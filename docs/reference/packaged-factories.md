@@ -458,6 +458,273 @@ The empty mock configuration accepts the writer and reviewer decision
 envelope, so this smoke run reaches the approved primary-result path without
 calling a live provider.
 
+## Detailed planning and implementation entries
+
+These four Factories are all planning-oriented, but their boundaries are
+different. `factory-builder` authors and installs a reusable Factory;
+`plan-execute` creates a PRD and implements it in the current workspace;
+`plan-parallel` runs a dependency-aware task graph in one repository and
+synthesizes the results; `full-flow` adds isolated Git worktrees, review, CI,
+local merges, and bounded replanning. Choose the smallest boundary that fits
+the job.
+
+The worked commands below were run against the current binary. The first
+three use `--with-mock-workers` to prove the invocation and terminal output
+envelope without contacting a live model. Generic mock acceptance does not
+simulate a builder's file tools or a planner's valid batch JSON; the normal
+provider-backed behavior and artifact guarantees are described separately in
+each entry. The `full-flow` smoke intentionally exercises its terminating
+argument-validation failure, while the repository's functional coverage uses
+protocol-valid provider responses for the complete worktree/review/merge loop.
+
+### `@you/factory-builder`
+
+**Purpose and suitable use.** Use `@you/factory-builder` when a customer
+request should become a new reusable named Factory. It can author either a
+graph/YAML Factory or a JavaScript Factory, and it answers usage guidance when
+the request is blank or a question rather than a build request. It is not a
+general-purpose task executor and should not be used to modify an existing
+Factory in place.
+
+**Invocation signature.** The live signature is:
+
+```text
+you run --named @you/factory-builder [<to>] [--builder-model <value>] [--builder-provider <value>] [--factory-name <value>] [--orchestrator <value>]
+```
+
+`<to>` is optional and accepts positional, `--to`, or stdin input.
+`--orchestrator` defaults to `graph` and accepts `graph` or `javascript`.
+`--factory-name` is optional; the builder derives a name when it is omitted.
+
+**Worker roles and provider/model overrides.** `builder-router` decides
+whether the request is a build or help request, `builder-helper` supplies
+the authored guidance for the help path, and `factory-builder` authors the
+candidate with its agent tools. `--builder-provider` and `--builder-model`
+apply to all three roles; omitted values use operator defaults.
+
+**Prerequisites and side effects.** A live build needs a configured provider
+and model and a workspace in which the builder can stage a new
+factory-name-scoped directory. The builder reads the Factory authoring and
+JavaScript workflow docs, validates the staged candidate with
+`you factory config validate`, then installs it through
+`you factory create <name> --from <stage> --dir ~/.you-agent-factory/factories`.
+It does not use `./factory`, the packaged-factory source tree, an existing
+Factory directory, or an existing name as a place to overwrite. A validation
+failure or name collision leaves the candidate uninstalled. A successful run
+changes the operator's local Factory catalog and may leave the requested
+workspace artifacts.
+
+**Expected output shape.** A successful build returns the canonical Factory
+name, the selected orchestrator form, validation success, and confirmation
+that the named-Factory create command installed it. The help path returns
+usage guidance without creating or installing anything. A failed validation
+returns a terminal failure and explicitly says that installation did not
+occur. The exact explanatory prose is model-generated.
+
+**Worked invocation.**
+
+```bash
+you run --named @you/factory-builder --with-mock-workers --no-record --quiet --factory-name docs-release-review --orchestrator graph --to "Create a Factory that reviews release notes and returns an approval summary."
+```
+
+**Observed output evidence.** The exact command above returned:
+
+```text
+mock worker accepted
+```
+
+That synthetic result only proves the current CLI can select and terminate
+the entry. The repository's provider-backed functional coverage separately
+asserts graph creation, JavaScript creation, validation, installation, and
+the no-install-on-invalid-candidate failure path.
+
+### `@you/plan-execute`
+
+**Purpose and suitable use.** Use `@you/plan-execute` when one project should
+first be expressed as a durable PRD and then implemented by an executor in
+the current workspace. It is sequential and workspace-local: it does not
+create task worktrees, merge branches, open a pull request, or perform remote
+review.
+
+**Invocation signature.** The live signature is:
+
+```text
+you run --named @you/plan-execute <to> [--executor-model <value>] [--executor-provider <value>] [--planner-model <value>] [--planner-provider <value>]
+```
+
+`<to>` is required and accepts positional, `--to`, or stdin input. The
+planner and executor provider/model overrides are independent; omitted values
+use operator defaults.
+
+**Worker roles and provider/model overrides.** `prd-planner` investigates the
+request and writes both `tasks/todo/<workname>.md` and
+`tasks/todo/<workname>.json`, then emits `<COMPLETE>`. `prd-executor` reads
+that plan, works in the current workspace, verifies the result, and emits
+`<COMPLETE>`. `--planner-provider`/`--planner-model` configure the first role;
+`--executor-provider`/`--executor-model` configure the second.
+
+**Prerequisites and side effects.** The current workspace must be writable and
+the selected provider/model must be usable for both roles. The planner's
+Markdown and JSON files are durable workspace artifacts. The executor may
+edit any files required by the request and run its checks. Normal runs create
+session/recording activity and provider artifacts; `--no-record` suppresses
+the normal recording side effect. The Factory does not itself open a PR or
+merge a remote branch.
+
+**Expected output shape.** The terminal result is the executor's completed
+implementation report, not a separate planner answer. The durable PRD files
+remain in `tasks/todo/`, and structured output exposes the completed status
+and primary result. If planning or execution fails, the invocation is
+terminally failed rather than reported as implemented. Model prose and the
+generated work-name suffix are not byte-stable.
+
+**Worked invocation.**
+
+```bash
+you run --named @you/plan-execute --with-mock-workers --no-record --quiet --planner-provider CODEX --planner-model gpt-5 --executor-provider CODEX --executor-model gpt-5 --to "Create a one-line README note and verify it."
+```
+
+**Observed output evidence.** The exact command above returned:
+
+```text
+mock worker accepted
+<COMPLETE>
+```
+
+The first line is the synthetic planner result and the stop token marks the
+synthetic executor's terminal result. A live provider run is the path that
+creates and executes the PRD artifacts described above.
+
+### `@you/plan-parallel`
+
+**Purpose and suitable use.** Use `@you/plan-parallel` when a request can be
+decomposed into independent or dependency-ordered implementation tasks and
+the final answer should synthesize all completed task reports. It keeps the
+tasks in the same repository and is a good fit for parallel investigation or
+changes that do not need per-task Git worktrees. Use `full-flow` when isolated
+branches, review, CI, and local merging are part of the requirement.
+
+**Invocation signature.** The live signature is:
+
+```text
+you run --named @you/plan-parallel <to> [--executor-model <value>] [--executor-provider <value>] [--executor-reasoning-effort <value>] [--merge-model <value>] [--merge-provider <value>] [--planner-model <value>] [--planner-provider <value>]
+```
+
+`<to>` is required and accepts positional, `--to`, or stdin input.
+`--executor-reasoning-effort` defaults to `xhigh`. Planner, executor, and
+merger provider/model overrides are independent and omitted values use
+operator defaults.
+
+**Worker roles and provider/model overrides.** `parallel-planner` must emit a
+raw `FACTORY_REQUEST_BATCH` containing 1–12 self-contained `planned-task`
+items with acyclic optional `DEPENDS_ON` relations. It must not create a
+catch-all synthesis task. `parallel-executor` runs each ready task with the
+selected executor provider/model and reasoning effort. `parallel-merger`
+receives every completed child and produces the final synthesis with the
+selected merge provider/model.
+
+**Prerequisites and side effects.** A live run needs a writable repository and
+usable planner, executor, and merger routes. Up to eight task executions may
+consume the `parallel-executor-slots` resource concurrently. All agents work
+in the same repository; there is no authored worktree or Git-branch merge
+step, so independent tasks should avoid overlapping files. A child failure
+fails the parent and prevents final synthesis. Normal runs can change the
+workspace and create recordings, provider sessions, and artifacts.
+
+**Expected output shape.** The terminal result is one merger-produced,
+customer-facing synthesis that incorporates the completed task reports. The
+planner's DAG and individual executor reports are intermediate Work and can
+be inspected through runtime events, but they are not printed as separate
+primary answers. Planner validation, unsupported reasoning effort, or child
+failure produces a terminal failure. Generated task names and prose are not
+stable.
+
+**Worked invocation.**
+
+```bash
+you run --named @you/plan-parallel --with-mock-workers --no-record --quiet --planner-provider CODEX --planner-model gpt-5 --executor-provider CODEX --executor-model gpt-5 --merge-provider CODEX --merge-model gpt-5 --to "Create a one-line README note and verify it."
+```
+
+**Observed output evidence.** The exact command above returned:
+
+```text
+mock worker accepted
+```
+
+This is the generic mock's terminal merger text. It does not claim that the
+mock invented a valid task DAG; provider-backed functional coverage asserts
+the bounded planner batch, dependency-aware dispatch, concurrency, merger,
+and failure paths.
+
+### `@you/full-flow`
+
+**Purpose and suitable use.** Use `@you/full-flow` for a project that needs
+bounded parallel implementation waves with independent worktrees, review,
+CI, local branch merges, and replanning after each wave. It is the most
+operationally involved planning entry in this catalog. Use it when the
+repository itself is the delivery target and the request benefits from
+separate task branches.
+
+**Invocation signature.** The live signature is:
+
+```text
+you run --named @you/full-flow <to> [--base-branch <value>] [--executor-model <value>] [--executor-provider <value>] [--max-cycles <number>] [--max-tasks-per-cycle <number>] [--planner-model <value>] [--planner-provider <value>] [--reviewer-model <value>] [--reviewer-provider <value>]
+```
+
+`<to>` is required and accepts positional, `--to`, or stdin input.
+`--base-branch` defaults to `main`; `--max-cycles` and
+`--max-tasks-per-cycle` each accept 1–8 and default to 4. Planner, executor,
+and reviewer provider/model overrides are optional and independently resolve
+to operator defaults when omitted.
+
+**Worker roles and provider/model overrides.** `full-flow-planner` produces a
+bounded raw batch of `delivery-task` Work plus one `cycle-control` Work.
+`task-worktree-setup` is a packaged script that creates or reuses a safe task
+worktree from the selected base branch. `full-flow-executor` implements one
+task, `full-flow-reviewer` independently reviews it, `full-flow-ci` verifies
+it, and `full-flow-merger` merges the verified task branch. The
+`cycle-decider` script routes the planner's exact `continue` or `complete`
+payload. Planner flags configure only the planner; executor flags configure
+implementation, CI, and merge; reviewer flags configure review.
+
+**Prerequisites and side effects.** The request must run from a Git
+repository with the selected base branch available. Each wave can create
+`.claude/worktrees/<task>` and a matching task branch, and the merger performs
+an actual local Git merge on the base branch. Up to eight task slots can run
+in parallel, while planning and merging each have a single slot. Review,
+CI, and merge rejection/continue outcomes route a task back for repair; the
+implementation, review, and cycle loop breakers keep retries finite. A child
+failure or exhausted cycle bound fails the project. This Factory completes
+local repository work; it does not itself open a remote pull request.
+
+**Expected output shape.** A successful invocation returns the completed
+project result after all required task branches are verified and merged. The
+event stream exposes planning waves, worktree setup, implementation/review/CI
+dispatches, merges, and any replan. A failed provider, task, or finite bound
+returns a terminal failure rather than claiming completion. Model-generated
+task descriptions and the final prose are not byte-stable.
+
+**Worked invocation.** To smoke the public argument guard without starting a
+provider-backed worktree run, execute this intentionally invalid bound:
+
+```bash
+you run --named @you/full-flow --no-record --quiet --max-cycles 9 --max-tasks-per-cycle 1 --to "Create a one-line README note and verify it."
+```
+
+**Observed output evidence.** The exact command above returned the terminating
+validation error:
+
+```text
+{"code":"INVOCATION_ARGUMENT_STRING_VALIDATION_MISMATCH","family":"BAD_REQUEST","message":"parameter \"maxCycles\" value \"9\" is not one of the declared choices (factory \"@you/full-flow\")"}
+```
+
+For the complete orchestration path, the current repository functional test
+uses protocol-valid planner, executor, reviewer, CI, and merger responses and
+asserts two parallel task worktrees, local merges, a completion replan, and
+the bounded failure paths. Do not substitute the empty generic mock for that
+coverage: it can accept a planner dispatch without authoring the required
+batch protocol.
+
 ## Representative invocations
 
 ```bash
@@ -487,9 +754,11 @@ Many packaged Factories expose per-role overrides. Common examples:
 
 | Factory | Role flags |
 |---------|------------|
+| `@you/factory-builder` | `--builder-provider`, `--builder-model` (shared by router, help, and builder roles) |
 | `@you/goal` | `--executor-provider`, `--executor-model` |
 | `@you/plan-execute` | `--planner-provider`, `--planner-model`, `--executor-provider`, `--executor-model` |
 | `@you/plan-parallel` | planner / executor / merge provider and model flags |
+| `@you/full-flow` | planner / executor (implementation, CI, merge) / reviewer provider and model flags |
 | `@you/review` | `--writer-provider`, `--writer-model`, `--reviewer-provider`, `--reviewer-model` |
 | `@you/classify` | classifier / small / medium / large provider and model flags |
 | `@you/quorum` | `--branch-provider`, `--branch-model`, `--merge-provider`, `--merge-model` |

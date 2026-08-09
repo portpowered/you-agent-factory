@@ -62,8 +62,8 @@
         "Tests pass, including make docs-reference-smoke"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added distinct operator-ready entries for @you/factory-builder, @you/plan-execute, @you/plan-parallel, and @you/full-flow using the shared seven-part contract. Documented all live worker roles, provider/model overrides, planning and validation behavior, current-workspace versus worktree side effects, concurrency bounds, local merge/replanning semantics, and terminal output shapes. Executed each worked invocation exactly as shown against the current bin/you.exe in isolated HOME/USERPROFILE state: builder returned `mock worker accepted`; plan-execute returned `mock worker accepted` plus `<COMPLETE>`; plan-parallel returned `mock worker accepted`; full-flow's bounded validation smoke returned the documented maxCycles choice error. Focused packaged-factory functional tests passed for builder graph/JavaScript installation and invalid-candidate rejection, plan-execute, plan-parallel DAG/concurrency/merge/failure paths, and full-flow worktrees, local merges, replanning, and bounds. make docs-reference-smoke, make verify-fast, and git diff --check pass. The docs explicitly distinguish generic mock envelope evidence from provider-backed planner/builder semantics."
     },
     {
       "id": "wo-d1-packaged-factories-docs-004",

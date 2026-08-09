@@ -4,6 +4,7 @@
 - Documentation for model-backed workflows should describe observable result shape and status/artifact evidence rather than byte-stable generated prose.
 - Isolate both `HOME` and `USERPROFILE` when verifying packaged named Factories so stale materialized operator copies cannot mask the current catalog source.
 - A classifier mock must emit the provider's valid response protocol and an exact configured route label; the default synthetic mock acceptance text is not a valid `small`/`medium`/`large` classification.
+- Planner and cycle-control workflows likewise need protocol-valid structured model output to exercise generated Work, concurrency, or replanning; an empty generic mock can prove only the terminal invocation envelope and may leave orchestration Work uncreated.
 
 ## 2026-08-09 13:12 - wo-d1-packaged-factories-docs-001
 - What was implemented
@@ -83,4 +84,25 @@
   - The live packaged catalog is lazily materialized and can be stale in an operator profile; use isolated home variables when collecting current help evidence.
   - `--with-mock-workers` is enough for most packaged examples, but classifier workflows need a protocol-valid scripted provider response for the exact route label before the selected lane can run.
   - Keep deterministic documentation fixtures under `docs/examples/` and explain their role so smoke output is not mistaken for a live model guarantee.
+---
+
+## 2026-08-09 14:04 - wo-d1-packaged-factories-docs-003
+- What was implemented
+  - Added distinct operator-ready entries for `@you/factory-builder`, `@you/plan-execute`, `@you/plan-parallel`, and `@you/full-flow` in `docs/reference/packaged-factories.md`.
+  - Documented each live help signature, all worker roles and provider/model overrides, relative workflow choice, workspace and Git side effects, concurrency and retry bounds, validation/installation, local merge/replanning, and final versus intermediate output behavior.
+  - Added exact current-binary smoke evidence: the builder returned `mock worker accepted`; plan-execute returned `mock worker accepted` and `<COMPLETE>`; plan-parallel returned `mock worker accepted`; full-flow's controlled invalid-bound check returned the documented `maxCycles` choice-validation error.
+  - Marked Story 003 as passing in `prd.json` and recorded the generic-mock limitation so protocol-valid planner responses are not confused with end-to-end orchestration evidence.
+- Files changed
+  - `docs/reference/packaged-factories.md`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `make docs-reference-smoke` — passed.
+  - `go test ./tests/functional/factory/packaged/factory_builder ./tests/functional/factory/packaged/plan_execute ./tests/functional/factory/packaged/plan_parallel ./tests/functional/factory/packaged/full_flow -count=1 -timeout 300s` — passed.
+  - `make verify-fast` — passed: dashboard typecheck, MCP contract boundary, 355 UI files / 2,970 tests, 191 Bun unit checks, and the short Go suite.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - The planning entries are not interchangeable: builder installs a new Factory, plan-execute stays sequential in the current workspace, plan-parallel shares one repository across a bounded DAG, and full-flow owns worktrees, local merges, and replanning.
+  - Generic mock workers accept a planner dispatch without producing its required `FACTORY_REQUEST_BATCH`; use protocol-valid fixtures or provider-backed functional tests when verifying generated Work, concurrency, or cycle control.
+  - Keep full-flow CLI smoke examples bounded and terminating; use controlled argument validation for the public command example and the isolated functional test for actual worktree/merge behavior.
 ---
