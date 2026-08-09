@@ -440,7 +440,10 @@ A relation cannot point to itself:
 }
 ```
 
-`requiredState` must be a state configured on the target Work type:
+For `DEPENDS_ON`, `requiredState` must be a state configured on the target Work
+type. `PARENT_CHILD` must omit `requiredState`; supplying it rejects the whole
+batch because that relation type records lineage rather than prerequisite
+state gating:
 
 ```json
 {
@@ -581,7 +584,7 @@ Avoid setting tag names that begin with `_work_`. The factory writes
 | `type` | Yes | Use `DEPENDS_ON` or `PARENT_CHILD`. |
 | `sourceWorkName` | Yes | Name of the blocked work item for `DEPENDS_ON`, or the child work item for `PARENT_CHILD`. |
 | `targetWorkName` | Yes | Name of the prerequisite work item for `DEPENDS_ON`, or the parent work item for `PARENT_CHILD`. |
-| `requiredState` | Only for `DEPENDS_ON` | Target state required before the source can run. Defaults to `complete`. Ignore this field for `PARENT_CHILD`. |
+| `requiredState` | Only for `DEPENDS_ON` | Target state required before the source can run. Defaults to `complete`. Omit it for `PARENT_CHILD`; supplying it rejects the whole batch. |
 
 Declare batch relations by name. Do not use `targetWorkId` in submitted batch
 relations; target work IDs are resolved during normalization and may appear in

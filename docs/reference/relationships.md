@@ -32,7 +32,7 @@ relation.
 | Relation type | Source means | Target means | `requiredState` |
 |---------------|--------------|--------------|-----------------|
 | `DEPENDS_ON` | The blocked work item | The prerequisite work item | Optional. Defaults to `complete`. Names a state on the target work type. |
-| `PARENT_CHILD` | The child work item | The parent work item | Not used. Ignore this field on `PARENT_CHILD`. |
+| `PARENT_CHILD` | The child work item | The parent work item | Must be omitted. Supplying it rejects the whole batch. |
 | `SAME_NAME` | No relation source; the input carrying the guard | The peer input named by `matchInput` | Not applicable. The selected Work names must be equal. |
 | `SPAWNED_BY` | The spawned child work item | The spawning context (for example a parent work item or fanout source) | Not used on batch files. Runtime records the spawn lineage. |
 
