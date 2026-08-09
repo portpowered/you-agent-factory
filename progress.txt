@@ -346,3 +346,20 @@
 - **Learnings for future iterations:**
   - When a full coverage lane fails on an unrelated flaky test, reproduce that test locally and rerun the failed CI job before changing feature code; the terminal rerun distinguishes transient baseline noise from a feature regression.
 ---
+
+## [2026-08-08 20:01 -07:00] - wo-b1-antigravity-provider-golden-traces-005
+- What was implemented
+  - Merged the current `origin/main` into the AGY branch, resolved the three content conflicts while preserving AGY parsing and upstream diagnostics behavior, and pushed merge commit `1e491539d`.
+- Files changed
+  - `pkg/services/providers/internal/services/execution/internal/adapters/agy/adapter.go`
+  - `pkg/services/workers/internal/diagnostics/codec.go`
+  - `pkg/services/workers/internal/diagnostics/safe_test.go`
+  - `progress.txt`
+- Verification
+  - Focused Providers/Workers/Wire tests, AGY offline functional replay, and focused vet pass after conflict resolution.
+  - The post-merge GitHub workflow is terminal and green across all required checks, including Backend Unit Coverage, Backend Functional Coverage, and Verification Policy.
+  - PR #1826 is mergeable with no unresolved or outdated review threads; no live AGY call was made.
+- **Learnings for future iterations:**
+  - Reconcile with the target repository's current `main` before final PR handoff; a previously clean PR can become conflicting as the base advances.
+  - When resolving shared diagnostics conflicts, retain both provider-specific allowlist keys and upstream failure metadata, then test both regression cases together.
+---
