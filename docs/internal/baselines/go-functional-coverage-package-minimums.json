@@ -2699,6 +2699,10 @@
       }
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli",
+      "minimum": 39.01
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire",
       "exception": {
         "kind": "measurement",
