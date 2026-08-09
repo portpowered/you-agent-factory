@@ -725,6 +725,284 @@ the bounded failure paths. Do not substitute the empty generic mock for that
 coverage: it can accept a planner dispatch without authoring the required
 batch protocol.
 
+## Detailed parallel investigation and selection entries
+
+These four Factories all fan work out before returning one customer-facing
+answer, but their selection policies differ. `deep-research` gives a lead
+researcher bounded specialist evidence, `spawn` merges an exact task count,
+`quorum` reconciles two independent Graph branches, and `tournament` keeps one
+winner from a bounded 1v1 bracket. The JavaScript entries are policy-bounded
+and read-only; quorum uses canonical Graph Work and requires both branch Works
+to complete before its merge worker can run.
+
+### `@you/deep-research`
+
+**Purpose and suitable use.** Use `@you/deep-research` for a research question
+where a lead answer benefits from separate technical and practical/trade-off
+investigations. It is appropriate for bounded evidence gathering and
+synthesis, not for an ongoing research session, network-connected browsing,
+or a write-oriented implementation task. Short topics can stay lead-only;
+longer topics can receive up to two specialist investigations.
+
+**Invocation signature.** The live signature from an isolated current-binary
+help run is:
+
+```text
+you run --named @you/deep-research <to> [--max-subagents <value>] [--research-model <value>] [--research-model-provider <value>] [--reasoning-effort <value>] [--research-depth <value>]
+```
+
+`<to>` is required and accepts positional, `--to`, or stdin input.
+`--research-depth` is 1–3 and defaults to 2. `--max-subagents` is 0–2 and
+defaults to 2. `--reasoning-effort` currently accepts `medium` and defaults to
+that value. The research model and provider flags are optional.
+
+**Worker roles and provider/model overrides.** A long topic can dispatch
+`research-specialist-technical` and `research-specialist-tradeoffs` in
+parallel, followed by `lead-research-synthesis`. The
+`--research-model-provider` and `--research-model` values are passed to the
+specialist and lead research calls; `--reasoning-effort` is passed to each
+call as well. Omitted values use operator defaults. Setting
+`--max-subagents 0`, or submitting a short topic, leaves only the lead
+synthesis call.
+
+**Prerequisites and side effects.** A live run needs a configured provider and
+model. The JavaScript policy is `READ_ONLY`, with a maximum of five agent
+calls, at most two concurrent calls, no network or connectors, and no writable
+roots. Workers may inspect available workspace evidence, but this Factory does
+not create a worktree or promise workspace changes. The run still creates
+Factory Session/provider activity and normally records events and artifacts;
+`--no-record` suppresses the normal recording side effect. A provider failure
+after the bounded specialist/lead work fails the invocation.
+
+**Expected output shape.** The primary result is a JSON object containing the
+submitted `topic`, `role: "lead-researcher"`, the selected `researchDepth` and
+`maxSubagents`, an `execution` selection, and `synthesis`. `synthesis` contains
+the lead result plus specialist status records; specialist prose is
+intermediate evidence, not a second set of primary answers. Use `--json` when
+consuming this structured primary result because default human output cannot
+render the object as plain text. Model prose and status diagnostics are not
+byte-stable.
+
+**Worked invocation.** This exact structured smoke run used the current
+binary with the deterministic mock runner:
+
+```bash
+you run --named @you/deep-research --with-mock-workers --no-record --json --max-subagents 2 --research-model-provider CODEX --research-model gpt-5 --research-depth 2 --reasoning-effort medium --to "Compare event sourcing and state machines for workflow orchestration"
+```
+
+**Observed output evidence.** The final `invocation_result` from that exact
+command was `COMPLETED` and included this primary-result shape (the mock's
+prompt-derived lead text is intentionally not reproduced as a stable golden):
+
+```text
+primaryResult[0].type = JSON
+primaryResult[0].json.topic = "Compare event sourcing and state machines for workflow orchestration"
+primaryResult[0].json.role = "lead-researcher"
+primaryResult[0].json.researchDepth = 2
+primaryResult[0].json.maxSubagents = 2
+primaryResult[0].json.execution = { modelProvider: "CODEX", model: "gpt-5", reasoningEffort: "medium" }
+primaryResult[0].json.synthesis.specialistStatuses = [technical: COMPLETED, tradeoffs: COMPLETED]
+response.status = "COMPLETED"
+```
+
+### `@you/spawn`
+
+**Purpose and suitable use.** Use `@you/spawn` when one read-only request can
+be decomposed into an exact number of independent tasks and a final merger
+should reconcile every result. It is useful for bounded parallel investigation
+or comparison. It does not create task worktrees or expose each child as a
+separate primary answer; use `plan-parallel` or `full-flow` when implementation
+ownership, Git isolation, or review/merge behavior is required.
+
+**Invocation signature.** The live signature is:
+
+```text
+you run --named @you/spawn <to> [--count <number>] [--worker-provider <value>] [--worker-model <value>] [--model-provider <value>]
+```
+
+`<to>` is required and accepts positional, `--to`, or stdin input.
+`--count` is optional, defaults to 3, and accepts 1–14. The upper bound is
+also the workflow budget: the Factory needs `count + 2` agent calls for one
+planner, all child tasks, and one merger.
+
+**Worker roles and provider/model overrides.** `spawn-planner` must return
+exactly `count` distinct, non-empty task strings. The resulting
+`spawn-task-1` through `spawn-task-N` workers run concurrently, followed by
+`spawn-merger`. `--worker-provider` selects the executor provider used by the
+planner, tasks, and merger; `--model-provider` selects their model provider;
+`--worker-model` selects their model. Omitted values use operator defaults for
+all three stages. These flags are intentionally shared: the live signature
+does not expose separate planner, child, or merger overrides.
+
+**Prerequisites and side effects.** A live run needs usable planner, task, and
+merger provider/model routes. The JavaScript policy is `READ_ONLY`, with up to
+16 agent calls, at most eight concurrent child calls, no network or connectors,
+and no writable roots. All children run in the same repository context rather
+than authored worktrees, so this is not a safe substitute for an implementation
+workflow with branch isolation. The session can still create provider-session,
+recording, and artifact activity; `--no-record` suppresses normal recording.
+If the planner does not return the exact JSON array contract, a child fails, or
+the merger returns empty text, the parent fails without a merged primary result.
+
+**Expected output shape.** A successful invocation returns one human-readable
+text result from `spawn-merger`. The planner array and each ordered child
+finding are intermediate workflow data; they are not printed as separate
+primary results. Structured `--json` output wraps that one merged text in the
+normal invocation result. Generated task strings, findings, and synthesis are
+not deterministic prose.
+
+**Worked invocation.** This provider-free bound smoke was executed exactly as
+shown against the current binary; it demonstrates that the live schema rejects
+a count above the Factory's 1–14 limit before any provider work starts:
+
+```bash
+you run --named @you/spawn --no-record --quiet --count 15 --to "Research the two strongest options for a release checklist."
+```
+
+**Observed output evidence.** The exact command returned this stable
+validation result (the machine-local schema-file path in the middle of the
+message is omitted here):
+
+```text
+{"code":"RUN_INVOCATION_FAILED","family":"INTERNAL_SERVER_ERROR","message":"workflow args do not satisfy argsSchema: ... at '/count': maximum: got 15, want 14"}
+```
+
+Do not use the empty `--with-mock-workers` configuration as success evidence
+for this Factory: its synthetic text is not the planner's required JSON array.
+The provider-command functional assertion
+`TestPackagedSpawnPlansExactCountRunsChildrenAndMergesThroughCodexCommandRunner`
+supplies a two-task planner array, two child results, and a merger result, then
+asserts that the primary text is exactly `merged travel answer`.
+
+### `@you/quorum`
+
+**Purpose and suitable use.** Use `@you/quorum` when two independent answers
+should challenge one another before a final merger reconciles their evidence.
+It is a good fit for risk review, competing release plans, and decisions where
+preserving disagreement matters. It always creates exactly two branches; use
+`spawn` when the task count should be caller-controlled or `tournament` when a
+judge should eliminate candidates pair by pair.
+
+**Invocation signature.** The live signature is:
+
+```text
+you run --named @you/quorum <to> [--branch-model <value>] [--branch-provider <value>] [--merge-model <value>] [--merge-provider <value>]
+```
+
+`<to>` is required and accepts positional, `--to`, or stdin input. The branch
+flags also have aliases `--bm` and `--bp`; the merge flags also have aliases
+`--mm` and `--mp`. All four override values are optional and fall back to
+operator defaults when omitted.
+
+**Worker roles and provider/model overrides.** `quorum-branch-a` and
+`quorum-branch-b` run independently with the shared branch provider/model
+selection. `quorum-merge` receives the original request plus both completed
+branch payloads and uses the independent merge provider/model selection.
+`--branch-provider`/`--branch-model` do not configure the merger, and
+`--merge-provider`/`--merge-model` do not configure either branch.
+
+**Prerequisites and side effects.** A live run needs configured routes for two
+branch workers and one merger. The Graph workflow creates the original task,
+two branch Works, and a merge Work; the merge is enabled only after both branch
+Works reach `complete`. It runs in the selected workspace without a packaged
+worktree isolation step, so provider workers may inspect or change that
+workspace according to their worker capabilities. Normal runs create session,
+recording, Work, dispatch, and provider-session activity; use `--no-record` to
+avoid the normal recording side effect. A branch or merge failure routes to a
+failed terminal path instead of returning a partial consensus.
+
+**Expected output shape.** The explicit invocation return is the single text
+result from `quorum-merge`. Branch A and branch B proposals, their rationale,
+and the Graph Work/dispatch events are intermediate evidence. Human-readable
+default output is the merger text; structured output contains one primary text
+part and the normal session status. The merger should preserve a consequential
+disagreement rather than treating two matching answers as proof, and its model
+prose is not byte-stable.
+
+**Worked invocation.** The exact current-binary smoke used both branch and
+merge overrides and deterministic mock workers:
+
+```bash
+you run --named @you/quorum --with-mock-workers --no-record --quiet --branch-provider CODEX --branch-model gpt-5 --merge-provider CODEX --merge-model gpt-5 --to "Compare the two proposed release plans."
+```
+
+**Observed output evidence.** That exact command completed and returned:
+
+```text
+mock worker accepted
+```
+
+The generic mock proves the Graph branch/merge path and primary text
+selection; it does not claim that the mock produced meaningful independent
+assessments. Use a configured provider for customer research.
+
+### `@you/tournament`
+
+**Purpose and suitable use.** Use `@you/tournament` when multiple independent
+candidate answers should compete in judged 1v1 matches and only the champion
+should be returned. It is appropriate for bounded competitive drafting or
+selection. Use `quorum` when both independent assessments must inform one
+reconciler, and use `spawn` when every branch result should contribute to the
+final synthesis instead of being eliminated.
+
+**Invocation signature.** The live signature is:
+
+```text
+you run --named @you/tournament <to> [--competitor-provider <value>] [--judge-provider <value>] [--judge-model <value>] [--judge-model-provider <value>] [--competitor-model <value>] [--competitor-model-provider <value>] [--rounds <number>]
+```
+
+`<to>` is required and accepts positional, `--to`, or stdin input.
+`--rounds` is optional, defaults to 2, and accepts 1–3. A round value of `R`
+generates `2^R` competitors and requires `2^(R+1)-1` provider calls, so the
+three allowed values require 3, 7, or 15 calls respectively.
+
+**Worker roles and provider/model overrides.** The JavaScript workflow creates
+`tournament-competitor-1` through `tournament-competitor-N` for independent
+candidate generation, then `tournament-judge-rN-mM` workers for each match.
+`--competitor-provider`, `--competitor-model-provider`, and
+`--competitor-model` configure candidate workers. `--judge-provider`,
+`--judge-model-provider`, and `--judge-model` configure judges. If a judge
+override is omitted, the workflow first falls back to the corresponding
+competitor selection and then to operator defaults. Every judge must return
+JSON selecting exactly `A` or `B` and a non-empty rationale.
+
+**Prerequisites and side effects.** A live run needs usable competitor and
+judge routes. The JavaScript policy is `READ_ONLY`, with a maximum of 15 agent
+calls, at most eight concurrent calls, no network or connectors, and no
+writable roots. Candidate generation and matches are bounded by `rounds`; the
+Factory does not create worktrees or a persistent candidate store. Session,
+provider-session, recording, and artifact activity still occurs unless
+`--no-record` is supplied. Invalid judge JSON, a failed candidate or judge, an
+empty champion, or an out-of-range round is terminal failure.
+
+**Expected output shape.** The primary result is one text string consisting of
+the champion's candidate answer followed by a `Tournament decision trail:`
+with the judge rationale for the matches that champion won. Losing candidates
+and non-winning rationales are intermediate workflow data, not additional
+primary results. The judge's JSON is an internal protocol and is not the
+customer-facing output. Candidate and judge prose is not byte-stable.
+
+**Worked invocation.** This provider-free bound smoke was executed exactly as
+shown against the current binary; it demonstrates the live 1–3 round guard
+without starting 15 provider calls:
+
+```bash
+you run --named @you/tournament --no-record --quiet --rounds 4 --to "Propose a launch strategy"
+```
+
+**Observed output evidence.** The exact command returned this stable
+validation result (the machine-local schema-file path is omitted):
+
+```text
+{"code":"RUN_INVOCATION_FAILED","family":"INTERNAL_SERVER_ERROR","message":"workflow args do not satisfy argsSchema: ... at '/rounds': maximum: got 4, want 3"}
+```
+
+Do not use the empty `--with-mock-workers` configuration as success evidence:
+its generic text is not valid judge JSON. The provider-command functional
+assertion `TestPackagedTournamentRunsOneOnOneBracketThroughCodexCommandRunner`
+supplies two candidates and a valid judge decision, then asserts a single
+champion text followed by `Tournament decision trail:` and the judge rationale.
+
 ## Representative invocations
 
 ```bash
@@ -763,8 +1041,9 @@ Many packaged Factories expose per-role overrides. Common examples:
 | `@you/classify` | classifier / small / medium / large provider and model flags |
 | `@you/quorum` | `--branch-provider`, `--branch-model`, `--merge-provider`, `--merge-model` |
 | `@you/fusion` | `--first-provider`, `--second-provider` (and matching model flags) |
+| `@you/deep-research` | `--research-model-provider`, `--research-model`, `--reasoning-effort`, `--max-subagents`, `--research-depth` |
 | `@you/tournament` | competitor and judge provider / model flags |
-| `@you/spawn` | `--worker-provider`, `--worker-model`, plus `--count` |
+| `@you/spawn` | `--worker-provider`, `--worker-model`, `--model-provider`, plus `--count` |
 
 Always confirm the live flag set with `you run --named <factory> --help`.
 Omitted provider and model values fall back to operator defaults from

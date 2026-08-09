@@ -78,8 +78,8 @@
         "Tests pass, including make docs-reference-smoke"
       ],
       "priority": 4,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added distinct operator-ready entries for @you/deep-research, @you/spawn, @you/quorum, and @you/tournament using the shared seven-part contract. Documented isolated current-binary signatures, every worker role and provider/model override, JavaScript read-only policy bounds, quorum Graph Work/merge behavior, task-count and round bounds, intermediate versus primary output, and operator-default fallback. Executed the deep-research JSON smoke and quorum invocation exactly as shown against a freshly rebuilt current-source bin/you.exe with isolated HOME/USERPROFILE state; deep-research completed with the documented structured primary result and quorum returned mock worker accepted. Executed provider-free schema-bound spawn and tournament invocations exactly as shown; they returned the live 1-14 count and 1-3 rounds validation errors before provider work. Existing provider-command functional assertions passed for successful exact-count spawn merging and tournament champion/decision-trail output. make docs-reference-smoke, focused packaged-factory functional tests, make verify-fast, and git diff --check pass. The docs explicitly distinguish generic mock limitations from provider-backed planner/judge protocol evidence."
     },
     {
       "id": "wo-d1-packaged-factories-docs-005",
