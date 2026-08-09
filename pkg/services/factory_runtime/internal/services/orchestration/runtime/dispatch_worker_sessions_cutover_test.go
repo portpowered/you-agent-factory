@@ -392,6 +392,75 @@ func TestRecordedWorkerSessionObservation_ReplaysHistoricalTerminalStream(t *tes
 	}
 }
 
+func TestRecordedWorkerSessionObservationStreamUsesAtomicSnapshotAndLimit(t *testing.T) {
+	base := time.Date(2026, 8, 8, 12, 0, 0, 0, time.UTC)
+	workID := "work-recorded-race"
+	dispatchID := "dispatch-recorded-race"
+	providerMetadata := &workers.ProviderSessionMetadata{Provider: string(providers.IDCodex), Kind: providers.SessionIDKind, ID: "provider-session-race"}
+	targetEvent := func(sequence int, id string, eventType interfaces.FactoryEventType) interfaces.FactoryEvent {
+		return interfaces.FactoryEvent{
+			Context: interfaces.FactoryEventContext{
+				Tick:       sequence,
+				Sequence:   sequence,
+				EventTime:  base.Add(time.Duration(sequence) * time.Second),
+				DispatchID: stringPointerForRecordedTest(dispatchID),
+			},
+			Id:   id,
+			Type: eventType,
+		}
+	}
+	activeEvents := []interfaces.FactoryEvent{
+		targetEvent(1, "race-request", interfaces.FactoryEventTypeDispatchRequest),
+		targetEvent(2, "race-association", interfaces.FactoryEventTypeDispatchWorkerSessionAssoc),
+	}
+	activeEvents[1].Payload = mustMarshalRecordedTest(t, interfaces.DispatchWorkerSessionAssociationEventPayload{WorkerSessionID: "worker-recorded-race"})
+	terminal := targetEvent(3, "race-response", interfaces.FactoryEventTypeDispatchResponse)
+	other := terminal.Clone()
+	other.Context.DispatchID = stringPointerForRecordedTest("other-dispatch")
+	other.Id = "other-response"
+	ledger := &recordingfixtures.ScriptedRuntimeLedger{
+		Events: activeEvents,
+		SubscribeResult: interfaces.FactoryEventStream{
+			History: []interfaces.FactoryEvent{activeEvents[0], activeEvents[1], other, terminal},
+			Events:  make(chan interfaces.FactoryEvent),
+		},
+	}
+	service := newRecordedWorkerSessionObservation(
+		nil,
+		ledger,
+		func(_ []interfaces.FactoryEvent, _ int) (interfaces.FactoryWorldState, error) {
+			return interfaces.FactoryWorldState{
+				ActiveDispatches: map[string]interfaces.FactoryWorldDispatch{
+					dispatchID: {DispatchID: dispatchID, StartedAt: base, WorkItemIDs: []string{workID}},
+				},
+				ProviderSessions: []interfaces.FactoryWorldProviderSessionRecord{{
+					DispatchID: dispatchID, ProviderSession: *providerMetadata, WorkItemIDs: []string{workID},
+				}},
+			}, nil
+		},
+		platformclock.NewDeterministic(base.Add(5*time.Second), time.Second),
+		nil,
+	)
+
+	subscription, err := service.StreamObservations(context.Background(), workersessions.StreamObservationsRequest{
+		ProviderSession: providerSessionRef(*providerMetadata),
+		Limit:           2,
+	})
+	if err != nil {
+		t.Fatalf("StreamObservations() error = %v", err)
+	}
+	defer subscription.Close()
+	if delivery := subscription.Next(context.Background()); delivery.Kind != workersessions.ObservationDeliveryRecord || delivery.Event.SourceID != "race-association" {
+		t.Fatalf("bounded retained delivery = %#v, want association after dropping the oldest retained record", delivery)
+	}
+	if delivery := subscription.Next(context.Background()); delivery.Kind != workersessions.ObservationDeliveryTerminalReplay || delivery.Event.SourceID != "race-response" {
+		t.Fatalf("atomic terminal delivery = %#v, want TERMINAL_REPLAY from the subscription snapshot", delivery)
+	}
+	if delivery := subscription.Next(context.Background()); delivery.Kind != workersessions.ObservationDeliveryClosed {
+		t.Fatalf("delivery after terminal snapshot = %#v, want CLOSED", delivery)
+	}
+}
+
 func TestRecordedWorkerSessionObservation_UsesCanonicalFactsForExactQueries(t *testing.T) {
 	fixture := newRecordedExactObservationFixture(t)
 	requireRecordedExactObservationList(t, fixture)

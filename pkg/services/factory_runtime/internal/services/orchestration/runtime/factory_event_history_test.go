@@ -681,12 +681,13 @@ func TestRecordedWorkerSessionObservationStreamOutcomes(t *testing.T) {
 	}
 
 	liveEvents := make(chan interfaces.FactoryEvent, 1)
-	liveEvents <- interfaces.FactoryEvent{
+	terminalEvent := interfaces.FactoryEvent{
 		Context: interfaces.FactoryEventContext{Sequence: 4, DispatchID: stringPointerForRecordedTest("dispatch-recorded-exact")},
 		Id:      "live-terminal",
 		Type:    interfaces.FactoryEventTypeDispatchInterrupted,
 	}
-	ledger.SubscribeResult = interfaces.FactoryEventStream{History: []interfaces.FactoryEvent{}, Events: liveEvents}
+	liveEvents <- terminalEvent
+	ledger.SubscribeResult = interfaces.FactoryEventStream{History: []interfaces.FactoryEvent{terminalEvent}, Events: liveEvents}
 	subscription, err := adapter.StreamObservations(nil, workersessions.StreamObservationsRequest{ProviderSession: fixture.ref})
 	if err != nil {
 		t.Fatalf("StreamObservations(nil context) error = %v", err)

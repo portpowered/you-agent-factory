@@ -43,6 +43,10 @@ type eventHistorySubscription struct {
 	done         <-chan struct{}
 	overflow     chan struct{}
 	overflowOnce sync.Once
+	dispatchID   string
+	limit        int
+	pendingMu    sync.Mutex
+	pending      int
 }
 
 func (subscription *eventHistorySubscription) signalOverflow() {
@@ -172,23 +176,29 @@ func (h *FactoryEventHistory) Subscribe(
 	}
 
 	h.mu.Lock()
-	events := cloneFactoryEvents(h.events)
+	events := cloneFactoryEventsForStream(h.events, scope)
 	streamGenerationID := h.streamGenerationID
 	if reconnect != nil {
-		replayed, err := buildDomainReconnectReplay(events, *reconnect, scope)
+		replayed, err := buildDomainReconnectReplay(cloneFactoryEvents(h.events), *reconnect, scope)
 		if err != nil {
 			h.mu.Unlock()
 			return interfaces.FactoryEventStream{}, err
 		}
-		events = replayed
+		events = cloneFactoryEventsForStream(replayed, scope)
+	}
+	bufferSize := scope.Limit
+	if bufferSize <= 0 {
+		bufferSize = eventHistoryStreamBufferSize
 	}
 	id := h.nextID
 	h.nextID++
 	subscription := &eventHistorySubscription{
-		events:   make(chan interfaces.FactoryEvent, eventHistoryStreamBufferSize),
-		inbox:    make(chan interfaces.FactoryEvent, eventHistoryStreamBufferSize),
-		done:     ctx.Done(),
-		overflow: make(chan struct{}),
+		events:     make(chan interfaces.FactoryEvent),
+		inbox:      make(chan interfaces.FactoryEvent, bufferSize),
+		done:       ctx.Done(),
+		overflow:   make(chan struct{}),
+		dispatchID: strings.TrimSpace(scope.DispatchID),
+		limit:      bufferSize,
 	}
 	h.streams[id] = subscription
 	h.mu.Unlock()
@@ -209,10 +219,13 @@ func (h *FactoryEventHistory) Subscribe(
 			case event := <-subscription.inbox:
 				select {
 				case <-subscription.done:
+					subscription.releasePending()
 					return
 				case <-subscription.overflow:
+					subscription.releasePending()
 					return
 				case subscription.events <- event.Clone():
+					subscription.releasePending()
 				}
 			}
 		}
@@ -708,16 +721,10 @@ func (h *FactoryEventHistory) appendEvent(event interfaces.FactoryEvent) {
 		recorder(event.Type)
 	}
 	for _, stream := range streams {
-		select {
-		case <-stream.done:
+		if stream.dispatchID != "" && !factoryEventBelongsToDispatch(event, stream.dispatchID) {
 			continue
-		case <-stream.overflow:
-			continue
-		default:
 		}
-		select {
-		case stream.inbox <- event.Clone():
-		default:
+		if !stream.offer(event.Clone()) {
 			stream.signalOverflow()
 		}
 	}

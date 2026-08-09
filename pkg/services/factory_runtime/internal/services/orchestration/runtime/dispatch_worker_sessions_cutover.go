@@ -441,7 +441,11 @@ func (s *recordedWorkerSessionObservation) streamRecorded(
 		streamContext = context.Background()
 	}
 	streamContext, cancel := context.WithCancel(streamContext)
-	source, subscribeErr := s.ledger.Subscribe(streamContext, nil, interfaces.FactoryEventReconnectScope{})
+	limit := observationStreamLimit(req.Limit)
+	source, subscribeErr := s.ledger.Subscribe(streamContext, nil, interfaces.FactoryEventReconnectScope{
+		DispatchID: fact.dispatchID,
+		Limit:      limit,
+	})
 	if subscribeErr != nil {
 		cancel()
 		if errors.Is(subscribeErr, context.Canceled) {
@@ -449,7 +453,43 @@ func (s *recordedWorkerSessionObservation) streamRecorded(
 		}
 		return workersessions.ObservationSubscription{}, true, workersessions.ErrObservationSourceUnavailable
 	}
-	return newRecordedObservationSubscription(source, fact.dispatchID, fact.state.Terminal(), cancel, streamContext), true, nil
+	source.History = boundedRecordedObservationHistory(source.History, fact.dispatchID, limit)
+	terminalReplay := recordedObservationHistoryHasTerminal(source.History, fact.dispatchID)
+	return newRecordedObservationSubscription(source, fact.dispatchID, terminalReplay, cancel, streamContext), true, nil
+}
+
+func observationStreamLimit(limit int) int {
+	if limit <= 0 {
+		return workersessions.DefaultObservationStreamLimit
+	}
+	return limit
+}
+
+func boundedRecordedObservationHistory(
+	events []interfaces.FactoryEvent,
+	dispatchID string,
+	limit int,
+) []interfaces.FactoryEvent {
+	limit = observationStreamLimit(limit)
+	ordered := make([]interfaces.FactoryEvent, 0, len(events))
+	for _, event := range cloneAndSortFactoryEvents(events) {
+		if stringPointerValue(event.Context.DispatchID) == dispatchID {
+			ordered = append(ordered, event)
+		}
+	}
+	if len(ordered) <= limit {
+		return ordered
+	}
+	return ordered[len(ordered)-limit:]
+}
+
+func recordedObservationHistoryHasTerminal(events []interfaces.FactoryEvent, dispatchID string) bool {
+	for _, event := range events {
+		if stringPointerValue(event.Context.DispatchID) == dispatchID && recordedWorkerSessionTerminalEvent(event) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *recordedWorkerSessionObservation) recordedObservationForProvider(

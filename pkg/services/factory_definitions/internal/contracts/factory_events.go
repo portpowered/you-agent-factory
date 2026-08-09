@@ -78,11 +78,17 @@ type FactorySessionSyncPreflightOptions struct {
 	LogicalSessionKeyID *string
 }
 
-// FactoryEventReconnectScope configures how reconnect cursors are interpreted.
+// FactoryEventReconnectScope configures how reconnect cursors are interpreted
+// and how a bounded domain stream is scoped at the canonical ledger boundary.
 type FactoryEventReconnectScope struct {
 	// SessionID enables sessionSequence-based after_sequence matching for
 	// session-scoped event streams.
 	SessionID string
+	// DispatchID limits a Worker Session stream to events for one dispatch.
+	DispatchID string
+	// Limit bounds the retained history and live buffer. Zero uses the ledger
+	// default buffer size.
+	Limit int
 }
 
 // FactoryEventStream carries replayed history and then live canonical events.

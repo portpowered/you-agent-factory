@@ -366,6 +366,61 @@ func TestFactoryEventHistory_CloseLiveSubscriptionsEndsActiveStreams(t *testing.
 	}
 }
 
+func TestFactoryEventHistory_ScopedSubscriptionBoundsHistoryAndLiveBuffer(t *testing.T) {
+	history := newTestFactoryEventHistory(nil, func() time.Time { return time.Unix(0, 0).UTC() })
+	event := func(id, dispatchID string) interfaces.FactoryEvent {
+		return interfaces.FactoryEvent{
+			Context: interfaces.FactoryEventContext{DispatchID: &dispatchID},
+			Id:      id,
+			Type:    interfaces.FactoryEventTypeDispatchRequest,
+		}
+	}
+	history.AppendRecordedEvent(event("target-1", "dispatch-target"))
+	history.AppendRecordedEvent(event("other-1", "dispatch-other"))
+	history.AppendRecordedEvent(event("target-2", "dispatch-target"))
+	history.AppendRecordedEvent(event("target-3", "dispatch-target"))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	stream, err := history.Subscribe(ctx, nil, interfaces.FactoryEventReconnectScope{DispatchID: "dispatch-target", Limit: 2})
+	if err != nil {
+		t.Fatalf("Subscribe() error = %v", err)
+	}
+	if got := len(stream.History); got != 2 {
+		t.Fatalf("scoped retained history length = %d, want 2", got)
+	}
+	if stream.History[0].Id != "target-2" || stream.History[1].Id != "target-3" {
+		t.Fatalf("scoped retained history = %#v, want latest target events", stream.History)
+	}
+
+	history.AppendRecordedEvent(event("other-live", "dispatch-other"))
+	history.AppendRecordedEvent(event("target-live-1", "dispatch-target"))
+	history.AppendRecordedEvent(event("target-live-2", "dispatch-target"))
+	history.AppendRecordedEvent(event("target-live-3", "dispatch-target"))
+
+	var liveIDs []string
+	deadline := time.After(time.Second)
+	for {
+		select {
+		case received, ok := <-stream.Events:
+			if !ok {
+				if len(liveIDs) > 2 {
+					t.Fatalf("scoped live buffer delivered %d records, want at most 2", len(liveIDs))
+				}
+				for _, id := range liveIDs {
+					if id == "other-live" {
+						t.Fatalf("unrelated event entered scoped stream: %q", id)
+					}
+				}
+				return
+			}
+			liveIDs = append(liveIDs, received.Id)
+		case <-deadline:
+			t.Fatalf("scoped live stream did not close after bounded-buffer overflow; received=%v", liveIDs)
+		}
+	}
+}
+
 func TestFactoryEventHistory_RecordInitialStructure_EmitsCanonicalPublicWorkstationKinds(t *testing.T) {
 	history := newTestFactoryEventHistory(
 		eventHistoryProjectionNet(),

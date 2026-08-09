@@ -18,6 +18,77 @@ const (
 	eventIDArtifactCreatedPrefix     = "factory-event/artifact-created"
 )
 
+func (subscription *eventHistorySubscription) offer(event interfaces.FactoryEvent) bool {
+	subscription.pendingMu.Lock()
+	select {
+	case <-subscription.done:
+		subscription.pendingMu.Unlock()
+		return true
+	case <-subscription.overflow:
+		subscription.pendingMu.Unlock()
+		return true
+	default:
+	}
+	if subscription.pending >= subscription.limit {
+		subscription.pendingMu.Unlock()
+		return false
+	}
+	subscription.pending++
+	subscription.pendingMu.Unlock()
+
+	select {
+	case <-subscription.done:
+		subscription.releasePending()
+	case <-subscription.overflow:
+		subscription.releasePending()
+	case subscription.inbox <- event:
+	default:
+		subscription.releasePending()
+		return false
+	}
+	return true
+}
+
+func (subscription *eventHistorySubscription) releasePending() {
+	subscription.pendingMu.Lock()
+	if subscription.pending > 0 {
+		subscription.pending--
+	}
+	subscription.pendingMu.Unlock()
+}
+
+func cloneFactoryEventsForStream(
+	events []interfaces.FactoryEvent,
+	scope interfaces.FactoryEventReconnectScope,
+) []interfaces.FactoryEvent {
+	dispatchID := strings.TrimSpace(scope.DispatchID)
+	filtered := make([]interfaces.FactoryEvent, 0, len(events))
+	for _, event := range events {
+		if dispatchID != "" && !factoryEventBelongsToDispatch(event, dispatchID) {
+			continue
+		}
+		filtered = append(filtered, event.Clone())
+	}
+	if dispatchID == "" && scope.Limit <= 0 {
+		return filtered
+	}
+	limit := scope.Limit
+	if limit <= 0 {
+		limit = eventHistoryStreamBufferSize
+	}
+	if len(filtered) <= limit {
+		return filtered
+	}
+	return filtered[len(filtered)-limit:]
+}
+
+func factoryEventBelongsToDispatch(event interfaces.FactoryEvent, dispatchID string) bool {
+	if event.Context.DispatchID == nil {
+		return false
+	}
+	return strings.TrimSpace(*event.Context.DispatchID) == dispatchID
+}
+
 // DispatchQueuedInput carries replay-safe facts for DISPATCH_QUEUED.
 type DispatchQueuedInput struct {
 	SessionID           string
