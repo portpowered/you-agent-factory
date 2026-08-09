@@ -211,5 +211,22 @@
   - The full Windows `make test-unit-coverage` command remains unable to start locally because its expanded Go command exceeds the Windows process command-line limit; Linux CI is the authoritative coverage environment.
 - **Learnings for future iterations:**
   - Local ignored working assets can make focused tests appear green while clean CI fails immediately; verify every replay fixture with `git ls-files` before declaring an offline gate reproducible.
-  - Keep the real recordings in tracked `testdata` and leave `docs/temp` for disposable operator working material.
+- Keep the real recordings in tracked `testdata` and leave `docs/temp` for disposable operator working material.
+---
+
+## [2026-08-08 17:15 -07:00] - wo-b1-antigravity-provider-golden-traces-005
+- What was implemented
+  - Enabled the built-in Antigravity runner's structured-output capability advertisement, matching the already implemented AGY `--output-format json` and schema-validation path.
+  - Added a root.BuildProcess structured JSON golden that replays the tracked AGY envelope and asserts exact JSON command arguments, provider output, schema validation, and accepted Worker dispatch.
+- Files changed
+  - `pkg/services/workers/runner_policy_contracts.go`
+  - `pkg/services/workers/internal/services/runners/runner/runner_test.go`
+  - `tests/functional/providers/agy/golden_test.go`
+- Verification
+  - `go test ./pkg/services/workers/... ./pkg/services/providers/... ./pkg/wire/... -count=1` passes.
+  - `go test ./tests/functional/providers/agy/... -count=1` passes with the tracked recordings.
+  - The pushed CI run is rechecking the backend coverage floor after the previous executor coverage regression; no live AGY call was made.
+- **Learnings for future iterations:**
+  - Capability metadata is enforced before the native runner executes, so implemented provider behavior must be reflected in the built-in runner policy or valid structured requests fail closed.
+  - A root.BuildProcess golden is useful for catching mismatches between provider adapter support and Worker capability policy that package-local parser tests cannot observe.
 ---
