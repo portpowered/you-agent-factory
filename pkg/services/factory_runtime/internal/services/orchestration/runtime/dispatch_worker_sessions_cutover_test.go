@@ -331,6 +331,64 @@ func TestRecordedWorkerSessionObservation_ListsHistoricalAttemptsInChronological
 	}
 }
 
+func TestRecordedWorkerSessionObservation_ReplaysHistoricalTerminalStream(t *testing.T) {
+	base := time.Date(2026, 8, 8, 12, 0, 0, 0, time.UTC)
+	workID := "work-recorded-stream"
+	dispatchID := "dispatch-recorded-stream"
+	providerMetadata := &workers.ProviderSessionMetadata{Provider: string(providers.IDCodex), Kind: providers.SessionIDKind, ID: "provider-session-recorded"}
+	events := []interfaces.FactoryEvent{
+		{
+			Context: interfaces.FactoryEventContext{Tick: 1, Sequence: 1, EventTime: base, DispatchID: stringPointerForRecordedTest(dispatchID), WorkIDs: stringSliceForRecordedTest([]string{workID})},
+			Id:      "recorded-request",
+			Type:    interfaces.FactoryEventTypeDispatchRequest,
+		},
+		{
+			Context: interfaces.FactoryEventContext{Tick: 1, Sequence: 2, EventTime: base.Add(time.Second), DispatchID: stringPointerForRecordedTest(dispatchID)},
+			Id:      "recorded-association",
+			Type:    interfaces.FactoryEventTypeDispatchWorkerSessionAssoc,
+			Payload: mustMarshalRecordedTest(t, interfaces.DispatchWorkerSessionAssociationEventPayload{WorkerSessionID: "worker-recorded-stream"}),
+		},
+		{
+			Context: interfaces.FactoryEventContext{Tick: 2, Sequence: 3, EventTime: base.Add(2 * time.Second), DispatchID: stringPointerForRecordedTest(dispatchID)},
+			Id:      "recorded-response",
+			Type:    interfaces.FactoryEventTypeDispatchResponse,
+		},
+	}
+	ledger := &recordingfixtures.ScriptedRuntimeLedger{Events: events}
+	service := newRecordedWorkerSessionObservation(
+		nil,
+		ledger,
+		func(_ []interfaces.FactoryEvent, _ int) (interfaces.FactoryWorldState, error) {
+			return interfaces.FactoryWorldState{
+				CompletedDispatches: []interfaces.FactoryWorldDispatchCompletion{{
+					DispatchID: dispatchID, StartedAt: base, CompletedAt: base.Add(2 * time.Second), WorkItemIDs: []string{workID},
+					Result: interfaces.WorkstationResult{Outcome: string(workers.OutcomeAccepted)}, ProviderSession: providerMetadata,
+				}},
+			}, nil
+		},
+		platformclock.Real{},
+	)
+
+	subscription, err := service.StreamObservations(context.Background(), workersessions.StreamObservationsRequest{ProviderSession: providerSessionRef(*providerMetadata)})
+	if err != nil {
+		t.Fatalf("StreamObservations() error = %v", err)
+	}
+	defer subscription.Close()
+	for index, want := range []workersessions.ObservationDeliveryKind{
+		workersessions.ObservationDeliveryRecord,
+		workersessions.ObservationDeliveryRecord,
+		workersessions.ObservationDeliveryTerminalReplay,
+	} {
+		delivery := subscription.Next(context.Background())
+		if delivery.Kind != want || delivery.Event.SourceSequence != uint64(index+1) || delivery.Event.SourceID == "" {
+			t.Fatalf("delivery %d = %#v, want %s at canonical sequence %d", index, delivery, want, index+1)
+		}
+	}
+	if closed := subscription.Next(context.Background()); closed.Kind != workersessions.ObservationDeliveryClosed {
+		t.Fatalf("delivery after historical terminal = %#v, want CLOSED", closed)
+	}
+}
+
 func TestRecordedWorkerSessionObservation_KnownWorkWithoutSessionsIsExplicitlyEmpty(t *testing.T) {
 	workID := "work-without-sessions"
 	event := interfaces.FactoryEvent{

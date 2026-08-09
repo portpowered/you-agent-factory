@@ -3,7 +3,9 @@ package runtime
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sort"
+	"sync"
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -265,10 +267,227 @@ func (s *recordedWorkerSessionObservation) StreamObservations(
 	ctx context.Context,
 	req workersessions.StreamObservationsRequest,
 ) (workersessions.ObservationSubscription, error) {
-	if s == nil || s.Service == nil {
+	if s == nil || (s.ledger == nil && s.projector == nil && s.Service == nil) {
+		return workersessions.ObservationSubscription{}, workersessions.ErrObservationProjectionUnavailable
+	}
+	if err := req.Validate(); err != nil {
+		return workersessions.ObservationSubscription{}, err
+	}
+	if err := observationContextError(ctx); err != nil {
+		return workersessions.ObservationSubscription{}, err
+	}
+	if s.ledger != nil && s.projector != nil {
+		fact, found, err := s.recordedObservationForProvider(ctx, req.ProviderSession)
+		if err != nil {
+			return workersessions.ObservationSubscription{}, err
+		}
+		if found {
+			streamContext := ctx
+			if streamContext == nil {
+				streamContext = context.Background()
+			}
+			streamContext, cancel := context.WithCancel(streamContext)
+			source, subscribeErr := s.ledger.Subscribe(streamContext, nil, interfaces.FactoryEventReconnectScope{})
+			if subscribeErr != nil {
+				cancel()
+				if errors.Is(subscribeErr, context.Canceled) {
+					return workersessions.ObservationSubscription{}, workersessions.ErrObservationCanceled
+				}
+				return workersessions.ObservationSubscription{}, workersessions.ErrObservationSourceUnavailable
+			}
+			return newRecordedObservationSubscription(source, fact.dispatchID, fact.state.Terminal(), cancel, streamContext), nil
+		}
+		if s.Service == nil {
+			return workersessions.ObservationSubscription{}, workersessions.ErrObservationSessionNotFound
+		}
+	}
+	if s.Service == nil {
 		return workersessions.ObservationSubscription{}, workersessions.ErrObservationProjectionUnavailable
 	}
 	return s.Service.StreamObservations(ctx, req)
+}
+
+func (s *recordedWorkerSessionObservation) recordedObservationForProvider(
+	ctx context.Context,
+	ref providers.SessionRef,
+) (recordedDispatchObservation, bool, error) {
+	if err := observationContextError(ctx); err != nil {
+		return recordedDispatchObservation{}, false, err
+	}
+	ordered := cloneAndSortFactoryEvents(s.ledger.CanonicalEvents())
+	world, err := s.projector(ordered, latestFactoryEventTick(ordered))
+	if err != nil {
+		return recordedDispatchObservation{}, false, workersessions.ErrObservationProjectionUnavailable
+	}
+	associations, requests := recordedDispatchFacts(ordered)
+	completed := recordedDispatchStateMaps(world)
+	for dispatchID, association := range associations {
+		fact := recordedDispatchFact(dispatchID, association, requests, completed, world.ProviderSessions, world.ActiveDispatches, ordered)
+		if fact.provider != nil && providerSessionRef(*fact.provider) == ref {
+			return fact, true, nil
+		}
+	}
+	return recordedDispatchObservation{}, false, nil
+}
+
+type recordedObservationSubscription struct {
+	stream         interfaces.FactoryEventStream
+	dispatchID     string
+	terminalReplay bool
+	cancel         context.CancelFunc
+	sourceContext  context.Context
+
+	mu          sync.Mutex
+	closed      bool
+	history     []interfaces.FactoryEvent
+	historyRead int
+}
+
+func newRecordedObservationSubscription(
+	stream interfaces.FactoryEventStream,
+	dispatchID string,
+	terminalReplay bool,
+	cancel context.CancelFunc,
+	sourceContext context.Context,
+) workersessions.ObservationSubscription {
+	subscription := &recordedObservationSubscription{
+		stream:         stream,
+		dispatchID:     dispatchID,
+		terminalReplay: terminalReplay,
+		cancel:         cancel,
+		sourceContext:  sourceContext,
+		history:        cloneAndSortFactoryEvents(stream.History),
+	}
+	return workersessions.ObservationSubscription{
+		NextFunc:  subscription.next,
+		CloseFunc: subscription.close,
+	}
+}
+
+func (s *recordedObservationSubscription) next(ctx context.Context) workersessions.ObservationDelivery {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	for {
+		if ctx.Err() != nil {
+			s.close()
+			return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliveryCanceled, Err: workersessions.ErrObservationCanceled}
+		}
+		if event, ok := s.nextHistoryEvent(); ok {
+			if delivery, terminal := s.project(event); delivery != nil {
+				if terminal {
+					s.close()
+				}
+				return *delivery
+			}
+			continue
+		}
+
+		s.mu.Lock()
+		if s.closed {
+			s.mu.Unlock()
+			return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliveryClosed}
+		}
+		streamContext := s.streamContext()
+		events := s.stream.Events
+		s.mu.Unlock()
+		if events == nil {
+			s.close()
+			return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliverySourceFailure, Err: workersessions.ErrObservationSourceClosed}
+		}
+		select {
+		case <-ctx.Done():
+			s.close()
+			return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliveryCanceled, Err: workersessions.ErrObservationCanceled}
+		case <-streamContext.Done():
+			return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliveryClosed}
+		case event, ok := <-events:
+			if !ok {
+				s.close()
+				return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliverySourceFailure, Err: workersessions.ErrObservationSourceClosed}
+			}
+			if delivery, terminal := s.project(event); delivery != nil {
+				if terminal {
+					s.close()
+				}
+				return *delivery
+			}
+		}
+	}
+}
+
+func (s *recordedObservationSubscription) nextHistoryEvent() (interfaces.FactoryEvent, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed || s.historyRead >= len(s.history) {
+		return interfaces.FactoryEvent{}, false
+	}
+	event := s.history[s.historyRead]
+	s.historyRead++
+	return event, true
+}
+
+func (s *recordedObservationSubscription) project(event interfaces.FactoryEvent) (*workersessions.ObservationDelivery, bool) {
+	if stringPointerValue(event.Context.DispatchID) != s.dispatchID {
+		return nil, false
+	}
+	terminal := recordedWorkerSessionTerminalEvent(event)
+	delivery := workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliveryRecord, Event: recordedObservationEvent(event)}
+	if terminal {
+		delivery.Kind = workersessions.ObservationDeliveryTerminal
+		if s.terminalReplay {
+			delivery.Kind = workersessions.ObservationDeliveryTerminalReplay
+		}
+	}
+	return &delivery, terminal
+}
+
+func (s *recordedObservationSubscription) streamContext() context.Context {
+	if s.sourceContext == nil {
+		return context.Background()
+	}
+	return s.sourceContext
+}
+
+func (s *recordedObservationSubscription) close() {
+	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return
+	}
+	s.closed = true
+	cancel := s.cancel
+	s.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+}
+
+func recordedWorkerSessionTerminalEvent(event interfaces.FactoryEvent) bool {
+	switch event.Type {
+	case interfaces.FactoryEventTypeDispatchResponse,
+		interfaces.FactoryEventTypeDispatchInterrupted,
+		interfaces.FactoryEventTypeDispatchReconciled:
+		return true
+	default:
+		return false
+	}
+}
+
+func recordedObservationEvent(event interfaces.FactoryEvent) workersessions.ObservationEvent {
+	position := event.Context.Sequence
+	if position < 0 {
+		position = 0
+	}
+	return workersessions.ObservationEvent{
+		Position:       uint64(position),
+		SourceType:     "factory_event",
+		SourceID:       event.Id,
+		SourceSequence: uint64(position),
+		SourceEventID:  event.Id,
+		SchemaID:       string(event.Type),
+		Payload:        append([]byte(nil), event.Payload...),
+	}
 }
 
 type recordedDispatchObservation struct {
