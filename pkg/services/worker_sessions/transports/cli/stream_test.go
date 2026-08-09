@@ -62,6 +62,49 @@ func TestStreamJSONUsesSessionScopedSSEAndStopsAtTerminal(t *testing.T) {
 	}
 }
 
+func TestStreamReplayOnlyWritesEventFramesAndFinalSummary(t *testing.T) {
+	var gotReplayOnly string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotReplayOnly = r.URL.Query().Get("replayOnly")
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = fmt.Fprint(w,
+			"data: {\"delivery\":\"RECORD\",\"workerSessionId\":\"worker-session-1\",\"providerSession\":null,\"workIds\":[],\"event\":{\"position\":1,\"sourceType\":\"worker\",\"sourceId\":\"worker-session-1\",\"sourceSequence\":1,\"sourceEventId\":\"event-1\",\"schemaId\":\"worker.output\",\"payload\":{\"text\":\"partial\"}},\"errorCode\":null,\"errorMessage\":null}\n\n",
+			"data: {\"delivery\":\"REPLAY_SUMMARY\",\"workerSessionId\":\"worker-session-1\",\"providerSession\":null,\"workIds\":[],\"event\":null,\"errorCode\":null,\"errorMessage\":null,\"replaySummary\":{\"kind\":\"replay-summary\",\"complete\":false,\"reason\":\"session-active\",\"eventsEmitted\":1}}\n\n",
+		)
+	}))
+	defer server.Close()
+
+	var output bytes.Buffer
+	err := NewStream(testHTTPProtocol(t))(StreamConfig{
+		Context: context.Background(), Server: server.URL, SessionID: "session-1",
+		Provider: "codex", Kind: "session_id", ID: "provider-session-1", OutputFormat: "json", ReplayOnly: true, Output: &output,
+	})
+	if err != nil {
+		t.Fatalf("Stream() error = %v", err)
+	}
+	if gotReplayOnly != "true" {
+		t.Fatalf("replayOnly query = %q, want true", gotReplayOnly)
+	}
+	lines := strings.Split(strings.TrimSpace(output.String()), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("JSON replay lines = %d, output=%q, want event and summary", len(lines), output.String())
+	}
+	var event map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(lines[0]), &event); err != nil {
+		t.Fatalf("decode event line: %v", err)
+	}
+	if string(event["delivery"]) != `"RECORD"` {
+		t.Fatalf("event line = %s, want RECORD", lines[0])
+	}
+	var summary streamReplaySummary
+	if err := json.Unmarshal([]byte(lines[1]), &summary); err != nil {
+		t.Fatalf("decode summary line: %v", err)
+	}
+	if summary.Kind != "replay-summary" || summary.Complete || summary.Reason != "session-active" || summary.EventsEmitted != 1 {
+		t.Fatalf("summary = %#v, want active count-one replay summary", summary)
+	}
+}
+
 func TestStreamHumanRendersExplicitSourceFailureAndReturnsStableError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -28,16 +29,34 @@ func (f observationProjectorFake) Project(providersessions.ProjectRequest) (prov
 }
 
 type observationEventReaderFake struct {
-	subscription events.Subscription
-	err          error
+	subscription   events.Subscription
+	err            error
+	readResults    []events.ReadResult
+	readErr        error
+	subscribeCalls int
+	readCalls      int
 }
 
 func (f *observationEventReaderFake) Subscribe(context.Context, events.SubscribeRequest) (events.Subscription, error) {
+	f.subscribeCalls++
 	return f.subscription, f.err
 }
 
+func (f *observationEventReaderFake) Read(context.Context, events.ReadRequest) (events.ReadResult, error) {
+	f.readCalls++
+	if f.readErr != nil {
+		return events.ReadResult{}, f.readErr
+	}
+	if len(f.readResults) == 0 {
+		return events.ReadResult{}, errors.New("observation reader fake: no read result")
+	}
+	result := f.readResults[0]
+	f.readResults = f.readResults[1:]
+	return result, nil
+}
+
 func newObservationRegistry(provider providersessions.Service, reader EventsReader) *registry {
-	return &registry{
+	registry := &registry{
 		sessions:         make(map[string]workersessions.Session),
 		observations:     make(map[string]*observation),
 		publications:     make(map[string]*publication),
@@ -48,6 +67,10 @@ func newObservationRegistry(provider providersessions.Service, reader EventsRead
 		clock:            platformclock.NewDeterministic(time.Date(2026, 8, 8, 12, 0, 0, 0, time.UTC), time.Second),
 		logger:           logging.NoopLogger{},
 	}
+	if retainedReader, ok := reader.(EventsRetainedReader); ok {
+		registry.retainedReader = retainedReader
+	}
+	return registry
 }
 
 func observationProviderRef() providers.SessionRef {
@@ -429,6 +452,120 @@ func TestObservationSubscriptionMapsCanonicalOutcomesAndClosesIdempotently(t *te
 	activeCancel.Close()
 	if !activeCancelCalled {
 		t.Fatal("Close() did not cancel an active Next")
+	}
+}
+
+func TestStreamObservationsReplayOnlyUsesReadSnapshotWithoutSubscriber(t *testing.T) {
+	ref := observationProviderRef()
+	topic := workersessions.Topic("worker-1")
+	reader := &observationEventReaderFake{
+		readResults: []events.ReadResult{
+			{
+				Outcome: events.ReadOutcomeProgress,
+				Records: []events.Record{
+					replayObservationRecord(topic, 1, "event-1"),
+					replayObservationRecord(topic, 2, "event-2"),
+				},
+				Next:     events.Cursor{Topic: topic, Position: 2},
+				Retained: events.RetainedRange{Topic: topic, Earliest: 1, Head: 3},
+			},
+			{
+				Outcome: events.ReadOutcomeProgress,
+				// Position 4 was appended after the captured head. It is
+				// deliberately returned by the fake to prove the replay
+				// subscription truncates the page at position 3.
+				Records: []events.Record{
+					replayObservationRecord(topic, 3, "event-3"),
+					replayObservationRecord(topic, 4, "event-4"),
+				},
+				Next:     events.Cursor{Topic: topic, Position: 4},
+				Retained: events.RetainedRange{Topic: topic, Earliest: 1, Head: 4},
+			},
+		},
+		subscription: events.Subscription(func(context.Context) events.Delivery {
+			t.Fatal("replay-only registered a live Events subscriber")
+			return events.Delivery{}
+		}),
+	}
+	registry := newObservationRegistry(observationProjectorFake{}, reader)
+	registry.sessions["worker-1"] = observationSession("worker-1", workersessions.StateRunning)
+
+	subscription, err := registry.StreamObservations(context.Background(), workersessions.StreamObservationsRequest{
+		ProviderSession: ref,
+		ReplayOnly:      true,
+		Limit:           2,
+	})
+	if err != nil {
+		t.Fatalf("StreamObservations() error = %v", err)
+	}
+	defer subscription.Close()
+
+	var positions []uint64
+	for range 3 {
+		delivery := subscription.Next(context.Background())
+		if delivery.Kind != workersessions.ObservationDeliveryRecord {
+			t.Fatalf("replay delivery = %#v, want RECORD", delivery)
+		}
+		positions = append(positions, delivery.Event.Position)
+	}
+	if got, want := fmt.Sprint(positions), "[1 2 3]"; got != want {
+		t.Fatalf("replayed positions = %s, want %s", got, want)
+	}
+	summary := subscription.Next(context.Background())
+	if summary.Kind != workersessions.ObservationDeliveryReplaySummary || summary.Summary == nil {
+		t.Fatalf("summary delivery = %#v, want REPLAY_SUMMARY", summary)
+	}
+	if summary.Summary.Complete || summary.Summary.Reason != "session-active" || summary.Summary.EventsEmitted != 3 {
+		t.Fatalf("summary = %#v, want incomplete active replay with count 3", summary.Summary)
+	}
+	if reader.subscribeCalls != 0 {
+		t.Fatalf("Subscribe() calls = %d, want 0 for replay-only", reader.subscribeCalls)
+	}
+	if reader.readCalls != 2 {
+		t.Fatalf("Read() calls = %d, want initial snapshot plus one page", reader.readCalls)
+	}
+}
+
+func TestStreamObservationsReplayOnlyEmitsSummaryForEmptyActiveTopic(t *testing.T) {
+	ref := observationProviderRef()
+	topic := workersessions.Topic("worker-1")
+	reader := &observationEventReaderFake{readResults: []events.ReadResult{{
+		Outcome:  events.ReadOutcomeAtHead,
+		Next:     events.Cursor{Topic: topic},
+		Retained: events.RetainedRange{Topic: topic},
+	}}}
+	registry := newObservationRegistry(observationProjectorFake{}, reader)
+	registry.sessions["worker-1"] = observationSession("worker-1", workersessions.StateRunning)
+
+	subscription, err := registry.StreamObservations(context.Background(), workersessions.StreamObservationsRequest{
+		ProviderSession: ref,
+		ReplayOnly:      true,
+	})
+	if err != nil {
+		t.Fatalf("StreamObservations() error = %v", err)
+	}
+	defer subscription.Close()
+	summary := subscription.Next(context.Background())
+	if summary.Kind != workersessions.ObservationDeliveryReplaySummary || summary.Summary == nil {
+		t.Fatalf("summary delivery = %#v, want empty replay summary", summary)
+	}
+	if summary.Summary.Complete || summary.Summary.Reason != "session-active" || summary.Summary.EventsEmitted != 0 {
+		t.Fatalf("summary = %#v, want zero-event incomplete active replay", summary.Summary)
+	}
+	if reader.subscribeCalls != 0 {
+		t.Fatalf("Subscribe() calls = %d, want 0 for replay-only", reader.subscribeCalls)
+	}
+}
+
+func replayObservationRecord(topic events.Topic, position uint64, eventID string) events.Record {
+	return events.Record{
+		ID:             events.RecordID{Topic: topic, Position: events.AggregateSequence(position)},
+		SourceType:     "worker_observation",
+		SourceID:       "provider-session-1",
+		SourceSequence: events.SourceSequence(position),
+		SourceEventID:  events.SourceEventID(eventID),
+		SchemaID:       "worker_session.observation",
+		Payload:        []byte(`{"position":1}`),
 	}
 }
 

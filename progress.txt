@@ -1,0 +1,17 @@
+## Codebase Patterns
+- Worker Session finite streams can use the injected Events `Read` contract with the first retained head as a snapshot boundary; replay-only paths must not call `Subscribe`.
+- Authored OpenAPI and CLI contracts generate their Go, TypeScript, published metadata, and family-manifest consumers; update the source contract first, then run the repository generators and drift checks.
+- Stream transport dispatch stays below the package maintainability threshold by delegating lifecycle-specific frame handling to focused helpers.
+
+## 2026-08-09 14:24 -07:00 - wo-c1-ext-stream-replay-only-001
+- What was implemented
+  - Added ACTIVE Worker Session finite replay through retained Events reads, including a captured head boundary, canonical paging, zero-event handling, explicit `REPLAY_SUMMARY`, `complete:false`, `reason:"session-active"`, and emitted-event counting.
+  - Added HTTP/SSE `replayOnly` propagation and summary framing, CLI `--replay-only` wiring, redirect-safe JSON summary output, and operator help/examples.
+  - Regenerated bundled OpenAPI, Go HTTP clients/server, TypeScript OpenAPI types, CLI family metadata, and published CLI contract artifacts.
+  - Added service, HTTP transport, and CLI behavioral tests proving ordering, snapshot truncation, no live subscriber, summary serialization, and query propagation.
+- Files changed
+  - Worker Sessions service and observation contracts, HTTP/CLI transports and tests, authored/generated OpenAPI and CLI contracts, `prd.json`, and this progress log.
+- **Learnings for future iterations:**
+  - The existing Events `ReadResult` explicitly distinguishes progress, head, and retention gaps; finite replay should preserve those outcomes instead of inferring completion from an empty page.
+  - `make api-smoke` checks the working tree for generated drift, so run it after committing synchronized generated artifacts; `make ui-deps` restores the Bun dependency tree when the local OpenAPI generator is missing.
+---

@@ -176,13 +176,14 @@ func (h *Handler) StreamWorkerSessionEventsBySessionId(
 		return
 	}
 
-	observation, subscription, err := h.adapter.StreamWorkerSessionEvents(r.Context(), string(sessionID), provider, kind, id)
+	replayOnly := params.ReplayOnly != nil && *params.ReplayOnly
+	observation, subscription, err := h.adapter.StreamWorkerSessionEvents(r.Context(), string(sessionID), provider, kind, id, replayOnly)
 	if err != nil {
 		h.writeMappedStreamError(w, err)
 		return
 	}
 	defer subscription.Close()
-	h.writeWorkerSessionStream(w, r, flusher, observation, subscription)
+	h.writeWorkerSessionStream(w, r, flusher, observation, subscription, replayOnly)
 }
 
 func (h *Handler) prepareStreamRequest(
@@ -238,6 +239,7 @@ func (h *Handler) writeWorkerSessionStream(
 	flusher http.Flusher,
 	observation factoryapi.WorkerSessionObservation,
 	subscription workersessions.ObservationSubscription,
+	replayOnly bool,
 ) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -247,37 +249,55 @@ func (h *Handler) writeWorkerSessionStream(
 	flusher.Flush()
 
 	for {
-		delivery := subscription.Next(r.Context())
-		switch delivery.Kind {
-		case workersessions.ObservationDeliveryRecord,
-			workersessions.ObservationDeliveryTerminal,
-			workersessions.ObservationDeliveryTerminalReplay:
-			frame := workerSessionEventFrame(observation, delivery)
-			if err := writeSSEFrame(w, flusher, frame); err != nil {
-				if h.logger != nil {
-					h.logger.Debug("write Worker Session event stream failed", zap.Error(err))
-				}
-				return
-			}
-			if delivery.Kind == workersessions.ObservationDeliveryTerminal || delivery.Kind == workersessions.ObservationDeliveryTerminalReplay {
-				return
-			}
-		case workersessions.ObservationDeliveryCanceled:
-			return
-		case workersessions.ObservationDeliverySourceFailure, workersessions.ObservationDeliveryClosed:
-			code, message := workerSessionStreamFailure(delivery.Err)
-			if err := writeSSEFrame(w, flusher, workerSessionFailureFrame(observation, code, message)); err != nil && h.logger != nil {
-				h.logger.Debug("write Worker Session source failure failed", zap.Error(err))
-			}
-			return
-		default:
-			code, message := workerSessionStreamFailure(fmt.Errorf("unknown Worker Session delivery kind %q", delivery.Kind))
-			if err := writeSSEFrame(w, flusher, workerSessionFailureFrame(observation, code, message)); err != nil && h.logger != nil {
-				h.logger.Debug("write Worker Session unknown delivery failure failed", zap.Error(err))
-			}
+		if h.writeWorkerSessionDelivery(w, flusher, observation, subscription.Next(r.Context()), replayOnly) {
 			return
 		}
 	}
+}
+
+func (h *Handler) writeWorkerSessionDelivery(
+	w http.ResponseWriter,
+	flusher http.Flusher,
+	observation factoryapi.WorkerSessionObservation,
+	delivery workersessions.ObservationDelivery,
+	replayOnly bool,
+) bool {
+	switch delivery.Kind {
+	case workersessions.ObservationDeliveryRecord,
+		workersessions.ObservationDeliveryTerminal,
+		workersessions.ObservationDeliveryTerminalReplay:
+		if !h.writeWorkerSessionFrame(w, flusher, workerSessionEventFrame(observation, delivery), "event stream") {
+			return true
+		}
+		return !replayOnly && (delivery.Kind == workersessions.ObservationDeliveryTerminal || delivery.Kind == workersessions.ObservationDeliveryTerminalReplay)
+	case workersessions.ObservationDeliveryReplaySummary:
+		h.writeWorkerSessionFrame(w, flusher, workerSessionReplaySummaryFrame(observation, delivery.Summary), "replay summary")
+		return true
+	case workersessions.ObservationDeliveryCanceled:
+		return true
+	case workersessions.ObservationDeliverySourceFailure, workersessions.ObservationDeliveryClosed:
+		code, message := workerSessionStreamFailure(delivery.Err)
+		h.writeWorkerSessionFrame(w, flusher, workerSessionFailureFrame(observation, code, message), "source failure")
+		return true
+	default:
+		code, message := workerSessionStreamFailure(fmt.Errorf("unknown Worker Session delivery kind %q", delivery.Kind))
+		h.writeWorkerSessionFrame(w, flusher, workerSessionFailureFrame(observation, code, message), "unknown delivery failure")
+		return true
+	}
+}
+
+func (h *Handler) writeWorkerSessionFrame(
+	w http.ResponseWriter,
+	flusher http.Flusher,
+	frame workerSessionEventFramePayload,
+	label string,
+) bool {
+	if err := writeSSEFrame(w, flusher, frame); err == nil {
+		return true
+	} else if h.logger != nil {
+		h.logger.Debug("write Worker Session "+label+" failed", zap.Error(err))
+	}
+	return false
 }
 
 type workerSessionEventFramePayload struct {
@@ -288,6 +308,7 @@ type workerSessionEventFramePayload struct {
 	Event           *workerSessionEventRecordPayload           `json:"event"`
 	ErrorCode       *string                                    `json:"errorCode"`
 	ErrorMessage    *string                                    `json:"errorMessage"`
+	ReplaySummary   *factoryapi.WorkerSessionReplaySummary     `json:"replaySummary,omitempty"`
 }
 
 type workerSessionEventRecordPayload struct {
@@ -312,6 +333,24 @@ func workerSessionFailureFrame(observation factoryapi.WorkerSessionObservation, 
 	return workerSessionEventFrameWithIdentity(observation, workersessions.ObservationDeliverySourceFailure, nil, &code, &message)
 }
 
+func workerSessionReplaySummaryFrame(observation factoryapi.WorkerSessionObservation, summary *workersessions.ReplaySummary) workerSessionEventFramePayload {
+	if summary == nil {
+		return workerSessionFailureFrame(observation, "WORKER_SESSION_STREAM_FAILED", "Worker Session replay summary is unavailable")
+	}
+	return workerSessionEventFramePayload{
+		Delivery:        workersessions.ObservationDeliveryReplaySummary,
+		WorkerSessionID: observation.WorkerSessionId,
+		ProviderSession: workerSessionProviderSessionRef(observation),
+		WorkIDs:         append([]string(nil), observation.WorkIds...),
+		ReplaySummary: &factoryapi.WorkerSessionReplaySummary{
+			Kind:          "replay-summary",
+			Complete:      summary.Complete,
+			Reason:        summary.Reason,
+			EventsEmitted: int64(summary.EventsEmitted),
+		},
+	}
+}
+
 func workerSessionEventFrameWithIdentity(
 	observation factoryapi.WorkerSessionObservation,
 	delivery workersessions.ObservationDeliveryKind,
@@ -334,6 +373,13 @@ func workerSessionEventFrameWithIdentity(
 		WorkIDs: append([]string(nil), observation.WorkIds...), Event: event,
 		ErrorCode: errorCode, ErrorMessage: errorMessage,
 	}
+}
+
+func workerSessionProviderSessionRef(observation factoryapi.WorkerSessionObservation) factoryapi.WorkerSessionProviderSessionRef {
+	if observation.ProviderSession == nil {
+		return factoryapi.WorkerSessionProviderSessionRef{}
+	}
+	return *observation.ProviderSession
 }
 
 func writeSSEFrame(w http.ResponseWriter, flusher http.Flusher, frame workerSessionEventFramePayload) error {

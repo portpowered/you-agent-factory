@@ -1,0 +1,24 @@
+type: object
+additionalProperties: false
+required:
+  - kind
+  - complete
+  - reason
+  - eventsEmitted
+properties:
+  kind:
+    type: string
+    enum:
+      - replay-summary
+    description: Stable record kind for the finite Worker Session replay marker.
+  complete:
+    type: boolean
+    description: Whether the retained capture represents a terminal Worker Session.
+  reason:
+    type: string
+    description: Stable lifecycle classification for the replay result.
+  eventsEmitted:
+    type: integer
+    format: int64
+    minimum: 0
+    description: Number of canonical event records emitted before this summary.

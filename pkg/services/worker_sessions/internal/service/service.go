@@ -9,6 +9,7 @@ import (
 	"errors"
 	"slices"
 	"sort"
+	"strings"
 	"sync"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
@@ -52,6 +53,13 @@ type EventsReader interface {
 	Subscribe(context.Context, events.SubscribeRequest) (events.Subscription, error)
 }
 
+// EventsRetainedReader is the narrow finite-replay dependency. Keeping Read
+// separate from EventsReader makes the live subscription path impossible to
+// enter accidentally when a replay-only request is handled.
+type EventsRetainedReader interface {
+	Read(context.Context, events.ReadRequest) (events.ReadResult, error)
+}
+
 type registry struct {
 	mu           sync.RWMutex
 	sessions     map[string]workersessions.Session
@@ -66,6 +74,7 @@ type registry struct {
 	boundary         workers.WorkstationPoolBoundary
 	events           EventsAppender
 	eventReader      EventsReader
+	retainedReader   EventsRetainedReader
 	providerSessions providersessions.Service
 	clock            platformclock.Source
 	logger           logging.Logger
@@ -114,6 +123,9 @@ func New(
 	}
 	if reader, ok := eventsAppender.(EventsReader); ok {
 		registry.eventReader = reader
+	}
+	if reader, ok := eventsAppender.(EventsRetainedReader); ok {
+		registry.retainedReader = reader
 	}
 	return registry, nil
 }
@@ -439,4 +451,244 @@ func (r *registry) associateProviderSessionLocked(
 		Association: association.Clone(),
 		Outcome:     workersessions.ProviderSessionAssociationOutcomeAccepted,
 	}, nil
+}
+
+// replayObservationSubscription drains one retained Events snapshot. It never
+// calls Subscribe: once the first Read captures the retained head, later reads
+// stop at that position even if the topic advances while the drain is in
+// progress.
+type replayObservationSubscription struct {
+	reader         EventsRetainedReader
+	topic          events.Topic
+	limit          int
+	snapshotHead   events.AggregateSequence
+	next           events.Cursor
+	pending        []events.Record
+	terminalReplay bool
+	complete       bool
+	reason         string
+	eventsEmitted  int
+	summarySent    bool
+	closed         bool
+	mu             sync.Mutex
+}
+
+func newReplayObservationSubscription(
+	ctx context.Context,
+	reader EventsRetainedReader,
+	topic events.Topic,
+	state workersessions.State,
+	limit int,
+) (*replayObservationSubscription, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if reader == nil {
+		return nil, workersessions.ErrObservationSourceUnavailable
+	}
+	if limit <= 0 {
+		limit = workersessions.DefaultObservationStreamLimit
+	}
+	replay := &replayObservationSubscription{
+		reader:         reader,
+		topic:          topic,
+		limit:          limit,
+		next:           events.Cursor{Topic: topic},
+		terminalReplay: state.Terminal(),
+		complete:       state.Terminal(),
+		reason:         replayReason(state),
+	}
+	result, err := reader.Read(ctx, events.ReadRequest{Topic: topic, From: replay.next, Limit: limit})
+	if err != nil {
+		return nil, replayReadError(err)
+	}
+	if err := replay.acceptInitial(result); err != nil {
+		return nil, err
+	}
+	return replay, nil
+}
+
+func (s *replayObservationSubscription) acceptInitial(result events.ReadResult) error {
+	if err := result.Validate(); err != nil {
+		return replayReadError(err)
+	}
+	if result.Outcome == events.ReadOutcomeGap {
+		return workersessions.ErrObservationSourceGap
+	}
+	if result.Next.Topic != s.topic || result.Retained.Topic != s.topic {
+		return workersessions.ErrObservationSourceUnavailable
+	}
+	s.snapshotHead = result.Retained.Head
+	s.next = result.Next
+	switch result.Outcome {
+	case events.ReadOutcomeProgress:
+		s.pending = cloneEventRecords(result.Records)
+	case events.ReadOutcomeAtHead:
+		return nil
+	default:
+		return workersessions.ErrObservationSourceUnavailable
+	}
+	return nil
+}
+
+func (s *replayObservationSubscription) Next(ctx context.Context) workersessions.ObservationDelivery {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	for {
+		if err := ctx.Err(); err != nil {
+			s.mu.Lock()
+			s.closed = true
+			s.mu.Unlock()
+			return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliveryCanceled, Err: workersessions.ErrObservationCanceled}
+		}
+
+		s.mu.Lock()
+		if s.closed {
+			s.mu.Unlock()
+			return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliveryClosed}
+		}
+		if len(s.pending) > 0 {
+			record := s.pending[0]
+			s.pending = s.pending[1:]
+			s.eventsEmitted++
+			terminalReplay := s.terminalReplay
+			s.mu.Unlock()
+			return observationRecordDelivery(record, terminalReplay)
+		}
+		if s.next.Position >= s.snapshotHead {
+			if !s.summarySent {
+				s.summarySent = true
+				summary := &workersessions.ReplaySummary{
+					Complete:      s.complete,
+					Reason:        s.reason,
+					EventsEmitted: s.eventsEmitted,
+				}
+				s.mu.Unlock()
+				return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliveryReplaySummary, Summary: summary}
+			}
+			s.closed = true
+			s.mu.Unlock()
+			return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliveryClosed}
+		}
+		reader := s.reader
+		request := events.ReadRequest{Topic: s.topic, From: s.next, Limit: s.limit}
+		s.mu.Unlock()
+
+		result, err := reader.Read(ctx, request)
+		if err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
+				s.mu.Lock()
+				s.closed = true
+				s.mu.Unlock()
+				return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliveryCanceled, Err: workersessions.ErrObservationCanceled}
+			}
+			s.mu.Lock()
+			s.closed = true
+			s.mu.Unlock()
+			return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliverySourceFailure, Err: replayReadError(err)}
+		}
+
+		s.mu.Lock()
+		if s.closed {
+			s.mu.Unlock()
+			return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliveryClosed}
+		}
+		err = s.appendPage(result)
+		s.mu.Unlock()
+		if err != nil {
+			s.mu.Lock()
+			s.closed = true
+			s.mu.Unlock()
+			return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliverySourceFailure, Err: err}
+		}
+	}
+}
+
+func (s *replayObservationSubscription) appendPage(result events.ReadResult) error {
+	if err := result.Validate(); err != nil {
+		return replayReadError(err)
+	}
+	if result.Outcome == events.ReadOutcomeGap {
+		return workersessions.ErrObservationSourceGap
+	}
+	if result.Next.Topic != s.topic || result.Retained.Topic != s.topic {
+		return workersessions.ErrObservationSourceUnavailable
+	}
+	switch result.Outcome {
+	case events.ReadOutcomeInvalidCursor:
+		return workersessions.ErrObservationSourceUnavailable
+	case events.ReadOutcomeAtHead:
+		if result.Next.Position < s.snapshotHead {
+			return workersessions.ErrObservationSourceUnavailable
+		}
+		s.next = result.Next
+		return nil
+	case events.ReadOutcomeProgress:
+		if len(result.Records) == 0 || result.Records[0].ID.Position != s.next.Position+1 {
+			return workersessions.ErrObservationSourceUnavailable
+		}
+		lastIncluded := s.next.Position
+		for _, record := range result.Records {
+			if record.ID.Position > s.snapshotHead {
+				break
+			}
+			s.pending = append(s.pending, record.Detached())
+			lastIncluded = record.ID.Position
+		}
+		if lastIncluded == s.next.Position {
+			return workersessions.ErrObservationSourceUnavailable
+		}
+		s.next = events.Cursor{Topic: s.topic, Position: lastIncluded}
+		return nil
+	default:
+		return workersessions.ErrObservationSourceUnavailable
+	}
+}
+
+func (s *replayObservationSubscription) Close() {
+	s.mu.Lock()
+	s.closed = true
+	s.mu.Unlock()
+}
+
+func cloneEventRecords(records []events.Record) []events.Record {
+	clone := make([]events.Record, len(records))
+	for index, record := range records {
+		clone[index] = record.Detached()
+	}
+	return clone
+}
+
+func observationRecordDelivery(record events.Record, terminalReplay bool) workersessions.ObservationDelivery {
+	event := projectObservationEvent(record)
+	if record.SourceType == lifecycleSourceType && record.SourceSequence >= terminalSourceSequence {
+		kind := workersessions.ObservationDeliveryTerminal
+		if terminalReplay {
+			kind = workersessions.ObservationDeliveryTerminalReplay
+		}
+		return workersessions.ObservationDelivery{Kind: kind, Event: event}
+	}
+	return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliveryRecord, Event: event}
+}
+
+func replayReadError(err error) error {
+	switch {
+	case errors.Is(err, context.Canceled), errors.Is(err, workersessions.ErrObservationCanceled):
+		return workersessions.ErrObservationCanceled
+	case errors.Is(err, workersessions.ErrObservationSourceGap):
+		return workersessions.ErrObservationSourceGap
+	default:
+		return workersessions.ErrObservationSourceUnavailable
+	}
+}
+
+func replayReason(state workersessions.State) string {
+	if !state.Terminal() {
+		return "session-active"
+	}
+	return "session-" + strings.ToLower(string(state))
 }

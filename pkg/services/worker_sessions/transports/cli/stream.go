@@ -28,6 +28,7 @@ type StreamConfig struct {
 	ID           string
 	OutputFormat string
 	JSON         bool
+	ReplayOnly   bool
 	Verbose      bool
 	Debug        bool
 	Output       io.Writer
@@ -53,6 +54,14 @@ type streamJSONFrame struct {
 	Event           *streamJSONEvent       `json:"event"`
 	ErrorCode       *string                `json:"errorCode"`
 	ErrorMessage    *string                `json:"errorMessage"`
+	ReplaySummary   *streamReplaySummary   `json:"replaySummary,omitempty"`
+}
+
+type streamReplaySummary struct {
+	Kind          string `json:"kind"`
+	Complete      bool   `json:"complete"`
+	Reason        string `json:"reason"`
+	EventsEmitted int64  `json:"eventsEmitted"`
 }
 
 type streamProviderSession struct {
@@ -84,7 +93,7 @@ func stream(config StreamConfig) error {
 		return emitStreamCLIError(config, jsonOutput, err)
 	}
 	jsonOutput = config.JSON || format == "json"
-	endpoint, err := workerSessionEventsEndpoint(config.Server, config.SessionID, config.Provider, config.Kind, config.ID)
+	endpoint, err := workerSessionEventsEndpoint(config.Server, config.SessionID, config.Provider, config.Kind, config.ID, config.ReplayOnly)
 	if err != nil {
 		return emitStreamCLIError(config, jsonOutput, err)
 	}
@@ -159,8 +168,14 @@ func consumeStreamPayload(config StreamConfig, jsonOutput, started bool, payload
 	if err := writeStreamFrame(config.Output, jsonOutput, frame); err != nil {
 		return started, false, err
 	}
-	if frame.Delivery == "TERMINAL" || frame.Delivery == "TERMINAL_REPLAY" {
+	if frame.Delivery == "REPLAY_SUMMARY" {
+		if frame.ReplaySummary == nil {
+			return started, false, newCLIError("WORKER_SESSION_STREAM_FAILED", "Worker Session replay summary is unavailable", nil)
+		}
 		return started, true, nil
+	}
+	if frame.Delivery == "TERMINAL" || frame.Delivery == "TERMINAL_REPLAY" {
+		return started, !config.ReplayOnly, nil
 	}
 	if frame.Delivery == "SOURCE_FAILURE" {
 		code := stringValue(frame.ErrorCode, "WORKER_SESSION_STREAM_FAILED")
@@ -174,6 +189,12 @@ func consumeStreamPayload(config StreamConfig, jsonOutput, started bool, payload
 }
 
 func writeStreamFrame(output io.Writer, jsonOutput bool, frame streamJSONFrame) error {
+	if frame.Delivery == "REPLAY_SUMMARY" {
+		if frame.ReplaySummary == nil {
+			return newCLIError("WORKER_SESSION_STREAM_FAILED", "Worker Session replay summary is unavailable", nil)
+		}
+		return writeStreamReplaySummary(output, jsonOutput, *frame.ReplaySummary)
+	}
 	if jsonOutput {
 		return json.NewEncoder(output).Encode(frame)
 	}
@@ -208,7 +229,7 @@ func validateStreamConfig(config StreamConfig) error {
 	return nil
 }
 
-func workerSessionEventsEndpoint(server, sessionID, provider, kind, id string) (url.URL, error) {
+func workerSessionEventsEndpoint(server, sessionID, provider, kind, id string, replayOnly bool) (url.URL, error) {
 	endpointURL, err := cliserver.RequestURL(server, sessionpath.WorkerSessionsEventsPath(sessionID))
 	if err != nil {
 		return url.URL{}, err
@@ -221,6 +242,9 @@ func workerSessionEventsEndpoint(server, sessionID, provider, kind, id string) (
 	query.Set("provider", provider)
 	query.Set("kind", kind)
 	query.Set("id", id)
+	if replayOnly {
+		query.Set("replayOnly", "true")
+	}
 	endpoint.RawQuery = query.Encode()
 	return *endpoint, nil
 }
@@ -315,6 +339,28 @@ func renderStreamFrame(output io.Writer, frame streamJSONFrame) error {
 	}
 	if frame.ErrorMessage != nil {
 		fields = append(fields, "errorMessage="+streamStringOrDash(*frame.ErrorMessage))
+	}
+	if frame.ReplaySummary != nil {
+		fields = append(fields,
+			"kind="+streamStringOrDash(frame.ReplaySummary.Kind),
+			fmt.Sprintf("complete=%t", frame.ReplaySummary.Complete),
+			"reason="+streamStringOrDash(frame.ReplaySummary.Reason),
+			fmt.Sprintf("eventsEmitted=%d", frame.ReplaySummary.EventsEmitted),
+		)
+	}
+	_, err := fmt.Fprintln(output, strings.Join(fields, " "))
+	return err
+}
+
+func writeStreamReplaySummary(output io.Writer, jsonOutput bool, summary streamReplaySummary) error {
+	if jsonOutput {
+		return json.NewEncoder(output).Encode(summary)
+	}
+	fields := []string{
+		"kind=" + streamStringOrDash(summary.Kind),
+		fmt.Sprintf("complete=%t", summary.Complete),
+		"reason=" + streamStringOrDash(summary.Reason),
+		fmt.Sprintf("eventsEmitted=%d", summary.EventsEmitted),
 	}
 	_, err := fmt.Fprintln(output, strings.Join(fields, " "))
 	return err

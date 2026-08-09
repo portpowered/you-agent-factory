@@ -271,10 +271,14 @@ func executeGeneratedWorkerSessionsStream(
 	if err != nil {
 		return err
 	}
+	replayOnly, err := commandInputValue[bool](values, "you.worker-sessions.stream.flag.replay-only")
+	if err != nil {
+		return err
+	}
 	jsonOutput := globals.json || strings.EqualFold(strings.TrimSpace(outputFormat), "json")
 	return stream(workersessionscli.StreamConfig{
 		Context: cmd.Context(), Server: globals.server, SessionID: sessionID,
-		Provider: provider, Kind: kind, ID: id, OutputFormat: outputFormat, JSON: jsonOutput,
+		Provider: provider, Kind: kind, ID: id, OutputFormat: outputFormat, JSON: jsonOutput, ReplayOnly: replayOnly,
 		Output: cmd.OutOrStdout(), Diagnostics: diagnostics.writer(cmd),
 		Verbose: diagnostics.verboseEnabled(), Debug: diagnostics.debug,
 	})

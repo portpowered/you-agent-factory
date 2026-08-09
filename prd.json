@@ -1,73 +1,88 @@
 {
-  "project": "WO-C3 — Add Reasoning-Effort and File-Backed Prompt Parity to you run",
-  "branchName": "wo-c3-run-parity-long-prompt-input",
-  "description": "Make one-shot ad-hoc you run invocations accept the canonical worker reasoning-effort override and an exact UTF-8 prompt from --to-file, with strict pre-dispatch source validation, preserved existing invocation behavior, synchronized CLI/help/reference contracts, and deterministic end-to-end proof.",
+  "project": "Pipeable Replay-Only Worker Session Streams",
+  "branchName": "wo-c1-ext-stream-replay-only",
+  "description": "Add --replay-only to you worker-sessions stream so operators can drain retained Worker Session events to redirect-safe NDJSON, receive an explicit completeness summary, and exit 0 without attaching a live follower, while preserving existing live-stream and ACTIVE transcript-read semantics.",
   "context": {
-    "customerAsk": "Add --worker-reasoning-effort and --to-file <path> to ad-hoc you run so AGY or Codex workers can receive a supported explicit effort and one exact long or multiline prompt without fragile shell quoting; reject invalid or conflicting sources before dispatch, preserve current run and Factory-signature behavior, publish the canonical contract, and deliver through merged terminal-green CI.",
-    "problem": "The live generic you run path rejects --worker-reasoning-effort even though authored Workers support canonical reasoning effort, while PowerShell Start-Process can split a multiline --to value into many positional arguments and cause INVOCATION_ARGUMENT_POSITIONAL_OVERFLOW. Long ad-hoc probes and explicit effort are therefore unreliable.",
-    "solution": "Declare canonical run-scoped effort and file-backed prompt inputs; reuse the authored Worker effort canonicalization and existing Worker request field; resolve --to-file through Work-owned input policy and an injected filesystem boundary; preserve exact UTF-8 content; reject conflicts, bad files, unsupported effort, and disallowed run shapes before Provider dispatch; then regenerate and verify CLI/help/reference surfaces with focused functional tests."
+    "customerAsk": "Allow operators to run you worker-sessions stream --replay-only --output json against ACTIVE or terminal sessions, redirect retained events to a file, receive an explicit final completeness marker, and exit 0 without cancellation or live following.",
+    "problem": "The existing stream replays retained events and then follows live until terminal or cancellation, so capturing an ACTIVE session through shell redirection requires cancellation that can truncate the pipe and cannot distinguish a partial capture from a complete transcript. The read command correctly refuses ACTIVE sessions and must continue doing so.",
+    "solution": "Add a finite retained-history mode owned by Worker Sessions and the process-local Events service. It snapshots and emits retained events once in canonical order without registering a follower, appends a replay-summary with authoritative completeness and emitted count, validates live/replay flag conflicts before output or network access, and preserves all existing non-replay-only and read behavior without adding storage."
   },
   "acceptanceCriteria": [
-    "you run --worker-reasoning-effort <supported-value> accepts the canonical authored-Worker effort vocabulary, normalizes it consistently, and carries it in the existing Worker request through dispatch; an unsupported value exits non-zero with an actionable diagnostic and no provider dispatch.",
-    "you run --to-file <path> reads a non-empty valid UTF-8 regular file and delivers its complete contents, including spaces, original line endings, non-ASCII characters, and trailing newline, as exactly one logical prompt without shell argv transport or content normalization.",
-    "--to-file, signature-defined --to, positional invocation text, and supplied non-empty stdin are mutually exclusive; conflicts, invalid paths/files/encoding/content, and run shapes without a primary prompt fail non-zero before runtime or Provider dispatch with source-specific diagnostics.",
-    "Invocations that omit the new flags preserve ordinary --to, stdin, positional Factory input, Factory-signature named/file/repeated/default inputs, packaged Factory behavior, batch/current/JavaScript run shapes, output behavior, and Provider-specific effort validation.",
-    "Canonical CLI sources and generated consumers, you run --help, and packaged you docs run describe the flags, strict conflict rule, effort semantics, and an independently runnable you run --provider codex --worker-reasoning-effort xhigh --to-file <path> example.",
-    "Applicable typecheck, focused unit/integration/functional tests, generated-contract checks, and documentation smoke checks pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
-    "The implementation/review loop continues until required CI is terminal and passing, every blocking PR conversation item is explicitly addressed, merge conflicts and shared-file changes are reconciled, and the PR is actually merged; opened, green, approved, or ready-to-merge is not complete."
+    "you worker-sessions stream --replay-only --output json works for ACTIVE and terminal Worker Sessions, emits retained events exactly once in canonical order, appends exactly one replay-summary record, and exits 0 without registering or waiting on a live follower.",
+    "An ACTIVE-session replay ends with kind replay-summary, complete false, reason session-active, and eventsEmitted N, while a terminal-session replay ends with complete true; in both cases eventsEmitted equals the number of preceding event records.",
+    "Every JSON-mode stdout line is independently valid JSON, event lines retain the existing Worker Session stream NDJSON contract, diagnostics remain on stderr, and a built-process redirection test proves the resulting file ends with the summary record.",
+    "Replay-only combined with --follow or any other mutually exclusive live-follow selection fails with a stable typed conflict error before network access, follower registration, or stdout output.",
+    "Existing behavior is preserved: stream without replay-only still replays then follows until terminal or cancellation, terminal replay is equivalent to the full retained history, and worker-sessions read still rejects ACTIVE sessions with WORKER_SESSION_TRANSCRIPT_ACTIVE.",
+    "Quality gate: the named focused verification command go test ./tests/functional/provider_sessions/cli -run '^(TestWorkerSessionsCLI|TestWorkerSessionsReplayOnlyRedirectsWellFormedNDJSON)$' -count=1 and make verify-fast pass; Typecheck passes; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green; generated CLI/OpenAPI/client artifacts are synchronized if their authored contracts change.",
+    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared-file changes are resolved, and the PR is actually merged; opening, approval, green CI, or merge readiness alone is not completion."
   ],
   "userStories": [
     {
-      "id": "wo-c3-run-parity-long-prompt-input-001",
-      "title": "Apply explicit reasoning effort to ad-hoc worker dispatch",
-      "description": "As a customer running an ad-hoc worker, I want to select its reasoning effort explicitly so the worker executes with the intended supported effort instead of rejecting or ignoring my request.",
+      "id": "wo-c1-ext-stream-replay-only-001",
+      "title": "Capture an ACTIVE session without following",
+      "description": "As an operator, I want replay-only streaming to drain the retained observations of an ACTIVE Worker Session and return successfully so I can inspect progress through a stable finite pipeline.",
       "acceptanceCriteria": [
-        "--worker-reasoning-effort is a typed you run input for applicable one-shot worker invocations and accepts the same normalized canonical values as authored Worker configuration, without a parallel enum, aliases, or fallback-to-default behavior.",
-        "A supported value, including existing case and whitespace normalization, reaches the existing Worker execution request reasoning-effort field and is observable at the deterministic Provider command edge.",
-        "A globally unsupported value fails non-zero before Factory Session activation or Provider dispatch with an actionable diagnostic naming the value; a canonically valid but Provider-unsupported value continues through existing Provider-specific rejection.",
-        "Omitting the flag preserves authored Worker/provider/model defaults, and existing packaged Factory effort signature parameters continue to work.",
-        "Focused CLI and functional regressions prove accepted effort dispatch and pre-dispatch rejection through root.BuildProcess and Process.Execute with Provider effects replaced only through edges.Edges.",
+        "Given an ACTIVE Worker Session with retained observations, replay-only emits each retained event once in canonical position order and does not emit observations published after the retained snapshot boundary.",
+        "The command does not register, retain, or wait on a live subscription after the retained drain and exits 0 without operator cancellation.",
+        "The last JSON line is a replay-summary with complete false, reason session-active, and eventsEmitted equal to the number of preceding event records, including zero when no events are retained.",
+        "Retained reads and lifecycle classification remain explicit Worker Sessions operations over the injected process-local Events service; no storage, hidden global state, or secondary dependency construction is introduced.",
+        "Focused Worker Sessions service, transport, and CLI behavioral tests pass.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Implemented and verified the typed run-scoped override. Canonicalization, pre-dispatch rejection, hosted and detached invocation forwarding, authored-effort fallback, and the deterministic Codex command edge are covered by focused unit and root.BuildProcess/Process.Execute functional tests."
+      "notes": "Implemented finite ACTIVE replay through injected Events.Read with a captured retained head, no live subscription, explicit replay-summary delivery, HTTP/SSE framing, CLI --replay-only wiring, redirect-safe JSON summary output, and regenerated API/CLI artifacts. Focused Worker Sessions service/HTTP/CLI tests, UI typecheck, pkg-maint, pkg-file-count, pkg-structure, and CLI contract smoke pass."
     },
     {
-      "id": "wo-c3-run-parity-long-prompt-input-002",
-      "title": "Deliver one exact prompt from --to-file",
-      "description": "As a customer with a long or multiline brief, I want you run to read the prompt from a file so shell quoting cannot split or alter it.",
+      "id": "wo-c1-ext-stream-replay-only-002",
+      "title": "Report a terminal replay as complete",
+      "description": "As an operator, I want replay-only streaming of a terminal Worker Session to identify itself as complete so a captured file can be trusted as the full retained transcript.",
       "acceptanceCriteria": [
-        "--to-file <path> is accepted for run shapes with one logical primary text prompt, including applicable ad-hoc AGY and Codex worker invocations, and paths containing spaces resolve through the existing injected filesystem boundary.",
-        "The selected path must identify a readable regular file containing valid, logically non-empty UTF-8; failure identifies the source/path, exits non-zero, and occurs before Factory Session activation or Provider dispatch.",
-        "File contents reach one Provider request with spaces, Unicode, original CR/LF sequences, blank lines, and final newline preserved, without trimming, joining, newline conversion, or argv re-tokenization.",
-        "--to-file conflicts with signature-defined --to, positional prompt input, and supplied non-empty stdin; every combination returns the stable invocation-input conflict classification, names the sources, and never silently chooses precedence.",
-        "Run shapes without a primary prompt reject --to-file, while invocation without it preserves existing stdin, positional, ordinary --to, and signature-defined named/file/repeated/default argument behavior.",
-        "A functional regression uses a real 30-line UTF-8 prompt file at a path containing spaces and proves exact single-prompt delivery through ProviderCommandRunner; conflict and unreadable-file regressions prove zero dispatch.",
+        "Given a terminal Worker Session, replay-only emits the same complete retained event sequence and ordering available to a normal terminal stream, then exits 0.",
+        "The final replay-summary has kind replay-summary, complete true, and eventsEmitted equal to the number of preceding event records; its reason value, if present, is stable and documents the terminal outcome without changing event records.",
+        "Stream without replay-only retains its current retained-then-live termination and cancellation behavior, and worker-sessions read continues to return WORKER_SESSION_TRANSCRIPT_ACTIVE for ACTIVE sessions.",
+        "Focused ACTIVE-versus-terminal lifecycle regression tests pass without sleeps or cancellation as the replay-only completion mechanism.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 2,
-      "passes": true,
-      "notes": "Implemented Work-owned --to-file preparation with injected regular-file inspection and reading, UTF-8/non-empty validation, exact text preservation, stable file/named/positional/stdin source conflicts, signature primary-parameter routing, and pre-dispatch rejection for non-prompt run shapes. Added generated CLI contract wiring and root.BuildProcess functional regressions proving a real 30-line UTF-8 file at a path with spaces reaches one Codex ProviderCommandRunner request byte-for-byte; conflict, missing-file, and non-regular-file cases prove zero dispatch and no read for invalid metadata. Focused Work/CLI/wire tests, make test, and lifecycle tests pass."
+      "passes": false,
+      "notes": ""
     },
     {
-      "id": "wo-c3-run-parity-long-prompt-input-003",
-      "title": "Publish and verify the reliable run contract",
-      "description": "As an operator, I want live help and the packaged run reference to show a reproducible file-backed effort command so I can use the feature without fragile shell-specific prompt quoting.",
+      "id": "wo-c1-ext-stream-replay-only-003",
+      "title": "Reject incompatible live and finite modes before output",
+      "description": "As an operator, I want contradictory replay-only and live-follow flags rejected immediately so an invalid invocation cannot create a misleading partial file or attach a follower.",
       "acceptanceCriteria": [
-        "The authored CLI manifest declares both flags, applicability, and --to-file conflicts, and all generated CLI manifest/consumer artifacts are regenerated through source-of-truth workflows without hand editing.",
-        "you run --help describes canonical effort validation, exact file-backed prompt behavior, and strict conflicts with --to, positional input, and supplied stdin without claiming silent precedence.",
-        "you docs run includes a PowerShell-safe workflow ending in you run --provider codex --worker-reasoning-effort xhigh --to-file \"<path with spaces>\", with prompt content absent from argv.",
-        "The documented command is independently runnable against the built CLI, and its deterministic test form proves the real 30-line prompt and xhigh effort reach one Codex worker dispatch together.",
-        "CLI contract/help tests and make docs-reference-smoke prove customer-visible behavior and packaged reference rendering without source-inventory or link-topology meta-tests.",
+        "Combining --replay-only with --follow is rejected with a stable typed CLI conflict error and a non-zero usage or failure exit before any stdout bytes are written.",
+        "Conflict validation occurs before network access and before any retained read or live subscription side effect.",
+        "A valid invocation with neither replay-only nor an explicit conflicting selection preserves the existing live-stream default.",
+        "The authored CLI contract, generated command metadata, help, and handler binding expose the flags and conflict consistently; generated artifacts are regenerated rather than hand-edited.",
+        "Focused CLI parsing, error mapping, and zero-output/zero-request behavioral tests pass.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 3,
-      "passes": true,
-        "notes": "Published the canonical authored CLI manifest/help contract for --worker-reasoning-effort and --to-file, including applicability and strict source/run-shape conflicts, then regenerated all CLI consumers and baselines. Added the PowerShell-safe packaged run reference and boundary test proving prompt content stays out of argv, plus the combined root.BuildProcess/Process.Execute lifecycle regression proving a real 30-line UTF-8 file and xhigh effort reach one Codex dispatch. CLI composition treats the shared static effort flag as authoritative while preserving authored packaged-Factory effort signatures; the packaged subagent regressions and injected Work file-preparation coverage pass. Verified CLI/work tests, contract and manifest checks, wire drift, contracts-smoke, api-smoke, api-package-verify, docs-reference smoke, make verify-fast, make test, backend-size, pkg-maint, pkg-file-count, pkg-structure, and vet; full lint is limited by the repository's existing unrelated 176-violation pkg-boundary baseline."
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "wo-c1-ext-stream-replay-only-004",
+      "title": "Produce a redirect-safe NDJSON capture",
+      "description": "As an operator, I want the real CLI process to write replay-only output as well-formed NDJSON so shell redirection produces a durable, machine-readable partial or complete capture.",
+      "acceptanceCriteria": [
+        "A process-boundary test invokes the built you CLI, redirects replay-only JSON stdout to a file, waits for exit 0, and parses every non-empty file line as exactly one JSON value.",
+        "The redirected file contains canonical event lines followed by exactly one final replay-summary; the summary count matches the event-line count and its completeness matches the session lifecycle used by the test.",
+        "The test proves replay-only completes without sending cancellation and that diagnostics or errors do not contaminate the redirected stdout file.",
+        "Operator-facing help or canonical reference documentation includes the redirect workflow and explains the complete marker, ACTIVE versus terminal meaning, and conflict with live following using real supported flags and output.",
+        "go test ./tests/functional/provider_sessions/cli -run '^(TestWorkerSessionsCLI|TestWorkerSessionsReplayOnlyRedirectsWellFormedNDJSON)$' -count=1 passes.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
     }
   ]
 }
