@@ -16,6 +16,37 @@ const (
 	watchRetryModelResponseEventID = "factory-event/model-response/2cf2a099-909b-4446-8e8d-1453054e093c/model-request/1"
 )
 
+func TestWatchReducerDefersWorkRequestsWithoutAuthoritativeState(t *testing.T) {
+	metadata := watchFactoryEvent(t, factoryapi.FactoryEventTypeInitialStructureRequest, "factory", 1,
+		factoryapi.InitialStructureRequestEventPayload{Factory: factoryapi.Factory{
+			WorkTypes: &[]factoryapi.WorkType{{
+				Name: "task",
+				States: []factoryapi.WorkState{
+					{Name: "to-complete", Type: factoryapi.WorkStateTypePROCESSING},
+					{Name: "complete", Type: factoryapi.WorkStateTypeTERMINAL},
+				},
+			}},
+		}})
+	request := watchFactoryEvent(t, factoryapi.FactoryEventTypeWorkRequest, "request", 2,
+		factoryapi.WorkRequestEventPayload{Works: &[]factoryapi.Work{
+			{WorkId: watchStringPtr("work-1"), WorkTypeName: watchStringPtr("task")},
+			{WorkId: watchStringPtr("system-time"), WorkTypeName: watchStringPtr("__system_time"), State: &factoryapi.WorkState{
+				Name: "pending", Type: factoryapi.WorkStateTypePROCESSING,
+			}},
+		}})
+	terminal := watchTransitionEvent(t, "move-terminal", 3, "work-1", "to-complete", "complete", true)
+	reducer := newWatchReducer("session-1")
+	if _, _, completed, err := reducer.Accept(metadata); err != nil || completed {
+		t.Fatalf("metadata: completed=%t error=%v, want incomplete", completed, err)
+	}
+	if _, _, completed, err := reducer.Accept(request); err != nil || completed {
+		t.Fatalf("state-less Work request: completed=%t error=%v, want incomplete", completed, err)
+	}
+	if _, emit, completed, err := reducer.Accept(terminal); err != nil || !emit || !completed {
+		t.Fatalf("terminal transition: emit=%t completed=%t error=%v, want emitted completion", emit, completed, err)
+	}
+}
+
 func TestWatchReducerAcceptsRefreshedModelRequestRetryWithoutProjectingWork(t *testing.T) {
 	metadata, request, firstTransition := watchRetrySetup(t)
 	retryInitial := watchModelRequestEvent(t, watchRetryModelRequestEventID, 4, "gpt-5-codex")

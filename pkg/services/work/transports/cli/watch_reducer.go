@@ -301,27 +301,12 @@ func (r *watchReducer) applyWorkRequest(
 ) error {
 	if payload.Works != nil {
 		for _, item := range *payload.Works {
-			workID := stringValue(item.WorkId)
-			if workID == "" {
-				return fmt.Errorf("event %q contains Work without workId", event.Id)
+			workID, observation, include, err := r.workRequestObservation(event, item)
+			if err != nil {
+				return err
 			}
-			workTypeName := stringValue(item.WorkTypeName)
-			if workTypeName == "" {
-				return fmt.Errorf("event %q Work %q has no workTypeName", event.Id, workID)
-			}
-			observation := watchWorkObservation{workTypeName: workTypeName}
-			if item.State != nil {
-				if strings.TrimSpace(item.State.Name) == "" {
-					return fmt.Errorf("event %q Work %q has a state without a name", event.Id, workID)
-				}
-				observation.state = item.State.Name
-				stateType := item.State.Type
-				if authoritativeType, ok := r.stateType(workTypeName, item.State.Name); ok {
-					stateType = authoritativeType
-				} else if item.State.Type != "" {
-					r.setStateType(workTypeName, item.State.Name, item.State.Type)
-				}
-				observation.terminal = isTerminalWorkState(stateType)
+			if !include {
+				continue
 			}
 			if err := r.recordWork(workID, observation); err != nil {
 				return err
@@ -339,6 +324,47 @@ func (r *watchReducer) applyWorkRequest(
 		}
 	}
 	return nil
+}
+
+func (r *watchReducer) workRequestObservation(
+	event factoryapi.FactoryEvent,
+	item factoryapi.Work,
+) (string, watchWorkObservation, bool, error) {
+	workID := stringValue(item.WorkId)
+	if workID == "" {
+		return "", watchWorkObservation{}, false, fmt.Errorf("event %q contains Work without workId", event.Id)
+	}
+	workTypeName := stringValue(item.WorkTypeName)
+	if workTypeName == "" {
+		return "", watchWorkObservation{}, false, fmt.Errorf("event %q Work %q has no workTypeName", event.Id, workID)
+	}
+	if item.State == nil {
+		// A WORK_REQUEST without state metadata does not establish an
+		// observable Work cohort yet. The first WORK_STATE_CHANGE supplies
+		// the authoritative state and records the Work then; retaining an
+		// empty observation here would make a complete session replay wait
+		// forever on unrelated submitted Work.
+		return "", watchWorkObservation{}, false, nil
+	}
+	if len(r.stateTypes) > 0 {
+		if _, ok := r.stateTypes[workTypeName]; !ok {
+			return "", watchWorkObservation{}, false, nil
+		}
+	}
+	if strings.TrimSpace(item.State.Name) == "" {
+		return "", watchWorkObservation{}, false, fmt.Errorf("event %q Work %q has a state without a name", event.Id, workID)
+	}
+	stateType := item.State.Type
+	if authoritativeType, ok := r.stateType(workTypeName, item.State.Name); ok {
+		stateType = authoritativeType
+	} else if item.State.Type != "" {
+		r.setStateType(workTypeName, item.State.Name, item.State.Type)
+	}
+	return workID, watchWorkObservation{
+		workTypeName: workTypeName,
+		state:        item.State.Name,
+		terminal:     isTerminalWorkState(stateType),
+	}, true, nil
 }
 
 func (r *watchReducer) applyWorkStateChange(

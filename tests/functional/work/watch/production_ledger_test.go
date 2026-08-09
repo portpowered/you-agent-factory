@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -26,17 +27,19 @@ import (
 )
 
 const (
-	productionLedgerFixtureName = "production-retry-ledger.replay.json"
-	productionLedgerWorkID      = "work-production-retry"
-	productionLedgerWorkType    = "task"
-	productionLedgerRetryID     = "factory-event/model-response/2cf2a099-909b-4446-8e8d-1453054e093c/model-request/1"
+	productionLedgerFixtureName        = "production-retry-ledger.replay.json"
+	productionLedgerSource             = "factory-session-~default-083224-637a0122-f34d-4c5e-99a0-20e70b5375c2.json"
+	productionLedgerWorkID             = "batch-operator-wave2-restoration-20260809-wo-c3-run-parity-long-prompt-input"
+	productionLedgerWorkType           = "task"
+	productionLedgerTerminalID         = "factory-event/work-state-change/batch-operator-wave2-restoration-20260809-wo-c3-run-parity-long-prompt-input/60"
+	productionLedgerObservedResponseID = "factory-event/model-response/2cf2a099-909b-4446-8e8d-1453054e093c/model-request/1"
 )
 
 // TestWorkWatchRecordedProductionRetryLedger routes a checked-in, redacted
-// recorded event ledger through the public HTTP stream and the same
-// root-built Process used by the CLI entrypoint. The fixture deliberately
-// includes the observed request-derived model-response identity at a later
-// sequence; corrected recorder identity proof remains in recorder tests.
+// recording from productionLedgerSource through the public HTTP stream and
+// the same root-built Process used by the CLI entrypoint. The fixture keeps
+// the source event order and request-derived model-response identities;
+// corrected recorder identity proof remains in recorder tests.
 func TestWorkWatchRecordedProductionRetryLedger(t *testing.T) {
 	fixture := loadProductionLedgerFixture(t)
 	assertProductionLedgerFixture(t, fixture)
@@ -52,13 +55,7 @@ func TestWorkWatchRecordedProductionRetryLedger(t *testing.T) {
 
 		waitForLedgerCommand(t, command, stdout, stderr)
 		lines := decodeWatchLines(t, stdout.String())
-		assertWorkWatchTransitionLines(
-			t,
-			lines,
-			factorysessions.DefaultSessionID,
-			productionLedgerWorkID,
-			[][2]string{{"init", "processing"}, {"processing", "complete"}},
-		)
+		assertProductionFiniteLines(t, lines)
 	})
 
 	t.Run("follow remains attached and consumes later transitions", func(t *testing.T) {
@@ -71,23 +68,23 @@ func TestWorkWatchRecordedProductionRetryLedger(t *testing.T) {
 		command := support.StartProcessCommand(t, process, inputs)
 
 		waitForLedgerSignal(t, stream.historySent, "retained production ledger")
-		waitForLedgerLines(t, stdout, 2, "retained terminal transitions")
+		waitForLedgerLines(t, stdout, 1, "retained terminal transitions")
 
 		stream.Publish(
 			productionLedgerTransition(
 				t,
-				"factory-event/work-state-change/work-follow-up/processing",
-				15,
+				"factory-event/work-state-change/work-follow-up/in-review",
+				223,
 				"work-follow-up",
 				"init",
-				"processing",
+				"in-review",
 			),
 			productionLedgerTransition(
 				t,
 				"factory-event/work-state-change/work-follow-up/complete",
-				16,
+				224,
 				"work-follow-up",
-				"processing",
+				"in-review",
 				"complete",
 			),
 		)
@@ -106,8 +103,9 @@ func TestWorkWatchRecordedProductionRetryLedger(t *testing.T) {
 	})
 
 	t.Run("rejects a same-sequence conflicting retry record", func(t *testing.T) {
-		conflict := conflictingProductionLedgerEvent(t, fixture.Events[8], fixture.Events[8].Context.Sequence)
-		history := append([]factoryapi.FactoryEvent(nil), fixture.Events[:9]...)
+		responseIndex := productionLedgerEventIndex(t, fixture.Events, factoryapi.FactoryEventTypeModelResponse)
+		conflict := conflictingProductionLedgerEvent(t, fixture.Events[responseIndex], fixture.Events[responseIndex].Context.Sequence)
+		history := append([]factoryapi.FactoryEvent(nil), fixture.Events[:responseIndex+1]...)
 		history = append(history, conflict)
 		stream := newProductionLedgerStream(t, history)
 		process := support.BuildProcess(t, serviceedges.Edges{})
@@ -132,6 +130,17 @@ func TestWorkWatchRecordedProductionRetryLedger(t *testing.T) {
 	})
 }
 
+func productionLedgerEventIndex(t *testing.T, events []factoryapi.FactoryEvent, eventType factoryapi.FactoryEventType) int {
+	t.Helper()
+	for index, event := range events {
+		if event.Type == eventType {
+			return index
+		}
+	}
+	t.Fatalf("production ledger has no %q event", eventType)
+	return -1
+}
+
 type productionLedgerFixture struct {
 	SchemaVersion string                    `json:"schemaVersion"`
 	RecordedAt    time.Time                 `json:"recordedAt"`
@@ -150,10 +159,13 @@ func loadProductionLedgerFixture(t *testing.T) productionLedgerFixture {
 		t.Fatalf("read production ledger fixture %s: %v", path, err)
 	}
 	text := string(data)
-	for _, secretMarker := range []string{"OPENAI_API_KEY", "sk-", "BEGIN PRIVATE KEY", "PRODUCTION_SECRET"} {
+	for _, secretMarker := range []string{"OPENAI_API_KEY", "BEGIN PRIVATE KEY", "PRODUCTION_SECRET"} {
 		if strings.Contains(text, secretMarker) {
 			t.Fatalf("production ledger fixture contains secret marker %q", secretMarker)
 		}
+	}
+	if regexp.MustCompile(`sk-[A-Za-z0-9_-]{20,}`).MatchString(text) {
+		t.Fatal("production ledger fixture contains a likely API key")
 	}
 	if !strings.Contains(text, "redacted") {
 		t.Fatal("production ledger fixture has no redacted sensitive values")
@@ -168,16 +180,38 @@ func loadProductionLedgerFixture(t *testing.T) productionLedgerFixture {
 
 func assertProductionLedgerFixture(t *testing.T, fixture productionLedgerFixture) {
 	t.Helper()
+	t.Logf("validated redacted production source %s", productionLedgerSource)
 	if fixture.SchemaVersion != "agent-factory.replay.v1" {
 		t.Fatalf("production ledger schemaVersion = %q, want agent-factory.replay.v1", fixture.SchemaVersion)
 	}
 	if fixture.RecordedAt.IsZero() {
 		t.Fatal("production ledger recordedAt is zero")
 	}
-	if len(fixture.Events) < 15 {
+	if len(fixture.Events) < 200 {
 		t.Fatalf("production ledger event count = %d, want complete retry history", len(fixture.Events))
 	}
+	ids := validateProductionLedgerEnvelope(t, fixture.Events)
+	if len(ids) != len(fixture.Events) {
+		t.Fatalf("production ledger reused canonical event IDs: %d unique IDs for %d events", len(ids), len(fixture.Events))
+	}
+	if !hasProductionLedgerWorkRequest(t, fixture.Events, productionLedgerWorkID) {
+		t.Fatalf("production ledger has no Work request for %q", productionLedgerWorkID)
+	}
+	modelRequestIDs := productionLedgerModelRequests(t, fixture.Events)
+	modelResponseCount, failedModelResponse, succeededModelResponse := productionLedgerModelResponses(t, fixture.Events, modelRequestIDs)
+	if modelResponseCount < 2 || !failedModelResponse || !succeededModelResponse {
+		t.Fatalf("production ledger model retry outcomes = count:%d failed:%t succeeded:%t", modelResponseCount, failedModelResponse, succeededModelResponse)
+	}
+	if !hasProductionLedgerEventID(fixture.Events, productionLedgerObservedResponseID) {
+		t.Fatalf("production ledger is missing observed model response %q", productionLedgerObservedResponseID)
+	}
+	if !hasProductionLedgerTerminal(t, fixture.Events, productionLedgerWorkID) {
+		t.Fatalf("production ledger has no terminal transition for %q", productionLedgerWorkID)
+	}
+}
 
+func validateProductionLedgerEnvelope(t *testing.T, events []factoryapi.FactoryEvent) map[string][]int {
+	t.Helper()
 	wantTypes := map[factoryapi.FactoryEventType]bool{
 		factoryapi.FactoryEventTypeRunRequest:                       false,
 		factoryapi.FactoryEventTypeInitialStructureRequest:          false,
@@ -190,12 +224,13 @@ func assertProductionLedgerFixture(t *testing.T, fixture productionLedgerFixture
 		factoryapi.FactoryEventTypeModelResponse:                    false,
 		factoryapi.FactoryEventTypeDispatchResponse:                 false,
 		factoryapi.FactoryEventTypeWorkStateChange:                  false,
-		factoryapi.FactoryEventTypeRunResponse:                      false,
+		factoryapi.FactoryEventTypeAgentRunResponse:                 false,
+		factoryapi.FactoryEventTypeRelationshipChangeRequest:        false,
+		factoryapi.FactoryEventTypeScriptRequest:                    false,
+		factoryapi.FactoryEventTypeScriptResponse:                   false,
 	}
 	ids := make(map[string][]int)
-	modelRequestIDs := make(map[string][]int)
-	terminalWork := false
-	for index, event := range fixture.Events {
+	for index, event := range events {
 		if event.SchemaVersion != factoryapi.AgentFactoryEventV1 {
 			t.Fatalf("fixture event %d schemaVersion = %q, want %q", index, event.SchemaVersion, factoryapi.AgentFactoryEventV1)
 		}
@@ -203,7 +238,7 @@ func assertProductionLedgerFixture(t *testing.T, fixture productionLedgerFixture
 			t.Fatalf("fixture event %d has incomplete canonical identity/time: %#v", index, event)
 		}
 		if event.Context.Sequence != index {
-			t.Fatalf("fixture event %d sequence = %d, want %d", index, event.Context.Sequence, index)
+			t.Fatalf("fixture event %d sequence = %d, want captured sequence %d", index, event.Context.Sequence, index)
 		}
 		_, ok := wantTypes[event.Type]
 		if !ok {
@@ -211,59 +246,118 @@ func assertProductionLedgerFixture(t *testing.T, fixture productionLedgerFixture
 		}
 		wantTypes[event.Type] = true
 		ids[event.Id] = append(ids[event.Id], event.Context.Sequence)
-
-		switch event.Type {
-		case factoryapi.FactoryEventTypeWorkRequest:
-			payload, err := event.Payload.AsWorkRequestEventPayload()
-			if err != nil || payload.Works == nil || len(*payload.Works) != 1 {
-				t.Fatalf("decode fixture Work request %q: payload=%#v error=%v", event.Id, payload, err)
-			}
-			work := (*payload.Works)[0]
-			if ledgerString(work.WorkId) != productionLedgerWorkID || ledgerString(work.WorkTypeName) != productionLedgerWorkType {
-				t.Fatalf("fixture Work lineage = workId:%q workType:%q, want %q:%q", ledgerString(work.WorkId), ledgerString(work.WorkTypeName), productionLedgerWorkID, productionLedgerWorkType)
-			}
-		case factoryapi.FactoryEventTypeModelRequest:
-			payload, err := event.Payload.AsModelRequestEventPayload()
-			if err != nil {
-				t.Fatalf("decode fixture MODEL_REQUEST %q: %v", event.Id, err)
-			}
-			modelRequestIDs[payload.ModelRequestId] = append(modelRequestIDs[payload.ModelRequestId], event.Context.Sequence)
-		case factoryapi.FactoryEventTypeModelResponse:
-			payload, err := event.Payload.AsModelResponseEventPayload()
-			if err != nil {
-				t.Fatalf("decode fixture MODEL_RESPONSE %q: %v", event.Id, err)
-			}
-			if payload.ModelRequestId != "dispatch-retry/model-request/1" {
-				t.Fatalf("fixture MODEL_RESPONSE %q correlation = %q, want request ordinal", event.Id, payload.ModelRequestId)
-			}
-			if event.Id != productionLedgerRetryID {
-				t.Fatalf("fixture MODEL_RESPONSE id %q does not retain the observed request-ordinal shape", event.Id)
-			}
-		case factoryapi.FactoryEventTypeWorkStateChange:
-			payload, err := event.Payload.AsWorkStateChangeEventPayload()
-			if err != nil {
-				t.Fatalf("decode fixture WORK_STATE_CHANGE %q: %v", event.Id, err)
-			}
-			if payload.WorkId != productionLedgerWorkID || payload.WorkTypeName != productionLedgerWorkType {
-				t.Fatalf("fixture Work transition lineage = %q/%q", payload.WorkId, payload.WorkTypeName)
-			}
-			terminalWork = terminalWork || payload.ToState == "complete"
-		}
 	}
 	for eventType, seen := range wantTypes {
 		if !seen {
 			t.Fatalf("production ledger omitted event family %q", eventType)
 		}
 	}
-	if got := ids[productionLedgerRetryID]; len(got) != 2 || got[0] >= got[1] {
-		t.Fatalf("repeated model-response identity sequences = %#v, want two increasing occurrences", got)
+	return ids
+}
+
+func hasProductionLedgerEventID(events []factoryapi.FactoryEvent, eventID string) bool {
+	for _, event := range events {
+		if event.Id == eventID {
+			return true
+		}
 	}
-	if got := modelRequestIDs["dispatch-retry/model-request/1"]; len(got) != 2 || got[0] >= got[1] {
-		t.Fatalf("refreshed model-request ordinal sequences = %#v, want two increasing occurrences", got)
+	return false
+}
+
+func hasProductionLedgerWorkRequest(t *testing.T, events []factoryapi.FactoryEvent, workID string) bool {
+	t.Helper()
+	for _, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeWorkRequest {
+			continue
+		}
+		payload, err := event.Payload.AsWorkRequestEventPayload()
+		if err != nil || payload.Works == nil {
+			t.Fatalf("decode fixture Work request %q: payload=%#v error=%v", event.Id, payload, err)
+		}
+		for _, work := range *payload.Works {
+			if ledgerString(work.WorkId) == workID && ledgerString(work.WorkTypeName) == productionLedgerWorkType {
+				return true
+			}
+		}
 	}
-	if !terminalWork {
-		t.Fatal("production ledger has no terminal Work transition")
+	return false
+}
+
+func productionLedgerModelRequests(t *testing.T, events []factoryapi.FactoryEvent) map[string][]int {
+	t.Helper()
+	requests := make(map[string][]int)
+	for _, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeModelRequest {
+			continue
+		}
+		payload, err := event.Payload.AsModelRequestEventPayload()
+		if err != nil {
+			t.Fatalf("decode fixture MODEL_REQUEST %q: %v", event.Id, err)
+		}
+		requests[payload.ModelRequestId] = append(requests[payload.ModelRequestId], event.Context.Sequence)
 	}
+	return requests
+}
+
+func productionLedgerModelResponses(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+	requests map[string][]int,
+) (int, bool, bool) {
+	t.Helper()
+	count := 0
+	failed := false
+	succeeded := false
+	for _, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeModelResponse {
+			continue
+		}
+		payload, err := event.Payload.AsModelResponseEventPayload()
+		if err != nil {
+			t.Fatalf("decode fixture MODEL_RESPONSE %q: %v", event.Id, err)
+		}
+		count++
+		if !strings.HasPrefix(event.Id, "factory-event/model-response/") || !strings.HasSuffix(event.Id, "/model-request/1") {
+			t.Fatalf("fixture MODEL_RESPONSE %q does not retain request-ordinal identity", event.Id)
+		}
+		if event.Id != "factory-event/model-response/"+payload.ModelRequestId {
+			t.Fatalf("fixture MODEL_RESPONSE %q does not correlate to modelRequestId %q", event.Id, payload.ModelRequestId)
+		}
+		requestSequences := requests[payload.ModelRequestId]
+		if len(requestSequences) == 0 || requestSequences[0] >= event.Context.Sequence {
+			t.Fatalf("fixture MODEL_RESPONSE %q has no earlier matching MODEL_REQUEST: %#v", event.Id, requestSequences)
+		}
+		if payload.OutputPreview == nil || *payload.OutputPreview != "redacted" {
+			t.Fatalf("fixture MODEL_RESPONSE %q output was not redacted", event.Id)
+		}
+		switch string(payload.Outcome) {
+		case "FAILED":
+			failed = true
+		case "SUCCEEDED":
+			succeeded = true
+		}
+	}
+	return count, failed, succeeded
+}
+
+func hasProductionLedgerTerminal(t *testing.T, events []factoryapi.FactoryEvent, workID string) bool {
+	t.Helper()
+	for _, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeWorkStateChange {
+			continue
+		}
+		payload, err := event.Payload.AsWorkStateChangeEventPayload()
+		if err != nil {
+			t.Fatalf("decode fixture WORK_STATE_CHANGE %q: %v", event.Id, err)
+		}
+		if payload.WorkTypeName != productionLedgerWorkType {
+			t.Fatalf("fixture Work transition type = %q, want %q", payload.WorkTypeName, productionLedgerWorkType)
+		}
+		if payload.WorkId == workID && payload.ToState == "complete" {
+			return true
+		}
+	}
+	return false
 }
 
 type productionLedgerStream struct {
@@ -448,21 +542,48 @@ func waitForLedgerCommand(t *testing.T, command *support.ProcessCommand, stdout,
 	}
 }
 
+type productionLedgerExpectedLine struct {
+	workID string
+	from   string
+	to     string
+	id     string
+	seq    int64
+	final  bool
+}
+
+func assertProductionFiniteLines(t *testing.T, lines []workWatchLine) {
+	t.Helper()
+	assertProductionLines(t, lines, []productionLedgerExpectedLine{
+		{
+			productionLedgerWorkID,
+			"to-complete",
+			"complete",
+			productionLedgerTerminalID,
+			106,
+			true,
+		},
+	})
+}
+
 func assertProductionFollowLines(t *testing.T, lines []workWatchLine) {
 	t.Helper()
-	want := []struct {
-		workID string
-		from   string
-		to     string
-		id     string
-		seq    int64
-		final  bool
-	}{
-		{productionLedgerWorkID, "init", "processing", "factory-event/work-state-change/work-production-retry/processing", 10, false},
-		{productionLedgerWorkID, "processing", "complete", "factory-event/work-state-change/work-production-retry/complete", 13, true},
-		{"work-follow-up", "init", "processing", "factory-event/work-state-change/work-follow-up/processing", 15, false},
-		{"work-follow-up", "processing", "complete", "factory-event/work-state-change/work-follow-up/complete", 16, true},
+	want := []productionLedgerExpectedLine{
+		{
+			productionLedgerWorkID,
+			"to-complete",
+			"complete",
+			productionLedgerTerminalID,
+			106,
+			true,
+		},
+		{"work-follow-up", "init", "in-review", "factory-event/work-state-change/work-follow-up/in-review", 223, false},
+		{"work-follow-up", "in-review", "complete", "factory-event/work-state-change/work-follow-up/complete", 224, true},
 	}
+	assertProductionLines(t, lines, want)
+}
+
+func assertProductionLines(t *testing.T, lines []workWatchLine, want []productionLedgerExpectedLine) {
+	t.Helper()
 	if len(lines) != len(want) {
 		t.Fatalf("follow Work watch transition count = %d, want %d: %#v", len(lines), len(want), lines)
 	}
