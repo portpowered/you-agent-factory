@@ -88,59 +88,125 @@ func declaredCancellationExitCode(args []string) int {
 }
 
 func selectedCommandPath(args []string) string {
+	commandPaths, flagByName, rootPaths := cancellationCommandMetadata()
+	if len(commandPaths) == 0 || len(rootPaths) == 0 {
+		return ""
+	}
+
 	parts := make([]string, 0, 2)
 	for index := 1; index < len(args); index++ {
 		arg := args[index]
-		if strings.HasPrefix(arg, "--") {
-			if !strings.Contains(arg, "=") && commandFlagConsumesValue(arg) {
-				index++
+		if arg == "--" {
+			return ""
+		}
+		if strings.HasPrefix(arg, "-") {
+			if !strings.Contains(arg, "=") {
+				flag, knownFlag := flagByName[arg]
+				if knownFlag && manifestFlagConsumesValue(flag) {
+					if index+1 >= len(args) {
+						return ""
+					}
+					index++
+				}
 			}
 			continue
 		}
-		if strings.HasPrefix(arg, "-") {
-			continue
-		}
-		parts = append(parts, arg)
-	}
-	if len(parts) == 0 {
-		return ""
-	}
-	return "you " + strings.Join(parts, " ")
-}
 
-func selectedCommandName(args []string) string {
-	for index := 1; index < len(args); index++ {
-		arg := args[index]
-		if strings.HasPrefix(arg, "--") {
-			if !strings.Contains(arg, "=") && globalFlagConsumesValue(arg) {
-				index++
+		parts = append(parts, arg)
+		matchedPrefix := false
+		for rootPath := range rootPaths {
+			candidate := strings.TrimSpace(rootPath + " " + strings.Join(parts, " "))
+			if canonicalPath, exact := commandPaths[candidate]; exact {
+				// Once Cobra has selected a runnable command, later non-flag
+				// tokens are command arguments rather than command path parts.
+				return canonicalPath
 			}
-			continue
+			if cancellationPathHasPrefix(commandPaths, candidate) {
+				matchedPrefix = true
+				break
+			}
 		}
-		if strings.HasPrefix(arg, "-") {
-			continue
+		if !matchedPrefix {
+			return ""
 		}
-		return arg
 	}
 	return ""
 }
 
-func globalFlagConsumesValue(arg string) bool {
-	switch arg {
-	case "--server":
-		return true
-	default:
-		return false
+func cancellationCommandMetadata() (map[string]string, map[string]climanifest.Flag, map[string]struct{}) {
+	commandPaths := make(map[string]string)
+	flagByName := make(map[string]climanifest.Flag)
+	rootPaths := make(map[string]struct{})
+	manifests := []func() (climanifest.Manifest, error){
+		generated.RunSubmitFamilyManifest,
+		generated.WorkerSessionsFamilyManifest,
+	}
+	for _, loadManifest := range manifests {
+		manifest, err := loadManifest()
+		if err != nil {
+			continue
+		}
+		if manifest.RootPath != "" {
+			rootPaths[manifest.RootPath] = struct{}{}
+		}
+		for _, command := range manifest.Commands {
+			for _, flag := range command.Flags {
+				registerManifestFlag(flagByName, flag)
+			}
+			if !commandDeclaresCancellation(command) {
+				continue
+			}
+			commandPaths[command.Path] = command.Path
+			for _, alias := range command.Aliases {
+				parentPath := strings.TrimSuffix(command.Path, " "+command.Name)
+				aliasPath := strings.TrimSpace(parentPath + " " + alias)
+				if aliasPath != "" {
+					commandPaths[aliasPath] = command.Path
+				}
+			}
+		}
+	}
+	return commandPaths, flagByName, rootPaths
+}
+
+func commandDeclaresCancellation(command climanifest.Command) bool {
+	for _, exit := range command.Exits {
+		if exit.Kind == "cancel" {
+			return true
+		}
+	}
+	return false
+}
+
+func registerManifestFlag(flags map[string]climanifest.Flag, flag climanifest.Flag) {
+	if flag.Long == "" {
+		return
+	}
+	register := func(name string) {
+		if current, exists := flags[name]; !exists || (current.ValueType == "bool" && flag.ValueType != "bool") {
+			flags[name] = flag
+		}
+	}
+	register("--" + flag.Long)
+	if flag.Shorthand != "" {
+		register("-" + flag.Shorthand)
+	}
+	for _, alias := range flag.Aliases {
+		register("--" + alias)
 	}
 }
 
-func commandFlagConsumesValue(arg string) bool {
-	switch arg {
-	case "--server", "--provider", "--kind", "--id", "--session", "--output":
-		return true
-	default:
-		return false
+func manifestFlagConsumesValue(flag climanifest.Flag) bool {
+	return flag.ValueType != "bool" && flag.NoOptionDefault == ""
+}
+
+func cancellationPathHasPrefix(commandPaths map[string]string, candidate string) bool {
+	for commandPath := range commandPaths {
+		if strings.HasPrefix(commandPath, candidate+" ") {
+			return true
+		}
 	}
+	return false
 }
 
 func streamIsTerminal(file *os.File) bool {

@@ -126,6 +126,39 @@ func TestGenericRepresentativeProjectionIsObservableThroughApplicationRoot(t *te
 	}
 }
 
+func TestWorkerSessionProjectionReportsMissingRequiredWorkID(t *testing.T) {
+	var observation cliobservation.Result
+	process := support.BuildProcess(t, serviceedges.Edges{
+		CLIObserver: cliobservation.Capture(&observation),
+	})
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "worker-sessions", "list",
+	})
+
+	err := process.Execute(inputs.Input)
+	if err == nil || !strings.Contains(err.Error(), `required flag(s) "--work-id" not set`) {
+		t.Fatalf("Process.Execute(worker-sessions list) error = %v, want missing --work-id diagnostic", err)
+	}
+	if observation.Parse.CommandPath != "you worker-sessions list" {
+		t.Fatalf("observed command path = %q, want worker-sessions list", observation.Parse.CommandPath)
+	}
+
+	var suppliedObservation cliobservation.Result
+	suppliedProcess := support.BuildProcess(t, serviceedges.Edges{
+		CLIObserver: cliobservation.Capture(&suppliedObservation),
+	})
+	suppliedInputs := support.FakeInputs(t.Context(), []string{
+		"you", "worker-sessions", "list", "--work-id", "work-1",
+	})
+	if err := suppliedProcess.Execute(suppliedInputs.Input); err != nil {
+		t.Fatalf("Process.Execute(worker-sessions list with work ID) error = %v", err)
+	}
+	workID, found := cliobservation.Flag(suppliedObservation.Parse, "work-id")
+	if !found || !workID.Changed || workID.Value != "work-1" {
+		t.Fatalf("observed --work-id parse = %#v found=%v", workID, found)
+	}
+}
+
 func TestGenericSessionProjectionEnforcesProductionInputContracts(t *testing.T) {
 	tests := []struct {
 		name string

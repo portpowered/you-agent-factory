@@ -252,7 +252,7 @@ func (GenericConstructor) Construct(manifest climanifest.Manifest, bindingSets .
 		if err := projectFlags(built[item.record.Path], item, targets, bindings); err != nil {
 			return nil, fmt.Errorf("build generic command tree: %w", err)
 		}
-		projectArgumentAndRelationshipRules(built[item.record.Path], item)
+		projectArgumentAndRelationshipRules(built[item.record.Path], item, bindings)
 		if err := projectGenericPresentation(built[item.record.Path], item, bindings); err != nil {
 			return nil, fmt.Errorf("build generic command tree: %w", err)
 		}
@@ -891,11 +891,6 @@ func projectFlags(
 		if err := registerGenericFlag(flagSet, item.record, value); err != nil {
 			return genericFlagError(plan.record.ID, item.record.ID, "register flag: %v", err)
 		}
-		if item.record.Required && len(item.record.Aliases) == 0 {
-			if err := cmd.MarkFlagRequired(item.record.Long); err != nil {
-				return genericFlagError(plan.record.ID, item.record.ID, "mark required: %v", err)
-			}
-		}
 	}
 	return nil
 }
@@ -924,23 +919,6 @@ func registerGenericFlag(flagSet *pflag.FlagSet, record climanifest.Flag, value 
 		aliasFlag := flagSet.Lookup(alias)
 		aliasFlag.Hidden = true
 		aliasFlag.NoOptDefVal = registered.NoOptDefVal
-	}
-	return nil
-}
-
-func validateRequiredGenericFlags(cmd *cobra.Command, plan plannedCommand) error {
-	for _, item := range plan.flags {
-		if !item.record.Required {
-			continue
-		}
-		names := append([]string{item.record.Long}, item.record.Aliases...)
-		for _, name := range names {
-			if flag := lookupCommandFlag(cmd, name); flag != nil && flag.Changed {
-				goto nextFlag
-			}
-		}
-		return fmt.Errorf("required flag(s) %q not set", "--"+item.record.Long)
-	nextFlag:
 	}
 	return nil
 }

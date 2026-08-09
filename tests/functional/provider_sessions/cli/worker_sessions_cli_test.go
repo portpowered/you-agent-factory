@@ -109,6 +109,7 @@ func TestWorkerSessionsCLI(t *testing.T) {
 	streamWorkerSession(t, ctx, process, env, factoryDir, baseURL, workerSessionsCodexFailureID, "FAILED")
 	assertFailedWorkerSession(t, ctx, process, env, factoryDir, baseURL, failureWorkID)
 	assertMissingWorkerSessionOutcomes(t, ctx, process, env, factoryDir, baseURL)
+	assertMissingWorkerSessionInputs(t, ctx, process, env, factoryDir, baseURL)
 
 	if runner.CallCount() != 2 {
 		t.Fatalf("provider command calls = %d, want one success and one failure invocation", runner.CallCount())
@@ -348,6 +349,92 @@ func assertMissingWorkerSessionOutcomes(t *testing.T, ctx context.Context, proce
 			output := inputs.Stdout() + inputs.Stderr() + err.Error()
 			if !strings.Contains(output, test.code) {
 				t.Fatalf("missing Worker Session operation omitted %s: %s", test.code, output)
+			}
+		})
+	}
+}
+
+func assertMissingWorkerSessionInputs(t *testing.T, ctx context.Context, process support.Process, env []string, factoryDir, baseURL string) {
+	t.Helper()
+	cases := []struct {
+		name string
+		args []string
+		code string
+	}{
+		{
+			name: "list local JSON output",
+			args: []string{"--server", baseURL, "worker-sessions", "list", "--output", "json"},
+			code: "WORK_ID_REQUIRED",
+		},
+		{
+			name: "list global JSON output",
+			args: []string{"--json", "worker-sessions", "list"},
+			code: "WORK_ID_REQUIRED",
+		},
+		{
+			name: "show local provider validation",
+			args: []string{"--server", baseURL, "worker-sessions", "show", "--output", "json"},
+			code: "PROVIDER_REQUIRED",
+		},
+		{
+			name: "show global kind validation",
+			args: []string{"--json", "worker-sessions", "show", "--provider", "codex"},
+			code: "SESSION_KIND_REQUIRED",
+		},
+		{
+			name: "show local ID validation",
+			args: []string{"--server", baseURL, "worker-sessions", "show", "--provider", "codex", "--kind", "session_id", "--output", "json"},
+			code: "SESSION_ID_REQUIRED",
+		},
+		{
+			name: "read local provider validation",
+			args: []string{"--server", baseURL, "worker-sessions", "read", "--output", "json"},
+			code: "PROVIDER_REQUIRED",
+		},
+		{
+			name: "read global kind validation",
+			args: []string{"--json", "worker-sessions", "read", "--provider", "codex"},
+			code: "SESSION_KIND_REQUIRED",
+		},
+		{
+			name: "read local ID validation",
+			args: []string{"--server", baseURL, "worker-sessions", "read", "--provider", "codex", "--kind", "session_id", "--output", "json"},
+			code: "SESSION_ID_REQUIRED",
+		},
+		{
+			name: "stream local provider validation",
+			args: []string{"--server", baseURL, "worker-sessions", "stream", "--output", "json"},
+			code: "PROVIDER_REQUIRED",
+		},
+		{
+			name: "stream global kind validation",
+			args: []string{"--json", "worker-sessions", "stream", "--provider", "codex"},
+			code: "SESSION_KIND_REQUIRED",
+		},
+		{
+			name: "stream local ID validation",
+			args: []string{"--server", baseURL, "worker-sessions", "stream", "--provider", "codex", "--kind", "session_id", "--output", "json"},
+			code: "SESSION_ID_REQUIRED",
+		},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			inputs, err := executeCLIExpectError(t, ctx, process, env, factoryDir, test.args...)
+			if err == nil {
+				t.Fatal("missing required Worker Session input returned nil error")
+			}
+			var payload struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			}
+			if decodeErr := json.Unmarshal([]byte(strings.TrimSpace(inputs.Stdout())), &payload); decodeErr != nil {
+				t.Fatalf("decode required-input JSON: %v\nstdout:\n%s\nstderr:\n%s", decodeErr, inputs.Stdout(), inputs.Stderr())
+			}
+			if payload.Code != test.code || strings.TrimSpace(payload.Message) == "" {
+				t.Fatalf("required-input payload = %#v, want code %s and message", payload, test.code)
+			}
+			if strings.Contains(inputs.Stdout(), "required flag(s)") || strings.Contains(inputs.Stderr(), "required flag(s)") {
+				t.Fatalf("Cobra required-flag prose leaked into machine-readable failure:\nstdout:\n%s\nstderr:\n%s", inputs.Stdout(), inputs.Stderr())
 			}
 		})
 	}

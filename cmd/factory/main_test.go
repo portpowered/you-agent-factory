@@ -61,6 +61,21 @@ func TestProcessExitCodePreservesDeclaredLifecycleContract(t *testing.T) {
 			want:       130,
 		},
 		{
+			name:       "run prompt is not part of command path",
+			contextErr: context.Canceled,
+			args:       []string{"you", "run", "Fix lint"},
+			want:       130,
+		},
+		{
+			name:       "run flag values are not part of command path",
+			contextErr: context.Canceled,
+			args: []string{
+				"you", "run", "--dir", `C:\workspace`, "--work", "Fix lint",
+				"--named", "factory-name", "--factory", "factory-path",
+			},
+			want: 130,
+		},
+		{
 			name:       "server cancellation normalized by lifecycle",
 			contextErr: context.Canceled,
 			args:       []string{"you", "server"},

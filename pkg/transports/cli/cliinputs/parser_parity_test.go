@@ -514,7 +514,7 @@ func productionParserParitySessionCreateCases() []productionParserParityCase {
 			argv:         []string{"session", "create"},
 			flagLong:     "dir",
 			wantParseErr: true,
-			errContains:  `required flag(s) "dir" not set`,
+			errContains:  `required flag(s) "--dir" not set`,
 			verify: func(t *testing.T, inv cliinputs.Inventory, _ platformprocess.CLIParseResult) {
 				t.Helper()
 				record := findFlagRecord(t, inv, "you session create", "dir")
