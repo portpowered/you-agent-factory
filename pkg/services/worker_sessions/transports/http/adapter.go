@@ -17,8 +17,15 @@ import (
 // Adapter maps Worker Sessions observation projections to the generated HTTP
 // contract. Work remains the authority for deciding whether the requested Work
 // exists; Worker Sessions remains the authority for correlated attempts.
+type observationService interface {
+	ListObservations(context.Context, workersessions.ListObservationsRequest) (workersessions.ListObservationsResult, error)
+	GetObservation(context.Context, workersessions.GetObservationRequest) (workersessions.Observation, error)
+	ReadTranscript(context.Context, workersessions.ReadTranscriptRequest) (workersessions.ReadTranscriptResult, error)
+	StreamObservations(context.Context, workersessions.StreamObservationsRequest) (workersessions.ObservationSubscription, error)
+}
+
 type Adapter struct {
-	observations workersessions.ObservationService
+	observations observationService
 	work         work.Service
 }
 
@@ -96,22 +103,22 @@ func (a *Adapter) StreamWorkerSessionEvents(
 	sessionID, provider, kind, id string,
 ) (factoryapi.WorkerSessionObservation, workersessions.ObservationSubscription, error) {
 	if a == nil || a.observations == nil {
-		return factoryapi.WorkerSessionObservation{}, nil, errors.New("Worker Sessions service is required")
+		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, errors.New("Worker Sessions service is required")
 	}
 	if strings.TrimSpace(sessionID) == "" {
-		return factoryapi.WorkerSessionObservation{}, nil, errors.New("session id is required")
+		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, errors.New("session id is required")
 	}
 	provider = strings.TrimSpace(provider)
 	kind = strings.TrimSpace(kind)
 	id = strings.TrimSpace(id)
 	if provider == "" || kind == "" || id == "" {
-		return factoryapi.WorkerSessionObservation{}, nil, errors.New("provider, kind, and id are required")
+		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, errors.New("provider, kind, and id are required")
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	if err := ctx.Err(); err != nil {
-		return factoryapi.WorkerSessionObservation{}, nil, err
+		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, err
 	}
 
 	request := workersessions.GetObservationRequest{
@@ -119,16 +126,16 @@ func (a *Adapter) StreamWorkerSessionEvents(
 	}
 	observation, err := a.observations.GetObservation(ctx, request)
 	if err != nil {
-		return factoryapi.WorkerSessionObservation{}, nil, fmt.Errorf("get Worker Session observation: %w", err)
+		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, fmt.Errorf("get Worker Session observation: %w", err)
 	}
 	subscription, err := a.observations.StreamObservations(ctx, workersessions.StreamObservationsRequest{
 		ProviderSession: request.ProviderSession,
 	})
 	if err != nil {
-		return factoryapi.WorkerSessionObservation{}, nil, fmt.Errorf("stream Worker Session events: %w", err)
+		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, fmt.Errorf("stream Worker Session events: %w", err)
 	}
-	if subscription == nil {
-		return factoryapi.WorkerSessionObservation{}, nil, workersessions.ErrObservationSourceUnavailable
+	if subscription.NextFunc == nil {
+		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, workersessions.ErrObservationSourceUnavailable
 	}
 	return WorkerSessionObservationToAPI(observation), subscription, nil
 }
@@ -136,7 +143,7 @@ func (a *Adapter) StreamWorkerSessionEvents(
 // NewAdapter binds the exact roots required by the Worker Sessions list
 // operation.
 func NewAdapter(
-	observations workersessions.ObservationService,
+	observations observationService,
 	workRoot work.Service,
 ) *Adapter {
 	if observations == nil || workRoot == nil {

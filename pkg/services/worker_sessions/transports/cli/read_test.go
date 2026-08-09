@@ -45,12 +45,22 @@ func TestReadJSONUsesTranscriptRouteAndPreservesNormalizedEntries(t *testing.T) 
 	if err != nil {
 		t.Fatalf("Read() error = %v", err)
 	}
-	if gotPath != "/factory-sessions/session-1/worker-sessions/transcript" || gotQuery["provider"] != "codex" || gotQuery["kind"] != "session_id" || gotQuery["id"] != "provider-session-1" {
-		t.Fatalf("request = path=%s query=%#v, want exact transcript route and identity", gotPath, gotQuery)
+	assertTranscriptReadRequest(t, gotPath, gotQuery)
+	assertTranscriptReadJSON(t, output.Bytes())
+}
+
+func assertTranscriptReadRequest(t *testing.T, path string, query map[string]string) {
+	t.Helper()
+	if path != "/factory-sessions/session-1/worker-sessions/transcript" || query["provider"] != "codex" || query["kind"] != "session_id" || query["id"] != "provider-session-1" {
+		t.Fatalf("request = path=%s query=%#v, want exact transcript route and identity", path, query)
 	}
+}
+
+func assertTranscriptReadJSON(t *testing.T, payload []byte) {
+	t.Helper()
 	var document map[string]json.RawMessage
-	if err := json.Unmarshal(output.Bytes(), &document); err != nil {
-		t.Fatalf("decode JSON output: %v; output=%q", err, output.String())
+	if err := json.Unmarshal(payload, &document); err != nil {
+		t.Fatalf("decode JSON output: %v; output=%q", err, string(payload))
 	}
 	if string(document["workerSessionId"]) != `"worker-session-1"` || string(document["attemptId"]) != `"attempt-1"` || string(document["turnId"]) != `"turn-1"` {
 		t.Fatalf("envelope = %s/%s/%s, want session/attempt/turn", document["workerSessionId"], document["attemptId"], document["turnId"])

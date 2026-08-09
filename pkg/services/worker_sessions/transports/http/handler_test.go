@@ -50,28 +50,58 @@ func TestListWorkerSessionsBySessionIDProjectsPopulatedObservation(t *testing.T)
 	if recorder.Code != 200 {
 		t.Fatalf("status = %d, want 200; body=%s", recorder.Code, recorder.Body.String())
 	}
+	assertPopulatedListResponse(t, recorder.Body.Bytes(), total)
+}
+
+func assertPopulatedListResponse(t *testing.T, payload []byte, total int) {
+	t.Helper()
 	var response factoryapi.ListWorkerSessionsResponse
-	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+	if err := json.Unmarshal(payload, &response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if len(response.Sessions) != 1 {
 		t.Fatalf("session count = %d, want 1", len(response.Sessions))
 	}
 	got := response.Sessions[0]
-	if got.WorkerSessionId != "worker-session-1" || got.AttemptId != "attempt-1" || got.State != factoryapi.WorkerSessionObservationStateCompleted {
-		t.Fatalf("identity/state = %#v, want worker-session-1/attempt-1/COMPLETED", got)
+	assertListObservationIdentity(t, got)
+	assertListObservationProvider(t, got)
+	assertListObservationUsage(t, got, total)
+	assertListObservationTiming(t, got)
+	assertListObservationTurn(t, got)
+}
+
+func assertListObservationIdentity(t *testing.T, observation factoryapi.WorkerSessionObservation) {
+	t.Helper()
+	if observation.WorkerSessionId != "worker-session-1" || observation.AttemptId != "attempt-1" || observation.State != factoryapi.WorkerSessionObservationStateCompleted {
+		t.Fatalf("identity/state = %#v, want worker-session-1/attempt-1/COMPLETED", observation)
 	}
-	if got.ProviderSession == nil || got.ProviderSession.Provider != "codex" || got.ProviderSession.Kind != providers.SessionIDKind || got.ProviderSession.Id != "provider-session-1" {
-		t.Fatalf("provider session = %#v, want projected provider identity", got.ProviderSession)
+}
+
+func assertListObservationProvider(t *testing.T, observation factoryapi.WorkerSessionObservation) {
+	t.Helper()
+	if observation.ProviderSession == nil || observation.ProviderSession.Provider != "codex" || observation.ProviderSession.Kind != providers.SessionIDKind || observation.ProviderSession.Id != "provider-session-1" {
+		t.Fatalf("provider session = %#v, want projected provider identity", observation.ProviderSession)
 	}
-	if got.TokenUsage == nil || got.TokenUsage.TotalTokens == nil || *got.TokenUsage.TotalTokens != total {
-		t.Fatalf("token usage = %#v, want total %d", got.TokenUsage, total)
+}
+
+func assertListObservationUsage(t *testing.T, observation factoryapi.WorkerSessionObservation, total int) {
+	t.Helper()
+	if observation.TokenUsage == nil || observation.TokenUsage.TotalTokens == nil || *observation.TokenUsage.TotalTokens != total {
+		t.Fatalf("token usage = %#v, want total %d", observation.TokenUsage, total)
 	}
-	if got.DurationMillis == nil || *got.DurationMillis != 2500 {
-		t.Fatalf("durationMillis = %#v, want 2500", got.DurationMillis)
+}
+
+func assertListObservationTiming(t *testing.T, observation factoryapi.WorkerSessionObservation) {
+	t.Helper()
+	if observation.DurationMillis == nil || *observation.DurationMillis != 2500 {
+		t.Fatalf("durationMillis = %#v, want 2500", observation.DurationMillis)
 	}
-	if got.TurnId == nil || *got.TurnId != "turn-1" {
-		t.Fatalf("turnId = %#v, want turn-1", got.TurnId)
+}
+
+func assertListObservationTurn(t *testing.T, observation factoryapi.WorkerSessionObservation) {
+	t.Helper()
+	if observation.TurnId == nil || *observation.TurnId != "turn-1" {
+		t.Fatalf("turnId = %#v, want turn-1", observation.TurnId)
 	}
 }
 
@@ -184,22 +214,52 @@ func TestGetWorkerSessionObservationBySessionIDProjectsFailureDiagnostics(t *tes
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", recorder.Code, recorder.Body.String())
 	}
+	assertFailureObservationResponse(t, recorder.Body.Bytes(), service, total, duration)
+}
+
+func assertFailureObservationResponse(t *testing.T, payload []byte, service *fakeObservationService, total int, duration int64) {
+	t.Helper()
 	var response factoryapi.WorkerSessionObservation
-	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+	if err := json.Unmarshal(payload, &response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
+	assertFailureObservationIdentity(t, response)
+	assertFailureObservationCause(t, response)
+	assertFailureObservationUsage(t, response, total, duration)
+	assertFailureObservationParse(t, response)
+	assertFailureObservationRequest(t, service)
+}
+
+func assertFailureObservationIdentity(t *testing.T, response factoryapi.WorkerSessionObservation) {
+	t.Helper()
 	if response.WorkerSessionId != "worker-session-1" || response.State != factoryapi.WorkerSessionObservationStateFailed || response.AttemptId != "attempt-1" {
 		t.Fatalf("identity/state = %#v, want failed attempt projection", response)
 	}
+}
+
+func assertFailureObservationCause(t *testing.T, response factoryapi.WorkerSessionObservation) {
+	t.Helper()
 	if response.Failure == nil || response.Failure.Detail != "provider exited with status 1" || response.Failure.ProviderFailureKind == nil {
 		t.Fatalf("failure = %#v, want structured failure diagnostics", response.Failure)
 	}
+}
+
+func assertFailureObservationUsage(t *testing.T, response factoryapi.WorkerSessionObservation, total int, duration int64) {
+	t.Helper()
 	if response.TokenUsage == nil || response.TokenUsage.TotalTokens == nil || *response.TokenUsage.TotalTokens != total || response.DurationMillis == nil || *response.DurationMillis != duration {
 		t.Fatalf("usage/duration = %#v/%v, want %d/%d", response.TokenUsage, response.DurationMillis, total, duration)
 	}
+}
+
+func assertFailureObservationParse(t *testing.T, response factoryapi.WorkerSessionObservation) {
+	t.Helper()
 	if response.Parse.EventCount != 4 || len(response.Parse.Errors) != 1 {
 		t.Fatalf("parse = %#v, want event and parse diagnostics", response.Parse)
 	}
+}
+
+func assertFailureObservationRequest(t *testing.T, service *fakeObservationService) {
+	t.Helper()
 	if service.getProviderSession != (providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-session-1"}) {
 		t.Fatalf("service identity = %#v, want exact provider session ref", service.getProviderSession)
 	}
@@ -228,8 +288,13 @@ func TestReadWorkerSessionTranscriptBySessionIDProjectsNormalizedEntries(t *test
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", recorder.Code, recorder.Body.String())
 	}
+	assertTranscriptResponse(t, recorder.Body.Bytes(), service, text, toolName)
+}
+
+func assertTranscriptResponse(t *testing.T, payload []byte, service *fakeObservationService, text, toolName string) {
+	t.Helper()
 	var response factoryapi.WorkerSessionTranscriptResponse
-	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+	if err := json.Unmarshal(payload, &response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if response.WorkerSessionId != "worker-session-1" || response.State != string(workersessions.StateFailed) || response.AttemptId != "attempt-1" || response.TurnId == nil || *response.TurnId != "turn-1" {
@@ -408,8 +473,7 @@ func TestStreamWorkerSessionEventsBySessionIDWritesRetainedAndTerminalFrames(t *
 	if frames[0].Event == nil || frames[0].Event.Position != 1 || string(frames[0].Event.Payload) != `{"state":"RUNNING"}` {
 		t.Fatalf("first event = %#v, want canonical event payload", frames[0].Event)
 	}
-	subscription, ok := service.streamSubscription.(*fakeObservationSubscription)
-	if !ok || !subscription.closed {
+	if service.streamSubscription == nil || !service.streamSubscription.closed {
 		t.Fatal("stream subscription was not closed after terminal delivery")
 	}
 }
@@ -481,7 +545,7 @@ type fakeObservationService struct {
 	readErr             error
 	readCalled          bool
 	readProviderSession providers.SessionRef
-	streamSubscription  workersessions.ObservationSubscription
+	streamSubscription  *fakeObservationSubscription
 	streamErr           error
 }
 
@@ -503,7 +567,13 @@ func (f *fakeObservationService) ReadTranscript(_ context.Context, request worke
 }
 
 func (f *fakeObservationService) StreamObservations(context.Context, workersessions.StreamObservationsRequest) (workersessions.ObservationSubscription, error) {
-	return f.streamSubscription, f.streamErr
+	if f.streamSubscription == nil {
+		return workersessions.ObservationSubscription{}, f.streamErr
+	}
+	return workersessions.ObservationSubscription{
+		NextFunc:  f.streamSubscription.Next,
+		CloseFunc: f.streamSubscription.Close,
+	}, f.streamErr
 }
 
 type fakeObservationSubscription struct {
@@ -571,7 +641,7 @@ func (s workServiceStub) GetWork(context.Context, string, string) (work.ReadMode
 	return work.ReadModel{WorkID: "known-work"}, nil
 }
 
-var _ workersessions.ObservationService = (*fakeObservationService)(nil)
+var _ observationService = (*fakeObservationService)(nil)
 var _ work.Service = workServiceStub{}
 
 func durationPtr(value time.Duration) *time.Duration { return &value }

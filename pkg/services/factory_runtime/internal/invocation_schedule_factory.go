@@ -23,6 +23,10 @@ type invocationScheduleService interface {
 	PrepareInvocationSchedules(context.Context, automations.InvocationScheduleRequest) (automations.PreparedInvocationSchedules, error)
 }
 
+type workerSessionsObservationProvider interface {
+	WorkerSessionsObservation() workersessions.ObservationService
+}
+
 type invocationScheduleFactory struct {
 	factory.Factory
 	schedules     invocationScheduleService
@@ -73,7 +77,7 @@ func (wrapped *invocationScheduleFactory) runtimeService() factory.Service {
 // installed, so dropping the capability here would make the public Worker
 // Sessions routes appear unavailable only in service mode.
 func (wrapped *invocationScheduleFactory) WorkerSessionsObservation() workersessions.ObservationService {
-	provider, _ := wrapped.Factory.(factory.WorkerSessionsObservationProvider)
+	provider, _ := wrapped.Factory.(workerSessionsObservationProvider)
 	if provider == nil {
 		return nil
 	}

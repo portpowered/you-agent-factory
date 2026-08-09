@@ -171,42 +171,8 @@ func (h *Handler) StreamWorkerSessionEventsBySessionId(
 	sessionID factoryapi.SessionID,
 	params factoryapi.StreamWorkerSessionEventsBySessionIdParams,
 ) {
-	if h == nil || h.adapter == nil {
-		writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
-		return
-	}
-	if strings.TrimSpace(string(sessionID)) == "" {
-		writeError(w, http.StatusBadRequest, "session id is required", "BAD_REQUEST")
-		return
-	}
-	if r == nil {
-		writeError(w, http.StatusBadRequest, "request is required", "BAD_REQUEST")
-		return
-	}
-	provider, kind, id := string(params.Provider), string(params.Kind), strings.TrimSpace(params.Id)
-	if provider == "" {
-		writeError(w, http.StatusBadRequest, "provider is required", "BAD_REQUEST")
-		return
-	}
-	if kind == "" {
-		writeError(w, http.StatusBadRequest, "kind is required", "BAD_REQUEST")
-		return
-	}
-	if id == "" {
-		writeError(w, http.StatusBadRequest, "id is required", "BAD_REQUEST")
-		return
-	}
-	if provider != string(providers.IDCodex) && provider != string(providers.IDCursor) {
-		writeError(w, http.StatusBadRequest, "unsupported provider", string(factoryapi.ErrorResponseCodePROVIDERUNSUPPORTED))
-		return
-	}
-	if kind != providers.SessionIDKind {
-		writeError(w, http.StatusBadRequest, "unsupported session kind", string(factoryapi.ErrorResponseCodeSESSIONKINDUNSUPPORTED))
-		return
-	}
-	flusher, ok := w.(http.Flusher)
+	provider, kind, id, flusher, ok := h.prepareStreamRequest(w, r, sessionID, params)
 	if !ok {
-		writeError(w, http.StatusInternalServerError, "Worker Session streaming is unavailable", "WORKER_SESSION_STREAM_UNAVAILABLE")
 		return
 	}
 
@@ -216,7 +182,63 @@ func (h *Handler) StreamWorkerSessionEventsBySessionId(
 		return
 	}
 	defer subscription.Close()
+	h.writeWorkerSessionStream(w, r, flusher, observation, subscription)
+}
 
+func (h *Handler) prepareStreamRequest(
+	w http.ResponseWriter,
+	r *http.Request,
+	sessionID factoryapi.SessionID,
+	params factoryapi.StreamWorkerSessionEventsBySessionIdParams,
+) (string, string, string, http.Flusher, bool) {
+	if h == nil || h.adapter == nil {
+		writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
+		return "", "", "", nil, false
+	}
+	if strings.TrimSpace(string(sessionID)) == "" {
+		writeError(w, http.StatusBadRequest, "session id is required", "BAD_REQUEST")
+		return "", "", "", nil, false
+	}
+	if r == nil {
+		writeError(w, http.StatusBadRequest, "request is required", "BAD_REQUEST")
+		return "", "", "", nil, false
+	}
+	provider, kind, id := string(params.Provider), string(params.Kind), strings.TrimSpace(params.Id)
+	if provider == "" {
+		writeError(w, http.StatusBadRequest, "provider is required", "BAD_REQUEST")
+		return "", "", "", nil, false
+	}
+	if kind == "" {
+		writeError(w, http.StatusBadRequest, "kind is required", "BAD_REQUEST")
+		return "", "", "", nil, false
+	}
+	if id == "" {
+		writeError(w, http.StatusBadRequest, "id is required", "BAD_REQUEST")
+		return "", "", "", nil, false
+	}
+	if provider != string(providers.IDCodex) && provider != string(providers.IDCursor) {
+		writeError(w, http.StatusBadRequest, "unsupported provider", string(factoryapi.ErrorResponseCodePROVIDERUNSUPPORTED))
+		return "", "", "", nil, false
+	}
+	if kind != providers.SessionIDKind {
+		writeError(w, http.StatusBadRequest, "unsupported session kind", string(factoryapi.ErrorResponseCodeSESSIONKINDUNSUPPORTED))
+		return "", "", "", nil, false
+	}
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeError(w, http.StatusInternalServerError, "Worker Session streaming is unavailable", "WORKER_SESSION_STREAM_UNAVAILABLE")
+		return "", "", "", nil, false
+	}
+	return provider, kind, id, flusher, true
+}
+
+func (h *Handler) writeWorkerSessionStream(
+	w http.ResponseWriter,
+	r *http.Request,
+	flusher http.Flusher,
+	observation factoryapi.WorkerSessionObservation,
+	subscription workersessions.ObservationSubscription,
+) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")

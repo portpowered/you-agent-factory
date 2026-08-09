@@ -181,7 +181,7 @@ func (s *preHandoffFailedWorkerSessionsService) GetObservation(
 func (s *preHandoffFailedWorkerSessionsService) StreamObservations(
 	context.Context, workersessions.StreamObservationsRequest,
 ) (workersessions.ObservationSubscription, error) {
-	return nil, nil
+	return workersessions.ObservationSubscription{}, nil
 }
 
 func (s *preHandoffFailedWorkerSessionsService) ReadTranscript(
