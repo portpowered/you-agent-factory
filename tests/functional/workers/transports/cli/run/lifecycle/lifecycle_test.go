@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -79,6 +80,233 @@ func TestCLIRunCleanInvocationCompletesWithoutDashboardStartup(t *testing.T) {
 	assertCleanInvocationStdoutFreeOfOperatorChatter(t, stdout)
 	if inputs.Stderr() != "" {
 		t.Fatalf("stderr = %q, want empty successful-run stderr", inputs.Stderr())
+	}
+}
+
+// TestCLIRunToFilePreservesExactPromptAndRejectsBeforeProviderDispatch proves
+// the public one-shot run path carries a real multiline UTF-8 file and the
+// canonical xhigh effort through one injected Codex command edge unchanged,
+// while file conflicts and unreadable paths fail before any runtime/provider
+// effect is activated.
+func TestCLIRunToFilePreservesExactPromptAndRejectsBeforeProviderDispatch(t *testing.T) {
+	t.Parallel()
+
+	factoryDir := scaffoldProviderBackedFactory(t)
+	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
+	support.WriteWorkstationConfig(t, factoryDir, "process", "---\ntype: MODEL_WORKSTATION\n---\n{{ (index .Inputs 0).Payload }}")
+
+	promptDir := filepath.Join(factoryDir, "prompt fixtures")
+	if err := os.MkdirAll(promptDir, 0o755); err != nil {
+		t.Fatalf("create prompt fixture directory: %v", err)
+	}
+	promptPath := filepath.Join(promptDir, "long prompt.txt")
+	var promptBuilder strings.Builder
+	for line := 1; line <= 30; line++ {
+		fmt.Fprintf(&promptBuilder, "line %02d — 東京\r\n", line)
+	}
+	wantPrompt := promptBuilder.String()
+	if err := os.WriteFile(promptPath, []byte(wantPrompt), 0o600); err != nil {
+		t.Fatalf("write prompt fixture: %v", err)
+	}
+
+	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: []byte("file prompt accepted COMPLETE"),
+	})
+	edges := serviceedges.Edges{
+		ProviderCommandRunner:          runner,
+		WorkSubmittedFileReader:        os.ReadFile,
+		WorkSubmittedFilePathInspector: os.Stat,
+	}
+	args := []string{
+		"you", "run", "--factory", factoryPath,
+		"--provider", "codex", "--worker-reasoning-effort", "xhigh",
+		"--to-file", promptPath, "--no-record", "--quiet",
+	}
+	inputs := support.FakeInputs(t.Context(), args)
+	inputs.Input.WorkingDirectory = factoryDir
+	if err := support.BuildProcess(t, edges).Execute(inputs.Input); err != nil {
+		t.Fatalf("Process.Execute(%v) error = %v\nstdout:\n%s\nstderr:\n%s", args, err, inputs.Stdout(), inputs.Stderr())
+	}
+	if runner.CallCount() != 1 {
+		t.Fatalf("provider command runner calls = %d, want exactly one file-backed dispatch", runner.CallCount())
+	}
+	request := runner.LastRequest()
+	if request.Command != string(modelprovider.ProviderCodex) {
+		t.Fatalf("provider command = %q, want %q", request.Command, modelprovider.ProviderCodex)
+	}
+	if got := string(request.Stdin); got != wantPrompt {
+		t.Fatalf("provider stdin = %q, want exact 30-line prompt %q", got, wantPrompt)
+	}
+	support.AssertArgsContainSequence(t, request.Args, []string{
+		"--config", `model_reasoning_effort="xhigh"`,
+	})
+	assertFilePromptConflicts(t, factoryDir, factoryPath, promptPath, args)
+	assertUnreadableFilePrompt(t, factoryDir, factoryPath, promptDir)
+}
+
+func assertFilePromptConflicts(t *testing.T, factoryDir, factoryPath, promptPath string, fileArgs []string) {
+	t.Helper()
+	for _, test := range []struct {
+		name        string
+		args        []string
+		stdin       string
+		stdinIsTTY  bool
+		wantSources []string
+	}{
+		{
+			name:        "file and positional",
+			args:        []string{"you", "run", "--factory", factoryPath, "also positional", "--to-file", promptPath, "--no-record", "--quiet"},
+			stdinIsTTY:  true,
+			wantSources: []string{"file_text", "positional_text"},
+		},
+		{
+			name:        "file and supplied stdin",
+			args:        fileArgs,
+			stdin:       "supplied stdin",
+			stdinIsTTY:  false,
+			wantSources: []string{"file_text", "stdin_text"},
+		},
+	} {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			runner := support.NewShapedProviderCommandRunner()
+			inputs := support.FakeInputs(t.Context(), test.args)
+			inputs.Input.WorkingDirectory = factoryDir
+			inputs.Input.Stdin = strings.NewReader(test.stdin)
+			inputs.Input.StdinIsTTY = &test.stdinIsTTY
+			err := support.BuildProcess(t, serviceedges.Edges{
+				ProviderCommandRunner:          runner,
+				WorkSubmittedFileReader:        os.ReadFile,
+				WorkSubmittedFilePathInspector: os.Stat,
+			}).Execute(inputs.Input)
+			if err == nil || !strings.Contains(err.Error(), "INVOCATION_INPUT_SOURCE_CONFLICT") {
+				t.Fatalf("Process.Execute(%v) error = %v, want stable source conflict", test.args, err)
+			}
+			for _, source := range test.wantSources {
+				if !strings.Contains(err.Error(), source) {
+					t.Fatalf("error = %v, want source %q", err, source)
+				}
+			}
+			if runner.CallCount() != 0 {
+				t.Fatalf("provider command runner calls = %d, want zero for %s conflict", runner.CallCount(), test.name)
+			}
+		})
+	}
+}
+
+func assertUnreadableFilePrompt(t *testing.T, factoryDir, factoryPath, promptDir string) {
+	t.Helper()
+	missingPath := filepath.Join(promptDir, "missing prompt.txt")
+	runner := support.NewShapedProviderCommandRunner()
+	missingArgs := []string{
+		"you", "run", "--factory", factoryPath,
+		"--to-file", missingPath, "--no-record", "--quiet",
+	}
+	inputs := support.FakeInputs(t.Context(), missingArgs)
+	inputs.Input.WorkingDirectory = factoryDir
+	err := support.BuildProcess(t, serviceedges.Edges{
+		ProviderCommandRunner:          runner,
+		WorkSubmittedFileReader:        os.ReadFile,
+		WorkSubmittedFilePathInspector: os.Stat,
+	}).Execute(inputs.Input)
+	if err == nil || !strings.Contains(err.Error(), missingPath) {
+		t.Fatalf("Process.Execute(%v) error = %v, want unreadable path diagnostic", missingArgs, err)
+	}
+	if runner.CallCount() != 0 {
+		t.Fatalf("provider command runner calls = %d, want zero for unreadable file", runner.CallCount())
+	}
+
+	directoryArgs := []string{
+		"you", "run", "--factory", factoryPath,
+		"--to-file", promptDir, "--no-record", "--quiet",
+	}
+	directoryInputs := support.FakeInputs(t.Context(), directoryArgs)
+	directoryInputs.Input.WorkingDirectory = factoryDir
+	err = support.BuildProcess(t, serviceedges.Edges{
+		ProviderCommandRunner:          runner,
+		WorkSubmittedFileReader:        os.ReadFile,
+		WorkSubmittedFilePathInspector: os.Stat,
+	}).Execute(directoryInputs.Input)
+	if err == nil || !strings.Contains(err.Error(), "regular file") {
+		t.Fatalf("Process.Execute(%v) error = %v, want non-regular source diagnostic", directoryArgs, err)
+	}
+	if runner.CallCount() != 0 {
+		t.Fatalf("provider command runner calls = %d, want zero for non-regular file", runner.CallCount())
+	}
+}
+
+// TestCLIRunWorkerReasoningEffortOverrideReachesCodexCommand proves the
+// run-scoped effort override crosses the public root process and reaches the
+// deterministic Codex command edge in canonical form.
+func TestCLIRunWorkerReasoningEffortOverrideReachesCodexCommand(t *testing.T) {
+	t.Parallel()
+
+	factoryDir := scaffoldProviderBackedFactory(t)
+	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
+	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: []byte("reasoning effort override COMPLETE"),
+	})
+	edges := serviceedges.Edges{}
+	support.ConfigureWorkerCommands(t, &edges, runner, nil)
+
+	args := []string{
+		"you", "run",
+		"--factory", factoryPath,
+		"--provider", "codex",
+		"--worker-reasoning-effort", " XHIGH ",
+		"--no-record",
+		"--quiet",
+		"prove the explicit reasoning effort path",
+	}
+	inputs := support.FakeInputs(t.Context(), args)
+	inputs.Input.WorkingDirectory = factoryDir
+	if err := support.BuildProcess(t, edges).Execute(inputs.Input); err != nil {
+		t.Fatalf("Process.Execute(%v) error = %v\nstdout:\n%s\nstderr:\n%s", args, err, inputs.Stdout(), inputs.Stderr())
+	}
+
+	if runner.CallCount() != 1 {
+		t.Fatalf("provider command runner calls = %d, want one dispatch", runner.CallCount())
+	}
+	request := runner.LastRequest()
+	if request.Command != "codex" {
+		t.Fatalf("provider command = %q, want codex", request.Command)
+	}
+	support.AssertArgsContainSequence(t, request.Args, []string{
+		"--config", `model_reasoning_effort="xhigh"`,
+	})
+}
+
+// TestCLIRunUnsupportedWorkerReasoningEffortRejectsBeforeProviderDispatch
+// proves invalid run input fails at the public command boundary before the
+// injected provider effect can be invoked.
+func TestCLIRunUnsupportedWorkerReasoningEffortRejectsBeforeProviderDispatch(t *testing.T) {
+	t.Parallel()
+
+	factoryDir := scaffoldProviderBackedFactory(t)
+	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
+	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: []byte("must not dispatch"),
+	})
+	edges := serviceedges.Edges{}
+	support.ConfigureWorkerCommands(t, &edges, runner, nil)
+
+	args := []string{
+		"you", "run",
+		"--factory", factoryPath,
+		"--provider", "codex",
+		"--worker-reasoning-effort", "turbo",
+		"--no-record",
+		"--quiet",
+		"reject the unsupported reasoning effort",
+	}
+	inputs := support.FakeInputs(t.Context(), args)
+	inputs.Input.WorkingDirectory = factoryDir
+	err := support.BuildProcess(t, edges).Execute(inputs.Input)
+	if err == nil || !strings.Contains(err.Error(), `invalid --worker-reasoning-effort "turbo"`) {
+		t.Fatalf("Process.Execute(%v) error = %v, want actionable effort validation", args, err)
+	}
+	if runner.CallCount() != 0 {
+		t.Fatalf("provider command runner calls = %d, want zero for invalid effort", runner.CallCount())
 	}
 }
 

@@ -38,7 +38,7 @@ func TestNewServiceSatisfiesPublishedWorkRoot(t *testing.T) {
 	t.Parallel()
 
 	runtime := &internalAdmissionRuntime{}
-	service := internalservice.NewService(&internalRuntimeResolver{runtime: runtime}, nil, nil, nil)
+	service := internalservice.NewService(&internalRuntimeResolver{runtime: runtime}, nil, nil, nil, nil)
 	var root work.Service = service
 
 	request := work.WorkRequest{RequestID: "internal-root-admission"}

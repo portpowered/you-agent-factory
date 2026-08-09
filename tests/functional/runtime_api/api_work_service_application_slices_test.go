@@ -21,6 +21,7 @@ func TestWorkServiceApplicationSlicesExerciseFunctionalLane(t *testing.T) {
 	service := workwire.NewRuntimeService(
 		functionalLaneRuntimeResolver{runtime: runtime},
 		os.ReadFile,
+		nil,
 		&functionalLaneContentStaging{},
 		work.ContentMaterializeFunc(func(context.Context, string) (string, work.ContentCleanup, error) {
 			return "/tmp/functional-materialized", func() {}, nil

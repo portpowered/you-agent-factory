@@ -1,6 +1,6 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-07-27
+last-modified: 2026-08-09
 doc-id: agent-factory/guides/run
 ---
 
@@ -78,6 +78,44 @@ Do not supply positional text and stdin together. Factories with an
 `invocationSignature` may instead define named, file-path, repeated, or
 defaulted arguments. Inspect their exact input boundary with
 `you run --factory ./factory.yaml --help`.
+
+## Long prompts and explicit reasoning effort
+
+For an applicable one-shot worker invocation, `--worker-reasoning-effort`
+accepts the canonical authored-Worker values `minimal`, `low`, `medium`,
+`high`, `xhigh`, and `max`. Case and surrounding whitespace are normalized.
+An unsupported value fails before Factory Session activation or Provider
+dispatch; a value that is canonical but unsupported by the selected Provider
+continues through that Provider's existing validation.
+
+Use `--to-file` when a prompt is long or multiline. It reads one regular file
+with logically non-empty, valid UTF-8 content and sends its contents as one
+primary prompt exactly as stored: spaces, Unicode, CRLF/LF line endings, blank
+lines, and a trailing newline are preserved. The file path is the only prompt
+input transported through the shell; the prompt itself is not split into
+argv tokens.
+
+`--to-file` is a one-shot source. It strictly conflicts with signature-defined
+`--to`, positional invocation text, and supplied non-empty stdin; no source is
+silently chosen by precedence. It is also rejected for `--work`,
+`--continuously`, `--replay`, and JavaScript workflow invocations. Source,
+path, encoding, and content failures happen before runtime or Provider
+dispatch.
+
+In PowerShell, create the UTF-8 file first and pass only its path. This example
+uses a path containing spaces and ends with the independently runnable command
+shape:
+
+```powershell
+$promptPath = Join-Path (Get-Location) "prompt files\release brief.txt"
+$promptText = @"
+Review the release notes and identify the highest-risk rollback step.
+Keep the answer concise, but preserve the exact wording of the risk.
+"@
+[IO.File]::WriteAllText($promptPath, $promptText, [Text.UTF8Encoding]::new($false))
+
+you run --provider codex --worker-reasoning-effort xhigh --to-file "prompt files\release brief.txt"
+```
 
 Use `--named` for a persisted Factory and still provide its required input:
 

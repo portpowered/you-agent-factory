@@ -440,7 +440,7 @@ func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs 
 		return err
 	}
 	cleanInvocation, textInvocation := runInvocationModes(cmd, cfg)
-	invocationFactorySelected := cmd.Flags().Changed("factory") || cmd.Flags().Changed("named")
+	invocationFactorySelected := cmd.Flags().Changed("factory") || cmd.Flags().Changed("named") || cfg.InvocationFileExplicit
 	defaultResponseStream := !cfg.SuppressDashboardRendering &&
 		(textInvocation || (invocationFactorySelected && !cfg.Continuously && !cmd.Flags().Changed("work") && len(promptArgs) > 0))
 	if defaultResponseStream && strings.TrimSpace(cfg.InvocationOutputMode) == "" && !cfg.InvocationOutputExplicit {
@@ -528,7 +528,7 @@ func resolveEffectiveRunPolicy(cmd *cobra.Command, cfg runcli.RunConfig, basePol
 }
 
 func runInvocationModes(cmd *cobra.Command, cfg runcli.RunConfig) (cleanInvocation bool, textInvocation bool) {
-	invocationFactorySelected := cmd.Flags().Changed("factory") || cmd.Flags().Changed("named")
+	invocationFactorySelected := cmd.Flags().Changed("factory") || cmd.Flags().Changed("named") || cfg.InvocationFileExplicit
 	cleanInvocation = invocationFactorySelected &&
 		cmd.Flags().Changed("work") &&
 		strings.TrimSpace(cfg.WorkFile) != "" &&
@@ -538,6 +538,7 @@ func runInvocationModes(cmd *cobra.Command, cfg runcli.RunConfig) (cleanInvocati
 		!cfg.Continuously &&
 		(cfg.InvocationPositionalText != nil ||
 			cfg.InvocationStdinText != nil ||
+			cfg.InvocationFileExplicit ||
 			cfg.InvocationNormalizedArguments != nil ||
 			cfg.PreparedInvocationInput != nil)
 	return cleanInvocation, textInvocation
@@ -819,14 +820,62 @@ func resolveRunFactoryPrompt(
 	factoryChanged := cmd.Flags().Changed("factory")
 	namedChanged := cmd.Flags().Changed("named")
 	workChanged := cmd.Flags().Changed("work")
+	if err := rejectFileBackedRunShape(cfg, workChanged); err != nil {
+		return err
+	}
 
 	if !factoryChanged && !namedChanged {
-		return resolveLegacyRunFactoryPrompt(cmd, promptArgs, preparation)
+		return resolveUnselectedRunFactoryPrompt(cmd, cfg, promptArgs, workChanged, preparation)
 	}
 	if factoryChanged && runFactorySourceUsesJavaScript(cfg.FactoryConfigPath) {
+		return rejectJavaScriptFilePrompt(cfg)
+	}
+	return resolveSelectedRunFactoryPrompt(cmd, cfg, promptArgs, workChanged, preparation)
+}
+
+func rejectFileBackedRunShape(cfg *runcli.RunConfig, workChanged bool) error {
+	if !cfg.InvocationFileExplicit {
 		return nil
 	}
+	switch {
+	case workChanged:
+		return fmt.Errorf("--to-file cannot be used with --work")
+	case cfg.Continuously:
+		return fmt.Errorf("--to-file cannot be used with --continuously")
+	case strings.TrimSpace(cfg.ReplayPath) != "":
+		return fmt.Errorf("--to-file cannot be used with --replay")
+	default:
+		return nil
+	}
+}
 
+func resolveUnselectedRunFactoryPrompt(
+	cmd *cobra.Command,
+	cfg *runcli.RunConfig,
+	promptArgs []string,
+	workChanged bool,
+	preparation work.InvocationInputPreparation,
+) error {
+	if cfg.InvocationFileExplicit {
+		return resolveCompatibilityRunFactoryPrompt(cmd, cfg, promptArgs, workChanged, preparation)
+	}
+	return resolveLegacyRunFactoryPrompt(cmd, promptArgs, preparation)
+}
+
+func rejectJavaScriptFilePrompt(cfg *runcli.RunConfig) error {
+	if cfg.InvocationFileExplicit {
+		return fmt.Errorf("--to-file is not supported for JavaScript workflow invocation")
+	}
+	return nil
+}
+
+func resolveSelectedRunFactoryPrompt(
+	cmd *cobra.Command,
+	cfg *runcli.RunConfig,
+	promptArgs []string,
+	workChanged bool,
+	preparation work.InvocationInputPreparation,
+) error {
 	signatureSource := filepath.Join(cfg.Dir, interfaces.FactoryConfigFile)
 	if strings.TrimSpace(cfg.FactoryConfigPath) != "" {
 		signatureSource = cfg.FactoryConfigPath
@@ -873,7 +922,7 @@ func resolveLegacyRunFactoryPrompt(cmd *cobra.Command, promptArgs []string, prep
 	if len(promptArgs) == 0 && runCommandInputIsTTY(cmd.Context()) {
 		return nil
 	}
-	input, err := prepareRunInvocationInput(cmd, promptArgs, nil, preparation)
+	input, err := prepareRunInvocationInputWithFile(cmd, promptArgs, nil, nil, preparation)
 	if err != nil {
 		return mapRunInvocationInputError(err, "")
 	}
@@ -890,7 +939,7 @@ func resolveSignatureRunFactoryPrompt(
 	signature *interfaces.InvocationSignatureConfig,
 	preparation work.InvocationInputPreparation,
 ) error {
-	prepared, err := prepareRunInvocationInput(cmd, promptArgs, signature, preparation)
+	prepared, err := prepareRunInvocationInputWithFile(cmd, promptArgs, signature, invocationFilePath(cfg), preparation)
 	if err != nil {
 		return mapRunInvocationInputError(err, cfg.NamedFactoryName)
 	}
@@ -906,7 +955,7 @@ func resolveCompatibilityRunFactoryPrompt(
 	workChanged bool,
 	preparation work.InvocationInputPreparation,
 ) error {
-	input, err := prepareRunInvocationInput(cmd, promptArgs, nil, preparation)
+	input, err := prepareRunInvocationInputWithFile(cmd, promptArgs, nil, invocationFilePath(cfg), preparation)
 	if err != nil {
 		return mapRunInvocationInputError(err, cfg.NamedFactoryName)
 	}
@@ -930,6 +979,16 @@ func prepareRunInvocationInput(
 	signature *interfaces.InvocationSignatureConfig,
 	preparation work.InvocationInputPreparation,
 ) (work.PreparedInvocationInput, error) {
+	return prepareRunInvocationInputWithFile(cmd, promptArgs, signature, nil, preparation)
+}
+
+func prepareRunInvocationInputWithFile(
+	cmd *cobra.Command,
+	promptArgs []string,
+	signature *interfaces.InvocationSignatureConfig,
+	filePath *string,
+	preparation work.InvocationInputPreparation,
+) (work.PreparedInvocationInput, error) {
 	if preparation == nil {
 		return work.PreparedInvocationInput{}, fmt.Errorf("Work invocation-input preparation is required")
 	}
@@ -945,7 +1004,16 @@ func prepareRunInvocationInput(
 		Arguments: append([]string(nil), promptArgs...),
 		Signature: signature,
 		StdinText: stdinText,
+		FilePath:  filePath,
 	})
+}
+
+func invocationFilePath(cfg *runcli.RunConfig) *string {
+	if cfg == nil || !cfg.InvocationFileExplicit {
+		return nil
+	}
+	path := cfg.InvocationFilePath
+	return &path
 }
 
 func collectRunInvocationStdin(

@@ -74,6 +74,7 @@ type Service struct {
 	factoryDocs                       workers.FactoryDocsLoader
 	worktreePreparer                  workers.FactoryWorktreePreparer
 	runWorktree                       string
+	runReasoningEffort                string
 	agentRunHarness                   workeragentrun.HarnessAdapter
 	retryRandom                       platformrandom.Source
 	workstationFiles                  platformfilesystem.ReadFileInspector
@@ -122,6 +123,17 @@ func (s *Service) WithRunWorktree(worktree string) *Service {
 	}
 	clone := *s
 	clone.runWorktree = worktree
+	return &clone
+}
+
+// WithRunReasoningEffort returns a service copy that applies one run-scoped
+// reasoning-effort selection to every provider-backed workstation dispatch.
+func (s *Service) WithRunReasoningEffort(reasoningEffort string) *Service {
+	if s == nil {
+		return nil
+	}
+	clone := *s
+	clone.runReasoningEffort = reasoningEffort
 	return &clone
 }
 
@@ -258,14 +270,14 @@ func (s *Service) Build(
 		}
 		return workstationResult(
 			runtimeConfig, factoryRunnerID, workflowContext, logger, direct, s.interpolation,
-			s.executionPolicy, clock, processEnvironment, currentWorkingDirectory, s.factoryDocs, s.worktreePreparer, s.runWorktree, s.workstationFiles,
+			s.executionPolicy, clock, processEnvironment, currentWorkingDirectory, s.factoryDocs, s.worktreePreparer, s.runWorktree, s.runReasoningEffort, s.workstationFiles,
 			s.resolveRunner,
 			s.resolveProvider,
 		), nil
 	case interfaces.WorkstationTypeLogical:
 		return workstationResult(
 			runtimeConfig, factoryRunnerID, workflowContext, logger, nil,
-			s.interpolation, s.executionPolicy, clock, processEnvironment, currentWorkingDirectory, s.factoryDocs, s.worktreePreparer, s.runWorktree, s.workstationFiles,
+			s.interpolation, s.executionPolicy, clock, processEnvironment, currentWorkingDirectory, s.factoryDocs, s.worktreePreparer, s.runWorktree, s.runReasoningEffort, s.workstationFiles,
 			s.resolveRunner,
 			s.resolveProvider,
 		), nil
@@ -282,7 +294,7 @@ func (s *Service) Build(
 		}
 		return workstationResult(
 			runtimeConfig, factoryRunnerID, workflowContext, logger, direct, s.interpolation,
-			s.executionPolicy, clock, processEnvironment, currentWorkingDirectory, s.factoryDocs, s.worktreePreparer, s.runWorktree, s.workstationFiles,
+			s.executionPolicy, clock, processEnvironment, currentWorkingDirectory, s.factoryDocs, s.worktreePreparer, s.runWorktree, s.runReasoningEffort, s.workstationFiles,
 			s.resolveRunner,
 			s.resolveProvider,
 		), nil
@@ -319,6 +331,7 @@ func (s *Service) BuildLogical(
 		s.factoryDocs,
 		s.worktreePreparer,
 		s.runWorktree,
+		s.runReasoningEffort,
 		s.workstationFiles,
 		s.resolveRunner,
 		s.resolveProvider,
@@ -471,6 +484,7 @@ func workstationResult(
 	factoryDocs workers.FactoryDocsLoader,
 	worktreePreparer workers.FactoryWorktreePreparer,
 	runWorktree string,
+	runReasoningEffort string,
 	workstationFiles platformfilesystem.ReadFileInspector,
 	resolveRunner workers.RunnerSelectionResolver,
 	resolveProvider workers.ProviderIdentityResolver,
@@ -489,9 +503,10 @@ func workstationResult(
 			Interpolation:   interpolation,
 			ExecutionPolicy: executionPolicy,
 			Renderer:        renderer, Logger: logger,
-			WorktreePreparer: worktreePreparer,
-			RunWorktree:      runWorktree,
-			FileSystem:       workstationFiles,
+			WorktreePreparer:   worktreePreparer,
+			RunWorktree:        runWorktree,
+			RunReasoningEffort: runReasoningEffort,
+			FileSystem:         workstationFiles,
 		},
 	}
 }

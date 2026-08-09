@@ -195,18 +195,19 @@ type Edges struct {
 
 	ScriptCommandRunner platformprocess.CommandRunner
 
-	WorkContentStagingFileSystem work.ContentStagingFileSystem
-	WorkContentStagingRandom     work.ContentStagingRandom
-	WorkContentStagingClock      work.ContentStagingClock
-	WorkContentHostPlatform      work.ContentHostPlatform
-	WorkContentInspectPath       work.ContentInspectPath
-	WorkContentCreateTempFile    work.ContentCreateTemporaryFile
-	WorkContentRemovePath        work.ContentRemovePath
-	WorkContentWriteFile         work.ContentWriteFile
-	WorkContentOpenFile          work.ContentOpenFile
-	WorkContentHTTPDoer          work.ContentHTTPDoer
-	WorkRequestIDGenerator       work.RequestIDGenerator
-	WorkSubmittedFileReader      work.SubmittedFileReader
+	WorkContentStagingFileSystem   work.ContentStagingFileSystem
+	WorkContentStagingRandom       work.ContentStagingRandom
+	WorkContentStagingClock        work.ContentStagingClock
+	WorkContentHostPlatform        work.ContentHostPlatform
+	WorkContentInspectPath         work.ContentInspectPath
+	WorkContentCreateTempFile      work.ContentCreateTemporaryFile
+	WorkContentRemovePath          work.ContentRemovePath
+	WorkContentWriteFile           work.ContentWriteFile
+	WorkContentOpenFile            work.ContentOpenFile
+	WorkContentHTTPDoer            work.ContentHTTPDoer
+	WorkRequestIDGenerator         work.RequestIDGenerator
+	WorkSubmittedFileReader        work.SubmittedFileReader
+	WorkSubmittedFilePathInspector work.SubmittedFilePathInspector
 }
 
 // Merge overlays non-zero replacements onto defaults.
@@ -610,6 +611,9 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.WorkSubmittedFileReader != nil {
 		defaults.WorkSubmittedFileReader = replacements.WorkSubmittedFileReader
+	}
+	if replacements.WorkSubmittedFilePathInspector != nil {
+		defaults.WorkSubmittedFilePathInspector = replacements.WorkSubmittedFilePathInspector
 	}
 	return defaults
 }

@@ -524,6 +524,10 @@ func resolveRunCommandInvocationInput(cmd *cobra.Command, args []string, base ru
 	if err != nil {
 		return nil, base, err
 	}
+	cfg.InvocationFileExplicit, err = climanifestcobra.InputChanged(cmd, "you.run.flag.to-file")
+	if err != nil {
+		return nil, base, err
+	}
 	mockWorkersExplicit, err := climanifestcobra.InputChanged(cmd, "you.run.flag.with-mock-workers")
 	if err != nil {
 		return nil, base, err

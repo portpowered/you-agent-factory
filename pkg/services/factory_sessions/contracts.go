@@ -43,6 +43,7 @@ type InvocationTarget struct {
 	FactoryDir                       string
 	FactorySourcePath                string
 	RunnerID                         string
+	WorkerReasoningEffort            string
 	Worktree                         string
 	OperatorDefaults                 operatorsettings.ResolvedDefaults
 	ExecutionBaseDir                 string

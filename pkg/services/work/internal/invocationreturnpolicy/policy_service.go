@@ -14,7 +14,7 @@ type PolicyService struct {
 
 // NewPolicyService constructs the private invocation/return-policy service.
 func NewPolicyService() *PolicyService {
-	return &PolicyService{preparation: NewInvocationInputPreparation()}
+	return &PolicyService{preparation: NewInvocationInputPreparation(nil, nil)}
 }
 
 func (s *PolicyService) PrepareInvocationInput(

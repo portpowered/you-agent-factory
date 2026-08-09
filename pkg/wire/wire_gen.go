@@ -80,7 +80,9 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	authoredFactorySourceLoader := provideAuthoredFactorySourceLoader(authoredLayoutReaderFileSystem)
 	factoryConfigFileLoader := provideFactoryConfigFileLoader(authoredFactorySourceLoader)
 	requestFileLoader := provideWorkRequestFileLoader()
-	invocationInputPreparation := work.NewInvocationInputPreparation()
+	submittedFileReader := provideWorkSubmittedFileReader(edges2)
+	submittedFilePathInspector := provideWorkSubmittedFilePathInspector(edges2)
+	invocationInputPreparation := work.NewInvocationInputPreparation(submittedFileReader, submittedFilePathInspector)
 	loggerBuilder := provideTerminalLoggerBuilder()
 	v5 := provideLiveRecordingTargetPlanner()
 	adapter := provideRecordingsCLIAdapter()
@@ -313,12 +315,11 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		ResolveHome:                    homeDirectoryResolver,
 		ProviderIdentities:             providerIdentityResolver,
 	}
-	submittedFileReader := provideWorkSubmittedFileReader(edges2)
 	contentStagingService, err := provideWorkContentStagingService(edges2)
 	if err != nil {
 		return nil, err
 	}
-	v40 := provideWorkFactory(submittedFileReader, contentStagingService, contentMaterializer)
+	v40 := provideWorkFactory(submittedFileReader, submittedFilePathInspector, contentStagingService, contentMaterializer)
 	workDependencies := &wire.WorkRuntimeOpeningDependencies{
 		Factory:             v40,
 		ContentMaterializer: contentMaterializer,
@@ -725,6 +726,7 @@ var servicesSet = wire4.NewSet(
 	provideWorkFactory,
 	provideWorkRequestIDGenerator,
 	provideWorkSubmittedFileReader,
+	provideWorkSubmittedFilePathInspector,
 	provideWorkContentHostPlatform,
 	provideContentMaterializer,
 	provideWorkMaterializationService,

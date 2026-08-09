@@ -111,6 +111,51 @@ func TestValidateRunSubmitFamily_RejectsIncompleteAndContradictoryContracts(t *t
 	}
 }
 
+func TestValidateRunSubmitFamily_DocumentsRunParityInputs(t *testing.T) {
+	manifest := loadRunSubmitFixture(t)
+	run := manifest.Commands["you.run"]
+
+	for _, test := range []struct {
+		name string
+		flag string
+		want []string
+	}{
+		{
+			name: "reasoning effort",
+			flag: "worker-reasoning-effort",
+			want: []string{"minimal", "low", "medium", "high", "xhigh", "max", "normalized", "before dispatch"},
+		},
+		{
+			name: "file prompt",
+			flag: "to-file",
+			want: []string{"exact", "UTF-8", "one-shot", "--to", "positional", "stdin"},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			flag, ok := run.FlagByLong(test.flag)
+			if !ok {
+				t.Fatalf("run flag --%s is missing", test.flag)
+			}
+			for _, marker := range test.want {
+				if !strings.Contains(flag.Usage, marker) {
+					t.Fatalf("run flag --%s usage = %q, want marker %q", test.flag, flag.Usage, marker)
+				}
+			}
+		})
+	}
+
+	for _, relationshipID := range []string{
+		"you.run.rel.to-file-invocation-input",
+		"you.run.rel.to-file-work",
+		"you.run.rel.to-file-continuously",
+		"you.run.rel.to-file-replay",
+	} {
+		if _, ok := run.Relationships[relationshipID]; !ok {
+			t.Fatalf("run manifest missing documented --to-file relationship %q", relationshipID)
+		}
+	}
+}
+
 func loadRunSubmitFixture(t *testing.T) climanifest.Manifest {
 	t.Helper()
 	path := testutil.MustRepoPath(t, climanifest.ProductionManifestPath)

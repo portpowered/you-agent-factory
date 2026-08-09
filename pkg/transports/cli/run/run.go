@@ -155,6 +155,11 @@ func Open(
 	loadMockWorkers workers.MockWorkersConfigLoader,
 	buildRuntimeRequest RuntimeOpeningRequestFactory,
 ) (*Operation, error) {
+	canonicalReasoningEffort, err := NormalizeWorkerReasoningEffort(cfg.WorkerReasoningEffort)
+	if err != nil {
+		return nil, err
+	}
+	cfg.WorkerReasoningEffort = canonicalReasoningEffort
 	cfg = normalizeRunInvocationMode(cfg)
 	logger := cfg.Logger
 	if logger == nil {
@@ -192,6 +197,16 @@ func Open(
 		prepareWorkTarget, mockWorkersConfig, invocationMode, requestedPort,
 		buildRunner, buildRuntimeRequest,
 	)
+}
+
+// NormalizeWorkerReasoningEffort validates and canonicalizes the run-scoped
+// worker reasoning-effort override before any Factory Runtime is constructed.
+func NormalizeWorkerReasoningEffort(value string) (string, error) {
+	canonical, ok := interfaces.CanonicalizeReasoningEffort(value)
+	if !ok {
+		return "", fmt.Errorf("invalid --worker-reasoning-effort %q: expected one of minimal, low, medium, high, xhigh, or max", value)
+	}
+	return canonical, nil
 }
 
 func openHostedRuntime(

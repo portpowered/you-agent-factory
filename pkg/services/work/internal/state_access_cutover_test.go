@@ -34,7 +34,7 @@ func (f *petriMoveRuntime) MoveWork(
 
 func TestNewServiceRoutesStateAccessSubmitMoveAndReadThroughDetachedResults(t *testing.T) {
 	runtime := &petriMoveRuntime{}
-	service := internalservice.NewService(workRuntimeResolver{runtime: runtime}, nil, nil, nil)
+	service := internalservice.NewService(workRuntimeResolver{runtime: runtime}, nil, nil, nil, nil)
 	ctx := context.Background()
 
 	request := work.WorkRequest{RequestID: "request-cutover"}
