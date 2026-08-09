@@ -260,3 +260,23 @@
   - A clean PR handoff can be made from the pushed branch head without staging unrelated worktree changes; inspect both index and worktree status before publishing.
   - Recheck PR existence against the explicit target repository because the checkout has multiple remotes and `gh` may infer a different owner.
 ---
+
+## [2026-08-08 18:24 -07:00] - wo-b1-antigravity-provider-golden-traces-005
+- What was implemented
+  - Addressed the blocking PR review: AGY command-runner composition is unconditional for root wire dispatch, including when an AgyPTYHost edge is present.
+  - Moved native print-timeout parsing into the internal workstation-executor package and added focused value tests.
+  - Migrated affected root AGY fixtures to ProviderCommandRunner, added exact dual-edge wire coverage, and removed the unrelated review-listed planning/meta files, script, and factory configuration edit.
+- Files changed
+  - `pkg/services/workers/execution_requests.go`
+  - `pkg/services/workers/internal/services/workstations/executor/timeouts.go` and `timeouts_test.go`
+  - `pkg/services/workers/internal/services/workstations/executor/agent.go` and `agentrun/executor.go`
+  - `pkg/wire/runtime_provider_bindings.go`, `session_runtime_providers.go`, and `agy_command_selection_test.go`
+  - AGY functional fixtures/tests, `prd.json`, and `progress.txt`
+- Verification
+  - `go test ./pkg/services/providers/... -count=1`, `go test ./pkg/services/workers/... -count=1`, `go test ./pkg/wire/... -count=1`, and both AGY functional suites pass.
+  - `go vet ./...`, `go run ./cmd/pkgstructurecheck`, `go run ./cmd/backendsizecheck -root .`, and `git diff --cached --check` pass before commit.
+  - `pkg-maint` reports only the unchanged main-branch `read_test.go` complexity baseline; no live AGY call was made.
+- **Learnings for future iterations:**
+  - A provider command edge and a legacy PTY host can coexist in the root edge aggregate, but the canonical provider adapter must be selected by explicit provider capability rather than edge presence.
+  - Pure execution-policy parsing belongs with the internal workstation executor when service-root structure gates reject an exported helper from the Workers contract package.
+---
