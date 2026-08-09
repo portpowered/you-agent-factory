@@ -455,40 +455,60 @@
       "name": "you worker-sessions list",
       "interface": "cli",
       "classification": "runnable",
-      "status": "missing",
-      "lane": "short",
+      "status": "covered",
+      "lane": "long",
       "executionClass": "deterministic",
-      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+      "evidence": [
+        {
+          "test": "tests/functional/provider_sessions/cli/worker_sessions_cli_test.go::TestWorkerSessionsCLI",
+          "boundary": "cli"
+        }
+      ]
     },
     {
       "stableId": "cli/you.worker-sessions.read",
       "name": "you worker-sessions read",
       "interface": "cli",
       "classification": "runnable",
-      "status": "missing",
-      "lane": "short",
+      "status": "covered",
+      "lane": "long",
       "executionClass": "deterministic",
-      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+      "evidence": [
+        {
+          "test": "tests/functional/provider_sessions/cli/worker_sessions_cli_test.go::TestWorkerSessionsCLI",
+          "boundary": "cli"
+        }
+      ]
     },
     {
       "stableId": "cli/you.worker-sessions.show",
       "name": "you worker-sessions show",
       "interface": "cli",
       "classification": "runnable",
-      "status": "missing",
-      "lane": "short",
+      "status": "covered",
+      "lane": "long",
       "executionClass": "deterministic",
-      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+      "evidence": [
+        {
+          "test": "tests/functional/provider_sessions/cli/worker_sessions_cli_test.go::TestWorkerSessionsCLI",
+          "boundary": "cli"
+        }
+      ]
     },
     {
       "stableId": "cli/you.worker-sessions.stream",
       "name": "you worker-sessions stream",
       "interface": "cli",
       "classification": "runnable",
-      "status": "missing",
-      "lane": "short",
+      "status": "covered",
+      "lane": "long",
       "executionClass": "deterministic",
-      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+      "evidence": [
+        {
+          "test": "tests/functional/provider_sessions/cli/worker_sessions_cli_test.go::TestWorkerSessionsCLI",
+          "boundary": "cli"
+        }
+      ]
     },
     {
       "stableId": "cli/you.workers",

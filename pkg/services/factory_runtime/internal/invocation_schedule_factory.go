@@ -13,6 +13,7 @@ import (
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 )
 
 // invocationScheduleService is the optional Automations capability consumed
@@ -65,6 +66,18 @@ func (wrapped *invocationScheduleFactory) scheduleContext() context.Context {
 func (wrapped *invocationScheduleFactory) runtimeService() factory.Service {
 	service, _ := wrapped.Factory.(factory.Service)
 	return service
+}
+
+// WorkerSessionsObservation forwards the optional runtime capability through
+// the automation decorator. The HTTP transport binds after this decorator is
+// installed, so dropping the capability here would make the public Worker
+// Sessions routes appear unavailable only in service mode.
+func (wrapped *invocationScheduleFactory) WorkerSessionsObservation() workersessions.ObservationService {
+	provider, _ := wrapped.Factory.(factory.WorkerSessionsObservationProvider)
+	if provider == nil {
+		return nil
+	}
+	return provider.WorkerSessionsObservation()
 }
 
 func (wrapped *invocationScheduleFactory) ControlPause(ctx context.Context, request factory.PauseRequest) (factory.PauseResult, error) {
