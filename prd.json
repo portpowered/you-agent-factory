@@ -67,8 +67,8 @@
         "Typecheck passes"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Extended docs/reference/relationships.md with a direct DEPENDS_ON, PARENT_CHILD, and SAME_NAME comparison; explicit source/target or matchInput direction; the distinction between batch relations and per-input guards; the all-selected-input dependency gate after join binding; and a two-batch worked timeline for a secondary SAME_NAME input whose prerequisite is incomplete. Rebuilt bin/you.exe and verified the rendered you docs relationships output, go test ./pkg/transports/cli/... -count=1, the existing TestDependsOnSecondaryJoinedInput behavioral regression, make docs-reference-smoke, and make verify-fast."
     },
     {
       "id": "wo-d2-reference-schemas-docs-004",
