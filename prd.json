@@ -69,8 +69,8 @@
         "Tests pass"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Updated docs/reference/authoring-factories.md to make validate-only validation the required step after authoring and immediately before the first run, route detailed checks and the worked join failure to you docs factory-validation, require revalidation after later topology/guard/route/schema/split-layout changes, and reflect the sequence in the checklist. Extended packaged-topic smoke markers. Rebuilt bin/you.exe and executed the exact portable-file and split-directory validation commands plus the changed authoring/factory-validation docs topics against the current binary; both validation forms exited 0 with the documented taxonomy. Verified with the named join regression, make docs-reference-smoke, and make verify-fast (typecheck, MCP contract check, UI/Bun tests, and short Go suite)."
     }
   ]
 }
