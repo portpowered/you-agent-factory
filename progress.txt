@@ -211,7 +211,7 @@
   - The full Windows `make test-unit-coverage` command remains unable to start locally because its expanded Go command exceeds the Windows process command-line limit; Linux CI is the authoritative coverage environment.
 - **Learnings for future iterations:**
   - Local ignored working assets can make focused tests appear green while clean CI fails immediately; verify every replay fixture with `git ls-files` before declaring an offline gate reproducible.
-- Keep the real recordings in tracked `testdata` and leave `docs/temp` for disposable operator working material.
+  - Keep the real recordings in tracked `testdata` and leave `docs/temp` for disposable operator working material.
 ---
 
 ## [2026-08-08 17:15 -07:00] - wo-b1-antigravity-provider-golden-traces-005
