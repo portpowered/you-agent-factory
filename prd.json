@@ -1,73 +1,74 @@
 {
-  "project": "WO-C3 — Add Reasoning-Effort and File-Backed Prompt Parity to you run",
-  "branchName": "wo-c3-run-parity-long-prompt-input",
-  "description": "Make one-shot ad-hoc you run invocations accept the canonical worker reasoning-effort override and an exact UTF-8 prompt from --to-file, with strict pre-dispatch source validation, preserved existing invocation behavior, synchronized CLI/help/reference contracts, and deterministic end-to-end proof.",
+  "project": "WO-C2 Correction 2 — Make Work Watch Survive Model-Response Retry Collisions",
+  "branchName": "wo-c2-fix2-watch-model-response-id",
+  "description": "Make finite and --follow Work watch streams survive live-shaped model-response retry collisions, prevent new model-response identity collisions, and prove the behavior with a complete recorded production ledger while preserving corruption detection and the existing NDJSON contract.",
   "context": {
-    "customerAsk": "Add --worker-reasoning-effort and --to-file <path> to ad-hoc you run so AGY or Codex workers can receive a supported explicit effort and one exact long or multiline prompt without fragile shell quoting; reject invalid or conflicting sources before dispatch, preserve current run and Factory-signature behavior, publish the canonical contract, and deliver through merged terminal-green CI.",
-    "problem": "The live generic you run path rejects --worker-reasoning-effort even though authored Workers support canonical reasoning effort, while PowerShell Start-Process can split a multiline --to value into many positional arguments and cause INVOCATION_ARGUMENT_POSITIONAL_OVERFLOW. Long ad-hoc probes and explicit effort are therefore unreliable.",
-    "solution": "Declare canonical run-scoped effort and file-backed prompt inputs; reuse the authored Worker effort canonicalization and existing Worker request field; resolve --to-file through Work-owned input policy and an injected filesystem boundary; preserve exact UTF-8 content; reject conflicts, bad files, unsupported effort, and disallowed run shapes before Provider dispatch; then regenerate and verify CLI/help/reference surfaces with focused functional tests."
+    "customerAsk": "Make you work watch stream real production sessions end-to-end despite repeated model-response IDs, extend the accepted retry/replay semantics from #1833 beyond MODEL_REQUEST, audit and correct the response ID construction that embeds model-request/1, retain same-sequence corruption rejection, and add complete production-ledger functional coverage for finite and --follow modes.",
+    "problem": "The watch reducer treats a later model-response record that reuses a request-ordinal-derived event ID as conflicting canonical data and aborts. The #1833 exception covers only MODEL_REQUEST, model-response IDs can collide across dispatch retries, and synthetic fixtures have twice failed to reproduce the full live event mix.",
+    "solution": "Use one sequence-aware policy for every non-projecting enrichment family: exact replay is idempotent, refreshed same-ID data is accepted only at a strictly later sequence, and conflicting same or backward sequence reuse remains an error. Give newly recorded retry responses distinct stable event IDs while preserving request correlation, then verify finite and follow behavior through the application watch pipeline using a complete redacted production ledger."
   },
   "acceptanceCriteria": [
-    "you run --worker-reasoning-effort <supported-value> accepts the canonical authored-Worker effort vocabulary, normalizes it consistently, and carries it in the existing Worker request through dispatch; an unsupported value exits non-zero with an actionable diagnostic and no provider dispatch.",
-    "you run --to-file <path> reads a non-empty valid UTF-8 regular file and delivers its complete contents, including spaces, original line endings, non-ASCII characters, and trailing newline, as exactly one logical prompt without shell argv transport or content normalization.",
-    "--to-file, signature-defined --to, positional invocation text, and supplied non-empty stdin are mutually exclusive; conflicts, invalid paths/files/encoding/content, and run shapes without a primary prompt fail non-zero before runtime or Provider dispatch with source-specific diagnostics.",
-    "Invocations that omit the new flags preserve ordinary --to, stdin, positional Factory input, Factory-signature named/file/repeated/default inputs, packaged Factory behavior, batch/current/JavaScript run shapes, output behavior, and Provider-specific effort validation.",
-    "Canonical CLI sources and generated consumers, you run --help, and packaged you docs run describe the flags, strict conflict rule, effort semantics, and an independently runnable you run --provider codex --worker-reasoning-effort xhigh --to-file <path> example.",
-    "Applicable typecheck, focused unit/integration/functional tests, generated-contract checks, and documentation smoke checks pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
-    "The implementation/review loop continues until required CI is terminal and passing, every blocking PR conversation item is explicitly addressed, merge conflicts and shared-file changes are reconciled, and the PR is actually merged; opened, green, approved, or ready-to-merge is not complete."
+    "Finite you work watch --session <session> replays the complete production-ledger fixture through terminal Work state and exits successfully without aborting on the observed model-response ID family.",
+    "you work watch --session <session> --follow consumes the same retained production history, remains attached after terminal history, emits later Work transitions once each, and stops cleanly only when canceled by the test.",
+    "Repeated non-projecting enrichment events with refreshed canonical data are accepted only at strictly increasing sequences, while conflicting reuse at the same or a lower sequence fails and leaves the last accepted cursor unchanged.",
+    "Newly recorded model responses for distinct retry executions cannot reuse a canonical event ID; exact replay of one recorded event retains its original identity and request correlation.",
+    "No storage engine is added, no you.work.watch.v1 NDJSON field or shape changes, and the cut list in docs/temp/work-order.md remains out of scope.",
+    "The named regression command go test ./pkg/services/work/transports/cli ./pkg/services/workers/internal/services/workstations/execution/recording ./tests/functional/work/watch -count=1 and make verify-fast pass; Typecheck passes; Tests pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
+    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared-file changes are reconciled, and the PR is actually merged."
   ],
   "userStories": [
     {
-      "id": "wo-c3-run-parity-long-prompt-input-001",
-      "title": "Apply explicit reasoning effort to ad-hoc worker dispatch",
-      "description": "As a customer running an ad-hoc worker, I want to select its reasoning effort explicitly so the worker executes with the intended supported effort instead of rejecting or ignoring my request.",
+      "id": "wo-c2-fix2-watch-model-response-id-001",
+      "title": "Accept ordered enrichment retries without hiding corruption",
+      "description": "As an operator watching Work, I want repeated model-response and equivalent enrichment records at later canonical positions to be treated as retry history so that unrelated enrichment cannot abort the Work transition stream.",
       "acceptanceCriteria": [
-        "--worker-reasoning-effort is a typed you run input for applicable one-shot worker invocations and accepts the same normalized canonical values as authored Worker configuration, without a parallel enum, aliases, or fallback-to-default behavior.",
-        "A supported value, including existing case and whitespace normalization, reaches the existing Worker execution request reasoning-effort field and is observable at the deterministic Provider command edge.",
-        "A globally unsupported value fails non-zero before Factory Session activation or Provider dispatch with an actionable diagnostic naming the value; a canonically valid but Provider-unsupported value continues through existing Provider-specific rejection.",
-        "Omitting the flag preserves authored Worker/provider/model defaults, and existing packaged Factory effort signature parameters continue to work.",
-        "Focused CLI and functional regressions prove accepted effort dispatch and pre-dispatch rejection through root.BuildProcess and Process.Execute with Provider effects replaced only through edges.Edges.",
-        "Typecheck passes",
-        "Tests pass"
+        "The exact live-shaped ID factory-event/model-response/2cf2a099-909b-4446-8e8d-1453054e093c/model-request/1 can recur with refreshed model-response canonical data at a strictly later sequence without emitting a Work line or returning an error.",
+        "The same sequence-aware behavior covers every non-projecting enrichment event family accepted by the watch reducer, with no event-family-specific retry exception left as the policy boundary.",
+        "Exact replays remain idempotent, advance neither emitted output nor cursor, and do not duplicate Work transitions.",
+        "A same-ID event with conflicting canonical data at the same or a lower sequence is rejected, and the cursor remains at the last valid event.",
+        "Finite and follow stream tests prove that valid Work transitions before, between, and after refreshed enrichment events are emitted once in strictly increasing sequence order.",
+        "Tests pass",
+        "Typecheck passes"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Implemented and verified the typed run-scoped override. Canonicalization, pre-dispatch rejection, hosted and detached invocation forwarding, authored-effort fallback, and the deterministic Codex command edge are covered by focused unit and root.BuildProcess/Process.Execute functional tests."
+      "notes": "Generalized watch ordering so every currently defined non-projecting Factory event family uses the same ordered-enrichment policy: exact replay is idempotent, refreshed same-ID data is accepted only at a strictly later canonical sequence, and same/backward conflicting reuse is rejected without moving the cursor. The explicit allowlist defaults unknown and projection-bearing event types to strict handling. Added reducer coverage for the complete current non-projecting event vocabulary, unknown-event strictness, the live-shaped model-response ID factory-event/model-response/2cf2a099-909b-4446-8e8d-1453054e093c/model-request/1, and finite/--follow model-response retry streams. The focused regression command and make verify-fast pass."
     },
     {
-      "id": "wo-c3-run-parity-long-prompt-input-002",
-      "title": "Deliver one exact prompt from --to-file",
-      "description": "As a customer with a long or multiline brief, I want you run to read the prompt from a file so shell quoting cannot split or alter it.",
+      "id": "wo-c2-fix2-watch-model-response-id-002",
+      "title": "Give distinct model responses collision-safe event identities",
+      "description": "As a maintainer of the canonical Factory ledger, I want distinct response records from dispatch retries to have distinct event identities so that new recordings do not manufacture ambiguous replay keys.",
       "acceptanceCriteria": [
-        "--to-file <path> is accepted for run shapes with one logical primary text prompt, including applicable ad-hoc AGY and Codex worker invocations, and paths containing spaces resolve through the existing injected filesystem boundary.",
-        "The selected path must identify a readable regular file containing valid, logically non-empty UTF-8; failure identifies the source/path, exits non-zero, and occurs before Factory Session activation or Provider dispatch.",
-        "File contents reach one Provider request with spaces, Unicode, original CR/LF sequences, blank lines, and final newline preserved, without trimming, joining, newline conversion, or argv re-tokenization.",
-        "--to-file conflicts with signature-defined --to, positional prompt input, and supplied non-empty stdin; every combination returns the stable invocation-input conflict classification, names the sources, and never silently chooses precedence.",
-        "Run shapes without a primary prompt reject --to-file, while invocation without it preserves existing stdin, positional, ordinary --to, and signature-defined named/file/repeated/default argument behavior.",
-        "A functional regression uses a real 30-line UTF-8 prompt file at a path containing spaces and proves exact single-prompt delivery through ProviderCommandRunner; conflict and unreadable-file regressions prove zero dispatch.",
-        "Typecheck passes",
-        "Tests pass"
+        "Two distinct model-response records produced for retry executions within the same dispatch lifecycle receive different canonical event IDs, even when both correlate to request ordinal model-request/1.",
+        "A response event retains explicit correlation to its matching model request, and request/response payload meaning is unchanged.",
+        "Reconstructing or replaying the same response record preserves its event ID; identity generation does not depend on wall-clock coincidence or mutable payload serialization.",
+        "Focused recording tests cover successful and failed responses across retries and demonstrate the no-collision invariant.",
+        "No Factory Event payload schema or Work-watch NDJSON shape changes.",
+        "Tests pass",
+        "Typecheck passes"
       ],
       "priority": 2,
       "passes": true,
-      "notes": "Implemented Work-owned --to-file preparation with injected regular-file inspection and reading, UTF-8/non-empty validation, exact text preservation, stable file/named/positional/stdin source conflicts, signature primary-parameter routing, and pre-dispatch rejection for non-prompt run shapes. Added generated CLI contract wiring and root.BuildProcess functional regressions proving a real 30-line UTF-8 file at a path with spaces reaches one Codex ProviderCommandRunner request byte-for-byte; conflict, missing-file, and non-regular-file cases prove zero dispatch and no read for invalid metadata. Focused Work/CLI/wire tests, make test, and lifecycle tests pass."
+      "notes": "Added a bounded runner-wide monotonic response ordinal for model-response event IDs, while preserving the existing model-request/1 retry correlation and all response payload fields. The ordinal is independent of wall-clock time and mutable payload data, and exact recorded-event replay retains its ID. Added focused recorder coverage for failed-then-successful retries, distinct IDs across dispatches, unchanged request correlation, and deterministic identity generation. The focused regression command and make verify-fast pass. No Factory Event payload schema or Work-watch NDJSON changes were made."
     },
     {
-      "id": "wo-c3-run-parity-long-prompt-input-003",
-      "title": "Publish and verify the reliable run contract",
-      "description": "As an operator, I want live help and the packaged run reference to show a reproducible file-backed effort command so I can use the feature without fragile shell-specific prompt quoting.",
+      "id": "wo-c2-fix2-watch-model-response-id-003",
+      "title": "Replay a complete production retry ledger through Work watch",
+      "description": "As an operator, I want the watch command verified against the full event mix from a real retried session so that synthetic coverage cannot mask another live-stream abort.",
       "acceptanceCriteria": [
-        "The authored CLI manifest declares both flags, applicability, and --to-file conflicts, and all generated CLI manifest/consumer artifacts are regenerated through source-of-truth workflows without hand editing.",
-        "you run --help describes canonical effort validation, exact file-backed prompt behavior, and strict conflicts with --to, positional input, and supplied stdin without claiming silent precedence.",
-        "you docs run includes a PowerShell-safe workflow ending in you run --provider codex --worker-reasoning-effort xhigh --to-file \"<path with spaces>\", with prompt content absent from argv.",
-        "The documented command is independently runnable against the built CLI, and its deterministic test form proves the real 30-line prompt and xhigh effort reach one Codex worker dispatch together.",
-        "CLI contract/help tests and make docs-reference-smoke prove customer-visible behavior and packaged reference rendering without source-inventory or link-topology meta-tests.",
-        "Typecheck passes",
-        "Tests pass"
+        "A complete recorded production ledger from a real session with dispatch retries is checked in as a stable, secret-free fixture; redaction preserves event order, event families, sequence values, repeated-ID relationships, Work lineage, and terminal outcome needed by the regression.",
+        "The fixture contains the observed model-response request-ordinal ID shape and at least one matching model-request/model-response correlation at a later canonical sequence.",
+        "An application-level functional test routes the recorded ledger through the same service and CLI watch pipeline used by Process.Execute, rather than invoking the reducer alone or a built you binary.",
+        "Finite mode emits only the expected you.work.watch.v1 Work transitions in canonical order, reaches the recorded terminal cohort, and exits successfully with no stderr error.",
+        "Follow mode drains the same retained ledger without duplicates or collision errors, remains subscribed, emits a deterministically supplied later Work transition once, and exits cleanly on cancellation without sleeps as synchronization.",
+        "The functional scenario rejects a deliberately same-sequence conflicting event derived from the fixture, proving that production compatibility does not weaken corruption detection.",
+        "go test ./pkg/services/work/transports/cli ./pkg/services/workers/internal/services/workstations/execution/recording ./tests/functional/work/watch -count=1 passes.",
+        "Tests pass",
+        "Typecheck passes"
       ],
       "priority": 3,
       "passes": true,
-        "notes": "Published the canonical authored CLI manifest/help contract for --worker-reasoning-effort and --to-file, including applicability and strict source/run-shape conflicts, then regenerated all CLI consumers and baselines. Added the PowerShell-safe packaged run reference and boundary test proving prompt content stays out of argv, plus the combined root.BuildProcess/Process.Execute lifecycle regression proving a real 30-line UTF-8 file and xhigh effort reach one Codex dispatch. CLI composition treats the shared static effort flag as authoritative while preserving authored packaged-Factory effort signatures; the packaged subagent regressions and injected Work file-preparation coverage pass. Verified CLI/work tests, contract and manifest checks, wire drift, contracts-smoke, api-smoke, api-package-verify, docs-reference smoke, make verify-fast, make test, backend-size, pkg-maint, pkg-file-count, pkg-structure, and vet; full lint is limited by the repository's existing unrelated 176-violation pkg-boundary baseline."
+      "notes": "Replaced the synthetic fixture with the sanitized 223-event recording factory-session-~default-083224-637a0122-f34d-4c5e-99a0-20e70b5375c2.json. Redaction removes prompt/output/path material while preserving the source event IDs, event families, canonical sequence values, timestamps, Work lineage, retry outcomes, request-ordinal model-response identities, and terminal state change. The fixture includes the observed response ID factory-event/model-response/2cf2a099-909b-4446-8e8d-1453054e093c/model-request/1 and its matching model request. The application-level regression routes that complete recording through the public SSE and root.BuildProcess/Process.Execute path: finite mode emits the captured terminal Work transition and exits successfully; follow mode drains the same retained history, emits two deterministic later transitions once, and cancels cleanly; a same-sequence conflict derived from a recorded model response is rejected. The reducer defers state-less Work requests and unknown internal Work types until authoritative Work state is observed so the complete production session can reach its terminal cohort without changing the NDJSON contract. Corrected-recorder identity proof remains in recorder tests. The focused story command, ratcheted gates, and make verify-fast passed."
     }
   ]
 }
