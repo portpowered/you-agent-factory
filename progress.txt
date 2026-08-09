@@ -1,0 +1,16 @@
+## Codebase Patterns
+- Run-scoped Worker selections must be forwarded through both the hosted runtime opening request and the detached Factory Session invocation target before reaching Worker execution.
+- Public CLI behavior should be proven through `root.BuildProcess` and `Process.Execute`, replacing external effects only with injected `edges.Edges` ports.
+
+## [2026-08-09 08:40 -07:00] - wo-c3-run-parity-long-prompt-input-001
+- What was implemented
+  - Added the typed `--worker-reasoning-effort` run input with shared canonical effort normalization and actionable invalid-value errors before runtime/provider dispatch.
+  - Forwarded the normalized override through hosted and detached invocation runtime construction, where it overrides authored Worker effort while preserving authored defaults when omitted.
+  - Regenerated the CLI contract/help artifacts and added focused CLI, runtime-boundary, and end-to-end Codex command-edge regressions.
+- Files changed
+  - CLI run configuration, manifest/source consumers, generated contract/help baselines, Factory Session invocation/runtime-opening boundaries, Worker runtime assembly/executor, focused tests, and `prd.json`.
+- **Learnings for future iterations:**
+  - The clean ad-hoc invocation path uses `factorysessions.InvocationTarget` and does not reuse the hosted `RuntimeOpeningRequest`; every run-scoped Worker selection must be mapped into both paths.
+  - The functional harness can observe the exact provider command while preserving architecture by using `support.BuildProcess(t, edges).Execute(...)` with `serviceedges.Edges`.
+  - Focused verification passed with `go test ./pkg/transports/cli/run ./pkg/transports/cli ./pkg/services/factory_sessions/internal/runtimeopening/... ./pkg/services/workers/... ./pkg/wire/... -count=1` and the two new lifecycle tests.
+---
