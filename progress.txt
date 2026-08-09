@@ -7,6 +7,7 @@
 - Planner and cycle-control workflows likewise need protocol-valid structured model output to exercise generated Work, concurrency, or replanning; an empty generic mock can prove only the terminal invocation envelope and may leave orchestration Work uncreated.
 - JavaScript packaged Factories that parse planner or judge output need protocol-valid provider-command evidence; the CLI `--with-mock-workers` path returns generic text for those child calls, so use focused provider-runner assertions plus a provider-free schema-bound CLI smoke and document the distinction.
 - Workstation prompt templates receive `PromptData`; access a bound work identifier through `(index .Inputs N).WorkID` rather than a root `.WorkID` field.
+- Run-level `--quiet` cannot be combined with structured `--json` or `--output`; verify output-mode combinations against the live CLI before documenting them.
 
 ## 2026-08-09 13:12 - wo-d1-packaged-factories-docs-001
 - What was implemented
@@ -153,4 +154,25 @@
   - The packaged TTS worker uses the local `OMNIVOICE_Q4_K_M` route and exposes no provider/model override flags; model readiness and local runtime setup belong in the canonical models workflow.
   - `--with-mock-workers` does not satisfy the managed local TTS readiness/runtime path; a successful CLI smoke needs a READY cache and a controlled local runtime or the real installed runtime.
   - TTS primary output is metadata pointing to an artifact, so paths, trace IDs, and generated audio bytes must remain runtime-generated rather than documentation promises.
+---
+
+## 2026-08-09 16:11 - wo-d1-packaged-factories-docs-006
+- What was implemented
+  - Added the complete `@you/subagent` operator entry to `docs/reference/packaged-factories.md` using the shared seven-part contract.
+  - Documented the bounded read-only purpose, request binding, exact live invocation signature, single `subagent-worker` role, optional provider/model/reasoning overrides, operator/provider-default fallback, runtime/session side effects, failure behavior, and human-readable versus structured primary output.
+  - Added an exact structured mock-worker invocation and captured its real `COMPLETED` output with a text `primaryResult`; explicitly separated deterministic mock envelope evidence from provider-generated answer quality.
+  - Marked story 006 as passing in `prd.json` and added the live `--quiet`/structured-output constraint to the consolidated codebase patterns.
+- Files changed
+  - `docs/reference/packaged-factories.md`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/factory/packaged/subagent -count=1 -timeout 300s` — passed.
+  - `make docs-reference-smoke` — passed.
+  - `make verify-fast` — passed: dashboard typecheck, MCP contract boundary, 355 UI files / 2,970 tests, 191 Bun unit checks, and the short Go suite.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - `@you/subagent` has one `READ_ONLY` `subagent-worker`; its live optional flags are `--worker-provider`, `--worker-model`, and `--worker-reasoning-effort`, with omitted provider/model values using operator defaults and omitted reasoning using the provider default.
+  - `--quiet` conflicts with `--json` and `--output`; structured examples must omit `--quiet` and should be validated against live CLI behavior.
+  - The normalized subagent primary result is the child answer, while request/trace IDs and session state are runtime metadata; generated provider prose remains non-deterministic.
 ---

@@ -110,8 +110,8 @@
         "Tests pass, including make docs-reference-smoke"
       ],
       "priority": 6,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added the complete @you/subagent operator entry using the shared seven-part contract. Documented its bounded read-only purpose, request binding, exact live signature, single subagent-worker role, optional worker-provider/worker-model/worker-reasoning-effort overrides, operator/provider-default fallback, runtime/session side effects, primary-result output shape, failure behavior, and the distinction between mock smoke evidence and provider-generated prose. Executed the exact structured example against the current bin/you.exe with isolated HOME/USERPROFILE state; it returned a COMPLETED invocation with a text primaryResult of mock worker accepted and runtime request/trace metadata. The existing TestPackagedSubagentReturnsChildResult assertion provides direct public-CLI proof of child-result propagation and hermetic no-server success."
     }
   ]
 }

@@ -725,6 +725,80 @@ the bounded failure paths. Do not substitute the empty generic mock for that
 coverage: it can accept a planner dispatch without authoring the required
 batch protocol.
 
+## Detailed single bounded-call entry
+
+### `@you/subagent`
+
+**Purpose and suitable use.** Use `@you/subagent` for one bounded, read-only
+worker task that should inspect the submitted request and return a
+self-contained answer in one pass. It is useful for a focused summary,
+explanation, or repository inspection when one worker is enough. It does not
+recursively orchestrate other Factories, write to the selected workspace, or
+represent an ongoing conversational agent session; use `goal`, `review`, or a
+planning Factory when the work needs iteration, implementation, or orchestration.
+
+**Invocation signature.** The live signature is:
+
+```text
+you run --named @you/subagent <to> [--worker-model <value>] [--worker-provider <value>] [--worker-reasoning-effort <value>]
+```
+
+`<to>` is required and accepts positional, `--to`, or stdin input. The
+optional `--worker-provider` and `--worker-model` flags select the one
+subagent worker's provider and model; `--worker-reasoning-effort` is an
+optional reasoning setting for that worker. Run-level flags such as `--json`,
+`--output`, `--record`, and `--no-record` remain available. `--quiet` cannot be
+combined with `--json` or `--output`.
+
+**Worker roles and provider/model overrides.** The Factory exposes exactly one
+role, `subagent-worker`, an agent worker with a `READ_ONLY` tool policy. The
+three `worker-*` flags apply to that role and there are no separate planner,
+reviewer, merger, or child-agent overrides. Omit provider or model values to
+use operator defaults. Omit reasoning effort to preserve the selected
+provider's default reasoning setting. These are the only Factory-defined
+provider, model, and reasoning inputs shown by the live help output.
+
+**Prerequisites and side effects.** A live run needs a configured provider and
+model route for `subagent-worker`; the worker can inspect the request and its
+read-only workspace context but is not an implementation path for workspace
+changes. One invocation creates runtime session, Work, dispatch, and provider
+session activity, and normal recording/artifact behavior applies unless a
+run-level option such as `--no-record` is supplied. The worker's answer is
+bounded to one pass; a provider or child failure is terminal and does not
+produce a success-shaped primary result. The runtime session and its metadata
+are not an ongoing agent conversation for the caller.
+
+**Expected output shape.** The default output is the worker's human-readable
+primary answer. With `--json --output primary`, the normal invocation envelope
+contains one text block in `primaryResult`, plus runtime metadata such as
+`status`, `requestId`, and `traceId`; those metadata fields are not part of the
+worker's answer. Generated answer prose is not byte-stable. A deterministic
+mock-worker smoke can prove the binding and primary-result path, but it does
+not represent the quality or content of a configured provider response.
+
+**Worked invocation.** This exact structured smoke was executed against the
+current binary with isolated operator state and a built-in accepting mock
+worker. The provider/model/reasoning flags exercise the live optional bindings
+without starting a provider process:
+
+```bash
+you run --named @you/subagent --with-mock-workers --no-record --json --output primary --worker-provider CODEX --worker-model gpt-5 --worker-reasoning-effort medium --to "Summarize the release checklist in three bullets."
+```
+
+**Observed output evidence.** The exact command completed with this result;
+the request and trace identifiers are opaque values generated for that run:
+
+```text
+{"primaryResult":[{"text":"mock worker accepted","type":"text"}],"requestId":"request-4d99f48a-8bc2-41a9-91d8-75db575c456e","status":"COMPLETED","traceId":"trace-request-4d99f48a-8bc2-41a9-91d8-75db575c456e"}
+```
+
+The existing behavioral assertion
+`TestPackagedSubagentReturnsChildResult` additionally proves through the
+public CLI that the child's normalized primary result is returned rather than
+the submitted request text, and that a hermetic named invocation succeeds
+without starting an HTTP listener. Remove `--with-mock-workers` for a real
+provider-backed answer after configuring the route described above.
+
 ## Detailed parallel investigation and selection entries
 
 These four Factories all fan work out before returning one customer-facing
