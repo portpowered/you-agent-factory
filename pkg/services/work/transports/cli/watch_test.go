@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -344,6 +345,7 @@ func TestWatchConsumesCanonicalSSEStreamUsingDefaultSession(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("X-Factory-Session-Retained-Event-Count", "3")
 		w.WriteHeader(http.StatusOK)
 		for _, event := range []factoryapi.FactoryEvent{metadata, request, transition} {
 			payload, err := json.Marshal(event)
@@ -382,14 +384,92 @@ func TestWatchConsumesCanonicalSSEStreamUsingDefaultSession(t *testing.T) {
 	}
 }
 
+func TestWatchFiniteConsumesEntireHTTPRetainedPrefixBeforeCompleting(t *testing.T) {
+	metadata, requestA, terminalA := watchRetainedTerminalPrefixSetup(t)
+	requestB := watchFactoryEvent(t, factoryapi.FactoryEventTypeWorkRequest, "request-b", 4,
+		factoryapi.WorkRequestEventPayload{Works: &[]factoryapi.Work{{
+			WorkId: watchStringPtr("work-b"), WorkTypeName: watchStringPtr("task"),
+			State: &factoryapi.WorkState{Name: "ready", Type: factoryapi.WorkStateTypeINITIAL},
+		}}})
+	terminalB := watchTransitionEvent(t, "move-b", 5, "work-b", "ready", "done", true)
+	events := []factoryapi.FactoryEvent{metadata, requestA, terminalA, requestB, terminalB}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("X-Factory-Session-Retained-Event-Count", "5")
+		w.WriteHeader(http.StatusOK)
+		for _, event := range events {
+			payload, err := json.Marshal(event)
+			if err != nil {
+				t.Errorf("encode retained event %q: %v", event.Id, err)
+				return
+			}
+			if _, err := io.WriteString(w, "data: "+string(payload)+"\n\n"); err != nil {
+				t.Errorf("write retained event %q: %v", event.Id, err)
+				return
+			}
+		}
+	}))
+	defer server.Close()
+	transport, err := clihttp.NewProtocol(server.Client(), watchTestHTTPClock{})
+	if err != nil {
+		t.Fatalf("build watch HTTP protocol: %v", err)
+	}
+
+	var output bytes.Buffer
+	err = Watch(WatchConfig{
+		Context: context.Background(),
+		Server:  server.URL,
+		Output:  &output,
+		HTTP:    transport,
+	})
+	if err != nil {
+		t.Fatalf("Watch() error = %v", err)
+	}
+	lines := strings.Split(strings.TrimSpace(output.String()), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("output lines = %d, want both retained terminal transitions: %q", len(lines), output.String())
+	}
+	var first, second watchLine
+	if err := decodeWatchLine(lines[0], &first); err != nil {
+		t.Fatal(err)
+	}
+	if err := decodeWatchLine(lines[1], &second); err != nil {
+		t.Fatal(err)
+	}
+	if first.EventID != "move-terminal" || second.EventID != "move-b" ||
+		first.Sequence >= second.Sequence || !first.Terminal || !second.Terminal {
+		t.Fatalf("retained transitions = %#v, %#v, want ordered terminal A then terminal B", first, second)
+	}
+}
+
+func watchRetainedTerminalPrefixSetup(t *testing.T) (factoryapi.FactoryEvent, factoryapi.FactoryEvent, factoryapi.FactoryEvent) {
+	t.Helper()
+	metadata := watchFactoryEvent(t, factoryapi.FactoryEventTypeInitialStructureRequest, "factory-retained", 1,
+		factoryapi.InitialStructureRequestEventPayload{Factory: factoryapi.Factory{
+			WorkTypes: &[]factoryapi.WorkType{{Name: "task", States: []factoryapi.WorkState{
+				{Name: "ready", Type: factoryapi.WorkStateTypeINITIAL},
+				{Name: "done", Type: factoryapi.WorkStateTypeTERMINAL},
+			}}},
+		}})
+	request := watchFactoryEvent(t, factoryapi.FactoryEventTypeWorkRequest, "request-a", 2,
+		factoryapi.WorkRequestEventPayload{Works: &[]factoryapi.Work{{
+			WorkId: watchStringPtr("work-a"), WorkTypeName: watchStringPtr("task"),
+			State: &factoryapi.WorkState{Name: "ready", Type: factoryapi.WorkStateTypeINITIAL},
+		}}})
+	terminal := watchTransitionEvent(t, "move-terminal", 3, "work-a", "ready", "done", true)
+	return metadata, request, terminal
+}
+
 type watchTestHTTPClock struct{}
 
 func (watchTestHTTPClock) Now() time.Time { return time.Unix(0, 0) }
 
 type finiteWatchEventStream struct {
-	events    []factoryapi.FactoryEvent
-	nextCalls int
-	closed    bool
+	events             []factoryapi.FactoryEvent
+	retainedEventCount int
+	nextCalls          int
+	closed             bool
 }
 
 func (stream *finiteWatchEventStream) Next(ctx context.Context) (factoryapi.FactoryEvent, error) {
@@ -409,6 +489,8 @@ func (stream *finiteWatchEventStream) Close() error {
 	stream.closed = true
 	return nil
 }
+
+func (stream *finiteWatchEventStream) RetainedEventCount() int { return stream.retainedEventCount }
 
 func watchFactoryEvent(t *testing.T, eventType factoryapi.FactoryEventType, id string, sequence int, payload any) factoryapi.FactoryEvent {
 	t.Helper()
@@ -776,6 +858,7 @@ func TestOpenHTTPWatchEventStreamSendsReconnectCursor(t *testing.T) {
 		gotEventID = r.URL.Query().Get("after_event_id")
 		gotSequence = r.URL.Query().Get("after_sequence")
 		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("X-Factory-Session-Retained-Event-Count", "0")
 		w.WriteHeader(http.StatusOK)
 		if flusher, ok := w.(http.Flusher); ok {
 			flusher.Flush()
@@ -802,6 +885,34 @@ func TestOpenHTTPWatchEventStreamSendsReconnectCursor(t *testing.T) {
 	}
 	if gotEventID != "move/1?retry" || gotSequence != "17" {
 		t.Fatalf("reconnect query = eventId=%q sequence=%q, want encoded cursor values", gotEventID, gotSequence)
+	}
+}
+
+func TestOpenHTTPWatchEventStreamValidatesRetainedEventCount(t *testing.T) {
+	for _, retainedHeader := range []string{"", "not-a-count", "-1"} {
+		t.Run(fmt.Sprintf("header=%q", retainedHeader), func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "text/event-stream")
+				if retainedHeader != "" {
+					w.Header().Set("X-Factory-Session-Retained-Event-Count", retainedHeader)
+				}
+				w.WriteHeader(http.StatusOK)
+			}))
+			defer server.Close()
+			transport, err := clihttp.NewProtocol(server.Client(), watchTestHTTPClock{})
+			if err != nil {
+				t.Fatalf("build watch HTTP protocol: %v", err)
+			}
+			stream, err := openHTTPWatchEventStream(
+				context.Background(), transport, server.URL, "session-header", nil, io.Discard, false,
+			)
+			if stream != nil {
+				_ = stream.Close()
+			}
+			if err == nil || !strings.Contains(err.Error(), "X-Factory-Session-Retained-Event-Count") {
+				t.Fatalf("open error = %v, want retained-count handshake failure", err)
+			}
+		})
 	}
 }
 
@@ -872,6 +983,8 @@ func (stream *cancellableWatchEventStream) Close() error {
 	return nil
 }
 
+func (stream *cancellableWatchEventStream) RetainedEventCount() int { return 0 }
+
 type errorWatchEventStream struct {
 	err error
 }
@@ -881,3 +994,5 @@ func (stream *errorWatchEventStream) Next(context.Context) (factoryapi.FactoryEv
 }
 
 func (stream *errorWatchEventStream) Close() error { return nil }
+
+func (stream *errorWatchEventStream) RetainedEventCount() int { return 0 }

@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
@@ -24,6 +25,7 @@ import (
 type watchEventStream interface {
 	Next(context.Context) (factoryapi.FactoryEvent, error)
 	Close() error
+	RetainedEventCount() int
 }
 
 type watchEventOpener interface {
@@ -137,6 +139,12 @@ type watchStreamResult struct {
 }
 
 func consumeWatchStream(cfg WatchConfig, reducer *watchReducer, stream watchEventStream) watchStreamResult {
+	retainedRemaining := stream.RetainedEventCount()
+	if retainedRemaining < 0 {
+		return watchStreamResult{
+			err: &watchProtocolError{message: fmt.Sprintf("work watch stream returned negative retained event count %d", retainedRemaining)},
+		}
+	}
 	for {
 		event, err := stream.Next(cfg.Context)
 		if err != nil {
@@ -144,6 +152,9 @@ func consumeWatchStream(cfg WatchConfig, reducer *watchReducer, stream watchEven
 				err:       formatWatchReadError(err),
 				retryable: isRetryableWatchError(err),
 			}
+		}
+		if retainedRemaining > 0 {
+			retainedRemaining--
 		}
 
 		transition, emit, completed, err := reducer.Accept(event)
@@ -155,7 +166,7 @@ func consumeWatchStream(cfg WatchConfig, reducer *watchReducer, stream watchEven
 				return watchStreamResult{err: err}
 			}
 		}
-		if completed && !cfg.Follow {
+		if completed && retainedRemaining == 0 && !cfg.Follow {
 			return watchStreamResult{completed: true}
 		}
 	}
@@ -172,9 +183,10 @@ func formatWatchReadError(err error) error {
 }
 
 type httpWatchEventStream struct {
-	reader    *bufio.Reader
-	body      io.ReadCloser
-	closeOnce sync.Once
+	reader             *bufio.Reader
+	body               io.ReadCloser
+	retainedEventCount int
+	closeOnce          sync.Once
 }
 
 func openHTTPWatchEventStream(
@@ -236,7 +248,44 @@ func openHTTPWatchEventStream(
 		defer resp.Body.Close()
 		return nil, &watchProtocolError{message: fmt.Sprintf("work watch stream for session %q returned content type %q", sessionID, resp.Header.Get("Content-Type"))}
 	}
-	return &httpWatchEventStream{reader: bufio.NewReader(resp.Body), body: resp.Body}, nil
+	retainedEventCount, err := parseWatchRetainedEventCount(resp.Header.Get(factorysessions.SessionEventStreamRetainedCountHeader), sessionID)
+	if err != nil {
+		defer resp.Body.Close()
+		return nil, err
+	}
+	return &httpWatchEventStream{
+		reader:             bufio.NewReader(resp.Body),
+		body:               resp.Body,
+		retainedEventCount: retainedEventCount,
+	}, nil
+}
+
+func parseWatchRetainedEventCount(headerValue, sessionID string) (int, error) {
+	value := strings.TrimSpace(headerValue)
+	if value == "" {
+		return 0, &watchProtocolError{message: fmt.Sprintf(
+			"work watch stream for session %q is missing %s",
+			sessionID,
+			factorysessions.SessionEventStreamRetainedCountHeader,
+		)}
+	}
+	count, err := strconv.Atoi(value)
+	if err != nil || count < 0 {
+		return 0, &watchProtocolError{message: fmt.Sprintf(
+			"work watch stream for session %q returned invalid %s %q",
+			sessionID,
+			factorysessions.SessionEventStreamRetainedCountHeader,
+			value,
+		)}
+	}
+	return count, nil
+}
+
+func (stream *httpWatchEventStream) RetainedEventCount() int {
+	if stream == nil {
+		return 0
+	}
+	return stream.retainedEventCount
 }
 
 func (stream *httpWatchEventStream) Next(ctx context.Context) (factoryapi.FactoryEvent, error) {
