@@ -48,8 +48,8 @@
         "Typecheck passes"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "2026-08-10: mechanically split pkg/transports/cli/run/run_invocation_test.go into lifecycle, input, output, CLI/API parity, no-server integration, and shared-helper test files. Isolated before/after go test ./pkg/transports/cli/run -count=1 -run '^$' -list '.*' inventories both contained 146 names with identical SHA-256 8A65F4CD3D63F0384D960E239E4EC434A2AD1F74E92ED8CBC8389B6C33C84E15 and an empty normalized diff; full before/after coverage stayed at 72.1%. Full focused tests, go vet, backend-size, pkg-maint, pkg-file-count, and pkg-structure pass; the largest split file is 513 lines."
     }
   ]
 }
