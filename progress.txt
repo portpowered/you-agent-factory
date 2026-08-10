@@ -28,6 +28,7 @@
 - Replay completeness must be derived from a terminal lifecycle record inside the captured Events range, not from a separately synchronized terminal session state.
 - When a package has a strict file-count baseline, put a small refactor in an existing focused file before adding a new helper file or changing the baseline.
 - When broad functional coverage reports a cancellation-observation failure, rerun the failed lane and isolate the named test before changing an unrelated feature; parallel-suite failures can move between existing durability/restart tests while isolated runs pass.
+- When a functional coverage job reports a missing evidence artifact, inspect the earlier test output first; the missing artifact can be a secondary symptom of the primary test failure.
 - For cross-repository PRs, resolve review and CI state with an explicit owner/repository and compare local, fork-branch, and PR head SHAs; current-branch discovery may follow a different local origin.
 
 ## 2026-08-09 13:12 - wo-d1-packaged-factories-docs-001
@@ -1099,4 +1100,20 @@
 - **Learnings for future iterations:**
   - A historical blocking conversation item is resolved when the current PR contains the requested behavioral fix and the thread-aware audit finds no unresolved inline work; preserve the original comment as review history.
   - Progress-only commits still change the PR head, so rerun the focused regression and verify terminal CI after pushing the bookkeeping update.
+---
+## 2026-08-10 05:05 -0700 - wo-b3-provider-capability-discovery-cli-ci-retry
+- What was implemented
+  - Diagnosed the first workflow attempt on the progress-only head as two unrelated flaky lanes: the UI component suite hit an out-of-memory failure in `FactorySimpleSubmissionComposer`, and backend functional coverage hit the previously observed canceled-context assertion in `TestFactorySessionResumeDoesNotRepeatCompletedDispatch`; no provider-discovery or UI files were changed.
+  - Reran only the failed jobs after the workflow became terminal.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Initial run `31385342784` failed only `Frontend Component` and `Backend Functional Coverage`; all other substantive checks passed.
+  - Retry `Frontend Component` job `93446283510` — passed.
+  - Retry `Backend Functional Coverage` job `93446283682` — passed.
+  - Dependent `Verification Policy` job `93447534784` — passed.
+  - All 18 checks are green on head `23cb30230ef31fda2ebf9fdec1f6c211e6913ca2`.
+- **Learnings for future iterations:**
+  - A progress-only commit can expose unrelated resource and timing flakiness; inspect the exact failing test and compare changed paths before editing feature code, then rerun only failed jobs when the isolated evidence supports it.
+  - Record both the primary failure and any missing downstream artifact so CI diagnosis does not mistake the upload symptom for the test cause.
 ---
