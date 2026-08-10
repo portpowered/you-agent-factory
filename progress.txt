@@ -813,6 +813,7 @@
   - `go test ./tests/functional/workers/mock -run 'TestPlainBatchDrain' -count=1 -timeout 120s` — passed.
   - `go run ./cmd/functionalboundarycheck` — passed.
   - `git diff --check` — passed.
+  - PR #1845's initial functional lane identified the same forbidden Runtime import; commit `085c00db6` removes it and is ready for a fresh canonical-repository CI run.
 - **Learnings for future iterations:**
   - The functional boundary lane is intentionally stricter than package tests: public harness tests verify observable process behavior, while `errors.As` checks for service-owned types belong in the owning service package.
 ---
