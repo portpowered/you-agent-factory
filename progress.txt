@@ -968,3 +968,21 @@
   - A historical top-level blocker can remain in the merged PR timeline after the requested fix is present; verify the current head against the feedback and inspect thread resolution separately before treating it as unresolved work.
   - When the PR head is hosted in a different repository than the local default remote, resolve and inspect it with the explicit owner/repository and compare its SHA to local `HEAD`.
 ---
+## 2026-08-10 02:43 -0700 - wo-b3-provider-capability-discovery-cli-final-delivery-audit
+- What was implemented
+  - Re-read `prd.json` and the consolidated Codebase Patterns; all three stories remain marked `passes:true`.
+  - Verified that the existing PR #1843 already contains the latest provider-policy reconciliation requested by its blocking conversation item: exact Codex model IDs, explicit AGY empty effort arrays with model-ID selection guidance, and the catalog-to-execution behavioral regression.
+  - Confirmed no inline review threads or formal reviews remain, and the top-level blocker is addressed by the current commits.
+- Files changed
+  - `progress.txt`
+  - `prd.json` was verified unchanged because all story pass states, acceptance notes, and the PR description are current.
+- Verification
+  - `go test ./tests/functional/providers/discovery/... -run '^TestProvidersListThroughRootBuildProcess$' -count=1` — passed.
+  - `git diff --check` — passed; worktree clean before this append.
+  - Local `HEAD`, the fork branch, and PR #1843 head all match `964eef47692ac9b7d7524dc5c540a558e9864a7b`.
+  - `gh pr checks 1843 --repo portpowered/you-agent-factory` — all 18 checks pass, including Backend Functional Coverage and Verification Policy.
+  - PR #1843 is open, mergeable, non-draft, and its description matches `prd.json`.
+- **Learnings for future iterations:**
+  - Final delivery audits should compare the exact local, remote-branch, and PR head SHAs, then verify the terminal CI run and PR description before reporting readiness.
+  - A historical top-level blocker is addressed when the current head contains its behavioral fix and thread-aware inspection shows no unresolved inline work; its original conversation item may remain as historical context.
+---
