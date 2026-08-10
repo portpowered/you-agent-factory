@@ -986,3 +986,19 @@
   - Final delivery audits should compare the exact local, remote-branch, and PR head SHAs, then verify the terminal CI run and PR description before reporting readiness.
   - A historical top-level blocker is addressed when the current head contains its behavioral fix and thread-aware inspection shows no unresolved inline work; its original conversation item may remain as historical context.
 ---
+## 2026-08-10 02:59 -0700 - wo-b3-provider-capability-discovery-cli-ci-retry-final
+- What was implemented
+  - Diagnosed the first fresh-head CI failure as the unchanged timing-sensitive `TestFactorySessionResumeDoesNotRepeatCompletedDispatch` test; its failure was `provider Infer did not observe canceled workflow context`, unrelated to provider discovery.
+  - Reproduced the exact test successfully for 20 isolated repetitions and reran only the failed GitHub jobs with `gh run rerun 31376137369 --failed --repo portpowered/you-agent-factory`.
+- Files changed
+  - `progress.txt`
+  - No feature code, generated artifact, or coverage baseline was changed for the unrelated retry.
+- Verification
+  - Isolated restart test: 20/20 repetitions passed.
+  - Retry Backend Functional Coverage job `93417380311` — passed.
+  - Retry Verification Policy job `93418598263` — passed.
+  - All required PR checks are green on head `b0c4850466dbf36faab0de18fa4e2250480a23c0`.
+- **Learnings for future iterations:**
+  - When a broad functional lane fails on an untouched timing-sensitive test, reproduce that exact test repeatedly before editing feature code; a clean repetition supports a targeted failed-job rerun.
+  - Record the retry job IDs and exact final head in the append-only log so CI recovery remains auditable.
+---
