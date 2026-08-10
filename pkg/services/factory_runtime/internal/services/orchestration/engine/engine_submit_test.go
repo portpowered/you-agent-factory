@@ -208,6 +208,82 @@ func TestSubmitWorkRequest_ValidationFailureQueuesNoPartialWork(t *testing.T) {
 	}
 }
 
+func TestSubmitWorkRequest_DuplicateNameFailureQueuesNoPartialWork(t *testing.T) {
+	n := buildTestNet()
+	marking := petri.NewMarking("test-wf")
+	eng := newTestFactoryEngine(n, marking, nil)
+
+	_, err := eng.SubmitWorkRequest(context.Background(), work.WorkRequest{
+		RequestID: "request-duplicate-name",
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.Work{
+			{Name: "release", WorkTypeID: "task"},
+			{Name: "release", WorkTypeID: "task"},
+		},
+	})
+	if err == nil {
+		t.Fatal("duplicate-name batch succeeded")
+	}
+	for _, marker := range []string{
+		"works[1].name",
+		"works[0].name",
+		"unique across the entire batch",
+	} {
+		if !strings.Contains(err.Error(), marker) {
+			t.Fatalf("duplicate-name diagnostic missing %q: %v", marker, err)
+		}
+	}
+	if err := eng.Tick(context.Background()); err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+	if len(eng.GetMarking().Tokens) != 0 {
+		t.Fatalf("tokens after duplicate-name batch = %d, want 0", len(eng.GetMarking().Tokens))
+	}
+}
+
+func TestSubmitWorkRequest_MissingRelationEndpointFailureQueuesNoPartialWork(t *testing.T) {
+	n := buildTestNet()
+	marking := petri.NewMarking("test-wf")
+	eng := newTestFactoryEngine(n, marking, nil)
+
+	_, err := eng.SubmitWorkRequest(context.Background(), work.WorkRequest{
+		RequestID: "request-missing-relation-endpoint",
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		Works:     []work.Work{{Name: "new-work", WorkTypeID: "task"}},
+		Relations: []work.WorkRelation{{
+			Type:           work.WorkRelationDependsOn,
+			SourceWorkName: "new-work",
+			TargetWorkName: "previously-submitted",
+		}},
+	})
+	if err == nil {
+		t.Fatal("missing relation endpoint batch succeeded")
+	}
+	for _, marker := range []string{
+		"relations[0]",
+		`relation type "DEPENDS_ON"`,
+		`sourceWorkName "new-work"`,
+		`targetWorkName "previously-submitted"`,
+		`endpoint targetWorkName="previously-submitted"`,
+		"missing from this batch",
+		"relation endpoints must name Work declared in this batch",
+		"add the named Work to works[] or correct targetWorkName",
+	} {
+		if !strings.Contains(err.Error(), marker) {
+			t.Fatalf("relation endpoint diagnostic missing %q: %v", marker, err)
+		}
+	}
+	if len(eng.workRequests) != 0 {
+		t.Fatalf("accepted request records = %d, want 0", len(eng.workRequests))
+	}
+	if err := eng.Tick(context.Background()); err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+	if len(eng.GetMarking().Tokens) != 0 {
+		t.Fatalf("tokens after missing relation endpoint batch = %d, want 0", len(eng.GetMarking().Tokens))
+	}
+}
+
 func TestSubmitWorkRequest_WrappedRequestsPreserveRuntimeFields(t *testing.T) {
 	n := buildTestNet()
 	marking := petri.NewMarking("test-wf")
