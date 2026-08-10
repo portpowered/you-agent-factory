@@ -2315,3 +2315,16 @@
 - **Learnings for future iterations:**
   - When a broad suite names one cancellation-sensitive failure while every other lane is green, repeat that exact test before altering production behavior; an isolated pass supports recording a flake and relying on CI reruns.
 ---
+
+## 2026-08-10 12:18 -07:00 - pf-cli-exit-codes-004 CI follow-up
+- What was implemented
+  - Investigated the first post-review CI failure and confirmed it was an unrelated transient failure in `TestFunctionalAPIServer_RuntimeLogDirectoryIsAProcessInput`; the expected `factory started` log entry was missing once, while the changed CLI tests were green.
+  - Re-ran the failed GitHub Actions jobs without changing feature code; the rerun completed successfully.
+- Files changed
+  - `progress.txt`
+- Verification
+  - The failing runtime-api test passed five consecutive local runs.
+  - CI run `31422128595` is green for Backend Functional Coverage, Verification Policy, and all other required checks; the PR is mergeable and clean.
+- **Learnings for future iterations:**
+  - A single missing startup log in the broad functional lane can be transient; isolate and repeat the named test before changing unrelated runtime behavior, then rerun only failed CI jobs when the local evidence is stable.
+---
