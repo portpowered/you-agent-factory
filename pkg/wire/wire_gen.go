@@ -533,6 +533,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
+	remoteInvocationOperation := provideRemoteInvocationOperation(wireStandardCLIHTTPProtocol)
 	acpService := provideACPCLIService(operatorsettingsService, service, idGenerator)
 	chatsessionsService, err := provideChatSessionsService(eventsService, loggingLogger)
 	if err != nil {
@@ -607,6 +608,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		ReadWorkerSession:                 v72,
 		StreamWorkerSession:               v73,
 		OpenRunSelection:                  selectionFactory,
+		RemoteInvocation:                  remoteInvocationOperation,
 		ACP:                               acpService,
 		ACPServer:                         server,
 	}
@@ -867,6 +869,7 @@ var cliCommandOperationsSet = wire4.NewSet(
 	provideSubmitPayloadReader,
 	provideOperatorDefaultsResolver,
 	provideStandardCLIHTTPProtocol,
+	provideRemoteInvocationOperation,
 	provideExtendedCLIHTTPProtocol,
 	provideWatchCLIHTTPProtocol,
 	provideStreamingCLIHTTPProtocol,

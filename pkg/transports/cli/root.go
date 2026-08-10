@@ -149,6 +149,7 @@ type CommandOperations struct {
 	ReadWorkerSession                 ReadWorkerSessionOperation
 	StreamWorkerSession               StreamWorkerSessionOperation
 	OpenRunSelection                  runcli.SelectionFactory
+	RemoteInvocation                  runcli.RemoteInvocationOperation
 	ACP                               acpcli.Service
 	ACPServer                         acp.Server
 }
@@ -206,6 +207,7 @@ type CommandFactory struct {
 	ReadWorkerSession      workersessionscli.ReadOperation
 	StreamWorkerSession    workersessionscli.StreamOperation
 	openRunSelection       runcli.SelectionFactory
+	remoteInvocation       runcli.RemoteInvocationOperation
 	acp                    acpcli.Service
 	acpServer              acp.Server
 }
@@ -259,6 +261,7 @@ func NewCommandFactory(operations CommandOperations) CommandFactory {
 		ReadWorkerSession:                 operations.ReadWorkerSession,
 		StreamWorkerSession:               operations.StreamWorkerSession,
 		openRunSelection:                  operations.OpenRunSelection,
+		remoteInvocation:                  operations.RemoteInvocation,
 		acp:                               operations.ACP,
 		acpServer:                         operations.ACPServer,
 	}
@@ -402,8 +405,10 @@ func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs 
 	cfg.TerminalPolicy = policy
 	cfg.ExecutionBaseDir = startupcli.WorkingDirectory(cmd.Context())
 
-	if err := resolveRunBindFromServer(cmd, globals.server, &cfg); err != nil {
-		return err
+	if !remotePlacementSelected(globals) {
+		if err := resolveRunBindFromServer(cmd, globals.server, &cfg); err != nil {
+			return err
+		}
 	}
 	homeDir, err := resolveProcessHomeDir(rootOptions)
 	if err != nil {
@@ -466,10 +471,19 @@ func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs 
 	}
 	cfg.Diagnostics = runPolicy.DiagnosticsWriter(cmd.ErrOrStderr())
 	cfg.JSONOutput = globals.json
+	if remotePlacementSelected(globals) {
+		return runcli.RunRemoteInvocation(
+			cmd.Context(), cfg, globals.server, rootOptions.remoteInvocation,
+		)
+	}
 	if rootOptions.initializer == nil {
 		return errors.New("run service initializer is required")
 	}
 	return delegateRunInitialization(cmd.Context(), cfg, defaultInvocation, rootOptions)
+}
+
+func remotePlacementSelected(globals *cliGlobalOptions) bool {
+	return globals != nil && (globals.remote || globals.placement == climanifest.ExecutionPlacementRemote)
 }
 
 func configureRunEnvironment(cmd *cobra.Command, cfg *runcli.RunConfig, rootOptions CommandFactory, homeDir string) error {

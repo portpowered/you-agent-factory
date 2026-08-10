@@ -602,7 +602,12 @@ func newRunServerHandlerRegistry(
 ) (*commandregistry.Registry, climanifestcobra.RunServerFlagBindings, error) {
 	registry, err := commandregistry.NewRunServerRegistry(commandregistry.RunServerHandlers{
 		Run: commandregistry.CommandHandlers{
-			PreRunE: rejectDeprecatedPortFlag,
+			PreRunE: func(cmd *cobra.Command, args []string) error {
+				if err := validateRunServerPlacement(globals, "you.run"); err != nil {
+					return err
+				}
+				return rejectDeprecatedPortFlag(cmd, args)
+			},
 			RunE: func(cmd *cobra.Command, args []string) error {
 				return executeRunCommand(
 					cmd, args, globals, diagnostics, operatorDefaults, rootOptions,
@@ -610,7 +615,12 @@ func newRunServerHandlerRegistry(
 			},
 		},
 		Server: commandregistry.CommandHandlers{
-			PreRunE: rejectDeprecatedPortFlag,
+			PreRunE: func(cmd *cobra.Command, args []string) error {
+				if err := validateRunServerPlacement(globals, "you.server"); err != nil {
+					return err
+				}
+				return rejectDeprecatedPortFlag(cmd, args)
+			},
 			RunE: func(cmd *cobra.Command, _ []string) error {
 				return executeServerCommand(
 					cmd, globals, diagnostics, operatorDefaults, rootOptions,
@@ -622,6 +632,22 @@ func newRunServerHandlerRegistry(
 		return nil, climanifestcobra.RunServerFlagBindings{}, err
 	}
 	return registry, newRunServerFlagBindings(), nil
+}
+
+func validateRunServerPlacement(globals *cliGlobalOptions, commandID string) error {
+	manifest, err := generated.RunSubmitFamilyManifest()
+	if err != nil {
+		return fmt.Errorf("resolve command %q placement: %w", commandID, err)
+	}
+	record, err := manifest.CommandByID(commandID)
+	if err != nil {
+		return fmt.Errorf("resolve command %q placement: %w", commandID, err)
+	}
+	remote := globals != nil && globals.remote
+	if _, err := record.ResolvePlacement(remote); err != nil {
+		return err
+	}
+	return nil
 }
 
 func productionWorkCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions, injected ...CommandFactory) *cobra.Command {
