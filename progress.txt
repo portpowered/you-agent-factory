@@ -144,3 +144,17 @@
   - Do not change replay-only code for an unrelated provider-functional flake; rerun the isolated failed job and wait for a reproducible feature-linked failure first.
   - The PR remains open and mergeable with no unresolved review threads, but the required verification policy cannot be green until the Backend Functional Coverage rerun reaches a terminal result.
 ---
+
+## 2026-08-09 17:06 -07:00 - wo-c1-ext-stream-replay-only-delivery-verification
+- What was implemented
+  - Confirmed all four PRD stories remain marked `passes:true`; no additional story implementation or authored contract change was required.
+  - Re-ran the named replay-only redirect/CLI functional command and `make verify-fast` successfully on the current PR head.
+  - Re-ran `make backend-size`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, `go test ./pkg/services/worker_sessions/...`, and `go vet ./pkg/services/worker_sessions/...`; all passed.
+  - Rechecked PR #1840: the branch head is synchronized with the PR remote, the prior blocking feedback has no unresolved review threads, and the new CI run is executing for this exact head.
+- Files changed
+  - `progress.txt`
+- **Learnings for future iterations:**
+  - The worktree's `origin` remote points at `infinite-you`; PR delivery for this repository uses the `fork` remote at `portpowered/you-agent-factory`, so compare and push against `fork` when verifying synchronization.
+  - A progress-only delivery commit still needs the complete local gate set and a fresh remote CI run before the PR can be reported ready for review.
+  - Keep `prd.json` unchanged when every story is already passed and the iteration adds only verification evidence.
+---
