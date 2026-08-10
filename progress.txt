@@ -884,3 +884,16 @@
 - **Learnings for future iterations:**
   - When a final bookkeeping-only commit does not receive a new check suite, a narrowly scoped user-facing clarification can provide a legitimate synchronization change for the normal pull-request workflow.
 ---
+## 2026-08-10 01:05 -0700 - wo-b3-provider-capability-discovery-cli-base-merge-api-follow-up
+- What was implemented
+  - Reconciled the PR with the current `you-agent-factory` main branch, preserving the B3 PRD while retaining the base branch's B2 source and generated artifacts.
+  - Regenerated the API contract manifest after the merge so the generated CLI-command and OpenAPI artifact hashes match their canonical sources.
+- Files changed
+  - `packages/api/generated/manifest.json`
+  - `progress.txt`
+- Verification
+  - `make generate-api`, `make contracts-generate`, `make contracts-smoke`, `make api-smoke`, and `make api-package-pack-smoke` — passed.
+  - The initial current-main CI run's API manifest failures are resolved locally; a fresh run is pending on the pushed merge head.
+- **Learnings for future iterations:**
+  - After merging a newer main into a PR, run the contract generator even when the feature does not change the API; generated package manifests can encode hashes for base-branch artifacts changed by the merge.
+---
