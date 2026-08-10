@@ -166,7 +166,14 @@ func (s *publisherServiceSpy) PublishRecord(context.Context, PublishRecordReques
 func TestPublisher_IdentityAndCanonicalDraftEdges(t *testing.T) {
 	reference := &providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "session-1"}
 	metadata := &workers.ProviderSessionMetadata{Provider: "codex", Kind: providers.SessionIDKind, ID: "session-1"}
+	assertProviderFragmentIdentity(t, reference, metadata)
+	assertCanonicalDraftIdentity(t)
+	assertProviderIdentityResolution(t, reference, metadata)
+	assertProgressProvenance(t)
+}
 
+func assertProviderFragmentIdentity(t *testing.T, reference *providers.SessionRef, metadata *workers.ProviderSessionMetadata) {
+	t.Helper()
 	if !providerFragmentAgrees(workers.ProgressFragment{}) {
 		t.Fatal("empty provider fragment should agree")
 	}
@@ -193,7 +200,10 @@ func TestPublisher_IdentityAndCanonicalDraftEdges(t *testing.T) {
 	if !providerFragmentAgrees(workers.ProgressFragment{Provider: "CoDeX", ProviderSessionRef: metadata}) {
 		t.Fatal("provider identity comparison should be case-insensitive")
 	}
+}
 
+func assertCanonicalDraftIdentity(t *testing.T) {
+	t.Helper()
 	draft := publisherTestDraft()
 	fragment := workers.ProgressFragment{DispatchID: "dispatch-1"}
 	cases := []struct {
@@ -222,7 +232,10 @@ func TestPublisher_IdentityAndCanonicalDraftEdges(t *testing.T) {
 			}
 		})
 	}
+}
 
+func assertProviderIdentityResolution(t *testing.T, reference *providers.SessionRef, metadata *workers.ProviderSessionMetadata) {
+	t.Helper()
 	if got := providerIdentityForFragment(workers.ProgressFragment{Provider: "claude"}, &workers.Draft{
 		Provenance: workers.Provenance{Provider: "codex"},
 	}); got != "codex" {
@@ -271,7 +284,10 @@ func TestPublisher_IdentityAndCanonicalDraftEdges(t *testing.T) {
 	}) {
 		t.Fatal("matching provider identities should agree")
 	}
+}
 
+func assertProgressProvenance(t *testing.T) {
+	t.Helper()
 	if got := progressDraftProvenance(workers.ProgressFragment{Type: "message.delta"}); got.Provider != "" {
 		t.Fatalf("providerless provenance provider = %q, want empty", got.Provider)
 	}
