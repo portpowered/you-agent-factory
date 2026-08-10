@@ -1081,7 +1081,7 @@
   - All 18 required PR checks are green on commit `330e7d8e1`.
 - **Learnings for future iterations:**
   - When a broad functional lane fails in an untouched timing-sensitive test, extract the exact failing test and message from the job log before changing feature code; a clean targeted retry is the appropriate recovery when the failure is nondeterministic and unrelated.
-- A failed dependent policy job should be evaluated only after the failed lane is rerun and terminal; the policy check can pass on the same workflow attempt once the selected lane succeeds.
+  - A failed dependent policy job should be evaluated only after the failed lane is rerun and terminal; the policy check can pass on the same workflow attempt once the selected lane succeeds.
 ---
 ## 2026-08-10 04:49 -0700 - wo-b3-provider-capability-discovery-cli-final-review-audit
 - What was implemented
