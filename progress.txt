@@ -124,8 +124,6 @@
   - `make readme-check` — passed.
 - **Learnings for future iterations:**
   - Keep the root count aligned with the canonical fifteen-entry catalog, but continue placing detailed Factory guidance in `docs/reference/packaged-factories.md`.
----
-
 ## 2026-08-09 13:20 - wo-d1-packaged-factories-docs-001 lint follow-up
 - What was implemented
   - No source change; checked the broad repository lint tier against the completed story.
@@ -2010,4 +2008,29 @@
   - Package-wide Go test symbols allow focused suites to reuse one session/factory/control fixture owner while stream-only event fixtures move to their own small helper when the enforced file-size gate requires it.
   - Exact package file-count baselines must be updated for intentional test-suite additions; the count and rationale must describe the ownership split rather than hiding it behind a broad exemption.
   - Compare both inventory and coverage against the pre-change commit so a move-only split has reviewer-visible equivalence evidence.
+---
+## [2026-08-10 14:40 -07:00] - thr-split-acp-stdio-tests-003
+- What was implemented
+  - Split the oversized ACP stdio stream suite into attachment lifecycle, ordered delivery, gap/error recovery, and live-drain behavioral suites while preserving all 43 test names, setup semantics, assertions, and observable outcomes.
+  - Consolidated the stream-specific `notificationItemID` and `seedRetentionGap` helpers into `prompt_stream_test_helpers_test.go`; no production code, public contract, generated artifact, or alternate execution path changed.
+  - Removed the obsolete `prompt_stream_test.go` file-size exemptions, carried the existing live-drain cyclomatic exemption to its new owner file, and updated the ACP stdio file-count baseline to 31.
+- Files changed
+  - `pkg/transports/acp/internal/stdio/prompt_stream_attachment_test.go`
+  - `pkg/transports/acp/internal/stdio/prompt_stream_delivery_test.go`
+  - `pkg/transports/acp/internal/stdio/prompt_stream_gap_test.go`
+  - `pkg/transports/acp/internal/stdio/prompt_stream_live_drain_test.go`
+  - `pkg/transports/acp/internal/stdio/prompt_stream_test.go` (removed)
+  - `pkg/transports/acp/internal/stdio/prompt_stream_test_helpers_test.go`
+  - `docs/internal/baselines/backend-exemption-budget.json`
+  - `docs/internal/baselines/backend-package-file-count.json`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Against baseline revision `2943d7328ed6c11e37e2c138346124e9b3b744bf`, normalized `go test -p 1 -vet=off ./pkg/transports/acp/internal/stdio -list '.*' -count=1` was identical before and after at 222 tests.
+  - `go test -p 1 -vet=off -cover -count=1 ./pkg/transports/acp/internal/stdio` — 94.3% before and after.
+  - Focused ACP stdio package tests, three-run concurrent-attachment race test, `go vet ./pkg/transports/acp/internal/stdio`, `make backend-size`, `make pkg-maint`, `make pkg-file-count`, `make typecheck`, JSON validation, and `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - For move-only Go test refactors, use an exact detached baseline worktree to compare normalized test inventory and coverage; current package output alone cannot prove equivalence.
+  - Package file-count baselines must be patched with package-specific context: generic `fileCount` hunks can accidentally update an unrelated entry when multiple packages share the same recorded count.
+  - When helpers were previously extracted into a shared file, move their adjacent test documentation with the tests so the helper file remains readable and semantically focused.
 ---

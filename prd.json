@@ -65,8 +65,8 @@
         "Typecheck passes"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Moved the 43 stream, attachment, gap, and live-drain tests into prompt_stream_attachment_test.go, prompt_stream_delivery_test.go, prompt_stream_gap_test.go, and prompt_stream_live_drain_test.go with their exact names, setup, assertions, and observable outcomes. Moved the stream-specific notificationItemID and seedRetentionGap helpers into prompt_stream_test_helpers_test.go; no production code, public contract, generated artifact, or alternate execution path changed. Removed the stale prompt_stream_test.go file-size exemptions, carried the pre-existing live-drain cyclomatic exemption to its new file, and updated the exact ACP stdio file-count baseline from 28 to 31. Against baseline revision 2943d7328ed6c11e37e2c138346124e9b3b744bf, normalized go test -p 1 -vet=off ./pkg/transports/acp/internal/stdio -list '.*' -count=1 remained identical at 222 tests with zero diff; go test -p 1 -vet=off -cover -count=1 ./pkg/transports/acp/internal/stdio remained 94.3% of statements before and after. Focused package tests, the three-run race test for concurrent attachments, vet, backend-size, pkg-maint, pkg-file-count, typecheck, JSON validation, and git diff --check passed. Resulting stream suite files are 415, 195, 403, and 341 lines, and the diff is move-dominated."
     }
   ]
 }

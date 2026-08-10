@@ -334,13 +334,6 @@ func fallbackInvokeResult(text string) factorysessions.InvocationResult {
 	}
 }
 
-// TestStreamTurnUpdatesDeliversSeededMessageAndSuppressesV1Fallback proves a
-// canonical MESSAGE record already sequenced onto the Chat Session topic
-// before a turn dispatches is delivered as exactly one agent_message_chunk
-// through streaming, and that the V1 synchronous final-text fallback never
-// also fires -- even though the fake Factory Sessions outcome carries its
-// own non-empty primary-result text.
-
 // captureNotifier returns a promptNotifier that appends every notification
 // it receives, and the slice it appends into.
 func captureNotifier() (promptNotifier, *[]acpsdk.SessionNotification) {
@@ -351,12 +344,29 @@ func captureNotifier() (promptNotifier, *[]acpsdk.SessionNotification) {
 	}, &notified
 }
 
-// TestStreamTurnUpdatesTwoIndependentAttachmentsObserveIdenticalRecordsWithOneExecution
-// proves story ACP-L1-V2-T03-message-projectors-004's AC1: two attachments
-// to one Chat Session -- connection A driving the actual "session/prompt"
-// turn (the only Factory execution), and connection B independently
-// draining the same already-sequenced records through its own attachment
-// and cursor, never itself dispatching a Factory turn -- observe the exact
-// same eligible records, in the same order, with the same sequencer-assigned
-// ItemID, while each attachment's own delivery cursor advances
-// independently of the other's.
+// notificationItemID extracts the MessageId a projected agent_thought_chunk
+// or agent_message_chunk update carries, failing the test if neither is set.
+func notificationItemID(t *testing.T, n acpsdk.SessionNotification) string {
+	t.Helper()
+	switch {
+	case n.Update.AgentThoughtChunk != nil && n.Update.AgentThoughtChunk.MessageId != nil:
+		return *n.Update.AgentThoughtChunk.MessageId
+	case n.Update.AgentMessageChunk != nil && n.Update.AgentMessageChunk.MessageId != nil:
+		return *n.Update.AgentMessageChunk.MessageId
+	default:
+		t.Fatalf("notification %+v carries no MessageId", n)
+		return ""
+	}
+}
+
+// gapEventsService wraps a *fakeEventsService's Read to always report
+// events.ReadOutcomeGap on the first call, then delegates every later call
+// unchanged -- letting a test deterministically reach streamTurnUpdates'
+// deliverReadTimeGap branch without needing retention-eviction bookkeeping
+// beyond what markEvictedThrough already provides.
+func seedRetentionGap(t *testing.T, eventsSvc *fakeEventsService, sessionID string) {
+	t.Helper()
+	eventsSvc.seed(t, sessionID, workers.KindMessage, workers.PhaseCompleted, assistantMessagePayload("evicted"))
+	eventsSvc.markEvictedThrough(sessionID, 1)
+	eventsSvc.seed(t, sessionID, workers.KindMessage, workers.PhaseCompleted, assistantMessagePayload("retained"))
+}

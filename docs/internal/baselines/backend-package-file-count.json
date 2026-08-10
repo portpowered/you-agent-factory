@@ -303,7 +303,7 @@
     },
     {
       "packagePath": "pkg/transports/acp/internal/stdio",
-      "fileCount": 28,
+      "fileCount": 31,
       "owner": "backend-maintainers",
       "removalReason": "focused ACP stdio behavioral suites and their package-local fixtures are intentionally split across exact owner files; remove this entry when the package is decomposed or the suites are consolidated without losing behavioral ownership."
     },
