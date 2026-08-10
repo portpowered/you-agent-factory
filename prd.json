@@ -47,8 +47,8 @@
         "Tests pass"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added paired normal-run and make-target regressions using the same prohibited pkg/wire import as the ignored-root fixture. Production files under nested .artifacts, .claude/worktrees, and worktrees directories still produce the applicable application-composition diagnostic and a non-zero result; the make entry path preserves that behavior."
     }
   ]
 }
