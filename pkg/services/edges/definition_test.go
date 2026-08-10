@@ -85,6 +85,11 @@ func TestMergeUsesExplicitReplacementsAndPreservesDefaults(t *testing.T) {
 			return nil, providerTemporaryFileError
 		},
 	}
+	directoryCreationRequested := false
+	directoryCreator := factorydefinitions.PackagedInstallationDirectoryCreator(func(string, fs.FileMode) error {
+		directoryCreationRequested = true
+		return nil
+	})
 
 	merged := Merge(Edges{
 		APIServerStarter:     defaultStarter,
@@ -178,13 +183,14 @@ func TestMergeUsesExplicitReplacementsAndPreservesDefaults(t *testing.T) {
 			requiredToolVersionProbed = true
 			return []byte("version"), nil
 		},
-		FactoryDefinitionNamedPathFileSystem:            platformfilesystem.Local{},
-		FactoryDefinitionNamedFactoryCatalogFileSystem:  platformfilesystem.Local{},
-		FactoryDefinitionPackagedInstallationFileSystem: platformfilesystem.Local{},
-		FactoryDefinitionPersistenceFileSystem:          platformfilesystem.Local{},
-		FactoryDefinitionDirectoryReplacementStore:      directoryReplacementStore,
-		FactoryDefinitionScaffoldFileSystem:             platformfilesystem.Local{},
-		FactoryDefinitionScaffoldOutput:                 scaffoldOutput,
+		FactoryDefinitionNamedPathFileSystem:                  platformfilesystem.Local{},
+		FactoryDefinitionNamedFactoryCatalogFileSystem:        platformfilesystem.Local{},
+		FactoryDefinitionPackagedInstallationFileSystem:       platformfilesystem.Local{},
+		FactoryDefinitionPackagedInstallationDirectoryCreator: directoryCreator,
+		FactoryDefinitionPersistenceFileSystem:                platformfilesystem.Local{},
+		FactoryDefinitionDirectoryReplacementStore:            directoryReplacementStore,
+		FactoryDefinitionScaffoldFileSystem:                   platformfilesystem.Local{},
+		FactoryDefinitionScaffoldOutput:                       scaffoldOutput,
 		WorkRequestIDGenerator: func() string {
 			workRequestIDGenerated = true
 			return "work-id"
@@ -347,6 +353,12 @@ func TestMergeUsesExplicitReplacementsAndPreservesDefaults(t *testing.T) {
 	}
 	if _, ok := merged.FactoryDefinitionPackagedInstallationFileSystem.(platformfilesystem.Local); !ok {
 		t.Fatalf("FactoryDefinitionPackagedInstallationFileSystem = %T, want explicit replacement", merged.FactoryDefinitionPackagedInstallationFileSystem)
+	}
+	if merged.FactoryDefinitionPackagedInstallationDirectoryCreator == nil {
+		t.Fatal("FactoryDefinitionPackagedInstallationDirectoryCreator = nil, want explicit replacement")
+	}
+	if err := merged.FactoryDefinitionPackagedInstallationDirectoryCreator("ignored", 0o755); err != nil || !directoryCreationRequested {
+		t.Fatalf("FactoryDefinitionPackagedInstallationDirectoryCreator replacement = (%v, %v), want injected call", err, directoryCreationRequested)
 	}
 	if _, ok := merged.FactoryDefinitionPersistenceFileSystem.(platformfilesystem.Local); !ok {
 		t.Fatalf("FactoryDefinitionPersistenceFileSystem = %T, want explicit replacement", merged.FactoryDefinitionPersistenceFileSystem)

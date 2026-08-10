@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -379,7 +380,7 @@ func TestDistributionInstallPackagedFactoryThroughInjectedPorts(t *testing.T) {
 	persistence := factorydefinitioncomposition.FactoryDefinitionPersistenceWithValidator(
 		factoryvalidation.New(nil),
 	)
-	installer := distributionpackagedinstallation.New(persistence, fileSystem)
+	installer := distributionpackagedinstallation.New(persistence, fileSystem, os.Mkdir)
 	svc := newDistributionService(t, catalog, factorydefinitions.PackagedFactoryInstallationOperations{
 		Install: installer.InstallPackagedFactory,
 	})

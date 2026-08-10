@@ -69,6 +69,7 @@ type filePreservingPackagedInstaller struct {
 func (installer *filePreservingPackagedInstaller) EnsurePackagedFactories(
 	_ context.Context,
 	root string,
+	_ string,
 	definitions []factorydefinitions.PackagedDefinition,
 ) ([]factorydefinitions.PackagedFactoryInstallResult, error) {
 	installer.calls++
@@ -103,6 +104,7 @@ type failingDefinitionsInstaller struct {
 
 func (installer *failingDefinitionsInstaller) EnsurePackagedFactories(
 	context.Context,
+	string,
 	string,
 	[]factorydefinitions.PackagedDefinition,
 ) ([]factorydefinitions.PackagedFactoryInstallResult, error) {

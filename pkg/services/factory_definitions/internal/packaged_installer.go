@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	distributionpackagedinstallation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/packagedinstallation"
 )
@@ -12,8 +13,10 @@ import (
 func NewPackagedFactoryInstaller(
 	persistence factorydefinitions.Persistence,
 	fileSystem factorydefinitions.PackagedInstallationFileSystem,
+	directoryCreator factorydefinitions.PackagedInstallationDirectoryCreator,
+	logger logging.Logger,
 ) factorydefinitions.PackagedFactoryInstaller {
-	return NewPackagedFactoryInstallationService(persistence, fileSystem)
+	return NewPackagedFactoryInstallationService(persistence, fileSystem, directoryCreator, logger)
 }
 
 // NewPackagedFactoryInstallationService constructs the private packaged
@@ -21,6 +24,8 @@ func NewPackagedFactoryInstaller(
 func NewPackagedFactoryInstallationService(
 	persistence factorydefinitions.Persistence,
 	fileSystem factorydefinitions.PackagedInstallationFileSystem,
+	directoryCreator factorydefinitions.PackagedInstallationDirectoryCreator,
+	logger logging.Logger,
 ) *distributionpackagedinstallation.Service {
-	return distributionpackagedinstallation.New(persistence, fileSystem)
+	return distributionpackagedinstallation.New(persistence, fileSystem, directoryCreator, logger)
 }
