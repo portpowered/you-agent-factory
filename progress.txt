@@ -1025,3 +1025,18 @@
 - **Learnings for future iterations:**
   - A green changed-package/unit lane does not clear the PR while the shared functional coverage manifest has an unrelated package-floor regression; record the exact package and measured delta and leave that baseline issue scoped for its owning change.
 ---
+
+## 2026-08-10 08:08 -07:00 - pf-stale-scope-diagnostic-002 PR CI diagnosis follow-up
+- What was implemented
+  - No source change; inspected PR #1853 with the thread-aware GitHub review workflow and found no conversation comments, reviews, or unresolved inline threads.
+  - Retrieved the failed Backend Functional Coverage artifact and identified the exact failure as the parallel-suite assertion in `tests/functional/runtime_api`: the runtime log was missing `factory started`.
+  - Confirmed the branch has no diff in that package and reran the named test five times in isolation; all five runs passed, so the failed CI result is a suite-level timing flake rather than a regression from this story.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/runtime_api -run '^TestFunctionalAPIServer_RuntimeLogDirectoryIsAProcessInput$' -count=5 -v -timeout 300s` — passed, 5/5.
+  - `python gh-address-comments/scripts/fetch_comments.py` — no PR comments, reviews, or unresolved threads.
+  - PR #1853 body remains byte-equivalent to the current `prd.json`.
+- **Learnings for future iterations:**
+  - When broad functional coverage reports a process-startup/log-observation failure, isolate the named test repeatedly before changing lifecycle code; parallel scheduling can expose a transient missing-log race that is not reproducible alone.
+---
