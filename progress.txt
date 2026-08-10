@@ -1898,3 +1898,20 @@
 - **Learnings for future iterations:**
   - Fetch the live default branch again immediately before the final PR handoff; a clean earlier merge can become stale while CI is running.
 ---
+
+## 2026-08-10 16:05 -07:00 - wsr-001-opening-record merged-head verification follow-up
+- What was implemented
+  - Completed the post-synchronization verification without further product changes; generated interfaces remain drift-free on the merged head.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `make interfaces-all` — passed with no generated diff.
+  - `make test` — passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure` — passed.
+  - Focused Worker Sessions race regression tests — passed.
+  - Scoped `go vet ./pkg/services/worker_sessions/... ./pkg/services/factory_runtime/...` — passed.
+  - Full `go vet ./...` was attempted but exceeded the local 180-second wrapper while unrelated Go jobs shared the build cache; no vet diagnostic was emitted.
+  - `git diff --check`, `git merge-tree --write-tree origin/main HEAD`, and PRD JSON validation — passed; all three stories remain `passes:true`.
+- **Learnings for future iterations:**
+  - When the shared local Go cache is busy, distinguish a wrapper timeout with no diagnostics from a vet finding; use scoped vet as local evidence and rely on isolated CI for the full repository sweep.
+---
