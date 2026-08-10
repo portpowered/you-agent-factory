@@ -23,6 +23,7 @@ import (
 const (
 	hardKillSuccessorReadinessTimeout = 15 * time.Second
 	hardKillProcessExitTimeout        = 5 * time.Second
+	preRuntimeStagingOwnerMetadata    = ".owner.json"
 )
 
 // TestCLISuccessorAfterHardKillReportsPreRuntimeStagingContention proves the
@@ -323,8 +324,18 @@ func waitForPreRuntimeStagingPath(t testing.TB, session *builtcliacceptance.Sess
 		}
 		path, err := findPreRuntimeStagingPath(root)
 		if err != nil {
-			_ = resume()
-			t.Fatalf("observe pre-runtime packaged-factory staging under %s: %v", root, err)
+			if resumeErr := resume(); resumeErr != nil {
+				t.Fatalf("resume predecessor after staging observation error: %v; original error: %v", resumeErr, err)
+			}
+			if !isRetryablePreRuntimeStagingObservationError(err) {
+				t.Fatalf("observe pre-runtime packaged-factory staging under %s: %v", root, err)
+			}
+			select {
+			case <-ticker.C:
+			case <-deadline.C:
+				t.Fatalf("timed out observing pre-runtime packaged-factory staging under %s after retryable observation error: %v", root, err)
+			}
+			continue
 		}
 		if path != "" {
 			return path, func() { _ = resume() }
@@ -351,7 +362,13 @@ func findPreRuntimeStagingPath(root string) (string, error) {
 		}
 		if strings.HasPrefix(entry.Name(), ".") && strings.HasSuffix(entry.Name(), ".staging-owner") {
 			if _, statErr := os.Stat(path); errors.Is(statErr, os.ErrNotExist) {
-				return nil
+				return filepath.SkipDir
+			} else if statErr != nil {
+				return statErr
+			}
+			ownerMetadataPath := filepath.Join(path, preRuntimeStagingOwnerMetadata)
+			if _, statErr := os.Stat(ownerMetadataPath); errors.Is(statErr, os.ErrNotExist) {
+				return filepath.SkipDir
 			} else if statErr != nil {
 				return statErr
 			}

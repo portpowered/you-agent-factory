@@ -7,6 +7,10 @@ import (
 	"syscall"
 )
 
+func isRetryablePreRuntimeStagingObservationError(error) bool {
+	return false
+}
+
 func suspendHardKillProcess(pid int) (func() error, error) {
 	process, err := os.FindProcess(pid)
 	if err != nil {

@@ -3,10 +3,15 @@
 package process_test
 
 import (
+	"errors"
 	"fmt"
 
 	"golang.org/x/sys/windows"
 )
+
+func isRetryablePreRuntimeStagingObservationError(err error) bool {
+	return errors.Is(err, windows.ERROR_SHARING_VIOLATION) || errors.Is(err, windows.ERROR_LOCK_VIOLATION)
+}
 
 var ntSuspendProcess = windows.NewLazySystemDLL("ntdll.dll").NewProc("NtSuspendProcess")
 var ntResumeProcess = windows.NewLazySystemDLL("ntdll.dll").NewProc("NtResumeProcess")
