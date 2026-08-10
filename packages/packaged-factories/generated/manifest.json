@@ -3,6 +3,35 @@
   "factorySchema": "https://schemas.portpowered.com/you/config/factory.schema.json",
   "factories": [
     {
+      "name": "@you/agy-cold-watch",
+      "project": "builtin-agy-cold-watch",
+      "slug": "agy-cold-watch",
+      "json": {
+        "locator": "generated/factories/agy-cold-watch/factory.json",
+        "sha256": "d6a2ef75e8f8ee806f25b44c128e3e9bb61459f1bea06f891ed3a1dc55036eaa"
+      },
+      "yaml": {
+        "locator": "generated/factories/agy-cold-watch/factory.yaml",
+        "sha256": "b42eb3dceec5213c955a7a17e836a184b828d593fc0b3b04743426f57184ee3d"
+      },
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Reviews a completed cut from first principles with ANTIGRAVITY, covering chronology, temporal defects, audio, observed speech, and a pass-or-reroll recommendation."
+      },
+      "examples": [
+        {
+          "name": "review-completed-cut",
+          "description": {
+            "type": "LOCALIZABLE_ASSET",
+            "value": "Cold-watch a completed cut and report what the artifact actually communicates."
+          },
+          "args": {
+            "cutPath": ".\\completed-cut.mp4"
+          }
+        }
+      ]
+    },
+    {
       "name": "@you/classify",
       "project": "builtin-classify",
       "slug": "classify",

@@ -101,6 +101,7 @@ func TestProvidePackagedFactoryDefinitions_LoadsDetachedGeneratedCatalog(t *test
 	}
 
 	wantNames := []string{
+		"@you/agy-cold-watch",
 		"@you/classify",
 		"@you/deep-research",
 		"@you/factory-builder",

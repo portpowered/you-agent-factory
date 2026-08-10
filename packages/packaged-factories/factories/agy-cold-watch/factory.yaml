@@ -1,0 +1,101 @@
+name: "@you/agy-cold-watch"
+id: builtin-agy-cold-watch
+description:
+  type: LOCALIZABLE_ASSET
+  value: Reviews a completed cut from first principles with ANTIGRAVITY, covering chronology, temporal defects, audio, observed speech, and a pass-or-reroll recommendation.
+invocationReturn:
+  policy: EXPLICIT
+  workTypeName: cold-watch-review
+  terminalState: complete
+invocationSignature:
+  unknownNamedArgumentPolicy: REJECT
+  outputContract:
+    mode: INLINE
+    contentType: text/markdown
+    description: A context-free Markdown observation report for the completed cut.
+  parameters:
+    - name: cutPath
+      description: Path to the completed cut, relative to the AGY workspace or an absolute path within it.
+      externalName: cut-path
+      typeHint: FILE_PATH
+      bindings:
+        - kind: NAMED
+examples:
+  - name: review-completed-cut
+    description:
+      type: LOCALIZABLE_ASSET
+      value: Cold-watch a completed cut and report what the artifact actually communicates.
+    args:
+      cutPath: .\completed-cut.mp4
+workTypes:
+  - name: cold-watch-review
+    handlingBehavior:
+      - DEFAULT
+    states:
+      - name: init
+        type: INITIAL
+      - name: complete
+        type: TERMINAL
+      - name: failed
+        type: FAILED
+workers:
+  - name: agy-cold-watch-reviewer
+    type: AGENT_WORKER
+    modelProvider: ANTIGRAVITY
+    model: gemini-3.6-flash-high
+    skipPermissions: true
+    timeout: 8m
+    # Every accepted observation must include the required speech audit. The
+    # recorded AGY missing-file refusal has exit-zero SUCCESS but no audit, so
+    # it is rejected rather than becoming a false review result.
+    stopToken: speech
+    body: |-
+      You are the context-free cold-watch reviewer for @you/agy-cold-watch. The
+      completed-cut path in the user task is your only creative context. Watch the
+      entire media file, including its audio track, using the existing workspace
+      file access. Do not inspect nearby briefs, manifests, shot specifications,
+      filenames as evidence of intent, or upstream status. Do not infer whether
+      the artifact is correct from anything other than what you observe in the
+      file. If the file cannot be opened or read, say so plainly and do not invent
+      a review report.
+
+      Return a concise Markdown report with all of these sections present, even
+      when a section is empty:
+      1. Chronological events, with timestamps where they can be observed.
+      2. Temporal or transient defects, timestamped; write "None observed" when
+         there are none.
+      3. Audio content and timestamped audio defects; write "None observed" when
+         there are none.
+      4. Observed speech, including a transcription when intelligible; write
+         "None observed" when there is no speech.
+      5. Overall recommendation: exactly pass or reroll, based only on the
+         observed artifact. A file-access refusal is an execution failure, not a
+         recommendation.
+
+      The report must include an explicit speech audit so accepted output is
+      distinguishable from an AGY response that merely reports SUCCESS while
+      refusing the file.
+
+workstations:
+  - name: watch-completed-cut
+    type: AGENT_RUN
+    worker: agy-cold-watch-reviewer
+    inputs:
+      - workType: cold-watch-review
+        state: init
+    outputs:
+      - workType: cold-watch-review
+        state: complete
+    onFailure:
+      - workType: cold-watch-review
+        state: failed
+    body: |-
+      Review only this completed-cut path. Preserve the path text exactly as
+      written when you use it; it is the only creative input and must be passed
+      directly to the AGY file-reading workflow:
+
+      ${cutPath}
+
+      Do not add a creative brief, shot specification, expected beat, prior
+      verdict, or any other context. Watch the whole file and return the complete
+      cold-watch observation report described by your reviewer instructions.

@@ -1,0 +1,106 @@
+{
+  "description": {
+    "type": "LOCALIZABLE_ASSET",
+    "value": "Reviews a completed cut from first principles with ANTIGRAVITY, covering chronology, temporal defects, audio, observed speech, and a pass-or-reroll recommendation."
+  },
+  "examples": [
+    {
+      "args": {
+        "cutPath": ".\\completed-cut.mp4"
+      },
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Cold-watch a completed cut and report what the artifact actually communicates."
+      },
+      "name": "review-completed-cut"
+    }
+  ],
+  "id": "builtin-agy-cold-watch",
+  "invocationReturn": {
+    "policy": "EXPLICIT",
+    "terminalState": "complete",
+    "workTypeName": "cold-watch-review"
+  },
+  "invocationSignature": {
+    "outputContract": {
+      "contentType": "text/markdown",
+      "description": "A context-free Markdown observation report for the completed cut.",
+      "mode": "INLINE"
+    },
+    "parameters": [
+      {
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "description": "Path to the completed cut, relative to the AGY workspace or an absolute path within it.",
+        "externalName": "cut-path",
+        "name": "cutPath",
+        "typeHint": "FILE_PATH"
+      }
+    ],
+    "unknownNamedArgumentPolicy": "REJECT"
+  },
+  "name": "agy-cold-watch",
+  "workTypes": [
+    {
+      "handlingBehavior": [
+        "DEFAULT"
+      ],
+      "name": "cold-watch-review",
+      "states": [
+        {
+          "name": "init",
+          "type": "INITIAL"
+        },
+        {
+          "name": "complete",
+          "type": "TERMINAL"
+        },
+        {
+          "name": "failed",
+          "type": "FAILED"
+        }
+      ]
+    }
+  ],
+  "workers": [
+    {
+      "body": "You are the context-free cold-watch reviewer for @you/agy-cold-watch. The\ncompleted-cut path in the user task is your only creative context. Watch the\nentire media file, including its audio track, using the existing workspace\nfile access. Do not inspect nearby briefs, manifests, shot specifications,\nfilenames as evidence of intent, or upstream status. Do not infer whether\nthe artifact is correct from anything other than what you observe in the\nfile. If the file cannot be opened or read, say so plainly and do not invent\na review report.\n\nReturn a concise Markdown report with all of these sections present, even\nwhen a section is empty:\n1. Chronological events, with timestamps where they can be observed.\n2. Temporal or transient defects, timestamped; write \"None observed\" when\n   there are none.\n3. Audio content and timestamped audio defects; write \"None observed\" when\n   there are none.\n4. Observed speech, including a transcription when intelligible; write\n   \"None observed\" when there is no speech.\n5. Overall recommendation: exactly pass or reroll, based only on the\n   observed artifact. A file-access refusal is an execution failure, not a\n   recommendation.\n\nThe report must include an explicit speech audit so accepted output is\ndistinguishable from an AGY response that merely reports SUCCESS while\nrefusing the file.",
+      "model": "gemini-3.6-flash-high",
+      "modelProvider": "ANTIGRAVITY",
+      "name": "agy-cold-watch-reviewer",
+      "skipPermissions": true,
+      "stopToken": "speech",
+      "timeout": "8m",
+      "type": "AGENT_WORKER"
+    }
+  ],
+  "workstations": [
+    {
+      "body": "Review only this completed-cut path. Preserve the path text exactly as\nwritten when you use it; it is the only creative input and must be passed\ndirectly to the AGY file-reading workflow:\n\n${cutPath}\n\nDo not add a creative brief, shot specification, expected beat, prior\nverdict, or any other context. Watch the whole file and return the complete\ncold-watch observation report described by your reviewer instructions.",
+      "inputs": [
+        {
+          "state": "init",
+          "workType": "cold-watch-review"
+        }
+      ],
+      "name": "watch-completed-cut",
+      "onFailure": [
+        {
+          "state": "failed",
+          "workType": "cold-watch-review"
+        }
+      ],
+      "outputs": [
+        {
+          "state": "complete",
+          "workType": "cold-watch-review"
+        }
+      ],
+      "type": "AGENT_RUN",
+      "worker": "agy-cold-watch-reviewer"
+    }
+  ]
+}
