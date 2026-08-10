@@ -1,6 +1,7 @@
 ## Codebase Patterns
 - For broad functional coverage concurrency flakes, isolate the named test and rerun only the failed CI jobs before changing untouched behavior.
 - When resolving long append-only progress conflicts, read merge-stage files in bounded chunks and validate the reconstructed line count so tool-output truncation cannot drop history.
+- When splitting oversized same-package tests into focused files, remove stale file/maintainability exemptions and update the package file-count baseline for the intentional net increase; keep shared fixtures in one package-local helper file.
 - Treat repository-enforcement inventories and architecture guards as project-enabling PRD criteria when they have no runtime, API, CLI, UI, or emitted-event behavior; source scans support enforcement but are not customer-behavior evidence.
 - AST scanners must expand grouped Go field declarations before indexing parameter or result types; a field-count helper can exceed the AST field-list length and panic on valid source.
 - Asynchronous service characterizations should wait on observed edge/context signals rather than arbitrary `time.After` ceilings; the test context remains the failure escape hatch.
@@ -56,6 +57,7 @@
 - Ordered functional provider outcomes can use `support.NewShapedProviderCommandRunner` with queued provider-native `CommandResult` values, including a later non-zero result, while preserving the real command-runner edge and typed provider classification.
 - For Go build-policy comparisons, use separate build/install destinations and an isolated `GOCACHE`, then record cold, unchanged-warm, forced-`-a`, artifact-hash, CLI-probe, and `go version -m` evidence in one sequential run.
 - In a Windows linked worktree, Go VCS build metadata can reflect the common checkout's revision/dirty state; compare that metadata across cache policies and document the environment instead of treating `-a` as a VCS-stamping fix.
+- For mechanical same-package Go test splits, run before/after discovery and coverage from isolated `HEAD` and current worktrees when the original source file is being moved; this keeps package-level evidence independent of the moved-file layout.
 
 - The production CLI process boundary should silence Cobra's implicit error text, preserve command-owned coded diagnostics with a writer marker, and wrap only unclassified failures in a constant safe fallback; direct Cobra callers can retain legacy presentation through a context switch.
 - Keep cancellation compatibility explicit at the boundary: a typed returned cancellation can retain the existing `Error: context canceled` diagnostic while still preserving `errors.Is(context.Canceled)` for declared exit-status handling.
@@ -2424,6 +2426,64 @@
   - CI run `31427408109` is green after the failed-job rerun, including Backend Functional Coverage and Verification Policy.
 - **Learnings for future iterations:**
   - Keep repeated CI flake evidence scoped to the named test and package; a successful isolated rerun is sufficient to validate recovery when the feature diff is untouched.
+## 2026-08-10 13:48 -07:00 - thr-split-cli-root-run-tests-001
+- What was implemented
+  - Mechanically split `pkg/transports/cli/root_run_test.go` into focused completion, named-factory selection, root composition, input/presentation, run flags, run configuration, and operator-default test files, with shared package-local fixtures in `root_run_test_helpers_test.go`.
+  - Preserved all 273 discovered CLI root-package test names and all nonblank test/helper bodies; only declaration placement and per-file imports changed.
+  - Removed the obsolete root-file backend-size and maintainability exemptions and updated the intentional `pkg/transports/cli` package file-count baseline from 23 to 30.
+  - Marked `thr-split-cli-root-run-tests-001` as passed in `prd.json`; invocation story 002 remains incomplete for the next iteration.
+- Files changed
+  - `pkg/transports/cli/root_run_test.go` (split/deleted)
+  - `pkg/transports/cli/root_command_composition_test.go`
+  - `pkg/transports/cli/root_operator_defaults_test.go`
+  - `pkg/transports/cli/root_run_completion_test.go`
+  - `pkg/transports/cli/root_run_config_test.go`
+  - `pkg/transports/cli/root_run_flags_test.go`
+  - `pkg/transports/cli/root_run_input_test.go`
+  - `pkg/transports/cli/root_run_selection_test.go`
+  - `pkg/transports/cli/root_run_test_helpers_test.go`
+  - `docs/internal/baselines/backend-exemption-budget.json`
+  - `docs/internal/baselines/backend-package-file-count.json`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Before/after normalized `go test ./pkg/transports/cli -run '^$' -list '.*'` inventory — 273 names on both sides; diff empty.
+  - Before/after `./pkg/transports/cli` coverage — 67.6% on both sides.
+  - `go test ./pkg/transports/cli -count=1`, `go vet ./pkg/transports/cli`, `make backend-size`, `make pkg-maint`, `make pkg-file-count`, and `make pkg-structure` — passed.
+  - `git diff --check` — passed.
+  - `make test` exceeded the 180-second tool ceiling without a failure result; the focused package suite and all changed-surface gates passed.
+  - Commit `15ca23ae1` — `test(cli): split root run tests`.
+- **Learnings for future iterations:**
+  - Keep shared root CLI fixtures in one helper file, but leave behavior-specific assertion helpers beside their owning test group when the move is mechanical.
+  - A same-package test split increases the package file count even when the total source body is unchanged; update the package baseline and remove stale file exemptions in the same change.
+  - The remaining `pkg/transports/cli/run/run_invocation_test.go` split is independent and should be handled as story 002 without mixing its inventory or coverage evidence into this iteration.
+---
+## 2026-08-10 14:17 -07:00 - thr-split-cli-root-run-tests-002
+- What was implemented
+  - Mechanically split `pkg/transports/cli/run/run_invocation_test.go` into lifecycle/bootstrap, input resolution, output/error, CLI/API parity, and no-server integration test files, with shared invocation fixtures in `run_invocation_test_helpers_test.go`.
+  - Preserved the package discovery inventory and moved the existing assertions, inputs, expected outputs, fixture semantics, and CLI outcomes without semantic changes.
+  - Removed the obsolete run-invocation backend-size and maintainability exemptions and updated the intentional `pkg/transports/cli/run` package file-count baseline from 27 to 32.
+  - Marked `thr-split-cli-root-run-tests-002` as passed in `prd.json`; all PRD stories are now complete.
+- Files changed
+  - `pkg/transports/cli/run/run_invocation_test.go` (split/deleted)
+  - `pkg/transports/cli/run/run_invocation_input_test.go`
+  - `pkg/transports/cli/run/run_invocation_lifecycle_test.go`
+  - `pkg/transports/cli/run/run_invocation_no_server_test.go`
+  - `pkg/transports/cli/run/run_invocation_output_test.go`
+  - `pkg/transports/cli/run/run_invocation_parity_test.go`
+  - `pkg/transports/cli/run/run_invocation_test_helpers_test.go`
+  - `docs/internal/baselines/backend-exemption-budget.json`
+  - `docs/internal/baselines/backend-package-file-count.json`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Isolated before/after `go test ./pkg/transports/cli/run -count=1 -run '^$' -list '.*'` inventories — 146 names on both sides, SHA-256 `8A65F4CD3D63F0384D960E239E4EC434A2AD1F74E92ED8CBC8389B6C33C84E15` on both sides, normalized diff empty.
+  - Isolated before/after full package coverage — 72.1% on both sides.
+  - `go test ./pkg/transports/cli/run -count=1 -timeout 180s`, focused typecheck via `go test ... -run '^$'`, `go vet ./pkg/transports/cli/run`, `make backend-size`, `make pkg-maint`, `make pkg-file-count`, and `make pkg-structure` — passed.
+  - Largest resulting split test file is 513 lines; `git diff --check` passed.
+- **Learnings for future iterations:**
+  - Keep no-server bootstrap fixtures and their integration assertions together because they share the capturing runner, mock-worker configuration, and API-projection helpers; keep metric recorder helpers with input-resolution observability tests.
+  - A full package-level inventory includes tests from every same-package file; compare isolated `HEAD` and current worktrees rather than only the moved file’s declarations.
 ---
 ## 2026-08-10 14:45 -07:00 - thr-worktree-build-cache-002 current-main sync follow-up
 - What was implemented
