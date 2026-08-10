@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/services/events"
@@ -576,6 +577,103 @@ func TestStart_TerminalRecordPublicationFailure_DoesNotChangeCommittedSession(t 
 	}
 	if decodeDraft(t, read.Records[0]).Phase != workers.PhaseStarted {
 		t.Fatalf("record[0] phase = %q, want STARTED", decodeDraft(t, read.Records[0]).Phase)
+	}
+}
+
+// TestReplayOnly_DoesNotClaimCompletenessBeforeTerminalRecordIsRetained
+// proves the terminal state and terminal Events record are not interchangeable
+// completeness signals. The appender blocks the terminal append after
+// commitTerminal has published the terminal in-process state, then replay
+// opens against the retained opening-only snapshot and must report an
+// incomplete capture.
+func TestReplayOnly_DoesNotClaimCompletenessBeforeTerminalRecordIsRetained(t *testing.T) {
+	appender := &blockingTerminalAppendEventsAppender{
+		Service:               newEventsAppender(),
+		terminalAppendStarted: make(chan struct{}),
+		releaseTerminalAppend: make(chan struct{}),
+	}
+	defer appender.release()
+	boundary := newControlledBoundary()
+	registry, err := newService(boundary, appender, nil)
+	if err != nil {
+		t.Fatalf("service.New() error = %v, want nil", err)
+	}
+	ctx := context.Background()
+	ref := sessionRef("replay-race-provider-session")
+
+	startDone := make(chan struct {
+		result workersessions.InvokeSessionResult
+		err    error
+	}, 1)
+	go func() {
+		result, startErr := registry.InvokeSession(ctx, validStartRequest("worker-1", "dispatch-1"))
+		startDone <- struct {
+			result workersessions.InvokeSessionResult
+			err    error
+		}{result: result, err: startErr}
+	}()
+	waitForReplayRaceSignal(t, boundary.started, "Worker Session dispatch")
+	if _, err := registry.AssociateProviderSession(ctx, workersessions.ProviderSessionAssociationRequest{
+		WorkerSessionID: "worker-1",
+		DispatchID:      "dispatch-1",
+		Reference:       ref,
+	}); err != nil {
+		t.Fatalf("AssociateProviderSession() error = %v, want nil", err)
+	}
+	go boundary.complete(completedDispatchResult("dispatch-1"), nil)
+	waitForReplayRaceSignal(t, appender.terminalAppendStarted, "blocked terminal append")
+
+	replay, err := registry.StreamObservations(ctx, workersessions.StreamObservationsRequest{
+		ProviderSession: ref,
+		ReplayOnly:      true,
+		Limit:           10,
+	})
+	if err != nil {
+		t.Fatalf("StreamObservations(replay-only) error = %v, want nil", err)
+	}
+	assertReplayIsIncomplete(t, replay, ctx)
+
+	appender.release()
+	assertReplayRaceStartCompleted(t, <-startDone)
+}
+
+func waitForReplayRaceSignal(t *testing.T, signal <-chan struct{}, name string) {
+	t.Helper()
+	select {
+	case <-signal:
+	case <-time.After(2 * time.Second):
+		t.Fatalf("timed out waiting for %s", name)
+	}
+}
+
+func assertReplayIsIncomplete(t *testing.T, replay workersessions.ObservationSubscription, ctx context.Context) {
+	t.Helper()
+	opening := replay.Next(ctx)
+	if opening.Kind != workersessions.ObservationDeliveryRecord || opening.Event.SourceSequence != 1 {
+		t.Fatalf("replay opening = %#v, want opening RECORD", opening)
+	}
+	summary := replay.Next(ctx)
+	if summary.Kind != workersessions.ObservationDeliveryReplaySummary || summary.Summary == nil {
+		t.Fatalf("replay summary = %#v, want REPLAY_SUMMARY", summary)
+	}
+	if summary.Summary.Complete || summary.Summary.Reason != "session-terminal-record-missing" || summary.Summary.EventsEmitted != 1 {
+		t.Fatalf("replay summary = %#v, want incomplete missing-terminal-record count-one summary", summary.Summary)
+	}
+	if closed := replay.Next(ctx); closed.Kind != workersessions.ObservationDeliveryClosed {
+		t.Fatalf("delivery after replay summary = %#v, want CLOSED", closed)
+	}
+}
+
+func assertReplayRaceStartCompleted(t *testing.T, completed struct {
+	result workersessions.InvokeSessionResult
+	err    error
+}) {
+	t.Helper()
+	if completed.err != nil {
+		t.Fatalf("Start() error = %v, want nil despite terminal record append failure", completed.err)
+	}
+	if completed.result.Session.State != workersessions.StateCompleted {
+		t.Fatalf("Start() state = %q, want COMPLETED", completed.result.Session.State)
 	}
 }
 

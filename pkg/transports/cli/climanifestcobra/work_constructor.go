@@ -707,3 +707,135 @@ func validateWorkerSessionsRunnableCommand(manifest climanifest.Manifest, comman
 	}
 	return nil
 }
+
+func projectCobraFlagGroupAnnotations(
+	cmd *cobra.Command,
+	commandID string,
+	relationships []plannedRelationship,
+) error {
+	for _, relationship := range relationships {
+		names := relationshipFlagNames(relationship)
+		if len(names) == 0 {
+			continue
+		}
+		if err := validateRelationshipFlags(cmd, commandID, relationship, names); err != nil {
+			return err
+		}
+		if projected, err := projectLocalFlagGroupAnnotations(cmd, relationship.record.Kind, names); err != nil {
+			return fmt.Errorf(
+				"command %q relationship %q: %w",
+				commandID,
+				relationship.record.ID,
+				err,
+			)
+		} else if projected {
+			continue
+		}
+		markCobraFlagGroup(cmd, relationship.record.Kind, names)
+	}
+	return nil
+}
+
+func relationshipFlagNames(relationship plannedRelationship) []string {
+	names := make([]string, 0, len(relationship.participants))
+	for _, participant := range relationship.participants {
+		if participant.kind != "flag" || !participant.cobraGroupAnnotationSafe {
+			return nil
+		}
+		names = append(names, strings.TrimPrefix(participant.public, "--"))
+	}
+	return names
+}
+
+func validateRelationshipFlags(
+	cmd *cobra.Command,
+	commandID string,
+	relationship plannedRelationship,
+	names []string,
+) error {
+	for _, name := range names {
+		if lookupCommandFlag(cmd, name) == nil {
+			return fmt.Errorf(
+				"command %q relationship %q cannot project unavailable flag %q",
+				commandID, relationship.record.ID, "--"+name,
+			)
+		}
+	}
+	return nil
+}
+
+const (
+	cobraRequiredAsGroupAnnotation   = "cobra_annotation_required_if_others_set"
+	cobraOneRequiredAnnotation       = "cobra_annotation_one_required"
+	cobraMutuallyExclusiveAnnotation = "cobra_annotation_mutually_exclusive"
+)
+
+// projectLocalFlagGroupAnnotations writes Cobra's standard relationship
+// annotations directly when every participant is a flag declared by the
+// command itself. Calling Cobra's MarkFlags* helpers in that case would first
+// merge detached parent persistent flags into the command. Detached command
+// families are later attached to the production root, so that eager merge can
+// shadow the real root flag storage (for example, --server).
+func projectLocalFlagGroupAnnotations(
+	cmd *cobra.Command,
+	kind string,
+	names []string,
+) (bool, error) {
+	flags := cmd.Flags()
+	for _, name := range names {
+		if flags.Lookup(name) == nil {
+			return false, nil
+		}
+	}
+	annotation, ok := cobraFlagGroupAnnotation(kind)
+	if !ok {
+		return false, nil
+	}
+	group := strings.Join(names, " ")
+	for _, name := range names {
+		flag := flags.Lookup(name)
+		values := append([]string(nil), flag.Annotations[annotation]...)
+		values = append(values, group)
+		if err := flags.SetAnnotation(name, annotation, values); err != nil {
+			return true, err
+		}
+	}
+	return true, nil
+}
+
+func cobraFlagGroupAnnotation(kind string) (string, bool) {
+	switch kind {
+	case "mutually-exclusive", "conflict":
+		return cobraMutuallyExclusiveAnnotation, true
+	case "required-together":
+		return cobraRequiredAsGroupAnnotation, true
+	case "at-least-one":
+		return cobraOneRequiredAnnotation, true
+	default:
+		return "", false
+	}
+}
+
+func markCobraFlagGroup(cmd *cobra.Command, kind string, names []string) {
+	switch kind {
+	case "mutually-exclusive", "conflict":
+		cmd.MarkFlagsMutuallyExclusive(names...)
+	case "required-together":
+		cmd.MarkFlagsRequiredTogether(names...)
+	case "at-least-one":
+		cmd.MarkFlagsOneRequired(names...)
+	}
+}
+
+func relationshipError(relationship plannedRelationship, message string) error {
+	names := make([]string, len(relationship.participants))
+	for index, participant := range relationship.participants {
+		names[index] = participant.public
+	}
+	return fmt.Errorf(
+		"input relationship %q: %s %s",
+		relationship.record.ID,
+		message,
+		strings.Join(names, ", "),
+	)
+}

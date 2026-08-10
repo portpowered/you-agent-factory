@@ -1,0 +1,195 @@
+## Codebase Patterns
+- Worker Session finite streams can use the injected Events `Read` contract with the first retained head as a snapshot boundary; replay-only paths must not call `Subscribe`.
+- Authored OpenAPI and CLI contracts generate their Go, TypeScript, published metadata, and family-manifest consumers; update the source contract first, then run the repository generators and drift checks.
+- Stream transport dispatch stays below the package maintainability threshold by delegating lifecycle-specific frame handling to focused helpers.
+- Deterministic Worker Session lifecycle tests can combine the controlled workstation boundary with the real in-memory Events service to verify retained replay ordering without sleeps or cancellation.
+- Detached Cobra command families should project local-only flag relationships without eagerly merging parent persistent flags; otherwise the detached storage can shadow the production root flag when the family is attached.
+- Process-boundary CLI tests should build `./cmd/factory` only when proving OS-level behavior, keep the real server on a root-built process, and assign redirected stdout and diagnostics stderr separately.
+- Restore package coverage thresholds with focused behavioral tests for typed edge outcomes; do not lower baseline manifests for new branches.
+- Replay completeness must be derived from a terminal lifecycle record inside the captured Events range, not from a separately synchronized terminal session state.
+- When a package has a strict file-count baseline, put a small refactor in an existing focused file before adding a new helper file or changing the baseline.
+- When broad functional coverage reports a cancellation-observation failure, rerun the failed lane and isolate the named test before changing an unrelated feature; parallel-suite failures can move between existing durability/restart tests while isolated runs pass.
+
+## 2026-08-09 14:24 -07:00 - wo-c1-ext-stream-replay-only-001
+- What was implemented
+  - Added ACTIVE Worker Session finite replay through retained Events reads, including a captured head boundary, canonical paging, zero-event handling, explicit `REPLAY_SUMMARY`, `complete:false`, `reason:"session-active"`, and emitted-event counting.
+  - Added HTTP/SSE `replayOnly` propagation and summary framing, CLI `--replay-only` wiring, redirect-safe JSON summary output, and operator help/examples.
+  - Regenerated bundled OpenAPI, Go HTTP clients/server, TypeScript OpenAPI types, CLI family metadata, and published CLI contract artifacts.
+  - Added service, HTTP transport, and CLI behavioral tests proving ordering, snapshot truncation, no live subscriber, summary serialization, and query propagation.
+- Files changed
+  - Worker Sessions service and observation contracts, HTTP/CLI transports and tests, authored/generated OpenAPI and CLI contracts, `prd.json`, and this progress log.
+- **Learnings for future iterations:**
+  - The existing Events `ReadResult` explicitly distinguishes progress, head, and retention gaps; finite replay should preserve those outcomes instead of inferring completion from an empty page.
+  - `make api-smoke` checks the working tree for generated drift, so run it after committing synchronized generated artifacts; `make ui-deps` restores the Bun dependency tree when the local OpenAPI generator is missing.
+---
+
+## 2026-08-09 14:32 -07:00 - wo-c1-ext-stream-replay-only-002
+- What was implemented
+  - Completed terminal replay regression coverage over the real in-memory Events service, proving a terminal Worker Session replays its retained opening and terminal records in canonical order, marks the lifecycle record as `TERMINAL_REPLAY`, emits exactly one complete `session-completed` replay summary with the matching event count, and closes after the summary.
+  - Added CLI coverage proving replay-only continues through `TERMINAL_REPLAY`, returns success, and writes the complete summary as the final JSON line.
+  - Preserved the existing live terminal-stream termination and ACTIVE transcript-read behavior.
+- Files changed
+  - `pkg/services/worker_sessions/internal/service/control_production_boundary_test.go`
+  - `pkg/services/worker_sessions/transports/cli/stream_test.go`
+  - `prd.json`
+  - `progress.txt`
+- **Learnings for future iterations:**
+- Terminal replay uses the same retained Events paging path as ACTIVE replay; lifecycle classification changes the delivery kind and summary completeness, not the canonical event records or order.
+- The CLI must treat `TERMINAL_REPLAY` as an event inside finite mode and wait for `REPLAY_SUMMARY` before returning success.
+---
+
+## 2026-08-09 15:00 -07:00 - wo-c1-ext-stream-replay-only-003
+- What was implemented
+  - Added the explicit `--follow` live-mode input and stable typed `WORKER_SESSION_STREAM_MODE_CONFLICT` error; `--replay-only --follow` now fails before the stream operation, HTTP request, retained read, follower, or stdout output.
+  - Added the authored CLI relationship, error metadata, help/examples, generated family metadata, published CLI contract, and production handler binding; refreshed the CLI inventory baselines and generated manifest hash.
+  - Fixed detached Cobra local relationship projection so the new mutually-exclusive flags do not eagerly shadow the production root `--server` value when the Worker Sessions family is attached.
+  - Added service and production-root behavioral tests for typed conflict mapping, zero requests/zero output, explicit follow binding, and operation non-invocation.
+- Files changed
+  - `contracts/cli/commands.json`, generated CLI/package artifacts, CLI inventory baselines, Worker Sessions CLI stream/config/tests, CLI family constructor, production root binding/tests, and this progress log.
+- **Learnings for future iterations:**
+  - Cobra's `MarkFlags*` helpers merge parent persistent flags immediately; detached generated families need local-only relationship annotations projected without that merge so their eventual production-root values remain authoritative.
+  - Intentional CLI contract additions require refreshing `contracts/testdata/baseline/cli-command-inputs.json` and `contracts/testdata/baseline/cli-commands.json` with `UPDATE_CLI_BASELINES=1` in addition to the normal manifest and contract generators.
+  - `make verify-fast`, Worker Sessions CLI tests, full `pkg/transports/cli` tests, CLI inventory/identity/contract/constructor tests, and `make cli-manifest-check` passed.
+---
+
+## 2026-08-09 15:11 -07:00 - wo-c1-ext-stream-replay-only-004
+- What was implemented
+  - Added `TestWorkerSessionsReplayOnlyRedirectsWellFormedNDJSON`, which builds and invokes the published `you` process against a terminal Worker Session, redirects replay-only JSON stdout to a capture file, and verifies every non-empty line is valid NDJSON.
+  - The process-boundary assertion checks canonical increasing event positions, exactly one final `replay-summary`, `complete:true`, stable `session-completed` reason, matching `eventsEmitted`, natural exit without cancellation, and verbose diagnostics isolated on stderr.
+  - Added the canonical `you docs sessions` redirect workflow describing the final completeness marker, ACTIVE versus terminal meaning, live-follow conflict, and stderr diagnostics behavior.
+- Files changed
+  - `tests/functional/provider_sessions/cli/worker_sessions_cli_test.go`
+  - `docs/reference/sessions.md`
+  - `prd.json`
+  - `progress.txt`
+- **Learnings for future iterations:**
+  - A built CLI process can prove shell redirection while the server and provider effects remain deterministic through `root.BuildProcess` and `edges.Edges`; this keeps the process-boundary proof narrow.
+- The final Worker Session replay summary is a standalone JSON object after the existing event-frame records, so capture assertions should parse the last line with its own summary shape.
+- `make lint` currently stops on the existing `pkg/transports/cli/climanifestcobra/constructor.go` 1037-line backend-size/pkg-maint violation; the story change does not touch that file.
+---
+
+## 2026-08-09 15:44 -07:00 - wo-c1-ext-stream-replay-only-004
+- What was implemented
+  - Added focused Worker Sessions service tests for retained-read failures, retention gaps, cancellation, malformed paging outcomes, snapshot-boundary violations, completion, and close behavior.
+  - Restored the `pkg/services/worker_sessions/internal/service` unit coverage result to 99.0%, above the enforced 98.72% package minimum, without lowering the coverage baseline.
+  - Re-ran the named Worker Sessions functional command, `make verify-fast`, package-structure/file-count checks, and Worker Sessions vet successfully.
+- Files changed
+  - `pkg/services/worker_sessions/internal/service/invoke_observation_test.go`
+  - `prd.json`
+  - `progress.txt`
+- **Learnings for future iterations:**
+  - The repository's coverage gate is sensitive to untested defensive replay branches; typed read outcomes should have direct behavioral assertions alongside the happy-path stream tests.
+  - `make test-unit-coverage` cannot launch its full coverage lane on this Windows checkout because the generated Go command exceeds the Windows filename/command-line limit; the affected package's local coverage profile still verifies the threshold.
+- A full CI functional run exposed `TestFactorySessionHistoryIsNotPersistedByDefault`, but the test passes repeatedly in isolation and the feature-specific functional command is green; avoid unrelated changes until a reproducible failure or actionable review feedback identifies a shared cause.
+---
+
+## 2026-08-09 16:30 -07:00 - wo-c1-ext-stream-replay-only-review-follow-up
+- What was implemented
+  - Addressed PR #1840's blocking correctness feedback by making replay summaries complete only when the retained snapshot contains a terminal Worker Session lifecycle record; terminal state without that record now reports `complete:false` with `session-terminal-record-missing`.
+  - Added a deterministic controlled-boundary regression that blocks and fails the terminal append after state commit, opens replay during the interleaving, and proves no false-complete summary is emitted.
+  - Moved Cobra relationship projection out of the oversized generic constructor into the existing work constructor file and split the replay completion/cancellation/close test to clear `backend-size` and `pkg-maint` without adding package-baseline files.
+- Files changed
+  - Worker Sessions replay service and behavioral tests/fakes, `pkg/transports/cli/climanifestcobra/constructor.go`, `pkg/transports/cli/climanifestcobra/work_constructor.go`, and this progress log.
+- **Learnings for future iterations:**
+  - Terminal state and terminal-event publication are separate synchronized effects; snapshot consumers must validate the event range before claiming a complete capture, including permanent terminal-record append failures.
+  - Review ratchets may include package file-count baselines in addition to line and complexity limits; an existing cohesive package file is preferable for small same-package helper moves.
+- Focused Worker Sessions/CLI package tests, the named redirect functional test, `make verify-fast`, `make backend-size`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, and affected-package vet pass. `make -k lint` still reports pre-existing baseline failures in `pkg-boundary`, package-target/packaged-factory/ownership inventories, and deadcode; the reviewer-identified new backend-size/pkg-maint failures are resolved.
+---
+
+## 2026-08-09 16:45 -07:00 - wo-c1-ext-stream-replay-only-ci-follow-up
+- What was implemented
+  - Inspected PR #1840's GitHub Actions backend functional coverage failure with the CI log workflow and reran only the failed job.
+  - Confirmed the first failing existing durability test (`TestJavaScriptInterruptedSessionResumesWithoutRepeatingCompletedChildren`) and the rerun's existing restart test (`TestFactorySessionResumeDoesNotRepeatCompletedDispatch`) each pass in isolation; no source change was made because neither touches the replay-only implementation.
+  - Confirmed all other PR checks, including Backend Unit Coverage, remain passing; the broad Backend Functional Coverage lane and its Verification Policy aggregator remain red after the rerun.
+- Files changed
+  - `progress.txt`
+- **Learnings for future iterations:**
+  - The current PR's remaining blocker is external full-suite functional instability in cancellation-observation assertions, not a reproducible feature failure; a future iteration should rerun or diagnose that suite before changing Worker Sessions replay behavior.
+  - The PR remains open at the latest pushed commit with no additional unresolved inline review threads, but cannot be marked review-ready while the required backend functional check is red.
+---
+
+## 2026-08-09 16:13 -07:00 - wo-c1-ext-stream-replay-only-delivery
+- What was implemented
+  - Confirmed all four PRD stories remain marked `passes:true`; no additional story implementation was required in this iteration.
+  - Re-ran the named Worker Sessions redirect/CLI functional test and `make verify-fast` successfully on the exact branch HEAD.
+  - Confirmed the worktree is clean before the delivery commit/PR update and found no existing PR or review feedback for this branch.
+- Files changed
+  - `progress.txt`
+- **Learnings for future iterations:**
+  - A clean branch synchronized with its remote still needs the focused and fast verification gates rerun before creating the PR so the published commit has current local evidence.
+  - When every story is already marked complete and no PR exists, append delivery evidence to the progress log without changing the completed PRD story state.
+---
+
+## 2026-08-09 16:51 -07:00 - wo-c1-ext-stream-replay-only-delivery-follow-up
+- What was implemented
+  - Confirmed all four PRD stories remain marked `passes:true`; no additional product story work was pending.
+  - Rechecked PR #1840's current discussion and thread state: the prior blocking correctness and lint feedback is addressed on the current head, with no unresolved inline review threads.
+  - Re-ran the named replay-only redirect/CLI functional test and `make verify-fast` successfully on the exact synchronized branch head.
+- Files changed
+  - `progress.txt`
+- **Learnings for future iterations:**
+  - An open PR with addressed feedback still needs its latest remote check state rechecked before reporting delivery; at this point the required CI run was still in progress.
+  - When the PRD is already fully passed and no new code is required, preserve the completed `prd.json` story state and record verification/review evidence in the append-only progress log.
+---
+
+## 2026-08-09 17:00 -07:00 - wo-c1-ext-stream-replay-only-ci-follow-up
+- What was implemented
+  - Rechecked PR #1840 at the synchronized head: all four PRD stories remain `passes:true`, the worktree is clean, and thread-aware review state has zero unresolved inline threads or formal reviews.
+  - Inspected the terminal Backend Functional Coverage failure from the GitHub Actions diagnostic artifact. The only failing test was the unrelated `TestAgyConductorSuccessThroughRootBuildProcess`, which observed zero terminal result messages; no Worker Sessions replay test or changed file was implicated.
+  - Reran only the failed Backend Functional Coverage job on the same commit; the rerun is still in progress. Backend Unit Coverage and all other completed required checks are passing.
+- Files changed
+  - `progress.txt`
+- **Learnings for future iterations:**
+  - Functional coverage diagnostics are in the `functional-test-diagnostics` artifact; `command.log` exposes the first actual failing test even when the job's final artifact guard reports only a missing evidence file.
+  - Do not change replay-only code for an unrelated provider-functional flake; rerun the isolated failed job and wait for a reproducible feature-linked failure first.
+  - The PR remains open and mergeable with no unresolved review threads, but the required verification policy cannot be green until the Backend Functional Coverage rerun reaches a terminal result.
+---
+
+## 2026-08-09 17:06 -07:00 - wo-c1-ext-stream-replay-only-delivery-verification
+- What was implemented
+  - Confirmed all four PRD stories remain marked `passes:true`; no additional story implementation or authored contract change was required.
+  - Re-ran the named replay-only redirect/CLI functional command and `make verify-fast` successfully on the current PR head.
+  - Re-ran `make backend-size`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, `go test ./pkg/services/worker_sessions/...`, and `go vet ./pkg/services/worker_sessions/...`; all passed.
+  - Rechecked PR #1840: the branch head is synchronized with the PR remote, the prior blocking feedback has no unresolved review threads, and the new CI run is executing for this exact head.
+- Files changed
+  - `progress.txt`
+- **Learnings for future iterations:**
+  - The worktree's `origin` remote points at `infinite-you`; PR delivery for this repository uses the `fork` remote at `portpowered/you-agent-factory`, so compare and push against `fork` when verifying synchronization.
+  - A progress-only delivery commit still needs the complete local gate set and a fresh remote CI run before the PR can be reported ready for review.
+  - Keep `prd.json` unchanged when every story is already passed and the iteration adds only verification evidence.
+
+## 2026-08-09 17:13 -07:00 - wo-c1-ext-stream-replay-only-delivery-review
+- What was implemented
+  - Confirmed all four PRD stories remain marked `passes:true`; no additional story implementation or contract change was required.
+  - Inspected PR #1840 with the thread-aware GitHub review workflow. The prior blocking correctness/lint feedback is addressed in the current head, and there are no unresolved inline review threads or external actionable comments.
+  - Confirmed local HEAD `97d6e77e` matches the fork PR head and the required CI run for that exact commit is executing.
+- Files changed
+  - `progress.txt`
+- **Learnings for future iterations:**
+  - A cross-repository PR needs the head repository and PR number passed explicitly to the thread-aware GraphQL comment reader when the local branch tracks a different remote.
+- Do not change the completed `prd.json` story state during delivery-only iterations; append review and CI evidence to the progress log instead.
+---
+
+## 2026-08-09 17:27 -07:00 - wo-c1-ext-stream-replay-only-merge-conflict-resolution
+- What was implemented
+  - Fetched the current fork `main` (`f6de38c59`) after GitHub reported PR #1840 as conflicting and merged it into the branch.
+  - Resolved the only conflict in the worktree-local `prd.json` by retaining the replay-only PRD; all product-file changes from current `main` merged without conflict.
+  - Preserved the completed four-story `passes:true` state and the existing review/CI evidence; the merge commit now needs the focused local gates and a fresh remote CI run.
+- Files changed
+  - `prd.json`, current-`main` merge result, and `progress.txt`
+- **Learnings for future iterations:**
+  - When multiple worktrees use a repository-local `prd.json`, a PR merge can conflict with another story's PRD even when product files are conflict-free; resolve that file in favor of the active branch's task contract.
+  - A green CI run on the pre-merge head does not establish merge readiness after GitHub reports `CONFLICTING`; fetch the PR's actual head repository `main`, resolve the conflict, and rerun checks for the merged head.
+---
+
+## 2026-08-09 17:51 -07:00 - wo-c1-ext-stream-replay-only-delivery-review
+- What was implemented
+  - Confirmed all four PRD stories remain marked `passes:true`; no additional story implementation or contract change was required.
+  - Rechecked PR #1840 in `portpowered/you-agent-factory` with thread-aware review data: there are no unresolved inline review threads or formal reviews, and the earlier correctness and lint feedback is addressed in the current head.
+  - Confirmed local HEAD `e769770b6` matches the PR head, the PR description still uses the current `prd.json`, GitHub reports the PR mergeable and clean, and every listed required check is terminal and successful.
+- Files changed
+  - `progress.txt`
+- **Learnings for future iterations:**
+  - For a cross-repository PR, verify the head OID and check state in the PR's actual repository rather than relying on the local branch's default remote association.
+  - When all stories and review feedback are complete, preserve `prd.json` and append delivery evidence to the progress log instead of creating unrelated source changes.
+---

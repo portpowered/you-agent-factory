@@ -8589,12 +8589,14 @@
           },
           "description": {
             "id": "you.worker-sessions.stream.description",
-            "canonicalEnglish": "Stream retained and live canonical Worker Session events for one exact Provider Session identity. The stream ends successfully on a terminal event and reports source failures explicitly."
+            "canonicalEnglish": "Stream retained and live canonical Worker Session events for one exact Provider Session identity. Live following is the default and can be selected explicitly with --follow. Use --replay-only to drain retained history once and append a completeness summary; --replay-only and --follow cannot be combined. The stream ends successfully on a terminal event and reports source failures explicitly."
           }
         },
         "examples": [
           "you worker-sessions stream --provider codex --kind session_id --id session-123",
-          "you worker-sessions stream --provider codex --kind session_id --id session-123 --output json"
+          "you worker-sessions stream --provider codex --kind session_id --id session-123 --output json",
+          "you worker-sessions stream --provider codex --kind session_id --id session-123 --follow",
+          "you worker-sessions stream --provider codex --kind session_id --id session-123 --replay-only --output json > worker-session.jsonl"
         ],
         "visibility": "public",
         "sourceHash": "4c6a9d3fc2f5fd2f5133c62b5f871a63b7d0e3a91cc0c8934c6edc397b7ef0fb"
@@ -8609,7 +8611,7 @@
       "runnable": true,
       "usage": {
         "line": "stream",
-        "example": "  you worker-sessions stream --provider codex --kind session_id --id session-123"
+        "example": "  you worker-sessions stream --provider codex --kind session_id --id session-123\n\n  # Explicitly follow retained history with live events (the default).\n  you worker-sessions stream --provider codex --kind session_id --id session-123 --follow\n\n  # Drain retained events to redirect-safe NDJSON. The final replay-summary marks ACTIVE captures incomplete.\n  you worker-sessions stream --provider codex --kind session_id --id session-123 --replay-only --output json > worker-session.jsonl"
       },
       "flags": {
         "you.worker-sessions.stream.flag.provider": {
@@ -8731,6 +8733,54 @@
             "state": "active",
             "since": "1.0.0"
           }
+        },
+        "you.worker-sessions.stream.flag.follow": {
+          "id": "you.worker-sessions.stream.flag.follow",
+          "long": "follow",
+          "usage": "follow live Worker Session events after retained history (the default live-stream mode)",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.stream.flag.follow",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.stream.flag.replay-only": {
+          "id": "you.worker-sessions.stream.flag.replay-only",
+          "long": "replay-only",
+          "usage": "drain retained Worker Session events once and append a completeness summary without following live events",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.stream.flag.replay-only",
+            "state": "active",
+            "since": "1.0.0"
+          }
         }
       },
       "handler": {
@@ -8752,6 +8802,22 @@
         },
         "acrossTiers": "replace",
         "multipleBindings": "reject"
+      },
+      "relationships": {
+        "you.worker-sessions.stream.rel.mutex.follow-replay-only": {
+          "id": "you.worker-sessions.stream.rel.mutex.follow-replay-only",
+          "kind": "mutually-exclusive",
+          "participants": [
+            {
+              "id": "you.worker-sessions.stream.flag.follow",
+              "type": "flag"
+            },
+            {
+              "id": "you.worker-sessions.stream.flag.replay-only",
+              "type": "flag"
+            }
+          ]
+        }
       },
       "channels": {
         "input": [
@@ -8775,6 +8841,12 @@
           "id": "you.worker-sessions.stream.output.json",
           "channel": "stdout",
           "format": "json"
+        }
+      },
+      "errors": {
+        "you.worker-sessions.stream.error.mode-conflict": {
+          "id": "you.worker-sessions.stream.error.mode-conflict",
+          "code": "WORKER_SESSION_STREAM_MODE_CONFLICT"
         }
       },
       "exits": {

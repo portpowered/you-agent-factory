@@ -1,73 +1,88 @@
 {
-  "project": "WO-D3 — Worker/provider guide with per-provider limits",
-  "branchName": "wo-d3-worker-provider-guide",
-  "description": "Publish one canonical packaged `you docs providers` guide that helps operators choose among the configured GPT-5.6 tiers, Claude Sonnet 5, and ANTIGRAVITY models; understand effort, modality, AGY process semantics, and the five-reference ImageGen limit; and use the correct Factory worker frontmatter or ad-hoc `you run` flags. Prove every documented CLI invocation against the current binary and deliver the documentation through merge without adding runtime, provider, CLI, ACP, local-model, multimodal-wrapper, or storage behavior.",
+  "project": "Pipeable Replay-Only Worker Session Streams",
+  "branchName": "wo-c1-ext-stream-replay-only",
+  "description": "Add --replay-only to you worker-sessions stream so operators can drain retained Worker Session events to redirect-safe NDJSON, receive an explicit completeness summary, and exit 0 without attaching a live follower, while preserving existing live-stream and ACTIVE transcript-read semantics.",
   "context": {
-    "customerAsk": "Publish a canonical packaged worker/provider guide that explains which supported models to choose and why, how reasoning effort is configured, which settings belong in Factory worker frontmatter versus ad-hoc `you run` invocations, and the provider-specific capabilities and limits that operators need before a run. Cover `gpt-5.6-luna`, `gpt-5.6-sol`, `gpt-5.6-terra`, `claude-sonnet-5`, ANTIGRAVITY/AGY supported models and efforts, AGY `--add-dir`, print-timeout, and exit-zero-on-decline semantics, `--worker-reasoning-effort`, `--to-file`, the five-path ImageGen `referenced_image_paths` limit, and GPT-5.6's lack of video/audio understanding. Keep canonical content under `docs/reference/`, prove every CLI example against the current binary, run packaged-docs and fast verification, and complete the delivery loop through actual merge.",
-    "problem": "Critical provider behavior is scattered or learned through production failures. Operators exceeded ImageGen's five-reference-path limit and assigned audiovisual judging to GPT-5.6 without knowing it could not see video or hear audio. Model-tier intent, effort vocabulary, Factory versus ad-hoc configuration, and AGY workspace, timeout, and completion semantics are not presented as one decision path, so users can choose an unsuitable provider, misplace a setting, invent a flag, or mistake AGY's zero exit status for task acceptance.",
-    "solution": "Expand the canonical packaged provider topic into an operator-oriented worker/provider guide with a selection matrix, explicit modality and tool limits, configuration ownership, AGY caveats, and copyable Factory and ad-hoc examples. Ground every claim in current worker contracts, provider adapters, recorded AGY evidence, and current-binary CLI behavior; route adjacent reference topics to the canonical guide; and verify the installed `you docs providers` behavior directly without implementing any new runtime capability."
+    "customerAsk": "Allow operators to run you worker-sessions stream --replay-only --output json against ACTIVE or terminal sessions, redirect retained events to a file, receive an explicit final completeness marker, and exit 0 without cancellation or live following.",
+    "problem": "The existing stream replays retained events and then follows live until terminal or cancellation, so capturing an ACTIVE session through shell redirection requires cancellation that can truncate the pipe and cannot distinguish a partial capture from a complete transcript. The read command correctly refuses ACTIVE sessions and must continue doing so.",
+    "solution": "Add a finite retained-history mode owned by Worker Sessions and the process-local Events service. It snapshots and emits retained events once in canonical order without registering a follower, appends a replay-summary with authoritative completeness and emitted count, validates live/replay flag conflicts before output or network access, and preserves all existing non-replay-only and read behavior without adding storage."
   },
   "acceptanceCriteria": [
-    "`you docs providers` presents one coherent selection path covering the intended uses of `gpt-5.6-luna`, `gpt-5.6-sol`, `gpt-5.6-terra`, and `claude-sonnet-5`, plus ANTIGRAVITY's currently supported AGY models and effort selection, without claiming unverified models or capabilities.",
-    "The packaged guide states the known modality and tool constraints before its examples: GPT-5.6 does not provide video/audio understanding, AGY can inspect referenced media through its CLI file-parsing path, and ImageGen accepts at most five `referenced_image_paths` per call.",
-    "The guide distinguishes Factory worker frontmatter from ad-hoc `you run` flags, documents `--worker-reasoning-effort` and `--to-file`, and explains AGY's mandatory workspace `--add-dir`, effective `--print-timeout`, and exit-zero-on-decline behavior in terms an operator can act on.",
-    "Every CLI invocation printed in changed or new guide content is executed against a binary built from the implementation commit; its real output or a direct behavioral assertion is retained as review evidence, and no example contains an invented flag, model, effort, or output.",
-    "Packaged behavior is proven by `make docs-reference-smoke`; the named focused verification command is `go test ./tests/functional/smoke -run '^TestDocsCommandSmoke_' -count=1`, and both commands verify customer-visible `you docs providers` output rather than source inventories or link topology.",
-    "Quality gate: Typecheck passes, `make verify-fast` passes, focused docs tests pass, and no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
-    "Delivery continues through implementation and correctness-first review until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, shared-file churn and merge conflicts are reconciled against current main, and the PR is actually merged; opened, green, approved, or ready-to-merge is not complete."
+    "you worker-sessions stream --replay-only --output json works for ACTIVE and terminal Worker Sessions, emits retained events exactly once in canonical order, appends exactly one replay-summary record, and exits 0 without registering or waiting on a live follower.",
+    "An ACTIVE-session replay ends with kind replay-summary, complete false, reason session-active, and eventsEmitted N, while a terminal-session replay ends with complete true; in both cases eventsEmitted equals the number of preceding event records.",
+    "Every JSON-mode stdout line is independently valid JSON, event lines retain the existing Worker Session stream NDJSON contract, diagnostics remain on stderr, and a built-process redirection test proves the resulting file ends with the summary record.",
+    "Replay-only combined with --follow or any other mutually exclusive live-follow selection fails with a stable typed conflict error before network access, follower registration, or stdout output.",
+    "Existing behavior is preserved: stream without replay-only still replays then follows until terminal or cancellation, terminal replay is equivalent to the full retained history, and worker-sessions read still rejects ACTIVE sessions with WORKER_SESSION_TRANSCRIPT_ACTIVE.",
+    "Quality gate: the named focused verification command go test ./tests/functional/provider_sessions/cli -run '^(TestWorkerSessionsCLI|TestWorkerSessionsReplayOnlyRedirectsWellFormedNDJSON)$' -count=1 and make verify-fast pass; Typecheck passes; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green; generated CLI/OpenAPI/client artifacts are synchronized if their authored contracts change.",
+    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared-file changes are resolved, and the PR is actually merged; opening, approval, green CI, or merge readiness alone is not completion."
   ],
   "userStories": [
     {
-      "id": "wo-d3-worker-provider-guide-001",
-      "title": "Choose a suitable provider and model before running work",
-      "description": "As an operator, I want a provider/model selection guide with explicit capabilities and limits so I can choose a worker that can perceive the input and perform the required task without learning constraints through a failed production run.",
+      "id": "wo-c1-ext-stream-replay-only-001",
+      "title": "Capture an ACTIVE session without following",
+      "description": "As an operator, I want replay-only streaming to drain the retained observations of an ACTIVE Worker Session and return successfully so I can inspect progress through a stable finite pipeline.",
       "acceptanceCriteria": [
-        "`you docs providers` explains the intended configured roles of `gpt-5.6-luna`, `gpt-5.6-sol`, `gpt-5.6-terra`, and `claude-sonnet-5`, and separates operator selection guidance from hard provider capability claims.",
-        "The guide lists only ANTIGRAVITY models and effort choices supported by current adapter behavior and recorded AGY evidence, and tells readers how AGY is selected through `modelProvider: ANTIGRAVITY`.",
-        "A capability/limit table states supported relevant input modalities and the decision consequences, including that GPT-5.6 cannot judge video or audio and AGY is the documented file-parsing route for audiovisual review.",
-        "The ImageGen section states that `referenced_image_paths` accepts zero to five paths per call and tells operators to split or redesign work that needs more than five references rather than retrying the same invalid call.",
-        "Provider/model names, effort choices, modality statements, and tool limits are checked against current contracts, adapters, and recorded evidence during implementation; uncertain or version-sensitive claims are labeled rather than presented as timeless guarantees.",
+        "Given an ACTIVE Worker Session with retained observations, replay-only emits each retained event once in canonical position order and does not emit observations published after the retained snapshot boundary.",
+        "The command does not register, retain, or wait on a live subscription after the retained drain and exits 0 without operator cancellation.",
+        "The last JSON line is a replay-summary with complete false, reason session-active, and eventsEmitted equal to the number of preceding event records, including zero when no events are retained.",
+        "Retained reads and lifecycle classification remain explicit Worker Sessions operations over the injected process-local Events service; no storage, hidden global state, or secondary dependency construction is introduced.",
+        "Focused Worker Sessions service, transport, and CLI behavioral tests pass.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Added the canonical provider/model selection and limits section to docs/reference/providers.md. It distinguishes operator heuristics from adapter facts, covers the configured gpt-5.6-luna/sol/terra and claude-sonnet-5 roles, documents the current AGY model allowlist and model-encoded effort selection, explains modelProvider: ANTIGRAVITY, records GPT-5.6's lack of video/audio understanding versus AGY's recorded workspace file-parsing evidence, and documents ImageGen's 0-5 referenced_image_paths limit with split/redesign guidance. Corrected the guide to state that the public Factory and you run contract rejects a separate AGY reasoning effort, so operators must omit it and select a listed effort-bearing model ID. Removed the stale checked-in-Factory processor claim for gpt-5.6-luna; the current factory assigns processor to CLAUDE/claude-sonnet-5 at high, while gpt-5.6-sol remains the observed planner/ideafier tier. Updated the executable docs smoke assertions. Verified with go test ./tests/functional/smoke -run '^TestDocsCommandSmoke_' -count=1, go test ./pkg/services/providers/... -run 'TestCommandEffect|Test.*Catalog|Test.*Selection' -count=1, make docs-reference-smoke, and make verify-fast (including typecheck, 355 Vitest files/2970 tests, 191 Bun tests, and the short Go suite)."
+      "notes": "Implemented finite ACTIVE replay through injected Events.Read with a captured retained head, no live subscription, explicit replay-summary delivery, HTTP/SSE framing, CLI --replay-only wiring, redirect-safe JSON summary output, and regenerated API/CLI artifacts. Focused Worker Sessions service/HTTP/CLI tests, UI typecheck, pkg-maint, pkg-file-count, pkg-structure, and CLI contract smoke pass."
     },
     {
-      "id": "wo-d3-worker-provider-guide-002",
-      "title": "Configure Factory workers and ad-hoc runs on the correct surface",
-      "description": "As an operator, I want copyable configuration and invocation examples that distinguish durable worker settings from one-off run flags so I can set effort and pass multiline prompts without misplaced fields or fragile shell quoting.",
+      "id": "wo-c1-ext-stream-replay-only-002",
+      "title": "Report a terminal replay as complete",
+      "description": "As an operator, I want replay-only streaming of a terminal Worker Session to identify itself as complete so a captured file can be trusted as the full retained transcript.",
       "acceptanceCriteria": [
-        "The guide includes a clear mapping between canonical Factory worker frontmatter fields (`modelProvider`, `model`, `reasoningEffort`, `skipPermissions`, and applicable timeout settings) and the supported ad-hoc `you run` flags, explicitly including `--worker-reasoning-effort` and `--to-file` without implying every provider-native flag is a `you run` flag.",
-        "At least one worker-frontmatter example and one ad-hoc `you run` example show how to select a provider/model and effort, and the multiline example uses `--to-file` so prompt content does not depend on PowerShell argv quoting.",
-        "ANTIGRAVITY guidance explains that factory dispatch supplies `agy --add-dir` for the working directory, derives/passes an effective `--print-timeout`, and must interpret the parsed final result because AGY can exit zero after declining the task; operators are not instructed to add provider-native flags to unsupported Factory or `you run` surfaces.",
-        "Each CLI invocation shown in the changed guide is executed against the current implementation binary, and review evidence includes the real output or a direct assertion of exit code and relevant output; examples requiring credentials or a provider call use a non-dispatching help/validation path or clearly separate environment-dependent output from deterministic syntax proof.",
-        "Invalid or unavailable combinations are described with an actionable alternative, including using AGY for audiovisual inspection, reducing ImageGen references to five or fewer, and omitting a separate effort value where the provider/model contract encodes or rejects it.",
+        "Given a terminal Worker Session, replay-only emits the same complete retained event sequence and ordering available to a normal terminal stream, then exits 0.",
+        "The final replay-summary has kind replay-summary, complete true, and eventsEmitted equal to the number of preceding event records; its reason value, if present, is stable and documents the terminal outcome without changing event records.",
+        "Stream without replay-only retains its current retained-then-live termination and cancellation behavior, and worker-sessions read continues to return WORKER_SESSION_TRANSCRIPT_ACTIVE for ACTIVE sessions.",
+        "Focused ACTIVE-versus-terminal lifecycle regression tests pass without sleeps or cancellation as the replay-only completion mechanism.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 2,
       "passes": true,
-      "notes": "Added a durable-Factory-versus-ad-hoc mapping to docs/reference/providers.md, including modelProvider/model/reasoningEffort/skipPermissions, timeout ownership, and prompt-file boundaries. Added a valid AGENT_WORKER frontmatter example and a PowerShell-safe --to-file invocation using --provider, --model, and --worker-reasoning-effort. Corrected the copyable PowerShell setup to create its prompt-files directory before writing the UTF-8 prompt and to pass the resulting $promptPath. Documented AGY's Factory-owned --add-dir and effective --print-timeout behavior, final-result parsing after exit-zero declines, the public rejection of separate AGY effort, model-ID effort selection, and actionable alternatives for audiovisual work and ImageGen references. Extended the process-boundary docs smoke markers. Built bin/you.exe from commit c62225a7caa680664d3259bd2372869556201de1 and executed the complete corrected setup from a fresh temporary directory: the prompt file was created with 138 bytes, and the documented run shape exited 1 with RUN_INVOCATION_FAILED because the fresh directory has no factory/factory.json, proving file creation and flag validation before provider dispatch without credentials. Verified with go test ./tests/functional/smoke -run '^TestDocsCommandSmoke_' -count=1, make docs-reference-smoke, focused AGY/worker/CLI tests, and make verify-fast (typecheck, MCP contract check, 355 Vitest files/2970 tests, 191 Bun tests, and the short Go suite)."
+      "notes": "Verified terminal replay against the real in-memory Events service with deterministic Worker Session completion: canonical retained opening and terminal records are emitted in order, the lifecycle record is TERMINAL_REPLAY, one complete session-completed replay-summary reports eventsEmitted 2, and the subscription closes afterward. Added CLI coverage proving TERMINAL_REPLAY does not end replay-only before the final summary and the command returns success. Existing live terminal-stream and ACTIVE transcript-read regressions remain covered."
     },
     {
-      "id": "wo-d3-worker-provider-guide-003",
-      "title": "Deliver the guide through the packaged docs experience",
-      "description": "As a CLI user, I want the worker/provider guidance available from the installed binary and consistently routed from related topics so I can find the same canonical answer outside the repository checkout.",
+      "id": "wo-c1-ext-stream-replay-only-003",
+      "title": "Reject incompatible live and finite modes before output",
+      "description": "As an operator, I want contradictory replay-only and live-follow flags rejected immediately so an invalid invocation cannot create a misleading partial file or attach a follower.",
       "acceptanceCriteria": [
-        "`you docs providers` from a built CLI outside the repository docs tree prints the complete provider/model, effort, configuration-surface, AGY semantics, modality, and ImageGen limit guidance.",
-        "The packaged docs topic index describes `providers` as the canonical worker/provider selection and limits guide, while related `workers`, `run`, and `models` content routes readers to it and does not retain contradictory provider or effort guidance.",
-        "Root documentation remains routing/index material; the detailed guide is maintained in canonical `docs/reference/` content and delivered through the existing packaged docs mechanism.",
-        "The focused packaged-docs regression proof invokes the docs command and asserts the decision-critical statements visible to customers, including the five-path limit and GPT-5.6 video/audio limitation, without scanning source files or asserting registration inventories.",
-        "`make docs-reference-smoke` passes.",
-        "The named focused verification command `go test ./tests/functional/smoke -run '^TestDocsCommandSmoke_' -count=1` passes.",
+        "Combining --replay-only with --follow is rejected with a stable typed CLI conflict error and a non-zero usage or failure exit before any stdout bytes are written.",
+        "Conflict validation occurs before network access and before any retained read or live subscription side effect.",
+        "A valid invocation with neither replay-only nor an explicit conflicting selection preserves the existing live-stream default.",
+        "The authored CLI contract, generated command metadata, help, and handler binding expose the flags and conflict consistently; generated artifacts are regenerated rather than hand-edited.",
+        "Focused CLI parsing, error mapping, and zero-output/zero-request behavioral tests pass.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 3,
       "passes": true,
-      "notes": "Delivered the provider guide through the packaged docs surface. Updated the CLI topic description and both documentation indexes so providers is the canonical worker/provider selection and limits guide; added explicit providers routing to workers, run, and models; and removed stale provider-specific effort mapping from the provider-neutral workers guide. Extended the executable process-boundary smoke contract for the index and related-topic routes. Built the current CLI and ran `you docs providers` plus `you docs` from a fresh temporary directory with no repository docs tree: both exited 0, all 11 provider/model, effort, configuration, AGY, modality, and ImageGen markers were present, and the updated index description was present. Verified with `go test ./tests/functional/smoke -run '^TestDocsCommandSmoke_' -count=1`, `make docs-reference-smoke`, and `make verify-fast` (typecheck, MCP contract check, 355 Vitest files/2970 tests, 191 Bun tests, and the short Go suite). Rebased PR #1839 onto the live target `main` at `47b25437d`, resolved the task-local `prd.json` conflict, and re-ran the focused and fast verification gates; the scoped diff remains clean with no unresolved review threads. Final audit at 2026-08-09 16:29 -07:00 found PR #1839 open, CLEAN/MERGEABLE, all 18 checks passing at head `11913dbb9`, zero inline review threads/formal reviews, and the PR body synchronized with this PRD."
+      "notes": "Added explicit --follow CLI metadata and handler binding, stable typed WORKER_SESSION_STREAM_MODE_CONFLICT validation before operation/network/output, and authored mutually-exclusive relationship/error records. Added zero-request/zero-output service and production-root tests, refreshed generated CLI artifacts and CLI inventory baselines, fixed detached Cobra relationship projection so root --server remains authoritative, and passed focused Worker Sessions/CLI tests, make cli-manifest-check, and make verify-fast."
+    },
+    {
+      "id": "wo-c1-ext-stream-replay-only-004",
+      "title": "Produce a redirect-safe NDJSON capture",
+      "description": "As an operator, I want the real CLI process to write replay-only output as well-formed NDJSON so shell redirection produces a durable, machine-readable partial or complete capture.",
+      "acceptanceCriteria": [
+        "A process-boundary test invokes the built you CLI, redirects replay-only JSON stdout to a file, waits for exit 0, and parses every non-empty file line as exactly one JSON value.",
+        "The redirected file contains canonical event lines followed by exactly one final replay-summary; the summary count matches the event-line count and its completeness matches the session lifecycle used by the test.",
+        "The test proves replay-only completes without sending cancellation and that diagnostics or errors do not contaminate the redirected stdout file.",
+        "Operator-facing help or canonical reference documentation includes the redirect workflow and explains the complete marker, ACTIVE versus terminal meaning, and conflict with live following using real supported flags and output.",
+        "go test ./tests/functional/provider_sessions/cli -run '^(TestWorkerSessionsCLI|TestWorkerSessionsReplayOnlyRedirectsWellFormedNDJSON)$' -count=1 passes.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": "Added a built-process functional test that redirects terminal replay-only JSON stdout to a file, parses every non-empty line, verifies canonical event ordering, one final complete replay-summary with matching eventsEmitted, and separate verbose stderr diagnostics without cancellation. Added the canonical sessions reference workflow covering redirect-safe NDJSON, ACTIVE versus terminal completeness, and --follow conflict. Focused CLI tests, docs-reference-smoke, make verify-fast, UI lint/typecheck, pkg-file-count, pkg-structure, and vet pass; added focused replay-read edge tests to keep the Worker Sessions service at 99.0% coverage above its 98.72% minimum; make lint/pkg-maint retain the pre-existing constructor.go 1037-line backend-size violation."
     }
   ]
 }

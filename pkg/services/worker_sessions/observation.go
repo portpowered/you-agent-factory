@@ -55,6 +55,10 @@ type StreamObservationsRequest struct {
 	// Limit bounds the retained batch and live buffer. Zero uses the stable
 	// service default.
 	Limit int
+	// ReplayOnly drains the retained Events range captured when the stream is
+	// opened and then returns one completeness summary without registering a
+	// live follower.
+	ReplayOnly bool
 }
 
 const DefaultObservationStreamLimit = 64
@@ -313,18 +317,28 @@ const (
 	ObservationDeliveryRecord         ObservationDeliveryKind = "RECORD"
 	ObservationDeliveryTerminal       ObservationDeliveryKind = "TERMINAL"
 	ObservationDeliveryTerminalReplay ObservationDeliveryKind = "TERMINAL_REPLAY"
+	ObservationDeliveryReplaySummary  ObservationDeliveryKind = "REPLAY_SUMMARY"
 	ObservationDeliveryClosed         ObservationDeliveryKind = "CLOSED"
 	ObservationDeliveryCanceled       ObservationDeliveryKind = "CANCELED"
 	ObservationDeliverySourceFailure  ObservationDeliveryKind = "SOURCE_FAILURE"
 )
 
+// ReplaySummary describes the completeness of one finite retained-history
+// drain. EventsEmitted counts event records delivered before the summary.
+type ReplaySummary struct {
+	Complete      bool
+	Reason        string
+	EventsEmitted int
+}
+
 // ObservationDelivery is one subscription outcome. Event is present for
-// RECORD, TERMINAL, and TERMINAL_REPLAY; Err is present only for CANCELED or
-// SOURCE_FAILURE.
+// RECORD, TERMINAL, and TERMINAL_REPLAY; Summary is present for
+// REPLAY_SUMMARY; Err is present only for CANCELED or SOURCE_FAILURE.
 type ObservationDelivery struct {
-	Kind  ObservationDeliveryKind
-	Event ObservationEvent
-	Err   error
+	Kind    ObservationDeliveryKind
+	Event   ObservationEvent
+	Summary *ReplaySummary
+	Err     error
 }
 
 // ObservationSubscription is a cancellable retained/live canonical event

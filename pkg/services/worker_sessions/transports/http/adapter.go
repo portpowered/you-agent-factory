@@ -101,6 +101,7 @@ func (a *Adapter) ReadWorkerSessionTranscript(
 func (a *Adapter) StreamWorkerSessionEvents(
 	ctx context.Context,
 	sessionID, provider, kind, id string,
+	replayOnly bool,
 ) (factoryapi.WorkerSessionObservation, workersessions.ObservationSubscription, error) {
 	if a == nil || a.observations == nil {
 		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, errors.New("Worker Sessions service is required")
@@ -132,7 +133,8 @@ func (a *Adapter) StreamWorkerSessionEvents(
 		ProviderSession: request.ProviderSession,
 		// Carry the documented default explicitly so the canonical ledger
 		// receives the bounded stream policy at the transport boundary.
-		Limit: workersessions.DefaultObservationStreamLimit,
+		Limit:      workersessions.DefaultObservationStreamLimit,
+		ReplayOnly: replayOnly,
 	})
 	if err != nil {
 		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, fmt.Errorf("stream Worker Session events: %w", err)
