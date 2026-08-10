@@ -27,6 +27,7 @@
 - When a package has a strict file-count baseline, put a small refactor in an existing focused file before adding a new helper file or changing the baseline.
 - When broad functional coverage reports a cancellation-observation failure, rerun the failed lane and isolate the named test before changing an unrelated feature; parallel-suite failures can move between existing durability/restart tests while isolated runs pass.
 - Persistent CLI globals are authored once on the root stable input ID; family manifests that project inherited inputs must mirror that ID, and the committed CLI inventory baseline should be refreshed through its repository update test.
+- Placement dispatch belongs at the CLI transport boundary: normalize once, pass the request to exactly one injected local or HTTP adapter, and preserve remote failures without local retry.
 
 ## 2026-08-09 13:12 - wo-d1-packaged-factories-docs-001
 - What was implemented
@@ -798,4 +799,37 @@
   - Persistent root inputs resolve from the root Cobra storage even when detached families omit local declarations; inherited manifest records are still needed wherever a family contract explicitly enumerates global inputs.
   - Adding a persistent global to a root requires auditing protocol/listener-style commands that intentionally shadow unrelated globals so they do not advertise or silently accept the new input.
   - Generated CLI Go and published contract artifacts must be refreshed after authored manifest changes before parser and inventory baselines are trustworthy.
+---
+
+## 2026-08-10 05:37 -07:00 - dwro-s1-remote-placement-flags-002
+- What was implemented
+  - Changed authored `you.run` to dual placement and added an injected remote invocation HTTP adapter that posts the normalized request to exactly the selected `--server` endpoint and default Factory Session.
+  - Routed remote `you run` dispatch at the CLI boundary after shared input preparation, preserving local and remote request parity and preventing local initialization, listener probing, or fallback after remote failure.
+  - Added stable unsupported-placement validation for the local-only detached `you server` command and safe endpoint-only remote diagnostics.
+  - Added focused remote adapter and public CLI behavioral tests for normalized payloads, exact endpoint selection, unsupported placement, and zero local fallback.
+  - Refreshed the published CLI contract artifacts and generated family and wire consumers.
+- Files changed
+  - `contracts/cli/commands.json`
+  - `packages/api/generated/cli/commands.json`
+  - `packages/api/generated/manifest.json`
+  - `pkg/transports/cli/generated/family_manifests_gen.go`
+  - `pkg/transports/cli/root.go`
+  - `pkg/transports/cli/root_work.go`
+  - `pkg/transports/cli/run/remote.go`
+  - `pkg/transports/cli/run/remote_test.go`
+  - `pkg/transports/cli/root_remote_placement_test.go`
+  - `pkg/wire/cli_commands.go`
+  - `pkg/wire/wire.go`
+  - `pkg/wire/wire_gen.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `make contracts-check` — passed.
+  - `make cli-manifest-check` — passed.
+  - `go test ./pkg/transports/cli/run ./pkg/transports/cli ./pkg/wire ./pkg/services/workers/internal/interface -count=1` — passed.
+  - `make test` — passed.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - Authored CLI placement changes must run both `make cli-manifest-generate` and `make contracts-generate`; the worker contract-staging test detects drift in the published package artifacts.
+  - The shared normalized invocation projection can be reused by local and remote adapters while keeping placement selection out of domain services.
 ---
