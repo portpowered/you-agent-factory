@@ -178,6 +178,67 @@ class FullFlowWorktreeSetupTest(unittest.TestCase):
         self.assertIn(f"remove only {lock_path}", result.stderr)
         self.assertIn("retry", result.stderr)
 
+    def test_live_lock_owner_returns_bounded_contention_without_removing_lock(self):
+        first = self.run_script("task-a")
+        self.assertEqual(first.returncode, 0, first.stderr)
+
+        lock_path = self.repository / ".git" / "config.lock"
+        owner_code = (
+            "from pathlib import Path\n"
+            "import sys\n"
+            "lock = Path(sys.argv[1])\n"
+            "with lock.open('w', encoding='utf-8') as handle:\n"
+            "    handle.write('owned-by-live-test\\n')\n"
+            "    handle.flush()\n"
+            "    print('acquired', flush=True)\n"
+            "    sys.stdin.read(1)\n"
+        )
+        owner = subprocess.Popen(
+            [sys.executable, "-c", owner_code, str(lock_path)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        acquired = queue.Queue(maxsize=1)
+
+        def read_acquisition():
+            acquired.put(owner.stdout.readline())
+
+        reader = threading.Thread(target=read_acquisition, daemon=True)
+        reader.start()
+        try:
+            try:
+                acquisition_line = acquired.get(timeout=30)
+            except queue.Empty:
+                self.fail("timed out observing live lock owner acquisition")
+            self.assertEqual(acquisition_line.strip(), "acquired")
+
+            started = time.monotonic()
+            result = self.run_script("task-a")
+            elapsed = time.monotonic() - started
+
+            self.assertEqual(owner.poll(), None, "live lock owner exited during contention")
+            self.assertTrue(lock_path.exists())
+            self.assertLess(elapsed, 5)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("git config serialization contention", result.stderr)
+            self.assertIn(f"resource={lock_path}", result.stderr)
+            self.assertIn("owner_liveness=indeterminate", result.stderr)
+            self.assertIn("verify no Git or task-worktree setup process", result.stderr)
+            self.assertIn(f"remove only {lock_path}", result.stderr)
+            self.assertIn("retry", result.stderr)
+        finally:
+            if owner.poll() is None:
+                owner.kill()
+                owner.wait(timeout=30)
+            for stream in (owner.stdin, owner.stdout, owner.stderr):
+                if stream is not None:
+                    stream.close()
+            reader.join(timeout=5)
+
+        self.assertFalse(reader.is_alive())
+
 
 if __name__ == "__main__":
     unittest.main()

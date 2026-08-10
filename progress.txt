@@ -821,3 +821,19 @@
   - Packaged supporting scripts are embedded in generated Full Flow artifacts; source edits require `make packaged-factory-catalog-generate` before catalog checks.
   - This resource is currently acquired during task-worktree setup after the application starts, not yet at the pre-runtime startup boundary in the real `you` regression; keep Story 001 incomplete until that lifecycle relationship is proven.
 ---
+
+## 2026-08-10 13:10 -07:00 - pf-stale-scope-diagnostic-001 live-owner follow-up
+- What was implemented
+  - Added a deterministic live-owner contention case for the Full Flow task-worktree Git config serialization path.
+  - The competing setup now has an explicit acquisition observation, a bounded failure guard, and assertions that the live child process and `.git/config.lock` remain intact while stderr reports the exact resource, `owner_liveness=indeterminate`, and safe verify/remove/retry guidance.
+  - Kept Story 001 open because the concrete resource is still acquired after application runtime starts; no backend-scope ownership lock was introduced.
+- Files changed
+  - `tests/factory/scripts/test_full_flow_setup_task_worktree.py`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `python tests/factory/scripts/test_full_flow_setup_task_worktree.py` — passed, 6 tests including orphan-unknown and live-owner contention.
+- **Learnings for future iterations:**
+  - A Git config lock has no trustworthy owner identity even when a known live test process created it; classify it conservatively as indeterminate and preserve it rather than deleting it.
+  - The live-owner test can synchronize on the child’s flushed `acquired` marker and inspect `poll()` after contention, avoiding sleeps and proving both ownership preservation and bounded failure.
+---
