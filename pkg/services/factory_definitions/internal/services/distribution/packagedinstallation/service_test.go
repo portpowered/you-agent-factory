@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
@@ -186,6 +188,204 @@ func TestInstallPackagedFactory_PreExistingStagingReturnsBoundedContention(t *te
 	if _, statErr := os.Stat(targetPath); !errors.Is(statErr, os.ErrNotExist) {
 		t.Fatalf("target path stat error = %v, want target absent", statErr)
 	}
+}
+
+func TestInstallPackagedFactory_LiveOwnerContentionPreservesLease(t *testing.T) {
+	root := t.TempDir()
+	persistence := &blockingPackagedInstallationPersistence{
+		prepareStarted: make(chan struct{}),
+		allowPrepare:   make(chan struct{}),
+	}
+	installer := New(persistence, platformfilesystem.Local{})
+	params := factorydefinitions.PackagedFactoryInstallParams{
+		NamedFactoriesRoot: root,
+		Definition: factorydefinitions.PackagedDefinition{
+			Name: "@test/live-owner",
+			JSON: []byte(`{}`),
+		},
+		Format: factorydefinitions.PackagedFactoryFormatJSON,
+	}
+	firstErr := make(chan error, 1)
+	go func() {
+		_, err := installer.InstallPackagedFactory(t.Context(), params)
+		firstErr <- err
+	}()
+	<-persistence.prepareStarted
+
+	secondDone := make(chan error, 1)
+	go func() {
+		_, err := installer.InstallPackagedFactory(t.Context(), params)
+		secondDone <- err
+	}()
+	secondInstallErr := <-secondDone
+	if secondInstallErr == nil || !errors.Is(secondInstallErr, factorydefinitions.ErrFactoryInstallationContention) {
+		t.Fatalf("live-owner successor error = %v, want typed contention", secondInstallErr)
+	}
+	for _, want := range []string{
+		"outcome=active-contention",
+		"owner_liveness=active",
+		fmt.Sprintf("owner_pid=%d", os.Getpid()),
+		"stop or verify that owner",
+	} {
+		if !strings.Contains(secondInstallErr.Error(), want) {
+			t.Fatalf("live-owner successor error = %q, want %q", secondInstallErr, want)
+		}
+	}
+	leasePath := stagingOwnershipPath(root, params.Definition.Name)
+	if _, err := os.Stat(leasePath); err != nil {
+		t.Fatalf("live owner lease stat error = %v, want retained lease", err)
+	}
+	close(persistence.allowPrepare)
+	if err := <-firstErr; err != nil {
+		t.Fatalf("live owner completed installation error = %v", err)
+	}
+	if _, err := os.Stat(leasePath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("released lease stat error = %v, want lease removed", err)
+	}
+}
+
+func TestInstallPackagedFactory_MalformedOwnerMetadataFailsClosed(t *testing.T) {
+	root := t.TempDir()
+	name := "@test/malformed-owner"
+	leasePath := stagingOwnershipPath(root, name)
+	if err := os.MkdirAll(leasePath, 0o755); err != nil {
+		t.Fatalf("create retained owner lease: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(leasePath, stagingOwnerMetadataName), []byte(`{"pid":"reused"}`), 0o600); err != nil {
+		t.Fatalf("write malformed owner metadata: %v", err)
+	}
+
+	_, err := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}).InstallPackagedFactory(
+		t.Context(),
+		factorydefinitions.PackagedFactoryInstallParams{
+			NamedFactoriesRoot: root,
+			Definition: factorydefinitions.PackagedDefinition{
+				Name: name,
+				JSON: []byte(`{}`),
+			},
+			Format: factorydefinitions.PackagedFactoryFormatJSON,
+		},
+	)
+	if err == nil || !errors.Is(err, factorydefinitions.ErrFactoryInstallationContention) {
+		t.Fatalf("malformed owner error = %v, want typed contention", err)
+	}
+	for _, want := range []string{
+		leasePath,
+		"outcome=indeterminate-contention",
+		"owner_liveness=indeterminate",
+		"remove only " + leasePath,
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("malformed owner error = %q, want %q", err, want)
+		}
+	}
+	if _, statErr := os.Stat(leasePath); statErr != nil {
+		t.Fatalf("malformed owner lease was removed: %v", statErr)
+	}
+}
+
+func TestInstallPackagedFactory_AcquisitionRacePreservesWinnerLease(t *testing.T) {
+	root := t.TempDir()
+	fileSystem := &racingPackagedInstallationFileSystem{
+		firstMkdirStarted: make(chan struct{}),
+		releaseFirstMkdir: make(chan struct{}),
+	}
+	persistence := &blockingPackagedInstallationPersistence{
+		prepareStarted: make(chan struct{}),
+		allowPrepare:   make(chan struct{}),
+	}
+	installer := New(persistence, fileSystem)
+	params := factorydefinitions.PackagedFactoryInstallParams{
+		NamedFactoriesRoot: root,
+		Definition: factorydefinitions.PackagedDefinition{
+			Name: "@test/acquisition-race",
+			JSON: []byte(`{}`),
+		},
+		Format: factorydefinitions.PackagedFactoryFormatJSON,
+	}
+	firstDone := make(chan error, 1)
+	go func() {
+		_, err := installer.InstallPackagedFactory(t.Context(), params)
+		firstDone <- err
+	}()
+	<-fileSystem.firstMkdirStarted
+
+	secondDone := make(chan error, 1)
+	go func() {
+		_, err := installer.InstallPackagedFactory(t.Context(), params)
+		secondDone <- err
+	}()
+	<-persistence.prepareStarted
+	close(fileSystem.releaseFirstMkdir)
+	firstInstallErr := <-firstDone
+	if firstInstallErr == nil || !errors.Is(firstInstallErr, factorydefinitions.ErrFactoryInstallationContention) {
+		t.Fatalf("racing loser error = %v, want typed contention", firstInstallErr)
+	}
+	for _, want := range []string{
+		"outcome=active-contention",
+		"owner_liveness=active",
+		"owner_pid=",
+	} {
+		if !strings.Contains(firstInstallErr.Error(), want) {
+			t.Fatalf("racing loser error = %q, want %q", firstInstallErr, want)
+		}
+	}
+	leasePath := stagingOwnershipPath(root, params.Definition.Name)
+	if _, err := os.Stat(leasePath); err != nil {
+		t.Fatalf("winner lease stat error = %v, want retained lease while winner runs", err)
+	}
+	close(persistence.allowPrepare)
+	if err := <-secondDone; err != nil {
+		t.Fatalf("racing winner installation error = %v", err)
+	}
+	if _, err := os.Stat(leasePath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("winner lease stat error = %v, want released lease", err)
+	}
+}
+
+type blockingPackagedInstallationPersistence struct {
+	factorydefinitions.Persistence
+	prepareStarted chan struct{}
+	allowPrepare   chan struct{}
+	prepareOnce    sync.Once
+}
+
+func (p *blockingPackagedInstallationPersistence) PrepareFactoryLayout(
+	context.Context,
+	string,
+	[]byte,
+) (*factorydefinitions.PreparedFactoryLayoutPayload, error) {
+	p.prepareOnce.Do(func() { close(p.prepareStarted) })
+	<-p.allowPrepare
+	return &factorydefinitions.PreparedFactoryLayoutPayload{}, nil
+}
+
+func (p *blockingPackagedInstallationPersistence) CreateNamedFactory(
+	rootDir string,
+	name string,
+	_ *factorydefinitions.PreparedFactoryLayoutPayload,
+) (string, error) {
+	return filepath.Join(rootDir, name), nil
+}
+
+type racingPackagedInstallationFileSystem struct {
+	platformfilesystem.Local
+	firstMkdirStarted chan struct{}
+	releaseFirstMkdir chan struct{}
+	mu                sync.Mutex
+	mkdirCalls        int
+}
+
+func (fileSystem *racingPackagedInstallationFileSystem) Mkdir(path string, mode fs.FileMode) error {
+	fileSystem.mu.Lock()
+	fileSystem.mkdirCalls++
+	call := fileSystem.mkdirCalls
+	fileSystem.mu.Unlock()
+	if call == 1 {
+		close(fileSystem.firstMkdirStarted)
+		<-fileSystem.releaseFirstMkdir
+	}
+	return fileSystem.Local.Mkdir(path, mode)
 }
 
 func TestInstallPackagedFactory_MaterializesPortableEditableFormats(t *testing.T) {

@@ -2,9 +2,11 @@ package packagedinstallation
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -16,13 +18,64 @@ import (
 type Service struct {
 	persistence factorydefinitions.Persistence
 	fileSystem  factorydefinitions.PackagedInstallationFileSystem
+	ownerProbe  ownerProbe
+}
+
+const (
+	stagingOwnerSuffix       = "owner"
+	stagingOwnerMetadataName = ".owner.json"
+	stagingAcquireAttempts   = 2
+)
+
+type ownerRecord struct {
+	PID int `json:"pid"`
+}
+
+type ownerLiveness string
+
+const (
+	ownerLivenessActive           ownerLiveness = "active"
+	ownerLivenessIndeterminate    ownerLiveness = "indeterminate"
+	ownerLivenessPermissionDenied ownerLiveness = "permission-denied"
+	ownerLivenessRacing           ownerLiveness = "racing"
+)
+
+type ownerProbe interface {
+	Current() (ownerRecord, error)
+	Classify(ownerRecord) ownerLiveness
+}
+
+type localOwnerProbe struct{}
+
+func (localOwnerProbe) Current() (ownerRecord, error) {
+	return ownerRecord{PID: os.Getpid()}, nil
+}
+
+func (localOwnerProbe) Classify(owner ownerRecord) ownerLiveness {
+	return probeOwnerPID(owner.PID)
 }
 
 func New(
 	persistence factorydefinitions.Persistence,
 	fileSystem factorydefinitions.PackagedInstallationFileSystem,
 ) *Service {
-	return &Service{persistence: persistence, fileSystem: fileSystem}
+	return &Service{
+		persistence: persistence,
+		fileSystem:  fileSystem,
+		ownerProbe:  localOwnerProbe{},
+	}
+}
+
+func newWithOwnerProbe(
+	persistence factorydefinitions.Persistence,
+	fileSystem factorydefinitions.PackagedInstallationFileSystem,
+	probe ownerProbe,
+) *Service {
+	service := New(persistence, fileSystem)
+	if probe != nil {
+		service.ownerProbe = probe
+	}
+	return service
 }
 
 func (service *Service) EnsurePackagedFactories(
@@ -75,13 +128,10 @@ func (service *Service) InstallPackagedFactory(
 		return result, installError(definition.Name, namedFactoriesRoot, err)
 	}
 	result.FactoryDir = targetDir
-	if service == nil || service.fileSystem == nil {
-		return result, installError(definition.Name, namedFactoriesRoot, fmt.Errorf("packaged Factory installation filesystem is required"))
+	if err := service.requireDependencies(); err != nil {
+		return result, installError(definition.Name, namedFactoriesRoot, err)
 	}
-	if service == nil || service.persistence == nil {
-		return result, installError(definition.Name, namedFactoriesRoot, fmt.Errorf("Factory Definitions persistence service is required"))
-	}
-	if err := ensureNoPreExistingStaging(service.fileSystem, namedFactoriesRoot, definition.Name); err != nil {
+	if err := service.rejectPreExistingStaging(namedFactoriesRoot, definition.Name); err != nil {
 		return result, installError(definition.Name, namedFactoriesRoot, err)
 	}
 	if _, err := service.fileSystem.Stat(targetDir); err == nil {
@@ -89,14 +139,22 @@ func (service *Service) InstallPackagedFactory(
 			return result, installError(definition.Name, namedFactoriesRoot, fmt.Errorf("existing target %s is invalid: %w", targetDir, err))
 		}
 		if params.Replace {
-			return service.replaceExistingPackagedFactory(
+			return service.withStagingOwnership(
 				ctx,
 				namedFactoriesRoot,
 				definition.Name,
-				targetDir,
-				payload,
-				rootFileName,
 				result,
+				func() (factorydefinitions.PackagedFactoryInstallResult, error) {
+					return service.replaceExistingPackagedFactory(
+						ctx,
+						namedFactoriesRoot,
+						definition.Name,
+						targetDir,
+						payload,
+						rootFileName,
+						result,
+					)
+				},
 			)
 		}
 		existingFormat, formatErr := authoredRootFormat(targetDir, service.fileSystem)
@@ -119,35 +177,341 @@ func (service *Service) InstallPackagedFactory(
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return result, installError(definition.Name, namedFactoriesRoot, fmt.Errorf("inspect target %s: %w", targetDir, err))
 	}
-	return service.createPackagedFactory(
+	return service.withStagingOwnership(
 		ctx,
 		namedFactoriesRoot,
 		definition.Name,
-		targetDir,
-		payload,
-		rootFileName,
 		result,
+		func() (factorydefinitions.PackagedFactoryInstallResult, error) {
+			return service.createPackagedFactory(
+				ctx,
+				namedFactoriesRoot,
+				definition.Name,
+				targetDir,
+				payload,
+				rootFileName,
+				result,
+			)
+		},
 	)
 }
 
-func ensureNoPreExistingStaging(
-	fileSystem factorydefinitions.PackagedInstallationFileSystem,
-	rootDir string,
-	name string,
-) error {
-	stagingPath, err := findPreExistingStaging(fileSystem, rootDir, name)
-	if err != nil {
+func (service *Service) requireDependencies() error {
+	if service == nil {
+		return fmt.Errorf("packaged Factory installation service is required")
+	}
+	if service.fileSystem == nil {
+		return fmt.Errorf("packaged Factory installation filesystem is required")
+	}
+	if service.persistence == nil {
+		return fmt.Errorf("Factory Definitions persistence service is required")
+	}
+	if service.ownerProbe == nil {
+		return fmt.Errorf("packaged Factory installation owner probe is required")
+	}
+	return nil
+}
+
+func (service *Service) rejectPreExistingStaging(rootDir, name string) error {
+	stagingPath, err := findPreExistingStaging(service.fileSystem, rootDir, name)
+	if err != nil || stagingPath == "" {
 		return err
 	}
-	if stagingPath == "" {
+	contention, retry, inspectErr := service.inspectStagingContention(rootDir, name, stagingPath)
+	if inspectErr != nil {
+		return inspectErr
+	}
+	if retry {
 		return nil
 	}
-	return fmt.Errorf(
-		"%w: resource=%s outcome=indeterminate-contention owner_liveness=indeterminate; verify no you process is still installing packaged Factory %q, then remove only %s and retry",
-		factorydefinitions.ErrFactoryInstallationContention,
-		stagingPath,
+	return contention
+}
+
+func (service *Service) withStagingOwnership(
+	ctx context.Context,
+	rootDir string,
+	name string,
+	result factorydefinitions.PackagedFactoryInstallResult,
+	operation func() (factorydefinitions.PackagedFactoryInstallResult, error),
+) (installResult factorydefinitions.PackagedFactoryInstallResult, installErr error) {
+	lease, err := service.acquireStagingOwnership(ctx, rootDir, name)
+	if err != nil {
+		return result, err
+	}
+	defer func() {
+		if releaseErr := service.releaseStagingOwnership(lease); releaseErr != nil {
+			if installErr != nil {
+				installErr = errors.Join(installErr, releaseErr)
+			} else {
+				installErr = releaseErr
+			}
+			installErr = installError(name, rootDir, installErr)
+		}
+	}()
+	return operation()
+}
+
+type stagingLease struct {
+	path  string
+	root  string
+	name  string
+	owner ownerRecord
+}
+
+func (service *Service) acquireStagingOwnership(
+	ctx context.Context,
+	rootDir string,
+	name string,
+) (*stagingLease, error) {
+	for attempt := 0; attempt < stagingAcquireAttempts; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		stagingPath, err := findPreExistingStaging(service.fileSystem, rootDir, name)
+		if err != nil {
+			return nil, err
+		}
+		if stagingPath != "" {
+			contention, retry, inspectErr := service.inspectStagingContention(
+				rootDir,
+				name,
+				stagingPath,
+			)
+			if inspectErr != nil {
+				return nil, inspectErr
+			}
+			if retry {
+				continue
+			}
+			return nil, contention
+		}
+		if err := service.fileSystem.MkdirAll(rootDir, 0o755); err != nil {
+			return nil, installationFailure(rootDir, name, "", ownerLivenessIndeterminate, err)
+		}
+		leasePath := stagingOwnershipPath(rootDir, name)
+		if err := service.fileSystem.Mkdir(leasePath, 0o755); err != nil {
+			if errors.Is(err, fs.ErrExist) {
+				continue
+			}
+			return nil, installationFailure(rootDir, name, leasePath, ownerLivenessIndeterminate, err)
+		}
+		owner, err := service.ownerProbe.Current()
+		if err != nil {
+			_ = service.fileSystem.RemoveAll(leasePath)
+			return nil, installationFailure(rootDir, name, leasePath, ownerLivenessIndeterminate, err)
+		}
+		if owner.PID <= 0 {
+			_ = service.fileSystem.RemoveAll(leasePath)
+			return nil, installationFailure(
+				rootDir,
+				name,
+				leasePath,
+				ownerLivenessIndeterminate,
+				fmt.Errorf("owner PID is invalid: %d", owner.PID),
+			)
+		}
+		if err := service.publishOwnerRecord(leasePath, owner); err != nil {
+			_ = service.fileSystem.RemoveAll(leasePath)
+			return nil, installationFailure(rootDir, name, leasePath, ownerLivenessIndeterminate, err)
+		}
+		return &stagingLease{path: leasePath, root: rootDir, name: name, owner: owner}, nil
+	}
+	return nil, installationContention(
+		rootDir,
+		name,
+		stagingOwnershipPath(rootDir, name),
+		"failed",
+		ownerLivenessRacing,
+		0,
+	)
+}
+
+func (service *Service) inspectStagingContention(
+	rootDir string,
+	name string,
+	stagingPath string,
+) (error, bool, error) {
+	if _, err := service.fileSystem.Stat(stagingPath); errors.Is(err, fs.ErrNotExist) {
+		return nil, true, nil
+	} else if err != nil {
+		return nil, false, fmt.Errorf("inspect packaged Factory staging resource %s: %w", stagingPath, err)
+	}
+	if stagingPath != stagingOwnershipPath(rootDir, name) {
+		return installationContention(
+			rootDir,
+			name,
+			stagingPath,
+			"indeterminate-contention",
+			ownerLivenessIndeterminate,
+			0,
+		), false, nil
+	}
+	owner, liveness, err := service.readOwnerRecord(stagingPath)
+	if errors.Is(err, fs.ErrNotExist) {
+		if _, statErr := service.fileSystem.Stat(stagingPath); errors.Is(statErr, fs.ErrNotExist) {
+			return nil, true, nil
+		}
+		return installationContention(
+			rootDir,
+			name,
+			stagingPath,
+			"indeterminate-contention",
+			ownerLivenessIndeterminate,
+			0,
+		), false, nil
+	}
+	if err != nil {
+		return installationContention(
+			rootDir,
+			name,
+			stagingPath,
+			"indeterminate-contention",
+			liveness,
+			owner.PID,
+		), false, nil
+	}
+	if liveness == ownerLivenessActive {
+		return installationContention(
+			rootDir,
+			name,
+			stagingPath,
+			"active-contention",
+			liveness,
+			owner.PID,
+		), false, nil
+	}
+	return installationContention(
+		rootDir,
 		name,
 		stagingPath,
+		"indeterminate-contention",
+		liveness,
+		owner.PID,
+	), false, nil
+}
+
+func (service *Service) publishOwnerRecord(path string, owner ownerRecord) error {
+	data, err := json.Marshal(owner)
+	if err != nil {
+		return fmt.Errorf("encode staging owner metadata: %w", err)
+	}
+	temporary := filepath.Join(path, stagingOwnerMetadataName+".tmp")
+	metadataPath := filepath.Join(path, stagingOwnerMetadataName)
+	if err := service.fileSystem.WriteFile(temporary, data, 0o600); err != nil {
+		return fmt.Errorf("write staging owner metadata: %w", err)
+	}
+	if err := service.fileSystem.Rename(temporary, metadataPath); err != nil {
+		_ = service.fileSystem.RemoveAll(temporary)
+		return fmt.Errorf("publish staging owner metadata: %w", err)
+	}
+	return nil
+}
+
+func (service *Service) readOwnerRecord(path string) (ownerRecord, ownerLiveness, error) {
+	metadataPath := filepath.Join(path, stagingOwnerMetadataName)
+	data, err := service.fileSystem.ReadFile(metadataPath)
+	if err != nil {
+		if errors.Is(err, fs.ErrPermission) {
+			return ownerRecord{}, ownerLivenessPermissionDenied, err
+		}
+		return ownerRecord{}, ownerLivenessIndeterminate, err
+	}
+	var owner ownerRecord
+	if err := json.Unmarshal(data, &owner); err != nil || owner.PID <= 0 {
+		if err == nil {
+			err = fmt.Errorf("owner PID must be positive")
+		}
+		return ownerRecord{}, ownerLivenessIndeterminate, fmt.Errorf("invalid staging owner metadata: %w", err)
+	}
+	return owner, service.ownerProbe.Classify(owner), nil
+}
+
+func (service *Service) releaseStagingOwnership(lease *stagingLease) error {
+	if lease == nil {
+		return nil
+	}
+	owner, _, err := service.readOwnerRecord(lease.path)
+	if err != nil {
+		return installationFailure(
+			lease.root,
+			lease.name,
+			lease.path,
+			ownerLivenessIndeterminate,
+			err,
+		)
+	}
+	if owner != lease.owner {
+		return installationFailure(
+			lease.root,
+			lease.name,
+			lease.path,
+			ownerLivenessRacing,
+			fmt.Errorf("staging owner changed from PID %d to PID %d", lease.owner.PID, owner.PID),
+		)
+	}
+	if err := service.fileSystem.RemoveAll(lease.path); err != nil {
+		return installationFailure(
+			lease.root,
+			lease.name,
+			lease.path,
+			ownerLivenessActive,
+			err,
+		)
+	}
+	return nil
+}
+
+func stagingOwnershipPath(rootDir, name string) string {
+	return filepath.Join(
+		rootDir,
+		authoringlayoutpersist.StagingDirectoryPrefix(name)+stagingOwnerSuffix,
+	)
+}
+
+func installationContention(
+	rootDir string,
+	name string,
+	resource string,
+	outcome string,
+	liveness ownerLiveness,
+	ownerPID int,
+) error {
+	ownerEvidence := "owner_pid=unavailable owner_identity=unverified"
+	if ownerPID > 0 {
+		ownerEvidence = fmt.Sprintf("owner_pid=%d owner_identity=unverified", ownerPID)
+	}
+	return fmt.Errorf(
+		"%w: scope=%s resource=%s outcome=%s owner_liveness=%s %s; verify no you process is still installing packaged Factory %q, stop or verify that owner before retrying, then remove only %s and retry",
+		factorydefinitions.ErrFactoryInstallationContention,
+		rootDir,
+		resource,
+		outcome,
+		liveness,
+		ownerEvidence,
+		name,
+		resource,
+	)
+}
+
+func installationFailure(
+	rootDir string,
+	name string,
+	resource string,
+	liveness ownerLiveness,
+	cause error,
+) error {
+	if resource == "" {
+		resource = stagingOwnershipPath(rootDir, name)
+	}
+	return fmt.Errorf(
+		"%w: scope=%s resource=%s outcome=failed owner_liveness=%s; verify no you process is still installing packaged Factory %q, stop or verify that owner before retrying, then remove only %s and retry: %w",
+		factorydefinitions.ErrFactoryInstallationContention,
+		rootDir,
+		resource,
+		liveness,
+		name,
+		resource,
+		cause,
 	)
 }
 
@@ -156,6 +520,12 @@ func findPreExistingStaging(
 	rootDir string,
 	name string,
 ) (string, error) {
+	ownershipPath := stagingOwnershipPath(rootDir, name)
+	if _, err := fileSystem.Stat(ownershipPath); err == nil {
+		return ownershipPath, nil
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return "", fmt.Errorf("inspect packaged Factory staging resource %s: %w", ownershipPath, err)
+	}
 	entries, err := fileSystem.ReadDir(rootDir)
 	if errors.Is(err, fs.ErrNotExist) {
 		return "", nil

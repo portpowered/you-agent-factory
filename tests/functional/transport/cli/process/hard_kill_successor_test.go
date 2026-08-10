@@ -88,6 +88,7 @@ func TestCLISuccessorAfterHardKillReportsPreRuntimeStagingContention(t *testing.
 		stagingPath,
 		"outcome=indeterminate-contention",
 		"owner_liveness=indeterminate",
+		fmt.Sprintf("owner_pid=%d", predecessor.command.Process.Pid),
 		"verify no you process is still installing",
 		"remove only " + stagingPath,
 	} {

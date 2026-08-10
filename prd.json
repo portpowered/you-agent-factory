@@ -50,8 +50,8 @@
         "Tests pass"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Completed 2026-08-10: packaged Factory create/replace now atomically reserves a deterministic `.<factory>.staging-owner` directory and publishes PID metadata through the injected filesystem edge. Valid existing targets retain the normal skip path without acquiring the write lease. Live owners produce bounded `outcome=active-contention` diagnostics with `owner_pid` and `owner_identity=unverified`; missing, malformed, permission-denied, and racing metadata remain preserved as indeterminate contention, and compare-before-release prevents removing a changed owner. Focused tests deterministically cover live owner, malformed/indeterminate metadata, and acquisition race; the real hard-kill process regression verifies the successor reports the retained owner resource and PID without reaching runtime."
     }
   ]
 }

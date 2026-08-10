@@ -98,6 +98,7 @@ func (Local) MkdirAll(path string, perm fs.FileMode) error {
 func (Local) MkdirTemp(dir, pattern string) (string, error) {
 	return os.MkdirTemp(dir, pattern)
 }
+func (Local) Mkdir(path string, perm fs.FileMode) error { return os.Mkdir(path, perm) }
 func (Local) CreateTemp(dir, pattern string) (TemporaryFile, error) {
 	return os.CreateTemp(dir, pattern)
 }
