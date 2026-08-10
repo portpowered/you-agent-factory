@@ -109,24 +109,24 @@ func representativeCatalogRoot() providers.Service {
 	return newCatalogPeerFake(codex, cursor)
 }
 
-func TestAcceptedCLIContract_ProductionManifestDeclaresNoProvidersCommands(t *testing.T) {
+func TestAcceptedCLIContract_ProductionManifestDeclaresProvidersList(t *testing.T) {
 	t.Parallel()
 
 	manifest := loadCLICommandManifest(t, climanifest.ProductionManifestPath)
-	for id, command := range manifest.Commands {
-		if strings.HasPrefix(id, "you.providers.") || id == "you.providers" {
-			t.Fatalf(
-				"production manifest declares %s (%q); this packet must not edit top-level CLI composition",
-				id,
-				command.Path,
-			)
+	for _, id := range []string{"you.providers", "you.providers.list"} {
+		command, ok := manifest.Commands[id]
+		if !ok {
+			t.Fatalf("production manifest is missing %s", id)
 		}
-		if strings.HasPrefix(strings.TrimSpace(command.Path), "you providers ") {
-			t.Fatalf(
-				"production manifest declares providers path %q; this packet must not edit top-level CLI composition",
-				command.Path,
-			)
+		if !strings.HasPrefix(command.Path, "you providers") {
+			t.Fatalf("production manifest path for %s = %q, want providers path", id, command.Path)
 		}
+	}
+	if manifest.Commands["you.providers"].Runnable {
+		t.Fatal("you.providers must remain non-runnable")
+	}
+	if !manifest.Commands["you.providers.list"].Runnable {
+		t.Fatal("you.providers.list must be runnable")
 	}
 }
 
