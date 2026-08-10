@@ -4,16 +4,22 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	"github.com/portpowered/infinite-you/internal/testutil"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 // TestCLIValidationFailureExitCode proves invalid customer input exits the
@@ -54,45 +60,46 @@ func TestCLIValidationFailureExitCode(t *testing.T) {
 	}
 }
 
-// TestCLIWorkerFailureExitCode proves a terminal worker failure exits the
-// documented runtime-failure code through the public built you CLI process.
+// TestCLIWorkerFailureExitCode proves a terminal worker failure crosses the
+// public CLI process boundary as a typed failure without using the MockWorkers
+// feature outside its workers/mock functional cell.
 func TestCLIWorkerFailureExitCode(t *testing.T) {
-	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
-	session := harness.NewSession(t).WithNoExternalServer(t)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
-	defer cancel()
-	binaryPath := buildYouBinary(t, ctx, testutil.MustRepoRoot(t))
-
-	initOutcome := initializeOperatorConfig(t, ctx, session, "worker-failure-exit-config-init")
-	configBody := []byte(`{
-  "defaults": {
-    "workerModelProvider": "codex",
-    "workerModel": "gpt-5-codex"
-  }
-}`)
-	if err := os.WriteFile(initOutcome.ConfigPath, configBody, 0o600); err != nil {
-		t.Fatalf("WriteFile(%q): %v", initOutcome.ConfigPath, err)
-	}
-
-	mockWorkersPath := writeRejectingGoalMockWorkers(t)
-	args := append([]string{}, session.RuntimeLogDirFlags()...)
-	args = append(args, session.ServerFlags()...)
-	args = append(args,
-		"run",
-		"--named", "@you/goal",
-		"--with-mock-workers="+mockWorkersPath,
-		"--no-record",
-		"--quiet",
-		fmt.Sprintf("worker-failure-exit-%d", time.Now().UnixNano()),
-	)
-
-	result, err := runBuiltYouBinary(ctx, binaryPath, session, args...)
+	factoryDir, factoryPath := scaffoldCLIExitCodeFactory(t)
+	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
+		ExitCode: 1,
+		Stderr:   []byte("provider process failed with private detail"),
+	})
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "run", "--factory", factoryPath,
+		"--provider", "codex", "--no-record", "--quiet",
+		"worker-failure-exit",
+	})
+	inputs.Input.WorkingDirectory = factoryDir
+	process := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: runner})
+	support.CleanupProcess(t, process)
+	err := process.Execute(inputs.Input)
 	if err == nil {
-		t.Fatalf("worker failure result = %#v; want process failure", result)
+		t.Fatal("worker failure Process.Execute error = nil; want typed process failure")
 	}
-	if result.ExitCode != 1 {
-		t.Fatalf("exit code = %d, want documented worker-failure exit 1", result.ExitCode)
+	if runner.CallCount() != 1 {
+		t.Fatalf("provider command runner calls = %d, want one worker dispatch", runner.CallCount())
+	}
+	if stdout := strings.TrimSpace(inputs.Stdout()); stdout != "" {
+		t.Fatalf("worker failure stdout = %q, want no false success output", stdout)
+	}
+	var diagnostic struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	}
+	stderr := strings.TrimSpace(inputs.Stderr())
+	if err := json.Unmarshal([]byte(stderr), &diagnostic); err != nil {
+		t.Fatalf("decode worker failure diagnostic: %v; stderr=%q", err, stderr)
+	}
+	if diagnostic.Code != "INVOCATION_RUNTIME_FAILURE" || diagnostic.Message == "" {
+		t.Fatalf("worker failure diagnostic = %#v, want coded runtime failure", diagnostic)
+	}
+	if strings.Count(stderr, diagnostic.Code) != 1 || strings.Contains(stderr, "private detail") {
+		t.Fatalf("worker failure stderr = %q, want one sanitized coded diagnostic", stderr)
 	}
 }
 
@@ -215,44 +222,94 @@ func interruptBuiltCLIAndAssertExit130(t testing.TB, command *exec.Cmd, waitTime
 	}
 }
 
-// TestCLISuccessExitCode proves a successful one-shot run that reaches normal
-// quiescence exits the documented success code through the public built you CLI process.
+// TestCLISuccessExitCode proves a successful one-shot worker run reaches the
+// public CLI process boundary through an injected provider command runner.
 func TestCLISuccessExitCode(t *testing.T) {
-	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
-	session := harness.NewSession(t).WithNoExternalServer(t)
+	factoryDir, factoryPath := scaffoldCLIExitCodeFactory(t)
+	const wantPrimaryResult = "worker success exit COMPLETE"
+	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: []byte(wantPrimaryResult),
+	})
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "run", "--factory", factoryPath,
+		"--provider", "codex", "--no-record", "--quiet",
+		"worker-success-exit",
+	})
+	inputs.Input.WorkingDirectory = factoryDir
+	process := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: runner})
+	support.CleanupProcess(t, process)
+	err := process.Execute(inputs.Input)
+	if err != nil {
+		t.Fatalf("successful worker Process.Execute failed: %v; stdout=%q stderr=%q", err, inputs.Stdout(), inputs.Stderr())
+	}
+	if runner.CallCount() != 1 {
+		t.Fatalf("provider command runner calls = %d, want one worker dispatch", runner.CallCount())
+	}
+	if got := strings.TrimSpace(inputs.Stdout()); got != wantPrimaryResult {
+		t.Fatalf("worker success stdout = %q, want primary result %q", got, wantPrimaryResult)
+	}
+	if inputs.Stderr() != "" {
+		t.Fatalf("worker success stderr = %q, want empty diagnostics", inputs.Stderr())
+	}
+}
 
+// TestBuiltCLIExitStatusForNonWorkerCommands proves the OS status mapping that
+// Process.Execute cannot expose, using deterministic commands that do not need
+// a worker or the MockWorkers feature.
+func TestBuiltCLIExitStatusForNonWorkerCommands(t *testing.T) {
+	t.Parallel()
+
+	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 	binaryPath := buildYouBinary(t, ctx, testutil.MustRepoRoot(t))
 
-	initOutcome := initializeOperatorConfig(t, ctx, session, "success-exit-config-init")
-	configBody := []byte(`{
-  "defaults": {
-    "workerModelProvider": "codex",
-    "workerModel": "gpt-5-codex"
-  }
-}`)
-	if err := os.WriteFile(initOutcome.ConfigPath, configBody, 0o600); err != nil {
-		t.Fatalf("WriteFile(%q): %v", initOutcome.ConfigPath, err)
+	for _, tc := range []struct {
+		name       string
+		args       []string
+		wantStatus int
+		wantError  bool
+	}{
+		{name: "help success", args: []string{"--help"}, wantStatus: 0},
+		{name: "unknown command failure", args: []string{"definitely-not-a-command"}, wantStatus: 1, wantError: true},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			session := harness.NewSession(t)
+			result, err := runBuiltYouBinary(ctx, binaryPath, session, tc.args...)
+			if result.ExitCode != tc.wantStatus {
+				t.Fatalf("built CLI exit code = %d, want %d; err=%v stdout=%q stderr=%q", result.ExitCode, tc.wantStatus, err, result.Stdout, result.Stderr)
+			}
+			if (err != nil) != tc.wantError {
+				t.Fatalf("built CLI error = %v, want error=%t", err, tc.wantError)
+			}
+		})
 	}
+}
 
-	mockWorkersPath := writeAcceptingGoalMockWorkers(t)
-	args := append([]string{}, session.RuntimeLogDirFlags()...)
-	args = append(args, session.ServerFlags()...)
-	args = append(args,
-		"run",
-		"--named", "@you/goal",
-		"--with-mock-workers="+mockWorkersPath,
-		"--no-record",
-		"--quiet",
-		fmt.Sprintf("success-exit-%d", time.Now().UnixNano()),
-	)
+func scaffoldCLIExitCodeFactory(t *testing.T) (string, string) {
+	t.Helper()
 
-	result, err := runBuiltYouBinary(ctx, binaryPath, session, args...)
-	if err != nil {
-		t.Fatalf("successful quiescence run failed: %v; stdout=%q stderr=%q", err, result.Stdout, result.Stderr)
-	}
-	if result.ExitCode != 0 {
-		t.Fatalf("exit code = %d, want documented success exit 0", result.ExitCode)
-	}
+	dir := support.ScaffoldFactory(t, map[string]any{
+		"name": "cli-exit-code-factory",
+		"workTypes": []map[string]any{{
+			"name":             "task",
+			"handlingBehavior": []string{"DEFAULT"},
+			"states": []map[string]string{
+				{"name": "init", "type": "INITIAL"},
+				{"name": "complete", "type": "TERMINAL"},
+				{"name": "failed", "type": "FAILED"},
+			},
+		}},
+		"workers": []map[string]string{{"name": "worker"}},
+		"workstations": []map[string]any{{
+			"name":      "process",
+			"worker":    "worker",
+			"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
+			"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
+			"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
+		}},
+	})
+	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
+	return dir, filepath.Join(dir, "factory.json")
 }
