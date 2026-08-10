@@ -1488,3 +1488,16 @@
   - Small additions to a heavily measured package can lower a two-decimal coverage floor even when behavior is covered; record the exact CI-measured floor before rerunning.
   - Functional coverage failures that say a provider did not observe cancellation are timing-sensitive harness failures when the failing test is outside the changed surface; inspect the test-specific diagnostic before changing runtime code.
 ---
+## 2026-08-10 08:40 -07:00 - e2-structured-worker-results-functional-coverage-follow-up
+- What was implemented
+  - Added the missing functional coverage manifest entry for `pkg/platform/jsonvalue` at the exact 67.34% floor measured from CI's completed functional profile (33 of 49 statements).
+- Files changed
+  - `docs/internal/baselines/go-functional-coverage-package-minimums.json`
+  - `progress.txt`
+- Verification
+  - Latest-head CI run `31402953537` passed Backend Unit Coverage and all fast/package/browser lanes; Backend Functional Coverage stopped only at the missing manifest entry before this fix.
+  - The uploaded functional profile was parsed independently to confirm the 67.34% floor; `git diff --check` passed.
+  - This follow-up is pending push and CI rerun.
+- **Learnings for future iterations:**
+  - New backend packages covered by both unit and functional lanes require entries in both lane-specific manifests; a missing functional entry is reported only after the full functional test profile completes.
+---
