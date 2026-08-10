@@ -112,5 +112,6 @@ class FullFlowWorktreeSetupTest(unittest.TestCase):
             )
         self.assertEqual(git(self.repository, "config", "--get", "core.longpaths"), "true")
 
+
 if __name__ == "__main__":
     unittest.main()

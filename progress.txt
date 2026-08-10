@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- OS-boundary functional tests may poll an isolated durable filesystem checkpoint only when the child exposes no parent-process event or injected edge; document that reason at each polling helper and keep the bound as a failure guard.
 - Git Worktree preparation treats a retained Git `*.lock` as indeterminate ownership: retry within a named bound, preserve the resource, and return its exact path with verify/remove/retry guidance.
 - Git's `.git/config.lock` has no trustworthy owner or PID evidence; after a bounded retry, report the exact lock with `owner_liveness=indeterminate` and require verification before removing only that file—never auto-delete it.
 - Named Factory persistence stages under the catalog root before an atomic directory move; a matching pre-existing `.<factory>.staging-*` must be preserved and surfaced as indeterminate contention with exact verify/remove/retry guidance, and pre-run Cobra failures need an explicit stderr write because the command tree silences them.
@@ -1158,4 +1159,27 @@
   - Pushed commit `11a6bacc7` to PR #1853's existing head branch.
 - **Learnings for future iterations:**
   - Ownership diagnostics should not broaden typed contention semantics to unrelated invalid payload or customer-target failures; log those failures while preserving their original caller-visible error class.
+---
+## 2026-08-10 10:32 -07:00 - pf-stale-scope-diagnostic-002 review follow-up
+- What was implemented
+  - Removed the prohibited `--with-mock-workers` flag from the real-process hard-kill regression because the scenario stops before runtime/work execution.
+  - Added explicit in-code justification for the bounded filesystem polls that observe the child process's durable operator config and packaged-factory staging reservation; the child exposes neither observation through `BuildProcess` nor an injected edge.
+  - Restored the unrelated full-flow setup-task-worktree blank-line change and regenerated its JSON/YAML catalog entries and manifest hashes.
+- Files changed
+  - `tests/functional/transport/cli/process/hard_kill_successor_test.go`
+  - `packages/packaged-factories/factories/full-flow/scripts/setup-task-worktree.py`
+  - `packages/packaged-factories/generated/factories/full-flow/factory.json`
+  - `packages/packaged-factories/generated/factories/full-flow/factory.yaml`
+  - `packages/packaged-factories/generated/manifest.json`
+  - `tests/factory/scripts/test_full_flow_setup_task_worktree.py`
+  - `prd.json`
+  - `progress.txt`
+- **Learnings for future iterations:**
+  - A built CLI is justified for hard-kill and Windows process-suspension evidence, but functional tests must still avoid worker mocks and explain every filesystem poll used to synchronize an otherwise unobservable child-process checkpoint.
+- Verification
+  - `go test ./tests/functional/transport/cli/process -run '^TestCLISuccessorAfterHardKillReportsPreRuntimeStagingContention$' -count=1 -v -timeout 300s` — passed.
+  - `make test` — passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` — passed.
+  - `python tests/factory/scripts/test_full_flow_setup_task_worktree.py` — passed.
+  - `make packaged-factory-catalog-generate` and `git diff --check` — passed.
 ---

@@ -15,6 +15,7 @@ def run(root, *args):
     if result.returncode:
         raise RuntimeError(result.stderr.strip() or result.stdout.strip())
     return result.stdout.strip()
+
 def persist_longpaths(root):
     last_error = ""
     for _ in range(20):

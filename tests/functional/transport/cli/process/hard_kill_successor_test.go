@@ -113,7 +113,6 @@ func hardKillSuccessorArgs(session *builtcliacceptance.Session) []string {
 		"--continuously",
 		"--with-server",
 		"--no-record",
-		"--with-mock-workers",
 	)
 }
 
@@ -272,6 +271,10 @@ func waitForPersistedBackendScopeID(t testing.TB, session *builtcliacceptance.Se
 	path := filepath.Join(session.HomeDir, ".you-agent-factory", "config.json")
 	deadline := time.NewTimer(hardKillSuccessorReadinessTimeout)
 	defer deadline.Stop()
+	// The predecessor is a separately built CLI process, so its durable
+	// operator-settings write cannot be observed through BuildProcess or an
+	// injected edge. Poll this filesystem checkpoint only to synchronize the
+	// OS-process-boundary proof before inspecting the packaged-factory resource.
 	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
 	var lastReadErr error
@@ -304,6 +307,11 @@ func waitForPreRuntimeStagingPath(t testing.TB, session *builtcliacceptance.Sess
 	root := filepath.Join(session.HomeDir, ".you-agent-factory", "factories")
 	deadline := time.NewTimer(hardKillSuccessorReadinessTimeout)
 	defer deadline.Stop()
+	// The packaged installer and its exclusive directory reservation run in the
+	// child process and expose no parent-process event or injectable edge. Poll
+	// the isolated filesystem so the test can suspend the child at the observed
+	// OS-process boundary before hard-killing it; the deadline is only a failure
+	// guard for a missing acquisition.
 	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
 	for {
