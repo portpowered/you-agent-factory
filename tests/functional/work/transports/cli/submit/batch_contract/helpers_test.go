@@ -134,6 +134,26 @@ func successSubmitBatchFactoryConfig() map[string]any {
 	}
 }
 
+func batchAdmissionFactoryConfig() map[string]any {
+	config := successSubmitBatchFactoryConfig()
+	delete(config, "workers")
+	delete(config, "workstations")
+	return config
+}
+
+func duplicateSubmitBatchFactoryConfig() map[string]any {
+	config := batchAdmissionFactoryConfig()
+	config["workTypes"] = append(config["workTypes"].([]map[string]any), map[string]any{
+		"name": "story",
+		"states": []map[string]any{
+			{"name": "init", "type": "INITIAL"},
+			{"name": "complete", "type": "TERMINAL"},
+			{"name": "failed", "type": "FAILED"},
+		},
+	})
+	return config
+}
+
 func decodeSubmitBatchJSONResult(t *testing.T, output string) batchContractSubmitJSON {
 	t.Helper()
 
@@ -196,6 +216,24 @@ func assertSubmitBatchJSONSuccess(t *testing.T, submitted batchContractSubmitJSO
 	}
 }
 
+func assertRelationEndpointDiagnostic(t *testing.T, diagnostic, endpoint, value, source, target string) {
+	t.Helper()
+	for _, marker := range []string{
+		"relations[0]",
+		`relation type "DEPENDS_ON"`,
+		`sourceWorkName "` + source + `"`,
+		`targetWorkName "` + target + `"`,
+		"endpoint " + endpoint + "=\"" + value + "\"",
+		"missing from this batch",
+		"relation endpoints must name Work declared in this batch",
+		"add the named Work to works[] or correct " + endpoint,
+	} {
+		if !strings.Contains(diagnostic, marker) {
+			t.Fatalf("diagnostic missing %q:\n%s", marker, diagnostic)
+		}
+	}
+}
+
 func inlineBatchJSON(requestID, workName, workType, title string) string {
 	return `{
 		"requestId": "` + requestID + `",
@@ -203,6 +241,42 @@ func inlineBatchJSON(requestID, workName, workType, title string) string {
 		"works": [
 			{"name": "` + workName + `", "workTypeName": "` + workType + `", "payload": {"title": "` + title + `"}}
 		]
+	}`
+}
+
+func duplicateBatchJSON(requestID string) string {
+	return `{
+		"requestId": "` + requestID + `",
+		"type": "FACTORY_REQUEST_BATCH",
+		"works": [
+			{"name": "release", "workTypeName": "task", "payload": {"title": "Task release"}},
+			{"name": "release", "workTypeName": "story", "payload": {"title": "Story release"}}
+		]
+	}`
+}
+
+func validRelationsBatchJSON() string {
+	return `{
+		"requestId": "batch-valid-relations",
+		"type": "FACTORY_REQUEST_BATCH",
+		"works": [
+			{"name": "parent", "workTypeName": "task"},
+			{"name": "prerequisite", "workTypeName": "task"},
+			{"name": "child", "workTypeName": "task"}
+		],
+		"relations": [
+			{"type": "PARENT_CHILD", "sourceWorkName": "child", "targetWorkName": "parent"},
+			{"type": "DEPENDS_ON", "sourceWorkName": "child", "targetWorkName": "prerequisite"}
+		]
+	}`
+}
+
+func relationEndpointBatchJSON(requestID, workName, sourceWorkName, targetWorkName string) string {
+	return `{
+		"requestId": "` + requestID + `",
+		"type": "FACTORY_REQUEST_BATCH",
+		"works": [{"name": "` + workName + `", "workTypeName": "task"}],
+		"relations": [{"type": "DEPENDS_ON", "sourceWorkName": "` + sourceWorkName + `", "targetWorkName": "` + targetWorkName + `"}]
 	}`
 }
 
