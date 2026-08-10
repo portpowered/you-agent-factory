@@ -45,12 +45,15 @@ adapter likewise no longer accept a per-call logger.
 
 Some presentation boundaries are still intentionally transitional. The
 application-opening request retains host-readiness, lifecycle-completion,
-historical-replay, and hosted-service callbacks; `StartRequest` still exposes
-its durable event consumer; and direct JavaScript/stdio opening retains output
-and host-observation values needed by the protocol adapters. These callbacks do
-not select or replace process effects, but they mean story 004 remains pending
-until the later transport and response-stream cutover can move them to owner
-results or transport-local adapters.
+historical-replay, and hosted-service callbacks. Durable `StartRequest` is now
+value-only; the live JavaScript owner exposes event observation through a
+private `StartSyncWithEventConsumer` capability so invocation presentation does
+not become request state, while ordinary durable callers use `StartSync`.
+Direct JavaScript/stdio opening still retains output and host-observation
+values needed by the protocol adapters. These callbacks do not select or
+replace process effects, but they mean story 004 remains pending until the
+later transport and response-stream cutover can move them to owner results or
+transport-local adapters.
 
 ## Private owner state
 

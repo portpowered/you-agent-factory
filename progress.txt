@@ -889,3 +889,31 @@
 - **Learnings for future iterations:**
   - The full short Go lane remains a practical final regression check for this backend-only contract cutover; it passed after the focused package and Wire checks.
 ---
+
+## 2026-08-10 07:28 -07:00 - btrc-p1-root-injection-004
+- What was implemented
+  - Removed the transport callback from the published durable `StartRequest`; normalization and idempotency/session request state now contain only durable start values.
+  - Added a private event-aware sync-start capability on the live durable owner and routed JavaScript invocation event delivery through it, with ordinary `StartSync` fallback for replay or implementations without live observation.
+  - Preserved canonical live event batches and final-history reconciliation through the existing execution and invocation regression tests.
+- Files changed
+  - `pkg/services/factory_sessions/execution_contract.go`
+  - `pkg/services/factory_sessions/internal/execution/normalize.go`
+  - `pkg/services/factory_sessions/internal/execution/runtime_service.go`
+  - `pkg/services/factory_sessions/internal/execution/fixtures/runtime_execution_test.go`
+  - `pkg/services/factory_sessions/internal/execution/fixtures/runtime_record_projection_test.go`
+  - `pkg/services/factory_sessions/internal/services/durable_execution/internal/service/service.go`
+  - `pkg/services/factory_sessions/internal/runtimeopening/invocation/operation.go`
+  - `docs/internal/packaged-service-structure/btrc-p1-owner-contracts.md`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/factory_sessions/... -count=1 -timeout 600s` — passed.
+  - `go test ./pkg/root/... ./pkg/wire/... ./pkg/transports/cli/run -count=1 -timeout 600s` — passed.
+  - `make wire-smoke` — passed; generated Wire output remained clean.
+  - `git diff --check` — passed before task-artifact updates.
+  - Commit `8437b7f6b` contains the focused code/test cutover.
+- **Learnings for future iterations:**
+  - Keep durable start requests value-only and expose live presentation as an owner capability; this avoids hashing or retaining callbacks in normalized/idempotent request state while preserving invocation event timing.
+  - A constructor returning a private durable interface may require an internal capability type assertion in focused tests when the extra presentation method is intentionally not published on the root service interface.
+  - Remaining Story 004 work is concentrated at application-opening lifecycle callbacks and direct JavaScript/stdio transport output/host observation; those need the response-stream or transport-local adapter cutover rather than another request field.
+---
