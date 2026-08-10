@@ -475,3 +475,19 @@
   - A full functional-coverage failure in an unchanged response-events package can be a timing flake; reproduce the exact assertion locally before making unrelated code changes.
   - Rerunning only the failed job can clear the flake, but a subsequent progress-only commit still needs its own complete CI run before delivery is current.
 ---
+
+## 2026-08-09 20:14 -07:00 - wo-d1-packaged-factories-docs-ci-durability-follow-up
+- What was implemented
+  - Investigated the final progress-head Backend Functional Coverage failures, which rotated across unchanged `response_events`, CLI output/process, `runtime_api`, and session-restart tests under the full parallel lane.
+  - Repeated each named failing test in isolation 20 times; every focused run passed, so no unrelated runtime or test source was changed.
+  - Reran only the failed Backend Functional Coverage job four times; the fourth attempt passed, and the dependent Verification Policy check passed as well.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Focused 20-run repetitions passed for `TestAPIResponseEventSSEStreamsRetainedThenLiveEvents`, `TestCLIJSONFailureRemainsValidJSON`, `TestAPIEventReplaySmoke_PublicEventsAndSessionProjectionExposeActiveAndCompletedTimeline`, `TestFunctionalAPIServer_RuntimeLogDirectoryIsAProcessInput`, `TestCLIFailureWritesDiagnosticToStderr`, and `TestFactorySessionHistoryIsNotPersistedByDefault`.
+  - `gh run rerun 31350774713 --failed --repo portpowered/you-agent-factory` — final attempt 4 passed Backend Functional Coverage and Verification Policy.
+  - All other required checks for the progress head passed on the original run.
+- **Learnings for future iterations:**
+  - When full functional coverage rotates between unrelated unchanged tests while each focused test is stable, treat the lane as parallel-suite timing instability and preserve the feature scope.
+  - A progress-only delivery commit must receive a fresh full-head CI result; a green failed-job rerun for an earlier attempt does not transfer to a later head.
+---
