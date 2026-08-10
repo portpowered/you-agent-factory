@@ -526,3 +526,17 @@
 - **Learnings for future iterations:**
   - A PR can become dirty immediately after a successful synchronization when main advances during CI; re-fetch the live base before final handoff and regenerate only the conflicted generated artifacts through the canonical interface workflow.
 ---
+## 2026-08-10 12:29 -07:00 - wsr-001-opening-record final CI retry follow-up
+- What was implemented
+  - Investigated the only failure on the latest-main PR run and confirmed it was the existing timing-sensitive JavaScript cancellation observation, not a WSR or coverage regression.
+  - Reproduced `TestJavaScriptDurabilityDoesNotPersistSnapshotsByDefault` successfully for 10 consecutive local runs and reran only the failed GitHub jobs; no code change was needed.
+- Files changed
+  - `progress.txt`
+- Verification
+  - GitHub Actions run `31423097483` — all required checks pass after the failed-job retry, including Backend Functional Coverage and Verification Policy.
+  - PR #1849 head `7e0e04ddc` — base `947152348`, mergeable state `clean`, open and non-draft.
+  - Thread-aware PR audit — no inline review threads or formal reviews; the historical blocking conversation findings are addressed by the current head.
+  - PR description is synchronized with `prd.json`; `git diff --check` and PRD JSON validation pass.
+- **Learnings for future iterations:**
+  - When a broad coverage lane fails at an unchanged cancellation observation, isolate the exact test, repeat it locally, and retry only the failed CI jobs before modifying stable runtime behavior.
+---
