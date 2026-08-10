@@ -2030,3 +2030,28 @@
   - A phased test split must move exemption-budget ownership with the test; keep the old consolidated-file suppressions until later stories remove the remaining legacy seams.
   - The focused files are below the 1,200-line target; `fake_service_test.go` and `fake_service_runtime_test.go` intentionally remain as transitional owners for the replay/dispatch and JavaScript-runtime stories.
 ---
+## [2026-08-10 14:47 -07:00] - thr-split-fake-service-runtime-tests-004
+- What was implemented
+  - Moved the JavaScript runtime start, result, persistence, normalization, source-resolution, policy-validation, and idempotency tests into behavior-focused package-local files without changing their declarations, bodies, assertions, fixtures, or outcomes.
+  - Centralized shared runtime construction, workflow, clock, recording, and orchestration-adapter helpers in `javascript_runtime_test_helpers_test.go`; kept persistence-only helpers with `javascript_runtime_persistence_test.go`.
+  - Raised the execution package file-count ratchet from 32 to 37 for the five new focused files; the legacy runtime file remains the staged owner for story 005.
+- Files changed
+  - `pkg/services/factory_sessions/internal/execution/fake_service_runtime_test.go`
+  - `pkg/services/factory_sessions/internal/execution/javascript_runtime_test_helpers_test.go`
+  - `pkg/services/factory_sessions/internal/execution/javascript_runtime_result_test.go`
+  - `pkg/services/factory_sessions/internal/execution/javascript_runtime_start_test.go`
+  - `pkg/services/factory_sessions/internal/execution/javascript_runtime_persistence_test.go`
+  - `pkg/services/factory_sessions/internal/execution/javascript_runtime_validation_test.go`
+  - `docs/internal/baselines/backend-package-file-count.json`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/factory_sessions/internal/execution/...` — passed.
+  - `go test -covermode=atomic ./pkg/services/factory_sessions/internal/execution/...` — passed with unchanged coverage: 79.6%, 80.0%, 83.1%, and 89.8%.
+  - Baseline/current `go test -list '.*'` comparison — 269 entries versus 269 entries; no differences.
+  - 106 moved top-level declarations compared with the pre-split source — zero body or assertion differences.
+  - `go vet ./pkg/services/factory_sessions/internal/execution/...`, `make pkg-maint`, `make backend-size`, `make pkg-file-count`, `make typecheck`, and `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - The authoritative placement map in the baseline artifact can drive a mechanical split while keeping helper ownership explicit; use declaration-level comparisons plus test inventory and coverage checks to detect accidental body changes.
+  - Keep the legacy file-level suppressions until the final staged seam retires that source file; per-test exemptions should move only when their owning test moves.
+---

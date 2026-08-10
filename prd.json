@@ -81,8 +81,8 @@
         "Tests pass"
       ],
       "priority": 4,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Moved the JavaScript runtime start, result, persistence, normalization, source-resolution, policy-validation, and idempotency tests from fake_service_runtime_test.go into javascript_runtime_start_test.go, javascript_runtime_result_test.go, javascript_runtime_persistence_test.go, and javascript_runtime_validation_test.go. Shared runtime construction, workflow, clock, recording, and adapter helpers now have one owner in javascript_runtime_test_helpers_test.go; persistence-only helpers remain with the persistence tests. Declaration integrity comparison found 106 moved declarations with zero body or assertion changes. The story 001 go test -list '.*' comparison is 269 baseline entries versus 269 current entries with zero differences, and go test -covermode=atomic remains 79.6% (execution), 80.0% (fixtures), 83.1% (recordingreplay), and 89.8% (runtimepersist). Focused suite, vet, pkg-maint, backend-size, pkg-file-count, and typecheck pass; the execution file-count ratchet is 37, and fake_service_runtime_test.go remains the staged owner for story 005."
     },
     {
       "id": "thr-split-fake-service-runtime-tests-005",

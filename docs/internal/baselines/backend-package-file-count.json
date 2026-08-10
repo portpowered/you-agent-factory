@@ -123,7 +123,7 @@
     },
     {
       "packagePath": "pkg/services/factory_sessions/internal/execution",
-      "fileCount": 32,
+      "fileCount": 37,
       "owner": "factory-session-maintainers",
       "removalReason": "Remove this ratchet after the remaining execution test seams are split into focused files."
     },
