@@ -342,6 +342,11 @@ func executeCommandFailure(diagnostics io.Writer, err error) error {
 	if clidiag.DiagnosticRendered(diagnostics) {
 		return err
 	}
+	if errors.Is(err, context.Canceled) {
+		_, _ = fmt.Fprintln(diagnostics, "Error: context canceled")
+		clidiag.MarkDiagnosticRendered(diagnostics)
+		return normalized
+	}
 	clidiag.WriteFailure(diagnostics, normalized)
 	return normalized
 }
