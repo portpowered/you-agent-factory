@@ -1440,3 +1440,20 @@
 - **Learnings for future iterations:**
   - A suspended Windows child can make an otherwise readable staging subtree report `ERROR_SHARING_VIOLATION`; retry only that bounded observation class after resuming the child, and require published ownership metadata before killing.
 ---
+
+## 2026-08-10 13:47 -07:00 - pf-stale-scope-diagnostic current-main synchronization follow-up
+- What was implemented
+  - Fetched the live `origin/main` head `6e01bee68` after the PR base advanced through the CLI-exit-codes merge, then merged it into the task branch.
+  - Preserved the task-scoped `prd.json` as the PR description source and combined the unrelated CLI-exit-codes append-only progress history with this task's progress, including all current reusable patterns.
+  - Committed the conflict-free reconciliation as `8716903af`; no task implementation files were discarded.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+  - Current-main CLI diagnostic and Worker Sessions source/test files included by the synchronization merge.
+- Verification
+  - `prd.json` parses as `pf-stale-scope-diagnostic` with both stories `passes:true`.
+  - `git ls-files -u` reports no unresolved merge stages.
+  - `git diff --cached --check` and merged-tree `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - When merging a long append-only progress file, retain both sides' content, validate conflict-marker absence and line-count/headings, and keep the active task PRD authoritative before regenerating the PR body.
+---
