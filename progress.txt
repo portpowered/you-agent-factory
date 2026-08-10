@@ -65,7 +65,6 @@
   - After `bun install --frozen-lockfile` in `ui/`, `make verify-fast` passed: dashboard typecheck, MCP contract boundary, 355 UI files / 2,970 tests, and the short Go suite.
 - **Learnings for future iterations:**
 - This checkout may have `ui/node_modules` without all lockfile dependencies; run the pinned Bun install before treating a typecheck failure as a source regression.
----
 ## 2026-08-10 04:32 -07:00 - sac-s0-2-pkg-boundary-ignores-001
 - What was implemented
   - Centralized repository-root-relative pruning for `.artifacts`, `.artifacts/bootstrap/worktrees`, generated transient worktrees, and the supported root worktree locations.
@@ -907,4 +906,16 @@
   - `git diff --check` passed.
 - **Learnings for future iterations:**
   - After resolving a shared JSON conflict manually, compare the normalized PR body against the file content rather than relying only on JSON validity; small wording drift can otherwise go unnoticed.
+---
+## 2026-08-10 05:54 -07:00 - pf-plain-batch-drain-001 review follow-up
+- What was implemented
+  - Addressed PR #1846's blocking test-construction feedback by naming the continuous idle observation and documenting why the bounded negative-liveness guard is required at the public `Process.Execute` boundary.
+- Files changed
+  - `tests/functional/workers/mock/plain_batch_drain_test.go`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/workers/mock -run 'TestPlainBatchDrain' -count=3 -timeout 180s` — passed.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - A functional test that proves a continuous run stays open must explain why no deterministic idle event or injected edge observation exists; name the bounded observation and keep it scoped to the negative-liveness guard.
 ---

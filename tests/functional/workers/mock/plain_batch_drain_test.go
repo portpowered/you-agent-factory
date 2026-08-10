@@ -16,6 +16,7 @@ import (
 )
 
 const plainBatchDrainTestTimeout = 15 * time.Second
+const plainBatchContinuousIdleObservation = 500 * time.Millisecond
 
 // TestPlainBatchDrainReportsStrandedWork proves the no-server customer path
 // returns the canonical incomplete-drain diagnostic after a deterministic mock
@@ -97,11 +98,18 @@ func TestPlainBatchDrainPreservesFiniteAndContinuousCounterexamples(t *testing.T
 		support.CleanupProcess(t, process)
 		command := support.StartProcessCommand(t, process, inputs.Input)
 
+		// Process.Execute exposes no public idle event for a continuous plain
+		// run, and this empty scenario has no edge callback that can certify
+		// idleness. A bounded observation is therefore required for this
+		// negative-liveness assertion: Done must remain open while the run is
+		// idle; without it a regression would leave the test blocked forever.
+		idleTimer := time.NewTimer(plainBatchContinuousIdleObservation)
+		defer idleTimer.Stop()
 		select {
 		case <-command.Done():
 			command.AcceptError()
 			t.Fatalf("continuous plain batch exited while idle: err=%v stdout=%q stderr=%q", command.Err(), inputs.Stdout(), inputs.Stderr())
-		case <-time.After(500 * time.Millisecond):
+		case <-idleTimer.C:
 		}
 		command.Stop(t)
 		if err := command.Err(); err != nil && !errors.Is(err, context.Canceled) {
