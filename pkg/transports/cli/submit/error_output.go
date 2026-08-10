@@ -20,6 +20,20 @@ type SubmissionHTTPError struct {
 	operation  string
 }
 
+func (e *SubmissionHTTPError) CLIErrorCode() string {
+	if e == nil || e.Code == "" {
+		return "SUBMISSION_FAILED"
+	}
+	return string(e.Code)
+}
+
+func (e *SubmissionHTTPError) CLIErrorMessage() string {
+	if e == nil {
+		return "submission failed"
+	}
+	return e.Error()
+}
+
 func (e *SubmissionHTTPError) Error() string {
 	details := make([]string, 0, 2)
 	if e.Code != "" {

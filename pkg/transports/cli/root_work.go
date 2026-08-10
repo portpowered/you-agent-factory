@@ -9,6 +9,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/cliversion"
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cobracompletion"
@@ -440,7 +441,7 @@ func executeRunCommand(cmd *cobra.Command, args []string, globals *cliGlobalOpti
 		if len(promptArgs) > 0 {
 			err = runcli.MapInvocationFailure(err)
 		}
-		if runcli.WriteIncompleteDrainError(cmd.ErrOrStderr(), err) {
+		if !clidiag.CentralDiagnosticsEnabled(cmd.Context()) && runcli.WriteIncompleteDrainError(cmd.ErrOrStderr(), err) {
 			return err
 		}
 		if runcli.WriteInvocationError(cmd.ErrOrStderr(), err, globals.json) {
@@ -451,7 +452,7 @@ func executeRunCommand(cmd *cobra.Command, args []string, globals *cliGlobalOpti
 		if errors.As(err, &ambiguousInputErr) {
 			errorWriter = cmd.ErrOrStderr()
 		}
-		if errorWriter != nil {
+		if errorWriter != nil && !clidiag.CentralDiagnosticsEnabled(cmd.Context()) {
 			_, _ = fmt.Fprintln(errorWriter, err)
 		}
 	}
