@@ -2001,5 +2001,18 @@
   - PR body matches `prd.json` after normalizing platform line endings; `git status` was clean before this bookkeeping update.
 - **Learnings for future iterations:**
   - A full functional lane can pass after a prior transient cancellation-observation failure; inspect the actual failing test, make only feature-linked fixes, then let a fresh terminal workflow establish the final coverage result.
-  - When a superseded GitHub Actions run holds branch concurrency, canceling only that stale run lets the latest exact-head workflow become authoritative without evaluating obsolete results.
+- When a superseded GitHub Actions run holds branch concurrency, canceling only that stale run lets the latest exact-head workflow become authoritative without evaluating obsolete results.
+---
+## 2026-08-10 13:31 -07:00 - btrc-p1-root-injection-006 functional rerun verification
+- What was implemented
+  - Reran the failed Backend Functional Coverage checks on unchanged head `12e480f28` after isolating the ACP daemon-reuse progress-phase failure and cancellation-observation failure as non-P1 functional instability.
+  - Confirmed the rerun completed successfully; no production source changes were needed. The PRD now records the terminal rerun evidence rather than the earlier superseded workflow.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - CI rerun `31428187689` — all 18 checks pass, including Backend Unit Coverage, Backend Functional Coverage, and Verification Policy.
+  - The rerun passed the previously failing functional lane; PR #1857 remains open and CLEAN before this final bookkeeping commit.
+- **Learnings for future iterations:**
+  - If a coverage job reports unrelated ACP/timeout failures, extract the concrete test output and rerun the failed job before changing feature code; a green rerun can preserve both the baseline and the story implementation.
 ---
