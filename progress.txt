@@ -1388,3 +1388,18 @@
 - **Learnings for future iterations:**
   - Run repository-wide scanners from the explicitly intended checkout when comparing worktree baselines; a nested temporary worktree can otherwise be scanned as repository content.
 ---
+## 2026-08-10 12:36 -07:00 - pf-stale-scope-diagnostic final handoff audit
+- What was implemented
+  - Revalidated the completed PRD against the existing PR #1853 after the latest current-main synchronization; no story implementation or PRD change was needed.
+  - Confirmed the prior blocking feedback is covered by the follow-up commits: structured packaged-installation diagnostics, injected backend-scope identity, checker-compliant exclusive reservation, removal of `--with-mock-workers` from the OS-boundary regression, justified filesystem observations, and restoration of unrelated generated churn.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Both `pf-stale-scope-diagnostic-001` and `pf-stale-scope-diagnostic-002` remain `passes:true`.
+  - PRD JSON and PR body match byte-for-byte; local `HEAD` matches PR #1853 head `49cb1daf25295c02c1856e3c984602b6fba40e8d`.
+  - Thread-aware GraphQL audit: 3 conversation comments, 0 reviews, and 0 inline review threads.
+  - All 18 PR checks are terminal and successful; PR #1853 is open, mergeable, and clean.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - A final PR handoff should recheck the exact PRD/body/head relationship after current-main synchronization and after the last required CI run; an earlier “pending” follow-up comment is not sufficient evidence by itself.
+---
