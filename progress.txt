@@ -1307,3 +1307,24 @@
   - Functional assertions that cover several provider-specific facts should be split by behavior area so maintainability limits do not force weaker runtime coverage.
   - A top-level review blocker can be resolved with a focused test-only change when the requested behavior is already correct; preserve the existing observable assertions while reducing helper scope.
 ---
+## 2026-08-10 06:24 -07:00 - pf-plain-batch-drain-001 current-main review follow-up
+- What was implemented
+  - Merged current `origin/main` into `pf-plain-batch-drain` and resolved the shared bookkeeping conflict by keeping the plain-batch `prd.json` authoritative while preserving both append-only progress histories.
+  - Retained the plain-batch Runtime wake re-evaluation, typed incomplete-drain propagation, and public functional regression alongside current-main provider-discovery source and generated artifacts.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+  - Current-main provider-discovery source/generated files were retained by the merge.
+- Verification
+  - Focused Runtime and Factory Session packages passed.
+  - `go test ./tests/functional/workers/mock -run '^TestPlainBatchDrain' -count=3 -timeout 240s` — passed.
+  - `go run ./cmd/functionalboundarycheck` — passed.
+  - `make test` — passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` — passed.
+  - `make verify-fast` — passed dashboard typecheck, MCP contract boundary, 355 UI files / 2,970 tests, 191 Bun checks, and the short Go suite.
+  - `make lint` passed UI lint/dead-code, vet, and backend gates, then reached the existing 176-violation `pkg-boundary` baseline; the baseline matches current main and no new task violation was introduced.
+  - `git diff --check` — passed; PRD parses with the single story still marked `passes:true`.
+- **Learnings for future iterations:**
+  - When current main changes the task bookkeeping files, preserve the active task PRD exactly for PR-description parity and merge each side's progress entries rather than replacing the append-only log.
+  - A clean local merge head can still report the repository's known `pkg-boundary` migration baseline; distinguish that baseline from changed-file regressions using the dedicated checker and functional-boundary gate.
+---
