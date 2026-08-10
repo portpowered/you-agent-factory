@@ -30,6 +30,7 @@ func NewOperation(
 	artifactRoots factoryruntime.RuntimeArtifactRootResolver,
 	generateSessionID factorysessions.SessionIDGenerator,
 	logger *zap.Logger,
+	presentations factorysessions.OpeningPresentationOwner,
 ) (roles.InvocationOperation, error) {
 	return legacyopening.NewOperation(
 		openRuntime,
@@ -41,6 +42,7 @@ func NewOperation(
 		artifactRoots,
 		generateSessionID,
 		logger,
+		presentations,
 	)
 }
 

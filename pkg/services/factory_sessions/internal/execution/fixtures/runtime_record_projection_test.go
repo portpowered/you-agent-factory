@@ -16,7 +16,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 )
 
-func TestJavaScriptRuntimeService_LiveAndReplayEventsRemainIdenticalAcrossPhaseCheckpointPhase(t *testing.T) {
+func TestJavaScriptRuntimeService_ReplaysPhaseCheckpointPhaseEventsInOrder(t *testing.T) {
 	records := []factory.JavaScriptRuntimeRecord{
 		{Sequence: 1, Kind: factory.JavaScriptRecordKindPhase, Phase: &factory.JavaScriptPhaseRecord{Name: "plan"}},
 		{Sequence: 2, Kind: factory.JavaScriptRecordKindCheckpoint, Checkpoint: &factory.JavaScriptCheckpointRecord{ID: "checkpoint-plan", Label: "plan-ready"}},
@@ -36,24 +36,8 @@ func TestJavaScriptRuntimeService_LiveAndReplayEventsRemainIdenticalAcrossPhaseC
 	service := newJavaScriptRuntimeService(t, workflows)
 	request := simpleFinalSyncStartRequest()
 	request.RequestID = "req-runtime-phase-checkpoint-phase-live-replay"
-	var live []interfaces.FactoryEvent
-	consume := func(events []interfaces.FactoryEvent) {
-		for _, event := range events {
-			live = append(live, event.Clone())
-		}
-	}
-	observed, ok := service.(interface {
-		StartSyncWithEventConsumer(
-			context.Context,
-			fse.StartRequest,
-			fse.FactoryEventConsumer,
-		) (fse.SyncStartResult, error)
-	})
-	if !ok {
-		t.Fatal("runtime service does not expose private event-aware sync start")
-	}
 
-	completed, err := observed.StartSyncWithEventConsumer(context.Background(), request, consume)
+	completed, err := service.StartSync(context.Background(), request)
 	if err != nil {
 		t.Fatalf("StartSync: %v", err)
 	}
@@ -62,9 +46,8 @@ func TestJavaScriptRuntimeService_LiveAndReplayEventsRemainIdenticalAcrossPhaseC
 		t.Fatalf("ReadEvents: %v", err)
 	}
 	replay := decodeCanonicalFactoryEvents(t, replayed.Events)
-	assertCanonicalEventStreamsEqual(t, live, replay)
-	assertStrictlyIncreasingFactoryEventSequences(t, live)
-	assertPhaseCheckpointPhaseTransitions(t, live)
+	assertStrictlyIncreasingFactoryEventSequences(t, replay)
+	assertPhaseCheckpointPhaseTransitions(t, replay)
 }
 
 func decodeCanonicalFactoryEvents(t *testing.T, rawEvents []json.RawMessage) []interfaces.FactoryEvent {
@@ -76,20 +59,6 @@ func decodeCanonicalFactoryEvents(t *testing.T, rawEvents []json.RawMessage) []i
 		}
 	}
 	return events
-}
-
-func assertCanonicalEventStreamsEqual(t *testing.T, live, replay []interfaces.FactoryEvent) {
-	t.Helper()
-	if len(live) != len(replay) {
-		t.Fatalf("live events = %d, replay events = %d", len(live), len(replay))
-	}
-	for index := range live {
-		liveJSON, _ := json.Marshal(live[index])
-		replayJSON, _ := json.Marshal(replay[index])
-		if string(liveJSON) != string(replayJSON) {
-			t.Fatalf("event %d differs:\nlive=%s\nreplay=%s", index, liveJSON, replayJSON)
-		}
-	}
 }
 
 func assertStrictlyIncreasingFactoryEventSequences(t *testing.T, events []interfaces.FactoryEvent) {

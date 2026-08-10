@@ -7,7 +7,6 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
@@ -16,7 +15,7 @@ import (
 func TestOpenHostedRuntimeBindsFactorySessionsInvocationCapability(t *testing.T) {
 	sessions := &hostedInvocationCapabilityFake{}
 	request := invocationRequestFromText("summarize the dispatch")
-	owner := factorysessionwire.NewOpeningPresentationOwner()
+	owner := newTestOpeningPresentationOwner()
 
 	operation, err := openHostedRuntime(
 		t.Context(),

@@ -62,10 +62,12 @@ observers, completion callbacks, hosted-service bindings, and visualization
 sinks with the process-scoped `OpeningPresentationOwner`; operation methods
 receive only the request and context and resolve that state by ID.
 
-Durable `StartRequest` is value-only; the live JavaScript owner exposes event
-observation through a private `StartSyncWithEventConsumer` capability so
-invocation presentation does not become request state, while ordinary durable
-callers use `StartSync`.
+Durable `StartRequest` is value-only. Invocation presentation registers its
+consumer with the process-scoped `OpeningPresentationOwner`; `InvocationTarget`
+passes only the typed `EventScopeID`, and the owner starts and finishes the
+Factory Event bridge around the invocation. `StartSync` remains the only
+execution start contract; no operation-specific callback or optional execution
+capability carries presentation state.
 
 ## Private owner state
 

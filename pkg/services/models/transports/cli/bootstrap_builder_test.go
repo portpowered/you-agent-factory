@@ -109,7 +109,6 @@ func (testModelInvocationOperation) InvokeFactory(
 	context.Context,
 	factorysessions.InvocationTarget,
 	factorysessions.InvocationRequest,
-	factorysessions.FactoryEventConsumer,
 ) (factorysessions.FactoryInvocationOutcome, error) {
 	return factorysessions.FactoryInvocationOutcome{}, errors.New("Factory invocation is not supported by the model test operation")
 }

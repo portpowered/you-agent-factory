@@ -61,6 +61,9 @@ type InvocationTarget struct {
 	MockWorkersConfig                *workers.MockWorkersConfig
 	SkipPermissionsOverride          *bool
 	SkipRunnerPrerequisiteValidation bool
+	// EventScopeID identifies owner-private Factory Event presentation state.
+	// It is the only invocation-time handle for transport event delivery.
+	EventScopeID OpeningScopeID
 }
 
 // HostedLiveInvocation is the live runtime surface used by hosted CLI invocations.
@@ -74,7 +77,9 @@ type FactoryInvocationOutcome struct {
 	Result interfaces.FactoryInvocationResult
 }
 
-// FactoryEventConsumer receives ordered canonical events during one invocation.
+// FactoryEventConsumer receives ordered canonical events for an owner-private
+// invocation presentation scope. It is registered with OpeningPresentationOwner
+// and never crosses an invocation operation boundary.
 type FactoryEventConsumer func([]interfaces.FactoryEvent)
 
 // OpeningScopeID is an opaque process-local identity for transport-owned
@@ -111,6 +116,12 @@ type StdioOpeningScope struct {
 	Output io.Writer
 }
 
+// InvocationEventScope retains one transport's canonical Factory Event
+// presentation callback behind the process-scoped owner.
+type InvocationEventScope struct {
+	Consume FactoryEventConsumer
+}
+
 // OpeningPresentationOwner owns the transport-local state associated with
 // value-only opening requests. Canonical Wire constructs one owner once and
 // each transport adapter registers a scope before invoking an opening
@@ -122,6 +133,15 @@ type OpeningPresentationOwner interface {
 	DirectJavaScript(OpeningScopeID) (DirectJavaScriptRunScope, bool)
 	RegisterStdio(StdioOpeningScope) (OpeningScopeID, error)
 	Stdio(OpeningScopeID) (StdioOpeningScope, bool)
+	RegisterInvocationEvents(InvocationEventScope) (OpeningScopeID, error)
+	InvocationEvents(OpeningScopeID) (FactoryEventConsumer, bool)
+	// StartFactoryEventBridge returns owner-private lifecycle state. The
+	// anonymous contract keeps this transport collaborator out of the service
+	// root's named interface inventory; callers exchange only the injected
+	// service root and detached outcome.
+	StartFactoryEventBridge(context.Context, Service, OpeningScopeID) (interface {
+		Finish(context.Context, Service, FactoryInvocationOutcome) error
+	}, error)
 	ObserveHost(OpeningScopeID, RuntimeHostBinding)
 	Close(OpeningScopeID)
 }

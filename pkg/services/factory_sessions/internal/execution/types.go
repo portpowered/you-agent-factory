@@ -329,7 +329,6 @@ type (
 	EventReadResult              = factorysessions.EventReadResult
 	EventReconnectRequest        = factorysessions.EventReconnectRequest
 	ExecutionProvider            = factorysessions.ExecutionProvider
-	FactoryEventConsumer         = factorysessions.FactoryEventConsumer
 	FailureSummary               = factorysessions.FailureSummary
 	InlineWorkflowSource         = factorysessions.InlineWorkflowSource
 	InspectionLinks              = factorysessions.InspectionLinks

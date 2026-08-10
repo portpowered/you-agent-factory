@@ -244,7 +244,7 @@ type ModelInvocationOperation interface {
 
 type InvocationOperation interface {
 	ModelInvocationOperation
-	InvokeFactory(context.Context, InvocationTarget, factorysessions.InvocationRequest, factorysessions.FactoryEventConsumer) (FactoryInvocationOutcome, error)
+	InvokeFactory(context.Context, InvocationTarget, factorysessions.InvocationRequest) (FactoryInvocationOutcome, error)
 }
 
 type InvocationTarget = factorysessions.InvocationTarget

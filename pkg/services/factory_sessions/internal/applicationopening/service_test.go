@@ -59,6 +59,20 @@ func (*applicationOpeningOwnerStub) Stdio(factorysessions.OpeningScopeID) (facto
 	return factorysessions.StdioOpeningScope{}, false
 }
 
+func (*applicationOpeningOwnerStub) RegisterInvocationEvents(factorysessions.InvocationEventScope) (factorysessions.OpeningScopeID, error) {
+	return "", errors.New("not used")
+}
+
+func (*applicationOpeningOwnerStub) InvocationEvents(factorysessions.OpeningScopeID) (factorysessions.FactoryEventConsumer, bool) {
+	return nil, false
+}
+
+func (*applicationOpeningOwnerStub) StartFactoryEventBridge(context.Context, factorysessions.Service, factorysessions.OpeningScopeID) (interface {
+	Finish(context.Context, factorysessions.Service, factorysessions.FactoryInvocationOutcome) error
+}, error) {
+	return nil, errors.New("not used")
+}
+
 func (owner *applicationOpeningOwnerStub) ObserveHost(id factorysessions.OpeningScopeID, binding factorysessions.RuntimeHostBinding) {
 	if id == owner.id && owner.scope.RuntimeHostObserver != nil {
 		owner.scope.RuntimeHostObserver(binding)

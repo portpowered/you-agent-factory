@@ -116,6 +116,7 @@ func TestOpenModelsPresentationScope_PropagatesRuntimeOpenFailure(t *testing.T) 
 		func(string) factoryruntime.RuntimeArtifactRoots { return factoryruntime.RuntimeArtifactRoots{} },
 		func() string { return "presentation-scope-test" },
 		zap.NewNop(),
+		invocationPresentationOwnerStub{},
 	)
 	if err != nil {
 		t.Fatalf("NewOperation() error = %v", err)

@@ -30,32 +30,6 @@ func (s *Service) StartSync(ctx context.Context, request factorysessions.StartRe
 	return execution.StartSync(ctx, request)
 }
 
-// StartSyncWithEventConsumer forwards the owner-private response presentation
-// capability when the selected durable execution supports it. The public
-// Factory Sessions contract remains value-only; invocation presentation is
-// discovered only by the internal runtime-opening capability check.
-func (s *Service) StartSyncWithEventConsumer(
-	ctx context.Context,
-	request factorysessions.StartRequest,
-	consume factorysessions.FactoryEventConsumer,
-) (factorysessions.SyncStartResult, error) {
-	execution, err := s.durableExecution()
-	if err != nil {
-		return factorysessions.SyncStartResult{}, err
-	}
-	observed, ok := execution.(interface {
-		StartSyncWithEventConsumer(
-			context.Context,
-			factorysessions.StartRequest,
-			factorysessions.FactoryEventConsumer,
-		) (factorysessions.SyncStartResult, error)
-	})
-	if !ok {
-		return execution.StartSync(ctx, request)
-	}
-	return observed.StartSyncWithEventConsumer(ctx, request, consume)
-}
-
 func (s *Service) ResumeInterruptedSession(ctx context.Context, sessionID string, request factorysessions.ResumeSessionRequest) (factorysessions.AsyncStartResult, error) {
 	execution, err := s.durableExecution()
 	if err != nil {

@@ -521,10 +521,7 @@ func rebuildRuntimeSessionCanonicalEvents(state *runtimeSessionState) []json.Raw
 		runtimeDispatchEventInputFromState(state),
 	)
 	projected = mergePreservedDispatchInterruptedEvents(projected, preserved)
-	if state.eventConsumer == nil {
-		return projected
-	}
-	return reconcileAppendOnlyCanonicalEvents(state.events, projected)
+	return projected
 }
 
 type dispatchQueuedEventPayload struct {
@@ -845,85 +842,5 @@ func (s *JavaScriptRuntimeService) applyRunningRuntimeRecord(sessionID string, r
 	state.session.ArtifactCount = len(state.session.ArtifactRefs)
 	restoreInterruptedDispatchResultSuppression(state, preservedInterrupted)
 	state.events = rebuildRuntimeSessionCanonicalEvents(state)
-	consume, events := nextFactoryEventsForConsumer(state)
 	s.mu.Unlock()
-	if consume != nil && len(events) > 0 {
-		consume(events)
-	}
-}
-
-func (s *JavaScriptRuntimeService) registerFactoryEventConsumer(
-	state *runtimeSessionState,
-	consume FactoryEventConsumer,
-) {
-	if consume == nil {
-		return
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	state.eventConsumer = consume
-	state.presentedEventIDs = make(map[string]struct{})
-}
-
-func (s *JavaScriptRuntimeService) observeFactoryEvents(
-	state *runtimeSessionState,
-	consume FactoryEventConsumer,
-) func() {
-	s.registerFactoryEventConsumer(state, consume)
-	if consume == nil {
-		return func() {}
-	}
-	return func() {
-		s.unregisterFactoryEventConsumer(state.session.SessionID)
-	}
-}
-
-func (s *JavaScriptRuntimeService) unregisterFactoryEventConsumer(sessionID string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	state, ok := s.sessions[sessionID]
-	if !ok {
-		return
-	}
-	state.eventConsumer = nil
-	state.presentedEventIDs = nil
-}
-
-func (s *JavaScriptRuntimeService) presentCurrentFactoryEvents(sessionID string) {
-	s.mu.Lock()
-	state, ok := s.sessions[sessionID]
-	if !ok {
-		s.mu.Unlock()
-		return
-	}
-	consume, events := nextFactoryEventsForConsumer(state)
-	s.mu.Unlock()
-	if consume != nil && len(events) > 0 {
-		consume(events)
-	}
-}
-
-func nextFactoryEventsForConsumer(
-	state *runtimeSessionState,
-) (FactoryEventConsumer, []interfaces.FactoryEvent) {
-	if state == nil || state.eventConsumer == nil {
-		return nil, nil
-	}
-	if state.presentedEventIDs == nil {
-		state.presentedEventIDs = make(map[string]struct{})
-	}
-	events := make([]interfaces.FactoryEvent, 0, len(state.events))
-	for _, raw := range state.events {
-		var event interfaces.FactoryEvent
-		if err := json.Unmarshal(raw, &event); err != nil {
-			continue
-		}
-		if _, seen := state.presentedEventIDs[event.Id]; seen {
-			continue
-		}
-		state.presentedEventIDs[event.Id] = struct{}{}
-		event.Payload = append(json.RawMessage(nil), event.Payload...)
-		events = append(events, event)
-	}
-	return state.eventConsumer, events
 }

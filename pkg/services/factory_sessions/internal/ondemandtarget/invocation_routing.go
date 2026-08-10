@@ -36,11 +36,11 @@ func (s *Service) invokeOnActivatedRuntime(
 	if err != nil || !factorydefinitions.IsJavaScriptOrchestratorFactory(projection.Context.FactoryCfg) {
 		return active.opened.Sessions.InvokeFactorySession(ctx, factorysessions.DefaultSessionID, request)
 	}
-	// consume is nil: this activation's callers observe a running invocation
-	// through SubscribeFactoryResponseEvents against the runtime's own
-	// response stream, not through an invocation-scoped event consumer.
+	// On-demand activation callers observe a running invocation through
+	// SubscribeFactoryResponseEvents against the runtime's own response stream,
+	// not through a one-shot invocation presentation scope.
 	result, err := invocation.InvokeOpenedJavaScriptFactory(
-		ctx, active.opened, projection.Context, active.invocationTarget(), request, s.generateID, nil,
+		ctx, active.opened, projection.Context, active.invocationTarget(), request, s.generateID,
 	)
 	return sessionInvocationResult(result), err
 }

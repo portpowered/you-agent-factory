@@ -2,11 +2,14 @@ package wire
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"sync"
 
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 )
 
@@ -21,6 +24,7 @@ type openingScope struct {
 	application      *factorysessions.ApplicationOpeningScope
 	directJavaScript *factorysessions.DirectJavaScriptRunScope
 	stdio            *factorysessions.StdioOpeningScope
+	invocationEvents *factorysessions.InvocationEventScope
 }
 
 type openingPresentationOwner struct {
@@ -81,6 +85,65 @@ func (o *openingPresentationOwner) Stdio(id factorysessions.OpeningScopeID) (fac
 	return *scope.stdio, true
 }
 
+func (o *openingPresentationOwner) RegisterInvocationEvents(scope factorysessions.InvocationEventScope) (factorysessions.OpeningScopeID, error) {
+	if scope.Consume == nil {
+		return "", errors.New("invocation event scope requires a consumer")
+	}
+	return o.register(openingScope{invocationEvents: &scope})
+}
+
+func (o *openingPresentationOwner) InvocationEvents(id factorysessions.OpeningScopeID) (factorysessions.FactoryEventConsumer, bool) {
+	o.mu.RLock()
+	scope, ok := o.scopes[id]
+	o.mu.RUnlock()
+	if !ok || scope.invocationEvents == nil || scope.invocationEvents.Consume == nil {
+		return nil, false
+	}
+	return scope.invocationEvents.Consume, true
+}
+
+func (o *openingPresentationOwner) StartFactoryEventBridge(
+	ctx context.Context,
+	reader factorysessions.Service,
+	id factorysessions.OpeningScopeID,
+) (interface {
+	Finish(context.Context, factorysessions.Service, factorysessions.FactoryInvocationOutcome) error
+}, error) {
+	if ctx == nil {
+		return nil, errors.New("Factory Event bridge context is required")
+	}
+	if reader == nil {
+		return nil, errors.New("Factory Event bridge service is required")
+	}
+	consume, ok := o.InvocationEvents(id)
+	if !ok {
+		return nil, fmt.Errorf("Factory Event scope %q is not registered", id)
+	}
+	streamCtx, cancel := context.WithCancel(ctx)
+	stream, err := reader.SubscribeFactoryEventsForSession(
+		streamCtx, factorysessions.DefaultSessionID, nil,
+	)
+	if err != nil {
+		cancel()
+		return nil, fmt.Errorf("subscribe invocation Factory Events: %w", err)
+	}
+	if stream == nil || stream.Events == nil {
+		cancel()
+		return nil, errors.New("subscribe invocation Factory Events: stream is unavailable")
+	}
+	bridge := &factoryEventBridge{
+		consume: consume, cancel: cancel, done: make(chan struct{}), seen: make(map[string]struct{}),
+	}
+	bridge.presentUnseen(stream.History)
+	go func() {
+		defer close(bridge.done)
+		for event := range stream.Events {
+			bridge.presentUnseen([]factorydefinitions.FactoryEvent{event})
+		}
+	}()
+	return bridge, nil
+}
+
 func (o *openingPresentationOwner) ObserveHost(id factorysessions.OpeningScopeID, binding factorysessions.RuntimeHostBinding) {
 	if scope, ok := o.Application(id); ok && scope.RuntimeHostObserver != nil {
 		scope.RuntimeHostObserver(binding)
@@ -97,6 +160,99 @@ func (o *openingPresentationOwner) Close(id factorysessions.OpeningScopeID) {
 	o.mu.Lock()
 	delete(o.scopes, id)
 	o.mu.Unlock()
+}
+
+type factoryEventBridge struct {
+	mu      sync.Mutex
+	consume factorysessions.FactoryEventConsumer
+	cancel  context.CancelFunc
+	done    chan struct{}
+	seen    map[string]struct{}
+}
+
+func (bridge *factoryEventBridge) Finish(
+	ctx context.Context,
+	reader factorysessions.Service,
+	outcome factorysessions.FactoryInvocationOutcome,
+) error {
+	if bridge == nil {
+		return nil
+	}
+	if bridge.cancel != nil {
+		bridge.cancel()
+	}
+	if bridge.done != nil {
+		<-bridge.done
+	}
+	events, err := readFactoryEventHistory(ctx, reader, outcome.Result.SessionID)
+	if err != nil {
+		return err
+	}
+	bridge.presentUnseen(events)
+	return nil
+}
+
+func (bridge *factoryEventBridge) presentUnseen(events []factorydefinitions.FactoryEvent) {
+	if bridge == nil || bridge.consume == nil {
+		return
+	}
+	bridge.mu.Lock()
+	defer bridge.mu.Unlock()
+	unseen := make([]factorydefinitions.FactoryEvent, 0, len(events))
+	for _, event := range events {
+		key := factoryEventPresentationKey(event)
+		if _, ok := bridge.seen[key]; ok {
+			continue
+		}
+		bridge.seen[key] = struct{}{}
+		unseen = append(unseen, event.Clone())
+	}
+	if len(unseen) > 0 {
+		bridge.consume(unseen)
+	}
+}
+
+func factoryEventPresentationKey(event factorydefinitions.FactoryEvent) string {
+	encoded, err := json.Marshal(event)
+	if err == nil {
+		return string(encoded)
+	}
+	return event.Id + "\x00" + string(event.Payload)
+}
+
+func readFactoryEventHistory(
+	ctx context.Context,
+	reader factorysessions.Service,
+	sessionID string,
+) ([]factorydefinitions.FactoryEvent, error) {
+	if reader == nil {
+		return nil, errors.New("Factory Session event reader is required")
+	}
+	sessionID = strings.TrimSpace(sessionID)
+	var (
+		stream *factorydefinitions.FactoryEventStream
+		err    error
+	)
+	if sessionID != "" && sessionID != factorysessions.DefaultSessionID {
+		stream, err = reader.ReadDurableFactorySessionEventStream(
+			ctx, sessionID, factorysessions.EventReconnectRequest{},
+		)
+	} else {
+		stream, err = reader.SubscribeFactoryEventsForSession(
+			ctx, factorysessions.DefaultSessionID, nil,
+		)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read invocation Factory Events: %w", err)
+	}
+	if stream == nil {
+		return nil, errors.New("read invocation Factory Events: stream is unavailable")
+	}
+	events := make([]factorydefinitions.FactoryEvent, len(stream.History))
+	for index := range stream.History {
+		events[index] = stream.History[index].Clone()
+	}
+	return events, nil
 }
 
 func (o *openingPresentationOwner) register(scope openingScope) (factorysessions.OpeningScopeID, error) {

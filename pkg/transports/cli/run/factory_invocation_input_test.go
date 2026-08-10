@@ -7,15 +7,122 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
+
+// testOpeningPresentationOwner is a local owner double for CLI behavior tests.
+// Production tests use the concrete owner in its service Wire package; CLI
+// tests only need to observe value-only scope registration without importing
+// that construction package across a transport boundary.
+type testOpeningPresentationOwner struct {
+	mu     sync.Mutex
+	nextID uint64
+	scopes map[factorysessions.OpeningScopeID]testOpeningPresentationScope
+}
+
+type testOpeningPresentationScope struct {
+	application      *factorysessions.ApplicationOpeningScope
+	directJavaScript *factorysessions.DirectJavaScriptRunScope
+	stdio            *factorysessions.StdioOpeningScope
+	invocationEvents *factorysessions.InvocationEventScope
+}
+
+func newTestOpeningPresentationOwner() *testOpeningPresentationOwner {
+	return &testOpeningPresentationOwner{scopes: make(map[factorysessions.OpeningScopeID]testOpeningPresentationScope)}
+}
+
+func (o *testOpeningPresentationOwner) register(scope testOpeningPresentationScope) (factorysessions.OpeningScopeID, error) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.nextID++
+	id := factorysessions.OpeningScopeID(fmt.Sprintf("test-opening-%d", o.nextID))
+	o.scopes[id] = scope
+	return id, nil
+}
+
+func (o *testOpeningPresentationOwner) RegisterApplication(scope factorysessions.ApplicationOpeningScope) (factorysessions.OpeningScopeID, error) {
+	return o.register(testOpeningPresentationScope{application: &scope})
+}
+
+func (o *testOpeningPresentationOwner) Application(id factorysessions.OpeningScopeID) (factorysessions.ApplicationOpeningScope, bool) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	scope, ok := o.scopes[id]
+	if !ok || scope.application == nil {
+		return factorysessions.ApplicationOpeningScope{}, false
+	}
+	return *scope.application, true
+}
+
+func (o *testOpeningPresentationOwner) RegisterDirectJavaScript(scope factorysessions.DirectJavaScriptRunScope) (factorysessions.OpeningScopeID, error) {
+	return o.register(testOpeningPresentationScope{directJavaScript: &scope})
+}
+
+func (o *testOpeningPresentationOwner) DirectJavaScript(id factorysessions.OpeningScopeID) (factorysessions.DirectJavaScriptRunScope, bool) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	scope, ok := o.scopes[id]
+	if !ok || scope.directJavaScript == nil {
+		return factorysessions.DirectJavaScriptRunScope{}, false
+	}
+	return *scope.directJavaScript, true
+}
+
+func (o *testOpeningPresentationOwner) RegisterStdio(scope factorysessions.StdioOpeningScope) (factorysessions.OpeningScopeID, error) {
+	return o.register(testOpeningPresentationScope{stdio: &scope})
+}
+
+func (o *testOpeningPresentationOwner) Stdio(id factorysessions.OpeningScopeID) (factorysessions.StdioOpeningScope, bool) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	scope, ok := o.scopes[id]
+	if !ok || scope.stdio == nil {
+		return factorysessions.StdioOpeningScope{}, false
+	}
+	return *scope.stdio, true
+}
+
+func (o *testOpeningPresentationOwner) RegisterInvocationEvents(scope factorysessions.InvocationEventScope) (factorysessions.OpeningScopeID, error) {
+	return o.register(testOpeningPresentationScope{invocationEvents: &scope})
+}
+
+func (o *testOpeningPresentationOwner) InvocationEvents(id factorysessions.OpeningScopeID) (factorysessions.FactoryEventConsumer, bool) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	scope, ok := o.scopes[id]
+	if !ok || scope.invocationEvents == nil {
+		return nil, false
+	}
+	return scope.invocationEvents.Consume, scope.invocationEvents.Consume != nil
+}
+
+func (o *testOpeningPresentationOwner) StartFactoryEventBridge(context.Context, factorysessions.Service, factorysessions.OpeningScopeID) (interface {
+	Finish(context.Context, factorysessions.Service, factorysessions.FactoryInvocationOutcome) error
+}, error) {
+	return nil, nil
+}
+
+func (o *testOpeningPresentationOwner) ObserveHost(id factorysessions.OpeningScopeID, binding factorysessions.RuntimeHostBinding) {
+	scope, ok := o.Application(id)
+	if ok && scope.RuntimeHostObserver != nil {
+		scope.RuntimeHostObserver(binding)
+	}
+}
+
+func (o *testOpeningPresentationOwner) Close(id factorysessions.OpeningScopeID) {
+	o.mu.Lock()
+	delete(o.scopes, id)
+	o.mu.Unlock()
+}
 
 func TestResolveFactoryInvocationInputSchemaNamedAndFileSelectionsAreEquivalent(t *testing.T) {
 	t.Parallel()

@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- Keep transport event consumers behind the process-scoped OpeningPresentationOwner: operation contracts carry only a typed scope ID, while the owner owns subscription lifecycle, final history reconciliation, and full-snapshot deduplication for mutable event IDs.
 - For broad functional coverage concurrency flakes, isolate the named test and rerun only the failed CI jobs before changing untouched behavior.
 - When resolving long append-only progress conflicts, read merge-stage files in bounded chunks and validate the reconstructed line count so tool-output truncation cannot drop history.
 - Treat repository-enforcement inventories and architecture guards as project-enabling PRD criteria when they have no runtime, API, CLI, UI, or emitted-event behavior; source scans support enforcement but are not customer-behavior evidence.
@@ -2379,4 +2380,19 @@
   - CI run `31427408109` is green after the failed-job rerun, including Backend Functional Coverage and Verification Policy.
 - **Learnings for future iterations:**
   - Keep repeated CI flake evidence scoped to the named test and package; a successful isolated rerun is sufficient to validate recovery when the feature diff is untouched.
+---
+
+## 2026-08-10 15:01 -07:00 - btrc-p1-root-injection-004/006 review follow-up
+- What was implemented
+  - Removed the per-invocation `FactoryEventConsumer` callback from `InvocationOperation`, the private `StartSyncWithEventConsumer` capability, and the optional type assertions that propagated that callback through Factory Sessions.
+  - Added an injected, process-scoped Factory Event bridge owner. CLI invocation presentation registers a consumer and passes only `InvocationTarget.EventScopeID`; the owner starts the live subscription, reconciles final history, and deduplicates complete event snapshots so mutable event IDs remain observable.
+  - Moved hosted invocation event lifecycle out of `pkg/transports/cli/run`, removed the extra hosted-event test file, regenerated canonical Wire, and merged current `origin/main` before this follow-up.
+- Files changed
+  - Factory Sessions contracts, runtime invocation/execution services, presentation owner, canonical Wire, CLI run transport, focused tests, and `docs/internal/packaged-service-structure/btrc-p1-owner-contracts.md`.
+- Verification
+  - Focused Factory Sessions, runtime-opening, CLI run, Wire, root, and models CLI tests pass.
+  - `make wire-smoke`, `make pkg-file-count`, and `make backend-size` pass; package file count is back within the committed baseline and backend files remain within limits.
+  - `make pkg-boundary` reports the existing 175-entry repository baseline on this branch, with no new transport lifecycle/concurrency violations; the target remains non-zero because the repository’s active migration baseline is intentional.
+- **Learnings for future iterations:**
+  - Removing runtime callback state must preserve ordinary replay projection semantics; keep runtime projections value-derived and let the owner bridge deduplicate complete event snapshots rather than restoring append-only state solely for presentation.
 ---

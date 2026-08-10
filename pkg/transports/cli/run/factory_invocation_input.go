@@ -174,6 +174,7 @@ func openInvocation(
 	invocation InvocationOperation,
 	presentation factoryvisualization.ResponsePresentation,
 	mockWorkersConfig *workers.MockWorkersConfig,
+	presentations factorysessions.OpeningPresentationOwner,
 ) (*Operation, error) {
 	if invocation == nil {
 		return nil, fmt.Errorf("construct factory invocation: operation is required")
@@ -186,6 +187,7 @@ func openInvocation(
 		invocationTarget: invocationTarget(cfg, mockWorkersConfig),
 		invocation:       invocation, presentation: presentation,
 		invocationMode: true, recordPath: recordPath,
+		openingPresentations: presentations,
 	}, nil
 }
 
@@ -279,9 +281,10 @@ func wrapInvocationInputError(err error) error {
 // the Factory Sessions invocation operation only receives that value contract
 // and opens ephemeral runtimes for its normal path.
 type hostedInvocationOperation struct {
-	delegate InvocationOperation
-	hosted   *factorysessions.HostedLiveInvocation
-	logger   *zap.Logger
+	delegate      InvocationOperation
+	hosted        *factorysessions.HostedLiveInvocation
+	logger        *zap.Logger
+	presentations factorysessions.OpeningPresentationOwner
 }
 
 func (operation *hostedInvocationOperation) InvokeModel(
@@ -305,7 +308,6 @@ func (operation *hostedInvocationOperation) InvokeFactory(
 	ctx context.Context,
 	target factorysessions.InvocationTarget,
 	request factorysessions.InvocationRequest,
-	consume factorysessions.FactoryEventConsumer,
 ) (factorysessions.FactoryInvocationOutcome, error) {
 	if operation == nil || operation.delegate == nil {
 		return factorysessions.FactoryInvocationOutcome{}, errors.New("hosted invocation operation is required")
@@ -316,11 +318,20 @@ func (operation *hostedInvocationOperation) InvokeFactory(
 	}
 	projection, projectionErr := hosted.Sessions.GetFactorySession(ctx, factorysessions.DefaultSessionID)
 	if projectionErr == nil && interfaces.IsJavaScriptOrchestratorFactory(projection.Context.FactoryCfg) {
-		return operation.delegate.InvokeFactory(ctx, target, request, consume)
+		return operation.delegate.InvokeFactory(ctx, target, request)
 	}
-	liveEvents, err := startHostedInvocationFactoryEvents(ctx, hosted.Sessions, consume)
-	if err != nil {
-		return factorysessions.FactoryInvocationOutcome{}, err
+	var bridge interface {
+		Finish(context.Context, factorysessions.Service, factorysessions.FactoryInvocationOutcome) error
+	}
+	if target.EventScopeID != "" {
+		if operation.presentations == nil {
+			return factorysessions.FactoryInvocationOutcome{}, errors.New("invocation presentation owner is required")
+		}
+		var bridgeErr error
+		bridge, bridgeErr = operation.presentations.StartFactoryEventBridge(ctx, hosted.Sessions, target.EventScopeID)
+		if bridgeErr != nil {
+			return factorysessions.FactoryInvocationOutcome{}, bridgeErr
+		}
 	}
 	invocationResult, invokeErr := hosted.Invoker.InvokeFactorySession(
 		ctx, factorysessions.DefaultSessionID, request,
@@ -328,10 +339,10 @@ func (operation *hostedInvocationOperation) InvokeFactory(
 	outcome := factorysessions.FactoryInvocationOutcome{
 		Result: factoryInvocationResultFromSessionInvocation(invocationResult),
 	}
-	if liveEvents == nil {
+	if bridge == nil {
 		return outcome, invokeErr
 	}
-	postResultErr := liveEvents.finish(ctx, hosted.Sessions, outcome.Result)
+	postResultErr := bridge.Finish(ctx, hosted.Sessions, outcome)
 	if postResultErr != nil && outcome.Result.Status != "" {
 		if operation.logger != nil {
 			operation.logger.Warn(
@@ -356,109 +367,6 @@ func factoryInvocationResultFromSessionInvocation(
 	}
 }
 
-type hostedInvocationFactoryEvents struct {
-	consume factorysessions.FactoryEventConsumer
-	cancel  context.CancelFunc
-	done    chan struct{}
-	seen    map[string]struct{}
-}
-
-func startHostedInvocationFactoryEvents(
-	ctx context.Context,
-	reader factorysessions.Service,
-	consume factorysessions.FactoryEventConsumer,
-) (*hostedInvocationFactoryEvents, error) {
-	if consume == nil {
-		return nil, nil
-	}
-	streamCtx, cancel := context.WithCancel(ctx)
-	stream, err := reader.SubscribeFactoryEventsForSession(
-		streamCtx, factorysessions.DefaultSessionID, nil,
-	)
-	if err != nil {
-		cancel()
-		return nil, fmt.Errorf("subscribe invocation Factory Events: %w", err)
-	}
-	if stream == nil || stream.Events == nil {
-		cancel()
-		return nil, errors.New("subscribe invocation Factory Events: stream is unavailable")
-	}
-	live := &hostedInvocationFactoryEvents{
-		consume: consume, cancel: cancel, done: make(chan struct{}), seen: make(map[string]struct{}),
-	}
-	live.presentUnseen(stream.History)
-	go func() {
-		defer close(live.done)
-		for event := range stream.Events {
-			live.presentUnseen([]interfaces.FactoryEvent{event})
-		}
-	}()
-	return live, nil
-}
-
-func (live *hostedInvocationFactoryEvents) finish(
-	ctx context.Context,
-	reader factorysessions.Service,
-	result interfaces.FactoryInvocationResult,
-) error {
-	live.cancel()
-	<-live.done
-	stream, err := readHostedInvocationFactoryEvents(ctx, reader, result)
-	if err != nil {
-		return err
-	}
-	live.presentUnseen(stream)
-	return nil
-}
-
-func (live *hostedInvocationFactoryEvents) presentUnseen(events []interfaces.FactoryEvent) {
-	unseen := make([]interfaces.FactoryEvent, 0, len(events))
-	for _, event := range events {
-		if _, ok := live.seen[event.Id]; ok {
-			continue
-		}
-		live.seen[event.Id] = struct{}{}
-		unseen = append(unseen, event.Clone())
-	}
-	if len(unseen) > 0 {
-		live.consume(unseen)
-	}
-}
-
-func readHostedInvocationFactoryEvents(
-	ctx context.Context,
-	reader factorysessions.Service,
-	result interfaces.FactoryInvocationResult,
-) ([]interfaces.FactoryEvent, error) {
-	if reader == nil {
-		return nil, errors.New("Factory Session event reader is required")
-	}
-	var (
-		stream *interfaces.FactoryEventStream
-		err    error
-	)
-	if strings.TrimSpace(result.SessionID) != "" && result.SessionID != factorysessions.DefaultSessionID {
-		stream, err = reader.ReadDurableFactorySessionEventStream(
-			ctx, result.SessionID, factorysessions.EventReconnectRequest{},
-		)
-	} else {
-		stream, err = reader.SubscribeFactoryEventsForSession(
-			ctx, factorysessions.DefaultSessionID, nil,
-		)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("read invocation Factory Events: %w", err)
-	}
-	if stream == nil {
-		return nil, errors.New("read invocation Factory Events: stream is unavailable")
-	}
-	events := make([]interfaces.FactoryEvent, len(stream.History))
-	for index := range stream.History {
-		events[index] = stream.History[index].Clone()
-	}
-	return events, nil
-}
-
 func runFactoryInvocation(
 	ctx context.Context,
 	cfg RunConfig,
@@ -466,6 +374,7 @@ func runFactoryInvocation(
 	request factoryapi.InvocationRequest,
 	invocation InvocationOperation,
 	presentation factoryvisualization.ResponsePresentation,
+	presentations factorysessions.OpeningPresentationOwner,
 ) error {
 	if invocation == nil {
 		return fmt.Errorf("run factory invocation: operation is required")
@@ -489,10 +398,15 @@ func runFactoryInvocation(
 	if streamRenderer != nil {
 		defer streamRenderer.StopProgressRendering()
 	}
-
-	var consume factorysessions.FactoryEventConsumer
-	if streamRenderer != nil {
-		consume = streamRenderer.PresentFactoryEvents
+	if streamRenderer != nil && presentations != nil {
+		scopeID, registerErr := presentations.RegisterInvocationEvents(factorysessions.InvocationEventScope{
+			Consume: streamRenderer.PresentFactoryEvents,
+		})
+		if registerErr != nil {
+			return fmt.Errorf("register invocation event presentation: %w", registerErr)
+		}
+		defer presentations.Close(scopeID)
+		target.EventScopeID = scopeID
 	}
 	invocationRequest := factorysessionmapping.InvocationRequestFromAPI(request)
 	if cfg.PreparedInvocationInput != nil {
@@ -501,7 +415,7 @@ func runFactoryInvocation(
 		invocationRequest.ContentProvided = false
 		invocationRequest.PreparedInvocationInput = cfg.PreparedInvocationInput.Clone()
 	}
-	outcome, err := invocation.InvokeFactory(invokeCtx, target, invocationRequest, consume)
+	outcome, err := invocation.InvokeFactory(invokeCtx, target, invocationRequest)
 	result := outcome.Result
 	if result.Status == "" {
 		if err == nil {

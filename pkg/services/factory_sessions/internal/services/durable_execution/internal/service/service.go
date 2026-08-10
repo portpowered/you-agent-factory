@@ -54,31 +54,6 @@ func (s *Service) SubscribeResponseEvents(
 	return subscriber.SubscribeResponseEvents(ctx, sessionID, request)
 }
 
-// StartSyncWithEventConsumer forwards the private presentation capability to
-// a live JavaScript execution when one is available. The public durable
-// StartRequest remains value-only; callers that do not need presentation use
-// the ordinary StartSync method above.
-func (s *Service) StartSyncWithEventConsumer(
-	ctx context.Context,
-	request factorysessions.StartRequest,
-	consume factorysessions.FactoryEventConsumer,
-) (factorysessions.SyncStartResult, error) {
-	if s == nil || s.Service == nil {
-		return factorysessions.SyncStartResult{}, factorysessions.ErrRuntimeNotAvailable
-	}
-	observed, ok := s.Service.(interface {
-		StartSyncWithEventConsumer(
-			context.Context,
-			factorysessions.StartRequest,
-			factorysessions.FactoryEventConsumer,
-		) (factorysessions.SyncStartResult, error)
-	})
-	if !ok {
-		return s.StartSync(ctx, request)
-	}
-	return observed.StartSyncWithEventConsumer(ctx, request, consume)
-}
-
 // New constructs an inert durable execution capability around an explicitly
 // injected implementation.
 func New(execution durableexecution.Service) (*Service, error) {

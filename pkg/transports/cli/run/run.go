@@ -192,6 +192,7 @@ func Open(
 			invocation,
 			presentation,
 			mockWorkersConfig,
+			presentationOwner,
 		)
 	}
 
@@ -324,7 +325,7 @@ func prepareHostedInvocation(
 		return nil, cfg, nil
 	}
 	operation, err := openInvocation(
-		ctx, cfg, logger, request, recordPath, invocation, presentation, mockWorkersConfig,
+		ctx, cfg, logger, request, recordPath, invocation, presentation, mockWorkersConfig, nil,
 	)
 	if err != nil {
 		return nil, RunConfig{}, err
@@ -469,14 +470,15 @@ func (operation *Operation) runInvocation(ctx context.Context) error {
 	invocation := operation.invocation
 	if operation.hostedLiveInvocation != nil {
 		invocation = &hostedInvocationOperation{
-			delegate: invocation,
-			hosted:   operation.hostedLiveInvocation,
-			logger:   operation.logger,
+			delegate:     invocation,
+			hosted:       operation.hostedLiveInvocation,
+			logger:       operation.logger,
+			presentations: operation.openingPresentations,
 		}
 	}
 	return runFactoryInvocation(
 		ctx, operation.cfg, target, *operation.invocationRequest,
-		invocation, operation.presentation,
+		invocation, operation.presentation, operation.openingPresentations,
 	)
 }
 

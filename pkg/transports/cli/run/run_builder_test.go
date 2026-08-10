@@ -17,7 +17,6 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
@@ -248,7 +247,7 @@ func TestOpenRunScopedServerAttachesInvocationCompletionAndKeepsOneShotResult(t 
 	var output strings.Builder
 	var opening factorysessions.ApplicationOpeningRequest
 	var openingScope factorysessions.ApplicationOpeningScope
-	owner := factorysessionwire.NewOpeningPresentationOwner()
+	owner := newTestOpeningPresentationOwner()
 	runnerCalls := 0
 	invocationCalls := 0
 	operation, err := Open(
@@ -281,7 +280,7 @@ func TestOpenRunScopedServerAttachesInvocationCompletionAndKeepsOneShotResult(t 
 			context.Context,
 			factorysessions.InvocationTarget,
 			factorysessions.InvocationRequest,
-			factorysessions.FactoryEventConsumer,
+			func([]interfaces.FactoryEvent),
 		) (factorysessions.FactoryInvocationOutcome, error) {
 			invocationCalls++
 			return factorysessions.FactoryInvocationOutcome{
@@ -338,12 +337,13 @@ func (r testDashboardRenderingRunner) Run(ctx context.Context) error {
 }
 
 func (f testRunnerOpeners) Invocation() InvocationOperation {
-	return testInvocationOperation{open: f.invocation}
+	return testInvocationOperation{open: f.invocation, presentations: f.presentations}
 }
 
 type testInvocationOperation struct {
 	open          testInvocationRunnerOpener
-	invokeFactory func(context.Context, factorysessions.InvocationTarget, factorysessions.InvocationRequest, factorysessions.FactoryEventConsumer) (factorysessions.FactoryInvocationOutcome, error)
+	presentations factorysessions.OpeningPresentationOwner
+	invokeFactory func(context.Context, factorysessions.InvocationTarget, factorysessions.InvocationRequest, func([]interfaces.FactoryEvent)) (factorysessions.FactoryInvocationOutcome, error)
 }
 
 func (testInvocationOperation) ResolveModelInvocationFactoryDir(dir string) (string, error) {
@@ -367,8 +367,13 @@ func (o testInvocationOperation) InvokeFactory(
 	ctx context.Context,
 	target factorysessions.InvocationTarget,
 	request factorysessions.InvocationRequest,
-	consume factorysessions.FactoryEventConsumer,
 ) (factorysessions.FactoryInvocationOutcome, error) {
+	consume := func([]interfaces.FactoryEvent) {}
+	if o.presentations != nil && target.EventScopeID != "" {
+		if registered, ok := o.presentations.InvocationEvents(target.EventScopeID); ok {
+			consume = registered
+		}
+	}
 	if o.invokeFactory != nil {
 		return o.invokeFactory(ctx, target, request, consume)
 	}
@@ -498,7 +503,7 @@ func runWithTestRuntimeRunnerAndMockWorkersLoader(
 	factory := testRunnerOpeners{
 		runtime: builder, invocation: openTestInvocationRunner,
 	}
-	factory.presentations = factorysessionwire.NewOpeningPresentationOwner()
+	factory.presentations = newTestOpeningPresentationOwner()
 	operation, err := Open(
 		ctx,
 		cfg,

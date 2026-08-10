@@ -18,7 +18,6 @@ import (
 //   - ExecutionValidationError names ValidationError for peer-facing clarity
 //   - ErrDurableSessionNotFound is the durable missing-session sentinel
 //   - ErrExecutionServiceNotConfigured names the durable service configuration failure
-//   - ExecutionFactoryEventConsumer names FactoryEventConsumer for durable sync observation
 //
 // Helper functions ApplySessionListScope, EvaluateLifecycleControl,
 // MaterializeEventReadStream, and related lifecycle/listing helpers are also
@@ -638,9 +637,6 @@ type WaitOptions struct {
 
 // ExecutionValidationError is the published root name for durable start/input validation failures.
 type ExecutionValidationError = ValidationError
-
-// ExecutionFactoryEventConsumer is the published root name for durable sync event observation.
-type ExecutionFactoryEventConsumer = FactoryEventConsumer
 
 const (
 	LifecycleStatusQueued           LifecycleStatus = "QUEUED"

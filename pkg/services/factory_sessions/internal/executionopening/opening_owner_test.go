@@ -1,6 +1,10 @@
 package executionopening
 
-import factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+import (
+	"context"
+
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+)
 
 type openingOwnerStub struct {
 	application      factorysessions.ApplicationOpeningScope
@@ -39,6 +43,20 @@ func (owner *openingOwnerStub) RegisterStdio(scope factorysessions.StdioOpeningS
 
 func (owner *openingOwnerStub) Stdio(id factorysessions.OpeningScopeID) (factorysessions.StdioOpeningScope, bool) {
 	return owner.stdio, id == owner.stdioID
+}
+
+func (*openingOwnerStub) RegisterInvocationEvents(factorysessions.InvocationEventScope) (factorysessions.OpeningScopeID, error) {
+	return "", nil
+}
+
+func (*openingOwnerStub) InvocationEvents(factorysessions.OpeningScopeID) (factorysessions.FactoryEventConsumer, bool) {
+	return nil, false
+}
+
+func (*openingOwnerStub) StartFactoryEventBridge(context.Context, factorysessions.Service, factorysessions.OpeningScopeID) (interface {
+	Finish(context.Context, factorysessions.Service, factorysessions.FactoryInvocationOutcome) error
+}, error) {
+	return nil, nil
 }
 
 func (owner *openingOwnerStub) ObserveHost(id factorysessions.OpeningScopeID, binding factorysessions.RuntimeHostBinding) {

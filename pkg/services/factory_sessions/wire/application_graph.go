@@ -216,6 +216,7 @@ func NewInvocationOperation(
 	artifactRoots factoryruntime.RuntimeArtifactRootResolver,
 	generateSessionID factorysessions.SessionIDGenerator,
 	logger *zap.Logger,
+	presentations OpeningPresentationOwner,
 ) (InvocationOperation, error) {
 	return invocationwire.NewOperation(
 		openRuntime,
@@ -227,6 +228,7 @@ func NewInvocationOperation(
 		artifactRoots,
 		generateSessionID,
 		logger,
+		presentations,
 	)
 }
 

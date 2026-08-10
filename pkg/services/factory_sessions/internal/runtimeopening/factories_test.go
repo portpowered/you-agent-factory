@@ -557,6 +557,20 @@ func (runtimeOpeningPresentationOwnerStub) Stdio(factorysessions.OpeningScopeID)
 	return factorysessions.StdioOpeningScope{}, false
 }
 
+func (runtimeOpeningPresentationOwnerStub) RegisterInvocationEvents(factorysessions.InvocationEventScope) (factorysessions.OpeningScopeID, error) {
+	return "test", nil
+}
+
+func (runtimeOpeningPresentationOwnerStub) InvocationEvents(factorysessions.OpeningScopeID) (factorysessions.FactoryEventConsumer, bool) {
+	return nil, false
+}
+
+func (runtimeOpeningPresentationOwnerStub) StartFactoryEventBridge(context.Context, factorysessions.Service, factorysessions.OpeningScopeID) (interface {
+	Finish(context.Context, factorysessions.Service, factorysessions.FactoryInvocationOutcome) error
+}, error) {
+	return nil, nil
+}
+
 func (runtimeOpeningPresentationOwnerStub) ObserveHost(factorysessions.OpeningScopeID, factorysessions.RuntimeHostBinding) {
 }
 

@@ -12,7 +12,6 @@ import (
 	processcontract "github.com/portpowered/infinite-you/pkg/initializer/process"
 	runtimeapplication "github.com/portpowered/infinite-you/pkg/initializer/runtimeapplication"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 )
 
@@ -35,7 +34,7 @@ func TestSplitFlagTerminatorPreservesCanonicalRunTokenization(t *testing.T) {
 func TestRunSelectionOwnsDirectJavaScriptTransportChoice(t *testing.T) {
 	output := &bytes.Buffer{}
 	direct := &selectionDirectJavaScriptStub{supported: true}
-	owner := factorysessionwire.NewOpeningPresentationOwner()
+	owner := newTestOpeningPresentationOwner()
 	factory, err := NewSelectionFactory(
 		func(context.Context, RunConfig, RuntimeRunnerBuilder, InvocationOperation, factoryvisualization.ResponsePresentation) (*Operation, error) {
 			t.Fatal("regular run opener called for direct JavaScript")
@@ -109,7 +108,7 @@ func TestRunSelectionDirectJavaScriptCleansPresentationOnOpenFailures(t *testing
 		{name: "nil application runner", nilRunner: true},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
-			owner := factorysessionwire.NewOpeningPresentationOwner()
+			owner := newTestOpeningPresentationOwner()
 			direct := &selectionDirectJavaScriptStub{supported: true, openErr: testCase.openErr}
 			factory, err := NewSelectionFactory(
 				func(context.Context, RunConfig, RuntimeRunnerBuilder, InvocationOperation, factoryvisualization.ResponsePresentation) (*Operation, error) {
