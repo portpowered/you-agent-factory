@@ -13,6 +13,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 const processCommandStopTimeout = 5 * time.Second
@@ -34,6 +35,20 @@ func BuildProcess(t testing.TB, edges serviceedges.Edges) Process {
 		t.Fatalf("BuildProcess() error = %v", err)
 	}
 	return process
+}
+
+// RequireSafeCLIDiagnostic verifies the process-boundary fallback used when a
+// command failure has no authored public diagnostic contract.
+func RequireSafeCLIDiagnostic(t testing.TB, stderr string) factoryapi.ErrorResponse {
+	t.Helper()
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stderr)), &response); err != nil {
+		t.Fatalf("decode safe CLI diagnostic: %v\nstderr=%q", err, stderr)
+	}
+	if response.Code != factoryapi.ErrorResponseCode("CLI_COMMAND_FAILED") || response.Message != "command failed" {
+		t.Fatalf("safe CLI diagnostic = %#v, want CLI_COMMAND_FAILED/command failed", response)
+	}
+	return response
 }
 
 // CleanupProcess closes a caller-owned reusable process after its sequential

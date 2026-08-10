@@ -8,6 +8,7 @@ import (
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimecli "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/cli"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 )
 
 const (
@@ -28,7 +29,11 @@ type InvocationError = factoryruntimecli.InvocationError
 // WriteInvocationError renders the stable clean-invocation failure contract to
 // stderr. It returns true when err matched an invocation contract error.
 func WriteInvocationError(w io.Writer, err error, quiet bool) bool {
-	return factoryruntimecli.WriteInvocationError(w, err, quiet)
+	handled := factoryruntimecli.WriteInvocationError(w, err, quiet)
+	if handled {
+		clidiag.MarkDiagnosticRendered(w)
+	}
+	return handled
 }
 
 // WriteIncompleteDrainError renders the finite-run failure contract for a
