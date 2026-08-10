@@ -225,6 +225,49 @@ func TestStreamReturnsClosedBeforeTerminalAsJSONError(t *testing.T) {
 	}
 }
 
+func TestStreamReturnsMalformedFrameAsTypedFailure(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = fmt.Fprint(w, "data: {not-json}\n\n")
+	}))
+	defer server.Close()
+
+	var output bytes.Buffer
+	err := NewStream(testHTTPProtocol(t))(StreamConfig{
+		Context: context.Background(), Server: server.URL, Provider: "codex", Kind: "session_id", ID: "session-1", Output: &output,
+	})
+	var typed *CLIError
+	if !errors.As(err, &typed) || typed.Code != "WORKER_SESSION_STREAM_FAILED" {
+		t.Fatalf("error = %v, want typed WORKER_SESSION_STREAM_FAILED", err)
+	}
+	if output.Len() != 0 {
+		t.Fatalf("malformed stream output = %q, want no frame", output.String())
+	}
+}
+
+func TestStreamReturnsOutputWriteFailureAsTypedStreamFailure(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = fmt.Fprint(w, "data: {\"delivery\":\"RECORD\",\"workerSessionId\":\"worker-session-1\",\"event\":null}\n\n")
+	}))
+	defer server.Close()
+
+	writeErr := errors.New("broken stdout pipe")
+	err := NewStream(testHTTPProtocol(t))(StreamConfig{
+		Context: context.Background(), Server: server.URL, Provider: "codex", Kind: "session_id", ID: "session-1", Output: failingStreamWriter{err: writeErr},
+	})
+	var typed *CLIError
+	if !errors.As(err, &typed) || typed.Code != "WORKER_SESSION_STREAM_FAILED" {
+		t.Fatalf("error = %v, want typed WORKER_SESSION_STREAM_FAILED", err)
+	}
+	if typed.Message != "failed to write Worker Session event stream" {
+		t.Fatalf("typed write failure message = %q, want safe stream-write message", typed.Message)
+	}
+	if !errors.Is(err, writeErr) {
+		t.Fatalf("error = %v, want to preserve the output write cause", err)
+	}
+}
+
 func TestStreamPropagatesContextCancellation(t *testing.T) {
 	protocol, err := clihttp.NewProtocol(streamCancelDoer{}, testClock{})
 	if err != nil {
@@ -341,4 +384,12 @@ func (w *streamSignalWriter) Write(p []byte) (int, error) {
 		w.once.Do(func() { close(w.frame) })
 	}
 	return n, err
+}
+
+type failingStreamWriter struct {
+	err error
+}
+
+func (writer failingStreamWriter) Write([]byte) (int, error) {
+	return 0, writer.err
 }

@@ -27,6 +27,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 	acpcli "github.com/portpowered/infinite-you/pkg/transports/cli/acp"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
@@ -286,21 +287,24 @@ func (factory CommandFactory) ExecuteCommand(input startupcli.CommandInvocation)
 	factory.homeDir = input.HomeDir
 	factory.lookupEnv = input.LookupEnv
 	factory.initializer = input.Initializer
+	diagnostics := clidiag.NewDiagnosticWriter(input.Stderr)
 	root := newRootCommandWithFactory(factory)
 	if root == nil {
-		return fmt.Errorf("execute CLI command: command is required")
+		return executeCommandFailure(diagnostics, fmt.Errorf("execute CLI command: command is required"))
 	}
 	root.SetArgs(append([]string(nil), input.Arguments...))
 	root.SetIn(input.Stdin)
 	root.SetOut(input.Stdout)
-	root.SetErr(input.Stderr)
-	root.SetContext(input.Context)
+	root.SetErr(diagnostics)
+	root.SilenceErrors = true
+	root.SilenceUsage = true
+	root.SetContext(clidiag.WithCentralDiagnostics(input.Context, true))
 	if factory.observeCLI == nil {
-		return cobracompletion.ExecuteWithPowerShellFilesystemDelegation(root)
+		return executeCommandResult(diagnostics, cobracompletion.ExecuteWithPowerShellFilesystemDelegation(root))
 	}
 	snapshot, err := cliobservation.CaptureSnapshot(root)
 	if err != nil {
-		return err
+		return executeCommandFailure(diagnostics, err)
 	}
 	command, positionals, parseErr := ParseArgvForCLIInputsInventory(root, input.Arguments)
 	result := cliobservation.Result{
@@ -310,18 +314,45 @@ func (factory CommandFactory) ExecuteCommand(input startupcli.CommandInvocation)
 	if parseErr == nil {
 		resolved, resolveErr := climanifestcobra.ResolvePersistentInputsForObservation(command, positionals)
 		if resolveErr != nil {
-			return resolveErr
+			return executeCommandFailure(diagnostics, resolveErr)
 		}
 		result.ResolvedInputs = resolved.Observations()
 	}
 	edgeObservation, err := cliobservation.Encode(result)
 	if err != nil {
-		return err
+		return executeCommandFailure(diagnostics, err)
 	}
 	if err := factory.observeCLI(edgeObservation); err != nil {
-		return fmt.Errorf("observe CLI command: %w", err)
+		return executeCommandFailure(diagnostics, fmt.Errorf("observe CLI command: %w", err))
 	}
-	return parseErr
+	return executeCommandResult(diagnostics, parseErr)
+}
+
+func executeCommandResult(diagnostics *clidiag.DiagnosticWriter, err error) error {
+	if err == nil {
+		return nil
+	}
+	if diagnostics != nil && diagnostics.DiagnosticRendered() {
+		return err
+	}
+	return executeCommandFailure(diagnostics, err)
+}
+
+func executeCommandFailure(diagnostics io.Writer, err error) error {
+	if err == nil {
+		return nil
+	}
+	normalized := clidiag.Normalize(err)
+	if clidiag.DiagnosticRendered(diagnostics) {
+		return err
+	}
+	if errors.Is(err, context.Canceled) {
+		_, _ = fmt.Fprintln(diagnostics, "Error: context canceled")
+		clidiag.MarkDiagnosticRendered(diagnostics)
+		return normalized
+	}
+	clidiag.WriteFailure(diagnostics, normalized)
+	return normalized
 }
 
 func buildWorkflowExecutionService(
@@ -378,6 +409,9 @@ func (opts *cliDiagnosticsOptions) verboseEnabled() bool {
 }
 
 func (opts *cliDiagnosticsOptions) writer(cmd *cobra.Command) io.Writer {
+	if cmd != nil && clidiag.CentralDiagnosticsEnabled(cmd.Context()) {
+		return cmd.ErrOrStderr()
+	}
 	return opts.resolvePolicy(false).DiagnosticsWriter(cmd.ErrOrStderr())
 }
 

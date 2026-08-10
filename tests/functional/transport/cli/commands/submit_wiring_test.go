@@ -180,9 +180,7 @@ func TestCLISubmitUnavailableServer(t *testing.T) {
 	}
 
 	output := string(submitOut)
-	if !strings.Contains(output, "factory not reachable at") {
-		t.Fatalf("submit batch output missing unreachable factory diagnostic:\n%s", output)
-	}
+	support.RequireSafeCLIDiagnostic(t, output)
 
 	for _, marker := range []string{
 		"requestId: " + submitWiringUnavailableRequestID,
