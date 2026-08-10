@@ -1,4 +1,7 @@
 ## Codebase Patterns
+- When synchronizing a task branch with current main, preserve the active branch's task-scoped `prd.json` and merge unrelated main history into `progress.txt`; validate the resulting PRD before staging.
+- When a termination drain consumes a runtime wake signal, the engine must re-enter its tick loop directly; returning to the outer wait loses the already-consumed wake and can strand a finite run.
+- Customer-facing functional tests must compose through `root.BuildProcess` and assert public process/CLI behavior; keep service-specific typed-error assertions in service-layer tests because the functional boundary check rejects direct Runtime imports.
 - Repository-wide `pkg-boundary` traversals must prune through one root-relative, slash-normalized policy before parsing entries; adding a new `WalkDir` requires using that same decision.
 - Treat disposable artifact/worktree paths as exact repository roots, not directory-name substrings, so tracked production packages with nested artifact-like names remain visible to the gate.
 - Canonical packaged CLI docs live under `docs/reference/`; adding a topic also requires its authored file in `docs/reference/embed.go` and a registry entry in `pkg/transports/cli/docs/docs.go`.
@@ -67,7 +70,6 @@
 - **Learnings for future iterations:**
 - This checkout may have `ui/node_modules` without all lockfile dependencies; run the pinned Bun install before treating a typecheck failure as a source regression.
 ---
-
 ## 2026-08-10 04:32 -07:00 - sac-s0-2-pkg-boundary-ignores-001
 - What was implemented
   - Centralized repository-root-relative pruning for `.artifacts`, `.artifacts/bootstrap/worktrees`, generated transient worktrees, and the supported root worktree locations.
@@ -1148,6 +1150,71 @@
   - A progress-only commit can expose unrelated resource and timing flakiness; inspect the exact failing test and compare changed paths before editing feature code, then rerun only failed jobs when the isolated evidence supports it.
   - Record both the primary failure and any missing downstream artifact so CI diagnosis does not mistake the upload symptom for the test cause.
 
+## 2026-08-10 04:44 -07:00 - pf-plain-batch-drain-001
+- What was implemented
+  - Made Factory Runtime termination-drain coordination re-evaluate immediately when a result, submission, or dispatch-result hook wake is consumed at the termination boundary.
+  - Added a focused engine regression proving a dispatch hook wake causes a second canonical termination check instead of returning to a blocked outer wait.
+  - Added root-built public plain-batch coverage for stranded PROCESSING Work, exact typed incomplete-drain propagation and stderr, empty and terminal finite success, and continuous idle liveness.
+- Files changed
+  - `pkg/services/factory_runtime/internal/services/orchestration/engine/engine.go`
+  - `pkg/services/factory_runtime/internal/services/orchestration/engine/runtime_state.go`
+  - `pkg/services/factory_runtime/internal/services/orchestration/engine/engine_termination_test.go`
+  - `tests/functional/workers/mock/plain_batch_drain_test.go`
+  - `progress.txt`
+  - `prd.json`
+- Verification
+  - `go test ./pkg/services/factory_runtime/internal/services/orchestration/... ./pkg/services/factory_sessions/internal/processlifecycle ./pkg/services/factory_sessions/internal/runtimehosting ./pkg/transports/cli/run ./tests/functional/workers/mock -run 'TestRun(ReevaluatesTerminationAfterDispatchHookWake|ReturnsIncompleteDrainErrorAfterTerminationClassification)$|TestPlainBatchDrain' -count=1 -timeout 180s` — passed.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - The Runtime termination checker already owns the finite incomplete classification and typed error; the lifecycle bug was that `finishTerminationDrain` reported a consumed wake without its caller looping back into `tickOnce`.
+  - Dispatch-result hook wake channels are part of the engine’s pending-input contract and must be drained alongside result and submission signals at the final termination boundary.
+---
+
+## 2026-08-10 04:57 -07:00 - pf-plain-batch-drain-001 verification follow-up
+- What was implemented
+  - Kept the termination-drain result helper within the repository’s 1000-line backend file limit without changing its semantics.
+- Files changed
+  - `pkg/services/factory_runtime/internal/services/orchestration/engine/engine.go`
+  - `pkg/services/factory_runtime/internal/services/orchestration/engine/runtime_state.go`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/factory_runtime/... -count=1 -timeout 300s` — passed.
+  - `go test ./pkg/services/factory_sessions/... -count=1 -timeout 360s` — passed.
+  - `go test ./tests/functional/sessions/execution -run 'TestWithServerDrainCannotReportSuccessWhileWorkIsNonTerminal|TestHostedFiniteRunsKeepEmptyAndTerminalSuccess|TestHostedContinuousRunsStayLiveWhileIdle' -count=1 -timeout 240s` — passed.
+  - `make test` — passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` — passed.
+  - `make verify-fast` — blocked before Go/UI tests by the checkout’s pre-existing dashboard baseline: missing `@types/bun` and TypeScript 6 `baseUrl` deprecation errors.
+- **Learnings for future iterations:**
+  - The backend quality gates report deletion-only baseline entries but pass newly changed files; a small private helper signature reduction is enough to preserve the strict engine file-size boundary.
+  - `make test` remains the reliable repository-wide short Go evidence when the fast aggregate stops early at an unavailable UI dependency.
+---
+
+## 2026-08-10 05:08 -07:00 - pf-plain-batch-drain-001 CI boundary follow-up
+- What was implemented
+  - Adjusted the plain customer-boundary assertion to avoid a forbidden direct Runtime service import while retaining exact stderr and process failure coverage.
+- Files changed
+  - `tests/functional/workers/mock/plain_batch_drain_test.go`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/workers/mock -run 'TestPlainBatchDrain' -count=1 -timeout 120s` — passed.
+  - `go run ./cmd/functionalboundarycheck` — passed.
+  - `git diff --check` — passed.
+  - PR #1845's initial functional lane identified the same forbidden Runtime import; commit `085c00db6` removes it and is ready for a fresh canonical-repository CI run.
+- **Learnings for future iterations:**
+  - The functional boundary lane is intentionally stricter than package tests: public harness tests verify observable process behavior, while `errors.As` checks for service-owned types belong in the owning service package.
+---
+
+## 2026-08-10 05:09 -07:00 - pf-plain-batch-drain-001 PR handoff follow-up
+- What was implemented
+  - Re-submitted the current branch as review PR #1846 after the migrated PR #1845 retained checks for its obsolete pre-boundary-fix commit.
+- Files changed
+  - `progress.txt`
+- Verification
+  - PR #1846 is open, non-draft, points at commit `f3f6db0b5`, has no comments or reviews, and its body matches `prd.json` after newline normalization.
+  - Local focused tests, the functional boundary checker, and the previously recorded repository quality gates remain passing; the checkout-local `make verify-fast` UI baseline remains blocked by missing `@types/bun` and TypeScript 6 `baseUrl` deprecation errors.
+  - GitHub currently reports no fresh Actions run for the current head after the repository-migration PR recreation; this remains PR follow-up rather than a claimed green CI result.
+- **Learnings for future iterations:**
+  - When a repository migration leaves a PR’s checks attached to an obsolete head, recreating the review PR can restore a clean handoff, but verify that the new pull-request event actually creates checks before declaring review readiness.
 ## 2026-08-10 04:38 -07:00 - sac-s0-2-pkg-boundary-ignores-002
 - What was implemented
   - Added a paired normal checker regression using the same prohibited `pkg/wire` import as the ignored-root fixture under production `pkg` paths containing nested `.artifacts`, `.claude/worktrees`, and `worktrees` directories.
@@ -1180,6 +1247,49 @@
 - **Learnings for future iterations:**
   - When a moving base changes an unrelated task PRD, resolve the bookkeeping conflict by keeping the branch’s task PRD and merging append-only progress entries; retain the base’s source changes and rerun both affected-package and feature-slice tests.
 ---
+## 2026-08-10 05:25 -07:00 - pf-plain-batch-drain-001 synchronization follow-up
+- What was implemented
+  - Synchronized the branch with current `main` after PR #1844 advanced the base, retaining the plain-batch implementation and resolving the shared PRD/progress bookkeeping files without dropping either history.
+  - Committed the conflict-free merge as `8bd1fb6eb`.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+  - Current-main `cmd/pkgboundarycheck` changes were merged as part of the base synchronization.
+- Verification
+  - Focused plain-batch/runtime/session tests passed.
+  - Full `pkg/services/factory_runtime/...` and `pkg/services/factory_sessions/...` tests passed.
+  - `go test ./cmd/pkgboundarycheck -count=1` and `go run ./cmd/functionalboundarycheck` passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` passed.
+  - `make test` passed.
+  - After `bun install --frozen-lockfile` restored the checkout's missing UI dependencies, `make verify-fast` passed dashboard typecheck, MCP contract checks, 355 UI files / 2,970 tests, 191 Bun unit checks, and the short Go suite.
+- **Learnings for future iterations:**
+  - The missing `@types/bun` dependency was an environment-only checkout issue; installing from the pinned lockfile restored the full fast verification tier without tracked dependency changes.
+  - A current-main merge can conflict in shared task bookkeeping even when product files merge cleanly; keep the active branch PRD authoritative and preserve both chronological progress histories.
+---
+## 2026-08-10 05:29 -07:00 - pf-plain-batch-drain-001 PR description follow-up
+- What was implemented
+  - Restored the omitted word `plain` in the active PRD acceptance criterion so `prd.json` exactly matches the existing PR #1846 description.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `prd.json` parses successfully.
+  - PR #1846 body matches `prd.json` after newline normalization.
+  - `git diff --check` passed.
+- **Learnings for future iterations:**
+  - After resolving a shared JSON conflict manually, compare the normalized PR body against the file content rather than relying only on JSON validity; small wording drift can otherwise go unnoticed.
+---
+## 2026-08-10 05:54 -07:00 - pf-plain-batch-drain-001 review follow-up
+- What was implemented
+  - Addressed PR #1846's blocking test-construction feedback by naming the continuous idle observation and documenting why the bounded negative-liveness guard is required at the public `Process.Execute` boundary.
+- Files changed
+  - `tests/functional/workers/mock/plain_batch_drain_test.go`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/workers/mock -run 'TestPlainBatchDrain' -count=3 -timeout 180s` — passed.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - A functional test that proves a continuous run stays open must explain why no deterministic idle event or injected edge observation exists; name the bounded observation and keep it scoped to the negative-liveness guard.
 ## 2026-08-10 05:47 -0700 - wo-b3-provider-capability-discovery-cli-003
 - What was implemented
   - Addressed the current blocking PR feedback by splitting the 88-line `assertJSONFacts` functional helper into focused JSON decoding, common inventory, Codex, Antigravity, and Claude behavioral assertions.
@@ -1196,4 +1306,25 @@
 - **Learnings for future iterations:**
   - Functional assertions that cover several provider-specific facts should be split by behavior area so maintainability limits do not force weaker runtime coverage.
   - A top-level review blocker can be resolved with a focused test-only change when the requested behavior is already correct; preserve the existing observable assertions while reducing helper scope.
+---
+## 2026-08-10 06:24 -07:00 - pf-plain-batch-drain-001 current-main review follow-up
+- What was implemented
+  - Merged current `origin/main` into `pf-plain-batch-drain` and resolved the shared bookkeeping conflict by keeping the plain-batch `prd.json` authoritative while preserving both append-only progress histories.
+  - Retained the plain-batch Runtime wake re-evaluation, typed incomplete-drain propagation, and public functional regression alongside current-main provider-discovery source and generated artifacts.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+  - Current-main provider-discovery source/generated files were retained by the merge.
+- Verification
+  - Focused Runtime and Factory Session packages passed.
+  - `go test ./tests/functional/workers/mock -run '^TestPlainBatchDrain' -count=3 -timeout 240s` — passed.
+  - `go run ./cmd/functionalboundarycheck` — passed.
+  - `make test` — passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` — passed.
+  - `make verify-fast` — passed dashboard typecheck, MCP contract boundary, 355 UI files / 2,970 tests, 191 Bun checks, and the short Go suite.
+  - `make lint` passed UI lint/dead-code, vet, and backend gates, then reached the existing 176-violation `pkg-boundary` baseline; the baseline matches current main and no new task violation was introduced.
+  - `git diff --check` — passed; PRD parses with the single story still marked `passes:true`.
+- **Learnings for future iterations:**
+  - When current main changes the task bookkeeping files, preserve the active task PRD exactly for PR-description parity and merge each side's progress entries rather than replacing the append-only log.
+  - A clean local merge head can still report the repository's known `pkg-boundary` migration baseline; distinguish that baseline from changed-file regressions using the dedicated checker and functional-boundary gate.
 ---

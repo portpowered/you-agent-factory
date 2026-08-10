@@ -1,81 +1,39 @@
 {
-  "project": "WO-B3 Provider Capability Discovery CLI",
-  "branchName": "wo-b3-provider-capability-discovery-cli",
-  "description": "Deliver WO-B3 as an end-to-end provider discovery CLI slice: make `you providers list` available through the canonical injected process and report deterministic provider identity, availability/prerequisites, models, effort settings, modalities, tools, and named known limits in aligned human, JSON, help, and reference surfaces without live provider calls or a second catalog.",
+  "project": "Plain Batch Honest-Drain Semantics",
+  "branchName": "pf-plain-batch-drain",
+  "description": "Make finite plain batch runs without --with-server terminate non-zero with the existing explicit incomplete-drain diagnostic when worker activity drains while Work remains stranded in PROCESSING, instead of hanging forever. Prove the correction through the public CLI process with a deterministic mock worker that never completes while preserving terminal-batch success and continuous-mode liveness.",
   "context": {
-    "customerAsk": "Make `you providers list` available from the canonical root.BuildProcess and Process.Execute path and enumerate every first-party provider's canonical identity, availability/prerequisites, models, effort settings, input/output modalities, tools, and known limits. Ensure operators can discover before execution that gpt-5.6 lacks video/audio understanding, image generation accepts at most five referenced image paths, and ANTIGRAVITY/AGY accepts video/audio file paths with its supported models/efforts and documented --add-dir/timeout constraints. Keep human, JSON, help, and reference behavior aligned and prove the command without live provider calls.",
-    "problem": "The installed CLI rejects `you providers list` even though the Providers root, catalog contracts, model-provider manifests, and Providers-owned list/show adapters already exist. The incomplete public path and incomplete capability metadata force operators to discover modality mismatches and hard provider limits through failed or misleading production runs.",
-    "solution": "Extend the existing authored model-provider catalog with validated provider/model discovery facts, project them through the Providers root, render deterministic equivalent human and JSON output through the Providers CLI transport, register that transport in the canonical CLI manifest and pkg/wire process graph, align help/reference guidance, and add focused plus root.BuildProcess/Process.Execute regression evidence. Do not add another registry, injector, runtime path, local-model harness, storage engine, or media transform.",
-    "originalDocument": "C:/Users/andre/work/portos/infinite-you/docs/temp/work-order.md"
+    "customerAsk": "Apply the drained-but-incomplete semantics delivered by merged WO-A7 to plain batch mode. Without --with-server, a batch whose mock worker leaves Work in PROCESSING and never completes must exit non-zero with an explicit stranded-work error instead of hanging forever.",
+    "problem": "Finite hosted runs already distinguish completion from a drained runtime that still owns non-terminal Work, but the equivalent plain batch path can wait indefinitely after worker activity stops making progress. Operators and automation receive neither a terminal process result nor an actionable failure and cannot distinguish stranded Work from active processing.",
+    "solution": "Use the existing Factory Runtime termination classification and IncompleteDrainError as the single finite-run contract, make plain batch lifecycle coordination re-evaluate termination when dispatch activity drains, preserve the typed failure through Factory Sessions, and reuse the existing CLI incomplete-drain presenter. Verify the observable result with root.BuildProcess and Process.Execute using a deterministic never-completing mock worker, plus empty, terminal, and continuous counterexamples."
   },
   "acceptanceCriteria": [
-    "`you providers list` succeeds through the production root.BuildProcess and Process.Execute path and enumerates every first-party provider exactly once without constructing a second service graph or making a live provider call.",
-    "Each provider entry reports canonical identity, availability/readiness and sanitized prerequisites, supported models, allowed effort settings, input/output modalities, tools, and named known limits in deterministic order.",
-    "The inventory makes these facts directly discoverable before execution: gpt-5.6 has no video or audio understanding; image generation accepts at most five referenced image paths; and ANTIGRAVITY/AGY accepts video and audio file paths with its supported models/efforts plus documented --add-dir and timeout constraints.",
-    "Human output and --json output represent the same canonical facts; command help and `you docs providers` explain the fields and usage without contradicting the catalog.",
-    "Unknown command/argument, catalog validation, mapping, unavailable-prerequisite, and output-write failures retain established CLI behavior, keep data on the correct output channel, and emit safe structured diagnostics without sensitive values.",
-    "Typecheck, focused tests, required generation checks, and required CI pass with no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
-    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared/generated-file churn are reconciled, and the PR is actually merged."
+    "A finite plain you run --work invocation without --with-server, --with-site, or --continuously returns instead of hanging when dispatch activity is drained and one or more Work items remain non-terminal, including Work stranded in PROCESSING by a worker that never returns a completion result.",
+    "The drained plain batch returns a non-zero process result, emits the existing human diagnostic 'Error: factory session drained with N non-terminal work items; run is incomplete' on stderr with the authoritative count, and emits no success or completion output that could misrepresent the run.",
+    "Empty finite plain batches and finite plain batches whose Work is fully terminal still return success, while --continuously runs remain live while idle or in-flight until explicit cancellation and do not report a finite incomplete drain.",
+    "The behavior reuses the Factory Runtime incomplete-termination state and typed error across plain and hosted paths; Factory Sessions and CLI transport propagate and present that state without a second termination policy, hidden mutable state, process-global coordination, or unrelated lifecycle cleanup.",
+    "Quality gates pass: Typecheck passes; Tests pass; the focused runtime, Factory Session, CLI, and plain-batch functional tests pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
+    "The implementation and review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared-file churn are resolved against current main, and the PR is actually merged; opened, green, approved, or ready-to-merge is not complete."
   ],
   "userStories": [
     {
-      "id": "wo-b3-provider-capability-discovery-cli-001",
-      "title": "Publish canonical provider capability facts",
-      "description": "As an operator selecting a provider and model, I want the Providers catalog to return complete execution-planning facts so that all discovery surfaces use one trustworthy authority.",
+      "id": "pf-plain-batch-drain-001",
+      "title": "Terminate stranded finite plain batches honestly",
+      "description": "As an operator running a finite batch without a server, I want the command to fail explicitly when worker activity drains while Work remains in processing so automation does not hang or mistake the run for success.",
       "acceptanceCriteria": [
-        "Listing the canonical catalog returns every first-party provider exactly once with canonical identity, support/implementation availability, readiness prerequisites, supported models, effort settings, input modalities, output modalities, tools, and named known limits.",
-        "The Codex/gpt-5.6 data explicitly represents text/image support as applicable and the absence of video and audio understanding; its image-generation limit states that at most five referenced image paths are accepted.",
-        "The ANTIGRAVITY entry identifies AGY and advertises its supported AGY model names and effort values, video/audio file-path input, required AGY executable/auth/workspace prerequisites, workspace extension through --add-dir, and the documented print-timeout behavior/limit.",
-        "Claude and every other first-party entry expose the same field shape with truthful empty or explicit unsupported values rather than omitted ambiguity.",
-        "Catalog decoding rejects invalid identities, duplicate provider/model facts, unknown modality/direction or effort values, malformed/non-positive numeric limits, and incomplete named-limit records with actionable errors.",
-        "Returned catalog values are detached from the embedded source and have deterministic provider, model, modality, effort, tool, prerequisite, and limit ordering.",
-        "Authored model-provider manifests remain the authority; generated catalog/schema/type artifacts are regenerated from them only where the accepted public catalog contract changes, and generated files are not hand-edited.",
-        "Focused authored-catalog, schema/contract, projection, clone-safety, ordering, and invalid-manifest tests pass.",
+        "Given a finite plain batch and a deterministic mock worker that accepts a dispatch, leaves the associated Work in PROCESSING, and never publishes a completion result, Process.Execute reaches a terminal result without requiring operator cancellation.",
+        "The terminal error matches the existing Factory Runtime incomplete-drain contract, carries the authoritative number of non-terminal Work items, and crosses the Factory Session boundary without being converted to success or a generic unrelated failure.",
+        "The CLI invocation returns non-zero, writes exactly one actionable incomplete-drain diagnostic to stderr containing the non-terminal Work count, and writes no success or completion message to stdout.",
+        "The same functional cell proves an empty finite plain batch and a fully terminal finite plain batch still succeed, and a continuous run does not apply finite-drain failure semantics before cancellation.",
+        "Focused lower-layer tests prove that a drained dispatch signal triggers a termination re-evaluation and that incomplete classification is based on the canonical runtime snapshot rather than a CLI timer or duplicated Work-state scan.",
+        "The functional regression constructs the application through root.BuildProcess, executes through Process.Execute, replaces external effects only through edges.Edges, uses the repository-owned mock-worker feature cell for the never-completing worker, and uses deterministic lifecycle signals; any bounded timeout exists only as a test-failure guard against the original hang and is justified in code.",
+        "No hosted-mode behavior, public API contract, generated artifact, continuous scheduling policy, or unrelated runtime structure changes beyond what is required for plain finite-run parity.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Implemented authored model-provider capability facts and generated schema/catalog/package artifacts for Codex, Claude, and Antigravity; projected deterministic, clone-safe Providers descriptors with sanitized prerequisites, models, efforts, modalities, tools, and known limits. Focused catalog/projection/provider tests, provider-catalog and package generation checks, API validation, affected Go packages, and UI typecheck pass. Review follow-up reconciled AGY's explicit empty model-encoded effort lists and the exact Codex gpt-5.6, gpt-5.6-luna, gpt-5.6-sol, and gpt-5.6-terra IDs with canonical execution policy, and added a behavioral consistency regression. Latest review follow-up adds the documented Claude exact model inventory (including claude-sonnet-5), verifies it in authored-catalog and root-process tests, and makes production unprobed catalog output truthful with readiness=unverified and prerequisite status=required while preserving request-time probe outcomes. Repository-wide make test, focused Go tests, docs-reference smoke, generation checks, and UI typecheck pass."
-    },
-    {
-      "id": "wo-b3-provider-capability-discovery-cli-002",
-      "title": "Render stable provider discovery output",
-      "description": "As an operator, I want `providers list` output to be complete, readable, and scriptable so that I can compare providers or automate preflight checks without invoking one.",
-      "acceptanceCriteria": [
-        "The Providers-owned CLI list operation renders each provider and its models, effort settings, directional modalities, tools, prerequisites, and named limits in a stable, documented human-readable layout with no dependence on input map or slice order.",
-        "--json emits a stable structured envelope containing the same canonical facts as human output, preserves typed values such as numeric maxima, and writes no human table text to stdout.",
-        "Both formats visibly encode unsupported/empty capabilities so gpt-5.6's lack of video/audio understanding cannot be mistaken for unknown metadata.",
-        "Both formats make the five-referenced-image-path limit and ANTIGRAVITY/AGY video/audio file-path, model/effort, --add-dir, and timeout facts discoverable by stable names and descriptions.",
-        "List rendering uses only the injected Providers service operation, performs no environment discovery or provider execution, and emits safe request/success/failure verbose diagnostics to stderr while keeping stdout machine-safe.",
-        "Context cancellation, Providers service failures, and output-write failures return errors without fabricated success diagnostics or leaking sensitive provider/process details.",
-        "Focused mapping, human/JSON parity, deterministic-ordering, empty/unsupported, cancellation, service-failure, and writer-failure tests pass.",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 2,
-      "passes": true,
-      "notes": "Implemented the Providers-owned list renderer with a stable human summary/details layout and a JSON envelope covering publication posture, availability/readiness, prerequisites, models, efforts, directional modalities, tools, known limits, and capabilities. Nested provider/model/modality/effort/tool/prerequisite/limit ordering is canonicalized from detached descriptors; empty arrays and unsupported modality records remain explicit. Output is buffered so writer failures return errors before success diagnostics, and verbose cancellation/service/write diagnostics expose only a safe stage/type. Review follow-up verifies human/JSON output exposes AGY's empty effort arrays and named model-ID selection constraint alongside the exact Codex model IDs. Focused Providers CLI tests, all Providers package tests, affected CLI transport tests, go vet, backend-size, pkg-file-count, CLI manifest, and docs reference checks pass. The repository-wide make test target still reports the unrelated existing stale packages/api generated-artifact failure in TestMockWorkersSchema_StaleStagingDetectedByContractCheck. Full make lint reaches pkg-maint with only the three pre-existing catalog complexity findings and no new CLI violation."
-    },
-    {
-      "id": "wo-b3-provider-capability-discovery-cli-003",
-      "title": "Expose and verify the canonical public command",
-      "description": "As a CLI user, I want `you providers list` to be discoverable and executable from the installed command tree so that provider preflight information is available in the same way as other public CLI operations.",
-      "acceptanceCriteria": [
-        "`you providers list` is present in root and family help, accepts the established global --json and --verbose conventions, rejects unsupported arguments with the standard usage failure, and invokes the Providers-owned CLI adapter.",
-        "The thin command entrypoint receives the already-constructed Providers service from the canonical pkg/wire application graph; pkg/initializer only activates injected roles, and command execution performs no child injection, service lookup, provider process call, network call, or runtime-session construction.",
-        "`you docs providers` explains how to read models, effort settings, directional modalities, tools, availability/prerequisites, and known limits, and includes the gpt-5.6, five-image-path, and ANTIGRAVITY/AGY operational facts without becoming a second capability authority.",
-        "A functional regression constructs the application with root.BuildProcess, runs Process.Execute with `providers list` and `providers list --json`, and proves successful output includes all required facts and deterministic provider ordering without live provider calls.",
-        "The same regression proves an unsupported providers subcommand/argument returns established CLI usage behavior and does not emit a successful or partial capability inventory.",
-        "CLI manifest/help generated artifacts are updated through the repository generator when their authored command contract changes; unrelated OpenAPI or generated interface artifacts remain unchanged unless an accepted public API contract truly changes.",
-        "The independently runnable end-to-end verification command passes: `go test ./tests/functional/providers/discovery/... -run '^TestProvidersListThroughRootBuildProcess$' -count=1`.",
-        "Focused root-command, help/manifest, reference smoke, and functional CLI tests pass.",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 3,
-      "passes": true,
-      "notes": "Registered the authored you.providers and you.providers.list manifest through the generated CLI family artifacts and canonical root command tree, with the Providers-owned adapter injected through pkg/wire. Added help/usage, command identity/input, CLI baselines, published CLI contract, reference docs, and root/help tests. Added the required root.BuildProcess/Process.Execute functional regression for human and JSON output, deterministic provider ordering, required Codex/Antigravity facts, standard unsupported-argument failure, and zero ProviderCommandRunner calls. Review follow-up extends the root-process assertions to all exact Codex model IDs and AGY's explicit empty effort representation plus model-ID selection limit. After the current-main merge, restored the catalog and Providers CLI package coverage floors with focused behavioral tests and moved the functional proof to the support.BuildProcess boundary required by the current boundary checker; direct package coverage is 92.5% and 82.6%. make test, make wire-smoke, make contracts-check, make cli-manifest-check, make docs-reference-smoke, make test-root-process-acceptance, make typecheck, make vet, make backend-size, make pkg-maint, make pkg-file-count, make pkg-structure, and the standalone discovery test pass. The latest PR head's required CI checks pass after rerunning transient backend functional-coverage failures. The umbrella make lint remains blocked by the repository's existing pkg-boundary migration inventory (176 violations), make test-contract still references the absent pkg/services/factory_definitions/contracts/contracttests directory, and the Windows full coverage wrapper cannot launch its generated all-package command because it exceeds the Windows argument-length limit."
+      "notes": "Implemented Runtime termination-drain wake re-evaluation and verified typed incomplete-drain propagation, exact plain CLI diagnostics, finite empty/terminal success, and continuous idle liveness through root-built functional tests."
     }
   ]
 }
