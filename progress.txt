@@ -1757,3 +1757,15 @@
   - When a retired file-level exemption exposed two long focused tests, the correct mechanical bookkeeping was to move the exemptions to those exact functions and keep their source directives synchronized with the sorted budget manifest.
   - The full lint aggregate currently remains blocked by unrelated repository-wide `pkg-boundary` debt; the story-scoped gates are green and should be reported separately from that baseline failure.
 ---
+## [2026-08-10 15:15 -07:00] - thr-split-fake-service-runtime-tests-005 merge verification
+- What was implemented
+  - Merged `upstream/main` at `78584efb5` into the task branch and resolved the shared task-management files by retaining this PRD while combining both branches' append-only progress history and codebase patterns.
+- Files changed
+  - Merge result includes current-main CLI changes; task-owned `prd.json` and `progress.txt` retain the five passing Factory Sessions split stories and all merged progress history.
+- Verification
+  - Final head `7025761a4` is based on current `upstream/main` with a clean worktree.
+  - Focused execution suite, atomic coverage, vet, backend-size, pkg-maint, pkg-file-count, pkg-structure, and typecheck all pass.
+  - Final inventory comparison remains 269 baseline entries versus 269 current entries with an empty multiset difference.
+- **Learnings for future iterations:**
+  - Synchronizing a task branch with a newer main can conflict only in shared `prd.json` and `progress.txt`; keep the active PRD authoritative and union append-only progress sections so unrelated main history is not lost.
+---
