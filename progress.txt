@@ -2059,3 +2059,18 @@
   - Compare multiline PR descriptions from one parsed `gh pr view --json body` string; line-oriented PowerShell capture can make an otherwise identical body appear different.
   - When a story is already complete and the PR is fully verified, preserve the task-owned `prd.json` and append only the verification record to the progress log.
 ---
+
+## 2026-08-10 13:39 -07:00 - dwro-s1-remote-placement-flags CI retry follow-up
+- What was implemented
+  - Investigated the fresh-head Backend Functional Coverage failures. Each failed attempt isolated a different unchanged timing-sensitive functional test; no placement-related test or source path failed.
+  - Repeated every implicated exact test locally 10 times successfully, then reran only the failed GitHub jobs until the terminal attempt passed; no product source changes were needed.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Exact local repetitions passed for packaged plan parallel, packaged loop, runtime log, BTRCP cancellation, session restart history, invocation output, Work recovery, and API event replay tests.
+  - PR #1852 run `31426476368`, attempt 6 — Backend Functional Coverage and Verification Policy passed; all other checks remained successful.
+  - PR head remains `a94927e22c2c22af888be336c6f1ef643a1d5d93`; PR is clean and mergeable.
+- **Learnings for future iterations:**
+  - When a broad functional lane fails on a different unchanged concurrency-sensitive test on each retry, repeat the exact tests locally and rerun only failed jobs before changing feature code.
+  - `gh run rerun --failed` preserves the PR head and successful checks, making it suitable for distinguishing transient suite failures from regressions.
+---
