@@ -2565,3 +2565,18 @@
 - **Learnings for future iterations:**
   - After fetching a moving base, merge it before final review and preserve the active task PRD when the shared `prd.json` is owned by another task on main.
 ---
+
+## 2026-08-10 16:49 -07:00 - thr-worktree-build-cache-002 verification follow-up
+- What was implemented
+  - Completed post-merge verification for the corrected cache policy and current-main synchronization.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `make test` passed.
+  - `make typecheck` passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` passed.
+  - Dry-run `make build` and `make install` omit `-a`; explicit `GO_BUILD_FLAGS=-a` retains the forced-rebuild control.
+  - The working tree remains clean before push, and the PRD still has both stories marked `passes:true`.
+- **Learnings for future iterations:**
+  - After a base-sync merge, rerun the repository gates locally before pushing so the new PR head has direct evidence in addition to the earlier green CI run.
+---
