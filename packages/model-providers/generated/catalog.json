@@ -15,6 +15,23 @@
         ],
         "executableNames": [
           "agy"
+        ],
+        "prerequisites": [
+          {
+            "description": "Authenticate the AGY account before execution.",
+            "kind": "authentication",
+            "name": "account-authentication"
+          },
+          {
+            "description": "The Antigravity adapter requires the agy executable.",
+            "kind": "executable",
+            "name": "agy"
+          },
+          {
+            "description": "Execution requires a writable workspace supplied through --add-dir.",
+            "kind": "workspace",
+            "name": "writable-workspace"
+          }
         ]
       },
       "displayName": {
@@ -29,6 +46,29 @@
       ],
       "id": "antigravity",
       "implementationAvailability": "bundled",
+      "knownLimits": [
+        {
+          "description": "AGY extends the accessible workspace with the --add-dir flag.",
+          "kind": "behavior",
+          "name": "add_dir_workspace",
+          "unit": "flag",
+          "value": "--add-dir"
+        },
+        {
+          "description": "AGY selects effort through the exact model ID; the public Providers execution path rejects a separate reasoning effort.",
+          "kind": "behavior",
+          "name": "effort_selection",
+          "unit": "model_id",
+          "value": "model_id"
+        },
+        {
+          "default": 300,
+          "description": "AGY sends --print-timeout and uses a five-minute default when no positive timeout is requested.",
+          "kind": "default",
+          "name": "print_timeout",
+          "unit": "seconds"
+        }
+      ],
       "maximumExecutionCapabilities": {
         "imageInput": false,
         "promptSubmission": true,
@@ -51,7 +91,615 @@
         "toolOutputDeltas": false,
         "usage": false
       },
-      "technicalSupportLevel": "experimental"
+      "models": [
+        {
+          "efforts": [],
+          "id": "claude-opus-4-6-thinking",
+          "modalities": [
+            {
+              "direction": "input",
+              "modality": "audio",
+              "support": "supported",
+              "transport": "file_path"
+            },
+            {
+              "direction": "input",
+              "modality": "image",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "input",
+              "modality": "text",
+              "support": "supported",
+              "transport": "inline"
+            },
+            {
+              "direction": "input",
+              "modality": "video",
+              "support": "supported",
+              "transport": "file_path"
+            },
+            {
+              "direction": "output",
+              "modality": "audio",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "modality": "image",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "modality": "text",
+              "support": "supported",
+              "transport": "inline"
+            },
+            {
+              "direction": "output",
+              "modality": "video",
+              "support": "unsupported",
+              "transport": "none"
+            }
+          ]
+        },
+        {
+          "efforts": [],
+          "id": "claude-sonnet-4-6",
+          "modalities": [
+            {
+              "direction": "input",
+              "modality": "audio",
+              "support": "supported",
+              "transport": "file_path"
+            },
+            {
+              "direction": "input",
+              "modality": "image",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "input",
+              "modality": "text",
+              "support": "supported",
+              "transport": "inline"
+            },
+            {
+              "direction": "input",
+              "modality": "video",
+              "support": "supported",
+              "transport": "file_path"
+            },
+            {
+              "direction": "output",
+              "modality": "audio",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "modality": "image",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "modality": "text",
+              "support": "supported",
+              "transport": "inline"
+            },
+            {
+              "direction": "output",
+              "modality": "video",
+              "support": "unsupported",
+              "transport": "none"
+            }
+          ]
+        },
+        {
+          "efforts": [],
+          "id": "gemini-3.1-pro-high",
+          "modalities": [
+            {
+              "direction": "input",
+              "modality": "audio",
+              "support": "supported",
+              "transport": "file_path"
+            },
+            {
+              "direction": "input",
+              "modality": "image",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "input",
+              "modality": "text",
+              "support": "supported",
+              "transport": "inline"
+            },
+            {
+              "direction": "input",
+              "modality": "video",
+              "support": "supported",
+              "transport": "file_path"
+            },
+            {
+              "direction": "output",
+              "modality": "audio",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "modality": "image",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "modality": "text",
+              "support": "supported",
+              "transport": "inline"
+            },
+            {
+              "direction": "output",
+              "modality": "video",
+              "support": "unsupported",
+              "transport": "none"
+            }
+          ]
+        },
+        {
+          "efforts": [],
+          "id": "gemini-3.1-pro-low",
+          "modalities": [
+            {
+              "direction": "input",
+              "modality": "audio",
+              "support": "supported",
+              "transport": "file_path"
+            },
+            {
+              "direction": "input",
+              "modality": "image",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "input",
+              "modality": "text",
+              "support": "supported",
+              "transport": "inline"
+            },
+            {
+              "direction": "input",
+              "modality": "video",
+              "support": "supported",
+              "transport": "file_path"
+            },
+            {
+              "direction": "output",
+              "modality": "audio",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "modality": "image",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "modality": "text",
+              "support": "supported",
+              "transport": "inline"
+            },
+            {
+              "direction": "output",
+              "modality": "video",
+              "support": "unsupported",
+              "transport": "none"
+            }
+          ]
+        },
+        {
+          "efforts": [],
+          "id": "gemini-3.5-flash-high",
+          "modalities": [
+            {
+              "direction": "input",
+              "modality": "audio",
+              "support": "supported",
+              "transport": "file_path"
+            },
+            {
+              "direction": "input",
+              "modality": "image",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "input",
+              "modality": "text",
+              "support": "supported",
+              "transport": "inline"
+            },
+            {
+              "direction": "input",
+              "modality": "video",
+              "support": "supported",
+              "transport": "file_path"
+            },
+            {
+              "direction": "output",
+              "modality": "audio",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "modality": "image",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "modality": "text",
+              "support": "supported",
+              "transport": "inline"
+            },
+            {
+              "direction": "output",
+              "modality": "video",
+              "support": "unsupported",
+              "transport": "none"
+            }
+          ]
+        },
+        {
+          "efforts": [],
+          "id": "gemini-3.5-flash-low",
+          "modalities": [
+            {
+              "direction": "input",
+              "modality": "audio",
+              "support": "supported",
+              "transport": "file_path"
+            },
+            {
+              "direction": "input",
+              "modality": "image",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "input",
+              "modality": "text",
+              "support": "supported",
+              "transport": "inline"
+            },
+            {
+              "direction": "input",
+              "modality": "video",
+              "support": "supported",
+              "transport": "file_path"
+            },
+            {
+              "direction": "output",
+              "modality": "audio",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "modality": "image",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "modality": "text",
+              "support": "supported",
+              "transport": "inline"
+            },
+            {
+              "direction": "output",
+              "modality": "video",
+              "support": "unsupported",
+              "transport": "none"
+            }
+          ]
+        },
+        {
+          "efforts": [],
+          "id": "gemini-3.5-flash-medium",
+          "modalities": [
+            {
+              "direction": "input",
+              "modality": "audio",
+              "support": "supported",
+              "transport": "file_path"
+            },
+            {
+              "direction": "input",
+              "modality": "image",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "input",
+              "modality": "text",
+              "support": "supported",
+              "transport": "inline"
+            },
+            {
+              "direction": "input",
+              "modality": "video",
+              "support": "supported",
+              "transport": "file_path"
+            },
+            {
+              "direction": "output",
+              "modality": "audio",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "modality": "image",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "modality": "text",
+              "support": "supported",
+              "transport": "inline"
+            },
+            {
+              "direction": "output",
+              "modality": "video",
+              "support": "unsupported",
+              "transport": "none"
+            }
+          ]
+        },
+        {
+          "efforts": [],
+          "id": "gemini-3.6-flash-high",
+          "modalities": [
+            {
+              "direction": "input",
+              "modality": "audio",
+              "support": "supported",
+              "transport": "file_path"
+            },
+            {
+              "direction": "input",
+              "modality": "image",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "input",
+              "modality": "text",
+              "support": "supported",
+              "transport": "inline"
+            },
+            {
+              "direction": "input",
+              "modality": "video",
+              "support": "supported",
+              "transport": "file_path"
+            },
+            {
+              "direction": "output",
+              "modality": "audio",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "modality": "image",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "modality": "text",
+              "support": "supported",
+              "transport": "inline"
+            },
+            {
+              "direction": "output",
+              "modality": "video",
+              "support": "unsupported",
+              "transport": "none"
+            }
+          ]
+        },
+        {
+          "efforts": [],
+          "id": "gemini-3.6-flash-low",
+          "modalities": [
+            {
+              "direction": "input",
+              "modality": "audio",
+              "support": "supported",
+              "transport": "file_path"
+            },
+            {
+              "direction": "input",
+              "modality": "image",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "input",
+              "modality": "text",
+              "support": "supported",
+              "transport": "inline"
+            },
+            {
+              "direction": "input",
+              "modality": "video",
+              "support": "supported",
+              "transport": "file_path"
+            },
+            {
+              "direction": "output",
+              "modality": "audio",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "modality": "image",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "modality": "text",
+              "support": "supported",
+              "transport": "inline"
+            },
+            {
+              "direction": "output",
+              "modality": "video",
+              "support": "unsupported",
+              "transport": "none"
+            }
+          ]
+        },
+        {
+          "efforts": [],
+          "id": "gemini-3.6-flash-medium",
+          "modalities": [
+            {
+              "direction": "input",
+              "modality": "audio",
+              "support": "supported",
+              "transport": "file_path"
+            },
+            {
+              "direction": "input",
+              "modality": "image",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "input",
+              "modality": "text",
+              "support": "supported",
+              "transport": "inline"
+            },
+            {
+              "direction": "input",
+              "modality": "video",
+              "support": "supported",
+              "transport": "file_path"
+            },
+            {
+              "direction": "output",
+              "modality": "audio",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "modality": "image",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "modality": "text",
+              "support": "supported",
+              "transport": "inline"
+            },
+            {
+              "direction": "output",
+              "modality": "video",
+              "support": "unsupported",
+              "transport": "none"
+            }
+          ]
+        },
+        {
+          "efforts": [],
+          "id": "gpt-oss-120b-medium",
+          "modalities": [
+            {
+              "direction": "input",
+              "modality": "audio",
+              "support": "supported",
+              "transport": "file_path"
+            },
+            {
+              "direction": "input",
+              "modality": "image",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "input",
+              "modality": "text",
+              "support": "supported",
+              "transport": "inline"
+            },
+            {
+              "direction": "input",
+              "modality": "video",
+              "support": "supported",
+              "transport": "file_path"
+            },
+            {
+              "direction": "output",
+              "modality": "audio",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "modality": "image",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "modality": "text",
+              "support": "supported",
+              "transport": "inline"
+            },
+            {
+              "direction": "output",
+              "modality": "video",
+              "support": "unsupported",
+              "transport": "none"
+            }
+          ]
+        }
+      ],
+      "technicalSupportLevel": "experimental",
+      "tools": [
+        {
+          "description": "Read and modify files in the selected AGY workspace.",
+          "name": "filesystem",
+          "support": "supported"
+        },
+        {
+          "description": "Run bounded shell commands through the AGY tool runner.",
+          "name": "shell",
+          "support": "supported"
+        }
+      ]
     },
     {
       "aliases": [],
@@ -66,6 +714,23 @@
         ],
         "executableNames": [
           "claude"
+        ],
+        "prerequisites": [
+          {
+            "description": "Sign in to the Claude account before execution.",
+            "kind": "authentication",
+            "name": "account-authentication"
+          },
+          {
+            "description": "The bundled Claude adapter requires the claude executable.",
+            "kind": "executable",
+            "name": "claude"
+          },
+          {
+            "description": "Execution requires a writable workspace selected by the factory.",
+            "kind": "workspace",
+            "name": "writable-workspace"
+          }
         ]
       },
       "displayName": {
@@ -80,6 +745,7 @@
       ],
       "id": "claude",
       "implementationAvailability": "bundled",
+      "knownLimits": [],
       "maximumExecutionCapabilities": {
         "imageInput": false,
         "promptSubmission": true,
@@ -102,7 +768,206 @@
         "toolOutputDeltas": true,
         "usage": false
       },
-      "technicalSupportLevel": "experimental"
+      "models": [
+        {
+          "efforts": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "id": "claude-opus-4-6-thinking",
+          "modalities": [
+            {
+              "direction": "input",
+              "modality": "audio",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "input",
+              "modality": "image",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "input",
+              "modality": "text",
+              "support": "supported",
+              "transport": "inline"
+            },
+            {
+              "direction": "input",
+              "modality": "video",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "modality": "audio",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "modality": "image",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "modality": "text",
+              "support": "supported",
+              "transport": "inline"
+            },
+            {
+              "direction": "output",
+              "modality": "video",
+              "support": "unsupported",
+              "transport": "none"
+            }
+          ]
+        },
+        {
+          "efforts": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "id": "claude-sonnet-4-20250514",
+          "modalities": [
+            {
+              "direction": "input",
+              "modality": "audio",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "input",
+              "modality": "image",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "input",
+              "modality": "text",
+              "support": "supported",
+              "transport": "inline"
+            },
+            {
+              "direction": "input",
+              "modality": "video",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "modality": "audio",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "modality": "image",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "modality": "text",
+              "support": "supported",
+              "transport": "inline"
+            },
+            {
+              "direction": "output",
+              "modality": "video",
+              "support": "unsupported",
+              "transport": "none"
+            }
+          ]
+        },
+        {
+          "efforts": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "id": "claude-sonnet-5",
+          "modalities": [
+            {
+              "direction": "input",
+              "modality": "audio",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "input",
+              "modality": "image",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "input",
+              "modality": "text",
+              "support": "supported",
+              "transport": "inline"
+            },
+            {
+              "direction": "input",
+              "modality": "video",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "modality": "audio",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "modality": "image",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "modality": "text",
+              "support": "supported",
+              "transport": "inline"
+            },
+            {
+              "direction": "output",
+              "modality": "video",
+              "support": "unsupported",
+              "transport": "none"
+            }
+          ]
+        }
+      ],
+      "technicalSupportLevel": "experimental",
+      "tools": [
+        {
+          "description": "Read and modify files in the selected workspace.",
+          "name": "filesystem",
+          "support": "supported"
+        },
+        {
+          "description": "Run bounded shell commands through the Claude tool runner.",
+          "name": "shell",
+          "support": "supported"
+        },
+        {
+          "description": "Use the provider web-search tool when enabled by the invocation.",
+          "name": "web_search",
+          "support": "supported"
+        }
+      ]
     },
     {
       "aliases": [],
@@ -117,6 +982,23 @@
         ],
         "executableNames": [
           "codex"
+        ],
+        "prerequisites": [
+          {
+            "description": "Sign in to the Codex account before execution.",
+            "kind": "authentication",
+            "name": "account-authentication"
+          },
+          {
+            "description": "The bundled Codex adapter requires the codex executable.",
+            "kind": "executable",
+            "name": "codex"
+          },
+          {
+            "description": "Execution requires a writable workspace selected by the factory.",
+            "kind": "workspace",
+            "name": "writable-workspace"
+          }
         ]
       },
       "displayName": {
@@ -131,6 +1013,15 @@
       ],
       "id": "codex",
       "implementationAvailability": "bundled",
+      "knownLimits": [
+        {
+          "description": "Image generation accepts at most five referenced image paths.",
+          "kind": "maximum",
+          "maximum": 5,
+          "name": "referenced_image_paths",
+          "unit": "paths"
+        }
+      ],
       "maximumExecutionCapabilities": {
         "imageInput": true,
         "promptSubmission": true,
@@ -153,7 +1044,270 @@
         "toolOutputDeltas": true,
         "usage": true
       },
-      "technicalSupportLevel": "production"
+      "models": [
+        {
+          "efforts": [
+            "minimal",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "id": "gpt-5.6",
+          "modalities": [
+            {
+              "direction": "input",
+              "modality": "audio",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "input",
+              "modality": "image",
+              "support": "supported",
+              "transport": "file_path"
+            },
+            {
+              "direction": "input",
+              "modality": "text",
+              "support": "supported",
+              "transport": "inline"
+            },
+            {
+              "direction": "input",
+              "modality": "video",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "modality": "audio",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "modality": "image",
+              "support": "supported",
+              "transport": "file_path"
+            },
+            {
+              "direction": "output",
+              "modality": "text",
+              "support": "supported",
+              "transport": "inline"
+            },
+            {
+              "direction": "output",
+              "modality": "video",
+              "support": "unsupported",
+              "transport": "none"
+            }
+          ]
+        },
+        {
+          "efforts": [
+            "minimal",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "id": "gpt-5.6-luna",
+          "modalities": [
+            {
+              "direction": "input",
+              "modality": "audio",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "input",
+              "modality": "image",
+              "support": "supported",
+              "transport": "file_path"
+            },
+            {
+              "direction": "input",
+              "modality": "text",
+              "support": "supported",
+              "transport": "inline"
+            },
+            {
+              "direction": "input",
+              "modality": "video",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "modality": "audio",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "modality": "image",
+              "support": "supported",
+              "transport": "file_path"
+            },
+            {
+              "direction": "output",
+              "modality": "text",
+              "support": "supported",
+              "transport": "inline"
+            },
+            {
+              "direction": "output",
+              "modality": "video",
+              "support": "unsupported",
+              "transport": "none"
+            }
+          ]
+        },
+        {
+          "efforts": [
+            "minimal",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "id": "gpt-5.6-sol",
+          "modalities": [
+            {
+              "direction": "input",
+              "modality": "audio",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "input",
+              "modality": "image",
+              "support": "supported",
+              "transport": "file_path"
+            },
+            {
+              "direction": "input",
+              "modality": "text",
+              "support": "supported",
+              "transport": "inline"
+            },
+            {
+              "direction": "input",
+              "modality": "video",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "modality": "audio",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "modality": "image",
+              "support": "supported",
+              "transport": "file_path"
+            },
+            {
+              "direction": "output",
+              "modality": "text",
+              "support": "supported",
+              "transport": "inline"
+            },
+            {
+              "direction": "output",
+              "modality": "video",
+              "support": "unsupported",
+              "transport": "none"
+            }
+          ]
+        },
+        {
+          "efforts": [
+            "minimal",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "id": "gpt-5.6-terra",
+          "modalities": [
+            {
+              "direction": "input",
+              "modality": "audio",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "input",
+              "modality": "image",
+              "support": "supported",
+              "transport": "file_path"
+            },
+            {
+              "direction": "input",
+              "modality": "text",
+              "support": "supported",
+              "transport": "inline"
+            },
+            {
+              "direction": "input",
+              "modality": "video",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "modality": "audio",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "modality": "image",
+              "support": "supported",
+              "transport": "file_path"
+            },
+            {
+              "direction": "output",
+              "modality": "text",
+              "support": "supported",
+              "transport": "inline"
+            },
+            {
+              "direction": "output",
+              "modality": "video",
+              "support": "unsupported",
+              "transport": "none"
+            }
+          ]
+        }
+      ],
+      "technicalSupportLevel": "production",
+      "tools": [
+        {
+          "description": "Read and modify files in the selected workspace.",
+          "name": "filesystem",
+          "support": "supported"
+        },
+        {
+          "description": "Run bounded shell commands through the Codex tool runner.",
+          "name": "shell",
+          "support": "supported"
+        },
+        {
+          "description": "Use the provider web-search tool when enabled by the invocation.",
+          "name": "web_search",
+          "support": "supported"
+        }
+      ]
     }
   ]
 }

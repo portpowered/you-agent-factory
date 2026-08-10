@@ -19,6 +19,12 @@
       ]
     },
     {
+      "test": "tests/functional/providers/discovery/discovery_test.go::TestProvidersListThroughRootBuildProcess",
+      "stableIds": [
+        "cli/you.providers.list"
+      ]
+    },
+    {
       "test": "tests/functional/sessions/execution/results_dispatches_test.go::TestAPIDispatchListAndDetailExposePublicCorrelation",
       "stableIds": [
         "rest/getFactorySessionDispatch",

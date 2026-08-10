@@ -57,5 +57,20 @@ properties:
     $ref: './ProviderResponseFidelityCapabilities.yaml'
   discovery:
     $ref: './ProviderDiscoveryPrerequisites.yaml'
+  models:
+    type: array
+    description: Named provider models and their complete capability facts in canonical model-ID order.
+    items:
+      $ref: './ProviderModel.yaml'
+  tools:
+    type: array
+    description: Named provider tool facts in canonical tool-name order.
+    items:
+      $ref: './ProviderTool.yaml'
+  knownLimits:
+    type: array
+    description: Named provider constraints and bounded behavior facts in canonical name order.
+    items:
+      $ref: './ProviderKnownLimit.yaml'
   deprecation:
     $ref: './ProviderDeprecation.yaml'
