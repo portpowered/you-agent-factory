@@ -76,6 +76,7 @@ func TestInstallPackagedFactory_OwnershipAcquisitionFailuresAreBounded(t *testin
 			_, err := newWithOwnerProbe(
 				packagedInstallationTestPersistence(),
 				fileSystem,
+				fileSystem.Mkdir,
 				probe,
 			).InstallPackagedFactory(t.Context(), factorydefinitions.PackagedFactoryInstallParams{
 				NamedFactoriesRoot: root,
@@ -153,6 +154,7 @@ func TestInstallPackagedFactory_PreExistingStagingReportsOwnerEvidence(t *testin
 			_, err := newWithOwnerProbe(
 				packagedInstallationTestPersistence(),
 				fileSystem,
+				fileSystem.Mkdir,
 				probe,
 			).InstallPackagedFactory(t.Context(), factorydefinitions.PackagedFactoryInstallParams{
 				NamedFactoriesRoot: root,
@@ -202,7 +204,7 @@ func TestInstallPackagedFactory_StagingInspectionErrorsAreReported(t *testing.T)
 			root := t.TempDir()
 			fileSystem := &failingPackagedInstallationFileSystem{}
 			test.configure(fileSystem, root)
-			_, err := New(packagedInstallationTestPersistence(), fileSystem).InstallPackagedFactory(
+			_, err := New(packagedInstallationTestPersistence(), fileSystem, fileSystem.Mkdir).InstallPackagedFactory(
 				t.Context(),
 				factorydefinitions.PackagedFactoryInstallParams{
 					NamedFactoriesRoot: root,
@@ -259,6 +261,7 @@ func TestInstallPackagedFactory_ReportsLeaseReleaseFailures(t *testing.T) {
 			_, err := newWithOwnerProbe(
 				&successfulPackagedInstallationPersistence{},
 				fileSystem,
+				fileSystem.Mkdir,
 				probe,
 			).InstallPackagedFactory(t.Context(), factorydefinitions.PackagedFactoryInstallParams{
 				NamedFactoriesRoot: root,

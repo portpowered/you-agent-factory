@@ -100,8 +100,8 @@ func TestEnsurePackagedFactories_InvalidPayloadDoesNotCommitTarget(t *testing.T)
 		Name: "@test/invalid",
 		JSON: []byte(`{"id":"invalid","workers":[`),
 	}
-	_, err := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}).
-		EnsurePackagedFactories(t.Context(), root, []factorydefinitions.PackagedDefinition{definition})
+	_, err := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir).
+		EnsurePackagedFactories(t.Context(), root, "", []factorydefinitions.PackagedDefinition{definition})
 	if err == nil || !strings.Contains(err.Error(), "install packaged factory") {
 		t.Fatalf("EnsurePackagedFactories() error = %v", err)
 	}
@@ -121,8 +121,8 @@ func TestEnsurePackagedFactories_PreparationFailurePreservesExistingRoot(t *test
 		t.Fatal(err)
 	}
 	definition := factorydefinitions.PackagedDefinition{Name: "@test/invalid", JSON: []byte(`{`)}
-	if _, err := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}).
-		EnsurePackagedFactories(t.Context(), root, []factorydefinitions.PackagedDefinition{definition}); err == nil {
+	if _, err := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir).
+		EnsurePackagedFactories(t.Context(), root, "", []factorydefinitions.PackagedDefinition{definition}); err == nil {
 		t.Fatal("EnsurePackagedFactories() error = nil")
 	}
 	content, err := os.ReadFile(marker)
@@ -132,9 +132,10 @@ func TestEnsurePackagedFactories_PreparationFailurePreservesExistingRoot(t *test
 }
 
 func TestEnsurePackagedFactories_FailsClosedWithoutFileSystem(t *testing.T) {
-	_, err := New(packagedInstallationTestPersistence(), nil).EnsurePackagedFactories(
+	_, err := New(packagedInstallationTestPersistence(), nil, os.Mkdir).EnsurePackagedFactories(
 		t.Context(),
 		t.TempDir(),
+		"",
 		[]factorydefinitions.PackagedDefinition{{Name: "@test/missing-filesystem", JSON: []byte(`{}`)}},
 	)
 	if err == nil || !strings.Contains(err.Error(), "installation filesystem is required") {
@@ -153,10 +154,11 @@ func TestInstallPackagedFactory_PreExistingStagingReturnsBoundedContention(t *te
 		t.Fatalf("create retained staging resource: %v", err)
 	}
 
-	_, err := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}).InstallPackagedFactory(
+	_, err := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir).InstallPackagedFactory(
 		t.Context(),
 		factorydefinitions.PackagedFactoryInstallParams{
 			NamedFactoriesRoot: root,
+			BackendScopeID:     "local-contention-scope",
 			Definition: factorydefinitions.PackagedDefinition{
 				Name: name,
 				JSON: []byte(`{}`),
@@ -172,6 +174,7 @@ func TestInstallPackagedFactory_PreExistingStagingReturnsBoundedContention(t *te
 	}
 	for _, want := range []string{
 		stagingPath,
+		"backend_scope_id=local-contention-scope",
 		"outcome=indeterminate-contention",
 		"owner_liveness=indeterminate",
 		"verify no you process is still installing",
@@ -196,9 +199,10 @@ func TestInstallPackagedFactory_LiveOwnerContentionPreservesLease(t *testing.T) 
 		prepareStarted: make(chan struct{}),
 		allowPrepare:   make(chan struct{}),
 	}
-	installer := New(persistence, platformfilesystem.Local{})
+	installer := New(persistence, platformfilesystem.Local{}, os.Mkdir)
 	params := factorydefinitions.PackagedFactoryInstallParams{
 		NamedFactoriesRoot: root,
+		BackendScopeID:     "local-live-scope",
 		Definition: factorydefinitions.PackagedDefinition{
 			Name: "@test/live-owner",
 			JSON: []byte(`{}`),
@@ -255,7 +259,7 @@ func TestInstallPackagedFactory_MalformedOwnerMetadataFailsClosed(t *testing.T) 
 		t.Fatalf("write malformed owner metadata: %v", err)
 	}
 
-	_, err := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}).InstallPackagedFactory(
+	_, err := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir).InstallPackagedFactory(
 		t.Context(),
 		factorydefinitions.PackagedFactoryInstallParams{
 			NamedFactoriesRoot: root,
@@ -294,7 +298,7 @@ func TestInstallPackagedFactory_AcquisitionRacePreservesWinnerLease(t *testing.T
 		prepareStarted: make(chan struct{}),
 		allowPrepare:   make(chan struct{}),
 	}
-	installer := New(persistence, fileSystem)
+	installer := New(persistence, fileSystem, fileSystem.Mkdir)
 	params := factorydefinitions.PackagedFactoryInstallParams{
 		NamedFactoriesRoot: root,
 		Definition: factorydefinitions.PackagedDefinition{
@@ -385,7 +389,7 @@ func (fileSystem *racingPackagedInstallationFileSystem) Mkdir(path string, mode 
 		close(fileSystem.firstMkdirStarted)
 		<-fileSystem.releaseFirstMkdir
 	}
-	return fileSystem.Local.Mkdir(path, mode)
+	return os.Mkdir(path, mode)
 }
 
 type scriptedOwnerProbe struct {
@@ -435,7 +439,7 @@ func (fileSystem *failingPackagedInstallationFileSystem) Mkdir(path string, mode
 	if fileSystem.mkdirErr != nil {
 		return fileSystem.mkdirErr
 	}
-	return fileSystem.Local.Mkdir(path, mode)
+	return os.Mkdir(path, mode)
 }
 
 func (fileSystem *failingPackagedInstallationFileSystem) MkdirAll(path string, mode fs.FileMode) error {
@@ -500,6 +504,7 @@ func TestInstallPackagedFactory_MaterializesPortableEditableFormats(t *testing.T
 			result, installErr := New(
 				packagedInstallationTestPersistence(),
 				platformfilesystem.Local{},
+				os.Mkdir,
 			).InstallPackagedFactory(t.Context(), factorydefinitions.PackagedFactoryInstallParams{
 				NamedFactoriesRoot: root,
 				Definition:         definition,
@@ -529,7 +534,7 @@ func TestInstallPackagedFactory_DefaultsToJSONAndRejectsUnsupportedFormat(t *tes
 	if !ok {
 		t.Fatal("published catalog is missing @you/goal")
 	}
-	installer := New(packagedInstallationTestPersistence(), platformfilesystem.Local{})
+	installer := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir)
 	root := t.TempDir()
 	result, err := installer.InstallPackagedFactory(
 		t.Context(),
@@ -579,6 +584,7 @@ func TestInstallPackagedFactory_MaterializesEveryPublishedFactory(t *testing.T) 
 			result, installErr := New(
 				packagedInstallationTestPersistence(),
 				platformfilesystem.Local{},
+				os.Mkdir,
 			).InstallPackagedFactory(
 				t.Context(),
 				factorydefinitions.PackagedFactoryInstallParams{
@@ -613,7 +619,7 @@ func TestInstallPackagedFactory_RepeatSkipsWithoutContentDrift(t *testing.T) {
 	if !ok {
 		t.Fatal("published catalog is missing @you/goal")
 	}
-	installer := New(packagedInstallationTestPersistence(), platformfilesystem.Local{})
+	installer := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir)
 	root := t.TempDir()
 	created, err := installer.InstallPackagedFactory(
 		t.Context(),
@@ -658,7 +664,7 @@ func TestInstallPackagedFactory_ExplicitReplaceRestoresPackagedLayout(t *testing
 	if !ok {
 		t.Fatal("published catalog is missing @you/goal")
 	}
-	installer := New(packagedInstallationTestPersistence(), platformfilesystem.Local{})
+	installer := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir)
 	root := t.TempDir()
 	created, err := installer.InstallPackagedFactory(
 		t.Context(),
@@ -708,7 +714,7 @@ func TestInstallPackagedFactory_RefusesAlternateFormatWithoutReplace(t *testing.
 	if !ok {
 		t.Fatal("published catalog is missing @you/goal")
 	}
-	installer := New(packagedInstallationTestPersistence(), platformfilesystem.Local{})
+	installer := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir)
 	root := t.TempDir()
 	if _, err := installer.InstallPackagedFactory(
 		t.Context(),
@@ -745,7 +751,7 @@ func TestInstallPackagedFactory_CancellationBeforeCommitLeavesTargetAbsent(t *te
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	root := t.TempDir()
-	_, err = New(packagedInstallationTestPersistence(), platformfilesystem.Local{}).
+	_, err = New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir).
 		InstallPackagedFactory(
 			ctx,
 			factorydefinitions.PackagedFactoryInstallParams{
@@ -775,7 +781,7 @@ func TestInstallPackagedFactory_FailedReplacePreservesCommittedLayout(t *testing
 	if !ok {
 		t.Fatal("published catalog is missing @you/goal")
 	}
-	installer := New(packagedInstallationTestPersistence(), platformfilesystem.Local{})
+	installer := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir)
 	root := t.TempDir()
 	created, err := installer.InstallPackagedFactory(
 		t.Context(),

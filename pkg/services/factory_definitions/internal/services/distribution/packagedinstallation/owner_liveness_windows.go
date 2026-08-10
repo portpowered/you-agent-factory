@@ -16,8 +16,8 @@ func probeOwnerPID(pid int) ownerLiveness {
 		uint32(pid),
 	)
 	if err != nil {
-		// A missing process is not enough to prove that an incomplete staged
-		// layout is safe to remove, so report it conservatively.
+		// A missing or inaccessible process does not prove that an incomplete
+		// staged layout is safe to remove, so report it conservatively.
 		return ownerLivenessIndeterminate
 	}
 	defer windows.CloseHandle(handle)

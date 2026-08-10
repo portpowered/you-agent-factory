@@ -34,6 +34,7 @@ type recordingPackagedInstaller struct {
 func (installer *recordingPackagedInstaller) EnsurePackagedFactories(
 	context.Context,
 	string,
+	string,
 	[]factorydefinitions.PackagedDefinition,
 ) ([]factorydefinitions.PackagedFactoryInstallResult, error) {
 	installer.calls++
@@ -180,6 +181,7 @@ type wirePackagedInstaller struct{}
 func (wirePackagedInstaller) EnsurePackagedFactories(
 	context.Context,
 	string,
+	string,
 	[]factorydefinitions.PackagedDefinition,
 ) ([]factorydefinitions.PackagedFactoryInstallResult, error) {
 	return nil, nil
@@ -311,6 +313,7 @@ type routingPackagedInstaller struct {
 
 func (installer *routingPackagedInstaller) EnsurePackagedFactories(
 	context.Context,
+	string,
 	string,
 	[]factorydefinitions.PackagedDefinition,
 ) ([]factorydefinitions.PackagedFactoryInstallResult, error) {
