@@ -1,96 +1,75 @@
 {
-  "project": "SAC S0.1 — Restore Package-Target and Ownership Inventories to the Live Tree",
-  "branchName": "sac-s0-1-ownership-inventories",
-  "description": "Restore the package-target manifest, ownership inventory, architecture guards, and canonical service-owner documentation so every live production package and cross-owner dependency has one reviewed owner and classification, unresolved bidirectional edges remain visible, and provider inference and hosted polling are assigned to Providers and Automations rather than Workers.",
+  "project": "Fast, Parallel, Quiet-by-Default Lint",
+  "branchName": "thr-lint-speed",
+  "description": "Make make lint substantially faster and easier for delivery agents to interpret by reusing safely compiled Go checker executables, running independent targets concurrently with clear failure attribution, and hiding package-boundary findings already recognized by the merged baseline policy unless --all is requested, without weakening any lint rule or changing PR #1844 ignore semantics.",
   "context": {
-    "customerAsk": "Implement story S0.1 of the Service Abstraction Convergence plan: regenerate and review the package-target manifest and ownership inventory; add the missing Worker Sessions, Events, Chat Sessions, ACP, Factory Sessions, Providers, platform, and mapping packages; correct the eight guards and documentation entries that misassign provider inference or hosted polling to Workers; and reconcile the service-owner tables in AGENTS.md, docs/architecture/architecture.md, and docs/architecture/packaged-structure.md.",
-    "problem": "The checked-in architecture inventories and some enforcement and documentation surfaces lag the live production package graph. Missing packages and edges, future-tense rationale for implemented services, and incorrect Workers ownership assignments prevent maintainers from trusting the inventories as a statement of package ownership, dependency direction, and remaining convergence debt.",
-    "solution": "Regenerate deterministic inventory candidates from the current production tree, review every package and cross-owner edge against durable service boundaries, preserve unresolved bidirectional dependencies as visible debt, correct inference and polling ownership guards, and align the three canonical service-owner tables without changing runtime behavior or widening into unrelated package migrations."
+    "customerAsk": "Reduce the wall time and output volume of make lint without weakening any gate: run independent lint targets concurrently, avoid repeated Go checker compilation costs, preserve target-specific failure attribution and standalone behavior, and hide the approximately 172 recorded package-boundary migration violations unless --all is requested.",
+    "problem": "Delivery agents repeatedly prove that branches add no new lint violations relative to main, but the current lint lane runs independent gates sequentially, pays go run startup and compilation costs for each custom checker, and floods normal output with recorded package-boundary debt. This makes delivery slower and obscures the violations an agent is actually responsible for.",
+    "solution": "Provide one cross-platform lint execution path that prepares reusable gitignored checker executables, schedules independent targets with bounded concurrency, captures and labels target results, and fails if any requested target fails. Filter package-boundary presentation through the already-merged baseline classification so default output shows only unrecorded findings while --all exposes complete diagnostics without changing classification or exit behavior."
   },
   "acceptanceCriteria": [
-    "make package-target-manifest-check passes from a clean checkout.",
-    "make ownership-inventory-check passes and reports no missing production package or cross-owner edge.",
-    "Every live production package appears exactly once with a durable owner or the explicit Process Edges exception, including Worker Sessions, Events, Chat Sessions, ACP, Factory Sessions, Providers, platform, and mapping packages.",
-    "Inventory regeneration does not silently reclassify a bidirectional edge as acceptable; every unresolved bidirectional edge remains visible until its owning convergence story lands.",
-    "The eight affected guards and documentation entries assign provider inference to Providers and hosted polling to Automations, and the service-owner tables in AGENTS.md, architecture.md, and packaged-structure.md state the same durable ownership model.",
-    "Enabling/project-level documentation criterion: the canonical service-owner guidance is reconciled with the reviewed inventories; this documentation-only alignment intentionally changes no runtime, public API, CLI, UI, or emitted-event behavior.",
-    "Typecheck and relevant focused tests pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
-    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts are resolved against current main, and the PR is actually merged."
+    "make lint runs the requested independent lint targets with bounded concurrency, waits for their terminal results, and exits non-zero if any requested target fails.",
+    "Custom Go checker targets use reusable compiled executables from a gitignored cache on the normal lint path; changed checker inputs cannot silently reuse stale behavior, and the supported fallback path preserves the checker's arguments, output, and exit status.",
+    "Concurrent execution produces target-delimited output and a final result that names each failed target, while successful gates and existing LINT_TARGETS and root-variable overrides remain usable.",
+    "On an unchanged tree, package-boundary default output omits every finding already recognized by the merged recorded-baseline/ignore rules; a deliberately introduced unrecorded boundary violation is printed and makes both the standalone gate and aggregate lint lane fail.",
+    "pkgboundarycheck --all displays the complete diagnostic output, including recorded debt, but does not alter classification, ignore matching, blocking counts, or exit status; no PR #1844 ignore-rule semantic is reimplemented or changed.",
+    "The PR records same-machine, same-environment before-and-after timings for documented main and branch revisions across at least three unchanged-tree runs and their medians, with the optimized median at least 30% lower, and records the command/output from a scratch new-boundary-violation proof.",
+    "Quality gates pass: typecheck and tests pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
+    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared-file or inventory churn are resolved against current origin/main, and the PR is actually merged."
   ],
-  "userStories": [],
-  "enablingCriteria": [
+  "userStories": [
     {
-      "id": "sac-s0-1-ownership-inventories-001",
-      "type": "project-enabling",
-      "title": "Complete the package-target manifest",
-      "description": "The package-target manifest is repository-enforcement and maintainer tooling that covers the live production tree exactly once, so placement and migration decisions are based on a reviewed current package graph rather than a stale snapshot.",
+      "id": "thr-lint-speed-001",
+      "title": "Reuse compiled checker executables",
+      "description": "As a delivery agent, I want lint checks to reuse safely prepared checker executables so repeated lint proof does not pay a separate go run compilation cost for every custom Go checker.",
       "acceptanceCriteria": [
-        "Regeneration accounts for every live production package exactly once as a reviewed retain or move destination, with only the explicit Process Edges exception outside durable service or family ownership.",
-        "Worker Sessions, Events, Chat Sessions, ACP, Factory Sessions, Providers, platform, and mapping package families present in the live tree are represented with destinations consistent with the repository architecture.",
-        "make package-target-manifest-check passes from a clean checkout and fails in a focused regression case when a production package is missing or duplicated.",
-        "Existing reviewed move rows and deletion conditions are preserved unless the live tree proves that their owning convergence work has already landed; unrelated package migrations are not performed in this criterion.",
-        "This project-enabling inventory alignment intentionally changes no runtime, public API, CLI, UI, or emitted-event behavior.",
-        "Tests pass",
-        "Typecheck passes"
+        "The normal lint path prepares custom Go checker executables in a gitignored cache and invokes those executables with the same arguments and environment values as their existing checker targets.",
+        "Repeating an unchanged checker target reuses valid compiled output, while changing relevant Go build inputs causes the executed checker behavior to be rebuilt rather than silently using a stale executable.",
+        "Direct invocation of an affected lint sub-target remains supported and produces the same pass/fail result and checker diagnostics as before.",
+        "An explicit supported fallback path uses go run with equivalent arguments and exit propagation; a genuine compile failure remains visible and cannot be converted into a passing check.",
+        "Focused process-level tests prove executable reuse, stale-input invalidation, argument forwarding, fallback behavior, and non-zero checker exit propagation without asserting a hard-coded command inventory.",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Regenerated the package-target manifest from the live production Go tree (545 packages) and retained the 17 newly discovered paths under platform, Chat Sessions, Events, Factory Sessions, Providers, Worker Sessions, ACP, CLI, and mapping destinations. Added Worker Sessions to the closed package-target owner vocabulary and reconciled the live Chat Sessions/Events/Worker Sessions top-level inventories. Existing package mappings and deletion conditions were preserved. make package-target-manifest-check, focused package-target mapping/coverage tests, and git diff --check pass. This is repository-enforcement and maintainer tooling work with no runtime, public API, CLI, UI, or emitted-event behavior change."
+      "notes": "Added the cross-platform cmd/lintcheck process driver and routed every Go checker used by lint, including the nested ownership checker, through its reusable executable cache. The cache key includes the checker transitive Go build inputs, module files, compiler/build environment, and target package; compiled output is published atomically under the gitignored .cache/lint-checkers path. Direct lint sub-targets retain their arguments and inherited environment. LINT_CHECKER_FALLBACK=1 uses the original go run path with a -exec status shim so Windows preserves checker streams and exact exit codes; compiler failures remain non-zero and visible. Focused process tests cover unchanged reuse, transitive-input invalidation, argument/environment forwarding, fallback output and exit propagation, and compile failure visibility. Focused checker tests, go vet ./cmd/lintcheck, make backend-size, make pkg-file-count, make pkg-maint, and make typecheck pass. make pkg-boundary still reports the pre-existing boundary debt assigned to story thr-lint-speed-003."
     },
     {
-      "id": "sac-s0-1-ownership-inventories-002",
-      "type": "project-enabling",
-      "title": "Complete and classify the ownership inventory",
-      "description": "The ownership inventory is repository-enforcement and maintainer tooling that records a reviewed owner and relationship classification for every production package and cross-owner dependency, so dependency direction and remaining convergence debt are explicit without changing product behavior.",
+      "id": "thr-lint-speed-002",
+      "title": "Run independent lint targets concurrently with clear attribution",
+      "description": "As a delivery agent, I want independent lint targets to run concurrently and report target-scoped outcomes so lint completes sooner without hiding which gate needs action.",
       "acceptanceCriteria": [
-        "The ownership inventory covers every production package from the regenerated package-target manifest and reports no missing or duplicate ownership row.",
-        "Every live cross-owner dependency is reviewed and classified as command, query, event, construction, lifecycle, protocol composition, or external effect, with a rationale consistent with the owning service contract.",
-        "Worker Sessions, Events, Chat Sessions, ACP, Factory Sessions, Providers, platform, and mapping packages and their live cross-owner edges are included.",
-        "Chat Sessions and Events rationale describes their implemented ownership and behavior in the present tense rather than as future work.",
-        "Regeneration preserves every unresolved bidirectional edge as visible debt and a focused regression test proves that such an edge cannot be silently reclassified as acceptable.",
-        "make ownership-inventory-check passes and reports no missing production package or edge.",
-        "This project-enabling inventory alignment intentionally changes no runtime, public API, CLI, UI, or emitted-event behavior.",
-        "Tests pass",
-        "Typecheck passes"
+        "make lint schedules requested independent targets with bounded concurrency greater than one by default, supports an explicit positive job limit, and never exceeds that limit.",
+        "The driver waits for every started target to reach a terminal state and returns non-zero when one or more targets fail; its final summary names every failed target and provides an actionable standalone rerun name.",
+        "Output from concurrent targets is delimited by target so diagnostics cannot be mistaken for another gate's output, and a successful run ends with an unambiguous success result.",
+        "LINT_TARGETS selection, checker root overrides, platform-appropriate executable handling, and non-Go gates such as UI lint, scripts, and vet retain their established observable behavior.",
+        "Deterministic tests with controllable commands prove actual overlap, job-limit enforcement, mixed success/failure aggregation, output attribution, and argument/environment forwarding; tests do not depend on wall-clock speed thresholds.",
+        "The PR reports at least three same-machine unchanged-tree runs for main and the optimized branch, includes raw and median wall times, and shows at least a 30% reduction in the optimized median.",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 2,
-      "passes": true,
-      "notes": "Regenerated the ownership inventory from the live package graph (576 existing-scope package rows) and added the 16 package-target paths introduced by story 001, including Worker Sessions, Events, Chat Sessions, ACP, Factory Sessions, Providers, platform, and mapping paths. Added Worker Sessions to the closed owner vocabulary, top-level inventory, and rationale cards; rewrote Chat Sessions and Events rationale in the present tense. Cross-owner discovery now records 155 classified edges, marks all 50 directed entries in reciprocal pairs as unresolved bidirectional debt, and rejects a valid interaction class when those debt markers are removed. make ownership-inventory-check, focused ownership tests, package-target-manifest-check, and git diff --check pass. The full internal ownership package still reports pre-existing Workers/Recordings root-contract baseline drift unrelated to this story."
+      "passes": false,
+      "notes": ""
     },
     {
-      "id": "sac-s0-1-ownership-inventories-004",
-      "type": "project-enabling",
-      "title": "Reconcile canonical service-owner documentation",
-      "description": "As a contributor, I want the canonical service-owner tables to agree with the reviewed inventories so that repository guidance leads changes to the correct package and contract boundary.",
+      "id": "thr-lint-speed-003",
+      "title": "Hide recorded package-boundary debt by default",
+      "description": "As a delivery agent, I want normal package-boundary output to show only unrecorded violations so I can immediately distinguish branch regressions from accepted migration debt.",
       "acceptanceCriteria": [
-        "The service-owner tables in AGENTS.md, docs/architecture/architecture.md, and docs/architecture/packaged-structure.md consistently describe the implemented Worker Sessions, Events, Chat Sessions, Factory Sessions, Providers, Workers, Automations, platform, ACP transport, and mapping ownership boundaries.",
-        "The tables state that Providers owns provider inference and execution policy, Automations owns hosted polling, and Workers consumes owner contracts to perform request-scoped worker execution.",
-        "Events is described as the process-local source-native stream and Recordings as canonical Factory history; Chat Sessions and Worker Sessions are described as current implemented owners rather than future services.",
-        "Documentation uses the customer-facing Factory vocabulary defined by the data model and does not expose internal Petri terminology as a service boundary.",
-        "The package-target and ownership inventory checks still pass after the documentation reconciliation.",
-        "Tests pass",
-        "Typecheck passes"
-      ],
-      "priority": 4,
-      "passes": true,
-      "notes": "Reconciled the three canonical ownership summaries with the implemented package graph. AGENTS.md now names Chat Sessions, Events, Worker Sessions, ACP, mapping, platform, Providers-owned provider inference/execution policy, Automations-owned hosted polling, and Workers request-scoped execution. architecture.md and packaged-structure.md use the same present-tense service-owner model, explicitly distinguish Events source-native delivery from the Recordings canonical Factory Event ledger, and keep internal runtime implementation details behind the customer-facing Factory boundary. This remains an enabling documentation criterion with no runtime, API, CLI, UI, or emitted-event behavior change. make ownership-inventory-check, make package-target-manifest-check, focused ownership-check tests, and git diff --check pass."
-    },
-    {
-      "id": "sac-s0-1-ownership-inventories-003",
-      "type": "project-enabling",
-      "title": "Correct inference and hosted-polling ownership enforcement",
-      "description": "As a service owner, I want architecture enforcement to attribute provider inference and hosted polling to their durable owners so that new code cannot deepen the incorrect Workers boundary.",
-      "acceptanceCriteria": [
-        "All eight affected guard and documentation entries are reviewed and corrected: provider inference is assigned to Providers, hosted polling is assigned to Automations, and Workers retains only its request-scoped execution responsibilities.",
-        "Ownership rationale distinguishes Workers deciding when to execute a worker attempt from Providers owning provider protocol, selection, session, adapter, and execution behavior, and from Automations owning hosted-source observation and polling.",
-        "Focused guard tests reject a new production assignment of provider inference or hosted polling to Workers, reject an expanded Workers-root Provider compatibility port, and accept only the exact reviewed request-scoped contract plus the reviewed Providers and Automations ownership paths.",
-        "No runtime behavior, public API contract, or unrelated Workers migration is changed by this correction.",
-        "Tests pass",
-        "Typecheck passes"
+        "Default package-boundary output does not print individual findings or debt-count summaries for violations already recognized by the PR #1844 recorded-baseline/ignore policy.",
+        "A fixture containing recorded debt and one unrecorded violation prints only the unrecorded violation by default, identifies its rule and affected package/import context, and exits non-zero.",
+        "A fixture containing only recorded debt produces a quiet passing/default result consistent with the existing ignore policy and does not list the recorded findings.",
+        "--all prints the recorded and unrecorded diagnostic sets in stable, target-readable form while preserving exactly the same blocking classification and exit status as default mode.",
+        "The aggregate make lint path uses quiet mode by default, still catches a deliberately introduced new boundary violation, names pkg-boundary as failed, and supports an intentional all-diagnostics invocation.",
+        "Focused behavioral tests cover quiet clean output, mixed recorded/new findings, --all, and unchanged exit semantics using the already-merged baseline matcher rather than a second ignore implementation.",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 3,
-      "passes": true,
-      "notes": "Corrected the package-boundary owner metadata for Providers execution/adapters and rewrote the provider-effect diagnostics to distinguish Providers-owned protocol, selection, session, adapter, and one-attempt execution from the Workers request-scoped compatibility port. The checker now expands grouped Go field declarations before inspecting signature types, so a valid grouped parameter declaration is rejected with a diagnostic instead of panicking; TestRunRejectsGroupedWorkersRequestScopedProviderPortWithoutPanic covers that regression. Added focused tests that allow the reviewed Providers leaf and exact Workers compatibility bridge while rejecting an expanded Workers-root provider port and any new provider-effect owner under Workers; the existing hosted-ownership tests reject polling/reconciliation assigned to Workers and accept Automation Hosted Sources. Burned down all eight stale misplaced-guard inventory entries, made retired entries fail validation, and expanded Providers/Workers rationale cards with present-tense ownership. No runtime behavior, public API shape, or unrelated migration changed. make ownership-inventory-check, make package-target-manifest-check, focused boundary/inventory tests, go test compilation checks, and git diff --check pass. The full internal ownership package and ownership-boundary make target retain the pre-existing Workers/Recordings root-contract and two unrelated baseline violations documented in progress.txt."
+      "passes": false,
+      "notes": ""
     }
   ]
 }

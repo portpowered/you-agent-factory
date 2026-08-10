@@ -89,7 +89,15 @@ BACKEND_DEPENDENCY_GRAPH_DOT ?= $(BACKEND_DEPENDENCY_GRAPH_DIR)/backend-dependen
 BACKEND_DEPENDENCY_GRAPH_SVG ?= $(BACKEND_DEPENDENCY_GRAPH_DIR)/backend-dependency-graph.svg
 COMPATIBILITY_ALIAS_CHECK_ROOT ?= .
 RETIRED_SURFACE_CHECK_ROOT ?= .
+LINT_CHECKER_CACHE_DIR ?= .cache/lint-checkers
+# Set LINT_CHECKER_FALLBACK=1 to use the original go run path for one proof.
+LINT_CHECKER_FALLBACK ?= 0
+LINT_CHECKER_DRIVER_PACKAGE := ./cmd/lintcheck
 LINT_TARGETS ?= ui-lint ui-deadcode vet backend-size pkg-maint pkg-file-count pkg-boundary pkg-structure package-target-manifest-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-check provider-catalog-check model-provider-package-check durable-runtime-construction-check logging-boundary-check compatibility-alias-check retired-surface-check ownership-inventory-check deadcode
+
+define run_lint_checker
+$(GO) run $(LINT_CHECKER_DRIVER_PACKAGE) -cache-dir "$(LINT_CHECKER_CACHE_DIR)" -go "$(GO)" $(if $(filter 1 true yes,$(LINT_CHECKER_FALLBACK)),-fallback,) -package "$(1)" -- $(2)
+endef
 
 define run_verification_step
 	@printf '%s\n' "==> $(2) [make $(1)]"
@@ -590,44 +598,44 @@ lint:
 	$(MAKE) $(LINT_TARGETS)
 
 backend-size:
-	$(GO) run ./cmd/backendsizecheck -root $(BACKEND_SIZE_ROOT)
+	$(call run_lint_checker,./cmd/backendsizecheck,-root "$(BACKEND_SIZE_ROOT)")
 
 backend-dependency-graph:
 	$(GO) run ./cmd/backenddependencygraph -root . -go $(GO) -output $(BACKEND_DEPENDENCY_GRAPH_DOT) -svg-output $(BACKEND_DEPENDENCY_GRAPH_SVG)
 
 pkg-maint:
-	$(GO) run ./cmd/pkgmaintcheck -root $(PACKAGE_MAINT_ROOT)
+	$(call run_lint_checker,./cmd/pkgmaintcheck,-root "$(PACKAGE_MAINT_ROOT)")
 
 pkg-file-count:
-	$(GO) run ./cmd/pkgfilecountcheck -root $(PACKAGE_FILE_COUNT_ROOT)
+	$(call run_lint_checker,./cmd/pkgfilecountcheck,-root "$(PACKAGE_FILE_COUNT_ROOT)")
 
 pkg-boundary:
-	$(GO) run ./cmd/pkgboundarycheck -root $(PACKAGE_BOUNDARY_ROOT)
-	$(GO) run ./cmd/ownershipboundarycheck
+	$(call run_lint_checker,./cmd/pkgboundarycheck,-root "$(PACKAGE_BOUNDARY_ROOT)")
+	$(call run_lint_checker,./cmd/ownershipboundarycheck,)
 
 pkg-structure:
-	$(GO) run ./cmd/pkgstructurecheck -root $(PACKAGE_STRUCTURE_ROOT)
+	$(call run_lint_checker,./cmd/pkgstructurecheck,-root "$(PACKAGE_STRUCTURE_ROOT)")
 
 package-target-manifest-check:
-	$(GO) run ./cmd/packagetargetmanifestcheck -root .
+	$(call run_lint_checker,./cmd/packagetargetmanifestcheck,-root ".")
 
 packaged-factory-source-check:
-	$(GO) run ./cmd/packagedfactorysourcecheck -root .
+	$(call run_lint_checker,./cmd/packagedfactorysourcecheck,-root ".")
 
 packaged-factory-consumption-check:
-	$(GO) run ./cmd/packagedfactoryconsumptioncheck -root .
+	$(call run_lint_checker,./cmd/packagedfactoryconsumptioncheck,-root ".")
 
 packaged-factory-catalog-generate:
 	$(GO) run ./cmd/packagedfactorycataloggenerate -root .
 
 packaged-factory-catalog-check:
-	$(GO) run ./cmd/packagedfactorycatalogcheck -root .
+	$(call run_lint_checker,./cmd/packagedfactorycatalogcheck,-root ".")
 
 provider-catalog-generate:
 	$(GO) run ./cmd/providercataloggenerate -root .
 
 provider-catalog-check:
-	$(GO) run ./cmd/providercatalogcheck -root .
+	$(call run_lint_checker,./cmd/providercatalogcheck,-root ".")
 
 model-provider-package-generate:
 	node scripts/model-provider-package.mjs generate
@@ -636,25 +644,25 @@ model-provider-package-check:
 	node scripts/model-provider-package.mjs check
 
 ownership-boundary-check:
-	$(GO) run ./cmd/ownershipboundarycheck
+	$(call run_lint_checker,./cmd/ownershipboundarycheck,)
 
 ownership-inventory-check:
-	$(GO) run ./cmd/ownershipinventorycheck
+	$(call run_lint_checker,./cmd/ownershipinventorycheck,)
 
 durable-runtime-construction-check:
-	$(GO) run ./cmd/durableruntimeconstructioncheck -root .
+	$(call run_lint_checker,./cmd/durableruntimeconstructioncheck,-root ".")
 
 logging-boundary-check:
-	$(GO) run ./cmd/loggingboundarycheck -root .
+	$(call run_lint_checker,./cmd/loggingboundarycheck,-root ".")
 
 compatibility-alias-check:
-	$(GO) run ./cmd/compatibilityaliascheck -root $(COMPATIBILITY_ALIAS_CHECK_ROOT)
+	$(call run_lint_checker,./cmd/compatibilityaliascheck,-root "$(COMPATIBILITY_ALIAS_CHECK_ROOT)")
 
 retired-surface-check:
-	$(GO) run ./cmd/retiredsurfacecheck -root $(RETIRED_SURFACE_CHECK_ROOT)
+	$(call run_lint_checker,./cmd/retiredsurfacecheck,-root "$(RETIRED_SURFACE_CHECK_ROOT)")
 
 deadcode:
-	$(GO) run ./cmd/deadcodecheck
+	$(call run_lint_checker,./cmd/deadcodecheck,)
 
 ui-deadcode:
 	cd ui && $(UI_SCRIPT) deadcode

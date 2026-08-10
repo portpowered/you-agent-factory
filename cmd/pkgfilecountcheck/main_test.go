@@ -248,7 +248,8 @@ func TestMakePkgFileCountTargetFailsForOversizedOwnedPackage(t *testing.T) {
 
 	got := string(output)
 	for _, want := range []string{
-		"go run ./cmd/pkgfilecountcheck -root " + fixtureRoot,
+		"go run ./cmd/lintcheck -cache-dir",
+		"-package \"./cmd/pkgfilecountcheck\" -- -root \"" + fixtureRoot + "\"",
 		"[agent-factory:pkg-file-count] oversized package: pkg/service",
 		"  package files: 16",
 		"  limit: 15",
@@ -274,7 +275,8 @@ func TestMakeLintPathFailsForOversizedOwnedPackage(t *testing.T) {
 
 	got := string(output)
 	for _, want := range []string{
-		"go run ./cmd/pkgfilecountcheck -root " + fixtureRoot,
+		"go run ./cmd/lintcheck -cache-dir",
+		"-package \"./cmd/pkgfilecountcheck\" -- -root \"" + fixtureRoot + "\"",
 		"[agent-factory:pkg-file-count] oversized package: pkg/service",
 		"  package files: 16",
 		"  limit: 15",

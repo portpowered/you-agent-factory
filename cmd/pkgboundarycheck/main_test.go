@@ -1515,7 +1515,8 @@ func TestMakePkgBoundaryTargetFailsForUnapprovedRootPackageFamily(t *testing.T) 
 
 	got := string(output)
 	for _, want := range []string{
-		"go run ./cmd/pkgboundarycheck -root " + fixtureRoot,
+		"go run ./cmd/lintcheck -cache-dir",
+		"-package \"./cmd/pkgboundarycheck\" -- -root \"" + fixtureRoot + "\"",
 		"[agent-factory:pkg-boundary] unapproved root package family: pkg/experimental",
 		"outside the approved package-family allowlist",
 		"move the code under an approved owner or deliberately update the allowlist with ownership rationale",
@@ -1604,7 +1605,8 @@ func TestMakeLintPathFailsForUnapprovedRootPackageFamily(t *testing.T) {
 
 	got := string(output)
 	for _, want := range []string{
-		"go run ./cmd/pkgboundarycheck -root " + fixtureRoot,
+		"go run ./cmd/lintcheck -cache-dir",
+		"-package \"./cmd/pkgboundarycheck\" -- -root \"" + fixtureRoot + "\"",
 		"[agent-factory:pkg-boundary] unapproved root package family: pkg/experimental",
 		"outside the approved package-family allowlist",
 		"move the code under an approved owner or deliberately update the allowlist with ownership rationale",

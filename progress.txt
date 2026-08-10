@@ -1,4 +1,6 @@
 ## Codebase Patterns
+- Reusable Go checker caches should fingerprint `go list -deps -json` source/embed inputs plus the build environment; hashing the transitive inputs prevents a valid-looking executable from masking dependency changes.
+- On Windows, `go run` may launch its child with inherited process handles instead of redirected `exec.Cmd` buffers; use a `go run -exec` shim with a temporary status file when an exact child exit code must be preserved while forwarding streams.
 - Treat repository-enforcement inventories and architecture guards as project-enabling PRD criteria when they have no runtime, API, CLI, UI, or emitted-event behavior; source scans support enforcement but are not customer-behavior evidence.
 - AST scanners must expand grouped Go field declarations before indexing parameter or result types; a field-count helper can exceed the AST field-list length and panic on valid source.
 - Asynchronous service characterizations should wait on observed edge/context signals rather than arbitrary `time.After` ceilings; the test context remains the failure escape hatch.
@@ -123,7 +125,6 @@
 - **Learnings for future iterations:**
   - Keep the root count aligned with the canonical fifteen-entry catalog, but continue placing detailed Factory guidance in `docs/reference/packaged-factories.md`.
 ---
-
 ## 2026-08-09 13:20 - wo-d1-packaged-factories-docs-001 lint follow-up
 - What was implemented
   - No source change; checked the broad repository lint tier against the completed story.
@@ -1949,4 +1950,32 @@
   - `git diff --check` — passed.
 - **Learnings for future iterations:**
   - Acceptance criteria for repository-enforcement work should explicitly identify the project-level nature of the evidence and state the intentionally unchanged customer-facing behavior; keep the PRD valid JSON so automated consumers do not depend on permissive parsers.
+---
+## 2026-08-10 14:15 -07:00 - thr-lint-speed-001
+- What was implemented
+  - Added the cross-platform `cmd/lintcheck` process driver and routed every Go checker used by the lint targets through it, including the nested ownership checker and the standalone ownership-boundary target.
+  - Reused compiled checker executables from `.cache/lint-checkers`, with cache names derived from transitive `go list -deps -json` source/embed inputs, module files, build environment, target package, and platform; atomic publication prevents partial binaries from being reused.
+  - Preserved checker arguments and inherited environment values for direct lint sub-targets. Added the explicit `LINT_CHECKER_FALLBACK=1` path, using `go run -exec` status forwarding on Windows so checker streams and exact non-zero exit codes remain observable.
+  - Added process-level fixture tests for cache reuse, transitive-input invalidation, argument/environment forwarding, fallback behavior, non-zero propagation, and visible compile failures; updated existing Make-output assertions for the new driver boundary.
+- Files changed
+  - `.gitignore`
+  - `Makefile`
+  - `cmd/lintcheck/main.go`
+  - `cmd/lintcheck/fingerprint.go`
+  - `cmd/lintcheck/main_test.go`
+  - `cmd/pkgfilecountcheck/main_test.go`
+  - `cmd/pkgboundarycheck/main_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test -p 1 ./cmd/lintcheck ./cmd/pkgfilecountcheck ./cmd/pkgboundarycheck -count=1` — passed.
+  - `go vet ./cmd/lintcheck` — passed.
+  - `make backend-size` — passed twice; the second run kept one cache executable.
+  - `make pkg-file-count` and `make pkg-maint` — passed through the cached driver.
+  - `make typecheck` — passed after the repository-declared `make ui-deps` install restored `@types/bun`.
+  - `make pkg-boundary` reaches the cached checker but remains blocked by the existing 175 package-boundary findings reserved for `thr-lint-speed-003`; no new boundary behavior was introduced here.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - The cache driver can remain a small Go process wrapper while checker binaries are built once per transitive-input fingerprint; direct Make targets stay the compatibility boundary for target-specific arguments.
+  - The next story can compose concurrency around these target recipes without changing checker cache semantics; avoid sharing one output file between different checker fingerprints.
 ---
