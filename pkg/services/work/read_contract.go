@@ -304,10 +304,17 @@ func expectedArtifactFailureEntry(
 	entries []ExpectedArtifactVerificationEntry,
 ) (ExpectedArtifactVerificationEntry, bool) {
 	declarationNumber := declarationIndex + 1
+	hasIndexedEntries := false
 	for _, entry := range entries {
+		if entry.DeclarationIndex > 0 {
+			hasIndexedEntries = true
+		}
 		if entry.DeclarationIndex == declarationNumber {
 			return entry, true
 		}
+	}
+	if hasIndexedEntries {
+		return ExpectedArtifactVerificationEntry{}, false
 	}
 	for _, entry := range entries {
 		if entry.Name == name && entry.Pattern == pattern {
