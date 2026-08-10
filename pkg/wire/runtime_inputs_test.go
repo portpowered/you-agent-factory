@@ -5,8 +5,11 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	processcontract "github.com/portpowered/infinite-you/pkg/initializer/process"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
@@ -14,11 +17,13 @@ import (
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
+	"go.uber.org/zap"
 )
 
 type recordingStdioOpening struct {
@@ -554,5 +559,188 @@ func TestRuntimeInputResolverRejectsMissingRequiredInputs(t *testing.T) {
 				t.Fatalf("error = %v, want %q", err, test.want)
 			}
 		})
+	}
+}
+
+type runtimeObservabilityTestOwners struct {
+	logOwner     factoryruntime.RuntimeLogOwner
+	metricsOwner factoryruntime.RuntimeMetricsOwner
+	logRoot      string
+	metricsRoot  string
+}
+
+func newRuntimeObservabilityTestOwners(t *testing.T) runtimeObservabilityTestOwners {
+	t.Helper()
+	at := time.Date(2026, time.August, 10, 15, 4, 2, 0, time.UTC)
+	root := t.TempDir()
+	owners := runtimeObservabilityTestOwners{
+		logRoot:     filepath.Join(root, "logs"),
+		metricsRoot: filepath.Join(root, "metrics"),
+	}
+	reserver, err := provideRuntimeArtifactPathReserver()
+	if err != nil {
+		t.Fatalf("provideRuntimeArtifactPathReserver(): %v", err)
+	}
+	var logCollision atomic.Int32
+	owners.logOwner, err = provideRuntimeLogOwner(
+		zap.NewNop(), func() time.Time { return at },
+		func() string { return "log-" + strconv.Itoa(int(logCollision.Add(1))) }, reserver,
+	)
+	if err != nil {
+		t.Fatalf("provideRuntimeLogOwner(): %v", err)
+	}
+	var metricCollision atomic.Int32
+	owners.metricsOwner, err = provideRuntimeMetricsOwner(
+		func() time.Time { return at },
+		func() string { return "metric-" + strconv.Itoa(int(metricCollision.Add(1))) }, reserver,
+	)
+	if err != nil {
+		t.Fatalf("provideRuntimeMetricsOwner(): %v", err)
+	}
+	assertRuntimeObservabilityConstructionIsInert(t, owners)
+	return owners
+}
+
+func assertRuntimeObservabilityConstructionIsInert(t *testing.T, owners runtimeObservabilityTestOwners) {
+	t.Helper()
+	for name, root := range map[string]string{"log": owners.logRoot, "metrics": owners.metricsRoot} {
+		if _, err := os.Stat(root); !os.IsNotExist(err) {
+			t.Fatalf("%s root after owner construction stat error = %v, want not exist", name, err)
+		}
+	}
+}
+
+func TestRuntimeLogOwnerKeepsPrivateScopesIsolated(t *testing.T) {
+	t.Parallel()
+	owners := newRuntimeObservabilityTestOwners(t)
+	first := openRuntimeLogTestScope(t, owners.logOwner, owners.logRoot, "session-first")
+	second := openRuntimeLogTestScope(t, owners.logOwner, owners.logRoot, "session-second")
+	if first.Artifact().Path == second.Artifact().Path {
+		t.Fatalf("log scope paths collide: %q", first.Artifact().Path)
+	}
+	first.Logger().Info("first session log")
+	second.Logger().Info("second session log")
+	if err := first.Close(); err != nil {
+		t.Fatalf("close first log scope: %v", err)
+	}
+	if err := first.Close(); err != nil {
+		t.Fatalf("close first log scope twice: %v", err)
+	}
+	second.Logger().Info("second session remains open")
+	defer second.Close()
+	assertRuntimeLogRecords(t, first, second)
+}
+
+func openRuntimeLogTestScope(t *testing.T, owner factoryruntime.RuntimeLogOwner, root, sessionID string) factoryruntime.RuntimeLogSink {
+	t.Helper()
+	sink, err := owner.Open(factoryruntime.RuntimeLogScopeRequest{
+		SessionID: sessionID, RuntimeInstanceID: "runtime-shared",
+		FolderPath: "/folder", FactoryDirectory: "/factory", RootDirectory: root,
+		Policy: factoryruntime.RuntimeFileLoggingPolicyEnabled,
+	})
+	if err != nil {
+		t.Fatalf("open log scope %q: %v", sessionID, err)
+	}
+	return sink
+}
+
+func assertRuntimeLogRecords(t *testing.T, first, second factoryruntime.RuntimeLogSink) {
+	t.Helper()
+	firstBytes, err := os.ReadFile(first.Artifact().Path)
+	if err != nil {
+		t.Fatalf("read first log scope: %v", err)
+	}
+	secondBytes, err := os.ReadFile(second.Artifact().Path)
+	if err != nil {
+		t.Fatalf("read second log scope: %v", err)
+	}
+	if !strings.Contains(string(firstBytes), "first session log") || strings.Contains(string(firstBytes), "second session log") {
+		t.Fatalf("first log scope leaked another session: %s", firstBytes)
+	}
+	if !strings.Contains(string(secondBytes), "second session remains open") {
+		t.Fatalf("second log scope did not remain writable: %s", secondBytes)
+	}
+}
+
+func TestRuntimeMetricsOwnerKeepsPrivateScopesIsolated(t *testing.T) {
+	t.Parallel()
+	owners := newRuntimeObservabilityTestOwners(t)
+	first := openRuntimeMetricsTestScope(t, owners.metricsOwner, owners.metricsRoot, "session-first")
+	second := openRuntimeMetricsTestScope(t, owners.metricsOwner, owners.metricsRoot, "session-second")
+	if first.Path() == second.Path() {
+		t.Fatalf("metrics scope paths collide: %q", first.Path())
+	}
+	if err := first.Counter(t.Context(), "first.metric", 1, factoryruntime.Fields{}); err != nil {
+		t.Fatalf("write first metrics scope: %v", err)
+	}
+	if err := first.Close(); err != nil {
+		t.Fatalf("close first metrics scope: %v", err)
+	}
+	if err := first.Close(); err != nil {
+		t.Fatalf("close first metrics scope twice: %v", err)
+	}
+	if err := second.Counter(t.Context(), "second.metric", 1, factoryruntime.Fields{}); err != nil {
+		t.Fatalf("write second metrics scope after first close: %v", err)
+	}
+	defer second.Close()
+	assertRuntimeMetricsRecords(t, first, second)
+}
+
+func openRuntimeMetricsTestScope(t *testing.T, owner factoryruntime.RuntimeMetricsOwner, root, sessionID string) factoryruntime.RuntimeMetricsSink {
+	t.Helper()
+	sink, err := owner.Open(factoryruntime.RuntimeMetricsScopeRequest{
+		Scope: factoryruntime.RuntimeMetricsScope{
+			SessionID: sessionID, RuntimeInstanceID: "runtime-shared",
+			FolderPath: "/folder", FactoryDir: "/factory",
+		},
+		RootDirectory: root, Policy: factoryruntime.RuntimeMetricsPolicyEnabled,
+	})
+	if err != nil {
+		t.Fatalf("open metrics scope %q: %v", sessionID, err)
+	}
+	return sink
+}
+
+func assertRuntimeMetricsRecords(t *testing.T, first, second factoryruntime.RuntimeMetricsSink) {
+	t.Helper()
+	firstBytes, err := os.ReadFile(first.Path())
+	if err != nil {
+		t.Fatalf("read first metrics scope: %v", err)
+	}
+	secondBytes, err := os.ReadFile(second.Path())
+	if err != nil {
+		t.Fatalf("read second metrics scope: %v", err)
+	}
+	if !strings.Contains(string(firstBytes), "session-first") || strings.Contains(string(firstBytes), "second.metric") {
+		t.Fatalf("first metrics scope leaked another session: %s", firstBytes)
+	}
+	if !strings.Contains(string(secondBytes), "session-second") {
+		t.Fatalf("second metrics scope did not record after first close: %s", secondBytes)
+	}
+}
+
+func TestRuntimeObservabilityOwnerRejectsUnwritableDestination(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	unwritable := filepath.Join(root, "not-a-directory")
+	if err := os.WriteFile(unwritable, []byte("file"), 0o600); err != nil {
+		t.Fatalf("create destination sentinel: %v", err)
+	}
+	reserver, err := provideRuntimeArtifactPathReserver()
+	if err != nil {
+		t.Fatalf("provideRuntimeArtifactPathReserver(): %v", err)
+	}
+	owner, err := provideRuntimeLogOwner(
+		zap.NewNop(), time.Now, func() string { return "unwritable" }, reserver,
+	)
+	if err != nil {
+		t.Fatalf("provideRuntimeLogOwner(): %v", err)
+	}
+	_, err = owner.Open(factoryruntime.RuntimeLogScopeRequest{
+		RuntimeInstanceID: "runtime-unwritable", RootDirectory: unwritable,
+		Policy: factoryruntime.RuntimeFileLoggingPolicyEnabled,
+	})
+	if err == nil || !strings.Contains(err.Error(), "runtime artifact") {
+		t.Fatalf("unwritable log destination error = %v, want actionable runtime artifact error", err)
 	}
 }

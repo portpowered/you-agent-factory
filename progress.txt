@@ -31,7 +31,9 @@
 - Restore package coverage thresholds with focused behavioral tests for typed edge outcomes; do not lower baseline manifests for new branches.
 - Replay completeness must be derived from a terminal lifecycle record inside the captured Events range, not from a separately synchronized terminal session state.
 - When a package has a strict file-count baseline, put a small refactor in an existing focused file before adding a new helper file or changing the baseline.
+- When a public owner contract intentionally adds an interface to a package with a deletion-only structure baseline, update that package's exact interface-count target in the same change and rerun `make pkg-structure`.
 - When broad functional coverage reports a cancellation-observation failure, rerun the failed lane and isolate the named test before changing an unrelated feature; parallel-suite failures can move between existing durability/restart tests while isolated runs pass.
+- Process-scoped external-effect owners should expose an `Open(valueRequest)` operation that returns a close-once private scope; the shared owner stays non-closable and retains ambient clock, ID, path, and filesystem effects.
 
 ## 2026-08-09 13:12 - wo-d1-packaged-factories-docs-001
 - What was implemented
@@ -978,4 +980,28 @@
 - **Learnings for future iterations:**
   - Keep durable opening requests value-only and pass output, readiness, lifecycle completion, and historical presentation through explicitly named transport boundaries; this preserves protocol behavior without making request state retain handles or callbacks.
   - When a presentation boundary is split, update both the internal owner role and every transport adapter/test fake; generated Wire output may remain unchanged when only handwritten function signatures move behind existing providers.
+---
+
+## 2026-08-10 08:52 -07:00 - btrc-p1-root-injection-005
+- What was implemented
+  - Replaced per-operation runtime log and metrics sink factories with process-scoped `RuntimeLogOwner` and `RuntimeMetricsOwner` contracts opened from value-only scope requests.
+  - Canonical Wire now constructs each observability owner once with the base logger, artifact clock, collision-ID generator, and path reserver; `RuntimeFactory.Build` opens private scopes without receiving a logger or sink factory.
+  - Added close-once scope guards, destination/error handling, and owner documentation; regenerated `pkg/wire/wire_gen.go` and reconciled the package-structure baseline for the intentional public owner contracts.
+  - Added behavioral coverage for inert owner construction, collision-free destinations, session isolation, sibling-scope usability after close, unwritable destinations, request forwarding, nil-owner failures, and repeated cleanup.
+- Files changed
+  - `pkg/services/factory_runtime/runtime_log_sink.go`
+  - `pkg/services/factory_runtime/runtime_metrics_sink.go`
+  - `pkg/services/factory_runtime/internal/build.go`, `runtime_build.go`, and focused tests
+  - `pkg/services/factory_runtime/wire/assembly.go`
+  - `pkg/wire/profiles.go`, `wire.go`, regenerated `wire_gen.go`, and `runtime_inputs_test.go`
+  - `docs/internal/packaged-service-structure/btrc-p1-owner-contracts.md`
+  - `docs/internal/baselines/package-structure-baseline.json`
+  - `prd.json`
+- Verification
+  - Focused Factory Runtime/Wire tests, full Factory Runtime/Wire package tests, `go vet`, and `go test -race` — passed.
+  - `make wire-smoke`, `make verify-fast`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, and `git diff --check` — passed.
+  - `make lint` reached all gates but remains blocked by the repository's pre-existing `pkg-boundary` baseline (179 violations); UI lint, dead-code, vet, backend-size, maintainability, file-count, and structure gates passed.
+- **Learnings for future iterations:**
+  - Keep shared observability owners non-closable and put all file creation, collision reservation, and close-once behavior in the returned operation-private scope; this preserves sibling sessions when one scope fails or closes.
+  - Split behavioral tests by scope type when they combine setup, lifecycle, and record assertions so the package maintainability gate remains green without suppressions.
 ---

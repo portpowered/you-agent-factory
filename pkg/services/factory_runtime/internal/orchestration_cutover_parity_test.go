@@ -114,7 +114,7 @@ func TestBuildThroughOrchestrationPreservesRunnablePetriTopology(t *testing.T) {
 		"", factory.RuntimeLogStorageConfig{},
 		factoryinternal.RuntimeFileLoggingPolicyDisabled,
 		factoryinternal.RuntimeMetricsPolicyDisabled, "", factory.RuntimeMetricsStorageConfig{},
-		loaded, zap.NewNop(), "runtime-cutover", "", clockwork.NewFakeClock(), "", nil, nil, nil, nil, nil,
+		loaded, "runtime-cutover", "", clockwork.NewFakeClock(), "", nil, nil, nil, nil, nil,
 		nil,
 		newTestRuntimeLedger,
 		func(recordings.WorkerEventRecorder, *zap.Logger) (map[string]workers.WorkerExecutor, error) {
@@ -167,7 +167,7 @@ func TestBuildThroughOrchestrationOpensInlineJavaScriptFactory(t *testing.T) {
 	}
 	workflows := cutoverJavaScriptWorkflows()
 	bundle, err := factoryinternal.NewRuntimeFactory(
-		nil, nil, nil, nil, nil, testRuntimeLoggerFactory, nil, nil,
+		nil, nil, nil, nil, nil, zap.NewNop(), testRuntimeLoggerFactory, nil, nil,
 		testRuntimeID, testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir,
 		factoryruntimeorchestrationowner.NewCompilation(testRuntimeID, workflows, workflows),
 		nil,
@@ -177,7 +177,7 @@ func TestBuildThroughOrchestrationOpensInlineJavaScriptFactory(t *testing.T) {
 		"", factory.RuntimeLogStorageConfig{},
 		factoryinternal.RuntimeFileLoggingPolicyDisabled,
 		factoryinternal.RuntimeMetricsPolicyDisabled, "", factory.RuntimeMetricsStorageConfig{},
-		loaded, zap.NewNop(), "runtime-cutover-js", "", clockwork.NewFakeClock(), "", nil, nil, nil, nil, nil,
+		loaded, "runtime-cutover-js", "", clockwork.NewFakeClock(), "", nil, nil, nil, nil, nil,
 		nil,
 		newTestRuntimeLedger,
 		func(recordings.WorkerEventRecorder, *zap.Logger) (map[string]workers.WorkerExecutor, error) {

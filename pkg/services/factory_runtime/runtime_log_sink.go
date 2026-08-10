@@ -30,15 +30,26 @@ type RuntimeLogSink interface {
 	io.Closer
 }
 
-// RuntimeLogSinkFactory opens one explicitly configured runtime log sink.
-// Wire owns the Platform adapter and all ambient clock, ID, home, path, and
-// filesystem dependencies used by that adapter.
-type RuntimeLogSinkFactory func(
-	base *zap.Logger,
-	runtimeInstanceID string,
-	rootDir string,
-	config RuntimeLogStorageConfig,
-) (RuntimeLogSink, error)
+// RuntimeLogScopeRequest contains the value selections for one private log
+// scope. The owner retains the base logger and all path, clock, ID, and
+// filesystem effects; callers provide only session/runtime identity and the
+// destination policy selected for this operation.
+type RuntimeLogScopeRequest struct {
+	SessionID         string
+	RuntimeInstanceID string
+	FolderPath        string
+	FactoryDirectory  string
+	RootDirectory     string
+	Policy            RuntimeFileLoggingPolicy
+	Config            RuntimeLogStorageConfig
+}
+
+// RuntimeLogOwner is the process-scoped observability root for runtime logs.
+// Open returns one operation-private sink. The owner itself has no lifecycle
+// operation: closing a session closes only the returned scope.
+type RuntimeLogOwner interface {
+	Open(RuntimeLogScopeRequest) (RuntimeLogSink, error)
+}
 
 type RuntimeArtifactRoots struct {
 	Logs    string

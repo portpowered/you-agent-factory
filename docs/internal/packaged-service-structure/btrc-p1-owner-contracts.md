@@ -1,12 +1,13 @@
 # BTRC P1 owner-contract register
 
-This register records the dependency classification for the first four BTRC P1
+This register records the dependency classification for the first five BTRC P1
 cutovers. It is intentionally limited to the Factory Sessions runtime-opening
 boundary changed by stories `btrc-p1-root-injection-001` and
 `btrc-p1-root-injection-002`, plus the shared Factory Sessions root cutover in
 `btrc-p1-root-injection-003`, and the value-only opening cutover in
-`btrc-p1-root-injection-004`; later P1 stories extend the register when they
-move additional operation contracts or private observability state.
+`btrc-p1-root-injection-004`, and the private observability-scope ownership
+cutover in `btrc-p1-root-injection-005`; later P1 stories extend the register
+when they move additional operation contracts or private owner state.
 
 ## Build-time owner ports
 
@@ -18,7 +19,7 @@ retain the aggregate `edges.Edges` value or select another service graph.
 | Owner | Contract | Contents |
 | --- | --- | --- |
 | Provider Sessions | `ProviderSessionsPorts` | Provider Sessions root |
-| Factory Runtime | `FactoryRuntimePorts` | base logger, workflow definitions, preview, runtime executors, provider invocation, mock runner, assembler, clock resolver, session logger factory, selected clock, provider override, submission recorder, and dispatch recorder |
+| Factory Runtime | `FactoryRuntimePorts` plus `RuntimeLogOwner` and `RuntimeMetricsOwner` | base logger, workflow definitions, preview, runtime executors, provider invocation, mock runner, assembler, clock resolver, session logger factory, selected clock, provider override, submission recorder, dispatch recorder, and process-scoped observability owners |
 | Factory Definitions | `FactoryDefinitionsPorts` | validator, named paths, loading, replay decoding, and snapshot capabilities |
 | Factory Sessions | `FactorySessionsPorts` | Sessions root, its directly retained runtime assembly, execution/scaffold/validation capabilities, runtime identity, home, provider identity, invocation metrics recorder, and runtime-host observer |
 | Work | `WorkPorts` | Work factory and content materializer |
@@ -67,9 +68,15 @@ fields. Opened runtime products, cleanup scopes, recording bindings, and model
 runtime scopes are operation-scoped state and are not exposed through the
 construction contract. Hosted clock/client/secret effects and visualization
 sink/root-observer effects are captured by their canonical Wire providers or
-application adapter once; dynamic log and metric destinations remain deferred
-to the observability-owner story. The base logger is also retained by the
-Factory Runtime owner, so application and invocation calls cannot rebind it.
+application adapter once. `RuntimeLogOwner` and `RuntimeMetricsOwner` retain
+the base logger, artifact clock, collision ID generator, and path reserver at
+process construction; their `Open` methods accept only destination values and
+opaque session/runtime identities. Each returned log or metrics sink is
+wrapped by the Factory Runtime owner in a close-once operation scope. The
+shared owners are never closed by a session, so closing or failing one scope
+cannot close another scope or the process root. The base logger is also
+retained by the Factory Runtime owner, so application and invocation calls
+cannot rebind it.
 
 The Factory Sessions root is constructed once with the selected process clock.
 Canonical Wire narrows that same root to its owner-private runtime assembly
@@ -89,7 +96,10 @@ proves the value-only resolver/opening handoff and lifecycle cleanup behavior.
 opens two failing runtimes concurrently and proves both use the same injected
 Factory Sessions runtime root while each private Models scope is closed once.
 `pkg/wire/runtime_inputs_test.go` verifies exact edge projection and one-time
-default runner selection. The root functional support test
+default runner selection, inert observability-owner construction,
+collision-free scope paths, scope isolation, and unwritable-destination errors.
+The Factory Runtime scope-opening tests verify value forwarding and close-once
+cleanup. The root functional support test
 `tests/functional/internal/support/public_process_observation_test.go` enters
 through `root.BuildProcess` and `Process.Execute` and observes the injected
 provider override through public Work. `pkg/wire/wire_gen.go` is regenerated

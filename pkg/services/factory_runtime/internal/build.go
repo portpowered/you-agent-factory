@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
+	"sync"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -33,9 +34,10 @@ type RuntimeFactory struct {
 	workPropagation          interfaces.WorkPropagationPolicyService
 	workService              work.Service
 	decisionEnvelopes        interfaces.DecisionEnvelopeService
+	baseLogger               *zap.Logger
 	loggerFactory            factory.RuntimeLoggerFactory
-	runtimeLogs              factory.RuntimeLogSinkFactory
-	runtimeMetrics           factory.RuntimeMetricsSinkFactory
+	runtimeLogs              factory.RuntimeLogOwner
+	runtimeMetrics           factory.RuntimeMetricsOwner
 	newID                    factory.IDGenerator
 	workRequestIDs           work.RequestIDGenerator
 	runtimeDirs              factory.RuntimeDirectoryFileSystem
@@ -51,9 +53,10 @@ func NewRuntimeFactory(
 	workPropagation interfaces.WorkPropagationPolicyService,
 	workService work.Service,
 	decisionEnvelopes interfaces.DecisionEnvelopeService,
+	baseLogger *zap.Logger,
 	loggerFactory factory.RuntimeLoggerFactory,
-	runtimeLogs factory.RuntimeLogSinkFactory,
-	runtimeMetrics factory.RuntimeMetricsSinkFactory,
+	runtimeLogs factory.RuntimeLogOwner,
+	runtimeMetrics factory.RuntimeMetricsOwner,
 	newID factory.IDGenerator,
 	workRequestIDs work.RequestIDGenerator,
 	runtimeDirs factory.RuntimeDirectoryFileSystem,
@@ -68,6 +71,7 @@ func NewRuntimeFactory(
 		workPropagation:          workPropagation,
 		workService:              workService,
 		decisionEnvelopes:        decisionEnvelopes,
+		baseLogger:               baseLogger,
 		loggerFactory:            loggerFactory,
 		runtimeLogs:              runtimeLogs,
 		runtimeMetrics:           runtimeMetrics,
@@ -108,7 +112,6 @@ func (f *RuntimeFactory) Build(
 	runtimeMetricsDir string,
 	runtimeMetricsConfig factory.RuntimeMetricsStorageConfig,
 	loadedFactoryCfg factory.LoadedConfig,
-	baseLogger *zap.Logger,
 	runtimeInstanceID string,
 	backendScopeID string,
 	clock factory.Clock,
@@ -148,33 +151,35 @@ func (f *RuntimeFactory) Build(
 	if f == nil || f.loggerFactory == nil {
 		return nil, fmt.Errorf("runtime logger factory is required")
 	}
-	logSink, runtimeInstanceID, err := buildRuntimeLogSink(
+	logSink, runtimeInstanceID, err := openRuntimeLogScope(
 		f.runtimeLogs,
 		runtimeFileLoggingPolicy,
 		runtimeLogDir,
 		runtimeLogConfig,
-		baseLogger,
+		sessionID,
+		folderPath,
+		dir,
 		runtimeInstanceID,
 	)
 	if err != nil {
 		return nil, err
 	}
 	logger := newSessionLogger(
-		runtimeSessionBaseLogger(baseLogger, logSink),
+		runtimeSessionBaseLogger(f.baseLogger, logSink),
 		sessionID,
 		folderPath,
 		dir,
 	)
 	structuredLogger := f.loggerFactory(logger, verbose)
 	if structuredLogger == nil {
-		_ = logSink.Close()
+		_ = factoryhost.CloseBundleSinks(logSink, nil)
 		return nil, fmt.Errorf("runtime logger factory returned nil")
 	}
 	if workerSessionsFactory == nil {
-		_ = logSink.Close()
+		_ = factoryhost.CloseBundleSinks(logSink, nil)
 		return nil, fmt.Errorf("Worker Sessions factory is required")
 	}
-	metricsSink, err := buildRuntimeMetricsSink(
+	metricsSink, err := openRuntimeMetricsScope(
 		f.runtimeMetrics,
 		runtimeMetricsPolicy,
 		runtimeMetricsDir,
@@ -185,9 +190,7 @@ func (f *RuntimeFactory) Build(
 		dir,
 	)
 	if err != nil {
-		if logSink != nil {
-			_ = logSink.Close()
-		}
+		_ = factoryhost.CloseBundleSinks(logSink, nil)
 		return nil, err
 	}
 	bundleBuilt := false
@@ -491,31 +494,37 @@ func dirExists(path string, files factory.RuntimeDirectoryFileSystem) bool {
 	return err == nil && info.IsDir()
 }
 
-func buildRuntimeLogSink(
-	build factory.RuntimeLogSinkFactory,
+func openRuntimeLogScope(
+	owner factory.RuntimeLogOwner,
 	policy RuntimeFileLoggingPolicy,
 	runtimeLogDir string,
 	runtimeLogConfig factory.RuntimeLogStorageConfig,
-	baseLogger *zap.Logger,
+	sessionID string,
+	folderPath string,
+	factoryDir string,
 	runtimeInstanceID string,
 ) (factory.RuntimeLogSink, string, error) {
-	if baseLogger == nil {
-		return nil, runtimeInstanceID, fmt.Errorf("base logger is required")
-	}
 	if strings.TrimSpace(runtimeInstanceID) == "" {
 		return nil, runtimeInstanceID, fmt.Errorf("runtime instance ID is required")
 	}
 	if !runtimeFileLoggingEnabled(policy) {
 		return nil, runtimeInstanceID, nil
 	}
-	if build == nil {
-		return nil, runtimeInstanceID, fmt.Errorf("runtime log sink factory is required")
+	if owner == nil {
+		return nil, runtimeInstanceID, fmt.Errorf("runtime log owner is required")
 	}
-	logSink, err := build(baseLogger, runtimeInstanceID, runtimeLogDir, runtimeLogConfig)
+	logSink, err := owner.Open(factory.RuntimeLogScopeRequest{
+		SessionID: sessionID, RuntimeInstanceID: runtimeInstanceID,
+		FolderPath: folderPath, FactoryDirectory: factoryDir,
+		RootDirectory: runtimeLogDir, Policy: policy, Config: runtimeLogConfig,
+	})
 	if err != nil {
-		return nil, runtimeInstanceID, fmt.Errorf("build runtime logger: %w", err)
+		return nil, runtimeInstanceID, fmt.Errorf("open runtime log scope: %w", err)
 	}
-	return logSink, runtimeInstanceID, nil
+	if logSink == nil {
+		return nil, runtimeInstanceID, fmt.Errorf("runtime log owner returned nil scope")
+	}
+	return &closeOnceRuntimeLogSink{RuntimeLogSink: logSink}, runtimeInstanceID, nil
 }
 
 func runtimeFileLoggingEnabled(policy RuntimeFileLoggingPolicy) bool {
@@ -550,8 +559,8 @@ func runtimeSessionBaseLogger(baseLogger *zap.Logger, logSink factory.RuntimeLog
 	return zap.NewNop()
 }
 
-func buildRuntimeMetricsSink(
-	build factory.RuntimeMetricsSinkFactory,
+func openRuntimeMetricsScope(
+	owner factory.RuntimeMetricsOwner,
 	policy RuntimeMetricsPolicy,
 	runtimeMetricsDir string,
 	runtimeMetricsConfig factory.RuntimeMetricsStorageConfig,
@@ -563,19 +572,51 @@ func buildRuntimeMetricsSink(
 	if !runtimeMetricsEnabled(policy) {
 		return nil, nil
 	}
-	if build == nil {
-		return nil, fmt.Errorf("runtime metrics sink factory is required")
+	if owner == nil {
+		return nil, fmt.Errorf("runtime metrics owner is required")
 	}
-	metricsSink, err := build(
-		factory.RuntimeMetricsScope{
+	metricsSink, err := owner.Open(factory.RuntimeMetricsScopeRequest{
+		Scope: factory.RuntimeMetricsScope{
 			SessionID: sessionID, RuntimeInstanceID: runtimeInstanceID,
 			FolderPath: folderPath, FactoryDir: factoryDir,
 		},
-		runtimeMetricsDir,
-		runtimeMetricsConfig,
-	)
+		RootDirectory: runtimeMetricsDir,
+		Policy:        policy,
+		Config:        runtimeMetricsConfig,
+	})
 	if err != nil {
-		return nil, fmt.Errorf("build runtime metrics sink: %w", err)
+		return nil, fmt.Errorf("open runtime metrics scope: %w", err)
 	}
-	return metricsSink, nil
+	if metricsSink == nil {
+		return nil, fmt.Errorf("runtime metrics owner returned nil scope")
+	}
+	return &closeOnceRuntimeMetricsSink{RuntimeMetricsSink: metricsSink}, nil
+}
+
+type closeOnceRuntimeLogSink struct {
+	factory.RuntimeLogSink
+	once sync.Once
+	err  error
+}
+
+func (sink *closeOnceRuntimeLogSink) Close() error {
+	if sink == nil || sink.RuntimeLogSink == nil {
+		return nil
+	}
+	sink.once.Do(func() { sink.err = sink.RuntimeLogSink.Close() })
+	return sink.err
+}
+
+type closeOnceRuntimeMetricsSink struct {
+	factory.RuntimeMetricsSink
+	once sync.Once
+	err  error
+}
+
+func (sink *closeOnceRuntimeMetricsSink) Close() error {
+	if sink == nil || sink.RuntimeMetricsSink == nil {
+		return nil
+	}
+	sink.once.Do(func() { sink.err = sink.RuntimeMetricsSink.Close() })
+	return sink.err
 }

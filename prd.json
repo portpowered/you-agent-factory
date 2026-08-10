@@ -103,8 +103,8 @@
         "Tests pass"
       ],
       "priority": 5,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented process-scoped RuntimeLogOwner and RuntimeMetricsOwner contracts. Canonical Wire now constructs each owner once with the base logger, artifact clock, collision ID generator, and path reserver; RuntimeFactory.Build opens private scopes from value-only destination selections and opaque session/runtime IDs without receiving a logger or sink factory. Log and metrics scopes are wrapped in close-once guards, so failure or repeated cleanup closes only the affected scope exactly once while the shared owners and sibling scopes remain usable. Added owner construction inertness, collision-free path, session isolation, sibling-scope-after-close, unwritable-destination, value-forwarding, nil-owner, and close-once tests; regenerated wire_gen.go. Focused Factory Runtime/Wire suites and wire-smoke pass. Story 006 remains for the end-to-end inert/reusable process proof."
     },
     {
       "id": "btrc-p1-root-injection-006",
