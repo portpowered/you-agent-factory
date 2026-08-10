@@ -107,6 +107,11 @@ properties:
     description: Optional destination emitted when the workstation fails permanently.
     items:
       $ref: './WorkstationIO.yaml'
+  expectedArtifacts:
+    type: array
+    description: Expected output declarations added by this workstation to its applicable work type contract.
+    items:
+      $ref: './ExpectedArtifact.yaml'
   resources:
     type: array
     description: Resource capacity this workstation consumes while one dispatch is in flight.

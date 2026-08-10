@@ -291,28 +291,29 @@ type workerFrontmatter struct {
 }
 
 type workstationFrontmatter struct {
-	ID               string                              `yaml:"id,omitempty"`
-	Name             string                              `yaml:"name,omitempty"`
-	Kind             factorydefinitions.WorkstationKind  `yaml:"behavior,omitempty"`
-	Type             string                              `yaml:"type,omitempty"`
-	Worker           string                              `yaml:"worker,omitempty"`
-	Runner           string                              `yaml:"runner,omitempty"`
-	PromptFile       string                              `yaml:"promptFile,omitempty"`
-	OutputSchema     string                              `yaml:"outputSchema,omitempty"`
-	OutputContract   string                              `yaml:"outputContract,omitempty"`
-	Limits           workstationLimitsFrontmatter        `yaml:"limits,omitempty"`
-	Cron             *cronFrontmatter                    `yaml:"cron,omitempty"`
-	Inputs           []ioFrontmatter                     `yaml:"inputs,omitempty"`
-	Outputs          []ioFrontmatter                     `yaml:"outputs,omitempty"`
-	OnContinue       []ioFrontmatter                     `yaml:"onContinue,omitempty"`
-	OnRejection      []ioFrontmatter                     `yaml:"onRejection,omitempty"`
-	OnFailure        []ioFrontmatter                     `yaml:"onFailure,omitempty"`
-	Resources        []factorydefinitions.ResourceConfig `yaml:"resources,omitempty"`
-	Guards           []guardFrontmatter                  `yaml:"guards,omitempty"`
-	StopWords        []string                            `yaml:"stopWords,omitempty"`
-	WorkingDirectory string                              `yaml:"workingDirectory,omitempty"`
-	Worktree         string                              `yaml:"worktree,omitempty"`
-	Env              map[string]string                   `yaml:"env,omitempty"`
+	ID                string                                      `yaml:"id,omitempty"`
+	Name              string                                      `yaml:"name,omitempty"`
+	Kind              factorydefinitions.WorkstationKind          `yaml:"behavior,omitempty"`
+	Type              string                                      `yaml:"type,omitempty"`
+	Worker            string                                      `yaml:"worker,omitempty"`
+	Runner            string                                      `yaml:"runner,omitempty"`
+	PromptFile        string                                      `yaml:"promptFile,omitempty"`
+	OutputSchema      string                                      `yaml:"outputSchema,omitempty"`
+	OutputContract    string                                      `yaml:"outputContract,omitempty"`
+	Limits            workstationLimitsFrontmatter                `yaml:"limits,omitempty"`
+	Cron              *cronFrontmatter                            `yaml:"cron,omitempty"`
+	Inputs            []ioFrontmatter                             `yaml:"inputs,omitempty"`
+	Outputs           []ioFrontmatter                             `yaml:"outputs,omitempty"`
+	OnContinue        []ioFrontmatter                             `yaml:"onContinue,omitempty"`
+	OnRejection       []ioFrontmatter                             `yaml:"onRejection,omitempty"`
+	OnFailure         []ioFrontmatter                             `yaml:"onFailure,omitempty"`
+	ExpectedArtifacts []factorydefinitions.ExpectedArtifactConfig `yaml:"expectedArtifacts,omitempty"`
+	Resources         []factorydefinitions.ResourceConfig         `yaml:"resources,omitempty"`
+	Guards            []guardFrontmatter                          `yaml:"guards,omitempty"`
+	StopWords         []string                                    `yaml:"stopWords,omitempty"`
+	WorkingDirectory  string                                      `yaml:"workingDirectory,omitempty"`
+	Worktree          string                                      `yaml:"worktree,omitempty"`
+	Env               map[string]string                           `yaml:"env,omitempty"`
 }
 
 type workstationLimitsFrontmatter struct {
@@ -373,17 +374,18 @@ func workstationFrontmatterForExpansion(def factorydefinitions.FactoryWorkstatio
 			MaxGeneratedWorkItemsArgument:       def.Limits.MaxGeneratedWorkItemsArgument,
 			MaxGeneratedWorkItemsArgumentOffset: def.Limits.MaxGeneratedWorkItemsArgumentOffset,
 		},
-		Inputs:           ioFrontmatterSlice(def.Inputs),
-		Outputs:          ioFrontmatterSlice(def.Outputs),
-		OnContinue:       ioFrontmatterSlice(def.OnContinue),
-		OnRejection:      ioFrontmatterSlice(def.OnRejection),
-		OnFailure:        ioFrontmatterSlice(def.OnFailure),
-		Resources:        append([]factorydefinitions.ResourceConfig(nil), def.Resources...),
-		Guards:           guardFrontmatterSlice(def.Guards),
-		StopWords:        append([]string(nil), def.StopWords...),
-		WorkingDirectory: def.WorkingDirectory,
-		Worktree:         def.Worktree,
-		Env:              cloneStringMap(def.Env),
+		Inputs:            ioFrontmatterSlice(def.Inputs),
+		Outputs:           ioFrontmatterSlice(def.Outputs),
+		OnContinue:        ioFrontmatterSlice(def.OnContinue),
+		OnRejection:       ioFrontmatterSlice(def.OnRejection),
+		OnFailure:         ioFrontmatterSlice(def.OnFailure),
+		ExpectedArtifacts: append([]factorydefinitions.ExpectedArtifactConfig(nil), def.ExpectedArtifacts...),
+		Resources:         append([]factorydefinitions.ResourceConfig(nil), def.Resources...),
+		Guards:            guardFrontmatterSlice(def.Guards),
+		StopWords:         append([]string(nil), def.StopWords...),
+		WorkingDirectory:  def.WorkingDirectory,
+		Worktree:          def.Worktree,
+		Env:               cloneStringMap(def.Env),
 	}
 	if def.Cron != nil {
 		rendered.Cron = &cronFrontmatter{

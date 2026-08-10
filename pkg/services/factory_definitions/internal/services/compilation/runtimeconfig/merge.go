@@ -229,6 +229,12 @@ func applyWorkstationRuntimeTopology(
 			runtimeDefinition.Resources...,
 		)
 	}
+	if len(runtimeDefinition.ExpectedArtifacts) > 0 {
+		workstation.ExpectedArtifacts = append(
+			[]factorydefinitions.ExpectedArtifactConfig(nil),
+			runtimeDefinition.ExpectedArtifacts...,
+		)
+	}
 	if len(runtimeDefinition.Guards) > 0 {
 		workstation.Guards = append(
 			[]factorydefinitions.GuardConfig(nil),

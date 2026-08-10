@@ -1431,6 +1431,18 @@ type ErrorTarget struct {
 	Kind string `json:"kind"`
 }
 
+// ExpectedArtifact One expected output declaration relative to the dispatch workspace. Pattern is a workspace-relative literal path or glob and may use the dispatch template fields, such as (index .Inputs 0).Name, inside a Go template action.
+type ExpectedArtifact struct {
+	// Name Customer-visible name for this expected output declaration.
+	Name string `json:"name"`
+
+	// NonEmpty Require every regular file matched by the pattern to be non-empty.
+	NonEmpty *bool `json:"nonEmpty,omitempty"`
+
+	// Pattern Workspace-relative literal path or glob template to verify.
+	Pattern string `json:"pattern"`
+}
+
 // Factory Top-level factory.json contract. Declare the work types, resources, portability resources, workers, and workstations that make up one authored factory here. Guarded loop breakers should be authored as guarded LOGICAL_MOVE workstations using VISIT_COUNT guards instead of a top-level exhaustion-rules field.
 type Factory struct {
 	// Description Optional localized customer-facing explanation of this Factory.
@@ -6722,6 +6734,9 @@ type WorkType struct {
 	// Description Optional localized customer-facing explanation of this work type.
 	Description *NameValue `json:"description,omitempty"`
 
+	// ExpectedArtifacts Expected output declarations inherited by workstations handling this work type.
+	ExpectedArtifacts *[]ExpectedArtifact `json:"expectedArtifacts,omitempty"`
+
 	// HandlingBehavior Optional CLI routing markers for this work type. Factories used with you run --factory must declare handlingBehavior DEFAULT on exactly one work type.
 	HandlingBehavior *[]WorkTypeHandlingBehavior `json:"handlingBehavior,omitempty"`
 
@@ -7127,6 +7142,9 @@ type Workstation struct {
 
 	// Env Environment variables added to the workstation execution context.
 	Env *StringMap `json:"env,omitempty"`
+
+	// ExpectedArtifacts Expected output declarations added by this workstation to its applicable work type contract.
+	ExpectedArtifacts *[]ExpectedArtifact `json:"expectedArtifacts,omitempty"`
 
 	// Guards Guarded loop breakers should use `VISIT_COUNT` guards here with a `LOGICAL_MOVE` workstation instead of top-level exhaustion rules.
 	Guards *[]WorkstationGuard `json:"guards,omitempty"`

@@ -530,6 +530,32 @@
       ],
       "type": "object"
     },
+    "ExpectedArtifact": {
+      "additionalProperties": false,
+      "description": "One expected output declaration relative to the dispatch workspace. Pattern is a workspace-relative literal path or glob and may use the dispatch template fields, such as (index .Inputs 0).Name, inside a Go template action.",
+      "properties": {
+        "name": {
+          "description": "Customer-visible name for this expected output declaration.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "nonEmpty": {
+          "default": false,
+          "description": "Require every regular file matched by the pattern to be non-empty.",
+          "type": "boolean"
+        },
+        "pattern": {
+          "description": "Workspace-relative literal path or glob template to verify.",
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "pattern"
+      ],
+      "type": "object"
+    },
     "Factory": {
       "additionalProperties": false,
       "description": "Top-level factory.json contract. Declare the work types, resources, portability resources, workers, and workstations that make up one authored factory here. Guarded loop breakers should be authored as guarded LOGICAL_MOVE workstations using VISIT_COUNT guards instead of a top-level exhaustion-rules field.",
@@ -4436,6 +4462,13 @@
           ],
           "description": "Optional localized customer-facing explanation of this work type."
         },
+        "expectedArtifacts": {
+          "description": "Expected output declarations inherited by workstations handling this work type.",
+          "items": {
+            "$ref": "#/$defs/ExpectedArtifact"
+          },
+          "type": "array"
+        },
         "handlingBehavior": {
           "description": "Optional CLI routing markers for this work type. Factories used with you run --factory must declare handlingBehavior DEFAULT on exactly one work type.",
           "items": {
@@ -4692,6 +4725,13 @@
           ],
           "description": "Environment variables added to the workstation execution context."
         },
+        "expectedArtifacts": {
+          "description": "Expected output declarations added by this workstation to its applicable work type contract.",
+          "items": {
+            "$ref": "#/$defs/ExpectedArtifact"
+          },
+          "type": "array"
+        },
         "guards": {
           "description": "Guarded loop breakers should use `VISIT_COUNT` guards here with a `LOGICAL_MOVE` workstation instead of top-level exhaustion rules.",
           "items": {
@@ -4765,6 +4805,10 @@
             }
           ],
           "description": "Optional worker-output parsing mode for model workstations. When set to `decision-envelope`, agent output is parsed as a reviewer/checker JSON envelope that maps directly onto WorkResult outcome, feedback, output, and optional recorded output work instead of stop-token routing."
+        },
+        "outputContract": {
+          "description": "Provider-neutral semantic contract applied to a successful workstation response after provider execution.",
+          "type": "string"
         },
         "outputSchema": {
           "description": "JSON schema string used to validate or parse structured model output when configured.",

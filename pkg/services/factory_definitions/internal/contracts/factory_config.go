@@ -5,10 +5,13 @@
 package factorycontracts
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	pathpkg "path"
 	"strings"
+	"text/template"
 	"time"
 
 	catalogresource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/resource"
@@ -424,11 +427,169 @@ func (a *InvocationExampleArguments) UnmarshalYAML(node *yaml.Node) error {
 }
 
 type WorkTypeConfig struct {
-	ID               string           `json:"id,omitempty" yaml:"id,omitempty"`
-	Name             string           `json:"name"`
-	Description      *NameValueConfig `json:"description,omitempty" yaml:"description,omitempty"`
-	States           []StateConfig    `json:"states"`
-	HandlingBehavior []string         `json:"handlingBehavior,omitempty"`
+	ID                string                   `json:"id,omitempty" yaml:"id,omitempty"`
+	Name              string                   `json:"name"`
+	Description       *NameValueConfig         `json:"description,omitempty" yaml:"description,omitempty"`
+	States            []StateConfig            `json:"states"`
+	HandlingBehavior  []string                 `json:"handlingBehavior,omitempty"`
+	ExpectedArtifacts []ExpectedArtifactConfig `json:"expectedArtifacts,omitempty" yaml:"expectedArtifacts,omitempty"`
+}
+
+// ExpectedArtifactConfig declares one output contract relative to the
+// dispatch workspace. Pattern is a workspace-relative literal path or glob
+// written with the same Go-template input vocabulary as workstation prompts.
+type ExpectedArtifactConfig struct {
+	Name     string `json:"name" yaml:"name"`
+	Pattern  string `json:"pattern" yaml:"pattern"`
+	NonEmpty bool   `json:"nonEmpty,omitempty" yaml:"nonEmpty,omitempty"`
+}
+
+// EffectiveExpectedArtifacts combines the applicable Work Type contract with
+// the producing Workstation contract. Work Type declarations are inherited
+// first, followed by Workstation declarations, and exact duplicate values are
+// retained only once in authored order.
+func EffectiveExpectedArtifacts(
+	workType WorkTypeConfig,
+	workstation FactoryWorkstationConfig,
+) []ExpectedArtifactConfig {
+	combined := make([]ExpectedArtifactConfig, 0, len(workType.ExpectedArtifacts)+len(workstation.ExpectedArtifacts))
+	combined = append(combined, workType.ExpectedArtifacts...)
+	combined = append(combined, workstation.ExpectedArtifacts...)
+	return NormalizeExpectedArtifactConfigs(combined)
+}
+
+// NormalizeExpectedArtifactConfigs removes exact duplicate declarations while
+// preserving the first declaration's authored position and value.
+func NormalizeExpectedArtifactConfigs(
+	declarations []ExpectedArtifactConfig,
+) []ExpectedArtifactConfig {
+	if len(declarations) == 0 {
+		return nil
+	}
+	normalized := make([]ExpectedArtifactConfig, 0, len(declarations))
+	seen := make(map[ExpectedArtifactConfig]struct{}, len(declarations))
+	for _, declaration := range declarations {
+		if _, exists := seen[declaration]; exists {
+			continue
+		}
+		seen[declaration] = struct{}{}
+		normalized = append(normalized, declaration)
+	}
+	return normalized
+}
+
+// ValidateExpectedArtifactConfig validates the definition-time portion of an
+// expected artifact contract. Runtime verification must repeat the workspace
+// containment check after rendering because input values are not known here.
+func ValidateExpectedArtifactConfig(
+	declaration ExpectedArtifactConfig,
+	inputCount int,
+) error {
+	if strings.TrimSpace(declaration.Name) == "" {
+		return fmt.Errorf("expected artifact name is required")
+	}
+	if strings.TrimSpace(declaration.Pattern) == "" {
+		return fmt.Errorf("expected artifact %q pattern is required", declaration.Name)
+	}
+	if err := validateExpectedArtifactPattern(declaration.Pattern, inputCount); err != nil {
+		return fmt.Errorf("expected artifact %q pattern: %w", declaration.Name, err)
+	}
+	return nil
+}
+
+func validateExpectedArtifactPattern(pattern string, inputCount int) error {
+	if inputCount < 0 {
+		return fmt.Errorf("input count cannot be negative")
+	}
+	if err := validateExpectedArtifactPathSafety(pattern); err != nil {
+		return err
+	}
+	parsed, err := template.New("expected_artifact").Option("missingkey=error").Parse(pattern)
+	if err != nil {
+		return fmt.Errorf("invalid template: %w", err)
+	}
+	data := expectedArtifactTemplateData{
+		Inputs: make([]expectedArtifactInputData, inputCount),
+		Context: expectedArtifactContextData{
+			WorkDir:     "workspace",
+			ArtifactDir: "artifacts",
+			Project:     "project",
+			SessionID:   "session",
+			Env:         map[string]string{"KEY": "value"},
+		},
+		Docs: map[string]string{},
+	}
+	for index := range data.Inputs {
+		data.Inputs[index] = expectedArtifactInputData{
+			Name:       fmt.Sprintf("work-%d", index),
+			WorkID:     fmt.Sprintf("work-id-%d", index),
+			WorkTypeID: "work-type",
+			DataType:   "work",
+			TraceID:    fmt.Sprintf("trace-%d", index),
+			ParentID:   "parent",
+			Project:    "project",
+			Tags:       map[string]string{"branch": "main"},
+			Payload:    "payload",
+		}
+	}
+	var rendered bytes.Buffer
+	if err := parsed.Execute(&rendered, data); err != nil {
+		return fmt.Errorf("template cannot be rendered for the dispatch inputs: %w", err)
+	}
+	return validateExpectedArtifactPathSafety(rendered.String())
+}
+
+func validateExpectedArtifactPathSafety(value string) error {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return fmt.Errorf("rendered pattern is empty")
+	}
+	portable := strings.ReplaceAll(trimmed, `\`, "/")
+	if pathpkg.IsAbs(portable) || strings.HasPrefix(portable, "/") {
+		return fmt.Errorf("path must be relative to the dispatch workspace")
+	}
+	if len(portable) >= 2 && portable[1] == ':' && isASCIIAlpha(portable[0]) {
+		return fmt.Errorf("path must not contain a host volume")
+	}
+	for _, segment := range strings.Split(portable, "/") {
+		if segment == ".." {
+			return fmt.Errorf("path cannot escape the dispatch workspace")
+		}
+	}
+	if _, err := pathpkg.Match(portable, ""); err != nil {
+		return fmt.Errorf("invalid glob pattern: %w", err)
+	}
+	return nil
+}
+
+func isASCIIAlpha(value byte) bool {
+	return (value >= 'a' && value <= 'z') || (value >= 'A' && value <= 'Z')
+}
+
+type expectedArtifactTemplateData struct {
+	Docs    map[string]string
+	Inputs  []expectedArtifactInputData
+	Context expectedArtifactContextData
+}
+
+type expectedArtifactInputData struct {
+	Name       string
+	WorkID     string
+	WorkTypeID string
+	DataType   string
+	TraceID    string
+	ParentID   string
+	Project    string
+	Tags       map[string]string
+	Payload    string
+}
+
+type expectedArtifactContextData struct {
+	WorkDir     string
+	ArtifactDir string
+	Project     string
+	SessionID   string
+	Env         map[string]string
 }
 
 // StateConfig declares a state within a work type.
@@ -551,6 +712,7 @@ type FactoryWorkstationConfig struct {
 	OnContinue            []IOConfig                  `json:"on_continue,omitempty" yaml:"onContinue,omitempty"`
 	OnRejection           []IOConfig                  `json:"on_rejection,omitempty" yaml:"onRejection,omitempty"`
 	OnFailure             []IOConfig                  `json:"on_failure,omitempty" yaml:"onFailure,omitempty"`
+	ExpectedArtifacts     []ExpectedArtifactConfig    `json:"expectedArtifacts,omitempty" yaml:"expectedArtifacts,omitempty"`
 	Resources             []catalogresource.Config    `json:"resources,omitempty" yaml:"resources,omitempty"`
 	CopyReferencedScripts bool                        `json:"copy_referenced_scripts,omitempty" yaml:"-"`
 	Guards                []GuardConfig               `json:"guards,omitempty" yaml:"guards,omitempty"`

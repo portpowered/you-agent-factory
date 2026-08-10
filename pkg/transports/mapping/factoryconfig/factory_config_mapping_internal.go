@@ -290,11 +290,12 @@ func workTypesInternalFromAPI(workTypes []factoryapi.WorkType) ([]interfaces.Wor
 			}
 		}
 		values[i] = interfaces.WorkTypeConfig{
-			ID:               stringValue(workType.Id),
-			Name:             workType.Name,
-			Description:      description,
-			States:           states,
-			HandlingBehavior: workTypeHandlingBehaviorInternalFromAPI(workType.HandlingBehavior),
+			ID:                stringValue(workType.Id),
+			Name:              workType.Name,
+			Description:       description,
+			States:            states,
+			HandlingBehavior:  workTypeHandlingBehaviorInternalFromAPI(workType.HandlingBehavior),
+			ExpectedArtifacts: expectedArtifactsInternalFromAPI(workType.ExpectedArtifacts),
 		}
 	}
 	return values, nil
@@ -759,6 +760,7 @@ func workstationInternalFromAPI(workstation factoryapi.Workstation, fieldPath st
 		OnContinue:            onContinue,
 		OnRejection:           onRejection,
 		OnFailure:             onFailure,
+		ExpectedArtifacts:     expectedArtifactsInternalFromAPI(workstation.ExpectedArtifacts),
 		Resources:             resourceRequirementsInternalFromAPI(workstation.Resources),
 		CopyReferencedScripts: boolValue(workstation.CopyReferencedScripts),
 		Guards:                workstationGuardsInternalFromAPI(workstation.Guards),
@@ -781,6 +783,23 @@ func workstationInternalFromAPI(workstation factoryapi.Workstation, fieldPath st
 	}
 	normalizeCanonicalWorkstationRuntime(&cfg)
 	return cfg, nil
+}
+
+func expectedArtifactsInternalFromAPI(
+	values *[]factoryapi.ExpectedArtifact,
+) []interfaces.ExpectedArtifactConfig {
+	if values == nil || len(*values) == 0 {
+		return nil
+	}
+	result := make([]interfaces.ExpectedArtifactConfig, len(*values))
+	for index, value := range *values {
+		result[index] = interfaces.ExpectedArtifactConfig{
+			Name:     value.Name,
+			Pattern:  value.Pattern,
+			NonEmpty: boolValue(value.NonEmpty),
+		}
+	}
+	return result
 }
 
 func workstationLimitsInternalFromAPI(limits *factoryapi.WorkstationLimits) interfaces.WorkstationLimits {

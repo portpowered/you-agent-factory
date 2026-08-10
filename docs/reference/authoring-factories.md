@@ -84,6 +84,77 @@ At runtime:
 Use `you docs config` for the
 canonical routing contract, including continue and rejection routes.
 
+## Declare Expected Artifacts
+
+Work Types and Workstations can declare files that a dispatch is expected to
+produce. The `pattern` is relative to the dispatch workspace and may be a
+literal path, a glob, or a Go template using the same values as workstation
+prompts. This complete JSON example can be saved as `factory.json` and checked
+with `you factory config validate ./factory.json`:
+
+```json
+{
+  "workTypes": [
+    {
+      "name": "task",
+      "handlingBehavior": ["DEFAULT"],
+      "states": [
+        { "name": "init", "type": "INITIAL" },
+        { "name": "complete", "type": "TERMINAL" },
+        { "name": "failed", "type": "FAILED" }
+      ],
+      "expectedArtifacts": [
+        {
+          "name": "task-report",
+          "pattern": "reports/{{ (index .Inputs 0).Name }}.json",
+          "nonEmpty": true
+        }
+      ]
+    }
+  ],
+  "workers": [{ "name": "processor" }],
+  "workstations": [
+    {
+      "name": "process-task",
+      "worker": "processor",
+      "inputs": [{ "workType": "task", "state": "init" }],
+      "outputs": [{ "workType": "task", "state": "complete" }],
+      "onFailure": { "workType": "task", "state": "failed" },
+      "expectedArtifacts": [
+        {
+          "name": "manifest",
+          "pattern": "reports/{{ (index .Inputs 0).Name }}.manifest.json"
+        }
+      ]
+    }
+  ]
+}
+```
+
+The same declarations are valid in `factory.yaml`:
+
+```yaml
+workTypes:
+  - name: task
+    expectedArtifacts:
+      - name: task-report
+        pattern: 'reports/{{ (index .Inputs 0).Name }}.json'
+        nonEmpty: true
+workstations:
+  - name: process-task
+    expectedArtifacts:
+      - name: manifest
+        pattern: 'reports/{{ (index .Inputs 0).Name }}.manifest.json'
+```
+
+Work Type declarations are inherited first, followed by Workstation
+declarations. Exact duplicates are removed while preserving the first authored
+position. `nonEmpty: true` requires every regular file matched by the pattern
+to contain data. Empty names or patterns, invalid templates or globs, absolute
+paths, and paths containing `..` are rejected with the owning Work Type or
+Workstation in the validation diagnostic. Omitting `expectedArtifacts` keeps
+the legacy behavior unchanged.
+
 ## Build Your First Workflow
 
 This walkthrough creates a two-stage execution and review loop with canonical

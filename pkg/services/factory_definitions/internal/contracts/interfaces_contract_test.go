@@ -1290,3 +1290,159 @@ func TestGeneratedSafeWorkDiagnostics_IncludesAgentRun(t *testing.T) {
 		t.Fatalf("generated tool policy = %#v, want read_only", generated.AgentRun.ToolPolicy)
 	}
 }
+
+func TestExpectedArtifacts_CombinesWorkTypeAndWorkstationInAuthoredOrder(t *testing.T) {
+	workType := WorkTypeConfig{
+		ExpectedArtifacts: []ExpectedArtifactConfig{
+			{Name: "report", Pattern: "reports/{{ (index .Inputs 0).Name }}.json"},
+			{Name: "shared", Pattern: "artifacts/shared.txt", NonEmpty: true},
+		},
+	}
+	workstation := FactoryWorkstationConfig{
+		ExpectedArtifacts: []ExpectedArtifactConfig{
+			{Name: "shared", Pattern: "artifacts/shared.txt", NonEmpty: true},
+			{Name: "manifest", Pattern: "artifacts/manifest.json"},
+			{Name: "report", Pattern: "reports/{{ (index .Inputs 0).Name }}.json"},
+		},
+	}
+
+	got := EffectiveExpectedArtifacts(workType, workstation)
+	want := []ExpectedArtifactConfig{
+		{Name: "report", Pattern: "reports/{{ (index .Inputs 0).Name }}.json"},
+		{Name: "shared", Pattern: "artifacts/shared.txt", NonEmpty: true},
+		{Name: "manifest", Pattern: "artifacts/manifest.json"},
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("EffectiveExpectedArtifacts() = %#v, want %#v", got, want)
+	}
+
+	got[0].Name = "detached"
+	if workType.ExpectedArtifacts[0].Name != "report" {
+		t.Fatal("effective artifact declarations share the source slice")
+	}
+}
+
+func TestExpectedArtifactConfig_ValidatesTemplatesAndWorkspacePaths(t *testing.T) {
+	tests := []struct {
+		name        string
+		declaration ExpectedArtifactConfig
+		inputCount  int
+		wantError   string
+	}{
+		{
+			name:        "literal",
+			declaration: ExpectedArtifactConfig{Name: "manifest", Pattern: "artifacts/manifest.json"},
+		},
+		{
+			name:        "template vocabulary",
+			declaration: ExpectedArtifactConfig{Name: "report", Pattern: "reports/{{ (index .Inputs 0).Name }}.json", NonEmpty: true},
+			inputCount:  1,
+		},
+		{
+			name:        "glob",
+			declaration: ExpectedArtifactConfig{Name: "logs", Pattern: "logs/*.json"},
+		},
+		{
+			name:        "missing name",
+			declaration: ExpectedArtifactConfig{Pattern: "artifacts/out.txt"},
+			wantError:   "name is required",
+		},
+		{
+			name:        "missing pattern",
+			declaration: ExpectedArtifactConfig{Name: "out"},
+			wantError:   "pattern is required",
+		},
+		{
+			name:        "invalid template",
+			declaration: ExpectedArtifactConfig{Name: "out", Pattern: "artifacts/{{ .Inputs"},
+			wantError:   "invalid template",
+		},
+		{
+			name:        "unrenderable input",
+			declaration: ExpectedArtifactConfig{Name: "out", Pattern: "artifacts/{{ (index .Inputs 1).Name }}.txt"},
+			inputCount:  1,
+			wantError:   "cannot be rendered",
+		},
+		{
+			name:        "absolute path",
+			declaration: ExpectedArtifactConfig{Name: "out", Pattern: "/tmp/out.txt"},
+			wantError:   "relative",
+		},
+		{
+			name:        "parent path",
+			declaration: ExpectedArtifactConfig{Name: "out", Pattern: "../out.txt"},
+			wantError:   "escape",
+		},
+		{
+			name:        "invalid glob",
+			declaration: ExpectedArtifactConfig{Name: "out", Pattern: "artifacts/[bad.txt"},
+			wantError:   "invalid glob",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateExpectedArtifactConfig(tt.declaration, tt.inputCount)
+			if tt.wantError == "" {
+				if err != nil {
+					t.Fatalf("ValidateExpectedArtifactConfig() error = %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tt.wantError) {
+				t.Fatalf("ValidateExpectedArtifactConfig() error = %v, want substring %q", err, tt.wantError)
+			}
+		})
+	}
+}
+
+func TestExpectedArtifacts_PersistThroughJSONCloneAndSnapshot(t *testing.T) {
+	cfg := &FactoryConfig{
+		Name: "artifact-contracts",
+		WorkTypes: []WorkTypeConfig{{
+			Name: "task",
+			ExpectedArtifacts: []ExpectedArtifactConfig{{
+				Name:     "report",
+				Pattern:  "reports/{{ (index .Inputs 0).Name }}.json",
+				NonEmpty: true,
+			}},
+		}},
+		Workstations: []FactoryWorkstationConfig{{
+			Name: "process-task",
+			ExpectedArtifacts: []ExpectedArtifactConfig{{
+				Name:    "manifest",
+				Pattern: "reports/manifest.json",
+			}},
+		}},
+	}
+
+	encoded, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatalf("json.Marshal: %v", err)
+	}
+	if !strings.Contains(string(encoded), `"expectedArtifacts"`) {
+		t.Fatalf("encoded Factory definition omitted expectedArtifacts: %s", encoded)
+	}
+
+	cloned, err := CloneFactoryConfig(cfg)
+	if err != nil {
+		t.Fatalf("CloneFactoryConfig: %v", err)
+	}
+	cloned.WorkTypes[0].ExpectedArtifacts[0].Pattern = "mutated.txt"
+	if cfg.WorkTypes[0].ExpectedArtifacts[0].Pattern == "mutated.txt" {
+		t.Fatal("Factory clone shares expected artifact declaration storage")
+	}
+
+	snapshot, err := NewFactorySnapshot(cfg)
+	if err != nil {
+		t.Fatalf("NewFactorySnapshot: %v", err)
+	}
+	var decoded FactoryConfig
+	if err := snapshot.Decode(&decoded); err != nil {
+		t.Fatalf("FactorySnapshot.Decode: %v", err)
+	}
+	if !slices.Equal(decoded.WorkTypes[0].ExpectedArtifacts, cfg.WorkTypes[0].ExpectedArtifacts) ||
+		!slices.Equal(decoded.Workstations[0].ExpectedArtifacts, cfg.Workstations[0].ExpectedArtifacts) {
+		t.Fatalf("snapshot expected artifacts = %#v / %#v, want %#v / %#v", decoded.WorkTypes[0].ExpectedArtifacts, decoded.Workstations[0].ExpectedArtifacts, cfg.WorkTypes[0].ExpectedArtifacts, cfg.Workstations[0].ExpectedArtifacts)
+	}
+}

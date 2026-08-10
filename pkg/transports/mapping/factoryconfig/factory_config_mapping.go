@@ -890,11 +890,12 @@ func workTypesAPIFromInternal(workTypes []interfaces.WorkTypeConfig) *[]factorya
 			}
 		}
 		result[i] = factoryapi.WorkType{
-			Id:               stringPtrIfNotEmpty(workType.ID),
-			Name:             workType.Name,
-			Description:      NameValueAPIFromInternal(workType.Description),
-			States:           states,
-			HandlingBehavior: workTypeHandlingBehaviorAPIFromInternal(workType.HandlingBehavior),
+			Id:                stringPtrIfNotEmpty(workType.ID),
+			Name:              workType.Name,
+			Description:       NameValueAPIFromInternal(workType.Description),
+			States:            states,
+			HandlingBehavior:  workTypeHandlingBehaviorAPIFromInternal(workType.HandlingBehavior),
+			ExpectedArtifacts: expectedArtifactsAPIFromInternal(workType.ExpectedArtifacts),
 		}
 	}
 	return &result
@@ -999,6 +1000,7 @@ func workstationAPIFromInternal(workstation interfaces.FactoryWorkstationConfig,
 		OnContinue:            optionalWorkstationIOsAPIFromInternal(normalized.OnContinue),
 		OnRejection:           optionalWorkstationIOsAPIFromInternal(normalized.OnRejection),
 		OnFailure:             optionalWorkstationIOsAPIFromInternal(normalized.OnFailure),
+		ExpectedArtifacts:     expectedArtifactsAPIFromInternal(normalized.ExpectedArtifacts),
 		Resources:             resourceRequirementsAPIFromInternal(normalized.Resources),
 		CopyReferencedScripts: boolPtrIfTrue(normalized.CopyReferencedScripts),
 		Guards:                workstationGuardsAPIFromInternal(normalized.Guards),
@@ -1029,6 +1031,23 @@ func workstationAPIFromInternal(workstation interfaces.FactoryWorkstationConfig,
 		apiWorkstation.Worktree = stringPtr(normalized.Worktree)
 	}
 	return apiWorkstation
+}
+
+func expectedArtifactsAPIFromInternal(
+	values []interfaces.ExpectedArtifactConfig,
+) *[]factoryapi.ExpectedArtifact {
+	if len(values) == 0 {
+		return nil
+	}
+	result := make([]factoryapi.ExpectedArtifact, len(values))
+	for index, value := range values {
+		result[index] = factoryapi.ExpectedArtifact{
+			Name:     value.Name,
+			Pattern:  value.Pattern,
+			NonEmpty: boolPtrIfTrue(value.NonEmpty),
+		}
+	}
+	return &result
 }
 
 func resourceManifestAPIFromInternal(manifest *interfaces.PortableResourceManifestConfig) *factoryapi.ResourceManifest {

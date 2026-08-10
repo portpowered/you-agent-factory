@@ -63,7 +63,7 @@ export interface paths {
     };
     /**
      * Stream retained and live Worker Session events
-     * @description Streams the canonical Worker Session Events topic for the exact Provider Session identity in the explicitly selected Factory Session. Retained records are emitted first in aggregate order, followed by live records. Each data frame is serialized JSON matching WorkerSessionEvent. The terminal event is marked TERMINAL for an active session or TERMINAL_REPLAY for an already-terminal session, after which the connection closes successfully. Source failures are emitted as an explicit SOURCE_FAILURE frame so clients can preserve complete records already written and return a typed non-success result.
+     * @description Streams the canonical Worker Session Events topic for the exact Provider Session identity in the explicitly selected Factory Session. Retained records are emitted first in aggregate order, followed by live records unless replayOnly is true. In replay-only mode the retained head is captured before delivery, no live follower is registered, and one REPLAY_SUMMARY frame closes the stream after the retained drain. Each data frame is serialized JSON matching WorkerSessionEvent. The terminal event is marked TERMINAL for an active session or TERMINAL_REPLAY for an already-terminal session. Source failures are emitted as an explicit SOURCE_FAILURE frame so clients can preserve complete records already written and return a typed non-success result.
      */
     get: operations["streamWorkerSessionEventsBySessionId"];
     put?: never;
@@ -1171,6 +1171,24 @@ export interface components {
       errorCode: string | null;
       /** @description Safe source-failure message when delivery is SOURCE_FAILURE. */
       errorMessage: string | null;
+      /** @description Completeness marker when delivery is REPLAY_SUMMARY. */
+      replaySummary?: components["schemas"]["WorkerSessionReplaySummary"];
+    };
+    WorkerSessionReplaySummary: {
+      /**
+       * @description Stable record kind for the finite Worker Session replay marker.
+       * @enum {string}
+       */
+      kind: WorkerSessionReplaySummaryKind;
+      /** @description Whether the retained capture represents a terminal Worker Session. */
+      complete: boolean;
+      /** @description Stable lifecycle classification for the replay result. */
+      reason: string;
+      /**
+       * Format: int64
+       * @description Number of canonical event records emitted before this summary.
+       */
+      eventsEmitted: number;
     };
     /**
      * @description Delivery outcome for one Worker Session stream frame. RECORD is a retained or live canonical event, TERMINAL marks the live terminal event, and TERMINAL_REPLAY marks the terminal event in an already-terminal replay. SOURCE_FAILURE is an explicit non-event outcome after the stream has opened.
@@ -4548,6 +4566,8 @@ export interface components {
       states: components["schemas"]["WorkState"][];
       /** @description Optional CLI routing markers for this work type. Factories used with you run --factory must declare handlingBehavior DEFAULT on exactly one work type. */
       handlingBehavior?: components["schemas"]["WorkTypeHandlingBehavior"][];
+      /** @description Expected output declarations inherited by workstations handling this work type. */
+      expectedArtifacts?: components["schemas"]["ExpectedArtifact"][];
     };
     /** @description A lifecycle state that a work item can occupy inside one work type. */
     WorkState: {
@@ -4853,6 +4873,8 @@ export interface components {
       promptFile?: string;
       /** @description JSON schema string used to validate or parse structured model output when configured. */
       outputSchema?: string;
+      /** @description Provider-neutral semantic contract applied to a successful workstation response after provider execution. */
+      outputContract?: string;
       /** @description Optional worker-output parsing mode for model workstations. When set to `decision-envelope`, agent output is parsed as a reviewer/checker JSON envelope that maps directly onto WorkResult outcome, feedback, output, and optional recorded output work instead of stop-token routing. */
       outcomeFormat?: components["schemas"]["WorkstationOutcomeFormat"];
       /** @description Retry and execution ceilings applied to this workstation. */
@@ -4875,6 +4897,8 @@ export interface components {
       onRejection?: components["schemas"]["WorkstationIO"][];
       /** @description Optional destination emitted when the workstation fails permanently. */
       onFailure?: components["schemas"]["WorkstationIO"][];
+      /** @description Expected output declarations added by this workstation to its applicable work type contract. */
+      expectedArtifacts?: components["schemas"]["ExpectedArtifact"][];
       /** @description Resource capacity this workstation consumes while one dispatch is in flight. */
       resources?: components["schemas"]["ResourceRequirement"][];
       /** @description Copy supported referenced script files into the expanded workstation layout when config expand runs. */
@@ -5490,6 +5514,18 @@ export interface components {
      * @enum {string}
      */
     WorkTypeHandlingBehavior: WorkTypeHandlingBehavior;
+    /** @description One expected output declaration relative to the dispatch workspace. Pattern is a workspace-relative literal path or glob and may use the dispatch template fields, such as (index .Inputs 0).Name, inside a Go template action. */
+    ExpectedArtifact: {
+      /** @description Customer-visible name for this expected output declaration. */
+      name: string;
+      /** @description Workspace-relative literal path or glob template to verify. */
+      pattern: string;
+      /**
+       * @description Require every regular file matched by the pattern to be non-empty.
+       * @default false
+       */
+      nonEmpty: boolean;
+    };
     /** @description Two-dimensional authored graph layout coordinate. */
     FactoryLayoutPoint: {
       /** @description Horizontal graph layout coordinate in authored canvas space. */
@@ -6101,6 +6137,8 @@ export interface operations {
         kind: components["schemas"]["LoadableProviderSessionKind"];
         /** @description Provider-issued session identifier, not a filesystem path. */
         id: string;
+        /** @description Drain the retained history through a captured Events head without registering a live follower. */
+        replayOnly?: boolean;
       };
       header?: never;
       path: {
@@ -6111,7 +6149,7 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description Retained then live Worker Session event frames. */
+      /** @description Retained then live Worker Session event frames, or a finite retained replay ending in REPLAY_SUMMARY. */
       200: {
         headers: {
           [name: string]: unknown;
@@ -7546,10 +7584,16 @@ export const WorkerSessionObservationTranscript = {
 } as const;
 export type WorkerSessionObservationTranscript =
   (typeof WorkerSessionObservationTranscript)[keyof typeof WorkerSessionObservationTranscript];
+export const WorkerSessionReplaySummaryKind = {
+  replay_summary: "replay-summary",
+} as const;
+export type WorkerSessionReplaySummaryKind =
+  (typeof WorkerSessionReplaySummaryKind)[keyof typeof WorkerSessionReplaySummaryKind];
 export const WorkerSessionEventDelivery = {
   WorkerSessionEventDeliveryRecord: "RECORD",
   WorkerSessionEventDeliveryTerminal: "TERMINAL",
   WorkerSessionEventDeliveryTerminalReplay: "TERMINAL_REPLAY",
+  WorkerSessionEventDeliveryReplaySummary: "REPLAY_SUMMARY",
   WorkerSessionEventDeliverySourceFailure: "SOURCE_FAILURE",
 } as const;
 export type WorkerSessionEventDelivery =

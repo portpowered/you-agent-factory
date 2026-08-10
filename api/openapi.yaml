@@ -9332,6 +9332,11 @@ components:
           description: Optional CLI routing markers for this work type. Factories used with you run --factory must declare handlingBehavior DEFAULT on exactly one work type.
           items:
             $ref: '#/components/schemas/WorkTypeHandlingBehavior'
+        expectedArtifacts:
+          type: array
+          description: Expected output declarations inherited by workstations handling this work type.
+          items:
+            $ref: '#/components/schemas/ExpectedArtifact'
     WorkState:
       type: object
       additionalProperties: false
@@ -10200,6 +10205,11 @@ components:
           description: Optional destination emitted when the workstation fails permanently.
           items:
             $ref: '#/components/schemas/WorkstationIO'
+        expectedArtifacts:
+          type: array
+          description: Expected output declarations added by this workstation to its applicable work type contract.
+          items:
+            $ref: '#/components/schemas/ExpectedArtifact'
         resources:
           type: array
           description: Resource capacity this workstation consumes while one dispatch is in flight.
@@ -11330,6 +11340,26 @@ components:
       description: Declares how the CLI should route simplified one-shot prompt submissions for this work type. DEFAULT marks the single work type that receives positional prompts from you run --factory.
       enum:
         - DEFAULT
+    ExpectedArtifact:
+      type: object
+      additionalProperties: false
+      description: One expected output declaration relative to the dispatch workspace. Pattern is a workspace-relative literal path or glob and may use the dispatch template fields, such as (index .Inputs 0).Name, inside a Go template action.
+      required:
+        - name
+        - pattern
+      properties:
+        name:
+          type: string
+          minLength: 1
+          description: Customer-visible name for this expected output declaration.
+        pattern:
+          type: string
+          minLength: 1
+          description: Workspace-relative literal path or glob template to verify.
+        nonEmpty:
+          type: boolean
+          default: false
+          description: Require every regular file matched by the pattern to be non-empty.
     FactoryLayoutPoint:
       type: object
       description: Two-dimensional authored graph layout coordinate.

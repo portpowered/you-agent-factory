@@ -4560,6 +4560,8 @@ export interface components {
       states: components["schemas"]["WorkState"][];
       /** @description Optional CLI routing markers for this work type. Factories used with you run --factory must declare handlingBehavior DEFAULT on exactly one work type. */
       handlingBehavior?: components["schemas"]["WorkTypeHandlingBehavior"][];
+      /** @description Expected output declarations inherited by workstations handling this work type. */
+      expectedArtifacts?: components["schemas"]["ExpectedArtifact"][];
     };
     /** @description A lifecycle state that a work item can occupy inside one work type. */
     WorkState: {
@@ -4990,6 +4992,8 @@ export interface components {
       onRejection?: components["schemas"]["WorkstationIO"][];
       /** @description Optional destination emitted when the workstation fails permanently. */
       onFailure?: components["schemas"]["WorkstationIO"][];
+      /** @description Expected output declarations added by this workstation to its applicable work type contract. */
+      expectedArtifacts?: components["schemas"]["ExpectedArtifact"][];
       /** @description Resource capacity this workstation consumes while one dispatch is in flight. */
       resources?: components["schemas"]["ResourceRequirement"][];
       /** @description Copy supported referenced script files into the expanded workstation layout when config expand runs. */
@@ -5605,6 +5609,18 @@ export interface components {
      * @enum {string}
      */
     WorkTypeHandlingBehavior: WorkTypeHandlingBehavior;
+    /** @description One expected output declaration relative to the dispatch workspace. Pattern is a workspace-relative literal path or glob and may use the dispatch template fields, such as (index .Inputs 0).Name, inside a Go template action. */
+    ExpectedArtifact: {
+      /** @description Customer-visible name for this expected output declaration. */
+      name: string;
+      /** @description Workspace-relative literal path or glob template to verify. */
+      pattern: string;
+      /**
+       * @description Require every regular file matched by the pattern to be non-empty.
+       * @default false
+       */
+      nonEmpty: boolean;
+    };
     /** @description Two-dimensional authored graph layout coordinate. */
     FactoryLayoutPoint: {
       /** @description Horizontal graph layout coordinate in authored canvas space. */
