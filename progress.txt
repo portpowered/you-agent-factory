@@ -426,3 +426,19 @@
   - Provider/ACP functional lanes can expose isolated session-load flakes; verify the exact failing test locally, rerun only failed CI jobs, and require the expected evidence artifact before treating the rerun as green.
   - A delivery-only CI follow-up should record the evidence in the append-only progress log without changing unrelated source or completed PRD story state.
 ---
+
+## 2026-08-09 19:12 -07:00 - wo-d1-packaged-factories-docs-delivery-ci-durability-follow-up
+- What was implemented
+  - Investigated the fresh-head Backend Functional Coverage failure, which rotated between two JavaScript durability cancellation assertions: `TestJavaScriptResumeRestoresCheckpointAndFinalResult` and `TestJavaScriptDurabilityDoesNotPersistSnapshotsByDefault`.
+  - Ran both exact tests locally 20 times each successfully and left unrelated runtime/test source unchanged.
+  - Re-ran only the failed backend job; the final rerun completed with all 18 CI jobs successful, including Backend Functional Coverage and Verification Policy.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/orchestration/javascript/durability -run '^TestJavaScript(ResumeRestoresCheckpointAndFinalResult|DurabilityDoesNotPersistSnapshotsByDefault)$' -count=20 -v -timeout 900s` — passed.
+  - `gh run rerun 31348213300 --failed` — final failed-job rerun passed.
+  - The rotating cancellation assertion was treated as a current-main CI timing flake; no unrelated production or test fix was introduced.
+- **Learnings for future iterations:**
+  - Full functional CI can expose timing-sensitive cancellation observations even when the exact durability tests pass repeatedly in isolation; use the failing assertion and local repetition to separate a flake from a branch regression before changing source.
+  - After a successful failed-job rerun, a subsequent progress-only head must receive its own complete CI run before delivery is considered current.
+---
