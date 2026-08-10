@@ -1,5 +1,6 @@
 ## Codebase Patterns
 - Go test lane runners use count `0` as cache mode and append `-count` only for positive explicit repeats; a fresh Make wrapper can select `-count=1` without changing the runner's default.
+- Authoritative coverage runners should pass `-count=1` alongside instrumentation so coverage and timing artifacts always describe a real test execution rather than a cached developer result.
 - Treat repository-enforcement inventories and architecture guards as project-enabling PRD criteria when they have no runtime, API, CLI, UI, or emitted-event behavior; source scans support enforcement but are not customer-behavior evidence.
 - AST scanners must expand grouped Go field declarations before indexing parameter or result types; a field-count helper can exceed the AST field-list length and panic on valid source.
 - Asynchronous service characterizations should wait on observed edge/context signals rather than arbitrary `time.After` ceilings; the test context remains the failure escape hatch.
@@ -1972,4 +1973,29 @@
 - **Learnings for future iterations:**
   - Make target contract tests in the existing POSIX-only observability verification package can stub `GO` and the boundary target to inspect observable command arguments and exit propagation without running the full functional suite.
   - Full functional timing measurements are not meaningful while other Go coverage or test processes share the workstation's process/API-server resources; rerun them in an isolated lane for story 004 evidence.
+---
+## 2026-08-10 14:13 -07:00 - thr-functional-lane-speed-002
+- What was implemented
+  - Made `cmd/gocoveragecheck` append explicit `-count=1` to its instrumented `go test` invocation, preserving the existing short functional package discovery, bounded jobs, timeout, coverage profile, timing summary, package manifest, aggregate floor, and failure behavior for the CI `functional-test-viz` path.
+  - Documented the cache-aware `make test-functional` developer path, fresh `make test-functional-fresh` CI-equivalent/flake-investigation path, and authoritative fresh coverage/visualization path.
+  - Strengthened the cached/fresh Make-target regression to retain representative failing functional-test output and non-zero propagation in both modes.
+- Files changed
+  - `Makefile`
+  - `cmd/gocoveragecheck/main.go`
+  - `cmd/gocoveragecheck/timing_test.go`
+  - `docs/internal/development/development.md`
+  - `tests/functional/README.md`
+  - `tests/functional/observability/verification/verify_tier_contract_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test -p=1 ./cmd/gocoveragecheck -count=1` — passed.
+  - `go test -p=1 ./cmd/functionallane -count=1` — passed.
+  - `go vet ./cmd/gocoveragecheck ./cmd/functionallane` — passed.
+  - Focused timing regression and Linux cross-compilation of the POSIX verification package — passed.
+  - `make -n test-functional test-functional-fresh functional-test-viz` and `git diff --check` — passed; cached/fresh targets retain their boundary, package, job, short-mode, timeout, and failure wiring, and visualization retains its artifact wiring.
+  - `make typecheck` — blocked by missing Bun type definitions (`TS2688: Cannot find type definition file for 'bun'`), an environment dependency issue also recorded for story 001.
+- **Learnings for future iterations:**
+  - Coverage instrumentation is a fresh authoritative boundary, but carrying explicit `-count=1` makes that contract visible in generated `go test` arguments and protects it if coverage flags change later.
+  - POSIX-only Make contract tests can be compiled with `GOOS=linux` on Windows when execution is unavailable; keep the live Windows verification focused on cross-platform runner/package tests.
 ---

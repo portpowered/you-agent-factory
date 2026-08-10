@@ -22,6 +22,7 @@ func TestFunctionalLaneTargetsSeparateCachedAndFreshModes(t *testing.T) {
 	fakeGo := writeExecutableScript(t, "fake-go-functional-lane", `#!/bin/sh
 printf '%s\n' "$*" >> "$FUNCTIONAL_LANE_ARGS"
 if [ "${FUNCTIONAL_LANE_FAIL:-0}" = "1" ]; then
+  printf '%s\n' '--- FAIL: TestRepresentativeFunctionalFailure'
   exit 23
 fi
 `)
@@ -90,6 +91,9 @@ fi
 			}
 			if !strings.Contains(output, "functional-lane") {
 				t.Fatalf("%s failure did not include the runner command:\\n%s", tc.target, output)
+			}
+			if !strings.Contains(output, "TestRepresentativeFunctionalFailure") {
+				t.Fatalf("%s failure did not preserve the failing functional test output:\\n%s", tc.target, output)
 			}
 		})
 	}

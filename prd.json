@@ -48,8 +48,8 @@
         "Tests pass"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Preserved authoritative fresh semantics by making `cmd/gocoveragecheck` append `-count=1` to every instrumented coverage invocation; the existing CI `functional-test-viz` route therefore keeps its maintained short package discovery, timeout, coverage profile, timing JSON, package manifest, coverage floor, and fail-closed boundary/suite/render behavior. Updated Makefile comments and developer/functional documentation to distinguish cache-aware `make test-functional`, fresh `make test-functional-fresh`, and fresh coverage/visualization usage for CI-equivalent evidence and flake investigation. Added coverage timing-argument regression evidence and representative failing-test output checks for both cached and fresh targets. Focused coverage-check and runner tests, vet, Make dry-run, diff checks, and Linux cross-compilation of the POSIX contract tests pass; `make typecheck` remains blocked by the workstation's missing Bun type definitions (`TS2688`)."
     },
     {
       "id": "thr-functional-lane-speed-003",
