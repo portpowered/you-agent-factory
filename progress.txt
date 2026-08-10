@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- When synchronizing a task branch with current main, preserve the active branch's task-scoped `prd.json` and merge unrelated main history into `progress.txt`; validate the resulting PRD before staging.
 - When a termination drain consumes a runtime wake signal, the engine must re-enter its tick loop directly; returning to the outer wait loses the already-consumed wake and can strand a finite run.
 - Customer-facing functional tests must compose through `root.BuildProcess` and assert public process/CLI behavior; keep service-specific typed-error assertions in service-layer tests because the functional boundary check rejects direct Runtime imports.
 - Repository-wide `pkg-boundary` traversals must prune through one root-relative, slash-normalized policy before parsing entries; adding a new `WalkDir` requires using that same decision.
@@ -65,7 +66,6 @@
 - **Learnings for future iterations:**
 - This checkout may have `ui/node_modules` without all lockfile dependencies; run the pinned Bun install before treating a typecheck failure as a source regression.
 ---
-
 ## 2026-08-10 04:32 -07:00 - sac-s0-2-pkg-boundary-ignores-001
 - What was implemented
   - Centralized repository-root-relative pruning for `.artifacts`, `.artifacts/bootstrap/worktrees`, generated transient worktrees, and the supported root worktree locations.
@@ -875,4 +875,23 @@
 - **Learnings for future iterations:**
   - Root-relative ignore policies need paired positive fixtures under production `pkg`; testing ignored paths alone cannot prove that nested artifact/worktree-like directories remain visible.
   - Existing `make pkg-boundary` subprocess tests provide a stable way to verify the public checker entry path against temporary repository fixtures.
+---
+## 2026-08-10 05:25 -07:00 - pf-plain-batch-drain-001 synchronization follow-up
+- What was implemented
+  - Synchronized the branch with current `main` after PR #1844 advanced the base, retaining the plain-batch implementation and resolving the shared PRD/progress bookkeeping files without dropping either history.
+  - Committed the conflict-free merge as `8bd1fb6eb`.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+  - Current-main `cmd/pkgboundarycheck` changes were merged as part of the base synchronization.
+- Verification
+  - Focused plain-batch/runtime/session tests passed.
+  - Full `pkg/services/factory_runtime/...` and `pkg/services/factory_sessions/...` tests passed.
+  - `go test ./cmd/pkgboundarycheck -count=1` and `go run ./cmd/functionalboundarycheck` passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` passed.
+  - `make test` passed.
+  - After `bun install --frozen-lockfile` restored the checkout's missing UI dependencies, `make verify-fast` passed dashboard typecheck, MCP contract checks, 355 UI files / 2,970 tests, 191 Bun unit checks, and the short Go suite.
+- **Learnings for future iterations:**
+  - The missing `@types/bun` dependency was an environment-only checkout issue; installing from the pinned lockfile restored the full fast verification tier without tracked dependency changes.
+  - A current-main merge can conflict in shared task bookkeeping even when product files merge cleanly; keep the active branch PRD authoritative and preserve both chronological progress histories.
 ---
