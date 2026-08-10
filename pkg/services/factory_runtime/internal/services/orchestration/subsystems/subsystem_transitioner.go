@@ -874,54 +874,6 @@ func consumedResourceTokenCountForPlace(consumedTokens []factorytoken.Token, pla
 	return count
 }
 
-func applyRecordedOutputWorkIdentity(token *factorytoken.Token, recorded work.FactoryWorkItem) {
-	if token == nil {
-		return
-	}
-	if recorded.WorkTypeID != "" && token.Color.WorkTypeID != "" && recorded.WorkTypeID != token.Color.WorkTypeID {
-		return
-	}
-	if recorded.ID != "" {
-		token.ID = recorded.ID
-		token.Color.WorkID = recorded.ID
-	}
-	if recorded.WorkTypeID != "" {
-		token.Color.WorkTypeID = recorded.WorkTypeID
-	}
-	if recorded.DisplayName != "" {
-		token.Color.Name = recorded.DisplayName
-	}
-	if recorded.CurrentChainingTraceID != "" {
-		token.Color.CurrentChainingTraceID = recorded.CurrentChainingTraceID
-	}
-	if len(recorded.PreviousChainingTraceIDs) > 0 {
-		token.Color.PreviousChainingTraceIDs = append([]string(nil), recorded.PreviousChainingTraceIDs...)
-	}
-	if recorded.ChainingTraceDepth > 0 {
-		token.Color.ChainingTraceDepth = recorded.ChainingTraceDepth
-	}
-	if recorded.TraceID != "" {
-		token.Color.TraceID = recorded.TraceID
-	}
-	if recorded.ParentID != "" {
-		token.Color.ParentID = recorded.ParentID
-	}
-	if len(recorded.Tags) > 0 {
-		token.Color.Tags = cloneTags(recorded.Tags)
-	}
-	if len(recorded.Content) > 0 {
-		token.Color.Content = work.CloneWorkContentParts(recorded.Content)
-	}
-	applyRecordedOutputWorkStructuredResult(token, recorded)
-}
-
-func applyRecordedOutputWorkStructuredResult(token *factorytoken.Token, recorded work.FactoryWorkItem) {
-	if jsonvalue.Present(recorded.StructuredResult, recorded.StructuredResultPresent) {
-		token.Color.StructuredResult = jsonvalue.Clone(recorded.StructuredResult)
-		token.Color.StructuredResultPresent = true
-	}
-}
-
 func (t *TransitionerSubsystem) buildIntermittentFailureRequeueMutations(
 	consumedTokens []factorytoken.Token,
 	history factorytoken.History,
