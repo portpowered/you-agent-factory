@@ -10,6 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token_transformer"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -18,6 +19,7 @@ func TestTransitioner_ExpectedArtifactFailureUsesFailureDestination(t *testing.T
 	net := workerBatchTestNet()
 	transitioner := NewTransitioner(net, nil, func() time.Time { return now }, testTokenTransformer(net), nil, nil, nil, testWorkPropagationPolicy())
 	snapshot := workerBatchSnapshot("worker output")
+	snapshot.Dispatches["dispatch-1"].ExpectedArtifactContext = &work.ExpectedArtifactTemplateContext{Project: "project-7", SessionID: "session-9"}
 	snapshot.Results[0] = workerexecution.WorkResult{
 		DispatchID:   "dispatch-1",
 		TransitionID: "t1",
@@ -52,6 +54,11 @@ func TestTransitioner_ExpectedArtifactFailureUsesFailureDestination(t *testing.T
 	if result.CompletedDispatches[0].ArtifactVerification == nil ||
 		len(result.CompletedDispatches[0].ArtifactVerification.Entries) != 1 {
 		t.Fatalf("completed artifact verification = %#v, want durable failure entries", result.CompletedDispatches[0].ArtifactVerification)
+	}
+	if result.CompletedDispatches[0].ExpectedArtifactContext == nil ||
+		result.CompletedDispatches[0].ExpectedArtifactContext.Project != "project-7" ||
+		result.CompletedDispatches[0].ExpectedArtifactContext.SessionID != "session-9" {
+		t.Fatalf("completed artifact context = %#v, want recorded context", result.CompletedDispatches[0].ExpectedArtifactContext)
 	}
 }
 
