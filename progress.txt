@@ -3650,3 +3650,17 @@
 - **Learnings for future iterations:**
   - If main advances while a PR’s required checks are running, merge the live main ref before handoff and preserve both task metadata histories so the PR base and progress evidence remain auditable.
 ---
+
+## [2026-08-10 16:55 -07:00] - thr-split-fake-service-runtime-tests final PR handoff
+- What was implemented
+  - No additional story implementation was needed; all five PRD stories remain marked `passes:true`.
+  - Audited the existing PR #1862 and confirmed that the requested branch is open, non-draft, synchronized with the current main base, and has no review, conversation, or inline-thread feedback to address.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `gh pr checks 1862 --watch` completed with every required check passing, including Backend Unit Coverage, Backend Functional Coverage, API Contract And Package, Frontend, UI Backend Integration, Local Inference, and Verification Policy.
+  - The PR body remains sourced from `prd.json`; local HEAD and the fork branch remain `2560aee673a65b2e60b89a6069b3f60b4b95fdb8`, and the PR base remains current `origin/main` at `acbd13fcc960926c6118d2e3167426a71345ace6`.
+  - The thread-aware GraphQL audit reports zero reviews, conversation comments, or inline review threads; the worktree was clean before this append.
+- **Learnings for future iterations:**
+  - When all story work is complete and an existing PR is already review-ready, preserve the move-only source diff and record the final PR head/base, review-thread, PRD/body, and terminal-CI checks in the append-only progress log.
+---
