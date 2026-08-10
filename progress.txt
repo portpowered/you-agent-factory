@@ -1020,3 +1020,20 @@
   - A review audit should compare the exact local, fork, and PR head SHAs and inspect thread state before deciding whether a duplicate PR or code change is necessary.
   - Progress-only delivery bookkeeping changes the PR head, so the final audit must recheck the corresponding CI run after pushing the append.
 ---
+## 2026-08-10 03:30 -0700 - wo-b3-provider-capability-discovery-cli-final-delivery-check
+- What was implemented
+  - Re-read `prd.json` and the consolidated Codebase Patterns; all three provider discovery stories remain marked `passes:true`, so no remaining story implementation was required.
+  - Inspected existing PR #1843 with the thread-aware GitHub review workflow. It has zero inline review threads and zero formal reviews; the historical top-level blocker is addressed by the current catalog, execution-policy regression, generated artifacts, and documentation.
+  - Confirmed the existing PR is the requested named PR, so no duplicate PR was created.
+- Files changed
+  - `progress.txt`
+  - `prd.json` was verified unchanged because all story pass states, acceptance notes, and the PR description are current.
+- Verification
+  - `go test ./tests/functional/providers/discovery/... -run '^TestProvidersListThroughRootBuildProcess$' -count=1` — passed.
+  - `git diff --check` — passed.
+  - Local `HEAD`, the fork branch, and PR #1843 head all match `4e36b453e8768b0364e37f7354e7ceea73dabbcf`.
+  - PR #1843 description matches `prd.json`; the PR is open, mergeable, and non-draft.
+  - `gh pr checks 1843 --repo portpowered/you-agent-factory` — all 18 checks pass, including Backend Functional Coverage and Verification Policy.
+- **Learnings for future iterations:**
+  - When a completed cross-repository PR already contains the requested review fix, verify thread state, exact local/fork/PR SHAs, description parity, and terminal checks before creating any new PR or feature change.
+---
