@@ -106,9 +106,7 @@ func TestWorkWatchRecordedProductionRetryLedger(t *testing.T) {
 		if stdout.String() != "" {
 			t.Fatalf("conflicting retry emitted Work transitions: %q", stdout.String())
 		}
-		if !strings.Contains(stderr.String(), "non-increasing canonical sequence") {
-			t.Fatalf("conflicting retry stderr = %q, want corruption diagnostic", stderr.String())
-		}
+		support.RequireSafeCLIDiagnostic(t, stderr.String())
 	})
 }
 

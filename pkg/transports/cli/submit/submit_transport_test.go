@@ -19,6 +19,39 @@ import (
 
 // Transport-edge regression tests guard clihttp migration outcomes at the HTTP boundary.
 
+func TestSubmissionHTTPError_ExposesSafeCLIFields(t *testing.T) {
+	t.Parallel()
+
+	var nilError *SubmissionHTTPError
+	if got := nilError.CLIErrorCode(); got != "SUBMISSION_FAILED" {
+		t.Fatalf("nil SubmissionHTTPError CLIErrorCode = %q, want fallback", got)
+	}
+	if got := nilError.CLIErrorMessage(); got != "submission failed" {
+		t.Fatalf("nil SubmissionHTTPError CLIErrorMessage = %q, want fallback", got)
+	}
+
+	empty := &SubmissionHTTPError{StatusCode: http.StatusBadGateway}
+	if got := empty.CLIErrorCode(); got != "SUBMISSION_FAILED" {
+		t.Fatalf("empty SubmissionHTTPError CLIErrorCode = %q, want fallback", got)
+	}
+	if got := empty.CLIErrorMessage(); got != "submission failed (502)" {
+		t.Fatalf("empty SubmissionHTTPError CLIErrorMessage = %q, want status-only message", got)
+	}
+
+	authored := &SubmissionHTTPError{
+		StatusCode: http.StatusBadRequest,
+		Code:       factoryapi.ErrorResponseCodeBADREQUEST,
+		Family:     factoryapi.ErrorFamilyBadRequest,
+		operation:  "submit batch",
+	}
+	if got := authored.CLIErrorCode(); got != string(factoryapi.ErrorResponseCodeBADREQUEST) {
+		t.Fatalf("authored SubmissionHTTPError CLIErrorCode = %q, want BAD_REQUEST", got)
+	}
+	if got := authored.CLIErrorMessage(); !strings.Contains(got, "submit batch failed (400)") {
+		t.Fatalf("authored SubmissionHTTPError CLIErrorMessage = %q", got)
+	}
+}
+
 func TestSubmit_Transport_HTTP201CreatedSuccess(t *testing.T) {
 	workID := "transport-work-201"
 	name := "transport-submit"

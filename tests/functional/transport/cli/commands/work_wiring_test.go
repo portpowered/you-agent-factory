@@ -273,12 +273,9 @@ func assertCLIWorkShowNotFoundFailure(
 	}
 
 	text := string(output)
-	lower := strings.ToLower(text)
-	if !strings.Contains(lower, "not found") {
-		t.Fatalf("work show missing not-found diagnostic:\n%s", text)
-	}
-	if !strings.Contains(text, workID) {
-		t.Fatalf("work show missing work id %q in diagnostic:\n%s", workID, text)
+	support.RequireSafeCLIDiagnostic(t, text)
+	if strings.Contains(text, workID) {
+		t.Fatalf("work show leaked work id %q in safe diagnostic:\n%s", workID, text)
 	}
 
 	var shown factoryapi.Work
