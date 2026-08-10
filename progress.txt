@@ -32,6 +32,7 @@
 - When a package has a strict file-count baseline, put a small refactor in an existing focused file before adding a new helper file or changing the baseline.
 - When broad functional coverage reports a cancellation-observation failure, rerun the failed lane and isolate the named test before changing an unrelated feature; parallel-suite failures can move between existing durability/restart tests while isolated runs pass.
 - For one-shot invocation characterization, pair a recorded artifact with `--output response-stream`: the artifact freezes canonical Factory Event order while the stream independently proves one terminal `invocation_result` and caller-visible mapping.
+- Direct JavaScript runtime characterization should observe ordered `RuntimeRecord` facts through `OnRecord` and terminal typed-value application through `OnResult`; the `Outcome` alone does not establish callback ordering or exactly-once publication.
 
 ## 2026-08-09 13:12 - wo-d1-packaged-factories-docs-001
 - What was implemented
@@ -882,4 +883,24 @@
   - The ACP worker path publishes ten canonical Factory events through one `DISPATCH_RESPONSE`; the continuous service session remains public `IDLE` while the Work projection carries the terminal target outcome.
   - ACP success ends in a provider `RUN/COMPLETED` response event, while protocol failure is surfaced as a synthesized provider `ERROR/FAILED` response event; canonical dispatch terminal uniqueness is asserted separately from provider-native response observations.
   - The existing JSON-RPC helper process is a deterministic command/protocol edge for ACP characterization and avoids live provider access or sleep-based coordination.
+---
+## 2026-08-10 06:33 -07:00 - btrc-p0-characterization-007
+- What was implemented
+  - Added deterministic direct JavaScript success and child-failure characterization at the existing `pkg/services/factory_runtime/internal/services/orchestration/javascript/runtime` owner boundary.
+  - Froze the literal `phase:activate` → `child_dispatch` QUEUED/RUNNING/COMPLETED → `phase:apply-result` → `terminal_result` order and checked contiguous runtime record sequences.
+  - Asserted stable `dispatch-1`, child index, session-scoped artifact URI, fake Provider Session reference, prompt digest, complete projected child output, one terminal result callback, and typed script failure with `unknown` child failure detail and no primary result.
+  - Marked story `btrc-p0-characterization-007` as passed in `prd.json`; no production behavior, public/generated contract, or Factory Sessions cutover changed.
+- Files changed
+  - `pkg/services/factory_runtime/internal/services/orchestration/javascript/runtime/host_children_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/factory_runtime/internal/services/orchestration/javascript/runtime -run '^TestBTRCP0DirectJavaScript' -count=5 -v` — passed.
+  - `go test ./pkg/services/factory_runtime/internal/services/orchestration/javascript/runtime -count=1` — passed.
+  - `go vet ./pkg/services/factory_runtime/internal/services/orchestration/javascript/runtime` — passed.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - The direct JavaScript owner publishes ordered `RuntimeRecord` facts through `OnRecord`; terminal typed-value application is observed afterward through exactly one `OnResult` callback rather than a separate runtime record.
+  - The deterministic fake child executor gives the direct boundary stable dispatch, artifact, Provider Session, and failure metadata without constructing Factory Sessions or invoking a live provider.
+  - A failed fake child emits QUEUED/RUNNING/FAILED records before the JavaScript runtime returns `WORKFLOW_RUNTIME_SCRIPT_ERROR`; the child failure detail remains typed and the terminal result hook is not called.
 ---

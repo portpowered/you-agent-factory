@@ -136,8 +136,8 @@
         "Tests pass"
       ],
       "priority": 7,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added TestBTRCP0DirectJavaScriptSuccessCharacterization and TestBTRCP0DirectJavaScriptChildFailureCharacterization to the current javascript/runtime owner boundary. The tests freeze literal phase and child-dispatch record order through terminal OnResult publication, assert stable dispatch/artifact/provider correlation and the complete projected child result, and assert typed script failure, unknown child FailureDetail, exact failed trace, no result callback, and no primary projection. Repeated focused/full package tests and vet pass; the built-in fake child executor provides deterministic evidence with no live provider, watcher, sleep, or Sessions cutover, and production behavior/contracts remain unchanged."
     },
     {
       "id": "btrc-p0-characterization-008",
