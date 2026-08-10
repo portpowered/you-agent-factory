@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- When a termination drain consumes a runtime wake signal, the engine must re-enter its tick loop directly; returning to the outer wait loses the already-consumed wake and can strand a finite run.
 - Canonical packaged CLI docs live under `docs/reference/`; adding a topic also requires its authored file in `docs/reference/embed.go` and a registry entry in `pkg/transports/cli/docs/docs.go`.
 - The `you run --named <factory> --help` output is the authoritative invocation contract; omitted role provider/model values resolve through operator defaults.
 - Documentation for model-backed workflows should describe observable result shape and status/artifact evidence rather than byte-stable generated prose.
@@ -760,4 +761,24 @@
   - Documentation parsers for Markdown output must match the report’s structural contract and tolerate the platform’s CRLF line endings; a single-line `Overall recommendation:` pattern is not equivalent to the emitted H2-plus-body form.
   - AGY structured-output replays enforce exact echoed-schema equivalence, so a contract schema change requires the historical replay envelope to be synchronized without changing its recorded response evidence.
   - When a backend package is at the 15-file limit, consolidate focused behavioral tests into an existing responsibility-aligned file before adding another package-local test file.
+---
+
+## 2026-08-10 04:44 -07:00 - pf-plain-batch-drain-001
+- What was implemented
+  - Made Factory Runtime termination-drain coordination re-evaluate immediately when a result, submission, or dispatch-result hook wake is consumed at the termination boundary.
+  - Added a focused engine regression proving a dispatch hook wake causes a second canonical termination check instead of returning to a blocked outer wait.
+  - Added root-built public plain-batch coverage for stranded PROCESSING Work, exact typed incomplete-drain propagation and stderr, empty and terminal finite success, and continuous idle liveness.
+- Files changed
+  - `pkg/services/factory_runtime/internal/services/orchestration/engine/engine.go`
+  - `pkg/services/factory_runtime/internal/services/orchestration/engine/runtime_state.go`
+  - `pkg/services/factory_runtime/internal/services/orchestration/engine/engine_termination_test.go`
+  - `tests/functional/workers/mock/plain_batch_drain_test.go`
+  - `progress.txt`
+  - `prd.json`
+- Verification
+  - `go test ./pkg/services/factory_runtime/internal/services/orchestration/... ./pkg/services/factory_sessions/internal/processlifecycle ./pkg/services/factory_sessions/internal/runtimehosting ./pkg/transports/cli/run ./tests/functional/workers/mock -run 'TestRun(ReevaluatesTerminationAfterDispatchHookWake|ReturnsIncompleteDrainErrorAfterTerminationClassification)$|TestPlainBatchDrain' -count=1 -timeout 180s` — passed.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - The Runtime termination checker already owns the finite incomplete classification and typed error; the lifecycle bug was that `finishTerminationDrain` reported a consumed wake without its caller looping back into `tickOnce`.
+  - Dispatch-result hook wake channels are part of the engine’s pending-input contract and must be drained alongside result and submission signals at the final termination boundary.
 ---
