@@ -16,7 +16,7 @@
 - Verify documented named-Factory commands against isolated live `you run --named ... --help`; role-pinned provider/model defaults should be documented as fixed policy when no override flags are exposed.
 - Canonical Wire should pass one explicit owner-port contract per service owner; aggregate composition helpers belong only in tests and must not cross the production constructor boundary.
 - Process-scoped external effects should be adapted or defaulted in canonical Wire providers and captured by closures; operation factories receive the selected owner ports and only values or observation fallbacks.
-- Value-only runtime-opening interfaces should use owner-retained logger/metrics ports; keep remaining transport readiness and event callbacks explicitly at the boundary until their result/stream migration is ready.
+- Value-only runtime-opening interfaces should use owner-retained logger/metrics ports; keep remaining transport presentation callbacks in a separate explicit boundary, never durable request state, until their result/stream migration is ready.
 - Regenerate `pkg/wire/wire_gen.go` through `make wire-smoke` after changing a Wire provider signature so drift and focused composition tests run together.
 - When a public service root also owns a private runtime capability, construct the capability once in Wire, narrow the same root once at composition time, and pass that retained role to operations; keep per-operation gateways/state private and never replace the shared root slot during concurrent completion.
 
@@ -66,6 +66,7 @@
 - **Learnings for future iterations:**
 - This checkout may have `ui/node_modules` without all lockfile dependencies; run the pinned Bun install before treating a typecheck failure as a source regression.
 ---
+
 
 ## 2026-08-09 13:17 - wo-d1-packaged-factories-docs-001 documentation routing follow-up
 - What was implemented
@@ -916,4 +917,33 @@
   - Keep durable start requests value-only and expose live presentation as an owner capability; this avoids hashing or retaining callbacks in normalized/idempotent request state while preserving invocation event timing.
   - A constructor returning a private durable interface may require an internal capability type assertion in focused tests when the extra presentation method is intentionally not published on the root service interface.
   - Remaining Story 004 work is concentrated at application-opening lifecycle callbacks and direct JavaScript/stdio transport output/host observation; those need the response-stream or transport-local adapter cutover rather than another request field.
+---
+
+## 2026-08-10 07:59 -07:00 - btrc-p1-root-injection-004
+- What was implemented
+  - Split `ApplicationOpeningRequest` from the explicit `ApplicationOpeningPresentation` boundary so durable runtime selections no longer retain host-readiness, completion, historical-replay, or hosted-service callbacks.
+  - Updated the CLI runner, Factory Sessions application opener, canonical Wire providers, and test adapters to pass presentation capabilities separately while preserving hosted invocation binding and completion behavior.
+  - Updated the owner-contract register and consolidated the value-only/presentation-boundary pattern for future cutovers.
+- Files changed
+  - `pkg/services/factory_sessions/contracts.go`
+  - `pkg/services/factory_sessions/internal/applicationopening/`
+  - `pkg/services/factory_sessions/internal/roles/contracts.go`
+  - `pkg/services/factory_sessions/wire/application_graph.go`
+  - `pkg/transports/cli/run/`
+  - `pkg/wire/profiles.go`, `pkg/wire/runtime_inputs.go`, and focused tests
+  - `docs/internal/packaged-service-structure/btrc-p1-owner-contracts.md`
+  - `prd.json`, `progress.txt`
+- Verification
+  - Focused Factory Sessions application-opening, CLI run, and Wire tests — passed.
+  - `make wire-smoke` — passed; generated Wire output remained clean.
+  - `make test` — passed.
+  - `make typecheck` — passed.
+  - `make mcp-contract-check` — passed.
+  - `make ui-test` — passed (355 Vitest files / 2,970 tests and 191 Bun tests).
+  - `git diff --check` — passed.
+  - Combined `make verify-fast` exceeded the command wrapper budget while unrelated long-running verification processes shared the checkout; its constituent steps passed independently.
+  - Commit `a4bf60016` contains the code and owner-contract documentation cutover.
+- **Learnings for future iterations:**
+  - Keep durable opening requests limited to runtime values and pass transport presentation capabilities as a distinct argument; this preserves readiness and hosted binding without making callbacks part of request state.
+  - The remaining Story 004 boundary is direct JavaScript/stdio output and host observation, which should move through the response-stream or transport-local adapter rather than back into the durable request.
 ---
