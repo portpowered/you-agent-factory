@@ -113,6 +113,7 @@
           "workType": "clip-qa-review"
         }
       ],
+      "outputContract": "structured-clip-qa/v1",
       "outputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"action_completed\": { \"type\": \"boolean\" },\n    \"spec_deviations\": { \"type\": \"array\", \"items\": { \"type\": \"string\" } },\n    \"temporal_artifacts\": { \"type\": \"array\", \"items\": { \"type\": \"string\" } },\n    \"audio_content\": { \"type\": \"string\", \"enum\": [\"speech\", \"music\", \"noise\", \"silence\", \"mixed\"] },\n    \"unexpected_speech\": { \"type\": \"boolean\" },\n    \"verdict\": { \"type\": \"string\", \"enum\": [\"pass\", \"reroll\"] },\n    \"confidence\": { \"type\": \"number\" }\n  },\n  \"required\": [\"action_completed\", \"spec_deviations\", \"temporal_artifacts\", \"audio_content\", \"unexpected_speech\", \"verdict\", \"confidence\"]\n}",
       "outputs": [
         {

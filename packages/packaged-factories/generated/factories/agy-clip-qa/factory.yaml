@@ -101,6 +101,7 @@ workstations:
       onFailure:
         - state: failed
           workType: clip-qa-review
+      outputContract: structured-clip-qa/v1
       outputSchema: |-
         {
           "type": "object",

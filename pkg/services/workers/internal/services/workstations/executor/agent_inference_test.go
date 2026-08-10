@@ -3,6 +3,7 @@ package executor
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -347,6 +348,7 @@ func TestAgentExecutorAcceptsExplicitStructuredRerollVerdict(t *testing.T) {
 	result, err := executor.Execute(context.Background(), testAgentRequest(
 		work.WorkDispatch{DispatchID: "structured-reroll", TransitionID: "qa", WorkerType: "clip-qa"},
 		withAgentOutputSchema(schema),
+		withAgentOutputContract(outputContractStructuredClipQAVerdictV1),
 	))
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
@@ -356,6 +358,57 @@ func TestAgentExecutorAcceptsExplicitStructuredRerollVerdict(t *testing.T) {
 	}
 	if result.Error != "" || result.FailureMetadata != nil {
 		t.Fatalf("failure fields = error %q metadata %#v, want no execution failure", result.Error, result.FailureMetadata)
+	}
+}
+
+func TestAgentExecutorRejectsStructuredRerollWithFailureStatus(t *testing.T) {
+	const schema = `{"type":"object","properties":{"action_completed":{"type":"boolean"},"verdict":{"type":"string","enum":["pass","reroll"]},"status":{"type":"string"}},"required":["action_completed","verdict"]}`
+	provider := &agentMockProvider{response: workerexecution.InferenceResponse{
+		Content: `{"action_completed":false,"verdict":"reroll","status":"error"}`,
+	}}
+	executor := NewAgentExecutor(staticRuntimeConfig{
+		Workers: map[string]*workerconfig.FactoryWorkerConfig{
+			"clip-qa": {Model: "gemini-3.6-flash-high", ModelProvider: workerexecution.RunnerIDAntigravity},
+		},
+	}, provider, nil, time.Now)
+
+	result, err := executor.Execute(context.Background(), testAgentRequest(
+		work.WorkDispatch{DispatchID: "structured-reroll-status", TransitionID: "qa", WorkerType: "clip-qa"},
+		withAgentOutputSchema(schema),
+		withAgentOutputContract(outputContractStructuredClipQAVerdictV1),
+	))
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("outcome = %q, want failed for mixed reroll/status output", result.Outcome)
+	}
+	if !strings.Contains(result.Error, "status=error") {
+		t.Fatalf("error = %q, want status diagnostic", result.Error)
+	}
+}
+
+func TestAgentExecutorRejectsUnscopedStructuredReroll(t *testing.T) {
+	const schema = `{"type":"object","properties":{"verdict":{"type":"string","enum":["pass","reroll"]}},"required":["verdict"]}`
+	provider := &agentMockProvider{response: workerexecution.InferenceResponse{Content: `{"verdict":"reroll"}`}}
+	executor := NewAgentExecutor(staticRuntimeConfig{
+		Workers: map[string]*workerconfig.FactoryWorkerConfig{
+			"worker-a": {Model: "test-model", ModelProvider: workerexecution.RunnerIDAntigravity},
+		},
+	}, provider, nil, time.Now)
+
+	result, err := executor.Execute(context.Background(), testAgentRequest(
+		work.WorkDispatch{DispatchID: "structured-reroll-unscoped", TransitionID: "qa", WorkerType: "worker-a"},
+		withAgentOutputSchema(schema),
+	))
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("outcome = %q, want failed for unscoped reroll", result.Outcome)
+	}
+	if !strings.Contains(result.Error, "explicit structured QA output contract") {
+		t.Fatalf("error = %q, want explicit-contract diagnostic", result.Error)
 	}
 }
 

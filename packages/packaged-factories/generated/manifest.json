@@ -8,11 +8,11 @@
       "slug": "agy-clip-qa",
       "json": {
         "locator": "generated/factories/agy-clip-qa/factory.json",
-        "sha256": "9213ab61d3ed82637d8431e36e9f92469768180c81faae97918214704dcc4b1b"
+        "sha256": "19830b3ca11d99439d3d815d060a32631e17665fbb1ed954ffe5cd9a7d034492"
       },
       "yaml": {
         "locator": "generated/factories/agy-clip-qa/factory.yaml",
-        "sha256": "d75e4f308125529205a617dc3f843a8ff3a6c4c9b81755c32e58c67bef9fb324"
+        "sha256": "70b44fd0af1a5d20212af72eb35df85cc6b914a5a9cd5433168613c0df0eb985"
       },
       "description": {
         "type": "LOCALIZABLE_ASSET",

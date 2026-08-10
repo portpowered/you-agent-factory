@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"regexp"
 	"strings"
 	"time"
@@ -198,16 +199,9 @@ func parseOutputAgainstSchema(content string, schemaPayload []byte) (any, error)
 	return document, nil
 }
 
-func structuredOutputFailure(content string) string {
+func structuredOutputFailure(content, contract string) string {
 	var object map[string]any
 	if err := json.Unmarshal([]byte(content), &object); err != nil || object == nil {
-		return ""
-	}
-
-	// A reroll is a valid inspected-artifact verdict for structured QA roles.
-	// Provider/file failures are rejected before this helper, while the schema
-	// validator guarantees that the role supplied the complete verdict object.
-	if value, ok := object["verdict"].(string); ok && strings.EqualFold(strings.TrimSpace(value), "reroll") {
 		return ""
 	}
 
@@ -221,11 +215,20 @@ func structuredOutputFailure(content string) string {
 			return fmt.Sprintf("%s=%s", key, strings.TrimSpace(value))
 		}
 	}
-	for _, key := range []string{"action_completed", "success", "completed"} {
+	for _, key := range []string{"success", "completed"} {
 		value, ok := object[key].(bool)
 		if ok && !value {
 			return fmt.Sprintf("%s=false", key)
 		}
+	}
+	if value, ok := object["action_completed"].(bool); ok && !value &&
+		strings.TrimSpace(contract) != outputContractStructuredClipQAVerdictV1 {
+		return "action_completed=false"
+	}
+	if value, ok := object["verdict"].(string); ok &&
+		strings.EqualFold(strings.TrimSpace(value), "reroll") &&
+		strings.TrimSpace(contract) != outputContractStructuredClipQAVerdictV1 {
+		return "verdict=reroll without an explicit structured QA output contract"
 	}
 	return ""
 }
@@ -237,7 +240,10 @@ func structuredOutputFailureMetadata() *workerexecution.WorkFailureMetadata {
 	}
 }
 
-const outputContractMarkdownObservationReportV1 = "markdown-observation-report/v1"
+const (
+	outputContractMarkdownObservationReportV1 = "markdown-observation-report/v1"
+	outputContractStructuredClipQAVerdictV1   = "structured-clip-qa/v1"
+)
 
 var (
 	observationReportTimestampPattern      = regexp.MustCompile(`(?i)(?:\b\d{1,2}:\d{2}(?:\.\d{1,3})?\b|\b\d+(?:\.\d+)?\s*(?:s|sec|secs|seconds)\b)`)
@@ -255,9 +261,81 @@ func validateOutputContract(content, contract string) error {
 		return nil
 	case outputContractMarkdownObservationReportV1:
 		return validateMarkdownObservationReport(content)
+	case outputContractStructuredClipQAVerdictV1:
+		return validateStructuredClipQAVerdict(content)
 	default:
 		return fmt.Errorf("unsupported output contract %q", contract)
 	}
+}
+
+func validateStructuredClipQAVerdict(content string) error {
+	if failure := structuredOutputFailure(content, outputContractStructuredClipQAVerdictV1); failure != "" {
+		return fmt.Errorf("structured output failure: %s", failure)
+	}
+
+	var object map[string]any
+	if err := json.Unmarshal([]byte(content), &object); err != nil || object == nil {
+		return fmt.Errorf("clip-QA verdict must be a JSON object")
+	}
+	for _, key := range []string{
+		"action_completed",
+		"spec_deviations",
+		"temporal_artifacts",
+		"audio_content",
+		"unexpected_speech",
+		"verdict",
+		"confidence",
+	} {
+		if _, ok := object[key]; !ok {
+			return fmt.Errorf("clip-QA verdict is missing required field %q", key)
+		}
+	}
+
+	var verdict struct {
+		ActionCompleted   *bool     `json:"action_completed"`
+		SpecDeviations    *[]string `json:"spec_deviations"`
+		TemporalArtifacts *[]string `json:"temporal_artifacts"`
+		AudioContent      *string   `json:"audio_content"`
+		UnexpectedSpeech  *bool     `json:"unexpected_speech"`
+		Verdict           *string   `json:"verdict"`
+		Confidence        *float64  `json:"confidence"`
+	}
+	if err := json.Unmarshal([]byte(content), &verdict); err != nil {
+		return fmt.Errorf("clip-QA verdict has invalid field types: %w", err)
+	}
+	if verdict.ActionCompleted == nil || verdict.SpecDeviations == nil ||
+		verdict.TemporalArtifacts == nil || verdict.AudioContent == nil ||
+		verdict.UnexpectedSpeech == nil || verdict.Verdict == nil || verdict.Confidence == nil {
+		return fmt.Errorf("clip-QA verdict contains a null required field")
+	}
+	if math.IsNaN(*verdict.Confidence) || math.IsInf(*verdict.Confidence, 0) ||
+		*verdict.Confidence < 0 || *verdict.Confidence > 1 {
+		return fmt.Errorf("confidence must be between 0 and 1")
+	}
+
+	switch *verdict.Verdict {
+	case "pass":
+		if !*verdict.ActionCompleted {
+			return fmt.Errorf("pass requires action_completed=true")
+		}
+		if len(*verdict.SpecDeviations) > 0 {
+			return fmt.Errorf("pass requires spec_deviations to be empty")
+		}
+		if len(*verdict.TemporalArtifacts) > 0 {
+			return fmt.Errorf("pass requires temporal_artifacts to be empty")
+		}
+		if *verdict.UnexpectedSpeech {
+			return fmt.Errorf("pass requires unexpected_speech=false")
+		}
+	case "reroll":
+		if *verdict.ActionCompleted && len(*verdict.SpecDeviations) == 0 &&
+			len(*verdict.TemporalArtifacts) == 0 && !*verdict.UnexpectedSpeech {
+			return fmt.Errorf("reroll requires an observed failure reason")
+		}
+	default:
+		return fmt.Errorf("verdict must be pass or reroll")
+	}
+	return nil
 }
 
 func validateMarkdownObservationReport(content string) error {

@@ -83,6 +83,7 @@ workstations:
   - name: gate-rendered-clip
     type: AGENT_RUN
     worker: agy-clip-qa-gate
+    outputContract: structured-clip-qa/v1
     outputSchema: |-
       {
         "type": "object",
