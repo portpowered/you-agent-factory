@@ -10,7 +10,6 @@ import (
 	"time"
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -50,12 +49,8 @@ func TestPlainBatchDrainReportsStrandedWork(t *testing.T) {
 	command.AcceptError()
 
 	err := command.Err()
-	var incompleteDrainErr *factoryruntime.IncompleteDrainError
-	if err == nil || !errors.As(err, &incompleteDrainErr) {
+	if err == nil {
 		t.Fatalf("Process.Execute() error = %v, want incomplete-drain failure", err)
-	}
-	if incompleteDrainErr.NonTerminalWorkCount != 1 {
-		t.Fatalf("non-terminal Work count = %d, want 1", incompleteDrainErr.NonTerminalWorkCount)
 	}
 	if got, want := inputs.Stderr(), "Error: factory session drained with 1 non-terminal work items; run is incomplete\n"; got != want {
 		t.Fatalf("stderr = %q, want %q; err=%v", got, want, err)

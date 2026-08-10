@@ -1,5 +1,6 @@
 ## Codebase Patterns
 - When a termination drain consumes a runtime wake signal, the engine must re-enter its tick loop directly; returning to the outer wait loses the already-consumed wake and can strand a finite run.
+- Customer-facing functional tests must compose through `root.BuildProcess` and assert public process/CLI behavior; keep service-specific typed-error assertions in service-layer tests because the functional boundary check rejects direct Runtime imports.
 - Canonical packaged CLI docs live under `docs/reference/`; adding a topic also requires its authored file in `docs/reference/embed.go` and a registry entry in `pkg/transports/cli/docs/docs.go`.
 - The `you run --named <factory> --help` output is the authoritative invocation contract; omitted role provider/model values resolve through operator defaults.
 - Documentation for model-backed workflows should describe observable result shape and status/artifact evidence rather than byte-stable generated prose.
@@ -800,4 +801,18 @@
 - **Learnings for future iterations:**
   - The backend quality gates report deletion-only baseline entries but pass newly changed files; a small private helper signature reduction is enough to preserve the strict engine file-size boundary.
   - `make test` remains the reliable repository-wide short Go evidence when the fast aggregate stops early at an unavailable UI dependency.
+---
+
+## 2026-08-10 05:08 -07:00 - pf-plain-batch-drain-001 CI boundary follow-up
+- What was implemented
+  - Adjusted the plain customer-boundary assertion to avoid a forbidden direct Runtime service import while retaining exact stderr and process failure coverage.
+- Files changed
+  - `tests/functional/workers/mock/plain_batch_drain_test.go`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/workers/mock -run 'TestPlainBatchDrain' -count=1 -timeout 120s` — passed.
+  - `go run ./cmd/functionalboundarycheck` — passed.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - The functional boundary lane is intentionally stricter than package tests: public harness tests verify observable process behavior, while `errors.As` checks for service-owned types belong in the owning service package.
 ---
