@@ -2715,3 +2715,20 @@
 - **Learnings for future iterations:**
   - When current main mechanically deletes an oversized test file, carry task-specific tests into a focused same-package file before resolving the deletion; this preserves behavior without resurrecting the old contention hotspot.
 ---
+
+## 2026-08-10 16:47 -07:00 - dwro-s1-remote-placement-flags current-main synchronization and verification
+- What was implemented
+  - Merged the live `origin/main` head `acbd13fcc` into the placement branch in merge commit `8916cf53f`.
+  - Preserved the task-owned S1 `prd.json` with all four stories marked `passes: true`, and retained the combined append-only `progress.txt` history while resolving the shared bookkeeping conflict.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+  - Current-main packaged-installation, system-initialization, CLI, JavaScript durability, and hard-kill functional-test files included by the synchronization merge.
+- Verification
+  - `make test` — passed in 125.8 seconds.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` — passed.
+  - `make pkg-boundary` on the replacement head and a detached `origin/main` checkout — both report the same intentional 175-entry package-boundary baseline, including 154 exact Petri public-surface migration edges; neither adds a new head-only finding.
+  - `prd.json` parses with all four user stories marked `passes: true`; merge conflict markers are absent; `git diff --check` passed before the verification entry was appended.
+- **Learnings for future iterations:**
+  - When a PR becomes unmergeable because the base advances, fetch the live remote base rather than relying on cached PR metadata, merge it into the task branch, keep the active PRD authoritative, and compare any intentional repository-wide lint baseline against a detached checkout of that exact base.
+---
