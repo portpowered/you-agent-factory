@@ -1672,3 +1672,16 @@
 - **Learnings for future iterations:**
   - Fetch `origin/main` immediately before handoff and resolve the task PRD explicitly when the shared progress/PRD files conflict during stale-base reconciliation.
 ---
+## [2026-08-10 16:01 -07:00] - thr-split-acp-stdio-tests-003 current-main CI blocker
+- What was implemented
+  - Investigated the final reconciled-head CI failure and confirmed it is outside the ACP split: Backend Functional Coverage failed while all other final-head lanes completed successfully.
+  - Retried Backend Functional Coverage once. The initial attempt reported `pkg/transports/cli` at 72.8180% against the 72.98% minimum after current-main added CLI lease-contention diagnostic branches; the retry also exited nonzero while producing the functional coverage profile.
+- Files changed
+  - `progress.txt`
+- Verification
+  - ACP stdio focused tests, race test, vet, repository gates, typecheck, inventory, and coverage remain green on the reconciled head.
+  - The same current-main commit `e8c0a248ae1ba354ccc2fc022fa674feefe52f85` has its own failed Backend Functional Coverage CI run (`31438826294`), confirming a base-branch blocker rather than an ACP split regression.
+  - No PR conversation comments, formal reviews, or unresolved inline threads are present.
+- **Learnings for future iterations:**
+  - When current-main itself fails the same required functional lane, preserve the scoped move-only change and leave the PR on the continue path until the base coverage regression is repaired or the repository lane is green.
+---
