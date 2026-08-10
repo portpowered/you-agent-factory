@@ -2073,3 +2073,16 @@
 - **Learnings for future iterations:**
   - When a new behavioral test crosses a ratcheted size or complexity gate, move only the focused fixture/assertion into an existing owner test module and extract helpers; do not weaken the gate or add an exemption.
 ---
+
+## [2026-08-10 15:40 -07:00] - thr-split-fake-service-runtime-tests-005 current-main synchronization
+- What was implemented
+  - Merged current `main` at `e8c0a248a` into the split branch after GitHub reported the PR base had advanced beyond the earlier synchronization point.
+  - Preserved the task-owned five-story `prd.json` and unioned the append-only progress history and reusable patterns from both branches; no test-split source files conflicted.
+- Files changed
+  - Current-main files carried forward by the merge, plus `prd.json` and `progress.txt` conflict resolution.
+- Verification
+  - Merge committed as `0dfcbf754`; all five task stories remain `passes:true`.
+  - The previously completed PR workflow was green before this required current-main synchronization; focused gates will be rerun on the new head.
+- **Learnings for future iterations:**
+  - A PR can report a stale cached base SHA after another main merge; compare both the hosting repository's live main ref and the PR base, then synchronize and rerun CI on the resulting head.
+---
