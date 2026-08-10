@@ -291,6 +291,7 @@ func (t *TransitionerSubsystem) buildCompletedDispatch(
 		Outcome:                     resolved.outcome,
 		SelectedClassificationLabel: resolved.selectedClassificationLabel,
 		Reason:                      completedDispatchReason(resolved),
+		ArtifactVerification:        workerexecution.CloneExpectedArtifactVerification(result.ArtifactVerification),
 		FailureMetadata:             failureMetadata,
 		ProviderSession:             workerexecution.CloneProviderSessionMetadata(result.ProviderSession),
 		EndTime:                     endTime,

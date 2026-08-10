@@ -106,6 +106,23 @@ func WorkReadModelToAPI(item work.ReadModel) factoryapi.Work {
 		}
 		result.Relations = &relations
 	}
+	if len(item.ExpectedArtifacts) > 0 {
+		expectedArtifacts := make([]factoryapi.WorkExpectedArtifact, 0, len(item.ExpectedArtifacts))
+		for _, artifact := range item.ExpectedArtifacts {
+			mapped := factoryapi.WorkExpectedArtifact{
+				Name:         artifact.Name,
+				Pattern:      artifact.Pattern,
+				NonEmpty:     artifact.NonEmpty,
+				Verification: factoryapi.WorkExpectedArtifactVerification(artifact.Verification),
+			}
+			if artifact.Reason != nil {
+				reason := factoryapi.ExpectedArtifactVerificationReason(*artifact.Reason)
+				mapped.Reason = &reason
+			}
+			expectedArtifacts = append(expectedArtifacts, mapped)
+		}
+		result.ExpectedArtifacts = &expectedArtifacts
+	}
 	return result
 }
 

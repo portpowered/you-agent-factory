@@ -4525,6 +4525,41 @@ components:
           description: Workspace-relative rendered artifact pattern; host paths are never emitted.
         reason:
           $ref: '#/components/schemas/ExpectedArtifactVerificationReason'
+    WorkExpectedArtifact:
+      type: object
+      additionalProperties: false
+      description: One effective expected artifact declaration projected on a Work item. Pattern is the rendered workspace-relative literal path or glob, never a host path.
+      required:
+        - name
+        - pattern
+        - nonEmpty
+        - verification
+      properties:
+        name:
+          type: string
+          description: Customer-visible declaration name.
+        pattern:
+          type: string
+          description: Safe rendered path or glob relative to the dispatch workspace.
+        nonEmpty:
+          type: boolean
+          description: Whether every matching regular file must contain at least one byte.
+        verification:
+          $ref: '#/components/schemas/WorkExpectedArtifactVerification'
+        reason:
+          $ref: '#/components/schemas/ExpectedArtifactVerificationReason'
+          description: Why this declaration failed, when verification is FAILED.
+    WorkExpectedArtifactVerification:
+      type: string
+      description: Latest recorded verification state for one expected artifact declaration on a Work item.
+      x-enum-varnames:
+        - WorkExpectedArtifactVerificationPending
+        - WorkExpectedArtifactVerificationSatisfied
+        - WorkExpectedArtifactVerificationFailed
+      enum:
+        - PENDING
+        - SATISFIED
+        - FAILED
     FactoryArtifact:
       type: object
       additionalProperties: false
@@ -11137,6 +11172,11 @@ components:
           description: Current outbound relationships attached to this listed source work item when returned by read APIs.
           items:
             $ref: '#/components/schemas/Relation'
+        expectedArtifacts:
+          type: array
+          description: Effective expected artifact declarations and their latest recorded verification state.
+          items:
+            $ref: '#/components/schemas/WorkExpectedArtifact'
         stopSummary:
           $ref: '#/components/schemas/FactoryStopSummary'
           description: Canonical stopped-state summary for existing work inspection reads when this work item explains paused, blocked, needs-human, or interrupted automation.

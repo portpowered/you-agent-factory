@@ -180,6 +180,39 @@ func TestWorkRuntimeAdapterProjectsDispatchOnlyWorkAsProcessing(t *testing.T) {
 	}
 }
 
+func TestWorkRuntimeAdapterProjectsRecordedArtifactFailureAfterResultsRetire(t *testing.T) {
+	t.Parallel()
+
+	token := workers.Token{
+		ID: "tok-failed", PlaceID: "story:review",
+		Color: workers.Color{WorkID: "work-failed", WorkTypeID: "story", Name: "failed"},
+	}
+	net := &factory.Net{
+		Transitions: map[string]*factory.PetriTransition{
+			"publish": {
+				ID: "publish", Name: "publish", InputArcs: []factory.PetriArc{{PlaceID: "story:review"}},
+				ExpectedArtifacts: []work.ExpectedArtifactDeclaration{{Name: "manifest", Pattern: "reports/manifest.json"}},
+			},
+		},
+		WorkTypes: map[string]*factory.WorkType{
+			"story": {ID: "story", ExpectedArtifacts: []work.ExpectedArtifactDeclaration{{Name: "report", Pattern: "reports/{{ (index .Inputs 0).Name }}.json"}}},
+		},
+	}
+	got := runtimeWorkItem(&token, net, false, nil, runtimeReadFacts{
+		dispatchHistory: []factory.CompletedDispatch{{
+			DispatchID: "dispatch-failed", TransitionID: "publish", WorkstationName: "publish", Outcome: workers.OutcomeFailed,
+			ConsumedTokens: []workers.Token{token}, ArtifactVerification: &workers.ExpectedArtifactVerification{
+				Entries: []workers.ExpectedArtifactVerificationEntry{{Name: "manifest", Pattern: "reports/manifest.json", Reason: workers.ExpectedArtifactVerificationReasonMissing}},
+			},
+		}},
+	})
+	if len(got.ExpectedArtifacts) != 2 || got.ExpectedArtifacts[0].Verification != work.ExpectedArtifactVerificationSatisfied ||
+		got.ExpectedArtifacts[1].Verification != work.ExpectedArtifactVerificationFailed || got.ExpectedArtifacts[1].Reason == nil ||
+		*got.ExpectedArtifacts[1].Reason != work.ExpectedArtifactVerificationReasonMissing {
+		t.Fatalf("live artifact projection = %#v, want mixed recorded result", got.ExpectedArtifacts)
+	}
+}
+
 func TestWorkRuntimeAdapterDetachesFactorySessionStopSummary(t *testing.T) {
 	workID := "work-1"
 	summary := &factorysessions.StopSummary{

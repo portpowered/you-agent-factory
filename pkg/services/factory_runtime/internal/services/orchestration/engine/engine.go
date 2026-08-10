@@ -186,16 +186,17 @@ func (e *FactoryEngine) retireCompletedDispatches(results []workerexecution.Work
 			if !hasCompletedRecord {
 				now := e.clock.Now()
 				completedDispatch = interfaces.CompletedDispatch{
-					DispatchID:      entry.DispatchID,
-					TransitionID:    entry.TransitionID,
-					WorkstationName: entry.WorkstationName,
-					Outcome:         r.Outcome,
-					Reason:          completedDispatchReasonFromResult(r),
-					ProviderSession: workerexecution.CloneProviderSessionMetadata(r.ProviderSession),
-					StartTime:       entry.StartTime,
-					EndTime:         now,
-					Duration:        now.Sub(entry.StartTime),
-					ConsumedTokens:  entry.ConsumedTokens,
+					DispatchID:           entry.DispatchID,
+					TransitionID:         entry.TransitionID,
+					WorkstationName:      entry.WorkstationName,
+					Outcome:              r.Outcome,
+					Reason:               completedDispatchReasonFromResult(r),
+					ArtifactVerification: workerexecution.CloneExpectedArtifactVerification(r.ArtifactVerification),
+					ProviderSession:      workerexecution.CloneProviderSessionMetadata(r.ProviderSession),
+					StartTime:            entry.StartTime,
+					EndTime:              now,
+					Duration:             now.Sub(entry.StartTime),
+					ConsumedTokens:       entry.ConsumedTokens,
 				}
 			}
 			e.runtimeState.DispatchHistory = append(e.runtimeState.DispatchHistory, completedDispatch)

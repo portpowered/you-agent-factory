@@ -1997,6 +1997,10 @@ components:
       $ref: './components/schemas/data-models/ExpectedArtifactVerification.yaml'
     ExpectedArtifactVerificationEntry:
       $ref: './components/schemas/data-models/ExpectedArtifactVerificationEntry.yaml'
+    WorkExpectedArtifact:
+      $ref: './components/schemas/data-models/WorkExpectedArtifact.yaml'
+    WorkExpectedArtifactVerification:
+      $ref: './components/schemas/data-models/WorkExpectedArtifactVerification.yaml'
     FactoryArtifact:
       $ref: './components/schemas/data-models/FactoryArtifact.yaml'
     FactoryArtifactRef:

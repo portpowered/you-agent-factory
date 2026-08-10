@@ -1,8 +1,12 @@
 package work
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	pathpkg "path"
+	"strings"
+	"text/template"
 
 	"github.com/portpowered/infinite-you/pkg/services/work/internal/stateaccessquery"
 )
@@ -48,6 +52,223 @@ type ReadModel struct {
 	Tags                     map[string]string
 	Relations                []ReadRelation
 	StopSummary              *StopSummary
+	ExpectedArtifacts        []ExpectedArtifactReadModel
+}
+
+// ExpectedArtifactDeclaration is the detached, compiled form of one authored
+// expected-artifact contract. Runtime topology and replay projections use this
+// type so Work never imports Factory Definition implementation contracts.
+type ExpectedArtifactDeclaration struct {
+	Name     string
+	Pattern  string
+	NonEmpty bool
+}
+
+// ExpectedArtifactVerificationStatus describes the latest recorded
+// verification observation for one expected artifact declaration.
+type ExpectedArtifactVerificationStatus string
+
+const (
+	ExpectedArtifactVerificationPending   ExpectedArtifactVerificationStatus = "PENDING"
+	ExpectedArtifactVerificationSatisfied ExpectedArtifactVerificationStatus = "SATISFIED"
+	ExpectedArtifactVerificationFailed    ExpectedArtifactVerificationStatus = "FAILED"
+)
+
+// ExpectedArtifactVerificationReason identifies why an expected artifact was
+// not satisfied. Values are intentionally aligned with the canonical failure
+// event vocabulary while remaining owned by the Work read contract.
+type ExpectedArtifactVerificationReason string
+
+const (
+	ExpectedArtifactVerificationReasonMissing ExpectedArtifactVerificationReason = "MISSING"
+	ExpectedArtifactVerificationReasonEmpty   ExpectedArtifactVerificationReason = "EMPTY"
+)
+
+// ExpectedArtifactReadModel is the safe per-Work artifact projection exposed
+// by list and get reads. Pattern is always workspace-relative or one of the
+// redacted diagnostic placeholders; it never contains a host workspace path.
+type ExpectedArtifactReadModel struct {
+	Name         string                              `json:"name"`
+	Pattern      string                              `json:"pattern"`
+	NonEmpty     bool                                `json:"nonEmpty"`
+	Verification ExpectedArtifactVerificationStatus  `json:"verification"`
+	Reason       *ExpectedArtifactVerificationReason `json:"reason,omitempty"`
+}
+
+// ExpectedArtifactInput is the stable template data needed to render an
+// authored artifact pattern from recorded Work inputs. It deliberately omits
+// filesystem and host-runtime details.
+type ExpectedArtifactInput struct {
+	Name       string
+	WorkID     string
+	WorkTypeID string
+	DataType   string
+	TraceID    string
+	ParentID   string
+	Project    string
+	Tags       map[string]string
+	Payload    string
+}
+
+// ExpectedArtifactTemplateContext carries the non-host context exposed to
+// artifact templates. Replay callers normally leave these values empty.
+type ExpectedArtifactTemplateContext struct {
+	WorkDir     string
+	ArtifactDir string
+	Project     string
+	SessionID   string
+	Env         map[string]string
+}
+
+// ExpectedArtifactVerificationEntry is one recorded unmet declaration.
+type ExpectedArtifactVerificationEntry struct {
+	Name    string
+	Pattern string
+	Reason  ExpectedArtifactVerificationReason
+}
+
+// ExpectedArtifactObservation describes the durable verification fact for a
+// relevant dispatch. A verified observation with no entries means every
+// declaration was satisfied; entries identify only unmet declarations.
+type ExpectedArtifactObservation struct {
+	Verified bool
+	Entries  []ExpectedArtifactVerificationEntry
+}
+
+// ProjectExpectedArtifactReadModels combines effective declarations and a
+// recorded verification observation into a deterministic Work read model. It
+// performs no filesystem access, so replay remains stable after workspace
+// contents change.
+func ProjectExpectedArtifactReadModels(
+	workTypeDeclarations []ExpectedArtifactDeclaration,
+	workstationDeclarations []ExpectedArtifactDeclaration,
+	inputs []ExpectedArtifactInput,
+	observation ExpectedArtifactObservation,
+) []ExpectedArtifactReadModel {
+	declarations := normalizeExpectedArtifactDeclarations(
+		workTypeDeclarations,
+		workstationDeclarations,
+	)
+	if len(declarations) == 0 {
+		return nil
+	}
+
+	readModels := make([]ExpectedArtifactReadModel, 0, len(declarations))
+	for _, declaration := range declarations {
+		pattern, renderErr := renderExpectedArtifactPattern(declaration.Pattern, inputs)
+		if renderErr != nil {
+			pattern = "<unrenderable>"
+		} else if safe, ok := safeExpectedArtifactPattern(pattern); ok {
+			pattern = safe
+		} else {
+			pattern = "<invalid>"
+		}
+
+		readModel := ExpectedArtifactReadModel{
+			Name:         declaration.Name,
+			Pattern:      pattern,
+			NonEmpty:     declaration.NonEmpty,
+			Verification: ExpectedArtifactVerificationPending,
+		}
+		if entry, ok := expectedArtifactFailureEntry(declaration.Name, pattern, observation.Entries); ok {
+			readModel.Verification = ExpectedArtifactVerificationFailed
+			readModel.Reason = expectedArtifactReasonPtr(entry.Reason)
+			if entry.Pattern != "" {
+				readModel.Pattern = entry.Pattern
+			}
+		} else if observation.Verified {
+			readModel.Verification = ExpectedArtifactVerificationSatisfied
+		}
+		readModels = append(readModels, readModel)
+	}
+	return readModels
+}
+
+func normalizeExpectedArtifactDeclarations(groups ...[]ExpectedArtifactDeclaration) []ExpectedArtifactDeclaration {
+	var normalized []ExpectedArtifactDeclaration
+	seen := make(map[ExpectedArtifactDeclaration]struct{})
+	for _, group := range groups {
+		for _, declaration := range group {
+			if _, ok := seen[declaration]; ok {
+				continue
+			}
+			seen[declaration] = struct{}{}
+			normalized = append(normalized, declaration)
+		}
+	}
+	return normalized
+}
+
+func renderExpectedArtifactPattern(pattern string, inputs []ExpectedArtifactInput) (string, error) {
+	parsed, err := template.New("expected_artifact").Option("missingkey=error").Parse(pattern)
+	if err != nil {
+		return "", err
+	}
+	data := struct {
+		Docs    map[string]string
+		Inputs  []ExpectedArtifactInput
+		Context ExpectedArtifactTemplateContext
+	}{
+		Docs:   map[string]string{},
+		Inputs: inputs,
+	}
+	var rendered bytes.Buffer
+	if err := parsed.Execute(&rendered, data); err != nil {
+		return "", err
+	}
+	return rendered.String(), nil
+}
+
+func safeExpectedArtifactPattern(value string) (string, bool) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return "", false
+	}
+	portable := strings.ReplaceAll(trimmed, `\`, "/")
+	if pathpkg.IsAbs(portable) || strings.HasPrefix(portable, "/") {
+		return "", false
+	}
+	if len(portable) >= 2 && portable[1] == ':' && isASCIIAlpha(portable[0]) {
+		return "", false
+	}
+	for _, segment := range strings.Split(portable, "/") {
+		if segment == ".." {
+			return "", false
+		}
+	}
+	if _, err := pathpkg.Match(portable, ""); err != nil {
+		return "", false
+	}
+	return portable, true
+}
+
+func expectedArtifactFailureEntry(
+	name string,
+	pattern string,
+	entries []ExpectedArtifactVerificationEntry,
+) (ExpectedArtifactVerificationEntry, bool) {
+	for _, entry := range entries {
+		if entry.Name == name && entry.Pattern == pattern {
+			return entry, true
+		}
+	}
+	for _, entry := range entries {
+		if entry.Name == name {
+			return entry, true
+		}
+	}
+	return ExpectedArtifactVerificationEntry{}, false
+}
+
+func expectedArtifactReasonPtr(reason ExpectedArtifactVerificationReason) *ExpectedArtifactVerificationReason {
+	if reason == "" {
+		return nil
+	}
+	return &reason
+}
+
+func isASCIIAlpha(value byte) bool {
+	return (value >= 'a' && value <= 'z') || (value >= 'A' && value <= 'Z')
 }
 
 type ReadRelation struct {

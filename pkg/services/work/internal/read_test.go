@@ -182,3 +182,57 @@ func TestGetWorkAndMoveWorkAndReadOwnDetachedReadSemantics(t *testing.T) {
 		t.Fatalf("MoveWorkAndRead result mutated source snapshot: %#v", runtime.snapshot.Items[0])
 	}
 }
+
+func TestProjectExpectedArtifactReadModels_TracksPendingSatisfiedFailedAndMixed(t *testing.T) {
+	t.Parallel()
+
+	declarations := []work.ExpectedArtifactDeclaration{
+		{Name: "report", Pattern: "reports/{{ (index .Inputs 0).Name }}.json", NonEmpty: true},
+		{Name: "manifest", Pattern: "reports/manifest.json"},
+		{Name: "duplicate", Pattern: "reports/manifest.json"},
+	}
+	inputs := []work.ExpectedArtifactInput{{Name: "review", WorkID: "work-1", WorkTypeID: "story"}}
+
+	pending := work.ProjectExpectedArtifactReadModels(declarations, nil, inputs, work.ExpectedArtifactObservation{})
+	if len(pending) != 3 || pending[0].Pattern != "reports/review.json" ||
+		pending[0].Verification != work.ExpectedArtifactVerificationPending {
+		t.Fatalf("pending projection = %#v", pending)
+	}
+
+	satisfied := work.ProjectExpectedArtifactReadModels(declarations, nil, inputs, work.ExpectedArtifactObservation{Verified: true})
+	if len(satisfied) != 3 || satisfied[0].Verification != work.ExpectedArtifactVerificationSatisfied ||
+		satisfied[1].Verification != work.ExpectedArtifactVerificationSatisfied {
+		t.Fatalf("satisfied projection = %#v", satisfied)
+	}
+
+	failed := work.ProjectExpectedArtifactReadModels(declarations, nil, inputs, work.ExpectedArtifactObservation{
+		Verified: true,
+		Entries: []work.ExpectedArtifactVerificationEntry{{
+			Name: "manifest", Pattern: "reports/manifest.json", Reason: work.ExpectedArtifactVerificationReasonEmpty,
+		}},
+	})
+	if len(failed) != 3 || failed[0].Verification != work.ExpectedArtifactVerificationSatisfied ||
+		failed[1].Verification != work.ExpectedArtifactVerificationFailed || failed[1].Reason == nil ||
+		*failed[1].Reason != work.ExpectedArtifactVerificationReasonEmpty ||
+		failed[2].Verification != work.ExpectedArtifactVerificationSatisfied {
+		t.Fatalf("mixed projection = %#v", failed)
+	}
+
+	if got := work.ProjectExpectedArtifactReadModels(nil, nil, inputs, work.ExpectedArtifactObservation{Verified: true}); got != nil {
+		t.Fatalf("no-declaration projection = %#v, want nil", got)
+	}
+}
+
+func TestProjectExpectedArtifactReadModels_RedactsUnsafeRenderedPatterns(t *testing.T) {
+	t.Parallel()
+
+	got := work.ProjectExpectedArtifactReadModels(
+		[]work.ExpectedArtifactDeclaration{{Name: "unsafe", Pattern: "{{ (index .Inputs 0).Name }}"}},
+		nil,
+		[]work.ExpectedArtifactInput{{Name: "C:\\workspace\\report.json"}},
+		work.ExpectedArtifactObservation{},
+	)
+	if len(got) != 1 || got[0].Pattern != "<invalid>" || got[0].Verification != work.ExpectedArtifactVerificationPending {
+		t.Fatalf("unsafe projection = %#v, want redacted pending artifact", got)
+	}
+}

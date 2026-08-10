@@ -972,6 +972,13 @@ const (
 	WorkContentPartTypeTextUpper  WorkContentPartType = "TEXT"
 )
 
+// Defines values for WorkExpectedArtifactVerification.
+const (
+	WorkExpectedArtifactVerificationFailed    WorkExpectedArtifactVerification = "FAILED"
+	WorkExpectedArtifactVerificationPending   WorkExpectedArtifactVerification = "PENDING"
+	WorkExpectedArtifactVerificationSatisfied WorkExpectedArtifactVerification = "SATISFIED"
+)
+
 // Defines values for WorkFailureFamily.
 const (
 	WorkFailureFamilyRetryable WorkFailureFamily = "retryable"
@@ -6445,6 +6452,9 @@ type Work struct {
 	// CurrentChainingTraceId Explicit chaining-trace identifier for this submitted work item.
 	CurrentChainingTraceId *string `json:"currentChainingTraceId,omitempty"`
 
+	// ExpectedArtifacts Effective expected artifact declarations and their latest recorded verification state.
+	ExpectedArtifacts *[]WorkExpectedArtifact `json:"expectedArtifacts,omitempty"`
+
 	// Name A human readable name for the work, not unique
 	Name string `json:"name"`
 
@@ -6581,6 +6591,27 @@ type WorkDiagnostics struct {
 	Provider       *ProviderDiagnostic       `json:"provider,omitempty"`
 	RenderedPrompt *RenderedPromptDiagnostic `json:"renderedPrompt,omitempty"`
 }
+
+// WorkExpectedArtifact One effective expected artifact declaration projected on a Work item. Pattern is the rendered workspace-relative literal path or glob, never a host path.
+type WorkExpectedArtifact struct {
+	// Name Customer-visible declaration name.
+	Name string `json:"name"`
+
+	// NonEmpty Whether every matching regular file must contain at least one byte.
+	NonEmpty bool `json:"nonEmpty"`
+
+	// Pattern Safe rendered path or glob relative to the dispatch workspace.
+	Pattern string `json:"pattern"`
+
+	// Reason Stable reason that an expected artifact declaration was not satisfied.
+	Reason *ExpectedArtifactVerificationReason `json:"reason,omitempty"`
+
+	// Verification Latest recorded verification state for one expected artifact declaration on a Work item.
+	Verification WorkExpectedArtifactVerification `json:"verification"`
+}
+
+// WorkExpectedArtifactVerification Latest recorded verification state for one expected artifact declaration on a Work item.
+type WorkExpectedArtifactVerification string
 
 // WorkFailureFamily Stable machine-readable failure family used to decide retry and routing behavior for failed work.
 type WorkFailureFamily string

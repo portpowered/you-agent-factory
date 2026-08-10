@@ -3995,6 +3995,13 @@
           "description": "Explicit chaining-trace identifier for this submitted work item.",
           "type": "string"
         },
+        "expectedArtifacts": {
+          "description": "Effective expected artifact declarations and their latest recorded verification state.",
+          "items": {
+            "$ref": "#/$defs/WorkExpectedArtifact"
+          },
+          "type": "array"
+        },
         "name": {
           "description": "A human readable name for the work, not unique",
           "type": "string"
@@ -4193,6 +4200,46 @@
     "WorkContentURLProperty": {
       "description": "Canonical content reference for file-backed parts. Supported schemes are file://, http://, https://, data:, and you-artifact:// for session-scoped factory artifact refs.",
       "minLength": 1,
+      "type": "string"
+    },
+    "WorkExpectedArtifact": {
+      "additionalProperties": false,
+      "description": "One effective expected artifact declaration projected on a Work item. Pattern is the rendered workspace-relative literal path or glob, never a host path.",
+      "properties": {
+        "name": {
+          "description": "Customer-visible declaration name.",
+          "type": "string"
+        },
+        "nonEmpty": {
+          "description": "Whether every matching regular file must contain at least one byte.",
+          "type": "boolean"
+        },
+        "pattern": {
+          "description": "Safe rendered path or glob relative to the dispatch workspace.",
+          "type": "string"
+        },
+        "reason": {
+          "$ref": "#/$defs/ExpectedArtifactVerificationReason"
+        },
+        "verification": {
+          "$ref": "#/$defs/WorkExpectedArtifactVerification"
+        }
+      },
+      "required": [
+        "name",
+        "pattern",
+        "nonEmpty",
+        "verification"
+      ],
+      "type": "object"
+    },
+    "WorkExpectedArtifactVerification": {
+      "description": "Latest recorded verification state for one expected artifact declaration on a Work item.",
+      "enum": [
+        "PENDING",
+        "SATISFIED",
+        "FAILED"
+      ],
       "type": "string"
     },
     "WorkFailureFamily": {

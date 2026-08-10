@@ -467,6 +467,10 @@ func TestTransitioner_ExpectedArtifactFailureUsesFailureDestination(t *testing.T
 	if len(result.CompletedDispatches) != 1 || result.CompletedDispatches[0].Outcome != workerexecution.OutcomeFailed {
 		t.Fatalf("completed dispatches = %#v, want failed terminal completion", result.CompletedDispatches)
 	}
+	if result.CompletedDispatches[0].ArtifactVerification == nil ||
+		len(result.CompletedDispatches[0].ArtifactVerification.Entries) != 1 {
+		t.Fatalf("completed artifact verification = %#v, want durable failure entries", result.CompletedDispatches[0].ArtifactVerification)
+	}
 }
 
 func TestTransitioner_WorkerGeneratedBatchPreservesAuthoredWorkData(t *testing.T) {

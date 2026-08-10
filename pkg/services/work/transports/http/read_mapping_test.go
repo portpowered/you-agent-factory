@@ -138,6 +138,10 @@ func TestWorkReadModelToAPI_EncodesDetachedReadModel(t *testing.T) {
 			TargetWorkID:   "work-draft",
 			RequiredState:  "complete",
 		}},
+		ExpectedArtifacts: []work.ExpectedArtifactReadModel{{
+			Name: "report", Pattern: "reports/review.json", NonEmpty: true,
+			Verification: work.ExpectedArtifactVerificationSatisfied,
+		}},
 	})
 	if got.Name != "Review PRD" ||
 		got.WorkId == nil || *got.WorkId != "work-prd-1" ||
@@ -146,6 +150,11 @@ func TestWorkReadModelToAPI_EncodesDetachedReadModel(t *testing.T) {
 		got.Tags == nil || (*got.Tags)["owner"] != "docs" ||
 		got.Relations == nil || len(*got.Relations) != 1 {
 		t.Fatalf("Work = %#v, want encoded detached read model", got)
+	}
+	if got.ExpectedArtifacts == nil || len(*got.ExpectedArtifacts) != 1 ||
+		(*got.ExpectedArtifacts)[0].Pattern != "reports/review.json" ||
+		(*got.ExpectedArtifacts)[0].Verification != factoryapi.WorkExpectedArtifactVerificationSatisfied {
+		t.Fatalf("expected artifacts = %#v, want encoded artifact projection", got.ExpectedArtifacts)
 	}
 }
 
@@ -203,7 +212,7 @@ func TestWorkReadModelToAPI_OmitsEmptyOptionalCollections(t *testing.T) {
 	if err := json.Unmarshal(raw, &fields); err != nil {
 		t.Fatal(err)
 	}
-	for _, field := range []string{"content", "tags", "relations", "previousChainingTraceIds", "stopSummary"} {
+	for _, field := range []string{"content", "tags", "relations", "expectedArtifacts", "previousChainingTraceIds", "stopSummary"} {
 		if _, present := fields[field]; present {
 			t.Fatalf("optional field %q unexpectedly present: %s", field, string(raw))
 		}

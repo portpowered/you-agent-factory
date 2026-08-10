@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -62,20 +63,247 @@ func (a workRuntimeAdapter) ReadWorkSnapshot(ctx context.Context) (work.ReadSnap
 	result := work.ReadSnapshot{Items: make([]work.ReadModel, 0, len(materialized.Tokens))}
 	for _, token := range materialized.Tokens {
 		_, inFlight := materialized.InFlightOnlyByID[token.ID]
-		item := runtimeWorkItem(token, snapshot.Topology, inFlight, names)
+		item := runtimeWorkItem(token, snapshot.Topology, inFlight, names, runtimeReadFacts{
+			dispatches: snapshot.Dispatches, dispatchHistory: snapshot.DispatchHistory, results: snapshot.Results,
+		})
 		item.StopSummary = runtimeWorkStopSummary(sessionprojection.ProjectWorkStopSummary(a.sessionID, snapshot, token, sessionSummary))
 		result.Items = append(result.Items, item)
 	}
 	return result, nil
 }
 
-func runtimeWorkItem(token *workers.Token, net *factoryruntime.Net, inFlight bool, names map[string]string) work.ReadModel {
+type runtimeReadFacts struct {
+	dispatches      map[string]*factoryruntime.DispatchEntry
+	dispatchHistory []factoryruntime.CompletedDispatch
+	results         []workers.WorkResult
+}
+
+func runtimeWorkItem(
+	token *workers.Token,
+	net *factoryruntime.Net,
+	inFlight bool,
+	names map[string]string,
+	facts ...runtimeReadFacts,
+) work.ReadModel {
+	var readFacts runtimeReadFacts
+	if len(facts) > 0 {
+		readFacts = facts[0]
+	}
 	name := runtimeFirstNonEmpty(token.Color.Name, token.Color.WorkID, token.ID)
-	item := work.ReadModel{CursorID: token.ID, Name: name, WorkID: token.Color.WorkID, WorkTypeName: token.Color.WorkTypeID, State: runtimeWorkState(token, net, inFlight), ChainingTraceDepth: token.Color.ChainingTraceDepth, CurrentChainingTraceID: runtimeFirstNonEmpty(token.Color.CurrentChainingTraceID, token.Color.TraceID), PreviousChainingTraceIDs: append([]string(nil), token.Color.PreviousChainingTraceIDs...), TraceID: token.Color.TraceID, Content: work.CloneWorkContentParts(token.Color.Content), Tags: work.CloneTags(token.Color.Tags)}
+	item := work.ReadModel{CursorID: token.ID, Name: name, WorkID: token.Color.WorkID, WorkTypeName: token.Color.WorkTypeID, State: runtimeWorkState(token, net, inFlight), ChainingTraceDepth: token.Color.ChainingTraceDepth, CurrentChainingTraceID: runtimeFirstNonEmpty(token.Color.CurrentChainingTraceID, token.Color.TraceID), PreviousChainingTraceIDs: append([]string(nil), token.Color.PreviousChainingTraceIDs...), TraceID: token.Color.TraceID, Content: work.CloneWorkContentParts(token.Color.Content), Tags: work.CloneTags(token.Color.Tags), ExpectedArtifacts: runtimeExpectedArtifacts(token, net, readFacts.dispatches, readFacts.dispatchHistory, readFacts.results)}
 	for _, relation := range token.Color.Relations {
 		item.Relations = append(item.Relations, work.ReadRelation{Type: relation.Type, SourceWorkName: name, TargetWorkName: runtimeFirstNonEmpty(names[relation.TargetWorkID], relation.TargetWorkID), TargetWorkID: relation.TargetWorkID, RequiredState: relation.RequiredState})
 	}
 	return item
+}
+
+func runtimeExpectedArtifacts(
+	token *workers.Token,
+	net *factoryruntime.Net,
+	dispatches map[string]*factoryruntime.DispatchEntry,
+	dispatchHistory []factoryruntime.CompletedDispatch,
+	results []workers.WorkResult,
+) []work.ExpectedArtifactReadModel {
+	if token == nil {
+		return nil
+	}
+	var workTypeDeclarations []work.ExpectedArtifactDeclaration
+	if net != nil {
+		if workType := net.WorkTypes[token.Color.WorkTypeID]; workType != nil {
+			workTypeDeclarations = append(workTypeDeclarations, workType.ExpectedArtifacts...)
+		}
+	}
+
+	if dispatch, ok := runtimeActiveArtifactDispatch(token, dispatches); ok {
+		return work.ProjectExpectedArtifactReadModels(
+			workTypeDeclarations,
+			runtimeWorkstationArtifactDeclarations(net, dispatch.transitionID, dispatch.workstationName),
+			runtimeExpectedArtifactInputs(dispatch.inputs, token),
+			work.ExpectedArtifactObservation{},
+		)
+	}
+	if dispatch, ok := runtimeCompletedArtifactDispatch(token, dispatchHistory, results); ok {
+		return work.ProjectExpectedArtifactReadModels(
+			workTypeDeclarations,
+			runtimeWorkstationArtifactDeclarations(net, dispatch.transitionID, dispatch.workstationName),
+			runtimeExpectedArtifactInputs(dispatch.inputs, token),
+			dispatch.observation,
+		)
+	}
+
+	var workstationDeclarations []work.ExpectedArtifactDeclaration
+	if net != nil {
+		transitionIDs := make([]string, 0, len(net.Transitions))
+		for transitionID := range net.Transitions {
+			transitionIDs = append(transitionIDs, transitionID)
+		}
+		sort.Strings(transitionIDs)
+		for _, transitionID := range transitionIDs {
+			transition := net.Transitions[transitionID]
+			if transition == nil {
+				continue
+			}
+			consumesPlace := false
+			for _, arc := range transition.InputArcs {
+				if arc.PlaceID == token.PlaceID {
+					consumesPlace = true
+					break
+				}
+			}
+			if !consumesPlace {
+				continue
+			}
+			workstationDeclarations = append(workstationDeclarations, transition.ExpectedArtifacts...)
+		}
+	}
+	return work.ProjectExpectedArtifactReadModels(
+		workTypeDeclarations,
+		workstationDeclarations,
+		[]work.ExpectedArtifactInput{runtimeExpectedArtifactInput(*token)},
+		work.ExpectedArtifactObservation{},
+	)
+}
+
+type runtimeArtifactDispatchFacts struct {
+	transitionID    string
+	workstationName string
+	inputs          []workers.Token
+	observation     work.ExpectedArtifactObservation
+}
+
+func runtimeActiveArtifactDispatch(
+	token *workers.Token,
+	dispatches map[string]*factoryruntime.DispatchEntry,
+) (runtimeArtifactDispatchFacts, bool) {
+	ids := make([]string, 0, len(dispatches))
+	for id := range dispatches {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		dispatch := dispatches[id]
+		if dispatch == nil || !runtimeDispatchContainsWork(dispatch.ConsumedTokens, token.Color.WorkID) {
+			continue
+		}
+		return runtimeArtifactDispatchFacts{
+			transitionID:    dispatch.TransitionID,
+			workstationName: dispatch.WorkstationName,
+			inputs:          append([]workers.Token(nil), dispatch.ConsumedTokens...),
+		}, true
+	}
+	return runtimeArtifactDispatchFacts{}, false
+}
+
+func runtimeCompletedArtifactDispatch(
+	token *workers.Token,
+	dispatches []factoryruntime.CompletedDispatch,
+	results []workers.WorkResult,
+) (runtimeArtifactDispatchFacts, bool) {
+	for index := len(dispatches) - 1; index >= 0; index-- {
+		dispatch := dispatches[index]
+		if !runtimeDispatchContainsWork(dispatch.ConsumedTokens, token.Color.WorkID) {
+			continue
+		}
+		return runtimeArtifactDispatchFacts{
+			transitionID:    dispatch.TransitionID,
+			workstationName: dispatch.WorkstationName,
+			inputs:          append([]workers.Token(nil), dispatch.ConsumedTokens...),
+			observation:     runtimeArtifactObservation(dispatch, results),
+		}, true
+	}
+	return runtimeArtifactDispatchFacts{}, false
+}
+
+func runtimeDispatchContainsWork(tokens []workers.Token, workID string) bool {
+	for _, token := range tokens {
+		if token.Color.WorkID == workID {
+			return true
+		}
+	}
+	return false
+}
+
+func runtimeArtifactObservation(
+	dispatch factoryruntime.CompletedDispatch,
+	results []workers.WorkResult,
+) work.ExpectedArtifactObservation {
+	if dispatch.ArtifactVerification != nil {
+		return runtimeExpectedArtifactObservation(dispatch.ArtifactVerification)
+	}
+	for _, result := range results {
+		if result.DispatchID != dispatch.DispatchID {
+			continue
+		}
+		if result.ArtifactVerification == nil {
+			if result.Outcome == workers.OutcomeAccepted {
+				return work.ExpectedArtifactObservation{Verified: true}
+			}
+			return work.ExpectedArtifactObservation{}
+		}
+		return runtimeExpectedArtifactObservation(result.ArtifactVerification)
+	}
+	if dispatch.Outcome == workers.OutcomeAccepted {
+		return work.ExpectedArtifactObservation{Verified: true}
+	}
+	return work.ExpectedArtifactObservation{}
+}
+
+func runtimeExpectedArtifactObservation(
+	verification *workers.ExpectedArtifactVerification,
+) work.ExpectedArtifactObservation {
+	if verification == nil {
+		return work.ExpectedArtifactObservation{}
+	}
+	observation := work.ExpectedArtifactObservation{Verified: true}
+	for _, entry := range verification.Entries {
+		observation.Entries = append(observation.Entries, work.ExpectedArtifactVerificationEntry{
+			Name: entry.Name, Pattern: entry.Pattern, Reason: work.ExpectedArtifactVerificationReason(entry.Reason),
+		})
+	}
+	return observation
+}
+
+func runtimeWorkstationArtifactDeclarations(
+	net *factoryruntime.Net,
+	transitionID string,
+	workstationName string,
+) []work.ExpectedArtifactDeclaration {
+	if net == nil {
+		return nil
+	}
+	for _, transition := range net.Transitions {
+		if transition == nil {
+			continue
+		}
+		if transition.ID == transitionID || transition.Name == transitionID || transition.Name == workstationName {
+			return append([]work.ExpectedArtifactDeclaration(nil), transition.ExpectedArtifacts...)
+		}
+	}
+	return nil
+}
+
+func runtimeExpectedArtifactInputs(tokens []workers.Token, fallback *workers.Token) []work.ExpectedArtifactInput {
+	if len(tokens) == 0 && fallback != nil {
+		tokens = []workers.Token{*fallback}
+	}
+	inputs := make([]work.ExpectedArtifactInput, 0, len(tokens))
+	for _, token := range tokens {
+		inputs = append(inputs, runtimeExpectedArtifactInput(token))
+	}
+	return inputs
+}
+
+func runtimeExpectedArtifactInput(token workers.Token) work.ExpectedArtifactInput {
+	return work.ExpectedArtifactInput{
+		Name:       runtimeFirstNonEmpty(token.Color.Name, token.Color.WorkID, token.ID),
+		WorkID:     token.Color.WorkID,
+		WorkTypeID: token.Color.WorkTypeID,
+		DataType:   string(token.Color.DataType),
+		TraceID:    token.Color.TraceID,
+		ParentID:   token.Color.ParentID,
+		Tags:       work.CloneTags(token.Color.Tags),
+		Payload:    string(token.Color.Payload),
+	}
 }
 
 func runtimeWorkState(token *workers.Token, net *factoryruntime.Net, inFlight bool) *work.State {

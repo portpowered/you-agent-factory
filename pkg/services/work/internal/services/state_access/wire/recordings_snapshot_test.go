@@ -8,13 +8,14 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func TestReadSnapshotFromWorldStateRejectsUnsupportedViews(t *testing.T) {
 	t.Parallel()
 
 	for name, view := range map[string]recordings.WorldStateView{
-		"wrong schema": {SchemaVersion: "v0", Payload: `{"workItemsById":{}}`},
+		"wrong schema":  {SchemaVersion: "v0", Payload: `{"workItemsById":{}}`},
 		"empty payload": {SchemaVersion: recordings.WorldStateViewSchemaV1, Payload: "  "},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -137,6 +138,74 @@ func TestReadSnapshotFromFactoryWorldStateMapsActiveFailedTerminalAndRelations(t
 	}
 	if len(byID["work-active"].Relations) != 1 || byID["work-active"].Relations[0].TargetWorkName != "Terminal story" {
 		t.Fatalf("relations = %#v, want one depends_on relation", byID["work-active"].Relations)
+	}
+}
+
+func TestReadSnapshotFromFactoryWorldStateProjectsArtifactVerificationWithoutScanning(t *testing.T) {
+	t.Parallel()
+
+	state := interfaces.FactoryWorldState{
+		Topology: interfaces.InitialStructurePayload{
+			WorkTypes: []interfaces.FactoryWorkType{{
+				ID: "story",
+				ExpectedArtifacts: []work.ExpectedArtifactDeclaration{{
+					Name: "report", Pattern: "reports/{{ (index .Inputs 0).Name }}.json", NonEmpty: true,
+				}},
+			}},
+			Workstations: []interfaces.FactoryWorkstation{{
+				ID: "publish", Name: "publish", InputPlaceIDs: []string{"story:review"},
+				ExpectedArtifacts: []work.ExpectedArtifactDeclaration{{
+					Name: "manifest", Pattern: "reports/manifest.json",
+				}},
+			}},
+		},
+		WorkItemsByID: map[string]work.FactoryWorkItem{
+			"pending":   {ID: "pending", WorkTypeID: "story", DisplayName: "pending", State: "review", PlaceID: "story:review"},
+			"satisfied": {ID: "satisfied", WorkTypeID: "story", DisplayName: "satisfied", State: "review", PlaceID: "story:review"},
+			"failed":    {ID: "failed", WorkTypeID: "story", DisplayName: "failed", State: "review", PlaceID: "story:review"},
+			"plain":     {ID: "plain", WorkTypeID: "plain", DisplayName: "plain", State: "review", PlaceID: "plain:review"},
+		},
+		ActiveDispatches: map[string]interfaces.FactoryWorldDispatch{
+			"dispatch-pending": {
+				DispatchID: "dispatch-pending", TransitionID: "publish", Workstation: interfaces.FactoryWorkstationRef{ID: "publish", Name: "publish"},
+				WorkItemIDs: []string{"pending"}, Inputs: []interfaces.WorkstationInput{{WorkItem: &work.FactoryWorkItem{ID: "pending", WorkTypeID: "story", DisplayName: "pending"}}},
+			},
+		},
+		CompletedDispatches: []interfaces.FactoryWorldDispatchCompletion{
+			{
+				DispatchID: "dispatch-satisfied", TransitionID: "publish", Workstation: interfaces.FactoryWorkstationRef{ID: "publish", Name: "publish"},
+				WorkItemIDs: []string{"satisfied"}, InputWorkItems: []work.FactoryWorkItem{{ID: "satisfied", WorkTypeID: "story", DisplayName: "satisfied"}},
+				Result: workerexecution.WorkstationResult{Outcome: string(workerexecution.OutcomeAccepted)},
+			},
+			{
+				DispatchID: "dispatch-failed", TransitionID: "publish", Workstation: interfaces.FactoryWorkstationRef{ID: "publish", Name: "publish"},
+				WorkItemIDs: []string{"failed"}, InputWorkItems: []work.FactoryWorkItem{{ID: "failed", WorkTypeID: "story", DisplayName: "failed"}},
+				Result: workerexecution.WorkstationResult{
+					Outcome: string(workerexecution.OutcomeFailed),
+					ArtifactVerification: &workerexecution.ExpectedArtifactVerification{Entries: []workerexecution.ExpectedArtifactVerificationEntry{{
+						Name: "manifest", Pattern: "reports/manifest.json", Reason: workerexecution.ExpectedArtifactVerificationReasonEmpty,
+					}}},
+				},
+			},
+		},
+	}
+
+	snapshot := readSnapshotFromFactoryWorldState(state)
+	byID := make(map[string]work.ReadModel, len(snapshot.Items))
+	for _, item := range snapshot.Items {
+		byID[item.WorkID] = item
+	}
+	if got := byID["pending"].ExpectedArtifacts; len(got) != 2 || got[0].Verification != work.ExpectedArtifactVerificationPending || got[0].Pattern != "reports/pending.json" {
+		t.Fatalf("pending artifacts = %#v", got)
+	}
+	if got := byID["satisfied"].ExpectedArtifacts; len(got) != 2 || got[0].Verification != work.ExpectedArtifactVerificationSatisfied || got[1].Verification != work.ExpectedArtifactVerificationSatisfied {
+		t.Fatalf("satisfied artifacts = %#v", got)
+	}
+	if got := byID["failed"].ExpectedArtifacts; len(got) != 2 || got[0].Verification != work.ExpectedArtifactVerificationSatisfied || got[1].Verification != work.ExpectedArtifactVerificationFailed || got[1].Reason == nil || *got[1].Reason != work.ExpectedArtifactVerificationReasonEmpty {
+		t.Fatalf("failed artifacts = %#v", got)
+	}
+	if got := byID["plain"].ExpectedArtifacts; got != nil {
+		t.Fatalf("no-declaration artifacts = %#v, want nil", got)
 	}
 }
 

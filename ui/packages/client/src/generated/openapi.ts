@@ -2098,6 +2098,23 @@ export interface components {
       pattern: string;
       reason: components["schemas"]["ExpectedArtifactVerificationReason"];
     };
+    /** @description One effective expected artifact declaration projected on a Work item. Pattern is the rendered workspace-relative literal path or glob, never a host path. */
+    WorkExpectedArtifact: {
+      /** @description Customer-visible declaration name. */
+      name: string;
+      /** @description Safe rendered path or glob relative to the dispatch workspace. */
+      pattern: string;
+      /** @description Whether every matching regular file must contain at least one byte. */
+      nonEmpty: boolean;
+      verification: components["schemas"]["WorkExpectedArtifactVerification"];
+      /** @description Why this declaration failed, when verification is FAILED. */
+      reason?: components["schemas"]["ExpectedArtifactVerificationReason"];
+    };
+    /**
+     * @description Latest recorded verification state for one expected artifact declaration on a Work item.
+     * @enum {string}
+     */
+    WorkExpectedArtifactVerification: WorkExpectedArtifactVerification;
     FactoryArtifact: {
       /** @description Stable artifact identifier referenced by session projections. */
       id: string;
@@ -5405,6 +5422,8 @@ export interface components {
       tags?: components["schemas"]["StringMap"];
       /** @description Current outbound relationships attached to this listed source work item when returned by read APIs. */
       relations?: components["schemas"]["Relation"][];
+      /** @description Effective expected artifact declarations and their latest recorded verification state. */
+      expectedArtifacts?: components["schemas"]["WorkExpectedArtifact"][];
       /** @description Canonical stopped-state summary for existing work inspection reads when this work item explains paused, blocked, needs-human, or interrupted automation. */
       stopSummary?: components["schemas"]["FactoryStopSummary"];
     };
@@ -7876,6 +7895,13 @@ export const FactoryDispatchJavaScriptTaskKind = {
 } as const;
 export type FactoryDispatchJavaScriptTaskKind =
   (typeof FactoryDispatchJavaScriptTaskKind)[keyof typeof FactoryDispatchJavaScriptTaskKind];
+export const WorkExpectedArtifactVerification = {
+  WorkExpectedArtifactVerificationPending: "PENDING",
+  WorkExpectedArtifactVerificationSatisfied: "SATISFIED",
+  WorkExpectedArtifactVerificationFailed: "FAILED",
+} as const;
+export type WorkExpectedArtifactVerification =
+  (typeof WorkExpectedArtifactVerification)[keyof typeof WorkExpectedArtifactVerification];
 export const FactoryArtifactKind = {
   // Final session result artifact.
   FactoryArtifactKindFINALRESULT: "FINAL_RESULT",

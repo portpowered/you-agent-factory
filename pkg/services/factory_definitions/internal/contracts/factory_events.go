@@ -754,9 +754,10 @@ type FactoryWorker struct {
 
 // FactoryWorkType describes a work type and its possible states.
 type FactoryWorkType struct {
-	ID     string                   `json:"id"`
-	Name   string                   `json:"name,omitempty"`
-	States []FactoryStateDefinition `json:"states,omitempty"`
+	ID                string                             `json:"id"`
+	Name              string                             `json:"name,omitempty"`
+	States            []FactoryStateDefinition           `json:"states,omitempty"`
+	ExpectedArtifacts []work.ExpectedArtifactDeclaration `json:"expected_artifacts,omitempty"`
 }
 
 // FactoryStateDefinition describes a named state in a work type lifecycle.
@@ -767,16 +768,17 @@ type FactoryStateDefinition struct {
 
 // FactoryWorkstation describes a transition that can execute work.
 type FactoryWorkstation struct {
-	ID                string            `json:"id"`
-	Name              string            `json:"name"`
-	WorkerID          string            `json:"worker_id,omitempty"`
-	Kind              string            `json:"kind,omitempty"`
-	Config            map[string]string `json:"config,omitempty"`
-	InputPlaceIDs     []string          `json:"input_place_ids,omitempty"`
-	OutputPlaceIDs    []string          `json:"output_place_ids,omitempty"`
-	ContinuePlaceIDs  []string          `json:"continue_place_ids,omitempty"`
-	RejectionPlaceIDs []string          `json:"rejection_place_ids,omitempty"`
-	FailurePlaceIDs   []string          `json:"failure_place_ids,omitempty"`
+	ID                string                             `json:"id"`
+	Name              string                             `json:"name"`
+	WorkerID          string                             `json:"worker_id,omitempty"`
+	Kind              string                             `json:"kind,omitempty"`
+	Config            map[string]string                  `json:"config,omitempty"`
+	InputPlaceIDs     []string                           `json:"input_place_ids,omitempty"`
+	OutputPlaceIDs    []string                           `json:"output_place_ids,omitempty"`
+	ContinuePlaceIDs  []string                           `json:"continue_place_ids,omitempty"`
+	RejectionPlaceIDs []string                           `json:"rejection_place_ids,omitempty"`
+	FailurePlaceIDs   []string                           `json:"failure_place_ids,omitempty"`
+	ExpectedArtifacts []work.ExpectedArtifactDeclaration `json:"expected_artifacts,omitempty"`
 }
 
 // FactoryWorkstationRef identifies a workstation in a runtime event.
