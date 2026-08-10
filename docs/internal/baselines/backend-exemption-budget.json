@@ -261,18 +261,6 @@
     },
     {
       "rule": "backendsizecheck:ignore-file",
-      "target": "pkg/transports/cli/root_run_test.go",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the backendsizecheck:ignore-file threshold. Current rationale: consolidated root run and operator-default CLI tests remain together until dedicated CLI test seams split."
-    },
-    {
-      "rule": "backendsizecheck:ignore-file",
-      "target": "pkg/transports/cli/run/run_invocation_test.go",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the backendsizecheck:ignore-file threshold. Current rationale: consolidated run invocation tests remain together until dedicated CLI invocation test seams split."
-    },
-    {
-      "rule": "backendsizecheck:ignore-file",
       "target": "pkg/transports/http/contracttests/generated_contract_common_test.go",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption."
@@ -2790,18 +2778,6 @@
       "target": "pkg/transports/cli/root_models_docs_coverage_test.go",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-file-lines",
-      "target": "pkg/transports/cli/root_run_test.go",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-file-lines threshold. Current rationale: consolidated root run and operator-default CLI tests remain together until dedicated CLI test seams split."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-file-lines",
-      "target": "pkg/transports/cli/run/run_invocation_test.go",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-file-lines threshold. Current rationale: consolidated run invocation tests remain together until dedicated CLI invocation test seams split."
     },
     {
       "rule": "pkgmaintcheck:ignore-file-lines",
