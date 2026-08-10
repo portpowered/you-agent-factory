@@ -911,3 +911,13 @@
 - **Learnings for future iterations:**
   - Final readiness requires checking the exact PR head against the terminal CI run, not only the latest successful run visible for an earlier commit.
 ---
+## 2026-08-10 01:31 -0700 - wo-b3-provider-capability-discovery-cli-final-ci-rerun
+- What was implemented
+  - Confirmed the final-head functional-coverage retry passed after the isolated durability test reproduced cleanly locally.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Final-head run `31369496270` now has all 18 checks passing, including Backend Functional Coverage and Verification Policy, on head `20a23e149a812ff835b1996a2deea425910eb337`.
+- **Learnings for future iterations:**
+  - Preserve the exact failing test, focused repetition result, rerun ID, and final head in the append-only log when CI recovery uses a known flaky lane.
+---
