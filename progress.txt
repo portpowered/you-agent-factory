@@ -952,3 +952,19 @@
   - For functional coverage failures, compare the reported package-floor deltas with the PR file list before changing code; a small drop in untouched packages is evidence for a targeted rerun, not a feature regression.
   - The dependent Verification Policy job may appear only after the rerun lane completes, so final readiness requires checking both the lane and its policy gate.
 ---
+## 2026-08-10 02:09 -0700 - wo-b3-provider-capability-discovery-cli-review-audit
+- What was implemented
+  - Re-read the PRD and consolidated codebase patterns; all three provider discovery stories remain marked `passes:true`.
+  - Audited PR #1843 after the existing blocking conversation item. The current head contains the requested catalog-to-execution-policy reconciliation: exact Codex model IDs, explicit AGY empty effort arrays with model-ID selection guidance, and an observable consistency regression; no inline review threads or formal reviews remain.
+- Files changed
+  - `progress.txt`
+  - `prd.json` was verified unchanged because all story pass states and acceptance notes are current.
+- Verification
+  - Local `HEAD` matches PR #1843 head `843750d423b4cc4ae1ff7f5346a15f1b313d7b8b`; the PR is open and mergeable.
+  - `go test ./tests/functional/providers/discovery/... -run '^TestProvidersListThroughRootBuildProcess$' -count=1` — passed.
+  - `git diff --check` — passed.
+  - The fresh PR CI run is still in progress; terminal readiness will be checked after it completes.
+- **Learnings for future iterations:**
+  - A historical top-level blocker can remain in the merged PR timeline after the requested fix is present; verify the current head against the feedback and inspect thread resolution separately before treating it as unresolved work.
+  - When the PR head is hosted in a different repository than the local default remote, resolve and inspect it with the explicit owner/repository and compare its SHA to local `HEAD`.
+---
