@@ -74,8 +74,8 @@
         "Tests pass"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Registered the authored you.providers and you.providers.list manifest through the generated CLI family artifacts and canonical root command tree, with the Providers-owned adapter injected through pkg/wire. Added help/usage, command identity/input, CLI baselines, published CLI contract, reference docs, and root/help tests. Added the required root.BuildProcess/Process.Execute functional regression for human and JSON output, deterministic provider ordering, required Codex/Antigravity facts, standard unsupported-argument failure, and zero ProviderCommandRunner calls. make test, make wire-smoke, make contracts-check, make cli-manifest-check, make docs-reference-smoke, make test-root-process-acceptance, make typecheck, make vet, make backend-size, make pkg-maint, make pkg-file-count, make pkg-structure, and the standalone discovery test pass. The umbrella make lint remains blocked by the repository's existing pkg-boundary migration inventory (176 violations), and make test-contract still references the absent pkg/services/factory_definitions/contracts/contracttests directory."
     }
   ]
 }
