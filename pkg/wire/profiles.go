@@ -337,11 +337,13 @@ func provideModelInvocationOperation(
 func provideSystemInitializationService(
 	persistence factorydefinitions.Persistence,
 	packagedInstallationFileSystem factorydefinitions.PackagedInstallationFileSystem,
+	packagedInstallationDirectoryCreator factorydefinitions.PackagedInstallationDirectoryCreator,
 	packagedCatalog factorydefinitions.PackagedFactoryCatalogOperations,
 	loadOperatorConfig operatorsettings.ConfigLoader,
 	ensureOperatorBackendScope operatorsettings.BackendScopeEnsurer,
 	inspectPath systeminitializationwire.InspectPath,
 	migrationFiles systeminitializationwire.LegacyFactoryMigrationFileSystem,
+	logger logging.Logger,
 ) (systeminitialization.Service, error) {
 	return systeminitializationwire.NewService(
 		systeminitializationwire.OperatorSettingsFunctions{
@@ -349,7 +351,12 @@ func provideSystemInitializationService(
 			Ensure: ensureOperatorBackendScope,
 		},
 		packagedCatalog,
-		factorydefinitionswire.NewPackagedFactoryInstaller(persistence, packagedInstallationFileSystem),
+		factorydefinitionswire.NewPackagedFactoryInstaller(
+			persistence,
+			packagedInstallationFileSystem,
+			packagedInstallationDirectoryCreator,
+			logger,
+		),
 		inspectPath,
 		migrationFiles,
 	)
@@ -381,8 +388,10 @@ func providePackagedFactoryCatalog(
 func providePackagedFactoryInstallation(
 	persistence factorydefinitions.Persistence,
 	fileSystem factorydefinitions.PackagedInstallationFileSystem,
+	directoryCreator factorydefinitions.PackagedInstallationDirectoryCreator,
+	logger logging.Logger,
 ) factorydefinitions.PackagedFactoryInstallationOperations {
-	installer := factorydefinitionswire.NewPackagedFactoryInstallationService(persistence, fileSystem)
+	installer := factorydefinitionswire.NewPackagedFactoryInstallationService(persistence, fileSystem, directoryCreator, logger)
 	return factorydefinitions.PackagedFactoryInstallationOperations{
 		Install: installer.InstallPackagedFactory,
 	}

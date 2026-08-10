@@ -1,4 +1,17 @@
 ## Codebase Patterns
+- For final PR handoff, compare the PR body byte-for-byte with `prd.json` and use the thread-aware GraphQL review audit because flat PR comments do not expose inline-thread resolution state.
+- OS-boundary functional tests may poll an isolated durable filesystem checkpoint only when the child exposes no parent-process event or injected edge; document that reason at each polling helper and keep the bound as a failure guard.
+- Git Worktree preparation treats a retained Git `*.lock` as indeterminate ownership: retry within a named bound, preserve the resource, and return its exact path with verify/remove/retry guidance.
+- Git's `.git/config.lock` has no trustworthy owner or PID evidence; after a bounded retry, report the exact lock with `owner_liveness=indeterminate` and require verification before removing only that file—never auto-delete it.
+- Named Factory persistence stages under the catalog root before an atomic directory move; a matching pre-existing `.<factory>.staging-*` must be preserved and surfaced as indeterminate contention with exact verify/remove/retry guidance, and pre-run Cobra failures need an explicit stderr write because the command tree silences them.
+- Cross-process startup observers must treat a readable-path failure such as a transient Windows sharing violation as retryable within the existing bounded observation window, because file existence can precede release of the writer handle.
+- Hard-kill startup probes should observe a durable checkpoint before listener readiness, then use explicit stdout/stderr/process-state guards; when the child exposes no acquisition event, suspend it before inspecting the exact resource and resume only on a miss so the observed lease cannot be released before the forced kill; `backendScopeID` is persisted identity, not evidence of a cross-process ownership lock.
+- Packaged Factory create/replace ownership uses a deterministic `.<factory>.staging-owner` directory with atomically published PID metadata; existing valid targets skip without taking that write lease, while live or ambiguous owners are preserved and reported with bounded contention diagnostics.
+- Cross-process ownership diagnostics should carry the persisted backend-scope ID through the owning service request and emit safe structured fields for resource, outcome, owner liveness, and unverified PID evidence.
+- Exclusive directory reservation is a synchronization capability: inject it as a narrowly owned function port and keep generic filesystem adapters limited to inspection and ordinary materialization effects.
+- Treat an absent PID as indeterminate unless the owner probe has stronger proof of orphanhood; compare the owner record again before any explicitly permitted orphan reclaim.
+- Atomic orphan reclaim must rename the exact revalidated lease to a distinct still-visible recovery path before publishing the new owner; never remove and reuse the same path across a delayed contender.
+- Cross-process lease probes must suspend before filesystem inspection and match the exact ownership-resource suffix; observe-then-suspend leaves a release race even when the path is re-stat'ed.
 - For mechanical test splits, capture the exact go test inventory, repeatable coverage command/output, and one-to-one behavior/helper placement map in a review artifact before moving tests.
 - Keep comments and exemption directives attached to the declaration they govern when splitting Go test files; otherwise a boundary can duplicate or orphan maintainability policy.
 - Replacing a file-level size exemption with focused test files may require per-function directives; update both the source directive and the sorted exemption-budget entry together.
@@ -1768,4 +1781,295 @@
   - Final inventory comparison remains 269 baseline entries versus 269 current entries with an empty multiset difference.
 - **Learnings for future iterations:**
   - Synchronizing a task branch with a newer main can conflict only in shared `prd.json` and `progress.txt`; keep the active PRD authoritative and union append-only progress sections so unrelated main history is not lost.
+---
+
+## 2026-08-09 13:16 - wo-d1-packaged-factories-docs-001 verification follow-up
+- What was implemented
+  - Installed the repository-pinned UI dependencies that were missing from the checkout so the broad verification tier could run.
+- Files changed
+  - No additional tracked files.
+- Verification
+  - Initial `make verify-fast` stopped at the environment dependency boundary (`@types/bun` missing and the globally selected TypeScript reported `TS5101`).
+  - After `bun install --frozen-lockfile` in `ui/`, `make verify-fast` passed: dashboard typecheck, MCP contract boundary, 355 UI files / 2,970 tests, and the short Go suite.
+- **Learnings for future iterations:**
+- This checkout may have `ui/node_modules` without all lockfile dependencies; run the pinned Bun install before treating a typecheck failure as a source regression.
+---
+
+## 2026-08-09 13:36 - wo-d1-packaged-factories-docs-002
+- What was implemented
+  - Added full bounded/iterative operator entries for `@you/goal`, `@you/loop`, `@you/fusion`, `@you/classify`, and `@you/review` to `docs/reference/packaged-factories.md`.
+  - Documented each current live invocation signature, all worker roles, role-specific provider/model overrides, operator-default fallback, prerequisites, workspace/session/recording side effects, stopping/routing/retry behavior, and final versus intermediate output shape.
+  - Added `docs/examples/packaged-classify-mock-workers.json` and indexed it from `docs/examples/README.md` so the classify example can deterministically prove a valid `small` route without a live provider call.
+  - Executed every worked command exactly as shown against a freshly built current-source `bin/you.exe` with isolated `HOME`/`USERPROFILE` state. `goal`, `loop`, `fusion`, and `review` returned `mock worker accepted`; `classify` routed through `small` and returned `mock worker accepted`.
+- Files changed
+  - `docs/reference/packaged-factories.md`
+  - `docs/examples/README.md`
+  - `docs/examples/packaged-classify-mock-workers.json`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `make docs-reference-smoke` — passed.
+  - `make verify-fast` — passed: dashboard typecheck, MCP contract boundary, 355 UI files / 2,970 tests, 191 Bun unit checks, and the short Go suite.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - The live packaged catalog is lazily materialized and can be stale in an operator profile; use isolated home variables when collecting current help evidence.
+  - `--with-mock-workers` is enough for most packaged examples, but classifier workflows need a protocol-valid scripted provider response for the exact route label before the selected lane can run.
+  - Keep deterministic documentation fixtures under `docs/examples/` and explain their role so smoke output is not mistaken for a live model guarantee.
+---
+
+## 2026-08-09 14:04 - wo-d1-packaged-factories-docs-003
+- What was implemented
+  - Added distinct operator-ready entries for `@you/factory-builder`, `@you/plan-execute`, `@you/plan-parallel`, and `@you/full-flow` in `docs/reference/packaged-factories.md`.
+  - Documented each live help signature, all worker roles and provider/model overrides, relative workflow choice, workspace and Git side effects, concurrency and retry bounds, validation/installation, local merge/replanning, and final versus intermediate output behavior.
+  - Added exact current-binary smoke evidence: the builder returned `mock worker accepted`; plan-execute returned `mock worker accepted` and `<COMPLETE>`; plan-parallel returned `mock worker accepted`; full-flow's controlled invalid-bound check returned the documented `maxCycles` choice-validation error.
+  - Marked Story 003 as passing in `prd.json` and recorded the generic-mock limitation so protocol-valid planner responses are not confused with end-to-end orchestration evidence.
+- Files changed
+  - `docs/reference/packaged-factories.md`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `make docs-reference-smoke` — passed.
+  - `go test ./tests/functional/factory/packaged/factory_builder ./tests/functional/factory/packaged/plan_execute ./tests/functional/factory/packaged/plan_parallel ./tests/functional/factory/packaged/full_flow -count=1 -timeout 300s` — passed.
+  - `make verify-fast` — passed: dashboard typecheck, MCP contract boundary, 355 UI files / 2,970 tests, 191 Bun unit checks, and the short Go suite.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - The planning entries are not interchangeable: builder installs a new Factory, plan-execute stays sequential in the current workspace, plan-parallel shares one repository across a bounded DAG, and full-flow owns worktrees, local merges, and replanning.
+  - Generic mock workers accept a planner dispatch without producing its required `FACTORY_REQUEST_BATCH`; use protocol-valid fixtures or provider-backed functional tests when verifying generated Work, concurrency, or cycle control.
+  - Keep full-flow CLI smoke examples bounded and terminating; use controlled argument validation for the public command example and the isolated functional test for actual worktree/merge behavior.
+---
+
+## 2026-08-09 15:51 - wo-d1-packaged-factories-docs-004
+- What was implemented
+  - Added distinct operator-ready entries for `@you/deep-research`, `@you/spawn`, `@you/quorum`, and `@you/tournament` in `docs/reference/packaged-factories.md` using the shared seven-part entry contract.
+  - Documented isolated current-binary invocation signatures, all worker roles and provider/model override flags, operator-default fallback, JavaScript policy bounds, quorum Graph Work and merge behavior, task-count/round bounds, side effects, and primary versus intermediate result shapes.
+  - Added exact worked command evidence: deep-research completed in structured JSON with two specialist statuses, quorum returned `mock worker accepted`, spawn rejected an…26759 tokens truncated…erCompatibilityPort|RejectsGroupedWorkersRequestScopedProviderPortWithoutPanic|RejectsExpandedWorkersRequestScopedProviderPort)$' -count=10` — passed.
+  - `go test ./cmd/pkgboundarycheck -count=1` — passed.
+  - `go vet ./cmd/pkgboundarycheck` — passed.
+  - `git diff --check` and PRD JSON validation — passed.
+- **Learnings for future iterations:**
+  - The latest review still blocks the PR on acceptance evidence for stories 001 and 002; inventory/package-target checker tests are repository-enforcement evidence, not customer-facing behavioral coverage under the review gate. Address those stories in separate iterations by moving them to explicit project-enabling criteria or adding appropriate observable contract behavior.
+---
+
+## 2026-08-10 10:26 -07:00 - sac-s0-1-ownership-inventories-003 PR handoff follow-up
+- What was implemented
+  - Re-ran the package-target manifest gate sequentially after an initial parallel Go-process file-lock message; the standalone gate completed cleanly with 545 inventory rows and 545 production package rows.
+  - Updated PR #1848 from the current `prd.json`, verified the description matches the file, and posted resolution evidence for the grouped-AST blocker. The thread-aware audit found no inline review threads; stories 001 and 002 remain the explicit acceptance-shape follow-up.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `make package-target-manifest-check` — passed (545 inventory rows / 545 production package rows).
+  - `make ownership-inventory-check` — passed.
+  - PR description comparison against `prd.json` — passed.
+  - Worktree clean and `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - On Windows, avoid running independent `go run` Make gates in parallel when they may contend for the generated executable; a sequential rerun distinguishes a transient file-lock message from a gate failure.
+---
+
+## 2026-08-10 10:28 -07:00 - sac-s0-1-ownership-inventories-001 review follow-up
+- What was implemented
+  - Reclassified `sac-s0-1-ownership-inventories-001` from a behavioral user story to an explicit `project-enabling` criterion in `prd.json`, because the package-target manifest is repository-enforcement and maintainer tooling rather than customer runtime, API, CLI, UI, or emitted-event behavior.
+  - Preserved the completed package-target acceptance evidence and added an explicit no-runtime/API/CLI/UI/event-behavior criterion so the PRD matches the review gate's acceptance model.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `make package-target-manifest-check` — passed (545 inventory rows / 545 production package rows).
+  - `make ownership-inventory-check` — passed.
+  - `go test ./cmd/packagetargetmanifestcheck -run 'Test(PackageTarget|Manifest|Coverage|Owner|Edges)' -count=1` — passed.
+  - PRD JSON validation reports story 001 exactly once under `enablingCriteria`, no failed items, and one remaining behavioral user story (002).
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - Repository inventory and architecture-guard checks are valid enforcement evidence, but they do not satisfy a customer-behavior acceptance gate; model genuinely non-behavioral work as explicit project-enabling criteria.
+  - The broad `go test ./cmd/packagetargetmanifestcheck` package also exercises current-main Workers/Recordings root-file inventories and currently reports unrelated baseline drift (`kind_phase_validation.go` and `lifecycle_capability.go`); the public package-target Make gate and focused manifest tests remain green.
+  - Story 002 still needs the same acceptance-shape follow-up in a separate iteration; do not combine it with this story's bookkeeping change.
+---
+
+## 2026-08-10 10:34 -07:00 - sac-s0-1-ownership-inventories-002 review follow-up
+- What was implemented
+  - Reclassified `sac-s0-1-ownership-inventories-002` from a behavioral user story to an explicit `project-enabling` criterion in `prd.json`, because the ownership inventory and reciprocal-edge validation are repository-enforcement and maintainer tooling rather than customer runtime, API, CLI, UI, or emitted-event behavior.
+  - Preserved the completed package, cross-owner classification, present-tense rationale, and unresolved-bidirectional-edge acceptance evidence, and added an explicit no-runtime/API/CLI/UI/event-behavior criterion.
+  - Corrected the existing trailing comma so `prd.json` is valid standard JSON.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `make ownership-inventory-check` — passed.
+  - `make package-target-manifest-check` — passed (545 inventory rows / 545 package rows).
+  - `go test ./cmd/ownershipinventorycheck -count=1` — passed.
+  - PRD validation reports valid JSON, four unique passing enabling criteria, and no behavioral user stories.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - Acceptance criteria for repository-enforcement work should explicitly identify the project-level nature of the evidence and state the intentionally unchanged customer-facing behavior; keep the PRD valid JSON so automated consumers do not depend on permissive parsers.
+---
+
+## 2026-08-10 11:23 -07:00 - pf-stale-scope-diagnostic final PR audit
+- What was implemented
+  - Corrected the stale story 001 note so it records story 002's completed live-owner and acquisition-race coverage.
+  - Audited the existing PR #1853 after the latest review follow-up; no additional implementation work or unresolved review thread remains.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - PRD JSON validation reports both `pf-stale-scope-diagnostic-001` and `pf-stale-scope-diagnostic-002` as `passes:true`.
+  - Thread-aware GitHub audit reports 3 conversation comments, 0 reviews, and 0 inline review threads, including 0 unresolved threads.
+  - Local `HEAD` matches the PR head; the PR body matches `prd.json` exactly; PR #1853 is open, mergeable, and clean.
+  - Latest required CI checks are terminal and successful, including Backend Functional Coverage and Verification Policy.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - A completed PR handoff still needs a thread-aware review audit and an exact PRD/body/head comparison; green checks alone do not prove that review state and task metadata are synchronized.
+---
+
+## 2026-08-10 12:05 -07:00 - pf-stale-scope-diagnostic current-main synchronization
+- What was implemented
+  - Merged the current `origin/main` head `947152348` into the task branch after the open PR's recorded base had advanced, preserving the task-scoped `prd.json` and append-only progress history.
+  - Confirmed both PRD stories remain complete; no additional story implementation was needed in this iteration.
+- Files changed
+  - Current-main merge (unrelated artifact-registry changes)
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/factory_definitions/internal/services/distribution/packagedinstallation -count=1 -timeout 180s` — passed.
+  - `go test ./tests/functional/transport/cli/process -run '^TestCLISuccessorAfterHardKillReportsPreRuntimeStagingContention$' -count=1 -v -timeout 300s` — passed.
+  - `make test` — passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` — passed.
+  - `make pkg-boundary` reports 175 findings on both the merged head and isolated current `origin/main`; no new boundary finding was introduced by this task.
+  - `prd.json` parses with both stories `passes:true`; the thread-aware PR audit reports 0 reviews and 0 inline review threads.
+- **Learnings for future iterations:**
+  - Run repository-wide scanners from the explicitly intended checkout when comparing worktree baselines; a nested temporary worktree can otherwise be scanned as repository content.
+---
+
+## 2026-08-10 12:36 -07:00 - pf-stale-scope-diagnostic final handoff audit
+- What was implemented
+  - Revalidated the completed PRD against the existing PR #1853 after the latest current-main synchronization; no story implementation or PRD change was needed.
+  - Confirmed the prior blocking feedback is covered by the follow-up commits: structured packaged-installation diagnostics, injected backend-scope identity, checker-compliant exclusive reservation, removal of `--with-mock-workers` from the OS-boundary regression, justified filesystem observations, and restoration of unrelated generated churn.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Both `pf-stale-scope-diagnostic-001` and `pf-stale-scope-diagnostic-002` remain `passes:true`.
+  - PRD JSON and PR body match byte-for-byte; local `HEAD` matches PR #1853 head `49cb1daf25295c02c1856e3c984602b6fba40e8d`.
+  - Thread-aware GraphQL audit: 3 conversation comments, 0 reviews, and 0 inline review threads.
+  - All 18 PR checks are terminal and successful; PR #1853 is open, mergeable, and clean.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - A final PR handoff should recheck the exact PRD/body/head relationship after current-main synchronization and after the last required CI run; an earlier “pending” follow-up comment is not sufficient evidence by itself.
+---
+
+## 2026-08-10 13:31 -07:00 - pf-stale-scope-diagnostic-001 review follow-up
+- What was implemented
+  - Replaced the hard-kill functional observer's observe-then-suspend sequence with a deterministic suspend-before-observe acquisition barrier. The real predecessor is paused before the exact packaged-factory `.staging-owner` resource is inspected, resumes only when no owner resource is present, and remains paused once the lease is found until the parent hard-kills it.
+  - Added portable Unix `SIGSTOP`/`SIGCONT` behavior alongside the existing Windows `NtSuspendProcess` path, including bounded resume/error handling for misses.
+  - Narrowed the functional evidence to the actual ownership lease suffix instead of matching transient persistence stages.
+- Files changed
+  - `tests/functional/transport/cli/process/hard_kill_successor_test.go`
+  - `tests/functional/transport/cli/process/hard_kill_successor_process_windows_test.go`
+  - `tests/functional/transport/cli/process/hard_kill_successor_process_nonwindows_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/transport/cli/process -run '^TestCLISuccessorAfterHardKillReportsPreRuntimeStagingContention$' -count=1 -v -timeout 300s` — passed.
+  - Same focused real-process test with `-count=3` — passed 3/3; each run retained `.staging-owner` and returned the bounded successor contention diagnostic.
+  - `gofmt` and `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - Re-stat'ing after filesystem enumeration does not close an observe-then-suspend release race; suspend the child before inspecting the resource, and resume only when the exact ownership lease is absent.
+  - Story 002 still has the separate atomic orphan-reclaimer race and deterministic concurrent reclaimer test requested by the current PR feedback; leave that work for the next story iteration.
+---
+
+## 2026-08-10 13:35 -07:00 - pf-stale-scope-diagnostic-001 acquisition evidence follow-up
+- What was implemented
+  - Required the deterministic observer to see the atomically published `.owner.json` before accepting the suspended `.staging-owner` lease, avoiding a valid but ownerless directory-creation checkpoint.
+  - Classified Windows sharing/lock violations caused by the suspended child holding a staging handle as retryable observations; the observer resumes and retries within the existing bounded guard while preserving immediate failure for unrelated filesystem errors.
+- Files changed
+  - `tests/functional/transport/cli/process/hard_kill_successor_test.go`
+  - `tests/functional/transport/cli/process/hard_kill_successor_process_windows_test.go`
+  - `tests/functional/transport/cli/process/hard_kill_successor_process_nonwindows_test.go`
+  - `progress.txt`
+- Verification
+  - Focused real-process hard-kill successor test with `-count=3` — passed 3/3 after the owner-metadata and transient-sharing retry adjustments; each run preserved `.staging-owner/.owner.json` and produced the bounded successor diagnostic with predecessor PID evidence.
+  - `gofmt` — passed.
+- **Learnings for future iterations:**
+  - A suspended Windows child can make an otherwise readable staging subtree report `ERROR_SHARING_VIOLATION`; retry only that bounded observation class after resuming the child, and require published ownership metadata before killing.
+---
+
+## 2026-08-10 13:47 -07:00 - pf-stale-scope-diagnostic current-main synchronization follow-up
+- What was implemented
+  - Fetched the live `origin/main` head `6e01bee68` after the PR base advanced through the CLI-exit-codes merge, then merged it into the task branch.
+  - Preserved the task-scoped `prd.json` as the PR description source and combined the unrelated CLI-exit-codes append-only progress history with this task's progress, including all current reusable patterns.
+  - Committed the conflict-free reconciliation as `8716903af`; no task implementation files were discarded.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+  - Current-main CLI diagnostic and Worker Sessions source/test files included by the synchronization merge.
+- Verification
+  - `prd.json` parses as `pf-stale-scope-diagnostic` with both stories `passes:true`.
+  - `git ls-files -u` reports no unresolved merge stages.
+  - `git diff --cached --check` and merged-tree `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - When merging a long append-only progress file, retain both sides' content, validate conflict-marker absence and line-count/headings, and keep the active task PRD authoritative before regenerating the PR body.
+---
+
+## 2026-08-10 14:08 -07:00 - pf-stale-scope-diagnostic merged-head verification follow-up
+- What was implemented
+  - Pushed the current-main synchronization merge and the deterministic Story 001 hard-kill test changes to `origin/pf-stale-scope-diagnostic` at `968afcc82`.
+  - Attempted the owner-package regression on the merged tree. The first run emitted an `ok` package result but the surrounding command returned nonzero; a repeat was inconclusive because the outer command limit expired during concurrent Go builds. No assertion failure was reported.
+- Files changed
+  - `progress.txt`
+- Verification
+  - The pre-synchronization focused hard-kill scenario passed three consecutive runs, and the pre-synchronization owner package, `make test`, backend structure gates, `go vet`, and whitespace checks passed.
+  - The merged tree is pushed for GitHub CI validation; the local merged-head owner-package rerun remains inconclusive because of workspace build contention.
+- **Learnings for future iterations:**
+  - Do not treat an `ok` line from a command that returns nonzero as a clean verification; retain the distinction between test output and process-level command status when concurrent build work is present.
+---
+
+## 2026-08-10 14:11 -07:00 - pf-stale-scope-diagnostic PR feedback follow-up
+- What was implemented
+  - Updated PR #1853 to head `dd27e1d0f` after pushing the current-main merge and the append-only merged-head verification record.
+  - Regenerated the PR description from the active `prd.json` and posted review follow-up comment `5246087033` with the Story 001 evidence and the remaining Story 002 atomic-reclamation work.
+- Files changed
+  - `progress.txt`
+- Verification
+  - The PR base is `6e01bee68`, matching the synchronized local `origin/main`; the PR is mergeable but blocked while checks rerun.
+  - The latest blocking conversation finding about the Story 001 observe-then-suspend race is explicitly addressed. The Story 002 compare-and-reclaim race remains unresolved by design for the next one-story iteration.
+- **Learnings for future iterations:**
+- A review follow-up should state exactly which finding the current head resolves and explicitly preserve any remaining blocking story work; green historical CI cannot be presented as merged-head evidence while new checks are pending.
+---
+
+## 2026-08-10 14:29 -07:00 - pf-stale-scope-diagnostic-002
+- What was implemented
+  - Replaced path-based orphan `RemoveAll` with an atomic exact-path rename claim: the winning reclaimer moves the revalidated deterministic `.staging-owner` lease to a distinct staging-prefixed recovery path, publishes the current owner metadata there, and passes that lease into the installation operation.
+  - Kept the original deterministic path out of reuse during recovery, so a delayed reclaimer receives a bounded racing/indeterminate contention result and cannot remove a replacement owner resource.
+  - Added a deterministic concurrent orphan-reclaimer test that pauses both contenders after revalidation, lets one reclaim and acquire the recovery lease, then resumes the delayed contender and verifies the winner metadata remains intact.
+  - Extended recovery diagnostics coverage to assert both `reclaimed-orphan` and recovery `acquired` structured outcomes.
+- Files changed
+  - `pkg/services/factory_definitions/internal/services/distribution/packagedinstallation/service.go`
+  - `pkg/services/factory_definitions/internal/services/distribution/packagedinstallation/service_test.go`
+  - `pkg/services/factory_definitions/internal/services/distribution/packagedinstallation/diagnostics_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Focused packaged-installation tests for recovery, acquisition race, structured diagnostics, and concurrent orphan reclaim — passed.
+  - Full `pkg/services/factory_definitions/internal/services/distribution/...` test sweep — passed.
+  - `go test -race` concurrent orphan-reclaimer test, `-count=10` — passed 10/10.
+  - Real-process hard-kill successor regression, `-count=3` — passed 3/3.
+  - `gofmt` and `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - A revalidated metadata read followed by path removal is not a safe compare-and-reclaim: the resource must be atomically moved to a distinct visible lease path before the old path can be reused.
+- Keep a recovered staging lease visible and owned throughout the handoff; this closes the gap where a third installer could otherwise acquire the deterministic path between orphan removal and successor ownership publication.
+---
+
+## 2026-08-10 14:43 -07:00 - pf-stale-scope-diagnostic-002 verification follow-up
+- What was implemented
+  - Moved orphan-claim/recovery mechanics into the focused `ownership.go` owner module and moved the concurrent race fixture into `diagnostics_test.go` so the repository’s backend-size and maintainability gates remain satisfied without exemptions.
+  - Extracted existing-target handling from `InstallPackagedFactory` and the recovered-acquisition assertion from the diagnostic test while preserving the same observable behavior.
+- Files changed
+  - `pkg/services/factory_definitions/internal/services/distribution/packagedinstallation/ownership.go`
+  - `pkg/services/factory_definitions/internal/services/distribution/packagedinstallation/service.go`
+  - `pkg/services/factory_definitions/internal/services/distribution/packagedinstallation/service_test.go`
+  - `pkg/services/factory_definitions/internal/services/distribution/packagedinstallation/diagnostics_test.go`
+- Verification
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` — passed.
+  - `make test` — passed.
+  - `make typecheck` — passed after one frozen `bun install --frozen-lockfile` restored the declared `@types/bun` dependency in the local workspace.
+  - Full distribution test sweep and 10-run race-detector orphan-reclaimer test — passed.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - When a new behavioral test crosses a ratcheted size or complexity gate, move only the focused fixture/assertion into an existing owner test module and extract helpers; do not weaken the gate or add an exemption.
 ---

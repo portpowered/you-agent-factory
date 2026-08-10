@@ -13,6 +13,7 @@ var ErrInvalidNamedFactoryName = catalognamedpaths.ErrInvalidName
 var ErrFactoryLayoutNotFound = errors.New("factory layout not found")
 var ErrNamedFactoryNotFound = catalognamedpaths.ErrNotFound
 var ErrNamedFactoryIsCurrent = errors.New("cannot delete current factory")
+var ErrFactoryInstallationContention = errors.New("packaged factory installation contention")
 
 type BlockingFactoryLoadError struct {
 	Targets []ValidationTarget

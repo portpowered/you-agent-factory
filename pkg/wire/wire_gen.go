@@ -240,7 +240,8 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	clock := provideFactoryDefinitionClock(edges2)
 	versionFileSystem := provideFactoryDefinitionVersionFileSystem(edges2)
 	packagedInstallationFileSystem := provideFactoryDefinitionPackagedInstallationFileSystem(edges2)
-	packagedFactoryInstallationOperations := providePackagedFactoryInstallation(v22, packagedInstallationFileSystem)
+	packagedInstallationDirectoryCreator := provideFactoryDefinitionPackagedInstallationDirectoryCreator(edges2)
+	packagedFactoryInstallationOperations := providePackagedFactoryInstallation(v22, packagedInstallationFileSystem, packagedInstallationDirectoryCreator, loggingLogger)
 	v23 := provideFactoryDefinitionsFactory(v22, v16, v11, v12, namedPathResolver, namedFactoryCatalogFileSystem, clock, versionFileSystem, effectiveFactoryCatalogOperation, packagedFactoryCatalogOperations, packagedFactoryInstallationOperations, v15, v17, portablefilesFileSystem, directoryReplacementStore)
 	initialFactorySnapshotFactory := provideInitialFactorySnapshotFactory(v11, v12)
 	v24 := provideLoadedFactoryLoader(v16)
@@ -634,7 +635,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	}
 	v87 := provideSystemInitializationInspectPath(edges2)
 	v88 := provideSystemInitializationLegacyFactoryMigrationFileSystem(edges2)
-	systeminitializationService, err := provideSystemInitializationService(v22, packagedInstallationFileSystem, packagedFactoryCatalogOperations, configLoader, backendScopeEnsurer, v87, v88)
+	systeminitializationService, err := provideSystemInitializationService(v22, packagedInstallationFileSystem, packagedInstallationDirectoryCreator, packagedFactoryCatalogOperations, configLoader, backendScopeEnsurer, v87, v88, loggingLogger)
 	if err != nil {
 		return nil, err
 	}
@@ -777,6 +778,7 @@ var servicesSet = wire4.NewSet(
 	provideFactoryDefinitionNamedPathResolver,
 	provideFactoryDefinitionNamedFactoryCatalogFileSystem,
 	provideFactoryDefinitionPackagedInstallationFileSystem,
+	provideFactoryDefinitionPackagedInstallationDirectoryCreator,
 	providePackagedFactoryInstallation,
 	provideFactoryDefinitionAuthoredReaderFileSystem,
 	provideFactoryDefinitionAuthoredWriterFileSystem,
