@@ -13,6 +13,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
 
 // TestProvidersListThroughRootBuildProcess proves the customer-facing command
@@ -63,6 +64,7 @@ func TestProvidersListThroughRootBuildProcess(t *testing.T) {
 	if calls := runner.calls.Load(); calls != 0 {
 		t.Fatalf("provider command calls = %d, want 0 for discovery and usage failure", calls)
 	}
+	functionalevidence.Covers(t, "cli/you.providers.list")
 }
 
 type countingCommandRunner struct {
