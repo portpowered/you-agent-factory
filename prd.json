@@ -63,8 +63,8 @@
         "Tests pass"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added typed post-open stream failure coverage and process-boundary regressions. An early SSE close after a complete frame returns WORKER_SESSION_STREAM_CLOSED, preserves the frame on stdout, emits exactly one coded stderr diagnostic, and exits the built you process non-zero. Malformed frames, source failures, transport failures, and output-write failures remain typed; output-write failures now use the safe WORKER_SESSION_STREAM_FAILED code. The full Worker Sessions CLI functional package, focused transport tests, go vet, pkg-maint, pkg-file-count, and git diff --check pass. Typecheck remains blocked by the pre-existing checkout dependency baseline: @types/bun is unavailable after the pinned UI install."
     },
     {
       "id": "pf-cli-exit-codes-004",

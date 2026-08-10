@@ -178,7 +178,7 @@ func consumeStreamPayload(config StreamConfig, jsonOutput, started bool, payload
 	}
 	started = true
 	if err := writeStreamFrame(config.Output, jsonOutput, frame); err != nil {
-		return started, false, err
+		return started, false, newCLIError("WORKER_SESSION_STREAM_FAILED", "failed to write Worker Session event stream", err)
 	}
 	if frame.Delivery == "REPLAY_SUMMARY" {
 		if frame.ReplaySummary == nil {

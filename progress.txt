@@ -29,6 +29,7 @@
 - The production CLI process boundary should silence Cobra's implicit error text, preserve command-owned coded diagnostics with a writer marker, and wrap only unclassified failures in a constant safe fallback; direct Cobra callers can retain legacy presentation through a context switch.
 - Keep cancellation compatibility explicit at the boundary: a typed returned cancellation can retain the existing `Error: context canceled` diagnostic while still preserving `errors.Is(context.Canceled)` for declared exit-status handling.
 - JSON error payloads from command-owned services must route to the process diagnostic writer when the central CLI policy is active; direct service tests can continue to use their caller-owned output writer outside that policy.
+- Post-open Worker Session stream failures must remain typed at the stream adapter, including output-write errors, so the process boundary can preserve a stable code and keep safe diagnostics off stdout.
 
 ## 2026-08-09 13:12 - wo-d1-packaged-factories-docs-001
 - What was implemented
@@ -813,4 +814,30 @@
   - A server bind error can be correctly typed and non-zero while still leaking a success-looking recording-path line; terminal success output must be gated on a successful hosted run.
   - Port 65535 provides a deterministic built-process bind failure because the default auto-port scan has no higher candidate; skip only when the test environment cannot reserve that terminal port.
   - Process.Execute proves returned errors and streams, but an `exec.Command` test is still required to prove the final OS exit status.
+---
+
+## 2026-08-10 07:06 -07:00 - pf-cli-exit-codes-003
+- What was implemented
+  - Kept the existing EOF-after-open stream classification and added a typed `WORKER_SESSION_STREAM_FAILED` wrapper for output-write failures, preserving the underlying cause without exposing it in the safe diagnostic message.
+  - Added root.BuildProcess/Process.Execute coverage for an early-closing Worker Sessions SSE response. The complete `RECORD` frame remains unchanged on stdout, no terminal or replay-success frame is synthesized, and stderr contains exactly one `WORKER_SESSION_STREAM_CLOSED` diagnostic.
+  - Added a focused built-executable regression proving the same stream abort exits non-zero at the OS process boundary.
+  - Updated the existing Worker Sessions required-input functional assertion to decode the central-policy diagnostic from stderr, matching the already-established story-001 output contract.
+- Files changed
+  - `pkg/services/worker_sessions/transports/cli/stream.go`
+  - `pkg/services/worker_sessions/transports/cli/stream_test.go`
+  - `tests/functional/provider_sessions/cli/stream_abort_test.go`
+  - `tests/functional/provider_sessions/cli/worker_sessions_cli_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/worker_sessions/transports/cli -run 'TestStream(ReturnsClosedBeforeTerminalAsJSONError|ReturnsMalformedFrameAsTypedFailure|ReturnsOutputWriteFailureAsTypedStreamFailure|JSONUsesSessionScopedSSEAndStopsAtTerminal|ReplayOnlyWritesTerminalReplayBeforeCompleteSummary|PropagatesContextCancellation|MapsPostOpenContextCancellationToInterruptedAndClosesBody)' -count=1 -v` — passed.
+  - `go test ./tests/functional/provider_sessions/cli -count=1 -timeout 300s` — passed.
+  - `go vet ./pkg/services/worker_sessions/transports/cli ./pkg/transports/cli/... ./pkg/root ./cmd/factory` — passed.
+  - `make pkg-maint`, `make pkg-file-count`, and `git diff --check` — passed.
+  - `make typecheck` — blocked by the pre-existing checkout dependency baseline: the pinned `bun install --frozen-lockfile` completed, but `@types/bun` remains unavailable; no UI files changed.
+  - The broader CLI package lane still reports the pre-existing `TestDocsTopicIndexBaseline_MatchesFixture` drift documented by earlier iterations; it is unrelated to this story.
+- **Learnings for future iterations:**
+  - A stream can emit valid partial frames before the transport closes, so the error must be returned after preserving those frames and the process boundary must own the single stderr diagnostic.
+  - `Process.Execute` proves typed propagation and stdout/stderr ownership; only a built `you` subprocess proves the final non-zero OS exit status.
+  - Keep stream output-write errors typed with a safe message while retaining the underlying cause through `Unwrap` for diagnostics and tests.
 ---
