@@ -484,3 +484,26 @@
 - **Learnings for future iterations:**
   - Acceptance criteria for repository-enforcement work should explicitly identify the project-level nature of the evidence and state the intentionally unchanged customer-facing behavior; keep the PRD valid JSON so automated consumers do not depend on permissive parsers.
 ---
+## 2026-08-10 11:39 -07:00 - wsr-001-opening-record functional coverage follow-up
+- What was implemented
+  - Resolved the current-main merge conflict while preserving this WSR PRD and the append-only progress history; the branch now includes the current `origin/main` head.
+  - Added an observable functional transport regression for the public Worker Session history route when its optional Worker Sessions owner is unavailable. The test asserts the structured `500 INTERNAL_ERROR` response and covers the API-owned defensive branch without changing the canonical success path.
+  - Kept the WSR-003 PRD evidence current with the additional unavailable-owner route coverage.
+- Files changed
+  - `tests/functional/transport/http/server/routing_safe_requests_test.go`
+  - `pkg/services/worker_sessions/transports/http/handler_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `make test-functional-coverage` — passed; overall coverage 55.5% and `pkg/transports/http` 68.5%, above the 66.35% package floor.
+  - `TestWSRFT001OpeningRecordPrecedesProviderOutput` and `TestWSRFT002LiveAndReplayCorrelationRemainStable` — passed.
+  - `TestWSRFT003ProviderNeutralLifecycleWorksWithoutProviderSession` — passed.
+  - `TestAPIWorkerSessionHistoryRouteReportsUnavailableWithoutOwnerHandler` — passed.
+  - Targeted coverage profile — all three previously uncovered `pkg/transports/http/server.go` unavailable-owner statements executed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet functional-boundary-check api-smoke` — passed.
+  - `make verify-fast` — passed dashboard typecheck, MCP contract checks, UI unit tests, and the short Go suite.
+  - `git diff --check` and PRD JSON validation — passed.
+- **Learnings for future iterations:**
+  - When a package coverage floor falls after adding a defensive transport branch, cover the public error response through the generated route and assert its observable status and error code; this preserves meaningful functional evidence instead of changing the threshold.
+  - A root-built success-path test can cover transport delegation while leaving an optional-owner failure branch uncovered, so inspect the package profile before choosing the narrowest additional test.
+---

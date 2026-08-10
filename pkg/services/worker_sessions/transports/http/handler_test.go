@@ -592,24 +592,65 @@ func TestStreamWorkerSessionEventsByWorkerSessionIDWritesProviderNeutralReplay(t
 		factoryapi.StreamWorkerSessionEventsByWorkerSessionIdParams{ReplayOnly: &replayOnly},
 	)
 
-	if recorder.Code != http.StatusOK || recorder.Header().Get("Content-Type") != "text/event-stream" {
-		t.Fatalf("response = status %d content-type %q, want SSE 200", recorder.Code, recorder.Header().Get("Content-Type"))
+	assertProviderNeutralReplayResponse(t, recorder)
+	assertProviderNeutralReplayFrames(t, decodeSSEFrames(t, recorder.Body.String()))
+	assertProviderNeutralReplayServiceCalls(t, service)
+}
+
+func assertProviderNeutralReplayResponse(t *testing.T, recorder *httptest.ResponseRecorder) {
+	t.Helper()
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("response status = %d, want SSE 200", recorder.Code)
 	}
-	frames := decodeSSEFrames(t, recorder.Body.String())
-	if len(frames) != 2 || frames[0].Delivery != "RECORD" || frames[1].Delivery != "REPLAY_SUMMARY" {
-		t.Fatalf("frames = %#v, want RECORD then REPLAY_SUMMARY", frames)
+	if recorder.Header().Get("Content-Type") != "text/event-stream" {
+		t.Fatalf("response content-type = %q, want text/event-stream", recorder.Header().Get("Content-Type"))
 	}
-	if frames[0].WorkerSessionID != "worker-no-reference" || frames[0].ProviderSession == nil {
-		t.Fatalf("provider-neutral frame identity = %#v, want Worker Session identity and empty provider envelope", frames[0])
+}
+
+func assertProviderNeutralReplayFrames(t *testing.T, frames []sseTestFrame) {
+	t.Helper()
+	if len(frames) != 2 {
+		t.Fatalf("frames = %#v, want one record and one replay summary", frames)
 	}
-	if frames[1].ReplaySummary == nil || !frames[1].ReplaySummary.Complete || frames[1].ReplaySummary.EventsEmitted != 1 {
+	if frames[0].Delivery != "RECORD" {
+		t.Fatalf("first frame delivery = %q, want RECORD", frames[0].Delivery)
+	}
+	if frames[1].Delivery != "REPLAY_SUMMARY" {
+		t.Fatalf("second frame delivery = %q, want REPLAY_SUMMARY", frames[1].Delivery)
+	}
+	if frames[0].WorkerSessionID != "worker-no-reference" {
+		t.Fatalf("provider-neutral frame identity = %#v, want Worker Session identity", frames[0])
+	}
+	if frames[0].ProviderSession == nil {
+		t.Fatalf("provider-neutral frame = %#v, want empty provider envelope", frames[0])
+	}
+	if frames[1].ReplaySummary == nil {
 		t.Fatalf("replay summary = %#v, want complete one-event summary", frames[1].ReplaySummary)
 	}
-	if !service.getByWorkerCalled || service.getWorkerSessionID != "worker-no-reference" {
-		t.Fatalf("Worker Session lookup = called=%t id=%q, want canonical identity", service.getByWorkerCalled, service.getWorkerSessionID)
+	if !frames[1].ReplaySummary.Complete {
+		t.Fatalf("replay summary = %#v, want complete one-event summary", frames[1].ReplaySummary)
 	}
-	if service.streamByWorkerRequest.WorkerSessionID != "worker-no-reference" || !service.streamByWorkerRequest.ReplayOnly || service.streamByWorkerRequest.Limit != workersessions.DefaultObservationStreamLimit {
-		t.Fatalf("Worker Session stream request = %#v, want bounded replay-only request", service.streamByWorkerRequest)
+	if frames[1].ReplaySummary.EventsEmitted != 1 {
+		t.Fatalf("replay summary = %#v, want one emitted event", frames[1].ReplaySummary)
+	}
+}
+
+func assertProviderNeutralReplayServiceCalls(t *testing.T, service *fakeObservationService) {
+	t.Helper()
+	if !service.getByWorkerCalled {
+		t.Fatal("Worker Session lookup was not called")
+	}
+	if service.getWorkerSessionID != "worker-no-reference" {
+		t.Fatalf("Worker Session lookup id = %q, want canonical identity", service.getWorkerSessionID)
+	}
+	if service.streamByWorkerRequest.WorkerSessionID != "worker-no-reference" {
+		t.Fatalf("Worker Session stream id = %q, want canonical identity", service.streamByWorkerRequest.WorkerSessionID)
+	}
+	if !service.streamByWorkerRequest.ReplayOnly {
+		t.Fatal("Worker Session stream request was not replay-only")
+	}
+	if service.streamByWorkerRequest.Limit != workersessions.DefaultObservationStreamLimit {
+		t.Fatalf("Worker Session stream limit = %d, want bounded replay limit", service.streamByWorkerRequest.Limit)
 	}
 	if !service.streamByWorkerSubscription.closed {
 		t.Fatal("Worker Session stream subscription was not closed")
