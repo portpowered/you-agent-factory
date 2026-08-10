@@ -115,10 +115,17 @@ func validateMisplacedGuards(inventory Inventory, report *Report) {
 	}
 
 	byID := map[string]MisplacedGuardEntry{}
+	required := map[string]struct{}{}
+	for _, id := range RequiredMisplacedGuardIDs() {
+		required[id] = struct{}{}
+	}
 	for _, entry := range inventory.MisplacedGuards {
 		byID[entry.ID] = entry
 		if msg := validateMisplacedGuardEntry(entry); msg != "" {
 			report.InvalidMisplacedGuards = append(report.InvalidMisplacedGuards, msg)
+		}
+		if _, expected := required[entry.ID]; !expected {
+			report.InvalidMisplacedGuards = append(report.InvalidMisplacedGuards, entry.ID+": no longer a committed misplaced guard; remove it after correcting ownership")
 		}
 	}
 	for _, id := range RequiredMisplacedGuardIDs() {
@@ -283,7 +290,7 @@ func validateNamedOwners(inventory Inventory, report *Report) {
 		if !slices.Contains(ProductOwners, confirmation.Owner) {
 			report.InvalidNamedOwnerMaps = append(
 				report.InvalidNamedOwnerMaps,
-				confirmation.Owner+": introduces alternate top-level owner outside the committed 13-owner tree",
+				confirmation.Owner+": introduces alternate top-level owner outside the committed product-owner tree",
 			)
 		}
 	}
@@ -394,6 +401,34 @@ func validateCrossServiceEdges(inventory Inventory, report *Report) {
 		}
 	}
 	slices.Sort(report.InvalidEdgeClassifications)
+	validateBidirectionalEdgeMarkers(inventory.CrossServiceEdges, report)
+}
+
+func validateBidirectionalEdgeMarkers(edges []CrossServiceEdge, report *Report) {
+	byPair := make(map[string]CrossServiceEdge, len(edges))
+	for _, edge := range edges {
+		byPair[edgePairKey(edge.FromOwner, edge.ToOwner)] = edge
+	}
+
+	for _, edge := range edges {
+		reverseKey := edgePairKey(edge.ToOwner, edge.FromOwner)
+		_, reciprocal := byPair[reverseKey]
+		if !reciprocal && (edge.Bidirectional || edge.Unresolved) {
+			report.InvalidBidirectionalEdges = append(report.InvalidBidirectionalEdges,
+				edgePairKey(edge.FromOwner, edge.ToOwner)+": bidirectional marker has no reciprocal edge")
+			continue
+		}
+		if !reciprocal || strings.Compare(edge.FromOwner, edge.ToOwner) > 0 {
+			continue
+		}
+		reverse := byPair[reverseKey]
+		if !edge.Bidirectional || !edge.Unresolved || !reverse.Bidirectional || !reverse.Unresolved {
+			report.InvalidBidirectionalEdges = append(report.InvalidBidirectionalEdges,
+				bidirectionalPairKey(edge.FromOwner, edge.ToOwner)+": reciprocal edges must remain marked as unresolved bidirectional debt")
+		}
+	}
+	slices.Sort(report.InvalidBidirectionalEdges)
+	report.InvalidBidirectionalEdges = slices.Compact(report.InvalidBidirectionalEdges)
 }
 
 func validateCrossServiceEdgeCoverage(inventory Inventory, discovered []CrossServiceEdge, report *Report) {
