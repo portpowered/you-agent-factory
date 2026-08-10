@@ -533,6 +533,46 @@ func remotePlacementSelected(globals *cliGlobalOptions) bool {
 	return globals != nil && (globals.remote || globals.placement == climanifest.ExecutionPlacementRemote)
 }
 
+func handleRunExecutionError(cmd *cobra.Command, resolvedConfig runcli.RunConfig, promptArgs []string, globals *cliGlobalOptions, basePolicy terminalpolicy.Policy, err error, currentFactorySelected bool) error {
+	err = factoryload.MaybeFormatOperatorError(err, resolvedConfig.Dir)
+	err = runcli.MapServerFailure(err)
+	if currentFactorySelected {
+		err = runcli.MapCurrentFactoryFailure(err)
+	}
+	if len(promptArgs) > 0 {
+		err = runcli.MapInvocationFailure(err)
+	}
+	if writeRunIncompleteDrainError(cmd, err) {
+		return err
+	}
+	if runcli.WriteInvocationError(cmd.ErrOrStderr(), err, globals.json) {
+		return err
+	}
+	errorWriter := resolveEffectiveRunPolicy(cmd, resolvedConfig, basePolicy).HumanTerminalWriter(cmd.ErrOrStderr())
+	var ambiguousInputErr *runcli.AmbiguousInvocationInputError
+	if errors.As(err, &ambiguousInputErr) {
+		errorWriter = cmd.ErrOrStderr()
+	}
+	if errorWriter != nil {
+		writeRunHumanError(cmd, errorWriter, err)
+	}
+	return err
+}
+
+func writeRunIncompleteDrainError(cmd *cobra.Command, err error) bool {
+	if clidiag.CentralDiagnosticsEnabled(cmd.Context()) {
+		return false
+	}
+	return runcli.WriteIncompleteDrainError(cmd.ErrOrStderr(), err)
+}
+
+func writeRunHumanError(cmd *cobra.Command, output io.Writer, err error) {
+	if clidiag.CentralDiagnosticsEnabled(cmd.Context()) {
+		return
+	}
+	_, _ = fmt.Fprintln(output, err)
+}
+
 func configureRunEnvironment(cmd *cobra.Command, cfg *runcli.RunConfig, rootOptions CommandFactory, homeDir string) error {
 	if rootOptions.loadOperatorConfig != nil {
 		operatorConfig, loadErr := rootOptions.loadOperatorConfig(operatorconfig.DefaultConfigPath(homeDir))

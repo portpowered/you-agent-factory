@@ -2507,3 +2507,23 @@
 - **Learnings for future iterations:**
   - Keep repeated CI flake evidence scoped to the named test and package; a successful isolated rerun is sufficient to validate recovery when the feature diff is untouched.
 ---
+
+## 2026-08-10 14:47 -07:00 - dwro-s1-remote-placement-flags current-main synchronization follow-up
+- What was implemented
+  - Merged current `origin/main` into the placement branch, preserved the task-owned `prd.json`, and unioned both branches' append-only progress history and reusable patterns.
+  - Reconciled `root_work.go` with current-main centralized CLI diagnostics and moved the shared run-error presentation helpers into the existing `root.go` owner so the package file-line ratchets remain within their recorded limits.
+- Files changed
+  - `pkg/transports/cli/root.go`
+  - `pkg/transports/cli/root_work.go`
+  - `prd.json`
+  - `progress.txt`
+  - Current-main source and generated artifacts included by the synchronization merge.
+- Verification
+  - `make contracts-validate`, `make cli-manifest-check`, `make docs-reference-smoke`, `make pkg-file-count`, `make pkg-structure`, and `make vet` — passed.
+  - `make backend-size` and `make pkg-maint` — passed after the helper move.
+  - `go test ./pkg/transports/cli/run` — passed.
+  - The exact ACP stdin-cancellation regression passed five consecutive repetitions after one transient failure in a broader CLI package run.
+  - `prd.json` parses with all four user stories marked `passes: true`; no conflict markers remain.
+- **Learnings for future iterations:**
+  - After a current-main merge, run ratchets against the working tree rather than relying on staged or historical counts; moving shared helpers into an existing file can restore deletion-only line limits without adding package-file debt.
+---

@@ -1,27 +1,22 @@
 package cli
 
 import (
-	"errors"
 	"fmt"
-	"io"
 	"path/filepath"
 	"strings"
 
 	"github.com/portpowered/infinite-you/internal/cliversion"
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cobracompletion"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	defaultcmd "github.com/portpowered/infinite-you/pkg/transports/cli/default"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/factoryload"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
 	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 	"github.com/spf13/cobra"
 )
@@ -457,46 +452,6 @@ func executeRunCommand(cmd *cobra.Command, args []string, globals *cliGlobalOpti
 		return handleRunExecutionError(cmd, resolvedConfig, promptArgs, globals, basePolicy, err, currentFactorySelected)
 	}
 	return err
-}
-
-func handleRunExecutionError(cmd *cobra.Command, resolvedConfig runcli.RunConfig, promptArgs []string, globals *cliGlobalOptions, basePolicy terminalpolicy.Policy, err error, currentFactorySelected bool) error {
-	err = factoryload.MaybeFormatOperatorError(err, resolvedConfig.Dir)
-	err = runcli.MapServerFailure(err)
-	if currentFactorySelected {
-		err = runcli.MapCurrentFactoryFailure(err)
-	}
-	if len(promptArgs) > 0 {
-		err = runcli.MapInvocationFailure(err)
-	}
-	if writeRunIncompleteDrainError(cmd, err) {
-		return err
-	}
-	if runcli.WriteInvocationError(cmd.ErrOrStderr(), err, globals.json) {
-		return err
-	}
-	errorWriter := resolveEffectiveRunPolicy(cmd, resolvedConfig, basePolicy).HumanTerminalWriter(cmd.ErrOrStderr())
-	var ambiguousInputErr *runcli.AmbiguousInvocationInputError
-	if errors.As(err, &ambiguousInputErr) {
-		errorWriter = cmd.ErrOrStderr()
-	}
-	if errorWriter != nil {
-		writeRunHumanError(cmd, errorWriter, err)
-	}
-	return err
-}
-
-func writeRunIncompleteDrainError(cmd *cobra.Command, err error) bool {
-	if clidiag.CentralDiagnosticsEnabled(cmd.Context()) {
-		return false
-	}
-	return runcli.WriteIncompleteDrainError(cmd.ErrOrStderr(), err)
-}
-
-func writeRunHumanError(cmd *cobra.Command, output io.Writer, err error) {
-	if clidiag.CentralDiagnosticsEnabled(cmd.Context()) {
-		return
-	}
-	_, _ = fmt.Fprintln(output, err)
 }
 
 func applyRunScopedServerMode(cfg runcli.RunConfig) runcli.RunConfig {
