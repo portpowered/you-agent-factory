@@ -121,14 +121,16 @@ For one run, keep the prompt in a UTF-8 file and pass only its path. This
 PowerShell shape is safe for multiline text and paths containing spaces:
 
 ```powershell
-$promptPath = Join-Path (Get-Location) "prompt files\release brief.txt"
+$promptDirectory = Join-Path (Get-Location) "prompt files"
+New-Item -ItemType Directory -Path $promptDirectory -Force | Out-Null
+$promptPath = Join-Path $promptDirectory "release brief.txt"
 $promptText = @"
 Review the release notes and identify the highest-risk rollback step.
 Keep the answer concise, but preserve the exact wording of the risk.
 "@
 [IO.File]::WriteAllText($promptPath, $promptText, [Text.UTF8Encoding]::new($false))
 
-you run --provider codex --model gpt-5.6-luna --worker-reasoning-effort high --to-file "prompt files\release brief.txt"
+you run --provider codex --model gpt-5.6-luna --worker-reasoning-effort high --to-file $promptPath
 ```
 
 `--to-file` is mutually exclusive with positional prompt text, non-empty
