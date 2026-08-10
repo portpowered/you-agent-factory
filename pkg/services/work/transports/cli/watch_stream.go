@@ -365,57 +365,72 @@ func restoreWatchStructuredResultNulls(data []byte, event *factoryapi.FactoryEve
 	if event == nil {
 		return nil
 	}
+	fields, err := watchPayloadFields(data)
+	if err != nil {
+		return err
+	}
+	switch event.Type {
+	case factoryapi.FactoryEventTypeWorkRequest:
+		return restoreWatchWorkRequestResultNulls(fields, event)
+	case factoryapi.FactoryEventTypeDispatchResponse:
+		return restoreWatchDispatchResultNulls(fields, event)
+	default:
+		return nil
+	}
+}
+
+func watchPayloadFields(data []byte) (map[string]json.RawMessage, error) {
 	var envelope struct {
 		Payload json.RawMessage `json:"payload"`
 	}
 	if err := json.Unmarshal(data, &envelope); err != nil {
-		return err
+		return nil, err
 	}
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(envelope.Payload, &fields); err != nil {
+		return nil, err
+	}
+	return fields, nil
+}
+
+func restoreWatchWorkRequestResultNulls(fields map[string]json.RawMessage, event *factoryapi.FactoryEvent) error {
+	payload, err := event.Payload.AsWorkRequestEventPayload()
+	if err != nil {
 		return err
 	}
-	resultIsNull := rawJSONFieldIsNull(fields, "structuredResult")
-	changed := resultIsNull
-	switch event.Type {
-	case factoryapi.FactoryEventTypeWorkRequest:
-		payload, err := event.Payload.AsWorkRequestEventPayload()
-		if err != nil {
-			return err
-		}
-		if payload.Works != nil {
-			workChanged, err := restoreWatchWorkResultNulls(fields["works"], payload.Works)
-			if err != nil {
-				return err
-			}
-			changed = workChanged
-		}
-		if !changed {
-			return nil
-		}
-		return event.Payload.FromWorkRequestEventPayload(payload)
-	case factoryapi.FactoryEventTypeDispatchResponse:
-		payload, err := event.Payload.AsDispatchResponseEventPayload()
-		if err != nil {
-			return err
-		}
-		if resultIsNull {
-			payload.StructuredResult = watchStructuredResultNullMarker
-		}
-		if payload.OutputWork != nil {
-			workChanged, err := restoreWatchWorkResultNulls(fields["outputWork"], payload.OutputWork)
-			if err != nil {
-				return err
-			}
-			changed = changed || workChanged
-		}
-		if !changed {
-			return nil
-		}
-		return event.Payload.FromDispatchResponseEventPayload(payload)
-	default:
+	if payload.Works == nil {
 		return nil
 	}
+	changed, err := restoreWatchWorkResultNulls(fields["works"], payload.Works)
+	if err != nil {
+		return err
+	}
+	if !changed {
+		return nil
+	}
+	return event.Payload.FromWorkRequestEventPayload(payload)
+}
+
+func restoreWatchDispatchResultNulls(fields map[string]json.RawMessage, event *factoryapi.FactoryEvent) error {
+	payload, err := event.Payload.AsDispatchResponseEventPayload()
+	if err != nil {
+		return err
+	}
+	changed := rawJSONFieldIsNull(fields, "structuredResult")
+	if changed {
+		payload.StructuredResult = watchStructuredResultNullMarker
+	}
+	if payload.OutputWork != nil {
+		workChanged, err := restoreWatchWorkResultNulls(fields["outputWork"], payload.OutputWork)
+		if err != nil {
+			return err
+		}
+		changed = changed || workChanged
+	}
+	if !changed {
+		return nil
+	}
+	return event.Payload.FromDispatchResponseEventPayload(payload)
 }
 
 func restoreWatchWorkResultNulls(data json.RawMessage, works *[]factoryapi.Work) (bool, error) {

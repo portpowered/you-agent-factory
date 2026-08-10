@@ -81,47 +81,7 @@ func TestWorkWatchRecordedProductionRetryLedger(t *testing.T) {
 	})
 
 	t.Run("follow remains attached and consumes later transitions", func(t *testing.T) {
-		stream := newProductionLedgerStream(t, fixture.Events)
-		process := support.BuildProcess(t, serviceedges.Edges{})
-		support.CleanupProcess(t, process)
-		stdout := newLedgerOutput()
-		stderr := newLedgerOutput()
-		inputs := productionLedgerWatchInput(t, stream.URL(), true, stdout, stderr)
-		command := support.StartProcessCommand(t, process, inputs)
-
-		waitForLedgerSignal(t, stream.historySent, "retained production ledger")
-		waitForLedgerLines(t, stdout, 1, "retained terminal transitions")
-
-		stream.Publish(
-			productionLedgerTransition(
-				t,
-				"factory-event/work-state-change/work-follow-up/in-review",
-				223,
-				"work-follow-up",
-				"init",
-				"in-review",
-			),
-			productionLedgerTransition(
-				t,
-				"factory-event/work-state-change/work-follow-up/complete",
-				224,
-				"work-follow-up",
-				"in-review",
-				"complete",
-			),
-		)
-		waitForLedgerLines(t, stdout, 2, "later follow transitions")
-
-		command.Stop(t)
-		if err := command.Err(); err != nil && !errors.Is(err, context.Canceled) {
-			t.Fatalf("follow Work watch cancellation error = %v, want cancellation or nil", err)
-		}
-		if got := strings.TrimSpace(stderr.String()); got != "" && got != "Error: context canceled" {
-			t.Fatalf("follow Work watch wrote unexpected diagnostics on test cancellation: %q", stderr.String())
-		}
-
-		lines := decodeWatchLines(t, stdout.String())
-		assertProductionFollowLines(t, lines)
+		runProductionLedgerFollowCase(t, fixture.Events)
 	})
 
 	t.Run("rejects a same-sequence conflicting retry record", func(t *testing.T) {
@@ -150,6 +110,51 @@ func TestWorkWatchRecordedProductionRetryLedger(t *testing.T) {
 			t.Fatalf("conflicting retry stderr = %q, want corruption diagnostic", stderr.String())
 		}
 	})
+}
+
+func runProductionLedgerFollowCase(t *testing.T, events []factoryapi.FactoryEvent) {
+	t.Helper()
+	stream := newProductionLedgerStream(t, events)
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	support.CleanupProcess(t, process)
+	stdout := newLedgerOutput()
+	stderr := newLedgerOutput()
+	inputs := productionLedgerWatchInput(t, stream.URL(), true, stdout, stderr)
+	command := support.StartProcessCommand(t, process, inputs)
+
+	waitForLedgerSignal(t, stream.historySent, "retained production ledger")
+	waitForLedgerLines(t, stdout, 1, "retained terminal transitions")
+
+	stream.Publish(
+		productionLedgerTransition(
+			t,
+			"factory-event/work-state-change/work-follow-up/in-review",
+			223,
+			"work-follow-up",
+			"init",
+			"in-review",
+		),
+		productionLedgerTransition(
+			t,
+			"factory-event/work-state-change/work-follow-up/complete",
+			224,
+			"work-follow-up",
+			"in-review",
+			"complete",
+		),
+	)
+	waitForLedgerLines(t, stdout, 2, "later follow transitions")
+
+	command.Stop(t)
+	if err := command.Err(); err != nil && !errors.Is(err, context.Canceled) {
+		t.Fatalf("follow Work watch cancellation error = %v, want cancellation or nil", err)
+	}
+	if got := strings.TrimSpace(stderr.String()); got != "" && got != "Error: context canceled" {
+		t.Fatalf("follow Work watch wrote unexpected diagnostics on test cancellation: %q", stderr.String())
+	}
+
+	lines := decodeWatchLines(t, stdout.String())
+	assertProductionFollowLines(t, lines)
 }
 
 func productionLedgerEventIndex(t *testing.T, events []factoryapi.FactoryEvent, eventType factoryapi.FactoryEventType) int {

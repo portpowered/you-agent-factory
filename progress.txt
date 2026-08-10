@@ -1432,3 +1432,30 @@
  - When current main changes the task bookkeeping files, preserve the active task PRD exactly for PR-description parity and merge each side's progress entries rather than replacing the append-only log.
  - A clean local merge head can still report the repository's known `pkg-boundary` migration baseline; distinguish that baseline from changed-file regressions using the dedicated checker and functional-boundary gate.
 ---
+
+## 2026-08-10 07:49 -07:00 - e2-structured-worker-results-review-follow-up
+- What was implemented
+  - Merged current `origin/main` into the structured-results branch, preserving the task-scoped `prd.json` and combining the append-only progress histories.
+  - Regenerated the bundled OpenAPI, Go/TypeScript/package interfaces, CLI inventory baselines, and CLI family metadata from the merged canonical sources.
+  - Refactored structured-result watch/list tests into existing responsibility-aligned test files, split the oversized schema-violation assertion into focused helpers, extracted the production watch follow-case helper, and decomposed structured-result null restoration so the merged head passes repository size and maintainability gates.
+- Files changed
+  - Current-main merge artifacts and regenerated contract/interface projections.
+  - `pkg/services/work/transports/cli/watch_stream.go`
+  - `pkg/services/work/transports/cli/watch_test.go`
+  - `pkg/services/work/transports/cli/watch_retry_test.go`
+  - `pkg/services/workers/internal/services/workstations/executor/agent_inference_test.go`
+  - `pkg/transports/cli/work/list_test.go`
+  - `pkg/transports/cli/work/list_counts_json_test.go`
+  - `tests/functional/work/watch/production_ledger_test.go`
+  - `prd.json` and `progress.txt`
+- Verification
+  - Focused Work, CLI, executor, and replay-backed Work watch tests — passed.
+  - `make contracts-check cli-manifest-check docs-reference-smoke` — passed.
+  - `make verify-fast` — passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` — passed.
+  - `make lint` passed UI lint/dead-code, vet, backend-size, pkg-maint, and file/structure gates before reaching the repository's existing `pkg-boundary` migration inventory (222 exact baseline violations on this merged head); no changed structured-results file appears in that inventory.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - When a branch is rebased onto a moving `main`, regenerate generated contracts and CLI baselines from the combined authored sources; do not choose one side of generated conflicts manually.
+  - Keep large behavior-specific tests in adjacent existing responsibility files when package file-count and file-size gates are strict; small pure helpers are preferable to weakening a gate.
+---

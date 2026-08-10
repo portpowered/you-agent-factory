@@ -354,47 +354,67 @@ func TestAgentExecutorClassifiesStructuredOutputSchemaViolations(t *testing.T) {
 	for _, test := range tests {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
-			provider := &agentMockProvider{response: workerexecution.InferenceResponse{Content: test.response}}
-			executor := NewAgentExecutor(staticRuntimeConfig{
-				Workers: map[string]*workerconfig.FactoryWorkerConfig{
-					"worker-a": {Model: "test-model", ModelProvider: workerexecution.RunnerIDAntigravity},
-				},
-			}, provider, nil, time.Now)
-
-			result, err := executor.Execute(context.Background(), testAgentRequest(
-				work.WorkDispatch{DispatchID: "structured-schema-" + test.name, TransitionID: "parse", WorkerType: "worker-a"},
-				withAgentOutputSchema(schema),
-			))
-			if err != nil {
-				t.Fatalf("Execute() error = %v", err)
-			}
-			if result.Outcome != workerexecution.OutcomeFailed {
-				t.Fatalf("outcome = %q, want failed", result.Outcome)
-			}
-			if result.FailureMetadata == nil || result.FailureMetadata.Family != workerexecution.WorkFailureFamilyTerminal ||
-				result.FailureMetadata.Type != workerexecution.WorkFailureTypeStructuredOutputSchemaViolation {
-				t.Fatalf("failure metadata = %#v, want terminal structured schema violation", result.FailureMetadata)
-			}
-			decision := workerexecution.FailureDecisionFromMetadata(result.FailureMetadata)
-			if decision.Retryable || !decision.Terminal || decision.TriggersThrottlePause {
-				t.Fatalf("failure decision = %#v, want terminal non-retryable non-throttle", decision)
-			}
-			if result.StructuredResult != nil || result.StructuredResultPresent {
-				t.Fatalf("structured result = %#v (present=%t), want rejected value omitted", result.StructuredResult, result.StructuredResultPresent)
-			}
-			if result.Output != test.response {
-				t.Fatalf("raw output = %q, want provider response retained for diagnostics", result.Output)
-			}
-			if !strings.HasPrefix(result.Error, "structured output schema violation: ") {
-				t.Fatalf("error = %q, want stable schema-violation prefix", result.Error)
-			}
-			if test.validationSummary != "" && !strings.Contains(result.Error, test.validationSummary) {
-				t.Fatalf("error = %q, want validation summary containing %q", result.Error, test.validationSummary)
-			}
-			if strings.Contains(result.Error, rejectedMarker) {
-				t.Fatalf("error = %q, want rejected response value excluded from diagnostic", result.Error)
-			}
+			assertAgentExecutorStructuredSchemaViolation(t, schema, rejectedMarker, test.name, test.response, test.validationSummary)
 		})
+	}
+}
+
+func assertAgentExecutorStructuredSchemaViolation(t *testing.T, schema, rejectedMarker, name, response, validationSummary string) {
+	t.Helper()
+	provider := &agentMockProvider{response: workerexecution.InferenceResponse{Content: response}}
+	executor := NewAgentExecutor(staticRuntimeConfig{
+		Workers: map[string]*workerconfig.FactoryWorkerConfig{
+			"worker-a": {Model: "test-model", ModelProvider: workerexecution.RunnerIDAntigravity},
+		},
+	}, provider, nil, time.Now)
+
+	result, err := executor.Execute(context.Background(), testAgentRequest(
+		work.WorkDispatch{DispatchID: "structured-schema-" + name, TransitionID: "parse", WorkerType: "worker-a"},
+		withAgentOutputSchema(schema),
+	))
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	assertAgentExecutorStructuredSchemaFailure(t, result)
+	assertAgentExecutorStructuredSchemaOutput(t, result, response)
+	assertAgentExecutorStructuredSchemaDiagnostic(t, result.Error, rejectedMarker, validationSummary)
+}
+
+func assertAgentExecutorStructuredSchemaFailure(t *testing.T, result workerexecution.WorkResult) {
+	t.Helper()
+	if result.Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("outcome = %q, want failed", result.Outcome)
+	}
+	if result.FailureMetadata == nil || result.FailureMetadata.Family != workerexecution.WorkFailureFamilyTerminal ||
+		result.FailureMetadata.Type != workerexecution.WorkFailureTypeStructuredOutputSchemaViolation {
+		t.Fatalf("failure metadata = %#v, want terminal structured schema violation", result.FailureMetadata)
+	}
+	decision := workerexecution.FailureDecisionFromMetadata(result.FailureMetadata)
+	if decision.Retryable || !decision.Terminal || decision.TriggersThrottlePause {
+		t.Fatalf("failure decision = %#v, want terminal non-retryable non-throttle", decision)
+	}
+	if result.StructuredResult != nil || result.StructuredResultPresent {
+		t.Fatalf("structured result = %#v (present=%t), want rejected value omitted", result.StructuredResult, result.StructuredResultPresent)
+	}
+}
+
+func assertAgentExecutorStructuredSchemaOutput(t *testing.T, result workerexecution.WorkResult, response string) {
+	t.Helper()
+	if result.Output != response {
+		t.Fatalf("raw output = %q, want provider response retained for diagnostics", result.Output)
+	}
+}
+
+func assertAgentExecutorStructuredSchemaDiagnostic(t *testing.T, diagnostic, rejectedMarker, validationSummary string) {
+	t.Helper()
+	if !strings.HasPrefix(diagnostic, "structured output schema violation: ") {
+		t.Fatalf("error = %q, want stable schema-violation prefix", diagnostic)
+	}
+	if validationSummary != "" && !strings.Contains(diagnostic, validationSummary) {
+		t.Fatalf("error = %q, want validation summary containing %q", diagnostic, validationSummary)
+	}
+	if strings.Contains(diagnostic, rejectedMarker) {
+		t.Fatalf("error = %q, want rejected response value excluded from diagnostic", diagnostic)
 	}
 }
 

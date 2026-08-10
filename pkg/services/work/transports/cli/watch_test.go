@@ -9,7 +9,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -112,71 +111,6 @@ func TestRenderWatchTransitionOmitsAbsentOptionalFieldsAndWritesOnce(t *testing.
 	}
 	if _, ok := fields["reason"]; ok {
 		t.Fatal("rendered line contains absent reason")
-	}
-}
-
-func TestRenderWatchTransitionPreservesNativeStructuredResultValues(t *testing.T) {
-	base := WatchTransition{
-		SessionID:               "session-1",
-		EventID:                 "event-1",
-		Sequence:                1,
-		EventTime:               time.Date(2026, time.August, 8, 0, 0, 0, 0, time.UTC),
-		WorkID:                  "work-1",
-		WorkTypeName:            "task",
-		FromState:               "init",
-		ToState:                 "complete",
-		Source:                  "worker",
-		Terminal:                true,
-		StructuredResultPresent: true,
-	}
-	for _, test := range []struct {
-		name  string
-		value any
-		want  string
-	}{
-		{name: "object", value: map[string]any{"z": float64(2), "a": "first"}, want: `{"a":"first","z":2}`},
-		{name: "explicit null", value: json.RawMessage("null"), want: "null"},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			var output bytes.Buffer
-			transition := base
-			transition.EventID = "event-" + test.name
-			transition.StructuredResult = test.value
-			if err := RenderWatchTransition(&output, transition); err != nil {
-				t.Fatalf("RenderWatchTransition() error = %v", err)
-			}
-			var fields map[string]json.RawMessage
-			if err := json.Unmarshal(bytes.TrimSpace(output.Bytes()), &fields); err != nil {
-				t.Fatalf("decode line: %v", err)
-			}
-			if got := string(fields["structuredResult"]); got != test.want {
-				t.Fatalf("structuredResult = %s, want %s", got, test.want)
-			}
-		})
-	}
-}
-
-func TestDecodeWatchSSEEventPreservesExplicitStructuredResultNull(t *testing.T) {
-	event := watchFactoryEvent(t, factoryapi.FactoryEventTypeDispatchResponse, "dispatch-response", 3,
-		factoryapi.DispatchResponseEventPayload{
-			Outcome:          factoryapi.WorkOutcomeAccepted,
-			StructuredResult: json.RawMessage("null"),
-		})
-	payload, err := json.Marshal(event)
-	if err != nil {
-		t.Fatalf("encode SSE event: %v", err)
-	}
-	decoded, err := decodeWatchSSEEvent([]string{string(payload)})
-	if err != nil {
-		t.Fatalf("decode SSE event: %v", err)
-	}
-	response, err := decoded.Payload.AsDispatchResponseEventPayload()
-	if err != nil {
-		t.Fatalf("decode dispatch response payload: %v", err)
-	}
-	value, ok := response.StructuredResult.(string)
-	if !ok || value != watchStructuredResultNullMarker {
-		t.Fatalf("structuredResult = %#v (marker=%t), want internal explicit-null marker", response.StructuredResult, ok)
 	}
 }
 
@@ -304,100 +238,6 @@ func TestWatchReducerProjectsOrderedTransitionsAndUsesTerminalMetadata(t *testin
 	}
 	if !transitions[1].Terminal || !transitions[2].Terminal || !reducer.Completed() {
 		t.Fatalf("terminal projection = %#v, reducer completed = %t", transitions, reducer.Completed())
-	}
-}
-
-func TestWatchReducerAttachesDispatchStructuredResultToOneFollowingTransition(t *testing.T) {
-	reducer := newWatchReducer("session-1")
-	metadata := watchFactoryEvent(t, factoryapi.FactoryEventTypeInitialStructureRequest, "factory", 1,
-		factoryapi.InitialStructureRequestEventPayload{Factory: factoryapi.Factory{
-			WorkTypes: &[]factoryapi.WorkType{{Name: "task", States: []factoryapi.WorkState{
-				{Name: "ready", Type: factoryapi.WorkStateTypeINITIAL},
-				{Name: "processing", Type: factoryapi.WorkStateTypePROCESSING},
-				{Name: "done", Type: factoryapi.WorkStateTypeTERMINAL},
-			}}},
-		}})
-	request := watchFactoryEvent(t, factoryapi.FactoryEventTypeWorkRequest, "request", 2,
-		factoryapi.WorkRequestEventPayload{Works: &[]factoryapi.Work{{
-			WorkId: watchStringPtr("work-1"), WorkTypeName: watchStringPtr("task"),
-		}}})
-	structured := map[string]any{"decision": "accept", "score": float64(2)}
-	response := watchFactoryEvent(t, factoryapi.FactoryEventTypeDispatchResponse, "dispatch-response", 3,
-		factoryapi.DispatchResponseEventPayload{
-			Outcome: factoryapi.WorkOutcomeAccepted,
-			OutputWork: &[]factoryapi.Work{{
-				WorkId:           watchStringPtr("work-1"),
-				WorkTypeName:     watchStringPtr("task"),
-				StructuredResult: structured,
-			}},
-		})
-	firstTransition := watchTransitionEvent(t, "move-1", 4, "work-1", "ready", "processing", false)
-	secondTransition := watchTransitionEvent(t, "move-2", 5, "work-1", "processing", "done", true)
-
-	for _, event := range []factoryapi.FactoryEvent{metadata, request, response} {
-		if _, emit, _, err := reducer.Accept(event); err != nil || emit {
-			t.Fatalf("Accept(%q): emit=%t error=%v, want no output line", event.Id, emit, err)
-		}
-	}
-	transition, emit, _, err := reducer.Accept(firstTransition)
-	if err != nil || !emit {
-		t.Fatalf("first transition: emit=%t error=%v, want output line", emit, err)
-	}
-	if !transition.StructuredResultPresent || transition.StructuredResult == nil {
-		t.Fatalf("first transition structuredResult = %#v (present=%t), want native result", transition.StructuredResult, transition.StructuredResultPresent)
-	}
-	if !reflect.DeepEqual(transition.StructuredResult, structured) {
-		t.Fatalf("first transition structuredResult = %#v, want %#v", transition.StructuredResult, structured)
-	}
-	transition, emit, _, err = reducer.Accept(secondTransition)
-	if err != nil || !emit {
-		t.Fatalf("second transition: emit=%t error=%v, want output line", emit, err)
-	}
-	if transition.StructuredResultPresent {
-		t.Fatalf("second transition structuredResult = %#v, want omitted after first handoff", transition.StructuredResult)
-	}
-}
-
-func TestWatchReducerOmitsStructuredResultFromFailedDispatchTransition(t *testing.T) {
-	reducer := newWatchReducer("session-1")
-	metadata := watchFactoryEvent(t, factoryapi.FactoryEventTypeInitialStructureRequest, "factory", 1,
-		factoryapi.InitialStructureRequestEventPayload{Factory: factoryapi.Factory{
-			WorkTypes: &[]factoryapi.WorkType{{Name: "task", States: []factoryapi.WorkState{
-				{Name: "ready", Type: factoryapi.WorkStateTypeINITIAL},
-				{Name: "failed", Type: factoryapi.WorkStateTypeFAILED},
-			}}},
-		}})
-	request := watchFactoryEvent(t, factoryapi.FactoryEventTypeWorkRequest, "request", 2,
-		factoryapi.WorkRequestEventPayload{Works: &[]factoryapi.Work{{
-			WorkId: watchStringPtr("work-1"), WorkTypeName: watchStringPtr("task"),
-		}}})
-	accepted := watchFactoryEvent(t, factoryapi.FactoryEventTypeDispatchResponse, "dispatch-accepted", 3,
-		factoryapi.DispatchResponseEventPayload{
-			Outcome: factoryapi.WorkOutcomeAccepted,
-			OutputWork: &[]factoryapi.Work{{
-				WorkId:           watchStringPtr("work-1"),
-				StructuredResult: map[string]any{"decision": "accept"},
-			}},
-		})
-	failed := watchFactoryEvent(t, factoryapi.FactoryEventTypeDispatchResponse, "dispatch-failed", 4,
-		factoryapi.DispatchResponseEventPayload{
-			Outcome: factoryapi.WorkOutcomeFailed,
-			OutputWork: &[]factoryapi.Work{{
-				WorkId: watchStringPtr("work-1"),
-			}},
-		})
-	transitionEvent := watchTransitionEvent(t, "move-failed", 5, "work-1", "ready", "failed", true)
-	for _, event := range []factoryapi.FactoryEvent{metadata, request, accepted, failed} {
-		if _, emit, _, err := reducer.Accept(event); err != nil || emit {
-			t.Fatalf("Accept(%q): emit=%t error=%v, want no output line", event.Id, emit, err)
-		}
-	}
-	transition, emit, _, err := reducer.Accept(transitionEvent)
-	if err != nil || !emit {
-		t.Fatalf("failed transition: emit=%t error=%v, want output line", emit, err)
-	}
-	if transition.StructuredResultPresent {
-		t.Fatalf("failed transition structuredResult = %#v, want omitted", transition.StructuredResult)
 	}
 }
 
