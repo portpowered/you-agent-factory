@@ -1,74 +1,81 @@
 {
-  "project": "WO-C2 Correction 2 — Make Work Watch Survive Model-Response Retry Collisions",
-  "branchName": "wo-c2-fix2-watch-model-response-id",
-  "description": "Make finite and --follow Work watch streams survive live-shaped model-response retry collisions, prevent new model-response identity collisions, and prove the behavior with a complete recorded production ledger while preserving corruption detection and the existing NDJSON contract.",
+  "project": "WO-B3 Provider Capability Discovery CLI",
+  "branchName": "wo-b3-provider-capability-discovery-cli",
+  "description": "Deliver WO-B3 as an end-to-end provider discovery CLI slice: make `you providers list` available through the canonical injected process and report deterministic provider identity, availability/prerequisites, models, effort settings, modalities, tools, and named known limits in aligned human, JSON, help, and reference surfaces without live provider calls or a second catalog.",
   "context": {
-    "customerAsk": "Make you work watch stream real production sessions end-to-end despite repeated model-response IDs, extend the accepted retry/replay semantics from #1833 beyond MODEL_REQUEST, audit and correct the response ID construction that embeds model-request/1, retain same-sequence corruption rejection, and add complete production-ledger functional coverage for finite and --follow modes.",
-    "problem": "The watch reducer treats a later model-response record that reuses a request-ordinal-derived event ID as conflicting canonical data and aborts. The #1833 exception covers only MODEL_REQUEST, model-response IDs can collide across dispatch retries, and synthetic fixtures have twice failed to reproduce the full live event mix.",
-    "solution": "Use one sequence-aware policy for every non-projecting enrichment family: exact replay is idempotent, refreshed same-ID data is accepted only at a strictly later sequence, and conflicting same or backward sequence reuse remains an error. Give newly recorded retry responses distinct stable event IDs while preserving request correlation, then verify finite and follow behavior through the application watch pipeline using a complete redacted production ledger."
+    "customerAsk": "Make `you providers list` available from the canonical root.BuildProcess and Process.Execute path and enumerate every first-party provider's canonical identity, availability/prerequisites, models, effort settings, input/output modalities, tools, and known limits. Ensure operators can discover before execution that gpt-5.6 lacks video/audio understanding, image generation accepts at most five referenced image paths, and ANTIGRAVITY/AGY accepts video/audio file paths with its supported models/efforts and documented --add-dir/timeout constraints. Keep human, JSON, help, and reference behavior aligned and prove the command without live provider calls.",
+    "problem": "The installed CLI rejects `you providers list` even though the Providers root, catalog contracts, model-provider manifests, and Providers-owned list/show adapters already exist. The incomplete public path and incomplete capability metadata force operators to discover modality mismatches and hard provider limits through failed or misleading production runs.",
+    "solution": "Extend the existing authored model-provider catalog with validated provider/model discovery facts, project them through the Providers root, render deterministic equivalent human and JSON output through the Providers CLI transport, register that transport in the canonical CLI manifest and pkg/wire process graph, align help/reference guidance, and add focused plus root.BuildProcess/Process.Execute regression evidence. Do not add another registry, injector, runtime path, local-model harness, storage engine, or media transform.",
+    "originalDocument": "C:/Users/andre/work/portos/infinite-you/docs/temp/work-order.md"
   },
   "acceptanceCriteria": [
-    "Finite you work watch --session <session> replays the complete production-ledger fixture through terminal Work state and exits successfully without aborting on the observed model-response ID family.",
-    "you work watch --session <session> --follow consumes the same retained production history, remains attached after terminal history, emits later Work transitions once each, and stops cleanly only when canceled by the test.",
-    "Repeated non-projecting enrichment events with refreshed canonical data are accepted only at strictly increasing sequences, while conflicting reuse at the same or a lower sequence fails and leaves the last accepted cursor unchanged.",
-    "Newly recorded model responses for distinct retry executions cannot reuse a canonical event ID; exact replay of one recorded event retains its original identity and request correlation.",
-    "No storage engine is added, no you.work.watch.v1 NDJSON field or shape changes, and the cut list in docs/temp/work-order.md remains out of scope.",
-    "The named regression command go test ./pkg/services/work/transports/cli ./pkg/services/workers/internal/services/workstations/execution/recording ./tests/functional/work/watch -count=1 and make verify-fast pass; Typecheck passes; Tests pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
-    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared-file changes are reconciled, and the PR is actually merged."
+    "`you providers list` succeeds through the production root.BuildProcess and Process.Execute path and enumerates every first-party provider exactly once without constructing a second service graph or making a live provider call.",
+    "Each provider entry reports canonical identity, availability/readiness and sanitized prerequisites, supported models, allowed effort settings, input/output modalities, tools, and named known limits in deterministic order.",
+    "The inventory makes these facts directly discoverable before execution: gpt-5.6 has no video or audio understanding; image generation accepts at most five referenced image paths; and ANTIGRAVITY/AGY accepts video and audio file paths with its supported models/efforts plus documented --add-dir and timeout constraints.",
+    "Human output and --json output represent the same canonical facts; command help and `you docs providers` explain the fields and usage without contradicting the catalog.",
+    "Unknown command/argument, catalog validation, mapping, unavailable-prerequisite, and output-write failures retain established CLI behavior, keep data on the correct output channel, and emit safe structured diagnostics without sensitive values.",
+    "Typecheck, focused tests, required generation checks, and required CI pass with no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
+    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared/generated-file churn are reconciled, and the PR is actually merged."
   ],
   "userStories": [
     {
-      "id": "wo-c2-fix2-watch-model-response-id-001",
-      "title": "Accept ordered enrichment retries without hiding corruption",
-      "description": "As an operator watching Work, I want repeated model-response and equivalent enrichment records at later canonical positions to be treated as retry history so that unrelated enrichment cannot abort the Work transition stream.",
+      "id": "wo-b3-provider-capability-discovery-cli-001",
+      "title": "Publish canonical provider capability facts",
+      "description": "As an operator selecting a provider and model, I want the Providers catalog to return complete execution-planning facts so that all discovery surfaces use one trustworthy authority.",
       "acceptanceCriteria": [
-        "The exact live-shaped ID factory-event/model-response/2cf2a099-909b-4446-8e8d-1453054e093c/model-request/1 can recur with refreshed model-response canonical data at a strictly later sequence without emitting a Work line or returning an error.",
-        "The same sequence-aware behavior covers every non-projecting enrichment event family accepted by the watch reducer, with no event-family-specific retry exception left as the policy boundary.",
-        "Exact replays remain idempotent, advance neither emitted output nor cursor, and do not duplicate Work transitions.",
-        "A same-ID event with conflicting canonical data at the same or a lower sequence is rejected, and the cursor remains at the last valid event.",
-        "Finite and follow stream tests prove that valid Work transitions before, between, and after refreshed enrichment events are emitted once in strictly increasing sequence order.",
-        "Tests pass",
-        "Typecheck passes"
+        "Listing the canonical catalog returns every first-party provider exactly once with canonical identity, support/implementation availability, readiness prerequisites, supported models, effort settings, input modalities, output modalities, tools, and named known limits.",
+        "The Codex/gpt-5.6 data explicitly represents text/image support as applicable and the absence of video and audio understanding; its image-generation limit states that at most five referenced image paths are accepted.",
+        "The ANTIGRAVITY entry identifies AGY and advertises its supported AGY model names and effort values, video/audio file-path input, required AGY executable/auth/workspace prerequisites, workspace extension through --add-dir, and the documented print-timeout behavior/limit.",
+        "Claude and every other first-party entry expose the same field shape with truthful empty or explicit unsupported values rather than omitted ambiguity.",
+        "Catalog decoding rejects invalid identities, duplicate provider/model facts, unknown modality/direction or effort values, malformed/non-positive numeric limits, and incomplete named-limit records with actionable errors.",
+        "Returned catalog values are detached from the embedded source and have deterministic provider, model, modality, effort, tool, prerequisite, and limit ordering.",
+        "Authored model-provider manifests remain the authority; generated catalog/schema/type artifacts are regenerated from them only where the accepted public catalog contract changes, and generated files are not hand-edited.",
+        "Focused authored-catalog, schema/contract, projection, clone-safety, ordering, and invalid-manifest tests pass.",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Generalized watch ordering so every currently defined non-projecting Factory event family uses the same ordered-enrichment policy: exact replay is idempotent, refreshed same-ID data is accepted only at a strictly later canonical sequence, and same/backward conflicting reuse is rejected without moving the cursor. The explicit allowlist defaults unknown and projection-bearing event types to strict handling. Added reducer coverage for the complete current non-projecting event vocabulary, unknown-event strictness, the live-shaped model-response ID factory-event/model-response/2cf2a099-909b-4446-8e8d-1453054e093c/model-request/1, and finite/--follow model-response retry streams. The focused regression command and make verify-fast pass."
+      "notes": "Implemented authored model-provider capability facts and generated schema/catalog/package artifacts for Codex, Claude, and Antigravity; projected deterministic, clone-safe Providers descriptors with sanitized prerequisites, models, efforts, modalities, tools, and known limits. Focused catalog/projection/provider tests, provider-catalog and package generation checks, API validation, affected Go packages, and UI typecheck pass. The repository-wide make test target still reports the unrelated existing TestMockWorkersSchema_StaleStagingDetectedByContractCheck failure for stale packages/api artifacts."
     },
     {
-      "id": "wo-c2-fix2-watch-model-response-id-002",
-      "title": "Give distinct model responses collision-safe event identities",
-      "description": "As a maintainer of the canonical Factory ledger, I want distinct response records from dispatch retries to have distinct event identities so that new recordings do not manufacture ambiguous replay keys.",
+      "id": "wo-b3-provider-capability-discovery-cli-002",
+      "title": "Render stable provider discovery output",
+      "description": "As an operator, I want `providers list` output to be complete, readable, and scriptable so that I can compare providers or automate preflight checks without invoking one.",
       "acceptanceCriteria": [
-        "Two distinct model-response records produced for retry executions within the same dispatch lifecycle receive different canonical event IDs, even when both correlate to request ordinal model-request/1.",
-        "A response event retains explicit correlation to its matching model request, and request/response payload meaning is unchanged.",
-        "Reconstructing or replaying the same response record preserves its event ID; identity generation does not depend on wall-clock coincidence or mutable payload serialization.",
-        "Focused recording tests cover successful and failed responses across retries and demonstrate the no-collision invariant.",
-        "No Factory Event payload schema or Work-watch NDJSON shape changes.",
-        "Tests pass",
-        "Typecheck passes"
+        "The Providers-owned CLI list operation renders each provider and its models, effort settings, directional modalities, tools, prerequisites, and named limits in a stable, documented human-readable layout with no dependence on input map or slice order.",
+        "--json emits a stable structured envelope containing the same canonical facts as human output, preserves typed values such as numeric maxima, and writes no human table text to stdout.",
+        "Both formats visibly encode unsupported/empty capabilities so gpt-5.6's lack of video/audio understanding cannot be mistaken for unknown metadata.",
+        "Both formats make the five-referenced-image-path limit and ANTIGRAVITY/AGY video/audio file-path, model/effort, --add-dir, and timeout facts discoverable by stable names and descriptions.",
+        "List rendering uses only the injected Providers service operation, performs no environment discovery or provider execution, and emits safe request/success/failure verbose diagnostics to stderr while keeping stdout machine-safe.",
+        "Context cancellation, Providers service failures, and output-write failures return errors without fabricated success diagnostics or leaking sensitive provider/process details.",
+        "Focused mapping, human/JSON parity, deterministic-ordering, empty/unsupported, cancellation, service-failure, and writer-failure tests pass.",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 2,
-      "passes": true,
-      "notes": "Added a bounded runner-wide monotonic response ordinal for model-response event IDs, while preserving the existing model-request/1 retry correlation and all response payload fields. The ordinal is independent of wall-clock time and mutable payload data, and exact recorded-event replay retains its ID. Added focused recorder coverage for failed-then-successful retries, distinct IDs across dispatches, unchanged request correlation, and deterministic identity generation. The focused regression command and make verify-fast pass. No Factory Event payload schema or Work-watch NDJSON changes were made."
+      "passes": false,
+      "notes": ""
     },
     {
-      "id": "wo-c2-fix2-watch-model-response-id-003",
-      "title": "Replay a complete production retry ledger through Work watch",
-      "description": "As an operator, I want the watch command verified against the full event mix from a real retried session so that synthetic coverage cannot mask another live-stream abort.",
+      "id": "wo-b3-provider-capability-discovery-cli-003",
+      "title": "Expose and verify the canonical public command",
+      "description": "As a CLI user, I want `you providers list` to be discoverable and executable from the installed command tree so that provider preflight information is available in the same way as other public CLI operations.",
       "acceptanceCriteria": [
-        "A complete recorded production ledger from a real session with dispatch retries is checked in as a stable, secret-free fixture; redaction preserves event order, event families, sequence values, repeated-ID relationships, Work lineage, and terminal outcome needed by the regression.",
-        "The fixture contains the observed model-response request-ordinal ID shape and at least one matching model-request/model-response correlation at a later canonical sequence.",
-        "An application-level functional test routes the recorded ledger through the same service and CLI watch pipeline used by Process.Execute, rather than invoking the reducer alone or a built you binary.",
-        "Finite mode emits only the expected you.work.watch.v1 Work transitions in canonical order, reaches the recorded terminal cohort, and exits successfully with no stderr error.",
-        "Follow mode drains the same retained ledger without duplicates or collision errors, remains subscribed, emits a deterministically supplied later Work transition once, and exits cleanly on cancellation without sleeps as synchronization.",
-        "The functional scenario rejects a deliberately same-sequence conflicting event derived from the fixture, proving that production compatibility does not weaken corruption detection.",
-        "go test ./pkg/services/work/transports/cli ./pkg/services/workers/internal/services/workstations/execution/recording ./tests/functional/work/watch -count=1 passes.",
-        "Tests pass",
-        "Typecheck passes"
+        "`you providers list` is present in root and family help, accepts the established global --json and --verbose conventions, rejects unsupported arguments with the standard usage failure, and invokes the Providers-owned CLI adapter.",
+        "The thin command entrypoint receives the already-constructed Providers service from the canonical pkg/wire application graph; pkg/initializer only activates injected roles, and command execution performs no child injection, service lookup, provider process call, network call, or runtime-session construction.",
+        "`you docs providers` explains how to read models, effort settings, directional modalities, tools, availability/prerequisites, and known limits, and includes the gpt-5.6, five-image-path, and ANTIGRAVITY/AGY operational facts without becoming a second capability authority.",
+        "A functional regression constructs the application with root.BuildProcess, runs Process.Execute with `providers list` and `providers list --json`, and proves successful output includes all required facts and deterministic provider ordering without live provider calls.",
+        "The same regression proves an unsupported providers subcommand/argument returns established CLI usage behavior and does not emit a successful or partial capability inventory.",
+        "CLI manifest/help generated artifacts are updated through the repository generator when their authored command contract changes; unrelated OpenAPI or generated interface artifacts remain unchanged unless an accepted public API contract truly changes.",
+        "The independently runnable end-to-end verification command passes: `go test ./tests/functional/providers/discovery/... -run '^TestProvidersListThroughRootBuildProcess$' -count=1`.",
+        "Focused root-command, help/manifest, reference smoke, and functional CLI tests pass.",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 3,
-      "passes": true,
-      "notes": "Replaced the synthetic fixture with the sanitized 223-event recording factory-session-~default-083224-637a0122-f34d-4c5e-99a0-20e70b5375c2.json. Redaction removes prompt/output/path material while preserving the source event IDs, event families, canonical sequence values, timestamps, Work lineage, retry outcomes, request-ordinal model-response identities, and terminal state change. The fixture includes the observed response ID factory-event/model-response/2cf2a099-909b-4446-8e8d-1453054e093c/model-request/1 and its matching model request. The application-level regression routes that complete recording through the public SSE and root.BuildProcess/Process.Execute path: finite mode emits the captured terminal Work transition and exits successfully; follow mode drains the same retained history, emits two deterministic later transitions once, and cancels cleanly; a same-sequence conflict derived from a recorded model response is rejected. The reducer defers state-less Work requests and unknown internal Work types until authoritative Work state is observed so the complete production session can reach its terminal cohort without changing the NDJSON contract. Corrected-recorder identity proof remains in recorder tests. The focused story command, ratcheted gates, and make verify-fast passed."
+      "passes": false,
+      "notes": ""
     }
   ]
 }

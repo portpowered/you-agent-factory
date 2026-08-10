@@ -2457,8 +2457,32 @@ components:
       $ref: './components/schemas/model-providers/ProviderResponseFidelityCapabilities.yaml'
     ProviderDiscoveryPrerequisites:
       $ref: './components/schemas/model-providers/ProviderDiscoveryPrerequisites.yaml'
+    ProviderDiscoveryPrerequisite:
+      $ref: './components/schemas/model-providers/ProviderDiscoveryPrerequisite.yaml'
     ProviderDiscoveryEndpointKind:
       $ref: './components/schemas/model-providers/ProviderDiscoveryEndpointKind.yaml'
+    ProviderEffort:
+      $ref: './components/schemas/model-providers/ProviderEffort.yaml'
+    ProviderModel:
+      $ref: './components/schemas/model-providers/ProviderModel.yaml'
+    ProviderModality:
+      $ref: './components/schemas/model-providers/ProviderModality.yaml'
+    ProviderModalityDirection:
+      $ref: './components/schemas/model-providers/ProviderModalityDirection.yaml'
+    ProviderModalityKind:
+      $ref: './components/schemas/model-providers/ProviderModalityKind.yaml'
+    ProviderModalitySupport:
+      $ref: './components/schemas/model-providers/ProviderModalitySupport.yaml'
+    ProviderModalityTransport:
+      $ref: './components/schemas/model-providers/ProviderModalityTransport.yaml'
+    ProviderTool:
+      $ref: './components/schemas/model-providers/ProviderTool.yaml'
+    ProviderToolSupport:
+      $ref: './components/schemas/model-providers/ProviderToolSupport.yaml'
+    ProviderKnownLimit:
+      $ref: './components/schemas/model-providers/ProviderKnownLimit.yaml'
+    ProviderKnownLimitKind:
+      $ref: './components/schemas/model-providers/ProviderKnownLimitKind.yaml'
     ProviderDeprecation:
       $ref: './components/schemas/model-providers/ProviderDeprecation.yaml'
     WorkerModelLocality:

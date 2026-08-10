@@ -37,3 +37,100 @@ discovery:
   endpointKinds:
     - stdio
   configurationKeys: []
+  prerequisites:
+    - kind: authentication
+      name: account-authentication
+      description: Authenticate the AGY account before execution.
+    - kind: executable
+      name: agy
+      description: The Antigravity adapter requires the agy executable.
+    - kind: workspace
+      name: writable-workspace
+      description: Execution requires a writable workspace supplied through --add-dir.
+models:
+  - id: claude-opus-4-6-thinking
+    efforts: &agyEfforts
+      - low
+      - medium
+      - high
+    modalities: &agyModalities
+      - direction: input
+        modality: audio
+        support: supported
+        transport: file_path
+      - direction: input
+        modality: image
+        support: unsupported
+        transport: none
+      - direction: input
+        modality: text
+        support: supported
+        transport: inline
+      - direction: input
+        modality: video
+        support: supported
+        transport: file_path
+      - direction: output
+        modality: audio
+        support: unsupported
+        transport: none
+      - direction: output
+        modality: image
+        support: unsupported
+        transport: none
+      - direction: output
+        modality: text
+        support: supported
+        transport: inline
+      - direction: output
+        modality: video
+        support: unsupported
+        transport: none
+  - id: claude-sonnet-4-6
+    efforts: *agyEfforts
+    modalities: *agyModalities
+  - id: gemini-3.1-pro-high
+    efforts: *agyEfforts
+    modalities: *agyModalities
+  - id: gemini-3.1-pro-low
+    efforts: *agyEfforts
+    modalities: *agyModalities
+  - id: gemini-3.5-flash-high
+    efforts: *agyEfforts
+    modalities: *agyModalities
+  - id: gemini-3.5-flash-low
+    efforts: *agyEfforts
+    modalities: *agyModalities
+  - id: gemini-3.5-flash-medium
+    efforts: *agyEfforts
+    modalities: *agyModalities
+  - id: gemini-3.6-flash-high
+    efforts: *agyEfforts
+    modalities: *agyModalities
+  - id: gemini-3.6-flash-low
+    efforts: *agyEfforts
+    modalities: *agyModalities
+  - id: gemini-3.6-flash-medium
+    efforts: *agyEfforts
+    modalities: *agyModalities
+  - id: gpt-oss-120b-medium
+    efforts: *agyEfforts
+    modalities: *agyModalities
+tools:
+  - name: filesystem
+    support: supported
+    description: Read and modify files in the selected AGY workspace.
+  - name: shell
+    support: supported
+    description: Run bounded shell commands through the AGY tool runner.
+knownLimits:
+  - name: add_dir_workspace
+    kind: behavior
+    unit: flag
+    description: AGY extends the accessible workspace with the --add-dir flag.
+    value: --add-dir
+  - name: print_timeout
+    kind: default
+    unit: seconds
+    description: AGY sends --print-timeout and uses a five-minute default when no positive timeout is requested.
+    default: 300

@@ -37,3 +37,105 @@ discovery:
   endpointKinds:
     - stdio
   configurationKeys: []
+  prerequisites:
+    - kind: authentication
+      name: account-authentication
+      description: Sign in to the Claude account before execution.
+    - kind: executable
+      name: claude
+      description: The bundled Claude adapter requires the claude executable.
+    - kind: workspace
+      name: writable-workspace
+      description: Execution requires a writable workspace selected by the factory.
+models:
+  - id: claude-opus-4-6-thinking
+    efforts:
+      - low
+      - medium
+      - high
+      - xhigh
+      - max
+    modalities:
+      - direction: input
+        modality: audio
+        support: unsupported
+        transport: none
+      - direction: input
+        modality: image
+        support: unsupported
+        transport: none
+      - direction: input
+        modality: text
+        support: supported
+        transport: inline
+      - direction: input
+        modality: video
+        support: unsupported
+        transport: none
+      - direction: output
+        modality: audio
+        support: unsupported
+        transport: none
+      - direction: output
+        modality: image
+        support: unsupported
+        transport: none
+      - direction: output
+        modality: text
+        support: supported
+        transport: inline
+      - direction: output
+        modality: video
+        support: unsupported
+        transport: none
+  - id: claude-sonnet-4-20250514
+    efforts:
+      - low
+      - medium
+      - high
+      - xhigh
+      - max
+    modalities:
+      - direction: input
+        modality: audio
+        support: unsupported
+        transport: none
+      - direction: input
+        modality: image
+        support: unsupported
+        transport: none
+      - direction: input
+        modality: text
+        support: supported
+        transport: inline
+      - direction: input
+        modality: video
+        support: unsupported
+        transport: none
+      - direction: output
+        modality: audio
+        support: unsupported
+        transport: none
+      - direction: output
+        modality: image
+        support: unsupported
+        transport: none
+      - direction: output
+        modality: text
+        support: supported
+        transport: inline
+      - direction: output
+        modality: video
+        support: unsupported
+        transport: none
+tools:
+  - name: filesystem
+    support: supported
+    description: Read and modify files in the selected workspace.
+  - name: shell
+    support: supported
+    description: Run bounded shell commands through the Claude tool runner.
+  - name: web_search
+    support: supported
+    description: Use the provider web-search tool when enabled by the invocation.
+knownLimits: []

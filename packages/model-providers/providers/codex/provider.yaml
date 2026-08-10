@@ -37,3 +37,71 @@ discovery:
   endpointKinds:
     - stdio
   configurationKeys: []
+  prerequisites:
+    - kind: authentication
+      name: account-authentication
+      description: Sign in to the Codex account before execution.
+    - kind: executable
+      name: codex
+      description: The bundled Codex adapter requires the codex executable.
+    - kind: workspace
+      name: writable-workspace
+      description: Execution requires a writable workspace selected by the factory.
+models:
+  - id: gpt-5.6
+    efforts:
+      - minimal
+      - low
+      - medium
+      - high
+      - xhigh
+      - max
+    modalities:
+      - direction: input
+        modality: audio
+        support: unsupported
+        transport: none
+      - direction: input
+        modality: image
+        support: supported
+        transport: file_path
+      - direction: input
+        modality: text
+        support: supported
+        transport: inline
+      - direction: input
+        modality: video
+        support: unsupported
+        transport: none
+      - direction: output
+        modality: audio
+        support: unsupported
+        transport: none
+      - direction: output
+        modality: image
+        support: supported
+        transport: file_path
+      - direction: output
+        modality: text
+        support: supported
+        transport: inline
+      - direction: output
+        modality: video
+        support: unsupported
+        transport: none
+tools:
+  - name: filesystem
+    support: supported
+    description: Read and modify files in the selected workspace.
+  - name: shell
+    support: supported
+    description: Run bounded shell commands through the Codex tool runner.
+  - name: web_search
+    support: supported
+    description: Use the provider web-search tool when enabled by the invocation.
+knownLimits:
+  - name: referenced_image_paths
+    kind: maximum
+    unit: paths
+    description: Image generation accepts at most five referenced image paths.
+    maximum: 5

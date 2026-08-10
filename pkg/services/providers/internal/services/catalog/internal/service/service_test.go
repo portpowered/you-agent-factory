@@ -132,6 +132,11 @@ func TestListProvidersReturnsDetachedValues(t *testing.T) {
 	if len(first.Providers[0].Aliases) > 0 {
 		first.Providers[0].Aliases[0] = "mutated"
 	}
+	first.Providers[0].Models[0].ID = "mutated-model"
+	first.Providers[0].Models[0].Efforts[0] = "mutated-effort"
+	if first.Providers[0].KnownLimits[1].Default != nil {
+		*first.Providers[0].KnownLimits[1].Default = 999
+	}
 	if len(first.Providers[0].Capabilities) > 0 {
 		first.Providers[0].Capabilities[0] = providers.CapabilityUsage
 	}
@@ -150,6 +155,12 @@ func TestListProvidersReturnsDetachedValues(t *testing.T) {
 		second.Providers[0].Capabilities[0] == providers.CapabilityUsage &&
 		first.Providers[0].Capabilities[0] == providers.CapabilityUsage {
 		t.Fatal("second list capabilities share mutation from first result")
+	}
+	if second.Providers[0].Models[0].ID == "mutated-model" || second.Providers[0].Models[0].Efforts[0] == "mutated-effort" {
+		t.Fatal("second list model facts share mutation from first result")
+	}
+	if second.Providers[0].KnownLimits[1].Default == nil || *second.Providers[0].KnownLimits[1].Default != 300 {
+		t.Fatal("second list limit facts share mutation from first result")
 	}
 }
 
@@ -178,6 +189,50 @@ func TestListProvidersProjectsIdentityMetadataAndCapabilities(t *testing.T) {
 	}
 	if !slices.Contains(codex.Capabilities, providers.CapabilityPromptSubmission) {
 		t.Fatalf("codex capabilities = %#v, want prompt_submission", codex.Capabilities)
+	}
+	if codex.TechnicalSupportLevel != providers.TechnicalSupportProduction || codex.ImplementationAvailability != providers.ImplementationBundled {
+		t.Fatalf("codex publication posture = %q/%q, want production/bundled", codex.TechnicalSupportLevel, codex.ImplementationAvailability)
+	}
+	if len(codex.Models) != 1 || codex.Models[0].ID != "gpt-5.6" {
+		t.Fatalf("codex models = %#v, want gpt-5.6", codex.Models)
+	}
+	if !slices.Equal(codex.Models[0].Efforts, []providers.ReasoningEffort{"minimal", "low", "medium", "high", "xhigh", "max"}) {
+		t.Fatalf("codex efforts = %v, want canonical order", codex.Models[0].Efforts)
+	}
+	if modality := findProviderModality(codex.Models[0].Modalities, providers.ModalityDirectionInput, providers.ModalityAudio); modality == nil || modality.Support != providers.ModalityUnsupported || modality.Transport != providers.ModalityTransportNone {
+		t.Fatalf("codex audio input = %#v, want explicitly unsupported/none", modality)
+	}
+	if modality := findProviderModality(codex.Models[0].Modalities, providers.ModalityDirectionInput, providers.ModalityVideo); modality == nil || modality.Support != providers.ModalityUnsupported || modality.Transport != providers.ModalityTransportNone {
+		t.Fatalf("codex video input = %#v, want explicitly unsupported/none", modality)
+	}
+	if len(codex.KnownLimits) != 1 || codex.KnownLimits[0].Maximum == nil || *codex.KnownLimits[0].Maximum != 5 {
+		t.Fatalf("codex known limits = %#v, want referenced image-path maximum 5", codex.KnownLimits)
+	}
+
+	agy := indexProviders(list.Providers)[providers.IDAntigravity]
+	if len(agy.Models) != 11 || len(agy.Models[0].Efforts) != 3 {
+		t.Fatalf("AGY models/efforts = %d/%v, want 11 models and three efforts", len(agy.Models), agy.Models[0].Efforts)
+	}
+	if !slices.Equal(agy.Models[0].Efforts, []providers.ReasoningEffort{"low", "medium", "high"}) {
+		t.Fatalf("AGY efforts = %v, want low, medium, high", agy.Models[0].Efforts)
+	}
+	for _, kind := range []providers.ModalityKind{providers.ModalityAudio, providers.ModalityVideo} {
+		modality := findProviderModality(agy.Models[0].Modalities, providers.ModalityDirectionInput, kind)
+		if modality == nil || modality.Support != providers.ModalitySupported || modality.Transport != providers.ModalityTransportFilePath {
+			t.Fatalf("AGY %s input = %#v, want supported/file_path", kind, modality)
+		}
+	}
+	if len(agy.KnownLimits) != 2 || agy.KnownLimits[0].Name != "add_dir_workspace" || agy.KnownLimits[1].Name != "print_timeout" {
+		t.Fatalf("AGY known limits = %#v, want stable name order", agy.KnownLimits)
+	}
+	prerequisiteKinds := make(map[providers.PrerequisiteKind]bool, len(agy.Prerequisites))
+	for _, prerequisite := range agy.Prerequisites {
+		prerequisiteKinds[prerequisite.Kind] = true
+	}
+	for _, kind := range []providers.PrerequisiteKind{providers.PrerequisiteAuthentication, providers.PrerequisiteExecutable, providers.PrerequisiteWorkspace} {
+		if !prerequisiteKinds[kind] {
+			t.Fatalf("AGY prerequisites = %#v, missing %q", agy.Prerequisites, kind)
+		}
 	}
 
 	if _, ok := indexProviders(list.Providers)[providers.IDCursor]; ok {
@@ -504,6 +559,15 @@ func assertGetErrorIs(
 	if !reflect.DeepEqual(result.Provider, providers.Descriptor{}) {
 		t.Fatalf("GetProvider(%#v) provider = %#v, want zero descriptor on failure", request, result.Provider)
 	}
+}
+
+func findProviderModality(values []providers.Modality, direction providers.ModalityDirection, kind providers.ModalityKind) *providers.Modality {
+	for index := range values {
+		if values[index].Direction == direction && values[index].Kind == kind {
+			return &values[index]
+		}
+	}
+	return nil
 }
 
 func indexProviders(descriptors []providers.Descriptor) map[providers.ID]providers.Descriptor {

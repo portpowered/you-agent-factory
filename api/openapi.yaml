@@ -9585,6 +9585,21 @@ components:
           $ref: '#/components/schemas/ProviderResponseFidelityCapabilities'
         discovery:
           $ref: '#/components/schemas/ProviderDiscoveryPrerequisites'
+        models:
+          type: array
+          description: Named provider models and their complete capability facts in canonical model-ID order.
+          items:
+            $ref: '#/components/schemas/ProviderModel'
+        tools:
+          type: array
+          description: Named provider tool facts in canonical tool-name order.
+          items:
+            $ref: '#/components/schemas/ProviderTool'
+        knownLimits:
+          type: array
+          description: Named provider constraints and bounded behavior facts in canonical name order.
+          items:
+            $ref: '#/components/schemas/ProviderKnownLimit'
         deprecation:
           $ref: '#/components/schemas/ProviderDeprecation'
     ProviderTechnicalSupportLevel:
@@ -9742,6 +9757,40 @@ components:
             minLength: 1
             maxLength: 128
             pattern: ^[A-Za-z][A-Za-z0-9._-]*$
+        prerequisites:
+          type: array
+          uniqueItems: true
+          description: Sanitized executable, authentication, workspace, or configuration requirements.
+          items:
+            $ref: '#/components/schemas/ProviderDiscoveryPrerequisite'
+    ProviderDiscoveryPrerequisite:
+      type: object
+      additionalProperties: false
+      description: Sanitized prerequisite guidance that never carries a secret or machine-local value.
+      required:
+        - kind
+        - name
+        - description
+      properties:
+        kind:
+          type: string
+          enum:
+            - executable
+            - authentication
+            - workspace
+            - configuration
+          description: Sanitized prerequisite category.
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+          pattern: ^[a-z][a-z0-9._-]*$
+          description: Stable prerequisite name, never a secret value.
+        description:
+          type: string
+          minLength: 1
+          maxLength: 256
+          description: Bounded setup guidance without environment values or paths.
     ProviderDiscoveryEndpointKind:
       type: string
       description: Static endpoint transport kind that may be checked without credentials.
@@ -9750,6 +9799,166 @@ components:
         - remote-http
         - stdio
         - unix-socket
+    ProviderEffort:
+      type: string
+      description: Provider-supported reasoning effort setting for one model.
+      enum:
+        - minimal
+        - low
+        - medium
+        - high
+        - xhigh
+        - max
+    ProviderModel:
+      type: object
+      additionalProperties: false
+      description: Capability facts for one named model exposed by a provider.
+      required:
+        - id
+        - efforts
+        - modalities
+      properties:
+        id:
+          type: string
+          minLength: 1
+          maxLength: 128
+          pattern: ^[A-Za-z0-9][A-Za-z0-9._-]*$
+          description: Exact model identifier accepted by the provider adapter.
+        efforts:
+          type: array
+          uniqueItems: true
+          description: Reasoning effort values accepted independently by this model.
+          items:
+            $ref: '#/components/schemas/ProviderEffort'
+        modalities:
+          type: array
+          uniqueItems: true
+          description: Complete directional modality facts, including unsupported values.
+          items:
+            $ref: '#/components/schemas/ProviderModality'
+    ProviderModality:
+      type: object
+      additionalProperties: false
+      description: One explicit supported or unsupported directional modality fact.
+      required:
+        - direction
+        - modality
+        - support
+        - transport
+      properties:
+        direction:
+          $ref: '#/components/schemas/ProviderModalityDirection'
+        modality:
+          $ref: '#/components/schemas/ProviderModalityKind'
+        support:
+          $ref: '#/components/schemas/ProviderModalitySupport'
+        transport:
+          $ref: '#/components/schemas/ProviderModalityTransport'
+    ProviderModalityDirection:
+      type: string
+      description: Direction in which a provider model accepts or emits a modality.
+      enum:
+        - input
+        - output
+    ProviderModalityKind:
+      type: string
+      description: Media or content modality understood by a provider model.
+      enum:
+        - text
+        - image
+        - audio
+        - video
+    ProviderModalitySupport:
+      type: string
+      description: Whether the provider model supports the modality in this direction.
+      enum:
+        - supported
+        - unsupported
+    ProviderModalityTransport:
+      type: string
+      description: How a supported modality is supplied or returned.
+      enum:
+        - inline
+        - file_path
+        - none
+    ProviderTool:
+      type: object
+      additionalProperties: false
+      description: One named provider tool fact used for execution planning.
+      required:
+        - name
+        - support
+        - description
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+          pattern: ^[a-z][a-z0-9._-]*$
+          description: Stable provider-neutral tool name.
+        support:
+          $ref: '#/components/schemas/ProviderToolSupport'
+        description:
+          type: string
+          minLength: 1
+          maxLength: 256
+          description: Bounded explanation of the tool fact.
+    ProviderToolSupport:
+      type: string
+      description: Whether the provider exposes a named tool through its integration.
+      enum:
+        - supported
+        - unsupported
+    ProviderKnownLimit:
+      type: object
+      additionalProperties: false
+      description: Named bounded provider constraint or documented behavior.
+      required:
+        - name
+        - kind
+        - unit
+        - description
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+          pattern: ^[a-z][a-z0-9._-]*$
+          description: Stable machine-readable limit name.
+        kind:
+          $ref: '#/components/schemas/ProviderKnownLimitKind'
+        unit:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: Unit or flag domain for the value.
+        description:
+          type: string
+          minLength: 1
+          maxLength: 512
+          description: Bounded operator-facing explanation of the limit.
+        maximum:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Positive numeric maximum when kind is maximum.
+        default:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Positive numeric default when kind is default.
+        value:
+          type: string
+          minLength: 1
+          maxLength: 256
+          description: Bounded non-numeric behavior value when kind is behavior.
+    ProviderKnownLimitKind:
+      type: string
+      description: Meaning of the value recorded by one named provider limit fact.
+      enum:
+        - maximum
+        - default
+        - behavior
     ProviderDeprecation:
       type: object
       additionalProperties: false
