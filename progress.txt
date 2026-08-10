@@ -2367,3 +2367,16 @@
 - **Learnings for future iterations:**
   - Broad functional coverage timing failures can occur in several independent packages; keep the feature diff unchanged when the named test is stable locally and validate recovery through the narrow failed-job rerun.
 ---
+
+## 2026-08-10 13:23 -07:00 - pf-cli-exit-codes-004 CI follow-up
+- What was implemented
+  - Investigated a fifth post-review CI failure: `TestFactorySessionResumeDoesNotRepeatCompletedDispatch` timed out in the sessions restart lane.
+  - Repeated the exact sessions-restart test ten times locally and reran only the failed functional/policy jobs; both completed successfully without source changes.
+- Files changed
+  - `progress.txt`
+- Verification
+  - The sessions-restart test passed ten consecutive local runs.
+  - CI run `31427408109` is green after the failed-job rerun, including Backend Functional Coverage and Verification Policy.
+- **Learnings for future iterations:**
+  - Keep repeated CI flake evidence scoped to the named test and package; a successful isolated rerun is sufficient to validate recovery when the feature diff is untouched.
+---
