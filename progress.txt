@@ -167,5 +167,17 @@
   - `progress.txt`
 - **Learnings for future iterations:**
   - A cross-repository PR needs the head repository and PR number passed explicitly to the thread-aware GraphQL comment reader when the local branch tracks a different remote.
-  - Do not change the completed `prd.json` story state during delivery-only iterations; append review and CI evidence to the progress log instead.
+- Do not change the completed `prd.json` story state during delivery-only iterations; append review and CI evidence to the progress log instead.
+---
+
+## 2026-08-09 17:27 -07:00 - wo-c1-ext-stream-replay-only-merge-conflict-resolution
+- What was implemented
+  - Fetched the current fork `main` (`f6de38c59`) after GitHub reported PR #1840 as conflicting and merged it into the branch.
+  - Resolved the only conflict in the worktree-local `prd.json` by retaining the replay-only PRD; all product-file changes from current `main` merged without conflict.
+  - Preserved the completed four-story `passes:true` state and the existing review/CI evidence; the merge commit now needs the focused local gates and a fresh remote CI run.
+- Files changed
+  - `prd.json`, current-`main` merge result, and `progress.txt`
+- **Learnings for future iterations:**
+  - When multiple worktrees use a repository-local `prd.json`, a PR merge can conflict with another story's PRD even when product files are conflict-free; resolve that file in favor of the active branch's task contract.
+  - A green CI run on the pre-merge head does not establish merge readiness after GitHub reports `CONFLICTING`; fetch the PR's actual head repository `main`, resolve the conflict, and rerun checks for the merged head.
 ---
