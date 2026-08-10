@@ -300,6 +300,7 @@ var cliCommandOperationsSet = wire.NewSet(
 	provideStreamWorkerSessionOperation,
 	provideSessionsCLIService,
 	provideModelsCLIService,
+	provideProvidersCLIService,
 	provideFlattenFactoryConfigOperation,
 	provideExpandFactoryConfigOperation,
 	provideConfigureInitOperation,

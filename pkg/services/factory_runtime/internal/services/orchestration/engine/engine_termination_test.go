@@ -43,3 +43,39 @@ func TestRunReturnsIncompleteDrainErrorAfterTerminationClassification(t *testing
 		t.Fatalf("Run() error = %v, want errors.Is(..., ErrIncompleteDrain)", err)
 	}
 }
+
+func TestRunReevaluatesTerminationAfterDispatchHookWake(t *testing.T) {
+	n := buildTestNet()
+	hook := newTestDispatchResultHook()
+	checks := 0
+	terminator := &mockSubsystem{
+		group: subsystems.TerminationCheck,
+		execFn: func(_ context.Context, _ *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) (*interfaces.TickResult, error) {
+			checks++
+			if checks == 1 {
+				hook.SignalBufferedResults()
+			}
+			classification := interfaces.TerminationClassificationIncomplete
+			if checks > 1 {
+				classification = interfaces.TerminationClassificationComplete
+			}
+			return &interfaces.TickResult{
+				ShouldTerminate: true,
+				Termination: &interfaces.TerminationResult{
+					Classification:       classification,
+					NonTerminalWorkCount: 1,
+				},
+			}, nil
+		},
+	}
+	engine := newTestFactoryEngine(n, petri.NewMarking("test-wf"), []subsystems.Subsystem{terminator},
+		WithDispatchResultHook(hook),
+	)
+
+	if err := engine.Run(context.Background()); err != nil {
+		t.Fatalf("Run() error = %v, want a successful re-evaluation", err)
+	}
+	if checks != 2 {
+		t.Fatalf("termination checks = %d, want 2 after dispatch hook wake", checks)
+	}
+}

@@ -63,13 +63,17 @@ func newRootCommandWithGeneratedRepresentativeFamily(options CommandFactory) *co
 	if err != nil {
 		panic(fmt.Sprintf("build models command: %v", err))
 	}
+	providersCmd, err := newProductionProvidersCommand(diagnostics, options)
+	if err != nil {
+		panic(fmt.Sprintf("build providers command: %v", err))
+	}
 	b12, err := newB12ProductionFamilies(globals, diagnostics, operatorDefaults, options)
 	if err != nil {
 		panic(fmt.Sprintf("build B12 production families: %v", err))
 	}
 
 	return NewRootCommandFromSubcommands(root, RootSubcommands{Commands: productionRootSubcommands(
-		globals, diagnostics, options, factoryConfigInit, docsCmd, modelsCmd, b12,
+		globals, diagnostics, options, factoryConfigInit, docsCmd, modelsCmd, providersCmd, b12,
 	)})
 }
 
@@ -291,6 +295,7 @@ func productionRootSubcommands(
 	factoryConfigInit factoryConfigInitProductionCommands,
 	docsCmd *cobra.Command,
 	modelsCmd *cobra.Command,
+	providersCmd *cobra.Command,
 	b12 b12ProductionFamilies,
 ) []*cobra.Command {
 	return []*cobra.Command{
@@ -300,6 +305,7 @@ func productionRootSubcommands(
 		factoryConfigInit.Init,
 		b12.MCP,
 		modelsCmd,
+		providersCmd,
 		b12.Run,
 		b12.Server,
 		b12.Submit,

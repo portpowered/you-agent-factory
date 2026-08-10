@@ -18,6 +18,7 @@ import (
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
+	providerscli "github.com/portpowered/infinite-you/pkg/services/providers/transports/cli"
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessionscli "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli"
@@ -147,6 +148,10 @@ func provideModelsCLIService(
 	invocation modelscli.InvocationOperation,
 ) modelscli.Service {
 	return modelscli.New(transport.Protocol, invocation)
+}
+
+func provideProvidersCLIService(service providers.Service) providerscli.Service {
+	return providerscli.New(service)
 }
 
 func provideFlattenFactoryConfigOperation(

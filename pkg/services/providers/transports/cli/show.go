@@ -12,6 +12,53 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 )
 
+type showJSONProvider struct {
+	ID            string                 `json:"id"`
+	DisplayName   string                 `json:"displayName,omitempty"`
+	Aliases       []string               `json:"aliases,omitempty"`
+	Availability  string                 `json:"availability"`
+	Readiness     string                 `json:"readiness"`
+	Capabilities  []string               `json:"capabilities,omitempty"`
+	Prerequisites []showJSONPrerequisite `json:"prerequisites,omitempty"`
+}
+
+type showJSONPrerequisite struct {
+	Kind        string `json:"kind"`
+	Name        string `json:"name"`
+	Status      string `json:"status"`
+	Description string `json:"description,omitempty"`
+}
+
+func descriptorToJSON(descriptor providers.Descriptor) showJSONProvider {
+	entry := showJSONProvider{
+		ID:           descriptor.ID.String(),
+		DisplayName:  descriptor.DisplayName,
+		Availability: string(descriptor.Availability),
+		Readiness:    string(descriptor.Readiness),
+	}
+	if len(descriptor.Aliases) > 0 {
+		entry.Aliases = append([]string(nil), descriptor.Aliases...)
+	}
+	if len(descriptor.Capabilities) > 0 {
+		entry.Capabilities = make([]string, 0, len(descriptor.Capabilities))
+		for _, capability := range descriptor.Capabilities {
+			entry.Capabilities = append(entry.Capabilities, string(capability))
+		}
+	}
+	if len(descriptor.Prerequisites) > 0 {
+		entry.Prerequisites = make([]showJSONPrerequisite, 0, len(descriptor.Prerequisites))
+		for _, prerequisite := range descriptor.Prerequisites {
+			entry.Prerequisites = append(entry.Prerequisites, showJSONPrerequisite{
+				Kind:        string(prerequisite.Kind),
+				Name:        prerequisite.Name,
+				Status:      string(prerequisite.Status),
+				Description: prerequisite.Description,
+			})
+		}
+	}
+	return entry
+}
+
 // ShowConfig holds parameters for the providers show command.
 type ShowConfig struct {
 	Context     context.Context

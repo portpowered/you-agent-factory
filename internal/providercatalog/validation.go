@@ -2,7 +2,9 @@ package providercatalog
 
 import (
 	"fmt"
+	"math"
 	"sort"
+	"strings"
 )
 
 func validateCatalogSemantics(providers []any) error {
@@ -11,7 +13,10 @@ func validateCatalogSemantics(providers []any) error {
 	for index, value := range providers {
 		manifest := value.(map[string]any)
 		manifests[index] = manifest
-		id := manifest["id"].(string)
+		id, ok := manifest["id"].(string)
+		if !ok || strings.TrimSpace(id) == "" {
+			return fmt.Errorf("provider identity at index %d: id must be a non-empty string", index)
+		}
 		if _, exists := ids[id]; exists {
 			return fmt.Errorf("provider identity collision: duplicate canonical id %q", id)
 		}
@@ -24,8 +29,237 @@ func validateCatalogSemantics(providers []any) error {
 		if err := validateCapabilities(manifest); err != nil {
 			return err
 		}
+		if err := validateModels(manifest); err != nil {
+			return err
+		}
+		if err := validateTools(manifest); err != nil {
+			return err
+		}
+		if err := validateKnownLimits(manifest); err != nil {
+			return err
+		}
 	}
 	return validateDeprecations(manifests, ids)
+}
+
+func validateModels(manifest map[string]any) error {
+	value, exists := manifest["models"]
+	if !exists {
+		return nil
+	}
+	models, ok := value.([]any)
+	if !ok {
+		return fmt.Errorf("provider %q: models must be an array", manifest["id"])
+	}
+	providerID, _ := manifest["id"].(string)
+	seen := make(map[string]struct{}, len(models))
+	for index, raw := range models {
+		model, ok := raw.(map[string]any)
+		if !ok {
+			return fmt.Errorf("provider %q: model %d is not an object", providerID, index)
+		}
+		id, ok := model["id"].(string)
+		if !ok || strings.TrimSpace(id) == "" {
+			return fmt.Errorf("provider %q: model %d has an empty id", providerID, index)
+		}
+		if _, duplicate := seen[id]; duplicate {
+			return fmt.Errorf("provider %q: duplicate model id %q", providerID, id)
+		}
+		seen[id] = struct{}{}
+		if err := validateEfforts(providerID, id, model["efforts"]); err != nil {
+			return err
+		}
+		if err := validateModalities(providerID, id, model["modalities"]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateEfforts(providerID, modelID string, value any) error {
+	efforts, ok := value.([]any)
+	if !ok {
+		return fmt.Errorf("provider %q model %q: efforts must be an array", providerID, modelID)
+	}
+	seen := make(map[string]struct{}, len(efforts))
+	for _, raw := range efforts {
+		effort, ok := raw.(string)
+		if !ok {
+			return fmt.Errorf("provider %q model %q: effort must be a string", providerID, modelID)
+		}
+		if !isKnownEffort(effort) {
+			return fmt.Errorf("provider %q model %q: unknown effort %q", providerID, modelID, effort)
+		}
+		if _, duplicate := seen[effort]; duplicate {
+			return fmt.Errorf("provider %q model %q: duplicate effort %q", providerID, modelID, effort)
+		}
+		seen[effort] = struct{}{}
+	}
+	return nil
+}
+
+func isKnownEffort(value string) bool {
+	switch value {
+	case "minimal", "low", "medium", "high", "xhigh", "max":
+		return true
+	default:
+		return false
+	}
+}
+
+func validateModalities(providerID, modelID string, value any) error {
+	modalities, ok := value.([]any)
+	if !ok {
+		return fmt.Errorf("provider %q model %q: modalities must be an array", providerID, modelID)
+	}
+	seen := make(map[string]struct{}, len(modalities))
+	for index, raw := range modalities {
+		modality, ok := raw.(map[string]any)
+		if !ok {
+			return fmt.Errorf("provider %q model %q: modality %d is not an object", providerID, modelID, index)
+		}
+		direction, _ := modality["direction"].(string)
+		kind, _ := modality["modality"].(string)
+		support, _ := modality["support"].(string)
+		transport, _ := modality["transport"].(string)
+		if direction != "input" && direction != "output" {
+			return fmt.Errorf("provider %q model %q: unknown modality direction %q", providerID, modelID, direction)
+		}
+		if kind != "text" && kind != "image" && kind != "audio" && kind != "video" {
+			return fmt.Errorf("provider %q model %q: unknown modality %q", providerID, modelID, kind)
+		}
+		if support != "supported" && support != "unsupported" {
+			return fmt.Errorf("provider %q model %q: unknown modality support %q", providerID, modelID, support)
+		}
+		if transport != "inline" && transport != "file_path" && transport != "none" {
+			return fmt.Errorf("provider %q model %q: unknown modality transport %q", providerID, modelID, transport)
+		}
+		if (support == "unsupported") != (transport == "none") {
+			return fmt.Errorf("provider %q model %q modality %s/%s has inconsistent support and transport", providerID, modelID, direction, kind)
+		}
+		key := direction + "\x00" + kind
+		if _, duplicate := seen[key]; duplicate {
+			return fmt.Errorf("provider %q model %q: duplicate modality %s/%s", providerID, modelID, direction, kind)
+		}
+		seen[key] = struct{}{}
+	}
+	return nil
+}
+
+func validateTools(manifest map[string]any) error {
+	value, exists := manifest["tools"]
+	if !exists {
+		return nil
+	}
+	tools, ok := value.([]any)
+	if !ok {
+		return fmt.Errorf("provider %q: tools must be an array", manifest["id"])
+	}
+	providerID, _ := manifest["id"].(string)
+	seen := make(map[string]struct{}, len(tools))
+	for index, raw := range tools {
+		tool, ok := raw.(map[string]any)
+		if !ok {
+			return fmt.Errorf("provider %q: tool %d is not an object", providerID, index)
+		}
+		name, _ := tool["name"].(string)
+		if strings.TrimSpace(name) == "" {
+			return fmt.Errorf("provider %q: tool %d has an empty name", providerID, index)
+		}
+		if _, duplicate := seen[name]; duplicate {
+			return fmt.Errorf("provider %q: duplicate tool %q", providerID, name)
+		}
+		support, _ := tool["support"].(string)
+		if support != "supported" && support != "unsupported" {
+			return fmt.Errorf("provider %q tool %q: unknown support %q", providerID, name, support)
+		}
+		description, _ := tool["description"].(string)
+		if strings.TrimSpace(description) == "" {
+			return fmt.Errorf("provider %q tool %q: description is required", providerID, name)
+		}
+		seen[name] = struct{}{}
+	}
+	return nil
+}
+
+func validateKnownLimits(manifest map[string]any) error {
+	value, exists := manifest["knownLimits"]
+	if !exists {
+		return nil
+	}
+	limits, ok := value.([]any)
+	if !ok {
+		return fmt.Errorf("provider %q: knownLimits must be an array", manifest["id"])
+	}
+	providerID, _ := manifest["id"].(string)
+	seen := make(map[string]struct{}, len(limits))
+	for index, raw := range limits {
+		limit, ok := raw.(map[string]any)
+		if !ok {
+			return fmt.Errorf("provider %q: known limit %d is not an object", providerID, index)
+		}
+		name, _ := limit["name"].(string)
+		if strings.TrimSpace(name) == "" {
+			return fmt.Errorf("provider %q: known limit %d has an empty name", providerID, index)
+		}
+		if _, duplicate := seen[name]; duplicate {
+			return fmt.Errorf("provider %q: duplicate known limit %q", providerID, name)
+		}
+		seen[name] = struct{}{}
+		kind, _ := limit["kind"].(string)
+		maximum, hasMaximum := limit["maximum"]
+		defaultValue, hasDefault := limit["default"]
+		value, hasValue := limit["value"]
+		valueText, valueIsString := value.(string)
+		switch kind {
+		case "maximum":
+			if !hasMaximum || !isPositiveInteger(maximum) || hasDefault || hasValue {
+				return fmt.Errorf("provider %q known limit %q: maximum record is incomplete", providerID, name)
+			}
+		case "default":
+			if !hasDefault || !isPositiveInteger(defaultValue) || hasMaximum || hasValue {
+				return fmt.Errorf("provider %q known limit %q: default record is incomplete", providerID, name)
+			}
+		case "behavior":
+			if !hasValue || !valueIsString || strings.TrimSpace(valueText) == "" || hasMaximum || hasDefault {
+				return fmt.Errorf("provider %q known limit %q: behavior record is incomplete", providerID, name)
+			}
+		default:
+			return fmt.Errorf("provider %q known limit %q: unknown kind %q", providerID, name, kind)
+		}
+	}
+	return nil
+}
+
+func isPositiveInteger(value any) bool {
+	switch number := value.(type) {
+	case int:
+		return number > 0
+	case int8:
+		return number > 0
+	case int16:
+		return number > 0
+	case int32:
+		return number > 0
+	case int64:
+		return number > 0
+	case uint:
+		return number > 0
+	case uint8:
+		return number > 0
+	case uint16:
+		return number > 0
+	case uint32:
+		return number > 0
+	case uint64:
+		return number > 0
+	case float32:
+		return number > 0 && float32(math.Trunc(float64(number))) == number
+	case float64:
+		return number > 0 && math.Trunc(number) == number
+	default:
+		return false
+	}
 }
 
 func validateAliases(manifests []map[string]any, ids map[string]struct{}) error {
