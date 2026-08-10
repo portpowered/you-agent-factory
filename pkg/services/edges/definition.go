@@ -60,8 +60,9 @@ type Edges struct {
 	FactoryWebhookHTTPClient      interface {
 		Do(*http.Request) (*http.Response, error)
 	}
-	FactoryWebhookSecretResolver webhooks.SecretResolver
-	ModelAssetHTTPClient         interface {
+	FactoryWebhookSecretResolver     webhooks.SecretResolver
+	FactoryWebhookDeadLetterAppender webhooks.DeadLetterAppender
+	ModelAssetHTTPClient             interface {
 		Do(*http.Request) (*http.Response, error)
 	}
 	ModelAssetEndpoints            models.RuntimeAssetEndpoints
@@ -266,6 +267,9 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.FactoryWebhookSecretResolver != nil {
 		defaults.FactoryWebhookSecretResolver = replacements.FactoryWebhookSecretResolver
+	}
+	if replacements.FactoryWebhookDeadLetterAppender != nil {
+		defaults.FactoryWebhookDeadLetterAppender = replacements.FactoryWebhookDeadLetterAppender
 	}
 	if replacements.ModelAssetHTTPClient != nil {
 		defaults.ModelAssetHTTPClient = replacements.ModelAssetHTTPClient

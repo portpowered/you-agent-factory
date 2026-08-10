@@ -14,6 +14,9 @@ const (
 	SignatureHeader     = "X-Factory-Webhook-Signature"
 	SignatureVersionV1  = "v1"
 	MaxResponseBodySize = 4 << 10
+	// DeadLetterRelativePath is kept below the loaded runtime base so terminal
+	// delivery failures remain owned by the Factory Session runtime.
+	DeadLetterRelativePath = ".you-agent-factory/webhooks/dead-letter.jsonl"
 )
 
 // SecretResolver resolves a declaration's reference without exposing secret
@@ -23,6 +26,11 @@ type SecretResolver func(
 	factorydefinitions.LoadedFactorySource,
 	string,
 ) (string, error)
+
+// DeadLetterAppender appends one already-encoded JSON Lines record to the
+// session-owned runtime path. The appender owns directory creation and file
+// permissions; the Webhooks service owns record redaction and line framing.
+type DeadLetterAppender func(string, []byte) error
 
 // Service starts session-scoped outbound subscriptions.
 type Service interface {
@@ -41,4 +49,5 @@ type StartRequest struct {
 	Scope            recordings.CanonicalEventScope
 	ActivationCursor *recordings.CanonicalEventCursor
 	RuntimeSource    factorydefinitions.LoadedFactorySource
+	DeadLetterPath   string
 }

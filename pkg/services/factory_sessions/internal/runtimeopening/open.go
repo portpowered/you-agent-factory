@@ -3,6 +3,8 @@ package runtimeopening
 import (
 	"context"
 	"fmt"
+	"path/filepath"
+	"strings"
 	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -524,7 +526,22 @@ func startFactoryWebhookSubscription(
 		Scope:            scope,
 		ActivationCursor: lastCanonicalCursor(ledger, scope),
 		RuntimeSource:    loaded,
+		DeadLetterPath:   factoryWebhookDeadLetterPath(loaded),
 	})
+}
+
+func factoryWebhookDeadLetterPath(loaded factorydefinitions.LoadedFactorySource) string {
+	if loaded == nil {
+		return ""
+	}
+	baseDir := strings.TrimSpace(loaded.RuntimeBaseDir())
+	if baseDir == "" {
+		baseDir = strings.TrimSpace(loaded.FactoryDir())
+	}
+	if baseDir == "" {
+		return ""
+	}
+	return filepath.Join(baseDir, filepath.FromSlash(webhooks.DeadLetterRelativePath))
 }
 
 func hasEnabledWebhooks(config *factorydefinitions.FactoryConfig) bool {

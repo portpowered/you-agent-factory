@@ -664,15 +664,21 @@ func (h *FactoryEventHistory) RecordWorkStateChange(tick int, record work.WorkSt
 	if workTypeName == "" {
 		workTypeName = record.WorkTypeID
 	}
+	context := interfaces.FactoryEventContext{
+		Tick:      tick,
+		EventTime: eventTime,
+		SessionID: stringPtrIfNotEmpty(record.SessionID),
+		RequestID: stringPtrIfNotEmpty(record.RequestID),
+		WorkIDs:   stringSlicePtr([]string{record.WorkID}),
+	}
+	if context.SessionID != nil {
+		sessionSequence := h.allocateSessionLifecycleSequence()
+		context.SessionSequence = &sessionSequence
+	}
 	h.appendEvent(domainFactoryEvent(
 		interfaces.FactoryEventTypeWorkStateChange,
 		fmt.Sprintf("%s/%s/%d", eventIDWorkStateChangePrefix, record.WorkID, tick),
-		interfaces.FactoryEventContext{
-			Tick:      tick,
-			EventTime: eventTime,
-			RequestID: stringPtrIfNotEmpty(record.RequestID),
-			WorkIDs:   stringSlicePtr([]string{record.WorkID}),
-		},
+		context,
 		interfaces.WorkStateChangeEventPayload{
 			WorkID:        record.WorkID,
 			WorkTypeName:  workTypeName,

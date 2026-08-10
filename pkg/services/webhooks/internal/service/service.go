@@ -1,16 +1,10 @@
 package service
 
 import (
-	"bytes"
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -27,6 +21,8 @@ type Service struct {
 	}
 	secretResolve webhooks.SecretResolver
 	clock         interface{ Now() time.Time }
+	deadLetters   webhooks.DeadLetterAppender
+	deadLetterMu  sync.Mutex
 	logger        logging.Logger
 }
 
@@ -40,6 +36,20 @@ func New(
 	clock interface{ Now() time.Time },
 	logger logging.Logger,
 ) *Service {
+	return NewWithDeadLetterAppender(httpClient, secretResolve, clock, nil, logger)
+}
+
+// NewWithDeadLetterAppender constructs the Webhooks service with the exact
+// runtime-storage effect used for terminal delivery records.
+func NewWithDeadLetterAppender(
+	httpClient interface {
+		Do(*http.Request) (*http.Response, error)
+	},
+	secretResolve webhooks.SecretResolver,
+	clock interface{ Now() time.Time },
+	deadLetters webhooks.DeadLetterAppender,
+	logger logging.Logger,
+) *Service {
 	if httpClient == nil || clock == nil {
 		return nil
 	}
@@ -47,6 +57,7 @@ func New(
 		httpClient:    httpClient,
 		secretResolve: secretResolve,
 		clock:         clock,
+		deadLetters:   deadLetters,
 		logger:        logging.EnsureLogger(logger),
 	}
 }
@@ -104,8 +115,11 @@ func (service *Service) runEndpoint(
 	definition factorydefinitions.FactoryWebhookConfig,
 ) {
 	subscribed, err := request.Events.SubscribeFrom(ctx, recordings.SubscribeRequest{
-		Cursor: request.ActivationCursor,
-		Scope:  request.Scope,
+		// A webhook remains a live subscriber after activation. The generic
+		// reconnect contract may close immediately when a cursor is exactly at
+		// the retained tail, so activation filtering is applied below while the
+		// underlying scoped subscription remains live.
+		Scope: request.Scope,
 	})
 	if err != nil {
 		service.logger.Error("factory webhook subscription failed", "endpoint", definition.Name, "error", err)
@@ -133,10 +147,13 @@ func (service *Service) runEndpoint(
 		outcome := subscribed.Subscription.Next(ctx)
 		switch outcome.Kind {
 		case recordings.SubscriptionEvent:
+			if atOrBeforeActivationCursor(outcome.Event, request.ActivationCursor) {
+				continue
+			}
 			if !matchesEventFilter(definition, outcome.Event) {
 				continue
 			}
-			service.deliver(ctx, definition, outcome.Event, secret, policy.RequestTimeout)
+			service.deliver(ctx, request, definition, outcome.Event, secret, policy)
 		case recordings.SubscriptionGap:
 			service.logger.Error("factory webhook subscription gap", "endpoint", definition.Name)
 			return
@@ -144,6 +161,17 @@ func (service *Service) runEndpoint(
 			return
 		}
 	}
+}
+
+func atOrBeforeActivationCursor(
+	event recordings.CanonicalEvent,
+	cursor *recordings.CanonicalEventCursor,
+) bool {
+	if cursor == nil || cursor.StreamGenerationID == "" ||
+		event.Cursor.StreamGenerationID != cursor.StreamGenerationID {
+		return false
+	}
+	return event.Cursor.Sequence <= cursor.Sequence
 }
 
 func matchesEventFilter(
@@ -208,49 +236,6 @@ func containsWebhookValue(values []string, want string) bool {
 	return false
 }
 
-func (service *Service) deliver(
-	parent context.Context,
-	definition factorydefinitions.FactoryWebhookConfig,
-	event recordings.CanonicalEvent,
-	secret string,
-	requestTimeout time.Duration,
-) {
-	body, err := marshalCanonicalEvent(event)
-	if err != nil {
-		service.logger.Error("factory webhook event encoding failed", "endpoint", definition.Name, "event_id", string(event.ID), "error", err)
-		return
-	}
-	timestamp := strconv.FormatInt(service.clock.Now().Unix(), 10)
-	signature := sign(secret, timestamp, body)
-	ctx, cancel := context.WithTimeout(parent, requestTimeout)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, definition.URL, bytes.NewReader(body))
-	if err != nil {
-		service.logger.Error("factory webhook request construction failed", "endpoint", definition.Name, "event_id", string(event.ID), "error", err)
-		return
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set(webhooks.EventIDHeader, string(event.ID))
-	req.Header.Set(webhooks.TimestampHeader, timestamp)
-	req.Header.Set(webhooks.SignatureHeader, webhooks.SignatureVersionV1+"="+signature)
-	response, err := service.httpClient.Do(req)
-	if err != nil {
-		if response != nil {
-			consumeResponseBody(response)
-		}
-		service.logger.Error("factory webhook delivery failed", "endpoint", definition.Name, "event_id", string(event.ID), "error", err)
-		return
-	}
-	if response == nil {
-		service.logger.Error("factory webhook delivery failed", "endpoint", definition.Name, "event_id", string(event.ID), "error", "empty HTTP response")
-		return
-	}
-	consumeResponseBody(response)
-	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		service.logger.Error("factory webhook receiver rejected event", "endpoint", definition.Name, "event_id", string(event.ID), "status", response.StatusCode)
-	}
-}
-
 func marshalCanonicalEvent(event recordings.CanonicalEvent) ([]byte, error) {
 	legacyContext := factorydefinitions.FactoryEventContext{
 		EventTime: event.RecordedAt,
@@ -273,21 +258,6 @@ func marshalCanonicalEvent(event recordings.CanonicalEvent) ([]byte, error) {
 		SchemaVersion: factorydefinitions.FactoryEventSchemaVersionV1,
 		Type:          factorydefinitions.FactoryEventType(event.Kind),
 	})
-}
-
-func sign(secret, timestamp string, body []byte) string {
-	mac := hmac.New(sha256.New, []byte(secret))
-	_, _ = mac.Write([]byte(timestamp + "."))
-	_, _ = mac.Write(body)
-	return hex.EncodeToString(mac.Sum(nil))
-}
-
-func consumeResponseBody(response *http.Response) {
-	if response.Body == nil {
-		return
-	}
-	_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, webhooks.MaxResponseBodySize))
-	_ = response.Body.Close()
 }
 
 type subscription struct {

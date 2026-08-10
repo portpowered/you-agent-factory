@@ -71,5 +71,11 @@ func provideFactoryWebhooksService(
 	if clockSource == nil {
 		clockSource = platformclock.Real{}
 	}
-	return webhookswire.NewService(httpClient, secretResolver, clockSource, logger)
+	return webhookswire.NewService(
+		httpClient,
+		secretResolver,
+		clockSource,
+		edges.FactoryWebhookDeadLetterAppender,
+		logger,
+	)
 }
