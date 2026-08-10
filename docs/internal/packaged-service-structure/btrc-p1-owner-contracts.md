@@ -44,19 +44,21 @@ behavior comes from the retained Factory Runtime and Factory Sessions owner
 ports. The application-opening resolver and CLI runner adapter likewise no
 longer accept a per-call logger.
 
-Some presentation boundaries are still intentionally transitional. The
+Presentation boundaries remain explicit and separate from operation values. The
 application-opening service receives host-readiness, lifecycle-completion,
 historical-replay, and hosted-service callbacks through its explicit
 `ApplicationOpeningPresentation` argument rather than its durable request.
-Durable `StartRequest` is now value-only; the live JavaScript owner exposes event
+Durable `StartRequest` is value-only; the live JavaScript owner exposes event
 observation through a private `StartSyncWithEventConsumer` capability so
 invocation presentation does not become request state, while ordinary durable
 callers use `StartSync`.
-Direct JavaScript/stdio opening still retains output and host-observation
-values needed by the protocol adapters. These callbacks do not select or
-replace process effects, but they mean story 004 remains pending until the
-later transport and response-stream cutover can move them to owner results or
-transport-local adapters.
+
+The direct JavaScript and MCP stdio openings follow the same rule:
+`DirectJavaScriptRunRequest` and `StdioOpeningRequest` contain only selection
+values, while `DirectJavaScriptRunPresentation` and
+`StdioOpeningPresentation` carry protocol output streams and optional host
+readiness at the transport adapter boundary. Host adapters receive the
+presentation value directly and cannot rebind the durable request.
 
 ## Private owner state
 

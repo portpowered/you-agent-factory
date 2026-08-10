@@ -25,7 +25,11 @@ type InvocationOperation interface {
 // consumed by CLI selection.
 type DirectJavaScriptRunOperation interface {
 	Supports(string) bool
-	Open(context.Context, factorysessions.DirectJavaScriptRunRequest) (factorysessions.DirectJavaScriptApplication, error)
+	Open(
+		context.Context,
+		factorysessions.DirectJavaScriptRunRequest,
+		factorysessions.DirectJavaScriptRunPresentation,
+	) (factorysessions.DirectJavaScriptApplication, error)
 }
 
 // SessionInvoker retains the historical CLI name while using the Factory
@@ -92,19 +96,20 @@ func (s *selection) Open(
 	if s.directJavaScript.Supports(cfg.FactoryConfigPath) {
 		request := factorysessions.DirectJavaScriptRunRequest{
 			SourcePath: cfg.FactoryConfigPath, MockWorkersEnabled: cfg.MockWorkersEnabled,
-			JSONOutput: cfg.JSONOutput, Output: cfg.Output,
+			JSONOutput: cfg.JSONOutput,
 		}
+		presentation := factorysessions.DirectJavaScriptRunPresentation{Output: cfg.Output}
 		if intent.APIEnabled {
-			request.Host = &factorysessions.RuntimeHostRequest{
+			presentation.Host = &factorysessions.RuntimeHostRequest{
 				Directory: cfg.Dir, Host: cfg.BindHost, Port: cfg.Port, AutoPort: cfg.AutoPort,
 			}
-			request.RuntimeHostObserver = newRuntimeHostObserver(
+			presentation.RuntimeHostObserver = newRuntimeHostObserver(
 				ctx, cfg, resolvedRunRecordPath{}, cfg.Port,
 				func() runtimeartifact.Diagnostics { return runtimeartifact.Diagnostics{} },
 			)
 		}
 		return s.buildApplication(ctx, func(openCtx context.Context) (initializer.OpenedApplication, error) {
-			opened, err := s.directJavaScript.Open(openCtx, request)
+			opened, err := s.directJavaScript.Open(openCtx, request, presentation)
 			return initializer.OpenedApplication{Plan: opened.Plan}, err
 		})
 	}

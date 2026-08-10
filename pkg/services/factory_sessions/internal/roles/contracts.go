@@ -136,17 +136,25 @@ type StdioExecutionOpening interface {
 }
 
 type StdioOpeningOperation interface {
-	OpenStdio(context.Context, factorysessions.StdioOpeningRequest) (StdioApplication, error)
+	OpenStdio(
+		context.Context,
+		factorysessions.StdioOpeningRequest,
+		factorysessions.StdioOpeningPresentation,
+	) (StdioApplication, error)
 }
 
 type DirectJavaScriptRunOperation interface {
 	Supports(string) bool
-	Open(context.Context, factorysessions.DirectJavaScriptRunRequest) (factorysessions.DirectJavaScriptApplication, error)
+	Open(
+		context.Context,
+		factorysessions.DirectJavaScriptRunRequest,
+		factorysessions.DirectJavaScriptRunPresentation,
+	) (factorysessions.DirectJavaScriptApplication, error)
 }
 
 type DirectJavaScriptHostAdapter func(
 	OwnedExecutionService,
-	factorysessions.DirectJavaScriptRunRequest,
+	factorysessions.DirectJavaScriptRunPresentation,
 ) (lifecycle.Component, error)
 
 type DirectJavaScriptSyncRunner func(

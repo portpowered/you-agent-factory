@@ -66,8 +66,8 @@ func TestRunSelectionOwnsDirectJavaScriptTransportChoice(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 	if direct.request.SourcePath != "workflow.cjs" || !direct.request.MockWorkersEnabled ||
-		!direct.request.JSONOutput || direct.request.Output != output {
-		t.Fatalf("direct request = %#v", direct.request)
+		!direct.request.JSONOutput || direct.presentation.Output != output {
+		t.Fatalf("direct opening = request:%#v presentation:%#v", direct.request, direct.presentation)
 	}
 }
 
@@ -88,8 +88,9 @@ func TestApplyRunIntentDisablesUnrequestedServerWithoutSuppressingTerminalPresen
 }
 
 type selectionDirectJavaScriptStub struct {
-	supported bool
-	request   factorysessions.DirectJavaScriptRunRequest
+	supported    bool
+	request      factorysessions.DirectJavaScriptRunRequest
+	presentation factorysessions.DirectJavaScriptRunPresentation
 }
 
 func (s *selectionDirectJavaScriptStub) Supports(string) bool { return s.supported }
@@ -97,8 +98,9 @@ func (s *selectionDirectJavaScriptStub) Supports(string) bool { return s.support
 func (s *selectionDirectJavaScriptStub) Open(
 	_ context.Context,
 	request factorysessions.DirectJavaScriptRunRequest,
+	presentation factorysessions.DirectJavaScriptRunPresentation,
 ) (factorysessions.DirectJavaScriptApplication, error) {
-	s.request = request
+	s.request, s.presentation = request, presentation
 	return factorysessions.DirectJavaScriptApplication{
 		Plan: lifecycle.Plan{Components: []lifecycle.NamedComponent{{
 			Name: "direct JavaScript",

@@ -22,15 +22,17 @@ import (
 )
 
 type recordingStdioOpening struct {
-	request factorysessions.StdioOpeningRequest
-	result  factorysessionwire.StdioApplication
+	request      factorysessions.StdioOpeningRequest
+	presentation factorysessions.StdioOpeningPresentation
+	result       factorysessionwire.StdioApplication
 }
 
 func (opening *recordingStdioOpening) OpenStdio(
 	_ context.Context,
 	request factorysessions.StdioOpeningRequest,
+	presentation factorysessions.StdioOpeningPresentation,
 ) (factorysessionwire.StdioApplication, error) {
-	opening.request = request
+	opening.request, opening.presentation = request, presentation
 	return opening.result, nil
 }
 
@@ -62,11 +64,11 @@ func TestStdioApplicationOpenerMapsOnlyInvocationEdgeValues(t *testing.T) {
 	if application != opening.result {
 		t.Fatal("OpenStdio() did not return the exact lifecycle-ready application")
 	}
-	request := opening.request
+	request, presentation := opening.request, opening.presentation
 	if request.FixtureCatalogPath != "fixtures.json" || !request.RuntimeBacked ||
 		request.ProjectRoot != "/project" || request.SystemConfigHome != "/home" ||
-		request.Input != input || request.Output != output {
-		t.Fatalf("mapped stdio opening request = %#v", request)
+		presentation.Input != input || presentation.Output != output {
+		t.Fatalf("mapped stdio opening = request:%#v presentation:%#v", request, presentation)
 	}
 }
 

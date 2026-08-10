@@ -18,23 +18,39 @@ type ExecutionRuntimeOpeningRequest struct {
 }
 
 // StdioOpeningRequest carries only invocation-edge values into the Factory
-// Sessions-owned stdio opening policy.
+// Sessions-owned stdio opening policy. Transport streams stay on the explicit
+// presentation boundary below so durable selection cannot retain protocol
+// handles.
 type StdioOpeningRequest struct {
 	FixtureCatalogPath string
 	RuntimeBacked      bool
 	ProjectRoot        string
 	SystemConfigHome   string
-	Input              io.Reader
-	Output             io.Writer
+}
+
+// StdioOpeningPresentation carries the protocol-owned streams for one stdio
+// opening. The Factory Sessions operation consumes these streams only while
+// adapting the already-selected execution into a lifecycle-ready application.
+type StdioOpeningPresentation struct {
+	Input  io.Reader
+	Output io.Writer
 }
 
 // DirectJavaScriptRunRequest carries customer-edge values for one raw
 // JavaScript workflow invocation. Source resolution and execution policy stay
-// behind DirectJavaScriptRunOperation.
+// behind DirectJavaScriptRunOperation. Output and hosting callbacks are kept
+// on DirectJavaScriptRunPresentation so this request remains value-only.
 type DirectJavaScriptRunRequest struct {
-	SourcePath          string
-	MockWorkersEnabled  bool
-	JSONOutput          bool
+	SourcePath         string
+	MockWorkersEnabled bool
+	JSONOutput         bool
+}
+
+// DirectJavaScriptRunPresentation carries transport-owned output and optional
+// HTTP-host readiness for one raw workflow invocation. It is deliberately
+// separate from DirectJavaScriptRunRequest: a durable request cannot retain an
+// io.Writer, listener selection, or callback supplied by a caller.
+type DirectJavaScriptRunPresentation struct {
 	Output              io.Writer
 	Host                *RuntimeHostRequest
 	RuntimeHostObserver RuntimeHostObserver

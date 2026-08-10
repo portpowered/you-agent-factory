@@ -772,14 +772,16 @@ func (adapter stdioApplicationOpener) OpenStdio(
 	ctx context.Context,
 	intent processcontract.MCPIntent,
 ) (initializer.RunApplication, error) {
-	return adapter.open.OpenStdio(ctx, factorysessions.StdioOpeningRequest{
-		FixtureCatalogPath: intent.FixtureCatalogPath,
-		RuntimeBacked:      intent.RuntimeBacked,
-		ProjectRoot:        intent.ProjectRoot,
-		SystemConfigHome:   intent.HomeDir,
-		Input:              intent.Stdin,
-		Output:             intent.Stdout,
-	})
+	return adapter.open.OpenStdio(
+		ctx,
+		factorysessions.StdioOpeningRequest{
+			FixtureCatalogPath: intent.FixtureCatalogPath,
+			RuntimeBacked:      intent.RuntimeBacked,
+			ProjectRoot:        intent.ProjectRoot,
+			SystemConfigHome:   intent.HomeDir,
+		},
+		factorysessions.StdioOpeningPresentation{Input: intent.Stdin, Output: intent.Stdout},
+	)
 }
 
 func provideStdioApplicationOpener(
@@ -894,9 +896,9 @@ func provideDirectJavaScriptHostAdapter(
 	}
 	return func(
 		execution factorysessionwire.OwnedExecutionService,
-		request factorysessions.DirectJavaScriptRunRequest,
+		presentation factorysessions.DirectJavaScriptRunPresentation,
 	) (lifecycle.Component, error) {
-		if request.Host == nil {
+		if presentation.Host == nil {
 			return nil, errors.New("direct JavaScript host request is required")
 		}
 		handler, err := httpHandler.BindDurableExecution(execution, logger)
@@ -905,11 +907,11 @@ func provideDirectJavaScriptHostAdapter(
 		}
 		return newRunner(func(ctx context.Context) error {
 			return start(ctx, platformhttpserver.StartRequest{
-				Handler: handler, Host: request.Host.Host, Port: request.Host.Port,
-				AutoPort: request.Host.AutoPort, Logger: logger,
+				Handler: handler, Host: presentation.Host.Host, Port: presentation.Host.Port,
+				AutoPort: presentation.Host.AutoPort, Logger: logger,
 				OnBound: func(binding platformhttpserver.Binding) {
-					if request.RuntimeHostObserver != nil {
-						request.RuntimeHostObserver(factorysessions.RuntimeHostBinding{
+					if presentation.RuntimeHostObserver != nil {
+						presentation.RuntimeHostObserver(factorysessions.RuntimeHostBinding{
 							Host: binding.Host, Port: binding.Port,
 						})
 					}

@@ -70,6 +70,7 @@ func (*directJavaScriptRunOperation) Supports(sourcePath string) bool {
 func (o *directJavaScriptRunOperation) Open(
 	ctx context.Context,
 	request factorysessions.DirectJavaScriptRunRequest,
+	presentation factorysessions.DirectJavaScriptRunPresentation,
 ) (factorysessions.DirectJavaScriptApplication, error) {
 	if o == nil || o.build == nil || o.runSync == nil {
 		return factorysessions.DirectJavaScriptApplication{}, errors.New("direct JavaScript run operation is unavailable")
@@ -78,8 +79,8 @@ func (o *directJavaScriptRunOperation) Open(
 	if err != nil {
 		return factorysessions.DirectJavaScriptApplication{}, err
 	}
-	completion := o.completion(prepared, request)
-	transport, completion, err := o.prepareHosting(request, prepared.execution, completion)
+	completion := o.completion(prepared, request, presentation)
+	transport, completion, err := o.prepareHosting(presentation, prepared.execution, completion)
 	if err != nil {
 		return factorysessions.DirectJavaScriptApplication{}, errors.Join(err, prepared.execution.Close())
 	}
@@ -135,6 +136,7 @@ func (o *directJavaScriptRunOperation) prepareExecution(
 func (o *directJavaScriptRunOperation) completion(
 	prepared preparedDirectJavaScriptExecution,
 	request factorysessions.DirectJavaScriptRunRequest,
+	presentation factorysessions.DirectJavaScriptRunPresentation,
 ) func(context.Context) error {
 	return func(runCtx context.Context) error {
 		return o.runSync(runCtx, prepared.execution, factorysessions.StartRequest{
@@ -144,22 +146,22 @@ func (o *directJavaScriptRunOperation) completion(
 				WorkflowFile: prepared.sourcePath,
 			},
 			Runtime: &factorysessions.RuntimeOptions{ChildExecutorMode: prepared.childMode},
-		}, request.JSONOutput, request.Output)
+		}, request.JSONOutput, presentation.Output)
 	}
 }
 
 func (o *directJavaScriptRunOperation) prepareHosting(
-	request factorysessions.DirectJavaScriptRunRequest,
+	presentation factorysessions.DirectJavaScriptRunPresentation,
 	execution roles.OwnedExecutionService,
 	completion func(context.Context) error,
 ) (directJavaScriptTransport, func(context.Context) error, error) {
-	if request.Host == nil {
+	if presentation.Host == nil {
 		return nil, completion, nil
 	}
 	ready := make(chan struct{})
-	observer := request.RuntimeHostObserver
+	observer := presentation.RuntimeHostObserver
 	var publish sync.Once
-	request.RuntimeHostObserver = func(binding factorysessions.RuntimeHostBinding) {
+	presentation.RuntimeHostObserver = func(binding factorysessions.RuntimeHostBinding) {
 		publish.Do(func() {
 			if observer != nil {
 				observer(binding)
@@ -176,7 +178,7 @@ func (o *directJavaScriptRunOperation) prepareHosting(
 			return runCtx.Err()
 		}
 	}
-	transport, err := o.host(execution, request)
+	transport, err := o.host(execution, presentation)
 	return transport, completion, err
 }
 

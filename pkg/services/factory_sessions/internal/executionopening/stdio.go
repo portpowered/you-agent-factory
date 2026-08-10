@@ -38,6 +38,7 @@ func NewStdioOpeningService(
 func (service *StdioOpeningService) OpenStdio(
 	ctx context.Context,
 	request factorysessions.StdioOpeningRequest,
+	presentation factorysessions.StdioOpeningPresentation,
 ) (roles.StdioApplication, error) {
 	if service == nil || service.opening == nil {
 		return nil, fmt.Errorf("session execution opening factory is required")
@@ -48,7 +49,7 @@ func (service *StdioOpeningService) OpenStdio(
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if request.Input == nil || request.Output == nil {
+	if presentation.Input == nil || presentation.Output == nil {
 		return nil, fmt.Errorf("stdio streams are required")
 	}
 	if request.RuntimeBacked {
@@ -62,7 +63,7 @@ func (service *StdioOpeningService) OpenStdio(
 		if err != nil {
 			return nil, err
 		}
-		application, err := service.buildRuntime(ctx, opened, request.Input, request.Output)
+		application, err := service.buildRuntime(ctx, opened, presentation.Input, presentation.Output)
 		if err != nil {
 			return nil, err
 		}
@@ -76,7 +77,7 @@ func (service *StdioOpeningService) OpenStdio(
 	if err != nil {
 		return nil, err
 	}
-	application, err := service.buildFixture(ctx, execution, request.Input, request.Output)
+	application, err := service.buildFixture(ctx, execution, presentation.Input, presentation.Output)
 	if err == nil && application != nil {
 		return application, nil
 	}

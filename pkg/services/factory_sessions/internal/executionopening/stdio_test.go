@@ -32,8 +32,8 @@ func TestStdioOpeningServiceOwnsFixtureSelection(t *testing.T) {
 
 	input, output := &bytes.Buffer{}, &bytes.Buffer{}
 	got, err := operation.OpenStdio(context.Background(), factorysessions.StdioOpeningRequest{
-		FixtureCatalogPath: "fixtures.json", Input: input, Output: output,
-	})
+		FixtureCatalogPath: "fixtures.json",
+	}, factorysessions.StdioOpeningPresentation{Input: input, Output: output})
 	if err != nil {
 		t.Fatalf("OpenStdio: %v", err)
 	}
@@ -62,8 +62,7 @@ func TestStdioOpeningServiceOwnsRuntimeBackedSelection(t *testing.T) {
 
 	got, err := operation.OpenStdio(context.Background(), factorysessions.StdioOpeningRequest{
 		RuntimeBacked: true, ProjectRoot: "project", SystemConfigHome: "home",
-		Input: &bytes.Buffer{}, Output: &bytes.Buffer{},
-	})
+	}, factorysessions.StdioOpeningPresentation{Input: &bytes.Buffer{}, Output: &bytes.Buffer{}})
 	if err != nil {
 		t.Fatalf("OpenStdio: %v", err)
 	}
@@ -86,8 +85,8 @@ func TestStdioOpeningServiceClosesFixtureWhenApplicationBuildFails(t *testing.T)
 		t.Fatalf("NewStdioOpeningService: %v", err)
 	}
 	_, err = operation.OpenStdio(context.Background(), factorysessions.StdioOpeningRequest{
-		FixtureCatalogPath: "fixtures.json", Input: &bytes.Buffer{}, Output: &bytes.Buffer{},
-	})
+		FixtureCatalogPath: "fixtures.json",
+	}, factorysessions.StdioOpeningPresentation{Input: &bytes.Buffer{}, Output: &bytes.Buffer{}})
 	if !errors.Is(err, buildErr) || !errors.Is(err, closeErr) || !owned.closed {
 		t.Fatalf("OpenStdio error = %v, closed = %v", err, owned.closed)
 	}
@@ -121,8 +120,7 @@ func TestStdioOpeningServiceLeavesRuntimeFailureCleanupWithBuilder(t *testing.T)
 	}
 	_, err = operation.OpenStdio(context.Background(), factorysessions.StdioOpeningRequest{
 		RuntimeBacked: true, ProjectRoot: "project",
-		Input: &bytes.Buffer{}, Output: &bytes.Buffer{},
-	})
+	}, factorysessions.StdioOpeningPresentation{Input: &bytes.Buffer{}, Output: &bytes.Buffer{}})
 	if !errors.Is(err, buildErr) || closeCount != 1 {
 		t.Fatalf("OpenStdio error = %v, close count = %d, want build error and one close", err, closeCount)
 	}
@@ -141,8 +139,8 @@ func TestStdioOpeningServiceRejectsNilApplications(t *testing.T) {
 		t.Fatalf("NewStdioOpeningService: %v", err)
 	}
 	_, err = operation.OpenStdio(context.Background(), factorysessions.StdioOpeningRequest{
-		FixtureCatalogPath: "fixtures.json", Input: &bytes.Buffer{}, Output: &bytes.Buffer{},
-	})
+		FixtureCatalogPath: "fixtures.json",
+	}, factorysessions.StdioOpeningPresentation{Input: &bytes.Buffer{}, Output: &bytes.Buffer{}})
 	if err == nil || !owned.closed {
 		t.Fatalf("OpenStdio error = %v, closed = %v, want fail-closed nil fixture application", err, owned.closed)
 	}

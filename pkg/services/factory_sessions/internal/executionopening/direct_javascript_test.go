@@ -67,7 +67,7 @@ func TestDirectJavaScriptRunOperationOwnsOpeningRequestPolicyAndCleanup(t *testi
 			}
 			operation, err := NewDirectJavaScriptRunOperation(
 				builder, runSync, func() string { return "direct-test-id" },
-				func(roles.OwnedExecutionService, factorysessions.DirectJavaScriptRunRequest) (lifecycle.Component, error) {
+				func(roles.OwnedExecutionService, factorysessions.DirectJavaScriptRunPresentation) (lifecycle.Component, error) {
 					return nil, nil
 				},
 			)
@@ -75,10 +75,14 @@ func TestDirectJavaScriptRunOperationOwnsOpeningRequestPolicyAndCleanup(t *testi
 				t.Fatalf("NewDirectJavaScriptRunOperation: %v", err)
 			}
 			source := filepath.Join(t.TempDir(), "workflow.mjs")
-			opened, err := operation.Open(context.Background(), factorysessions.DirectJavaScriptRunRequest{
-				SourcePath: source, MockWorkersEnabled: testCase.mockWorkers,
-				JSONOutput: true, Output: output,
-			})
+			opened, err := operation.Open(
+				context.Background(),
+				factorysessions.DirectJavaScriptRunRequest{
+					SourcePath: source, MockWorkersEnabled: testCase.mockWorkers,
+					JSONOutput: true,
+				},
+				factorysessions.DirectJavaScriptRunPresentation{Output: output},
+			)
 			if err != nil {
 				t.Fatalf("Open: %v", err)
 			}
@@ -113,7 +117,7 @@ func TestDirectJavaScriptRunOperationJoinsExecutionAndCloseFailures(t *testing.T
 			return runFailure
 		},
 		func() string { return "direct-test-id" },
-		func(roles.OwnedExecutionService, factorysessions.DirectJavaScriptRunRequest) (lifecycle.Component, error) {
+		func(roles.OwnedExecutionService, factorysessions.DirectJavaScriptRunPresentation) (lifecycle.Component, error) {
 			return nil, nil
 		},
 	)
@@ -123,6 +127,7 @@ func TestDirectJavaScriptRunOperationJoinsExecutionAndCloseFailures(t *testing.T
 	opened, err := operation.Open(
 		context.Background(),
 		factorysessions.DirectJavaScriptRunRequest{SourcePath: "workflow.js"},
+		factorysessions.DirectJavaScriptRunPresentation{},
 	)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
@@ -147,10 +152,10 @@ func TestDirectJavaScriptRunOperationGatesHostedCompletionOnReadiness(t *testing
 			return nil
 		},
 		func() string { return "direct-test-id" },
-		func(_ roles.OwnedExecutionService, request factorysessions.DirectJavaScriptRunRequest) (lifecycle.Component, error) {
+		func(_ roles.OwnedExecutionService, presentation factorysessions.DirectJavaScriptRunPresentation) (lifecycle.Component, error) {
 			return lifecycle.NewRunner(func(ctx context.Context) error {
 				ready.Store(true)
-				request.RuntimeHostObserver(factorysessions.RuntimeHostBinding{Port: request.Host.Port})
+				presentation.RuntimeHostObserver(factorysessions.RuntimeHostBinding{Port: presentation.Host.Port})
 				<-ctx.Done()
 				return ctx.Err()
 			}), nil
@@ -161,7 +166,9 @@ func TestDirectJavaScriptRunOperationGatesHostedCompletionOnReadiness(t *testing
 	}
 	opened, err := operation.Open(context.Background(), factorysessions.DirectJavaScriptRunRequest{
 		SourcePath: "workflow.js",
-		Host:       &factorysessions.RuntimeHostRequest{Port: 7437},
+	}, factorysessions.DirectJavaScriptRunPresentation{
+		Host:                &factorysessions.RuntimeHostRequest{Port: 7437},
+		RuntimeHostObserver: func(factorysessions.RuntimeHostBinding) {},
 	})
 	if err != nil {
 		t.Fatalf("Open: %v", err)
