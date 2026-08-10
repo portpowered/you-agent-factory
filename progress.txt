@@ -8,6 +8,7 @@
 - JavaScript packaged Factories that parse planner or judge output need protocol-valid provider-command evidence; the CLI `--with-mock-workers` path returns generic text for those child calls, so use focused provider-runner assertions plus a provider-free schema-bound CLI smoke and document the distinction.
 - Workstation prompt templates receive `PromptData`; access a bound work identifier through `(index .Inputs N).WorkID` rather than a root `.WorkID` field.
 - Run-level `--quiet` cannot be combined with structured `--json` or `--output`; verify output-mode combinations against the live CLI before documenting them.
+- For direct named packaged Factory invocations, bind inputs in authored workstation bodies with `${parameter}` interpolation; `.Inputs` payload can be empty even when the named CLI argument is present.
 
 - Worker Session finite streams can use the injected Events `Read` contract with the first retained head as a snapshot boundary; replay-only paths must not call `Subscribe`.
 - Authored OpenAPI and CLI contracts generate their Go, TypeScript, published metadata, and family-manifest consumers; update the source contract first, then run the repository generators and drift checks.
@@ -42,7 +43,6 @@
   - The existing Markdown page was present but not embedded or registered, so `you docs packaged-factories` was previously rejected; keep the source file, embed list, registry, indexes, and user-visible smoke expectations synchronized.
   - The live catalog contains fifteen `@you/*` entries plus any local Factory names, and its directory column is operator-specific; use exact Factory names for portable documentation.
   - The current help contract explicitly prints Factory-defined request binding and role-specific flags, including the phrase that omitted provider/model values use operator defaults.
----
 
 ## 2026-08-09 13:16 - wo-d1-packaged-factories-docs-001 verification follow-up
 - What was implemented
@@ -489,5 +489,33 @@
   - All other required checks for the progress head passed on the original run.
 - **Learnings for future iterations:**
   - When full functional coverage rotates between unrelated unchanged tests while each focused test is stable, treat the lane as parallel-suite timing instability and preserve the feature scope.
-  - A progress-only delivery commit must receive a fresh full-head CI result; a green failed-job rerun for an earlier attempt does not transfer to a later head.
+- A progress-only delivery commit must receive a fresh full-head CI result; a green failed-job rerun for an earlier attempt does not transfer to a later head.
+---
+## 2026-08-09 21:32 -07:00 - wo-b2-agy-production-review-roles-001
+- What was implemented
+  - Added the independently invocable `@you/agy-cold-watch` packaged Factory with one required `cutPath` input, explicit Markdown primary result, strict unknown-argument rejection, and an AGY reviewer prompt that treats the completed cut as its only creative context.
+  - Defined the cold-watch report contract for chronology, temporal/transient defects, audio, observed speech, and pass-or-reroll recommendation; missing-file refusals are routed to failed Work even when the replayed AGY provider reports exit-zero SUCCESS.
+  - Added root-built offline functional coverage for both real video/audio traces and the missing-file trace, asserting the unchanged path in the AGY prompt and `--add-dir`, provider command settings, returned observations, and recorded Factory Events.
+  - Regenerated the packaged catalog and updated published catalog expectations for the new sixteenth first-party Factory.
+- Files changed
+  - `packages/packaged-factories/factories/agy-cold-watch/factory.yaml`
+  - `packages/packaged-factories/generated/factories/agy-cold-watch/factory.yaml`
+  - `packages/packaged-factories/generated/factories/agy-cold-watch/factory.json`
+  - `packages/packaged-factories/generated/manifest.json`
+  - `tests/functional/providers/agy/production_review_test.go`
+  - `tests/functional/factory/packaged/catalog/discovery_test.go`
+  - `pkg/wire/factory_definition_packaged_installation_test.go`
+  - `pkg/wire/packaged_factory_catalog_consumption_test.go`
+  - `prd.json`
+- Verification
+  - `go run ./cmd/factory --json factory config validate packages/packaged-factories/factories/agy-cold-watch` — passed.
+  - `go test ./tests/functional/providers/agy -run '^TestAgyProductionReviewRolesThroughRootBuildProcess$' -count=1` — passed.
+  - `go test ./tests/functional/factory/packaged/catalog -count=1` — passed.
+  - `go test ./pkg/wire -run 'TestProvidePackagedFactoryDefinitions_LoadsDetachedGeneratedCatalog|TestPackagedFactoryCatalogConsumption_ListResolveInstallUsesPublishedCatalog' -count=1` — passed.
+  - `make packaged-factory-catalog-check` and `make packaged-factory-source-check` — passed.
+  - `make ui-deps` restored locked dependencies and `make typecheck` — passed.
+  - `make verify-fast` initially stopped at missing UI dependencies; after restoring them, the broad `make test` lane reached the existing five-minute `TestPause_ControlOutcomesKeepTheLifecycleTruthful` worker-session timeout. The focused story and affected catalog tests remain green.
+- **Learnings for future iterations:**
+  - The generated catalog is sorted by public Factory name, so adding a packaged Factory also requires updating the detached-catalog and wire-consumption behavioral expectations.
+  - AGY provider `SUCCESS` is only process status; a refusal must be rejected by the role contract so it cannot resolve an invocation primary result.
 ---
