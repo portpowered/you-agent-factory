@@ -520,11 +520,9 @@ func validateExpectedArtifactPattern(pattern string, inputCount int) error {
 			Payload:    "payload",
 		}
 	}
-	rendered, err := work.RenderExpectedArtifactPattern(
-		pattern,
-		inputs,
-		work.ExpectedArtifactTemplateContext{Project: "project", SessionID: "session"},
-	)
+	rendered, err := (work.ExpectedArtifactTemplateContext{
+		Project: "project", SessionID: "session",
+	}).Render(pattern, inputs)
 	if err != nil {
 		return fmt.Errorf("template cannot be rendered for the dispatch inputs: %w", err)
 	}

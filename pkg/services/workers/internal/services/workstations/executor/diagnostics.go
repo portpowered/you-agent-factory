@@ -286,7 +286,7 @@ func verifyExpectedArtifactDeclarations(
 
 func expectedArtifactContext(request workerexecution.WorkstationExecutionRequest) *work.ExpectedArtifactTemplateContext {
 	if recorded := request.Dispatch.ExpectedArtifactContext; recorded != nil {
-		return work.CloneExpectedArtifactTemplateContext(recorded)
+		return recorded.Clone()
 	}
 	return &work.ExpectedArtifactTemplateContext{
 		Project:   request.ProjectID,
@@ -317,11 +317,7 @@ func renderExpectedArtifactPattern(
 	if context != nil {
 		templateContext = *context
 	}
-	return work.RenderExpectedArtifactPattern(
-		pattern,
-		expectedArtifactInputs(tokens, templateContext.Project),
-		templateContext,
-	)
+	return templateContext.Render(pattern, expectedArtifactInputs(tokens, templateContext.Project))
 }
 
 func expectedArtifactInputs(tokens []workerexecution.Token, inputProject string) []work.ExpectedArtifactInput {

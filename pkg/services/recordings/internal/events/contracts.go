@@ -36,5 +36,5 @@ var _ recordings.WorkerEventRecorder = (*FactoryEventHistory)(nil)
 func cloneExpectedArtifactTemplateContext(
 	context *work.ExpectedArtifactTemplateContext,
 ) *work.ExpectedArtifactTemplateContext {
-	return work.CloneExpectedArtifactTemplateContext(context)
+	return context.Clone()
 }

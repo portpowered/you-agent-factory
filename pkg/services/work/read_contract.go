@@ -137,14 +137,12 @@ const (
 func cloneExpectedArtifactTemplateContext(
 	context *ExpectedArtifactTemplateContext,
 ) *ExpectedArtifactTemplateContext {
-	return CloneExpectedArtifactTemplateContext(context)
+	return context.Clone()
 }
 
-// CloneExpectedArtifactTemplateContext returns a detached copy of the stable
-// artifact template data carried with a dispatch.
-func CloneExpectedArtifactTemplateContext(
-	context *ExpectedArtifactTemplateContext,
-) *ExpectedArtifactTemplateContext {
+// Clone returns a detached copy of the stable artifact template data carried
+// with a dispatch.
+func (context *ExpectedArtifactTemplateContext) Clone() *ExpectedArtifactTemplateContext {
 	if context == nil {
 		return nil
 	}
@@ -282,7 +280,7 @@ func expectedArtifactTemplateContext(
 ) ExpectedArtifactTemplateContext {
 	var context ExpectedArtifactTemplateContext
 	if len(templateContexts) > 0 {
-		context = *CloneExpectedArtifactTemplateContext(&templateContexts[0])
+		context = *(&templateContexts[0]).Clone()
 	}
 	if len(context.Inputs) == 0 {
 		context.Inputs = cloneExpectedArtifactInputs(inputs)
@@ -311,24 +309,23 @@ func renderExpectedArtifactPattern(
 	inputs []ExpectedArtifactInput,
 	templateContext ExpectedArtifactTemplateContext,
 ) (string, error) {
-	return RenderExpectedArtifactPattern(pattern, inputs, templateContext)
+	return templateContext.Render(pattern, inputs)
 }
 
-// RenderExpectedArtifactPattern renders an artifact pattern using the one
-// replay-safe input/context vocabulary shared by definition validation,
-// completion verification, live reads, and replay reads. Prompt-only fields
-// such as relations, content, retry history, filesystem paths, environment,
-// and Factory docs are intentionally not present in this DTO.
-func RenderExpectedArtifactPattern(
+// Render renders an artifact pattern using the one replay-safe input/context
+// vocabulary shared by definition validation, completion verification, live
+// reads, and replay reads. Prompt-only fields such as relations, content,
+// retry history, filesystem paths, environment, and Factory docs are
+// intentionally not present in this DTO.
+func (context ExpectedArtifactTemplateContext) Render(
 	pattern string,
 	inputs []ExpectedArtifactInput,
-	templateContext ExpectedArtifactTemplateContext,
 ) (string, error) {
 	parsed, err := template.New("expected_artifact").Option("missingkey=error").Parse(pattern)
 	if err != nil {
 		return "", err
 	}
-	context := expectedArtifactTemplateContext(inputs, templateContext)
+	context = expectedArtifactTemplateContext(inputs, context)
 	if len(context.Inputs) > 0 {
 		inputs = context.Inputs
 	}

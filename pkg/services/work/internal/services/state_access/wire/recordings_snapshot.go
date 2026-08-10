@@ -271,7 +271,7 @@ func latestWorldCompletedArtifactDispatch(
 func cloneExpectedArtifactTemplateContext(
 	context *work.ExpectedArtifactTemplateContext,
 ) *work.ExpectedArtifactTemplateContext {
-	return work.CloneExpectedArtifactTemplateContext(context)
+	return context.Clone()
 }
 
 func worldDispatchContainsWork(

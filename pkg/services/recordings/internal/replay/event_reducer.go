@@ -737,5 +737,5 @@ func isWorkerOutputSource(source string) bool {
 func cloneExpectedArtifactTemplateContext(
 	context *work.ExpectedArtifactTemplateContext,
 ) *work.ExpectedArtifactTemplateContext {
-	return work.CloneExpectedArtifactTemplateContext(context)
+	return context.Clone()
 }

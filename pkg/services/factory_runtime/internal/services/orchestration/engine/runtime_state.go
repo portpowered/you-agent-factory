@@ -95,7 +95,7 @@ func deepCopyCompletedDispatch(d interfaces.CompletedDispatch) interfaces.Comple
 func cloneExpectedArtifactTemplateContext(
 	context *work.ExpectedArtifactTemplateContext,
 ) *work.ExpectedArtifactTemplateContext {
-	return work.CloneExpectedArtifactTemplateContext(context)
+	return context.Clone()
 }
 
 func deepCopyWorkResult(result workerexecution.WorkResult) workerexecution.WorkResult {

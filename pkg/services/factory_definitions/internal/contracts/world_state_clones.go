@@ -27,7 +27,7 @@ func CloneFactoryWorldDispatchCompletion(completion FactoryWorldDispatchCompleti
 func cloneExpectedArtifactTemplateContext(
 	context *work.ExpectedArtifactTemplateContext,
 ) *work.ExpectedArtifactTemplateContext {
-	return work.CloneExpectedArtifactTemplateContext(context)
+	return context.Clone()
 }
 
 // CloneFactoryWorldProviderSessionRecord returns a detached copy of one
