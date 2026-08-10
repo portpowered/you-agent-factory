@@ -79,4 +79,4 @@ workstations:
     onFailure:
       - workType: task
         state: failed
-    body: "For Work {{ .WorkID }}, read the complete bound text input, pass it unchanged to the configured TTS operation, and return the resulting audio content. Do not summarize, translate, add commentary, or claim success if synthesis produces no valid audio output."
+    body: "For Work {{ (index .Inputs 0).WorkID }}, read the complete bound text input, pass it unchanged to the configured TTS operation, and return the resulting audio content. Do not summarize, translate, add commentary, or claim success if synthesis produces no valid audio output."

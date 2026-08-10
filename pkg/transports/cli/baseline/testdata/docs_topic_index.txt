@@ -1,11 +1,14 @@
 agents	Agent orientation: read order, work submission, command matrix, planner vs executor, and topic router.
 authoring-factories	Practical factory authoring workflow, runnable examples, mock workers, and replay.
+packaged-factories	First-party @you/* Factory catalog, live invocation discovery, and operator guide.
 run	Supported local, one-shot, batch, continuous, and mock-worker run shapes.
 config	Operator initialization and Factory validation, flattening, expansion, and minimum authoring contract.
+factory-validation	Pre-run static Factory validation gate, supported checks, file and directory commands, and validation limits.
 mock-workers	Mock-worker runs, JSON selection contract, and deterministic accept, reject, and script outcomes.
 record-replay	Record and replay run modes, artifact paths, sensitivity, and incompatible flag combinations.
 guards	Workstation, input, and factory guards, guarded LOGICAL_MOVE loop breakers, and guard attachment levels.
 relationships	Batch DEPENDS_ON and PARENT_CHILD relations, runtime SPAWNED_BY lineage, and parent-aware guard linkage.
+operations	Real-pipeline lifetime, finite-drain classification, and same-name restart recovery.
 work	Submitted work: session-scoped work routes, tags, batch cross-links, and submission contracts.
 sessions	Live factory sessions: session list, session show, pause and resume, factory query, status API, dashboard URL, and run modes.
 orchestrators	Factory, FactoryOrchestrator, FactorySession, Dispatch, FactoryArtifact, FactoryEvent, and dynamic workflow aliases.
@@ -13,7 +16,7 @@ javascript-workflows	Supported JavaScript authoring, equivalent CLI/API/MCP exec
 mcp	Canonical you mcp serve install path, preview tool catalog, scope boundaries, and automation-backed checks.
 workstations	Workstation kinds, route fields, runtime step behavior, and scoped execution settings.	workstation
 workers	Worker types, model providers, script workers, and worker configuration.
-providers	ACP agent setup, custom provider lifecycle, Factory selection, validation, and JavaScript usage.	acp
+providers	Worker/provider selection, model capabilities and limits, Factory configuration, AGY caveats, ACP lifecycle, and JavaScript usage.	acp
 serve-acp	Canonical you serve acp ACP-agent host command, stdio channel contract, clean shutdown, and minimal client configuration.
 resources	Resource capacity, bounded concurrency, and workstation resource requirements.
 models	Local and hosted model setup for workers and CLI model commands.

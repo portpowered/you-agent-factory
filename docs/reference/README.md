@@ -24,10 +24,13 @@ concept owners below when you need the complete customer-facing contract.
 | Topic | Packaged scope | Canonical or broader customer guide |
 |-------|----------------|--------------------------------------|
 | `authoring-factories` | Practical factory authoring workflow, runnable examples, and cross-links to run-mode guides | [Author factories](authoring-factories.md) |
+| `packaged-factories` | First-party `@you/*` Factory catalog, live invocation discovery, and operator guide | [Packaged factories](packaged-factories.md) |
 | `run` | Supported local, one-shot, batch, continuous, and mock-worker run shapes | [Run](run.md) |
 | `config` | Operator initialization plus Factory validation, transformation, and minimum authoring contract | [Config](config.md) and [Author factories](authoring-factories.md) |
+| `factory-validation` | Required pre-run static gate, current validation checks, exact source commands, and validation limits | [Factory validation](factory-validation.md) |
 | `mock-workers` | `--with-mock-workers` and the `mockWorkers` JSON contract | [Mock workers](mock-workers.md) |
 | `record-replay` | Default recording, `--record`, `--replay`, and `--no-record` | [Record and replay](record-replay.md) |
+| `operations` | Real-pipeline lifetime, finite-drain classification, and same-name restart recovery | [Operations](operations.md) |
 | `work` | Submitted work: session-scoped work routes, tags, and batch cross-links | [Submitted work](work.md) |
 | `sessions` | Session list, session show, pause and resume, factory query, status API, dashboard, and run modes | [Sessions](sessions.md) |
 | `orchestrators` | Factory orchestrator identity, FactorySession runtime nouns, dispatch/artifact/event aliases | [Orchestrators](orchestrators.md) |
@@ -35,7 +38,7 @@ concept owners below when you need the complete customer-facing contract.
 | `mcp` | `you mcp serve` host setup, backing modes, first-use smoke, and troubleshooting | [MCP host setup](mcp.md) |
 | `workstations` | Workstation kinds, routes, runtime fields, and scoped execution settings | [Workstations](workstations.md) |
 | `workers` | Worker quick reference | [Workers](workers.md) |
-| `providers` | ACP presets, custom integrations, Factory selection, validation, removal, and JavaScript usage | [Providers and ACP agents](providers.md) |
+| `providers` | Canonical worker/provider selection, model capabilities and limits, Factory versus ad-hoc configuration, AGY caveats, ACP integrations, and JavaScript usage | [Providers and ACP agents](providers.md) |
 | `serve-acp` | `you serve acp` ACP-agent host command, stdio channel contract, clean shutdown, and minimal client configuration | [Host You as an ACP agent](serve-acp.md) |
 | `resources` | Bounded-concurrency quick reference | [Resources](resources.md) and [Config](config.md) |
 | `models` | Model discovery, readiness, pull, invocation, and Factory execution boundaries | [Models](models.md) |
@@ -86,6 +89,8 @@ filesystem work around that invocation.
 - [Orchestrators](orchestrators.md) owns `Factory`, `FactoryOrchestrator`,
   `FactorySession`, `Dispatch`, `FactoryArtifact`, `FactoryEvent`, and accepted
   dynamic workflow aliases.
+- [Operations](operations.md) owns real-pipeline lifetime, finite-drain
+  classification, and same-name restart recovery.
 - [JavaScript workflows](javascript-workflows.md) owns the supported JavaScript
   authoring surface, equivalent execution and inspection flows, child worker
   preset rules, host-capability boundary, and executable examples.
@@ -98,8 +103,9 @@ filesystem work around that invocation.
   model/script/hosted backend fields, explicit `AGENT_WORKER` tool policy,
   agent-run failure classes, hosted `auth.secretRef` guidance, and split
   `workers/<name>/AGENTS.md` placement.
-- [Providers and ACP agents](providers.md) owns ACP installation, built-in
-  presets, operator-added integrations, `executorProvider` selection, and
+- [Providers and ACP agents](providers.md) owns worker/provider selection,
+  configured model roles, provider-specific effort and modality/tool limits,
+  Factory versus ad-hoc configuration, AGY caveats, ACP installation, and
   provider lifecycle commands.
 - [Host You as an ACP agent](serve-acp.md) owns the canonical `you serve acp`
   ACP-agent host command, its stdio channel contract, clean shutdown
@@ -132,6 +138,8 @@ Use these canonical concept owners when you need the current contract.
 - [Author factories](authoring-factories.md) keeps factory sequencing, quick-start
   run commands, reusable [`docs/examples/`](../examples/README.md) inputs, and
   links to the dedicated mock-worker and record/replay guides.
+- [Packaged factories](packaged-factories.md) owns the first-party `@you/*`
+  catalog, live invocation discovery, and operator-facing Factory entries.
 - [Author AGENTS.md](authoring-agents-md.md) keeps split-file shape, prompt
   placement, and prompt-authoring examples.
 
@@ -139,6 +147,8 @@ Use these canonical concept owners when you need the current contract.
 
 - [Package docs index](../README.md)
 - [Config](config.md)
+- [Packaged factories](packaged-factories.md)
+- [Factory validation](factory-validation.md)
 - [Sessions](sessions.md)
 - [Submitted work](work.md)
 - [Workstations](workstations.md)

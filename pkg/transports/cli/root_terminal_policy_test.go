@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -588,7 +589,7 @@ func TestWorkerSessionsStreamCommandMapsManifestInputsToOperation(t *testing.T) 
 	root.SetArgs([]string{
 		"--json", "--server", "http://factory.test:7437",
 		"worker-sessions", "stream", "--provider", "codex", "--kind", "session_id", "--id", "provider-session-1",
-		"--session", "session-1", "--output", "json",
+		"--session", "session-1", "--output", "json", "--follow",
 	})
 
 	if err := root.Execute(); err != nil {
@@ -599,6 +600,40 @@ func TestWorkerSessionsStreamCommandMapsManifestInputsToOperation(t *testing.T) 
 	}
 	if got.Server != "http://factory.test:7437" || got.OutputFormat != "json" || !got.JSON {
 		t.Fatalf("output/config = %#v, want server and json values", got)
+	}
+	if !got.Follow || got.ReplayOnly {
+		t.Fatalf("stream mode config = %#v, want explicit live follow only", got)
+	}
+}
+
+func TestWorkerSessionsStreamRejectsReplayOnlyFollowBeforeOperation(t *testing.T) {
+	operationCalls := 0
+	factory := withTestInjectedPlatformRoles(CommandFactory{
+		StreamWorkerSession: func(workersessionscli.StreamConfig) error {
+			operationCalls++
+			return nil
+		},
+	})
+	root := factory.NewCommand(nil, nil, nil)
+	var stdout, stderr bytes.Buffer
+	root.SetOut(&stdout)
+	root.SetErr(&stderr)
+	root.SetArgs([]string{
+		"--json", "--server", "http://factory.test:7437",
+		"worker-sessions", "stream", "--provider", "codex", "--kind", "session_id", "--id", "provider-session-1",
+		"--replay-only", "--follow", "--output", "json",
+	})
+
+	err := root.Execute()
+	var typed *workersessionscli.CLIError
+	if !errors.As(err, &typed) || typed.Code != workersessionscli.StreamModeConflictCode {
+		t.Fatalf("error = %v, want %s", err, workersessionscli.StreamModeConflictCode)
+	}
+	if operationCalls != 0 {
+		t.Fatalf("conflicting stream invoked operation %d times, want 0", operationCalls)
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("conflicting stream wrote stdout %q, want empty", stdout.String())
 	}
 }
 

@@ -1,0 +1,509 @@
+## Codebase Patterns
+- Canonical packaged CLI docs live under `docs/reference/`; adding a topic also requires its authored file in `docs/reference/embed.go` and a registry entry in `pkg/transports/cli/docs/docs.go`.
+- The `you run --named <factory> --help` output is the authoritative invocation contract; omitted role provider/model values resolve through operator defaults.
+- Documentation for model-backed workflows should describe observable result shape and status/artifact evidence rather than byte-stable generated prose.
+- Isolate both `HOME` and `USERPROFILE` when verifying packaged named Factories so stale materialized operator copies cannot mask the current catalog source.
+- A classifier mock must emit the provider's valid response protocol and an exact configured route label; the default synthetic mock acceptance text is not a valid `small`/`medium`/`large` classification.
+- Planner and cycle-control workflows likewise need protocol-valid structured model output to exercise generated Work, concurrency, or replanning; an empty generic mock can prove only the terminal invocation envelope and may leave orchestration Work uncreated.
+- JavaScript packaged Factories that parse planner or judge output need protocol-valid provider-command evidence; the CLI `--with-mock-workers` path returns generic text for those child calls, so use focused provider-runner assertions plus a provider-free schema-bound CLI smoke and document the distinction.
+- Workstation prompt templates receive `PromptData`; access a bound work identifier through `(index .Inputs N).WorkID` rather than a root `.WorkID` field.
+- Run-level `--quiet` cannot be combined with structured `--json` or `--output`; verify output-mode combinations against the live CLI before documenting them.
+
+- Worker Session finite streams can use the injected Events `Read` contract with the first retained head as a snapshot boundary; replay-only paths must not call `Subscribe`.
+- Authored OpenAPI and CLI contracts generate their Go, TypeScript, published metadata, and family-manifest consumers; update the source contract first, then run the repository generators and drift checks.
+- Stream transport dispatch stays below the package maintainability threshold by delegating lifecycle-specific frame handling to focused helpers.
+- Deterministic Worker Session lifecycle tests can combine the controlled workstation boundary with the real in-memory Events service to verify retained replay ordering without sleeps or cancellation.
+- Detached Cobra command families should project local-only flag relationships without eagerly merging parent persistent flags; otherwise the detached storage can shadow the production root flag when the family is attached.
+- Process-boundary CLI tests should build `./cmd/factory` only when proving OS-level behavior, keep the real server on a root-built process, and assign redirected stdout and diagnostics stderr separately.
+- Restore package coverage thresholds with focused behavioral tests for typed edge outcomes; do not lower baseline manifests for new branches.
+- Public CLI manifest additions require regenerating family metadata and the published CLI contract, then updating command input/help/tree baselines.
+- Reviewed functional CLI coverage requires a sorted scenario declaration, an evidence-registry entry, a manifest mapping, and one literal `functionalevidence.Covers` marker.
+- Replay completeness must be derived from a terminal lifecycle record inside the captured Events range, not from a separately synchronized terminal session state.
+- When a package has a strict file-count baseline, put a small refactor in an existing focused file before adding a new helper file or changing the baseline.
+- When broad functional coverage reports a cancellation-observation failure, rerun the failed lane and isolate the named test before changing an unrelated feature; parallel-suite failures can move between existing durability/restart tests while isolated runs pass.
+
+## 2026-08-09 13:12 - wo-d1-packaged-factories-docs-001
+- What was implemented
+  - Established the operator-facing discovery workflow and common seven-part entry contract in `docs/reference/packaged-factories.md`.
+  - Added family-based catalog navigation, materialization/default-provider guidance, live-help evidence, and model-output stability guidance.
+  - Registered `packaged-factories` as a real `you docs packaged-factories` topic and updated the packaged docs indexes plus observable CLI smoke expectations.
+  - Verified the current-source binary with `you factory list`, `you run --named @you/goal --help`, and `you docs packaged-factories` (using a freshly built workspace binary).
+- Files changed
+  - `docs/reference/packaged-factories.md`
+  - `docs/reference/embed.go`
+  - `docs/reference/README.md`
+  - `docs/README.md`
+  - `pkg/transports/cli/docs/docs.go`
+  - `pkg/transports/cli/root_docs_test.go`
+  - `tests/functional/smoke/cli_docs_smoke_test.go`
+  - `progress.txt`
+- Verification
+  - `make docs-reference-smoke` — passed.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - The existing Markdown page was present but not embedded or registered, so `you docs packaged-factories` was previously rejected; keep the source file, embed list, registry, indexes, and user-visible smoke expectations synchronized.
+  - The live catalog contains fifteen `@you/*` entries plus any local Factory names, and its directory column is operator-specific; use exact Factory names for portable documentation.
+  - The current help contract explicitly prints Factory-defined request binding and role-specific flags, including the phrase that omitted provider/model values use operator defaults.
+---
+
+## 2026-08-09 13:16 - wo-d1-packaged-factories-docs-001 verification follow-up
+- What was implemented
+  - Installed the repository-pinned UI dependencies that were missing from the checkout so the broad verification tier could run.
+- Files changed
+  - No additional tracked files.
+- Verification
+  - Initial `make verify-fast` stopped at the environment dependency boundary (`@types/bun` missing and the globally selected TypeScript reported `TS5101`).
+  - After `bun install --frozen-lockfile` in `ui/`, `make verify-fast` passed: dashboard typecheck, MCP contract boundary, 355 UI files / 2,970 tests, and the short Go suite.
+- **Learnings for future iterations:**
+- This checkout may have `ui/node_modules` without all lockfile dependencies; run the pinned Bun install before treating a typecheck failure as a source regression.
+---
+
+## 2026-08-09 13:17 - wo-d1-packaged-factories-docs-001 documentation routing follow-up
+- What was implemented
+  - Corrected the root README's packaged-Factory count from fourteen to fifteen while keeping the root page as routing/quick-start material.
+- Files changed
+  - `README.md`
+- Verification
+  - `make readme-check` — passed.
+- **Learnings for future iterations:**
+  - Keep the root count aligned with the canonical fifteen-entry catalog, but continue placing detailed Factory guidance in `docs/reference/packaged-factories.md`.
+---
+
+## 2026-08-09 13:20 - wo-d1-packaged-factories-docs-001 lint follow-up
+- What was implemented
+  - No source change; checked the broad repository lint tier against the completed story.
+- Files changed
+  - No additional tracked files.
+- Verification
+  - `make lint` completed the UI lint/dead-code checks, `go vet`, backend-size, pkg-maint, pkg-file-count, and related checks, then stopped at the existing `pkg-boundary` baseline with 176 violations. The reported violations are in pre-existing service-boundary/Petri migration surfaces and none are in this story's changed files.
+- **Learnings for future iterations:**
+  - Treat the current `pkg-boundary` findings as baseline debt unless a changed file introduces a new violation; this documentation story does not touch those ownership surfaces.
+---
+
+## 2026-08-09 13:36 - wo-d1-packaged-factories-docs-002
+- What was implemented
+  - Added full bounded/iterative operator entries for `@you/goal`, `@you/loop`, `@you/fusion`, `@you/classify`, and `@you/review` to `docs/reference/packaged-factories.md`.
+  - Documented each current live invocation signature, all worker roles, role-specific provider/model overrides, operator-default fallback, prerequisites, workspace/session/recording side effects, stopping/routing/retry behavior, and final versus intermediate output shape.
+  - Added `docs/examples/packaged-classify-mock-workers.json` and indexed it from `docs/examples/README.md` so the classify example can deterministically prove a valid `small` route without a live provider call.
+  - Executed every worked command exactly as shown against a freshly built current-source `bin/you.exe` with isolated `HOME`/`USERPROFILE` state. `goal`, `loop`, `fusion`, and `review` returned `mock worker accepted`; `classify` routed through `small` and returned `mock worker accepted`.
+- Files changed
+  - `docs/reference/packaged-factories.md`
+  - `docs/examples/README.md`
+  - `docs/examples/packaged-classify-mock-workers.json`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `make docs-reference-smoke` — passed.
+  - `make verify-fast` — passed: dashboard typecheck, MCP contract boundary, 355 UI files / 2,970 tests, 191 Bun unit checks, and the short Go suite.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - The live packaged catalog is lazily materialized and can be stale in an operator profile; use isolated home variables when collecting current help evidence.
+  - `--with-mock-workers` is enough for most packaged examples, but classifier workflows need a protocol-valid scripted provider response for the exact route label before the selected lane can run.
+  - Keep deterministic documentation fixtures under `docs/examples/` and explain their role so smoke output is not mistaken for a live model guarantee.
+---
+
+## 2026-08-09 14:04 - wo-d1-packaged-factories-docs-003
+- What was implemented
+  - Added distinct operator-ready entries for `@you/factory-builder`, `@you/plan-execute`, `@you/plan-parallel`, and `@you/full-flow` in `docs/reference/packaged-factories.md`.
+  - Documented each live help signature, all worker roles and provider/model overrides, relative workflow choice, workspace and Git side effects, concurrency and retry bounds, validation/installation, local merge/replanning, and final versus intermediate output behavior.
+  - Added exact current-binary smoke evidence: the builder returned `mock worker accepted`; plan-execute returned `mock worker accepted` and `<COMPLETE>`; plan-parallel returned `mock worker accepted`; full-flow's controlled invalid-bound check returned the documented `maxCycles` choice-validation error.
+  - Marked Story 003 as passing in `prd.json` and recorded the generic-mock limitation so protocol-valid planner responses are not confused with end-to-end orchestration evidence.
+- Files changed
+  - `docs/reference/packaged-factories.md`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `make docs-reference-smoke` — passed.
+  - `go test ./tests/functional/factory/packaged/factory_builder ./tests/functional/factory/packaged/plan_execute ./tests/functional/factory/packaged/plan_parallel ./tests/functional/factory/packaged/full_flow -count=1 -timeout 300s` — passed.
+  - `make verify-fast` — passed: dashboard typecheck, MCP contract boundary, 355 UI files / 2,970 tests, 191 Bun unit checks, and the short Go suite.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - The planning entries are not interchangeable: builder installs a new Factory, plan-execute stays sequential in the current workspace, plan-parallel shares one repository across a bounded DAG, and full-flow owns worktrees, local merges, and replanning.
+  - Generic mock workers accept a planner dispatch without producing its required `FACTORY_REQUEST_BATCH`; use protocol-valid fixtures or provider-backed functional tests when verifying generated Work, concurrency, or cycle control.
+  - Keep full-flow CLI smoke examples bounded and terminating; use controlled argument validation for the public command example and the isolated functional test for actual worktree/merge behavior.
+---
+
+## 2026-08-09 15:51 - wo-d1-packaged-factories-docs-004
+- What was implemented
+  - Added distinct operator-ready entries for `@you/deep-research`, `@you/spawn`, `@you/quorum`, and `@you/tournament` in `docs/reference/packaged-factories.md` using the shared seven-part entry contract.
+  - Documented isolated current-binary invocation signatures, all worker roles and provider/model override flags, operator-default fallback, JavaScript policy bounds, quorum Graph Work and merge behavior, task-count/round bounds, side effects, and primary versus intermediate result shapes.
+  - Added exact worked command evidence: deep-research completed in structured JSON with two specialist statuses, quorum returned `mock worker accepted`, spawn rejected an out-of-range count of 15, and tournament rejected an out-of-range round count of 4 before provider work.
+  - Connected successful provider-backed result claims to the existing functional assertions for exact-count spawn merging and tournament champion/decision-trail output; did not treat generic JavaScript mocks as valid planner/judge protocol.
+- Files changed
+  - `docs/reference/packaged-factories.md`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `make docs-reference-smoke` — passed.
+  - `go test ./tests/functional/factory/packaged/deep_research ./tests/functional/factory/packaged/quorum ./tests/functional/factory/packaged/javascript_families -count=1 -timeout 300s` — passed.
+  - `make verify-fast` — passed: dashboard typecheck, MCP contract boundary, 355 UI files / 2,970 tests, 191 Bun unit checks, and the short Go suite.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - Always collect packaged-Factory help and invocation evidence with isolated `HOME` and `USERPROFILE`; stale materialized copies can advertise obsolete flag names or defaults.
+  - The current JavaScript mock runner proves generic terminal envelopes but cannot author `@you/spawn`'s exact planner JSON array or `@you/tournament`'s judge JSON; provider-command functional tests are the observable success proof for those protocol-sensitive workflows.
+  - `@you/deep-research`'s structured primary result requires `--json`; default human output rejects a non-plain-text JSON primary result.
+---
+
+## 2026-08-09 16:04 - wo-d1-packaged-factories-docs-005
+- What was implemented
+  - Added the complete `@you/tts` entry to `docs/reference/packaged-factories.md`, covering the live text-only signature, suitable use, local worker/backend/model route, readiness prerequisite, side effects, primary metadata, generated audio artifact, and failure behavior.
+  - Corrected the pre-existing packaged TTS workstation prompt template to read `WorkID` from the first bound input, then regenerated the checked-in JSON/YAML catalog and manifest hashes so the documented live invocation can reach model execution.
+  - Executed `you run --named @you/tts --no-record --output primary --to "The release is ready."` exactly as documented against the rebuilt current binary using a disposable READY model cache and controlled local runtime. The command returned a runtime-generated WAV artifact path, `audio/wav`, the `OMNIVOICE_Q4_K_M/LLAMACPP` backend, and a trace ID; the existing behavioral test also verifies readable audio artifact output.
+- Files changed
+  - `docs/reference/packaged-factories.md`
+  - `packages/packaged-factories/factories/tts/factory.yaml`
+  - `packages/packaged-factories/generated/factories/tts/factory.json`
+  - `packages/packaged-factories/generated/factories/tts/factory.yaml`
+  - `packages/packaged-factories/generated/manifest.json`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `make docs-reference-smoke` — passed.
+  - `make packaged-factory-catalog-check` — passed.
+  - `go test ./tests/functional/factory/packaged/tts ./pkg/services/factory_definitions/internal/services/distribution/tts -count=1 -timeout 300s` — passed.
+  - `make verify-fast` — passed: dashboard typecheck, MCP contract boundary, 355 UI files / 2,970 tests, 191 Bun unit checks, and the short Go suite.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - The packaged TTS worker uses the local `OMNIVOICE_Q4_K_M` route and exposes no provider/model override flags; model readiness and local runtime setup belong in the canonical models workflow.
+  - `--with-mock-workers` does not satisfy the managed local TTS readiness/runtime path; a successful CLI smoke needs a READY cache and a controlled local runtime or the real installed runtime.
+  - TTS primary output is metadata pointing to an artifact, so paths, trace IDs, and generated audio bytes must remain runtime-generated rather than documentation promises.
+---
+
+## 2026-08-09 16:11 - wo-d1-packaged-factories-docs-006
+- What was implemented
+  - Added the complete `@you/subagent` operator entry to `docs/reference/packaged-factories.md` using the shared seven-part contract.
+  - Documented the bounded read-only purpose, request binding, exact live invocation signature, single `subagent-worker` role, optional provider/model/reasoning overrides, operator/provider-default fallback, runtime/session side effects, failure behavior, and human-readable versus structured primary output.
+  - Added an exact structured mock-worker invocation and captured its real `COMPLETED` output with a text `primaryResult`; explicitly separated deterministic mock envelope evidence from provider-generated answer quality.
+  - Marked story 006 as passing in `prd.json` and added the live `--quiet`/structured-output constraint to the consolidated codebase patterns.
+- Files changed
+  - `docs/reference/packaged-factories.md`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/factory/packaged/subagent -count=1 -timeout 300s` — passed.
+  - `make docs-reference-smoke` — passed.
+  - `make verify-fast` — passed: dashboard typecheck, MCP contract boundary, 355 UI files / 2,970 tests, 191 Bun unit checks, and the short Go suite.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - `@you/subagent` has one `READ_ONLY` `subagent-worker`; its live optional flags are `--worker-provider`, `--worker-model`, and `--worker-reasoning-effort`, with omitted provider/model values using operator defaults and omitted reasoning using the provider default.
+  - `--quiet` conflicts with `--json` and `--output`; structured examples must omit `--quiet` and should be validated against live CLI behavior.
+  - The normalized subagent primary result is the child answer, while request/trace IDs and session state are runtime metadata; generated provider prose remains non-deterministic.
+---
+
+## 2026-08-09 16:52 - review follow-up: packaged-factory worked examples
+- What was implemented
+  - Merged the current `origin/main` into the documentation branch and resolved the shared docs indexes, embed registry, and CLI smoke-test changes while preserving both branches' behavior.
+  - Replaced the invalid sole worked invocations for `@you/full-flow`, `@you/spawn`, and `@you/tournament` with valid bounded commands and captured successful output from the current binary in a controlled environment.
+  - Kept the `max-cycles 9`, `count 15`, and `rounds 4` commands as explicitly labeled additional bound checks rather than success examples.
+  - Removed the attempted checked-in JavaScript mock-worker fixtures after confirming that the CLI `--with-mock-workers` mode selects generic `FakeChildExecutor` output and cannot satisfy planner/judge protocols.
+- Files changed
+  - `docs/reference/packaged-factories.md`
+  - `prd.json`
+  - `progress.txt`
+  - merged current-main documentation and test conflict resolutions
+- Verification
+  - Full-flow exact command exited 0 with `Create a one-line README note and verify it.` after a deterministic local `codex` executable supplied a protocol-valid planner response marking the bounded request complete, so no implementation/review/merge call was needed.
+  - Spawn exact command exited 0 with `merged travel answer` using `--count 2`.
+  - Tournament exact command exited 0 with the champion and `Tournament decision trail:` / `Round 1, match 1: more complete` using `--rounds 1`.
+  - All three runs used isolated `HOME` and `USERPROFILE`; full-flow used a disposable Git repository with `main` as the base branch.
+- **Learnings for future iterations:**
+  - JavaScript packaged-factory success smokes need a live provider boundary or provider-command edge fixture; `--with-mock-workers` intentionally returns generic fake child text and is not protocol-valid for planner/judge workflows.
+  - A bounded full-flow terminal smoke must preserve the rendered cycle-control Work name; a mismatched name leaves the orchestration graph waiting for completion.
+  - After merging current main into a docs branch, verify both the embed/topic registry and user-visible docs smoke assertions before committing the merge resolution.
+---
+
+## 2026-08-09 14:24 -07:00 - wo-c1-ext-stream-replay-only-001
+- What was implemented
+  - Added ACTIVE Worker Session finite replay through retained Events reads, including a captured head boundary, canonical paging, zero-event handling, explicit `REPLAY_SUMMARY`, `complete:false`, `reason:"session-active"`, and emitted-event counting.
+  - Added HTTP/SSE `replayOnly` propagation and summary framing, CLI `--replay-only` wiring, redirect-safe JSON summary output, and operator help/examples.
+  - Regenerated bundled OpenAPI, Go HTTP clients/server, TypeScript OpenAPI types, CLI family metadata, and published CLI contract artifacts.
+  - Added service, HTTP transport, and CLI behavioral tests proving ordering, snapshot truncation, no live subscriber, summary serialization, and query propagation.
+- Files changed
+  - Worker Sessions service and observation contracts, HTTP/CLI transports and tests, authored/generated OpenAPI and CLI contracts, `prd.json`, and this progress log.
+- **Learnings for future iterations:**
+  - The existing Events `ReadResult` explicitly distinguishes progress, head, and retention gaps; finite replay should preserve those outcomes instead of inferring completion from an empty page.
+  - `make api-smoke` checks the working tree for generated drift, so run it after committing synchronized generated artifacts; `make ui-deps` restores the Bun dependency tree when the local OpenAPI generator is missing.
+---
+
+## 2026-08-09 14:32 -07:00 - wo-c1-ext-stream-replay-only-002
+- What was implemented
+  - Completed terminal replay regression coverage over the real in-memory Events service, proving a terminal Worker Session replays its retained opening and terminal records in canonical order, marks the lifecycle record as `TERMINAL_REPLAY`, emits exactly one complete `session-completed` replay summary with the matching event count, and closes after the summary.
+  - Added CLI coverage proving replay-only continues through `TERMINAL_REPLAY`, returns success, and writes the complete summary as the final JSON line.
+  - Preserved the existing live terminal-stream termination and ACTIVE transcript-read behavior.
+- Files changed
+  - `pkg/services/worker_sessions/internal/service/control_production_boundary_test.go`
+  - `pkg/services/worker_sessions/transports/cli/stream_test.go`
+  - `prd.json`
+  - `progress.txt`
+- **Learnings for future iterations:**
+- Terminal replay uses the same retained Events paging path as ACTIVE replay; lifecycle classification changes the delivery kind and summary completeness, not the canonical event records or order.
+- The CLI must treat `TERMINAL_REPLAY` as an event inside finite mode and wait for `REPLAY_SUMMARY` before returning success.
+---
+
+## 2026-08-09 15:00 -07:00 - wo-c1-ext-stream-replay-only-003
+- What was implemented
+  - Added the explicit `--follow` live-mode input and stable typed `WORKER_SESSION_STREAM_MODE_CONFLICT` error; `--replay-only --follow` now fails before the stream operation, HTTP request, retained read, follower, or stdout output.
+  - Added the authored CLI relationship, error metadata, help/examples, generated family metadata, published CLI contract, and production handler binding; refreshed the CLI inventory baselines and generated manifest hash.
+  - Fixed detached Cobra local relationship projection so the new mutually-exclusive flags do not eagerly shadow the production root `--server` value when the Worker Sessions family is attached.
+  - Added service and production-root behavioral tests for typed conflict mapping, zero requests/zero output, explicit follow binding, and operation non-invocation.
+- Files changed
+  - `contracts/cli/commands.json`, generated CLI/package artifacts, CLI inventory baselines, Worker Sessions CLI stream/config/tests, CLI family constructor, production root binding/tests, and this progress log.
+- **Learnings for future iterations:**
+  - Cobra's `MarkFlags*` helpers merge parent persistent flags immediately; detached generated families need local-only relationship annotations projected without that merge so their eventual production-root values remain authoritative.
+  - Intentional CLI contract additions require refreshing `contracts/testdata/baseline/cli-command-inputs.json` and `contracts/testdata/baseline/cli-commands.json` with `UPDATE_CLI_BASELINES=1` in addition to the normal manifest and contract generators.
+  - `make verify-fast`, Worker Sessions CLI tests, full `pkg/transports/cli` tests, CLI inventory/identity/contract/constructor tests, and `make cli-manifest-check` passed.
+---
+
+## 2026-08-09 15:11 -07:00 - wo-c1-ext-stream-replay-only-004
+- What was implemented
+  - Added `TestWorkerSessionsReplayOnlyRedirectsWellFormedNDJSON`, which builds and invokes the published `you` process against a terminal Worker Session, redirects replay-only JSON stdout to a capture file, and verifies every non-empty line is valid NDJSON.
+  - The process-boundary assertion checks canonical increasing event positions, exactly one final `replay-summary`, `complete:true`, stable `session-completed` reason, matching `eventsEmitted`, natural exit without cancellation, and verbose diagnostics isolated on stderr.
+  - Added the canonical `you docs sessions` redirect workflow describing the final completeness marker, ACTIVE versus terminal meaning, live-follow conflict, and stderr diagnostics behavior.
+- Files changed
+  - `tests/functional/provider_sessions/cli/worker_sessions_cli_test.go`
+  - `docs/reference/sessions.md`
+  - `prd.json`
+  - `progress.txt`
+- **Learnings for future iterations:**
+  - A built CLI process can prove shell redirection while the server and provider effects remain deterministic through `root.BuildProcess` and `edges.Edges`; this keeps the process-boundary proof narrow.
+- The final Worker Session replay summary is a standalone JSON object after the existing event-frame records, so capture assertions should parse the last line with its own summary shape.
+- `make lint` currently stops on the existing `pkg/transports/cli/climanifestcobra/constructor.go` 1037-line backend-size/pkg-maint violation; the story change does not touch that file.
+---
+
+## 2026-08-09 15:44 -07:00 - wo-c1-ext-stream-replay-only-004
+- What was implemented
+  - Added focused Worker Sessions service tests for retained-read failures, retention gaps, cancellation, malformed paging outcomes, snapshot-boundary violations, completion, and close behavior.
+  - Restored the `pkg/services/worker_sessions/internal/service` unit coverage result to 99.0%, above the enforced 98.72% package minimum, without lowering the coverage baseline.
+  - Re-ran the named Worker Sessions functional command, `make verify-fast`, package-structure/file-count checks, and Worker Sessions vet successfully.
+- Files changed
+  - `pkg/services/worker_sessions/internal/service/invoke_observation_test.go`
+  - `prd.json`
+  - `progress.txt`
+- **Learnings for future iterations:**
+  - The repository's coverage gate is sensitive to untested defensive replay branches; typed read outcomes should have direct behavioral assertions alongside the happy-path stream tests.
+  - `make test-unit-coverage` cannot launch its full coverage lane on this Windows checkout because the generated Go command exceeds the Windows filename/command-line limit; the affected package's local coverage profile still verifies the threshold.
+- A full CI functional run exposed `TestFactorySessionHistoryIsNotPersistedByDefault`, but the test passes repeatedly in isolation and the feature-specific functional command is green; avoid unrelated changes until a reproducible failure or actionable review feedback identifies a shared cause.
+---
+
+## 2026-08-09 16:30 -07:00 - wo-c1-ext-stream-replay-only-review-follow-up
+- What was implemented
+  - Addressed PR #1840's blocking correctness feedback by making replay summaries complete only when the retained snapshot contains a terminal Worker Session lifecycle record; terminal state without that record now reports `complete:false` with `session-terminal-record-missing`.
+  - Added a deterministic controlled-boundary regression that blocks and fails the terminal append after state commit, opens replay during the interleaving, and proves no false-complete summary is emitted.
+  - Moved Cobra relationship projection out of the oversized generic constructor into the existing work constructor file and split the replay completion/cancellation/close test to clear `backend-size` and `pkg-maint` without adding package-baseline files.
+- Files changed
+  - Worker Sessions replay service and behavioral tests/fakes, `pkg/transports/cli/climanifestcobra/constructor.go`, `pkg/transports/cli/climanifestcobra/work_constructor.go`, and this progress log.
+- **Learnings for future iterations:**
+  - Terminal state and terminal-event publication are separate synchronized effects; snapshot consumers must validate the event range before claiming a complete capture, including permanent terminal-record append failures.
+  - Review ratchets may include package file-count baselines in addition to line and complexity limits; an existing cohesive package file is preferable for small same-package helper moves.
+- Focused Worker Sessions/CLI package tests, the named redirect functional test, `make verify-fast`, `make backend-size`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, and affected-package vet pass. `make -k lint` still reports pre-existing baseline failures in `pkg-boundary`, package-target/packaged-factory/ownership inventories, and deadcode; the reviewer-identified new backend-size/pkg-maint failures are resolved.
+---
+
+## 2026-08-09 16:45 -07:00 - wo-c1-ext-stream-replay-only-ci-follow-up
+- What was implemented
+  - Inspected PR #1840's GitHub Actions backend functional coverage failure with the CI log workflow and reran only the failed job.
+  - Confirmed the first failing existing durability test (`TestJavaScriptInterruptedSessionResumesWithoutRepeatingCompletedChildren`) and the rerun's existing restart test (`TestFactorySessionResumeDoesNotRepeatCompletedDispatch`) each pass in isolation; no source change was made because neither touches the replay-only implementation.
+  - Confirmed all other PR checks, including Backend Unit Coverage, remain passing; the broad Backend Functional Coverage lane and its Verification Policy aggregator remain red after the rerun.
+- Files changed
+  - `progress.txt`
+- **Learnings for future iterations:**
+  - The current PR's remaining blocker is external full-suite functional instability in cancellation-observation assertions, not a reproducible feature failure; a future iteration should rerun or diagnose that suite before changing Worker Sessions replay behavior.
+  - The PR remains open at the latest pushed commit with no additional unresolved inline review threads, but cannot be marked review-ready while the required backend functional check is red.
+---
+
+## 2026-08-09 16:13 -07:00 - wo-c1-ext-stream-replay-only-delivery
+- What was implemented
+  - Confirmed all four PRD stories remain marked `passes:true`; no additional story implementation was required in this iteration.
+  - Re-ran the named Worker Sessions redirect/CLI functional test and `make verify-fast` successfully on the exact branch HEAD.
+  - Confirmed the worktree is clean before the delivery commit/PR update and found no existing PR or review feedback for this branch.
+- Files changed
+  - `progress.txt`
+- **Learnings for future iterations:**
+  - A clean branch synchronized with its remote still needs the focused and fast verification gates rerun before creating the PR so the published commit has current local evidence.
+  - When every story is already marked complete and no PR exists, append delivery evidence to the progress log without changing the completed PRD story state.
+---
+
+## 2026-08-09 16:51 -07:00 - wo-c1-ext-stream-replay-only-delivery-follow-up
+- What was implemented
+  - Confirmed all four PRD stories remain marked `passes:true`; no additional product story work was pending.
+  - Rechecked PR #1840's current discussion and thread state: the prior blocking correctness and lint feedback is addressed on the current head, with no unresolved inline review threads.
+  - Re-ran the named replay-only redirect/CLI functional test and `make verify-fast` successfully on the exact synchronized branch head.
+- Files changed
+  - `progress.txt`
+- **Learnings for future iterations:**
+  - An open PR with addressed feedback still needs its latest remote check state rechecked before reporting delivery; at this point the required CI run was still in progress.
+  - When the PRD is already fully passed and no new code is required, preserve the completed `prd.json` story state and record verification/review evidence in the append-only progress log.
+---
+
+## 2026-08-09 17:00 -07:00 - wo-c1-ext-stream-replay-only-ci-follow-up
+- What was implemented
+  - Rechecked PR #1840 at the synchronized head: all four PRD stories remain `passes:true`, the worktree is clean, and thread-aware review state has zero unresolved inline threads or formal reviews.
+  - Inspected the terminal Backend Functional Coverage failure from the GitHub Actions diagnostic artifact. The only failing test was the unrelated `TestAgyConductorSuccessThroughRootBuildProcess`, which observed zero terminal result messages; no Worker Sessions replay test or changed file was implicated.
+  - Reran only the failed Backend Functional Coverage job on the same commit; the rerun is still in progress. Backend Unit Coverage and all other completed required checks are passing.
+- Files changed
+  - `progress.txt`
+- **Learnings for future iterations:**
+  - Functional coverage diagnostics are in the `functional-test-diagnostics` artifact; `command.log` exposes the first actual failing test even when the job's final artifact guard reports only a missing evidence file.
+  - Do not change replay-only code for an unrelated provider-functional flake; rerun the isolated failed job and wait for a reproducible feature-linked failure first.
+  - The PR remains open and mergeable with no unresolved review threads, but the required verification policy cannot be green until the Backend Functional Coverage rerun reaches a terminal result.
+---
+
+## 2026-08-09 17:06 -07:00 - wo-c1-ext-stream-replay-only-delivery-verification
+- What was implemented
+  - Confirmed all four PRD stories remain marked `passes:true`; no additional story implementation or authored contract change was required.
+  - Re-ran the named replay-only redirect/CLI functional command and `make verify-fast` successfully on the current PR head.
+  - Re-ran `make backend-size`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, `go test ./pkg/services/worker_sessions/...`, and `go vet ./pkg/services/worker_sessions/...`; all passed.
+  - Rechecked PR #1840: the branch head is synchronized with the PR remote, the prior blocking feedback has no unresolved review threads, and the new CI run is executing for this exact head.
+- Files changed
+  - `progress.txt`
+- **Learnings for future iterations:**
+  - The worktree's `origin` remote points at `infinite-you`; PR delivery for this repository uses the `fork` remote at `portpowered/you-agent-factory`, so compare and push against `fork` when verifying synchronization.
+  - A progress-only delivery commit still needs the complete local gate set and a fresh remote CI run before the PR can be reported ready for review.
+  - Keep `prd.json` unchanged when every story is already passed and the iteration adds only verification evidence.
+
+## 2026-08-09 17:13 -07:00 - wo-c1-ext-stream-replay-only-delivery-review
+- What was implemented
+  - Confirmed all four PRD stories remain marked `passes:true`; no additional story implementation or contract change was required.
+  - Inspected PR #1840 with the thread-aware GitHub review workflow. The prior blocking correctness/lint feedback is addressed in the current head, and there are no unresolved inline review threads or external actionable comments.
+  - Confirmed local HEAD `97d6e77e` matches the fork PR head and the required CI run for that exact commit is executing.
+- Files changed
+  - `progress.txt`
+- **Learnings for future iterations:**
+  - A cross-repository PR needs the head repository and PR number passed explicitly to the thread-aware GraphQL comment reader when the local branch tracks a different remote.
+- Do not change the completed `prd.json` story state during delivery-only iterations; append review and CI evidence to the progress log instead.
+---
+
+## 2026-08-09 17:27 -07:00 - wo-c1-ext-stream-replay-only-merge-conflict-resolution
+- What was implemented
+  - Fetched the current fork `main` (`f6de38c59`) after GitHub reported PR #1840 as conflicting and merged it into the branch.
+  - Resolved the only conflict in the worktree-local `prd.json` by retaining the replay-only PRD; all product-file changes from current `main` merged without conflict.
+  - Preserved the completed four-story `passes:true` state and the existing review/CI evidence; the merge commit now needs the focused local gates and a fresh remote CI run.
+- Files changed
+  - `prd.json`, current-`main` merge result, and `progress.txt`
+- **Learnings for future iterations:**
+  - When multiple worktrees use a repository-local `prd.json`, a PR merge can conflict with another story's PRD even when product files are conflict-free; resolve that file in favor of the active branch's task contract.
+  - A green CI run on the pre-merge head does not establish merge readiness after GitHub reports `CONFLICTING`; fetch the PR's actual head repository `main`, resolve the conflict, and rerun checks for the merged head.
+---
+
+## 2026-08-09 17:51 -07:00 - wo-c1-ext-stream-replay-only-delivery-review
+- What was implemented
+  - Confirmed all four PRD stories remain marked `passes:true`; no additional story implementation or contract change was required.
+  - Rechecked PR #1840 in `portpowered/you-agent-factory` with thread-aware review data: there are no unresolved inline review threads or formal reviews, and the earlier correctness and lint feedback is addressed in the current head.
+  - Confirmed local HEAD `e769770b6` matches the PR head, the PR description still uses the current `prd.json`, GitHub reports the PR mergeable and clean, and every listed required check is terminal and successful.
+- Files changed
+  - `progress.txt`
+- **Learnings for future iterations:**
+  - For a cross-repository PR, verify the head OID and check state in the PR's actual repository rather than relying on the local branch's default remote association.
+  - When all stories and review feedback are complete, preserve `prd.json` and append delivery evidence to the progress log instead of creating unrelated source changes.
+---
+
+## 2026-08-09 18:33 -07:00 - wo-d1-packaged-factories-docs-delivery
+- What was implemented
+  - Fetched the current `main` from the PR repository (`40512cfa1`) and merged it into the documentation branch.
+  - Reconciled shared `docs/README.md`, `prd.json`, and append-only `progress.txt` conflicts while preserving the packaged-factory PRD and the mainline Worker Sessions history.
+  - Kept all six WO-D1 stories marked `passes:true` and retained the current PR description contract.
+- Files changed
+  - Current-main merge result, `docs/README.md`, `prd.json`, `progress.txt`, and the mainline files included by the merge.
+- Verification
+  - `make docs-reference-smoke` — passed.
+  - `make verify-fast` — passed: dashboard typecheck, MCP contract boundary, 355 UI files / 2,970 tests, 191 Bun unit checks, and the short Go suite.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - The checkout's default `origin` remote tracks `portpowered/infinite-you`, while PR #1841 is hosted in `portpowered/you-agent-factory`; compare and push against the PR's head repository when checking mergeability.
+  - A clean local merge against an older cached base is insufficient when GitHub reports `CONFLICTING`; fetch the actual current base, preserve both append-only progress logs, and rerun the gates on the merge commit.
+---
+
+## 2026-08-09 18:51 -07:00 - wo-d1-packaged-factories-docs-delivery-ci-follow-up
+- What was implemented
+  - Investigated the initial CI failure in the ACP functional lane; it was an isolated session-load failure, not a documentation or packaged-factory source regression.
+  - Re-ran the exact failing ACP test locally ten times successfully, then re-ran the failed GitHub Actions jobs. The rerun passed the functional lane and produced the required real-ACP evidence artifact.
+  - Confirmed the PR remains reconciled with current `main`, clean, mergeable, and synchronized to the latest pushed commit.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/providers/acp -run '^TestFactoryRunRetriesACPProviderByResumingExactSession$' -count=10 -v -timeout 300s` — passed.
+  - `gh run rerun 31347454534 --failed` — rerun completed successfully.
+  - All required PR checks, including Backend Functional Coverage and Verification Policy, are passing.
+  - No remaining `passes:false` entries in `prd.json`; no unresolved inline review threads or formal reviews.
+- **Learnings for future iterations:**
+  - Provider/ACP functional lanes can expose isolated session-load flakes; verify the exact failing test locally, rerun only failed CI jobs, and require the expected evidence artifact before treating the rerun as green.
+  - A delivery-only CI follow-up should record the evidence in the append-only progress log without changing unrelated source or completed PRD story state.
+---
+
+## 2026-08-09 19:12 -07:00 - wo-d1-packaged-factories-docs-delivery-ci-durability-follow-up
+- What was implemented
+  - Investigated the fresh-head Backend Functional Coverage failure, which rotated between two JavaScript durability cancellation assertions: `TestJavaScriptResumeRestoresCheckpointAndFinalResult` and `TestJavaScriptDurabilityDoesNotPersistSnapshotsByDefault`.
+  - Ran both exact tests locally 20 times each successfully and left unrelated runtime/test source unchanged.
+  - Re-ran only the failed backend job; the final rerun completed with all 18 CI jobs successful, including Backend Functional Coverage and Verification Policy.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/orchestration/javascript/durability -run '^TestJavaScript(ResumeRestoresCheckpointAndFinalResult|DurabilityDoesNotPersistSnapshotsByDefault)$' -count=20 -v -timeout 900s` — passed.
+  - `gh run rerun 31348213300 --failed` — final failed-job rerun passed.
+  - The rotating cancellation assertion was treated as a current-main CI timing flake; no unrelated production or test fix was introduced.
+- **Learnings for future iterations:**
+  - Full functional CI can expose timing-sensitive cancellation observations even when the exact durability tests pass repeatedly in isolation; use the failing assertion and local repetition to separate a flake from a branch regression before changing source.
+  - After a successful failed-job rerun, a subsequent progress-only head must receive its own complete CI run before delivery is considered current.
+---
+
+## 2026-08-09 19:33 -07:00 - wo-d1-packaged-factories-docs-review-follow-up
+- What was implemented
+  - Addressed the latest blocking PR conversation feedback by removing the stale statement that the `@you/full-flow` worked smoke intentionally exercises argument validation.
+  - The planning-family introduction now describes the successful controlled planner-response smoke and identifies `--max-cycles 9` only as an additional out-of-range bound check.
+  - Kept all six PRD stories marked `passes:true`; no `prd.json` change was required.
+- Files changed
+  - `docs/reference/packaged-factories.md`
+  - `progress.txt`
+- Verification
+  - `make docs-reference-smoke` — passed.
+  - `make verify-fast` — passed: dashboard typecheck, MCP contract boundary, 355 UI files / 2,970 tests, 191 Bun unit checks, and the short Go suite.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - After replacing a worked example, audit nearby family-level explanatory prose as well as the entry itself; stale summary text can reintroduce a resolved correctness contradiction.
+  - Documentation-only review fixes still require a fresh pushed head and terminal CI before the PR can be reported ready.
+---
+
+## 2026-08-09 19:47 -07:00 - wo-d1-packaged-factories-docs-ci-follow-up
+- What was implemented
+  - Investigated the fresh-head Backend Functional Coverage failure, which was the unrelated `TestAPIResponseEventSSEStreamsRetainedThenLiveEvents` assertion observing zero retained response events.
+  - Ran the exact test 20 times locally with no failures, then reran only the failed GitHub Actions job; the rerun passed Backend Functional Coverage and Verification Policy.
+  - Left unrelated event-stream source unchanged and retained the documentation fix as the only product change.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/events/response_events -run '^TestAPIResponseEventSSEStreamsRetainedThenLiveEvents$' -count=20 -v -timeout 900s` — passed all 20 runs.
+  - `gh run rerun 31350145939 --failed --repo portpowered/you-agent-factory` — attempt 2 passed the failed lane.
+  - Backend Functional Coverage and Verification Policy passed on the rerun; all other required checks for the prior head were already passing.
+- **Learnings for future iterations:**
+  - A full functional-coverage failure in an unchanged response-events package can be a timing flake; reproduce the exact assertion locally before making unrelated code changes.
+  - Rerunning only the failed job can clear the flake, but a subsequent progress-only commit still needs its own complete CI run before delivery is current.
+---
+
+## 2026-08-09 20:14 -07:00 - wo-d1-packaged-factories-docs-ci-durability-follow-up
+- What was implemented
+  - Investigated the final progress-head Backend Functional Coverage failures, which rotated across unchanged `response_events`, CLI output/process, `runtime_api`, and session-restart tests under the full parallel lane.
+  - Repeated each named failing test in isolation 20 times; every focused run passed, so no unrelated runtime or test source was changed.
+  - Reran only the failed Backend Functional Coverage job four times; the fourth attempt passed, and the dependent Verification Policy check passed as well.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Focused 20-run repetitions passed for `TestAPIResponseEventSSEStreamsRetainedThenLiveEvents`, `TestCLIJSONFailureRemainsValidJSON`, `TestAPIEventReplaySmoke_PublicEventsAndSessionProjectionExposeActiveAndCompletedTimeline`, `TestFunctionalAPIServer_RuntimeLogDirectoryIsAProcessInput`, `TestCLIFailureWritesDiagnosticToStderr`, and `TestFactorySessionHistoryIsNotPersistedByDefault`.
+  - `gh run rerun 31350774713 --failed --repo portpowered/you-agent-factory` — final attempt 4 passed Backend Functional Coverage and Verification Policy.
+  - All other required checks for the progress head passed on the original run.
+- **Learnings for future iterations:**
+  - When full functional coverage rotates between unrelated unchanged tests while each focused test is stable, treat the lane as parallel-suite timing instability and preserve the feature scope.
+  - A progress-only delivery commit must receive a fresh full-head CI result; a green failed-job rerun for an earlier attempt does not transfer to a later head.
+---
+## 2026-08-09 23:04 -0700 - wo-b3-provider-capability-discovery-cli-003
+- What was implemented
+  - Registered the authored `you providers list` command in the generated CLI manifest and canonical root command tree, injected the Providers-owned adapter through `pkg/wire`, documented the discovery fields and operational facts, and added root.BuildProcess/Process.Execute human/JSON proof with deterministic ordering, usage failure, and zero provider-command calls.
+  - Reconciled the branch with current `main`, regenerated CLI and approved contract artifacts, refreshed command-input/help baselines, and merged the current docs smoke expectations with the provider discovery markers.
+- Files changed
+  - CLI manifest and generated command artifacts; CLI root/wire composition and Providers command adapter; root/help, manifest, baseline, and functional tests; published CLI contract; `docs/reference/providers.md` and docs smoke markers; functional scenario/evidence registries; provider catalog maintainability helpers and package-count baseline; current-main merge artifacts.
+- Verification
+  - `make test`, `make wire-smoke`, `make contracts-check`, `make cli-manifest-check`, `make docs-reference-smoke`, `make test-root-process-acceptance`, `make typecheck`, `make vet`, `make backend-size`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, and `go test ./tests/functional/providers/discovery/... -run '^TestProvidersListThroughRootBuildProcess$' -count=1` pass.
+  - The umbrella `make lint` still reports the repository's existing `pkg-boundary` migration inventory (176 violations); `make test-contract` still references the absent `pkg/services/factory_definitions/contracts/contracttests` directory.
+- **Learnings for future iterations:**
+  - Empty authored CLI `sideEffects` must be omitted when the canonical generator represents it as nil; otherwise manifest drift checks fail.
+  - When rebasing or merging a public CLI change onto a moving `main`, regenerate command baselines and approved contract hashes from the combined source instead of selecting one side of generated conflicts.
+  - The discovery proof can assert no live provider call by injecting a counting command runner through `serviceedges.Edges` and checking it remains at zero after successful and usage-failure executions.
+---

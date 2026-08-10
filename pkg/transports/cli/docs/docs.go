@@ -18,12 +18,15 @@ type Topic string
 const (
 	TopicAgents              Topic = "agents"
 	TopicAuthoringFactories  Topic = "authoring-factories"
+	TopicPackagedFactories   Topic = "packaged-factories"
 	TopicRun                 Topic = "run"
 	TopicConfig              Topic = "config"
+	TopicFactoryValidation   Topic = "factory-validation"
 	TopicMockWorkers         Topic = "mock-workers"
 	TopicRecordReplay        Topic = "record-replay"
 	TopicGuards              Topic = "guards"
 	TopicRelationships       Topic = "relationships"
+	TopicOperations          Topic = "operations"
 	TopicWork                Topic = "work"
 	TopicSessions            Topic = "sessions"
 	TopicWorkstations        Topic = "workstations"
@@ -48,12 +51,15 @@ const (
 const (
 	referenceAgentsPath              = "agents.md"
 	referenceAuthoringFactoriesPath  = "authoring-factories.md"
+	referencePackagedFactoriesPath   = "packaged-factories.md"
 	referenceRunPath                 = "run.md"
 	referenceConfigPath              = "config.md"
+	referenceFactoryValidationPath   = "factory-validation.md"
 	referenceMockWorkersPath         = "mock-workers.md"
 	referenceRecordReplayPath        = "record-replay.md"
 	referenceGuardsPath              = "guards.md"
 	referenceRelationshipsPath       = "relationships.md"
+	referenceOperationsPath          = "operations.md"
 	referenceWorkPath                = "work.md"
 	referenceSessionsPath            = "sessions.md"
 	referenceWorkstationsPath        = "workstations.md"
@@ -80,12 +86,15 @@ type topicDocument struct {
 var topicDocuments = []topicDocument{
 	{topic: TopicAgents, description: "Agent orientation: read order, work submission, command matrix, planner vs executor, and topic router.", path: referenceAgentsPath, displayOrder: 5},
 	{topic: TopicAuthoringFactories, description: "Practical factory authoring workflow, runnable examples, mock workers, and replay.", path: referenceAuthoringFactoriesPath, displayOrder: 10},
+	{topic: TopicPackagedFactories, description: "First-party @you/* Factory catalog, live invocation discovery, and operator guide.", path: referencePackagedFactoriesPath, displayOrder: 12},
 	{topic: TopicRun, description: "Supported local, one-shot, batch, continuous, and mock-worker run shapes.", path: referenceRunPath, displayOrder: 15},
 	{topic: TopicConfig, description: "Operator initialization and Factory validation, flattening, expansion, and minimum authoring contract.", path: referenceConfigPath, displayOrder: 20},
+	{topic: TopicFactoryValidation, description: "Pre-run static Factory validation gate, supported checks, file and directory commands, and validation limits.", path: referenceFactoryValidationPath, displayOrder: 22},
 	{topic: TopicMockWorkers, description: "Mock-worker runs, JSON selection contract, and deterministic accept, reject, and script outcomes.", path: referenceMockWorkersPath, displayOrder: 25},
 	{topic: TopicRecordReplay, description: "Record and replay run modes, artifact paths, sensitivity, and incompatible flag combinations.", path: referenceRecordReplayPath, displayOrder: 26},
 	{topic: TopicGuards, description: "Workstation, input, and factory guards, guarded LOGICAL_MOVE loop breakers, and guard attachment levels.", path: referenceGuardsPath, displayOrder: 27},
 	{topic: TopicRelationships, description: "Batch DEPENDS_ON and PARENT_CHILD relations, runtime SPAWNED_BY lineage, and parent-aware guard linkage.", path: referenceRelationshipsPath, displayOrder: 28},
+	{topic: TopicOperations, description: "Real-pipeline lifetime, finite-drain classification, and same-name restart recovery.", path: referenceOperationsPath, displayOrder: 29},
 	{topic: TopicWork, description: "Submitted work: session-scoped work routes, tags, batch cross-links, and submission contracts.", path: referenceWorkPath, displayOrder: 30},
 	{topic: TopicSessions, description: "Live factory sessions: session list, session show, pause and resume, factory query, status API, dashboard URL, and run modes.", path: referenceSessionsPath, displayOrder: 35},
 	{topic: TopicOrchestrators, description: "Factory, FactoryOrchestrator, FactorySession, Dispatch, FactoryArtifact, FactoryEvent, and dynamic workflow aliases.", path: referenceOrchestratorsPath, displayOrder: 37},
@@ -93,7 +102,7 @@ var topicDocuments = []topicDocument{
 	{topic: TopicMCP, description: "Canonical you mcp serve install path, preview tool catalog, scope boundaries, and automation-backed checks.", path: referenceMCPPath, displayOrder: 39},
 	{topic: TopicWorkstations, description: "Workstation kinds, route fields, runtime step behavior, and scoped execution settings.", path: referenceWorkstationsPath, displayOrder: 40, aliases: []Topic{TopicWorkstationAlias}},
 	{topic: TopicWorkers, description: "Worker types, model providers, script workers, and worker configuration.", path: referenceWorkersPath, displayOrder: 50},
-	{topic: TopicProviders, description: "ACP agent setup, custom provider lifecycle, Factory selection, validation, and JavaScript usage.", path: referenceProvidersPath, displayOrder: 55, aliases: []Topic{TopicACPAlias}},
+	{topic: TopicProviders, description: "Worker/provider selection, model capabilities and limits, Factory configuration, AGY caveats, ACP lifecycle, and JavaScript usage.", path: referenceProvidersPath, displayOrder: 55, aliases: []Topic{TopicACPAlias}},
 	{topic: TopicServeACP, description: "Canonical you serve acp ACP-agent host command, stdio channel contract, clean shutdown, and minimal client configuration.", path: referenceServeACPPath, displayOrder: 56},
 	{topic: TopicResources, description: "Resource capacity, bounded concurrency, and workstation resource requirements.", path: referenceResourcesPath, displayOrder: 60},
 	{topic: TopicModels, description: "Local and hosted model setup for workers and CLI model commands.", path: referenceModelsPath, displayOrder: 70},

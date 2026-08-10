@@ -1044,6 +1044,7 @@ const (
 // Defines values for WorkerSessionEventDelivery.
 const (
 	WorkerSessionEventDeliveryRecord         WorkerSessionEventDelivery = "RECORD"
+	WorkerSessionEventDeliveryReplaySummary  WorkerSessionEventDelivery = "REPLAY_SUMMARY"
 	WorkerSessionEventDeliverySourceFailure  WorkerSessionEventDelivery = "SOURCE_FAILURE"
 	WorkerSessionEventDeliveryTerminal       WorkerSessionEventDelivery = "TERMINAL"
 	WorkerSessionEventDeliveryTerminalReplay WorkerSessionEventDelivery = "TERMINAL_REPLAY"
@@ -1072,6 +1073,11 @@ const (
 const (
 	WorkerSessionObservationTranscriptAVAILABLE   WorkerSessionObservationTranscript = "AVAILABLE"
 	WorkerSessionObservationTranscriptUNAVAILABLE WorkerSessionObservationTranscript = "UNAVAILABLE"
+)
+
+// Defines values for WorkerSessionReplaySummaryKind.
+const (
+	ReplaySummary WorkerSessionReplaySummaryKind = "replay-summary"
 )
 
 // Defines values for WorkerType.
@@ -6819,6 +6825,7 @@ type WorkerSessionEvent struct {
 	ErrorMessage    *string                         `json:"errorMessage"`
 	Event           WorkerSessionEventRecord        `json:"event"`
 	ProviderSession WorkerSessionProviderSessionRef `json:"providerSession"`
+	ReplaySummary   *WorkerSessionReplaySummary     `json:"replaySummary,omitempty"`
 
 	// WorkIds Work identities correlated with the streamed attempt.
 	WorkIds []string `json:"workIds"`
@@ -6937,6 +6944,24 @@ type WorkerSessionProviderSessionRef struct {
 	// Provider Provider identity that issued the correlated session.
 	Provider string `json:"provider"`
 }
+
+// WorkerSessionReplaySummary defines model for WorkerSessionReplaySummary.
+type WorkerSessionReplaySummary struct {
+	// Complete Whether the retained capture represents a terminal Worker Session.
+	Complete bool `json:"complete"`
+
+	// EventsEmitted Number of canonical event records emitted before this summary.
+	EventsEmitted int64 `json:"eventsEmitted"`
+
+	// Kind Stable record kind for the finite Worker Session replay marker.
+	Kind WorkerSessionReplaySummaryKind `json:"kind"`
+
+	// Reason Stable lifecycle classification for the replay result.
+	Reason string `json:"reason"`
+}
+
+// WorkerSessionReplaySummaryKind Stable record kind for the finite Worker Session replay marker.
+type WorkerSessionReplaySummaryKind string
 
 // WorkerSessionTranscriptResponse defines model for WorkerSessionTranscriptResponse.
 type WorkerSessionTranscriptResponse struct {

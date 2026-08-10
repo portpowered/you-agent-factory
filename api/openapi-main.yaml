@@ -132,12 +132,15 @@ paths:
         Streams the canonical Worker Session Events topic for the exact
         Provider Session identity in the explicitly selected Factory Session.
         Retained records are emitted first in aggregate order, followed by
-        live records. Each data frame is serialized JSON matching
+        live records unless replayOnly is true. In replay-only mode the
+        retained head is captured before delivery, no live follower is
+        registered, and one REPLAY_SUMMARY frame closes the stream after the
+        retained drain. Each data frame is serialized JSON matching
         WorkerSessionEvent. The terminal event is marked TERMINAL for an active
-        session or TERMINAL_REPLAY for an already-terminal session, after
-        which the connection closes successfully. Source failures are emitted
-        as an explicit SOURCE_FAILURE frame so clients can preserve complete
-        records already written and return a typed non-success result.
+        session or TERMINAL_REPLAY for an already-terminal session. Source
+        failures are emitted as an explicit SOURCE_FAILURE frame so clients
+        can preserve complete records already written and return a typed
+        non-success result.
       parameters:
         - $ref: '#/components/parameters/SessionID'
         - name: provider
@@ -159,9 +162,16 @@ paths:
           schema:
             type: string
             minLength: 1
+        - name: replayOnly
+          in: query
+          required: false
+          description: Drain the retained history through a captured Events head without registering a live follower.
+          schema:
+            type: boolean
+            default: false
       responses:
         '200':
-          description: Retained then live Worker Session event frames.
+          description: Retained then live Worker Session event frames, or a finite retained replay ending in REPLAY_SUMMARY.
           content:
             text/event-stream:
               schema:
@@ -1809,6 +1819,8 @@ components:
       $ref: './components/schemas/api/WorkerSessionObservation.yaml'
     WorkerSessionEvent:
       $ref: './components/schemas/api/WorkerSessionEvent.yaml'
+    WorkerSessionReplaySummary:
+      $ref: './components/schemas/api/WorkerSessionReplaySummary.yaml'
     WorkerSessionEventDelivery:
       $ref: './components/schemas/api/WorkerSessionEventDelivery.yaml'
     WorkerSessionEventRecord:

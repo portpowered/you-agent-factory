@@ -8,9 +8,11 @@ enum:
   - RECORD
   - TERMINAL
   - TERMINAL_REPLAY
+  - REPLAY_SUMMARY
   - SOURCE_FAILURE
 x-enum-varnames:
   - WorkerSessionEventDeliveryRecord
   - WorkerSessionEventDeliveryTerminal
   - WorkerSessionEventDeliveryTerminalReplay
+  - WorkerSessionEventDeliveryReplaySummary
   - WorkerSessionEventDeliverySourceFailure

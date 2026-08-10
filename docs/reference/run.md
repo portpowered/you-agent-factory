@@ -10,6 +10,14 @@ Use `you run` to start a Factory or perform a one-shot Factory invocation. This
 is the canonical packaged entry point for local, explicit-factory, batch,
 continuous, and mock-worker run tasks.
 
+For the operator runbook that distinguishes idle, finite-drained, and
+restart-recovery states, use `you docs operations`.
+
+Use `you docs providers` for worker/provider and model selection, provider
+capabilities and limits, effort mapping, and the boundary between durable
+Factory settings and one-shot overrides. This page owns run shapes and input
+sources.
+
 ## Choose a run shape
 
 | Task | Run shape |
@@ -84,6 +92,10 @@ accepts the canonical authored-Worker values `minimal`, `low`, `medium`,
 An unsupported value fails before Factory Session activation or Provider
 dispatch; a value that is canonical but unsupported by the selected Provider
 continues through that Provider's existing validation.
+
+The canonical effort vocabulary is therefore not a guarantee that every
+provider/model accepts every value. See `you docs providers` before selecting
+the provider-specific model or effort for a run.
 
 Use `--to-file` when a prompt is long or multiline. It reads one regular file
 with logically non-empty, valid UTF-8 content and sends its contents as one

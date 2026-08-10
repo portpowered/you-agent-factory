@@ -260,3 +260,35 @@ func (f *failOnNthAppendEventsAppender) Append(ctx context.Context, req events.A
 	}
 	return f.Service.Append(ctx, req)
 }
+
+// blockingTerminalAppendEventsAppender pauses the terminal append after the
+// Worker Session state has committed. It lets replay tests observe the exact
+// interleaving in which a terminal state exists without a terminal lifecycle
+// record in the retained Events snapshot.
+type blockingTerminalAppendEventsAppender struct {
+	events.Service
+	terminalAppendStarted chan struct{}
+	releaseTerminalAppend chan struct{}
+	once                  sync.Once
+	releaseOnce           sync.Once
+
+	mu    sync.Mutex
+	calls int
+}
+
+func (b *blockingTerminalAppendEventsAppender) Append(ctx context.Context, req events.AppendRequest) (events.AppendResult, error) {
+	b.mu.Lock()
+	b.calls++
+	call := b.calls
+	b.mu.Unlock()
+	if call != 2 {
+		return b.Service.Append(ctx, req)
+	}
+	b.once.Do(func() { close(b.terminalAppendStarted) })
+	<-b.releaseTerminalAppend
+	return events.AppendResult{}, errors.New("blockingTerminalAppendEventsAppender: terminal append failed")
+}
+
+func (b *blockingTerminalAppendEventsAppender) release() {
+	b.releaseOnce.Do(func() { close(b.releaseTerminalAppend) })
+}

@@ -123,7 +123,7 @@ paths:
         - Worker Sessions
       operationId: streamWorkerSessionEventsBySessionId
       summary: Stream retained and live Worker Session events
-      description: Streams the canonical Worker Session Events topic for the exact Provider Session identity in the explicitly selected Factory Session. Retained records are emitted first in aggregate order, followed by live records. Each data frame is serialized JSON matching WorkerSessionEvent. The terminal event is marked TERMINAL for an active session or TERMINAL_REPLAY for an already-terminal session, after which the connection closes successfully. Source failures are emitted as an explicit SOURCE_FAILURE frame so clients can preserve complete records already written and return a typed non-success result.
+      description: Streams the canonical Worker Session Events topic for the exact Provider Session identity in the explicitly selected Factory Session. Retained records are emitted first in aggregate order, followed by live records unless replayOnly is true. In replay-only mode the retained head is captured before delivery, no live follower is registered, and one REPLAY_SUMMARY frame closes the stream after the retained drain. Each data frame is serialized JSON matching WorkerSessionEvent. The terminal event is marked TERMINAL for an active session or TERMINAL_REPLAY for an already-terminal session. Source failures are emitted as an explicit SOURCE_FAILURE frame so clients can preserve complete records already written and return a typed non-success result.
       parameters:
         - $ref: '#/components/parameters/SessionID'
         - name: provider
@@ -145,9 +145,16 @@ paths:
           schema:
             type: string
             minLength: 1
+        - name: replayOnly
+          in: query
+          required: false
+          description: Drain the retained history through a captured Events head without registering a live follower.
+          schema:
+            type: boolean
+            default: false
       responses:
         '200':
-          description: Retained then live Worker Session event frames.
+          description: Retained then live Worker Session event frames, or a finite retained replay ending in REPLAY_SUMMARY.
           content:
             text/event-stream:
               schema:
@@ -2508,6 +2515,35 @@ components:
           type: string
           nullable: true
           description: Safe source-failure message when delivery is SOURCE_FAILURE.
+        replaySummary:
+          $ref: '#/components/schemas/WorkerSessionReplaySummary'
+          nullable: true
+          description: Completeness marker when delivery is REPLAY_SUMMARY.
+    WorkerSessionReplaySummary:
+      type: object
+      additionalProperties: false
+      required:
+        - kind
+        - complete
+        - reason
+        - eventsEmitted
+      properties:
+        kind:
+          type: string
+          enum:
+            - replay-summary
+          description: Stable record kind for the finite Worker Session replay marker.
+        complete:
+          type: boolean
+          description: Whether the retained capture represents a terminal Worker Session.
+        reason:
+          type: string
+          description: Stable lifecycle classification for the replay result.
+        eventsEmitted:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Number of canonical event records emitted before this summary.
     WorkerSessionEventDelivery:
       type: string
       description: Delivery outcome for one Worker Session stream frame. RECORD is a retained or live canonical event, TERMINAL marks the live terminal event, and TERMINAL_REPLAY marks the terminal event in an already-terminal replay. SOURCE_FAILURE is an explicit non-event outcome after the stream has opened.
@@ -2515,11 +2551,13 @@ components:
         - RECORD
         - TERMINAL
         - TERMINAL_REPLAY
+        - REPLAY_SUMMARY
         - SOURCE_FAILURE
       x-enum-varnames:
         - WorkerSessionEventDeliveryRecord
         - WorkerSessionEventDeliveryTerminal
         - WorkerSessionEventDeliveryTerminalReplay
+        - WorkerSessionEventDeliveryReplaySummary
         - WorkerSessionEventDeliverySourceFailure
     WorkerSessionEventRecord:
       type: object

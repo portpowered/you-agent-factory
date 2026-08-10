@@ -1041,6 +1041,7 @@ const (
 // Defines values for WorkerSessionEventDelivery.
 const (
 	WorkerSessionEventDeliveryRecord         WorkerSessionEventDelivery = "RECORD"
+	WorkerSessionEventDeliveryReplaySummary  WorkerSessionEventDelivery = "REPLAY_SUMMARY"
 	WorkerSessionEventDeliverySourceFailure  WorkerSessionEventDelivery = "SOURCE_FAILURE"
 	WorkerSessionEventDeliveryTerminal       WorkerSessionEventDelivery = "TERMINAL"
 	WorkerSessionEventDeliveryTerminalReplay WorkerSessionEventDelivery = "TERMINAL_REPLAY"
@@ -1069,6 +1070,11 @@ const (
 const (
 	WorkerSessionObservationTranscriptAVAILABLE   WorkerSessionObservationTranscript = "AVAILABLE"
 	WorkerSessionObservationTranscriptUNAVAILABLE WorkerSessionObservationTranscript = "UNAVAILABLE"
+)
+
+// Defines values for WorkerSessionReplaySummaryKind.
+const (
+	ReplaySummary WorkerSessionReplaySummaryKind = "replay-summary"
 )
 
 // Defines values for WorkerType.
@@ -6821,6 +6827,7 @@ type WorkerSessionEvent struct {
 	ErrorMessage    *string                         `json:"errorMessage"`
 	Event           WorkerSessionEventRecord        `json:"event"`
 	ProviderSession WorkerSessionProviderSessionRef `json:"providerSession"`
+	ReplaySummary   *WorkerSessionReplaySummary     `json:"replaySummary,omitempty"`
 
 	// WorkIds Work identities correlated with the streamed attempt.
 	WorkIds []string `json:"workIds"`
@@ -6939,6 +6946,24 @@ type WorkerSessionProviderSessionRef struct {
 	// Provider Provider identity that issued the correlated session.
 	Provider string `json:"provider"`
 }
+
+// WorkerSessionReplaySummary defines model for WorkerSessionReplaySummary.
+type WorkerSessionReplaySummary struct {
+	// Complete Whether the retained capture represents a terminal Worker Session.
+	Complete bool `json:"complete"`
+
+	// EventsEmitted Number of canonical event records emitted before this summary.
+	EventsEmitted int64 `json:"eventsEmitted"`
+
+	// Kind Stable record kind for the finite Worker Session replay marker.
+	Kind WorkerSessionReplaySummaryKind `json:"kind"`
+
+	// Reason Stable lifecycle classification for the replay result.
+	Reason string `json:"reason"`
+}
+
+// WorkerSessionReplaySummaryKind Stable record kind for the finite Worker Session replay marker.
+type WorkerSessionReplaySummaryKind string
 
 // WorkerSessionTranscriptResponse defines model for WorkerSessionTranscriptResponse.
 type WorkerSessionTranscriptResponse struct {
@@ -7535,6 +7560,9 @@ type StreamWorkerSessionEventsBySessionIdParams struct {
 
 	// Id Provider-issued session identifier, not a filesystem path.
 	Id string `form:"id" json:"id"`
+
+	// ReplayOnly Drain the retained history through a captured Events head without registering a live follower.
+	ReplayOnly *bool `form:"replayOnly,omitempty" json:"replayOnly,omitempty"`
 }
 
 // ReadWorkerSessionTranscriptBySessionIdParams defines parameters for ReadWorkerSessionTranscriptBySessionId.
@@ -11443,6 +11471,14 @@ func (siw *ServerInterfaceWrapper) StreamWorkerSessionEventsBySessionId(w http.R
 	err = runtime.BindQueryParameter("form", true, true, "id", r.URL.Query(), &params.Id)
 	if err != nil {
 		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "replayOnly" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "replayOnly", r.URL.Query(), &params.ReplayOnly)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "replayOnly", Err: err})
 		return
 	}
 

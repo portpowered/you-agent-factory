@@ -14,6 +14,9 @@ start, inspect, and recover—use `you docs javascript-workflows`. This page own
 general Factory Session discovery, lifecycle controls, routing, and runtime
 inspection shared by every orchestrator kind.
 
+For the canonical real-pipeline lifetime and process-restart recovery runbook,
+use `you docs operations`.
+
 Each live session owns its own runtime state. The service coordinates and
 routes requests between sessions, but runtime state such as loaded factory,
 event history, current work, and relative execution-path resolution is scoped
@@ -23,6 +26,40 @@ For the end-to-end agent playbook (read order, submission ingress, operator
 loop), see `you docs agents`. For submitted-work contracts
 after the factory is running, see `you docs work`. For `factory.json` topology,
 see `you docs config`.
+
+## Finite Worker Session event captures
+
+Use `worker-sessions stream --replay-only` when you need a redirect-safe
+snapshot of one provider-issued Worker Session without attaching a live
+follower:
+
+```bash
+you --server http://localhost:7437 worker-sessions stream \
+  --provider codex --kind session_id --id <provider-session-id> \
+  --replay-only --output json > worker-session.jsonl
+```
+
+Every non-empty line before the last line is the existing Worker Session stream
+JSON record. The final line is one standalone replay summary, for example:
+
+```json
+{"kind":"replay-summary","complete":true,"reason":"session-completed","eventsEmitted":12}
+```
+
+`eventsEmitted` must equal the number of preceding event records. For an
+`ACTIVE` Worker Session, the summary has `complete: false` and
+`reason: "session-active"`; it describes the retained snapshot and does not
+claim that later events were captured. For a terminal session, `complete: true`
+means the retained history was drained to its terminal outcome, and `reason`
+uses the stable `session-<terminal-state>` form such as
+`session-completed`.
+
+Replay-only exits successfully after the summary and does not send cancellation
+or wait for live events. Leave out `--replay-only` (or use `--follow`) for the
+normal retained-then-live stream. `--replay-only` and `--follow` are mutually
+exclusive and fail before a stream request is made. Command diagnostics, when
+enabled with `--verbose` or `--debug`, remain on stderr so they do not corrupt
+the redirected NDJSON file.
 
 ## JavaScript Factory Session Model
 

@@ -481,6 +481,39 @@ func TestStreamWorkerSessionEventsBySessionIDWritesRetainedAndTerminalFrames(t *
 	}
 }
 
+func TestStreamWorkerSessionEventsBySessionIDReplayOnlyWritesSummaryAndPreservesMode(t *testing.T) {
+	replayOnly := true
+	service := &fakeObservationService{
+		getResult: workersessions.Observation{
+			WorkerSessionID: "worker-session-1", ProviderSessionAvailable: true,
+			ProviderSession: providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-session-1"},
+			WorkIDs:         []string{"work-1"}, State: workersessions.StateRunning,
+		},
+		streamSubscription: &fakeObservationSubscription{deliveries: []workersessions.ObservationDelivery{
+			{Kind: workersessions.ObservationDeliveryRecord, Event: workersessions.ObservationEvent{Position: 1, Payload: json.RawMessage(`{"step":1}`)}},
+			{Kind: workersessions.ObservationDeliveryReplaySummary, Summary: &workersessions.ReplaySummary{Complete: false, Reason: "session-active", EventsEmitted: 1}},
+		}},
+	}
+	handler := NewHandler(NewAdapter(service, workServiceStub{}), zap.NewNop())
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest("GET", "/factory-sessions/session-1/worker-sessions/events?provider=codex&kind=session_id&id=provider-session-1&replayOnly=true", nil)
+
+	handler.StreamWorkerSessionEventsBySessionId(recorder, request, factoryapi.SessionID("session-1"), factoryapi.StreamWorkerSessionEventsBySessionIdParams{
+		Provider: factoryapi.LoadableProviderSessionProvider("codex"), Kind: factoryapi.LoadableProviderSessionKind("session_id"), Id: "provider-session-1", ReplayOnly: &replayOnly,
+	})
+
+	frames := decodeSSEFrames(t, recorder.Body.String())
+	if len(frames) != 2 || frames[0].Delivery != "RECORD" || frames[1].Delivery != "REPLAY_SUMMARY" {
+		t.Fatalf("frames = %#v, want RECORD then REPLAY_SUMMARY", frames)
+	}
+	if frames[1].ReplaySummary == nil || frames[1].ReplaySummary.Kind != "replay-summary" || frames[1].ReplaySummary.Complete || frames[1].ReplaySummary.Reason != "session-active" || frames[1].ReplaySummary.EventsEmitted != 1 {
+		t.Fatalf("replay summary = %#v, want active count-one summary", frames[1].ReplaySummary)
+	}
+	if !service.streamRequest.ReplayOnly {
+		t.Fatal("adapter did not preserve replay-only mode in the Worker Sessions request")
+	}
+}
+
 func TestStreamWorkerSessionEventsBySessionIDWritesExplicitSourceFailure(t *testing.T) {
 	service := &fakeObservationService{
 		getResult: workersessions.Observation{
@@ -610,6 +643,14 @@ type sseTestFrame struct {
 	Event           *sseTestEvent                               `json:"event"`
 	ErrorCode       *string                                     `json:"errorCode"`
 	ErrorMessage    *string                                     `json:"errorMessage"`
+	ReplaySummary   *sseTestReplaySummary                       `json:"replaySummary"`
+}
+
+type sseTestReplaySummary struct {
+	Kind          string `json:"kind"`
+	Complete      bool   `json:"complete"`
+	Reason        string `json:"reason"`
+	EventsEmitted int64  `json:"eventsEmitted"`
 }
 
 type sseTestEvent struct {
