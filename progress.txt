@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- Shared functional public-projection waits should use `support.WaitForObservation`: observe immediately, poll at 10ms, honor the caller deadline, and return the last observation/error for diagnostics; edge fakes cannot prove asynchronous projection behavior.
 - Go test lane runners use count `0` as cache mode and append `-count` only for positive explicit repeats; a fresh Make wrapper can select `-count=1` without changing the runner's default.
 - Authoritative coverage runners should pass `-count=1` alongside instrumentation so coverage and timing artifacts always describe a real test execution rather than a cached developer result.
 - Treat repository-enforcement inventories and architecture guards as project-enabling PRD criteria when they have no runtime, API, CLI, UI, or emitted-event behavior; source scans support enforcement but are not customer-behavior evidence.
@@ -1998,4 +1999,29 @@
 - **Learnings for future iterations:**
   - Coverage instrumentation is a fresh authoritative boundary, but carrying explicit `-count=1` makes that contract visible in generated `go test` arguments and protects it if coverage flags change later.
   - POSIX-only Make contract tests can be compiled with `GOOS=linux` on Windows when execution is unavailable; keep the live Windows verification focused on cross-platform runner/package tests.
+---
+## 2026-08-10 14:30 -07:00 - thr-functional-lane-speed-003
+- What was implemented
+  - Captured the fresh functional timing baseline before edits: 142 packages, 207.342 seconds wall time, with `work/relationships` at 43.950 seconds, `work/submission` at 33.606 seconds, and `sessions/execution` at 31.719 seconds.
+  - Added `support.WaitForObservation`, an immediate plus 10ms bounded observer that returns the last observation and observer error in timeout diagnostics.
+  - Replaced the measured 50–100ms fixed polling sleeps in the Work submission, Work relationship, and Factory Session execution helpers with public Work/Session observations through the shared wait; scenario assertions and the JavaScript durability owner package were unchanged.
+  - Added shared wait tests for immediate success, delayed success, timeout, and diagnostic observer failure, and marked story `thr-functional-lane-speed-003` complete in `prd.json`.
+- Files changed
+  - `tests/functional/internal/support/observation.go`
+  - `tests/functional/internal/support/observation_test.go`
+  - `tests/functional/work/submission/submission_helpers_test.go`
+  - `tests/functional/work/relationships/dependencies_test.go`
+  - `tests/functional/sessions/execution/helpers_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/work/submission -count=3 -v -timeout 300s` — passed (55.265s).
+  - `go test ./tests/functional/work/relationships -count=3 -v -timeout 300s` — passed (41.596s).
+  - `go test ./tests/functional/sessions/execution -count=3 -v -timeout 300s` — passed (61.503s).
+  - `go test ./tests/functional/internal/support -count=1 -timeout 120s` — passed.
+  - Focused `go vet` — passed; `make backend-size`, `make pkg-maint`, `make pkg-file-count`, and `make pkg-structure` — passed.
+  - `make typecheck` remains blocked by the workstation's missing Bun type definitions (`TS2688`).
+- **Learnings for future iterations:**
+  - Public Work and durable Session projections are asynchronously committed and do not share one deterministic completion signal; the shared 10ms observer preserves real runtime behavior while removing avoidable 50–100ms polling latency.
+  - The baseline timing artifact is ignored under `.artifacts/`; story 004 still needs a clean comparable after-summary plus cold, warm, and fresh lane evidence in an isolated process environment.
 ---

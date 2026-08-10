@@ -66,8 +66,8 @@
         "Tests pass"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Captured the fresh functional timing summary at `.artifacts/functional-test-viz/story-003-before-functional-timing-summary.json` (142 packages, 207.342s wall time); the measured candidates selected for this story were `work/relationships` (43.950s), `work/submission` (33.606s), and `sessions/execution` (31.719s). Replaced their fixed 50–100ms public Work/Session polling sleeps with shared `support.WaitForObservation`, which observes immediately, polls every 10ms, preserves the bounded caller deadline, and reports the last observation and observer error on timeout. Added shared-wait coverage for immediate success, delayed success, timeout, and diagnostic observer failure. Repeated focused functional runs passed three times for all three touched packages; support tests, focused vet, backend-size, pkg-maint, pkg-file-count, and pkg-structure passed. The repository typecheck remains blocked by the workstation's missing Bun type definitions (`TS2688`); the JavaScript durability package was not changed."
     },
     {
       "id": "thr-functional-lane-speed-004",

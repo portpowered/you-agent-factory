@@ -51,17 +51,18 @@ func newPartialResultBlockingProvider(workflowName string) *partialResultBlockin
 func (p *partialResultBlockingProvider) waitForCanceledInfer(t *testing.T, timeout time.Duration) {
 	t.Helper()
 
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		p.mu.Lock()
-		canceled := p.contextCanceled
-		p.mu.Unlock()
-		if canceled > 0 {
-			return
-		}
-		time.Sleep(5 * time.Millisecond)
+	_, err := support.WaitForObservation(
+		timeout,
+		func() (int, error) {
+			p.mu.Lock()
+			defer p.mu.Unlock()
+			return p.contextCanceled, nil
+		},
+		func(canceled int) bool { return canceled > 0 },
+	)
+	if err != nil {
+		t.Fatal("provider Infer did not observe canceled workflow context:", err)
 	}
-	t.Fatal("provider Infer did not observe canceled workflow context")
 }
 
 func (p *partialResultBlockingProvider) Infer(
@@ -537,16 +538,18 @@ func waitForDurableSessionStatus(
 ) {
 	t.Helper()
 
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		session := readDurableSession(t, serverURL, sessionID)
-		if session.Status == want {
-			return
-		}
-		time.Sleep(15 * time.Millisecond)
+	last, err := support.WaitForObservation(
+		timeout,
+		func() (factoryapi.FactorySessionDurableReadModel, error) {
+			return readDurableSession(t, serverURL, sessionID), nil
+		},
+		func(session factoryapi.FactorySessionDurableReadModel) bool {
+			return session.Status == want
+		},
+	)
+	if err != nil {
+		t.Fatalf("durable session %s status = %q, want %q: %v", sessionID, last.Status, want, err)
 	}
-	session := readDurableSession(t, serverURL, sessionID)
-	t.Fatalf("durable session %s status = %q, want %q within %s", sessionID, session.Status, want, timeout)
 }
 
 func waitForFactoryDispatchStatus(
@@ -557,20 +560,23 @@ func waitForFactoryDispatchStatus(
 ) {
 	t.Helper()
 
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		listed := listFactorySessionDispatches(t, serverURL, sessionID)
-		for _, dispatch := range listed.Dispatches {
-			if dispatch.Id != dispatchID {
-				continue
+	last, err := support.WaitForObservation(
+		timeout,
+		func() (factoryapi.ListFactorySessionDispatchesResponse, error) {
+			return listFactorySessionDispatches(t, serverURL, sessionID), nil
+		},
+		func(listed factoryapi.ListFactorySessionDispatchesResponse) bool {
+			for _, dispatch := range listed.Dispatches {
+				if dispatch.Id == dispatchID && dispatch.Status == want {
+					return true
+				}
 			}
-			if dispatch.Status == want {
-				return
-			}
-		}
-		time.Sleep(10 * time.Millisecond)
+			return false
+		},
+	)
+	if err != nil {
+		t.Fatalf("dispatch %s did not reach %s: %v; last dispatches=%#v", dispatchID, want, err, last.Dispatches)
 	}
-	t.Fatalf("dispatch %s did not reach %s within %s", dispatchID, want, timeout)
 }
 
 func waitForDurablePartialResult(
@@ -580,21 +586,19 @@ func waitForDurablePartialResult(
 ) factoryapi.FactorySessionResult {
 	t.Helper()
 
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		partial := readDurableSessionResultWithMode(t, serverURL, sessionID, "partial")
-		if partial.ResultStatus == factoryapi.FactorySessionResultStatusPartial &&
-			partial.PrimaryResult != nil && len(*partial.PrimaryResult) > 0 {
-			return partial
-		}
-		time.Sleep(25 * time.Millisecond)
-	}
-	partial := readDurableSessionResultWithMode(t, serverURL, sessionID, "partial")
-	t.Fatalf(
-		"partial result = %#v, want PARTIAL status with primaryResult before %s",
-		partial,
+	partial, err := support.WaitForObservation(
 		timeout,
+		func() (factoryapi.FactorySessionResult, error) {
+			return readDurableSessionResultWithMode(t, serverURL, sessionID, "partial"), nil
+		},
+		func(partial factoryapi.FactorySessionResult) bool {
+			return partial.ResultStatus == factoryapi.FactorySessionResultStatusPartial &&
+				partial.PrimaryResult != nil && len(*partial.PrimaryResult) > 0
+		},
 	)
+	if err != nil {
+		t.Fatalf("partial result = %#v, want PARTIAL status with primaryResult: %v", partial, err)
+	}
 	return partial
 }
 
