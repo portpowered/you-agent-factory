@@ -1521,3 +1521,17 @@
 - **Learnings for future iterations:**
   - For an already-completed story, use the authoritative PRD, focused inventory gates, pushed-head comparison, PR-body comparison, and thread-aware review audit as the final handoff evidence; do not reopen unrelated baseline debt.
 ---
+## 2026-08-10 08:02 -0700 - sac-s0-1-ownership-inventories CI retry follow-up
+- What was implemented
+  - Investigated the fresh-head Backend Functional Coverage failure and identified the unchanged timing-sensitive JavaScript durability test `TestJavaScriptDurabilityDoesNotPersistSnapshotsByDefault`; its assertion was `provider Infer did not observe canceled workflow context`.
+  - Confirmed this matches the repository's documented current-main flake pattern, made no unrelated runtime changes, and reran only the failed GitHub jobs after the focused test passed 20 consecutive local repetitions.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/orchestration/javascript/durability -run '^TestJavaScriptDurabilityDoesNotPersistSnapshotsByDefault$' -count=20 -timeout 300s` — passed.
+  - GitHub Actions run `31399893972`, attempt 2 — all 18 checks passed, including Backend Functional Coverage and Verification Policy.
+  - PR #1848 remains conflict-free with body matching `prd.json`; local and pushed head are both `5e04c54d4761d8d04eae8813ee9ebb7bbffb5210`.
+  - Thread-aware review audit reports zero review submissions and zero unresolved or outdated inline threads.
+- **Learnings for future iterations:**
+  - A canceled-context assertion in the JavaScript durability suite is a known timing-sensitive CI failure; run the exact test repeatedly and rerun only failed jobs before changing unrelated runtime code.
+---
