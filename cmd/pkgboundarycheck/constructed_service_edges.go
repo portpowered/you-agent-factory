@@ -37,6 +37,9 @@ func scanConstructedServiceEdges(repoRoot string) ([]constructedServiceEdgesFind
 		if walkErr != nil {
 			return walkErr
 		}
+		if shouldSkipRepositoryWalkDirectory(repoRoot, path, entry) {
+			return filepath.SkipDir
+		}
 		if entry.IsDir() {
 			if path == servicesRoot {
 				return nil
