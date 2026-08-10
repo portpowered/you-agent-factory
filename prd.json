@@ -121,8 +121,8 @@
         "Tests pass"
       ],
       "priority": 6,
-      "passes": true,
-      "notes": "Completed the end-to-end root-process proof through public Factory Session HTTP surfaces. The test constructs one root.BuildProcess with instrumented session/runtime/response-ID edges, provider runner, API starter, and explicit observability roots, proves all remain inert during construction, then executes that same process twice by rotating only the transport starter. The two executions reuse the exact injected edge instances while producing distinct session IDs, stream generations, runtime IDs, and observability scopes; success and provider-failure invocations retain their terminal statuses, isolated response streams, canonical DISPATCH_REQUEST-before-DISPATCH_RESPONSE ordering, and exact runner call cardinality. Existing root construction-failure and close/unwind coverage remains in place, and the P1 owner-contract deletion register now records live story 001-005 replacements while explicitly deferring P2-P6 seams. Focused root-composition and full root-composition package tests pass; typecheck and the remaining verification gates are recorded in progress.txt."
+      "passes": false,
+      "notes": "The reusable root-process behavior proof exists and its focused functional assertions pass, but Story 006 remains incomplete on the review path. `make backend-size` reports the functional test at 121 lines versus the 100-line limit, and the review also requires replacing its ordinary raw HTTP/polling flow with the mandated public process/CLI seam or documenting a narrow parity exception and deterministic synchronization rationale. The branch still needs a rebase/merge with current origin/main and terminal CI."
     }
   ]
 }
