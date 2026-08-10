@@ -473,9 +473,12 @@ three use `--with-mock-workers` to prove the invocation and terminal output
 envelope without contacting a live model. Generic mock acceptance does not
 simulate a builder's file tools or a planner's valid batch JSON; the normal
 provider-backed behavior and artifact guarantees are described separately in
-each entry. The `full-flow` smoke intentionally exercises its terminating
-argument-validation failure, while the repository's functional coverage uses
-protocol-valid provider responses for the complete worktree/review/merge loop.
+each entry. The `full-flow` smoke uses a controlled protocol-valid planner
+response and a bounded cycle limit to reach its successful terminal result,
+while the repository's functional coverage uses protocol-valid provider
+responses for the complete worktree/review/merge loop. An intentionally
+out-of-range `--max-cycles 9` invocation is retained separately as an
+additional argument-validation check.
 
 ### `@you/factory-builder`
 

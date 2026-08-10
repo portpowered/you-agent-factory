@@ -442,3 +442,20 @@
   - Full functional CI can expose timing-sensitive cancellation observations even when the exact durability tests pass repeatedly in isolation; use the failing assertion and local repetition to separate a flake from a branch regression before changing source.
   - After a successful failed-job rerun, a subsequent progress-only head must receive its own complete CI run before delivery is considered current.
 ---
+
+## 2026-08-09 19:33 -07:00 - wo-d1-packaged-factories-docs-review-follow-up
+- What was implemented
+  - Addressed the latest blocking PR conversation feedback by removing the stale statement that the `@you/full-flow` worked smoke intentionally exercises argument validation.
+  - The planning-family introduction now describes the successful controlled planner-response smoke and identifies `--max-cycles 9` only as an additional out-of-range bound check.
+  - Kept all six PRD stories marked `passes:true`; no `prd.json` change was required.
+- Files changed
+  - `docs/reference/packaged-factories.md`
+  - `progress.txt`
+- Verification
+  - `make docs-reference-smoke` — passed.
+  - `make verify-fast` — passed: dashboard typecheck, MCP contract boundary, 355 UI files / 2,970 tests, 191 Bun unit checks, and the short Go suite.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - After replacing a worked example, audit nearby family-level explanatory prose as well as the entry itself; stale summary text can reintroduce a resolved correctness contradiction.
+  - Documentation-only review fixes still require a fresh pushed head and terminal CI before the PR can be reported ready.
+---
