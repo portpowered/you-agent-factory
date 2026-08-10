@@ -37,13 +37,23 @@ func TestJavaScriptRuntimeService_LiveAndReplayEventsRemainIdenticalAcrossPhaseC
 	request := simpleFinalSyncStartRequest()
 	request.RequestID = "req-runtime-phase-checkpoint-phase-live-replay"
 	var live []interfaces.FactoryEvent
-	request.EventConsumer = func(events []interfaces.FactoryEvent) {
+	consume := func(events []interfaces.FactoryEvent) {
 		for _, event := range events {
 			live = append(live, event.Clone())
 		}
 	}
+	observed, ok := service.(interface {
+		StartSyncWithEventConsumer(
+			context.Context,
+			fse.StartRequest,
+			fse.FactoryEventConsumer,
+		) (fse.SyncStartResult, error)
+	})
+	if !ok {
+		t.Fatal("runtime service does not expose private event-aware sync start")
+	}
 
-	completed, err := service.StartSync(context.Background(), request)
+	completed, err := observed.StartSyncWithEventConsumer(context.Background(), request, consume)
 	if err != nil {
 		t.Fatalf("StartSync: %v", err)
 	}

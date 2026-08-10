@@ -461,8 +461,18 @@ func invokeJavaScriptFactory(
 	if err != nil {
 		return factorydefinitions.FactoryInvocationResult{}, err
 	}
-	startRequest.EventConsumer = factorysessions.ExecutionFactoryEventConsumer(consume)
-	started, err := opened.Execution.StartSync(ctx, startRequest)
+	var started factorysessions.SyncStartResult
+	if observed, ok := opened.Execution.(interface {
+		StartSyncWithEventConsumer(
+			context.Context,
+			factorysessions.StartRequest,
+			factorysessions.FactoryEventConsumer,
+		) (factorysessions.SyncStartResult, error)
+	}); ok {
+		started, err = observed.StartSyncWithEventConsumer(ctx, startRequest, consume)
+	} else {
+		started, err = opened.Execution.StartSync(ctx, startRequest)
+	}
 	if err != nil {
 		return factorydefinitions.FactoryInvocationResult{}, err
 	}

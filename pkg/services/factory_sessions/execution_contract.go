@@ -610,7 +610,6 @@ type StartRequest struct {
 	RequestedPolicy map[string]any
 	Runtime         *RuntimeOptions
 	Wait            *WaitOptions
-	EventConsumer   FactoryEventConsumer `json:"-"`
 }
 
 // SyncOutcome reports how a sync start wait ended.

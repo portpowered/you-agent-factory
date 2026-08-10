@@ -105,12 +105,22 @@ func TestJavaScriptRuntimeService_StartSyncStreamsCanonicalPhaseBeforeCompletion
 	request := simpleFinalSyncStartRequest()
 	request.RequestID = "req-runtime-sync-live-events-001"
 	eventBatches := make(chan []interfaces.FactoryEvent, 8)
-	request.EventConsumer = func(events []interfaces.FactoryEvent) {
+	consume := func(events []interfaces.FactoryEvent) {
 		eventBatches <- events
+	}
+	eventAware, ok := service.(interface {
+		StartSyncWithEventConsumer(
+			context.Context,
+			fse.StartRequest,
+			fse.FactoryEventConsumer,
+		) (fse.SyncStartResult, error)
+	})
+	if !ok {
+		t.Fatal("runtime service does not expose private event-aware sync start")
 	}
 	done := make(chan error, 1)
 	go func() {
-		_, err := service.StartSync(context.Background(), request)
+		_, err := eventAware.StartSyncWithEventConsumer(context.Background(), request, consume)
 		done <- err
 	}()
 

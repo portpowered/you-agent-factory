@@ -378,6 +378,26 @@ func (s *JavaScriptRuntimeService) StartAsync(ctx context.Context, req StartRequ
 }
 
 func (s *JavaScriptRuntimeService) StartSync(ctx context.Context, req StartRequest) (SyncStartResult, error) {
+	return s.startSync(ctx, req, nil)
+}
+
+// StartSyncWithEventConsumer keeps transport presentation outside the durable
+// StartRequest. The invocation owner may opt into this private capability when
+// it needs live canonical-event delivery; ordinary durable callers continue to
+// use StartSync with a value-only request.
+func (s *JavaScriptRuntimeService) StartSyncWithEventConsumer(
+	ctx context.Context,
+	req StartRequest,
+	consume FactoryEventConsumer,
+) (SyncStartResult, error) {
+	return s.startSync(ctx, req, consume)
+}
+
+func (s *JavaScriptRuntimeService) startSync(
+	ctx context.Context,
+	req StartRequest,
+	consume FactoryEventConsumer,
+) (SyncStartResult, error) {
 	if err := ctx.Err(); err != nil {
 		return SyncStartResult{}, err
 	}
@@ -417,7 +437,7 @@ func (s *JavaScriptRuntimeService) StartSync(ctx context.Context, req StartReque
 		}
 		return SyncStartResult{}, err
 	}
-	stopObservingFactoryEvents := s.observeFactoryEvents(reserved.state, normalized.EventConsumer)
+	stopObservingFactoryEvents := s.observeFactoryEvents(reserved.state, consume)
 	defer stopObservingFactoryEvents()
 
 	s.mu.Lock()
