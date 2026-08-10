@@ -2361,3 +2361,16 @@
 - **Learnings for future iterations:**
   - Once prior blocking comments are documented as cleared, validate the current head with thread-aware review state, base ancestry/conflict checks, and terminal `gh pr checks`; visible historical rejection comments do not by themselves indicate outstanding work.
 ---
+## 2026-08-10 13:20 -07:00 - e2-structured-worker-results CI follow-up
+- What was implemented
+  - Investigated the fresh PR run failure in `TestFactorySessionResumeDoesNotRepeatCompletedDispatch`; the failure was the known timing-sensitive `provider Infer did not observe canceled workflow context` assertion at `logical_identity_test.go:124`.
+  - Repeated the exact functional test five times locally and reran the failed GitHub jobs on the same head; no E2 source change was warranted.
+- Files changed
+  - `progress.txt`
+- Verification
+  - The focused restart test passed all five local repetitions.
+  - GitHub Actions run `31427246233` rerun passed Backend Functional Coverage, pinned real ACP evidence, Verification Policy, and all other required lanes on head `b97c093f0`.
+  - `git diff --check` — passed before this bookkeeping append.
+- **Learnings for future iterations:**
+  - When the full functional lane fails only at a known cancellation-observation assertion, reproduce that exact test repeatedly and rerun the failed jobs before changing unrelated runtime code; a clean rerun distinguishes an intermittent current-main timing failure from a feature regression.
+---
