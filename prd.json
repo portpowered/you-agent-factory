@@ -84,7 +84,7 @@
       ],
       "priority": 4,
       "passes": false,
-      "notes": ""
+      "notes": "Focused post-change timing evidence is complete for the three packages changed by story 003: `.artifacts/functional-test-viz/story-004-after-focused-functional-timing-summary.json` reports complete fresh instrumented results for 3 packages (17.847s wall, 36.587s package elapsed sum), with `sessions/execution` 31.719s -> 13.386s, `work/relationships` 43.950s -> 13.004s, and `work/submission` 33.606s -> 10.197s. The same packages passed a three-repeat short focused run. Story remains incomplete because full `make test-functional` cold/warm attempts were contended or incomplete, and the full lane plus isolated three-repeat focused execution of `factory_runtime/root_composition` fails with the unchanged baseline provider-prompt mismatch (`unexpected provider prompt`: 18 calls); therefore no complete full fresh lane or full before/after timing summary can be claimed yet. Typecheck remains blocked by the workstation's missing Bun type definitions (`TS2688`)."
     }
   ]
 }

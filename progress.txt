@@ -2,6 +2,7 @@
 - Shared functional public-projection waits should use `support.WaitForObservation`: observe immediately, poll at 10ms, honor the caller deadline, and return the last observation/error for diagnostics; edge fakes cannot prove asynchronous projection behavior.
 - Go test lane runners use count `0` as cache mode and append `-count` only for positive explicit repeats; a fresh Make wrapper can select `-count=1` without changing the runner's default.
 - Authoritative coverage runners should pass `-count=1` alongside instrumentation so coverage and timing artifacts always describe a real test execution rather than a cached developer result.
+- For targeted performance evidence, `gocoveragecheck -packages ... -total-only -timing-output ...` preserves the authoritative fresh instrumentation and timing schema while isolating measured packages from an independently failing full-lane package.
 - Treat repository-enforcement inventories and architecture guards as project-enabling PRD criteria when they have no runtime, API, CLI, UI, or emitted-event behavior; source scans support enforcement but are not customer-behavior evidence.
 - AST scanners must expand grouped Go field declarations before indexing parameter or result types; a field-count helper can exceed the AST field-list length and panic on valid source.
 - Asynchronous service characterizations should wait on observed edge/context signals rather than arbitrary `time.After` ceilings; the test context remains the failure escape hatch.
@@ -2024,4 +2025,21 @@
 - **Learnings for future iterations:**
   - Public Work and durable Session projections are asynchronously committed and do not share one deterministic completion signal; the shared 10ms observer preserves real runtime behavior while removing avoidable 50–100ms polling latency.
   - The baseline timing artifact is ignored under `.artifacts/`; story 004 still needs a clean comparable after-summary plus cold, warm, and fresh lane evidence in an isolated process environment.
+---
+## 2026-08-10 15:48 -07:00 - thr-functional-lane-speed-004
+- What was implemented
+  - Ran the story-level timing and correctness evidence pass without changing production or functional-test source in this iteration.
+  - Captured focused post-change timing with the same fresh instrumented `gocoveragecheck` mechanism used for the baseline. The complete summary is `.artifacts/functional-test-viz/story-004-after-focused-functional-timing-summary.json` (ignored artifact, 3 packages, 17.847s wall time, 36.587s package elapsed sum).
+  - Confirmed all three measured packages improved against the comparable story-003 baseline: `sessions/execution` 31.719s → 13.386s, `work/relationships` 43.950s → 13.004s, and `work/submission` 33.606s → 10.197s.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Focused fresh `gocoveragecheck` for the three touched packages with `-count=1`, short mode, eight jobs, and `-total-only` — passed; timing summary is complete and all three package outcomes are pass.
+  - `go test -short -p=3 ./tests/functional/internal/support ./tests/functional/work/submission ./tests/functional/work/relationships ./tests/functional/sessions/execution -count=3 -timeout=300s` — passed.
+  - `go test ./tests/functional/factory_runtime/root_composition -run '^TestFactoryRuntimeMixedDirectAndFactoryChildDispatchesStayIsolatedThroughCLI$' -count=3 -v -timeout=180s` — failed identically in all three repetitions with the pre-existing `unexpected provider prompt` result; this package is outside the three performance targets and was unchanged by stories 001–003.
+  - Full `make test-functional` cold/warm attempts were not authoritative: the cold retries were contended/incomplete and the warm retry showed cached package results but exited non-zero on the same root-composition failure. No complete full fresh lane or full before/after summary can be claimed until that baseline failure is resolved or isolated.
+- **Learnings for future iterations:**
+  - A focused `gocoveragecheck` timing summary is useful for proving selected package deltas, but it cannot replace the required full fresh functional and coverage evidence.
+  - The full functional lane currently reaches `factory_runtime/root_composition` and fails before a clean lane result; investigate that existing provider-prompt mismatch before marking story 004 complete.
 ---
