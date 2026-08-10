@@ -782,3 +782,22 @@
   - The Runtime termination checker already owns the finite incomplete classification and typed error; the lifecycle bug was that `finishTerminationDrain` reported a consumed wake without its caller looping back into `tickOnce`.
   - Dispatch-result hook wake channels are part of the engine’s pending-input contract and must be drained alongside result and submission signals at the final termination boundary.
 ---
+
+## 2026-08-10 04:57 -07:00 - pf-plain-batch-drain-001 verification follow-up
+- What was implemented
+  - Kept the termination-drain result helper within the repository’s 1000-line backend file limit without changing its semantics.
+- Files changed
+  - `pkg/services/factory_runtime/internal/services/orchestration/engine/engine.go`
+  - `pkg/services/factory_runtime/internal/services/orchestration/engine/runtime_state.go`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/factory_runtime/... -count=1 -timeout 300s` — passed.
+  - `go test ./pkg/services/factory_sessions/... -count=1 -timeout 360s` — passed.
+  - `go test ./tests/functional/sessions/execution -run 'TestWithServerDrainCannotReportSuccessWhileWorkIsNonTerminal|TestHostedFiniteRunsKeepEmptyAndTerminalSuccess|TestHostedContinuousRunsStayLiveWhileIdle' -count=1 -timeout 240s` — passed.
+  - `make test` — passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` — passed.
+  - `make verify-fast` — blocked before Go/UI tests by the checkout’s pre-existing dashboard baseline: missing `@types/bun` and TypeScript 6 `baseUrl` deprecation errors.
+- **Learnings for future iterations:**
+  - The backend quality gates report deletion-only baseline entries but pass newly changed files; a small private helper signature reduction is enough to preserve the strict engine file-size boundary.
+  - `make test` remains the reliable repository-wide short Go evidence when the fast aggregate stops early at an unavailable UI dependency.
+---
