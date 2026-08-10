@@ -1002,3 +1002,21 @@
   - When a broad functional lane fails on an untouched timing-sensitive test, reproduce that exact test repeatedly before editing feature code; a clean repetition supports a targeted failed-job rerun.
   - Record the retry job IDs and exact final head in the append-only log so CI recovery remains auditable.
 ---
+## 2026-08-10 03:11 -0700 - wo-b3-provider-capability-discovery-cli-delivery-audit
+- What was implemented
+  - Re-read the PRD and consolidated Codebase Patterns; all three provider discovery stories remain marked `passes:true`.
+  - Audited existing PR #1843 after the prior blocking conversation item. The current head includes the exact Codex model inventory, explicit AGY empty effort arrays with model-ID selection guidance, and the catalog-to-execution behavioral regression requested by the feedback.
+  - Confirmed the existing PR is open, mergeable, non-draft, and already points at the latest local and fork branch commit, so no duplicate PR or feature-code change is needed.
+- Files changed
+  - `progress.txt`
+  - `prd.json` was verified unchanged because all story pass states and acceptance notes are current.
+- Verification
+  - `go test ./tests/functional/providers/discovery/... -run '^TestProvidersListThroughRootBuildProcess$' -count=1` — passed.
+  - `git diff --check` — passed.
+  - Local `HEAD`, the fork branch, and PR #1843 head all match `998a9fecdf46c9bcbaaf92bef72ddee0f3d0bf49` before this progress-only append.
+  - `gh pr checks 1843 --repo portpowered/you-agent-factory` — all 18 checks pass, including Backend Functional Coverage and Verification Policy.
+  - Thread-aware PR inspection reports zero inline review threads and zero formal reviews; the prior top-level blocker is addressed by the current commits.
+- **Learnings for future iterations:**
+  - A review audit should compare the exact local, fork, and PR head SHAs and inspect thread state before deciding whether a duplicate PR or code change is necessary.
+  - Progress-only delivery bookkeeping changes the PR head, so the final audit must recheck the corresponding CI run after pushing the append.
+---
