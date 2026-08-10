@@ -1040,3 +1040,17 @@
 - **Learnings for future iterations:**
   - When broad functional coverage reports a process-startup/log-observation failure, isolate the named test repeatedly before changing lifecycle code; parallel scheduling can expose a transient missing-log race that is not reproducible alone.
 ---
+
+## 2026-08-10 08:18 -07:00 - pf-stale-scope-diagnostic-002 PR CI rerun follow-up
+- What was implemented
+  - No source change; inspected the second Backend Functional Coverage failure on the latest PR commit.
+  - Confirmed the failure moved to the unrelated `tests/functional/sessions/restart` assertion `TestFactorySessionResumeDoesNotRepeatCompletedDispatch`, where the provider did not observe a canceled workflow context.
+  - Confirmed the branch has no diff in that package and reran the named test five times in isolation; all five runs passed.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/sessions/restart -run '^TestFactorySessionResumeDoesNotRepeatCompletedDispatch$' -count=5 -v -timeout 300s` — passed, 5/5.
+  - Latest PR run: Backend Unit Coverage and all non-functional lanes passed; Backend Functional Coverage failed only at the isolated-test assertion above.
+- **Learnings for future iterations:**
+  - A changing failure among unrelated cancellation/startup observations across full-suite reruns is evidence of parallel-suite flakiness; preserve the feature scope and isolate each named test before attempting a production change.
+---
