@@ -47,8 +47,8 @@
         "Tests pass"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Made the no-snapshot proof deterministic in tests/functional/orchestration/javascript/durability/resume_test.go. The injected blocking provider now exposes a completion signal that fires when the canceled Infer edge returns; TestJavaScriptDurabilityDoesNotPersistSnapshotsByDefault waits for that edge after the public INTERRUPTED lifecycle is observed before inspecting project-local persistence. The assertion continues to read the interrupted Factory Session through the public HTTP contract, verifies INTERRUPTED plus interruption lifecycle data, and now rejects both the durable-session snapshot and its parent directory. No product durability code changed because the evidence still shows the default policy is correctly in-memory-only. Focused no-snapshot runs passed once and five consecutive times; all three durability resume scenarios passed together; go vet and git diff --check passed. Sibling fresh-run and race evidence remain in story 003."
     },
     {
       "id": "thr-deflake-js-durability-003",

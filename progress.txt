@@ -1972,3 +1972,24 @@
   - A public dispatch `RUNNING` projection is not proof that an external provider call has started; cancellation tests must synchronize on the injected edge's entry signal before issuing lifecycle control.
   - Channel-based edge observations remove both the pre-entry race and the test's counter-polling sleep without changing product durability behavior. Story 002 still needs a separate review of the no-snapshot filesystem boundary, and story 003 still needs fresh-run and sibling-scope proof.
 ---
+## 2026-08-10 14:14 -07:00 - thr-deflake-js-durability-002
+- What was implemented
+  - Made `TestJavaScriptDurabilityDoesNotPersistSnapshotsByDefault` wait for the injected blocking provider's `Infer` call to return after cancellation, closing the gap where the public `INTERRUPTED` projection could be observed before the external edge completed.
+  - Kept the public Factory Session assertions for in-memory `INTERRUPTED` status and `interruptedAt` lifecycle data, and expanded the negative durability proof to reject both the project-local durable-session snapshot and its parent directory.
+  - Confirmed no product durability change is needed: default execution remains in-memory-only, and the correction stays in the JavaScript durability functional test.
+- Files changed
+  - `tests/functional/orchestration/javascript/durability/resume_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test -p=1 -vet=off ./tests/functional/orchestration/javascript/durability -run '^TestJavaScriptDurabilityDoesNotPersistSnapshotsByDefault$' -count=1 -v -timeout 180s` — passed.
+  - The same focused test with `-count=5 -v` — five consecutive passes.
+  - All three JavaScript durability resume scenarios with `-count=1 -v` — passed.
+  - `go vet ./tests/functional/orchestration/javascript/durability` — passed.
+  - `make ui-deps` followed by `make typecheck` — passed; dependency setup changed no tracked lockfile.
+  - `git diff --check` and `prd.json` JSON validation — passed.
+- **Learnings for future iterations:**
+  - A cancellation-observed signal is not the same as an external provider call's completion; negative persistence assertions should wait for the injected edge to return before reading the filesystem.
+  - When the local UI dependency tree is incomplete, `make typecheck` reports missing `@types/bun`; `make ui-deps` restores the pinned Bun workspace without changing tracked files.
+  - Story 003 still owns the 20 fresh package runs, race-enabled package run, and any sibling scenarios that require the same completion boundary.
+---
