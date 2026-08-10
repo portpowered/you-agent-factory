@@ -8142,3 +8142,18 @@
   - Rebase before final gate verification because current main can advance while a PR is under review; compare the boundary count to the freshly fetched main baseline rather than the stale PR base.
   - Large behavioral test helpers can be split into a same-package helper test file to satisfy backend file-size limits without weakening observable tests or introducing production abstractions.
 ---
+
+## 2026-08-10 09:26 -07:00 - e3-event-webhooks-004 CI follow-up
+- What was implemented
+  - Investigated the first final-head CI result and isolated its only substantive failure to the pre-existing `TestFactorySessionResumeDoesNotRepeatCompletedDispatch` timing assertion in the functional sessions/restart package; no Webhooks or changed-file failure was reported.
+  - Re-ran the failed CI jobs after five consecutive local passes of that test. Backend Functional Coverage and the dependent Verification Policy job passed on the unchanged final rebased head.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - All 18 required CI checks pass for run `31408773708` on head `1e99e7b7a`.
+  - PR #1850 is open, clean, mergeable, and has no unresolved inline review threads; the original blocking feedback is addressed in the follow-up comment.
+- **Learnings for future iterations:**
+  - When a broad functional lane fails on a timing-sensitive test outside the changed files, verify it with repeated focused runs and inspect the exact failing assertion before changing production code.
+  - A failed required lane can be safely retried on the unchanged head when local repeated runs and the failure location identify a transient test flake; record the final green run in the PR progress.
+---
