@@ -30,6 +30,8 @@
 - A schema-valid structured QA `reroll` is an accepted inspection verdict; provider refusal, malformed output, and schema mismatch must fail before verdict interpretation, while provider failures may consume the bounded default retry budget.
 - Packaged Factory additions that change the public catalog require synchronized authored/generated sources, catalog counts, the canonical reference topic, and CLI docs smoke markers; refresh generated output only through `make packaged-factory-catalog-generate`.
 - Verify documented named-Factory commands against isolated live `you run --named ... --help`; role-pinned provider/model defaults should be documented as fixed policy when no override flags are exposed.
+- Functional CLI tests that need worker behavior should inject `ProviderCommandRunner` through `edges.Edges` and `root.BuildProcess`; reserve built-executable subprocesses for OS-boundary facts that in-process execution cannot expose.
+- Keep `--with-mock-workers` coverage inside `tests/functional/workers/mock/...`; non-workers/mock functional cells should use provider-command edge doubles and sanitized public assertions.
 
 - Worker Session finite streams can use the injected Events `Read` contract with the first retained head as a snapshot boundary; replay-only paths must not call `Subscribe`.
 - Authored OpenAPI and CLI contracts generate their Go, TypeScript, published metadata, and family-manifest consumers; update the source contract first, then run the repository generators and drift checks.
@@ -119,7 +121,6 @@
   - The checker has many independent `WalkDir` callbacks; updating only the primary repository scan leaves secondary scanners able to rediscover ignored files.
   - A malformed ignored fixture is useful behavioral evidence for prune-before-parse: a valid stale import alone may not exercise every parser path.
   - The next story should add the paired production `pkg` failure fixture and verify the `make pkg-boundary` subprocess path while keeping nested artifact-like directory names visible.
----
 ## 2026-08-09 13:17 - wo-d1-packaged-factories-docs-001 documentation routing follow-up
 - What was implemented
   - Corrected the root README's packaged-Factory count from fourteen to fifteen while keeping the root page as routing/quick-start material.
@@ -2277,4 +2278,26 @@
   - The branch now includes the current remote `main` and is ready for post-merge focused verification and CI.
 - **Learnings for future iterations:**
   - GitHub's cached PR base metadata can lag the live default branch; compare `git ls-remote origin refs/heads/main` with the PR base, fetch the live ref, and resolve shared task bookkeeping before relying on mergeability.
+---
+
+## 2026-08-10 11:55 -07:00 - pf-cli-exit-codes-004 PR review follow-up
+- What was implemented
+  - Addressed the latest blocking review feedback by removing the modified `--with-mock-workers` worker success/failure scenarios from the non-workers/mock process cell.
+  - Rebuilt worker success and failure coverage through `root.BuildProcess` / `Process.Execute` with `edges.Edges.ProviderCommandRunner`; the failure assertion verifies one sanitized `INVOCATION_RUNTIME_FAILURE` diagnostic and no stdout success payload.
+  - Added a deterministic built-executable status matrix using `--help` and an unknown command, keeping subprocess coverage limited to the OS exit-status fact that `Process.Execute` cannot expose.
+  - Merged current `origin/main` at `947152348` after the fix commit and retained the CLI task PRD and append-only progress history.
+- Files changed
+  - `tests/functional/transport/cli/process/exit_codes_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/transport/cli/process -count=1` — passed.
+  - Focused worker success/failure and built status regressions — passed after the current-main merge.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` — passed.
+  - `make typecheck` — passed.
+  - `git diff --check` — passed.
+  - The affected package sweep passed all changed CLI/root/Worker Sessions packages; `pkg/transports/cli/commandidentity` still reports the pre-existing committed-baseline drift (`want 51822 bytes, got 52445`) and no file in that package is part of this branch diff.
+- **Learnings for future iterations:**
+  - Review construction rules can require moving behavioral assertions between process and executable layers; preserve worker semantics through injected edges, then use a minimal worker-free subprocess case for final OS-status coverage.
+  - When a PR branch lags current main, merge the live base before final CI and keep task-scoped `prd.json` and append-only progress ownership explicit even when the merge is conflict-free.
 ---
