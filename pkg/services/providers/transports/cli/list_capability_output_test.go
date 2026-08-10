@@ -94,28 +94,76 @@ func assertCompleteJSONOutput(t *testing.T, source []byte) {
 	if err := json.Unmarshal(source, &got); err != nil {
 		t.Fatalf("JSON output is invalid: %v", err)
 	}
-	if len(got.Providers) != 2 || got.Providers[0].ID != "antigravity" || got.Providers[1].ID != "codex" {
+	if len(got.Providers) != 2 {
 		t.Fatalf("provider order = %#v, want antigravity then codex", got.Providers)
 	}
-	agy := got.Providers[0]
-	if agy.TechnicalSupportLevel != "experimental" || agy.ImplementationAvailability != "bundled" || len(agy.Models) != 1 {
-		t.Fatalf("AGY publication/model facts = %#v", agy)
+	if got.Providers[0].ID != "antigravity" || got.Providers[1].ID != "codex" {
+		t.Fatalf("provider order = %#v, want antigravity then codex", got.Providers)
 	}
-	if agy.Models[0].Efforts[0] != "low" || agy.Models[0].Efforts[1] != "medium" || len(agy.Models[0].Modalities) != 2 {
-		t.Fatalf("AGY model/effort facts = %#v", agy.Models)
+	assertAGYJSONFacts(t, got.Providers[0])
+	assertCodexJSONFacts(t, got.Providers[1])
+}
+
+func assertAGYJSONFacts(t *testing.T, agy listCapabilityProviderJSON) {
+	t.Helper()
+	if agy.TechnicalSupportLevel != "experimental" || agy.ImplementationAvailability != "bundled" {
+		t.Fatalf("AGY publication facts = %#v", agy)
 	}
-	if agy.Models[0].Modalities[0].Modality != "audio" || agy.Models[0].Modalities[1].Modality != "video" {
-		t.Fatalf("AGY modality order = %#v", agy.Models[0].Modalities)
+	assertAGYModelFacts(t, agy.Models)
+	assertAGYLimitFacts(t, agy.KnownLimits)
+}
+
+func assertAGYModelFacts(t *testing.T, models []listModelJSON) {
+	t.Helper()
+	if len(models) != 1 {
+		t.Fatalf("AGY models = %#v", models)
 	}
-	if len(agy.KnownLimits) != 2 || agy.KnownLimits[0].Name != "add_dir_workspace" || agy.KnownLimits[1].Name != "print_timeout" || agy.KnownLimits[0].Value != "--add-dir" || agy.KnownLimits[1].Default == nil || *agy.KnownLimits[1].Default != 300 {
-		t.Fatalf("AGY limit facts = %#v", agy.KnownLimits)
+	model := models[0]
+	if len(model.Efforts) != 2 || model.Efforts[0] != "low" || model.Efforts[1] != "medium" {
+		t.Fatalf("AGY effort order = %#v", model.Efforts)
 	}
-	codex := got.Providers[1]
-	if len(codex.Models) != 1 || len(codex.Models[0].Modalities) != 3 || codex.Models[0].Modalities[0].Modality != "audio" || codex.Models[0].Modalities[0].Support != "unsupported" || codex.Models[0].Modalities[2].Modality != "video" || codex.Models[0].Modalities[2].Support != "unsupported" {
-		t.Fatalf("Codex modality facts = %#v", codex.Models)
+	if len(model.Modalities) != 2 {
+		t.Fatalf("AGY modalities = %#v", model.Modalities)
 	}
-	if len(codex.KnownLimits) != 1 || codex.KnownLimits[0].Maximum == nil || *codex.KnownLimits[0].Maximum != 5 {
-		t.Fatalf("Codex image-path limit = %#v", codex.KnownLimits)
+	if model.Modalities[0].Modality != "audio" || model.Modalities[1].Modality != "video" {
+		t.Fatalf("AGY modality order = %#v", model.Modalities)
+	}
+}
+
+func assertAGYLimitFacts(t *testing.T, limits []listKnownLimitJSON) {
+	t.Helper()
+	if len(limits) != 2 {
+		t.Fatalf("AGY limits = %#v", limits)
+	}
+	if limits[0].Name != "add_dir_workspace" || limits[0].Value != "--add-dir" {
+		t.Fatalf("AGY workspace limit = %#v", limits[0])
+	}
+	if limits[1].Name != "print_timeout" || limits[1].Default == nil || *limits[1].Default != 300 {
+		t.Fatalf("AGY timeout limit = %#v", limits[1])
+	}
+}
+
+func assertCodexJSONFacts(t *testing.T, codex listCapabilityProviderJSON) {
+	t.Helper()
+	if len(codex.Models) != 1 {
+		t.Fatalf("Codex models = %#v", codex.Models)
+	}
+	modalities := codex.Models[0].Modalities
+	if len(modalities) != 3 {
+		t.Fatalf("Codex modalities = %#v", modalities)
+	}
+	if modalities[0].Modality != "audio" || modalities[0].Support != "unsupported" {
+		t.Fatalf("Codex audio modality = %#v", modalities[0])
+	}
+	if modalities[2].Modality != "video" || modalities[2].Support != "unsupported" {
+		t.Fatalf("Codex video modality = %#v", modalities[2])
+	}
+	if len(codex.KnownLimits) != 1 {
+		t.Fatalf("Codex limits = %#v", codex.KnownLimits)
+	}
+	limit := codex.KnownLimits[0]
+	if limit.Maximum == nil || *limit.Maximum != 5 {
+		t.Fatalf("Codex image-path limit = %#v", limit)
 	}
 }
 
