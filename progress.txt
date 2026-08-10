@@ -787,3 +787,40 @@
   - The package-target manifest and ownership inventory are separate ledgers: package-target regeneration can be green while ownership verification still reports missing package rows and edges until story 002 refreshes its reviewed classifications.
   - Worker Sessions is an implemented durable service owner, so its package family must be retained under `worker_sessions`; treating it as an unknown residual would incorrectly queue live code for deletion.
 ---
+
+## 2026-08-10 04:52 -07:00 - sac-s0-1-ownership-inventories-002
+- What was implemented
+  - Regenerated `docs/internal/baselines/ownership-inventory.json` from the live package graph, adding the 16 paths introduced by the refreshed package-target manifest and retaining the existing test-package inventory scope.
+  - Added Worker Sessions to the closed product-owner vocabulary, current-root inventory, package mapping, top-level child inventory, and present-tense owner rationale.
+  - Rewrote Chat Sessions and Events rationale cards to describe their implemented state, lifecycle, consumers, transaction boundaries, and failure behavior rather than future work.
+  - Classified the newly discovered cross-owner imports and regenerated the edge table at 155 edges. Reciprocal owner dependencies are now explicitly marked `bidirectional` and `unresolved` so valid interaction classes cannot hide convergence debt.
+  - Added validation and regression coverage that rejects an otherwise valid class when reciprocal-edge debt markers are removed.
+- Files changed
+  - `docs/internal/baselines/ownership-inventory.json`
+  - `internal/ownershipinventory/destinations.go`
+  - `internal/ownershipinventory/edges.go`
+  - `internal/ownershipinventory/edges_test.go`
+  - `internal/ownershipinventory/freeze_test.go`
+  - `internal/ownershipinventory/gate.go`
+  - `internal/ownershipinventory/load.go`
+  - `internal/ownershipinventory/map.go`
+  - `internal/ownershipinventory/named_owners.go`
+  - `internal/ownershipinventory/owner_top_level.go`
+  - `internal/ownershipinventory/rationale.go`
+  - `internal/ownershipinventory/rationale_service_owners.go`
+  - `internal/ownershipinventory/types.go`
+  - `internal/ownershipinventory/validate.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `make ownership-inventory-check` — passed with 576 package rows and 155 classified cross-owner edges.
+  - Focused `go test ./internal/ownershipinventory` selection covering regeneration, Worker Sessions mapping, owner-top-level coverage, reciprocal-edge discovery, and debt-marker rejection — passed.
+  - `go test ./cmd/ownershipinventorycheck -count=1` — passed.
+  - `make package-target-manifest-check` — passed with 545 package-target rows.
+  - `git diff --check` — passed.
+  - The full `internal/ownershipinventory` package still reports the pre-existing Workers/Recordings root-contract baseline drift (`kind_phase_validation.go`, `lifecycle_capability.go`, and related inventories); those files are outside this story's ownership-inventory changes.
+- **Learnings for future iterations:**
+  - Keep the package-target and ownership ledgers distinct: package-target coverage is the 545 non-test production-package set, while the ownership freeze currently retains its established 576-directory scope that includes test-only Go packages.
+  - Reciprocal owner imports need a separate unresolved-debt marker in addition to a valid interaction class; classifying both directions alone can make convergence debt look resolved.
+  - Adding a product owner requires synchronized destination vocabulary, package mapping, top-level child inventory, rationale generation, and regenerated JSON before the ownership gate can pass.
+---

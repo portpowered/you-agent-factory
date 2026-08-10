@@ -279,12 +279,12 @@ func committedChatSessionsRationales() []OwnerRationaleCard {
 		topLevel(
 			"chat_sessions",
 			"pkg/services/chat_sessions",
-			"L1 V0 Chat Sessions contract owner: detached session/target/turn/attachment/control-intent values, enum validation, and lifecycle transition tables; no implementation of the public Service interface in this slice. No longer owns a Factory Sessions adapter: the narrow start/invoke/cancel/close Factory-target dependency ACP composition needs is consumed directly from Factory Sessions' own owner-published factorysessions.TargetExecutionService capability, retiring the former internal/factorysessionsshim stopgap at L3 Factory Sessions sealing.",
-			"No state store for the public contract; publishes value types and pure validation/transition functions only. No independent state store is retained for the retired Factory Sessions adapter either -- session state now lives for the process duration in the factory_sessions target-execution capability composition injects directly.",
-			"Public values are stateless; the Service interface documents session/turn/control lifecycle for a later implementation to satisfy. The Factory Sessions-owned target-execution capability composition consumes directly is itself session-scoped and discarded on process exit.",
-			"Future ACP transport and Chat Sessions implementation slices; no current consumer imports this package's public Service interface yet. The retired Factory Sessions adapter's former consumers now depend on Factory Sessions' own published capability directly.",
-			"None in this slice for the public contract; no persistence or mutation is performed. The retired Factory Sessions adapter delegated 1:1 to factory_sessions.Service and owned no separate transaction boundary; the capability it forwarded to still does not.",
-			"Typed validation/transition/not-found/busy/conflict/unsupported errors are contract-only; no runtime recovery behavior exists in this slice. The retired Factory Sessions adapter's failures normalized at the factory_sessions public root it forwarded to; consumers of the published capability observe that same normalization directly.",
+			"Owns Chat Session, target-episode, turn, attachment, control-intent, and Factory-target catalog authority, including validation, lifecycle transitions, idempotency, and the live session service implementation.",
+			"Process-local Chat Session state and its sequenced delivery metadata; Events owns the source-native stream records and Recordings owns the canonical durable Factory Event ledger.",
+			"Wire constructs the service once; session, turn, attachment, control, Factory-target binding, and response-bridge operations run through the Chat Sessions lifecycle.",
+			"ACP transport, Factory Sessions target execution, Events sequencing, Worker Sessions response bridging, and Chat Sessions-owned transport adapters.",
+			"Chat Session version guards serialize session-local mutations; Factory-target execution and event sequencing remain explicit cross-owner commands through published capabilities.",
+			"Typed validation, not-found, busy, conflict, transition, attachment-position, and retention-gap failures preserve the session boundary; retries converge through request identities and idempotent operations.",
 		),
 	}
 }
@@ -293,12 +293,26 @@ func committedEventsRationales() []OwnerRationaleCard {
 		topLevel(
 			"events",
 			"pkg/services/events",
-			"L1 V0 Events contract owner: detached identity, position, envelope, and outcome contracts for a process-local, in-memory event stream; ordering, cursors, retention, gaps, and backpressure (D2 in docs/internal/projects/acp-program/README.md).",
-			"No durable journal in this slice; Recordings remains the canonical durable Factory Event ledger.",
-			"Append, source attachment, retained reads, and subscriptions are documented contract operations for a later implementation to satisfy.",
-			"Future ACP Core and Worker Events consumers via the events.Service cross-lane contract; no current consumer imports this package yet.",
-			"None in this slice; no persistence or mutation is performed.",
-			"Typed contract errors only; no runtime recovery behavior exists in this slice.",
+			"Owns the process-local source-native event stream: event identity, envelopes, append and source attachment, retained reads, cursors, subscriptions, retention gaps, and backpressure outcomes.",
+			"In-memory topic stores and subscription state; Recordings remains the canonical durable Factory Event ledger and replay source.",
+			"Wire constructs the stream service once; append, attach, retained-read, and subscription lifecycles are active for the process lifetime and close with the application.",
+			"Chat Sessions sequencing, Worker Sessions publication, Factory Sessions response consumers, ACP transport composition, and Recordings event capture.",
+			"Topic append and subscription state are Events-local; Chat Sessions owns session sequencing and Recordings owns durable capture, so cross-owner handoffs use explicit event contracts.",
+			"Invalid identities, duplicate appends, source mismatches, retention gaps, and closed subscriptions return typed stream facts without moving durable history into Events.",
+		),
+	}
+}
+func committedWorkerSessionsRationales() []OwnerRationaleCard {
+	return []OwnerRationaleCard{
+		topLevel(
+			"worker_sessions",
+			"pkg/services/worker_sessions",
+			"Owns the live Worker Session lifecycle for one Factory dispatch: session identity, start/control, retained observation, terminal outcome, publication, and dispatch association.",
+			"Process-local Worker Session records and retained observations backed by the Events stream; durable Factory history remains owned by Recordings.",
+			"Wire constructs the service once; start, control, publish, read, stream, and terminalization operations share the Worker Session lifecycle and close with the process.",
+			"Workers dispatch, Factory Sessions, Events, Chat Sessions response bridging, and CLI/HTTP Worker Session transports.",
+			"Worker Session lifecycle and publication state are session-local; Workers decides when a request-scoped attempt runs while Worker Sessions records and exposes its observable session.",
+			"Invalid lifecycle transitions, stale controls, missing sessions, publication conflicts, retention gaps, and terminalization failures remain typed Worker Session facts.",
 		),
 	}
 }

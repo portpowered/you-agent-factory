@@ -46,11 +46,11 @@
         "make ownership-inventory-check passes and reports no missing production package or edge.",
         "Tests pass",
         "Typecheck passes"
-      ],
-      "priority": 2,
-      "passes": false,
-      "notes": ""
-    },
+    ],
+    "priority": 2,
+    "passes": true,
+    "notes": "Regenerated the ownership inventory from the live package graph (576 existing-scope package rows) and added the 16 package-target paths introduced by story 001, including Worker Sessions, Events, Chat Sessions, ACP, Factory Sessions, Providers, platform, and mapping paths. Added Worker Sessions to the closed owner vocabulary, top-level inventory, and rationale cards; rewrote Chat Sessions and Events rationale in the present tense. Cross-owner discovery now records 155 classified edges, marks all 50 directed entries in reciprocal pairs as unresolved bidirectional debt, and rejects a valid interaction class when those debt markers are removed. make ownership-inventory-check, focused ownership tests, package-target-manifest-check, and git diff --check pass. The full internal ownership package still reports pre-existing Workers/Recordings root-contract baseline drift unrelated to this story."
+  },
     {
       "id": "sac-s0-1-ownership-inventories-003",
       "title": "Correct inference and hosted-polling ownership enforcement",

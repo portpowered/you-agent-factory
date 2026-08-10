@@ -71,7 +71,8 @@ func composeVerificationGate(inventory Report, pathLease PathLeaseFreezeReport) 
 		EdgeClassifications: !inventory.MissingCrossServiceEdgeTable &&
 			len(inventory.MissingCrossServiceEdges) == 0 &&
 			len(inventory.UnexpectedCrossServiceEdges) == 0 &&
-			len(inventory.InvalidEdgeClassifications) == 0,
+			len(inventory.InvalidEdgeClassifications) == 0 &&
+			len(inventory.InvalidBidirectionalEdges) == 0,
 		NamedOwnerCoverage: len(inventory.MissingNamedOwners) == 0 &&
 			len(inventory.UnconfirmedNamedOwners) == 0 &&
 			len(inventory.InvalidNamedOwnerMaps) == 0,
