@@ -2244,3 +2244,18 @@
 - **Learnings for future iterations:**
   - When a task branch adds a production package before current-main inventories catch up, regenerate both the package-target manifest and ownership freeze; validating only the public package-target gate will not update the ownership completeness ledger.
 ---
+## 2026-08-10 11:35 -07:00 - e2-structured-worker-results post-merge verification
+- What was implemented
+  - Completed the post-merge verification pass for the structured-results head; no additional runtime or public-contract changes were needed after current-main synchronization and inventory regeneration.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Focused worker executor, prompting, Work CLI, and CLI Work packages — passed.
+  - Root-built functional structured-result prompt and Work watch scenarios — passed.
+  - `make backend-size`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, `make package-target-manifest-check`, `make ownership-inventory-check`, `make vet`, `make typecheck`, and `make test` — passed.
+  - `make lint` passed all checks through the repository’s known `pkg-boundary` migration baseline and reported 175 accepted baseline violations; no new E2-specific finding was identified.
+  - The direct `cmd/packagetargetmanifestcheck` package test retains the documented current-main Workers/Recordings root-contract inventory drift, while its public Make gate remains green.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - A green public inventory gate can coexist with stale direct root-contract characterization fixtures from current main; record that distinction rather than changing unrelated baseline inventories during a feature handoff.
+---
