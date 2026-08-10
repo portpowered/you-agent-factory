@@ -1494,3 +1494,17 @@
 - **Learnings for future iterations:**
   - Always compare the PR head SHA with each check run’s head SHA before treating a stale failed check as evidence about the current commit.
 ---
+
+## 2026-08-10 09:10 -07:00 - dwro-s1-remote-placement-flags-004 CI follow-up
+- What was implemented
+  - Reran the failed Backend Functional Coverage job after confirming its failure was an unrelated timing-sensitive JavaScript durability cancellation observation, not a placement assertion or coverage regression.
+  - Recorded the terminal passing result for the current PR head and completed the review-thread audit.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Rerun of CI run `31405267195` passed Backend Functional Coverage and Verification Policy; every required matrix check is green on head `4032d635b`.
+  - PR #1852 has no conversation comments, reviews, or unresolved review threads; its body remains the `prd.json` content.
+  - The four PRD stories remain marked `passes: true`, and the local worktree is clean.
+- **Learnings for future iterations:**
+  - When a full functional lane fails on a cancellation-observation race, inspect the emitted package/test artifact before changing unrelated runtime code; rerunning the failed lane can distinguish a transient failure from a regression.
+---
