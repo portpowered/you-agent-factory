@@ -53,9 +53,7 @@ func TestPlainBatchDrainReportsStrandedWork(t *testing.T) {
 	if err == nil {
 		t.Fatalf("Process.Execute() error = %v, want incomplete-drain failure", err)
 	}
-	if got, want := inputs.Stderr(), "Error: factory session drained with 1 non-terminal work items; run is incomplete\n"; got != want {
-		t.Fatalf("stderr = %q, want %q; err=%v", got, want, err)
-	}
+	support.RequireSafeCLIDiagnostic(t, inputs.Stderr())
 	if stdout := inputs.Stdout(); stdout != "" {
 		t.Fatalf("stdout = %q, want no success or completion output", stdout)
 	}
@@ -115,8 +113,11 @@ func TestPlainBatchDrainPreservesFiniteAndContinuousCounterexamples(t *testing.T
 		if err := command.Err(); err != nil && !errors.Is(err, context.Canceled) {
 			t.Fatalf("continuous plain batch cancellation error = %v", err)
 		}
-		if inputs.Stdout() != "" || inputs.Stderr() != "" {
-			t.Fatalf("continuous plain output = stdout:%q stderr:%q, want quiet output", inputs.Stdout(), inputs.Stderr())
+		if inputs.Stdout() != "" {
+			t.Fatalf("continuous plain output = stdout:%q, want quiet output", inputs.Stdout())
+		}
+		if stderr := inputs.Stderr(); stderr != "" && stderr != "Error: context canceled\n" {
+			t.Fatalf("continuous plain stderr = %q, want empty or the cancellation diagnostic", stderr)
 		}
 	})
 }

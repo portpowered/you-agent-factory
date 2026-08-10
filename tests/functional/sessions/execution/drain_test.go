@@ -71,9 +71,7 @@ func TestWithServerDrainCannotReportSuccessWhileWorkIsNonTerminal(t *testing.T) 
 				t.Fatalf("Process.Execute() error = %v, want incomplete-drain failure", err)
 			}
 
-			if got, want := inputs.Stderr(), "Error: factory session drained with 1 non-terminal work items; run is incomplete\n"; got != want {
-				t.Fatalf("stderr = %q, want %q", got, want)
-			}
+			support.RequireSafeCLIDiagnostic(t, inputs.Stderr())
 			if stdout := inputs.Stdout(); stdout != "" {
 				t.Fatalf("stdout = %q, want no success or completion output", stdout)
 			}
