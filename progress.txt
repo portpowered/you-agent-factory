@@ -2761,3 +2761,17 @@
 - **Learnings for future iterations:**
   - When current main advances during PR recomputation, preserve task-scoped PRD ownership, merge the append-only progress history, and update the synchronization record to the actual fetched base SHA before publishing.
 ---
+
+## 2026-08-10 15:02 -07:00 - wsr-001-opening-record merged-head verification
+- What was implemented
+  - Completed the post-merge verification pass without additional product changes; regenerated interfaces remain drift-free and the WSR implementation is ready to publish from the conflict-free merged head.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet functional-boundary-check api-smoke` — passed.
+  - Worker Sessions/Factory Runtime package tests, WSR-FT-001/002/003, provider stream-fidelity, ACP session-bearing history, and unavailable-owner HTTP tests — passed.
+  - `make verify-fast` — passed dashboard typecheck, MCP contract checks, 355 UI files / 2,970 tests, 191 Bun tests, and the short Go suite.
+  - `make interfaces-all`, `git diff --check`, and `git merge-tree --write-tree origin/main HEAD` — passed with `origin/main` at `78584efb5`.
+- **Learnings for future iterations:**
+  - After reconciling a moving default branch, rerun both contract generation and the shared fast tier before pushing so unrelated merged test reorganizations are covered by the same handoff evidence.
+---
