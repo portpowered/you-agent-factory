@@ -206,6 +206,11 @@ func TestJavaScriptDurabilityDoesNotPersistSnapshotsByDefault(t *testing.T) {
 	})
 	baseURL := strings.TrimSuffix(server.URL(), "/")
 	sessionID := startInterruptedJavaScriptDurabilitySession(t, baseURL, provider, workflowName)
+	// The interrupted lifecycle projection is published when cancellation is
+	// accepted, before the provider edge necessarily returns. Wait for the
+	// injected edge to finish before inspecting project-local persistence so
+	// this negative assertion covers the complete interrupted operation.
+	provider.waitForBlockedInferCompletion(t, 5*time.Second)
 	interrupted := readDurableJavaScriptSession(t, baseURL, sessionID)
 	if interrupted.Status != factoryapi.FactorySessionDurableLifecycleStatusInterrupted {
 		t.Fatalf("in-memory status = %q, want INTERRUPTED", interrupted.Status)
@@ -213,10 +218,7 @@ func TestJavaScriptDurabilityDoesNotPersistSnapshotsByDefault(t *testing.T) {
 	if interrupted.Lifecycle == nil || interrupted.Lifecycle.InterruptedAt == nil {
 		t.Fatalf("in-memory lifecycle = %#v, want interruptedAt", interrupted.Lifecycle)
 	}
-	persistenceDir := filepath.Dir(javaScriptDurableSessionPersistencePath(projectRoot, sessionID))
-	if _, err := os.Stat(persistenceDir); !os.IsNotExist(err) {
-		t.Fatalf("project-local durable session directory stat error = %v, want not exist", err)
-	}
+	assertNoJavaScriptDurableSessionPersistence(t, projectRoot, sessionID)
 }
 
 func setupJavaScriptDurabilityResumeWorkflowFixture(t *testing.T, workflowName string) string {
@@ -388,6 +390,19 @@ func resumeJavaScriptSessionExpectingInvalidState(
 
 func javaScriptDurableSessionPersistencePath(projectRoot, sessionID string) string {
 	return filepath.Join(projectRoot, ".you-agent-factory", "durable-sessions", sessionID+".json")
+}
+
+func assertNoJavaScriptDurableSessionPersistence(t *testing.T, projectRoot, sessionID string) {
+	t.Helper()
+
+	persistencePath := javaScriptDurableSessionPersistencePath(projectRoot, sessionID)
+	if _, err := os.Stat(persistencePath); !os.IsNotExist(err) {
+		t.Fatalf("project-local durable session snapshot stat error = %v, want not exist", err)
+	}
+	persistenceDir := filepath.Dir(persistencePath)
+	if _, err := os.Stat(persistenceDir); !os.IsNotExist(err) {
+		t.Fatalf("project-local durable session directory stat error = %v, want not exist", err)
+	}
 }
 
 func listJavaScriptSessionDispatches(
@@ -659,6 +674,8 @@ type javascriptDurabilityResumeBlockingProvider struct {
 	inferStartedOnce    sync.Once
 	contextCanceled     chan struct{}
 	contextCanceledOnce sync.Once
+	inferCompleted      chan struct{}
+	inferCompletedOnce  sync.Once
 }
 
 func newJavaScriptDurabilityResumeBlockingProvider(workflowName string) *javascriptDurabilityResumeBlockingProvider {
@@ -666,6 +683,7 @@ func newJavaScriptDurabilityResumeBlockingProvider(workflowName string) *javascr
 		workflowName:    workflowName,
 		inferStarted:    make(chan struct{}),
 		contextCanceled: make(chan struct{}),
+		inferCompleted:  make(chan struct{}),
 	}
 }
 
@@ -701,6 +719,9 @@ func (p *javascriptDurabilityResumeBlockingProvider) Infer(
 	}
 
 	if !alreadyBlocked {
+		defer func() {
+			p.inferCompletedOnce.Do(func() { close(p.inferCompleted) })
+		}()
 		<-ctx.Done()
 		p.contextCanceledOnce.Do(func() { close(p.contextCanceled) })
 		return workerexecution.InferenceResponse{}, ctx.Err()
@@ -725,6 +746,18 @@ func (p *javascriptDurabilityResumeBlockingProvider) waitForBlockedInfer(t *test
 		return
 	case <-timer.C:
 		t.Fatal("provider Infer did not start the blocking call")
+	}
+}
+
+func (p *javascriptDurabilityResumeBlockingProvider) waitForBlockedInferCompletion(t *testing.T, timeout time.Duration) {
+	t.Helper()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-p.inferCompleted:
+		return
+	case <-timer.C:
+		t.Fatal("provider Infer did not return after cancellation")
 	}
 }
 
