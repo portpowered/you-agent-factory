@@ -1975,3 +1975,16 @@
   - When a PR head is behind current `main`, synchronize before relying on new CI; GitHub may report a dirty/diverged merge state and omit a fresh PR-head run until the merge is pushed.
   - After a coverage-sensitive parser change, moving reusable validation into an already-covered platform package and adding focused edge-case tests keeps both unit and functional coverage ratchets above their floors.
 ---
+
+## 2026-08-10 11:45 -07:00 - dwro-s1-remote-placement-flags CI retry follow-up
+- What was implemented
+  - Audited the latest-head functional coverage failure and confirmed it was limited to two unrelated nondeterministic existing tests: ACP concurrent prompt serialization and worker stream completion-snapshot fidelity.
+  - Reran the failed GitHub Actions lane without changing unrelated runtime code; the retry passed on the same head `941edb53a`.
+- Files changed
+  - `progress.txt`
+- Verification
+  - PR #1852 `gh pr checks` — all 18 checks passed on head `941edb53a`.
+  - PR merge state — `clean`, base `cba6b45f`, head `941edb53a`.
+- **Learnings for future iterations:**
+  - When a broad functional lane fails only in pre-existing concurrency or stream-fidelity tests and the changed files are unrelated, inspect the exact assertion and rerun the failed lane before making speculative source changes.
+---
