@@ -83,6 +83,8 @@ BACKEND_SIZE_ROOT ?= .
 PACKAGE_MAINT_ROOT ?= .
 PACKAGE_FILE_COUNT_ROOT ?= .
 PACKAGE_BOUNDARY_ROOT ?= .
+PACKAGE_BOUNDARY_ALL ?= 0
+PACKAGE_BOUNDARY_BASE_REF ?=
 PACKAGE_STRUCTURE_ROOT ?= .
 BACKEND_DEPENDENCY_GRAPH_DIR ?= .artifacts/backend-dependency-graph
 BACKEND_DEPENDENCY_GRAPH_DOT ?= $(BACKEND_DEPENDENCY_GRAPH_DIR)/backend-dependency-graph.dot
@@ -613,7 +615,7 @@ pkg-file-count:
 	$(call run_lint_checker,./cmd/pkgfilecountcheck,-root "$(PACKAGE_FILE_COUNT_ROOT)")
 
 pkg-boundary:
-	$(call run_lint_checker,./cmd/pkgboundarycheck,-root "$(PACKAGE_BOUNDARY_ROOT)")
+	$(call run_lint_checker,./cmd/pkgboundarycheck,-root "$(PACKAGE_BOUNDARY_ROOT)" $(if $(strip $(PACKAGE_BOUNDARY_BASE_REF)),-base-ref "$(PACKAGE_BOUNDARY_BASE_REF)",) $(if $(filter 1 true yes,$(PACKAGE_BOUNDARY_ALL)),--all,))
 	$(call run_lint_checker,./cmd/ownershipboundarycheck,)
 
 pkg-structure:
