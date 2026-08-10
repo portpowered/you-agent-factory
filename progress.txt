@@ -125,6 +125,29 @@
 - **Learnings for future iterations:**
   - Keep the root count aligned with the canonical fifteen-entry catalog, but continue placing detailed Factory guidance in `docs/reference/packaged-factories.md`.
 ---
+## [2026-08-10 14:27 -07:00] - thr-split-fake-service-runtime-tests-003
+- What was implemented
+  - Moved the remaining 24 tests from `fake_service_test.go` into behavior-focused package-local files: 15 replay/canonical projection tests in `fake_service_replay_test.go` and 9 interruption/dispatch-control tests in `fake_service_dispatch_test.go`.
+  - Retired `fake_service_test.go` after every original declaration had exactly one destination; preserved test bodies, assertions, fixtures, event ordering, and observable outcomes without adding or removing coverage.
+  - Removed the retired file's file-level maintainability exemptions, relocated its three function-level exemption targets to the focused owners, and raised the execution package file-count ratchet from 31 to 32.
+- Files changed
+  - `pkg/services/factory_sessions/internal/execution/fake_service_replay_test.go`
+  - `pkg/services/factory_sessions/internal/execution/fake_service_dispatch_test.go`
+  - `pkg/services/factory_sessions/internal/execution/fake_service_test.go` (retired)
+  - `docs/internal/baselines/backend-exemption-budget.json`
+  - `docs/internal/baselines/backend-package-file-count.json`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/factory_sessions/internal/execution/... -count=1` — passed.
+  - `go test -covermode=atomic ./pkg/services/factory_sessions/internal/execution/...` — passed with unchanged coverage: 79.6%, 80.0%, 83.1%, and 89.8% for the four packages.
+  - Baseline/current `go test -list '.*'` comparison — 269 entries versus 269 entries; no added, removed, or renamed test or example entry.
+  - `go vet ./pkg/services/factory_sessions/internal/execution/...` — passed.
+  - New focused files are 798 and 586 lines; `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - When a staged test split retires a consolidated file, remove only that file's exemptions, move function-level exemption targets with their declarations, and keep the remaining staged source exemptions until their own stories retire them.
+  - The exact baseline artifact contains 269 list entries even though the earlier story note summarized 267; compare the authoritative command output directly and record the command-derived count.
+---
 ## 2026-08-09 13:20 - wo-d1-packaged-factories-docs-001 lint follow-up
 - What was implemented
   - No source change; checked the broad repository lint tier against the completed story.

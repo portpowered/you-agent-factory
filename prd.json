@@ -64,8 +64,8 @@
         "Tests pass"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Moved all 24 tests from fake_service_test.go into fake_service_replay_test.go (15 replay/projection tests) and fake_service_dispatch_test.go (9 interruption/dispatch-control tests), preserving declarations, bodies, assertions, event order, and outcomes; fake_service_test.go is retired. Shared helpers remain owned by execution_test_helpers_test.go and no helper was duplicated. The story 001 go test -list '.*' comparison is 269 baseline entries versus 269 current entries with zero differences, and go test -covermode=atomic remains 79.6% (execution), 80.0% (fixtures), 83.1% (recordingreplay), and 89.8% (runtimepersist). New focused files are 798 and 586 lines; fake_service_runtime_test.go remains the staged owner for stories 004-005."
     },
     {
       "id": "thr-split-fake-service-runtime-tests-004",
