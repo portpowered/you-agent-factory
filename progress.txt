@@ -2540,3 +2540,14 @@
   - Recheck PR mergeability after pushing a current-main merge; a newly created PR can report conflicts immediately when its branch starts behind the live base.
   - On this Windows checkout, broad `make test` may outlive the wrapper while focused package and repository enforcement gates remain responsive; record the timeout separately from deterministic pass/fail evidence.
 ---
+## [2026-08-10 14:56 -07:00] - thr-split-acp-stdio-tests-003 current-main follow-up
+- What was implemented
+  - Merged the next live `origin/main` advance at `78584efb52dacb6989604f8f7cc6c12ed08da028` as merge commit `9ee8f4c01`; retained the ACP task PRD and append-only progress history through the second stale-base reconciliation.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Focused ACP stdio package tests and the three-run concurrent-attachment race test — passed.
+  - `go vet ./pkg/transports/acp/internal/stdio`, `make backend-size`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, `make typecheck`, PRD validation, and `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - Re-fetch `origin/main` immediately before the final PR-state check; another merged PR can advance the base between a successful merge and GitHub's mergeability calculation.
+---
