@@ -1572,3 +1572,16 @@
 - **Learnings for future iterations:**
   - When removing event-delivery tests, retain direct value-derived canonical-event coverage for runtime-record branches; a thin package ratchet can expose lost projection scenarios even when the broader behavior suite remains green.
 ---
+
+## 2026-08-10 16:23 -07:00 - btrc-p1-root-injection-006 PR verification follow-up
+- What was implemented
+  - Audited the existing PR against the completed PRD: the PR body still matches `prd.json` byte-for-byte, all six stories remain `passes: true`, and there are no inline review comments.
+  - Reproduced the server-binding failure on a clean `origin/main` worktree; the branch has no diff in `tests/functional/transport/server_binding`, so no unrelated test or runtime behavior was changed.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Changed-surface and backend unit coverage lanes pass on head `bca967502`.
+  - The full functional lane remains red on existing flaky tests: JavaScript resume cancellation timing and the server-binding diagnostic-line assertion. The latter reproduces on clean current main locally.
+- **Learnings for future iterations:**
+  - Before changing scoped product code for a failing broad functional lane, compare the exact test package with current main and reproduce on a clean main checkout; this distinguishes branch regressions from existing platform or timing flakes.
+---
