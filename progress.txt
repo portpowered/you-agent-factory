@@ -1481,3 +1481,16 @@
   - The functional coverage floor for `pkg/transports/cli` includes root transport statements reached only through `root.BuildProcess` scenarios; package-local tests do not restore that functional threshold.
   - Compare the CI `coverage.out` block counts with a focused functional profile to select observable scenarios that cover the missing statements without lowering a package baseline.
 ---
+
+## 2026-08-10 08:43 -07:00 - dwro-s1-remote-placement-flags-004 PR head follow-up
+- What was implemented
+  - Confirmed the open PR now references the pushed coverage-fix head and remains free of review comments or unresolved threads.
+  - Recorded the required follow-up while GitHub schedules checks for the current PR head.
+- Files changed
+  - `progress.txt`
+- Verification
+  - PR #1852 head is `1488c29a7`; the prior failed CI run is explicitly tied to its older head `8d1a235a7`.
+  - Local worktree is clean after the coverage and progress commits.
+- **Learnings for future iterations:**
+  - Always compare the PR head SHA with each check run’s head SHA before treating a stale failed check as evidence about the current commit.
+---
