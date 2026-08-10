@@ -1414,3 +1414,20 @@
   - Custom `run` flag parsing happens inside `RunE`, so pre-run relationship metadata cannot observe local flags; early raw-argv validation plus post-parser validation keeps errors side-effect-free and order-independent.
   - On Windows, timed-out `make`/unitlane shells can outlive the tool timeout and contend on Go build files; inspect and clean only the identified child process tree before rerunning verification.
 ---
+
+## 2026-08-10 07:22 -07:00 - dwro-s1-remote-placement-flags-004 CI follow-up
+- What was implemented
+  - Updated the legacy listener bind-failure functional assertion to verify the intentional `--server` migration warning separately before decoding the structured `SERVER_BIND_FAILED` response.
+  - Added remote-adapter coverage for invalid context/protocol/endpoint/request input, unavailable and non-API HTTP responses, terminal failure metadata, missing invocation/status errors, endpoint redaction, and credential-safe diagnostics.
+- Files changed
+  - `pkg/transports/cli/run/remote_test.go`
+  - `tests/functional/transport/http/server/startup_shutdown_test.go`
+  - `progress.txt`
+- Verification
+  - Focused remote invocation and server bind-failure tests — passed.
+  - `go test ./pkg/transports/cli/run -cover -count=1` — passed (73.6% package-local coverage; the repository coverage command cannot be launched from this Windows checkout because its generated Go command exceeds Windows command-line length).
+  - GitHub CI run `31396592503` identified the package threshold and stale stderr assertion; frontend, docs, API/package, provider-package, local-inference, and local fast-tier checks passed. A new CI run is required after this fix.
+- **Learnings for future iterations:**
+  - Structured stderr consumers must parse after explicitly expected compatibility warnings; migration diagnostics are part of the observable CLI contract and must not be treated as malformed JSON.
+  - When a package coverage threshold is narrowly missed after adding an adapter, cover its error and terminal branches in the owning package rather than lowering the manifest minimum.
+---

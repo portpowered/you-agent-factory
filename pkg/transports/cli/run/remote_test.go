@@ -143,6 +143,187 @@ func TestRemoteInvocationFailureDoesNotLeakRequestOrRetryLocally(t *testing.T) {
 	}
 }
 
+func TestRemoteInvocationClientRejectsInvalidInputsAndResponses(t *testing.T) {
+	t.Run("context is required", func(t *testing.T) {
+		_, err := remoteInvocationClient{transport: &remoteProtocolStub{}}.InvokeFactory(nil, RemoteInvocationRequest{})
+		if err == nil || !strings.Contains(err.Error(), "context is required") {
+			t.Fatalf("error = %v, want required-context error", err)
+		}
+	})
+
+	t.Run("protocol is required", func(t *testing.T) {
+		_, err := remoteInvocationClient{}.InvokeFactory(context.Background(), RemoteInvocationRequest{})
+		if err == nil || !strings.Contains(err.Error(), "CLI HTTP protocol is required") {
+			t.Fatalf("error = %v, want required-protocol error", err)
+		}
+	})
+
+	t.Run("endpoint must be valid", func(t *testing.T) {
+		stub := &remoteProtocolStub{}
+		_, err := remoteInvocationClient{transport: stub}.InvokeFactory(context.Background(), RemoteInvocationRequest{
+			Server: "http://[::1",
+		})
+		if err == nil || !strings.Contains(err.Error(), "endpoint") {
+			t.Fatalf("error = %v, want invalid-endpoint error", err)
+		}
+		if stub.called {
+			t.Fatal("invalid endpoint called the HTTP protocol")
+		}
+	})
+
+	t.Run("request must be JSON encodable", func(t *testing.T) {
+		bad := map[string]any{"function": func() {}}
+		_, err := remoteInvocationClient{transport: &remoteProtocolStub{}}.InvokeFactory(context.Background(), RemoteInvocationRequest{
+			Server:  "http://selected.test",
+			Request: factoryapi.InvocationRequest{Args: &bad},
+		})
+		if err == nil || !strings.Contains(err.Error(), "marshal remote invocation request") {
+			t.Fatalf("error = %v, want marshal error", err)
+		}
+	})
+
+	t.Run("nil HTTP response is rejected", func(t *testing.T) {
+		_, err := remoteInvocationClient{transport: &remoteProtocolStub{
+			response: clihttp.Response{},
+		}}.InvokeFactory(context.Background(), RemoteInvocationRequest{Server: "http://selected.test"})
+		if err == nil || !strings.Contains(err.Error(), "HTTP response is unavailable") {
+			t.Fatalf("error = %v, want missing-response error", err)
+		}
+	})
+
+	t.Run("non API error status remains actionable", func(t *testing.T) {
+		_, err := remoteInvocationClient{transport: &remoteProtocolStub{
+			response: clihttp.Response{HTTP: &http.Response{
+				StatusCode: http.StatusBadGateway,
+				Body:       io.NopCloser(strings.NewReader("not an API error")),
+			}},
+		}}.InvokeFactory(context.Background(), RemoteInvocationRequest{Server: "http://selected.test"})
+		if err == nil || !strings.Contains(err.Error(), "(502)") {
+			t.Fatalf("error = %v, want HTTP status error", err)
+		}
+	})
+
+	t.Run("success does not require a response body", func(t *testing.T) {
+		stub := &remoteProtocolStub{response: clihttp.Response{HTTP: &http.Response{StatusCode: http.StatusOK}}}
+		response, err := remoteInvocationClient{transport: stub}.InvokeFactory(context.Background(), RemoteInvocationRequest{
+			Server:    "https://selected.test",
+			SessionID: " session-beta ",
+		})
+		if err != nil {
+			t.Fatalf("InvokeFactory: %v", err)
+		}
+		if response.Status != "" || !strings.HasSuffix(stub.url, "/factory-sessions/session-beta/invocations") {
+			t.Fatalf("response/url = %#v/%q, want empty response and scoped session URL", response, stub.url)
+		}
+	})
+}
+
+func TestRunRemoteInvocationReportsTerminalStatesAndInputErrors(t *testing.T) {
+	text := "remote terminal state"
+	failedCode := factoryapi.InvocationResponseErrorCode("REMOTE_FAILED")
+	sessionID, workID, workName, workState := "session-1", "work-1", "work name", "failed"
+	message := "remote terminal failure"
+	response := factoryapi.InvocationResponse{
+		ErrorCode: &failedCode,
+		Message:   &message,
+		RequestId: "request-1",
+		SessionId: &sessionID,
+		Status:    factoryapi.InvocationTerminalStatusFailed,
+		TraceId:   "trace-1",
+		WorkId:    &workID,
+		WorkName:  &workName,
+		WorkState: &workState,
+	}
+
+	t.Run("nil operation is rejected", func(t *testing.T) {
+		err := RunRemoteInvocation(context.Background(), RunConfig{}, "", nil)
+		if err == nil || !strings.Contains(err.Error(), "operation is required") {
+			t.Fatalf("error = %v, want required-operation error", err)
+		}
+	})
+
+	t.Run("missing invocation input has stable code", func(t *testing.T) {
+		err := RunRemoteInvocation(context.Background(), RunConfig{Dir: "factory"}, "", remoteInvocationOperationFunc(func(context.Context, RemoteInvocationRequest) (factoryapi.InvocationResponse, error) {
+			t.Fatal("remote operation called without invocation input")
+			return factoryapi.InvocationResponse{}, nil
+		}))
+		var invocationErr *InvocationError
+		if !errors.As(err, &invocationErr) || invocationErr.Code != RemoteInvocationInputRequiredCode {
+			t.Fatalf("error = %v, want %s", err, RemoteInvocationInputRequiredCode)
+		}
+	})
+
+	t.Run("missing terminal status is rejected", func(t *testing.T) {
+		err := RunRemoteInvocation(context.Background(), RunConfig{Dir: "factory", InvocationPositionalText: &text}, "", remoteInvocationOperationFunc(func(context.Context, RemoteInvocationRequest) (factoryapi.InvocationResponse, error) {
+			return factoryapi.InvocationResponse{}, nil
+		}))
+		if err == nil || !strings.Contains(err.Error(), "no terminal status") {
+			t.Fatalf("error = %v, want missing-status error", err)
+		}
+	})
+
+	t.Run("terminal failure preserves response fields", func(t *testing.T) {
+		got := invocationResultFromRemoteResponse(response)
+		if got.ErrorCode != string(failedCode) || got.Message != message || got.SessionID != sessionID || got.WorkID != workID || got.WorkName != workName || got.WorkState != workState {
+			t.Fatalf("mapped response = %#v, want response metadata", got)
+		}
+		var output bytes.Buffer
+		err := RunRemoteInvocation(context.Background(), RunConfig{
+			Dir:                      "factory",
+			InvocationPositionalText: &text,
+			JSONOutput:               true,
+			Output:                   &output,
+		}, "", remoteInvocationOperationFunc(func(context.Context, RemoteInvocationRequest) (factoryapi.InvocationResponse, error) {
+			return response, nil
+		}))
+		if err == nil || output.Len() == 0 {
+			t.Fatalf("error/output = %v/%q, want terminal failure and rendered JSON", err, output.String())
+		}
+	})
+}
+
+func TestSafeRemoteEndpointRedactsCredentialsAndPreservesInvalidInput(t *testing.T) {
+	if got := safeRemoteEndpoint("https://user:secret@selected.test/path"); got != "https://selected.test/path" {
+		t.Fatalf("safe endpoint = %q, want credentials removed", got)
+	}
+	if got := safeRemoteEndpoint("http://[::1"); got != "http://[::1" {
+		t.Fatalf("invalid safe endpoint = %q, want original input", got)
+	}
+}
+
+type remoteProtocolStub struct {
+	response clihttp.Response
+	err      error
+	called   bool
+	url      string
+}
+
+func (stub *remoteProtocolStub) Execute(*http.Request) (clihttp.Response, error) {
+	return stub.response, stub.err
+}
+
+func (stub *remoteProtocolStub) GetJSON(context.Context, string, any) (clihttp.Response, error) {
+	return stub.response, stub.err
+}
+
+func (stub *remoteProtocolStub) PostJSON(_ context.Context, url string, _ io.Reader, _ any) (clihttp.Response, error) {
+	stub.called = true
+	stub.url = url
+	return stub.response, stub.err
+}
+
+func (stub *remoteProtocolStub) PostJSONCreated(context.Context, string, io.Reader, any) (clihttp.Response, error) {
+	return stub.response, stub.err
+}
+
+func (stub *remoteProtocolStub) PutJSON(context.Context, string, io.Reader, any) (clihttp.Response, error) {
+	return stub.response, stub.err
+}
+
+func (stub *remoteProtocolStub) PutJSONCreated(context.Context, string, io.Reader, any) (clihttp.Response, error) {
+	return stub.response, stub.err
+}
+
 type remoteInvocationOperationFunc func(context.Context, RemoteInvocationRequest) (factoryapi.InvocationResponse, error)
 
 func (fn remoteInvocationOperationFunc) InvokeFactory(ctx context.Context, request RemoteInvocationRequest) (factoryapi.InvocationResponse, error) {
