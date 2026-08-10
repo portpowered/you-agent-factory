@@ -1,0 +1,17 @@
+type: object
+additionalProperties: false
+description: One explicit supported or unsupported directional modality fact.
+required:
+  - direction
+  - modality
+  - support
+  - transport
+properties:
+  direction:
+    $ref: './ProviderModalityDirection.yaml'
+  modality:
+    $ref: './ProviderModalityKind.yaml'
+  support:
+    $ref: './ProviderModalitySupport.yaml'
+  transport:
+    $ref: './ProviderModalityTransport.yaml'

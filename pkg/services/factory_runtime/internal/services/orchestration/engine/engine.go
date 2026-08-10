@@ -537,7 +537,12 @@ func (e *FactoryEngine) runUntilQuiescent(ctx context.Context) (bool, error) {
 			return false, err
 		}
 		if shouldTerminate {
-			return e.finishTerminationDrain()
+			if e.finishTerminationDrain() {
+				return true, nil
+			}
+			// A wake-up arrived while preparing to terminate. The drain
+			// consumed it, so immediately rerun the canonical tick.
+			continue
 		}
 		if !mutated {
 			e.mu.Lock()

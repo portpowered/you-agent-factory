@@ -59,7 +59,7 @@
       "title": "Characterize hosted and service outcomes",
       "description": "As an operator of hosted Factory Sessions, I want current hosted source and service-run outcomes captured so that activating sources or handling a hosted failure remains compatible after ownership moves.",
       "acceptanceCriteria": [
-        "A deterministic hosted/service success asserts the literal canonical Factory Event sequence from hosted submission through terminal session result and the complete caller-visible result.",
+        "A deterministic hosted/service success asserts the literal canonical Factory Event sequence from hosted submission through terminal Work/dispatch completion and the complete caller-visible service result. Because continuous Petri service mode intentionally keeps its live Factory Session IDLE rather than publishing a finite session result, the characterization explicitly asserts that the live result route is typed NOT_FOUND and reconciles the dispatch response plus terminal Work/progress projection as the service result.",
         "A representative hosted source, secret, HTTP, or execution failure asserts its literal emitted event sequence, typed terminal failure/result, and whether dispatch was attempted under current behavior.",
         "Failure evidence proves current hosted-source cleanup/stop observation and no activity leakage into an independent second session.",
         "Hosted effects are replaced only through the existing process edge boundary with deterministic clock, HTTP, and secret fakes.",
@@ -69,7 +69,7 @@
       ],
       "priority": 3,
       "passes": true,
-      "notes": "Added tests/functional/automations/hosted_characterization_test.go. Root-composed service-mode tests inject deterministic hosted clock, Linear HTTP, secret, and provider command edges and assert literal startup-to-dispatch event order for successful hosted ingress and provider execution failure, typed ACCEPTED/FAILED dispatch payloads, terminal Work projections, IDLE service progress, exactly one provider attempt, and no duplicate terminal Work. A blocked HTTP source test asserts the four-event startup-only prefix, no submission or dispatch, observed request-context cancellation on stop, and an independent second service session with isolated work identity. No production behavior or public/generated contract changed."
+      "notes": "Added tests/functional/workstations/poller/hosted_characterization_test.go. Root-composed service-mode tests inject deterministic hosted clock, Linear HTTP, secret, and provider command edges and assert literal startup-to-dispatch event order for successful hosted ingress and provider execution failure, typed ACCEPTED/FAILED dispatch payloads, terminal Work projections, IDLE service progress, exactly one provider attempt, and no duplicate terminal Work. A blocked HTTP source test asserts the four-event startup-only prefix, no submission or dispatch, observed request-context cancellation on stop, and an independent second service session with isolated work identity. Success and failure explicitly reconcile continuous Petri service behavior by asserting the live /result route returns typed NOT_FOUND while dispatch plus terminal Work/progress is the complete caller-visible result. No production behavior or public/generated contract changed."
     },
     {
       "id": "btrc-p0-characterization-004",

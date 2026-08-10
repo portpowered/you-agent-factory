@@ -22,7 +22,8 @@ type Service interface {
 
 // ProbeFacts are live readiness and prerequisite facts for one projected catalog
 // provider. Descriptions must stay bounded and must not include raw environment
-// values, filesystem paths, or native probe output.
+// values, filesystem paths, or native probe output. They replace the static
+// unverified/required values emitted by the authored catalog.
 type ProbeFacts struct {
 	Readiness     providers.Readiness
 	Prerequisites []providers.Prerequisite

@@ -56,6 +56,9 @@ func scanFunctionalProcessEdges(repoRoot string) ([]functionalProcessEdgeFinding
 			if walkErr != nil {
 				return walkErr
 			}
+			if shouldSkipRepositoryWalkDirectory(repoRoot, filePath, entry) {
+				return filepath.SkipDir
+			}
 			if entry.IsDir() || filepath.Ext(filePath) != ".go" {
 				return nil
 			}

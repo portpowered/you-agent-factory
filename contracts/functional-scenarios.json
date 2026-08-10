@@ -227,6 +227,31 @@
       "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
     },
     {
+      "stableId": "cli/you.providers",
+      "name": "you providers",
+      "interface": "cli",
+      "classification": "grouping",
+      "status": "not-applicable",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "CLI grouping node has no independently runnable customer behavior; its child commands remain separately inventoried."
+    },
+    {
+      "stableId": "cli/you.providers.list",
+      "name": "you providers list",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "covered",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/providers/discovery/discovery_test.go::TestProvidersListThroughRootBuildProcess",
+          "boundary": "cli"
+        }
+      ]
+    },
+    {
       "stableId": "cli/you.run",
       "name": "you run",
       "interface": "cli",
@@ -257,7 +282,7 @@
       "interface": "cli",
       "classification": "runnable",
       "status": "covered",
-      "lane": "long",
+      "lane": "short",
       "executionClass": "deterministic",
       "evidence": [
         {
@@ -551,7 +576,7 @@
       "interface": "cli",
       "classification": "runnable",
       "status": "covered",
-      "lane": "long",
+      "lane": "short",
       "executionClass": "deterministic",
       "evidence": [
         {
@@ -566,7 +591,7 @@
       "interface": "cli",
       "classification": "runnable",
       "status": "covered",
-      "lane": "long",
+      "lane": "short",
       "executionClass": "deterministic",
       "evidence": [
         {
@@ -581,7 +606,7 @@
       "interface": "cli",
       "classification": "runnable",
       "status": "covered",
-      "lane": "long",
+      "lane": "short",
       "executionClass": "deterministic",
       "evidence": [
         {

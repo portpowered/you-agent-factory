@@ -34,3 +34,9 @@ properties:
       minLength: 1
       maxLength: 128
       pattern: '^[A-Za-z][A-Za-z0-9._-]*$'
+  prerequisites:
+    type: array
+    uniqueItems: true
+    description: Sanitized executable, authentication, workspace, or configuration requirements.
+    items:
+      $ref: './ProviderDiscoveryPrerequisite.yaml'

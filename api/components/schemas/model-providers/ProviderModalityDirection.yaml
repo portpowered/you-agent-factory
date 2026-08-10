@@ -1,0 +1,5 @@
+type: string
+description: Direction in which a provider model accepts or emits a modality.
+enum:
+  - input
+  - output

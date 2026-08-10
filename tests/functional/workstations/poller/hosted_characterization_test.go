@@ -1,7 +1,8 @@
-package automations
+package poller
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"reflect"
@@ -9,7 +10,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/jonboulle/clockwork"
 	"github.com/portpowered/infinite-you/internal/testutil"
@@ -17,6 +17,7 @@ import (
 	automationservice "github.com/portpowered/infinite-you/pkg/services/automations"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -62,7 +63,7 @@ func TestBTRCP0HostedServiceSuccessCharacterization(t *testing.T) {
 		t.Fatalf("hosted success dispatch outcome = %q, want ACCEPTED", response.Outcome)
 	}
 	assertBTRCHostedOutputState(t, response, "complete")
-	assertBTRCHostedServiceProgress(t, server.URL(), "complete")
+	assertBTRCHostedServiceResultReconciliation(t, server.URL(), "complete")
 	assertBTRCHostedSingleTerminalWork(t, support.ListDefaultSessionWork(t, server.URL()), workID, "complete")
 }
 
@@ -96,7 +97,7 @@ func TestBTRCP0HostedServiceExecutionFailureCharacterization(t *testing.T) {
 	if got := provider.CallCount(); got != 1 {
 		t.Fatalf("provider command calls = %d, want exactly one dispatch attempt", got)
 	}
-	assertBTRCHostedServiceProgress(t, server.URL(), "failed")
+	assertBTRCHostedServiceResultReconciliation(t, server.URL(), "failed")
 	assertBTRCHostedSingleTerminalWork(t, support.ListDefaultSessionWork(t, server.URL()), workID, "failed")
 }
 
@@ -185,6 +186,11 @@ func startBTRCHostedService(
 	secretCalls *atomic.Int32,
 ) *support.FunctionalAPIServer {
 	t.Helper()
+	// Hosted service mode is a continuous Process.Execute invocation: after a
+	// Work item reaches a terminal state, the live Factory Session intentionally
+	// remains IDLE and the process has no finite caller-returned result. These
+	// public HTTP reads are therefore the API-owned hosted inspection contract;
+	// finite CLI result mapping is characterized by btrc-p0-characterization-005.
 	return support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
@@ -218,8 +224,8 @@ func waitForBTRCHostedSubmission(t *testing.T, submissions <-chan work.FactorySu
 	select {
 	case record := <-submissions:
 		return record
-	case <-time.After(5 * time.Second):
-		t.Fatal("timed out waiting for hosted source submission")
+	case <-t.Context().Done():
+		t.Fatalf("waiting for hosted source submission: %v", t.Context().Err())
 		return work.FactorySubmissionRecord{}
 	}
 }
@@ -227,7 +233,7 @@ func waitForBTRCHostedSubmission(t *testing.T, submissions <-chan work.FactorySu
 func waitForBTRCHostedDispatchResponse(t *testing.T, stream *support.FactoryEventStream, workID string) {
 	t.Helper()
 	for {
-		event := stream.NextEvent(5 * time.Second)
+		event := stream.NextEventContext(t.Context())
 		if event.Type == factoryapi.FactoryEventTypeDispatchResponse && btrcHostedEventIncludesWork(event, workID) {
 			return
 		}
@@ -304,6 +310,37 @@ func assertBTRCHostedServiceProgress(t *testing.T, baseURL, terminalState string
 	}
 }
 
+func assertBTRCHostedServiceResultReconciliation(t *testing.T, baseURL, terminalState string) {
+	t.Helper()
+	assertBTRCHostedServiceProgress(t, baseURL, terminalState)
+
+	request, err := http.NewRequestWithContext(
+		t.Context(),
+		http.MethodGet,
+		strings.TrimSuffix(baseURL, "/")+"/factory-sessions/"+factorysessions.DefaultSessionID+"/result",
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("build hosted live result request: %v", err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("GET hosted live result: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusNotFound {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("hosted live result status = %d body=%q, want 404 because continuous Petri service sessions have no terminal live result", response.StatusCode, strings.TrimSpace(string(body)))
+	}
+	var errorResponse factoryapi.ErrorResponse
+	if err := json.NewDecoder(response.Body).Decode(&errorResponse); err != nil {
+		t.Fatalf("decode hosted live result absence: %v", err)
+	}
+	if errorResponse.Code != factoryapi.ErrorResponseCodeNOTFOUND {
+		t.Fatalf("hosted live result absence code = %q, want NOT_FOUND", errorResponse.Code)
+	}
+}
+
 func assertBTRCHostedSingleTerminalWork(t *testing.T, listed factoryapi.ListWorkResponse, workID, state string) {
 	t.Helper()
 	matched := 0
@@ -357,8 +394,8 @@ func waitForBTRCHostedSignal(t *testing.T, signal <-chan struct{}, description s
 	t.Helper()
 	select {
 	case <-signal:
-	case <-time.After(5 * time.Second):
-		t.Fatalf("timed out waiting for %s", description)
+	case <-t.Context().Done():
+		t.Fatalf("waiting for %s: %v", description, t.Context().Err())
 	}
 }
 

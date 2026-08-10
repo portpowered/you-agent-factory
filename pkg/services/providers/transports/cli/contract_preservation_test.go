@@ -109,28 +109,28 @@ func representativeCatalogRoot() providers.Service {
 	return newCatalogPeerFake(codex, cursor)
 }
 
-func TestAcceptedCLIContract_ProductionManifestDeclaresNoProvidersCommands(t *testing.T) {
+func TestAcceptedCLIContract_ProductionManifestDeclaresProvidersList(t *testing.T) {
 	t.Parallel()
 
 	manifest := loadCLICommandManifest(t, climanifest.ProductionManifestPath)
-	for id, command := range manifest.Commands {
-		if strings.HasPrefix(id, "you.providers.") || id == "you.providers" {
-			t.Fatalf(
-				"production manifest declares %s (%q); this packet must not edit top-level CLI composition",
-				id,
-				command.Path,
-			)
+	for _, id := range []string{"you.providers", "you.providers.list"} {
+		command, ok := manifest.Commands[id]
+		if !ok {
+			t.Fatalf("production manifest is missing %s", id)
 		}
-		if strings.HasPrefix(strings.TrimSpace(command.Path), "you providers ") {
-			t.Fatalf(
-				"production manifest declares providers path %q; this packet must not edit top-level CLI composition",
-				command.Path,
-			)
+		if !strings.HasPrefix(command.Path, "you providers") {
+			t.Fatalf("production manifest path for %s = %q, want providers path", id, command.Path)
 		}
+	}
+	if manifest.Commands["you.providers"].Runnable {
+		t.Fatal("you.providers must remain non-runnable")
+	}
+	if !manifest.Commands["you.providers.list"].Runnable {
+		t.Fatal("you.providers.list must be runnable")
 	}
 }
 
-func TestAcceptedCLIContract_ListPreservesAcceptedHumanAndJSONOutput(t *testing.T) {
+func TestCLIContract_ListReportsCanonicalFactsInHumanAndJSONOutput(t *testing.T) {
 	t.Parallel()
 
 	root := representativeCatalogRoot()
@@ -146,7 +146,29 @@ func TestAcceptedCLIContract_ListPreservesAcceptedHumanAndJSONOutput(t *testing.
 	wantHuman := strings.Join([]string{
 		"ID\tDISPLAY NAME\tAVAILABILITY\tREADINESS\tALIASES",
 		"codex\tCodex\tselectable\tready\topenai-codex",
+		"  Technical support:\tnone",
+		"  Implementation:\tnone",
+		"  Capabilities:\tnative_streaming, prompt_submission",
+		"  Prerequisites:",
+		"    - none",
+		"  Models:",
+		"    - none",
+		"  Tools:",
+		"    - none",
+		"  Known limits:",
+		"    - none",
 		"cursor\tCursor\tsupported-but-unavailable\tunavailable\tnone",
+		"  Technical support:\tnone",
+		"  Implementation:\tnone",
+		"  Capabilities:\tprompt_submission",
+		"  Prerequisites:",
+		"    - configuration/executable: missing — cursor-agent must be installed",
+		"  Models:",
+		"    - none",
+		"  Tools:",
+		"    - none",
+		"  Known limits:",
+		"    - none",
 		"",
 	}, "\n")
 	if human.String() != wantHuman {

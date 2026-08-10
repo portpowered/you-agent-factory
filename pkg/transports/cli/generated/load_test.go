@@ -45,6 +45,36 @@ func TestModelsDocsFamilyManifestMatchesContractedIDs(t *testing.T) {
 	}
 }
 
+func TestProvidersFamilyManifestMatchesContractedIDs(t *testing.T) {
+	manifest, err := generated.ProvidersFamilyManifest()
+	if err != nil {
+		t.Fatalf("ProvidersFamilyManifest() error = %v", err)
+	}
+	if len(manifest.Commands) != len(climanifestgen.ProvidersFamilyCommandIDs) {
+		t.Fatalf("command count = %d, want %d", len(manifest.Commands), len(climanifestgen.ProvidersFamilyCommandIDs))
+	}
+	for index, id := range climanifestgen.ProvidersFamilyCommandIDs {
+		record, err := manifest.CommandByID(id)
+		if err != nil {
+			t.Fatalf("CommandByID(%q) error = %v", id, err)
+		}
+		if record.ID != id || generated.ProvidersFamilyCommandIDs[index] != id {
+			t.Fatalf("providers id[%d] record=%q generated=%q want=%q", index, record.ID, generated.ProvidersFamilyCommandIDs[index], id)
+		}
+	}
+}
+
+func TestProvidersFamilyCommandIDsGenMatchesGeneratorList(t *testing.T) {
+	if len(generated.ProvidersFamilyCommandIDs) != len(climanifestgen.ProvidersFamilyCommandIDs) {
+		t.Fatalf("generated id count = %d, want %d", len(generated.ProvidersFamilyCommandIDs), len(climanifestgen.ProvidersFamilyCommandIDs))
+	}
+	for index, id := range climanifestgen.ProvidersFamilyCommandIDs {
+		if generated.ProvidersFamilyCommandIDs[index] != id {
+			t.Fatalf("generated ids[%d] = %q, want %q", index, generated.ProvidersFamilyCommandIDs[index], id)
+		}
+	}
+}
+
 func TestRunSubmitFamilyManifestMatchesContractedIDs(t *testing.T) {
 	manifest, err := generated.RunSubmitFamilyManifest()
 	if err != nil {
