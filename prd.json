@@ -85,7 +85,7 @@
       ],
       "priority": 4,
       "passes": true,
-      "notes": "Replaced the customer-representable watch null sentinel with raw event-payload presence handling. Reducer application restores only fields whose canonical raw value is JSON null, preserving the exact historical sentinel string as a string while keeping explicit null and omission distinct. Added focused decode/reducer/render coverage for both values; Work/CLI/functional suites, contract/docs checks, typecheck, test, vet, and repository quality gates pass."
+      "notes": "Replaced the customer-representable watch null sentinel with raw event-payload presence handling. Reducer application restores only fields whose canonical raw value is JSON null, preserving the exact historical sentinel string as a string while keeping explicit null and omission distinct. Added focused decode/reducer/render coverage for both values; Work/CLI/functional suites, contract/docs checks, typecheck, test, vet, and repository quality gates pass. Review follow-up moved the recorded Work identity and structured-result projection helpers into the existing invocation-output owner so the transitioner stays within the backend-size and maintainability limits without changing behavior."
     }
   ]
 }

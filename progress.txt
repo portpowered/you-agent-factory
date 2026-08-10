@@ -1,5 +1,6 @@
 ## Codebase Patterns
 - JSON Schema worker diagnostics must use `ErrorKind.KeywordPath()` and typed schema metadata; localized `ValidationError.Error()` text can leak rejected values and compiler-expanded host paths.
+- When an exact package file-count baseline blocks an oversized-file split, move the cohesive helpers into an existing appropriately owned file and verify both size and file-count gates.
 - Optional native JSON channels use an explicit presence bit plus custom JSON at durable boundaries to distinguish omitted values from JSON null; clone map/slice trees at projection and transport ownership boundaries.
 - Generated `interface{}` transport types collapse explicit JSON null during ordinary decoding; inspect raw HTTP/SSE JSON at the transport boundary and carry an internal normalized marker until final rendering.
 - Treat repository-enforcement inventories and architecture guards as project-enabling PRD criteria when they have no runtime, API, CLI, UI, or emitted-event behavior; source scans support enforcement but are not customer-behavior evidence.
@@ -2833,4 +2834,26 @@
   - `git diff --check` — passed.
 - **Learnings for future iterations:**
   - Resolve append-only progress conflicts by selecting unique dated sections from bounded Git chunks, then validate line and header counts before staging.
+---
+
+## 2026-08-10 15:00 -07:00 - e2-structured-worker-results review follow-up
+- What was implemented
+  - Addressed the latest blocking PR feedback by moving recorded Work identity, content, and structured-result projection helpers out of the oversized transitioner and into the existing `invocation_output.go` owner.
+  - Reduced `subsystem_transitioner.go` to 959 lines without changing runtime behavior or adding a package file, preserving the exact 19-file subsystem baseline.
+- Files changed
+  - `pkg/services/factory_runtime/internal/services/orchestration/subsystems/invocation_output.go`
+  - `pkg/services/factory_runtime/internal/services/orchestration/subsystems/subsystem_transitioner.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/factory_runtime/internal/services/orchestration/subsystems` — passed.
+  - `make test` — passed.
+  - `make typecheck` — passed.
+  - `make vet` — passed.
+  - `make pkg-structure` — passed.
+  - `make backend-size`, `make pkg-maint`, and `make pkg-file-count` — passed.
+  - `make lint` passed all prerequisite checks and reached only the known 175-entry `pkg-boundary` baseline.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - A maintainability fix must satisfy adjacent repository ratchets too: use an existing cohesive owner when adding a file would violate an exact package file-count baseline.
 ---
