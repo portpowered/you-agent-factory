@@ -50,6 +50,8 @@
 - Keep cancellation compatibility explicit at the boundary: a typed returned cancellation can retain the existing `Error: context canceled` diagnostic while still preserving `errors.Is(context.Canceled)` for declared exit-status handling.
 - JSON error payloads from command-owned services must route to the process diagnostic writer when the central CLI policy is active; direct service tests can continue to use their caller-owned output writer outside that policy.
 - Post-open Worker Session stream failures must remain typed at the stream adapter, including output-write errors, so the process boundary can preserve a stable code and keep safe diagnostics off stdout.
+- Transport boundary helpers must preserve caller-owned context semantics; nil inputs remain nil instead of being replaced by `context.Background()`.
+- For ratcheted repository-wide gates with intentional baseline violations, compare the current count with an exact detached current-main checkout; a non-zero command can still be clean when the counts match.
 ## 2026-08-09 13:12 - wo-d1-packaged-factories-docs-001
 - What was implemented
   - Established the operator-facing discovery workflow and common seven-part entry contract in `docs/reference/packaged-factories.md`.
@@ -1867,4 +1869,18 @@
   - CI run `31413200225` final failed-job rerun passed Backend Functional Coverage, Backend Unit Coverage, Verification Policy, and all other required checks for head `06a8d59e8`.
 - **Learnings for future iterations:**
   - Broad functional coverage failures can move between existing cancellation-sensitive scenarios under instrumentation; inspect the named test, stress it locally, and rerun only failed jobs before changing unrelated runtime behavior.
+---
+## 2026-08-10 10:59 -07:00 - pf-cli-exit-codes-001 review and PR follow-up
+- What was implemented
+  - Verified that the already-pushed context-boundary fix removes the transport-owned `context.Background()` fallback and leaves nil caller contexts nil.
+  - Compared the current branch with a detached `origin/main` worktree; both report the same 176-entry `pkg-boundary` baseline, so the blocking new violation is removed.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Focused CLI diagnostic, process-boundary, Worker Sessions stream, server-bind, and functional CLI tests passed.
+  - `go vet ./pkg/transports/cli/... ./pkg/services/worker_sessions/transports/cli ./pkg/root ./cmd/factory` passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure` passed.
+  - `git diff --check` passed; all four PRD stories remain `passes:true`.
+- **Learnings for future iterations:**
+  - A ratcheted gate must be evaluated against the exact current-main count after a review fix; matching the intentional baseline is the relevant result even when the standalone gate exits non-zero.
 ---
