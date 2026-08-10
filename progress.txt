@@ -2516,3 +2516,16 @@
 - **Learnings for future iterations:**
   - When a broad CI lane names an unchanged test that is stable across ten isolated local runs, preserve the feature scope and validate recovery after syncing the latest PR base rather than changing unrelated production code.
 ---
+
+## 2026-08-10 15:15 -07:00 - thr-worktree-build-cache-002 CI flake follow-up
+- What was implemented
+  - Investigated the next failed-job rerun for PR #1860; the broad Backend Functional Coverage lane rotated to the unchanged `TestFunctionalAPIServer_RuntimeLogDirectoryIsAProcessInput` test, which missed its expected startup log line.
+  - Repeated that exact runtime-API test ten consecutive times locally; all runs passed, and no unrelated source change was made.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/runtime_api -run '^TestFunctionalAPIServer_RuntimeLogDirectoryIsAProcessInput$' -count=10 -v -timeout 600s` — passed all ten runs.
+  - The build-cache branch remains clean apart from this progress entry; the PR diff remains limited to `Makefile`, `prd.json`, and `progress.txt`.
+- **Learnings for future iterations:**
+  - If sequential failed-job reruns rotate among unchanged functional timing assertions while each isolated test passes repeatedly, keep the feature diff untouched and use the repository's failed-job rerun path until the required lane completes.
+---
