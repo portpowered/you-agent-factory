@@ -109,7 +109,7 @@ func (e *FactoryEngine) tickOnce(ctx context.Context) (bool, bool, error) {
 	return e.tick(ctx)
 }
 
-func (e *FactoryEngine) finishTerminationDrain() (bool, error) {
+func (e *FactoryEngine) finishTerminationDrain() bool {
 	e.mu.Lock()
 	e.acceptingSubmits = false
 	drained := e.drainChannels()
@@ -118,9 +118,9 @@ func (e *FactoryEngine) finishTerminationDrain() (bool, error) {
 	}
 	e.mu.Unlock()
 	if drained {
-		return false, nil
+		return false
 	}
-	return true, nil
+	return true
 }
 
 // Tick executes a single tick synchronously. Drains all pending channel events
