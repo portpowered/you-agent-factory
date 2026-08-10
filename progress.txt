@@ -553,3 +553,16 @@
   - The generic provider retry policy can issue three attempts for schema/provider failures; failure assertions should prove terminal routing and diagnostics without assuming one command call.
   - The next story should document the optional positional/stdin reachability bindings alongside the named flags so the public help and operator examples explain both invocation paths.
 ---
+
+## 2026-08-09 21:52 -07:00 - wo-b2-agy-production-review-roles-002 verification follow-up
+- What was implemented
+  - No additional product change; rechecked the committed clip-QA story through the broad fast verification tier and live generated invocation help.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `make verify-fast` — passed dashboard typecheck, MCP contract boundary, 355 UI files / 2,970 tests, 191 Bun checks, and the short Go suite.
+  - `go run ./cmd/factory run --named @you/agy-clip-qa --help` with isolated `HOME` and `USERPROFILE` — passed and exposed `--clip-path`, `--shot-specification`, positional clip-path, and stdin shot-specification bindings.
+  - The worktree was clean before this append-only verification entry; story 003 remains the only PRD story with `passes:false`.
+- **Learnings for future iterations:**
+  - A generated named-Factory help smoke is useful evidence that authored external names and binding fallbacks survived materialization; keep it alongside the behavioral root-process test when documenting the role.
+---
