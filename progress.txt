@@ -8177,3 +8177,20 @@
   - Runtime model workstation definitions need an explicit model workstation type when their linked worker is model-backed; otherwise the executor treats the definition as unresolved unless it is a script worker.
   - When CI reports a package coverage regression, reproduce the exact package/profile locally before changing the manifest; a real behavioral scenario restored margin without weakening the floor.
 ---
+
+## 2026-08-10 10:46 -07:00 - e3-event-webhooks-004 final review readiness
+- What was implemented
+  - Confirmed all four PRD stories remain marked `passes:true`; no additional story implementation or contract change was required.
+  - Inspected PR #1850 with the thread-aware GitHub review workflow. The historical blocking feedback is addressed by the current commits, and there are no unresolved inline review threads or formal reviews.
+  - Synchronized the story-004 PRD note with the terminal CI and review state.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `gh pr checks 1850` — all 18 required checks pass on final head `b9e493e04` in run `31414764034`.
+  - GitHub reports PR #1850 open, clean, mergeable, and using the current `prd.json` as its description; local `HEAD` matches the PR head.
+  - `git fetch origin main` and `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - A historical top-level blocking comment can remain in PR conversation after its requested fixes land; use commit ancestry plus thread-aware unresolved state to distinguish addressed feedback from remaining work.
+  - Final readiness requires checking the exact pushed head, terminal CI, PR description, and review-thread state together after any bookkeeping commit.
+---
