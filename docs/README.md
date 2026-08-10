@@ -3,10 +3,11 @@ This is the table of contents for the Agent Factory documentation.
 The installed CLI also packages a fixed reference surface under
 `you docs`. Run `you docs` to list the packaged topics, or
 run `you docs <topic>` for packaged topics such as `agents`,
-`authoring-factories`, `config`, `factory-validation`, `mock-workers`,
-`record-replay`, `guards`, `relationships`, `operations`, `work`,
-`workstations`, `workers`, `resources`, `models`, `providers`, `batch-inputs`,
-or `templates`.
+`authoring-factories`, `packaged-factories`, `config`, `factory-validation`,
+`mock-workers`, `record-replay`, `guards`, `relationships`, `operations`,
+`work`, `workstations`, `workers`, `resources`, `models`, `providers`,
+`batch-inputs`, or
+`templates`.
 
 ## For agents
 
@@ -32,6 +33,9 @@ These are the fixed topic names accepted by `you docs <topic>`.
 - `authoring-factories` is the packaged practical factory authoring guide. Run
   `you docs authoring-factories` for workflow sequencing, runnable examples,
   mock-worker checks, and replay recording.
+- `packaged-factories` is the first-party `@you/*` Factory operator guide. Run
+  `you docs packaged-factories` for catalog discovery, live invocation help, and
+  the common per-Factory entry contract.
 - `config` is the packaged `factory.json` topology reference. Run `you docs
   config` for work types, states, workers, workstations, resources,
   portability, and top-level layout fields.

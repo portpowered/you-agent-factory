@@ -24,6 +24,7 @@ concept owners below when you need the complete customer-facing contract.
 | Topic | Packaged scope | Canonical or broader customer guide |
 |-------|----------------|--------------------------------------|
 | `authoring-factories` | Practical factory authoring workflow, runnable examples, and cross-links to run-mode guides | [Author factories](authoring-factories.md) |
+| `packaged-factories` | First-party `@you/*` Factory catalog, live invocation discovery, and operator guide | [Packaged factories](packaged-factories.md) |
 | `run` | Supported local, one-shot, batch, continuous, and mock-worker run shapes | [Run](run.md) |
 | `config` | Operator initialization plus Factory validation, transformation, and minimum authoring contract | [Config](config.md) and [Author factories](authoring-factories.md) |
 | `factory-validation` | Required pre-run static gate, current validation checks, exact source commands, and validation limits | [Factory validation](factory-validation.md) |
@@ -137,6 +138,8 @@ Use these canonical concept owners when you need the current contract.
 - [Author factories](authoring-factories.md) keeps factory sequencing, quick-start
   run commands, reusable [`docs/examples/`](../examples/README.md) inputs, and
   links to the dedicated mock-worker and record/replay guides.
+- [Packaged factories](packaged-factories.md) owns the first-party `@you/*`
+  catalog, live invocation discovery, and operator-facing Factory entries.
 - [Author AGENTS.md](authoring-agents-md.md) keeps split-file shape, prompt
   placement, and prompt-authoring examples.
 
@@ -144,6 +147,7 @@ Use these canonical concept owners when you need the current contract.
 
 - [Package docs index](../README.md)
 - [Config](config.md)
+- [Packaged factories](packaged-factories.md)
 - [Factory validation](factory-validation.md)
 - [Sessions](sessions.md)
 - [Submitted work](work.md)

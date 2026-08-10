@@ -17,6 +17,11 @@ so the published primitive usage stays aligned with the shipped host API.
 - [`mock-workers-mixed.json`](mock-workers-mixed.json) keeps the reviewer
   rejection mock and sets `unmatchedDispatchPolicy: "passthrough"` so unmatched
   dispatches execute through the normal worker path.
+- [`packaged-classify-mock-workers.json`](packaged-classify-mock-workers.json)
+  returns the protocol-valid `small` label for the packaged
+  `@you/classify` classifier while leaving its selected executor on the default
+  accepted mock outcome. It is used by the deterministic packaged-Factory
+  documentation example.
 - [`startup-work.json`](startup-work.json) is a startup
   `FACTORY_REQUEST_BATCH` request for a `story` work item in the `init` state.
   Pass it with `you run --dir ./examples/write-code-review --work

@@ -1,88 +1,117 @@
 {
-  "project": "Pipeable Replay-Only Worker Session Streams",
-  "branchName": "wo-c1-ext-stream-replay-only",
-  "description": "Add --replay-only to you worker-sessions stream so operators can drain retained Worker Session events to redirect-safe NDJSON, receive an explicit completeness summary, and exit 0 without attaching a live follower, while preserving existing live-stream and ACTIVE transcript-read semantics.",
+  "project": "WO-D1 — Document Packaged Factories with Worked Examples",
+  "branchName": "wo-d1-packaged-factories-docs",
+  "description": "Replace the flat packaged-Factory overview with canonical operator-ready reference documentation for all fifteen current first-party @you/* Factories. Each entry will explain purpose, live invocation signature, accepted worker roles and provider/model overrides, prerequisites or side effects, expected primary output shape, and one copy-ready example verified exactly as shown against the current you binary, with special emphasis on making @you/subagent usable without production trial and error.",
   "context": {
-    "customerAsk": "Allow operators to run you worker-sessions stream --replay-only --output json against ACTIVE or terminal sessions, redirect retained events to a file, receive an explicit final completeness marker, and exit 0 without cancellation or live following.",
-    "problem": "The existing stream replays retained events and then follows live until terminal or cancellation, so capturing an ACTIVE session through shell redirection requires cancellation that can truncate the pipe and cannot distinguish a partial capture from a complete transcript. The read command correctly refuses ACTIVE sessions and must continue doing so.",
-    "solution": "Add a finite retained-history mode owned by Worker Sessions and the process-local Events service. It snapshots and emits retained events once in canonical order without registering a follower, appends a replay-summary with authoritative completeness and emitted count, validates live/replay flag conflicts before output or network access, and preserves all existing non-replay-only and read behavior without adding storage."
+    "customerAsk": "Deliver WO-D1 documentation in canonical docs/reference/ Markdown with a description and one worked example for every packaged Factory, including what @you/subagent is for, each Factory's invocation signature, accepted workers/providers, and expected output shape. Execute every CLI invocation shown in the new documentation against the current binary and paste or behaviorally assert real output. Keep the binding cut list from docs/temp/work-order.md, run make docs-reference-smoke and make verify-fast, and deliver through actual PR merge.",
+    "problem": "The packaged-Factory reference is primarily a name table plus representative commands. It does not give each Factory an independently usable worked example or consistently describe role-specific worker/provider inputs and returned output. Operators consequently discovered @you/subagent invocation semantics by trial and error during production, while other examples can be copied without enough information to predict accepted flags, prerequisites, side effects, or output.",
+    "solution": "Expand the canonical packaged-Factory reference into a consistent operator guide. Give every current packaged Factory a focused entry containing purpose, suitable use, exact live invocation signature, worker roles and supported provider/model override behavior, prerequisites or material side effects, expected output shape, and one copy-ready worked example with real current-binary output evidence. Organize related entries for scanning, retain root docs only as routing material, and avoid engine, provider, storage, UI, API, and generated-contract changes."
   },
   "acceptanceCriteria": [
-    "you worker-sessions stream --replay-only --output json works for ACTIVE and terminal Worker Sessions, emits retained events exactly once in canonical order, appends exactly one replay-summary record, and exits 0 without registering or waiting on a live follower.",
-    "An ACTIVE-session replay ends with kind replay-summary, complete false, reason session-active, and eventsEmitted N, while a terminal-session replay ends with complete true; in both cases eventsEmitted equals the number of preceding event records.",
-    "Every JSON-mode stdout line is independently valid JSON, event lines retain the existing Worker Session stream NDJSON contract, diagnostics remain on stderr, and a built-process redirection test proves the resulting file ends with the summary record.",
-    "Replay-only combined with --follow or any other mutually exclusive live-follow selection fails with a stable typed conflict error before network access, follower registration, or stdout output.",
-    "Existing behavior is preserved: stream without replay-only still replays then follows until terminal or cancellation, terminal replay is equivalent to the full retained history, and worker-sessions read still rejects ACTIVE sessions with WORKER_SESSION_TRANSCRIPT_ACTIVE.",
-    "Quality gate: the named focused verification command go test ./tests/functional/provider_sessions/cli -run '^(TestWorkerSessionsCLI|TestWorkerSessionsReplayOnlyRedirectsWellFormedNDJSON)$' -count=1 and make verify-fast pass; Typecheck passes; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green; generated CLI/OpenAPI/client artifacts are synchronized if their authored contracts change.",
-    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared-file changes are resolved, and the PR is actually merged; opening, approval, green CI, or merge readiness alone is not completion."
+    "The canonical docs/reference/ packaged-Factory topic gives each of the fifteen current first-party @you/* Factories an independently understandable description, suitable-use guidance, invocation signature, accepted worker roles and provider/model override behavior, prerequisites or material side effects, and expected output shape.",
+    "Every packaged Factory has one copy-ready worked CLI example, and every CLI invocation added or changed in the topic is executed exactly as shown against the current you binary during implementation; corresponding real output is pasted in the documentation or captured by a direct behavioral assertion, with reviewer-visible evidence and no invented flags or output.",
+    "The @you/subagent entry explicitly explains its bounded read-only purpose, request binding, optional provider/model/reasoning inputs supported by the live signature, single worker role, and primary-result output behavior, and its worked example succeeds as documented.",
+    "Documentation distinguishes orchestration behavior, required environment/model prerequisites, potentially long-running or workspace-changing behavior, and machine-readable versus human-readable output where those facts affect safe operator use, without promising unsupported providers, flags, determinism, or exact model prose.",
+    "Scope remains limited to WO-D1 canonical reference documentation and direct documentation behavior evidence: root docs remain routing material, and there is no local-model execution harness, llama-server trace testing, Gemma validation, new ACP lane, wrapper-layer multimodal transformation, storage engine work, public API change, generated contract change, or broad unrelated cleanup.",
+    "Quality gates pass: make docs-reference-smoke, make verify-fast, applicable typecheck and focused tests, and no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
+    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared-file reconciliation are resolved, and the PR is actually merged; an opened, green, approved, or ready-to-merge PR is not complete."
   ],
   "userStories": [
     {
-      "id": "wo-c1-ext-stream-replay-only-001",
-      "title": "Capture an ACTIVE session without following",
-      "description": "As an operator, I want replay-only streaming to drain the retained observations of an ACTIVE Worker Session and return successfully so I can inspect progress through a stable finite pipeline.",
+      "id": "wo-d1-packaged-factories-docs-001",
+      "title": "Establish the operator-facing entry contract and discovery guidance",
+      "description": "As an operator, I want a consistent structure and trustworthy discovery guidance so I can compare packaged Factories and understand how live signatures, defaults, outputs, and examples should be read.",
       "acceptanceCriteria": [
-        "Given an ACTIVE Worker Session with retained observations, replay-only emits each retained event once in canonical position order and does not emit observations published after the retained snapshot boundary.",
-        "The command does not register, retain, or wait on a live subscription after the retained drain and exits 0 without operator cancellation.",
-        "The last JSON line is a replay-summary with complete false, reason session-active, and eventsEmitted equal to the number of preceding event records, including zero when no events are retained.",
-        "Retained reads and lifecycle classification remain explicit Worker Sessions operations over the injected process-local Events service; no storage, hidden global state, or secondary dependency construction is introduced.",
-        "Focused Worker Sessions service, transport, and CLI behavioral tests pass.",
+        "The topic explains how packaged Factories are discovered and materialized, how to inspect a Factory's current live invocation help, and how omitted role provider/model values use operator defaults, using commands verified against the current binary.",
+        "A consistent entry contract is used for every Factory: purpose and suitable use, invocation signature, accepted worker roles and provider/model overrides, prerequisites or side effects, expected output shape, one worked invocation, and real output evidence.",
+        "The topic explains that model-generated prose is not byte-stable and describes output shape without presenting one model response as a deterministic guarantee.",
+        "Navigation supports finding an individual Factory without turning root documentation into a duplicate guide.",
         "Typecheck passes",
-        "Tests pass"
+        "Tests pass, including make docs-reference-smoke"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Implemented finite ACTIVE replay through injected Events.Read with a captured retained head, no live subscription, explicit replay-summary delivery, HTTP/SSE framing, CLI --replay-only wiring, redirect-safe JSON summary output, and regenerated API/CLI artifacts. Focused Worker Sessions service/HTTP/CLI tests, UI typecheck, pkg-maint, pkg-file-count, pkg-structure, and CLI contract smoke pass."
+      "notes": "Established the canonical packaged-factories operator guide with discovery/materialization guidance, a shared seven-part entry contract, family-based catalog navigation, provider/model default behavior, and non-byte-stable model-output guidance. Registered the existing topic as `you docs packaged-factories`, updated the packaged docs indexes and user-visible smoke coverage, and captured live `you factory list`, `you run --named @you/goal --help`, and `you docs packaged-factories` evidence from a freshly built current-source binary. `make docs-reference-smoke`, `make verify-fast`, `make readme-check`, and `git diff --check` pass. The broad `make lint` tier reached the existing 176-violation `pkg-boundary` baseline after all changed-file-relevant lint checks passed; no changed file is among those baseline violations. Detailed per-Factory entries remain scoped to stories 002-006."
     },
     {
-      "id": "wo-c1-ext-stream-replay-only-002",
-      "title": "Report a terminal replay as complete",
-      "description": "As an operator, I want replay-only streaming of a terminal Worker Session to identify itself as complete so a captured file can be trusted as the full retained transcript.",
+      "id": "wo-d1-packaged-factories-docs-002",
+      "title": "Document bounded and iterative single-request Factories",
+      "description": "As an operator, I want worked guidance for @you/goal, @you/loop, @you/fusion, @you/classify, and @you/review so I can choose and configure the correct bounded, recurring, routed, refinement, or review behavior.",
       "acceptanceCriteria": [
-        "Given a terminal Worker Session, replay-only emits the same complete retained event sequence and ordering available to a normal terminal stream, then exits 0.",
-        "The final replay-summary has kind replay-summary, complete true, and eventsEmitted equal to the number of preceding event records; its reason value, if present, is stable and documents the terminal outcome without changing event records.",
-        "Stream without replay-only retains its current retained-then-live termination and cancellation behavior, and worker-sessions read continues to return WORKER_SESSION_TRANSCRIPT_ACTIVE for ACTIVE sessions.",
-        "Focused ACTIVE-versus-terminal lifecycle regression tests pass without sleeps or cancellation as the replay-only completion mechanism.",
+        "Each of @you/goal, @you/loop, @you/fusion, @you/classify, and @you/review has a distinct entry satisfying the common entry contract and distinguishing its stopping or routing behavior from the others.",
+        "Each entry names all worker roles visible in its live invocation signature and accurately documents provider/model overrides, required non-role inputs such as an interval, and operator-default behavior.",
+        "Each Factory has one copy-ready invocation executed exactly as shown against the current binary, with real output pasted or directly behaviorally asserted and reviewer-visible execution evidence retained.",
+        "Expected output guidance distinguishes the final returned answer from intermediate classification, review, retry, or recurring session activity where applicable.",
         "Typecheck passes",
-        "Tests pass"
+        "Tests pass, including make docs-reference-smoke"
       ],
       "priority": 2,
       "passes": true,
-      "notes": "Verified terminal replay against the real in-memory Events service with deterministic Worker Session completion: canonical retained opening and terminal records are emitted in order, the lifecycle record is TERMINAL_REPLAY, one complete session-completed replay-summary reports eventsEmitted 2, and the subscription closes afterward. Added CLI coverage proving TERMINAL_REPLAY does not end replay-only before the final summary and the command returns success. Existing live terminal-stream and ACTIVE transcript-read regressions remain covered."
+      "notes": "Added distinct operator-ready entries for @you/goal, @you/loop, @you/fusion, @you/classify, and @you/review using the shared seven-part contract. Documented live signatures, every worker role and role-specific provider/model override, operator-default fallback, prerequisites and workspace/session/recording side effects, stopping/routing/retry behavior, and final versus intermediate output shape. Added the deterministic docs smoke fixture docs/examples/packaged-classify-mock-workers.json and its examples index entry. Executed every worked command exactly as shown against a freshly built current-source binary with isolated operator state; all returned the documented mock primary-result shape. make docs-reference-smoke, make verify-fast, and git diff --check pass. Remaining detailed Factory entries remain scoped to stories 003-006."
     },
     {
-      "id": "wo-c1-ext-stream-replay-only-003",
-      "title": "Reject incompatible live and finite modes before output",
-      "description": "As an operator, I want contradictory replay-only and live-follow flags rejected immediately so an invalid invocation cannot create a misleading partial file or attach a follower.",
+      "id": "wo-d1-packaged-factories-docs-003",
+      "title": "Document planning and implementation Factories",
+      "description": "As an implementer, I want worked guidance for @you/factory-builder, @you/plan-execute, @you/plan-parallel, and @you/full-flow so I can select a workflow with the right planning, concurrency, workspace, and completion behavior.",
       "acceptanceCriteria": [
-        "Combining --replay-only with --follow is rejected with a stable typed CLI conflict error and a non-zero usage or failure exit before any stdout bytes are written.",
-        "Conflict validation occurs before network access and before any retained read or live subscription side effect.",
-        "A valid invocation with neither replay-only nor an explicit conflicting selection preserves the existing live-stream default.",
-        "The authored CLI contract, generated command metadata, help, and handler binding expose the flags and conflict consistently; generated artifacts are regenerated rather than hand-edited.",
-        "Focused CLI parsing, error mapping, and zero-output/zero-request behavioral tests pass.",
+        "Each of @you/factory-builder, @you/plan-execute, @you/plan-parallel, and @you/full-flow has a distinct entry satisfying the common entry contract and explaining when it is appropriate relative to the other implementation workflows.",
+        "Each entry names all worker roles and live provider/model overrides and calls out material workspace mutation, worktree or concurrency behavior, validation, merge, replanning, or completion semantics that affect safe use.",
+        "Each Factory has one copy-ready invocation executed exactly as shown against the current binary in an appropriate disposable or controlled workspace, with real output pasted or directly behaviorally asserted and reviewer-visible execution evidence retained.",
+        "Expected output guidance identifies whether the caller receives guidance, a built or installed Factory result, an implementation result, a synthesized result, or a terminal failure rather than promising hidden intermediate artifacts as the primary result.",
         "Typecheck passes",
-        "Tests pass"
+        "Tests pass, including make docs-reference-smoke"
       ],
       "priority": 3,
       "passes": true,
-      "notes": "Added explicit --follow CLI metadata and handler binding, stable typed WORKER_SESSION_STREAM_MODE_CONFLICT validation before operation/network/output, and authored mutually-exclusive relationship/error records. Added zero-request/zero-output service and production-root tests, refreshed generated CLI artifacts and CLI inventory baselines, fixed detached Cobra relationship projection so root --server remains authoritative, and passed focused Worker Sessions/CLI tests, make cli-manifest-check, and make verify-fast."
+      "notes": "Added distinct operator-ready entries for @you/factory-builder, @you/plan-execute, @you/plan-parallel, and @you/full-flow using the shared seven-part contract. Documented all live worker roles, provider/model overrides, planning and validation behavior, current-workspace versus worktree side effects, concurrency bounds, local merge/replanning semantics, and terminal output shapes. Executed each worked invocation exactly as shown against the current bin/you.exe in isolated HOME/USERPROFILE state: builder returned `mock worker accepted`; plan-execute returned `mock worker accepted` plus `<COMPLETE>`; plan-parallel returned `mock worker accepted`; full-flow's valid controlled smoke exited 0 with the documented terminal result after a protocol-valid planner response marked the bounded request complete. The full-flow smoke used a deterministic local codex executable first on PATH, isolated HOME/USERPROFILE, and a disposable Git repository; the maxCycles=9 validation remains an explicitly labeled additional bound check. Focused packaged-factory functional tests passed for builder graph/JavaScript installation and invalid-candidate rejection, plan-execute, plan-parallel DAG/concurrency/merge/failure paths, and full-flow worktrees, local merges, replanning, and bounds. make docs-reference-smoke, make verify-fast, and git diff --check pass. The docs explicitly distinguish generic mock envelope evidence from provider-backed planner/builder semantics."
     },
     {
-      "id": "wo-c1-ext-stream-replay-only-004",
-      "title": "Produce a redirect-safe NDJSON capture",
-      "description": "As an operator, I want the real CLI process to write replay-only output as well-formed NDJSON so shell redirection produces a durable, machine-readable partial or complete capture.",
+      "id": "wo-d1-packaged-factories-docs-004",
+      "title": "Document parallel investigation and selection Factories",
+      "description": "As an operator, I want worked guidance for @you/deep-research, @you/spawn, @you/quorum, and @you/tournament so I can choose the correct fan-out, synthesis, consensus, or competitive-selection workflow and bound its execution.",
       "acceptanceCriteria": [
-        "A process-boundary test invokes the built you CLI, redirects replay-only JSON stdout to a file, waits for exit 0, and parses every non-empty file line as exactly one JSON value.",
-        "The redirected file contains canonical event lines followed by exactly one final replay-summary; the summary count matches the event-line count and its completeness matches the session lifecycle used by the test.",
-        "The test proves replay-only completes without sending cancellation and that diagnostics or errors do not contaminate the redirected stdout file.",
-        "Operator-facing help or canonical reference documentation includes the redirect workflow and explains the complete marker, ACTIVE versus terminal meaning, and conflict with live following using real supported flags and output.",
-        "go test ./tests/functional/provider_sessions/cli -run '^(TestWorkerSessionsCLI|TestWorkerSessionsReplayOnlyRedirectsWellFormedNDJSON)$' -count=1 passes.",
+        "Each of @you/deep-research, @you/spawn, @you/quorum, and @you/tournament has a distinct entry satisfying the common entry contract and explaining its fan-out and final-selection behavior.",
+        "Each entry names all live worker-role provider/model overrides and accurately explains required bounds such as task count or rounds, applicable defaults, and the difference between Graph and JavaScript orchestration where it affects invocation or results.",
+        "Each Factory has one copy-ready invocation executed exactly as shown against the current binary, with real output pasted or directly behaviorally asserted and reviewer-visible execution evidence retained.",
+        "Expected output guidance distinguishes generated branch or candidate results from the single synthesized, merged, or champion result returned to the caller.",
         "Typecheck passes",
-        "Tests pass"
+        "Tests pass, including make docs-reference-smoke"
       ],
       "priority": 4,
       "passes": true,
-      "notes": "Added a built-process functional test that redirects terminal replay-only JSON stdout to a file, parses every non-empty line, verifies canonical event ordering, one final complete replay-summary with matching eventsEmitted, and separate verbose stderr diagnostics without cancellation. Added the canonical sessions reference workflow covering redirect-safe NDJSON, ACTIVE versus terminal completeness, and --follow conflict. Focused CLI tests, docs-reference-smoke, make verify-fast, UI lint/typecheck, pkg-file-count, pkg-structure, and vet pass; added focused replay-read edge tests to keep the Worker Sessions service at 99.0% coverage above its 98.72% minimum; make lint/pkg-maint retain the pre-existing constructor.go 1037-line backend-size violation."
+      "notes": "Added distinct operator-ready entries for @you/deep-research, @you/spawn, @you/quorum, and @you/tournament using the shared seven-part contract. Documented isolated current-binary signatures, every worker role and provider/model override, JavaScript read-only policy bounds, quorum Graph Work/merge behavior, task-count and round bounds, intermediate versus primary output, and operator-default fallback. Executed the deep-research JSON smoke and quorum invocation exactly as shown against a freshly rebuilt current-source bin/you.exe with isolated HOME/USERPROFILE state; deep-research completed with the documented structured primary result and quorum returned mock worker accepted. Replaced the invalid sole spawn and tournament worked examples with successful current-binary runs: spawn with model-provider codex and count 2 returned `merged travel answer`, and tournament with competitor/judge model-provider codex and rounds 1 returned the champion plus `Tournament decision trail:` and `Round 1, match 1: more complete`. Both used a deterministic local codex executable first on PATH with isolated HOME/USERPROFILE; the invalid count=15 and rounds=4 invocations remain explicitly labeled additional bound checks. Existing provider-command functional assertions passed for successful exact-count spawn merging and tournament champion/decision-trail output. make docs-reference-smoke, focused packaged-factory functional tests, make verify-fast, and git diff --check pass. The docs explicitly distinguish generic mock limitations from provider-backed planner/judge protocol evidence."
+    },
+    {
+      "id": "wo-d1-packaged-factories-docs-005",
+      "title": "Document local text-to-speech behavior",
+      "description": "As an operator, I want one worked @you/tts guide so I know its local-model prerequisite, accepted input, worker/provider constraints, artifact behavior, and returned result before requesting audio.",
+      "acceptanceCriteria": [
+        "The @you/tts entry satisfies the common entry contract and accurately describes text input, packaged local TTS worker/provider behavior, model-readiness prerequisite, generated audio artifact, and primary output shape.",
+        "The entry does not imply that general inference-provider role overrides are accepted when absent from the live signature and routes model setup detail to the canonical models reference rather than duplicating it.",
+        "Its copy-ready invocation is executed exactly as shown against the current binary in an environment with the documented prerequisite, with real output pasted or directly behaviorally asserted and reviewer-visible execution evidence retained.",
+        "The expected-output section tells operators how to identify the returned result and produced audio without claiming a fixed path, format, or message that the current binary did not produce.",
+        "Typecheck passes",
+        "Tests pass, including make docs-reference-smoke"
+      ],
+      "priority": 5,
+      "passes": true,
+      "notes": "Added the complete @you/tts operator entry with its live text-only signature, local tts-executor role, OMNIVOICE_Q4_K_M/LLAMACPP readiness prerequisite, side effects, and runtime-generated audio artifact result shape. Corrected the pre-existing packaged workstation prompt template to read the bound Work ID from PromptData inputs and regenerated the packaged catalog; this was required for a successful real invocation and does not change the public contract. Executed `you run --named @you/tts --no-record --output primary --to \"The release is ready.\"` exactly as documented against the current binary with a disposable READY model cache and controlled local runtime; the run returned audio/wav metadata, backend, trace ID, and a readable audio artifact. The existing TestPackagedTTSRequiredInputProducesAudioArtifactMetadata assertion covers the public result and artifact behavior. `make docs-reference-smoke`, `make packaged-factory-catalog-check`, the focused TTS tests, `make verify-fast`, and `git diff --check` pass."
+    },
+    {
+      "id": "wo-d1-packaged-factories-docs-006",
+      "title": "Document @you/subagent as a bounded read-only call",
+      "description": "As an operator, I want a complete worked @you/subagent reference so I can delegate one bounded read-only task and consume its primary result without discovering invocation semantics in production.",
+      "acceptanceCriteria": [
+        "The entry states that @you/subagent runs one bounded read-only worker task and returns that worker's normalized primary result; it does not imply recursive orchestration, workspace mutation, or an ongoing agent session.",
+        "The documented signature matches live help for request binding and every supported optional provider, model, and reasoning-effort input, identifies the single subagent worker role, and explains operator-default fallback for omitted values.",
+        "One copy-ready invocation is executed exactly as shown against the current binary and successfully returns a representative result; real output is pasted or directly behaviorally asserted and reviewer-visible execution evidence is retained.",
+        "The expected-output section distinguishes the primary result from runtime or session metadata and explains relevant human-readable or structured-output selection without inventing an unsupported flag or response envelope.",
+        "Typecheck passes",
+        "Tests pass, including make docs-reference-smoke"
+      ],
+      "priority": 6,
+      "passes": true,
+      "notes": "Added the complete @you/subagent operator entry using the shared seven-part contract. Documented its bounded read-only purpose, request binding, exact live signature, single subagent-worker role, optional worker-provider/worker-model/worker-reasoning-effort overrides, operator/provider-default fallback, runtime/session side effects, primary-result output shape, failure behavior, and the distinction between mock smoke evidence and provider-generated prose. Executed the exact structured example against the current bin/you.exe with isolated HOME/USERPROFILE state; it returned a COMPLETED invocation with a text primaryResult of mock worker accepted and runtime request/trace metadata. The existing TestPackagedSubagentReturnsChildResult assertion provides direct public-CLI proof of child-result propagation and hermetic no-server success."
     }
   ]
 }
