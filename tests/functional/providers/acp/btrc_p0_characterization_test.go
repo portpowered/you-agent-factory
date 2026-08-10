@@ -26,6 +26,8 @@ var btrcACPEventOrder = []factoryapi.FactoryEventType{
 	factoryapi.FactoryEventTypeDispatchResponse,
 }
 
+const btrcACPCompletionCeiling = 20 * time.Second
+
 func TestBTRCP0ACPTargetSuccessCharacterization(t *testing.T) {
 	run := runBTRCP0ACPTarget(t, "1")
 	if run.starts != 1 {
@@ -67,10 +69,16 @@ func runBTRCP0ACPTarget(t *testing.T, mode string) btrcACPTargetRun {
 	t.Setenv(acpHelperEnvironment, mode)
 
 	var starts atomic.Int32
+	// The helper ACP process is the injected command/protocol edge, so it has
+	// no in-process completion callback for this test to await. The root-built
+	// continuous process is positively synchronized by the public terminal
+	// Factory Session observation inside this helper; this ceiling is only a
+	// bounded failure guard for a broken helper or runtime, not a sleep/polling
+	// synchronization mechanism.
 	session, listed, events, responseEvents := support.RunFactoryToCompletionWithEdgesAndResponseEvents(t, dir, serviceedges.Edges{
 		PlatformProcessCommandFactory: acpHelperCommandFactory(&starts),
 		ProvidersExecutableLocator:    availableExecutableLocator{},
-	}, 20*time.Second)
+	}, btrcACPCompletionCeiling)
 	return btrcACPTargetRun{session: session, listed: listed, events: events, responseEvents: responseEvents, starts: starts.Load()}
 }
 

@@ -41,6 +41,8 @@
 - When broad functional coverage reports a cancellation-observation failure, rerun the failed lane and isolate the named test before changing an unrelated feature; parallel-suite failures can move between existing durability/restart tests while isolated runs pass.
 - When a functional coverage job reports a missing evidence artifact, inspect the earlier test output first; the missing artifact can be a secondary symptom of the primary test failure.
 - For cross-repository PRs, resolve review and CI state with an explicit owner/repository and compare local, fork-branch, and PR head SHAs; current-branch discovery may follow a different local origin.
+- New functional scenarios must use an allowed product-domain noun plus subsection path such as `tests/functional/factory/batch`; transport names like `cli` and internal implementation names like `factory_runtime` are not durable domain cells.
+- Ordered functional provider outcomes can use `support.NewShapedProviderCommandRunner` with queued provider-native `CommandResult` values, including a later non-zero result, while preserving the real command-runner edge and typed provider classification.
 
 ## 2026-08-09 13:12 - wo-d1-packaged-factories-docs-001
 - What was implemented
@@ -75,7 +77,6 @@
   - After `bun install --frozen-lockfile` in `ui/`, `make verify-fast` passed: dashboard typecheck, MCP contract boundary, 355 UI files / 2,970 tests, and the short Go suite.
 - **Learnings for future iterations:**
 - This checkout may have `ui/node_modules` without all lockfile dependencies; run the pinned Bun install before treating a typecheck failure as a source regression.
----
 ## 2026-08-10 04:32 -07:00 - sac-s0-2-pkg-boundary-ignores-001
 - What was implemented
   - Centralized repository-root-relative pruning for `.artifacts`, `.artifacts/bootstrap/worktrees`, generated transient worktrees, and the supported root worktree locations.
@@ -1553,4 +1554,47 @@
 - **Learnings for future iterations:**
   - The hosted/service success contract is intentionally not a terminal live Factory Session result: continuous Petri sessions stay IDLE, so `/result` returns typed NOT_FOUND while dispatch response, terminal Work, and progress are the stable service result.
   - Moving a functional scenario into an approved domain/subsection can preserve its package-private fixture helpers when the destination owns the same workstation behavior.
+---
+## 2026-08-10 08:10 -07:00 - btrc-p0-characterization review follow-up
+- What was implemented
+  - Addressed the blocking PR gate feedback by moving the batch characterization to `tests/functional/factory/batch/` and both one-shot characterizations to `tests/functional/factory/invocation/`, clearing the ratcheted functional package-structure violations.
+  - Replaced the batch-specific in-process `ProviderOverride` with the existing `ProviderCommandRunner` edge and queued shaped command results; success remains two accepted dispatches and the failure case now observes the real command-edge `permanent_bad_request` classification on the second work.
+  - Added an in-code explanation for the ACP completion ceiling: public terminal Factory Session observation is the positive synchronization, while the duration is only a bounded failure guard around an out-of-process protocol edge.
+  - Added an observable runtime-preservation acceptance criterion to story `btrc-p0-characterization-001` and reconciled its notes and all moved test paths in `prd.json`.
+- Files changed
+  - `tests/functional/factory/batch/batch_characterization_test.go`
+  - `tests/functional/factory/invocation/characterization_test.go`
+  - `tests/functional/factory/invocation/btrc_p0_cancellation_characterization_test.go`
+  - `tests/functional/providers/acp/btrc_p0_characterization_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/factory/batch -count=3 -v -timeout 300s` — passed.
+  - `go test ./tests/functional/factory/invocation -count=3 -v -timeout 300s` — passed.
+  - `go test ./tests/functional/providers/acp -run '^TestBTRCP0ACPTarget(Success|ProtocolFailure)Characterization$' -count=3 -v -timeout 300s` — passed.
+  - `make pkg-structure` — passed with no new violations.
+  - `go vet ./tests/functional/factory/batch ./tests/functional/factory/invocation ./tests/functional/providers/acp` — passed.
+  - `git diff --check` — passed.
+  - Parsed `prd.json` reports zero stories with `passes:false`.
+- **Learnings for future iterations:**
+  - The prior PR head’s Backend Functional Coverage failure was an unrelated flaky `runtime_api` log assertion (`TestFunctionalAPIServer_RuntimeLogDirectoryIsAProcessInput`); the required local characterization and structure gates remain green, so rerun CI after publishing before changing unrelated runtime-api behavior.
+  - `gh pr view` confirmed current `upstream/main` is already the PR base and the PR is mergeable; compare the explicit base/head SHAs before creating a needless merge commit.
+---
+## 2026-08-10 08:16 -07:00 - btrc-p0-characterization review verification follow-up
+- What was implemented
+  - Completed the local review-gate verification after the path, edge, ACP documentation, and PRD acceptance updates; no production behavior or public/generated contract changed.
+- Files changed
+  - No additional tracked files.
+- Verification
+  - `make test` — passed.
+  - `make backend-size` — passed.
+  - `make pkg-maint` — passed.
+  - `make pkg-file-count` — passed.
+  - `make pkg-structure` — passed.
+  - `make vet` — passed.
+  - `make typecheck` — passed.
+  - Hosted characterization repeated twice — passed.
+  - The previously failing `TestFunctionalAPIServer_RuntimeLogDirectoryIsAProcessInput` repeated three times locally — passed.
+- **Learnings for future iterations:**
+  - The prior GitHub functional-coverage failure is reproducible as a transient baseline failure rather than a deterministic source failure; fresh CI after this head is the authoritative check.
 ---

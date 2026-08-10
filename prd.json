@@ -31,11 +31,12 @@
         "Documented totals and source-to-row reconciliation make omissions and duplicate rows reviewer-visible without adding a production or test-time filesystem inventory checker.",
         "The matrix is published before all characterization is complete and remains reconciled with authoritative current main for P1 and other parallel consumers.",
         "No destination introduces a generic factory, locator, callback injector, compatibility graph, service-valued operation bag, or exposed private owner state.",
+        "The current root-built runtime behavior remains observable through the characterization suite: its literal Factory Event and terminal-result assertions pass against the ownership inputs documented by this matrix.",
         "Typecheck passes"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Published docs/internal/packaged-service-structure/runtime-opening-ownership-matrix.md. It reconciles all 44 grouped dependency fields, 15 ExternalEffects fields, 38 deferred construction/callback roles, and 13 late completion/attachment/binding operations with one classification, one target owner or deletion, lifecycle/cleanup responsibility, retirement packet, and reviewer-visible source totals. No production or inventory-checker code changed."
+      "notes": "Published docs/internal/packaged-service-structure/runtime-opening-ownership-matrix.md. It reconciles all 44 grouped dependency fields, 15 ExternalEffects fields, 38 deferred construction/callback roles, and 13 late completion/attachment/binding operations with one classification, one target owner or deletion, lifecycle/cleanup responsibility, retirement packet, and reviewer-visible source totals. The batch, hosted, replay, one-shot, ACP, direct JavaScript, standalone, cancellation, partial-opening, and isolation characterization stories provide the behavioral evidence that the current root-built runtime remains unchanged while this matrix is used by P1. No production or inventory-checker code changed."
     },
     {
       "id": "btrc-p0-characterization-002",
@@ -52,7 +53,7 @@
       ],
       "priority": 2,
       "passes": true,
-      "notes": "Added tests/functional/factory_runtime/root_composition/batch_characterization_test.go. Root-built Process.Execute runs a two-work parent/child batch through a capacity-one resource fixture and an injected provider edge; tests assert the literal 20-event success/partial-failure order, request/relation and work counts, stable ~default session and dispatch-to-Worker-Session identities, terminal per-work states, typed permanent_bad_request classification, no stranded work, and the current SUCCEEDED/FINAL aggregate session projection. Repeated focused runs pass without sleeps, network, or live providers."
+      "notes": "Added tests/functional/factory/batch/batch_characterization_test.go. Root-built Process.Execute runs a two-work parent/child batch through a capacity-one resource fixture and the existing ProviderCommandRunner edge; tests assert the literal 20-event success/partial-failure order, request/relation and work counts, stable ~default session and dispatch-to-Worker-Session identities, terminal per-work states, typed permanent_bad_request classification, no stranded work, and the current SUCCEEDED/FINAL aggregate session projection. Repeated focused runs pass without sleeps, network, or live providers."
     },
     {
       "id": "btrc-p0-characterization-003",
@@ -103,7 +104,7 @@
       ],
       "priority": 5,
       "passes": true,
-      "notes": "Added tests/functional/cli/one_shot/characterization_test.go. Root-built Process.Execute runs deterministic one-work factories through an injected Codex-shaped ProviderCommandRunner and a recorded response-stream invocation. Tests assert the literal 14-event success/provider-failure order, request/trace/work/dispatch/session correlation, complete primary-result projection, terminal SUCCEEDED/FINAL session publication, typed failed dispatch metadata, failed InvocationResponse/runtime error, exactly one provider attempt, and exactly one invocation_result. Repeated focused and race runs pass; no production behavior or public/generated contract changed."
+      "notes": "Added tests/functional/factory/invocation/characterization_test.go. Root-built Process.Execute runs deterministic one-work factories through an injected Codex-shaped ProviderCommandRunner and a recorded response-stream invocation. Tests assert the literal 14-event success/provider-failure order, request/trace/work/dispatch/session correlation, complete primary-result projection, terminal SUCCEEDED/FINAL session publication, typed failed dispatch metadata, failed InvocationResponse/runtime error, exactly one provider attempt, and exactly one invocation_result. Repeated focused and race runs pass; no production behavior or public/generated contract changed."
     },
     {
       "id": "btrc-p0-characterization-006",
@@ -172,7 +173,7 @@
       ],
       "priority": 9,
       "passes": true,
-      "notes": "Added tests/functional/cli/one_shot/btrc_p0_cancellation_characterization_test.go, pkg/services/factory_sessions/internal/runtimeopening/models_bind_test.go, and pkg/services/factory_sessions/internal/ondemandtarget/target_execution_test.go. The root-built one-shot cancellation test uses an injected blocking command edge and freezes the exact 13-event cancellation artifact (including both currently observed adjacent MODEL_RESPONSE/FACTORY_STATE_RESPONSE order variants), typed CANCELED/INVOCATION_CANCELED response and process error, one terminal response-stream record, one provider attempt, and idempotent repeated Stop. Runtime-opening characterization records models → worker → late Automations failure → reverse worker/models cleanup, no Factory Runtime assembly call, and joined initiating/cleanup errors with exactly-once cleanup. Concurrent target characterization proves one canceled target is replaced under its opaque identity while a second blocked target completes unchanged, with per-target result/session/request identities, isolated cleanup, and idempotent repeated cancel/close. Focused repeat and race tests pass; no production behavior or public/generated contract changed."
+      "notes": "Added tests/functional/factory/invocation/btrc_p0_cancellation_characterization_test.go, pkg/services/factory_sessions/internal/runtimeopening/models_bind_test.go, and pkg/services/factory_sessions/internal/ondemandtarget/target_execution_test.go. The root-built one-shot cancellation test uses an injected blocking command edge and freezes the exact 13-event cancellation artifact (including both currently observed adjacent MODEL_RESPONSE/FACTORY_STATE_RESPONSE order variants), typed CANCELED/INVOCATION_CANCELED response and process error, one terminal response-stream record, one provider attempt, and idempotent repeated Stop. Runtime-opening characterization records models → worker → late Automations failure → reverse worker/models cleanup, no Factory Runtime assembly call, and joined initiating/cleanup errors with exactly-once cleanup. Concurrent target characterization proves one canceled target is replaced under its opaque identity while a second blocked target completes unchanged, with per-target result/session/request identities, isolated cleanup, and idempotent repeated cancel/close. Focused repeat and race tests pass; no production behavior or public/generated contract changed."
     }
   ]
 }

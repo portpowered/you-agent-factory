@@ -1,17 +1,15 @@
 package root_composition_test
 
 import (
-	"context"
 	"encoding/json"
-	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
 	"sort"
-	"sync"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -56,7 +54,7 @@ func TestBTRCP0BatchSuccessCharacterization(t *testing.T) {
 	if executeErr != nil {
 		t.Fatalf("Process.Execute(batch) error = %v", executeErr)
 	}
-	if got := provider.callCount(); got != 2 {
+	if got := provider.CallCount(); got != 2 {
 		t.Fatalf("injected provider calls = %d, want 2", got)
 	}
 
@@ -74,7 +72,7 @@ func TestBTRCP0BatchPartialFailureCharacterization(t *testing.T) {
 	if executeErr != nil {
 		t.Fatalf("Process.Execute(partial batch) error = %v", executeErr)
 	}
-	if got := provider.callCount(); got != 2 {
+	if got := provider.CallCount(); got != 2 {
 		t.Fatalf("injected provider calls = %d, want 2", got)
 	}
 
@@ -117,7 +115,7 @@ func btrcBatchRequest() work.WorkRequest {
 func runBTRCBatch(
 	t *testing.T,
 	request work.WorkRequest,
-	provider workerexecution.Provider,
+	provider platformprocess.CommandRunner,
 ) (*interfaces.ReplayArtifact, error) {
 	t.Helper()
 
@@ -132,7 +130,7 @@ func runBTRCBatch(
 	}
 	artifactPath := filepath.Join(t.TempDir(), "batch.replay.json")
 
-	process := support.BuildProcess(t, serviceedges.Edges{ProviderOverride: provider})
+	process := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: provider})
 	support.CleanupProcess(t, process)
 	homeDir := t.TempDir()
 	inputs := support.FakeInputs(t.Context(), []string{
@@ -484,49 +482,19 @@ func assertBTRCBatchTerminalSession(t *testing.T, events []interfaces.FactoryEve
 	}
 }
 
-type btrcBatchProvider struct {
-	mu         sync.Mutex
-	calls      []workerexecution.ProviderInferenceRequest
-	failSecond bool
-}
-
-func newBTRCBatchProvider(failSecond bool) *btrcBatchProvider {
-	return &btrcBatchProvider{failSecond: failSecond}
-}
-
-func (p *btrcBatchProvider) Infer(
-	_ context.Context,
-	request workerexecution.ProviderInferenceRequest,
-) (workerexecution.InferenceResponse, error) {
-	p.mu.Lock()
-	p.calls = append(p.calls, request)
-	callNumber := len(p.calls)
-	p.mu.Unlock()
-
-	if p.failSecond && callNumber == 2 {
-		return workerexecution.InferenceResponse{}, workerexecution.NewProviderError(
-			workerexecution.WorkFailureTypePermanentBadRequest,
-			"provider rejected the request",
-			errors.New("invalid request"),
-		)
+func newBTRCBatchProvider(failSecond bool) *support.ShapedProviderCommandRunner {
+	results := []platformprocess.CommandResult{
+		{Stdout: []byte("processed. COMPLETE")},
+		{Stdout: []byte("processed. COMPLETE")},
 	}
-	return workerexecution.InferenceResponse{
-		Content: "processed. COMPLETE",
-		Diagnostics: &workerexecution.WorkDiagnostics{
-			Metadata: map[string]string{
-				workerexecution.ProviderResponseMetadataCompletionEvidence: "provider_response",
-			},
-		},
-	}, nil
+	if failSecond {
+		results[1] = platformprocess.CommandResult{
+			ExitCode: 1,
+			Stderr:   []byte("ERROR: unexpected status 400 Bad Request: invalid request"),
+		}
+	}
+	return support.NewShapedProviderCommandRunner(results...)
 }
-
-func (p *btrcBatchProvider) callCount() int {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return len(p.calls)
-}
-
-var _ workerexecution.Provider = (*btrcBatchProvider)(nil)
 
 func btrcStringPointerValue(value *string) string {
 	if value == nil {
