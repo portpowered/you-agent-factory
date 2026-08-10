@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
@@ -173,5 +174,22 @@ func TestInstallPackagedFactory_ReclaimsOnlyRevalidatedOrphan(t *testing.T) {
 	}
 	if !foundReclaim {
 		t.Fatalf("reclaimed-orphan diagnostic missing: %#v", logger.snapshot())
+	}
+	foundAcquired := false
+	for _, entry := range logger.snapshot() {
+		if entry.fields["outcome"] != "acquired" {
+			continue
+		}
+		if entry.fields["backend_scope_id"] != "local-orphan-scope" {
+			t.Fatalf("recovered acquisition diagnostic = %#v, want scope", entry.fields)
+		}
+		resource, ok := entry.fields["resource"].(string)
+		if !ok || !strings.Contains(resource, "-recovered-") {
+			t.Fatalf("recovered acquisition resource = %#v, want recovery lease", entry.fields["resource"])
+		}
+		foundAcquired = true
+	}
+	if !foundAcquired {
+		t.Fatalf("recovered acquired diagnostic missing: %#v", logger.snapshot())
 	}
 }
