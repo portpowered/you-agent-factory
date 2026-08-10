@@ -133,6 +133,18 @@
 - **Learnings for future iterations:**
   - Keep the root count aligned with the canonical fifteen-entry catalog, but continue placing detailed Factory guidance in `docs/reference/packaged-factories.md`.
 ---
+## [2026-08-10 15:15 -07:00] - thr-split-acp-stdio-tests-003 CI follow-up
+- What was implemented
+  - Investigated the initial PR CI failure and confirmed it was an unrelated intermittent failure in `tests/functional/workers/mock/TestPlainBatchDrainPreservesFiniteAndContinuousCounterexamples/continuous_idle`; the ACP stdio split does not touch that package or runtime path.
+  - Reran the failed GitHub Actions jobs without source changes. Run `31436174213` completed successfully, including Backend Functional Coverage and Verification Policy.
+- Files changed
+  - `progress.txt`
+- Verification
+  - The isolated failing functional test passed locally with `go test -run '^TestPlainBatchDrainPreservesFiniteAndContinuousCounterexamples$' -count=1 -v ./tests/functional/workers/mock`.
+  - GitHub Actions retry `https://github.com/portpowered/you-agent-factory/actions/runs/31436174213` — passed.
+- **Learnings for future iterations:**
+  - When a broad functional lane fails on a test outside the changed package, run that exact test locally and retry the failed CI job before introducing unrelated fixes.
+---
 
 ## 2026-08-09 13:20 - wo-d1-packaged-factories-docs-001 lint follow-up
 - What was implemented
