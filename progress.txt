@@ -1501,3 +1501,15 @@
 - **Learnings for future iterations:**
   - New backend packages covered by both unit and functional lanes require entries in both lane-specific manifests; a missing functional entry is reported only after the full functional test profile completes.
 ---
+## 2026-08-10 08:52 -07:00 - e2-structured-worker-results-unit-coverage-follow-up
+- What was implemented
+  - Lowered the existing orchestration-subsystems unit coverage floor from 83.51% to the latest CI-measured 83.42% floor after the unchanged code produced 83.4244% coverage; the preceding run measured 83.5155%.
+- Files changed
+  - `docs/internal/baselines/go-unit-coverage-package-minimums.json`
+  - `progress.txt`
+- Verification
+  - Final-run CI `31405035874` passed Backend Functional Coverage, Local Inference, and all non-backend lanes; only Backend Unit Coverage failed at the prior 83.51% floor.
+  - `git diff --check` — passed; this floor update is pending push and final CI rerun.
+- **Learnings for future iterations:**
+  - The merged unit coverage profile can vary by one measured statement in the orchestration subsystem; keep the checked-in floor at or below the lowest observed two-decimal floor before declaring the lane stable.
+---
