@@ -49,8 +49,8 @@
         "Tests pass"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented detached structured-result prompt rendering, optional prompt-contract metadata and absence diagnostics, plus root BuildProcess/Process.Execute functional coverage for nested objects and arrays."
     },
     {
       "id": "e2-structured-worker-results-003",

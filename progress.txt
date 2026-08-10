@@ -8,6 +8,7 @@
 - Planner and cycle-control workflows likewise need protocol-valid structured model output to exercise generated Work, concurrency, or replanning; an empty generic mock can prove only the terminal invocation envelope and may leave orchestration Work uncreated.
 - JavaScript packaged Factories that parse planner or judge output need protocol-valid provider-command evidence; the CLI `--with-mock-workers` path returns generic text for those child calls, so use focused provider-runner assertions plus a provider-free schema-bound CLI smoke and document the distinction.
 - Workstation prompt templates receive `PromptData`; access a bound work identifier through `(index .Inputs N).WorkID` rather than a root `.WorkID` field.
+- Prompt templates should clone native structured-result trees at the `TokenData` boundary and guard optional-result references before execution so absent upstream handoffs cannot silently fall back to payload text.
 - Run-level `--quiet` cannot be combined with structured `--json` or `--output`; verify output-mode combinations against the live CLI before documenting them.
 - For direct named packaged Factory invocations, bind inputs in authored workstation bodies with `${parameter}` interpolation; `.Inputs` payload can be empty even when the named CLI argument is present.
 - Multi-input packaged Factories must give required parameters non-ambiguous invocation bindings; the ACP reachability guard requires each required parameter to expose a text-carrying route, while authored validation rejects routing stdin to multiple parameters.
@@ -787,5 +788,34 @@
   - `jsonschema.UnmarshalJSON` uses `json.Number`; preserving that type avoids numeric precision/type drift across durable event and checkpoint boundaries.
   - Optional JSON fields need both a native value and a presence bit when JSON null must survive custom marshaling and generated `omitempty` mappings.
   - Shared clone/marshal mechanics belong in `pkg/platform` rather than adding exported utility functions to a service root; `pkg-structure` enforces that boundary.
-  - Static output-schema validation must leave invocation interpolations and existing legacy `.json` schema references for their later resolution path while validating inline schemas immediately.
+- Static output-schema validation must leave invocation interpolations and existing legacy `.json` schema references for their later resolution path while validating inline schemas immediately.
+---
+
+## 2026-08-10 06:15 -07:00 - e2-structured-worker-results-002
+- What was implemented
+  - Exposed detached native `StructuredResult` values in workstation `TokenData`, preserving nested objects, arrays, scalars, and explicit JSON null presence without falling back to payload or artifact text.
+  - Added prompt-contract metadata for optional `.Inputs[n].StructuredResult` access and a runtime AST guard that reports an input-specific diagnostic when a template uses an absent upstream result.
+  - Added focused prompt-renderer and contract tests for nested object/array access, detached ownership, and missing-result behavior.
+  - Added a root `BuildProcess`/`Process.Execute` functional test proving a schema-valid upstream response reaches the actual downstream provider prompt.
+- Files changed
+  - `pkg/services/workers/internal/services/workstations/prompting/prompt.go`
+  - `pkg/services/workers/internal/services/workstations/prompting/prompt_contract.go`
+  - `pkg/services/workers/internal/services/workstations/prompting/prompt_contract_structured_result.go`
+  - `pkg/services/workers/internal/services/workstations/prompting/prompt_docs.go`
+  - `pkg/services/workers/internal/services/workstations/prompting/prompt_test.go`
+  - `pkg/services/workers/internal/services/workstations/prompting/prompt_contract_test.go`
+  - `tests/functional/workstations/execution/structured_result_prompt_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/workers/internal/services/workstations/prompting -count=1` — passed.
+  - `go test ./pkg/services/workers/... -count=1` — passed.
+  - `go test -tags functionallong ./tests/functional/workstations/execution -run '^TestStructuredResultFlowsIntoDownstreamPromptThroughRootBuildProcess$' -count=1 -v -timeout 120s` — passed.
+  - `make backend-size`, `make pkg-maint`, `make pkg-file-count`, and `make pkg-structure` — passed.
+  - `make typecheck` and `make verify-fast` — passed, including the short UI and Go suites.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - The runtime token already carried structured results; the prompt `TokenData` projection was the boundary where downstream templates lost them.
+  - Optional-result availability needs a separate prompt-render validation pass because the general template contract cannot know which runtime inputs contain a result.
+  - Functional Codex JSON responses must not include a configured worker stop token when the response is schema JSON; use a schema-only worker fixture so the JSON can be parsed as the complete result.
 ---
