@@ -29,6 +29,8 @@
 - Persistent CLI globals are authored once on the root stable input ID; family manifests that project inherited inputs must mirror that ID, and the committed CLI inventory baseline should be refreshed through its repository update test.
 - Placement dispatch belongs at the CLI transport boundary: normalize once, pass the request to exactly one injected local or HTTP adapter, and preserve remote failures without local retry.
 - Listener-owned inputs belong in the detached run/server family manifest as local flags; resolve `--listen` to `BindHost`/`Port`/`AutoPort` at the CLI boundary and emit legacy `--server` migration warnings only for commands that actually own a listener.
+- Custom `run` flag parsing happens inside the command handler, so relationship checks for local run flags must execute after parsing; use a raw pre-initialization guard as well when the initializer itself is a side effect.
+- Placement conflicts should use the same typed `ErrorResponse` contract at every validation boundary so flag ordering has one stable code, family, and actionable message.
 
 ## 2026-08-09 13:12 - wo-d1-packaged-factories-docs-001
 - What was implemented
@@ -863,4 +865,33 @@
   - Listener-owned inputs belong in the detached run/server family manifest as local flags; resolve `--listen` to `BindHost`/`Port`/`AutoPort` at the CLI boundary and emit legacy `--server` migration warnings only for commands that actually own a listener.
   - Exact listener lifecycle tests should assert readiness and shutdown through the returned process state; this avoids arbitrary sleeps while still catching unavailable-port failures.
   - The remaining story owns the `--remote` plus local-hosting conflict validation and its final migration guidance; do not fold that work into listener compatibility changes.
+---
+
+## 2026-08-10 06:59 -07:00 - dwro-s1-remote-placement-flags-004
+- What was implemented
+  - Added stable `REMOTE_LOCAL_HOSTING_CONFLICT` bad-request validation before system initialization and after custom run input parsing, covering persistent flags before or after `run` and both local hosting modes.
+  - Authored conflict relationships, executable help/example guidance, local `--listen` versus remote `--server` vocabulary, and legacy migration documentation; regenerated contract artifacts and CLI baselines.
+  - Added behavioral assertions for stable JSON output and zero run, remote, browser, listener, and system-initialization side effects.
+- Files changed
+  - `README.md`
+  - `contracts/cli/commands.json`
+  - `docs/reference/{run,sessions}.md`
+  - `packages/api/generated/{cli/commands.json,manifest.json}`
+  - `pkg/services/factory_runtime/transports/cli/invocation_error.go`
+  - `pkg/transports/cli/{baseline/testdata/run_flags.txt,baseline/testdata/run_help.txt,climanifest/run_submit_validation.go,climanifest/run_submit_validation_test.go,generated/family_manifests_gen.go,root_factory.go,root_remote_placement_test.go,root_work.go,run/invocation_error.go}`
+  - `tests/functional/smoke/cli_docs_smoke_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/transports/cli ./pkg/transports/cli/climanifest ./pkg/services/factory_runtime/transports/cli`
+  - `go test ./pkg/transports/cli/baseline -count=1`
+  - `make test`
+  - `make verify-fast` (typecheck, MCP contract boundary, 191 Bun tests, 2,970 Vitest tests, and short Go suite)
+  - `make cli-manifest-check`
+  - `make contracts-check`
+  - `make docs-reference-smoke`
+  - `git diff --check`
+- **Learnings for future iterations:**
+  - Custom `run` flag parsing happens inside `RunE`, so pre-run relationship metadata cannot observe local flags; early raw-argv validation plus post-parser validation keeps errors side-effect-free and order-independent.
+  - On Windows, timed-out `make`/unitlane shells can outlive the tool timeout and contend on Go build files; inspect and clean only the identified child process tree before rerunning verification.
 ---
