@@ -890,3 +890,19 @@
   - Root-relative ignore policies need paired positive fixtures under production `pkg`; testing ignored paths alone cannot prove that nested artifact/worktree-like directories remain visible.
   - Existing `make pkg-boundary` subprocess tests provide a stable way to verify the public checker entry path against temporary repository fixtures.
 ---
+
+## 2026-08-10 06:00 -07:00 - pf-batch-submit-diagnostics review follow-up
+- What was implemented
+  - Refactored the relation endpoint functional assertion into a focused helper so the test remains below the repository's 100-line backend-size limit.
+  - Replaced the newly added `UseMockWorkers` functional scenarios with a worker-free Factory fixture because admission and dry-run validation do not execute workers.
+  - Preserved the valid relation submission and public CLI diagnostic coverage through `root.BuildProcess` and `Process.Execute`.
+- Files changed
+  - `tests/functional/work/transports/cli/submit/batch_contract/batch_contract_test.go`
+  - `tests/functional/work/transports/cli/submit/batch_contract/helpers_test.go`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/work/transports/cli/submit/batch_contract -count=1 -timeout 900s -v` — passed.
+- **Learnings for future iterations:**
+  - Admission-only functional scenarios should use a minimal Factory definition without workers; reserve `UseMockWorkers` for tests that actually own or exercise worker execution.
+  - Moving repeated observable marker checks into responsibility-aligned helpers keeps functional test cases below backend-size thresholds without weakening behavior assertions.
+---

@@ -134,8 +134,15 @@ func successSubmitBatchFactoryConfig() map[string]any {
 	}
 }
 
-func duplicateSubmitBatchFactoryConfig() map[string]any {
+func batchAdmissionFactoryConfig() map[string]any {
 	config := successSubmitBatchFactoryConfig()
+	delete(config, "workers")
+	delete(config, "workstations")
+	return config
+}
+
+func duplicateSubmitBatchFactoryConfig() map[string]any {
+	config := batchAdmissionFactoryConfig()
 	config["workTypes"] = append(config["workTypes"].([]map[string]any), map[string]any{
 		"name": "story",
 		"states": []map[string]any{
@@ -143,13 +150,6 @@ func duplicateSubmitBatchFactoryConfig() map[string]any {
 			{"name": "complete", "type": "TERMINAL"},
 			{"name": "failed", "type": "FAILED"},
 		},
-	})
-	config["workstations"] = append(config["workstations"].([]map[string]any), map[string]any{
-		"name":      "process-story",
-		"worker":    "mock-worker",
-		"inputs":    []map[string]string{{"workType": "story", "state": "init"}},
-		"outputs":   []map[string]string{{"workType": "story", "state": "complete"}},
-		"onFailure": []map[string]string{{"workType": "story", "state": "failed"}},
 	})
 	return config
 }
@@ -213,6 +213,24 @@ func assertSubmitBatchJSONSuccess(t *testing.T, submitted batchContractSubmitJSO
 	}
 	if strings.TrimSpace(work.WorkID) == "" {
 		t.Fatalf("submit batch JSON missing accepted workId: %#v", work)
+	}
+}
+
+func assertRelationEndpointDiagnostic(t *testing.T, diagnostic, endpoint, value, source, target string) {
+	t.Helper()
+	for _, marker := range []string{
+		"relations[0]",
+		`relation type "DEPENDS_ON"`,
+		`sourceWorkName "` + source + `"`,
+		`targetWorkName "` + target + `"`,
+		"endpoint " + endpoint + "=\"" + value + "\"",
+		"missing from this batch",
+		"relation endpoints must name Work declared in this batch",
+		"add the named Work to works[] or correct " + endpoint,
+	} {
+		if !strings.Contains(diagnostic, marker) {
+			t.Fatalf("diagnostic missing %q:\n%s", marker, diagnostic)
+		}
 	}
 }
 

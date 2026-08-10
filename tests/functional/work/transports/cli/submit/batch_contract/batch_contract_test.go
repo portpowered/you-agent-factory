@@ -51,8 +51,7 @@ func TestCLISubmitBatchDryRunEmitsSummaryWithoutMutation(t *testing.T) {
 func TestCLISubmitBatchDuplicateNameDiagnosticIsActionableAndAtomic(t *testing.T) {
 	factoryDir := support.ScaffoldFactory(t, duplicateSubmitBatchFactoryConfig())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:     factoryDir,
-		UseMockWorkers: true,
+		FactoryDir: factoryDir,
 	})
 	defer server.Stop(t)
 
@@ -125,10 +124,9 @@ func TestCLISubmitBatchDuplicateNameDiagnosticIsActionableAndAtomic(t *testing.T
 // endpoints are rejected in live human, live structured, and dry-run modes,
 // including when the target name belongs to an earlier submission.
 func TestCLISubmitBatchRelationEndpointDiagnosticIsActionableAndAtomic(t *testing.T) {
-	factoryDir := support.ScaffoldFactory(t, successSubmitBatchFactoryConfig())
+	factoryDir := support.ScaffoldFactory(t, batchAdmissionFactoryConfig())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:     factoryDir,
-		UseMockWorkers: true,
+		FactoryDir: factoryDir,
 	})
 	defer server.Stop(t)
 
@@ -197,20 +195,7 @@ func TestCLISubmitBatchRelationEndpointDiagnosticIsActionableAndAtomic(t *testin
 				t.Fatal("relation endpoint submission succeeded")
 			}
 			diagnostic := err.Error() + "\n" + stderr
-			for _, marker := range []string{
-				"relations[0]",
-				`relation type "DEPENDS_ON"`,
-				`sourceWorkName "` + test.source + `"`,
-				`targetWorkName "` + test.target + `"`,
-				"endpoint " + test.endpoint + "=\"" + test.value + "\"",
-				"missing from this batch",
-				"relation endpoints must name Work declared in this batch",
-				"add the named Work to works[] or correct " + test.endpoint,
-			} {
-				if !strings.Contains(diagnostic, marker) {
-					t.Fatalf("diagnostic missing %q:\n%s", marker, diagnostic)
-				}
-			}
+			assertRelationEndpointDiagnostic(t, diagnostic, test.endpoint, test.value, test.source, test.target)
 			if test.additional != "" && !strings.Contains(diagnostic, test.additional) {
 				t.Fatalf("diagnostic missing %q:\n%s", test.additional, diagnostic)
 			}
