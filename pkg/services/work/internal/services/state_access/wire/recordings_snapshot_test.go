@@ -345,3 +345,91 @@ func TestWorkStateCategorySkipsNonMatchingWorkTypes(t *testing.T) {
 		t.Fatalf("workStateCategory = %q, want processing", category)
 	}
 }
+
+func TestReadSnapshotFromFactoryWorldStateUsesFailedDispatchAndFailureDetailArtifactFacts(t *testing.T) {
+	t.Parallel()
+
+	topology := interfaces.InitialStructurePayload{
+		WorkTypes: []interfaces.FactoryWorkType{{
+			ID: "story", ExpectedArtifacts: []work.ExpectedArtifactDeclaration{{Name: "report", Pattern: "report.txt"}},
+		}},
+		Workstations: []interfaces.FactoryWorkstation{{
+			ID: "review", Name: "review", InputPlaceIDs: []string{"story:review"},
+			ExpectedArtifacts: []work.ExpectedArtifactDeclaration{{Name: "manifest", Pattern: "manifest.json"}},
+		}},
+	}
+	failedDispatchItem := work.FactoryWorkItem{ID: "failed-dispatch", WorkTypeID: "story", DisplayName: "failed dispatch", State: "review"}
+	failureDetailItem := work.FactoryWorkItem{ID: "failed-detail", WorkTypeID: "story", DisplayName: "failed detail", State: "review"}
+	state := interfaces.FactoryWorldState{
+		Topology:      topology,
+		WorkItemsByID: map[string]work.FactoryWorkItem{failedDispatchItem.ID: failedDispatchItem, failureDetailItem.ID: failureDetailItem},
+		FailedDispatches: []interfaces.FactoryWorldDispatchCompletion{{
+			DispatchID: "dispatch-failed", TransitionID: "review", Workstation: interfaces.FactoryWorkstationRef{ID: "review", Name: "review"},
+			WorkItemIDs: []string{failedDispatchItem.ID}, Result: interfaces.WorkstationResult{Outcome: string(workerexecution.OutcomeAccepted)},
+		}},
+		FailureDetailsByWorkID: map[string]interfaces.FactoryWorldFailureDetail{
+			failureDetailItem.ID: {
+				DispatchID: "dispatch-detail", TransitionID: "review", WorkstationName: "review", WorkItem: failureDetailItem,
+				ExpectedArtifactContext: &work.ExpectedArtifactTemplateContext{Project: "project-7", SessionID: "session-9"},
+				ArtifactVerification: &workerexecution.ExpectedArtifactVerification{Entries: []workerexecution.ExpectedArtifactVerificationEntry{{
+					Name: "manifest", Pattern: "manifest.json", Reason: workerexecution.ExpectedArtifactVerificationReasonEmpty,
+				}}},
+			},
+		},
+	}
+
+	snapshot := readSnapshotFromFactoryWorldState(state)
+	byID := make(map[string]work.ReadModel, len(snapshot.Items))
+	for _, item := range snapshot.Items {
+		byID[item.WorkID] = item
+	}
+	if got := byID[failedDispatchItem.ID].ExpectedArtifacts; len(got) != 2 || got[0].Verification != work.ExpectedArtifactVerificationSatisfied || got[1].Verification != work.ExpectedArtifactVerificationSatisfied {
+		t.Fatalf("failed-dispatch artifacts = %#v", got)
+	}
+	if got := byID[failureDetailItem.ID].ExpectedArtifacts; len(got) != 2 || got[0].Verification != work.ExpectedArtifactVerificationSatisfied || got[1].Verification != work.ExpectedArtifactVerificationFailed || got[1].Reason == nil {
+		t.Fatalf("failure-detail artifacts = %#v", got)
+	}
+}
+
+func TestWorldArtifactProjectionCoversFallbackBranches(t *testing.T) {
+	t.Parallel()
+
+	fallback := work.FactoryWorkItem{ID: "fallback", WorkTypeID: "story", DisplayName: "fallback"}
+	if got := worldExpectedArtifactInputs(nil, fallback); len(got) != 1 || got[0].WorkID != fallback.ID {
+		t.Fatalf("fallback inputs = %#v", got)
+	}
+	if got := worldArtifactObservation(nil); got.Verified || len(got.Entries) != 0 {
+		t.Fatalf("nil observation = %#v, want empty", got)
+	}
+	if got := worldArtifactObservationFromResult(workerexecution.WorkstationResult{Outcome: string(workerexecution.OutcomeFailed)}); got.Verified {
+		t.Fatalf("failed nil-verification observation = %#v, want pending", got)
+	}
+	if got := worldWorkstationArtifactDeclarations(interfaces.InitialStructurePayload{}, "missing", "missing"); got != nil {
+		t.Fatalf("missing workstation declarations = %#v, want nil", got)
+	}
+
+	input := work.FactoryWorkItem{ID: "input"}
+	if !worldDispatchContainsWork(nil, []interfaces.WorkstationInput{{WorkItem: &input}}, nil, nil, input.ID) {
+		t.Fatal("workstation input did not identify Work")
+	}
+	if !worldDispatchContainsWork(nil, nil, []work.FactoryWorkItem{input}, nil, input.ID) {
+		t.Fatal("input Work item did not identify Work")
+	}
+	if !worldDispatchContainsWork(nil, nil, nil, []work.FactoryWorkItem{input}, input.ID) {
+		t.Fatal("output Work item did not identify Work")
+	}
+	if worldDispatchContainsWork(nil, nil, nil, nil, input.ID) {
+		t.Fatal("empty dispatch incorrectly identified Work")
+	}
+
+	topology := interfaces.InitialStructurePayload{
+		Workstations: []interfaces.FactoryWorkstation{{
+			Name: "review", InputPlaceIDs: []string{"story:review"},
+			ExpectedArtifacts: []work.ExpectedArtifactDeclaration{{Name: "review", Pattern: "review.txt"}},
+		}},
+	}
+	got := worldCandidateWorkstationArtifactDeclarations(work.FactoryWorkItem{WorkTypeID: "story", State: "review"}, topology)
+	if len(got) != 1 || got[0].Name != "review" {
+		t.Fatalf("candidate workstation declarations = %#v", got)
+	}
+}
