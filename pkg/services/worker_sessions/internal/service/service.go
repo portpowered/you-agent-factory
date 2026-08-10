@@ -659,7 +659,7 @@ func (s *replayObservationSubscription) noteTerminalRecord(records []events.Reco
 		return
 	}
 	for _, record := range records {
-		if record.SourceType == lifecycleSourceType && record.SourceSequence >= terminalSourceSequence {
+		if isTerminalLifecycleRecord(record) {
 			s.terminalRecordSeen = true
 			return
 		}
@@ -692,7 +692,7 @@ func cloneEventRecords(records []events.Record) []events.Record {
 
 func observationRecordDelivery(record events.Record, terminalReplay bool) workersessions.ObservationDelivery {
 	event := projectObservationEvent(record)
-	if record.SourceType == lifecycleSourceType && record.SourceSequence >= terminalSourceSequence {
+	if isTerminalLifecycleRecord(record) {
 		kind := workersessions.ObservationDeliveryTerminal
 		if terminalReplay {
 			kind = workersessions.ObservationDeliveryTerminalReplay

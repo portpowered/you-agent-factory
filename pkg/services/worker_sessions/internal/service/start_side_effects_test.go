@@ -131,6 +131,12 @@ func TestStart_OpeningRecordCarriesCanonicalExecutionCorrelation(t *testing.T) {
 	if liveDraft.Kind != workers.KindSession || liveDraft.Phase != workers.PhaseStarted {
 		t.Fatalf("opening draft = %+v, want SESSION/STARTED", liveDraft)
 	}
+	if liveDraft.Provenance.Delivery != workers.DeliverySynthesized ||
+		liveDraft.Provenance.Representation != workers.RepresentationNotification ||
+		liveDraft.Provenance.Fidelity != workers.FidelityLifecycleOnly ||
+		liveDraft.Provenance.Provider != workers.RunnerIDCodex {
+		t.Fatalf("opening provenance = %#v, want synthesized codex lifecycle provenance", liveDraft.Provenance)
+	}
 	if livePayload.StartedAt == nil || !livePayload.StartedAt.Equal(startedAt) {
 		t.Fatalf("startedAt = %v, want injected clock value %v", livePayload.StartedAt, startedAt)
 	}
@@ -736,6 +742,111 @@ func TestStart_TerminalRecordFollowsPublishedWorkerOutput(t *testing.T) {
 	}
 	if terminal.Kind != workers.KindSession || terminal.Phase != workers.PhaseCompleted {
 		t.Fatalf("record[2] = %+v, want Kind=SESSION Phase=COMPLETED", terminal)
+	}
+}
+
+// TestStart_CanonicalProviderOutputBindsBeforePublication proves the
+// provider-native canonical path obeys the same opening barrier as translated
+// progress: when the opening has no provider identity, Worker Sessions emits
+// one synthesized SESSION/UPDATED binding before the first provider output,
+// and the synthesized terminal record remains last.
+func TestStart_CanonicalProviderOutputBindsBeforePublication(t *testing.T) {
+	eventsSvc := newEventsAppender()
+	var svc workersessions.Service
+	forwarded := 0
+	publisher := workersessions.NewProviderSessionObservationPublisher(func(workers.ProgressFragment) {
+		forwarded++
+	})
+	execution := &fakeExecution{
+		dispatch: func(ctx context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+			payload, marshalErr := json.Marshal(workers.MessagePayload{
+				Role:          "assistant",
+				ContentBlocks: []workers.ContentBlock{{Kind: workers.ContentBlockText, Text: "canonical"}},
+			})
+			if marshalErr != nil {
+				t.Fatalf("marshal canonical payload error = %v", marshalErr)
+			}
+			canonical := workers.Draft{
+				Kind:       workers.KindMessage,
+				Phase:      workers.PhaseCompleted,
+				DispatchID: req.Execution.Dispatch.DispatchID,
+				Provenance: workers.Provenance{Provider: "codex", NativeEventType: "message.completed", Delivery: workers.DeliveryNativeFinal, Representation: workers.RepresentationSnapshot, Fidelity: workers.FidelityFinalOnly},
+				Payload:    payload,
+			}
+			if validateErr := workers.ValidateDraft(canonical); validateErr != nil {
+				t.Fatalf("ValidateDraft(canonical) error = %v", validateErr)
+			}
+			publisher.Publish(workers.CanonicalDraftFragment(req.Execution.Dispatch.DispatchID, canonical))
+			return workers.WorkstationDispatchResult{
+				DispatchID: req.Execution.Dispatch.DispatchID,
+				Result: workers.WorkResult{
+					DispatchID: req.Execution.Dispatch.DispatchID,
+					Outcome:    workers.OutcomeAccepted,
+				},
+			}, nil
+		},
+	}
+	var err error
+	svc, err = newService(executionBoundary{execution: execution}, eventsSvc, nil)
+	if err != nil {
+		t.Fatalf("service.New() error = %v, want nil", err)
+	}
+	publisher.Bind(svc)
+	ctx := context.Background()
+	publisher.Publish(workers.CanonicalDraftFragment("dispatch-canonical", workers.Draft{
+		Kind:       workers.KindProgress,
+		Phase:      workers.PhaseUpdated,
+		DispatchID: "dispatch-canonical",
+		Provenance: workers.Provenance{Provider: "codex", NativeEventType: "progress.updated", Delivery: workers.DeliveryNativeStream, Representation: workers.RepresentationNotification, Fidelity: workers.FidelityNormalized},
+		Payload:    []byte(`{"label":"too-early"}`),
+	}))
+	if forwarded != 0 {
+		t.Fatalf("pre-opening canonical output forwarded=%d, want rejection before opening", forwarded)
+	}
+	if _, err := svc.InvokeSession(ctx, validStartRequest("worker-canonical", "dispatch-canonical")); err != nil {
+		t.Fatalf("InvokeSession() error = %v, want nil", err)
+	}
+
+	read, err := eventsSvc.Read(ctx, events.ReadRequest{
+		Topic: workersessions.Topic("worker-canonical"),
+		From:  events.Cursor{Topic: workersessions.Topic("worker-canonical")},
+		Limit: 10,
+	})
+	if err != nil {
+		t.Fatalf("Read() error = %v, want nil", err)
+	}
+	if len(read.Records) != 4 || forwarded != 1 {
+		t.Fatalf("records=%d forwarded=%d, want opening/binding/output/terminal and one downstream output", len(read.Records), forwarded)
+	}
+
+	opening := decodeDraft(t, read.Records[0])
+	binding := decodeDraft(t, read.Records[1])
+	output := decodeDraft(t, read.Records[2])
+	terminal := decodeDraft(t, read.Records[3])
+	if opening.Kind != workers.KindSession || opening.Phase != workers.PhaseStarted ||
+		opening.Provenance.Delivery != workers.DeliverySynthesized ||
+		opening.Provenance.Representation != workers.RepresentationNotification ||
+		opening.Provenance.Fidelity != workers.FidelityLifecycleOnly || opening.Provenance.Provider != "" {
+		t.Fatalf("opening = %#v, want provider-neutral synthesized lifecycle provenance", opening)
+	}
+	if binding.Kind != workers.KindSession || binding.Phase != workers.PhaseUpdated ||
+		binding.Provenance.Delivery != workers.DeliverySynthesized ||
+		binding.Provenance.Representation != workers.RepresentationNotification ||
+		binding.Provenance.Fidelity != workers.FidelityLifecycleOnly || binding.Provenance.Provider != "codex" {
+		t.Fatalf("binding = %#v, want codex synthesized lifecycle binding", binding)
+	}
+	bindingPayload := decodeSessionPayload(t, binding)
+	if bindingPayload.ProviderSelection == nil || bindingPayload.ProviderSelection.RunnerID != "codex" {
+		t.Fatalf("binding payload = %#v, want codex provider selection", bindingPayload)
+	}
+	if output.Kind != workers.KindMessage || output.Provenance.Provider != "codex" {
+		t.Fatalf("output = %#v, want codex provider output after binding", output)
+	}
+	if terminal.Kind != workers.KindSession || terminal.Phase != workers.PhaseCompleted ||
+		terminal.Provenance.Delivery != workers.DeliverySynthesized ||
+		terminal.Provenance.Representation != workers.RepresentationNotification ||
+		terminal.Provenance.Fidelity != workers.FidelityLifecycleOnly || terminal.Provenance.Provider != "codex" {
+		t.Fatalf("terminal = %#v, want terminal-last synthesized codex lifecycle record", terminal)
 	}
 }
 

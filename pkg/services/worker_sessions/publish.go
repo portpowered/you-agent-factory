@@ -121,7 +121,11 @@ func (p *ProviderSessionObservationPublisher) Publish(fragment workers.ProgressF
 	// not see it twice, and it declines the duplicate itself -- see
 	// responsebridge's carriedByWorkerSession -- because it is the only
 	// consumer that also reads the Worker topic.
-	if isWorkerAuthoredFragment(fragment) {
+	if draft, ok := canonicalDraftFromFragment(fragment); ok {
+		if !p.publishCanonicalWorkerRecord(observer, fragment, draft) {
+			return
+		}
+	} else if isWorkerAuthoredFragment(fragment) {
 		p.publishWorkerRecord(observer, fragment)
 	}
 	if next != nil {
@@ -141,12 +145,117 @@ func isWorkerAuthoredFragment(fragment workers.ProgressFragment) bool {
 	}
 }
 
+func canonicalDraftFromFragment(fragment workers.ProgressFragment) (workers.Draft, bool) {
+	var draft workers.Draft
+	switch value := fragment.CanonicalDraft.(type) {
+	case workers.Draft:
+		draft = workers.CloneDraft(value)
+	case *workers.Draft:
+		if value == nil {
+			return workers.Draft{}, false
+		}
+		draft = workers.CloneDraft(*value)
+	default:
+		return workers.Draft{}, false
+	}
+	if draft.Kind == "" {
+		return workers.Draft{}, false
+	}
+	if draft.DispatchID == "" {
+		draft.DispatchID = strings.TrimSpace(fragment.DispatchID)
+	}
+	return draft, true
+}
+
+func providerIdentityForFragment(fragment workers.ProgressFragment, draft *workers.Draft) string {
+	if draft != nil {
+		if provider := strings.TrimSpace(draft.Provenance.Provider); provider != "" {
+			return provider
+		}
+	}
+	if reference := fragment.ProviderSessionReference; reference != nil {
+		if provider := strings.TrimSpace(reference.Provider.String()); provider != "" {
+			return provider
+		}
+	}
+	if metadata := fragment.ProviderSessionRef; metadata != nil {
+		return strings.TrimSpace(metadata.Provider)
+	}
+	return ""
+}
+
+func providerIdentityAgrees(fragment workers.ProgressFragment, draft workers.Draft) bool {
+	provider := strings.TrimSpace(draft.Provenance.Provider)
+	if provider == "" {
+		return true
+	}
+	if reference := fragment.ProviderSessionReference; reference != nil &&
+		strings.TrimSpace(reference.Provider.String()) != "" &&
+		!strings.EqualFold(provider, strings.TrimSpace(reference.Provider.String())) {
+		return false
+	}
+	if metadata := fragment.ProviderSessionRef; metadata != nil && strings.TrimSpace(metadata.Provider) != "" &&
+		!strings.EqualFold(provider, strings.TrimSpace(metadata.Provider)) {
+		return false
+	}
+	return true
+}
+
+func ensureProviderBinding(
+	observer Service,
+	req ProviderBindingRequest,
+) (ProviderBindingResult, error) {
+	binding, ok := observer.(ProviderBindingService)
+	if !ok {
+		return ProviderBindingResult{}, ErrProviderBindingAttemptMismatch
+	}
+	return binding.EnsureProviderBinding(context.Background(), req)
+}
+
+func resolveWorkerSessionID(observer Service, dispatchID string) (string, error) {
+	if resolver, ok := observer.(WorkerSessionDispatchResolver); ok {
+		return resolver.WorkerSessionIDForDispatch(context.Background(), dispatchID)
+	}
+	return strings.TrimSpace(dispatchID), nil
+}
+
+func (p *ProviderSessionObservationPublisher) publishCanonicalWorkerRecord(
+	observer Service,
+	fragment workers.ProgressFragment,
+	draft workers.Draft,
+) bool {
+	sessionID := strings.TrimSpace(fragment.DispatchID)
+	if observer == nil || sessionID == "" || draft.DispatchID == "" || !providerIdentityAgrees(fragment, draft) {
+		return false
+	}
+	if provider := providerIdentityForFragment(fragment, &draft); provider != "" {
+		binding, err := ensureProviderBinding(observer, ProviderBindingRequest{
+			DispatchID: sessionID,
+			Provider:   provider,
+		})
+		if err != nil {
+			p.reportRejectedRecord(sessionID, draft, err)
+			return false
+		}
+		if binding.WorkerSessionID != "" {
+			sessionID = binding.WorkerSessionID
+		}
+	} else if resolved, err := resolveWorkerSessionID(observer, sessionID); err != nil {
+		p.reportRejectedRecord(sessionID, draft, err)
+		return false
+	} else {
+		sessionID = resolved
+	}
+	p.publishWorkerDraft(observer, sessionID, draft)
+	return true
+}
+
 // publishWorkerRecord commits one Worker-authored observation to that Worker
 // Session's topic.
 //
-// The Worker Session id is the dispatch id (see Factory Runtime's
-// startThroughWorkerSessions), so the fragment already names the session it
-// belongs to and no separate correlation is needed.
+// The fragment names the current Workers dispatch. The bound Worker Sessions
+// service resolves that attempt to the stable Worker Session topic before the
+// record is appended.
 //
 // A rejected record loses that record and nothing else: Publish has a
 // no-return signature by design, and one malformed or late observation must
@@ -165,7 +274,35 @@ func (p *ProviderSessionObservationPublisher) publishWorkerRecord(
 	if !ok {
 		return
 	}
+	if provider := providerIdentityForFragment(fragment, &draft); provider != "" {
+		binding, err := ensureProviderBinding(observer, ProviderBindingRequest{
+			DispatchID: sessionID,
+			Provider:   provider,
+		})
+		if err != nil {
+			p.reportRejectedRecord(sessionID, draft, err)
+			return
+		}
+		if binding.WorkerSessionID != "" {
+			sessionID = binding.WorkerSessionID
+		}
+	} else if resolved, err := resolveWorkerSessionID(observer, sessionID); err != nil {
+		p.reportRejectedRecord(sessionID, draft, err)
+		return
+	} else {
+		sessionID = resolved
+	}
+	p.publishWorkerDraft(observer, sessionID, draft)
+}
 
+func (p *ProviderSessionObservationPublisher) publishWorkerDraft(
+	observer Service,
+	sessionID string,
+	draft workers.Draft,
+) {
+	if observer == nil || strings.TrimSpace(sessionID) == "" {
+		return
+	}
 	p.records.Lock()
 	defer p.records.Unlock()
 	if p.sequences == nil {
@@ -315,6 +452,43 @@ type PublishRecordResult struct {
 	Outcome           PublishOutcome
 }
 
+// ProviderBindingRequest carries the provider identity learned at the
+// Workers dispatch boundary. Provider is an explicit provider identity from a
+// canonical draft or trusted provider metadata; Worker Sessions never derives
+// it from a Provider Session's opaque ID.
+type ProviderBindingRequest struct {
+	DispatchID string
+	Provider   string
+}
+
+// Validate reports whether the dispatch and provider identities are present.
+// The registry resolves the dispatch to its owning Worker Session.
+func (req ProviderBindingRequest) Validate() error {
+	if strings.TrimSpace(req.DispatchID) == "" || strings.TrimSpace(req.Provider) == "" {
+		return ErrInvalidProviderBinding
+	}
+	return nil
+}
+
+// ProviderBindingOutcome distinguishes a newly emitted binding record from
+// a provider identity already established by the opening or an earlier
+// binding call.
+type ProviderBindingOutcome string
+
+const (
+	ProviderBindingOutcomeAccepted  ProviderBindingOutcome = "ACCEPTED"
+	ProviderBindingOutcomeDuplicate ProviderBindingOutcome = "DUPLICATE"
+)
+
+// ProviderBindingResult is detached evidence of the provider identity known
+// for one Worker Session dispatch.
+type ProviderBindingResult struct {
+	WorkerSessionID string
+	DispatchID      string
+	Provider        string
+	Outcome         ProviderBindingOutcome
+}
+
 // draftFromProgressFragment converts one Workers progress observation into the
 // source-native workers.Draft that gets committed to the Worker Session topic.
 //
@@ -361,7 +535,9 @@ func draftFromProgressFragment(fragment workers.ProgressFragment) (workers.Draft
 	draft := workers.Draft{
 		Kind:         kind,
 		Phase:        phase,
+		Provenance:   progressDraftProvenance(fragment),
 		Payload:      encoded,
+		DispatchID:   strings.TrimSpace(fragment.DispatchID),
 		ItemID:       strings.TrimSpace(fragment.Metadata["item_id"]),
 		ParentItemID: progressDraftParentItemID(kind, fragment.Metadata),
 	}
@@ -374,6 +550,24 @@ func draftFromProgressFragment(fragment workers.ProgressFragment) (workers.Draft
 		return workers.Draft{}, false
 	}
 	return draft, true
+}
+
+func progressDraftProvenance(fragment workers.ProgressFragment) workers.Provenance {
+	provider := providerIdentityForFragment(fragment, nil)
+	if provider == "" {
+		return workers.Provenance{}
+	}
+	nativeType := strings.TrimSpace(fragment.Type)
+	if nativeType == "" {
+		nativeType = strings.TrimSpace(fragment.Metadata["native_type"])
+	}
+	return workers.Provenance{
+		Delivery:        workers.DeliveryNativeStream,
+		Fidelity:        workers.FidelityNormalized,
+		NativeEventType: nativeType,
+		Provider:        provider,
+		Representation:  workers.RepresentationNotification,
+	}
 }
 
 // progressFactVocabulary resolves the fact's Kind and Phase from whichever of

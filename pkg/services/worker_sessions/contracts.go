@@ -145,6 +145,21 @@ type Service interface {
 	Terminate(ctx context.Context, req ControlRequest) (ControlResult, error)
 }
 
+// ProviderBindingService is the optional Worker Sessions publication-boundary
+// capability used by the provider-output bridge. Keeping it separate from
+// Service preserves the existing test and integration seams that only need
+// observation, control, or ordinary source-record publication.
+type ProviderBindingService interface {
+	EnsureProviderBinding(context.Context, ProviderBindingRequest) (ProviderBindingResult, error)
+}
+
+// WorkerSessionDispatchResolver is the optional dispatch-to-session lookup
+// capability used when a Workers fragment names an attempt dispatch rather
+// than the stable Worker Session identity.
+type WorkerSessionDispatchResolver interface {
+	WorkerSessionIDForDispatch(context.Context, string) (string, error)
+}
+
 // ReserveRequest asks Service to reserve one new Worker Session identity.
 type ReserveRequest struct {
 	ID string
@@ -465,6 +480,12 @@ var (
 	// SourceSequence that regresses behind one already accepted for the same
 	// (SourceType, SourceID). No record is committed.
 	ErrOutOfOrderPublication = errors.New("worker session: source sequence is out of order")
+	// ErrInvalidProviderBinding reports a missing dispatch or provider identity
+	// at the provider-output publication boundary.
+	ErrInvalidProviderBinding = errors.New("worker session: invalid provider binding")
+	// ErrProviderBindingAttemptMismatch reports a provider identity observed
+	// for a dispatch Worker Sessions does not currently supervise.
+	ErrProviderBindingAttemptMismatch = errors.New("worker session: provider binding attempt mismatch")
 	// ErrInvalidProviderSessionAssociation reports a malformed Worker Sessions
 	// association correlation. Invalid provider, kind, or opaque Provider
 	// Session identity retains the more specific Providers-owned typed error.

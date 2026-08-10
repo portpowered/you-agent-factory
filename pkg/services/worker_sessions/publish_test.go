@@ -238,6 +238,7 @@ func TestProviderSessionObservationRequest_Validate(t *testing.T) {
 type workerRecordSpy struct {
 	workersessions.Service
 	published []workersessions.PublishRecordRequest
+	bindings  []workersessions.ProviderBindingRequest
 }
 
 func (s *workerRecordSpy) ObserveProviderSession(
@@ -251,6 +252,48 @@ func (s *workerRecordSpy) PublishRecord(
 ) (workersessions.PublishRecordResult, error) {
 	s.published = append(s.published, req)
 	return workersessions.PublishRecordResult{}, nil
+}
+
+func (s *workerRecordSpy) EnsureProviderBinding(
+	_ context.Context,
+	req workersessions.ProviderBindingRequest,
+) (workersessions.ProviderBindingResult, error) {
+	s.bindings = append(s.bindings, req)
+	return workersessions.ProviderBindingResult{
+		WorkerSessionID: "worker-1",
+		DispatchID:      req.DispatchID,
+		Provider:        req.Provider,
+		Outcome:         workersessions.ProviderBindingOutcomeAccepted,
+	}, nil
+}
+
+// TestPublish_CanonicalDraftBindsBeforeWorkerOutput proves canonical provider
+// drafts use the Worker Sessions-owned binding capability before the draft is
+// committed and still reach the downstream response publisher exactly once.
+func TestPublish_CanonicalDraftBindsBeforeWorkerOutput(t *testing.T) {
+	spy := &workerRecordSpy{}
+	forwarded := 0
+	publisher := workersessions.NewProviderSessionObservationPublisher(func(workers.ProgressFragment) {
+		forwarded++
+	})
+	publisher.Bind(spy)
+	publisher.Publish(workers.CanonicalDraftFragment("worker-1", workers.Draft{
+		Kind:       workers.KindMessage,
+		Phase:      workers.PhaseCompleted,
+		DispatchID: "worker-1",
+		Provenance: workers.Provenance{Provider: "codex", NativeEventType: "message.completed", Delivery: workers.DeliveryNativeFinal, Representation: workers.RepresentationSnapshot, Fidelity: workers.FidelityFinalOnly},
+		Payload:    []byte(`{"role":"assistant","contentBlocks":[{"kind":"TEXT","text":"done"}]}`),
+	}))
+
+	if len(spy.bindings) != 1 || spy.bindings[0].Provider != "codex" || spy.bindings[0].DispatchID != "worker-1" {
+		t.Fatalf("provider bindings = %#v, want one codex binding before output", spy.bindings)
+	}
+	if len(spy.published) != 1 || spy.published[0].Draft.Kind != workers.KindMessage || spy.published[0].Draft.Provenance.Provider != "codex" {
+		t.Fatalf("published canonical records = %#v, want one codex MESSAGE record", spy.published)
+	}
+	if forwarded != 1 {
+		t.Fatalf("forwarded canonical fragments = %d, want exactly one", forwarded)
+	}
 }
 
 // TestPublish_CommitsWorkerOutputAsValidRecordsAndStillForwards pins both

@@ -64,6 +64,7 @@ func (r *registry) InvokeSession(ctx context.Context, req workersessions.InvokeS
 		req.ID,
 		attemptID,
 		openingSessionPayload(req.ID, attemptID, startedAt, req.Execution.Execution),
+		providerIdentityForExecution(req.Execution.Execution),
 	); err != nil {
 		terminal := failedTerminal(workersessions.FailureCauseEventPublicationFailure, safeDetail(workersessions.FailureCauseEventPublicationFailure, nil))
 		final, committed := r.commitTerminal(req.ID, workersessions.StateFailed, terminal)
@@ -277,8 +278,9 @@ func retryableDispatchResult(result workers.WorkstationDispatchResult) bool {
 }
 
 // observation is the registry-owned timing and Work correlation captured at
-// the Worker Sessions lifecycle boundary. Provider identity is deliberately
-// read from the Session association rather than duplicated here.
+// the Worker Sessions lifecycle boundary. Provider Session association remains
+// its own exact resumability fact; resolved provider identity is carried by
+// the lifecycle record's provenance instead.
 type observation struct {
 	workIDs   []string
 	turnID    string
@@ -358,6 +360,25 @@ func openingSessionPayload(
 		}
 	}
 	return payload
+}
+
+// providerIdentityForExecution returns only a provider identity already
+// resolved by the Workers execution request. It deliberately does not choose
+// a default runner: an empty result means the provider can be learned from a
+// later provider-authored record and must then be bound before that output is
+// committed.
+func providerIdentityForExecution(request workers.WorkstationExecutionRequest) string {
+	runner := strings.TrimSpace(request.RunnerID)
+	if runner != "" && !strings.EqualFold(runner, workers.ExecutorProviderACP) && !strings.EqualFold(runner, "SCRIPT_WRAP") {
+		return runner
+	}
+	if identity, err := workers.RunnerIdentityForWorker(request.ExecutorProvider, request.ModelProvider); err == nil && strings.TrimSpace(identity) != "" {
+		return strings.TrimSpace(identity)
+	}
+	if request.ResumeSession != nil {
+		return strings.TrimSpace(string(request.ResumeSession.Provider))
+	}
+	return ""
 }
 
 func timeValue(value time.Time) *time.Time {
@@ -745,7 +766,7 @@ func (s *observationSubscription) Next(ctx context.Context) workersessions.Obser
 	switch delivery.Kind {
 	case events.DeliveryRecord:
 		event := projectObservationEvent(delivery.Record)
-		if delivery.Record.SourceType == lifecycleSourceType && delivery.Record.SourceSequence >= terminalSourceSequence {
+		if isTerminalLifecycleRecord(delivery.Record) {
 			s.closeSource()
 			s.mu.Lock()
 			terminalReplay := s.terminalReplay

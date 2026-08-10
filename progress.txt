@@ -16,6 +16,7 @@
 - Verify documented named-Factory commands against isolated live `you run --named ... --help`; role-pinned provider/model defaults should be documented as fixed policy when no override flags are exposed.
 
 - Worker Session finite streams can use the injected Events `Read` contract with the first retained head as a snapshot boundary; replay-only paths must not call `Subscribe`.
+- Provider progress bridges name the current attempt dispatch; resolve that dispatch through Worker Sessions before publishing onto the stable Worker Session topic.
 - Capture the Worker Session start timestamp once at the observation boundary and reuse that exact value in the lifecycle opening payload; calling the injected clock separately for projection and publication breaks live/replay identity.
 - Lifecycle metadata uses optional pointers/`omitempty` and exact typed continuation values; unknown provider, Factory, recording, and capability facts must stay absent instead of being inferred from runner or model defaults.
 - Authored OpenAPI and CLI contracts generate their Go, TypeScript, published metadata, and family-manifest consumers; update the source contract first, then run the repository generators and drift checks.
@@ -796,4 +797,32 @@
 - **Learnings for future iterations:**
   - The canonical resolved `WorkstationExecutionRequest` is the shared handoff for Petri and JavaScript paths; add optional lifecycle facts there, clone pointer values at the boundary, and let Worker Sessions publish them once.
   - The API smoke drift guard expects generated files to be clean relative to HEAD, so run it again after the intentional generated artifacts are committed or compare generator output against the worktree deliberately.
+---
+## 2026-08-10 05:29 -07:00 - wsr-001-opening-record-002
+- What was implemented
+  - Added Worker Sessions-owned synthesized lifecycle provenance to opening, provider-binding, and terminal records: `SYNTHESIZED`, `NOTIFICATION`, and `LIFECYCLE_ONLY`; resolved provider identity is retained on the opening when known.
+  - Added an idempotent provider-binding lifecycle boundary for provider identity learned after opening. The first binding is a `SESSION/UPDATED` record committed through the same Events append path before dependent provider output.
+  - Updated the Worker progress bridge to publish canonical provider drafts, resolve attempt dispatch IDs to stable Worker Session topics, preserve explicit provider provenance, and suppress canonical output that arrives before its required opening/binding.
+  - Made lifecycle stream/replay terminal detection identify the terminal event explicitly so the provider-binding `SESSION/UPDATED` record cannot close the stream early.
+- Files changed
+  - `pkg/services/worker_sessions/contracts.go`
+  - `pkg/services/worker_sessions/publish.go`
+  - `pkg/services/worker_sessions/publish_test.go`
+  - `pkg/services/worker_sessions/internal/service/invoke_session.go`
+  - `pkg/services/worker_sessions/internal/service/publish_record.go`
+  - `pkg/services/worker_sessions/internal/service/service.go`
+  - `pkg/services/worker_sessions/internal/service/start_side_effects_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/worker_sessions/... -p 1 -count=1 -timeout=90s` — passed.
+  - `go test ./pkg/services/factory_runtime/... -p 1 -count=1 -timeout=120s` — passed.
+  - `go test -race ./pkg/services/worker_sessions/internal/service ./pkg/services/worker_sessions -run 'TestStart_CanonicalProviderOutputBindsBeforePublication|TestProviderSessionObservationPublisher|TestPublish_CanonicalDraftBindsBeforeWorkerOutput' -count=1 -timeout=90s` — passed.
+  - `go vet ./pkg/services/worker_sessions/...` — passed.
+  - `go test ./pkg/services/workers/... -p 1 -run '^$' -count=1 -timeout=120s` — compile-only pass; the full workers package still has the pre-existing generated-schema staging failure noted below.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - Provider output fragments carry attempt dispatch IDs, while Worker Session Events topics use stable session IDs; the bridge must resolve the dispatch owner before calling `PublishRecord`.
+  - Provider binding needs a separate Events source identity from the historical opening/terminal lifecycle source so terminal source sequences remain compatible while aggregate order is still serialized by the publication lock.
+  - The broad `pkg/services/workers/internal/interface` schema-contract test currently reports stale `packages/api/generated/manifest.json` and `packages/api/generated/openapi/openapi.yaml` in addition to its expected mock-workers schema drift; these files were clean and unrelated in this worktree.
 ---

@@ -51,8 +51,8 @@
         "Tests pass."
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Worker Sessions now stamps opening and terminal drafts with synthesized notification/lifecycle-only provenance and carries the resolved provider on the opening when known. The provider-output bridge resolves attempt dispatches to stable Worker Session topics, publishes canonical drafts through the same Events path, and emits one SESSION/UPDATED provider binding when provider identity is first learned after opening. Focused publisher and real in-memory Events tests prove pre-opening rejection, opening/binding/output/terminal ordering, exactly-once binding, terminal-last history, and one downstream forwarding; Worker Sessions tests, factory-runtime tests, race tests, and vet pass."
     },
     {
       "id": "wsr-001-opening-record-003",

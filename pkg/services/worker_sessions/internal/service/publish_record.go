@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/portpowered/infinite-you/pkg/services/events"
@@ -52,6 +53,13 @@ type publication struct {
 	// an identity never accepted before is subject to the out-of-order
 	// rejection below.
 	accepted map[events.AppendIdentity]struct{}
+	// provider is the provider identity established by the opening record or
+	// the first provider-bound lifecycle update. It is guarded by mu and is
+	// intentionally separate from the optional Provider Session association.
+	provider string
+	// turnID is retained only to correlate a provider-bound SESSION/UPDATED
+	// record when the opening did not yet know the provider.
+	turnID string
 }
 
 // publicationFor returns the publication registered for id, or nil if id was
@@ -98,6 +106,21 @@ func (r *registry) PublishRecord(ctx context.Context, req workersessions.Publish
 	if !pub.open {
 		r.logger.Info("worker session publish record rejected", "sessionID", req.SessionID, "outcome", "publication_not_open")
 		return workersessions.PublishRecordResult{}, workersessions.ErrPublicationNotOpen
+	}
+	if provider := strings.TrimSpace(req.Draft.Provenance.Provider); provider != "" && pub.provider == "" {
+		dispatchID := strings.TrimSpace(req.Draft.DispatchID)
+		if dispatchID == "" {
+			return workersessions.PublishRecordResult{}, workersessions.ErrInvalidProviderBinding
+		}
+		r.mu.RLock()
+		ownerID, exists := r.dispatchOwners[dispatchID]
+		r.mu.RUnlock()
+		if !exists || ownerID != req.SessionID {
+			return workersessions.PublishRecordResult{}, workersessions.ErrProviderBindingAttemptMismatch
+		}
+		if _, err := r.publishProviderBindingLocked(ctx, req.SessionID, dispatchID, provider, pub); err != nil {
+			return workersessions.PublishRecordResult{}, err
+		}
 	}
 
 	key := sourceKey{sourceType: req.SourceType, sourceID: req.SourceID}
@@ -151,6 +174,117 @@ func publishOutcomeLabel(outcome workersessions.PublishOutcome) string {
 	}
 }
 
+// EnsureProviderBinding publishes the first provider-bound lifecycle record
+// for the dispatch when the opening record did not already resolve a
+// provider. The publication lock is the same lock used by source-native
+// observations and the terminal boundary, so a provider output can never
+// overtake its required SESSION/UPDATED binding.
+func (r *registry) EnsureProviderBinding(
+	ctx context.Context,
+	req workersessions.ProviderBindingRequest,
+) (workersessions.ProviderBindingResult, error) {
+	if err := req.Validate(); err != nil {
+		r.logger.Info("worker session provider binding rejected", "attemptID", req.DispatchID, "outcome", "invalid")
+		return workersessions.ProviderBindingResult{}, err
+	}
+
+	r.mu.RLock()
+	ownerID, exists := r.dispatchOwners[strings.TrimSpace(req.DispatchID)]
+	r.mu.RUnlock()
+	if !exists {
+		r.logger.Info("worker session provider binding rejected", "attemptID", req.DispatchID, "outcome", "unknown_dispatch")
+		return workersessions.ProviderBindingResult{}, workersessions.ErrProviderBindingAttemptMismatch
+	}
+
+	pub := r.publicationFor(ownerID)
+	if pub == nil {
+		return workersessions.ProviderBindingResult{}, workersessions.ErrSessionNotFound
+	}
+	provider := strings.TrimSpace(req.Provider)
+	pub.mu.Lock()
+	defer pub.mu.Unlock()
+	return r.publishProviderBindingLocked(ctx, ownerID, strings.TrimSpace(req.DispatchID), provider, pub)
+}
+
+func (r *registry) publishProviderBindingLocked(
+	ctx context.Context,
+	ownerID string,
+	dispatchID string,
+	provider string,
+	pub *publication,
+) (workersessions.ProviderBindingResult, error) {
+	if !pub.open {
+		r.logger.Info("worker session provider binding rejected", "sessionID", ownerID, "attemptID", dispatchID, "outcome", "publication_not_open")
+		return workersessions.ProviderBindingResult{}, workersessions.ErrPublicationNotOpen
+	}
+	if pub.provider != "" {
+		return workersessions.ProviderBindingResult{
+			WorkerSessionID: ownerID,
+			DispatchID:      dispatchID,
+			Provider:        pub.provider,
+			Outcome:         workersessions.ProviderBindingOutcomeDuplicate,
+		}, nil
+	}
+
+	selection := workers.SessionProviderSelection{RunnerID: provider}
+	payload := workers.SessionPayload{
+		Status:            string(workersessions.StateStarting),
+		WorkerSessionID:   ownerID,
+		DispatchID:        dispatchID,
+		TurnID:            pub.turnID,
+		AttemptID:         dispatchID,
+		ProviderSelection: &selection,
+	}
+	payloadJSON, _ := json.Marshal(payload)
+	draft := workers.Draft{
+		Kind:       workers.KindSession,
+		Phase:      workers.PhaseUpdated,
+		Provenance: lifecycleProvenance(provider),
+		Payload:    payloadJSON,
+		DispatchID: dispatchID,
+		TurnID:     pub.turnID,
+	}
+	identity := events.AppendIdentity{
+		SourceType:     lifecycleSourceType,
+		SourceID:       providerBindingSourceID(ownerID),
+		SourceSequence: providerBindingSourceSequence,
+		SourceEventID:  providerBindingSourceEventID,
+	}
+	appendResult, err := r.appendDraft(ctx, workersessions.Topic(ownerID), identity, workerDraftSchemaID, draft)
+	if err != nil {
+		r.logger.Info("worker session provider binding rejected", "sessionID", ownerID, "attemptID", dispatchID, "outcome", "append_failed")
+		return workersessions.ProviderBindingResult{}, err
+	}
+	pub.provider = provider
+	outcome := workersessions.ProviderBindingOutcomeAccepted
+	if appendResult.Outcome == events.AppendOutcomeDuplicate {
+		outcome = workersessions.ProviderBindingOutcomeDuplicate
+	}
+	r.logger.Info("worker session provider binding", "sessionID", ownerID, "attemptID", dispatchID, "provider", provider, "outcome", string(outcome))
+	return workersessions.ProviderBindingResult{
+		WorkerSessionID: ownerID,
+		DispatchID:      dispatchID,
+		Provider:        provider,
+		Outcome:         outcome,
+	}, nil
+}
+
+// WorkerSessionIDForDispatch resolves the current Workers attempt identity
+// to the stable Worker Session that owns its topic. Provider progress names
+// dispatches, while lifecycle records are keyed by the stable session.
+func (r *registry) WorkerSessionIDForDispatch(_ context.Context, dispatchID string) (string, error) {
+	if strings.TrimSpace(dispatchID) == "" {
+		return "", workersessions.ErrInvalidProviderBinding
+	}
+	r.mu.RLock()
+	ownerID, exists := r.dispatchOwners[strings.TrimSpace(dispatchID)]
+	r.mu.RUnlock()
+	if !exists {
+		return "", workersessions.ErrProviderBindingAttemptMismatch
+	}
+	return ownerID, nil
+}
+
 // appendDraft validates draft with the existing Workers draft rules, then
 // appends it, detached, onto topic using identity as the complete Events
 // idempotency tuple. Every SESSION or source-native Worker record this
@@ -179,22 +313,40 @@ func (r *registry) appendDraft(ctx context.Context, topic events.Topic, identity
 	}.Detached())
 }
 
-// Fixed identity Start uses to commit the one opening SESSION/STARTED record
-// onto workersessions.Topic(id) before Workers invocation, and the one
-// terminal SESSION record after. Both records are Worker-Sessions-owned
-// lifecycle, not a source-native Workers observation, so their SourceID is
-// the Worker Session's own stable identity and their SourceSequence/
-// SourceEventID are fixed constants scoped by that SourceID: a genuine retry
-// can never occur (transitionToStarting and commitTerminal each succeed at
-// most once per identity), so no richer sequencing is required here.
+// Fixed identities Worker Sessions uses to commit its opening, optional
+// provider-binding, and terminal lifecycle records. The binding has its own
+// SourceID so the opening/terminal source keeps its historical sequence
+// numbers while the publication lock still determines aggregate order.
 const (
-	lifecycleSourceType    events.SourceType     = "worker_session_lifecycle"
-	openingSourceSequence  events.SourceSequence = 1
-	openingSourceEventID   events.SourceEventID  = "started"
-	terminalSourceSequence events.SourceSequence = 2
-	terminalSourceEventID  events.SourceEventID  = "terminal"
-	workerDraftSchemaID    events.SchemaID       = "workers.draft.v1"
+	lifecycleSourceType           events.SourceType     = "worker_session_lifecycle"
+	openingSourceSequence         events.SourceSequence = 1
+	openingSourceEventID          events.SourceEventID  = "started"
+	providerBindingSourceSequence events.SourceSequence = 1
+	providerBindingSourceEventID  events.SourceEventID  = "provider-bound"
+	terminalSourceSequence        events.SourceSequence = 2
+	terminalSourceEventID         events.SourceEventID  = "terminal"
+	workerDraftSchemaID           events.SchemaID       = "workers.draft.v1"
 )
+
+func providerBindingSourceID(id string) events.SourceID {
+	return events.SourceID(id + "/provider-binding")
+}
+
+func lifecycleProvenance(provider string) workers.Provenance {
+	return workers.Provenance{
+		Delivery:        workers.DeliverySynthesized,
+		Fidelity:        workers.FidelityLifecycleOnly,
+		NativeEventType: string(lifecycleSourceType),
+		Provider:        strings.TrimSpace(provider),
+		Representation:  workers.RepresentationNotification,
+	}
+}
+
+func isTerminalLifecycleRecord(record events.Record) bool {
+	return record.SourceType == lifecycleSourceType &&
+		record.SourceSequence >= terminalSourceSequence &&
+		record.SourceEventID == terminalSourceEventID
+}
 
 // publishOpeningRecord commits the one opening KindSession/PhaseStarted
 // workers.Draft onto workersessions.Topic(id), detached from any
@@ -205,7 +357,7 @@ const (
 // the append itself has committed: no PublishRecord call can be accepted for
 // id until this succeeds. A non-nil return means no record was committed and
 // the window stays closed: Start must not proceed to Workers handoff.
-func (r *registry) publishOpeningRecord(ctx context.Context, id, attemptID string, payload workers.SessionPayload) error {
+func (r *registry) publishOpeningRecord(ctx context.Context, id, attemptID string, payload workers.SessionPayload, provider string) error {
 	pub := r.publicationFor(id)
 	pub.mu.Lock()
 	defer pub.mu.Unlock()
@@ -217,6 +369,7 @@ func (r *registry) publishOpeningRecord(ctx context.Context, id, attemptID strin
 	draft := workers.Draft{
 		Kind:       workers.KindSession,
 		Phase:      workers.PhaseStarted,
+		Provenance: lifecycleProvenance(provider),
 		Payload:    draftPayload,
 		DispatchID: attemptID,
 		TurnID:     payload.TurnID,
@@ -231,6 +384,8 @@ func (r *registry) publishOpeningRecord(ctx context.Context, id, attemptID strin
 		return err
 	}
 	pub.open = true
+	pub.provider = strings.TrimSpace(provider)
+	pub.turnID = strings.TrimSpace(payload.TurnID)
 	pub.lastSequence = make(map[sourceKey]events.SourceSequence)
 	pub.accepted = make(map[events.AppendIdentity]struct{})
 	return nil
@@ -296,6 +451,7 @@ func terminalDraft(state workersessions.State, result workersessions.TerminalRes
 	return workers.Draft{
 		Kind:       workers.KindSession,
 		Phase:      phase,
+		Provenance: lifecycleProvenance(""),
 		Payload:    payloadJSON,
 		DispatchID: attemptID,
 	}, nil
@@ -321,6 +477,7 @@ func (r *registry) publishTerminalRecord(ctx context.Context, id, attemptID stri
 	pub.mu.Lock()
 	defer pub.mu.Unlock()
 	pub.open = false
+	draft.Provenance = lifecycleProvenance(pub.provider)
 
 	identity := events.AppendIdentity{
 		SourceType:     lifecycleSourceType,
