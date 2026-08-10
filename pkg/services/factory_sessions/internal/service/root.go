@@ -97,7 +97,19 @@ func NewRoot(
 	if !ok || assembly == nil {
 		return nil, fmt.Errorf("construct Factory Sessions: implementation rejected its dependencies")
 	}
-	return &Root{Service: &legacyservice.Service{}, Assembly: assembly}, nil
+	root := &Root{Service: &legacyservice.Service{}, Assembly: assembly}
+	if err := validateCompatibilityBinding(root, clock); err != nil {
+		return nil, fmt.Errorf("construct Factory Sessions: compatibility binding rejected root: %w", err)
+	}
+	return root, nil
+}
+
+// validateCompatibilityBinding keeps the published compatibility contract
+// checked against the exact process root. The binding is inert: it neither
+// constructs a child service nor starts runtime work.
+func validateCompatibilityBinding(root *Root, clock factoryruntime.Clock) error {
+	_, err := root.ForRuntime(factorysessions.RuntimeBinding{Clock: clock})
+	return err
 }
 
 // ForRuntime is retained as a compatibility binding for callers that have not
