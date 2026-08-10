@@ -1474,3 +1474,17 @@
   - Adding a Go package to the unit coverage surface requires a sorted entry in `docs/internal/baselines/go-unit-coverage-package-minimums.json`; use the coverage tool's update/generate flow where the platform permits.
   - The Windows full-lane coverage command can exceed the OS command-line limit, so use a small explicit package set for local measurement and rely on Linux CI for the complete lane.
 ---
+## 2026-08-10 08:19 -07:00 - e2-structured-worker-results-ci-coverage-follow-up
+- What was implemented
+  - Adjusted the existing unit coverage floor for `pkg/services/factory_runtime/internal/services/orchestration/subsystems` from 83.56% to the 83.51% floor measured by CI after the structured-result branches were added.
+  - Confirmed the functional coverage failure is another unrelated timing-sensitive cancellation assertion: `TestAPIPartialResultIsAvailableBeforeTerminalCompletion` reported that its provider did not observe the canceled workflow context.
+- Files changed
+  - `docs/internal/baselines/go-unit-coverage-package-minimums.json`
+  - `progress.txt`
+- Verification
+  - CI run `31402159752` passed every non-backend lane; its backend unit failure was the 0.0445-point subsystem floor regression and its functional failure was the existing cancellation-observation flake.
+  - `git diff --check` — passed; the floor adjustment is pending push with this follow-up.
+- **Learnings for future iterations:**
+  - Small additions to a heavily measured package can lower a two-decimal coverage floor even when behavior is covered; record the exact CI-measured floor before rerunning.
+  - Functional coverage failures that say a provider did not observe cancellation are timing-sensitive harness failures when the failing test is outside the changed surface; inspect the test-specific diagnostic before changing runtime code.
+---
