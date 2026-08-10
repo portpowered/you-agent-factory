@@ -7609,6 +7609,8 @@ components:
           $ref: '#/components/schemas/WorkOutcome'
         output:
           type: string
+        structuredResult:
+          description: Optional native JSON value produced when the workstation outputSchema validates the worker response. JSON null is distinct from an omitted value.
         error:
           type: string
         feedback:
@@ -10864,6 +10866,8 @@ components:
           description: Optional canonical ordered work content parts for this work item.
         payload:
           description: Opaque work payload forwarded as raw JSON, or a binary data, or whatever else.
+        structuredResult:
+          description: Optional JSON value produced by a workstation whose outputSchema validated the worker response. JSON null is distinct from an omitted value.
         tags:
           $ref: '#/components/schemas/StringMap'
           description: Key-value pairs for storing arbitrary metadata about the work. Both keys and values are strings.

@@ -1,6 +1,7 @@
 package factorycontracts
 
 import (
+	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerdiagnostics "github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -10,6 +11,8 @@ import (
 // selected-tick dispatch completion record.
 func CloneFactoryWorldDispatchCompletion(completion FactoryWorldDispatchCompletion) FactoryWorldDispatchCompletion {
 	clone := completion
+	clone.Result.StructuredResult = jsonvalue.Clone(completion.Result.StructuredResult)
+	clone.Result.StructuredResultPresent = jsonvalue.Present(completion.Result.StructuredResult, completion.Result.StructuredResultPresent)
 	clone.Result.FailureMetadata = workerexecution.CloneWorkFailureMetadata(completion.Result.FailureMetadata)
 	clone.WorkItemIDs = cloneStringSlice(completion.WorkItemIDs)
 	clone.ConsumedInputs = cloneWorkstationInputs(completion.ConsumedInputs)
@@ -81,6 +84,8 @@ func cloneFactoryTerminalWork(terminalWork *FactoryTerminalWork) *FactoryTermina
 	}
 	clone := *terminalWork
 	clone.WorkItem.PreviousChainingTraceIDs = cloneStringSlice(terminalWork.WorkItem.PreviousChainingTraceIDs)
+	clone.WorkItem.StructuredResult = jsonvalue.Clone(terminalWork.WorkItem.StructuredResult)
+	clone.WorkItem.StructuredResultPresent = jsonvalue.Present(terminalWork.WorkItem.StructuredResult, terminalWork.WorkItem.StructuredResultPresent)
 	clone.WorkItem.Tags = cloneStringMap(terminalWork.WorkItem.Tags)
 	return &clone
 }
@@ -93,6 +98,8 @@ func cloneFactoryWorkItems(items []work.FactoryWorkItem) []work.FactoryWorkItem 
 	for i, item := range items {
 		clone[i] = item
 		clone[i].PreviousChainingTraceIDs = cloneStringSlice(item.PreviousChainingTraceIDs)
+		clone[i].StructuredResult = jsonvalue.Clone(item.StructuredResult)
+		clone[i].StructuredResultPresent = jsonvalue.Present(item.StructuredResult, item.StructuredResultPresent)
 		clone[i].Tags = cloneStringMap(item.Tags)
 	}
 	return clone
@@ -108,6 +115,8 @@ func cloneWorkstationInputs(inputs []WorkstationInput) []WorkstationInput {
 		if input.WorkItem != nil {
 			item := *input.WorkItem
 			item.PreviousChainingTraceIDs = cloneStringSlice(item.PreviousChainingTraceIDs)
+			item.StructuredResult = jsonvalue.Clone(item.StructuredResult)
+			item.StructuredResultPresent = jsonvalue.Present(item.StructuredResult, item.StructuredResultPresent)
 			item.Tags = cloneStringMap(item.Tags)
 			clone[i].WorkItem = &item
 		}

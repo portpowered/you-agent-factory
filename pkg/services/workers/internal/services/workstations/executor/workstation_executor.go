@@ -166,6 +166,15 @@ func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, disp
 	if failed != nil {
 		return *failed, nil
 	}
+	if workstationDef.OutputSchema != "" {
+		if err := validateOutputSchema([]byte(workstationDef.OutputSchema)); err != nil {
+			result := outputSchemaConfigurationFailure(workerexecution.WorkstationExecutionRequest{
+				Dispatch: dispatch,
+			}, err)
+			result.Metrics = workerexecution.WorkMetrics{Duration: we.Now().Sub(start)}
+			return result, nil
+		}
+	}
 	workerName := workstationWorkerName(workstationDef, dispatch)
 	workerConfig, ok := we.RuntimeConfig.Worker(workerName)
 	if !ok {
@@ -743,6 +752,7 @@ func (we *WorkstationExecutor) executeInnerWorker(ctx context.Context, request w
 			Metrics:      workerexecution.WorkMetrics{Duration: we.Now().Sub(start)},
 		}, nil
 	}
+	result = attachStructuredResult(request, result)
 	if result.Outcome == workerexecution.OutcomeAccepted && request.OutputContract != "" {
 		if contractErr := validateOutputContract(result.Output, request.OutputContract); contractErr != nil {
 			result.Outcome = workerexecution.OutcomeFailed

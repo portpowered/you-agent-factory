@@ -3,6 +3,7 @@ package events
 import (
 	"context"
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -261,6 +262,54 @@ func TestFactoryEventHistory_RecordWorkstationResponse_FailedResultIncludesFailu
 	providerFailure := assertJSONObject(t, payloadObject, "providerFailure")
 	assertJSONField(t, providerFailure, "family", "throttle")
 	assertJSONField(t, providerFailure, "type", "throttled")
+}
+
+func TestFactoryEventHistory_RecordWorkstationResponse_PreservesStructuredResult(t *testing.T) {
+	eventTime := time.Date(2026, 4, 17, 10, 30, 0, 0, time.UTC)
+	history := newTestFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
+	result := workerexecution.WorkResult{
+		DispatchID:              "dispatch-structured",
+		TransitionID:            "build",
+		Outcome:                 workerexecution.OutcomeAccepted,
+		Output:                  `{"items":[{"name":"one"},{"name":"two"}]}`,
+		StructuredResult:        map[string]any{"items": []any{map[string]any{"name": "one"}, map[string]any{"name": "two"}}},
+		StructuredResultPresent: true,
+	}
+	completed := interfaces.CompletedDispatch{
+		DispatchID:   result.DispatchID,
+		TransitionID: result.TransitionID,
+		Outcome:      workerexecution.OutcomeAccepted,
+		EndTime:      eventTime,
+		Duration:     time.Second,
+	}
+
+	history.RecordWorkstationResponse(9, result, completed)
+	events := generatedHistoryEvents(t, history)
+	if len(events) != 1 {
+		t.Fatalf("event count = %d, want 1", len(events))
+	}
+
+	canonical, err := events[0].Payload.AsDispatchResponseEventPayload()
+	if err != nil {
+		t.Fatalf("dispatch response payload: %v", err)
+	}
+	want := map[string]any{"items": []any{map[string]any{"name": "one"}, map[string]any{"name": "two"}}}
+	if !reflect.DeepEqual(canonical.StructuredResult, want) {
+		t.Fatalf("canonical structured result = %#v, want %#v", canonical.StructuredResult, want)
+	}
+
+	data, err := json.Marshal(events[0])
+	if err != nil {
+		t.Fatalf("marshal event: %v", err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("unmarshal event: %v", err)
+	}
+	structured := assertJSONObject(t, assertJSONObject(t, decoded, "payload"), "structuredResult")
+	if !reflect.DeepEqual(structured, want) {
+		t.Fatalf("serialized structured result = %#v, want %#v", structured, want)
+	}
 }
 
 func TestFactoryEventHistory_RecordWorkstationResponse_UsesUTCFallbackAndDurationMillisForMissingEndTime(t *testing.T) {

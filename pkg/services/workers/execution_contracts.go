@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -270,10 +271,38 @@ type DispatchResponseEventPayload struct {
 	Output                      *string                      `json:"output,omitempty"`
 	OutputResources             *[]DispatchResourceEventRef  `json:"outputResources,omitempty"`
 	OutputWork                  *[]work.WorkRequestEventWork `json:"outputWork,omitempty"`
+	StructuredResult            any                          `json:"structuredResult,omitempty"`
 	PreviousChainingTraceIDs    *[]string                    `json:"previousChainingTraceIds,omitempty"`
 	ProviderFailure             *WorkFailureMetadata         `json:"providerFailure,omitempty"`
 	SelectedClassificationLabel *string                      `json:"selectedClassificationLabel,omitempty"`
 	TransitionID                string                       `json:"transitionId"`
+	// StructuredResultPresent distinguishes a present JSON null from an absent
+	// result without changing the public event shape.
+	StructuredResultPresent bool `json:"-"`
+}
+
+// MarshalJSON preserves an explicitly present structuredResult when its JSON
+// value is null while keeping the field omitted for unstructured dispatches.
+func (value DispatchResponseEventPayload) MarshalJSON() ([]byte, error) {
+	type alias DispatchResponseEventPayload
+	return jsonvalue.MarshalOptionalField(alias(value), value.StructuredResult, value.StructuredResultPresent, "structuredResult")
+}
+
+// UnmarshalJSON restores structured-result presence for event replay.
+func (value *DispatchResponseEventPayload) UnmarshalJSON(data []byte) error {
+	type alias DispatchResponseEventPayload
+	var decoded alias
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	structured, present, err := jsonvalue.UnmarshalOptionalField(data, "structuredResult")
+	if err != nil {
+		return err
+	}
+	*value = DispatchResponseEventPayload(decoded)
+	value.StructuredResult = structured
+	value.StructuredResultPresent = present
+	return nil
 }
 
 // DispatchResourceEventRef preserves the public resource facts emitted with a
@@ -301,12 +330,42 @@ type WorkstationResult struct {
 	SelectedClassificationLabel string               `json:"selected_classification_label,omitempty"`
 	FailureDetail               *FailureDetail       `json:"failureDetail,omitempty"`
 	FailureMetadata             *WorkFailureMetadata `json:"failure_metadata,omitempty"`
+	StructuredResult            any                  `json:"structuredResult,omitempty"`
+	// StructuredResultPresent distinguishes a present JSON null from an absent
+	// result in durable dispatch completion projections.
+	StructuredResultPresent bool `json:"-"`
+}
+
+// MarshalJSON preserves an explicitly present structuredResult when its JSON
+// value is null while keeping the field omitted for unstructured results.
+func (value WorkstationResult) MarshalJSON() ([]byte, error) {
+	type alias WorkstationResult
+	return jsonvalue.MarshalOptionalField(alias(value), value.StructuredResult, value.StructuredResultPresent, "structuredResult")
+}
+
+// UnmarshalJSON restores structured-result presence from durable projections.
+func (value *WorkstationResult) UnmarshalJSON(data []byte) error {
+	type alias WorkstationResult
+	var decoded alias
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	structured, present, err := jsonvalue.UnmarshalOptionalField(data, "structuredResult")
+	if err != nil {
+		return err
+	}
+	*value = WorkstationResult(decoded)
+	value.StructuredResult = structured
+	value.StructuredResultPresent = present
+	return nil
 }
 
 func CloneWorkstationResult(result WorkstationResult) WorkstationResult {
 	clone := result
 	clone.FailureDetail = CloneFailureDetail(result.FailureDetail)
 	clone.FailureMetadata = CloneWorkFailureMetadata(result.FailureMetadata)
+	clone.StructuredResult = jsonvalue.Clone(result.StructuredResult)
+	clone.StructuredResultPresent = jsonvalue.Present(result.StructuredResult, result.StructuredResultPresent)
 	return clone
 }
 
@@ -317,6 +376,7 @@ type WorkResult struct {
 	TransitionID                string                   `json:"transition_id"`
 	Outcome                     WorkOutcome              `json:"outcome"`
 	Output                      string                   `json:"output,omitempty"`
+	StructuredResult            any                      `json:"structuredResult,omitempty"`
 	RecordedOutputWork          []work.FactoryWorkItem   `json:"recorded_output_work,omitempty"`
 	Error                       string                   `json:"error,omitempty"`
 	Feedback                    string                   `json:"feedback,omitempty"`
@@ -333,6 +393,34 @@ type WorkResult struct {
 	ProviderContinuationOutcome     providers.ContinuationOutcome     `json:"-"`
 	Diagnostics                     *WorkDiagnostics                  `json:"diagnostics,omitempty"`
 	Metrics                         WorkMetrics                       `json:"metrics"`
+	// StructuredResultPresent distinguishes a present JSON null from an absent
+	// result at transient and checkpoint boundaries.
+	StructuredResultPresent bool `json:"-"`
+}
+
+// MarshalJSON preserves an explicitly present structuredResult when its JSON
+// value is null while keeping the field omitted for unstructured results.
+func (value WorkResult) MarshalJSON() ([]byte, error) {
+	type alias WorkResult
+	return jsonvalue.MarshalOptionalField(alias(value), value.StructuredResult, value.StructuredResultPresent, "structuredResult")
+}
+
+// UnmarshalJSON restores structured-result presence from checkpoints or other
+// persisted execution snapshots.
+func (value *WorkResult) UnmarshalJSON(data []byte) error {
+	type alias WorkResult
+	var decoded alias
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	structured, present, err := jsonvalue.UnmarshalOptionalField(data, "structuredResult")
+	if err != nil {
+		return err
+	}
+	*value = WorkResult(decoded)
+	value.StructuredResult = structured
+	value.StructuredResultPresent = present
+	return nil
 }
 
 // ProviderSessionMetadata carries a stable provider rollout/session identity.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime/buffers"
@@ -91,6 +92,8 @@ func deepCopyCompletedDispatch(d interfaces.CompletedDispatch) interfaces.Comple
 func deepCopyWorkResult(result workerexecution.WorkResult) workerexecution.WorkResult {
 	cp := result
 	cp.ProviderSession = workerexecution.CloneProviderSessionMetadata(result.ProviderSession)
+	cp.StructuredResult = jsonvalue.Clone(result.StructuredResult)
+	cp.StructuredResultPresent = jsonvalue.Present(result.StructuredResult, result.StructuredResultPresent)
 	return cp
 }
 

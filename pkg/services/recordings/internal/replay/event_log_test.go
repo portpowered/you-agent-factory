@@ -9,9 +9,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -154,6 +156,13 @@ func replayDispatchCompletedEvent(t *testing.T, completionID string, result work
 		ProviderFailure: workerdiagnosticsmapping.GeneratedWorkFailureMetadata(result.FailureMetadata),
 		Metrics:         generatedWorkMetrics(result.Metrics),
 	}
+	if jsonvalue.Present(result.StructuredResult, result.StructuredResultPresent) {
+		if result.StructuredResult == nil {
+			payload.StructuredResult = json.RawMessage("null")
+		} else {
+			payload.StructuredResult = jsonvalue.Clone(result.StructuredResult)
+		}
+	}
 	var union factoryapi.FactoryEvent_Payload
 	if err := union.FromDispatchResponseEventPayload(payload); err != nil {
 		t.Fatalf("encode dispatch completed payload: %v", err)
@@ -181,7 +190,7 @@ func generatedReplayOutputWorkPtr(items []work.FactoryWorkItem) *[]factoryapi.Wo
 		if currentChainingTraceID == "" {
 			currentChainingTraceID = item.TraceID
 		}
-		out = append(out, factoryapi.Work{
+		generated := factoryapi.Work{
 			Name:                     item.DisplayName,
 			WorkId:                   stringPtrIfNotEmpty(item.ID),
 			WorkTypeName:             stringPtrIfNotEmpty(item.WorkTypeID),
@@ -190,7 +199,15 @@ func generatedReplayOutputWorkPtr(items []work.FactoryWorkItem) *[]factoryapi.Wo
 			PreviousChainingTraceIds: slicePtr(item.PreviousChainingTraceIDs),
 			TraceId:                  stringPtrIfNotEmpty(item.TraceID),
 			Tags:                     generatedStringMapPtr(item.Tags),
-		})
+		}
+		if jsonvalue.Present(item.StructuredResult, item.StructuredResultPresent) {
+			if item.StructuredResult == nil {
+				generated.StructuredResult = json.RawMessage("null")
+			} else {
+				generated.StructuredResult = jsonvalue.Clone(item.StructuredResult)
+			}
+		}
+		out = append(out, generated)
 	}
 	return &out
 }
@@ -261,6 +278,47 @@ func TestReduceReplayEvents_CompletionsPreserveRecordedOutputWork(t *testing.T) 
 	// materialization assigned on the live path; it must not invent new IDs.
 	if got[0].CurrentChainingTraceID != "trace-1" || got[0].Tags["kind"] != "plan" {
 		t.Fatalf("recorded output work[0] lineage = %#v", got[0])
+	}
+}
+
+func TestReduceReplayEvents_CompletionsPreserveStructuredResultAndOutputWorkValues(t *testing.T) {
+	structured := map[string]any{
+		"verdict": "pass",
+		"items":   []any{json.Number("1"), json.Number("2")},
+	}
+	artifact := testReplayArtifact(
+		t,
+		replayDispatchCompletedEvent(t, "completion-structured", workerexecution.WorkResult{
+			DispatchID:              "dispatch-structured",
+			TransitionID:            "process",
+			Outcome:                 workerexecution.OutcomeAccepted,
+			StructuredResult:        structured,
+			StructuredResultPresent: true,
+			RecordedOutputWork: []work.FactoryWorkItem{
+				{ID: "work-output-a", WorkTypeID: "task", StructuredResult: structured, StructuredResultPresent: true},
+				{ID: "work-output-b", WorkTypeID: "task", StructuredResult: structured, StructuredResultPresent: true},
+			},
+		}, 3),
+	)
+
+	reduced, err := reduceReplayEvents(artifact, testFactorySnapshotDecoder, testRuntimeConfigDecoder)
+	if err != nil {
+		t.Fatalf("reduceReplayEvents: %v", err)
+	}
+	if len(reduced.Completions) != 1 {
+		t.Fatalf("reduced completions = %d, want 1", len(reduced.Completions))
+	}
+	completion := reduced.Completions[0].result
+	if !completion.StructuredResultPresent || !reflect.DeepEqual(completion.StructuredResult, structured) {
+		t.Fatalf("replayed structured result = %#v (present=%t), want %#v", completion.StructuredResult, completion.StructuredResultPresent, structured)
+	}
+	if len(completion.RecordedOutputWork) != 2 {
+		t.Fatalf("replayed output work = %#v, want two items", completion.RecordedOutputWork)
+	}
+	for _, item := range completion.RecordedOutputWork {
+		if !item.StructuredResultPresent || !reflect.DeepEqual(item.StructuredResult, structured) {
+			t.Fatalf("replayed output %q structured result = %#v (present=%t), want %#v", item.ID, item.StructuredResult, item.StructuredResultPresent, structured)
+		}
 	}
 }
 

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -170,6 +171,25 @@ func parseOutputAgainstSchema(content string, schemaPayload []byte) (any, error)
 	if strings.TrimSpace(content) == "" {
 		return nil, fmt.Errorf("response is empty")
 	}
+	validate, err := compileOutputSchema(schemaPayload)
+	if err != nil {
+		return nil, err
+	}
+
+	document, err := jsonschema.UnmarshalJSON(bytes.NewReader([]byte(content)))
+	if err != nil {
+		return nil, fmt.Errorf("response is not valid JSON: %w", err)
+	}
+	if err := validate(document); err != nil {
+		return nil, fmt.Errorf("response does not satisfy output schema: %w", err)
+	}
+	return document, nil
+}
+
+// compileOutputSchema validates workstation configuration without attempting
+// to parse a worker response. The returned function validates one already
+// decoded JSON value, allowing the worker boundary to decode a response once.
+func compileOutputSchema(schemaPayload []byte) (func(any) error, error) {
 	if len(bytes.TrimSpace(schemaPayload)) == 0 {
 		return nil, fmt.Errorf("output schema is empty")
 	}
@@ -188,15 +208,61 @@ func parseOutputAgainstSchema(content string, schemaPayload []byte) (any, error)
 	if err != nil {
 		return nil, fmt.Errorf("output schema is invalid: %w", err)
 	}
+	return compiled.Validate, nil
+}
 
-	document, err := jsonschema.UnmarshalJSON(bytes.NewReader([]byte(content)))
+func validateOutputSchema(schemaPayload []byte) error {
+	_, err := compileOutputSchema(schemaPayload)
+	return err
+}
+
+func structuredOutputMisconfigurationMetadata() *workerexecution.WorkFailureMetadata {
+	return &workerexecution.WorkFailureMetadata{
+		Family: workerexecution.WorkFailureFamilyTerminal,
+		Type:   workerexecution.WorkFailureTypeMisconfigured,
+	}
+}
+
+func outputSchemaConfigurationFailure(
+	request workerexecution.WorkstationExecutionRequest,
+	err error,
+) workerexecution.WorkResult {
+	message := "workstation outputSchema is misconfigured"
 	if err != nil {
-		return nil, fmt.Errorf("response is not valid JSON: %w", err)
+		message += ": " + err.Error()
 	}
-	if err := compiled.Validate(document); err != nil {
-		return nil, fmt.Errorf("response does not satisfy output schema: %w", err)
+	return workerexecution.WorkResult{
+		DispatchID:      request.Dispatch.DispatchID,
+		TransitionID:    request.Dispatch.TransitionID,
+		Outcome:         workerexecution.OutcomeFailed,
+		Error:           message,
+		FailureMetadata: structuredOutputMisconfigurationMetadata(),
 	}
-	return document, nil
+}
+
+// attachStructuredResult validates and attaches a native result for executor
+// implementations that return raw output without doing schema handling. Agent
+// execution already performs this work and marks the result present, so the
+// shared workstation boundary does not decode it a second time.
+func attachStructuredResult(
+	request workerexecution.WorkstationExecutionRequest,
+	result workerexecution.WorkResult,
+) workerexecution.WorkResult {
+	if request.OutputSchema == "" ||
+		result.Outcome != workerexecution.OutcomeAccepted ||
+		jsonvalue.Present(result.StructuredResult, result.StructuredResultPresent) {
+		return result
+	}
+	structured, err := parseOutputAgainstSchema(result.Output, []byte(request.OutputSchema))
+	if err != nil {
+		result.Outcome = workerexecution.OutcomeFailed
+		result.Error = "output parse failed: " + err.Error()
+		result.FailureMetadata = structuredOutputFailureMetadata()
+		return result
+	}
+	result.StructuredResult = jsonvalue.Clone(structured)
+	result.StructuredResultPresent = true
+	return result
 }
 
 func structuredOutputFailure(content, contract string) string {

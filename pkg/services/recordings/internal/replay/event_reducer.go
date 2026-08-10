@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workdomain "github.com/portpowered/infinite-you/pkg/services/work"
@@ -514,6 +515,8 @@ func replayCompletionFromEvent(event interfaces.FactoryEvent, inference replayIn
 			TransitionID:                payload.TransitionID,
 			Outcome:                     payload.Outcome,
 			Output:                      stringValue(payload.Output),
+			StructuredResult:            jsonvalue.Clone(payload.StructuredResult),
+			StructuredResultPresent:     jsonvalue.Present(payload.StructuredResult, payload.StructuredResultPresent),
 			Error:                       stringValue(payload.Error),
 			Feedback:                    stringValue(payload.Feedback),
 			SelectedClassificationLabel: stringValue(payload.SelectedClassificationLabel),
@@ -559,7 +562,9 @@ func factoryWorkItemFromEventWork(eventWork work.WorkRequestEventWork) workdomai
 		PreviousChainingTraceIDs: append([]string(nil), eventWork.PreviousChainingTraceIDs...),
 		TraceID:                  eventWork.TraceID,
 		Content:                  content,
+		StructuredResult:         jsonvalue.Clone(eventWork.StructuredResult),
 		Tags:                     cloneStringMap(eventWork.Tags),
+		StructuredResultPresent:  jsonvalue.Present(eventWork.StructuredResult, eventWork.StructuredResultPresent),
 	}
 }
 

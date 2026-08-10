@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 
+	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -58,6 +59,8 @@ func readModelFromWorkItem(
 		PreviousChainingTraceIDs: append([]string(nil), item.PreviousChainingTraceIDs...),
 		TraceID:                  item.TraceID,
 		Content:                  work.CloneWorkContentParts(item.Content),
+		StructuredResult:         jsonvalue.Clone(item.StructuredResult),
+		StructuredResultPresent:  jsonvalue.Present(item.StructuredResult, item.StructuredResultPresent),
 		Tags:                     work.CloneTags(item.Tags),
 	}
 	read.State = workStateFromItem(item, state, inFlight)

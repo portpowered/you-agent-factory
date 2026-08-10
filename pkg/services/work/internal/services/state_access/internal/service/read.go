@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	stateaccess "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access"
 	"github.com/portpowered/infinite-you/pkg/services/work/internal/stateaccessquery"
@@ -185,6 +186,8 @@ func nextIndex(items []work.ReadModel, cursor string) int {
 func detachReadModel(item work.ReadModel) work.ReadModel {
 	item.PreviousChainingTraceIDs = append([]string(nil), item.PreviousChainingTraceIDs...)
 	item.Content = work.CloneWorkContentParts(item.Content)
+	item.StructuredResult = jsonvalue.Clone(item.StructuredResult)
+	item.StructuredResultPresent = jsonvalue.Present(item.StructuredResult, item.StructuredResultPresent)
 	item.Tags = work.CloneTags(item.Tags)
 	item.Relations = append([]work.ReadRelation(nil), item.Relations...)
 	if item.State != nil {

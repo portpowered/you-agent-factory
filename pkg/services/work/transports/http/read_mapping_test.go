@@ -2,6 +2,7 @@ package http
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -146,6 +147,45 @@ func TestWorkReadModelToAPI_EncodesDetachedReadModel(t *testing.T) {
 		got.Tags == nil || (*got.Tags)["owner"] != "docs" ||
 		got.Relations == nil || len(*got.Relations) != 1 {
 		t.Fatalf("Work = %#v, want encoded detached read model", got)
+	}
+}
+
+func TestWorkReadModelToAPI_PreservesNativeStructuredResultAndNullPresence(t *testing.T) {
+	t.Parallel()
+
+	structured := map[string]any{"nested": map[string]any{"label": "ready"}, "items": []any{float64(1), float64(2)}}
+	got := WorkReadModelToAPI(work.ReadModel{
+		WorkID:                  "work-structured",
+		StructuredResult:        structured,
+		StructuredResultPresent: true,
+	})
+	if !reflect.DeepEqual(got.StructuredResult, structured) {
+		t.Fatalf("structured result = %#v, want native object %#v", got.StructuredResult, structured)
+	}
+
+	encoded, err := json.Marshal(got)
+	if err != nil {
+		t.Fatalf("marshal structured Work: %v", err)
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(encoded, &fields); err != nil {
+		t.Fatalf("decode structured Work: %v", err)
+	}
+	if _, ok := fields["structuredResult"]; !ok {
+		t.Fatalf("structuredResult omitted from %s", encoded)
+	}
+
+	nullWork := WorkReadModelToAPI(work.ReadModel{WorkID: "work-null", StructuredResultPresent: true})
+	nullEncoded, err := json.Marshal(nullWork)
+	if err != nil {
+		t.Fatalf("marshal null Work: %v", err)
+	}
+	var nullFields map[string]json.RawMessage
+	if err := json.Unmarshal(nullEncoded, &nullFields); err != nil {
+		t.Fatalf("decode null Work: %v", err)
+	}
+	if string(nullFields["structuredResult"]) != "null" {
+		t.Fatalf("structuredResult = %s, want null", nullFields["structuredResult"])
 	}
 }
 

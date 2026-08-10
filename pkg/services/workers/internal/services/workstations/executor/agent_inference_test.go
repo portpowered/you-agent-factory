@@ -3,6 +3,7 @@ package executor
 import (
 	"context"
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -329,8 +330,118 @@ func TestAgentExecutorAcceptsSchemaValidatedStructuredOutput(t *testing.T) {
 	if result.Output != `{"verdict":"pass","confidence":0.95}` {
 		t.Fatalf("output = %q, want structured JSON", result.Output)
 	}
+	wantStructured := map[string]any{"verdict": "pass", "confidence": json.Number("0.95")}
+	if !reflect.DeepEqual(result.StructuredResult, wantStructured) || !result.StructuredResultPresent {
+		t.Fatalf("structured result = %#v (present=%t), want detached native object %#v", result.StructuredResult, result.StructuredResultPresent, wantStructured)
+	}
 	if result.FailureMetadata != nil {
 		t.Fatalf("failure metadata = %#v, want nil", result.FailureMetadata)
+	}
+}
+
+func TestAgentExecutorPreservesNativeStructuredResultTypes(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		schema   string
+		response string
+		want     any
+	}{
+		{
+			name:     "object",
+			schema:   `{"type":"object","properties":{"nested":{"type":"object"}},"required":["nested"]}`,
+			response: `{"nested":{"label":"ready"}}`,
+			want:     map[string]any{"nested": map[string]any{"label": "ready"}},
+		},
+		{
+			name:     "array",
+			schema:   `{"type":"array","items":{"type":"integer"}}`,
+			response: `[1,2,3]`,
+			want:     []any{json.Number("1"), json.Number("2"), json.Number("3")},
+		},
+		{
+			name:     "string",
+			schema:   `{"type":"string"}`,
+			response: `"ready"`,
+			want:     "ready",
+		},
+		{
+			name:     "number",
+			schema:   `{"type":"number"}`,
+			response: `0.95`,
+			want:     json.Number("0.95"),
+		},
+		{
+			name:     "boolean",
+			schema:   `{"type":"boolean"}`,
+			response: `true`,
+			want:     true,
+		},
+		{
+			name:     "null",
+			schema:   `{"type":"null"}`,
+			response: `null`,
+			want:     nil,
+		},
+	}
+
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			provider := &agentMockProvider{response: workerexecution.InferenceResponse{Content: test.response}}
+			executor := NewAgentExecutor(staticRuntimeConfig{
+				Workers: map[string]*workerconfig.FactoryWorkerConfig{
+					"worker-a": {Model: "test-model", ModelProvider: workerexecution.RunnerIDAntigravity},
+				},
+			}, provider, nil, time.Now)
+
+			result, err := executor.Execute(context.Background(), testAgentRequest(
+				work.WorkDispatch{DispatchID: "structured-" + test.name, TransitionID: "parse", WorkerType: "worker-a"},
+				withAgentOutputSchema(test.schema),
+			))
+			if err != nil {
+				t.Fatalf("Execute() error = %v", err)
+			}
+			if result.Outcome != workerexecution.OutcomeAccepted {
+				t.Fatalf("outcome = %q, want %q (error=%q)", result.Outcome, workerexecution.OutcomeAccepted, result.Error)
+			}
+			if !result.StructuredResultPresent || !reflect.DeepEqual(result.StructuredResult, test.want) {
+				t.Fatalf("structured result = %#v (present=%t), want %#v", result.StructuredResult, result.StructuredResultPresent, test.want)
+			}
+			if result.Output != test.response {
+				t.Fatalf("raw output = %q, want %q", result.Output, test.response)
+			}
+		})
+	}
+}
+
+func TestAgentExecutorRejectsInvalidOutputSchemaBeforeProviderResponse(t *testing.T) {
+	provider := &agentMockProvider{response: workerexecution.InferenceResponse{Content: `{"ok":true}`}}
+	executor := NewAgentExecutor(staticRuntimeConfig{
+		Workers: map[string]*workerconfig.FactoryWorkerConfig{
+			"worker-a": {Model: "test-model", ModelProvider: workerexecution.RunnerIDAntigravity},
+		},
+	}, provider, nil, time.Now)
+
+	result, err := executor.Execute(context.Background(), testAgentRequest(
+		work.WorkDispatch{DispatchID: "invalid-schema", TransitionID: "parse", WorkerType: "worker-a"},
+		withAgentOutputSchema(`{"type":`),
+	))
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("outcome = %q, want failed", result.Outcome)
+	}
+	if result.FailureMetadata == nil || result.FailureMetadata.Type != workerexecution.WorkFailureTypeMisconfigured || result.FailureMetadata.Family != workerexecution.WorkFailureFamilyTerminal {
+		t.Fatalf("failure metadata = %#v, want terminal misconfigured", result.FailureMetadata)
+	}
+	if provider.callCount != 0 {
+		t.Fatalf("provider calls = %d, want zero for invalid configuration", provider.callCount)
+	}
+	if result.Output != "" || result.StructuredResultPresent {
+		t.Fatalf("result = %#v, want no accepted response data", result)
 	}
 }
 

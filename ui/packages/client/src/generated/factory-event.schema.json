@@ -505,6 +505,9 @@
         "selectedClassificationLabel": {
           "type": "string"
         },
+        "structuredResult": {
+          "description": "Optional native JSON value produced when the workstation outputSchema validates the worker response. JSON null is distinct from an omitted value."
+        },
         "transitionId": {
           "type": "string"
         }
@@ -3945,6 +3948,9 @@
         "stopSummary": {
           "$ref": "#/$defs/FactoryStopSummary"
         },
+        "structuredResult": {
+          "description": "Optional JSON value produced by a workstation whose outputSchema validated the worker response. JSON null is distinct from an omitted value."
+        },
         "tags": {
           "$ref": "#/$defs/StringMap"
         },
@@ -4765,6 +4771,10 @@
             }
           ],
           "description": "Optional worker-output parsing mode for model workstations. When set to `decision-envelope`, agent output is parsed as a reviewer/checker JSON envelope that maps directly onto WorkResult outcome, feedback, output, and optional recorded output work instead of stop-token routing."
+        },
+        "outputContract": {
+          "description": "Provider-neutral semantic contract applied to a successful workstation response after provider execution.",
+          "type": "string"
         },
         "outputSchema": {
           "description": "JSON schema string used to validate or parse structured model output when configured.",

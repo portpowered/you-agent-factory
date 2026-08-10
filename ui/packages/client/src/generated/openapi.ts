@@ -63,7 +63,7 @@ export interface paths {
     };
     /**
      * Stream retained and live Worker Session events
-     * @description Streams the canonical Worker Session Events topic for the exact Provider Session identity in the explicitly selected Factory Session. Retained records are emitted first in aggregate order, followed by live records. Each data frame is serialized JSON matching WorkerSessionEvent. The terminal event is marked TERMINAL for an active session or TERMINAL_REPLAY for an already-terminal session, after which the connection closes successfully. Source failures are emitted as an explicit SOURCE_FAILURE frame so clients can preserve complete records already written and return a typed non-success result.
+     * @description Streams the canonical Worker Session Events topic for the exact Provider Session identity in the explicitly selected Factory Session. Retained records are emitted first in aggregate order, followed by live records unless replayOnly is true. In replay-only mode the retained head is captured before delivery, no live follower is registered, and one REPLAY_SUMMARY frame closes the stream after the retained drain. Each data frame is serialized JSON matching WorkerSessionEvent. The terminal event is marked TERMINAL for an active session or TERMINAL_REPLAY for an already-terminal session. Source failures are emitted as an explicit SOURCE_FAILURE frame so clients can preserve complete records already written and return a typed non-success result.
      */
     get: operations["streamWorkerSessionEventsBySessionId"];
     put?: never;
@@ -1171,6 +1171,24 @@ export interface components {
       errorCode: string | null;
       /** @description Safe source-failure message when delivery is SOURCE_FAILURE. */
       errorMessage: string | null;
+      /** @description Completeness marker when delivery is REPLAY_SUMMARY. */
+      replaySummary?: components["schemas"]["WorkerSessionReplaySummary"];
+    };
+    WorkerSessionReplaySummary: {
+      /**
+       * @description Stable record kind for the finite Worker Session replay marker.
+       * @enum {string}
+       */
+      kind: WorkerSessionReplaySummaryKind;
+      /** @description Whether the retained capture represents a terminal Worker Session. */
+      complete: boolean;
+      /** @description Stable lifecycle classification for the replay result. */
+      reason: string;
+      /**
+       * Format: int64
+       * @description Number of canonical event records emitted before this summary.
+       */
+      eventsEmitted: number;
     };
     /**
      * @description Delivery outcome for one Worker Session stream frame. RECORD is a retained or live canonical event, TERMINAL marks the live terminal event, and TERMINAL_REPLAY marks the terminal event in an already-terminal replay. SOURCE_FAILURE is an explicit non-event outcome after the stream has opened.
@@ -3628,6 +3646,8 @@ export interface components {
       previousChainingTraceIds?: string[];
       outcome: components["schemas"]["WorkOutcome"];
       output?: string;
+      /** @description Optional native JSON value produced when the workstation outputSchema validates the worker response. JSON null is distinct from an omitted value. */
+      structuredResult?: unknown;
       error?: string;
       feedback?: string;
       selectedClassificationLabel?: string;
@@ -4853,6 +4873,8 @@ export interface components {
       promptFile?: string;
       /** @description JSON schema string used to validate or parse structured model output when configured. */
       outputSchema?: string;
+      /** @description Provider-neutral semantic contract applied to a successful workstation response after provider execution. */
+      outputContract?: string;
       /** @description Optional worker-output parsing mode for model workstations. When set to `decision-envelope`, agent output is parsed as a reviewer/checker JSON envelope that maps directly onto WorkResult outcome, feedback, output, and optional recorded output work instead of stop-token routing. */
       outcomeFormat?: components["schemas"]["WorkstationOutcomeFormat"];
       /** @description Retry and execution ceilings applied to this workstation. */
@@ -5360,6 +5382,8 @@ export interface components {
       content?: components["schemas"]["WorkContent"];
       /** @description Opaque work payload forwarded as raw JSON, or a binary data, or whatever else. */
       payload?: unknown;
+      /** @description Optional JSON value produced by a workstation whose outputSchema validated the worker response. JSON null is distinct from an omitted value. */
+      structuredResult?: unknown;
       /** @description Key-value pairs for storing arbitrary metadata about the work. Both keys and values are strings. */
       tags?: components["schemas"]["StringMap"];
       /** @description Current outbound relationships attached to this listed source work item when returned by read APIs. */
@@ -6101,6 +6125,8 @@ export interface operations {
         kind: components["schemas"]["LoadableProviderSessionKind"];
         /** @description Provider-issued session identifier, not a filesystem path. */
         id: string;
+        /** @description Drain the retained history through a captured Events head without registering a live follower. */
+        replayOnly?: boolean;
       };
       header?: never;
       path: {
@@ -6111,7 +6137,7 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description Retained then live Worker Session event frames. */
+      /** @description Retained then live Worker Session event frames, or a finite retained replay ending in REPLAY_SUMMARY. */
       200: {
         headers: {
           [name: string]: unknown;
@@ -7546,10 +7572,16 @@ export const WorkerSessionObservationTranscript = {
 } as const;
 export type WorkerSessionObservationTranscript =
   (typeof WorkerSessionObservationTranscript)[keyof typeof WorkerSessionObservationTranscript];
+export const WorkerSessionReplaySummaryKind = {
+  replay_summary: "replay-summary",
+} as const;
+export type WorkerSessionReplaySummaryKind =
+  (typeof WorkerSessionReplaySummaryKind)[keyof typeof WorkerSessionReplaySummaryKind];
 export const WorkerSessionEventDelivery = {
   WorkerSessionEventDeliveryRecord: "RECORD",
   WorkerSessionEventDeliveryTerminal: "TERMINAL",
   WorkerSessionEventDeliveryTerminalReplay: "TERMINAL_REPLAY",
+  WorkerSessionEventDeliveryReplaySummary: "REPLAY_SUMMARY",
   WorkerSessionEventDeliverySourceFailure: "SOURCE_FAILURE",
 } as const;
 export type WorkerSessionEventDelivery =
