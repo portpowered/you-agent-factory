@@ -588,3 +588,18 @@
   - Provider model inventories must enumerate exact IDs used by configured Factories; a family label such as `gpt-5.6` is not a substitute for accepted tier IDs.
   - Catalog/execution consistency regressions should invoke the public service operation with catalog-derived values and an injected adapter, allowing policy drift to fail behaviorally without live provider calls.
 ---
+## 2026-08-10 00:51 -0700 - wo-b3-provider-capability-discovery-cli-ci-follow-up
+- What was implemented
+  - Diagnosed the first fresh CI failure as two unrelated timing-sensitive functional assertions in session execution/restart coverage; both passed 20 consecutive focused local repetitions.
+  - Diagnosed the next functional-lane failure as an existing runtime package coverage-floor miss caused by incomplete/nondeterministic broad functional coverage, not a changed runtime package; local coverage likewise hit an unrelated concurrent dispatch assertion.
+  - Reran the failed CI lane through three attempts without changing unrelated runtime code. The final backend functional coverage and dependent Verification Policy jobs passed.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/sessions/execution -run '^TestWithServerDrainCannotReportSuccessWhileWorkIsNonTerminal$' -count=20` — passed.
+  - `go test ./tests/functional/sessions/restart -run '^TestFactorySessionResumeDoesNotRepeatCompletedDispatch$' -count=20` — passed.
+  - Final `gh pr checks 1843 --repo portpowered/you-agent-factory` — all required checks pass on head `28ddae7e6653ec6272cbc47db88f695d8246b401`.
+- **Learnings for future iterations:**
+  - The functional coverage gate can fail after a broad concurrent test is incomplete, surfacing as a package coverage-floor regression even when the changed package is unrelated; inspect test output and compare coverage artifacts before touching a baseline.
+  - A failed-job rerun retains the same workflow run but creates new job IDs; inspect the job list by attempt when confirming the terminal result.
+---
