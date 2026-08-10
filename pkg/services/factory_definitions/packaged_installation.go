@@ -15,6 +15,7 @@ const (
 // definition.
 type PackagedFactoryInstallParams struct {
 	NamedFactoriesRoot string
+	BackendScopeID     string
 	Definition         PackagedDefinition
 	Format             PackagedFactoryFormat
 	Replace            bool
@@ -32,6 +33,7 @@ type PackagedFactoryInstallResult struct {
 type PackagedFactoryInstaller interface {
 	EnsurePackagedFactories(
 		context.Context,
+		string,
 		string,
 		[]PackagedDefinition,
 	) ([]PackagedFactoryInstallResult, error)
