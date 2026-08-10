@@ -573,7 +573,7 @@ func assertMissingWorkerSessionInputs(t *testing.T, ctx context.Context, process
 				Code    string `json:"code"`
 				Message string `json:"message"`
 			}
-			if decodeErr := json.Unmarshal([]byte(strings.TrimSpace(inputs.Stdout())), &payload); decodeErr != nil {
+			if decodeErr := json.Unmarshal([]byte(strings.TrimSpace(inputs.Stderr())), &payload); decodeErr != nil {
 				t.Fatalf("decode required-input JSON: %v\nstdout:\n%s\nstderr:\n%s", decodeErr, inputs.Stdout(), inputs.Stderr())
 			}
 			if payload.Code != test.code || strings.TrimSpace(payload.Message) == "" {

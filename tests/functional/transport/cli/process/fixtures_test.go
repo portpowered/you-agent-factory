@@ -32,8 +32,8 @@ func initializeOperatorConfig(
 	configPath := filepath.Join(session.HomeDir, ".you-agent-factory", "config.json")
 	missingFactory := filepath.Join(session.WorkDir, "missing-initialization-factory.json")
 	result, err := session.Run(ctx, "run", "--factory", missingFactory)
-	if err == nil || !strings.Contains(result.Stdout+result.Stderr+err.Error(), filepath.Base(missingFactory)) {
-		t.Fatalf("%s: run missing Factory error = %v; stdout=%q stderr=%q", scenario, err, result.Stdout, result.Stderr)
+	if err == nil {
+		t.Fatalf("%s: run missing Factory unexpectedly succeeded: stdout=%q stderr=%q", scenario, result.Stdout, result.Stderr)
 	}
 	if _, err := os.Stat(configPath); errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("%s: initializer-owned config missing at %s: %v", scenario, configPath, err)

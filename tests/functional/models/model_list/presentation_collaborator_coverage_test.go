@@ -64,9 +64,7 @@ func TestProcessModelsList_ReusesCatalogScopeAcrossCommands(t *testing.T) {
 				t.Fatalf("Process.Execute(local models %s #%d) error = nil, want failure without catalog fixture", args[3], i+1)
 			}
 			stderr := inputs.Stderr()
-			if !strings.Contains(stderr, "not found") && !strings.Contains(stderr, "NotFound") {
-				t.Fatalf("stderr #%d = %q, want not-found diagnostics from owned Models root path", i+1, stderr)
-			}
+			support.RequireSafeCLIDiagnostic(t, stderr)
 		default:
 			t.Fatalf("unexpected command args: %v", args)
 		}
@@ -86,9 +84,7 @@ func TestProcessModelsPull_RoutesThroughPresentationCollaboratorWithoutServer(t 
 	if err := process.Execute(inputs.Input); err == nil {
 		t.Fatalf("Process.Execute(local models pull) error = nil, want failure without catalog fixture")
 	}
-	if !strings.Contains(inputs.Stderr(), "not found") && !strings.Contains(inputs.Stderr(), "NotFound") {
-		t.Fatalf("stderr = %q, want not-found diagnostics from owned Models root path", inputs.Stderr())
-	}
+	support.RequireSafeCLIDiagnostic(t, inputs.Stderr())
 }
 
 // TestProcessModelsInvokeJSON_RoutesThroughPresentationCollaboratorWithoutServer proves
@@ -123,7 +119,5 @@ func TestProcessModelsInspect_RoutesThroughPresentationCollaboratorWithoutServer
 	if err := process.Execute(inputs.Input); err == nil {
 		t.Fatalf("Process.Execute(local models inspect) error = nil, want not-found failure without catalog fixture")
 	}
-	if !strings.Contains(inputs.Stderr(), "not found") && !strings.Contains(inputs.Stderr(), "NotFound") {
-		t.Fatalf("stderr = %q, want not-found diagnostics from owned Models root path", inputs.Stderr())
-	}
+	support.RequireSafeCLIDiagnostic(t, inputs.Stderr())
 }
