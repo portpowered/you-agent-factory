@@ -895,3 +895,16 @@
   - The missing `@types/bun` dependency was an environment-only checkout issue; installing from the pinned lockfile restored the full fast verification tier without tracked dependency changes.
   - A current-main merge can conflict in shared task bookkeeping even when product files merge cleanly; keep the active branch PRD authoritative and preserve both chronological progress histories.
 ---
+## 2026-08-10 05:29 -07:00 - pf-plain-batch-drain-001 PR description follow-up
+- What was implemented
+  - Restored the omitted word `plain` in the active PRD acceptance criterion so `prd.json` exactly matches the existing PR #1846 description.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `prd.json` parses successfully.
+  - PR #1846 body matches `prd.json` after newline normalization.
+  - `git diff --check` passed.
+- **Learnings for future iterations:**
+  - After resolving a shared JSON conflict manually, compare the normalized PR body against the file content rather than relying only on JSON validity; small wording drift can otherwise go unnoticed.
+---
