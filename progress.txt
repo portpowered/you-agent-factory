@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- AST scanners must expand grouped Go field declarations before indexing parameter or result types; a field-count helper can exceed the AST field-list length and panic on valid source.
 - Asynchronous service characterizations should wait on observed edge/context signals rather than arbitrary `time.After` ceilings; the test context remains the failure escape hatch.
 - Continuous Petri service sessions intentionally remain `IDLE` after terminal Work; characterize the dispatch and Work/progress projection as the caller-visible result and assert the live-result route's typed unavailability instead of inventing a finite session result.
 - Use an authored capacity-one resource in a deterministic fixture to serialize multi-work dispatches when exact Factory Event order must be characterized; this avoids sleeps and preserves the real dispatch/resource boundary.
@@ -1880,4 +1881,22 @@
   - GitHub Actions run `31407831161` — all 18 checks passed, including Backend Functional Coverage and Verification Policy, on head `5ed5afbcf`.
 - **Learnings for future iterations:**
   - For broad functional-coverage failures, inspect the first assertion; unchanged cancellation/concurrency observations can move between tests across retries. Repeat the exact test and rerun failed jobs before changing unrelated runtime code.
+---
+## 2026-08-10 10:25 -07:00 - sac-s0-1-ownership-inventories-003 review follow-up
+- What was implemented
+  - Fixed the provider-effect boundary checker panic on valid grouped Go parameters such as `Infer(ctx, req context.Context)` by expanding grouped AST fields before signature inspection.
+  - Added a focused regression proving the malformed grouped Workers-root compatibility port is rejected with the normal ownership diagnostic and never panics.
+  - Reclassified story `sac-s0-1-ownership-inventories-003` as a `project-enabling` criterion because its architecture-guard evidence is repository-enforcement behavior rather than customer runtime/API/CLI/UI/event behavior; the remaining package-target and ownership inventory stories still need the same review-gate acceptance-shape decision.
+- Files changed
+  - `cmd/pkgboundarycheck/provider_effect_ownership.go`
+  - `cmd/pkgboundarycheck/provider_effect_ownership_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./cmd/pkgboundarycheck -run '^TestRun(AllowsWorkersRequestScopedProviderCompatibilityPort|RejectsGroupedWorkersRequestScopedProviderPortWithoutPanic|RejectsExpandedWorkersRequestScopedProviderPort)$' -count=10` — passed.
+  - `go test ./cmd/pkgboundarycheck -count=1` — passed.
+  - `go vet ./cmd/pkgboundarycheck` — passed.
+  - `git diff --check` and PRD JSON validation — passed.
+- **Learnings for future iterations:**
+  - The latest review still blocks the PR on acceptance evidence for stories 001 and 002; inventory/package-target checker tests are repository-enforcement evidence, not customer-facing behavioral coverage under the review gate. Address those stories in separate iterations by moving them to explicit project-enabling criteria or adding appropriate observable contract behavior.
 ---
