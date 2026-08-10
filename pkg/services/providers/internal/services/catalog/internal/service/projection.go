@@ -201,7 +201,7 @@ func projectAvailability(manifest publishedProviderManifest) providers.Availabil
 func projectReadiness(availability providers.Availability) providers.Readiness {
 	switch availability {
 	case providers.AvailabilitySelectable:
-		return providers.ReadinessReady
+		return providers.ReadinessUnverified
 	default:
 		return providers.ReadinessUnavailable
 	}
@@ -228,7 +228,7 @@ func projectStaticPrerequisites(manifest publishedProviderManifest) []providers.
 		prerequisites = append(prerequisites, providers.Prerequisite{
 			Kind:        providers.PrerequisiteConfiguration,
 			Name:        strings.TrimSpace(key),
-			Status:      providers.PrerequisiteSatisfied,
+			Status:      providers.PrerequisiteRequired,
 			Description: fmt.Sprintf("%s lists configuration key %q.", displayName, strings.TrimSpace(key)),
 		})
 	}
@@ -237,7 +237,7 @@ func projectStaticPrerequisites(manifest publishedProviderManifest) []providers.
 		prerequisites = append(prerequisites, providers.Prerequisite{
 			Kind:        providers.PrerequisiteConfiguration,
 			Name:        kindName,
-			Status:      providers.PrerequisiteSatisfied,
+			Status:      providers.PrerequisiteRequired,
 			Description: fmt.Sprintf("%s supports %s transport.", displayName, kindName),
 		})
 	}
@@ -249,7 +249,7 @@ func projectStaticPrerequisites(manifest publishedProviderManifest) []providers.
 		prerequisites = append(prerequisites, providers.Prerequisite{
 			Kind:        providers.PrerequisiteDependency,
 			Name:        executable,
-			Status:      providers.PrerequisiteSatisfied,
+			Status:      providers.PrerequisiteRequired,
 			Description: fmt.Sprintf("%s uses the %q executable.", displayName, executable),
 		})
 	}
@@ -261,7 +261,7 @@ func projectStaticPrerequisites(manifest publishedProviderManifest) []providers.
 		prerequisites = append(prerequisites, providers.Prerequisite{
 			Kind:        kind,
 			Name:        strings.TrimSpace(prerequisite.Name),
-			Status:      providers.PrerequisiteSatisfied,
+			Status:      providers.PrerequisiteRequired,
 			Description: strings.TrimSpace(prerequisite.Description),
 		})
 	}

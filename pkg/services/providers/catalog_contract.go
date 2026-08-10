@@ -24,13 +24,18 @@ const (
 	AvailabilitySelectable              Availability = "selectable"
 )
 
-// Readiness identifies the current provider availability outcome.
+// Readiness identifies the current provider availability outcome, or explains
+// that the catalog has not performed a request-time readiness probe.
 type Readiness string
 
 const (
 	ReadinessReady       Readiness = "ready"
 	ReadinessUnavailable Readiness = "unavailable"
 	ReadinessDegraded    Readiness = "degraded"
+	// ReadinessUnverified means that the descriptor contains static catalog
+	// facts only; the current machine, account, and executable have not been
+	// probed.
+	ReadinessUnverified Readiness = "unverified"
 )
 
 // TechnicalSupportLevel is the maintainer-verified support posture published
@@ -66,12 +71,16 @@ const (
 	PrerequisiteWorkspace      PrerequisiteKind = "workspace"
 )
 
-// PrerequisiteStatus identifies whether a provider prerequisite is satisfied.
+// PrerequisiteStatus identifies whether a provider prerequisite is known to be
+// satisfied, missing, or merely required by the static catalog.
 type PrerequisiteStatus string
 
 const (
 	PrerequisiteSatisfied PrerequisiteStatus = "satisfied"
 	PrerequisiteMissing   PrerequisiteStatus = "missing"
+	// PrerequisiteRequired is an authored requirement whose current state has
+	// not been checked by a request-time readiness probe.
+	PrerequisiteRequired PrerequisiteStatus = "required"
 )
 
 // Prerequisite is a provider-neutral readiness requirement. Description is

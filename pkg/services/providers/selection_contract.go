@@ -51,9 +51,10 @@ type ResolveSelectionResult struct {
 	Source   SelectionSource
 }
 
-// ValidatePrerequisitesRequest asks Providers whether one canonical provider is
-// currently selectable. Callers must resolve aliases through ResolveIdentity
-// first when they hold a non-canonical identity.
+// ValidatePrerequisitesRequest asks Providers whether one canonical provider
+// is selectable by the catalog. Static requirements can remain unverified
+// until a readiness probe runs; callers must resolve aliases through
+// ResolveIdentity first when they hold a non-canonical identity.
 type ValidatePrerequisitesRequest struct {
 	ID ID
 }

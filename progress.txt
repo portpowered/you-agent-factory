@@ -1037,3 +1037,34 @@
 - **Learnings for future iterations:**
   - When a completed cross-repository PR already contains the requested review fix, verify thread state, exact local/fork/PR SHAs, description parity, and terminal checks before creating any new PR or feature change.
 ---
+## 2026-08-10 04:09 -0700 - wo-b3-provider-capability-discovery-cli-review-follow-up
+- What was implemented
+  - Addressed the latest blocking PR feedback for the canonical capability-facts story.
+  - Added Claude's exact authored model inventory: `claude-opus-4-6-thinking`, `claude-sonnet-4-20250514`, and `claude-sonnet-5`, with explicit text-only modalities and low-through-max effort values.
+  - Changed unprobed static catalog projections from fabricated `ready`/`satisfied` values to truthful `unverified`/`required` values, while retaining `ready`/`unavailable`/`missing` for request-time probe facts and allowing catalog-selectable unprobed providers through normal selection.
+  - Extended human, JSON, authored-catalog, projection, and production `root.BuildProcess`/`Process.Execute` assertions to cover the new status semantics and Claude inventory; updated the provider reference documentation and PRD notes.
+- Files changed
+  - `packages/model-providers/providers/claude/provider.yaml`
+  - `packages/model-providers/generated/catalog.json`
+  - `packages/model-providers/metadata/manifest.json`
+  - `packages/model-providers/catalog_test.go`
+  - `pkg/services/providers/catalog_contract.go`
+  - `pkg/services/providers/internal/service/selection.go`
+  - `pkg/services/providers/internal/services/catalog/internal/service/{projection.go,projection_test.go,service.go,service_test.go}`
+  - `pkg/services/providers/internal/services/catalog/service.go`
+  - `pkg/services/providers/{selection_contract.go,service_contract.go}`
+  - `pkg/services/providers/transports/mcp/schemas.go`
+  - `tests/functional/providers/discovery/discovery_test.go`
+  - `docs/reference/providers.md`
+  - `prd.json`
+- Verification
+  - `make provider-catalog-generate` and `make model-provider-package-generate` — passed.
+  - `make provider-catalog-check` and `make model-provider-package-check` — passed.
+  - Focused Providers/catalog/CLI/MCP Go tests — passed.
+  - `go test ./tests/functional/providers/discovery -count=1 -timeout 120s` — passed.
+  - `make docs-reference-smoke`, `make typecheck`, `make test`, and `make vet backend-size pkg-maint pkg-file-count pkg-structure` — passed.
+- **Learnings for future iterations:**
+  - Static authored provider manifests describe maximum/publication facts only; production catalog projections must never imply current installation, authentication, or executable readiness without a probe.
+  - Keep static and live readiness vocabularies distinguishable at the public Providers boundary: `unverified`/`required` describe no probe, while `ready`/`unavailable` and `satisfied`/`missing` describe probe outcomes.
+  - Exact model IDs should be asserted at the manifest, projection, JSON, human, and root-process boundaries when docs or execution harnesses name a model.
+---

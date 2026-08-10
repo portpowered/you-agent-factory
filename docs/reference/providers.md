@@ -1,6 +1,6 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-08-09
+last-modified: 2026-08-10
 doc-id: agent-factory/guides/providers
 ---
 
@@ -212,9 +212,12 @@ List the built-in presets and any operator-added ACP integrations:
 you workers list
 ```
 
-`selectable` means the identity is present in the Providers catalog. The
-definitive readiness check is a small `you run`, because the agent executable,
-authentication, and negotiated ACP session are checked when execution starts.
+`selectable` means the identity is present in the Providers catalog. In the
+side-effect-free catalog output, `readiness: unverified` means no request-time
+probe checked the current executable, account, or session. A prerequisite with
+`status: required` is static setup guidance, not a claim that the requirement
+is installed or authenticated. A readiness probe, or a small `you run`, can
+report `ready`, `unavailable`, or `degraded` after checking the current machine.
 
 ## Discover provider capabilities before execution
 
@@ -232,7 +235,7 @@ has:
 | Field | Meaning |
 | --- | --- |
 | `id`, display name, and aliases | The canonical identity accepted by worker and run configuration. |
-| `availability`, `readiness`, and `prerequisites` | Whether the provider is selectable and which sanitized authentication, executable, configuration, or workspace facts affect readiness. |
+| `availability`, `readiness`, and `prerequisites` | `availability` is publication/selectability metadata. `readiness: unverified` and prerequisite `status: required` mean the side-effect-free catalog has not checked the current machine; a request-time probe can report `ready`, `unavailable`, or `degraded` with `satisfied`/`missing` facts. |
 | `models` and `efforts` | Exact supported model IDs and the effort values accepted independently for each model. The model list is an exact per-ID inventory, not a family alias; do not synthesize IDs from a family name. An empty effort list is explicit: the model has no separate public effort setting, such as AGY's model-encoded selection. |
 | `modalities` | Directional input/output support, including the transport such as `inline`, `file_path`, or `none`. Unsupported values are explicit. |
 | `tools` | Named tools and whether the provider advertises them as supported. |
@@ -253,6 +256,10 @@ The current first-party entries make several preflight constraints explicit:
   use `file_path` transport. Its named limits expose that model-ID selection,
   workspace extension through `--add-dir`, and a five-minute default
   `print_timeout` (300 seconds).
+- Claude publishes the exact text-only IDs `claude-opus-4-6-thinking`,
+  `claude-sonnet-4-20250514`, and `claude-sonnet-5`, each with the same
+  low-through-max effort list. Its static authentication, executable, and
+  workspace requirements remain `required` until a readiness probe runs.
 - Claude and any configured ACP identity use the same field shape. Empty model,
   tool, or limit arrays are reported explicitly, so missing metadata is not
   mistaken for support.

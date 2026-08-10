@@ -91,6 +91,10 @@ func assertHumanFacts(t *testing.T, output string) {
 		}
 	}
 	for _, want := range []string{
+		"antigravity\tAntigravity\tselectable\tunverified",
+		"claude\tClaude Code\tselectable\tunverified",
+		"codex\tCodex\tselectable\tunverified",
+		"authentication/account-authentication: required",
 		"gpt-5.6",
 		"gpt-5.6-luna",
 		"gpt-5.6-sol",
@@ -99,6 +103,7 @@ func assertHumanFacts(t *testing.T, output string) {
 		"video: unsupported (transport: none)",
 		"referenced_image_paths [maximum, paths] maximum=5",
 		"claude-opus-4-6-thinking",
+		"claude-sonnet-5",
 		"Efforts:\tnone",
 		"audio: supported (transport: file_path)",
 		"video: supported (transport: file_path)",
@@ -117,11 +122,17 @@ type listOutput struct {
 }
 
 type providerOutput struct {
-	ID            string        `json:"id"`
-	Models        []modelOutput `json:"models"`
-	Prerequisites []any         `json:"prerequisites"`
-	Tools         []any         `json:"tools"`
-	KnownLimits   []limitOutput `json:"knownLimits"`
+	ID            string               `json:"id"`
+	Availability  string               `json:"availability"`
+	Readiness     string               `json:"readiness"`
+	Models        []modelOutput        `json:"models"`
+	Prerequisites []prerequisiteOutput `json:"prerequisites"`
+	Tools         []any                `json:"tools"`
+	KnownLimits   []limitOutput        `json:"knownLimits"`
+}
+
+type prerequisiteOutput struct {
+	Status string `json:"status"`
 }
 
 type modelOutput struct {
@@ -173,6 +184,14 @@ func assertJSONFacts(t *testing.T, output string) {
 		if provider.Models == nil || provider.Prerequisites == nil || provider.Tools == nil || provider.KnownLimits == nil {
 			t.Fatalf("provider %q omitted explicit capability arrays: %#v", providerID, provider)
 		}
+		if provider.Availability != "selectable" || provider.Readiness != "unverified" {
+			t.Fatalf("provider %q availability/readiness = %q/%q, want selectable/unverified", providerID, provider.Availability, provider.Readiness)
+		}
+		for _, prerequisite := range provider.Prerequisites {
+			if prerequisite.Status != "required" {
+				t.Fatalf("provider %q prerequisite status = %q, want required", providerID, prerequisite.Status)
+			}
+		}
 	}
 
 	codex := byID["codex"]
@@ -204,6 +223,24 @@ func assertJSONFacts(t *testing.T, output string) {
 	}
 	if limit := findLimit(antigravity.KnownLimits, "print_timeout"); limit == nil || limit.Default == nil || *limit.Default != 300 {
 		t.Fatalf("AGY timeout limit = %#v, want default 300", limit)
+	}
+
+	claude := byID["claude"]
+	wantClaudeModels := []string{"claude-opus-4-6-thinking", "claude-sonnet-4-20250514", "claude-sonnet-5"}
+	if len(claude.Models) != len(wantClaudeModels) {
+		t.Fatalf("Claude models = %#v, want exact IDs %v", claude.Models, wantClaudeModels)
+	}
+	for _, modelID := range wantClaudeModels {
+		model := findModel(claude.Models, modelID)
+		if model == nil {
+			t.Fatalf("Claude is missing model %s", modelID)
+		}
+		if len(model.Efforts) != 5 || strings.Join(model.Efforts, ",") != "low,medium,high,xhigh,max" {
+			t.Fatalf("Claude %s efforts = %v, want low through max", model.ID, model.Efforts)
+		}
+		assertModality(t, model.Modalities, "input", "text", "supported", "inline")
+		assertModality(t, model.Modalities, "input", "audio", "unsupported", "none")
+		assertModality(t, model.Modalities, "input", "video", "unsupported", "none")
 	}
 }
 

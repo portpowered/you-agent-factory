@@ -86,9 +86,9 @@ func (s *Service) ResolveSelection(
 	}, nil
 }
 
-// ValidatePrerequisites reports whether a canonical provider is currently
-// selectable. Unknown identities fail with ErrUnknownProvider; blocked
-// availability or prerequisites fail with ErrProviderUnavailable.
+// ValidatePrerequisites reports whether a canonical provider is selectable by
+// the catalog. Unknown identities fail with ErrUnknownProvider; blocked
+// availability or missing prerequisites fail with ErrProviderUnavailable.
 func (s *Service) ValidatePrerequisites(
 	ctx context.Context,
 	request providers.ValidatePrerequisitesRequest,

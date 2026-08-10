@@ -108,8 +108,8 @@ func TestListProvidersIncludesExperimentalSelectableEntries(t *testing.T) {
 	if antigravity.Availability != providers.AvailabilitySelectable {
 		t.Fatalf("antigravity availability = %q, want %q", antigravity.Availability, providers.AvailabilitySelectable)
 	}
-	if antigravity.Readiness != providers.ReadinessReady {
-		t.Fatalf("antigravity readiness = %q, want %q", antigravity.Readiness, providers.ReadinessReady)
+	if antigravity.Readiness != providers.ReadinessUnverified {
+		t.Fatalf("antigravity readiness = %q, want %q", antigravity.Readiness, providers.ReadinessUnverified)
 	}
 }
 
@@ -153,6 +153,7 @@ func TestListProvidersProjectsIdentityMetadataAndCapabilities(t *testing.T) {
 	indexed := indexProviders(list.Providers)
 	assertCodexCatalogFacts(t, indexed[providers.IDCodex])
 	assertAntigravityCatalogFacts(t, indexed[providers.IDAntigravity])
+	assertClaudeCatalogFacts(t, indexed[providers.IDClaude])
 
 	if _, ok := indexed[providers.IDCursor]; ok {
 		t.Fatal("native cursor must not be present in the selectable provider catalog")
@@ -203,8 +204,8 @@ func assertDetachedProvider(t *testing.T, first, second providers.Descriptor) {
 
 func assertCodexCatalogFacts(t *testing.T, codex providers.Descriptor) {
 	t.Helper()
-	if codex.DisplayName != "Codex" || codex.Availability != providers.AvailabilitySelectable || codex.Readiness != providers.ReadinessReady {
-		t.Fatalf("codex identity = %#v, want Codex/selectable/ready", codex)
+	if codex.DisplayName != "Codex" || codex.Availability != providers.AvailabilitySelectable || codex.Readiness != providers.ReadinessUnverified {
+		t.Fatalf("codex identity = %#v, want Codex/selectable/unverified", codex)
 	}
 	if !slices.Contains(codex.Capabilities, providers.CapabilityPromptSubmission) {
 		t.Fatalf("codex capabilities = %#v, want prompt_submission", codex.Capabilities)
@@ -263,6 +264,38 @@ func assertAntigravityPrerequisites(t *testing.T, agy providers.Descriptor) {
 			t.Fatalf("AGY prerequisites = %#v, missing %q", agy.Prerequisites, kind)
 		}
 	}
+	for _, prerequisite := range agy.Prerequisites {
+		if prerequisite.Status != providers.PrerequisiteRequired {
+			t.Fatalf("AGY prerequisite %s/%s status = %q, want required", prerequisite.Kind, prerequisite.Name, prerequisite.Status)
+		}
+	}
+}
+
+func assertClaudeCatalogFacts(t *testing.T, claude providers.Descriptor) {
+	t.Helper()
+	if claude.Readiness != providers.ReadinessUnverified {
+		t.Fatalf("Claude readiness = %q, want unverified for an unprobed catalog", claude.Readiness)
+	}
+	wantModels := []string{"claude-opus-4-6-thinking", "claude-sonnet-4-20250514", "claude-sonnet-5"}
+	if len(claude.Models) != len(wantModels) {
+		t.Fatalf("Claude models = %#v, want exact IDs %v", claude.Models, wantModels)
+	}
+	for index, model := range claude.Models {
+		if model.ID != wantModels[index] {
+			t.Fatalf("Claude model[%d] = %q, want %q", index, model.ID, wantModels[index])
+		}
+		if !slices.Equal(model.Efforts, []providers.ReasoningEffort{"low", "medium", "high", "xhigh", "max"}) {
+			t.Fatalf("Claude %s efforts = %v, want canonical order", model.ID, model.Efforts)
+		}
+		assertProviderModality(t, "Claude text input", model, providers.ModalityText, providers.ModalitySupported, providers.ModalityTransportInline)
+		assertProviderModality(t, "Claude audio input", model, providers.ModalityAudio, providers.ModalityUnsupported, providers.ModalityTransportNone)
+		assertProviderModality(t, "Claude video input", model, providers.ModalityVideo, providers.ModalityUnsupported, providers.ModalityTransportNone)
+	}
+	for _, prerequisite := range claude.Prerequisites {
+		if prerequisite.Status != providers.PrerequisiteRequired {
+			t.Fatalf("Claude prerequisite %s/%s status = %q, want required", prerequisite.Kind, prerequisite.Name, prerequisite.Status)
+		}
+	}
 }
 
 func assertProviderModality(t *testing.T, label string, model providers.ModelDescriptor, kind providers.ModalityKind, support providers.ModalitySupport, transport providers.ModalityTransport) {
@@ -294,8 +327,8 @@ func TestGetProviderResolvesCanonicalID(t *testing.T) {
 	if got.Provider.Availability != providers.AvailabilitySelectable {
 		t.Fatalf("availability = %q, want selectable", got.Provider.Availability)
 	}
-	if got.Provider.Readiness != providers.ReadinessReady {
-		t.Fatalf("readiness = %q, want ready", got.Provider.Readiness)
+	if got.Provider.Readiness != providers.ReadinessUnverified {
+		t.Fatalf("readiness = %q, want unverified", got.Provider.Readiness)
 	}
 	if !slices.Contains(got.Provider.Capabilities, providers.CapabilityPromptSubmission) {
 		t.Fatalf("capabilities = %#v, want prompt_submission", got.Provider.Capabilities)

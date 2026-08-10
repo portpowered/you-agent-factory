@@ -127,6 +127,32 @@ func TestCatalogPublishesCanonicalCapabilityFacts(t *testing.T) {
 	if len(agyLimits) != 3 || agyLimits[0].Name != "add_dir_workspace" || agyLimits[1].Name != "effort_selection" || agyLimits[2].Name != "print_timeout" {
 		t.Fatalf("AGY known limits = %#v, want stable name order", agyLimits)
 	}
+
+	claude, ok := byID["claude"]
+	if !ok {
+		t.Fatal("claude is missing from the catalog")
+	}
+	claudeModels := derefSlice(claude.Models)
+	wantClaudeModels := []string{"claude-opus-4-6-thinking", "claude-sonnet-4-20250514", "claude-sonnet-5"}
+	if len(claudeModels) != len(wantClaudeModels) {
+		t.Fatalf("claude models = %#v, want exact IDs %v", claudeModels, wantClaudeModels)
+	}
+	for index, model := range claudeModels {
+		if model.Id != wantClaudeModels[index] {
+			t.Fatalf("claude model[%d] = %q, want %q", index, model.Id, wantClaudeModels[index])
+		}
+		if got := effortStrings(model.Efforts); !wantStringSlice(got, []string{"low", "medium", "high", "xhigh", "max"}) {
+			t.Fatalf("claude %s efforts = %v, want low through max", model.Id, got)
+		}
+		for _, modalityName := range []string{"audio", "video"} {
+			if modality := findModality(model.Modalities, "input", modalityName); modality == nil || modality.Support != generated.ProviderModalitySupportUnsupported || modality.Transport != generated.None {
+				t.Fatalf("claude %s %s input = %#v, want explicitly unsupported/none", model.Id, modalityName, modality)
+			}
+		}
+		if modality := findModality(model.Modalities, "input", "text"); modality == nil || modality.Support != generated.ProviderModalitySupportSupported || modality.Transport != generated.Inline {
+			t.Fatalf("claude %s text input = %#v, want supported/inline", model.Id, modality)
+		}
+	}
 }
 
 func derefSlice[T any](value *[]T) []T {

@@ -45,7 +45,7 @@ func TestProjectAvailabilityPostures(t *testing.T) {
 				ImplementationAvailability: "bundled",
 			},
 			wantAvail:     providers.AvailabilitySelectable,
-			wantReadiness: providers.ReadinessReady,
+			wantReadiness: providers.ReadinessUnverified,
 		},
 		{
 			name: "selectable externally supplied",
@@ -55,7 +55,7 @@ func TestProjectAvailabilityPostures(t *testing.T) {
 				ImplementationAvailability: "externally-supplied",
 			},
 			wantAvail:     providers.AvailabilitySelectable,
-			wantReadiness: providers.ReadinessReady,
+			wantReadiness: providers.ReadinessUnverified,
 		},
 		{
 			name: "supported-but-unavailable default",
@@ -125,8 +125,8 @@ func TestProjectStaticPrerequisites(t *testing.T) {
 		t.Fatalf("len(prerequisites) = %d, want 3", len(prerequisites))
 	}
 	for _, prerequisite := range prerequisites {
-		if prerequisite.Status != providers.PrerequisiteSatisfied {
-			t.Fatalf("prerequisite %q status = %q, want satisfied", prerequisite.Name, prerequisite.Status)
+		if prerequisite.Status != providers.PrerequisiteRequired {
+			t.Fatalf("prerequisite %q status = %q, want required", prerequisite.Name, prerequisite.Status)
 		}
 		if prerequisite.Description == "" {
 			t.Fatalf("prerequisite %q missing bounded description", prerequisite.Name)

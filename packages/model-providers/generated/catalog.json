@@ -888,6 +888,66 @@
               "transport": "none"
             }
           ]
+        },
+        {
+          "efforts": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "id": "claude-sonnet-5",
+          "modalities": [
+            {
+              "direction": "input",
+              "modality": "audio",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "input",
+              "modality": "image",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "input",
+              "modality": "text",
+              "support": "supported",
+              "transport": "inline"
+            },
+            {
+              "direction": "input",
+              "modality": "video",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "modality": "audio",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "modality": "image",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "modality": "text",
+              "support": "supported",
+              "transport": "inline"
+            },
+            {
+              "direction": "output",
+              "modality": "video",
+              "support": "unsupported",
+              "transport": "none"
+            }
+          ]
         }
       ],
       "technicalSupportLevel": "experimental",
