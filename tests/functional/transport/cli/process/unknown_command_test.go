@@ -2,6 +2,7 @@ package process_test
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -12,11 +13,9 @@ import (
 
 const unknownCommandProbeToken = "not-a-command"
 
-// TestCLIUnknownCommandWritesActionableStderr proves that mistyping a root
-// command through the public built you CLI writes stderr that names the invalid
-// token and keeps any command guidance limited to customer-visible surfaces
-// without leaking hidden or internal discovery commands.
-func TestCLIUnknownCommandWritesActionableStderr(t *testing.T) {
+// TestCLIUnknownCommandWritesSafeCodedStderr proves that mistyping a root
+// command through the public built you CLI writes one safe typed diagnostic.
+func TestCLIUnknownCommandWritesSafeCodedStderr(t *testing.T) {
 	t.Parallel()
 
 	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
@@ -35,12 +34,18 @@ func TestCLIUnknownCommandWritesActionableStderr(t *testing.T) {
 		t.Fatal("unknown command stderr was empty; want actionable diagnostic")
 	}
 
-	wantDiagnostic := `unknown command "` + unknownCommandProbeToken + `" for "you"`
-	if strings.Count(stderr, wantDiagnostic) != 1 {
-		t.Fatalf("stderr = %q, want exactly one diagnostic naming %q", stderr, unknownCommandProbeToken)
+	var diagnostic struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
 	}
-	if !strings.Contains(stderr, "unknown command") {
-		t.Fatalf("stderr = %q, want unknown-command guidance", stderr)
+	if err := json.Unmarshal([]byte(stderr), &diagnostic); err != nil {
+		t.Fatalf("decode one unknown-command diagnostic: %v; stderr=%q", err, stderr)
+	}
+	if diagnostic.Code != "CLI_COMMAND_FAILED" || diagnostic.Message != "command failed" {
+		t.Fatalf("unknown-command diagnostic = %#v, want safe CLI_COMMAND_FAILED diagnostic", diagnostic)
+	}
+	if strings.Count(stderr, "CLI_COMMAND_FAILED") != 1 {
+		t.Fatalf("stderr = %q, want exactly one coded diagnostic", stderr)
 	}
 
 	for _, forbidden := range forbiddenRootDiscoveryCommands {

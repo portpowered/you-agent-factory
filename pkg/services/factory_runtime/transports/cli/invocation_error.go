@@ -63,6 +63,23 @@ func (e *InvocationError) Unwrap() error {
 	return e.Cause
 }
 
+// CLIErrorCode and CLIErrorMessage expose the already-sanitized diagnostic
+// fields to the shared process CLI boundary without exposing the concrete
+// runtime transport type there.
+func (e *InvocationError) CLIErrorCode() string {
+	if e == nil {
+		return ""
+	}
+	return e.Code
+}
+
+func (e *InvocationError) CLIErrorMessage() string {
+	if e == nil {
+		return ""
+	}
+	return e.Message
+}
+
 // ValidateInvocationOutputModeRequest carries invocation output validation inputs.
 type ValidateInvocationOutputModeRequest struct {
 	InvocationOutputMode string

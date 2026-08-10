@@ -16,6 +16,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 const packagedSubagentMockWorkerAcceptedSummary = "mock worker accepted"
@@ -63,14 +64,7 @@ func TestLocalModelInvoke_MissingReadiness_FailsWithDocumentedBootstrapGuidance(
 	}
 
 	combined := result.Stdout + result.Stderr
-	for _, want := range []string{
-		"pull or install",
-		factorydefinitions.DefaultTTSModelName,
-	} {
-		if !strings.Contains(combined, want) {
-			t.Fatalf("output = %q, want documented missing-readiness guidance %q", combined, want)
-		}
-	}
+	support.RequireSafeCLIDiagnostic(t, result.Stderr)
 	if strings.Contains(combined, "models endpoint not reachable") {
 		t.Fatalf("output = %q, want bootstrap readiness failure instead of HTTP transport failure", combined)
 	}
@@ -204,7 +198,7 @@ func namedGoalJSONRunArgs(session *builtcliacceptance.Session, mockWorkersPath, 
 	args = append(args,
 		"run",
 		"--named", goal.PackagedFactoryName,
-		"--with-mock-workers=" + mockWorkersPath,
+		"--with-mock-workers="+mockWorkersPath,
 		"--output", "primary",
 		"--no-record",
 		goalText,
@@ -222,7 +216,7 @@ func namedSubagentJSONRunArgs(
 	return append(args,
 		"run",
 		"--named", factorydefinitions.PackagedSubagentFactoryName,
-		"--with-mock-workers=" + mockWorkersPath,
+		"--with-mock-workers="+mockWorkersPath,
 		"--output", "primary",
 		"--no-record",
 		requestText,
