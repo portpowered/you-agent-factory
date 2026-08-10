@@ -38,6 +38,7 @@ func (service *service) List(cfg ListConfig) error {
 		return fmt.Errorf("output writer is required")
 	}
 	if err := cfg.Context.Err(); err != nil {
+		logListFailure(cfg, "cancellation", err)
 		return err
 	}
 	clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "providers list request")
