@@ -14,8 +14,8 @@ import (
 	"testing"
 	"time"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -29,11 +29,11 @@ import (
 func TestJavaScriptInterruptedSessionResumesWithoutRepeatingCompletedChildren(t *testing.T) {
 	const workflowName = "resumable-two-step-fake-children"
 	projectRoot := setupJavaScriptDurabilityResumeWorkflowFixture(t, workflowName)
-	provider := newJavaScriptDurabilityResumeBlockingProvider(workflowName)
+	provider := newJavaScriptDurabilityResumeBlockingCommandRunner(workflowName)
 
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: projectRoot,
-		Edges:      serviceedges.Edges{ProviderOverride: provider},
+		Edges:      serviceedges.Edges{ProviderCommandRunner: provider},
 	})
 	baseURL := strings.TrimSuffix(server.URL(), "/")
 
@@ -130,11 +130,11 @@ func TestJavaScriptInterruptedSessionResumesWithoutRepeatingCompletedChildren(t 
 func TestJavaScriptResumeRestoresCheckpointAndFinalResult(t *testing.T) {
 	const workflowName = "resumable-two-step-fake-children"
 	projectRoot := setupJavaScriptDurabilityResumeWorkflowFixture(t, workflowName)
-	provider := newJavaScriptDurabilityResumeBlockingProvider(workflowName)
+	provider := newJavaScriptDurabilityResumeBlockingCommandRunner(workflowName)
 
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: projectRoot,
-		Edges:      serviceedges.Edges{ProviderOverride: provider},
+		Edges:      serviceedges.Edges{ProviderCommandRunner: provider},
 	})
 	baseURL := strings.TrimSuffix(server.URL(), "/")
 
@@ -198,11 +198,11 @@ func TestJavaScriptResumeRestoresCheckpointAndFinalResult(t *testing.T) {
 func TestJavaScriptDurabilityDoesNotPersistSnapshotsByDefault(t *testing.T) {
 	const workflowName = "resumable-two-step-fake-children"
 	projectRoot := setupJavaScriptDurabilityResumeWorkflowFixture(t, workflowName)
-	provider := newJavaScriptDurabilityResumeBlockingProvider(workflowName)
+	provider := newJavaScriptDurabilityResumeBlockingCommandRunner(workflowName)
 
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: projectRoot,
-		Edges:      serviceedges.Edges{ProviderOverride: provider},
+		Edges:      serviceedges.Edges{ProviderCommandRunner: provider},
 	})
 	baseURL := strings.TrimSuffix(server.URL(), "/")
 	sessionID := startInterruptedJavaScriptDurabilitySession(t, baseURL, provider, workflowName)
@@ -213,10 +213,12 @@ func TestJavaScriptDurabilityDoesNotPersistSnapshotsByDefault(t *testing.T) {
 	if interrupted.Lifecycle == nil || interrupted.Lifecycle.InterruptedAt == nil {
 		t.Fatalf("in-memory lifecycle = %#v, want interruptedAt", interrupted.Lifecycle)
 	}
-	persistenceDir := filepath.Dir(javaScriptDurableSessionPersistencePath(projectRoot, sessionID))
-	if _, err := os.Stat(persistenceDir); !os.IsNotExist(err) {
-		t.Fatalf("project-local durable session directory stat error = %v, want not exist", err)
-	}
+	// The public interrupted projection is published before the canceled
+	// provider command necessarily returns. Join the root-built process before
+	// inspecting project-local persistence so the negative assertion runs after
+	// all runtime work and cleanup associated with the canceled edge is done.
+	server.Stop(t)
+	assertNoJavaScriptDurableSessionPersistence(t, projectRoot, sessionID)
 }
 
 func setupJavaScriptDurabilityResumeWorkflowFixture(t *testing.T, workflowName string) string {
@@ -240,7 +242,7 @@ func setupJavaScriptDurabilityResumeWorkflowFixture(t *testing.T, workflowName s
 func startInterruptedJavaScriptDurabilitySession(
 	t *testing.T,
 	baseURL string,
-	provider *javascriptDurabilityResumeBlockingProvider,
+	provider *javascriptDurabilityResumeBlockingCommandRunner,
 	workflowName string,
 ) string {
 	t.Helper()
@@ -280,9 +282,13 @@ func startInterruptedJavaScriptDurabilitySession(
 		factoryapi.FactoryDispatchStatusRUNNING,
 		5*time.Second,
 	)
+	// RUNNING is published before the worker necessarily reaches the provider
+	// edge. Wait for the injected provider's entry signal before interrupting;
+	// otherwise the cancellation can win before Infer observes the workflow
+	// context, which is the scheduling race behind the CI failure.
+	provider.waitForBlockedInfer(t, 5*time.Second)
 
 	reason := "javascript durability resume interrupt"
-	provider.waitForInferBlocked(t, 5*time.Second)
 	postJavaScriptDurabilityJSON[factoryapi.FactorySessionLifecycleControlResponse](
 		t,
 		baseURL+"/factory-sessions/"+sessionID+"/interrupt-dispatch",
@@ -384,6 +390,19 @@ func resumeJavaScriptSessionExpectingInvalidState(
 
 func javaScriptDurableSessionPersistencePath(projectRoot, sessionID string) string {
 	return filepath.Join(projectRoot, ".you-agent-factory", "durable-sessions", sessionID+".json")
+}
+
+func assertNoJavaScriptDurableSessionPersistence(t *testing.T, projectRoot, sessionID string) {
+	t.Helper()
+
+	persistencePath := javaScriptDurableSessionPersistencePath(projectRoot, sessionID)
+	if _, err := os.Stat(persistencePath); !os.IsNotExist(err) {
+		t.Fatalf("project-local durable session snapshot stat error = %v, want not exist", err)
+	}
+	persistenceDir := filepath.Dir(persistencePath)
+	if _, err := os.Stat(persistenceDir); !os.IsNotExist(err) {
+		t.Fatalf("project-local durable session directory stat error = %v, want not exist", err)
+	}
 }
 
 func listJavaScriptSessionDispatches(
@@ -646,95 +665,103 @@ func strPtr(value string) *string {
 	return &value
 }
 
-type javascriptDurabilityResumeBlockingProvider struct {
-	mu              sync.Mutex
-	calls           int
-	blockedOnce     bool
-	contextCanceled int
-	inferBlocked    chan struct{}
-	workflowName    string
+// javascriptDurabilityResumeBlockingCommandRunner replaces only the injected
+// ProviderCommandRunner edge. Its first provider-shaped result completes the
+// first child, its second call is held until dispatch cancellation, and later
+// calls complete the resumed child. The test therefore observes the real
+// provider-command path without constructing a custom in-process Provider.
+type javascriptDurabilityResumeBlockingCommandRunner struct {
+	mu                  sync.Mutex
+	calls               int
+	blockedOnce         bool
+	workflowName        string
+	inferStarted        chan struct{}
+	inferStartedOnce    sync.Once
+	contextCanceled     chan struct{}
+	contextCanceledOnce sync.Once
 }
 
-func newJavaScriptDurabilityResumeBlockingProvider(workflowName string) *javascriptDurabilityResumeBlockingProvider {
-	return &javascriptDurabilityResumeBlockingProvider{
-		inferBlocked: make(chan struct{}),
-		workflowName: workflowName,
+func newJavaScriptDurabilityResumeBlockingCommandRunner(workflowName string) *javascriptDurabilityResumeBlockingCommandRunner {
+	return &javascriptDurabilityResumeBlockingCommandRunner{
+		workflowName:    workflowName,
+		inferStarted:    make(chan struct{}),
+		contextCanceled: make(chan struct{}),
 	}
 }
 
-func (p *javascriptDurabilityResumeBlockingProvider) waitForInferBlocked(t *testing.T, timeout time.Duration) {
-	t.Helper()
-
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
-	select {
-	case <-p.inferBlocked:
-	case <-timer.C:
-		t.Fatal("provider Infer did not enter its cancellable wait")
-	}
-}
-
-func (p *javascriptDurabilityResumeBlockingProvider) callCount() int {
+func (p *javascriptDurabilityResumeBlockingCommandRunner) callCount() int {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.calls
 }
 
-func (p *javascriptDurabilityResumeBlockingProvider) Infer(
+func (p *javascriptDurabilityResumeBlockingCommandRunner) Run(
 	ctx context.Context,
-	_ workerexecution.ProviderInferenceRequest,
-) (workerexecution.InferenceResponse, error) {
+	_ platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
 	p.mu.Lock()
 	p.calls++
 	call := p.calls
 	alreadyBlocked := p.blockedOnce
+	if call == 2 && !alreadyBlocked {
+		p.blockedOnce = true
+		p.inferStartedOnce.Do(func() { close(p.inferStarted) })
+	}
 	p.mu.Unlock()
 
 	if call == 1 {
-		return workerexecution.InferenceResponse{
-			Content: fmt.Sprintf(`{"text":"live:%s:step-one:step-one:workflows","label":"step-one"}`, p.workflowName),
-			ProviderSession: &workerexecution.ProviderSessionMetadata{
-				Provider: "mock",
-				Kind:     "session_id",
-				ID:       "live-provider-session-1",
-			},
-		}, nil
+		return javascriptDurabilityProviderCommandResult(
+			p.workflowName,
+			"step-one",
+			"step-one",
+		), nil
 	}
 
 	if !alreadyBlocked {
-		p.mu.Lock()
-		p.blockedOnce = true
-		close(p.inferBlocked)
-		p.mu.Unlock()
-
 		<-ctx.Done()
-		p.mu.Lock()
-		p.contextCanceled++
-		p.mu.Unlock()
-		return workerexecution.InferenceResponse{}, ctx.Err()
+		p.contextCanceledOnce.Do(func() { close(p.contextCanceled) })
+		return platformprocess.CommandResult{}, ctx.Err()
 	}
 
-	return workerexecution.InferenceResponse{
-		Content: fmt.Sprintf(`{"text":"live:%s:step-two:step-two:workflows","label":"step-two"}`, p.workflowName),
-		ProviderSession: &workerexecution.ProviderSessionMetadata{
-			Provider: "mock",
-			Kind:     "session_id",
-			ID:       "live-provider-session-2",
-		},
-	}, nil
+	return javascriptDurabilityProviderCommandResult(
+		p.workflowName,
+		"step-two",
+		"step-two",
+	), nil
 }
 
-func (p *javascriptDurabilityResumeBlockingProvider) waitForCanceledInfer(t *testing.T, timeout time.Duration) {
-	t.Helper()
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		p.mu.Lock()
-		canceled := p.contextCanceled
-		p.mu.Unlock()
-		if canceled > 0 {
-			return
-		}
-		time.Sleep(5 * time.Millisecond)
+func javascriptDurabilityProviderCommandResult(
+	workflowName string,
+	step string,
+	label string,
+) platformprocess.CommandResult {
+	return platformprocess.CommandResult{
+		Stdout: support.CodexSuccessStdout(
+			fmt.Sprintf(`{"text":"live:%s:%s:%s:workflows","label":"%s"}`, workflowName, step, step, label),
+		),
 	}
-	t.Fatal("provider Infer did not observe canceled workflow context")
+}
+
+func (p *javascriptDurabilityResumeBlockingCommandRunner) waitForBlockedInfer(t *testing.T, timeout time.Duration) {
+	t.Helper()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-p.inferStarted:
+		return
+	case <-timer.C:
+		t.Fatal("provider Infer did not start the blocking call")
+	}
+}
+
+func (p *javascriptDurabilityResumeBlockingCommandRunner) waitForCanceledInfer(t *testing.T, timeout time.Duration) {
+	t.Helper()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-p.contextCanceled:
+		return
+	case <-timer.C:
+		t.Fatal("provider Infer did not observe canceled workflow context")
+	}
 }
