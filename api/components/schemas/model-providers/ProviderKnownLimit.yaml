@@ -1,0 +1,42 @@
+type: object
+additionalProperties: false
+description: Named bounded provider constraint or documented behavior.
+required:
+  - name
+  - kind
+  - unit
+  - description
+properties:
+  name:
+    type: string
+    minLength: 1
+    maxLength: 128
+    pattern: '^[a-z][a-z0-9._-]*$'
+    description: Stable machine-readable limit name.
+  kind:
+    $ref: './ProviderKnownLimitKind.yaml'
+  unit:
+    type: string
+    minLength: 1
+    maxLength: 64
+    description: Unit or flag domain for the value.
+  description:
+    type: string
+    minLength: 1
+    maxLength: 512
+    description: Bounded operator-facing explanation of the limit.
+  maximum:
+    type: integer
+    format: int64
+    minimum: 1
+    description: Positive numeric maximum when kind is maximum.
+  default:
+    type: integer
+    format: int64
+    minimum: 1
+    description: Positive numeric default when kind is default.
+  value:
+    type: string
+    minLength: 1
+    maxLength: 256
+    description: Bounded non-numeric behavior value when kind is behavior.

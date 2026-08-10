@@ -1,0 +1,27 @@
+type: object
+additionalProperties: false
+description: Sanitized prerequisite guidance that never carries a secret or machine-local value.
+required:
+  - kind
+  - name
+  - description
+properties:
+  kind:
+    type: string
+    enum:
+      - executable
+      - authentication
+      - workspace
+      - configuration
+    description: Sanitized prerequisite category.
+  name:
+    type: string
+    minLength: 1
+    maxLength: 128
+    pattern: '^[a-z][a-z0-9._-]*$'
+    description: Stable prerequisite name, never a secret value.
+  description:
+    type: string
+    minLength: 1
+    maxLength: 256
+    description: Bounded setup guidance without environment values or paths.

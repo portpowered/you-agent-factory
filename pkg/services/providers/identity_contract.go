@@ -53,13 +53,18 @@ func (id ID) String() string {
 // It carries identity, availability, capability, and prerequisite facts peers
 // need to list and select providers without importing Workers provider internals.
 type Descriptor struct {
-	ID            ID
-	Aliases       []string
-	DisplayName   string
-	Availability  Availability
-	Readiness     Readiness
-	Prerequisites []Prerequisite
-	Capabilities  []Capability
+	ID                         ID
+	Aliases                    []string
+	DisplayName                string
+	Availability               Availability
+	Readiness                  Readiness
+	TechnicalSupportLevel      TechnicalSupportLevel
+	ImplementationAvailability ImplementationAvailability
+	Prerequisites              []Prerequisite
+	Models                     []ModelDescriptor
+	Tools                      []Tool
+	KnownLimits                []KnownLimit
+	Capabilities               []Capability
 }
 
 // Clone returns a detached descriptor copy.
@@ -67,6 +72,15 @@ func (descriptor Descriptor) Clone() Descriptor {
 	cloned := descriptor
 	cloned.Aliases = append([]string(nil), descriptor.Aliases...)
 	cloned.Prerequisites = clonePrerequisites(descriptor.Prerequisites)
+	cloned.Models = make([]ModelDescriptor, len(descriptor.Models))
+	for index, model := range descriptor.Models {
+		cloned.Models[index] = model.Clone()
+	}
+	cloned.Tools = append([]Tool(nil), descriptor.Tools...)
+	cloned.KnownLimits = make([]KnownLimit, len(descriptor.KnownLimits))
+	for index, limit := range descriptor.KnownLimits {
+		cloned.KnownLimits[index] = limit.Clone()
+	}
 	cloned.Capabilities = append([]Capability(nil), descriptor.Capabilities...)
 	return cloned
 }
