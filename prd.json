@@ -68,8 +68,8 @@
         "Tests pass"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added tests/functional/automations/hosted_characterization_test.go. Root-composed service-mode tests inject deterministic hosted clock, Linear HTTP, secret, and provider command edges and assert literal startup-to-dispatch event order for successful hosted ingress and provider execution failure, typed ACCEPTED/FAILED dispatch payloads, terminal Work projections, IDLE service progress, exactly one provider attempt, and no duplicate terminal Work. A blocked HTTP source test asserts the four-event startup-only prefix, no submission or dispatch, observed request-context cancellation on stop, and an independent second service session with isolated work identity. No production behavior or public/generated contract changed."
     },
     {
       "id": "btrc-p0-characterization-004",

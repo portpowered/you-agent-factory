@@ -1,6 +1,7 @@
 ## Codebase Patterns
 - Use an authored capacity-one resource in a deterministic fixture to serialize multi-work dispatches when exact Factory Event order must be characterized; this avoids sleeps and preserves the real dispatch/resource boundary.
 - Correlate batch history from both sources: request/relationship and dispatch identity live in Factory Event context, while terminal per-work state is carried by dispatch-response `outputWork`.
+- For hosted-source characterization, route the poller through an unseeded processing input and map its external submission to a separate normal processor; this isolates source effects from the downstream dispatch executor while preserving the real runtime path.
 - Runtime-opening ownership inventories should source grouped fields from runtimeopening.Dependencies, invocation-local values from ExternalEffects, and late seams from the opener; keep the reconciliation reviewer-visible in documentation instead of adding source-inventory tests.
 - Canonical packaged CLI docs live under `docs/reference/`; adding a topic also requires its authored file in `docs/reference/embed.go` and a registry entry in `pkg/transports/cli/docs/docs.go`.
 - The `you run --named <factory> --help` output is the authoritative invocation contract; omitted role provider/model values resolve through operator defaults.
@@ -801,4 +802,23 @@
   - A capacity-one authored resource is the current deterministic boundary for serializing a multi-work batch without sleeps; it produces stable dispatch request/association/model/response ordering while retaining multiple child works.
   - A partially failed work can still yield a `SUCCEEDED`/`FINAL` Factory Session when every work token reaches a terminal state; the typed per-dispatch failure remains in `DISPATCH_RESPONSE`.
   - Canonical batch work identity is split across the WORK_REQUEST/relationship event context and the dispatch response `outputWork`; assert both instead of relying on a projection derived from the test itself.
+---
+## 2026-08-10 05:33 -07:00 - btrc-p0-characterization-003
+- What was implemented
+  - Added deterministic hosted/service characterization in tests/functional/automations/hosted_characterization_test.go without changing production code or public/generated contracts.
+  - Root-composed service tests replace the hosted clock, Linear HTTP client, secret resolver, and provider command runner through edges.Edges; successful hosted ingress asserts the literal ten-event startup-to-dispatch sequence, ACCEPTED dispatch payload, terminal `complete` Work, and IDLE service progress.
+  - Execution failure asserts the same literal event sequence, typed dispatch failure detail/error, terminal `failed` Work, one provider attempt, and no non-terminal progress.
+  - Blocked hosted HTTP asserts the startup-only four-event prefix, no submission or dispatch, observed request-context cancellation during service stop, and an isolated independent second session that completes only its own Work.
+  - Marked story btrc-p0-characterization-003 as passed in prd.json.
+- Files changed
+  - tests/functional/automations/hosted_characterization_test.go
+  - prd.json
+  - progress.txt
+- Verification
+  - `go test ./tests/functional/automations -run 'TestBTRCP0HostedService' -count=1 -v -timeout 120s` — passed.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - Hosted service mode remains live with runtime status IDLE after a terminal Work; its caller-visible terminal result is the dispatch response plus session-scoped Work/progress projection rather than a durable session-result endpoint.
+  - A poller workstation without a worker executor fails after admission; use a separate normal workstation for the hosted target state when characterizing successful hosted ingress.
+  - A blocking HTTP edge makes source cleanup observable through request-context cancellation, while a separate process with a distinct hosted Work ID provides a direct isolation assertion.
 ---
