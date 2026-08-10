@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestMapCommittedOwnerPackageCoversAllThirteenOwners(t *testing.T) {
+func TestMapCommittedOwnerPackageCoversAllProductOwners(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := findRepoRoot(t)
@@ -139,6 +139,14 @@ func TestMapCommittedOwnerPackageUsesPlanNestedDestinations(t *testing.T) {
 				Destination: "system_initialization",
 			},
 		},
+		{
+			path: "pkg/services/worker_sessions/internal/service",
+			want: PackageMapping{
+				PackagePath: "pkg/services/worker_sessions/internal/service",
+				Disposition: DispositionRetain,
+				Destination: "worker_sessions",
+			},
+		},
 	}
 
 	for _, tc := range cases {
@@ -225,4 +233,3 @@ func TestCommittedManifestMapsProductOwnersWithoutRediscovery(t *testing.T) {
 		t.Fatalf("committed packages missing owners: %v", err)
 	}
 }
-

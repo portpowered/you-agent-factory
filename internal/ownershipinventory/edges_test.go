@@ -93,6 +93,41 @@ func TestValidateFailsWhenCrossServiceEdgesNotStableSorted(t *testing.T) {
 	}
 }
 
+func TestValidateRejectsReclassifyingUnresolvedBidirectionalDebtAsAcceptable(t *testing.T) {
+	inventory, packages := loadedInventoryAndPackages(t)
+	first := -1
+	for i := range inventory.CrossServiceEdges {
+		if inventory.CrossServiceEdges[i].Bidirectional {
+			first = i
+			break
+		}
+	}
+	if first < 0 {
+		t.Fatal("expected at least one unresolved bidirectional edge")
+	}
+	from := inventory.CrossServiceEdges[first].FromOwner
+	to := inventory.CrossServiceEdges[first].ToOwner
+	for i := range inventory.CrossServiceEdges {
+		edge := &inventory.CrossServiceEdges[i]
+		if !((edge.FromOwner == from && edge.ToOwner == to) ||
+			(edge.FromOwner == to && edge.ToOwner == from)) {
+			continue
+		}
+		// A valid interaction class does not resolve a reciprocal dependency.
+		edge.Class = ownershipinventory.EdgeClassQuery
+		edge.Bidirectional = false
+		edge.Unresolved = false
+	}
+
+	report := ownershipinventory.ValidateInventory(inventory, packages)
+	if report.OK() {
+		t.Fatal("ValidateInventory() unexpectedly accepted an unmarked reciprocal edge")
+	}
+	if len(report.InvalidBidirectionalEdges) == 0 {
+		t.Fatalf("invalid bidirectional edges empty; report=%#v", report)
+	}
+}
+
 func TestClassifyEdgeMarksProcessEdgesAsArchitectureException(t *testing.T) {
 	cases := []struct {
 		from string
@@ -152,6 +187,7 @@ func TestDiscoverCrossServiceEdgesCoversDistinctOwners(t *testing.T) {
 		t.Fatal("expected discovered cross-service edges")
 	}
 	seenEdges := false
+	seenBidirectional := false
 	for _, edge := range edges {
 		if edge.FromOwner == "" || edge.ToOwner == "" {
 			t.Fatalf("edge missing owners: %#v", edge)
@@ -161,6 +197,12 @@ func TestDiscoverCrossServiceEdgesCoversDistinctOwners(t *testing.T) {
 		}
 		if strings.TrimSpace(edge.Class) == "" {
 			t.Fatalf("edge missing class: %#v", edge)
+		}
+		if edge.Bidirectional {
+			seenBidirectional = true
+			if !edge.Unresolved {
+				t.Fatalf("bidirectional edge is not visible as unresolved debt: %#v", edge)
+			}
 		}
 		if edge.FromOwner == ownershipinventory.DestinationEdges || edge.ToOwner == ownershipinventory.DestinationEdges {
 			seenEdges = true
@@ -174,5 +216,8 @@ func TestDiscoverCrossServiceEdgesCoversDistinctOwners(t *testing.T) {
 	}
 	if !seenEdges {
 		t.Fatal("expected at least one Process Edges edge in discovery")
+	}
+	if !seenBidirectional {
+		t.Fatal("expected at least one unresolved bidirectional edge in discovery")
 	}
 }

@@ -6,10 +6,11 @@ import (
 	"strings"
 )
 
-// Provider performs one inference request against an external model provider.
-// Cross-service consumers (for example Recordings replay binding) name this
-// Workers root contract instead of importing provider/inferencecontract
-// packages.
+// Provider is the request-scoped compatibility adapter retained at the Workers
+// root for existing construction boundaries. Providers owns provider protocol,
+// selection, session identity, native adapters, and the one normalized attempt;
+// Workers owns when to execute this request and how to retry or schedule it.
+// New durable provider-effect contracts belong under Providers Execution.
 type Provider interface {
 	Infer(context.Context, ProviderInferenceRequest) (InferenceResponse, error)
 }

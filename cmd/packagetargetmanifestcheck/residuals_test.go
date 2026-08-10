@@ -233,7 +233,6 @@ func TestCommittedManifestMapsResidualsWithoutReopeningOwners(t *testing.T) {
 	vocabOwners := append([]string{}, manifest.DestinationVocabulary.ProductOwners...)
 	wantOwners := closedDestinationVocabulary().ProductOwners
 	if strings.Join(vocabOwners, ",") != strings.Join(wantOwners, ",") {
-		t.Fatalf("destination vocabulary productOwners changed; residual mapping must not reopen the 13-owner tree")
+		t.Fatalf("destination vocabulary productOwners changed; residual mapping must not reopen the committed product-owner tree")
 	}
 }
-
