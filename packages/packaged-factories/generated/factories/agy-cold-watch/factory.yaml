@@ -21,6 +21,8 @@ invocationSignature:
     parameters:
         - bindings:
             - kind: NAMED
+            - kind: POSITIONAL
+              position: 1
           description: Path to the completed cut, relative to the AGY workspace or an absolute path within it.
           externalName: cut-path
           name: cutPath

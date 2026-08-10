@@ -612,3 +612,21 @@
 - **Learnings for future iterations:**
   - Adding public packaged Factories also expands the candidate consumer's manifest-derived invocation inventory; update its exact-count assertions in the same change and run the package verification target locally.
 ---
+
+## 2026-08-09 22:24 -07:00 - wo-b2-agy-production-review-roles-003 CI follow-up
+- What was implemented
+  - Added a positional `cutPath` binding to @you/agy-cold-watch so the required file input remains reachable from ACP's single-text-prompt contract while preserving the named `--cut-path` CLI route.
+  - Regenerated the cold-watch YAML/JSON and packaged-factory manifest artifacts.
+- Files changed
+  - `packages/packaged-factories/factories/agy-cold-watch/factory.yaml`
+  - `packages/packaged-factories/generated/factories/agy-cold-watch/factory.yaml`
+  - `packages/packaged-factories/generated/factories/agy-cold-watch/factory.json`
+  - `packages/packaged-factories/generated/manifest.json`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/factory/packaged/catalog -run '^TestEveryPackagedFactoryIsInvocableFromASingleTextPrompt$' -count=1` — passed.
+  - `go test ./tests/functional/providers/agy -run '^TestAgyProductionReviewRolesThroughRootBuildProcess$' -count=1` — passed.
+  - `make packaged-factory-catalog-check` and `make packaged-factory-package-verify` — passed; all 38 package-script subtests passed except the expected Windows symlink-creation skip.
+- **Learnings for future iterations:**
+  - Required named file arguments still need a positional or STDIN binding when the packaged Factory participates in ACP single-text-prompt invocability; named CLI help alone does not satisfy that contract.
+---

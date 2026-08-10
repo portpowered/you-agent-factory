@@ -21,6 +21,8 @@ invocationSignature:
       typeHint: FILE_PATH
       bindings:
         - kind: NAMED
+        - kind: POSITIONAL
+          position: 1
 examples:
   - name: review-completed-cut
     description:
