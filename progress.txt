@@ -50,6 +50,7 @@
 - Exclusive directory reservation is a synchronization capability: inject it as a narrowly owned function port and keep generic filesystem adapters limited to inspection and ordinary materialization effects.
 - Treat an absent PID as indeterminate unless the owner probe has stronger proof of orphanhood; compare the owner record again before any explicitly permitted orphan reclaim.
 - When broad functional coverage reports a cancellation-observation failure, rerun the failed lane and isolate the named test before changing an unrelated feature; parallel-suite failures can move between existing durability/restart tests while isolated runs pass.
+- Atomic orphan reclaim must rename the exact revalidated lease to a distinct still-visible recovery path before publishing the new owner; never remove and reuse the same path across a delayed contender.
 - Cross-process lease probes must suspend before filesystem inspection and match the exact ownership-resource suffix; observe-then-suspend leaves a release race even when the path is re-stat'ed.
 
 ## 2026-08-09 13:12 - wo-d1-packaged-factories-docs-001
@@ -1481,5 +1482,28 @@
   - The PR base is `6e01bee68`, matching the synchronized local `origin/main`; the PR is mergeable but blocked while checks rerun.
   - The latest blocking conversation finding about the Story 001 observe-then-suspend race is explicitly addressed. The Story 002 compare-and-reclaim race remains unresolved by design for the next one-story iteration.
 - **Learnings for future iterations:**
-  - A review follow-up should state exactly which finding the current head resolves and explicitly preserve any remaining blocking story work; green historical CI cannot be presented as merged-head evidence while new checks are pending.
+- A review follow-up should state exactly which finding the current head resolves and explicitly preserve any remaining blocking story work; green historical CI cannot be presented as merged-head evidence while new checks are pending.
+---
+
+## 2026-08-10 14:29 -07:00 - pf-stale-scope-diagnostic-002
+- What was implemented
+  - Replaced path-based orphan `RemoveAll` with an atomic exact-path rename claim: the winning reclaimer moves the revalidated deterministic `.staging-owner` lease to a distinct staging-prefixed recovery path, publishes the current owner metadata there, and passes that lease into the installation operation.
+  - Kept the original deterministic path out of reuse during recovery, so a delayed reclaimer receives a bounded racing/indeterminate contention result and cannot remove a replacement owner resource.
+  - Added a deterministic concurrent orphan-reclaimer test that pauses both contenders after revalidation, lets one reclaim and acquire the recovery lease, then resumes the delayed contender and verifies the winner metadata remains intact.
+  - Extended recovery diagnostics coverage to assert both `reclaimed-orphan` and recovery `acquired` structured outcomes.
+- Files changed
+  - `pkg/services/factory_definitions/internal/services/distribution/packagedinstallation/service.go`
+  - `pkg/services/factory_definitions/internal/services/distribution/packagedinstallation/service_test.go`
+  - `pkg/services/factory_definitions/internal/services/distribution/packagedinstallation/diagnostics_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Focused packaged-installation tests for recovery, acquisition race, structured diagnostics, and concurrent orphan reclaim — passed.
+  - Full `pkg/services/factory_definitions/internal/services/distribution/...` test sweep — passed.
+  - `go test -race` concurrent orphan-reclaimer test, `-count=10` — passed 10/10.
+  - Real-process hard-kill successor regression, `-count=3` — passed 3/3.
+  - `gofmt` and `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - A revalidated metadata read followed by path removal is not a safe compare-and-reclaim: the resource must be atomically moved to a distinct visible lease path before the old path can be reused.
+  - Keep a recovered staging lease visible and owned throughout the handoff; this closes the gap where a third installer could otherwise acquire the deterministic path between orphan removal and successor ownership publication.
 ---
