@@ -1505,5 +1505,24 @@
   - `gofmt` and `git diff --check` — passed.
 - **Learnings for future iterations:**
   - A revalidated metadata read followed by path removal is not a safe compare-and-reclaim: the resource must be atomically moved to a distinct visible lease path before the old path can be reused.
-  - Keep a recovered staging lease visible and owned throughout the handoff; this closes the gap where a third installer could otherwise acquire the deterministic path between orphan removal and successor ownership publication.
+- Keep a recovered staging lease visible and owned throughout the handoff; this closes the gap where a third installer could otherwise acquire the deterministic path between orphan removal and successor ownership publication.
+---
+
+## 2026-08-10 14:43 -07:00 - pf-stale-scope-diagnostic-002 verification follow-up
+- What was implemented
+  - Moved orphan-claim/recovery mechanics into the focused `ownership.go` owner module and moved the concurrent race fixture into `diagnostics_test.go` so the repository’s backend-size and maintainability gates remain satisfied without exemptions.
+  - Extracted existing-target handling from `InstallPackagedFactory` and the recovered-acquisition assertion from the diagnostic test while preserving the same observable behavior.
+- Files changed
+  - `pkg/services/factory_definitions/internal/services/distribution/packagedinstallation/ownership.go`
+  - `pkg/services/factory_definitions/internal/services/distribution/packagedinstallation/service.go`
+  - `pkg/services/factory_definitions/internal/services/distribution/packagedinstallation/service_test.go`
+  - `pkg/services/factory_definitions/internal/services/distribution/packagedinstallation/diagnostics_test.go`
+- Verification
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` — passed.
+  - `make test` — passed.
+  - `make typecheck` — passed after one frozen `bun install --frozen-lockfile` restored the declared `@types/bun` dependency in the local workspace.
+  - Full distribution test sweep and 10-run race-detector orphan-reclaimer test — passed.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - When a new behavioral test crosses a ratcheted size or complexity gate, move only the focused fixture/assertion into an existing owner test module and extract helpers; do not weaken the gate or add an exemption.
 ---
