@@ -1,6 +1,6 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-08-09
+last-modified: 2026-08-10
 doc-id: agent-factory/guides/batch-inputs
 ---
 
@@ -251,9 +251,12 @@ you submit batch '{"requestId":"release-story-set","type":"FACTORY_REQUEST_BATCH
 Validate the public batch envelope locally without contacting the server
 (`--dry-run` exits 0 on valid input even when the factory is unreachable). A
 dry run checks the JSON shape, public field aliases, request discriminator,
-request ID, and non-empty `works[]`; it cannot compare `workTypeName`, `state`,
-or `requiredState` with the running factory's topology or validate the complete
-relation graph.
+request ID, non-empty `works[]`, and the topology-independent batch rules:
+`works[].name` must be unique across the whole request, and every relation
+endpoint must match a name in that request's `works[]`. It cannot compare
+`workTypeName`, `state`, or `requiredState` with the running factory's topology
+or validate the complete relation graph. Live admission repeats the same
+topology-independent checks before applying Factory-topology validation.
 
 ```bash
 you submit batch --dry-run '{"requestId":"release-story-set","type":"FACTORY_REQUEST_BATCH","works":[{"name":"story-auth","workTypeName":"story","payload":{"title":"Harden auth session handling"}}]}'
@@ -384,6 +387,24 @@ type:
 }
 ```
 
+The deterministic diagnostic names the duplicate and both entry paths, for
+example: `work_request: duplicate name "release": works[1].name conflicts
+with works[0].name; works[].name must be unique across the entire batch,
+including across different workTypeName values; rename or remove one entry`.
+Rename one entry or remove it before submitting. For example, this corrected
+batch uses two distinct names even though the Work types remain different:
+
+```json
+{
+  "requestId": "distinct-names",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    { "name": "release-set", "workTypeName": "story-set" },
+    { "name": "release-story", "workTypeName": "story" }
+  ]
+}
+```
+
 Relation endpoints must both be present in this request; an existing Work in a
 different submission does not satisfy the lookup:
 
@@ -393,6 +414,35 @@ different submission does not satisfy the lookup:
   "type": "FACTORY_REQUEST_BATCH",
   "works": [
     { "name": "publish", "workTypeName": "story" }
+  ],
+  "relations": [
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "publish",
+      "targetWorkName": "review"
+    }
+  ]
+}
+```
+
+The same deterministic check is available in live submission and `--dry-run`.
+It identifies the relation index and type, both endpoint values, and the
+missing field, for example: `work_request: relations[0] relation type
+"DEPENDS_ON" has sourceWorkName "publish" and targetWorkName "review";
+endpoint targetWorkName="review" is missing from this batch; relation
+endpoints must name Work declared in this batch's works[] (not previously
+submitted Work); add the named Work to works[] or correct targetWorkName`.
+Repair it by adding the named Work to this request or changing the endpoint to
+one of the names already declared in `works[]`. This corrected request adds
+the prerequisite instead of referring to a Work submitted earlier:
+
+```json
+{
+  "requestId": "intra-batch-endpoint",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    { "name": "publish", "workTypeName": "story" },
+    { "name": "review", "workTypeName": "story" }
   ],
   "relations": [
     {
@@ -466,9 +516,11 @@ state gating:
 
 The server's admission diagnostic identifies the offending work or relation
 and rule (duplicate name, unknown endpoint, self-dependency, dependency cycle,
-or unknown required state). These checks are distinct from `--dry-run`, which
-does not have the factory topology needed for the last two topology-dependent
-cases.
+or unknown required state). The duplicate-name and same-batch endpoint checks
+also run during `--dry-run`; the dry run does not contact a Factory and cannot
+validate topology-dependent values such as work types, states, or required
+states. In live submission, any failed check rejects the whole request before
+Work or relationships are admitted.
 
 After validation, the factory normalizes the batch:
 
@@ -626,13 +678,16 @@ Before dropping a batch file into `factory/inputs/...`, confirm:
 - The filename ends in `.json`.
 - `type` is exactly `FACTORY_REQUEST_BATCH`.
 - `requestId` is stable and unique for the intended submission.
-- Every work item has a unique `name`.
+- Every work item has a unique `name` across the whole `works[]` array, even
+  when entries use different `workTypeName` values.
 - Every `inputs/BATCH` work item sets `workTypeName`.
 - Parent work items that feed fan-in use the exact waiting `state` expected by
   the guarded parent input.
 - Every `PARENT_CHILD.sourceWorkName` names a child.
 - Every `PARENT_CHILD.targetWorkName` names a parent.
-- Every relation source and target matches a work item name.
+- Every relation source and target matches a work item name in this request's
+  `works[]`; do not target previously submitted or otherwise existing Work by
+  name.
 - `requiredState`, when used on `DEPENDS_ON`, names an actual state on the
   target work type.
 - `DEPENDS_ON` relations do not create cycles.
