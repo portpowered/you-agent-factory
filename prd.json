@@ -1,96 +1,58 @@
 {
-  "project": "SAC S0.1 — Restore Package-Target and Ownership Inventories to the Live Tree",
-  "branchName": "sac-s0-1-ownership-inventories",
-  "description": "Restore the package-target manifest, ownership inventory, architecture guards, and canonical service-owner documentation so every live production package and cross-owner dependency has one reviewed owner and classification, unresolved bidirectional edges remain visible, and provider inference and hosted polling are assigned to Providers and Automations rather than Workers.",
+  "project": "Restore Go Build-Cache Reuse in Git Worktrees",
+  "branchName": "thr-worktree-build-cache",
+  "description": "Stop forcing go build -a solely because a factory worker runs in a Git worktree. Recover and address the original staleness concern with the narrowest evidence-backed cache policy, prove that cross-worktree builds always reflect current source and preserve version behavior, and demonstrate a material warm-build speedup for make build and make install.",
   "context": {
-    "customerAsk": "Implement story S0.1 of the Service Abstraction Convergence plan: regenerate and review the package-target manifest and ownership inventory; add the missing Worker Sessions, Events, Chat Sessions, ACP, Factory Sessions, Providers, platform, and mapping packages; correct the eight guards and documentation entries that misassign provider inference or hosted polling to Workers; and reconcile the service-owner tables in AGENTS.md, docs/architecture/architecture.md, and docs/architecture/packaged-structure.md.",
-    "problem": "The checked-in architecture inventories and some enforcement and documentation surfaces lag the live production package graph. Missing packages and edges, future-tense rationale for implemented services, and incorrect Workers ownership assignments prevent maintainers from trusting the inventories as a statement of package ownership, dependency direction, and remaining convergence debt.",
-    "solution": "Regenerate deterministic inventory candidates from the current production tree, review every package and cross-owner edge against durable service boundaries, preserve unresolved bidirectional dependencies as visible debt, correct inference and polling ownership guards, and align the three canonical service-owner tables without changing runtime behavior or widening into unrelated package migrations."
+    "customerAsk": "Remove the blanket go build -a behavior from Git worktrees and solve any original staleness risk precisely. Record the guard's history in the PR, prove that a main-checkout build followed by worktree builds and a worktree source modification never produces a stale binary, compare make build and make install with forced-rebuild equivalents, and publish before/after wall-time evidence. This lane owns only the WORKTREE_FLAGS block and build-cache flags in the root Makefile.",
+    "problem": "The root Makefile compares git-common-dir with git-dir and sets WORKTREE_FLAGS to -a for every linked worktree. All factory lanes run in that topology, so make build, make install, verify-build, and default repeatedly rebuild the Go standard library and dependency graph instead of reusing valid content-addressed cache entries. Repository history shows the block first appearing in commit 826929a692b17490c922fec2fe05b4b9cd9fc35b with only a stale-cache comment and no recorded reproducer in the commit message, so the original correctness intent must be investigated and preserved through direct behavioral evidence.",
+    "solution": "Use Go's content-addressed build cache by default in worktrees and remove unconditional -a. Complete the guard archaeology, reproduce a main-checkout/worktree/source-mutation scenario with an observable binary probe, and introduce narrower cache keying or isolation only if evidence identifies a real missing input such as environment, cgo, or VCS metadata. Prove build/install artifact and version parity against explicit forced-rebuild controls, then record comparable before, primed, and warm wall times in the PR."
   },
   "acceptanceCriteria": [
-    "make package-target-manifest-check passes from a clean checkout.",
-    "make ownership-inventory-check passes and reports no missing production package or cross-owner edge.",
-    "Every live production package appears exactly once with a durable owner or the explicit Process Edges exception, including Worker Sessions, Events, Chat Sessions, ACP, Factory Sessions, Providers, platform, and mapping packages.",
-    "Inventory regeneration does not silently reclassify a bidirectional edge as acceptable; every unresolved bidirectional edge remains visible until its owning convergence story lands.",
-    "The eight affected guards and documentation entries assign provider inference to Providers and hosted polling to Automations, and the service-owner tables in AGENTS.md, architecture.md, and packaged-structure.md state the same durable ownership model.",
-    "Enabling/project-level documentation criterion: the canonical service-owner guidance is reconciled with the reviewed inventories; this documentation-only alignment intentionally changes no runtime, public API, CLI, UI, or emitted-event behavior.",
-    "Typecheck and relevant focused tests pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
-    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts are resolved against current main, and the PR is actually merged."
+    "The PR records the available history and rationale for the worktree guard, including commit 826929a692b17490c922fec2fe05b4b9cd9fc35b, any recovered original staleness scenario, and the evidence supporting the selected cache policy.",
+    "make build and make install no longer force go build -a solely because the checkout is a Git worktree; any replacement cache isolation or cache-key input is narrowly scoped to a reproduced correctness risk.",
+    "A clean main-checkout build, a linked-worktree build, and a rebuild after an observable source change in that worktree each produce the behavior expected from their own source, with no stale cross-worktree binary.",
+    "Cache-enabled make build and make install outputs are byte-identical to, or behaviorally equivalent to, comparable forced -a controls, including the same CLI version/VCS stamping and successful installed-binary behavior.",
+    "The PR records equivalent before/after worktree timing commands and environment assumptions; an immediate warm cache-enabled make build is materially faster than the forced-rebuild baseline, with the expected improvement from minutes toward seconds or any variance explained with evidence.",
+    "Scope remains limited to the root Makefile's worktree/build-cache flags and the smallest direct behavioral verification needed; lint-driver mechanics, cmd/unitlane, functional targets, public contracts, UI, generated artifacts, and unrelated cleanup remain unchanged.",
+    "Quality gates pass: focused cross-worktree build/install verification, relevant Go tests, and Typecheck pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
+    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, conflicts or adjacent Makefile churn are resolved against current origin/main, and the PR is actually merged."
   ],
-  "userStories": [],
-  "enablingCriteria": [
+  "userStories": [
     {
-      "id": "sac-s0-1-ownership-inventories-001",
-      "type": "project-enabling",
-      "title": "Complete the package-target manifest",
-      "description": "The package-target manifest is repository-enforcement and maintainer tooling that covers the live production tree exactly once, so placement and migration decisions are based on a reviewed current package graph rather than a stale snapshot.",
+      "id": "thr-worktree-build-cache-001",
+      "title": "Preserve source freshness while enabling cached worktree builds",
+      "description": "As an implementation worker building from a linked worktree, I want the build to reuse valid cached packages and still reflect my worktree's current source so that fast builds never execute stale code.",
       "acceptanceCriteria": [
-        "Regeneration accounts for every live production package exactly once as a reviewed retain or move destination, with only the explicit Process Edges exception outside durable service or family ownership.",
-        "Worker Sessions, Events, Chat Sessions, ACP, Factory Sessions, Providers, platform, and mapping package families present in the live tree are represented with destinations consistent with the repository architecture.",
-        "make package-target-manifest-check passes from a clean checkout and fails in a focused regression case when a production package is missing or duplicated.",
-        "Existing reviewed move rows and deletion conditions are preserved unless the live tree proves that their owning convergence work has already landed; unrelated package migrations are not performed in this criterion.",
-        "This project-enabling inventory alignment intentionally changes no runtime, public API, CLI, UI, or emitted-event behavior.",
-        "Tests pass",
-        "Typecheck passes"
+        "The PR archaeology identifies the guard's introducing commit and searches available commit, blame, PR, and issue context for the motivating staleness case; unsupported assumptions are explicitly labeled, and the chosen policy is tied to recovered or reproduced evidence.",
+        "Being in a Git worktree no longer adds -a to the ordinary make build or make install command.",
+        "If a cache-key risk is demonstrated, the implementation isolates only that risk through a documented deterministic input or cache boundary; if no risk is demonstrated, ordinary Go content-cache behavior remains the source of truth without new process-global or repository-local cache state.",
+        "In a controlled scenario, the main checkout builds a binary, a linked worktree builds its binary, an observable package or version-probe behavior is changed only in the worktree, and the next worktree build exhibits the changed behavior while the main-checkout result remains unchanged.",
+        "Reverting or changing the worktree probe again causes the next build to exhibit the new expected behavior, proving that both cache hits and invalidation are correct rather than passing from a one-time clean build.",
+        "The scenario is verified on the repository's supported CI platform and includes Windows-safe path handling where automation is added; it does not delete broad user cache directories or mutate a developer's installed binary as test setup.",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Regenerated the package-target manifest from the live production Go tree (545 packages) and retained the 17 newly discovered paths under platform, Chat Sessions, Events, Factory Sessions, Providers, Worker Sessions, ACP, CLI, and mapping destinations. Added Worker Sessions to the closed package-target owner vocabulary and reconciled the live Chat Sessions/Events/Worker Sessions top-level inventories. Existing package mappings and deletion conditions were preserved. make package-target-manifest-check, focused package-target mapping/coverage tests, and git diff --check pass. This is repository-enforcement and maintainer tooling work with no runtime, public API, CLI, UI, or emitted-event behavior change."
+      "notes": "Completed the available guard archaeology: 826929a692b17490c922fec2fe05b4b9cd9fc35b is the first available Makefile/blame point for the worktree block, and its associated PR #1359 changed only cron functional coverage; neither the commit message, associated PR discussion, nor available commit comments recovered a cache-staleness reproducer or issue. That unsupported historical intent is now documented explicitly. Removed the worktree-only -a policy from the root Makefile and replaced it with empty-by-default GO_BUILD_FLAGS, preserving make GO_BUILD_FLAGS=-a build/install as an explicit comparison control. On Windows with the shared Go cache, a main-checkout binary and linked-worktree binary both returned probe code 1; changing only cmd/factory/main.go in the worktree produced 37, then 73, and reverting produced 1 again, while the main artifact remained at 1. The final cache-enabled make build completed in 3.577 seconds to a temporary output path. Temporary source and artifacts were restored/isolated; no installed binary or broad cache directory was modified. make -n confirms no default -a in build/install and explicit -a remains available. make typecheck, make test, and focused cmd/factory/pkg/root tests pass. The initial clean-build wrapper attempt was terminated by concurrent host Go-build contention, so no unsupported cold-build timing claim is made here; warm timing belongs to story 002."
     },
     {
-      "id": "sac-s0-1-ownership-inventories-002",
-      "type": "project-enabling",
-      "title": "Complete and classify the ownership inventory",
-      "description": "The ownership inventory is repository-enforcement and maintainer tooling that records a reviewed owner and relationship classification for every production package and cross-owner dependency, so dependency direction and remaining convergence debt are explicit without changing product behavior.",
+      "id": "thr-worktree-build-cache-002",
+      "title": "Prove build/install parity and warm-build throughput",
+      "description": "As a factory operator repeating build and review cycles, I want cached worktree builds to preserve release-relevant output while completing dramatically faster so that throughput improves without changing the shipped CLI.",
       "acceptanceCriteria": [
-        "The ownership inventory covers every production package from the regenerated package-target manifest and reports no missing or duplicate ownership row.",
-        "Every live cross-owner dependency is reviewed and classified as command, query, event, construction, lifecycle, protocol composition, or external effect, with a rationale consistent with the owning service contract.",
-        "Worker Sessions, Events, Chat Sessions, ACP, Factory Sessions, Providers, platform, and mapping packages and their live cross-owner edges are included.",
-        "Chat Sessions and Events rationale describes their implemented ownership and behavior in the present tense rather than as future work.",
-        "Regeneration preserves every unresolved bidirectional edge as visible debt and a focused regression test proves that such an edge cannot be silently reclassified as acceptable.",
-        "make ownership-inventory-check passes and reports no missing production package or edge.",
-        "This project-enabling inventory alignment intentionally changes no runtime, public API, CLI, UI, or emitted-event behavior.",
-        "Tests pass",
-        "Typecheck passes"
+        "From equivalent source and environment inputs, cache-enabled and explicit forced -a make build controls are byte-identical, or a documented behavioral comparison proves equivalent CLI startup, --version output, VCS/dirty-state stamping, and representative command behavior.",
+        "make install uses the same corrected cache policy as make build; its installed binary passes the same version/behavior probe as the corresponding build artifact without overwriting an unrelated user installation during verification.",
+        "verify-build and default inherit the corrected build behavior through their existing dependency on build; no adjacent lint, unit-lane, functional-lane, or UI mechanics are changed to manufacture the timing result.",
+        "The PR includes before and after timing for make build in a fresh linked worktree under comparable Go version, source revision, host-load, and cache-state conditions, plus an immediate unchanged warm rerun.",
+        "The warm cache-enabled result is materially faster than the forced -a baseline and trends from minutes toward seconds; the PR reports raw wall times and explains material variance rather than claiming an unsupported percentage.",
+        "Focused build/install probes and the repository's required build-related CI checks pass with no version-stamping regression.",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 2,
-      "passes": true,
-      "notes": "Regenerated the ownership inventory from the live package graph (576 existing-scope package rows) and added the 16 package-target paths introduced by story 001, including Worker Sessions, Events, Chat Sessions, ACP, Factory Sessions, Providers, platform, and mapping paths. Added Worker Sessions to the closed owner vocabulary, top-level inventory, and rationale cards; rewrote Chat Sessions and Events rationale in the present tense. Cross-owner discovery now records 155 classified edges, marks all 50 directed entries in reciprocal pairs as unresolved bidirectional debt, and rejects a valid interaction class when those debt markers are removed. make ownership-inventory-check, focused ownership tests, package-target-manifest-check, and git diff --check pass. The full internal ownership package still reports pre-existing Workers/Recordings root-contract baseline drift unrelated to this story."
-    },
-    {
-      "id": "sac-s0-1-ownership-inventories-004",
-      "type": "project-enabling",
-      "title": "Reconcile canonical service-owner documentation",
-      "description": "As a contributor, I want the canonical service-owner tables to agree with the reviewed inventories so that repository guidance leads changes to the correct package and contract boundary.",
-      "acceptanceCriteria": [
-        "The service-owner tables in AGENTS.md, docs/architecture/architecture.md, and docs/architecture/packaged-structure.md consistently describe the implemented Worker Sessions, Events, Chat Sessions, Factory Sessions, Providers, Workers, Automations, platform, ACP transport, and mapping ownership boundaries.",
-        "The tables state that Providers owns provider inference and execution policy, Automations owns hosted polling, and Workers consumes owner contracts to perform request-scoped worker execution.",
-        "Events is described as the process-local source-native stream and Recordings as canonical Factory history; Chat Sessions and Worker Sessions are described as current implemented owners rather than future services.",
-        "Documentation uses the customer-facing Factory vocabulary defined by the data model and does not expose internal Petri terminology as a service boundary.",
-        "The package-target and ownership inventory checks still pass after the documentation reconciliation.",
-        "Tests pass",
-        "Typecheck passes"
-      ],
-      "priority": 4,
-      "passes": true,
-      "notes": "Reconciled the three canonical ownership summaries with the implemented package graph. AGENTS.md now names Chat Sessions, Events, Worker Sessions, ACP, mapping, platform, Providers-owned provider inference/execution policy, Automations-owned hosted polling, and Workers request-scoped execution. architecture.md and packaged-structure.md use the same present-tense service-owner model, explicitly distinguish Events source-native delivery from the Recordings canonical Factory Event ledger, and keep internal runtime implementation details behind the customer-facing Factory boundary. This remains an enabling documentation criterion with no runtime, API, CLI, UI, or emitted-event behavior change. make ownership-inventory-check, make package-target-manifest-check, focused ownership-check tests, and git diff --check pass."
-    },
-    {
-      "id": "sac-s0-1-ownership-inventories-003",
-      "type": "project-enabling",
-      "title": "Correct inference and hosted-polling ownership enforcement",
-      "description": "As a service owner, I want architecture enforcement to attribute provider inference and hosted polling to their durable owners so that new code cannot deepen the incorrect Workers boundary.",
-      "acceptanceCriteria": [
-        "All eight affected guard and documentation entries are reviewed and corrected: provider inference is assigned to Providers, hosted polling is assigned to Automations, and Workers retains only its request-scoped execution responsibilities.",
-        "Ownership rationale distinguishes Workers deciding when to execute a worker attempt from Providers owning provider protocol, selection, session, adapter, and execution behavior, and from Automations owning hosted-source observation and polling.",
-        "Focused guard tests reject a new production assignment of provider inference or hosted polling to Workers, reject an expanded Workers-root Provider compatibility port, and accept only the exact reviewed request-scoped contract plus the reviewed Providers and Automations ownership paths.",
-        "No runtime behavior, public API contract, or unrelated Workers migration is changed by this correction.",
-        "Tests pass",
-        "Typecheck passes"
-      ],
-      "priority": 3,
-      "passes": true,
-      "notes": "Corrected the package-boundary owner metadata for Providers execution/adapters and rewrote the provider-effect diagnostics to distinguish Providers-owned protocol, selection, session, adapter, and one-attempt execution from the Workers request-scoped compatibility port. The checker now expands grouped Go field declarations before inspecting signature types, so a valid grouped parameter declaration is rejected with a diagnostic instead of panicking; TestRunRejectsGroupedWorkersRequestScopedProviderPortWithoutPanic covers that regression. Added focused tests that allow the reviewed Providers leaf and exact Workers compatibility bridge while rejecting an expanded Workers-root provider port and any new provider-effect owner under Workers; the existing hosted-ownership tests reject polling/reconciliation assigned to Workers and accept Automation Hosted Sources. Burned down all eight stale misplaced-guard inventory entries, made retired entries fail validation, and expanded Providers/Workers rationale cards with present-tense ownership. No runtime behavior, public API shape, or unrelated migration changed. make ownership-inventory-check, make package-target-manifest-check, focused boundary/inventory tests, go test compilation checks, and git diff --check pass. The full internal ownership package and ownership-boundary make target retain the pre-existing Workers/Recordings root-contract and two unrelated baseline violations documented in progress.txt."
+      "passes": false,
+      "notes": ""
     }
   ]
 }

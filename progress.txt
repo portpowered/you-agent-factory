@@ -1950,3 +1950,25 @@
 - **Learnings for future iterations:**
   - Acceptance criteria for repository-enforcement work should explicitly identify the project-level nature of the evidence and state the intentionally unchanged customer-facing behavior; keep the PRD valid JSON so automated consumers do not depend on permissive parsers.
 ---
+## 2026-08-10 14:16 -07:00 - thr-worktree-build-cache-001
+- What was implemented
+  - Completed guard archaeology for `826929a692b17490c922fec2fe05b4b9cd9fc35b`: it is the first available Makefile/blame point for the worktree cache block, while the associated cron-coverage PR #1359 and available commit/PR discussion contain no recovered cache-staleness reproducer or issue rationale.
+  - Removed worktree detection and unconditional `-a` from the root Makefile. Added empty-by-default `GO_BUILD_FLAGS` so ordinary `make build` and `make install` use Go's content-addressed cache while explicit forced comparisons remain available with `GO_BUILD_FLAGS=-a`.
+  - Ran a Windows linked-worktree source-freshness probe using temporary binary outputs: baseline code `1`, worktree-only source changes to `37` and `73`, then revert to `1`; the main-checkout artifact remained at `1` throughout.
+- Files changed
+  - `Makefile`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `make -n build`, `make -n install`, and `make -n GO_BUILD_FLAGS=-a install` — passed; default commands contain no `-a`, explicit forced control does.
+  - Final cache-enabled linked-worktree `make build` to a temporary output — passed in 3.577s; temporary binary probe returned `1`.
+  - Source-freshness probe binaries — returned `37`, `73`, then `1` after source changes/revert; main artifact returned `1`.
+  - `make typecheck` — passed.
+  - `make test` — passed on retry after the first run's unit-lane process was terminated by concurrent host Go-build contention.
+  - `go test ./cmd/factory ./pkg/root -count=1 -timeout 300s` — passed.
+  - `git diff --check` and PRD JSON validation — passed.
+- **Learnings for future iterations:**
+  - Go's cache remained source-fresh across the main checkout and linked worktree on Windows without repository-local or process-global cache isolation; no reproduced cache-key risk justified a narrower isolation policy.
+  - The first full build/test attempts were affected by many concurrent Go builds from other worktrees; retry after the cache warmed completed, so timing claims must state host-load and cache-state assumptions.
+  - Story 002 still owns forced-rebuild parity, install verification, and comparable cold/primed/warm throughput evidence; do not claim those acceptance results from this story's warm build alone.
+---
