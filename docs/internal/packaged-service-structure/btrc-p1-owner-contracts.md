@@ -36,19 +36,22 @@ runtime clock.
 
 ## Operation values
 
-`factorysessions.RuntimeOpeningRequest` and `factorysessions.InvocationTarget`
-are value-only selections for runtime opening and one-shot invocation. The
-invocation and execution opening interfaces accept only the request and context;
-their logger and metrics behavior comes from the retained Factory Runtime and
-Factory Sessions owner ports. The application-opening resolver and CLI runner
-adapter likewise no longer accept a per-call logger.
+`factorysessions.RuntimeOpeningRequest`, `factorysessions.ApplicationOpeningRequest`,
+and `factorysessions.InvocationTarget` are value-only selections for runtime
+opening and one-shot invocation. The invocation and execution opening
+interfaces accept only the request and context; their logger and metrics
+behavior comes from the retained Factory Runtime and Factory Sessions owner
+ports. The application-opening resolver and CLI runner adapter likewise no
+longer accept a per-call logger.
 
 Some presentation boundaries are still intentionally transitional. The
-application-opening request retains host-readiness, lifecycle-completion,
-historical-replay, and hosted-service callbacks. Durable `StartRequest` is now
-value-only; the live JavaScript owner exposes event observation through a
-private `StartSyncWithEventConsumer` capability so invocation presentation does
-not become request state, while ordinary durable callers use `StartSync`.
+application-opening service receives host-readiness, lifecycle-completion,
+historical-replay, and hosted-service callbacks through its explicit
+`ApplicationOpeningPresentation` argument rather than its durable request.
+Durable `StartRequest` is now value-only; the live JavaScript owner exposes event
+observation through a private `StartSyncWithEventConsumer` capability so
+invocation presentation does not become request state, while ordinary durable
+callers use `StartSync`.
 Direct JavaScript/stdio opening still retains output and host-observation
 values needed by the protocol adapters. These callbacks do not select or
 replace process effects, but they mean story 004 remains pending until the

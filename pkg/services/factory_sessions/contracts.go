@@ -76,8 +76,11 @@ type FactoryInvocationOutcome struct {
 // FactoryEventConsumer receives ordered canonical events during one invocation.
 type FactoryEventConsumer func([]interfaces.FactoryEvent)
 
-// ApplicationOpeningPorts contains invocation-local observation edges.
-type ApplicationOpeningPorts struct {
+// ApplicationOpeningPresentation contains transport-local observation and
+// completion edges for one already-selected application opening. It is kept
+// separate from ApplicationOpeningRequest so the durable opening values do
+// not retain callbacks or opened service handles.
+type ApplicationOpeningPresentation struct {
 	RuntimeHostObserver RuntimeHostObserver
 	// RuntimeHTTPServicesBound is called once after the application runtime opens
 	// and before component binding. Hosted CLI invocations use it to route factory
@@ -88,13 +91,14 @@ type ApplicationOpeningPorts struct {
 	// a live runtime, so callers can present the recording without constructing
 	// providers, workers, a runtime host, or lifecycle controls.
 	HistoricalReplayBound func(HistoricalReplayInspection)
+	Completion            func(context.Context) error
 }
 
-// ApplicationOpeningRequest binds a runtime request to invocation-local ports.
+// ApplicationOpeningRequest carries only the immutable runtime selections for
+// one application opening. Transport presentation belongs to the explicit
+// ApplicationOpeningPresentation boundary, not to this value contract.
 type ApplicationOpeningRequest struct {
-	Runtime    *RuntimeOpeningRequest
-	Ports      ApplicationOpeningPorts
-	Completion func(context.Context) error
+	Runtime *RuntimeOpeningRequest
 }
 
 // RuntimeHTTPServices is the detached set of opened runtime services consumed

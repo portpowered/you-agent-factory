@@ -72,30 +72,31 @@ func New(
 func (service *Service) OpenApplication(
 	ctx context.Context,
 	request roles.ApplicationOpeningRequest,
+	presentation roles.ApplicationOpeningPresentation,
 	visualizationSink factoryvisualization.Sink,
 ) (roles.OpenedProcessApplication, error) {
 	if service == nil || service.resolveInputs == nil || service.openRuntime == nil || service.adaptRuntime == nil || service.planLifecycle == nil {
 		return roles.OpenedProcessApplication{}, errors.New("open Factory Session application: service is required")
 	}
-	ports, completion := gateCompletionOnRuntimeHost(request.Ports, request.Completion)
+	effectivePresentation, completion := gateCompletionOnRuntimeHost(presentation, presentation.Completion)
 	inputs, err := service.resolveInputs(ctx, request.Runtime)
 	if err != nil {
 		return roles.OpenedProcessApplication{}, fmt.Errorf("open Factory Session application: %w", err)
 	}
 	opened, err := service.openRuntime.OpenApplicationRuntime(
-		ctx, inputs.Request, ports.RuntimeHostObserver,
+		ctx, inputs.Request, effectivePresentation.RuntimeHostObserver,
 	)
 	if err != nil {
 		return roles.OpenedProcessApplication{}, fmt.Errorf("open Factory Session application runtime: %w", err)
 	}
 	if opened.HistoricalReplay != nil {
-		if ports.HistoricalReplayBound != nil {
-			ports.HistoricalReplayBound(*opened.HistoricalReplay)
+		if effectivePresentation.HistoricalReplayBound != nil {
+			effectivePresentation.HistoricalReplayBound(*opened.HistoricalReplay)
 		}
 		return service.openHistoricalReplayApplication(opened)
 	}
-	if ports.RuntimeHTTPServicesBound != nil {
-		ports.RuntimeHTTPServicesBound(opened.HTTP)
+	if effectivePresentation.RuntimeHTTPServicesBound != nil {
+		effectivePresentation.RuntimeHTTPServicesBound(opened.HTTP)
 	}
 	components, err := service.adaptRuntime(opened, visualizationSink)
 	if err != nil {
@@ -139,16 +140,16 @@ func (service *Service) openHistoricalReplayApplication(
 }
 
 func gateCompletionOnRuntimeHost(
-	ports roles.ApplicationOpeningPorts,
+	presentation roles.ApplicationOpeningPresentation,
 	completion func(context.Context) error,
-) (roles.ApplicationOpeningPorts, func(context.Context) error) {
+) (roles.ApplicationOpeningPresentation, func(context.Context) error) {
 	if completion == nil {
-		return ports, nil
+		return presentation, nil
 	}
 	ready := make(chan struct{})
-	observer := ports.RuntimeHostObserver
+	observer := presentation.RuntimeHostObserver
 	var publish sync.Once
-	ports.RuntimeHostObserver = func(binding factorysessions.RuntimeHostBinding) {
+	presentation.RuntimeHostObserver = func(binding factorysessions.RuntimeHostBinding) {
 		publish.Do(func() {
 			if observer != nil {
 				observer(binding)
@@ -156,7 +157,7 @@ func gateCompletionOnRuntimeHost(
 			close(ready)
 		})
 	}
-	return ports, func(ctx context.Context) error {
+	return presentation, func(ctx context.Context) error {
 		select {
 		case <-ready:
 			return completion(ctx)

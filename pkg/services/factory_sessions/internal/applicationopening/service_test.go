@@ -75,7 +75,7 @@ func TestOpenApplicationResolvesThenOpensAndBindsExactInputs(t *testing.T) {
 	request := &factorysessions.RuntimeOpeningRequest{}
 	resolvedRequest := &factorysessions.RuntimeOpeningRequest{}
 	observer := factorysessions.RuntimeHostObserver(func(factorysessions.RuntimeHostBinding) {})
-	invocationPorts := roles.ApplicationOpeningPorts{RuntimeHostObserver: observer}
+	presentation := roles.ApplicationOpeningPresentation{RuntimeHostObserver: observer}
 	var order []string
 	service, err := New(
 		func(
@@ -118,9 +118,12 @@ func TestOpenApplicationResolvesThenOpensAndBindsExactInputs(t *testing.T) {
 		t.Fatalf("New(): %v", err)
 	}
 
-	opened, err := service.OpenApplication(context.Background(), roles.ApplicationOpeningRequest{
-		Runtime: request, Ports: invocationPorts,
-	}, nil)
+	opened, err := service.OpenApplication(
+		context.Background(),
+		roles.ApplicationOpeningRequest{Runtime: request},
+		presentation,
+		nil,
+	)
 	if err != nil {
 		t.Fatalf("OpenApplication(): %v", err)
 	}
@@ -173,6 +176,7 @@ func TestOpenApplicationPassesVisualizationSinkToAdapter(t *testing.T) {
 	if _, err := service.OpenApplication(
 		context.Background(),
 		roles.ApplicationOpeningRequest{Runtime: &factorysessions.RuntimeOpeningRequest{}},
+		roles.ApplicationOpeningPresentation{},
 		sink,
 	); err != nil {
 		t.Fatalf("OpenApplication(): %v", err)
@@ -185,7 +189,7 @@ func TestOpenApplicationPassesVisualizationSinkToAdapter(t *testing.T) {
 func TestCompletionWaitsForRuntimeHostReadinessAndPublishesOnce(t *testing.T) {
 	var observerCalls, completionCalls atomic.Int32
 	ports, completion := gateCompletionOnRuntimeHost(
-		roles.ApplicationOpeningPorts{
+		roles.ApplicationOpeningPresentation{
 			RuntimeHostObserver: func(factorysessions.RuntimeHostBinding) {
 				observerCalls.Add(1)
 			},
@@ -253,7 +257,10 @@ func TestOpenApplicationClosesOpenedResourcesWhenBindingFails(t *testing.T) {
 	}
 
 	_, err = service.OpenApplication(
-		context.Background(), roles.ApplicationOpeningRequest{Runtime: &factorysessions.RuntimeOpeningRequest{}}, nil,
+		context.Background(),
+		roles.ApplicationOpeningRequest{Runtime: &factorysessions.RuntimeOpeningRequest{}},
+		roles.ApplicationOpeningPresentation{},
+		nil,
 	)
 	if !errors.Is(err, bindErr) || !errors.Is(err, closeErr) {
 		t.Fatalf("OpenApplication() error = %v, want binding and cleanup causes", err)
@@ -301,7 +308,10 @@ func TestOpenApplicationClosesOpenedResourcesExactlyOnceWhenLifecyclePlanningFai
 	}
 
 	_, err = service.OpenApplication(
-		context.Background(), roles.ApplicationOpeningRequest{Runtime: &factorysessions.RuntimeOpeningRequest{}}, nil,
+		context.Background(),
+		roles.ApplicationOpeningRequest{Runtime: &factorysessions.RuntimeOpeningRequest{}},
+		roles.ApplicationOpeningPresentation{},
+		nil,
 	)
 	if !errors.Is(err, planErr) || !errors.Is(err, closeErr) {
 		t.Fatalf("OpenApplication() error = %v, want planning and cleanup causes", err)
@@ -362,7 +372,10 @@ func TestOpenApplicationStopsAtResolveAndOpenFailures(t *testing.T) {
 			}
 
 			_, err = service.OpenApplication(
-				context.Background(), roles.ApplicationOpeningRequest{Runtime: &factorysessions.RuntimeOpeningRequest{}}, nil,
+				context.Background(),
+				roles.ApplicationOpeningRequest{Runtime: &factorysessions.RuntimeOpeningRequest{}},
+				roles.ApplicationOpeningPresentation{},
+				nil,
 			)
 			wantErr := test.resolveErr
 			if wantErr == nil {
@@ -412,17 +425,15 @@ func TestOpenApplicationInvokesRuntimeHTTPServicesBound(t *testing.T) {
 		t.Fatalf("New(): %v", err)
 	}
 
-	ports := roles.ApplicationOpeningPorts{
+	presentation := roles.ApplicationOpeningPresentation{
 		RuntimeHTTPServicesBound: func(roles.RuntimeHTTPServices) {
 			bound = true
 		},
 	}
 	_, err = service.OpenApplication(
 		context.Background(),
-		roles.ApplicationOpeningRequest{
-			Runtime: &factorysessions.RuntimeOpeningRequest{},
-			Ports:   ports,
-		},
+		roles.ApplicationOpeningRequest{Runtime: &factorysessions.RuntimeOpeningRequest{}},
+		presentation,
 		nil,
 	)
 	if err != nil {
@@ -481,11 +492,11 @@ func TestOpenApplicationPublishesHistoricalReplayInspectionWithoutLiveBindings(t
 		context.Background(),
 		roles.ApplicationOpeningRequest{
 			Runtime: &factorysessions.RuntimeOpeningRequest{},
-			Ports: roles.ApplicationOpeningPorts{
-				HistoricalReplayBound: func(got factorysessions.HistoricalReplayInspection) {
-					bound = true
-					published = got
-				},
+		},
+		roles.ApplicationOpeningPresentation{
+			HistoricalReplayBound: func(got factorysessions.HistoricalReplayInspection) {
+				bound = true
+				published = got
 			},
 		},
 		nil,
@@ -553,6 +564,7 @@ func TestOpenApplicationClosesHistoricalReplayResourcesWhenLifecyclePlanningFail
 	_, err = service.OpenApplication(
 		context.Background(),
 		roles.ApplicationOpeningRequest{Runtime: &factorysessions.RuntimeOpeningRequest{}},
+		roles.ApplicationOpeningPresentation{},
 		nil,
 	)
 	if !errors.Is(err, planErr) || !errors.Is(err, closeErr) ||

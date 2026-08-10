@@ -23,7 +23,7 @@ import (
 
 type InvocationMetricsRecorder = factorysessions.InvocationMetricsRecorder
 
-type ApplicationOpeningPorts = factorysessions.ApplicationOpeningPorts
+type ApplicationOpeningPresentation = factorysessions.ApplicationOpeningPresentation
 
 type ApplicationOpeningRequest = factorysessions.ApplicationOpeningRequest
 

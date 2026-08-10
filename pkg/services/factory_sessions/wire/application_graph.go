@@ -68,7 +68,7 @@ type (
 	InvocationOperation                  = roles.InvocationOperation
 	InvocationTarget                     = roles.InvocationTarget
 	FactoryInvocationOutcome             = roles.FactoryInvocationOutcome
-	ApplicationOpeningPorts              = roles.ApplicationOpeningPorts
+	ApplicationOpeningPresentation       = roles.ApplicationOpeningPresentation
 	ApplicationOpeningRequest            = roles.ApplicationOpeningRequest
 	RuntimeResources                     = roles.RuntimeResources
 	RuntimeHTTPServices                  = roles.RuntimeHTTPServices

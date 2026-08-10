@@ -67,6 +67,7 @@ type cleanInvocationWorkTarget struct {
 type RuntimeRunnerBuilder func(
 	context.Context,
 	factorysessions.ApplicationOpeningRequest,
+	factorysessions.ApplicationOpeningPresentation,
 	factoryvisualization.Sink,
 ) (initializer.LocalRuntimeRunner, error)
 
@@ -75,7 +76,6 @@ type RuntimeRunnerBuilder func(
 type RuntimeOpeningRequestFactory func(
 	RunConfig,
 	*workers.MockWorkersConfig,
-	factorysessions.RuntimeHostObserver,
 ) factorysessions.ApplicationOpeningRequest
 
 type Opener func(
@@ -241,15 +241,18 @@ func openHostedRuntime(
 		ctx, cfg, recordPath, requestedPort,
 		func() runtimeartifact.Diagnostics { return runtimeLogDiagnosticsForRunner(factorySvc) },
 	)
-	openingRequest := buildRuntimeRequest(runtimeCfg, mockWorkersConfig, onBound)
-	openingRequest.Completion = hostedInvocationCompletion(operation)
+	openingRequest := buildRuntimeRequest(runtimeCfg, mockWorkersConfig)
+	openingPresentation := factorysessions.ApplicationOpeningPresentation{
+		RuntimeHostObserver: onBound,
+		Completion:          hostedInvocationCompletion(operation),
+	}
 	var historicalReplay *factorysessions.HistoricalReplayInspection
-	openingRequest.Ports.HistoricalReplayBound = func(inspection factorysessions.HistoricalReplayInspection) {
+	openingPresentation.HistoricalReplayBound = func(inspection factorysessions.HistoricalReplayInspection) {
 		inspectionCopy := inspection
 		historicalReplay = &inspectionCopy
 	}
 	if invocationMode && operation != nil {
-		openingRequest.Ports.RuntimeHTTPServicesBound = func(http factorysessions.RuntimeHTTPServices) {
+		openingPresentation.RuntimeHTTPServicesBound = func(http factorysessions.RuntimeHTTPServices) {
 			operation.hostedLiveInvocation = &factorysessions.HostedLiveInvocation{
 				Sessions: http.FactorySessions,
 				Invoker:  http.FactorySessions,
@@ -260,7 +263,7 @@ func openHostedRuntime(
 		emitVerboseStartupDiagnostics(cfg, recordPath, requestedPort)
 	}
 	visualizationSink := runVisualizationSink(cfg, presentation)
-	factorySvc, err = buildRunner(ctx, openingRequest, visualizationSink)
+	factorySvc, err = buildRunner(ctx, openingRequest, openingPresentation, visualizationSink)
 	if err != nil {
 		return nil, err
 	}

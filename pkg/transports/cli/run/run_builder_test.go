@@ -72,7 +72,6 @@ type testRuntimeSelections struct {
 func testRuntimeOpeningRequestFactory(
 	cfg RunConfig,
 	mockWorkers *workers.MockWorkersConfig,
-	observer factorysessions.RuntimeHostObserver,
 ) factorysessions.ApplicationOpeningRequest {
 	mode := interfaces.RuntimeModeBatch
 	if cfg.Continuously {
@@ -119,8 +118,6 @@ func testRuntimeOpeningRequestFactory(
 		},
 		ModelCacheDirectory: cfg.ModelCacheDir,
 		OperatorDefaults:    cfg.OperatorDefaults,
-	}, Ports: factorysessions.ApplicationOpeningPorts{
-		RuntimeHostObserver: observer,
 	}}
 }
 
@@ -192,6 +189,7 @@ type testRunnerOpeners struct {
 func (f testRunnerOpeners) BuildRunner(
 	ctx context.Context,
 	request factorysessions.ApplicationOpeningRequest,
+	presentation factorysessions.ApplicationOpeningPresentation,
 	visualizationSink factoryvisualization.Sink,
 ) (initializer.LocalRuntimeRunner, error) {
 	if f.runtime == nil {
@@ -199,7 +197,7 @@ func (f testRunnerOpeners) BuildRunner(
 	}
 	selections := flattenTestRuntimeRequest(request.Runtime)
 	edges := serviceedges.Edges{
-		RuntimeHostObserver: request.Ports.RuntimeHostObserver,
+		RuntimeHostObserver: presentation.RuntimeHostObserver,
 	}
 	if selections != nil {
 		selections.RuntimeHostObserver = edges.RuntimeHostObserver
@@ -244,6 +242,7 @@ func TestOpenRunScopedServerAttachesInvocationCompletionAndKeepsOneShotResult(t 
 	prompt := "ship it"
 	var output strings.Builder
 	var opening factorysessions.ApplicationOpeningRequest
+	var openingPresentation factorysessions.ApplicationOpeningPresentation
 	runnerCalls := 0
 	invocationCalls := 0
 	operation, err := Open(
@@ -260,9 +259,11 @@ func TestOpenRunScopedServerAttachesInvocationCompletionAndKeepsOneShotResult(t 
 		func(
 			_ context.Context,
 			request factorysessions.ApplicationOpeningRequest,
+			presentation factorysessions.ApplicationOpeningPresentation,
 			_ factoryvisualization.Sink,
 		) (initializer.LocalRuntimeRunner, error) {
 			opening = request
+			openingPresentation = presentation
 			return runFuncRunner(func(context.Context) error {
 				runnerCalls++
 				return nil
@@ -296,15 +297,15 @@ func TestOpenRunScopedServerAttachesInvocationCompletionAndKeepsOneShotResult(t 
 	if opening.Runtime.FactoryRuntime.Mode != interfaces.RuntimeModeService {
 		t.Fatalf("hosted runtime mode = %q, want service until terminal completion", opening.Runtime.FactoryRuntime.Mode)
 	}
-	if opening.Completion == nil || opening.Ports.RuntimeHostObserver == nil {
+	if openingPresentation.Completion == nil || openingPresentation.RuntimeHostObserver == nil {
 		t.Fatal("run-scoped server omitted readiness-gated terminal completion")
 	}
 
 	if invocationCalls != 0 {
 		t.Fatal("invocation started while opening the hosted lifecycle")
 	}
-	opening.Ports.RuntimeHostObserver(factorysessions.RuntimeHostBinding{Port: 7437})
-	if err := opening.Completion(t.Context()); err != nil {
+	openingPresentation.RuntimeHostObserver(factorysessions.RuntimeHostBinding{Port: 7437})
+	if err := openingPresentation.Completion(t.Context()); err != nil {
 		t.Fatalf("completion: %v", err)
 	}
 	if invocationCalls != 1 || output.String() != "done" {

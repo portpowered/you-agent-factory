@@ -32,15 +32,16 @@ func TestOpenHostedRuntimeBindsFactorySessionsInvocationCapability(t *testing.T)
 		func(
 			_ context.Context,
 			opening factorysessions.ApplicationOpeningRequest,
+			presentation factorysessions.ApplicationOpeningPresentation,
 			_ factoryvisualization.Sink,
 		) (initializer.LocalRuntimeRunner, error) {
-			if opening.Ports.RuntimeHTTPServicesBound == nil {
+			if presentation.RuntimeHTTPServicesBound == nil {
 				t.Fatal("runtime HTTP services binding = nil")
 			}
-			opening.Ports.RuntimeHTTPServicesBound(factorysessions.RuntimeHTTPServices{FactorySessions: sessions})
-			return stubFactoryService{run: opening.Completion}, nil
+			presentation.RuntimeHTTPServicesBound(factorysessions.RuntimeHTTPServices{FactorySessions: sessions})
+			return stubFactoryService{run: presentation.Completion}, nil
 		},
-		func(RunConfig, *workers.MockWorkersConfig, factorysessions.RuntimeHostObserver) factorysessions.ApplicationOpeningRequest {
+		func(RunConfig, *workers.MockWorkersConfig) factorysessions.ApplicationOpeningRequest {
 			return factorysessions.ApplicationOpeningRequest{}
 		},
 	)

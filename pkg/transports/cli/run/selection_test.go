@@ -38,7 +38,7 @@ func TestRunSelectionOwnsDirectJavaScriptTransportChoice(t *testing.T) {
 			t.Fatal("regular run opener called for direct JavaScript")
 			return nil, nil
 		},
-		func(context.Context, factorysessions.ApplicationOpeningRequest, factoryvisualization.Sink) (initializer.LocalRuntimeRunner, error) {
+		func(context.Context, factorysessions.ApplicationOpeningRequest, factorysessions.ApplicationOpeningPresentation, factoryvisualization.Sink) (initializer.LocalRuntimeRunner, error) {
 			return nil, nil
 		},
 		testInvocationOperation{},
