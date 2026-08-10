@@ -31,6 +31,7 @@ Available Commands:
   init            Configure provider and model defaults
   mcp             Model Context Protocol servers for Factory Session tools
   models          Inspect discovered models from a running service
+  providers       Discover provider capabilities
   run             Load workflow and run the factory engine
   serve           Host You as a protocol server
   server          Serve the Current Factory API and dashboard

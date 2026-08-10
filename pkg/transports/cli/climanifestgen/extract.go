@@ -114,3 +114,9 @@ func ExtractModelsDocsFamily(manifest climanifest.Manifest) (climanifest.Manifes
 		Commands:      commands,
 	}, nil
 }
+
+// ExtractProvidersFamily returns manifest metadata for exactly the providers
+// capability-discovery command IDs declared in commands.json.
+func ExtractProvidersFamily(manifest climanifest.Manifest) (climanifest.Manifest, error) {
+	return extractFamily(manifest, "providers", ProvidersFamilyCommandIDs)
+}

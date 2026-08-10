@@ -586,8 +586,8 @@ const (
 
 // Defines values for FactoryWorldRunnerOptionalCapabilityStatus.
 const (
-	Supported   FactoryWorldRunnerOptionalCapabilityStatus = "supported"
-	Unsupported FactoryWorldRunnerOptionalCapabilityStatus = "unsupported"
+	FactoryWorldRunnerOptionalCapabilityStatusSupported   FactoryWorldRunnerOptionalCapabilityStatus = "supported"
+	FactoryWorldRunnerOptionalCapabilityStatusUnsupported FactoryWorldRunnerOptionalCapabilityStatus = "unsupported"
 )
 
 // Defines values for FactoryWorldWorkItemRefLineageContinuity.
@@ -807,6 +807,14 @@ const (
 	ProviderDiscoveryEndpointKindUnixSocket ProviderDiscoveryEndpointKind = "unix-socket"
 )
 
+// Defines values for ProviderDiscoveryPrerequisiteKind.
+const (
+	Authentication ProviderDiscoveryPrerequisiteKind = "authentication"
+	Configuration  ProviderDiscoveryPrerequisiteKind = "configuration"
+	Executable     ProviderDiscoveryPrerequisiteKind = "executable"
+	Workspace      ProviderDiscoveryPrerequisiteKind = "workspace"
+)
+
 // Defines values for ProviderDocumentationLinkKind.
 const (
 	ProviderDocumentationLinkKindHomepage  ProviderDocumentationLinkKind = "homepage"
@@ -815,11 +823,55 @@ const (
 	ProviderDocumentationLinkKindSupport   ProviderDocumentationLinkKind = "support"
 )
 
+// Defines values for ProviderEffort.
+const (
+	High    ProviderEffort = "high"
+	Low     ProviderEffort = "low"
+	Max     ProviderEffort = "max"
+	Medium  ProviderEffort = "medium"
+	Minimal ProviderEffort = "minimal"
+	Xhigh   ProviderEffort = "xhigh"
+)
+
 // Defines values for ProviderImplementationAvailability.
 const (
 	ProviderImplementationAvailabilityBundled            ProviderImplementationAvailability = "bundled"
 	ProviderImplementationAvailabilityCatalogOnly        ProviderImplementationAvailability = "catalog-only"
 	ProviderImplementationAvailabilityExternallySupplied ProviderImplementationAvailability = "externally-supplied"
+)
+
+// Defines values for ProviderKnownLimitKind.
+const (
+	ProviderKnownLimitKindBehavior ProviderKnownLimitKind = "behavior"
+	ProviderKnownLimitKindDefault  ProviderKnownLimitKind = "default"
+	ProviderKnownLimitKindMaximum  ProviderKnownLimitKind = "maximum"
+)
+
+// Defines values for ProviderModalityDirection.
+const (
+	Input  ProviderModalityDirection = "input"
+	Output ProviderModalityDirection = "output"
+)
+
+// Defines values for ProviderModalityKind.
+const (
+	Audio ProviderModalityKind = "audio"
+	Image ProviderModalityKind = "image"
+	Text  ProviderModalityKind = "text"
+	Video ProviderModalityKind = "video"
+)
+
+// Defines values for ProviderModalitySupport.
+const (
+	ProviderModalitySupportSupported   ProviderModalitySupport = "supported"
+	ProviderModalitySupportUnsupported ProviderModalitySupport = "unsupported"
+)
+
+// Defines values for ProviderModalityTransport.
+const (
+	FilePath ProviderModalityTransport = "file_path"
+	Inline   ProviderModalityTransport = "inline"
+	None     ProviderModalityTransport = "none"
 )
 
 // Defines values for ProviderSessionTranscriptEntryType.
@@ -837,6 +889,12 @@ const (
 	ProviderTechnicalSupportLevelExperimental ProviderTechnicalSupportLevel = "experimental"
 	ProviderTechnicalSupportLevelNotSupported ProviderTechnicalSupportLevel = "not-supported"
 	ProviderTechnicalSupportLevelProduction   ProviderTechnicalSupportLevel = "production"
+)
+
+// Defines values for ProviderToolSupport.
+const (
+	Supported   ProviderToolSupport = "supported"
+	Unsupported ProviderToolSupport = "unsupported"
 )
 
 // Defines values for RelationType.
@@ -5352,6 +5410,21 @@ type ProviderDiagnostic struct {
 // ProviderDiscoveryEndpointKind Static endpoint transport kind that may be checked without credentials.
 type ProviderDiscoveryEndpointKind string
 
+// ProviderDiscoveryPrerequisite Sanitized prerequisite guidance that never carries a secret or machine-local value.
+type ProviderDiscoveryPrerequisite struct {
+	// Description Bounded setup guidance without environment values or paths.
+	Description string `json:"description"`
+
+	// Kind Sanitized prerequisite category.
+	Kind ProviderDiscoveryPrerequisiteKind `json:"kind"`
+
+	// Name Stable prerequisite name, never a secret value.
+	Name string `json:"name"`
+}
+
+// ProviderDiscoveryPrerequisiteKind Sanitized prerequisite category.
+type ProviderDiscoveryPrerequisiteKind string
+
 // ProviderDiscoveryPrerequisites Static, credential-free facts that tooling may use to explain how a provider can be discovered. Only names and endpoint kinds are published: credential values, environment values, endpoint addresses, machine-local paths, installation/readiness state, and pricing are outside this contract.
 type ProviderDiscoveryPrerequisites struct {
 	// ConfigurationKeys Required configuration-key names only; configuration and environment values are forbidden.
@@ -5362,6 +5435,9 @@ type ProviderDiscoveryPrerequisites struct {
 
 	// ExecutableNames Executable basenames that may supply the provider integration.
 	ExecutableNames []string `json:"executableNames"`
+
+	// Prerequisites Sanitized executable, authentication, workspace, or configuration requirements.
+	Prerequisites *[]ProviderDiscoveryPrerequisite `json:"prerequisites,omitempty"`
 }
 
 // ProviderDocumentationLink One stable public documentation resource for a provider.
@@ -5375,6 +5451,9 @@ type ProviderDocumentationLink struct {
 
 // ProviderDocumentationLinkKind Purpose of one stable public provider documentation link.
 type ProviderDocumentationLinkKind string
+
+// ProviderEffort Provider-supported reasoning effort setting for one model.
+type ProviderEffort string
 
 // ProviderExecutionCapabilities Maximum evidenced execution features of the provider integration. These values are independent of support posture and do not imply current-machine readiness.
 type ProviderExecutionCapabilities struct {
@@ -5415,6 +5494,33 @@ type ProviderIdentity = WorkerModelProvider
 // ProviderImplementationAvailability How an implementation is supplied. Availability is publication metadata, not a live readiness or installation result.
 type ProviderImplementationAvailability string
 
+// ProviderKnownLimit Named bounded provider constraint or documented behavior.
+type ProviderKnownLimit struct {
+	// Default Positive numeric default when kind is default.
+	Default *int64 `json:"default,omitempty"`
+
+	// Description Bounded operator-facing explanation of the limit.
+	Description string `json:"description"`
+
+	// Kind Meaning of the value recorded by one named provider limit fact.
+	Kind ProviderKnownLimitKind `json:"kind"`
+
+	// Maximum Positive numeric maximum when kind is maximum.
+	Maximum *int64 `json:"maximum,omitempty"`
+
+	// Name Stable machine-readable limit name.
+	Name string `json:"name"`
+
+	// Unit Unit or flag domain for the value.
+	Unit string `json:"unit"`
+
+	// Value Bounded non-numeric behavior value when kind is behavior.
+	Value *string `json:"value,omitempty"`
+}
+
+// ProviderKnownLimitKind Meaning of the value recorded by one named provider limit fact.
+type ProviderKnownLimitKind string
+
 // ProviderManifest Public, data-only metadata for one model-provider integration. A manifest describes evidenced maximum behavior and publication posture; it never reports current-machine installation, authentication, readiness, pricing, or runtime registration.
 type ProviderManifest struct {
 	// Aliases Alternate lowercase identifiers; aliases must not equal or shadow any catalog ID or alias.
@@ -5441,14 +5547,62 @@ type ProviderManifest struct {
 	// ImplementationAvailability How an implementation is supplied. Availability is publication metadata, not a live readiness or installation result.
 	ImplementationAvailability ProviderImplementationAvailability `json:"implementationAvailability"`
 
+	// KnownLimits Named provider constraints and bounded behavior facts in canonical name order.
+	KnownLimits *[]ProviderKnownLimit `json:"knownLimits,omitempty"`
+
 	// MaximumExecutionCapabilities Maximum evidenced execution features of the provider integration. These values are independent of support posture and do not imply current-machine readiness.
 	MaximumExecutionCapabilities ProviderExecutionCapabilities `json:"maximumExecutionCapabilities"`
 
 	// MaximumResponseFidelityCapabilities Maximum evidenced response-event fidelity of the provider integration. Capabilities describe observable output independently of support posture.
 	MaximumResponseFidelityCapabilities ProviderResponseFidelityCapabilities `json:"maximumResponseFidelityCapabilities"`
 
+	// Models Named provider models and their complete capability facts in canonical model-ID order.
+	Models *[]ProviderModel `json:"models,omitempty"`
+
 	// TechnicalSupportLevel Maintainer-verified technical support posture for a provider integration. This value does not describe whether the provider is installed or ready on the current machine.
 	TechnicalSupportLevel ProviderTechnicalSupportLevel `json:"technicalSupportLevel"`
+
+	// Tools Named provider tool facts in canonical tool-name order.
+	Tools *[]ProviderTool `json:"tools,omitempty"`
+}
+
+// ProviderModality One explicit supported or unsupported directional modality fact.
+type ProviderModality struct {
+	// Direction Direction in which a provider model accepts or emits a modality.
+	Direction ProviderModalityDirection `json:"direction"`
+
+	// Modality Media or content modality understood by a provider model.
+	Modality ProviderModalityKind `json:"modality"`
+
+	// Support Whether the provider model supports the modality in this direction.
+	Support ProviderModalitySupport `json:"support"`
+
+	// Transport How a supported modality is supplied or returned.
+	Transport ProviderModalityTransport `json:"transport"`
+}
+
+// ProviderModalityDirection Direction in which a provider model accepts or emits a modality.
+type ProviderModalityDirection string
+
+// ProviderModalityKind Media or content modality understood by a provider model.
+type ProviderModalityKind string
+
+// ProviderModalitySupport Whether the provider model supports the modality in this direction.
+type ProviderModalitySupport string
+
+// ProviderModalityTransport How a supported modality is supplied or returned.
+type ProviderModalityTransport string
+
+// ProviderModel Capability facts for one named model exposed by a provider.
+type ProviderModel struct {
+	// Efforts Reasoning effort values accepted independently by this model.
+	Efforts []ProviderEffort `json:"efforts"`
+
+	// Id Exact model identifier accepted by the provider adapter.
+	Id string `json:"id"`
+
+	// Modalities Complete directional modality facts, including unsupported values.
+	Modalities []ProviderModality `json:"modalities"`
 }
 
 // ProviderResponseFidelityCapabilities Maximum evidenced response-event fidelity of the provider integration. Capabilities describe observable output independently of support posture.
@@ -5703,6 +5857,21 @@ type ProviderSessionUnknownEvent struct {
 
 // ProviderTechnicalSupportLevel Maintainer-verified technical support posture for a provider integration. This value does not describe whether the provider is installed or ready on the current machine.
 type ProviderTechnicalSupportLevel string
+
+// ProviderTool One named provider tool fact used for execution planning.
+type ProviderTool struct {
+	// Description Bounded explanation of the tool fact.
+	Description string `json:"description"`
+
+	// Name Stable provider-neutral tool name.
+	Name string `json:"name"`
+
+	// Support Whether the provider exposes a named tool through its integration.
+	Support ProviderToolSupport `json:"support"`
+}
+
+// ProviderToolSupport Whether the provider exposes a named tool through its integration.
+type ProviderToolSupport string
 
 // ReasoningEffort Optional provider-neutral reasoning effort. Surrounding whitespace and letter case are normalized. Omit the field to preserve the selected provider and model default. Factory definitions may use an exact invocation-parameter placeholder such as `${executorReasoningEffort}`.
 type ReasoningEffort = string
