@@ -8157,3 +8157,23 @@
   - When a broad functional lane fails on a timing-sensitive test outside the changed files, verify it with repeated focused runs and inspect the exact failing assertion before changing production code.
   - A failed required lane can be safely retried on the unchanged head when local repeated runs and the failure location identify a transient test flake; record the final green run in the PR progress.
 ---
+
+## 2026-08-10 10:34 -07:00 - e3-event-webhooks-004 coverage and dispatch-scope follow-up
+- What was implemented
+  - Added a root.BuildProcess plus Process.Execute functional scenario with an injected failing model provider to prove `DISPATCH_RESPONSE` outcome `FAILED` is filtered, signed, and delivered to the configured endpoint.
+  - Fixed the runtime event ledger to carry the active Factory Session identity and session-local delivery sequence through Work Request, dispatch request/response, Worker event, and related runtime events so Recordings' scoped subscribers receive dispatch failures without sequence gaps.
+  - Corrected the behavioral fixture to declare its model workstation type, ensuring the injected provider failure is exercised rather than an invalid-workstation fallback.
+- Files changed
+  - `pkg/services/recordings/internal/events/event_history.go`
+  - `pkg/services/recordings/internal/events/event_history_session_lifecycle.go`
+  - `tests/functional/events/factory_events/webhooks_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Focused dispatch-failure test, full functional webhook package, Webhooks and Recordings race suites, affected package matrix, exact functional coverage profile, aggregate `make test`, and structural/size/contract/vet/wire gates pass.
+  - Exact focused functional coverage is 66.7% for `pkg/services/webhooks/internal/service`, above the 61.36% CI minimum.
+- **Learnings for future iterations:**
+  - Recordings session-scoped subscriptions require both `Context.SessionID` and monotonically allocated `SessionSequence`; adding only the identity makes later events appear as sequence gaps.
+  - Runtime model workstation definitions need an explicit model workstation type when their linked worker is model-backed; otherwise the executor treats the definition as unresolved unless it is a script worker.
+  - When CI reports a package coverage regression, reproduce the exact package/profile locally before changing the manifest; a real behavioral scenario restored margin without weakening the floor.
+---
