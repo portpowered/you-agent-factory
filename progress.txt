@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- Provider-authored Worker progress must carry explicit provider identity independently from optional Provider Session references; never infer a resumable reference from that identity.
 - Canonical packaged CLI docs live under `docs/reference/`; adding a topic also requires its authored file in `docs/reference/embed.go` and a registry entry in `pkg/transports/cli/docs/docs.go`.
 - The `you run --named <factory> --help` output is the authoritative invocation contract; omitted role provider/model values resolve through operator defaults.
 - Documentation for model-backed workflows should describe observable result shape and status/artifact evidence rather than byte-stable generated prose.
@@ -824,5 +825,40 @@
 - **Learnings for future iterations:**
   - Provider output fragments carry attempt dispatch IDs, while Worker Session Events topics use stable session IDs; the bridge must resolve the dispatch owner before calling `PublishRecord`.
   - Provider binding needs a separate Events source identity from the historical opening/terminal lifecycle source so terminal source sequences remain compatible while aggregate order is still serialized by the publication lock.
-  - The broad `pkg/services/workers/internal/interface` schema-contract test currently reports stale `packages/api/generated/manifest.json` and `packages/api/generated/openapi/openapi.yaml` in addition to its expected mock-workers schema drift; these files were clean and unrelated in this worktree.
+- The broad `pkg/services/workers/internal/interface` schema-contract test currently reports stale `packages/api/generated/manifest.json` and `packages/api/generated/openapi/openapi.yaml` in addition to its expected mock-workers schema drift; these files were clean and unrelated in this worktree.
+---
+
+## 2026-08-10 06:05 -07:00 - wsr-001-opening-record-003
+- What was implemented
+  - Added explicit provider identity to the provider-neutral Worker progress contract and the Agent Runner publication path, keeping provider provenance available when a provider returns no native `providers.SessionRef`.
+  - Preserved that identity through Factory Session response-stream mapping and prevented coalescing from merging adjacent events with different provider provenance; native session references remain optional and are never synthesized.
+  - Kept provider binding, normalized legal Kind/Phase conversion, Events idempotency source identity, and terminal lifecycle ordering on the existing Worker Sessions publication path.
+  - Added observable no-session lifecycle coverage through real in-memory Events, response-stream mapping assertions, Agent Runner progress assertions, and provider/reference consistency checks.
+- Files changed
+  - `pkg/services/workers/progress_observations.go`
+  - `pkg/services/workers/internal/services/runners/internal/services/agent/internal/service/runner.go`
+  - `pkg/services/workers/internal/services/runners/internal/services/agent/internal/service/live_provider_progress_test.go`
+  - `pkg/services/workers/internal/services/runners/wire/agent_progress_test.go`
+  - `pkg/services/worker_sessions/publish.go`
+  - `pkg/services/worker_sessions/publish_test.go`
+  - `pkg/services/worker_sessions/internal/service/start_side_effects_test.go`
+  - `pkg/services/factory_sessions/internal/stream/fragment.go`
+  - `pkg/services/factory_sessions/internal/stream/fragment_test.go`
+  - `pkg/services/factory_sessions/internal/responsestream/types.go`
+  - `pkg/services/factory_sessions/internal/responsestream/stream.go`
+  - `pkg/services/factory_sessions/internal/responsestream/fragmentmap/mapper.go`
+  - `pkg/services/factory_sessions/internal/responsestream/fragmentmap/mapper_test.go`
+- Verification
+  - Focused Worker Sessions/Agent Runner/response-stream tests — passed.
+  - Provider registration/conformance suites for Claude, Codex, Agy, provider execution, conductor, and adapters — passed.
+  - Root-built functional fixtures for Claude/Codex/Agy inference and Cursor/ACP execution — passed.
+  - Focused race suites — passed.
+  - Targeted `go vet` — passed.
+  - Dashboard typecheck, MCP contract check, 355 UI files/2,970 UI tests, and 191 Bun unit checks — passed through `make verify-fast`.
+  - The short Go lane reproduced the existing generated-schema staging mismatch in `pkg/services/workers/internal/interface` (`packages/api/generated/manifest.json`, `packages/api/generated/openapi/openapi.yaml`, and the mock-workers schema); no changed Story 003 file is involved.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - Provider selection is an execution fact, not a synonym for a resumable native session; carry it as an independent field at the observation boundary and let response projections use it for provenance.
+  - A no-session final-only execution still needs the same opening/binding/output/terminal ordering and source-event idempotency as a session-bearing stream; only the optional reference and unsupported fidelity claims are absent.
+  - The production provider conformance lane is rooted at `root.BuildProcess`/`Process.Execute` and sanitized ProviderCommandRunner fixtures; the legacy raw progress helper is not used by the Claude/Codex/Agy/ACP production registrations covered here.
 ---

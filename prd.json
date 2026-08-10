@@ -69,8 +69,8 @@
         "Tests pass."
       ],
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Provider-independent provenance is now carried explicitly on Worker progress and response-stream events, separate from optional Provider Session references; no reference is synthesized. Real Events ordering coverage proves opening/binding/output/terminal history, legal normalized Kind/Phase pairs, native normalized fidelity, source-event idempotency, and terminal behavior for no-session output. Production provider conformance and root.BuildProcess/Process.Execute sanitized fixture lanes cover Claude tool lifecycle, Codex streaming, Cursor/ACP session-bearing, and Agy final-only behavior. Focused tests, race tests, targeted vet, dashboard typecheck, MCP/UI checks, and functional fixtures pass; the only broad verify-fast issue is the pre-existing generated-schema staging mismatch in the workers interface package."
     }
   ]
 }
