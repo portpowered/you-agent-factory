@@ -1,5 +1,6 @@
 ## Codebase Patterns
 - Canonical Wire should pass one explicit owner-port contract per service owner; aggregate composition helpers belong only in tests and must not cross the production constructor boundary.
+- Functional support may normalize an edge aggregate only at the test composition boundary; production root.BuildProcess must continue to receive the exact owner-port projection.
 - Process-scoped external effects should be adapted or defaulted in canonical Wire providers and captured by closures; operation factories receive selected owner ports and only values or observation fallbacks.
 - Value-only runtime-opening interfaces should retain logger/metrics and transport presentation state behind process-scoped owners keyed by typed IDs; durable requests must not retain protocol handles or callbacks.
 - When a root-process functional test needs live event inspection, invoke through `support.BuildProcess` and `Process.Execute`, use the injected API only for observation, and gate the command-runner edge until observation streams are open.
@@ -1963,4 +1964,25 @@
   - The published CI run's unit lane still reflects the pre-fix head; it must be rerun after this commit. Functional coverage remains in progress on that prior head.
 - **Learnings for future iterations:**
   - Package ratchets are computed from the merged coverage profile, so a root-boundary migration can remove downstream execution evidence from an unchanged edge aggregator; restore that evidence with a small observable `Merge` test instead of changing the manifest.
+---
+## 2026-08-10 12:59 -07:00 - btrc-p1-root-injection-006 functional coverage and CI follow-up
+- What was implemented
+  - Kept the edge aggregate overlay in functional test composition so root-process scenarios exercise the complete replacement projection without reintroducing aggregate dependencies into production Wire.
+  - Added an observable second metrics close, switched the JavaScript packaged Factory proof to public JSON response-stream output, and forwarded the private event-consumer capability through the session gateway to the durable execution owner.
+  - Validated the inert compatibility `ForRuntime` binding against the exact process root during root construction; it still returns the existing root and never creates a child service or starts runtime work.
+- Files changed
+  - `tests/functional/internal/support/process.go`
+  - `tests/functional/providers/runtime_logging_smoke_test.go`
+  - `tests/functional/factory/packaged/factory_builder/invocation_test.go`
+  - `pkg/services/factory_sessions/internal/sessionservice/execution.go`
+  - `pkg/services/factory_sessions/internal/service/root.go`
+- Verification
+  - Focused provider, packaged JavaScript Factory, root-process, edge, metrics, sessionservice, durable-execution, Factory Sessions Wire, and canonical Wire tests — passed.
+  - `make backend-size` and `make pkg-maint` — passed.
+  - Pushed commits through `3d613d863`; Backend Unit Coverage passed on CI run `31425745028`.
+  - The functional CI lane reached the full test corpus but stopped on three timing-sensitive cancellation-observation assertions before producing a coverage summary; a fresh run is required to audit the resulting ratchets and terminal workflow state.
+- **Learnings for future iterations:**
+  - The invocation runtime exposes the session gateway, not the durable wrapper directly; optional event-consumer capabilities must be forwarded through that gateway before the runtime-opening type assertion can select them.
+  - A compatibility binding removed from the runtime-opening path can remain behaviorally covered by an inert root-construction validation that preserves the same root identity and does not construct another graph.
+  - A failed functional test corpus does not produce the coverage summary; inspect the test failure first and rerun before interpreting package-ratchet status.
 ---
