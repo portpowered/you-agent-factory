@@ -1855,3 +1855,16 @@
 - **Learnings for future iterations:**
   - Transport helpers must preserve caller-owned context semantics; returning nil for a nil input is preferable to manufacturing a background context merely to satisfy `context.WithValue`.
 ---
+## 2026-08-10 10:39 -07:00 - pf-cli-exit-codes CI rerun follow-up
+- What was implemented
+  - Investigated the first failed Backend Functional Coverage run after the review fix; its terminal-failure output and continuous-run cancellation failures were unrelated coverage/process-environment flakes and reproduced neither as a feature regression locally.
+  - Reran only failed GitHub Actions jobs twice. The first rerun moved to the known JavaScript durability cancellation-observation flake; that test passed locally 10/10. The second targeted rerun completed successfully.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Focused invocation failure test passed three times locally.
+  - `TestJavaScriptInterruptedSessionResumesWithoutRepeatingCompletedChildren` passed 10/10 locally.
+  - CI run `31413200225` final failed-job rerun passed Backend Functional Coverage, Backend Unit Coverage, Verification Policy, and all other required checks for head `06a8d59e8`.
+- **Learnings for future iterations:**
+  - Broad functional coverage failures can move between existing cancellation-sensitive scenarios under instrumentation; inspect the named test, stress it locally, and rerun only failed jobs before changing unrelated runtime behavior.
+---
