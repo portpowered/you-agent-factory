@@ -8110,3 +8110,17 @@
   - After rebasing a feature that adds fields to a near-limit shared event-history file, prefer moving an existing responsibility-aligned method group into an existing owner before adding another package file or weakening the size gate.
   - Regenerate contract staging after resolving generated-file conflicts; `make generate-api` alone does not refresh the contract manifest hashes.
 ---
+
+## 2026-08-10 08:59 -07:00 - e3-event-webhooks-004 coverage-floor follow-up
+- What was implemented
+  - Added Webhooks service tests for missing construction dependencies, nil-service rejection, and the nil-parent/no-endpoint lifecycle path, raising focused Linux service coverage to 75.0%.
+  - Added complete Factory Webhook delivery-policy resolver coverage for defaults, authored values, positive duration parsing, and invalid attempts/multiplier/duration/order inputs.
+- Files changed
+  - `pkg/services/webhooks/internal/service/service_test.go`
+  - `pkg/services/factory_definitions/internal/contracts/factory_snapshot_test.go`
+  - `prd.json`
+  - `progress.txt`
+- **Learnings for future iterations:**
+  - A package floor can move when a new contract helper is added even if focused feature tests pass; cover the resolver's success and typed-error paths in the contract owner package before considering a manifest change.
+  - Linux and Windows focused coverage can differ by one or more statements even for the same Go tests; leave measurable margin above the manifest floor when adding a coverage-restoration test.
+---
