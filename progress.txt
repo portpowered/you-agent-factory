@@ -1933,3 +1933,19 @@
   - Coverage ratchets are package- and lane-specific: changing an operation boundary requires behavioral tests for both success and typed cleanup/error branches, while unrelated low-margin packages can fail a parallel functional run independently.
   - When `go test -coverprofile` is invoked from PowerShell, keep the profile path literal and clean up the generated file explicitly; native argument expansion can otherwise leave a file named `$coveragePath`.
 ---
+## 2026-08-10 12:20 -07:00 - btrc-p1-root-injection-006 hosted invocation coverage follow-up
+- What was implemented
+  - Added observable transport coverage for the hosted invocation event bridge: detached model/artifact capability forwarding, JavaScript delegate routing, live event delivery with duplicate-free final reconciliation, durable-session reconciliation, incomplete runtime rejection, subscription failures, and terminal-result cleanup behavior.
+  - Kept the existing package baselines and production behavior unchanged; the coverage-only change targets the changed `pkg/transports/cli/run` bridge introduced by the owner migration.
+- Files changed
+  - `pkg/transports/cli/run/hosted_invocation_events_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/transports/cli/run -count=1` — passed.
+  - `make backend-size`, `git diff --check`, and the focused package checks — passed.
+  - The fresh PR run exposed one unrelated functional test race and the unchanged main-branch pinned-ACPX artifact prerequisite; those CI follow-ups remain open. Unit coverage still needs a fresh run to confirm the added `cli/run` coverage clears its ratchet.
+- **Learnings for future iterations:**
+  - Hosted CLI invocation has two event sources: a live subscription for prompt-time output and a final history read for durable reconciliation; tests should assert ordered IDs and duplicate suppression across both.
+  - The GitHub functional lane can fail independently of package coverage when the pinned real-ACPX test skips before emitting its required artifact; distinguish that workflow prerequisite from changed-code failures before changing production behavior.
+---
