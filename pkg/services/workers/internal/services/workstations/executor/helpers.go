@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
+	"regexp"
 	"strings"
 	"time"
 
@@ -197,7 +199,7 @@ func parseOutputAgainstSchema(content string, schemaPayload []byte) (any, error)
 	return document, nil
 }
 
-func structuredOutputFailure(content string) string {
+func structuredOutputFailure(content, contract string) string {
 	var object map[string]any
 	if err := json.Unmarshal([]byte(content), &object); err != nil || object == nil {
 		return ""
@@ -209,15 +211,24 @@ func structuredOutputFailure(content string) string {
 			continue
 		}
 		switch strings.ToLower(strings.TrimSpace(value)) {
-		case "fail", "failed", "failure", "error", "reroll", "reject", "rejected":
+		case "fail", "failed", "failure", "error", "reject", "rejected":
 			return fmt.Sprintf("%s=%s", key, strings.TrimSpace(value))
 		}
 	}
-	for _, key := range []string{"action_completed", "success", "completed"} {
+	for _, key := range []string{"success", "completed"} {
 		value, ok := object[key].(bool)
 		if ok && !value {
 			return fmt.Sprintf("%s=false", key)
 		}
+	}
+	if value, ok := object["action_completed"].(bool); ok && !value &&
+		strings.TrimSpace(contract) != outputContractStructuredClipQAVerdictV1 {
+		return "action_completed=false"
+	}
+	if value, ok := object["verdict"].(string); ok &&
+		strings.EqualFold(strings.TrimSpace(value), "reroll") &&
+		strings.TrimSpace(contract) != outputContractStructuredClipQAVerdictV1 {
+		return "verdict=reroll without an explicit structured QA output contract"
 	}
 	return ""
 }
@@ -227,6 +238,204 @@ func structuredOutputFailureMetadata() *workerexecution.WorkFailureMetadata {
 		Family: workerexecution.WorkFailureFamilyTerminal,
 		Type:   workerexecution.WorkFailureTypePermanentBadRequest,
 	}
+}
+
+const (
+	outputContractMarkdownObservationReportV1 = "markdown-observation-report/v1"
+	outputContractStructuredClipQAVerdictV1   = "structured-clip-qa/v1"
+)
+
+var (
+	observationReportTimestampPattern      = regexp.MustCompile(`(?i)(?:\b\d{1,2}:\d{2}(?:\.\d{1,3})?\b|\b\d+(?:\.\d+)?\s*(?:s|sec|secs|seconds)\b)`)
+	observationReportStatusPattern         = regexp.MustCompile(`(?im)^\s*inspected\s*:\s*yes\s*$`)
+	observationReportAudioPattern          = regexp.MustCompile(`(?im)^\s*audio\s+content\s*:\s*(speech|music|noise|silence|mixed)\s*$`)
+	observationReportRecommendationPattern = regexp.MustCompile(`(?im)^\s*(?:overall\s+)?recommendation\s*:\s*(pass|reroll)\s*$`)
+)
+
+// validateOutputContract validates provider-neutral semantic contracts after
+// a worker returns. Provider adapters still own transport/schema parsing; this
+// layer owns contracts that cannot be expressed by a provider output mode.
+func validateOutputContract(content, contract string) error {
+	switch strings.TrimSpace(contract) {
+	case "":
+		return nil
+	case outputContractMarkdownObservationReportV1:
+		return validateMarkdownObservationReport(content)
+	case outputContractStructuredClipQAVerdictV1:
+		return validateStructuredClipQAVerdict(content)
+	default:
+		return fmt.Errorf("unsupported output contract %q", contract)
+	}
+}
+
+type structuredClipQAVerdict struct {
+	ActionCompleted   *bool     `json:"action_completed"`
+	SpecDeviations    *[]string `json:"spec_deviations"`
+	TemporalArtifacts *[]string `json:"temporal_artifacts"`
+	AudioContent      *string   `json:"audio_content"`
+	UnexpectedSpeech  *bool     `json:"unexpected_speech"`
+	Verdict           *string   `json:"verdict"`
+	Confidence        *float64  `json:"confidence"`
+}
+
+var structuredClipQAVerdictRequiredFields = []string{
+	"action_completed",
+	"spec_deviations",
+	"temporal_artifacts",
+	"audio_content",
+	"unexpected_speech",
+	"verdict",
+	"confidence",
+}
+
+func validateStructuredClipQAVerdict(content string) error {
+	if failure := structuredOutputFailure(content, outputContractStructuredClipQAVerdictV1); failure != "" {
+		return fmt.Errorf("structured output failure: %s", failure)
+	}
+
+	verdict, err := decodeStructuredClipQAVerdict(content)
+	if err != nil {
+		return err
+	}
+	return validateStructuredClipQAVerdictFields(verdict)
+}
+
+func decodeStructuredClipQAVerdict(content string) (*structuredClipQAVerdict, error) {
+	var object map[string]any
+	if err := json.Unmarshal([]byte(content), &object); err != nil || object == nil {
+		return nil, fmt.Errorf("clip-QA verdict must be a JSON object")
+	}
+	for _, key := range structuredClipQAVerdictRequiredFields {
+		if _, ok := object[key]; !ok {
+			return nil, fmt.Errorf("clip-QA verdict is missing required field %q", key)
+		}
+	}
+
+	var verdict structuredClipQAVerdict
+	if err := json.Unmarshal([]byte(content), &verdict); err != nil {
+		return nil, fmt.Errorf("clip-QA verdict has invalid field types: %w", err)
+	}
+	return &verdict, nil
+}
+
+func validateStructuredClipQAVerdictFields(verdict *structuredClipQAVerdict) error {
+	if verdict.ActionCompleted == nil || verdict.SpecDeviations == nil ||
+		verdict.TemporalArtifacts == nil || verdict.AudioContent == nil ||
+		verdict.UnexpectedSpeech == nil || verdict.Verdict == nil || verdict.Confidence == nil {
+		return fmt.Errorf("clip-QA verdict contains a null required field")
+	}
+	if err := validateStructuredClipQAConfidence(*verdict.Confidence); err != nil {
+		return err
+	}
+	return validateStructuredClipQAVerdictSemantics(verdict)
+}
+
+func validateStructuredClipQAConfidence(confidence float64) error {
+	if math.IsNaN(confidence) || math.IsInf(confidence, 0) || confidence < 0 || confidence > 1 {
+		return fmt.Errorf("confidence must be between 0 and 1")
+	}
+	return nil
+}
+
+func validateStructuredClipQAVerdictSemantics(verdict *structuredClipQAVerdict) error {
+	switch *verdict.Verdict {
+	case "pass":
+		return validateStructuredClipQAPass(verdict)
+	case "reroll":
+		return validateStructuredClipQAReroll(verdict)
+	default:
+		return fmt.Errorf("verdict must be pass or reroll")
+	}
+}
+
+func validateStructuredClipQAPass(verdict *structuredClipQAVerdict) error {
+	if !*verdict.ActionCompleted {
+		return fmt.Errorf("pass requires action_completed=true")
+	}
+	if len(*verdict.SpecDeviations) > 0 {
+		return fmt.Errorf("pass requires spec_deviations to be empty")
+	}
+	if len(*verdict.TemporalArtifacts) > 0 {
+		return fmt.Errorf("pass requires temporal_artifacts to be empty")
+	}
+	if *verdict.UnexpectedSpeech {
+		return fmt.Errorf("pass requires unexpected_speech=false")
+	}
+	return nil
+}
+
+func validateStructuredClipQAReroll(verdict *structuredClipQAVerdict) error {
+	if *verdict.ActionCompleted && len(*verdict.SpecDeviations) == 0 &&
+		len(*verdict.TemporalArtifacts) == 0 && !*verdict.UnexpectedSpeech {
+		return fmt.Errorf("reroll requires an observed failure reason")
+	}
+	return nil
+}
+
+func validateMarkdownObservationReport(content string) error {
+	sections := markdownReportSections(content)
+	for _, name := range []string{
+		"inspection status",
+		"chronological events",
+		"temporal or transient defects",
+		"audio content and defects",
+		"observed speech",
+		"overall recommendation",
+	} {
+		if _, ok := sections[name]; !ok {
+			return fmt.Errorf("missing required section %q", name)
+		}
+		if strings.TrimSpace(sections[name]) == "" {
+			return fmt.Errorf("section %q is empty; state none observed when applicable", name)
+		}
+	}
+
+	if !observationReportStatusPattern.MatchString(sections["inspection status"]) {
+		return fmt.Errorf("inspection status must contain exactly Inspected: yes")
+	}
+	if !observationReportTimestampPattern.MatchString(sections["chronological events"]) {
+		return fmt.Errorf("chronological events must include timestamps")
+	}
+	for _, name := range []string{"temporal or transient defects", "audio content and defects", "observed speech"} {
+		body := strings.ToLower(sections[name])
+		if !strings.Contains(body, "none observed") && !observationReportTimestampPattern.MatchString(body) {
+			return fmt.Errorf("section %q must include timestamps or an explicit none observed statement", name)
+		}
+	}
+	if !observationReportAudioPattern.MatchString(sections["audio content and defects"]) {
+		return fmt.Errorf("audio content and defects must name speech, music, noise, silence, or mixed")
+	}
+	recommendations := observationReportRecommendationPattern.FindAllStringSubmatch(content, -1)
+	if len(recommendations) != 1 {
+		return fmt.Errorf("report must contain exactly one pass or reroll recommendation")
+	}
+	if len(observationReportRecommendationPattern.FindAllStringSubmatch(sections["overall recommendation"], -1)) != 1 {
+		return fmt.Errorf("overall recommendation must contain exactly one pass or reroll recommendation")
+	}
+	return nil
+}
+
+func markdownReportSections(content string) map[string]string {
+	sections := make(map[string]string)
+	current := ""
+	for _, rawLine := range strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n") {
+		line := strings.TrimSpace(rawLine)
+		if strings.HasPrefix(line, "## ") {
+			current = strings.ToLower(strings.TrimSpace(strings.TrimPrefix(line, "## ")))
+			if _, exists := sections[current]; !exists {
+				sections[current] = ""
+			}
+			continue
+		}
+		if current == "" || line == "" {
+			continue
+		}
+		if sections[current] != "" {
+			sections[current] += "\n"
+		}
+		sections[current] += line
+	}
+	return sections
 }
 
 const (

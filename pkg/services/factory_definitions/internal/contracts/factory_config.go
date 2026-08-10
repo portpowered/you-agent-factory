@@ -540,6 +540,7 @@ type FactoryWorkstationConfig struct {
 	Runner                string                      `json:"runner,omitempty" yaml:"runner,omitempty"`
 	PromptFile            string                      `json:"prompt_file,omitempty" yaml:"promptFile,omitempty"`
 	OutputSchema          string                      `json:"output_schema,omitempty" yaml:"outputSchema,omitempty"`
+	OutputContract        string                      `json:"output_contract,omitempty" yaml:"outputContract,omitempty"`
 	Timeout               string                      `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 	Limits                WorkstationLimits           `json:"limits,omitempty" yaml:"limits,omitempty"`
 	WorkPropagation       *WorkPropagationConfig      `json:"workPropagation,omitempty" yaml:"workPropagation,omitempty"`

@@ -49,6 +49,9 @@ properties:
   outputSchema:
     type: string
     description: JSON schema string used to validate or parse structured model output when configured.
+  outputContract:
+    type: string
+    description: Provider-neutral semantic contract applied to a successful workstation response after provider execution.
   outcomeFormat:
     allOf:
       - $ref: './WorkstationOutcomeFormat.yaml'

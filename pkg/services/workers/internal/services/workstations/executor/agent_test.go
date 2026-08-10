@@ -178,6 +178,12 @@ func withAgentOutputSchema(schema string) func(*workerexecution.WorkstationExecu
 	}
 }
 
+func withAgentOutputContract(contract string) func(*workerexecution.WorkstationExecutionRequest) {
+	return func(req *workerexecution.WorkstationExecutionRequest) {
+		req.OutputContract = contract
+	}
+}
+
 func withAgentEnvVars(envVars map[string]string) func(*workerexecution.WorkstationExecutionRequest) {
 	return func(req *workerexecution.WorkstationExecutionRequest) {
 		req.EnvVars = envVars

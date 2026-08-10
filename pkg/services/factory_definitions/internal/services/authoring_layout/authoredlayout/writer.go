@@ -491,7 +491,7 @@ func workstationHasRuntimeFields(
 	return strings.TrimSpace(workstation.Type) != "" ||
 		workstation.Runner != "" ||
 		workstation.PromptFile != "" ||
-		workstation.OutputSchema != "" ||
+		workstationHasOutputContract(workstation) ||
 		workstation.Timeout != "" ||
 		workstation.Limits.MaxRetries != 0 ||
 		workstation.Limits.MaxExecutionTime != "" ||
@@ -503,6 +503,10 @@ func workstationHasRuntimeFields(
 		workstation.WorkingDirectory != "" ||
 		workstation.Worktree != "" ||
 		len(workstation.Env) > 0
+}
+
+func workstationHasOutputContract(workstation factorydefinitions.FactoryWorkstationConfig) bool {
+	return workstation.OutputSchema != "" || workstation.OutputContract != ""
 }
 
 func (w *Writer) pruneStaleRuntimeDirs(

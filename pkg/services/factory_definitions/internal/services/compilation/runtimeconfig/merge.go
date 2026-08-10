@@ -248,6 +248,9 @@ func applyWorkstationRuntimeTemplate(
 	if runtimeDefinition.OutputSchema != "" {
 		workstation.OutputSchema = runtimeDefinition.OutputSchema
 	}
+	if runtimeDefinition.OutputContract != "" {
+		workstation.OutputContract = runtimeDefinition.OutputContract
+	}
 	workstation.Limits = mergeWorkstationLimits(workstation.Limits, runtimeDefinition.Limits)
 	workstationexecution.NormalizeExecutionLimit(workstation)
 	workstation.StopWords = mergeStopWords(
