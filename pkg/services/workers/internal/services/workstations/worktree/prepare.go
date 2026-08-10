@@ -12,11 +12,6 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-const (
-	gitSerializationLockRetries    = 20
-	gitSerializationLockRetryDelay = 50 * time.Millisecond
-)
-
 // PrepareFactoryGitWorktreeResult describes a successful worktree preparation.
 type PrepareFactoryGitWorktreeResult = workerexecution.FactoryWorktreePreparation
 
@@ -105,130 +100,25 @@ func PrepareFactoryGitWorktree(
 		return PrepareFactoryGitWorktreeResult{}, fmt.Errorf("create worktree parent directory: %w", err)
 	}
 
-	if err := addGitWorktree(ctx, fileSystem, git, repoRoot, checkoutPath); err != nil {
-		return PrepareFactoryGitWorktreeResult{}, err
+	stdout, stderr, exitCode, runErr := git.Run(ctx, repoRoot, "worktree", "add", checkoutPath, "HEAD")
+	if runErr != nil {
+		return PrepareFactoryGitWorktreeResult{}, fmt.Errorf("git worktree add: %w", runErr)
+	}
+	if exitCode != 0 {
+		detail := strings.TrimSpace(stderr)
+		if detail == "" {
+			detail = strings.TrimSpace(stdout)
+		}
+		if detail == "" {
+			detail = fmt.Sprintf("git worktree add exited with status %d", exitCode)
+		}
+		return PrepareFactoryGitWorktreeResult{}, fmt.Errorf("git worktree add failed: %s", detail)
 	}
 
 	return PrepareFactoryGitWorktreeResult{
 		CheckoutPath: checkoutPath,
 		Reused:       false,
 	}, nil
-}
-
-func addGitWorktree(
-	ctx context.Context,
-	fileSystem workerexecution.WorktreeFileSystem,
-	git workerexecution.WorktreeGitCommander,
-	repoRoot string,
-	checkoutPath string,
-) error {
-	var lastResult gitWorktreeCommandResult
-	for attempt := 0; attempt < gitSerializationLockRetries; attempt++ {
-		stdout, stderr, exitCode, runErr := git.Run(ctx, repoRoot, "worktree", "add", checkoutPath, "HEAD")
-		lastResult = gitWorktreeCommandResult{stdout: stdout, stderr: stderr, exitCode: exitCode, runErr: runErr}
-		if runErr == nil && exitCode == 0 {
-			return nil
-		}
-		if !isGitSerializationLockFailure(stdout, stderr, runErr) {
-			return formatGitWorktreeCommandError(lastResult)
-		}
-		if attempt+1 == gitSerializationLockRetries {
-			break
-		}
-		if err := waitForGitSerializationRetry(ctx); err != nil {
-			return fmt.Errorf("git worktree add: %w", err)
-		}
-	}
-
-	lockPath := gitSerializationLockPath(repoRoot, lastResult.stdout, lastResult.stderr)
-	if lockPath != "" && gitPathExists(fileSystem, lockPath) {
-		return fmt.Errorf(
-			"git worktree serialization contention: resource=%s owner_liveness=indeterminate; "+
-				"verify no Git or worktree setup process is still using the repository, then remove only %s and retry; "+
-				"last_git_error=%s",
-			lockPath,
-			lockPath,
-			gitWorktreeCommandDetail(lastResult),
-		)
-	}
-	return formatGitWorktreeCommandError(lastResult)
-}
-
-type gitWorktreeCommandResult struct {
-	stdout   string
-	stderr   string
-	exitCode int
-	runErr   error
-}
-
-func formatGitWorktreeCommandError(result gitWorktreeCommandResult) error {
-	if result.runErr != nil {
-		return fmt.Errorf("git worktree add: %w", result.runErr)
-	}
-	return fmt.Errorf("git worktree add failed: %s", gitWorktreeCommandDetail(result))
-}
-
-func gitWorktreeCommandDetail(result gitWorktreeCommandResult) string {
-	detail := strings.TrimSpace(result.stderr)
-	if detail == "" {
-		detail = strings.TrimSpace(result.stdout)
-	}
-	if detail == "" {
-		detail = fmt.Sprintf("git worktree add exited with status %d", result.exitCode)
-	}
-	return detail
-}
-
-func isGitSerializationLockFailure(stdout, stderr string, runErr error) bool {
-	detail := strings.ToLower(strings.Join([]string{stdout, stderr, gitWorktreeRunError(runErr)}, "\n"))
-	return strings.Contains(detail, ".lock") &&
-		(strings.Contains(detail, "file exists") ||
-			strings.Contains(detail, "unable to create") ||
-			strings.Contains(detail, "could not lock") ||
-			strings.Contains(detail, "lock file"))
-}
-
-func gitWorktreeRunError(err error) string {
-	if err == nil {
-		return ""
-	}
-	return err.Error()
-}
-
-func waitForGitSerializationRetry(ctx context.Context) error {
-	timer := time.NewTimer(gitSerializationLockRetryDelay)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-timer.C:
-		return nil
-	}
-}
-
-func gitSerializationLockPath(repoRoot string, output ...string) string {
-	for _, text := range output {
-		for _, field := range strings.Fields(text) {
-			candidate := strings.Trim(field, "\"'`.,:;()[]")
-			if !strings.Contains(strings.ToLower(candidate), ".lock") {
-				continue
-			}
-			if filepath.IsAbs(candidate) {
-				return filepath.Clean(candidate)
-			}
-			relative := filepath.Clean(filepath.FromSlash(candidate))
-			if relative == ".git" || strings.HasPrefix(relative, ".git"+string(filepath.Separator)) {
-				return filepath.Join(repoRoot, relative)
-			}
-			return filepath.Clean(filepath.Join(repoRoot, ".git", filepath.Base(relative)))
-		}
-	}
-	return filepath.Join(repoRoot, ".git", "config.lock")
-}
-
-func gitPathExists(fileSystem workerexecution.WorktreeFileSystem, path string) bool {
-	_, err := fileSystem.Stat(path)
-	return err == nil
 }
 
 // FailedWorkResultFromPreparation maps a preparation error to a failed workstation result.

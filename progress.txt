@@ -1054,3 +1054,30 @@
 - **Learnings for future iterations:**
   - A changing failure among unrelated cancellation/startup observations across full-suite reruns is evidence of parallel-suite flakiness; preserve the feature scope and isolate each named test before attempting a production change.
 ---
+
+## 2026-08-10 08:45 -07:00 - pf-stale-scope-diagnostic-002 evidence cleanup
+- What was implemented
+  - Removed the superseded Git `config.lock` contention experiment from the Go worktree preparer and packaged full-flow worktree script after reproduction proved that Git serialization was not the retained pre-runtime resource.
+  - Regenerated the packaged Factory JSON/YAML and manifest from the authored script so generated assets no longer carry the unsupported hypothesis.
+  - Kept the evidenced packaged Factory staging-owner acquisition, live-owner classification, compare-before-release behavior, and hard-kill regression unchanged.
+- Files changed
+  - `packages/packaged-factories/factories/full-flow/scripts/setup-task-worktree.py`
+  - `packages/packaged-factories/generated/factories/full-flow/factory.json`
+  - `packages/packaged-factories/generated/factories/full-flow/factory.yaml`
+  - `packages/packaged-factories/generated/manifest.json`
+  - `pkg/services/workers/internal/services/workstations/worktree/prepare.go`
+  - `pkg/services/workers/internal/services/workstations/worktree/prepare_test.go`
+  - `tests/factory/scripts/test_full_flow_setup_task_worktree.py`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/workers/internal/services/workstations/worktree -count=1 -timeout 180s` — passed.
+  - `go vet ./pkg/services/workers/internal/services/workstations/worktree` — passed.
+  - `python -m unittest discover -s tests/factory/scripts -p 'test_full_flow_setup_task_worktree.py'` — passed, 4 tests.
+  - `make packaged-factory-catalog-generate` — passed.
+  - `git diff --check` — passed.
+  - `make test-functional-coverage` — stopped at the pre-existing parallel failure in `TestFactoryRuntimeMixedDirectAndFactoryChildDispatchesStayIsolatedThroughCLI` (`unexpected provider prompt`) before coverage evaluation; the named test failed identically in five isolated repetitions and this branch has no diff in its package.
+  - Focused functional coverage of `pkg/services/workers/internal/services/workstations/worktree` after cleanup measured 52.8% from the Codex worktree flow; the full lane is required to include all contributing functional packages once the unrelated suite flake is resolved.
+- **Learnings for future iterations:**
+  - Once deterministic reproduction identifies the owning resource, remove speculative ownership mechanisms and their generated/test surfaces instead of preserving competing explanations for coverage or convenience.
+  - A full coverage command can fail before package-floor evaluation; isolate the named functional test and report that boundary explicitly rather than lowering a checked-in floor.
+---
