@@ -1,5 +1,7 @@
 ## Codebase Patterns
 - For mechanical test splits, capture the exact go test inventory, repeatable coverage command/output, and one-to-one behavior/helper placement map in a review artifact before moving tests.
+- Keep comments and exemption directives attached to the declaration they govern when splitting Go test files; otherwise a boundary can duplicate or orphan maintainability policy.
+- Replacing a file-level size exemption with focused test files may require per-function directives; update both the source directive and the sorted exemption-budget entry together.
 - When moving a test with a pkgmaintcheck exemption, move the existing budget target with the test and retain legacy file suppressions until the remaining staged split retires the source file.
 - Treat repository-enforcement inventories and architecture guards as project-enabling PRD criteria when they have no runtime, API, CLI, UI, or emitted-event behavior; source scans support enforcement but are not customer-behavior evidence.
 - AST scanners must expand grouped Go field declarations before indexing parameter or result types; a field-count helper can exceed the AST field-list length and panic on valid source.
@@ -2053,5 +2055,32 @@
   - `go vet ./pkg/services/factory_sessions/internal/execution/...`, `make pkg-maint`, `make backend-size`, `make pkg-file-count`, `make typecheck`, and `git diff --check` — passed.
 - **Learnings for future iterations:**
   - The authoritative placement map in the baseline artifact can drive a mechanical split while keeping helper ownership explicit; use declaration-level comparisons plus test inventory and coverage checks to detect accidental body changes.
-  - Keep the legacy file-level suppressions until the final staged seam retires that source file; per-test exemptions should move only when their owning test moves.
+- Keep the legacy file-level suppressions until the final staged seam retires that source file; per-test exemptions should move only when their owning test moves.
+---
+## [2026-08-10 15:08 -07:00] - thr-split-fake-service-runtime-tests-005
+- What was implemented
+  - Moved the remaining runtime lifecycle-control, interruption, checkpoint, resume, phase-event, observer, append-only-history, recording, and workflow-policy tests from `fake_service_runtime_test.go` into `javascript_runtime_control_test.go`, `javascript_runtime_checkpoint_test.go`, and `javascript_runtime_event_recording_test.go`.
+  - Moved `TestFakeService_InterruptAcceptedBeforeCompletion_ObservableDispatchAndEventOutcomes` into `fake_service_dispatch_test.go`; shared event/dispatch lookup helpers have one owner in `javascript_runtime_event_recording_test.go`.
+  - Retired `fake_service_runtime_test.go`, removed its file-level exemptions, relocated the remaining function exemptions, and raised the execution package file-count baseline from 37 to 39.
+- Files changed
+  - `pkg/services/factory_sessions/internal/execution/fake_service_dispatch_test.go`
+  - `pkg/services/factory_sessions/internal/execution/fake_service_runtime_test.go`
+  - `pkg/services/factory_sessions/internal/execution/javascript_runtime_control_test.go`
+  - `pkg/services/factory_sessions/internal/execution/javascript_runtime_checkpoint_test.go`
+  - `pkg/services/factory_sessions/internal/execution/javascript_runtime_event_recording_test.go`
+  - `docs/internal/baselines/backend-exemption-budget.json`
+  - `docs/internal/baselines/backend-package-file-count.json`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/factory_sessions/internal/execution/...` — passed.
+  - `go test -covermode=atomic ./pkg/services/factory_sessions/internal/execution/...` — passed with unchanged coverage: 79.6%, 80.0%, 83.1%, and 89.8%.
+  - Baseline/current `go test -list '.*' ./pkg/services/factory_sessions/internal/execution/...` comparison — 269 entries versus 269 entries; the sorted multiset difference is empty, with no added, removed, or renamed test/example entry.
+  - Declaration comparison — all 47 functions/methods from the retired runtime file are present at exactly one destination with identical bodies ignoring formatting-only line boundaries; no assertion or fixture changes.
+  - `go vet ./pkg/services/factory_sessions/internal/execution/...`, `make backend-size`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, `make typecheck`, and `git diff --check` — passed.
+  - `make lint` — UI lint/deadcode, vet, backend-size, pkg-maint, and pkg-file-count passed; the aggregate target stopped at the pre-existing `make pkg-boundary` baseline violations in unrelated factory-definition, runtime, transport, and functional-test files (175 violations), with no touched-file violation reported.
+- **Learnings for future iterations:**
+  - Use the story 001 placement map with comment-aware declaration boundaries; a naive split can duplicate directives at the next declaration even when the tests still compile.
+  - When a retired file-level exemption exposed two long focused tests, the correct mechanical bookkeeping was to move the exemptions to those exact functions and keep their source directives synchronized with the sorted budget manifest.
+  - The full lint aggregate currently remains blocked by unrelated repository-wide `pkg-boundary` debt; the story-scoped gates are green and should be reported separately from that baseline failure.
 ---

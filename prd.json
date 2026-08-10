@@ -98,8 +98,8 @@
         "Tests pass"
       ],
       "priority": 5,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Moved the remaining runtime control, interruption, checkpoint, resume, phase-event, observer, append-only-history, recording, and workflow-policy tests from fake_service_runtime_test.go into javascript_runtime_control_test.go, javascript_runtime_checkpoint_test.go, and javascript_runtime_event_recording_test.go; moved the fake-service interruption test into fake_service_dispatch_test.go; and retired fake_service_runtime_test.go. All 47 functions/methods from the retired file have exactly one destination with unchanged bodies and the 269-entry story 001 test inventory is unchanged as a sorted multiset. Final go test -covermode=atomic coverage matches the baseline at 79.6% (execution), 80.0% (fixtures), 83.1% (recordingreplay), and 89.8% (runtimepersist). Focused suite, vet, backend-size, pkg-maint, pkg-file-count, pkg-structure, and typecheck pass; all resulting Go files are below 1,200 lines. The aggregate make lint target reaches only the pre-existing repository-wide pkg-boundary baseline violations in unrelated files after its other stages pass."
     }
   ]
 }

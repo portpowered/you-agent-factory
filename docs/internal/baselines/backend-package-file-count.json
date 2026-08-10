@@ -123,9 +123,9 @@
     },
     {
       "packagePath": "pkg/services/factory_sessions/internal/execution",
-      "fileCount": 37,
+      "fileCount": 39,
       "owner": "factory-session-maintainers",
-      "removalReason": "Remove this ratchet after the remaining execution test seams are split into focused files."
+      "removalReason": "Remove this ratchet after the execution package is reduced below the repository limit."
     },
     {
       "packagePath": "pkg/services/factory_sessions/internal/runtimeopening",

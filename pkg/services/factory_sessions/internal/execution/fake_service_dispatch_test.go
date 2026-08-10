@@ -584,3 +584,70 @@ func TestFakeService_PauseResumeAppendsLifecycleControlEventsWithoutNoOpMutation
 		t.Fatalf("replayed status = %q, want RUNNING", replayed.Status)
 	}
 }
+
+// pkgmaintcheck:ignore-cyclomatic-complexity this fake-service race regression keeps interrupt and replay assertions together on one scenario.
+func TestFakeService_InterruptAcceptedBeforeCompletion_ObservableDispatchAndEventOutcomes(t *testing.T) {
+	t.Parallel()
+	service := newContractFakeService(t)
+	started := startAsyncByRequestID(t, service, "req-js-run-n-001")
+
+	dispatches, err := service.ListDispatches(context.Background(), started.SessionID)
+	if err != nil {
+		t.Fatalf("ListDispatches before interrupt: %v", err)
+	}
+	if len(dispatches.Dispatches) < 2 {
+		t.Fatalf("dispatches = %#v, want at least two fixture dispatches", dispatches.Dispatches)
+	}
+	runningBefore := findDispatchByID(dispatches.Dispatches, "disp-js-002")
+	if runningBefore == nil || runningBefore.Status != DispatchStatusRunning {
+		t.Fatalf("dispatch disp-js-002 = %#v, want RUNNING before interrupt", runningBefore)
+	}
+
+	interruptResult, err := service.InterruptDispatch(context.Background(), started.SessionID, InterruptDispatchRequest{
+
+		ControlRequest: ControlRequest{Reason: "stop before provider completion"},
+		DispatchID:     "disp-js-002",
+	})
+	if err != nil {
+		t.Fatalf("InterruptDispatch: %v", err)
+	}
+	if interruptResult.Outcome != LifecycleControlOutcomeAccepted {
+		t.Fatalf("outcome = %q, want ACCEPTED", interruptResult.Outcome)
+	}
+
+	dispatch, err := service.GetDispatch(context.Background(), started.SessionID, "disp-js-002")
+	if err != nil {
+		t.Fatalf("GetDispatch: %v", err)
+	}
+	if dispatch.Status != DispatchStatusInterrupted {
+		t.Fatalf("dispatch status = %q, want INTERRUPTED", dispatch.Status)
+	}
+
+	events, err := service.ReadEvents(context.Background(), started.SessionID, EventReconnectRequest{})
+	if err != nil {
+		t.Fatalf("ReadEvents: %v", err)
+	}
+	payload := findDispatchInterruptedEventPayload(t, events.Events, "disp-js-002")
+	if payload.ObservedStatus != string(factoryapi.FactoryDispatchStatusRUNNING) {
+		t.Fatalf("observedStatus = %q, want RUNNING", payload.ObservedStatus)
+	}
+	if payload.Reason != "stop before provider completion" {
+		t.Fatalf("reason = %q, want stop before provider completion", payload.Reason)
+	}
+
+	session, err := service.GetSession(context.Background(), started.SessionID)
+	if err != nil {
+		t.Fatalf("GetSession: %v", err)
+	}
+	updated, err := service.ListDispatches(context.Background(), started.SessionID)
+	if err != nil {
+		t.Fatalf("ListDispatches after interrupt: %v", err)
+	}
+	interrupted := findDispatchByID(updated.Dispatches, "disp-js-002")
+	if interrupted == nil || interrupted.Status != DispatchStatusInterrupted {
+		t.Fatalf("dispatch disp-js-002 after interrupt = %#v, want INTERRUPTED", interrupted)
+	}
+	if err := ValidateDispatchListMatchesSessionProgress(session, updated.Dispatches); err != nil {
+		t.Fatalf("ValidateDispatchListMatchesSessionProgress: %v", err)
+	}
+}
