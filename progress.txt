@@ -1147,3 +1147,15 @@
   - The durable operator config is the source of the backend-scope identity, while the deterministic `.<factory>.staging-owner` directory is the actual serialization resource; keep those concepts separate in errors, logs, and tests.
   - The local OS probe deliberately does not equate a missing PID with safe reclamation because PID reuse and incomplete stage contents are not identity proof; only a stronger injected orphan classification may enter compare-and-reclaim.
 ---
+## 2026-08-10 10:29 -07:00 - pf-stale-scope-diagnostic-002 verification follow-up
+- What was implemented
+  - Kept ordinary payload, validation, and target-format failures on their existing installation-error path while retaining structured `failed` logs; only ownership acquisition/recovery failures use the typed contention diagnostic.
+- Files changed
+  - `pkg/services/factory_definitions/internal/services/distribution/packagedinstallation/service.go`
+  - `progress.txt`
+- Verification
+  - Focused packaged-installation, System Initialization workflow, and Wire tests — passed.
+  - Pushed commit `11a6bacc7` to PR #1853's existing head branch.
+- **Learnings for future iterations:**
+  - Ownership diagnostics should not broaden typed contention semantics to unrelated invalid payload or customer-target failures; log those failures while preserving their original caller-visible error class.
+---
