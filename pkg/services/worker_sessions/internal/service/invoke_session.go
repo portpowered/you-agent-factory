@@ -476,7 +476,46 @@ func (r *registry) GetObservation(ctx context.Context, req workersessions.GetObs
 	return projected, nil
 }
 
+func (r *registry) GetObservationByWorkerSessionID(ctx context.Context, req workersessions.GetObservationByWorkerSessionIDRequest) (workersessions.Observation, error) {
+	if err := req.Validate(); err != nil {
+		r.logger.Info("worker session observation get by Worker Session rejected", "outcome", "invalid")
+		return workersessions.Observation{}, err
+	}
+	if err := observationContextError(ctx); err != nil {
+		return workersessions.Observation{}, err
+	}
+	// Worker-ID lookup is the provider-neutral history boundary. It must not
+	// require transcript enrichment from Provider Sessions: a worker can emit
+	// canonical lifecycle/output records without a readable provider transcript.
+	projected, err := r.projectWorkerSessionIdentity(ctx, req.WorkerSessionID)
+	if err != nil {
+		r.logger.Info("worker session observation get by Worker Session", "workerSessionID", req.WorkerSessionID, "outcome", "not_found")
+		return workersessions.Observation{}, err
+	}
+	r.logger.Info("worker session observation get by Worker Session", "workerSessionID", projected.WorkerSessionID, "outcome", "success")
+	return projected, nil
+}
+
 func (r *registry) projectObservation(ctx context.Context, id string) (workersessions.Observation, error) {
+	if err := observationContextError(ctx); err != nil {
+		return workersessions.Observation{}, err
+	}
+	projected, err := r.projectWorkerSessionIdentity(ctx, id)
+	if err != nil {
+		return workersessions.Observation{}, err
+	}
+
+	if !projected.ProviderSessionAvailable {
+		return projected, nil
+	}
+	return r.enrichWithProviderSessionsProjection(ctx, projected)
+}
+
+// projectWorkerSessionIdentity projects the registry-owned Worker Session
+// identity and lifecycle timing without consulting Provider Sessions. The
+// canonical Worker-ID history stream uses this boundary so missing provider
+// transcript storage cannot hide retained Worker Session records.
+func (r *registry) projectWorkerSessionIdentity(ctx context.Context, id string) (workersessions.Observation, error) {
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.Observation{}, err
 	}
@@ -492,11 +531,7 @@ func (r *registry) projectObservation(ctx context.Context, id string) (workerses
 		failure := *session.Result.Cause
 		projected.Failure = &failure
 	}
-
-	if !projected.ProviderSessionAvailable {
-		return projected, nil
-	}
-	return r.enrichWithProviderSessionsProjection(ctx, projected)
+	return projected, nil
 }
 
 // loadObservationState returns detached snapshots of the registered session
@@ -847,21 +882,45 @@ func (r *registry) StreamObservations(ctx context.Context, req workersessions.St
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.ObservationSubscription{}, err
 	}
-	if !req.ReplayOnly && r.eventReader == nil {
-		r.logger.Info("worker session observation stream", "outcome", "source_unavailable")
-		return workersessions.ObservationSubscription{}, workersessions.ErrObservationSourceUnavailable
-	}
-
 	workerSessionID, alreadyTerminal, workerSessionState, err := r.observationStreamSession(req.ProviderSession)
 	if err != nil {
 		return workersessions.ObservationSubscription{}, err
 	}
-	limit := req.Limit
+	return r.streamObservationTopic(ctx, workerSessionID, workerSessionState, alreadyTerminal, req.Limit, req.ReplayOnly)
+}
+
+func (r *registry) StreamObservationsByWorkerSessionID(ctx context.Context, req workersessions.StreamObservationsByWorkerSessionIDRequest) (workersessions.ObservationSubscription, error) {
+	if err := req.Validate(); err != nil {
+		r.logger.Info("worker session observation stream by Worker Session rejected", "outcome", "invalid")
+		return workersessions.ObservationSubscription{}, err
+	}
+	if err := observationContextError(ctx); err != nil {
+		return workersessions.ObservationSubscription{}, err
+	}
+	workerSessionID, alreadyTerminal, workerSessionState, err := r.observationStreamSessionByID(req.WorkerSessionID)
+	if err != nil {
+		return workersessions.ObservationSubscription{}, err
+	}
+	return r.streamObservationTopic(ctx, workerSessionID, workerSessionState, alreadyTerminal, req.Limit, req.ReplayOnly)
+}
+
+func (r *registry) streamObservationTopic(
+	ctx context.Context,
+	workerSessionID string,
+	workerSessionState workersessions.State,
+	alreadyTerminal bool,
+	limit int,
+	replayOnly bool,
+) (workersessions.ObservationSubscription, error) {
+	if !replayOnly && r.eventReader == nil {
+		r.logger.Info("worker session observation stream", "outcome", "source_unavailable")
+		return workersessions.ObservationSubscription{}, workersessions.ErrObservationSourceUnavailable
+	}
 	if limit == 0 {
 		limit = workersessions.DefaultObservationStreamLimit
 	}
 	topic := workersessions.Topic(workerSessionID)
-	if req.ReplayOnly {
+	if replayOnly {
 		return r.replayObservationStream(ctx, topic, workerSessionState, limit)
 	}
 	return r.liveObservationStream(ctx, topic, limit, alreadyTerminal)
@@ -887,6 +946,17 @@ func (r *registry) observationStreamSession(ref providers.SessionRef) (string, b
 		return "", false, workersessions.StateReserved, workersessions.ErrObservationSessionNotFound
 	}
 	return workerSessionID, alreadyTerminal, workerSessionState, nil
+}
+
+func (r *registry) observationStreamSessionByID(id string) (string, bool, workersessions.State, error) {
+	r.mu.RLock()
+	session, exists := r.sessions[id]
+	r.mu.RUnlock()
+	if !exists {
+		r.logger.Info("worker session observation stream by Worker Session", "workerSessionID", id, "outcome", "not_found")
+		return "", false, workersessions.StateReserved, workersessions.ErrObservationSessionNotFound
+	}
+	return id, session.Terminal(), session.State, nil
 }
 
 func (r *registry) replayObservationStream(

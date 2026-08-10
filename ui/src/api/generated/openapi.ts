@@ -68,6 +68,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/factory-sessions/{session_id}/worker-sessions/{worker_session_id}/events": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Stream retained and live Worker Session events by Worker Session identity
+     * @description Streams the canonical Worker Session Events topic for the stable Worker Session identity returned by the Worker Sessions list operation. This provider-neutral path remains available when the provider did not emit a native Provider Session reference. Retained records are emitted first in aggregate order, followed by live records unless replayOnly is true. In replay-only mode the retained head is captured before delivery, no live follower is registered, and one REPLAY_SUMMARY frame closes the stream after the retained drain.
+     */
+    get: operations["streamWorkerSessionEventsByWorkerSessionId"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/factory-sessions/{session_id}/worker-sessions/detail": {
     parameters: {
       query?: never;
@@ -6095,6 +6115,8 @@ export interface components {
   parameters: {
     /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
     SessionID: string;
+    /** @description Stable Worker Session identity returned by the Worker Sessions list operation. */
+    WorkerSessionID: string;
     /** @description Optional positive page size. Omit to use the default page size; non-positive values fall back to the default after successful integer binding. */
     MaxResults: number;
     /** @description Optional base64-encoded token ID cursor. */
@@ -6278,6 +6300,37 @@ export interface operations {
       path: {
         /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
         session_id: components["parameters"]["SessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Retained then live Worker Session event frames, or a finite retained replay ending in REPLAY_SUMMARY. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "text/event-stream": string;
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  streamWorkerSessionEventsByWorkerSessionId: {
+    parameters: {
+      query?: {
+        /** @description Drain the retained history through a captured Events head without registering a live follower. */
+        replayOnly?: boolean;
+      };
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+        /** @description Stable Worker Session identity returned by the Worker Sessions list operation. */
+        worker_session_id: components["parameters"]["WorkerSessionID"];
       };
       cookie?: never;
     };

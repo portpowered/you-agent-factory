@@ -7471,6 +7471,9 @@ type WorkListWorkTypeName = string
 // WorkOrTokenID defines model for WorkOrTokenID.
 type WorkOrTokenID = string
 
+// WorkerSessionID defines model for WorkerSessionID.
+type WorkerSessionID = string
+
 // BadRequest defines model for BadRequest.
 type BadRequest = ErrorResponse
 

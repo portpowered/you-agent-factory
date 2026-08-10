@@ -51,6 +51,11 @@ type Service interface {
 	// Providers-owned provider/kind/id reference.
 	GetObservation(ctx context.Context, req GetObservationRequest) (Observation, error)
 
+	// GetObservationByWorkerSessionID returns one detached observation by the
+	// canonical Worker Session identity. This identity-only path keeps
+	// provider-neutral histories inspectable when no Provider Session exists.
+	GetObservationByWorkerSessionID(ctx context.Context, req GetObservationByWorkerSessionIDRequest) (Observation, error)
+
 	// ReadTranscript returns the normalized Provider Sessions transcript for one
 	// terminal Worker Session identified by its exact Provider Session reference.
 	ReadTranscript(ctx context.Context, req ReadTranscriptRequest) (ReadTranscriptResult, error)
@@ -59,6 +64,11 @@ type Service interface {
 	// the canonical Worker Session Events topic for the exact Provider Session
 	// reference.
 	StreamObservations(ctx context.Context, req StreamObservationsRequest) (ObservationSubscription, error)
+
+	// StreamObservationsByWorkerSessionID returns a cancellable retained-then-live
+	// stream over the canonical Worker Session Events topic by stable Worker
+	// Session identity, including sessions without a Provider Session reference.
+	StreamObservationsByWorkerSessionID(ctx context.Context, req StreamObservationsByWorkerSessionIDRequest) (ObservationSubscription, error)
 
 	// InvokeSession validates req, then establishes or reuses one stable Worker
 	// Session identity in StateReserved, transitions StateStarting, and hands

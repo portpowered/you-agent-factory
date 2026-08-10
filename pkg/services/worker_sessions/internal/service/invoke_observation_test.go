@@ -308,11 +308,21 @@ func TestInvokeObservationProjectionAndTranscriptOutcomes(t *testing.T) {
 	if err != nil || got.WorkerSessionID != "worker-1" || got.Transcript != workersessions.TranscriptAvailabilityAvailable {
 		t.Fatalf("GetObservation() = %#v, %v", got, err)
 	}
+	gotByWorker, err := registry.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "worker-1"})
+	if err != nil || gotByWorker.WorkerSessionID != "worker-1" || gotByWorker.ProviderSessionAvailable != got.ProviderSessionAvailable {
+		t.Fatalf("GetObservationByWorkerSessionID() = %#v, %v", gotByWorker, err)
+	}
 	if _, err := registry.GetObservation(context.Background(), workersessions.GetObservationRequest{ProviderSession: providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "missing"}}); !errors.Is(err, workersessions.ErrObservationSessionNotFound) {
 		t.Fatalf("GetObservation(missing) error = %v", err)
 	}
+	if _, err := registry.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "missing"}); !errors.Is(err, workersessions.ErrObservationSessionNotFound) {
+		t.Fatalf("GetObservationByWorkerSessionID(missing) error = %v", err)
+	}
 	if _, err := registry.GetObservation(canceled, workersessions.GetObservationRequest{ProviderSession: ref}); !errors.Is(err, workersessions.ErrObservationCanceled) {
 		t.Fatalf("GetObservation(canceled) error = %v", err)
+	}
+	if _, err := registry.GetObservationByWorkerSessionID(canceled, workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "worker-1"}); !errors.Is(err, workersessions.ErrObservationCanceled) {
+		t.Fatalf("GetObservationByWorkerSessionID(canceled) error = %v", err)
 	}
 	if _, err := registry.projectObservation(canceled, "worker-1"); !errors.Is(err, workersessions.ErrObservationCanceled) {
 		t.Fatalf("projectObservation(canceled) error = %v", err)
@@ -339,6 +349,17 @@ func TestInvokeObservationProjectionUnavailableOutcomes(t *testing.T) {
 	noProvider.observations["worker-1"] = observationMetadata()
 	if _, err := noProvider.GetObservation(context.Background(), workersessions.GetObservationRequest{ProviderSession: ref}); !errors.Is(err, workersessions.ErrObservationProjectionUnavailable) {
 		t.Fatalf("GetObservation(without provider service) error = %v", err)
+	}
+	noReference := newObservationRegistry(nil, nil)
+	noReference.sessions["worker-no-reference"] = workersessions.Session{ID: "worker-no-reference", State: workersessions.StateCompleted}
+	noReference.observations["worker-no-reference"] = observationMetadata()
+	gotNoReference, err := noReference.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "worker-no-reference"})
+	if err != nil || gotNoReference.ProviderSessionAvailable || gotNoReference.WorkerSessionID != "worker-no-reference" {
+		t.Fatalf("GetObservationByWorkerSessionID(no reference) = %#v, %v", gotNoReference, err)
+	}
+	gotIdentity, err := noProvider.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "worker-1"})
+	if err != nil || !gotIdentity.ProviderSessionAvailable || gotIdentity.ProviderSession.ID != ref.ID {
+		t.Fatalf("GetObservationByWorkerSessionID(provider reference without projector) = %#v, %v", gotIdentity, err)
 	}
 	canceledProvider := newObservationRegistry(observationProjectorFake{err: context.Canceled}, nil)
 	canceledProvider.sessions["worker-1"] = observationSession("worker-1", workersessions.StateRunning)
@@ -558,6 +579,47 @@ func TestStreamObservationsReplayOnlyEmitsSummaryForEmptyActiveTopic(t *testing.
 	}
 	if reader.subscribeCalls != 0 {
 		t.Fatalf("Subscribe() calls = %d, want 0 for replay-only", reader.subscribeCalls)
+	}
+}
+
+func TestStreamObservationsByWorkerSessionIDUsesCanonicalTopic(t *testing.T) {
+	topic := workersessions.Topic("worker-no-reference")
+	opening := replayObservationRecord(topic, 1, "opening")
+	terminal := replayObservationRecord(topic, 2, "terminal")
+	terminal.SourceType = "worker_session_lifecycle"
+	terminal.SourceSequence = 2
+	terminal.SourceEventID = "terminal"
+	terminal.Payload = []byte(`{"kind":"SESSION","phase":"COMPLETED","payload":{"status":"COMPLETED"}}`)
+	reader := &observationEventReaderFake{readResults: []events.ReadResult{{
+		Outcome:  events.ReadOutcomeProgress,
+		Records:  []events.Record{opening},
+		Next:     events.Cursor{Topic: topic, Position: 1},
+		Retained: events.RetainedRange{Topic: topic, Earliest: 1, Head: 2},
+	}, {
+		Outcome:  events.ReadOutcomeProgress,
+		Records:  []events.Record{terminal},
+		Next:     events.Cursor{Topic: topic, Position: 2},
+		Retained: events.RetainedRange{Topic: topic, Earliest: 1, Head: 2},
+	}}}
+	registry := newObservationRegistry(nil, reader)
+	registry.sessions["worker-no-reference"] = workersessions.Session{ID: "worker-no-reference", State: workersessions.StateCompleted}
+
+	subscription, err := registry.StreamObservationsByWorkerSessionID(context.Background(), workersessions.StreamObservationsByWorkerSessionIDRequest{
+		WorkerSessionID: "worker-no-reference",
+		ReplayOnly:      true,
+	})
+	if err != nil {
+		t.Fatalf("StreamObservationsByWorkerSessionID() error = %v", err)
+	}
+	defer subscription.Close()
+	if delivery := subscription.Next(context.Background()); delivery.Kind != workersessions.ObservationDeliveryRecord || delivery.Event.Position != 1 {
+		t.Fatalf("Worker Session identity stream opening delivery = %#v, want record position 1", delivery)
+	}
+	if delivery := subscription.Next(context.Background()); delivery.Kind != workersessions.ObservationDeliveryTerminalReplay || delivery.Event.Position != 2 {
+		t.Fatalf("Worker Session identity stream terminal delivery = %#v, want terminal replay position 2", delivery)
+	}
+	if summary := subscription.Next(context.Background()); summary.Kind != workersessions.ObservationDeliveryReplaySummary || summary.Summary == nil || !summary.Summary.Complete {
+		t.Fatalf("Worker Session identity stream summary = %#v, want complete replay summary", summary)
 	}
 }
 

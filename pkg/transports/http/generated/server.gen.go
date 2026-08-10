@@ -7473,6 +7473,9 @@ type WorkListWorkTypeName = string
 // WorkOrTokenID defines model for WorkOrTokenID.
 type WorkOrTokenID = string
 
+// WorkerSessionID defines model for WorkerSessionID.
+type WorkerSessionID = string
+
 // BadRequest defines model for BadRequest.
 type BadRequest = ErrorResponse
 
@@ -7659,6 +7662,12 @@ type ReadWorkerSessionTranscriptBySessionIdParams struct {
 
 	// Id Provider-issued session identifier, not a filesystem path.
 	Id string `form:"id" json:"id"`
+}
+
+// StreamWorkerSessionEventsByWorkerSessionIdParams defines parameters for StreamWorkerSessionEventsByWorkerSessionId.
+type StreamWorkerSessionEventsByWorkerSessionIdParams struct {
+	// ReplayOnly Drain the retained history through a captured Events head without registering a live follower.
+	ReplayOnly *bool `form:"replayOnly,omitempty" json:"replayOnly,omitempty"`
 }
 
 // GetProviderSessionDetailsParams defines parameters for GetProviderSessionDetails.
@@ -10214,6 +10223,9 @@ type ServerInterface interface {
 	// Read one finished Worker Session transcript
 	// (GET /factory-sessions/{session_id}/worker-sessions/transcript)
 	ReadWorkerSessionTranscriptBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID, params ReadWorkerSessionTranscriptBySessionIdParams)
+	// Stream retained and live Worker Session events by Worker Session identity
+	// (GET /factory-sessions/{session_id}/worker-sessions/{worker_session_id}/events)
+	StreamWorkerSessionEventsByWorkerSessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID, workerSessionId WorkerSessionID, params StreamWorkerSessionEventsByWorkerSessionIdParams)
 	// Validate factory definition
 	// (POST /factory-validations)
 	ValidateFactory(w http.ResponseWriter, r *http.Request)
@@ -11650,6 +11662,51 @@ func (siw *ServerInterfaceWrapper) ReadWorkerSessionTranscriptBySessionId(w http
 	handler.ServeHTTP(w, r)
 }
 
+// StreamWorkerSessionEventsByWorkerSessionId operation middleware
+func (siw *ServerInterfaceWrapper) StreamWorkerSessionEventsByWorkerSessionId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "session_id" -------------
+	var sessionId SessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "session_id", mux.Vars(r)["session_id"], &sessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "worker_session_id" -------------
+	var workerSessionId WorkerSessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "worker_session_id", mux.Vars(r)["worker_session_id"], &workerSessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "worker_session_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params StreamWorkerSessionEventsByWorkerSessionIdParams
+
+	// ------------- Optional query parameter "replayOnly" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "replayOnly", r.URL.Query(), &params.ReplayOnly)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "replayOnly", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.StreamWorkerSessionEventsByWorkerSessionId(w, r, sessionId, workerSessionId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ValidateFactory operation middleware
 func (siw *ServerInterfaceWrapper) ValidateFactory(w http.ResponseWriter, r *http.Request) {
 
@@ -12037,6 +12094,8 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/worker-sessions/events", wrapper.StreamWorkerSessionEventsBySessionId).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/worker-sessions/transcript", wrapper.ReadWorkerSessionTranscriptBySessionId).Methods("GET")
+
+	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/worker-sessions/{worker_session_id}/events", wrapper.StreamWorkerSessionEventsByWorkerSessionId).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/factory-validations", wrapper.ValidateFactory).Methods("POST")
 

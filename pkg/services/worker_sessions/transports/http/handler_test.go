@@ -570,20 +570,27 @@ func TestStreamWorkerSessionEventsBySessionIDMapsUnavailableBeforeOpening(t *tes
 }
 
 type fakeObservationService struct {
-	result              workersessions.ListObservationsResult
-	listErr             error
-	listCalled          bool
-	getResult           workersessions.Observation
-	getErr              error
-	getCalled           bool
-	getProviderSession  providers.SessionRef
-	readResult          workersessions.ReadTranscriptResult
-	readErr             error
-	readCalled          bool
-	readProviderSession providers.SessionRef
-	streamSubscription  *fakeObservationSubscription
-	streamRequest       workersessions.StreamObservationsRequest
-	streamErr           error
+	result                     workersessions.ListObservationsResult
+	listErr                    error
+	listCalled                 bool
+	getResult                  workersessions.Observation
+	getErr                     error
+	getCalled                  bool
+	getProviderSession         providers.SessionRef
+	getByWorkerResult          workersessions.Observation
+	getByWorkerErr             error
+	getByWorkerCalled          bool
+	getWorkerSessionID         string
+	readResult                 workersessions.ReadTranscriptResult
+	readErr                    error
+	readCalled                 bool
+	readProviderSession        providers.SessionRef
+	streamSubscription         *fakeObservationSubscription
+	streamRequest              workersessions.StreamObservationsRequest
+	streamErr                  error
+	streamByWorkerSubscription *fakeObservationSubscription
+	streamByWorkerRequest      workersessions.StreamObservationsByWorkerSessionIDRequest
+	streamByWorkerErr          error
 }
 
 func (f *fakeObservationService) ListObservations(context.Context, workersessions.ListObservationsRequest) (workersessions.ListObservationsResult, error) {
@@ -595,6 +602,12 @@ func (f *fakeObservationService) GetObservation(_ context.Context, request worke
 	f.getCalled = true
 	f.getProviderSession = request.ProviderSession
 	return f.getResult, f.getErr
+}
+
+func (f *fakeObservationService) GetObservationByWorkerSessionID(_ context.Context, request workersessions.GetObservationByWorkerSessionIDRequest) (workersessions.Observation, error) {
+	f.getByWorkerCalled = true
+	f.getWorkerSessionID = request.WorkerSessionID
+	return f.getByWorkerResult, f.getByWorkerErr
 }
 
 func (f *fakeObservationService) ReadTranscript(_ context.Context, request workersessions.ReadTranscriptRequest) (workersessions.ReadTranscriptResult, error) {
@@ -612,6 +625,17 @@ func (f *fakeObservationService) StreamObservations(_ context.Context, request w
 		NextFunc:  f.streamSubscription.Next,
 		CloseFunc: f.streamSubscription.Close,
 	}, f.streamErr
+}
+
+func (f *fakeObservationService) StreamObservationsByWorkerSessionID(_ context.Context, request workersessions.StreamObservationsByWorkerSessionIDRequest) (workersessions.ObservationSubscription, error) {
+	f.streamByWorkerRequest = request
+	if f.streamByWorkerSubscription == nil {
+		return workersessions.ObservationSubscription{}, f.streamByWorkerErr
+	}
+	return workersessions.ObservationSubscription{
+		NextFunc:  f.streamByWorkerSubscription.Next,
+		CloseFunc: f.streamByWorkerSubscription.Close,
+	}, f.streamByWorkerErr
 }
 
 type fakeObservationSubscription struct {
