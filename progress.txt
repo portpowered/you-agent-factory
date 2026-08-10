@@ -2099,3 +2099,16 @@
 - **Learnings for future iterations:**
   - After reconciling current-main changes, rerun both focused behavior checks and the repository ratchets before relying on the prior PR workflow result.
 ---
+
+## [2026-08-10 15:59 -07:00] - thr-split-fake-service-runtime-tests-005 CI flake diagnosis
+- What was implemented
+  - Investigated the final-head Backend Functional Coverage failure in untouched `tests/functional/events/response_events/stream_test.go`.
+  - Confirmed the failure was the timing-sensitive `TestAPIResponseEventStreamClosesAtDocumentedBoundary` observation that a completed session retained zero Response Events before stream open; no split-file code or assertion changed.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/events/response_events -run '^TestAPIResponseEventStreamClosesAtDocumentedBoundary$' -count=10 -v -timeout 300s` — passed all ten runs.
+  - The failed PR job is isolated to this existing functional test; the other final-head checks passed.
+- **Learnings for future iterations:**
+  - When broad functional coverage reports a retained-response timing failure in an untouched stream test, run that exact test repeatedly before changing behavior and rerun the failed CI lane on the latest head.
+---
