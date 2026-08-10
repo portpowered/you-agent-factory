@@ -23,6 +23,7 @@ import (
 	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	providerscli "github.com/portpowered/infinite-you/pkg/services/providers/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 	acpcli "github.com/portpowered/infinite-you/pkg/transports/cli/acp"
@@ -122,6 +123,7 @@ type CommandOperations struct {
 	LoadOperatorConfig                operatorconfig.ConfigLoader
 	BuildExecution                    ExecutionServiceBuilder
 	ModelsCLI                         modelscli.Service
+	ProvidersCLI                      providerscli.Service
 	SessionsCLI                       sessioncli.Service
 	SubmitWork                        SubmitWorkOperation
 	SubmitBatch                       SubmitBatchOperation
@@ -182,6 +184,7 @@ type CommandFactory struct {
 	SessionsCLI            sessioncli.Service
 	BuildExecution         ExecutionServiceBuilder
 	ModelsCLI              modelscli.Service
+	ProvidersCLI           providerscli.Service
 	FlattenFactoryConfig   func(configcli.FactoryConfigFlattenConfig) error
 	ExpandFactoryConfig    func(configcli.FactoryConfigExpandConfig) error
 	InitFactory            interfaces.ScaffoldInitializer
@@ -235,6 +238,7 @@ func NewCommandFactory(operations CommandOperations) CommandFactory {
 		SessionsCLI:                       operations.SessionsCLI,
 		BuildExecution:                    operations.BuildExecution,
 		ModelsCLI:                         operations.ModelsCLI,
+		ProvidersCLI:                      operations.ProvidersCLI,
 		FlattenFactoryConfig:              operations.FlattenFactoryConfig,
 		ExpandFactoryConfig:               operations.ExpandFactoryConfig,
 		InitFactory:                       operations.InitFactory,
@@ -1102,4 +1106,15 @@ func newProductionModelsCommand(
 		},
 	)
 	return climanifestcobra.NewModelsCommand(handler)
+}
+
+func newProductionProvidersCommand(
+	diagnostics *cliDiagnosticsOptions,
+	rootOptions CommandFactory,
+) (*cobra.Command, error) {
+	handler := providerscli.NewCommandHandler(
+		rootOptions.ProvidersCLI,
+		diagnostics.writer,
+	)
+	return climanifestcobra.NewProvidersCommand(handler.List)
 }

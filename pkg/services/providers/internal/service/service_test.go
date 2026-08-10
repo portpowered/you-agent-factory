@@ -189,6 +189,59 @@ func TestRootRejectsSeparateReasoningEffortForAgy(t *testing.T) {
 	}
 }
 
+func TestCatalogAdvertisedAgyEffortsAreNotRejectedByExecutionPolicy(t *testing.T) {
+	t.Parallel()
+
+	catalogService, err := catalogwire.NewService()
+	if err != nil {
+		t.Fatalf("catalogwire.NewService() = %v", err)
+	}
+	executionService, err := executionwire.NewService(
+		catalogService,
+		execution.Registration{
+			Provider: providers.IDAntigravity,
+			Attempt: func(
+				context.Context,
+				providers.ExecuteRequest,
+			) (providers.ExecuteResult, error) {
+				return providers.ExecuteResult{Content: "accepted"}, nil
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("executionwire.NewService() = %v", err)
+	}
+	root, err := providerservice.New(catalogService, executionService, logging.NoopLogger{})
+	if err != nil {
+		t.Fatalf("New() = %v", err)
+	}
+
+	list, err := root.ListProviders(context.Background(), providers.ListProvidersRequest{})
+	if err != nil {
+		t.Fatalf("ListProviders() = %v", err)
+	}
+	agy := indexProviders(list.Providers)[providers.IDAntigravity]
+	for _, model := range agy.Models {
+		for _, effort := range model.Efforts {
+			_, executeErr := root.Execute(context.Background(), providers.ExecuteRequest{
+				Provider:        providers.IDAntigravity,
+				AttemptID:       "catalog-policy-" + model.ID,
+				Model:           model.ID,
+				ReasoningEffort: string(effort),
+			})
+			var failure providers.ExecuteFailure
+			if errors.As(executeErr, &failure) &&
+				failure.Kind == providers.ExecuteFailureKindInvalidRequest &&
+				strings.Contains(failure.Message, "does not support a separate reasoning effort") {
+				t.Fatalf("catalog advertises AGY model %q effort %q rejected by canonical execution policy", model.ID, effort)
+			}
+			if executeErr != nil {
+				t.Fatalf("Execute(%s, %s) = %v, want accepted advertised combination", model.ID, effort, executeErr)
+			}
+		}
+	}
+}
+
 func TestRootRejectsMinimalReasoningEffortForClaude(t *testing.T) {
 	t.Parallel()
 

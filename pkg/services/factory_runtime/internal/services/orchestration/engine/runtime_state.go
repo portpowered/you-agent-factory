@@ -112,7 +112,7 @@ func (e *FactoryEngine) tickOnce(ctx context.Context) (bool, bool, error) {
 	return e.tick(ctx)
 }
 
-func (e *FactoryEngine) finishTerminationDrain() (bool, error) {
+func (e *FactoryEngine) finishTerminationDrain() bool {
 	e.mu.Lock()
 	e.acceptingSubmits = false
 	drained := e.drainChannels()
@@ -121,9 +121,9 @@ func (e *FactoryEngine) finishTerminationDrain() (bool, error) {
 	}
 	e.mu.Unlock()
 	if drained {
-		return false, nil
+		return false
 	}
-	return true, nil
+	return true
 }
 
 // Tick executes a single tick synchronously. Drains all pending channel events
@@ -185,11 +185,20 @@ func (e *FactoryEngine) GetResultBuffer() *buffers.TypedBuffer[workerexecution.W
 // Returns true when at least one signal was drained.
 func (e *FactoryEngine) drainChannels() bool {
 	drained := false
+	var dispatchWait <-chan struct{}
+	if e.dispatchHook != nil {
+		dispatchWait = e.dispatchHook.WaitCh()
+	}
 	for {
 		select {
 		case <-e.resultCh:
 			e.handleResult()
 			drained = true
+		case <-dispatchWait:
+			// A dispatch-result hook wake-up is itself a reason to rerun the
+			// termination check. The hook may have drained activity without
+			// leaving a result in the engine-owned result channel yet.
+			return true
 		default:
 			select {
 			case <-e.submitSignal:

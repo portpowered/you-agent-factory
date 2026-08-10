@@ -1,0 +1,6 @@
+type: string
+description: Meaning of the value recorded by one named provider limit fact.
+enum:
+  - maximum
+  - default
+  - behavior

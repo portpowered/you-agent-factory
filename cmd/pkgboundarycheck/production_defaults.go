@@ -179,6 +179,9 @@ func scanProductionDefaultSelections(repoRoot string) ([]productionDefaultFindin
 		if walkErr != nil {
 			return walkErr
 		}
+		if shouldSkipRepositoryWalkDirectory(repoRoot, path, entry) {
+			return filepath.SkipDir
+		}
 		if entry.IsDir() {
 			relative, relErr := filepath.Rel(repoRoot, path)
 			if relErr != nil {
@@ -286,6 +289,9 @@ func scanPlatformAdapterSelections(
 	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
+		}
+		if shouldSkipRepositoryWalkDirectory(repoRoot, path, entry) {
+			return filepath.SkipDir
 		}
 		if entry.IsDir() {
 			relative, err := filepath.Rel(repoRoot, path)
@@ -422,6 +428,9 @@ func readWireProductionSelections(repoRoot string) (map[string]struct{}, error) 
 	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
+		}
+		if shouldSkipRepositoryWalkDirectory(repoRoot, path, entry) {
+			return filepath.SkipDir
 		}
 		if entry.IsDir() || filepath.Ext(entry.Name()) != ".go" ||
 			strings.HasSuffix(entry.Name(), "_test.go") || entry.Name() == "wire_gen.go" {
