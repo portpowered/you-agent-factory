@@ -19,8 +19,10 @@ import (
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
 )
 
 const (
@@ -231,10 +233,11 @@ func TestRunScopedServerUsesExactListenAddress(t *testing.T) {
 	homeDir := t.TempDir()
 	environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 	stdout, stderr := execute(t, process, environment, workingDirectory, []string{
-		"you", "run", "--factory", workflowPath, "--with-mock-workers", "--with-server",
+		"you", "--server", "http://127.0.0.1:65534", "run", "--factory", workflowPath, "--with-mock-workers", "--with-server",
 		"--listen", "127.0.0.1:" + strconv.Itoa(requestedPort),
 	}, "")
-	if stderr != "" || !strings.Contains(stdout, "completed (SUCCEEDED)") {
+	const wantWarning = "warning: --listen takes precedence over --server for the local listener; use --listen for the listener and reserve --server for the factory API endpoint\n"
+	if stderr != wantWarning || !strings.Contains(stdout, "completed (SUCCEEDED)") {
 		t.Fatalf("JavaScript stdout=%q stderr=%q", stdout, stderr)
 	}
 	wantURL := "Dashboard URL: http://127.0.0.1:" + strconv.Itoa(requestedPort) + "/dashboard/ui"
@@ -246,6 +249,66 @@ func TestRunScopedServerUsesExactListenAddress(t *testing.T) {
 		t.Fatalf("exact listener remained bound after completion: %v", err)
 	}
 	_ = rebound.Close()
+}
+
+// TestRemotePlacementDispatchesThroughSelectedServer proves a dual-placement
+// run sends its normalized prompt to the selected server without starting a
+// local listener or invoking the local runtime.
+func TestRemotePlacementDispatchesThroughSelectedServer(t *testing.T) {
+	var gotRequest factoryapi.InvocationRequest
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/factory-sessions/~default/invocations" {
+			t.Fatalf("remote request = %s %s, want POST /factory-sessions/~default/invocations", r.Method, r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&gotRequest); err != nil {
+			t.Fatalf("decode remote invocation request: %v", err)
+		}
+		requests.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(factoryapi.InvocationResponse{
+			RequestId: "remote-request",
+			TraceId:   "remote-trace",
+			Status:    factoryapi.InvocationTerminalStatusCompleted,
+			PrimaryResult: contentcontract.GeneratedPtrFromParts([]work.WorkContentPart{{
+				Type: work.WorkContentPartTypeText,
+				Text: "remote result",
+			}}),
+		})
+	}))
+	defer server.Close()
+
+	workingDirectory := t.TempDir()
+	factoryPath := filepath.Join(workingDirectory, "factory.json")
+	if err := os.WriteFile(factoryPath, []byte(remotePlacementFactoryJSON), 0o600); err != nil {
+		t.Fatalf("write remote factory: %v", err)
+	}
+	var localStarts atomic.Int32
+	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+		APIServerStarter: func(context.Context, platformhttpserver.StartRequest) error {
+			localStarts.Add(1)
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+	homeDir := t.TempDir()
+	environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	stdout, stderr := execute(t, process, environment, workingDirectory, []string{
+		"you", "--remote", "--server", server.URL, "run", "--factory", factoryPath,
+		"--no-record", "--output", "primary", "same normalized request",
+	}, "")
+	if stderr != "" || stdout != "remote result" {
+		t.Fatalf("remote stdout=%q stderr=%q, want remote result and no diagnostics", stdout, stderr)
+	}
+	if requests.Load() != 1 || localStarts.Load() != 0 {
+		t.Fatalf("dispatch effects = remote requests:%d local listeners:%d, want 1/0", requests.Load(), localStarts.Load())
+	}
+	parts := contentcontract.PartsFromGenerated(gotRequest.Content)
+	if len(parts) != 1 || parts[0].Text != "same normalized request" {
+		t.Fatalf("remote normalized content = %#v, want one prompt part", gotRequest.Content)
+	}
 }
 
 func TestRunScopedServerRejectsUnavailableExactListenAddress(t *testing.T) {
@@ -672,3 +735,27 @@ func reserveExactPort(t *testing.T) int {
 	}
 	return port
 }
+
+const remotePlacementFactoryJSON = `{
+  "name": "remote-placement",
+  "workTypes": [
+    {
+      "name": "task",
+      "states": [
+        {"name": "init", "type": "INITIAL"},
+        {"name": "complete", "type": "TERMINAL"},
+        {"name": "failed", "type": "FAILED"}
+      ]
+    }
+  ],
+  "workers": [{"name": "processor"}],
+  "workstations": [
+    {
+      "name": "process",
+      "inputs": [{"workType": "task", "state": "init"}],
+      "outputs": [{"workType": "task", "state": "complete"}],
+      "onFailure": [{"workType": "task", "state": "failed"}],
+      "worker": "processor"
+    }
+  ]
+}`
