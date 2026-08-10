@@ -155,8 +155,25 @@ func (service *Service) runEndpoint(
 			}
 			service.deliver(ctx, request, definition, outcome.Event, secret, policy)
 		case recordings.SubscriptionGap:
-			service.logger.Error("factory webhook subscription gap", "endpoint", definition.Name)
-			return
+			if outcome.Gap == nil {
+				service.logger.Error("factory webhook subscription gap has no reconnect cursor", "endpoint", definition.Name)
+				return
+			}
+			reconnectFrom := outcome.Gap.ReconnectFrom
+			reconnected, reconnectErr := request.Events.SubscribeFrom(ctx, recordings.SubscribeRequest{
+				Cursor: &reconnectFrom,
+				Scope:  request.Scope,
+			})
+			if reconnectErr != nil {
+				service.logger.Error(
+					"factory webhook subscription reconnect failed",
+					"endpoint", definition.Name,
+					"cause", outcome.Gap.Cause,
+					"error", reconnectErr,
+				)
+				return
+			}
+			subscribed = reconnected
 		default:
 			return
 		}

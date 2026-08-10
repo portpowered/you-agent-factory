@@ -71,11 +71,15 @@ func provideFactoryWebhooksService(
 	if clockSource == nil {
 		clockSource = platformclock.Real{}
 	}
+	deadLetterAppender := edges.FactoryWebhookDeadLetterAppender
+	if deadLetterAppender == nil {
+		deadLetterAppender = platformfilesystem.Local{}.AppendDurable
+	}
 	return webhookswire.NewService(
 		httpClient,
 		secretResolver,
 		clockSource,
-		edges.FactoryWebhookDeadLetterAppender,
+		deadLetterAppender,
 		logger,
 	)
 }

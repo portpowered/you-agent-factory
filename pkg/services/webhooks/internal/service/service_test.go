@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -290,6 +291,110 @@ func TestServiceDefaultsDispatchSelectionToFailureStatus(t *testing.T) {
 	case request := <-received:
 		t.Fatalf("successful dispatch response was delivered: %s", request.body)
 	case <-time.After(100 * time.Millisecond):
+	}
+}
+
+func TestServiceReconnectsAfterBoundedSubscriptionOverflow(t *testing.T) {
+	firstEvent := testWorkEvent(t)
+	laterEvent := firstEvent
+	laterEvent.ID = "event-after-overflow"
+	laterEvent.Sequence = firstEvent.Sequence + 1
+	laterEvent.Cursor.Sequence = firstEvent.Cursor.Sequence + 1
+	laterEvent.Payload = `{"workId":"work-after-overflow","fromState":"queued","toState":"done"}`
+	root := newOverflowRecordingRootStub(laterEvent)
+	firstDeliveryStarted := make(chan struct{}, 1)
+	releaseFirstDelivery := make(chan struct{})
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(releaseFirstDelivery) }) }
+	defer release()
+	requests := make(chan receivedRequest, 2)
+	var attempts int
+	client := roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		body, err := io.ReadAll(request.Body)
+		if err != nil {
+			return nil, err
+		}
+		attempts++
+		if attempts == 1 {
+			firstDeliveryStarted <- struct{}{}
+			<-releaseFirstDelivery
+		}
+		requests <- receivedRequest{body: body, headers: request.Header.Clone()}
+		return &http.Response{StatusCode: http.StatusNoContent, Body: io.NopCloser(strings.NewReader("ok"))}, nil
+	})
+	service := New(client, testSecretResolver, platformclock.Real{}, logging.NoopLogger{})
+	subscription, err := service.Start(context.Background(), webhooks.StartRequest{
+		Definitions: []factorydefinitions.FactoryWebhookConfig{{
+			Name:             "overflow-reconnect",
+			Enabled:          true,
+			URL:              "https://monitor.example/events",
+			SigningSecretRef: "secrets/webhook",
+			Filter: factorydefinitions.FactoryWebhookFilterConfig{
+				EventTypes: []string{factorydefinitions.FactoryWebhookEventTypeWorkStateChange},
+			},
+		}},
+		Events:        root,
+		RuntimeSource: testLoadedFactorySource{},
+		Scope:         recordings.CanonicalEventScope{FactorySessionID: "~default"},
+	})
+	if err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	defer subscription(context.Background())
+	waitForSubscriptions(t, root.recordingRootStub, 1)
+
+	root.Publish(recordings.SubscriptionOutcome{Kind: recordings.SubscriptionEvent, Event: firstEvent})
+	select {
+	case <-firstDeliveryStarted:
+	case <-time.After(time.Second):
+		t.Fatal("first webhook delivery did not become slow")
+	}
+	// The first stream has one buffered slot. The second event occupies it;
+	// the third event overflows that bounded subscriber and makes its next
+	// observation a reconnectable gap.
+	root.Publish(recordings.SubscriptionOutcome{Kind: recordings.SubscriptionEvent, Event: testEventWithID(firstEvent, "event-overflowed")})
+	root.Publish(recordings.SubscriptionOutcome{Kind: recordings.SubscriptionEvent, Event: testEventWithID(firstEvent, "event-lost")})
+	release()
+
+	firstRequest := receiveRequest(t, requests)
+	secondRequest := receiveRequest(t, requests)
+	var firstEnvelope, secondEnvelope factorydefinitions.FactoryEvent
+	if err := json.Unmarshal(firstRequest.body, &firstEnvelope); err != nil {
+		t.Fatalf("decode first webhook envelope: %v", err)
+	}
+	if err := json.Unmarshal(secondRequest.body, &secondEnvelope); err != nil {
+		t.Fatalf("decode reconnected webhook envelope: %v", err)
+	}
+	if firstEnvelope.Id != string(firstEvent.ID) {
+		t.Fatalf("first delivered event = %q, want %q", firstEnvelope.Id, firstEvent.ID)
+	}
+	if secondEnvelope.Id != string(laterEvent.ID) {
+		t.Fatalf("event after bounded overflow = %q, want %q", secondEnvelope.Id, laterEvent.ID)
+	}
+	if got := root.SubscriptionCount(); got != 2 {
+		t.Fatalf("SubscribeFrom calls = %d, want initial subscription plus one cursor reconnect", got)
+	}
+	reconnect := root.ReconnectRequest()
+	if reconnect.Cursor == nil || *reconnect.Cursor != firstEvent.Cursor {
+		t.Fatalf("reconnect cursor = %#v, want last delivered cursor %#v", reconnect.Cursor, firstEvent.Cursor)
+	}
+}
+
+func TestRetryableStatusRestrictsServerErrorsToFiveHundreds(t *testing.T) {
+	for statusCode, want := range map[int]bool{
+		http.StatusRequestTimeout:      true,
+		http.StatusTooManyRequests:     true,
+		http.StatusInternalServerError: true,
+		599:                            true,
+		499:                            false,
+		600:                            false,
+		700:                            false,
+	} {
+		t.Run(strconv.Itoa(statusCode), func(t *testing.T) {
+			if got := retryableStatus(statusCode); got != want {
+				t.Fatalf("retryableStatus(%d) = %t, want %t", statusCode, got, want)
+			}
+		})
 	}
 }
 
@@ -774,6 +879,11 @@ func testDispatchEvent(t *testing.T, id string, kind string, payload string) rec
 	return event
 }
 
+func testEventWithID(event recordings.CanonicalEvent, id string) recordings.CanonicalEvent {
+	event.ID = recordings.CanonicalEventID(id)
+	return event
+}
+
 type receivedRequest struct {
 	body    []byte
 	headers http.Header
@@ -882,6 +992,146 @@ func (root *recordingRootStub) SubscriptionCount() int {
 	return len(root.streams)
 }
 
+// overflowRecordingRootStub models a bounded live subscriber whose producer
+// reports a gap after a slow webhook delivery lets its one-slot buffer fill.
+// The reconnect subscription represents the retained recording history that
+// can replay the event after the last delivered cursor.
+type overflowRecordingRootStub struct {
+	*recordingRootStub
+	later recordings.CanonicalEvent
+
+	mu               sync.Mutex
+	first            *overflowSubscriptionStream
+	subscribeCalls   int
+	reconnectRequest recordings.SubscribeRequest
+}
+
+func newOverflowRecordingRootStub(later recordings.CanonicalEvent) *overflowRecordingRootStub {
+	return &overflowRecordingRootStub{
+		recordingRootStub: newRecordingRootStub(),
+		later:             later,
+	}
+}
+
+func (root *overflowRecordingRootStub) SubscribeFrom(
+	ctx context.Context,
+	request recordings.SubscribeRequest,
+) (recordings.SubscribeResult, error) {
+	_ = ctx
+	root.mu.Lock()
+	root.subscribeCalls++
+	switch root.subscribeCalls {
+	case 1:
+		stream := newOverflowSubscriptionStream()
+		root.first = stream
+		root.mu.Unlock()
+		root.started <- struct{}{}
+		return recordings.SubscribeResult{Subscription: stream.Next}, nil
+	case 2:
+		// The request value is copied so the test can assert the exact cursor
+		// passed back after the bounded subscription reports its gap.
+		root.reconnectRequest = request
+		root.mu.Unlock()
+		return root.reconnectSubscription(), nil
+	default:
+		root.mu.Unlock()
+		return recordings.SubscribeResult{Subscription: func(ctx context.Context) recordings.SubscriptionOutcome {
+			select {
+			case <-ctx.Done():
+				return recordings.SubscriptionOutcome{Kind: recordings.SubscriptionClosed}
+			default:
+				return recordings.SubscriptionOutcome{Kind: recordings.SubscriptionClosed}
+			}
+		}}, nil
+	}
+}
+
+func (root *overflowRecordingRootStub) reconnectSubscription() recordings.SubscribeResult {
+	outcomes := make(chan recordings.SubscriptionOutcome, 1)
+	outcomes <- recordings.SubscriptionOutcome{Kind: recordings.SubscriptionEvent, Event: root.later}
+	close(outcomes)
+	return recordings.SubscribeResult{Subscription: func(ctx context.Context) recordings.SubscriptionOutcome {
+		select {
+		case outcome, ok := <-outcomes:
+			if !ok {
+				return recordings.SubscriptionOutcome{Kind: recordings.SubscriptionClosed}
+			}
+			return outcome
+		case <-ctx.Done():
+			return recordings.SubscriptionOutcome{Kind: recordings.SubscriptionClosed}
+		}
+	}}
+}
+
+func (root *overflowRecordingRootStub) Publish(outcome recordings.SubscriptionOutcome) {
+	root.mu.Lock()
+	stream := root.first
+	root.mu.Unlock()
+	if stream != nil {
+		stream.Publish(outcome)
+	}
+}
+
+func (root *overflowRecordingRootStub) SubscriptionCount() int {
+	root.mu.Lock()
+	defer root.mu.Unlock()
+	return root.subscribeCalls
+}
+
+func (root *overflowRecordingRootStub) ReconnectRequest() recordings.SubscribeRequest {
+	root.mu.Lock()
+	defer root.mu.Unlock()
+	return root.reconnectRequest
+}
+
+type overflowSubscriptionStream struct {
+	mu            sync.Mutex
+	outcomes      chan recordings.SubscriptionOutcome
+	overflowed    bool
+	reconnectFrom recordings.CanonicalEventCursor
+}
+
+func newOverflowSubscriptionStream() *overflowSubscriptionStream {
+	return &overflowSubscriptionStream{
+		outcomes: make(chan recordings.SubscriptionOutcome, 1),
+	}
+}
+
+func (stream *overflowSubscriptionStream) Next(ctx context.Context) recordings.SubscriptionOutcome {
+	stream.mu.Lock()
+	if stream.overflowed {
+		cursor := stream.reconnectFrom
+		stream.mu.Unlock()
+		return recordings.SubscriptionOutcome{
+			Kind: recordings.SubscriptionGap,
+			Gap: &recordings.SubscriptionGapFacts{
+				Cause:         recordings.SubscriptionBackpressure,
+				ReconnectFrom: cursor,
+			},
+		}
+	}
+	stream.mu.Unlock()
+	select {
+	case outcome := <-stream.outcomes:
+		return outcome
+	case <-ctx.Done():
+		return recordings.SubscriptionOutcome{Kind: recordings.SubscriptionClosed}
+	}
+}
+
+func (stream *overflowSubscriptionStream) Publish(outcome recordings.SubscriptionOutcome) {
+	stream.mu.Lock()
+	defer stream.mu.Unlock()
+	if outcome.Kind == recordings.SubscriptionEvent && stream.reconnectFrom == (recordings.CanonicalEventCursor{}) {
+		stream.reconnectFrom = outcome.Event.Cursor
+	}
+	select {
+	case stream.outcomes <- outcome:
+	default:
+		stream.overflowed = true
+	}
+}
+
 type testLoadedFactorySource struct {
 	factorydefinitions.RuntimeDefinitionLookup
 }
@@ -894,3 +1144,4 @@ func (testLoadedFactorySource) RuntimeBaseDir() string { return "/runtime/test" 
 
 var _ factorydefinitions.LoadedFactorySource = testLoadedFactorySource{}
 var _ recordings.Service = (*recordingRootStub)(nil)
+var _ recordings.Service = (*overflowRecordingRootStub)(nil)

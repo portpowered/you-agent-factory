@@ -21,6 +21,7 @@ import (
 	"github.com/jonboulle/clockwork"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/webhooks"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -55,9 +56,11 @@ func testFunctionalWebhookTransition(t *testing.T) {
 	resolver.waitForCount(t, 2, 5*time.Second)
 
 	stream := support.OpenFactoryEventStreamAt(t, support.DefaultSessionEventsURL(server.URL()))
-	work := submitFunctionalWebhookWork(t, server.URL(), "transition-filtering")
-	moveFunctionalWebhookWork(t, server.URL(), *work.WorkId, "complete")
-	terminalEvent := waitForTerminalWorkEvent(t, stream, *work.WorkId, 15*time.Second)
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	support.CleanupProcess(t, process)
+	workID := submitFunctionalWebhookWork(t, process, server.URL(), "transition-filtering")
+	moveFunctionalWebhookWork(t, process, server.URL(), workID, "complete")
+	terminalEvent := waitForTerminalWorkEvent(t, stream, workID, 15*time.Second)
 	request := receiver.waitForEvent(t, terminalEvent.Id, 5*time.Second)
 
 	assertSignedCanonicalWebhook(t, request, terminalEvent, functionalWebhookSecret)
@@ -100,13 +103,15 @@ func testFunctionalWebhookRetrySuccess(t *testing.T) {
 	resolver.waitForCount(t, 1, 5*time.Second)
 
 	stream := support.OpenFactoryEventStreamAt(t, support.DefaultSessionEventsURL(server.URL()))
-	work := submitFunctionalWebhookWork(t, server.URL(), "retry-success")
-	moveFunctionalWebhookWork(t, server.URL(), *work.WorkId, "complete")
-	first := receiver.waitForWorkEvent(t, *work.WorkId, 5*time.Second)
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	support.CleanupProcess(t, process)
+	workID := submitFunctionalWebhookWork(t, process, server.URL(), "retry-success")
+	moveFunctionalWebhookWork(t, process, server.URL(), workID, "complete")
+	first := receiver.waitForWorkEvent(t, workID, 5*time.Second)
 	fakeClock.BlockUntil(1)
 	fakeClock.Advance(time.Second)
 	second := receiver.waitForEvent(t, first.eventID, 5*time.Second)
-	terminalEvent := waitForTerminalWorkEvent(t, stream, *work.WorkId, 15*time.Second)
+	terminalEvent := waitForTerminalWorkEvent(t, stream, workID, 15*time.Second)
 
 	if first.path != "/retry" || second.path != "/retry" {
 		t.Fatalf("retry paths = %q, %q; want /retry", first.path, second.path)
@@ -162,15 +167,17 @@ func testFunctionalWebhookRetryExhaustion(t *testing.T) {
 	resolver.waitForCount(t, 1, 5*time.Second)
 
 	stream := support.OpenFactoryEventStreamAt(t, support.DefaultSessionEventsURL(server.URL()))
-	work := submitFunctionalWebhookWork(t, server.URL(), "retry-exhaustion")
-	moveFunctionalWebhookWork(t, server.URL(), *work.WorkId, "complete")
-	first := receiver.waitForWorkEvent(t, *work.WorkId, 5*time.Second)
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	support.CleanupProcess(t, process)
+	workID := submitFunctionalWebhookWork(t, process, server.URL(), "retry-exhaustion")
+	moveFunctionalWebhookWork(t, process, server.URL(), workID, "complete")
+	first := receiver.waitForWorkEvent(t, workID, 5*time.Second)
 	for _, delay := range []time.Duration{time.Second, 2 * time.Second} {
 		fakeClock.BlockUntil(1)
 		fakeClock.Advance(delay)
 		receiver.waitForEvent(t, first.eventID, 5*time.Second)
 	}
-	terminalEvent := waitForTerminalWorkEvent(t, stream, *work.WorkId, 15*time.Second)
+	terminalEvent := waitForTerminalWorkEvent(t, stream, workID, 15*time.Second)
 	record := deadLetterStore.wait(t, 5*time.Second)
 
 	var deadLetter struct {
@@ -454,41 +461,43 @@ func startWebhookFunctionalServer(
 	})
 }
 
-func submitFunctionalWebhookWork(t *testing.T, baseURL, name string) factoryapi.SubmitWorkResponse {
+func submitFunctionalWebhookWork(t *testing.T, process support.Process, baseURL, name string) string {
 	t.Helper()
-	return support.SubmitDefaultSessionWork(t, baseURL, factoryapi.SubmitWorkRequest{
-		Name:         &name,
-		WorkTypeName: "task",
-		Payload: map[string]string{
-			"title": "functional webhook delivery",
-		},
+	payloadPath := filepath.Join(t.TempDir(), "webhook-request.md")
+	if err := os.WriteFile(payloadPath, []byte("# functional webhook delivery\n"), 0o600); err != nil {
+		t.Fatalf("write functional webhook payload: %v", err)
+	}
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "--server", baseURL, "--json", "submit",
+		"--session", factorysessions.DefaultSessionID,
+		"--name", name,
+		"--work-type-name", "task",
+		"--payload", payloadPath,
 	})
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf("Process.Execute(submit) error = %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
+	}
+	var response struct {
+		WorkID *string `json:"workId"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(inputs.Stdout())), &response); err != nil {
+		t.Fatalf("decode CLI submit response: %v\nstdout:\n%s", err, inputs.Stdout())
+	}
+	if response.WorkID == nil || strings.TrimSpace(*response.WorkID) == "" {
+		t.Fatalf("CLI submit response missing workId: %s", inputs.Stdout())
+	}
+	return *response.WorkID
 }
 
-func moveFunctionalWebhookWork(t *testing.T, baseURL, workID, stateName string) factoryapi.Work {
+func moveFunctionalWebhookWork(t *testing.T, process support.Process, baseURL, workID, stateName string) {
 	t.Helper()
-	body, err := json.Marshal(factoryapi.MoveWorkRequest{StateName: stateName})
-	if err != nil {
-		t.Fatalf("marshal functional webhook move request: %v", err)
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "--server", baseURL, "--json", "work", "move",
+		workID, stateName, "--session", factorysessions.DefaultSessionID,
+	})
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf("Process.Execute(work move %s) error = %v\nstdout:\n%s\nstderr:\n%s", stateName, err, inputs.Stdout(), inputs.Stderr())
 	}
-	endpoint := support.DefaultSessionWorkURL(baseURL, "/work/"+workID+"/move")
-	response, err := http.Post(endpoint, "application/json", bytes.NewReader(body))
-	if err != nil {
-		t.Fatalf("POST %s: %v", endpoint, err)
-	}
-	defer response.Body.Close()
-	responseBody, err := io.ReadAll(response.Body)
-	if err != nil {
-		t.Fatalf("read POST %s response: %v", endpoint, err)
-	}
-	if response.StatusCode != http.StatusOK {
-		t.Fatalf("POST %s status = %d, want 200: %s", endpoint, response.StatusCode, responseBody)
-	}
-	var moved factoryapi.Work
-	if err := json.Unmarshal(responseBody, &moved); err != nil {
-		t.Fatalf("decode moved Work: %v: %s", err, responseBody)
-	}
-	return moved
 }
 
 func scaffoldWebhookFactory(t *testing.T, webhooksConfig []map[string]any) string {

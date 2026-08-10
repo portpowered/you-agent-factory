@@ -194,7 +194,7 @@ func (service *Service) logAttempt(
 func retryableStatus(statusCode int) bool {
 	return statusCode == http.StatusRequestTimeout ||
 		statusCode == http.StatusTooManyRequests ||
-		statusCode >= http.StatusInternalServerError
+		(statusCode >= http.StatusInternalServerError && statusCode <= 599)
 }
 
 func retryDelay(result deliveryAttempt, exponential, maximum time.Duration) time.Duration {
