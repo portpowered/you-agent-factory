@@ -2112,3 +2112,19 @@
 - **Learnings for future iterations:**
   - When broad functional coverage reports a retained-response timing failure in an untouched stream test, run that exact test repeatedly before changing behavior and rerun the failed CI lane on the latest head.
 ---
+
+## [2026-08-10 16:11 -07:00] - thr-split-fake-service-runtime-tests final handoff audit
+- What was implemented
+  - No additional story implementation was needed; all five PRD stories remain marked `passes:true`.
+  - Audited PR #1862 and marked the existing draft PR ready for review.
+- Files changed
+  - `progress.txt`
+- Verification
+  - PR #1862 is open, mergeable, and ready for review with title and branch `thr-split-fake-service-runtime-tests`.
+  - Local `HEAD`, the fork branch, and the PR head all match `431bf9b505e78b436e0bbc636157ac5e4d40efc2`.
+  - The PR base matches current `origin/main` at `e8c0a248ae1ba354ccc2fc022fa674feefe52f85`.
+  - The PR body matches `prd.json` byte-for-byte; both SHA-256 values are `D75EFC3B16ECA4ED660C02D18D9BDC6B376EAAA426241E6291A31995036FAB45`.
+  - Thread-aware GraphQL audit found zero reviews, conversation comments, and inline review threads; all required CI checks are terminal and successful.
+- **Learnings for future iterations:**
+  - A completed split can be handed off without source changes when the PRD, PR body, head/base SHAs, review-thread state, and required checks are independently synchronized and verified.
+---
