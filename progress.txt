@@ -2919,3 +2919,19 @@
 - **Learnings for future iterations:**
   - A maintainability fix must satisfy adjacent repository ratchets too: use an existing cohesive owner when adding a file would violate an exact package file-count baseline.
 ---
+
+## 2026-08-10 15:14 -07:00 - e2-structured-worker-results current-main synchronization follow-up
+- What was implemented
+  - Merged the live `origin/main` at `78584efb52dacb6989604f8f7cc6c12ed08da028` into the E2 branch and preserved the task-scoped PRD plus append-only progress history while retaining the current-main CLI split and baseline changes.
+  - Revalidated that the live main ref is an ancestor of merge head `19e22198b`; no unresolved shared-file conflicts or generated-file merge conflicts remain.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+  - Current-main CLI test and baseline files from the merge
+- Verification
+  - `git merge-tree --write-tree HEAD origin/main` — clean.
+  - `git diff --check` — passed.
+  - GitHub CI run `31436798504` for head `19e22198b` — all required checks passed, including Verification Policy.
+- **Learnings for future iterations:**
+  - Update the local tracking ref explicitly with `git fetch origin main:refs/remotes/origin/main` before final mergeability checks; a stale tracking ref can hide newer main history even when the PR appears clean.
+---
