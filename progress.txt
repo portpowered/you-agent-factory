@@ -1183,3 +1183,18 @@
   - `python tests/factory/scripts/test_full_flow_setup_task_worktree.py` — passed.
   - `make packaged-factory-catalog-generate` and `git diff --check` — passed.
 ---
+## 2026-08-10 10:47 -07:00 - pf-stale-scope-diagnostic CI verification follow-up
+- What was implemented
+  - Diagnosed the failed PR #1853 Backend Functional Coverage lane as the unchanged `tests/functional/factory/packaged/plan_parallel/TestPackagedPlanParallelChildFailureFansInWithoutMerge` test observing two executor calls instead of its bounded-retry expectation; the dependent Verification Policy failure reported the same backend result.
+  - Confirmed the failing package has no branch diff relative to `origin/main` and repeated the test 10 times locally with all runs passing. No production or test-code change was warranted.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Focused `TestPackagedPlanParallelChildFailureFansInWithoutMerge` — passed 10/10 locally.
+  - Focused packaged-installation owner tests — passed.
+  - Real-process hard-kill successor regression — passed.
+  - `make pkg-maint pkg-file-count pkg-structure vet` — passed.
+  - `prd.json` reports zero stories with `passes:false`; `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - When a full functional coverage lane fails in an unchanged package and the focused test repeats cleanly, preserve the task scope and retry the GitHub Actions lane rather than changing unrelated behavior.
+---
