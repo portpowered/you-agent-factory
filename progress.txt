@@ -1164,3 +1164,19 @@
   - Root-relative ignore policies need paired positive fixtures under production `pkg`; testing ignored paths alone cannot prove that nested artifact/worktree-like directories remain visible.
   - Existing `make pkg-boundary` subprocess tests provide a stable way to verify the public checker entry path against temporary repository fixtures.
 ---
+## 2026-08-10 05:15 -0700 - wo-b3-provider-capability-discovery-cli-final-merge-audit
+- What was implemented
+  - Reconciled the provider-discovery branch with current `main` at `353b0527a`; the merge conflict was limited to `prd.json` and `progress.txt`.
+  - Preserved the B3 PRD and all three `passes:true` stories, combined both append-only progress histories, and retained the current-main `pkg-boundary` production-source changes.
+- Files changed
+  - Current-main `cmd/pkgboundarycheck/` implementation and focused tests were merged.
+  - `progress.txt`
+  - `prd.json` was verified as the B3 version after conflict resolution.
+- Verification
+  - `go test ./cmd/pkgboundarycheck -count=1` — passed.
+  - `go test ./tests/functional/providers/discovery/... -run '^TestProvidersListThroughRootBuildProcess$' -count=1` — passed.
+  - PR #1843 is conflict-free and points to merge head `f80b38a8d29eace327d53895bc84c4ad4e3f6487` with base `353b0527a26163711043671f966466be30f478c4`.
+  - Fresh CI run `31386632092` — all 18 checks pass, including Backend Functional Coverage and Verification Policy.
+- **Learnings for future iterations:**
+  - When a moving base changes an unrelated task PRD, resolve the bookkeeping conflict by keeping the branch’s task PRD and merging append-only progress entries; retain the base’s source changes and rerun both affected-package and feature-slice tests.
+---
