@@ -1300,11 +1300,12 @@ upstream status, filename intent, or prior verdict.
 **Invocation signature.** The live signature is:
 
 ```text
-you run --named @you/agy-cold-watch --cut-path <file-path>
+you run --named @you/agy-cold-watch <cut-path>
 ```
 
-`--cut-path` is the one required creative input. The help output exposes no
-positional cut path and no other creative or role-specific flags.
+`<cut-path>` is the one required creative input. The help output exposes it as
+positional input and as `--cut-path`; no other creative or role-specific flags
+are available.
 
 **Worker roles and provider/model overrides.** The one worker role is
 `agy-cold-watch-reviewer`. It uses `ANTIGRAVITY`, `gemini-3.6-flash-high`, and

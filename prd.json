@@ -68,8 +68,8 @@
         "Tests pass"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": "The reference catalog and worked composition example are present, but blocking review follow-up is still outstanding: the cold-watch help/docs statement about positional cutPath disagrees with live help and must be corrected and reverified."
+      "passes": true,
+      "notes": "Documented both roles in the packaged-factory reference catalog with exact live-help signatures, pinned ANTIGRAVITY/gemini-3.6-flash-high/8m policy, report schemas, path and failure boundaries, and PowerShell-safe invocations. Added the repository-owned AGY production composition example with distinct pass/reroll/failed routing and the offline root-process command; updated catalog-count/docs smoke coverage. Corrected cold-watch documentation to match live help: required cutPath is available positionally and through --cut-path. Authored/generated catalog checks, factory validation, focused root-process coverage, docs-reference-smoke, packaged catalog/source checks, readme-check, and verify-fast pass; make lint reaches only the unchanged current-main pkg-boundary migration baseline while owned gates pass."
     }
   ]
 }

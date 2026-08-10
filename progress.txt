@@ -712,3 +712,21 @@
   - A structured reroll is only a successful inspection verdict when its explicit contract is present; check provider/status failure markers before interpreting domain-level reroll fields.
   - Recorded AGY traces can be reused for synthetic semantic variants by changing only the terminal structured output while preserving the echoed provider schema and stream envelope.
 ---
+
+## 2026-08-10 00:05 -07:00 - wo-b2-agy-production-review-roles-003 review follow-up
+- What was implemented
+  - Corrected the cold-watch reference signature to document the required `<cut-path>` positional binding and its equivalent `--cut-path` named binding, matching the generated authored catalog and live CLI help.
+  - Marked the final production-composition story complete after confirming the catalog, worked example, failure boundaries, validation guidance, and offline behavioral coverage are synchronized.
+- Files changed
+  - `docs/reference/packaged-factories.md`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go run ./cmd/factory run --named @you/agy-cold-watch --help` — passed; exposed `positional 1 <cut-path> | --cut-path <file-path>`.
+  - `go run ./cmd/factory run --named @you/agy-clip-qa --help` — passed; exposed the documented positional/`--clip-path` and `--shot-specification` inputs.
+  - `go test ./tests/functional/providers/agy -run '^TestAgyProductionReviewRolesThroughRootBuildProcess$' -count=1` — passed.
+  - `make packaged-factory-catalog-check` and `make docs-reference-smoke` — passed.
+  - `make verify-fast` — attempted but stopped at dashboard typecheck because the pre-existing checkout lacks `@types/bun` and all `ui/packages/*` workspace sources; `make ui-deps` cannot resolve those missing workspaces. Earlier complete-checkout verification for this PR head passed `verify-fast`, and no UI files are part of this follow-up.
+- **Learnings for future iterations:**
+  - Treat generated named-Factory help as the source of truth when documenting positional and named bindings; inspect both the authored binding and live help before marking a docs story complete.
+---
