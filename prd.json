@@ -1,71 +1,54 @@
 {
-  "project": "you submit batch Constraint Diagnostics",
-  "branchName": "pf-batch-submit-diagnostics",
-  "description": "Make you submit batch reject duplicate Work names and relations outside the submitted batch with deterministic, actionable diagnostics that identify the offending entries, explain the governing rule, and tell customers how to repair the request. Run these topology-independent checks during dry-run, preserve atomic valid-batch behavior, and document the constraints in the packaged batch and relationship references.",
+  "project": "SAC S0.2: pkg-boundary Runs Against Production Code Only",
+  "branchName": "sac-s0-2-pkg-boundary-ignores",
+  "description": "Make the pkg-boundary architecture gate inspect production source only by consistently excluding explicit repository-policy non-source roots, including .artifacts, bootstrap worktrees, and generated transient worktrees, while preserving detection of the same prohibited import under production pkg.",
   "context": {
-    "customerAsk": "Improve you submit batch validation so batch-wide duplicate Work names and relations outside the submitted batch produce precise, actionable errors naming the offending Work or relation. Document both constraints in the batch reference docs. A relation-to-existing-Work opt-in is only a stretch goal if cheap; otherwise clearly explain the intra-batch rule.",
-    "problem": "Batch admission requires every works[].name to be unique across the complete request and every relation endpoint to resolve through that request's Work-name index. Existing failures can identify only the later duplicate or call an endpoint unknown, leaving customers to infer the earlier conflict, whether uniqueness spans Work types, and whether previously submitted Work is a valid endpoint. This causes avoidable trial and error and obscures an atomic admission rule.",
-    "solution": "Keep canonical validation in Work request admission and make deterministic errors include entry indexes, names, relation type and endpoints, the violated batch rule, and a correction. Reuse the topology-independent checks for CLI dry runs, preserve the diagnostic through human and structured CLI errors, retain whole-batch rejection with no partial side effects, and update packaged batch and relationship documentation. Do not add cross-batch relation resolution or an opt-in flag in this delivery."
+    "customerAsk": "Implement story S0.2 of the Service Abstraction Convergence plan: make pkg-boundary consistently ignore .artifacts, bootstrap worktrees, generated transient worktrees, and other non-source roots already excluded by repository policy, with a regression proving ignored stale imports cannot fail the gate while production imports still do.",
+    "problem": "Multiple repository-wide scans contribute to pkg-boundary and do not apply a fully consistent source-universe policy. Disposable artifacts or stale worktree copies can therefore be interpreted as production code and create false architecture failures, while an overly broad ignore rule could hide real tracked production violations.",
+    "solution": "Apply one explicit repository-root-relative non-source directory policy to every applicable pkg-boundary traversal, prune ignored roots before parsing, and add paired behavioral fixtures showing ignored artifact/worktree source passes while the identical violation in production pkg fails. Keep all changes exclusive to the boundary checker and its focused tests."
   },
   "acceptanceCriteria": [
-    "A batch with duplicate works[].name values is rejected with a deterministic diagnostic that names the duplicate value, identifies both conflicting entries, states that names are unique across the whole batch even across Work types, and advises renaming or removing one entry.",
-    "A relation whose source or target is absent from the same request's works[] is rejected with a deterministic diagnostic that identifies the relation entry, relation type, source and target names, the missing endpoint field and value, and the intra-batch rule plus corrective action.",
-    "Normal you submit batch and you submit batch --dry-run expose these topology-independent diagnostics through supported human and structured error modes without admitting partial Work or relationships, while valid batches retain established behavior.",
-    "Canonical packaged batch and relationship documentation explicitly describes both constraints and includes invalid and corrected authoring examples consistent with runtime behavior.",
-    "Validation remains owned by Work request admission with pure deterministic rule evaluation and isolated transport and network side effects; no cross-batch lookup, mutable state, alternate validator, or unrelated public contract change is introduced.",
-    "Typecheck and focused tests pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
-    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared/generated-file churn are resolved against current main, and the PR is actually merged."
+    "make pkg-boundary runs to completion when stale prohibited imports exist only beneath .artifacts, including bootstrap and generated transient worktree layouts, and beneath existing explicitly ignored non-source roots.",
+    "Every repository-wide traversal owned by pkg-boundary applies the same repository-root-relative source-universe decision so ignored files cannot be rediscovered by a secondary scan.",
+    "The same stale prohibited import placed beneath production pkg fails with the applicable package-boundary diagnostic and a non-zero result.",
+    "Exclusions match explicit non-source roots or root-relative subtrees and cannot hide a tracked production package merely because a nested segment has an artifact-like or worktree-like name.",
+    "The diff remains exclusive to the boundary checker and focused behavioral regression coverage, with no production-service, public-contract, generated-interface, baseline-debt, or unrelated cleanup changes.",
+    "Typecheck, focused checker tests, and required verification pass with no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
+    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts are resolved against current main, and the PR is actually merged."
   ],
   "userStories": [
     {
-      "id": "pf-batch-submit-diagnostics-001",
-      "title": "Diagnose batch-wide duplicate Work names",
-      "description": "As a batch author, I want duplicate-name rejection to identify both conflicting Work entries and the uniqueness rule so I can repair the batch without searching or guessing.",
+      "id": "sac-s0-2-pkg-boundary-ignores-001",
+      "title": "Ignore repository-policy non-source roots consistently",
+      "description": "As a maintainer running architecture verification, I want every package-boundary scan to exclude disposable repository roots consistently so stale generated or copied source cannot create a false boundary failure.",
       "acceptanceCriteria": [
-        "When a later works[] entry repeats an earlier name, the diagnostic includes the repeated name and both zero-based entry paths, such as works[3] and works[0].",
-        "The diagnostic states that works[].name must be unique across the entire batch, including when the conflicting entries have different workTypeName values, and tells the author to rename or remove one entry.",
-        "If multiple duplicate pairs exist, validation reports the first conflict in stable request order so identical input produces identical output.",
-        "Normal live submission and --dry-run reject the invalid request through supported human and structured CLI error modes before any Work is admitted; a batch with distinct names continues to validate and submit normally.",
-        "Focused Work request-admission and CLI behavioral tests assert the customer-visible diagnostic and no-partial-admission outcome rather than source topology.",
+        "A fixture with stale prohibited imports beneath root .artifacts passes package-boundary evaluation when no production violation exists.",
+        "Representative bootstrap and generated transient worktree layouts beneath the artifact root are pruned before their Go source is parsed.",
+        "Existing repository-policy exclusions for Git metadata, dependency/vendor trees, and supported worktree roots continue to be ignored by every applicable repository-wide scan.",
+        "Exclusion decisions are based on explicit paths relative to the configured repository root and behave consistently with native Windows and slash-normalized fixture paths.",
+        "Focused tests exercise the checker through its normal run behavior rather than asserting a source-file or rule inventory.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Implemented one shared Work request-admission duplicate-name diagnostic for live normalization and topology-independent batch preparation used by --dry-run. The deterministic first conflict names the duplicate value, both zero-based works[] entries, the whole-batch cross-workTypeName rule, and the rename/remove repair. Bounded work_request: server diagnostics now survive the existing human and --json CLI error paths through SubmissionHTTPError.Message. Admission, engine atomicity, direct CLI, and root-built functional tests cover cross-type collisions, stable ordering, dry-run no-HTTP behavior, live human/structured diagnostics, valid existing submission behavior, and zero partial Work."
+      "notes": "Centralized repository-root-relative pruning for .artifacts and supported worktree roots, preserved the existing Git metadata/vendor/node_modules/testdata exclusions, and applied the same decision to every pkg-boundary traversal. The normal checker regression uses malformed stale imports under bootstrap/generated transient artifact worktrees and existing ignored roots, proving they are pruned before parsing. Focused cmd/pkgboundarycheck tests pass; make pkg-boundary reports only the unchanged 176-violation main baseline."
     },
     {
-      "id": "pf-batch-submit-diagnostics-002",
-      "title": "Diagnose relation endpoints outside the submitted batch",
-      "description": "As a batch author, I want an invalid relation to identify its missing endpoint and explain the same-batch requirement so I can add the Work to this request or correct the endpoint name.",
+      "id": "sac-s0-2-pkg-boundary-ignores-002",
+      "title": "Preserve enforcement for production pkg source",
+      "description": "As a maintainer relying on the architecture gate, I want ignored-root handling to remain narrowly scoped so a real prohibited import in production code still blocks the change.",
       "acceptanceCriteria": [
-        "If sourceWorkName or targetWorkName does not exactly match a name in the same request's works[], the diagnostic includes the relations[] index, relation type, source and target names, and the missing endpoint field and value.",
-        "The diagnostic explicitly says relation endpoints must name Work declared in this batch and advises either adding the named Work to works[] or correcting the endpoint; it does not imply that existing Work from an earlier submission can be targeted.",
-        "Source validation precedes target validation for a relation and relations are checked in request order, producing stable output when multiple endpoints are invalid.",
-        "Normal live submission and --dry-run expose the same actionable rule context through supported human and structured CLI error modes, reject the whole request without Work or relationship side effects, and preserve valid DEPENDS_ON and PARENT_CHILD submission behavior.",
-        "Focused Work request-admission and CLI behavioral tests cover missing source, missing target, a name that exists only in prior Factory state, and valid same-batch relations.",
+        "A paired regression fixture places the same stale prohibited import used in the ignored-root case beneath production pkg and observes a non-zero package-boundary result.",
+        "The failure identifies the applicable production package/import violation rather than failing because of artifact or worktree contents.",
+        "A tracked production subtree is not excluded solely because a nested directory name resembles an artifact, bootstrap, generated, or worktree directory.",
+        "The make pkg-boundary entry path retains the same production failure behavior as the focused checker invocation.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 2,
       "passes": true,
-      "notes": "Implemented one shared deterministic relation-endpoint diagnostic for Work request normalization and topology-independent batch preparation used by --dry-run. Diagnostics identify the relation index and type, both source/target names, the missing endpoint field/value, the same-batch works[] rule, exclusion of previously submitted Work, and the add-or-correct repair. Source validation precedes target validation and relation order remains stable. Admission, engine atomicity, valid DEPENDS_ON/PARENT_CHILD behavior, root-built live human/structured CLI, dry-run, and prior-state endpoint cases are covered. Typecheck and focused/full tests pass. Story 003 remains for later documentation work."
-    },
-    {
-      "id": "pf-batch-submit-diagnostics-003",
-      "title": "Document batch naming and relation membership constraints",
-      "description": "As a customer preparing a batch, I want the packaged reference guides to state the validation rules and remedies so I can author a valid request before submitting it.",
-      "acceptanceCriteria": [
-        "you docs batch-inputs states that works[].name is unique across the whole batch, not per Work type, and that both relation endpoints must match names in that request's works[].",
-        "The batch guide includes compact invalid duplicate-name and outside-batch relation examples, the kind of diagnostic each produces, and corrected examples or corrections a customer can apply.",
-        "The canonical relationship guide states that submitted DEPENDS_ON and PARENT_CHILD endpoints are intra-batch name references and that previously submitted or otherwise existing Work cannot be targeted by name.",
-        "Documentation accurately distinguishes topology-independent --dry-run checks from live Factory topology validation and preserves the whole-batch and no-partial-Work guarantee.",
-        "Packaged reference rendering exposes the updated content through you docs batch-inputs, its compatibility alias, and you docs relationships; make docs-reference-smoke passes.",
-        "Typecheck passes"
-      ],
-      "priority": 3,
-      "passes": true,
-      "notes": "Updated the canonical packaged batch and relationship references with whole-batch name uniqueness, same-request relation endpoint membership, exact actionable duplicate and missing-endpoint diagnostic examples, corrected JSON repairs, topology-independent --dry-run coverage, live Factory-topology boundaries, and whole-batch/no-partial-Work guarantees. Added rendered CLI docs smoke markers for batch-inputs, its batch-work compatibility alias, and relationships. docs-reference-smoke and verify-fast pass."
+      "notes": "Added paired normal-run and make-target regressions using the same prohibited pkg/wire import as the ignored-root fixture. Production files under nested .artifacts, .claude/worktrees, and worktrees directories still produce the applicable application-composition diagnostic and a non-zero result; the make entry path preserves that behavior."
     }
   ]
 }
