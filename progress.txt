@@ -1659,3 +1659,16 @@
 - **Learnings for future iterations:**
   - Browser integration suites can intermittently miss a UI state within their assertion timeout under concurrent CI load; isolate and retry the failed browser job when all changed-surface checks remain green.
 ---
+## [2026-08-10 15:41 -07:00] - thr-split-acp-stdio-tests-003 current-main reconciliation
+- What was implemented
+  - Merged the latest `origin/main` advance at `e8c0a248ae1ba354ccc2fc022fa674feefe52f85` as merge commit `a0c703bb1` and retained the task-scoped `prd.json` while preserving the append-only progress history.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Focused ACP stdio package tests and the three-run concurrent-attachment race test — passed.
+  - `go vet ./pkg/transports/acp/internal/stdio`, `make backend-size`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, and `make typecheck` — passed.
+  - Current ACP stdio inventory remained 222 tests with 94.3% coverage; PRD JSON validation and `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - Fetch `origin/main` immediately before handoff and resolve the task PRD explicitly when the shared progress/PRD files conflict during stale-base reconciliation.
+---
