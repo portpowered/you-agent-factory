@@ -1517,3 +1517,15 @@
 - **Learnings for future iterations:**
   - Payload classification coverage is most stable when the same live submit contract exercises Markdown, JSON, and generic file extensions through the public request path.
 ---
+## 2026-08-10 09:04 -0700 - pf-cli-exit-codes CI closeout
+- What was implemented
+  - Completed the required PR review/CI follow-up after the functional coverage repair; the first rerun encountered two unrelated functional flakes, and the failed coverage job was rerun cleanly on the same head.
+- Files changed
+  - `progress.txt`
+- Verification
+  - CI run `31405306468` passed all checks, including Backend Functional Coverage, Backend Unit Coverage, UI Backend Integration, and Verification Policy.
+  - Final functional coverage artifact reports `clidiag` 61/76 statements (80.3%) and `terminalpolicy` 22/26 statements (84.6%), both meeting their manifest floors.
+  - PR #1856 has no conversation comments, reviews, or review threads; all four PRD stories remain `passes:true`.
+- **Learnings for future iterations:**
+  - When a broad functional coverage job fails before producing a coverage profile because of unrelated scenario flakes, rerun only the failed job before changing feature code; the clean rerun can validate the intended coverage delta directly.
+---
