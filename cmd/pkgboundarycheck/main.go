@@ -721,6 +721,9 @@ func scanRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
 	}
 
 	scanRoot := filepath.Join(repoRoot, filepath.FromSlash(cfg.packageRoot))
+	if isIgnoredRepositoryBoundaryPath(repoRoot, scanRoot) {
+		return scanResult{}, nil
+	}
 	info, err := os.Stat(scanRoot)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -740,6 +743,9 @@ func scanRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
 	result := scanResult{}
 	for _, entry := range entries {
 		if !entry.IsDir() {
+			continue
+		}
+		if isIgnoredRepositoryBoundaryPath(repoRoot, filepath.Join(scanRoot, entry.Name())) {
 			continue
 		}
 
@@ -970,6 +976,9 @@ func scanConvergedServiceSubpackageImports(repoRoot string) ([]transportServiceI
 	err := filepath.WalkDir(packageRoot, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
+		}
+		if shouldSkipRepositoryWalkDirectory(repoRoot, path, entry) {
+			return filepath.SkipDir
 		}
 		if entry.IsDir() || filepath.Ext(entry.Name()) != ".go" || strings.HasSuffix(entry.Name(), "_test.go") {
 			return nil
@@ -1323,24 +1332,46 @@ func testServiceImportKey(filePath, importPath string) string {
 	return filepath.ToSlash(filePath) + "\x00" + importPath
 }
 
+var repositoryBoundaryIgnoredDirectoryNames = map[string]struct{}{
+	".git":         {},
+	"node_modules": {},
+	"testdata":     {},
+	"vendor":       {},
+}
+
+// repositoryBoundaryIgnoredRoots contains repository-relative subtrees that
+// are policy-owned metadata, generated output, or disposable worktree state.
+// Keep artifact/worktree entries root-relative: a tracked production package
+// may legitimately contain a directory whose name merely resembles one of
+// these transient roots.
+var repositoryBoundaryIgnoredRoots = []string{
+	".artifacts",
+	".claude/worktrees",
+	".worktrees",
+	"worktrees",
+}
+
 func shouldSkipRepositoryWalkDirectory(repoRoot, path string, entry os.DirEntry) bool {
-	if !entry.IsDir() || path == repoRoot {
+	return entry.IsDir() && isIgnoredRepositoryBoundaryPath(repoRoot, path)
+}
+
+func isIgnoredRepositoryBoundaryPath(repoRoot, path string) bool {
+	relativePath, err := filepath.Rel(filepath.Clean(repoRoot), filepath.Clean(path))
+	if err != nil || relativePath == "." || relativePath == "" {
 		return false
 	}
-	switch entry.Name() {
-	case ".git", "node_modules", "vendor":
-		return true
+	relativePath = filepath.ToSlash(relativePath)
+	for _, ignoredRoot := range repositoryBoundaryIgnoredRoots {
+		if relativePath == ignoredRoot || strings.HasPrefix(relativePath, ignoredRoot+"/") {
+			return true
+		}
 	}
-	relativePath, err := filepath.Rel(repoRoot, path)
-	if err != nil {
-		return false
+	for _, directory := range strings.Split(relativePath, "/") {
+		if _, ignored := repositoryBoundaryIgnoredDirectoryNames[directory]; ignored {
+			return true
+		}
 	}
-	switch filepath.ToSlash(relativePath) {
-	case ".worktrees", "worktrees", ".claude/worktrees":
-		return true
-	default:
-		return false
-	}
+	return false
 }
 
 func scanProductServiceConstruction(repoRoot string) ([]serviceConstructionFinding, error) {
@@ -1763,6 +1794,9 @@ func scanTransportServiceImplementationImports(repoRoot string) ([]transportServ
 		if walkErr != nil {
 			return walkErr
 		}
+		if shouldSkipRepositoryWalkDirectory(repoRoot, path, entry) {
+			return filepath.SkipDir
+		}
 		if entry.IsDir() || filepath.Ext(entry.Name()) != ".go" || strings.HasSuffix(entry.Name(), "_test.go") {
 			return nil
 		}
@@ -1818,6 +1852,9 @@ func scanPeerServiceImports(repoRoot string) ([]peerServiceImportFinding, error)
 	err := filepath.WalkDir(servicesRoot, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
+		}
+		if shouldSkipRepositoryWalkDirectory(repoRoot, path, entry) {
+			return filepath.SkipDir
 		}
 		if entry.IsDir() || filepath.Ext(entry.Name()) != ".go" || strings.HasSuffix(entry.Name(), "_test.go") {
 			return nil
@@ -2027,6 +2064,9 @@ func scanDomainTransportImports(repoRoot string, exceptions []string) ([]domainT
 			if walkErr != nil {
 				return walkErr
 			}
+			if shouldSkipRepositoryWalkDirectory(repoRoot, path, entry) {
+				return filepath.SkipDir
+			}
 			if entry.IsDir() || filepath.Ext(entry.Name()) != ".go" || strings.HasSuffix(entry.Name(), "_test.go") {
 				return nil
 			}
@@ -2094,6 +2134,9 @@ func scanHandwrittenGeneratedFiles(repoRoot string, exceptions []generatedCodeEx
 			if walkErr != nil {
 				return walkErr
 			}
+			if shouldSkipRepositoryWalkDirectory(repoRoot, path, entry) {
+				return filepath.SkipDir
+			}
 			if entry.IsDir() || filepath.Ext(entry.Name()) != ".go" {
 				return nil
 			}
@@ -2149,6 +2192,9 @@ func scanRetiredPackageImports(repoRoot string, scanRoot string, packageRoot str
 	err := filepath.WalkDir(scanRoot, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
+		}
+		if shouldSkipRepositoryWalkDirectory(repoRoot, path, entry) {
+			return filepath.SkipDir
 		}
 		if entry.IsDir() || filepath.Ext(entry.Name()) != ".go" {
 			return nil

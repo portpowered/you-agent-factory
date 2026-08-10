@@ -885,3 +885,20 @@
   - Events should always be described as process-local source-native delivery, while Recordings remains the canonical Factory history owner; ACP and boundary mapping adapt these contracts without owning domain state.
   - Provider inference/execution policy, hosted polling, and request-scoped worker execution must remain named separately in documentation so future ownership changes do not collapse them back into Workers.
 ---
+
+## 2026-08-10 04:38 -07:00 - sac-s0-2-pkg-boundary-ignores-002
+- What was implemented
+  - Added a paired normal checker regression using the same prohibited `pkg/wire` import as the ignored-root fixture under production `pkg` paths containing nested `.artifacts`, `.claude/worktrees`, and `worktrees` directories.
+  - Added a `make pkg-boundary` entry-path regression proving the nested `.artifacts` production package is still reported with the application-composition diagnostic and non-zero result.
+  - Marked story 002 complete in `prd.json` on the S0.2 branch.
+- Files changed
+  - `cmd/pkgboundarycheck/main_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./cmd/pkgboundarycheck -run 'TestRunRejectsProductionPkgViolationInsideArtifactLikeSubtrees|TestMakePkgBoundaryTargetRejectsProductionPkgImportInsideArtifactLikeSubtree' -count=1 -v` — passed.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - Root-relative ignore policies need paired positive fixtures under production `pkg`; testing ignored paths alone cannot prove that nested artifact/worktree-like directories remain visible.
+  - Existing `make pkg-boundary` subprocess tests provide a stable way to verify the public checker entry path against temporary repository fixtures.
+---

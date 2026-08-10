@@ -110,10 +110,10 @@ func scanProviderEffectOwnershipFile(
 	if walkErr != nil {
 		return nil, walkErr
 	}
+	if shouldSkipRepositoryWalkDirectory(repoRoot, path, entry) {
+		return nil, filepath.SkipDir
+	}
 	if entry.IsDir() {
-		if entry.Name() == "testdata" || entry.Name() == "vendor" {
-			return nil, filepath.SkipDir
-		}
 		return nil, nil
 	}
 	if !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
