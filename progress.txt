@@ -133,6 +133,17 @@
 - **Learnings for future iterations:**
   - Keep the root count aligned with the canonical fifteen-entry catalog, but continue placing detailed Factory guidance in `docs/reference/packaged-factories.md`.
 ---
+## [2026-08-10 15:29 -07:00] - thr-split-acp-stdio-tests-003 final CI follow-up
+- What was implemented
+  - Investigated the final-head CI browser failure and identified an unrelated timing timeout in `integration/maintainer-phantom-worker-graph.integration.test.mjs`; the remaining 33 browser tests and all backend/API/package lanes passed.
+  - Reran only the failed Frontend Browser job. The retry passed, and the dependent Verification Policy passed on the same final head.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Final-head GitHub Actions run `https://github.com/portpowered/you-agent-factory/actions/runs/31437495633` — passed after the browser retry, including Backend Functional Coverage, API/package lanes, UI Backend Integration, and Verification Policy.
+- **Learnings for future iterations:**
+  - Browser integration suites can intermittently miss a UI state within their assertion timeout under concurrent CI load; isolate and retry the failed browser job when all changed-surface checks remain green.
+---
 ## [2026-08-10 15:15 -07:00] - thr-split-acp-stdio-tests-003 CI follow-up
 - What was implemented
   - Investigated the initial PR CI failure and confirmed it was an unrelated intermittent failure in `tests/functional/workers/mock/TestPlainBatchDrainPreservesFiniteAndContinuousCounterexamples/continuous_idle`; the ACP stdio split does not touch that package or runtime path.
