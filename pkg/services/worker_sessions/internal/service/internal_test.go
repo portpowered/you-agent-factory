@@ -1610,6 +1610,22 @@ func assertWorkerObservationLookups(t *testing.T, registry *registry, got worker
 	}
 }
 
+func TestStreamObservationsByWorkerSessionIDRejectsInvalidContextAndMissing(t *testing.T) {
+	registry := newObservationRegistry(nil, nil)
+	if _, err := registry.StreamObservationsByWorkerSessionID(context.Background(), workersessions.StreamObservationsByWorkerSessionIDRequest{}); !errors.Is(err, workersessions.ErrInvalidSessionID) {
+		t.Fatalf("invalid Worker Session stream error = %v, want %v", err, workersessions.ErrInvalidSessionID)
+	}
+
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := registry.StreamObservationsByWorkerSessionID(canceled, workersessions.StreamObservationsByWorkerSessionIDRequest{WorkerSessionID: "worker-1"}); !errors.Is(err, workersessions.ErrObservationCanceled) {
+		t.Fatalf("canceled Worker Session stream error = %v, want %v", err, workersessions.ErrObservationCanceled)
+	}
+	if _, err := registry.StreamObservationsByWorkerSessionID(context.Background(), workersessions.StreamObservationsByWorkerSessionIDRequest{WorkerSessionID: "missing"}); !errors.Is(err, workersessions.ErrObservationSessionNotFound) {
+		t.Fatalf("missing Worker Session stream error = %v, want %v", err, workersessions.ErrObservationSessionNotFound)
+	}
+}
+
 func assertObservationProjectionEdges(t *testing.T, registry *registry, canceled context.Context) {
 	t.Helper()
 	if _, err := registry.projectObservation(canceled, "worker-1"); !errors.Is(err, workersessions.ErrObservationCanceled) {

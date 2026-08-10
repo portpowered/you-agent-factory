@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- New public REST event-stream operations need synchronized reviewed REST/SSE manifest records and evidence-registry declarations; contract smoke validates both inventories together.
 - Provider-output bridges must suppress provider-authored forwarding when Worker Sessions cannot resolve or bind the dispatch; forwarding an uncommitted observation can violate opening-first ordering, while ordinary downstream publication failures may follow an explicit forwarding policy.
 - Package coverage ratchets should be restored with behavioral tests for the uncovered boundary and error paths; a passing package test suite alone does not prove the checked-in per-package floor.
 - When a historical Worker Session projection is merged with the live Worker Sessions service, preserve the live canonical opening timestamp; dispatch-request time is only a fallback and can precede the authoritative opening.
@@ -53,6 +54,29 @@
 - **Learnings for future iterations:**
   - Coverage regressions can be isolated by reading the package manifest's uncovered functions, then testing their externally visible error/result contracts through the narrowest real service setup.
   - Keep coverage-only edge tests in focused subtests/helpers; the package maintainability gate counts test complexity as well as production complexity.
+---
+## 2026-08-10 10:53 -0700 - wsr-001-opening-record CI follow-up
+- What was implemented
+  - Registered the provider-neutral Worker Session-ID REST/SSE operations in the reviewed functional-scenario manifest and evidence registry, and made the generic OpenAPI route-reachability fixture resolve `{worker_session_id}` with a deliberately invalid-but-routable value so the handler returns a structured response instead of a 404.
+  - Added focused service and HTTP handler coverage for invalid context/request inputs, missing sessions, public provider-neutral replay, subscription failures, and response-writer/adapter boundaries, restoring both package coverage ratchets.
+  - Repaired the current-main CLI dispatch functional test double to read prompts from the runtime’s argument-based Claude command shape and emit Claude-native JSONL; the root-composition functional package now passes.
+- Files changed
+  - `internal/functionalscenarios/manifest.go`
+  - `contracts/functional-scenarios.json`
+  - `contracts/functional-scenario-evidence.json`
+  - `pkg/services/worker_sessions/internal/service/internal_test.go`
+  - `pkg/services/worker_sessions/transports/http/handler_test.go`
+  - `tests/functional/workers/inference/opening_record_test.go`
+  - `tests/functional/transport/http/server/routing_safe_requests_test.go`
+  - `tests/functional/factory_runtime/root_composition/dispatch_worker_sessions_concurrency_activation_test.go`
+  - `progress.txt`
+- Verification
+  - Focused Worker Sessions service and HTTP tests — passed.
+  - Root-built WSR-FT-003, Claude full-stream, and Codex partial-stream tests — passed.
+  - OpenAPI route reachability, contract smoke, and root-composition functional package — passed.
+- **Learnings for future iterations:**
+  - The provider command seam may carry prompts in CLI arguments rather than stdin; test doubles should inspect the actual command contract and shape output for the selected provider.
+  - A reviewed functional operation with an SSE response may produce separate REST and SSE scenario records, so both must be declared and covered by the same observable test.
 ---
 - Capture the Worker Session start timestamp once at the observation boundary and reuse that exact value in the lifecycle opening payload; calling the injected clock separately for projection and publication breaks live/replay identity.
 - Lifecycle metadata uses optional pointers/`omitempty` and exact typed continuation values; unknown provider, Factory, recording, and capability facts must stay absent instead of being inferred from runner or model defaults.
