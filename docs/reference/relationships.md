@@ -27,6 +27,20 @@ is different: it is a per-input workstation guard, not an entry in batch
 `relations[]`. A workstation can use `SAME_NAME` together with either batch
 relation.
 
+## Submitted relation name scope
+
+Submitted `DEPENDS_ON` and `PARENT_CHILD` relations use the name namespace of
+one `FACTORY_REQUEST_BATCH`. For each relation, both `sourceWorkName` and
+`targetWorkName` must exactly match a `works[].name` declared in that same
+request. These fields are intra-batch name references, not Work IDs and not
+lookups into other batches or current Factory state. A previously submitted or
+otherwise existing Work cannot be targeted by name; include it in the current
+`works[]` array or correct the endpoint name.
+
+This rule is different from `SAME_NAME`: a workstation's `SAME_NAME` guard may
+select matching Work from different submissions, but that guard does not widen
+the endpoint rule for submitted `DEPENDS_ON` or `PARENT_CHILD` relations.
+
 ## Source And Target Semantics
 
 | Relation type | Source means | Target means | `requiredState` |
@@ -315,15 +329,19 @@ Common rejection reasons:
 | Problem | Result |
 |---------|--------|
 | Invalid JSON or retired field aliases | Whole batch rejected |
-| Duplicate work names in `works[]` | Whole batch rejected |
-| Relation `sourceWorkName` or `targetWorkName` does not match a work name | Whole batch rejected |
+| Duplicate `works[].name` values anywhere in the batch, including across Work types | Whole batch rejected |
+| Relation `sourceWorkName` or `targetWorkName` is absent from this request's `works[]` (including a previously submitted Work) | Whole batch rejected |
 | Self-relation (`source` equals `target`) | Whole batch rejected |
 | `DEPENDS_ON` cycle between siblings | Whole batch rejected |
 | `requiredState` names a state that does not exist on the target work type | Whole batch rejected |
 | Unknown `workTypeName` or invalid batch shape | Whole batch rejected |
 
 Declare batch relations by work name. Do not use `targetWorkId` in submitted
-batch relations.
+batch relations. The duplicate-name and same-request endpoint checks are
+topology-independent and are also performed by `you submit batch --dry-run`;
+live submission then applies Factory-topology checks such as work-type,
+state, and required-state validation. A rejected live request creates no
+partial Work or relationship side effects.
 
 ## Normalization Outcomes
 

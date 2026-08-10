@@ -246,3 +246,45 @@ func TestSubmit_Transport_StructuredAPIError(t *testing.T) {
 		t.Fatalf("stdout = %q, want empty on API failure", out.String())
 	}
 }
+
+func TestSubmitBatch_HTTPErrorPreservesWorkRequestDiagnosticInHumanAndJSONModes(t *testing.T) {
+	message := "work_request: duplicate name \"release\": works[1].name conflicts with works[0].name; works[].name must be unique across the entire batch, including across different workTypeName values; rename or remove one entry"
+	for _, test := range []struct {
+		name string
+		json bool
+	}{
+		{name: "human"}, {name: "structured", json: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusBadRequest)
+				_ = json.NewEncoder(w).Encode(factoryapi.ErrorResponse{
+					Message: message, Code: factoryapi.ErrorResponseCodeBADREQUEST,
+					Family: factoryapi.ErrorFamilyBadRequest,
+				})
+			}))
+			defer srv.Close()
+
+			path := writeBatchFile(t, validBatchJSON("batch-duplicate-live", "release"))
+			var out bytes.Buffer
+			err := submitBatchForTest(t, BatchConfig{
+				Context: context.Background(), Args: []string{path},
+				Server: mustServerBase(t, srv.URL), JSON: test.json, Output: &out,
+			})
+			if err == nil {
+				t.Fatal("SubmitBatch succeeded for duplicate-name response")
+			}
+			var httpErr *SubmissionHTTPError
+			if !errors.As(err, &httpErr) {
+				t.Fatalf("error type = %T, want *SubmissionHTTPError", err)
+			}
+			if httpErr.Message != message || !strings.Contains(err.Error(), message) {
+				t.Fatalf("typed or human diagnostic missing: %#v %v", httpErr, err)
+			}
+			if out.Len() != 0 {
+				t.Fatalf("stdout = %q, want no success output on failure", out.String())
+			}
+		})
+	}
+}

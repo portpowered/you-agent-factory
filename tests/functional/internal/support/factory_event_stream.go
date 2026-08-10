@@ -138,6 +138,27 @@ func (s *FactoryEventStream) NextEvent(timeout time.Duration) factoryapi.Factory
 	return event
 }
 
+// NextEventContext waits for the next live Factory Event until ctx is done or
+// the stream closes. Callers that already have a deterministic lifecycle or
+// edge-observation context can use this without adding an arbitrary timeout.
+func (s *FactoryEventStream) NextEventContext(ctx context.Context) factoryapi.FactoryEvent {
+	s.t.Helper()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	select {
+	case event := <-s.events:
+		return event
+	case err := <-s.errs:
+		s.t.Fatalf("factory event stream error: %v", err)
+	case <-s.done:
+		s.t.Fatal("factory event stream closed before the expected event")
+	case <-ctx.Done():
+		s.t.Fatalf("waiting for factory event stream payload: %v", ctx.Err())
+	}
+	return factoryapi.FactoryEvent{}
+}
+
 // TryNextEvent waits for the next live Factory Event until timeout or stream close.
 func (s *FactoryEventStream) TryNextEvent(timeout time.Duration) (factoryapi.FactoryEvent, bool) {
 	s.t.Helper()
