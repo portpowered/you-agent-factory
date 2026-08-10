@@ -1437,3 +1437,161 @@ func TestNormalizeCommittedTerminal_RepairsInvalidFailure(t *testing.T) {
 		t.Fatal("normalized failure cause detail is empty")
 	}
 }
+
+type staticProviderBindingAppender struct {
+	result events.AppendResult
+	err    error
+}
+
+func (a staticProviderBindingAppender) Append(context.Context, events.AppendRequest) (events.AppendResult, error) {
+	return a.result, a.err
+}
+
+func providerBindingRegistry(t *testing.T, appender EventsAppender) *registry {
+	t.Helper()
+	r := newTestRegistry(t)
+	if appender != nil {
+		r.events = appender
+	}
+	r.dispatchOwners["dispatch-1"] = "worker-1"
+	r.publications["worker-1"] = &publication{open: true, turnID: "turn-1"}
+	return r
+}
+
+func TestProviderBindingAndDispatchLookupEdgesAreObservable(t *testing.T) {
+	ctx := context.Background()
+
+	r := newTestRegistry(t)
+	for _, test := range []struct {
+		name string
+		id   string
+		want error
+	}{
+		{name: "blank dispatch", id: " ", want: workersessions.ErrInvalidProviderBinding},
+		{name: "unknown dispatch", id: "missing", want: workersessions.ErrProviderBindingAttemptMismatch},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := r.WorkerSessionIDForDispatch(ctx, test.id); !errors.Is(err, test.want) {
+				t.Fatalf("WorkerSessionIDForDispatch(%q) error = %v, want %v", test.id, err, test.want)
+			}
+		})
+	}
+	r.dispatchOwners["dispatch-1"] = "worker-1"
+	if got, err := r.WorkerSessionIDForDispatch(ctx, " dispatch-1 "); err != nil || got != "worker-1" {
+		t.Fatalf("WorkerSessionIDForDispatch(known) = %q, %v, want worker-1", got, err)
+	}
+
+	if _, err := New(unusedExecution{t: t}, newEventsAppenderForInternalTest(t), nil, nil, unavailableProviderSessions{}); !errors.Is(err, ErrMissingClock) {
+		t.Fatalf("New(missing clock) error = %v, want ErrMissingClock", err)
+	}
+	if _, err := New(unusedExecution{t: t}, newEventsAppenderForInternalTest(t), nil, platformclock.Real{}, nil); !errors.Is(err, ErrMissingProviderSessions) {
+		t.Fatalf("New(missing provider sessions) error = %v, want ErrMissingProviderSessions", err)
+	}
+
+	if got := providerIdentityForExecution(workers.WorkstationExecutionRequest{
+		ExecutorProvider: workers.ExecutorProviderACP,
+		ModelProvider:    "cursor-acp",
+	}); got != "cursor-acp" {
+		t.Fatalf("providerIdentityForExecution(ACP) = %q, want cursor-acp", got)
+	}
+	wantResult := workers.WorkstationDispatchResult{DispatchID: "dispatch-1"}
+	if got := (&supervision{result: wantResult}).lastResult(); !reflect.DeepEqual(got, wantResult) {
+		t.Fatalf("lastResult() = %#v, want %#v", got, wantResult)
+	}
+}
+
+func newEventsAppenderForInternalTest(t *testing.T) events.Service {
+	t.Helper()
+	service, err := eventswire.NewService(logging.NoopLogger{})
+	if err != nil {
+		t.Fatalf("eventswire.NewService() error = %v", err)
+	}
+	return service
+}
+
+func TestProviderBindingPublicationEdgesPreserveAttributionAndOrdering(t *testing.T) {
+	t.Run("canonical provider draft", testCanonicalProviderDraftEdges)
+	t.Run("binding lifecycle", testProviderBindingLifecycleEdges)
+	t.Run("lookup errors", testProviderBindingLookupEdges)
+	t.Run("append outcomes", testProviderBindingAppendEdges)
+}
+
+func testCanonicalProviderDraftEdges(t *testing.T) {
+	ctx := context.Background()
+	providerDraft := func(provider, dispatchID string) workers.Draft {
+		return workers.Draft{DispatchID: dispatchID, Provenance: workers.Provenance{Provider: provider}}
+	}
+	r := providerBindingRegistry(t, nil)
+	pub := r.publications["worker-1"]
+	request := workersessions.PublishRecordRequest{SessionID: "worker-1", Draft: providerDraft("claude", "")}
+	if err := r.ensurePublishRecordProvider(ctx, request, pub); !errors.Is(err, workersessions.ErrInvalidProviderBinding) {
+		t.Fatalf("ensurePublishRecordProvider(blank dispatch) error = %v, want ErrInvalidProviderBinding", err)
+	}
+	request.Draft.DispatchID = "foreign-dispatch"
+	r.dispatchOwners["foreign-dispatch"] = "worker-2"
+	if err := r.ensurePublishRecordProvider(ctx, request, pub); !errors.Is(err, workersessions.ErrProviderBindingAttemptMismatch) {
+		t.Fatalf("ensurePublishRecordProvider(foreign dispatch) error = %v, want ErrProviderBindingAttemptMismatch", err)
+	}
+	request.Draft.DispatchID = "dispatch-1"
+	if err := r.ensurePublishRecordProvider(ctx, request, pub); err != nil {
+		t.Fatalf("ensurePublishRecordProvider(first provider) error = %v, want nil", err)
+	}
+	request.Draft.Provenance.Provider = "CLAUDE"
+	if err := r.ensurePublishRecordProvider(ctx, request, pub); err != nil {
+		t.Fatalf("ensurePublishRecordProvider(same provider) error = %v, want nil", err)
+	}
+	request.Draft.Provenance.Provider = "codex"
+	if err := r.ensurePublishRecordProvider(ctx, request, pub); !errors.Is(err, workersessions.ErrProviderBindingConflict) {
+		t.Fatalf("ensurePublishRecordProvider(conflicting provider) error = %v, want ErrProviderBindingConflict", err)
+	}
+}
+
+func testProviderBindingLifecycleEdges(t *testing.T) {
+	ctx := context.Background()
+	closed := providerBindingRegistry(t, nil)
+	closed.publications["worker-1"].open = false
+	if _, err := closed.EnsureProviderBinding(ctx, workersessions.ProviderBindingRequest{DispatchID: "dispatch-1", Provider: "claude"}); !errors.Is(err, workersessions.ErrPublicationNotOpen) {
+		t.Fatalf("EnsureProviderBinding(closed) error = %v, want ErrPublicationNotOpen", err)
+	}
+
+	accepted := providerBindingRegistry(t, nil)
+	first, err := accepted.EnsureProviderBinding(ctx, workersessions.ProviderBindingRequest{DispatchID: "dispatch-1", Provider: "claude"})
+	if err != nil || first.Outcome != workersessions.ProviderBindingOutcomeAccepted {
+		t.Fatalf("EnsureProviderBinding(first) = %#v, %v, want ACCEPTED", first, err)
+	}
+	duplicate, err := accepted.EnsureProviderBinding(ctx, workersessions.ProviderBindingRequest{DispatchID: "dispatch-1", Provider: "CLAUDE"})
+	if err != nil || duplicate.Outcome != workersessions.ProviderBindingOutcomeDuplicate {
+		t.Fatalf("EnsureProviderBinding(duplicate) = %#v, %v, want DUPLICATE", duplicate, err)
+	}
+	if _, err := accepted.EnsureProviderBinding(ctx, workersessions.ProviderBindingRequest{DispatchID: "dispatch-1", Provider: "codex"}); !errors.Is(err, workersessions.ErrProviderBindingConflict) {
+		t.Fatalf("EnsureProviderBinding(conflict) error = %v, want ErrProviderBindingConflict", err)
+	}
+}
+
+func testProviderBindingLookupEdges(t *testing.T) {
+	ctx := context.Background()
+	unknown := providerBindingRegistry(t, nil)
+	if _, err := unknown.EnsureProviderBinding(ctx, workersessions.ProviderBindingRequest{DispatchID: "missing", Provider: "claude"}); !errors.Is(err, workersessions.ErrProviderBindingAttemptMismatch) {
+		t.Fatalf("EnsureProviderBinding(unknown) error = %v, want ErrProviderBindingAttemptMismatch", err)
+	}
+	unknown.dispatchOwners["orphan-dispatch"] = "orphan-session"
+	if _, err := unknown.EnsureProviderBinding(ctx, workersessions.ProviderBindingRequest{DispatchID: "orphan-dispatch", Provider: "claude"}); !errors.Is(err, workersessions.ErrSessionNotFound) {
+		t.Fatalf("EnsureProviderBinding(orphan publication) error = %v, want ErrSessionNotFound", err)
+	}
+	if _, err := unknown.EnsureProviderBinding(ctx, workersessions.ProviderBindingRequest{}); !errors.Is(err, workersessions.ErrInvalidProviderBinding) {
+		t.Fatalf("EnsureProviderBinding(invalid) error = %v, want ErrInvalidProviderBinding", err)
+	}
+}
+
+func testProviderBindingAppendEdges(t *testing.T) {
+	ctx := context.Background()
+	appendFailure := providerBindingRegistry(t, staticProviderBindingAppender{err: errors.New("binding append failed")})
+	if _, err := appendFailure.EnsureProviderBinding(ctx, workersessions.ProviderBindingRequest{DispatchID: "dispatch-1", Provider: "claude"}); err == nil {
+		t.Fatal("EnsureProviderBinding(append failure) error = nil, want append error")
+	}
+	appendDuplicate := providerBindingRegistry(t, staticProviderBindingAppender{result: events.AppendResult{Outcome: events.AppendOutcomeDuplicate}})
+	result, err := appendDuplicate.EnsureProviderBinding(ctx, workersessions.ProviderBindingRequest{DispatchID: "dispatch-1", Provider: "claude"})
+	if err != nil || result.Outcome != workersessions.ProviderBindingOutcomeDuplicate {
+		t.Fatalf("EnsureProviderBinding(append duplicate) = %#v, %v, want DUPLICATE", result, err)
+	}
+}
