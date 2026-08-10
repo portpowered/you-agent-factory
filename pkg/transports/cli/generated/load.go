@@ -45,6 +45,12 @@ func ModelsDocsFamilyManifest() (climanifest.Manifest, error) {
 	return modelsDocsFamilyManifestValue(), nil
 }
 
+// ProvidersFamilyManifest returns generated metadata for the providers
+// capability-discovery command family.
+func ProvidersFamilyManifest() (climanifest.Manifest, error) {
+	return providersFamilyManifestValue(), nil
+}
+
 // RunSubmitFamilyManifest returns generated metadata for the run/submit family.
 func RunSubmitFamilyManifest() (climanifest.Manifest, error) {
 	return runSubmitFamilyManifestValue(), nil

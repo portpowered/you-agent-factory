@@ -1,0 +1,7 @@
+type: string
+description: Media or content modality understood by a provider model.
+enum:
+  - text
+  - image
+  - audio
+  - video

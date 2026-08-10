@@ -19,6 +19,7 @@ func TestGeneratedFamilyAccessorsReturnFreshValues(t *testing.T) {
 		{name: "work", load: WorkFamilyManifest},
 		{name: "factory config init", load: FactoryConfigInitFamilyManifest},
 		{name: "models docs", load: ModelsDocsFamilyManifest},
+		{name: "providers", load: ProvidersFamilyManifest},
 		{name: "run submit", load: RunSubmitFamilyManifest},
 		{name: "mcp", load: MCPFamilyManifest},
 	}

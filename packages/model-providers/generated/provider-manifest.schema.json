@@ -84,6 +84,41 @@
       ],
       "type": "string"
     },
+    "ProviderDiscoveryPrerequisite": {
+      "additionalProperties": false,
+      "description": "Sanitized prerequisite guidance that never carries a secret or machine-local value.",
+      "properties": {
+        "description": {
+          "description": "Bounded setup guidance without environment values or paths.",
+          "maxLength": 256,
+          "minLength": 1,
+          "type": "string"
+        },
+        "kind": {
+          "description": "Sanitized prerequisite category.",
+          "enum": [
+            "executable",
+            "authentication",
+            "workspace",
+            "configuration"
+          ],
+          "type": "string"
+        },
+        "name": {
+          "description": "Stable prerequisite name, never a secret value.",
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "name",
+        "description"
+      ],
+      "type": "object"
+    },
     "ProviderDiscoveryPrerequisites": {
       "additionalProperties": false,
       "description": "Static, credential-free facts that tooling may use to explain how a provider can be discovered. Only names and endpoint kinds are published: credential values, environment values, endpoint addresses, machine-local paths, installation/readiness state, and pricing are outside this contract.",
@@ -114,6 +149,14 @@
             "minLength": 1,
             "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
             "type": "string"
+          },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "prerequisites": {
+          "description": "Sanitized executable, authentication, workspace, or configuration requirements.",
+          "items": {
+            "$ref": "#/$defs/ProviderDiscoveryPrerequisite"
           },
           "type": "array",
           "uniqueItems": true
@@ -154,6 +197,18 @@
         "setup",
         "reference",
         "support"
+      ],
+      "type": "string"
+    },
+    "ProviderEffort": {
+      "description": "Provider-supported reasoning effort setting for one model.",
+      "enum": [
+        "minimal",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
       ],
       "type": "string"
     },
@@ -209,6 +264,163 @@
         "catalog-only"
       ],
       "type": "string"
+    },
+    "ProviderKnownLimit": {
+      "additionalProperties": false,
+      "description": "Named bounded provider constraint or documented behavior.",
+      "properties": {
+        "default": {
+          "description": "Positive numeric default when kind is default.",
+          "format": "int64",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "description": {
+          "description": "Bounded operator-facing explanation of the limit.",
+          "maxLength": 512,
+          "minLength": 1,
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/ProviderKnownLimitKind"
+        },
+        "maximum": {
+          "description": "Positive numeric maximum when kind is maximum.",
+          "format": "int64",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "name": {
+          "description": "Stable machine-readable limit name.",
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "type": "string"
+        },
+        "unit": {
+          "description": "Unit or flag domain for the value.",
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        },
+        "value": {
+          "description": "Bounded non-numeric behavior value when kind is behavior.",
+          "maxLength": 256,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "kind",
+        "unit",
+        "description"
+      ],
+      "type": "object"
+    },
+    "ProviderKnownLimitKind": {
+      "description": "Meaning of the value recorded by one named provider limit fact.",
+      "enum": [
+        "maximum",
+        "default",
+        "behavior"
+      ],
+      "type": "string"
+    },
+    "ProviderModality": {
+      "additionalProperties": false,
+      "description": "One explicit supported or unsupported directional modality fact.",
+      "properties": {
+        "direction": {
+          "$ref": "#/$defs/ProviderModalityDirection"
+        },
+        "modality": {
+          "$ref": "#/$defs/ProviderModalityKind"
+        },
+        "support": {
+          "$ref": "#/$defs/ProviderModalitySupport"
+        },
+        "transport": {
+          "$ref": "#/$defs/ProviderModalityTransport"
+        }
+      },
+      "required": [
+        "direction",
+        "modality",
+        "support",
+        "transport"
+      ],
+      "type": "object"
+    },
+    "ProviderModalityDirection": {
+      "description": "Direction in which a provider model accepts or emits a modality.",
+      "enum": [
+        "input",
+        "output"
+      ],
+      "type": "string"
+    },
+    "ProviderModalityKind": {
+      "description": "Media or content modality understood by a provider model.",
+      "enum": [
+        "text",
+        "image",
+        "audio",
+        "video"
+      ],
+      "type": "string"
+    },
+    "ProviderModalitySupport": {
+      "description": "Whether the provider model supports the modality in this direction.",
+      "enum": [
+        "supported",
+        "unsupported"
+      ],
+      "type": "string"
+    },
+    "ProviderModalityTransport": {
+      "description": "How a supported modality is supplied or returned.",
+      "enum": [
+        "inline",
+        "file_path",
+        "none"
+      ],
+      "type": "string"
+    },
+    "ProviderModel": {
+      "additionalProperties": false,
+      "description": "Capability facts for one named model exposed by a provider.",
+      "properties": {
+        "efforts": {
+          "description": "Reasoning effort values accepted independently by this model.",
+          "items": {
+            "$ref": "#/$defs/ProviderEffort"
+          },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "id": {
+          "description": "Exact model identifier accepted by the provider adapter.",
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+          "type": "string"
+        },
+        "modalities": {
+          "description": "Complete directional modality facts, including unsupported values.",
+          "items": {
+            "$ref": "#/$defs/ProviderModality"
+          },
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "id",
+        "efforts",
+        "modalities"
+      ],
+      "type": "object"
     },
     "ProviderResponseFidelityCapabilities": {
       "additionalProperties": false,
@@ -282,6 +494,42 @@
         "not-supported"
       ],
       "type": "string"
+    },
+    "ProviderTool": {
+      "additionalProperties": false,
+      "description": "One named provider tool fact used for execution planning.",
+      "properties": {
+        "description": {
+          "description": "Bounded explanation of the tool fact.",
+          "maxLength": 256,
+          "minLength": 1,
+          "type": "string"
+        },
+        "name": {
+          "description": "Stable provider-neutral tool name.",
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "type": "string"
+        },
+        "support": {
+          "$ref": "#/$defs/ProviderToolSupport"
+        }
+      },
+      "required": [
+        "name",
+        "support",
+        "description"
+      ],
+      "type": "object"
+    },
+    "ProviderToolSupport": {
+      "description": "Whether the provider exposes a named tool through its integration.",
+      "enum": [
+        "supported",
+        "unsupported"
+      ],
+      "type": "string"
     }
   },
   "$id": "https://schemas.you.dev/model-providers/provider-manifest/1.0.0.schema.json",
@@ -341,14 +589,35 @@
     "implementationAvailability": {
       "$ref": "#/$defs/ProviderImplementationAvailability"
     },
+    "knownLimits": {
+      "description": "Named provider constraints and bounded behavior facts in canonical name order.",
+      "items": {
+        "$ref": "#/$defs/ProviderKnownLimit"
+      },
+      "type": "array"
+    },
     "maximumExecutionCapabilities": {
       "$ref": "#/$defs/ProviderExecutionCapabilities"
     },
     "maximumResponseFidelityCapabilities": {
       "$ref": "#/$defs/ProviderResponseFidelityCapabilities"
     },
+    "models": {
+      "description": "Named provider models and their complete capability facts in canonical model-ID order.",
+      "items": {
+        "$ref": "#/$defs/ProviderModel"
+      },
+      "type": "array"
+    },
     "technicalSupportLevel": {
       "$ref": "#/$defs/ProviderTechnicalSupportLevel"
+    },
+    "tools": {
+      "description": "Named provider tool facts in canonical tool-name order.",
+      "items": {
+        "$ref": "#/$defs/ProviderTool"
+      },
+      "type": "array"
     }
   },
   "required": [

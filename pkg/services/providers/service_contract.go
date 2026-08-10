@@ -16,7 +16,9 @@ type Service interface {
 	// GetProvider returns one detached catalog descriptor for a Providers-owned
 	// provider identity. Invalid identity fails with ErrInvalidID, unknown
 	// identity fails with ErrUnknownProvider, and blocked availability or
-	// prerequisite facts fail with ErrProviderUnavailable.
+	// missing prerequisite facts fail with ErrProviderUnavailable. Static
+	// catalog requirements remain selectable but are reported as unverified
+	// until a readiness probe supplies current facts.
 	GetProvider(context.Context, GetProviderRequest) (GetProviderResult, error)
 	// ResolveIdentity canonicalizes one Providers-owned ID or accepted alias
 	// without starting execution.
