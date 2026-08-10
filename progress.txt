@@ -1914,3 +1914,21 @@
 - **Learnings for future iterations:**
   - On Windows, avoid running independent `go run` Make gates in parallel when they may contend for the generated executable; a sequential rerun distinguishes a transient file-lock message from a gate failure.
 ---
+## 2026-08-10 10:28 -07:00 - sac-s0-1-ownership-inventories-001 review follow-up
+- What was implemented
+  - Reclassified `sac-s0-1-ownership-inventories-001` from a behavioral user story to an explicit `project-enabling` criterion in `prd.json`, because the package-target manifest is repository-enforcement and maintainer tooling rather than customer runtime, API, CLI, UI, or emitted-event behavior.
+  - Preserved the completed package-target acceptance evidence and added an explicit no-runtime/API/CLI/UI/event-behavior criterion so the PRD matches the review gate's acceptance model.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `make package-target-manifest-check` — passed (545 inventory rows / 545 production package rows).
+  - `make ownership-inventory-check` — passed.
+  - `go test ./cmd/packagetargetmanifestcheck -run 'Test(PackageTarget|Manifest|Coverage|Owner|Edges)' -count=1` — passed.
+  - PRD JSON validation reports story 001 exactly once under `enablingCriteria`, no failed items, and one remaining behavioral user story (002).
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - Repository inventory and architecture-guard checks are valid enforcement evidence, but they do not satisfy a customer-behavior acceptance gate; model genuinely non-behavioral work as explicit project-enabling criteria.
+  - The broad `go test ./cmd/packagetargetmanifestcheck` package also exercises current-main Workers/Recordings root-file inventories and currently reports unrelated baseline drift (`kind_phase_validation.go` and `lifecycle_capability.go`); the public package-target Make gate and focused manifest tests remain green.
+  - Story 002 still needs the same acceptance-shape follow-up in a separate iteration; do not combine it with this story's bookkeeping change.
+---

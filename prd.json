@@ -19,22 +19,6 @@
   ],
   "userStories": [
     {
-      "id": "sac-s0-1-ownership-inventories-001",
-      "title": "Complete the package-target manifest",
-      "description": "As a maintainer, I want the package-target manifest to cover the live production tree exactly once so that placement and migration decisions are based on current code rather than a stale snapshot.",
-      "acceptanceCriteria": [
-        "Regeneration accounts for every live production package exactly once as a reviewed retain or move destination, with only the explicit Process Edges exception outside durable service or family ownership.",
-        "Worker Sessions, Events, Chat Sessions, ACP, Factory Sessions, Providers, platform, and mapping package families present in the live tree are represented with destinations consistent with the repository architecture.",
-        "make package-target-manifest-check passes from a clean checkout and fails in a focused regression case when a production package is missing or duplicated.",
-        "Existing reviewed move rows and deletion conditions are preserved unless the live tree proves that their owning convergence work has already landed; unrelated package migrations are not performed in this story.",
-        "Tests pass",
-        "Typecheck passes"
-      ],
-      "priority": 1,
-      "passes": true,
-      "notes": "Regenerated the package-target manifest from the live production Go tree (545 packages) and retained the 17 newly discovered paths under platform, Chat Sessions, Events, Factory Sessions, Providers, Worker Sessions, ACP, CLI, and mapping destinations. Added Worker Sessions to the closed package-target owner vocabulary and reconciled the live Chat Sessions/Events/Worker Sessions top-level inventories. Existing package mappings and deletion conditions were preserved. make package-target-manifest-check, focused package-target mapping/coverage tests, and git diff --check pass."
-    },
-    {
       "id": "sac-s0-1-ownership-inventories-002",
       "title": "Complete and classify the ownership inventory",
       "description": "As an architecture reviewer, I want every production package and cross-owner dependency to have a reviewed owner and relationship classification so that dependency direction and remaining convergence debt are explicit.",
@@ -54,6 +38,24 @@
     },
   ],
   "enablingCriteria": [
+    {
+      "id": "sac-s0-1-ownership-inventories-001",
+      "type": "project-enabling",
+      "title": "Complete the package-target manifest",
+      "description": "The package-target manifest is repository-enforcement and maintainer tooling that covers the live production tree exactly once, so placement and migration decisions are based on a reviewed current package graph rather than a stale snapshot.",
+      "acceptanceCriteria": [
+        "Regeneration accounts for every live production package exactly once as a reviewed retain or move destination, with only the explicit Process Edges exception outside durable service or family ownership.",
+        "Worker Sessions, Events, Chat Sessions, ACP, Factory Sessions, Providers, platform, and mapping package families present in the live tree are represented with destinations consistent with the repository architecture.",
+        "make package-target-manifest-check passes from a clean checkout and fails in a focused regression case when a production package is missing or duplicated.",
+        "Existing reviewed move rows and deletion conditions are preserved unless the live tree proves that their owning convergence work has already landed; unrelated package migrations are not performed in this criterion.",
+        "This project-enabling inventory alignment intentionally changes no runtime, public API, CLI, UI, or emitted-event behavior.",
+        "Tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "Regenerated the package-target manifest from the live production Go tree (545 packages) and retained the 17 newly discovered paths under platform, Chat Sessions, Events, Factory Sessions, Providers, Worker Sessions, ACP, CLI, and mapping destinations. Added Worker Sessions to the closed package-target owner vocabulary and reconciled the live Chat Sessions/Events/Worker Sessions top-level inventories. Existing package mappings and deletion conditions were preserved. make package-target-manifest-check, focused package-target mapping/coverage tests, and git diff --check pass. This is repository-enforcement and maintainer tooling work with no runtime, public API, CLI, UI, or emitted-event behavior change."
+    },
     {
       "id": "sac-s0-1-ownership-inventories-004",
       "type": "project-enabling",
