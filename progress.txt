@@ -877,3 +877,15 @@
   - Moving a per-call logger out of a runtime request also requires cutting it from the application resolver and transport runner adapter; otherwise the owner still has a hidden rebinding path even when the runtime Factory ignores it.
   - Host readiness, lifecycle completion, historical replay publication, and event streaming are presentation contracts rather than effect-selection ports, but they still need a dedicated transport/result cutover before the value-only story can be marked passed.
 ---
+
+## 2026-08-10 07:16 -07:00 - btrc-p1-root-injection-004 verification follow-up
+- What was implemented
+  - No additional source changes; recorded the post-commit verification result.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `make test` — passed across the short Go unit lane.
+  - `git status --short` — clean after commits `4a208e601` and `0ca5aee43`.
+- **Learnings for future iterations:**
+  - The full short Go lane remains a practical final regression check for this backend-only contract cutover; it passed after the focused package and Wire checks.
+---
