@@ -507,3 +507,22 @@
   - When a package coverage floor falls after adding a defensive transport branch, cover the public error response through the generated route and assert its observable status and error code; this preserves meaningful functional evidence instead of changing the threshold.
   - A root-built success-path test can cover transport delegation while leaving an optional-owner failure branch uncovered, so inspect the package profile before choosing the narrowest additional test.
 ---
+## 2026-08-10 12:13 -07:00 - wsr-001-opening-record latest-main synchronization follow-up
+- What was implemented
+  - Merged the latest `origin/main` head `947152348` after the base advanced during PR verification, resolving the generated API conflicts through `make interfaces-all`.
+  - Preserved the WSR implementation and PRD while incorporating the current main artifact-contract changes; the local merge-tree is now conflict-free.
+- Files changed
+  - `packages/api/generated/manifest.json`
+  - `ui/packages/client/src/generated/openapi.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `make interfaces-all` — passed and produced no generated drift.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet functional-boundary-check api-smoke` — passed.
+  - `make verify-fast` — passed dashboard typecheck, MCP contract checks, UI unit tests, and the short Go suite.
+  - `make test-functional-coverage` — passed; overall coverage 55.7% and `pkg/transports/http` 68.5%, above the 66.35% package floor.
+  - WSR-FT-001, WSR-FT-002, WSR-FT-003, public unavailable-owner route, and provider-neutral replay transport tests — passed.
+  - `git merge-tree --write-tree origin/main HEAD`, `git diff --check`, and PRD JSON validation — passed.
+- **Learnings for future iterations:**
+  - A PR can become dirty immediately after a successful synchronization when main advances during CI; re-fetch the live base before final handoff and regenerate only the conflicted generated artifacts through the canonical interface workflow.
+---
