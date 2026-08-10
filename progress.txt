@@ -26,6 +26,9 @@
 - Replay completeness must be derived from a terminal lifecycle record inside the captured Events range, not from a separately synchronized terminal session state.
 - When a package has a strict file-count baseline, put a small refactor in an existing focused file before adding a new helper file or changing the baseline.
 - When broad functional coverage reports a cancellation-observation failure, rerun the failed lane and isolate the named test before changing an unrelated feature; parallel-suite failures can move between existing durability/restart tests while isolated runs pass.
+- The production CLI process boundary should silence Cobra's implicit error text, preserve command-owned coded diagnostics with a writer marker, and wrap only unclassified failures in a constant safe fallback; direct Cobra callers can retain legacy presentation through a context switch.
+- Keep cancellation compatibility explicit at the boundary: a typed returned cancellation can retain the existing `Error: context canceled` diagnostic while still preserving `errors.Is(context.Canceled)` for declared exit-status handling.
+- JSON error payloads from command-owned services must route to the process diagnostic writer when the central CLI policy is active; direct service tests can continue to use their caller-owned output writer outside that policy.
 
 ## 2026-08-09 13:12 - wo-d1-packaged-factories-docs-001
 - What was implemented
@@ -760,4 +763,33 @@
   - Documentation parsers for Markdown output must match the report’s structural contract and tolerate the platform’s CRLF line endings; a single-line `Overall recommendation:` pattern is not equivalent to the emitted H2-plus-body form.
   - AGY structured-output replays enforce exact echoed-schema equivalence, so a contract schema change requires the historical replay envelope to be synchronized without changing its recorded response evidence.
   - When a backend package is at the 15-file limit, consolidate focused behavioral tests into an existing responsibility-aligned file before adding another package-local test file.
+---
+
+## 2026-08-10 04:46 -07:00 - pf-cli-exit-codes-001
+- What was implemented
+  - Added a CLI-owned process-boundary diagnostic policy that silences Cobra's implicit error text, preserves authored coded errors, and maps unclassified failures to the safe typed `CLI_COMMAND_FAILED` fallback without inspecting terminal output.
+  - Added a transparent diagnostic writer marker so existing run/server structured renderers remain single-shot; direct Cobra callers retain their legacy presentation through the central-policy context switch.
+  - Routed Worker Sessions JSON error payloads to the process diagnostic writer under the central policy so failures never add an error object to stdout, while direct service callers keep their existing output ownership.
+  - Added root.BuildProcess/Process.Execute coverage for authored invocation errors and safe unclassified remote failures, including stdout isolation and stderr JSON assertions.
+- Files changed
+  - `pkg/transports/cli/clidiag/diagnostics.go`
+  - `pkg/transports/cli/clidiag/diagnostics_test.go`
+  - `pkg/transports/cli/root.go`
+  - `pkg/transports/cli/root_work.go`
+  - `pkg/transports/cli/run/invocation_error.go`
+  - `pkg/transports/cli/baseline/goal_failure_process_test.go`
+  - `pkg/services/factory_runtime/transports/cli/invocation_error.go`
+  - `pkg/services/worker_sessions/transports/cli/{list,read,show,stream}.go`
+  - `pkg/transports/cli/submit/error_output.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./cmd/factory ./pkg/root ./pkg/initializer/application ./pkg/services/factory_runtime/transports/cli ./pkg/services/worker_sessions/transports/cli ./pkg/transports/cli -count=1` — passed.
+  - `go test ./pkg/root ./pkg/initializer/... ./pkg/services/factory_runtime/... ./pkg/services/worker_sessions/... ./pkg/transports/cli/...` — changed packages passed; the command stopped only at the pre-existing `TestDocsTopicIndexBaseline_MatchesFixture` docs-topic fixture drift.
+  - `go vet ./pkg/transports/cli/... ./pkg/root ./cmd/factory` — passed.
+  - `make pkg-maint pkg-file-count` — passed.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - Keep the next server and stream stories on the same process-boundary marker/context seam so startup and stream-specific typed codes can be added without duplicating the command graph or changing service ownership.
+  - The current checkout's docs-topic baseline is stale relative to the live packaged-factory docs (`packaged-factories` is added and the providers description differs); it is unrelated to this CLI story and should be reconciled separately.
 ---
