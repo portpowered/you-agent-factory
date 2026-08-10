@@ -1849,3 +1849,20 @@
 - **Learnings for future iterations:**
   - The prior GitHub functional-coverage failure is reproducible as a transient baseline failure rather than a deterministic source failure; fresh CI after this head is the authoritative check.
 ---
+## 2026-08-10 09:13 -07:00 - sac-s0-1-ownership-inventories current-main conflict follow-up
+- What was implemented
+  - Merged the server's current `main` head `59fd5748` into the SAC branch after GitHub reported the existing PR as conflicting.
+  - Preserved the SAC `prd.json` as the authoritative PR description and retained both branches' append-only `progress.txt` histories while resolving the bookkeeping conflicts.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+  - Current-main characterization sources and tests were retained by the merge.
+- Verification
+  - `make package-target-manifest-check` — passed (545 inventory rows / 545 production package rows).
+  - `make ownership-inventory-check` — passed.
+  - `go test ./cmd/pkgboundarycheck ./cmd/ownershipinventorycheck -count=1` — passed.
+  - `git diff --check` and PRD JSON validation — passed.
+  - Merge commit `b13db64f0` is pushed; fresh required CI and final PR mergeability are pending.
+- **Learnings for future iterations:**
+  - Compare the server's live base SHA with the local remote-tracking ref before treating a PR as conflict-free; stale base metadata can hide a conflict in shared `prd.json` and `progress.txt`.
+---
