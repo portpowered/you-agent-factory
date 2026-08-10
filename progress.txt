@@ -951,5 +951,26 @@
 - **Learnings for future iterations:**
   - The blocked one-shot cancellation path currently permits two complete artifact orders differing only in the adjacent `MODEL_RESPONSE` and `FACTORY_STATE_RESPONSE`; both retain contiguous canonical sequence numbers and exactly-once terminal publication.
   - On-demand cancellation closes the captured runtime, publishes the canceled invocation only after replacement succeeds, and treats controls against the replacement or an evicted identity as idempotent no-ops.
-  - Late runtime-opening failures use joined errors: the initiating Automations failure remains discoverable alongside earlier worker cleanup failure, while acquired resources close in reverse order and later assembly is not called.
+- Late runtime-opening failures use joined errors: the initiating Automations failure remains discoverable alongside earlier worker cleanup failure, while acquired resources close in reverse order and later assembly is not called.
+---
+## [2026-08-10 07:31 -07:00] - btrc-p0-characterization-009 verification follow-up
+- What was implemented
+  - Refactored the concurrent target characterization into a deterministic fixture and focused assertion helpers so the new test stays within repository maintainability limits.
+  - Consolidated the replay characterization into the existing `pkg/services/recordings/internal/replay/runtime_decoder_test.go` file and split its success assertions, preserving the same observable replay coverage while restoring package file-count and maintainability baselines.
+  - Updated the replay story note in `prd.json` to match the reconciled file location; the PR description will be refreshed from this exact PRD.
+- Files changed
+  - `pkg/services/factory_sessions/internal/ondemandtarget/target_execution_test.go`
+  - `pkg/services/recordings/internal/replay/runtime_decoder_test.go`
+  - `pkg/services/recordings/internal/replay/btrc_p0_characterization_test.go` (consolidated/deleted)
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `make test` — passed (short Go suite).
+  - `make backend-size` — passed.
+  - `make pkg-maint` — passed.
+  - `make pkg-file-count` — passed.
+  - Affected replay and concurrent-target repeat/race tests and vet — passed.
+- **Learnings for future iterations:**
+  - Characterization tests should be split into owner-focused helpers before running `pkg-maint`; detailed observable assertions can remain rich without making one test function exceed complexity or line limits.
+  - When a P0 test adds a file to a package at its exact file-count baseline, consolidate it into a semantically adjacent existing test file rather than recording a new baseline entry.
 ---
