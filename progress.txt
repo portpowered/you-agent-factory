@@ -1,5 +1,6 @@
 ## Codebase Patterns
 - When synchronizing a task branch with current main, preserve the active branch's task-scoped `prd.json` and merge unrelated main history into `progress.txt`; validate the resulting PRD before staging.
+- A PR's cached base SHA can lag the remote default branch after another PR merges; fetch the current base ref and compare/merge against that ref before final handoff.
 - When a termination drain consumes a runtime wake signal, the engine must re-enter its tick loop directly; returning to the outer wait loses the already-consumed wake and can strand a finite run.
 - Customer-facing functional tests must compose through `root.BuildProcess` and assert public process/CLI behavior; keep service-specific typed-error assertions in service-layer tests because the functional boundary check rejects direct Runtime imports.
 - Repository-wide `pkg-boundary` traversals must prune through one root-relative, slash-normalized policy before parsing entries; adding a new `WalkDir` requires using that same decision.
@@ -1534,4 +1535,17 @@
   - Thread-aware review audit reports zero review submissions and zero unresolved or outdated inline threads.
 - **Learnings for future iterations:**
   - A canceled-context assertion in the JavaScript durability suite is a known timing-sensitive CI failure; run the exact test repeatedly and rerun only failed jobs before changing unrelated runtime code.
+---
+## 2026-08-10 08:17 -07:00 - sac-s0-1-ownership-inventories current-main freshness follow-up
+- What was implemented
+  - Merged the latest `origin/main` head `11b34c073` after it advanced beyond the prior handoff, with no merge conflicts.
+  - Preserved the SAC task PRD and inventory implementation while retaining the current-main batch-submit diagnostic changes; all four PRD story/enabling items remain `passes:true`.
+- Files changed
+  - `progress.txt`
+  - Current-main batch-submit changes retained in `docs/reference/`, `pkg/services/factory_runtime/`, `pkg/services/work/`, `pkg/transports/cli/submit/`, and `tests/functional/`.
+- Verification
+  - `git merge --no-edit origin/main` — passed without conflicts.
+  - Focused inventory gates and post-merge PR/CI verification are pending in this iteration.
+- **Learnings for future iterations:**
+  - A clean PR can still have a stale cached base SHA after another PR merges; fetch the remote default branch and use its actual commit for final freshness checks.
 ---
