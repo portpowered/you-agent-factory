@@ -102,7 +102,7 @@ var topicDocuments = []topicDocument{
 	{topic: TopicMCP, description: "Canonical you mcp serve install path, preview tool catalog, scope boundaries, and automation-backed checks.", path: referenceMCPPath, displayOrder: 39},
 	{topic: TopicWorkstations, description: "Workstation kinds, route fields, runtime step behavior, and scoped execution settings.", path: referenceWorkstationsPath, displayOrder: 40, aliases: []Topic{TopicWorkstationAlias}},
 	{topic: TopicWorkers, description: "Worker types, model providers, script workers, and worker configuration.", path: referenceWorkersPath, displayOrder: 50},
-	{topic: TopicProviders, description: "ACP agent setup, custom provider lifecycle, Factory selection, validation, and JavaScript usage.", path: referenceProvidersPath, displayOrder: 55, aliases: []Topic{TopicACPAlias}},
+	{topic: TopicProviders, description: "Worker/provider selection, model capabilities and limits, Factory configuration, AGY caveats, ACP lifecycle, and JavaScript usage.", path: referenceProvidersPath, displayOrder: 55, aliases: []Topic{TopicACPAlias}},
 	{topic: TopicServeACP, description: "Canonical you serve acp ACP-agent host command, stdio channel contract, clean shutdown, and minimal client configuration.", path: referenceServeACPPath, displayOrder: 56},
 	{topic: TopicResources, description: "Resource capacity, bounded concurrency, and workstation resource requirements.", path: referenceResourcesPath, displayOrder: 60},
 	{topic: TopicModels, description: "Local and hosted model setup for workers and CLI model commands.", path: referenceModelsPath, displayOrder: 70},

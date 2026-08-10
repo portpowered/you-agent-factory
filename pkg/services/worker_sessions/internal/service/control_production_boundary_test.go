@@ -813,6 +813,55 @@ func TestObservationStream_ReplaysRetainedEventsThenCompletesAndReplaysTerminalS
 	}
 }
 
+func TestObservationStream_ReplayOnlyTerminalSessionEmitsCompleteRetainedHistory(t *testing.T) {
+	boundary := newControlledBoundary()
+	registry := newObservationService(t, boundary, newEventsAppender(), platformclock.Real{}, nil)
+	started := startControlledSession(t, registry, boundary, "replay-terminal-session", "replay-terminal-dispatch")
+	ref := sessionRef("replay-terminal-provider-session")
+	if _, err := registry.AssociateProviderSession(context.Background(), workersessions.ProviderSessionAssociationRequest{
+		WorkerSessionID: "replay-terminal-session",
+		DispatchID:      "replay-terminal-dispatch",
+		Reference:       ref,
+	}); err != nil {
+		t.Fatalf("AssociateProviderSession() error = %v", err)
+	}
+
+	boundary.complete(completedDispatchResult("replay-terminal-dispatch"), nil)
+	if final := <-started; final.Session.State != workersessions.StateCompleted {
+		t.Fatalf("Start() final session = %#v, want COMPLETED", final.Session)
+	}
+
+	ctx := context.Background()
+	replay, err := registry.StreamObservations(ctx, workersessions.StreamObservationsRequest{
+		ProviderSession: ref,
+		ReplayOnly:      true,
+		Limit:           1,
+	})
+	if err != nil {
+		t.Fatalf("StreamObservations(replay-only) error = %v", err)
+	}
+	defer replay.Close()
+
+	opening := replay.Next(ctx)
+	if opening.Kind != workersessions.ObservationDeliveryRecord || opening.Event.SourceSequence != 1 {
+		t.Fatalf("replay-only opening = %#v, want RECORD source sequence 1", opening)
+	}
+	terminal := replay.Next(ctx)
+	if terminal.Kind != workersessions.ObservationDeliveryTerminalReplay || terminal.Event.SourceSequence != 2 {
+		t.Fatalf("replay-only terminal = %#v, want TERMINAL_REPLAY source sequence 2", terminal)
+	}
+	summary := replay.Next(ctx)
+	if summary.Kind != workersessions.ObservationDeliveryReplaySummary || summary.Summary == nil {
+		t.Fatalf("replay-only summary = %#v, want REPLAY_SUMMARY", summary)
+	}
+	if !summary.Summary.Complete || summary.Summary.Reason != "session-completed" || summary.Summary.EventsEmitted != 2 {
+		t.Fatalf("replay-only summary = %#v, want complete completed-session count-two summary", summary.Summary)
+	}
+	if closed := replay.Next(ctx); closed.Kind != workersessions.ObservationDeliveryClosed {
+		t.Fatalf("delivery after replay-only summary = %#v, want CLOSED", closed)
+	}
+}
+
 func TestObservationStream_CancellationUnregistersSubscription(t *testing.T) {
 	boundary := newControlledBoundary()
 	registry := newObservationService(t, boundary, newEventsAppender(), platformclock.Real{}, nil)
