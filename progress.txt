@@ -87,7 +87,6 @@
 - This checkout may have `ui/node_modules` without all lockfile dependencies; run the pinned Bun install before treating a typecheck failure as a source regression.
 ---
 
-
 ## 2026-08-10 04:32 -07:00 - sac-s0-2-pkg-boundary-ignores-001
 - What was implemented
   - Centralized repository-root-relative pruning for `.artifacts`, `.artifacts/bootstrap/worktrees`, generated transient worktrees, and the supported root worktree locations.
@@ -1958,4 +1957,21 @@
   - `git diff --check` — passed.
 - **Learnings for future iterations:**
   - Acceptance criteria for repository-enforcement work should explicitly identify the project-level nature of the evidence and state the intentionally unchanged customer-facing behavior; keep the PRD valid JSON so automated consumers do not depend on permissive parsers.
+---
+
+## 2026-08-10 11:30 -07:00 - dwro-s1-remote-placement-flags final PR follow-up
+- What was implemented
+  - Merged the current `origin/main` into the feature branch, preserving the task-owned `prd.json` and append-only `progress.txt` while incorporating the current repository ownership and package-inventory updates.
+  - Pushed synchronized head `a35da5197348d830682878ef609eb5381addbcf3` to PR #1852 and refreshed the PR description from `prd.json`.
+  - Confirmed all four PRD stories remain `passes: true`; audited the existing blocking conversation comments against the completed fixes and found no inline review threads or newer unresolved comments.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Post-merge package-target manifest, ownership inventory, package boundary, contract, functional-scenario, maintainability, file-count, backend-size, package-structure, and `go vet` gates — passed.
+  - GitHub Actions run `31418719107` on head `a35da5197` — all 18 checks passed, including backend unit/functional coverage and Verification Policy.
+  - PR description comparison against `prd.json` — passed.
+  - Worktree clean and `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - When a PR head is behind current `main`, synchronize before relying on new CI; GitHub may report a dirty/diverged merge state and omit a fresh PR-head run until the merge is pushed.
+  - After a coverage-sensitive parser change, moving reusable validation into an already-covered platform package and adding focused edge-case tests keeps both unit and functional coverage ratchets above their floors.
 ---
