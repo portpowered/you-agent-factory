@@ -175,7 +175,7 @@ func (r *registry) ensurePublishRecordProvider(
 	pub *publication,
 ) error {
 	provider := strings.TrimSpace(req.Draft.Provenance.Provider)
-	if provider == "" {
+	if provider == "" || strings.EqualFold(provider, "agent-run") {
 		return nil
 	}
 	if pub.provider != "" {

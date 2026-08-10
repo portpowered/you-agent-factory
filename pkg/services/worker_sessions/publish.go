@@ -181,7 +181,9 @@ func canonicalDraftFromFragment(fragment workers.ProgressFragment) (workers.Draf
 func providerIdentityForFragment(fragment workers.ProgressFragment, draft *workers.Draft) string {
 	if draft != nil {
 		if provider := strings.TrimSpace(draft.Provenance.Provider); provider != "" {
-			return provider
+			if !isSyntheticWorkerProvider(provider) {
+				return provider
+			}
 		}
 	}
 	if provider := strings.TrimSpace(fragment.Provider); provider != "" {
@@ -200,7 +202,7 @@ func providerIdentityForFragment(fragment workers.ProgressFragment, draft *worke
 
 func providerIdentityAgrees(fragment workers.ProgressFragment, draft workers.Draft) bool {
 	provider := strings.TrimSpace(draft.Provenance.Provider)
-	if provider == "" {
+	if provider == "" || isSyntheticWorkerProvider(provider) {
 		return true
 	}
 	if explicit := strings.TrimSpace(fragment.Provider); explicit != "" &&
@@ -217,6 +219,10 @@ func providerIdentityAgrees(fragment workers.ProgressFragment, draft workers.Dra
 		return false
 	}
 	return true
+}
+
+func isSyntheticWorkerProvider(provider string) bool {
+	return strings.EqualFold(strings.TrimSpace(provider), "agent-run")
 }
 
 func ensureProviderBinding(
@@ -246,18 +252,21 @@ func (p *ProviderSessionObservationPublisher) publishCanonicalWorkerRecord(
 		})
 		if err != nil {
 			p.reportRejectedRecord(sessionID, draft, err)
-			return false
+			return !errors.Is(err, ErrProviderBindingConflict)
 		}
 		if binding.WorkerSessionID != "" {
 			sessionID = binding.WorkerSessionID
 		}
 	} else if resolved, err := resolveWorkerSessionID(observer, sessionID); err != nil {
 		p.reportRejectedRecord(sessionID, draft, err)
-		return false
+		return !errors.Is(err, ErrProviderBindingConflict)
 	} else {
 		sessionID = resolved
 	}
-	return p.publishWorkerDraft(observer, sessionID, draft) == nil
+	if err := p.publishWorkerDraft(observer, sessionID, draft); err != nil {
+		return !errors.Is(err, ErrProviderBindingConflict)
+	}
+	return true
 }
 
 // publishWorkerRecord commits one Worker-authored observation to that Worker

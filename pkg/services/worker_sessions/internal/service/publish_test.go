@@ -180,6 +180,57 @@ func TestPublishRecord_RejectsProviderContradictingOpening(t *testing.T) {
 	}
 }
 
+// TestPublishRecord_SyntheticAgentRunProvenanceDoesNotBindProvider proves the
+// Worker-authored final draft marker is not treated as a second provider
+// identity. The opening may already be attributed to the selected provider,
+// while the canonical Worker response still carries its internal agent-run
+// provenance.
+func TestPublishRecord_SyntheticAgentRunProvenanceDoesNotBindProvider(t *testing.T) {
+	eventsSvc := newEventsAppender()
+	var svc workersessions.Service
+	var publishResult workersessions.PublishRecordResult
+	var publishErr error
+	execution := &fakeExecution{
+		dispatch: func(ctx context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+			draft := messageDraft("synthetic Worker provenance")
+			draft.DispatchID = req.Execution.Dispatch.DispatchID
+			draft.Provenance.Provider = "agent-run"
+			publishResult, publishErr = svc.PublishRecord(ctx, validPublishRecordRequest("worker-1", 1, draft))
+			return workers.WorkstationDispatchResult{
+				DispatchID: req.Execution.Dispatch.DispatchID,
+				Result: workers.WorkResult{
+					DispatchID: req.Execution.Dispatch.DispatchID,
+					Outcome:    workers.OutcomeAccepted,
+				},
+			}, nil
+		},
+	}
+	var err error
+	svc, err = newService(executionBoundary{execution: execution}, eventsSvc, nil)
+	if err != nil {
+		t.Fatalf("service.New() error = %v, want nil", err)
+	}
+	request := validStartRequest("worker-1", "dispatch-1")
+	request.Execution.Execution.RunnerID = workers.RunnerIDCodex
+	if _, err := svc.InvokeSession(context.Background(), request); err != nil {
+		t.Fatalf("InvokeSession() error = %v, want nil", err)
+	}
+	if publishErr != nil {
+		t.Fatalf("PublishRecord() error = %v, want nil", publishErr)
+	}
+	if publishResult.Outcome != workersessions.PublishOutcomeAccepted {
+		t.Fatalf("PublishRecord() outcome = %v, want Accepted", publishResult.Outcome)
+	}
+
+	committed := readAllDrafts(t, eventsSvc, workersessions.Topic("worker-1"))
+	if len(committed) != 3 {
+		t.Fatalf("committed record count = %d, want opening, Worker output, and terminal", len(committed))
+	}
+	if committed[1].Provenance.Provider != "agent-run" {
+		t.Fatalf("Worker output provider = %q, want agent-run", committed[1].Provenance.Provider)
+	}
+}
+
 // TestPublishRecord_InvalidDraft_ReturnsErrorAndCommitsNoRecord proves that a
 // draft violating the existing Workers Kind/Phase/payload rules is rejected
 // explicitly and appends nothing, before any session or publication-window
