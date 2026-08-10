@@ -282,6 +282,7 @@ func startInterruptedJavaScriptDurabilitySession(
 	)
 
 	reason := "javascript durability resume interrupt"
+	provider.waitForInferBlocked(t, 5*time.Second)
 	postJavaScriptDurabilityJSON[factoryapi.FactorySessionLifecycleControlResponse](
 		t,
 		baseURL+"/factory-sessions/"+sessionID+"/interrupt-dispatch",
@@ -650,11 +651,27 @@ type javascriptDurabilityResumeBlockingProvider struct {
 	calls           int
 	blockedOnce     bool
 	contextCanceled int
+	inferBlocked    chan struct{}
 	workflowName    string
 }
 
 func newJavaScriptDurabilityResumeBlockingProvider(workflowName string) *javascriptDurabilityResumeBlockingProvider {
-	return &javascriptDurabilityResumeBlockingProvider{workflowName: workflowName}
+	return &javascriptDurabilityResumeBlockingProvider{
+		inferBlocked: make(chan struct{}),
+		workflowName: workflowName,
+	}
+}
+
+func (p *javascriptDurabilityResumeBlockingProvider) waitForInferBlocked(t *testing.T, timeout time.Duration) {
+	t.Helper()
+
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-p.inferBlocked:
+	case <-timer.C:
+		t.Fatal("provider Infer did not enter its cancellable wait")
+	}
 }
 
 func (p *javascriptDurabilityResumeBlockingProvider) callCount() int {
@@ -687,6 +704,7 @@ func (p *javascriptDurabilityResumeBlockingProvider) Infer(
 	if !alreadyBlocked {
 		p.mu.Lock()
 		p.blockedOnce = true
+		close(p.inferBlocked)
 		p.mu.Unlock()
 
 		<-ctx.Done()

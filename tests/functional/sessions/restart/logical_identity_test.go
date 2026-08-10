@@ -433,6 +433,7 @@ func startInterruptedResumableSession(
 	)
 
 	reason := "logical identity resume interrupt"
+	provider.waitForInferBlocked(t, 5*time.Second)
 	postLogicalIdentityJSON[factoryapi.FactorySessionLifecycleControlResponse](
 		t,
 		baseURL+"/factory-sessions/"+sessionID+"/interrupt-dispatch",
@@ -728,11 +729,27 @@ type logicalIdentityResumeBlockingProvider struct {
 	calls           int
 	blockedOnce     bool
 	contextCanceled int
+	inferBlocked    chan struct{}
 	workflowName    string
 }
 
 func newLogicalIdentityResumeBlockingProvider(workflowName string) *logicalIdentityResumeBlockingProvider {
-	return &logicalIdentityResumeBlockingProvider{workflowName: workflowName}
+	return &logicalIdentityResumeBlockingProvider{
+		inferBlocked: make(chan struct{}),
+		workflowName: workflowName,
+	}
+}
+
+func (p *logicalIdentityResumeBlockingProvider) waitForInferBlocked(t *testing.T, timeout time.Duration) {
+	t.Helper()
+
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-p.inferBlocked:
+	case <-timer.C:
+		t.Fatal("provider Infer did not enter its cancellable wait")
+	}
 }
 
 func (p *logicalIdentityResumeBlockingProvider) callCount() int {
@@ -765,6 +782,7 @@ func (p *logicalIdentityResumeBlockingProvider) Infer(
 	if !alreadyBlocked {
 		p.mu.Lock()
 		p.blockedOnce = true
+		close(p.inferBlocked)
 		p.mu.Unlock()
 
 		<-ctx.Done()
