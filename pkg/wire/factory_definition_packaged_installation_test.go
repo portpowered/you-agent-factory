@@ -20,6 +20,10 @@ func (packagedInstallationFileSystemStub) Stat(string) (fs.FileInfo, error) {
 	return nil, fs.ErrNotExist
 }
 
+func (packagedInstallationFileSystemStub) ReadDir(string) ([]fs.DirEntry, error) {
+	return nil, fs.ErrNotExist
+}
+
 func TestProvideNamedFactoryCandidatePathsResolverForwardsOwnerOperation(t *testing.T) {
 	paths, err := factorydefinitionswire.NewPathResolver(platformfilesystem.Local{})
 	if err != nil {
@@ -41,6 +45,16 @@ func TestProvideNamedFactoryCandidatePathsResolverForwardsOwnerOperation(t *test
 func (packagedInstallationFileSystemStub) ReadFile(string) ([]byte, error) {
 	return nil, fs.ErrNotExist
 }
+
+func (packagedInstallationFileSystemStub) Mkdir(string, fs.FileMode) error { return nil }
+
+func (packagedInstallationFileSystemStub) MkdirAll(string, fs.FileMode) error { return nil }
+
+func (packagedInstallationFileSystemStub) RemoveAll(string) error { return nil }
+
+func (packagedInstallationFileSystemStub) WriteFile(string, []byte, fs.FileMode) error { return nil }
+
+func (packagedInstallationFileSystemStub) Rename(string, string) error { return nil }
 
 type factoryDefinitionClockStub struct{}
 

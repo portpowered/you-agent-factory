@@ -135,11 +135,13 @@ func TestProvideSystemInitializationServiceComposedInitializeCreatesThenSkipsPac
 	service, err := provideSystemInitializationService(
 		bootstrapCompositionTestPersistence(t),
 		platformfilesystem.Local{},
+		provideFactoryDefinitionPackagedInstallationDirectoryCreator(edges),
 		bootstrapCompositionGoalCatalog(t),
 		loadOperatorConfig,
 		ensureOperatorBackendScope,
 		provideSystemInitializationInspectPath(edges),
 		provideSystemInitializationLegacyFactoryMigrationFileSystem(edges),
+		logging.NoopLogger{},
 	)
 	if err != nil {
 		t.Fatalf("provideSystemInitializationService() error = %v", err)
