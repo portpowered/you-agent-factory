@@ -171,7 +171,7 @@ Return structured JSON.
 	})
 	defer server.Stop(t)
 
-	payloadPath := filepath.Join(t.TempDir(), "request.md")
+	payloadPath := filepath.Join(t.TempDir(), "request.txt")
 	if err := os.WriteFile(payloadPath, []byte("execute live submit"), 0o600); err != nil {
 		t.Fatalf("write unary payload: %v", err)
 	}

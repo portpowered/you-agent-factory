@@ -1505,3 +1505,15 @@
 - **Learnings for future iterations:**
   - Functional coverage floors include policy helper branches, so keep exported policy decisions on the production path that consumes them and pair file-ingress helpers with observable JSON and Markdown CLI cases.
 ---
+## 2026-08-10 08:47 -0700 - pf-cli-exit-codes functional payload fallback coverage
+- What was implemented
+  - Reused the existing live unary submit functional scenario with a `.txt` payload fixture, covering the customer-visible generic file classification while retaining the `.md` and `.json` cases.
+- Files changed
+  - `tests/functional/transport/submit/submit_test.go`
+  - `progress.txt`
+- Verification
+  - `go test -short ./tests/functional/transport/submit -run '^TestSubmitFamily' -count=1 -timeout 240s -v` — passed.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - Payload classification coverage is most stable when the same live submit contract exercises Markdown, JSON, and generic file extensions through the public request path.
+---
