@@ -3,7 +3,6 @@ package factorysessions
 import (
 	"errors"
 	"fmt"
-	"io"
 )
 
 // ProviderIdentityResolver resolves one authored provider selection through
@@ -26,34 +25,19 @@ type StdioOpeningRequest struct {
 	RuntimeBacked      bool
 	ProjectRoot        string
 	SystemConfigHome   string
-}
-
-// StdioOpeningPresentation carries the protocol-owned streams for one stdio
-// opening. The Factory Sessions operation consumes these streams only while
-// adapting the already-selected execution into a lifecycle-ready application.
-type StdioOpeningPresentation struct {
-	Input  io.Reader
-	Output io.Writer
+	ScopeID            OpeningScopeID
 }
 
 // DirectJavaScriptRunRequest carries customer-edge values for one raw
 // JavaScript workflow invocation. Source resolution and execution policy stay
-// behind DirectJavaScriptRunOperation. Output and hosting callbacks are kept
-// on DirectJavaScriptRunPresentation so this request remains value-only.
+// behind DirectJavaScriptRunOperation. Protocol output and host observation are
+// owner-private state selected by ScopeID.
 type DirectJavaScriptRunRequest struct {
 	SourcePath         string
 	MockWorkersEnabled bool
 	JSONOutput         bool
-}
-
-// DirectJavaScriptRunPresentation carries transport-owned output and optional
-// HTTP-host readiness for one raw workflow invocation. It is deliberately
-// separate from DirectJavaScriptRunRequest: a durable request cannot retain an
-// io.Writer, listener selection, or callback supplied by a caller.
-type DirectJavaScriptRunPresentation struct {
-	Output              io.Writer
-	Host                *RuntimeHostRequest
-	RuntimeHostObserver RuntimeHostObserver
+	Host               *RuntimeHostRequest
+	ScopeID            OpeningScopeID
 }
 
 // --- merged from opening_contract.go ---

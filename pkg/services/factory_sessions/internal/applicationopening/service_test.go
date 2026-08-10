@@ -16,37 +16,65 @@ import (
 type runtimeOpenerFunc func(
 	context.Context,
 	*factorysessions.RuntimeOpeningRequest,
-	factorysessions.RuntimeHostObserver,
 ) (roles.OpenedApplicationRuntime, error)
 
 func (open runtimeOpenerFunc) OpenApplicationRuntime(
 	ctx context.Context,
 	request *factorysessions.RuntimeOpeningRequest,
-	observer factorysessions.RuntimeHostObserver,
 ) (roles.OpenedApplicationRuntime, error) {
-	return open(ctx, request, observer)
+	return open(ctx, request)
 }
 
-func TestNewRequiresEveryInjectedOperation(t *testing.T) {
-	t.Parallel()
+type applicationOpeningOwnerStub struct {
+	scope factorysessions.ApplicationOpeningScope
+	id    factorysessions.OpeningScopeID
+}
 
-	resolve := RuntimeInputResolver(func(
-		context.Context,
-		*factorysessions.RuntimeOpeningRequest,
-	) (RuntimeInputs, error) {
+type markerSink struct{}
+
+func (markerSink) PresentFactoryView(factoryvisualization.View) {}
+
+func (owner *applicationOpeningOwnerStub) RegisterApplication(scope factorysessions.ApplicationOpeningScope) (factorysessions.OpeningScopeID, error) {
+	owner.scope, owner.id = scope, "application-test"
+	return owner.id, nil
+}
+
+func (owner *applicationOpeningOwnerStub) Application(id factorysessions.OpeningScopeID) (factorysessions.ApplicationOpeningScope, bool) {
+	return owner.scope, id == owner.id
+}
+
+func (*applicationOpeningOwnerStub) RegisterDirectJavaScript(factorysessions.DirectJavaScriptRunScope) (factorysessions.OpeningScopeID, error) {
+	return "", errors.New("not used")
+}
+
+func (*applicationOpeningOwnerStub) DirectJavaScript(factorysessions.OpeningScopeID) (factorysessions.DirectJavaScriptRunScope, bool) {
+	return factorysessions.DirectJavaScriptRunScope{}, false
+}
+
+func (*applicationOpeningOwnerStub) RegisterStdio(factorysessions.StdioOpeningScope) (factorysessions.OpeningScopeID, error) {
+	return "", errors.New("not used")
+}
+
+func (*applicationOpeningOwnerStub) Stdio(factorysessions.OpeningScopeID) (factorysessions.StdioOpeningScope, bool) {
+	return factorysessions.StdioOpeningScope{}, false
+}
+
+func (owner *applicationOpeningOwnerStub) ObserveHost(id factorysessions.OpeningScopeID, binding factorysessions.RuntimeHostBinding) {
+	if id == owner.id && owner.scope.RuntimeHostObserver != nil {
+		owner.scope.RuntimeHostObserver(binding)
+	}
+}
+
+func (*applicationOpeningOwnerStub) Close(factorysessions.OpeningScopeID) {}
+
+func TestNewRequiresEveryInjectedOperation(t *testing.T) {
+	resolve := RuntimeInputResolver(func(context.Context, *factorysessions.RuntimeOpeningRequest) (RuntimeInputs, error) {
 		return RuntimeInputs{}, nil
 	})
-	open := runtimeOpenerFunc(func(
-		context.Context,
-		*factorysessions.RuntimeOpeningRequest,
-		factorysessions.RuntimeHostObserver,
-	) (roles.OpenedApplicationRuntime, error) {
+	open := runtimeOpenerFunc(func(context.Context, *factorysessions.RuntimeOpeningRequest) (roles.OpenedApplicationRuntime, error) {
 		return roles.OpenedApplicationRuntime{}, nil
 	})
-	adapt := RuntimeAdapter(func(
-		roles.OpenedApplicationRuntime,
-		factoryvisualization.Sink,
-	) (factorysessions.BoundProcessComponents, error) {
+	adapt := RuntimeAdapter(func(roles.OpenedApplicationRuntime, factoryvisualization.Sink) (factorysessions.BoundProcessComponents, error) {
 		return factorysessions.BoundProcessComponents{}, nil
 	})
 	plan := roles.LifecyclePlanOperation(func(roles.LifecyclePlanRequest) (lifecycle.Plan, error) {
@@ -60,7 +88,6 @@ func TestNewRequiresEveryInjectedOperation(t *testing.T) {
 		"lifecycle": func() error { _, err := New(resolve, open, adapt, nil); return err },
 	} {
 		t.Run(name, func(t *testing.T) {
-			t.Parallel()
 			if err := construct(); err == nil {
 				t.Fatalf("New() error = nil, want missing %s operation", name)
 			}
@@ -68,513 +95,189 @@ func TestNewRequiresEveryInjectedOperation(t *testing.T) {
 	}
 }
 
-// pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
-func TestOpenApplicationResolvesThenOpensAndBindsExactInputs(t *testing.T) {
-	t.Parallel()
-
+func TestOpenApplicationUsesOwnerScopeAndValueOnlyRuntimeRequest(t *testing.T) {
 	request := &factorysessions.RuntimeOpeningRequest{}
 	resolvedRequest := &factorysessions.RuntimeOpeningRequest{}
-	observer := factorysessions.RuntimeHostObserver(func(factorysessions.RuntimeHostBinding) {})
-	presentation := roles.ApplicationOpeningPresentation{RuntimeHostObserver: observer}
 	var order []string
+	var boundSink factoryvisualization.Sink
+	var completionCalls atomic.Int32
+	sink := &markerSink{}
+	owner := &applicationOpeningOwnerStub{}
+	scopeID, err := owner.RegisterApplication(factorysessions.ApplicationOpeningScope{
+		VisualizationSink: sink,
+		Completion: func(context.Context) error {
+			completionCalls.Add(1)
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("RegisterApplication: %v", err)
+	}
 	service, err := New(
-		func(
-			ctx context.Context,
-			gotRequest *factorysessions.RuntimeOpeningRequest,
-		) (RuntimeInputs, error) {
+		func(ctx context.Context, gotRequest *factorysessions.RuntimeOpeningRequest) (RuntimeInputs, error) {
 			order = append(order, "resolve")
 			if ctx == nil || gotRequest != request {
 				t.Fatal("resolver received different invocation inputs")
 			}
 			return RuntimeInputs{Request: resolvedRequest}, nil
 		},
-		runtimeOpenerFunc(func(
-			_ context.Context,
-			gotRequest *factorysessions.RuntimeOpeningRequest,
-			gotObserver factorysessions.RuntimeHostObserver,
-		) (roles.OpenedApplicationRuntime, error) {
+		runtimeOpenerFunc(func(_ context.Context, gotRequest *factorysessions.RuntimeOpeningRequest) (roles.OpenedApplicationRuntime, error) {
 			order = append(order, "open")
-			if gotRequest != resolvedRequest {
-				t.Fatal("runtime opener did not receive resolved inputs")
-			}
-			if gotObserver == nil {
-				t.Fatal("runtime opener did not receive invocation observer")
+			if gotRequest != resolvedRequest || gotRequest.ScopeID != scopeID {
+				t.Fatalf("runtime opener request = %#v, want resolved request with scope %q", gotRequest, scopeID)
 			}
 			return roles.OpenedApplicationRuntime{}, nil
 		}),
-		func(
-			roles.OpenedApplicationRuntime,
-			factoryvisualization.Sink,
-		) (factorysessions.BoundProcessComponents, error) {
+		func(_ roles.OpenedApplicationRuntime, gotSink factoryvisualization.Sink) (factorysessions.BoundProcessComponents, error) {
 			order = append(order, "bind")
+			boundSink = gotSink
 			return factorysessions.BoundProcessComponents{}, nil
 		},
 		func(got roles.LifecyclePlanRequest) (lifecycle.Plan, error) {
 			order = append(order, "plan")
-			return lifecycle.Plan{Resources: []lifecycle.NamedResource{{Name: "factory runtime"}}}, nil
-		},
+			if got.Completion == nil {
+				t.Fatal("lifecycle plan did not receive owner completion")
+			}
+			return lifecycle.Plan{}, nil
+		}, owner,
 	)
 	if err != nil {
 		t.Fatalf("New(): %v", err)
 	}
-
-	opened, err := service.OpenApplication(
-		context.Background(),
-		roles.ApplicationOpeningRequest{Runtime: request},
-		presentation,
-		nil,
-	)
+	opened, err := service.OpenApplication(context.Background(), roles.ApplicationOpeningRequest{
+		Runtime: request, ScopeID: scopeID,
+	})
 	if err != nil {
 		t.Fatalf("OpenApplication(): %v", err)
 	}
-	if len(opened.Plan.Resources) != 1 || opened.Plan.Resources[0].Name != "factory runtime" {
-		t.Fatalf("opened plan resources = %#v", opened.Plan.Resources)
+	if opened.Plan.Components != nil && len(opened.Plan.Components) != 0 {
+		t.Fatalf("opened plan components = %#v", opened.Plan.Components)
 	}
-	if len(order) != 4 || order[0] != "resolve" || order[1] != "open" || order[2] != "bind" || order[3] != "plan" {
-		t.Fatalf("operation order = %v, want [resolve open bind plan]", order)
+	if boundSink != sink || len(order) != 4 || strings.Join(order, ",") != "resolve,open,bind,plan" {
+		t.Fatalf("order/sink = %v/%v", order, boundSink == sink)
+	}
+	if resolvedRequest.ScopeID != scopeID {
+		t.Fatalf("resolved request scope = %q, want %q", resolvedRequest.ScopeID, scopeID)
 	}
 }
 
-func TestOpenApplicationPassesVisualizationSinkToAdapter(t *testing.T) {
-
-	t.Parallel()
-
-	type markerSink struct{ factoryvisualization.Sink }
-	sink := &markerSink{Sink: factoryvisualization.SinkFunc(func(factoryvisualization.View) {})}
-	var boundSink factoryvisualization.Sink
+func TestOpenApplicationRejectsMissingOwnerScope(t *testing.T) {
 	service, err := New(
-		func(
-			context.Context,
-			*factorysessions.RuntimeOpeningRequest,
-		) (RuntimeInputs, error) {
-			return RuntimeInputs{
-				Request: &factorysessions.RuntimeOpeningRequest{},
-			}, nil
+		func(context.Context, *factorysessions.RuntimeOpeningRequest) (RuntimeInputs, error) {
+			return RuntimeInputs{Request: &factorysessions.RuntimeOpeningRequest{}}, nil
 		},
-		runtimeOpenerFunc(func(
-			context.Context,
-			*factorysessions.RuntimeOpeningRequest,
-			factorysessions.RuntimeHostObserver,
-		) (roles.OpenedApplicationRuntime, error) {
+		runtimeOpenerFunc(func(context.Context, *factorysessions.RuntimeOpeningRequest) (roles.OpenedApplicationRuntime, error) {
 			return roles.OpenedApplicationRuntime{}, nil
 		}),
-		func(
-			_ roles.OpenedApplicationRuntime,
-			sink factoryvisualization.Sink,
-		) (factorysessions.BoundProcessComponents, error) {
-			boundSink = sink
+		func(roles.OpenedApplicationRuntime, factoryvisualization.Sink) (factorysessions.BoundProcessComponents, error) {
 			return factorysessions.BoundProcessComponents{}, nil
-		},
-		func(roles.LifecyclePlanRequest) (lifecycle.Plan, error) {
-			return lifecycle.Plan{}, nil
-		},
-	)
-	if err != nil {
-		t.Fatalf("New(): %v", err)
-	}
-
-	if _, err := service.OpenApplication(
-		context.Background(),
-		roles.ApplicationOpeningRequest{Runtime: &factorysessions.RuntimeOpeningRequest{}},
-		roles.ApplicationOpeningPresentation{},
-		sink,
-	); err != nil {
-		t.Fatalf("OpenApplication(): %v", err)
-	}
-	if boundSink != sink {
-		t.Fatal("adapter did not receive visualization sink")
-	}
-}
-
-func TestCompletionWaitsForRuntimeHostReadinessAndPublishesOnce(t *testing.T) {
-	var observerCalls, completionCalls atomic.Int32
-	ports, completion := gateCompletionOnRuntimeHost(
-		roles.ApplicationOpeningPresentation{
-			RuntimeHostObserver: func(factorysessions.RuntimeHostBinding) {
-				observerCalls.Add(1)
-			},
-		},
-		func(context.Context) error {
-			completionCalls.Add(1)
-			return nil
-		},
-	)
-	if ports.RuntimeHostObserver == nil || completion == nil {
-		t.Fatal("readiness gate omitted observer or completion")
-	}
-	result := make(chan error, 1)
-	go func() { result <- completion(t.Context()) }()
-	if completionCalls.Load() != 0 {
-		t.Fatal("completion ran before runtime host readiness")
-	}
-	ports.RuntimeHostObserver(factorysessions.RuntimeHostBinding{Port: 7437})
-	ports.RuntimeHostObserver(factorysessions.RuntimeHostBinding{Port: 7438})
-	if err := <-result; err != nil {
-		t.Fatalf("completion: %v", err)
-	}
-	if completionCalls.Load() != 1 || observerCalls.Load() != 1 {
-		t.Fatalf(
-			"calls = completion:%d observer:%d, want one each",
-			completionCalls.Load(),
-			observerCalls.Load(),
-		)
-	}
-}
-
-func TestOpenApplicationClosesOpenedResourcesWhenBindingFails(t *testing.T) {
-	t.Parallel()
-
-	bindErr := errors.New("bind failed")
-	closeErr := errors.New("close failed")
-	closed := 0
-	service, err := New(
-		func(
-			context.Context,
-			*factorysessions.RuntimeOpeningRequest,
-		) (RuntimeInputs, error) {
-			return RuntimeInputs{Request: &factorysessions.RuntimeOpeningRequest{}}, nil
-		},
-		runtimeOpenerFunc(func(
-			context.Context,
-			*factorysessions.RuntimeOpeningRequest,
-			factorysessions.RuntimeHostObserver,
-		) (roles.OpenedApplicationRuntime, error) {
-			return roles.OpenedApplicationRuntime{Resources: roles.RuntimeResources{Close: func() error {
-				closed++
-				return closeErr
-			}}}, nil
-		}),
-		func(
-			roles.OpenedApplicationRuntime,
-			factoryvisualization.Sink,
-		) (factorysessions.BoundProcessComponents, error) {
-			return factorysessions.BoundProcessComponents{}, bindErr
 		},
 		func(roles.LifecyclePlanRequest) (lifecycle.Plan, error) { return lifecycle.Plan{}, nil },
+		&applicationOpeningOwnerStub{},
 	)
 	if err != nil {
 		t.Fatalf("New(): %v", err)
 	}
-
-	_, err = service.OpenApplication(
-		context.Background(),
-		roles.ApplicationOpeningRequest{Runtime: &factorysessions.RuntimeOpeningRequest{}},
-		roles.ApplicationOpeningPresentation{},
-		nil,
-	)
-	if !errors.Is(err, bindErr) || !errors.Is(err, closeErr) {
-		t.Fatalf("OpenApplication() error = %v, want binding and cleanup causes", err)
-	}
-	if closed != 1 {
-		t.Fatalf("resource close count = %d, want 1", closed)
+	_, err = service.OpenApplication(context.Background(), roles.ApplicationOpeningRequest{
+		Runtime: &factorysessions.RuntimeOpeningRequest{}, ScopeID: "missing",
+	})
+	if err == nil || !strings.Contains(err.Error(), "presentation scope") {
+		t.Fatalf("OpenApplication() error = %v, want missing owner scope", err)
 	}
 }
 
-func TestOpenApplicationClosesOpenedResourcesExactlyOnceWhenLifecyclePlanningFails(t *testing.T) {
-	t.Parallel()
-
-	planErr := errors.New("plan failed")
-	closeErr := errors.New("close failed")
-	closed := 0
-	service, err := New(
-		func(
-			context.Context,
-			*factorysessions.RuntimeOpeningRequest,
-		) (RuntimeInputs, error) {
-			return RuntimeInputs{Request: &factorysessions.RuntimeOpeningRequest{}}, nil
-		},
-		runtimeOpenerFunc(func(
-			context.Context,
-			*factorysessions.RuntimeOpeningRequest,
-			factorysessions.RuntimeHostObserver,
-		) (roles.OpenedApplicationRuntime, error) {
-			return roles.OpenedApplicationRuntime{Resources: roles.RuntimeResources{Close: func() error {
-				closed++
-				return closeErr
-			}}}, nil
-		}),
-		func(
-			roles.OpenedApplicationRuntime,
-			factoryvisualization.Sink,
-		) (factorysessions.BoundProcessComponents, error) {
-			return factorysessions.BoundProcessComponents{}, nil
-		},
-		func(roles.LifecyclePlanRequest) (lifecycle.Plan, error) {
-			return lifecycle.Plan{}, planErr
-		},
-	)
-	if err != nil {
-		t.Fatalf("New(): %v", err)
-	}
-
-	_, err = service.OpenApplication(
-		context.Background(),
-		roles.ApplicationOpeningRequest{Runtime: &factorysessions.RuntimeOpeningRequest{}},
-		roles.ApplicationOpeningPresentation{},
-		nil,
-	)
-	if !errors.Is(err, planErr) || !errors.Is(err, closeErr) {
-		t.Fatalf("OpenApplication() error = %v, want planning and cleanup causes", err)
-	}
-	if closed != 1 {
-		t.Fatalf("resource close count = %d, want 1", closed)
-	}
-}
-
-func TestOpenApplicationStopsAtResolveAndOpenFailures(t *testing.T) {
-	t.Parallel()
-
-	resolveErr := errors.New("resolve failed")
-	openErr := errors.New("open failed")
-	tests := []struct {
-		name        string
-		resolveErr  error
-		openErr     error
-		wantContext string
-		wantOpens   int
+func TestOpenApplicationClosesOpenedResourcesOnBindingOrPlanningFailure(t *testing.T) {
+	for _, testCase := range []struct {
+		name      string
+		bindError bool
 	}{
-		{name: "resolve", resolveErr: resolveErr, wantContext: "open Factory Session application", wantOpens: 0},
-		{name: "open", openErr: openErr, wantContext: "open Factory Session application runtime", wantOpens: 1},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			opened, adapted := 0, 0
+		{name: "binding", bindError: true},
+		{name: "planning"},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			bindErr := errors.New("bind failed")
+			planErr := errors.New("plan failed")
+			closeErr := errors.New("close failed")
+			closed := 0
 			service, err := New(
-				func(
-					context.Context,
-					*factorysessions.RuntimeOpeningRequest,
-				) (RuntimeInputs, error) {
-					if test.resolveErr != nil {
-						return RuntimeInputs{}, test.resolveErr
-					}
+				func(context.Context, *factorysessions.RuntimeOpeningRequest) (RuntimeInputs, error) {
 					return RuntimeInputs{Request: &factorysessions.RuntimeOpeningRequest{}}, nil
 				},
-				runtimeOpenerFunc(func(
-					context.Context,
-					*factorysessions.RuntimeOpeningRequest,
-					factorysessions.RuntimeHostObserver,
-				) (roles.OpenedApplicationRuntime, error) {
-					opened++
-					return roles.OpenedApplicationRuntime{}, test.openErr
+				runtimeOpenerFunc(func(context.Context, *factorysessions.RuntimeOpeningRequest) (roles.OpenedApplicationRuntime, error) {
+					return roles.OpenedApplicationRuntime{Resources: roles.RuntimeResources{Close: func() error {
+						closed++
+						return closeErr
+					}}}, nil
 				}),
-				func(
-					roles.OpenedApplicationRuntime,
-					factoryvisualization.Sink,
-				) (factorysessions.BoundProcessComponents, error) {
-					adapted++
+				func(roles.OpenedApplicationRuntime, factoryvisualization.Sink) (factorysessions.BoundProcessComponents, error) {
+					if testCase.bindError {
+						return factorysessions.BoundProcessComponents{}, bindErr
+					}
 					return factorysessions.BoundProcessComponents{}, nil
 				},
-				func(roles.LifecyclePlanRequest) (lifecycle.Plan, error) { return lifecycle.Plan{}, nil },
+				func(roles.LifecyclePlanRequest) (lifecycle.Plan, error) {
+					if testCase.bindError {
+						return lifecycle.Plan{}, nil
+					}
+					return lifecycle.Plan{}, planErr
+				},
 			)
 			if err != nil {
 				t.Fatalf("New(): %v", err)
 			}
-
-			_, err = service.OpenApplication(
-				context.Background(),
-				roles.ApplicationOpeningRequest{Runtime: &factorysessions.RuntimeOpeningRequest{}},
-				roles.ApplicationOpeningPresentation{},
-				nil,
-			)
-			wantErr := test.resolveErr
-			if wantErr == nil {
-				wantErr = test.openErr
+			_, err = service.OpenApplication(context.Background(), roles.ApplicationOpeningRequest{
+				Runtime: &factorysessions.RuntimeOpeningRequest{},
+			})
+			want := planErr
+			if testCase.bindError {
+				want = bindErr
 			}
-			if !errors.Is(err, wantErr) || !strings.Contains(err.Error(), test.wantContext) {
-				t.Fatalf("OpenApplication() error = %v, want %q wrapping %v", err, test.wantContext, wantErr)
-			}
-			if opened != test.wantOpens || adapted != 0 {
-				t.Fatalf("downstream calls = open %d adapt %d, want %d and 0", opened, adapted, test.wantOpens)
+			if !errors.Is(err, want) || !errors.Is(err, closeErr) || closed != 1 {
+				t.Fatalf("OpenApplication() error = %v, closed = %d", err, closed)
 			}
 		})
 	}
 }
 
-func TestOpenApplicationInvokesRuntimeHTTPServicesBound(t *testing.T) {
-	t.Parallel()
-
-	var bound bool
-	service, err := New(
-		func(
-			context.Context,
-			*factorysessions.RuntimeOpeningRequest,
-		) (RuntimeInputs, error) {
-			return RuntimeInputs{Request: &factorysessions.RuntimeOpeningRequest{}}, nil
-		},
-		runtimeOpenerFunc(func(
-			context.Context,
-			*factorysessions.RuntimeOpeningRequest,
-			factorysessions.RuntimeHostObserver,
-		) (roles.OpenedApplicationRuntime, error) {
-			return roles.OpenedApplicationRuntime{
-				HTTP: roles.RuntimeHTTPServices{},
-			}, nil
-		}),
-		func(
-			roles.OpenedApplicationRuntime,
-			factoryvisualization.Sink,
-		) (factorysessions.BoundProcessComponents, error) {
-			return factorysessions.BoundProcessComponents{}, nil
-		},
-		func(roles.LifecyclePlanRequest) (lifecycle.Plan, error) {
-			return lifecycle.Plan{}, nil
-		},
-	)
-	if err != nil {
-		t.Fatalf("New(): %v", err)
-	}
-
-	presentation := roles.ApplicationOpeningPresentation{
-		RuntimeHTTPServicesBound: func(roles.RuntimeHTTPServices) {
-			bound = true
-		},
-	}
-	_, err = service.OpenApplication(
-		context.Background(),
-		roles.ApplicationOpeningRequest{Runtime: &factorysessions.RuntimeOpeningRequest{}},
-		presentation,
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("OpenApplication(): %v", err)
-	}
-	if !bound {
-		t.Fatal("RuntimeHTTPServicesBound was not invoked")
-	}
-}
-
-func TestOpenApplicationPublishesHistoricalReplayInspectionWithoutLiveBindings(t *testing.T) {
-	t.Parallel()
-
+func TestOpenApplicationPublishesHistoricalReplayThroughOwner(t *testing.T) {
 	inspection := factorysessions.HistoricalReplayInspection{
 		Session: factorysessions.SessionReadResult{SessionID: "recorded-session"},
-		Redaction: factorysessions.HistoricalReplayRedaction{
-			RuntimeStateOmitted: true,
-			SecretsRedacted:     2,
-		},
 	}
 	var published factorysessions.HistoricalReplayInspection
-	var bound, adapted bool
+	owner := &applicationOpeningOwnerStub{}
+	scopeID, err := owner.RegisterApplication(factorysessions.ApplicationOpeningScope{
+		HistoricalReplayBound: func(got factorysessions.HistoricalReplayInspection) { published = got },
+	})
+	if err != nil {
+		t.Fatalf("RegisterApplication: %v", err)
+	}
 	service, err := New(
-		func(
-			context.Context,
-			*factorysessions.RuntimeOpeningRequest,
-		) (RuntimeInputs, error) {
+		func(context.Context, *factorysessions.RuntimeOpeningRequest) (RuntimeInputs, error) {
 			return RuntimeInputs{Request: &factorysessions.RuntimeOpeningRequest{}}, nil
 		},
-		runtimeOpenerFunc(func(
-			context.Context,
-			*factorysessions.RuntimeOpeningRequest,
-			factorysessions.RuntimeHostObserver,
-		) (roles.OpenedApplicationRuntime, error) {
+		runtimeOpenerFunc(func(context.Context, *factorysessions.RuntimeOpeningRequest) (roles.OpenedApplicationRuntime, error) {
 			return roles.OpenedApplicationRuntime{HistoricalReplay: &inspection}, nil
 		}),
-		func(
-			roles.OpenedApplicationRuntime,
-			factoryvisualization.Sink,
-		) (factorysessions.BoundProcessComponents, error) {
-			adapted = true
+		func(roles.OpenedApplicationRuntime, factoryvisualization.Sink) (factorysessions.BoundProcessComponents, error) {
+			t.Fatal("historical replay unexpectedly bound live runtime")
 			return factorysessions.BoundProcessComponents{}, nil
 		},
 		func(request roles.LifecyclePlanRequest) (lifecycle.Plan, error) {
 			if request.Components.Transport == nil {
-				t.Fatal("historical replay lifecycle is missing its no-op transport")
+				t.Fatal("historical replay lifecycle is missing no-op transport")
 			}
 			return lifecycle.Plan{}, nil
-		},
+		}, owner,
 	)
 	if err != nil {
 		t.Fatalf("New(): %v", err)
 	}
-
-	_, err = service.OpenApplication(
-		context.Background(),
-		roles.ApplicationOpeningRequest{
-			Runtime: &factorysessions.RuntimeOpeningRequest{},
-		},
-		roles.ApplicationOpeningPresentation{
-			HistoricalReplayBound: func(got factorysessions.HistoricalReplayInspection) {
-				bound = true
-				published = got
-			},
-		},
-		nil,
-	)
-	if err != nil {
+	if _, err := service.OpenApplication(context.Background(), roles.ApplicationOpeningRequest{
+		Runtime: &factorysessions.RuntimeOpeningRequest{}, ScopeID: scopeID,
+	}); err != nil {
 		t.Fatalf("OpenApplication(): %v", err)
 	}
-	if !bound {
-		t.Fatal("HistoricalReplayBound was not invoked")
-	}
-	if published.Session.SessionID != "recorded-session" ||
-		!published.Redaction.RuntimeStateOmitted || published.Redaction.SecretsRedacted != 2 {
-		t.Fatalf("published historical replay = %#v, want recorded inspection facts", published)
-	}
-	if adapted {
-		t.Fatal("historical replay unexpectedly bound live runtime components")
-	}
-}
-
-func TestOpenApplicationClosesHistoricalReplayResourcesWhenLifecyclePlanningFails(t *testing.T) {
-	t.Parallel()
-
-	planErr := errors.New("plan historical replay failed")
-	closeErr := errors.New("close historical replay failed")
-	inspection := factorysessions.HistoricalReplayInspection{
-		Session: factorysessions.SessionReadResult{SessionID: "recorded-session"},
-	}
-	closed := 0
-	adapted := false
-	service, err := New(
-		func(
-			context.Context,
-			*factorysessions.RuntimeOpeningRequest,
-		) (RuntimeInputs, error) {
-			return RuntimeInputs{Request: &factorysessions.RuntimeOpeningRequest{}}, nil
-		},
-		runtimeOpenerFunc(func(
-			context.Context,
-			*factorysessions.RuntimeOpeningRequest,
-			factorysessions.RuntimeHostObserver,
-		) (roles.OpenedApplicationRuntime, error) {
-			return roles.OpenedApplicationRuntime{
-				HistoricalReplay: &inspection,
-				Resources: roles.RuntimeResources{Close: func() error {
-					closed++
-					return closeErr
-				}},
-			}, nil
-		}),
-		func(
-			roles.OpenedApplicationRuntime,
-			factoryvisualization.Sink,
-		) (factorysessions.BoundProcessComponents, error) {
-			adapted = true
-			return factorysessions.BoundProcessComponents{}, nil
-		},
-		func(roles.LifecyclePlanRequest) (lifecycle.Plan, error) {
-			return lifecycle.Plan{}, planErr
-		},
-	)
-	if err != nil {
-		t.Fatalf("New(): %v", err)
-	}
-
-	_, err = service.OpenApplication(
-		context.Background(),
-		roles.ApplicationOpeningRequest{Runtime: &factorysessions.RuntimeOpeningRequest{}},
-		roles.ApplicationOpeningPresentation{},
-		nil,
-	)
-	if !errors.Is(err, planErr) || !errors.Is(err, closeErr) ||
-		!strings.Contains(err.Error(), "plan Factory Session historical replay lifecycle") {
-		t.Fatalf("OpenApplication() error = %v, want historical planning and cleanup causes", err)
-	}
-	if closed != 1 {
-		t.Fatalf("resource close count = %d, want 1", closed)
-	}
-	if adapted {
-		t.Fatal("historical replay unexpectedly bound live runtime components")
+	if published.Session.SessionID != "recorded-session" {
+		t.Fatalf("published inspection = %#v", published)
 	}
 }

@@ -3,6 +3,7 @@ package wire
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"os"
@@ -799,32 +800,74 @@ func stdioLifecycleOpening(
 }
 
 type stdioApplicationOpener struct {
-	open factorysessionwire.StdioOpeningOperation
+	open          factorysessionwire.StdioOpeningOperation
+	presentations factorysessions.OpeningPresentationOwner
 }
 
 func (adapter stdioApplicationOpener) OpenStdio(
 	ctx context.Context,
 	intent processcontract.MCPIntent,
 ) (initializer.RunApplication, error) {
-	return adapter.open.OpenStdio(
+	request := factorysessions.StdioOpeningRequest{
+		FixtureCatalogPath: intent.FixtureCatalogPath,
+		RuntimeBacked:      intent.RuntimeBacked,
+		ProjectRoot:        intent.ProjectRoot,
+		SystemConfigHome:   intent.HomeDir,
+	}
+	var scopeID factorysessions.OpeningScopeID
+	var err error
+	if adapter.presentations != nil {
+		scopeID, err = adapter.presentations.RegisterStdio(factorysessions.StdioOpeningScope{
+			Input: intent.Stdin, Output: intent.Stdout,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("register stdio opening presentation: %w", err)
+		}
+		request.ScopeID = scopeID
+	}
+	application, err := adapter.open.OpenStdio(
 		ctx,
-		factorysessions.StdioOpeningRequest{
-			FixtureCatalogPath: intent.FixtureCatalogPath,
-			RuntimeBacked:      intent.RuntimeBacked,
-			ProjectRoot:        intent.ProjectRoot,
-			SystemConfigHome:   intent.HomeDir,
-		},
-		factorysessions.StdioOpeningPresentation{Input: intent.Stdin, Output: intent.Stdout},
+		request,
 	)
+	if err != nil {
+		if adapter.presentations != nil {
+			adapter.presentations.Close(scopeID)
+		}
+		return nil, err
+	}
+	if application == nil {
+		if adapter.presentations != nil {
+			adapter.presentations.Close(scopeID)
+		}
+		return nil, errors.New("stdio opening returned nil application")
+	}
+	if adapter.presentations == nil {
+		return application, nil
+	}
+	return scopedRunApplication{
+		application: application,
+		close:       func() { adapter.presentations.Close(scopeID) },
+	}, nil
+}
+
+type scopedRunApplication struct {
+	application initializer.RunApplication
+	close       func()
+}
+
+func (application scopedRunApplication) Run(ctx context.Context) error {
+	defer application.close()
+	return application.application.Run(ctx)
 }
 
 func provideStdioApplicationOpener(
 	open factorysessionwire.StdioOpeningOperation,
+	presentations factorysessions.OpeningPresentationOwner,
 ) (processcontract.StdioApplicationOpener, error) {
 	if open == nil {
 		return nil, errors.New("Factory Session stdio opening operation is required")
 	}
-	return stdioApplicationOpener{open: open}, nil
+	return stdioApplicationOpener{open: open, presentations: presentations}, nil
 }
 
 func provideLifecycleRunnerFactory() lifecycle.RunnerFactory {
@@ -835,6 +878,7 @@ func provideRunOpener(
 	prepareWorkTarget work.SingleWorkTargetPreparation,
 	loadMockWorkers workers.MockWorkersConfigLoader,
 	buildRuntimeRequest runcli.RuntimeOpeningRequestFactory,
+	presentations factorysessions.OpeningPresentationOwner,
 ) runcli.Opener {
 	return func(
 		ctx context.Context,
@@ -845,7 +889,7 @@ func provideRunOpener(
 	) (*runcli.Operation, error) {
 		return runcli.Open(
 			ctx, cfg, buildRunner, invocation, presentation,
-			prepareWorkTarget, loadMockWorkers, buildRuntimeRequest,
+			prepareWorkTarget, loadMockWorkers, buildRuntimeRequest, presentations,
 		)
 	}
 }
@@ -869,9 +913,11 @@ func provideRunSelectionFactory(
 	presentation factoryvisualization.ResponsePresentation,
 	directJavaScript factorysessionwire.DirectJavaScriptRunOperation,
 	buildApplication initializer.RuntimeRunnerBuilder,
+	presentations factorysessions.OpeningPresentationOwner,
 ) (runcli.SelectionFactory, error) {
 	return runcli.NewSelectionFactory(
 		open, buildRunner, invocation, presentation, directJavaScript, buildApplication,
+		presentations,
 	)
 }
 
@@ -885,11 +931,9 @@ func provideRunRuntimeRunnerBuilder(
 	return func(
 		ctx context.Context,
 		request factorysessionwire.ApplicationOpeningRequest,
-		presentation factorysessionwire.ApplicationOpeningPresentation,
-		sink factoryvisualization.Sink,
 	) (initializer.LocalRuntimeRunner, error) {
 		return build(ctx, func(openCtx context.Context) (initializer.OpenedApplication, error) {
-			opened, err := open.OpenApplication(openCtx, request, presentation, sink)
+			opened, err := open.OpenApplication(openCtx, request)
 			if err != nil {
 				return initializer.OpenedApplication{}, err
 			}
@@ -930,22 +974,20 @@ func provideDirectJavaScriptHostAdapter(
 	}
 	return func(
 		execution factorysessionwire.OwnedExecutionService,
-		presentation factorysessions.DirectJavaScriptRunPresentation,
+		host factorysessions.RuntimeHostRequest,
+		observer factorysessions.RuntimeHostObserver,
 	) (lifecycle.Component, error) {
-		if presentation.Host == nil {
-			return nil, errors.New("direct JavaScript host request is required")
-		}
 		handler, err := httpHandler.BindDurableExecution(execution, logger)
 		if err != nil {
 			return nil, err
 		}
 		return newRunner(func(ctx context.Context) error {
 			return start(ctx, platformhttpserver.StartRequest{
-				Handler: handler, Host: presentation.Host.Host, Port: presentation.Host.Port,
-				AutoPort: presentation.Host.AutoPort, Logger: logger,
+				Handler: handler, Host: host.Host, Port: host.Port,
+				AutoPort: host.AutoPort, Logger: logger,
 				OnBound: func(binding platformhttpserver.Binding) {
-					if presentation.RuntimeHostObserver != nil {
-						presentation.RuntimeHostObserver(factorysessions.RuntimeHostBinding{
+					if observer != nil {
+						observer(factorysessions.RuntimeHostBinding{
 							Host: binding.Host, Port: binding.Port,
 						})
 					}

@@ -2,6 +2,7 @@ package factorysessions
 
 import (
 	"context"
+	"io"
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -76,29 +77,61 @@ type FactoryInvocationOutcome struct {
 // FactoryEventConsumer receives ordered canonical events during one invocation.
 type FactoryEventConsumer func([]interfaces.FactoryEvent)
 
-// ApplicationOpeningPresentation contains transport-local observation and
-// completion edges for one already-selected application opening. It is kept
-// separate from ApplicationOpeningRequest so the durable opening values do
-// not retain callbacks or opened service handles.
-type ApplicationOpeningPresentation struct {
-	RuntimeHostObserver RuntimeHostObserver
-	// RuntimeHTTPServicesBound is called once after the application runtime opens
-	// and before component binding. Hosted CLI invocations use it to route factory
-	// invokes through the live session invoker on the already-running host.
+// OpeningScopeID is an opaque process-local identity for transport-owned
+// presentation state. Operation requests carry this identity instead of
+// retaining streams, observers, services, or callbacks.
+type OpeningScopeID string
+
+// ApplicationOpeningScope is private owner state registered by a transport
+// adapter before it opens one application. The application-opening operation
+// looks it up by OpeningScopeID; callers never pass this collaborator bundle
+// through the operation request.
+type ApplicationOpeningScope struct {
+	RuntimeHostObserver      RuntimeHostObserver
 	RuntimeHTTPServicesBound func(RuntimeHTTPServices)
-	// HistoricalReplayBound receives the read-only Factory Session inspection
-	// facts restored from a portable recording. It is invoked instead of binding
-	// a live runtime, so callers can present the recording without constructing
-	// providers, workers, a runtime host, or lifecycle controls.
-	HistoricalReplayBound func(HistoricalReplayInspection)
-	Completion            func(context.Context) error
+	HistoricalReplayBound    func(HistoricalReplayInspection)
+	Completion               func(context.Context) error
+	// VisualizationSink is adapted by the application-opening owner because
+	// Factory Visualization depends on Factory Sessions' public contracts.
+	VisualizationSink any
 }
 
-// ApplicationOpeningRequest carries only the immutable runtime selections for
-// one application opening. Transport presentation belongs to the explicit
-// ApplicationOpeningPresentation boundary, not to this value contract.
+// DirectJavaScriptRunScope holds protocol presentation state behind the
+// process-scoped opening owner. Direct JavaScript requests carry only values
+// and the opaque scope identity.
+type DirectJavaScriptRunScope struct {
+	Output              io.Writer
+	RuntimeHostObserver RuntimeHostObserver
+}
+
+// StdioOpeningScope holds protocol streams behind the process-scoped opening
+// owner. MCP opening requests carry only values and the opaque scope identity.
+type StdioOpeningScope struct {
+	Input  io.Reader
+	Output io.Writer
+}
+
+// OpeningPresentationOwner owns the transport-local state associated with
+// value-only opening requests. Canonical Wire constructs one owner once and
+// each transport adapter registers a scope before invoking an opening
+// operation. Lookup and host observation remain owner-internal operations.
+type OpeningPresentationOwner interface {
+	RegisterApplication(ApplicationOpeningScope) (OpeningScopeID, error)
+	Application(OpeningScopeID) (ApplicationOpeningScope, bool)
+	RegisterDirectJavaScript(DirectJavaScriptRunScope) (OpeningScopeID, error)
+	DirectJavaScript(OpeningScopeID) (DirectJavaScriptRunScope, bool)
+	RegisterStdio(StdioOpeningScope) (OpeningScopeID, error)
+	Stdio(OpeningScopeID) (StdioOpeningScope, bool)
+	ObserveHost(OpeningScopeID, RuntimeHostBinding)
+	Close(OpeningScopeID)
+}
+
+// ApplicationOpeningRequest carries only immutable runtime selections and an
+// opaque owner scope identity for one application opening. The opening owner
+// retains all presentation state.
 type ApplicationOpeningRequest struct {
 	Runtime *RuntimeOpeningRequest
+	ScopeID OpeningScopeID
 }
 
 // RuntimeHTTPServices is the detached set of opened runtime services consumed

@@ -88,6 +88,7 @@ var servicesSet = wire.NewSet(
 	factorysessionwire.NewLifecyclePlanOperation,
 	provideFactoryVisualizationFactory,
 	provideResponsePresentation,
+	factorysessionwire.NewOpeningPresentationOwner,
 	provideWorkContentStagingService,
 	work.NewContentPreparation,
 	work.NewRequestPreparationService,

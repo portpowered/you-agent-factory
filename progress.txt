@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- Transport presentation state belongs in one process-scoped owner registry keyed by typed scope IDs; operation methods receive only immutable selections and IDs, and the adapter closes each scope with its lifecycle.
 - Canonical packaged CLI docs live under `docs/reference/`; adding a topic also requires its authored file in `docs/reference/embed.go` and a registry entry in `pkg/transports/cli/docs/docs.go`.
 - The `you run --named <factory> --help` output is the authoritative invocation contract; omitted role provider/model values resolve through operator defaults.
 - Documentation for model-backed workflows should describe observable result shape and status/artifact evidence rather than byte-stable generated prose.
@@ -1027,5 +1028,36 @@
   - `make pkg-maint pkg-file-count pkg-structure wire-smoke` and `git diff --check` — passed; Wire generation produced no additional diff.
 - **Learnings for future iterations:**
   - A continuous server can host multiple Factory Sessions while retaining one runtime instance; prove per-execution runtime identity by reusing the process and rotating only the transport starter between sequential executions.
-  - Provider-native Response Events describe provider activity, so a failed invocation may legitimately end its provider stream with `RUN/COMPLETED`; assert invocation failure and canonical dispatch failure separately from response-stream terminal activity.
+- Provider-native Response Events describe provider activity, so a failed invocation may legitimately end its provider stream with `RUN/COMPLETED`; assert invocation failure and canonical dispatch failure separately from response-stream terminal activity.
+---
+
+## 2026-08-10 10:18 -07:00 - btrc-p1-root-injection-004 review follow-up
+- What was implemented
+  - Addressed the blocking Story 004 contract feedback by removing `ApplicationOpeningPresentation`, `DirectJavaScriptRunPresentation`, and `StdioOpeningPresentation` from operation APIs and request surfaces.
+  - Added the canonical process-scoped `OpeningPresentationOwner` and typed `OpeningScopeID`; application, direct JavaScript, and stdio transport adapters register their callbacks, streams, output, host observation, and visualization state behind owner scopes.
+  - Updated Factory Sessions runtime opening, CLI selection/hosted invocation, MCP stdio adaptation, direct execution, canonical Wire providers, generated Wire output, behavioral tests, and owner-contract documentation.
+  - Removed source-scanning boundary tests and corrected the owner-register evidence to the actual runtime-opening concurrency test.
+- Files changed
+  - `pkg/services/factory_sessions/contracts.go`
+  - `pkg/services/factory_sessions/execution_opening_contract.go`
+  - `pkg/services/factory_sessions/opened_runtime.go`
+  - `pkg/services/factory_sessions/wire/`
+  - `pkg/services/factory_sessions/internal/applicationopening/`
+  - `pkg/services/factory_sessions/internal/executionopening/`
+  - `pkg/services/factory_sessions/internal/runtimeopening/`
+  - `pkg/services/factory_sessions/internal/roles/contracts.go`
+  - `pkg/services/factory_sessions/wire/application_graph.go`
+  - `pkg/transports/cli/run/`
+  - `pkg/wire/profiles.go`, `pkg/wire/wire.go`, `pkg/wire/wire_gen.go`, and focused tests
+  - `docs/internal/packaged-service-structure/btrc-p1-owner-contracts.md`
+  - `prd.json`, `progress.txt`
+- Verification
+  - `go test ./pkg/services/factory_sessions/... -count=1 -timeout 600s` — passed.
+  - `go test ./pkg/wire/... -count=1 -timeout 600s` — passed.
+  - `go test ./pkg/transports/cli/run -count=1 -timeout 600s` — passed.
+  - `make generate-wire` — passed; generated Wire output is synchronized.
+- **Learnings for future iterations:**
+  - Dynamic transport collaborators can remain available for the full lifecycle without entering durable operation contracts when the process owner stores them under a typed scope ID and transport adapters own scope closure.
+  - Completion readiness belongs with the owner that registers the host observer; this keeps application-opening operations free of callback arguments while preserving the existing host-boundary sequencing.
+  - Remaining PR feedback is outside this story: split the new functional test below the backend-size threshold, replace its raw HTTP/polling observation with the required public process seam, and rebase the branch onto current `origin/main` before review.
 ---

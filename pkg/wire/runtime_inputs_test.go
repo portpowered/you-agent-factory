@@ -27,17 +27,15 @@ import (
 )
 
 type recordingStdioOpening struct {
-	request      factorysessions.StdioOpeningRequest
-	presentation factorysessions.StdioOpeningPresentation
-	result       factorysessionwire.StdioApplication
+	request factorysessions.StdioOpeningRequest
+	result  factorysessionwire.StdioApplication
 }
 
 func (opening *recordingStdioOpening) OpenStdio(
 	_ context.Context,
 	request factorysessions.StdioOpeningRequest,
-	presentation factorysessions.StdioOpeningPresentation,
 ) (factorysessionwire.StdioApplication, error) {
-	opening.request, opening.presentation = request, presentation
+	opening.request = request
 	return opening.result, nil
 }
 
@@ -51,7 +49,8 @@ func TestStdioApplicationOpenerMapsOnlyInvocationEdgeValues(t *testing.T) {
 	input := strings.NewReader("request")
 	output := &strings.Builder{}
 	opening := &recordingStdioOpening{result: testStdioApplication{}}
-	adapter, err := provideStdioApplicationOpener(opening)
+	owner := factorysessionwire.NewOpeningPresentationOwner()
+	adapter, err := provideStdioApplicationOpener(opening, owner)
 	if err != nil {
 		t.Fatalf("provideStdioApplicationOpener(): %v", err)
 	}
@@ -66,10 +65,14 @@ func TestStdioApplicationOpenerMapsOnlyInvocationEdgeValues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenStdio(): %v", err)
 	}
-	if application != opening.result {
-		t.Fatal("OpenStdio() did not return the exact lifecycle-ready application")
+	if application == nil {
+		t.Fatal("OpenStdio() returned a nil lifecycle-ready application")
 	}
-	request, presentation := opening.request, opening.presentation
+	request := opening.request
+	presentation, ok := owner.Stdio(request.ScopeID)
+	if !ok {
+		t.Fatalf("stdio opening scope %q was not registered", request.ScopeID)
+	}
 	if request.FixtureCatalogPath != "fixtures.json" || !request.RuntimeBacked ||
 		request.ProjectRoot != "/project" || request.SystemConfigHome != "/home" ||
 		presentation.Input != input || presentation.Output != output {
@@ -80,7 +83,7 @@ func TestStdioApplicationOpenerMapsOnlyInvocationEdgeValues(t *testing.T) {
 func TestStdioApplicationOpenerRequiresOwnerOperation(t *testing.T) {
 	t.Parallel()
 
-	adapter, err := provideStdioApplicationOpener(nil)
+	adapter, err := provideStdioApplicationOpener(nil, nil)
 	if err == nil || adapter != nil {
 		t.Fatalf("provideStdioApplicationOpener(nil) = (%v, %v), want nil and error", adapter, err)
 	}

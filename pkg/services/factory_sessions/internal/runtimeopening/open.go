@@ -475,10 +475,16 @@ func effectiveRuntimeHostObserver(
 	configured factorysessions.RuntimeHostObserver,
 	operation factorysessions.RuntimeHostObserver,
 ) factorysessions.RuntimeHostObserver {
-	if configured != nil {
+	if configured == nil {
+		return operation
+	}
+	if operation == nil {
 		return configured
 	}
-	return operation
+	return func(binding factorysessions.RuntimeHostBinding) {
+		configured(binding)
+		operation(binding)
+	}
 }
 
 // bindRuntimeRecordingLifecycle binds the runtime recorder to the already-

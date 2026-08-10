@@ -246,7 +246,6 @@ func TestNewFactoryOpensHistoricalReplayWithoutLiveRuntimeCollaborators(t *testi
 			FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{Directory: t.TempDir()},
 			Recordings:        recordings.RuntimeOpeningRequest{ReplayPath: "recording.json"},
 		},
-		nil,
 	)
 	if err != nil {
 		t.Fatalf("OpenApplicationRuntime() error = %v", err)
@@ -434,6 +433,7 @@ func runtimeOpeningMemberOmissions() []runtimeOpeningDependencyOmission {
 		{"Factory Sessions runtime instance ID generator", func(d *runtimeOpeningFixture) { d.FactorySessions.GenerateRuntimeInstanceID = nil }},
 		{"Factory Sessions home directory resolver", func(d *runtimeOpeningFixture) { d.FactorySessions.ResolveHome = nil }},
 		{"Factory Sessions provider identity resolver", func(d *runtimeOpeningFixture) { d.FactorySessions.ProviderIdentities = nil }},
+		{"Factory Sessions opening presentation owner", func(d *runtimeOpeningFixture) { d.FactorySessions.PresentationOwner = nil }},
 		{"Work factory", func(d *runtimeOpeningFixture) { d.Work.Factory = nil }},
 		{"Work content materializer", func(d *runtimeOpeningFixture) { d.Work.ContentMaterializer = nil }},
 		{"Automations factory", func(d *runtimeOpeningFixture) { d.Automations.Factory = nil }},
@@ -496,6 +496,7 @@ func validRuntimeOpeningOwnerPorts(calls *int) runtimeOpeningFixture {
 			GenerateRuntimeInstanceID:      inertRuntimeOpeningFunction[factorysessions.RuntimeInstanceIDGenerator](calls),
 			ResolveHome:                    inertRuntimeOpeningFunction[factorysessions.HomeDirectoryResolver](calls),
 			ProviderIdentities:             inertRuntimeOpeningFunction[factorysessions.ProviderIdentityResolver](calls),
+			PresentationOwner:              runtimeOpeningPresentationOwnerStub{},
 		},
 		Work: &WorkPorts{
 			Factory:             inertRuntimeOpeningFunction[WorkFactory](calls),
@@ -529,6 +530,37 @@ func validRuntimeOpeningOwnerPorts(calls *int) runtimeOpeningFixture {
 		},
 	}
 }
+
+type runtimeOpeningPresentationOwnerStub struct{}
+
+func (runtimeOpeningPresentationOwnerStub) RegisterApplication(factorysessions.ApplicationOpeningScope) (factorysessions.OpeningScopeID, error) {
+	return "test", nil
+}
+
+func (runtimeOpeningPresentationOwnerStub) Application(factorysessions.OpeningScopeID) (factorysessions.ApplicationOpeningScope, bool) {
+	return factorysessions.ApplicationOpeningScope{}, false
+}
+
+func (runtimeOpeningPresentationOwnerStub) RegisterDirectJavaScript(factorysessions.DirectJavaScriptRunScope) (factorysessions.OpeningScopeID, error) {
+	return "test", nil
+}
+
+func (runtimeOpeningPresentationOwnerStub) DirectJavaScript(factorysessions.OpeningScopeID) (factorysessions.DirectJavaScriptRunScope, bool) {
+	return factorysessions.DirectJavaScriptRunScope{}, false
+}
+
+func (runtimeOpeningPresentationOwnerStub) RegisterStdio(factorysessions.StdioOpeningScope) (factorysessions.OpeningScopeID, error) {
+	return "test", nil
+}
+
+func (runtimeOpeningPresentationOwnerStub) Stdio(factorysessions.OpeningScopeID) (factorysessions.StdioOpeningScope, bool) {
+	return factorysessions.StdioOpeningScope{}, false
+}
+
+func (runtimeOpeningPresentationOwnerStub) ObserveHost(factorysessions.OpeningScopeID, factorysessions.RuntimeHostBinding) {
+}
+
+func (runtimeOpeningPresentationOwnerStub) Close(factorysessions.OpeningScopeID) {}
 
 func inertRuntimeOpeningFunction[T any](calls *int) T {
 	functionType := reflect.TypeOf((*T)(nil)).Elem()

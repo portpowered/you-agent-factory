@@ -13,15 +13,17 @@ import (
 // for one MCP stdio invocation. Its builder ports adapt already-injected
 // transport and lifecycle machinery without exposing those implementations.
 type StdioOpeningService struct {
-	opening      roles.StdioExecutionOpening
-	buildFixture roles.FixtureStdioApplicationBuilder
-	buildRuntime roles.RuntimeStdioApplicationBuilder
+	opening       roles.StdioExecutionOpening
+	buildFixture  roles.FixtureStdioApplicationBuilder
+	buildRuntime  roles.RuntimeStdioApplicationBuilder
+	presentations factorysessions.OpeningPresentationOwner
 }
 
 func NewStdioOpeningService(
 	opening roles.StdioExecutionOpening,
 	buildFixture roles.FixtureStdioApplicationBuilder,
 	buildRuntime roles.RuntimeStdioApplicationBuilder,
+	presentations ...factorysessions.OpeningPresentationOwner,
 ) (*StdioOpeningService, error) {
 	if opening == nil {
 		return nil, fmt.Errorf("session execution opening factory is required")
@@ -29,8 +31,13 @@ func NewStdioOpeningService(
 	if buildFixture == nil || buildRuntime == nil {
 		return nil, fmt.Errorf("stdio application builders are required")
 	}
+	var presentationOwner factorysessions.OpeningPresentationOwner
+	if len(presentations) > 0 {
+		presentationOwner = presentations[0]
+	}
 	return &StdioOpeningService{
 		opening: opening, buildFixture: buildFixture, buildRuntime: buildRuntime,
+		presentations: presentationOwner,
 	}, nil
 }
 
@@ -38,7 +45,6 @@ func NewStdioOpeningService(
 func (service *StdioOpeningService) OpenStdio(
 	ctx context.Context,
 	request factorysessions.StdioOpeningRequest,
-	presentation factorysessions.StdioOpeningPresentation,
 ) (roles.StdioApplication, error) {
 	if service == nil || service.opening == nil {
 		return nil, fmt.Errorf("session execution opening factory is required")
@@ -49,8 +55,9 @@ func (service *StdioOpeningService) OpenStdio(
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if presentation.Input == nil || presentation.Output == nil {
-		return nil, fmt.Errorf("stdio streams are required")
+	presentation, err := service.presentationScope(request.ScopeID)
+	if err != nil {
+		return nil, err
 	}
 	if request.RuntimeBacked {
 		root, err := service.opening.ResolveProjectRoot(request.ProjectRoot)
@@ -88,4 +95,15 @@ func (service *StdioOpeningService) OpenStdio(
 		err = errors.Join(err, fmt.Errorf("close session execution: %w", closeErr))
 	}
 	return nil, err
+}
+
+func (service *StdioOpeningService) presentationScope(id factorysessions.OpeningScopeID) (factorysessions.StdioOpeningScope, error) {
+	if id == "" || service.presentations == nil {
+		return factorysessions.StdioOpeningScope{}, fmt.Errorf("stdio opening presentation scope %q is unavailable", id)
+	}
+	scope, ok := service.presentations.Stdio(id)
+	if !ok {
+		return factorysessions.StdioOpeningScope{}, fmt.Errorf("stdio opening presentation scope %q is unavailable", id)
+	}
+	return scope, nil
 }

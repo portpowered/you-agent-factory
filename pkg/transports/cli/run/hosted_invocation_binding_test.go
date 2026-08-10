@@ -7,7 +7,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
+	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
@@ -16,6 +16,7 @@ import (
 func TestOpenHostedRuntimeBindsFactorySessionsInvocationCapability(t *testing.T) {
 	sessions := &hostedInvocationCapabilityFake{}
 	request := invocationRequestFromText("summarize the dispatch")
+	owner := factorysessionwire.NewOpeningPresentationOwner()
 
 	operation, err := openHostedRuntime(
 		t.Context(),
@@ -32,18 +33,21 @@ func TestOpenHostedRuntimeBindsFactorySessionsInvocationCapability(t *testing.T)
 		func(
 			_ context.Context,
 			opening factorysessions.ApplicationOpeningRequest,
-			presentation factorysessions.ApplicationOpeningPresentation,
-			_ factoryvisualization.Sink,
 		) (initializer.LocalRuntimeRunner, error) {
-			if presentation.RuntimeHTTPServicesBound == nil {
+			scope, ok := owner.Application(opening.ScopeID)
+			if !ok || scope.RuntimeHTTPServicesBound == nil {
 				t.Fatal("runtime HTTP services binding = nil")
 			}
-			presentation.RuntimeHTTPServicesBound(factorysessions.RuntimeHTTPServices{FactorySessions: sessions})
-			return stubFactoryService{run: presentation.Completion}, nil
+			scope.RuntimeHTTPServicesBound(factorysessions.RuntimeHTTPServices{FactorySessions: sessions})
+			if scope.RuntimeHostObserver != nil {
+				scope.RuntimeHostObserver(factorysessions.RuntimeHostBinding{Host: "127.0.0.1", Port: 1})
+			}
+			return stubFactoryService{run: scope.Completion}, nil
 		},
 		func(RunConfig, *workers.MockWorkersConfig) factorysessions.ApplicationOpeningRequest {
 			return factorysessions.ApplicationOpeningRequest{}
 		},
+		owner,
 	)
 	if err != nil {
 		t.Fatalf("openHostedRuntime() error = %v", err)

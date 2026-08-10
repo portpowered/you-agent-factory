@@ -323,6 +323,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	providerIdentityResolver := provideFactorySessionProviderIdentityResolver(providerRegistry)
 	v46 := provideFactorySessionInvocationMetricsRecorder(edges2)
 	runtimeHostObserver := provideFactorySessionRuntimeHostObserver(edges2)
+	openingPresentationOwner := wire.NewOpeningPresentationOwner()
 	v47 := &wire.FactorySessionsRuntimeOpeningPorts{
 		Service:                        factorysessionsService,
 		RuntimeAssembly:                runtimeAssembly,
@@ -336,6 +337,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		ProviderIdentities:             providerIdentityResolver,
 		InvocationMetricsRecorder:      v46,
 		RuntimeHostObserver:            runtimeHostObserver,
+		PresentationOwner:              openingPresentationOwner,
 	}
 	contentStagingService, err := provideWorkContentStagingService(edges2)
 	if err != nil {
@@ -496,7 +498,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	runtimeOpeningRequestFactory := provideRuntimeOpeningRequestFactory()
-	runOpener := provideRunOpener(singleWorkTargetPreparation, mockWorkersConfigLoader, runtimeOpeningRequestFactory)
+	runOpener := provideRunOpener(singleWorkTargetPreparation, mockWorkersConfigLoader, runtimeOpeningRequestFactory, openingPresentationOwner)
 	managedRunnerFactory := provideManagedRunnerFactory()
 	runtimeRunnerBuilder, err := application.NewRuntimeRunnerBuilder(managedRunnerFactory)
 	if err != nil {
@@ -527,7 +529,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	v90 := wire.NewLifecyclePlanOperation()
-	v91, err := wire.NewApplicationService(v88, v70, v89, v90)
+	v91, err := wire.NewApplicationService(v88, v70, v89, v90, openingPresentationOwner)
 	if err != nil {
 		return nil, err
 	}
@@ -541,11 +543,11 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	v94, err := wire.NewDirectJavaScriptRunOperation(v76, v93, v33, directJavaScriptHostAdapter)
+	v94, err := wire.NewDirectJavaScriptRunOperation(v76, v93, v33, directJavaScriptHostAdapter, openingPresentationOwner)
 	if err != nil {
 		return nil, err
 	}
-	selectionFactory, err := provideRunSelectionFactory(runOpener, runRuntimeRunnerBuilder, v78, v92, v94, runtimeRunnerBuilder)
+	selectionFactory, err := provideRunSelectionFactory(runOpener, runRuntimeRunnerBuilder, v78, v92, v94, runtimeRunnerBuilder, openingPresentationOwner)
 	if err != nil {
 		return nil, err
 	}
@@ -638,11 +640,11 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	v99 := provideRuntimeStdioApplicationBuilder(openedStdioRunnerBuilder, runnerFactory, stdioOpener, v79)
-	v100, err := wire.NewStdioOpeningService(v75, v98, v99)
+	v100, err := wire.NewStdioOpeningService(v75, v98, v99, openingPresentationOwner)
 	if err != nil {
 		return nil, err
 	}
-	processStdioApplicationOpener, err := provideStdioApplicationOpener(v100)
+	processStdioApplicationOpener, err := provideStdioApplicationOpener(v100, openingPresentationOwner)
 	if err != nil {
 		return nil, err
 	}
@@ -707,8 +709,7 @@ var servicesSet = wire4.NewSet(
 	provideAPIServerStarter,
 	provideRuntimeHostOperation,
 	provideProcessRuntimeFactory, wire.NewLifecyclePlanOperation, provideFactoryVisualizationFactory,
-	provideResponsePresentation,
-	provideWorkContentStagingService, work.NewContentPreparation, work.NewRequestPreparationService, work.NewSingleWorkTargetPreparation, work.NewListRequestPreparation, work.NewFactoryRequestBatchPreparation, work.NewInvocationInputPreparation, provideWorkersMockWorkersConfigFileSystem, workers.NewMockWorkersConfigLoader, provideRuntimeArtifactClock,
+	provideResponsePresentation, wire.NewOpeningPresentationOwner, provideWorkContentStagingService, work.NewContentPreparation, work.NewRequestPreparationService, work.NewSingleWorkTargetPreparation, work.NewListRequestPreparation, work.NewFactoryRequestBatchPreparation, work.NewInvocationInputPreparation, provideWorkersMockWorkersConfigFileSystem, workers.NewMockWorkersConfigLoader, provideRuntimeArtifactClock,
 	provideRuntimeArtifactIDGenerator,
 	provideRuntimeArtifactPathReserver,
 	provideRuntimeArtifactRootResolver,

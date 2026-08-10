@@ -37,7 +37,7 @@ retain the aggregate `edges.Edges` value or select another service graph.
 | Provider Sessions | `ProviderSessionsPorts` | Provider Sessions root |
 | Factory Runtime | `FactoryRuntimePorts` plus `RuntimeLogOwner` and `RuntimeMetricsOwner` | base logger, workflow definitions, preview, runtime executors, provider invocation, mock runner, assembler, clock resolver, session logger factory, selected clock, provider override, submission recorder, dispatch recorder, and process-scoped observability owners |
 | Factory Definitions | `FactoryDefinitionsPorts` | validator, named paths, loading, replay decoding, and snapshot capabilities |
-| Factory Sessions | `FactorySessionsPorts` | Sessions root, its directly retained runtime assembly, execution/scaffold/validation capabilities, runtime identity, home, provider identity, invocation metrics recorder, and runtime-host observer |
+| Factory Sessions | `FactorySessionsPorts` | Sessions root, its directly retained runtime assembly, execution/scaffold/validation capabilities, runtime identity, home, provider identity, invocation metrics recorder, runtime-host observer, and the process-scoped opening presentation owner |
 | Work | `WorkPorts` | Work factory and content materializer |
 | Automations | `AutomationsPorts` | automation and hosted-source factories |
 | Models | `ModelsPorts` | Models root |
@@ -55,27 +55,17 @@ runtime clock.
 
 `factorysessions.RuntimeOpeningRequest`, `factorysessions.ApplicationOpeningRequest`,
 and `factorysessions.InvocationTarget` are value-only selections for runtime
-opening and one-shot invocation. The invocation and execution opening
-interfaces accept only the request and context; their logger and metrics
-behavior comes from the retained Factory Runtime and Factory Sessions owner
-ports. The application-opening resolver and CLI runner adapter likewise no
-longer accept a per-call logger.
+opening and one-shot invocation. Opening requests carry only an opaque typed
+`OpeningScopeID` when a transport needs dynamic presentation state. The
+application, direct JavaScript, and MCP stdio adapters register streams,
+observers, completion callbacks, hosted-service bindings, and visualization
+sinks with the process-scoped `OpeningPresentationOwner`; operation methods
+receive only the request and context and resolve that state by ID.
 
-Presentation boundaries remain explicit and separate from operation values. The
-application-opening service receives host-readiness, lifecycle-completion,
-historical-replay, and hosted-service callbacks through its explicit
-`ApplicationOpeningPresentation` argument rather than its durable request.
 Durable `StartRequest` is value-only; the live JavaScript owner exposes event
 observation through a private `StartSyncWithEventConsumer` capability so
 invocation presentation does not become request state, while ordinary durable
 callers use `StartSync`.
-
-The direct JavaScript and MCP stdio openings follow the same rule:
-`DirectJavaScriptRunRequest` and `StdioOpeningRequest` contain only selection
-values, while `DirectJavaScriptRunPresentation` and
-`StdioOpeningPresentation` carry protocol output streams and optional host
-readiness at the transport adapter boundary. Host adapters receive the
-presentation value directly and cannot rebind the durable request.
 
 ## Private owner state
 
@@ -84,7 +74,9 @@ fields. Opened runtime products, cleanup scopes, recording bindings, and model
 runtime scopes are operation-scoped state and are not exposed through the
 construction contract. Hosted clock/client/secret effects and visualization
 sink/root-observer effects are captured by their canonical Wire providers or
-application adapter once. `RuntimeLogOwner` and `RuntimeMetricsOwner` retain
+application adapter once. The opening presentation owner retains transport
+state only until the corresponding lifecycle run closes its scope.
+`RuntimeLogOwner` and `RuntimeMetricsOwner` retain
 the base logger, artifact clock, collision ID generator, and path reserver at
 process construction; their `Open` methods accept only destination values and
 opaque session/runtime identities. Each returned log or metrics sink is
@@ -107,7 +99,11 @@ scopes, and cleanup stacks remain private to each opened operation.
 supplies distinct fakes for every owner-port contract, asserts exact identity
 retention, and verifies construction does not invoke collaborator functions.
 `pkg/services/factory_sessions/internal/applicationopening/service_test.go`
-proves the value-only resolver/opening handoff and lifecycle cleanup behavior.
+proves the value-only resolver/opening handoff, owner-scope lookup, and
+lifecycle cleanup behavior. `pkg/services/factory_sessions/wire/presentation_test.go`
+proves owner scope retention, host observation, completion gating, and close.
+The direct JavaScript and stdio execution-opening tests prove their streams
+and host callbacks arrive through registered owner scopes.
 `pkg/services/factory_sessions/internal/runtimeopening/factories_test.go`
 opens two failing runtimes concurrently and proves both use the same injected
 Factory Sessions runtime root while each private Models scope is closed once.
@@ -126,3 +122,5 @@ constructs once, observes no injected edge or observability activity, then
 executes the same process twice through separate public server lifetimes and
 asserts distinct session/runtime identities, isolated success/failure results,
 canonical dispatch ordering, response streams, and exact runner cardinality.
+The focused shared-root assertion is
+`pkg/services/factory_sessions/internal/runtimeopening/factories_test.go:TestConcurrentRuntimeOpeningUsesSharedFactorySessionsRoot`.

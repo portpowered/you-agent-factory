@@ -61,14 +61,11 @@ type cleanInvocationWorkTarget struct {
 }
 
 // RuntimeRunnerBuilder is the CLI edge adapter for one owner-bounded Factory
-// Sessions request. Wire converts the request and presentation sink into an
-// initializer.ApplicationOpeningOperation before invoking the neutral
-// Initializer builder.
+// Sessions request. Presentation state is registered with the process-scoped
+// opening owner before this value-only request is built.
 type RuntimeRunnerBuilder func(
 	context.Context,
 	factorysessions.ApplicationOpeningRequest,
-	factorysessions.ApplicationOpeningPresentation,
-	factoryvisualization.Sink,
 ) (initializer.LocalRuntimeRunner, error)
 
 // RuntimeOpeningRequestFactory is the Wire-selected mapping from CLI values
@@ -140,6 +137,8 @@ type Operation struct {
 	recordPath           resolvedRunRecordPath
 	hostedLiveInvocation *factorysessions.HostedLiveInvocation
 	historicalReplay     *factorysessions.HistoricalReplayInspection
+	openingPresentations factorysessions.OpeningPresentationOwner
+	openingScopeID       factorysessions.OpeningScopeID
 }
 
 // Open resolves run inputs and opens invocation-local runtime state without
@@ -153,7 +152,12 @@ func Open(
 	prepareWorkTarget work.SingleWorkTargetPreparation,
 	loadMockWorkers workers.MockWorkersConfigLoader,
 	buildRuntimeRequest RuntimeOpeningRequestFactory,
+	presentations ...factorysessions.OpeningPresentationOwner,
 ) (*Operation, error) {
+	var presentationOwner factorysessions.OpeningPresentationOwner
+	if len(presentations) > 0 {
+		presentationOwner = presentations[0]
+	}
 	canonicalReasoningEffort, err := NormalizeWorkerReasoningEffort(cfg.WorkerReasoningEffort)
 	if err != nil {
 		return nil, err
@@ -194,7 +198,7 @@ func Open(
 	return openHostedRuntime(
 		ctx, cfg, logger, invocationRequest, recordPath, invocation, presentation,
 		prepareWorkTarget, mockWorkersConfig, invocationMode, requestedPort,
-		buildRunner, buildRuntimeRequest,
+		buildRunner, buildRuntimeRequest, presentationOwner,
 	)
 }
 
@@ -222,6 +226,7 @@ func openHostedRuntime(
 	requestedPort int,
 	buildRunner RuntimeRunnerBuilder,
 	buildRuntimeRequest RuntimeOpeningRequestFactory,
+	presentations factorysessions.OpeningPresentationOwner,
 ) (*Operation, error) {
 	if buildRunner == nil {
 		return nil, errors.New("construct local runtime: injected runtime runner builder is required")
@@ -242,17 +247,17 @@ func openHostedRuntime(
 		func() runtimeartifact.Diagnostics { return runtimeLogDiagnosticsForRunner(factorySvc) },
 	)
 	openingRequest := buildRuntimeRequest(runtimeCfg, mockWorkersConfig)
-	openingPresentation := factorysessions.ApplicationOpeningPresentation{
+	openingScope := factorysessions.ApplicationOpeningScope{
 		RuntimeHostObserver: onBound,
 		Completion:          hostedInvocationCompletion(operation),
 	}
 	var historicalReplay *factorysessions.HistoricalReplayInspection
-	openingPresentation.HistoricalReplayBound = func(inspection factorysessions.HistoricalReplayInspection) {
+	openingScope.HistoricalReplayBound = func(inspection factorysessions.HistoricalReplayInspection) {
 		inspectionCopy := inspection
 		historicalReplay = &inspectionCopy
 	}
 	if invocationMode && operation != nil {
-		openingPresentation.RuntimeHTTPServicesBound = func(http factorysessions.RuntimeHTTPServices) {
+		openingScope.RuntimeHTTPServicesBound = func(http factorysessions.RuntimeHTTPServices) {
 			operation.hostedLiveInvocation = &factorysessions.HostedLiveInvocation{
 				Sessions: http.FactorySessions,
 				Invoker:  http.FactorySessions,
@@ -262,23 +267,45 @@ func openHostedRuntime(
 	if cfg.Port <= 0 {
 		emitVerboseStartupDiagnostics(cfg, recordPath, requestedPort)
 	}
-	visualizationSink := runVisualizationSink(cfg, presentation)
-	factorySvc, err = buildRunner(ctx, openingRequest, openingPresentation, visualizationSink)
+	openingScope.VisualizationSink = runVisualizationSink(cfg, presentation)
+	var scopeID factorysessions.OpeningScopeID
+	if presentations != nil {
+		scopeID, err = presentations.RegisterApplication(openingScope)
+		if err != nil {
+			return nil, fmt.Errorf("register application opening presentation: %w", err)
+		}
+		openingRequest.ScopeID = scopeID
+		if openingRequest.Runtime != nil {
+			resolvedRuntime := *openingRequest.Runtime
+			resolvedRuntime.ScopeID = scopeID
+			openingRequest.Runtime = &resolvedRuntime
+		}
+	}
+	factorySvc, err = buildRunner(ctx, openingRequest)
 	if err != nil {
+		if presentations != nil {
+			presentations.Close(scopeID)
+		}
 		return nil, err
 	}
 	if factorySvc == nil {
+		if presentations != nil {
+			presentations.Close(scopeID)
+		}
 		return nil, fmt.Errorf("construct local runtime: builder returned nil runner")
 	}
 	if operation != nil {
 		operation.runner = factorySvc
 		operation.historicalReplay = historicalReplay
+		operation.openingPresentations = presentations
+		operation.openingScopeID = scopeID
 		return operation, nil
 	}
 
 	return &Operation{
 		cfg: cfg, logger: logger, runner: factorySvc, recordPath: recordPath,
 		prepareWorkTarget: prepareWorkTarget, historicalReplay: historicalReplay,
+		openingPresentations: presentations, openingScopeID: scopeID,
 	}, nil
 }
 
@@ -341,6 +368,9 @@ func hostedInvocationCompletion(operation *Operation) func(context.Context) erro
 func (operation *Operation) Run(ctx context.Context) error {
 	if operation == nil {
 		return fmt.Errorf("run local operation: operation is required")
+	}
+	if operation.openingPresentations != nil {
+		defer operation.openingPresentations.Close(operation.openingScopeID)
 	}
 	if operation.historicalReplay != nil {
 		if operation.runner == nil {

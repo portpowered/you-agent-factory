@@ -68,8 +68,8 @@ type (
 	InvocationOperation                  = roles.InvocationOperation
 	InvocationTarget                     = roles.InvocationTarget
 	FactoryInvocationOutcome             = roles.FactoryInvocationOutcome
-	ApplicationOpeningPresentation       = roles.ApplicationOpeningPresentation
 	ApplicationOpeningRequest            = roles.ApplicationOpeningRequest
+	OpeningPresentationOwner             = factorysessions.OpeningPresentationOwner
 	RuntimeResources                     = roles.RuntimeResources
 	RuntimeHTTPServices                  = roles.RuntimeHTTPServices
 	RuntimeVisualizationServices         = roles.RuntimeVisualizationServices
@@ -201,8 +201,9 @@ func NewApplicationService(
 	openRuntime ApplicationRuntimeOpening,
 	adaptRuntime RuntimeAdapter,
 	planLifecycle LifecyclePlanOperation,
+	presentations OpeningPresentationOwner,
 ) (*ApplicationService, error) {
-	return applicationopening.New(resolveInputs, openRuntime, adaptRuntime, planLifecycle)
+	return applicationopening.New(resolveInputs, openRuntime, adaptRuntime, planLifecycle, presentations)
 }
 
 func NewInvocationOperation(
@@ -238,14 +239,16 @@ func NewDirectJavaScriptRunOperation(
 	runSync DirectJavaScriptSyncRunner,
 	generateSessionID factorysessions.SessionIDGenerator,
 	host roles.DirectJavaScriptHostAdapter,
+	presentations OpeningPresentationOwner,
 ) (DirectJavaScriptRunOperation, error) {
-	return executionopening.NewDirectJavaScriptRunOperation(build, runSync, generateSessionID, host)
+	return executionopening.NewDirectJavaScriptRunOperation(build, runSync, generateSessionID, host, presentations)
 }
 
 func NewStdioOpeningService(
 	opening StdioExecutionOpening,
 	buildFixture FixtureStdioApplicationBuilder,
 	buildRuntime RuntimeStdioApplicationBuilder,
+	presentations OpeningPresentationOwner,
 ) (*StdioOpeningService, error) {
-	return executionopening.NewStdioOpeningService(opening, buildFixture, buildRuntime)
+	return executionopening.NewStdioOpeningService(opening, buildFixture, buildRuntime, presentations)
 }

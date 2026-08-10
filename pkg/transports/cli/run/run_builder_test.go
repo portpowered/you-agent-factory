@@ -17,6 +17,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
@@ -182,22 +183,26 @@ var openTestRuntimeRunner testRuntimeRunnerOpener = missingTestRuntimeRunner
 var openTestInvocationRunner testInvocationRunnerOpener
 
 type testRunnerOpeners struct {
-	runtime    testRuntimeRunnerOpener
-	invocation testInvocationRunnerOpener
+	runtime       testRuntimeRunnerOpener
+	invocation    testInvocationRunnerOpener
+	presentations factorysessions.OpeningPresentationOwner
 }
 
 func (f testRunnerOpeners) BuildRunner(
 	ctx context.Context,
 	request factorysessions.ApplicationOpeningRequest,
-	presentation factorysessions.ApplicationOpeningPresentation,
-	visualizationSink factoryvisualization.Sink,
 ) (initializer.LocalRuntimeRunner, error) {
 	if f.runtime == nil {
 		return nil, errors.New("construct local runtime: dependency-injected builder is required")
 	}
 	selections := flattenTestRuntimeRequest(request.Runtime)
-	edges := serviceedges.Edges{
-		RuntimeHostObserver: presentation.RuntimeHostObserver,
+	var visualizationSink factoryvisualization.Sink
+	edges := serviceedges.Edges{}
+	if f.presentations != nil && request.ScopeID != "" {
+		if scope, ok := f.presentations.Application(request.ScopeID); ok {
+			edges.RuntimeHostObserver = scope.RuntimeHostObserver
+			visualizationSink, _ = scope.VisualizationSink.(factoryvisualization.Sink)
+		}
 	}
 	if selections != nil {
 		selections.RuntimeHostObserver = edges.RuntimeHostObserver
@@ -242,7 +247,8 @@ func TestOpenRunScopedServerAttachesInvocationCompletionAndKeepsOneShotResult(t 
 	prompt := "ship it"
 	var output strings.Builder
 	var opening factorysessions.ApplicationOpeningRequest
-	var openingPresentation factorysessions.ApplicationOpeningPresentation
+	var openingScope factorysessions.ApplicationOpeningScope
+	owner := factorysessionwire.NewOpeningPresentationOwner()
 	runnerCalls := 0
 	invocationCalls := 0
 	operation, err := Open(
@@ -259,11 +265,13 @@ func TestOpenRunScopedServerAttachesInvocationCompletionAndKeepsOneShotResult(t 
 		func(
 			_ context.Context,
 			request factorysessions.ApplicationOpeningRequest,
-			presentation factorysessions.ApplicationOpeningPresentation,
-			_ factoryvisualization.Sink,
 		) (initializer.LocalRuntimeRunner, error) {
 			opening = request
-			openingPresentation = presentation
+			var ok bool
+			openingScope, ok = owner.Application(request.ScopeID)
+			if !ok {
+				t.Fatalf("application opening scope %q was not registered", request.ScopeID)
+			}
 			return runFuncRunner(func(context.Context) error {
 				runnerCalls++
 				return nil
@@ -290,6 +298,7 @@ func TestOpenRunScopedServerAttachesInvocationCompletionAndKeepsOneShotResult(t 
 		prepareSingleWorkTargetForTest,
 		testMockWorkersConfigLoader,
 		testRuntimeOpeningRequestFactory,
+		owner,
 	)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
@@ -297,15 +306,15 @@ func TestOpenRunScopedServerAttachesInvocationCompletionAndKeepsOneShotResult(t 
 	if opening.Runtime.FactoryRuntime.Mode != interfaces.RuntimeModeService {
 		t.Fatalf("hosted runtime mode = %q, want service until terminal completion", opening.Runtime.FactoryRuntime.Mode)
 	}
-	if openingPresentation.Completion == nil || openingPresentation.RuntimeHostObserver == nil {
+	if openingScope.Completion == nil || openingScope.RuntimeHostObserver == nil {
 		t.Fatal("run-scoped server omitted readiness-gated terminal completion")
 	}
 
 	if invocationCalls != 0 {
 		t.Fatal("invocation started while opening the hosted lifecycle")
 	}
-	openingPresentation.RuntimeHostObserver(factorysessions.RuntimeHostBinding{Port: 7437})
-	if err := openingPresentation.Completion(t.Context()); err != nil {
+	openingScope.RuntimeHostObserver(factorysessions.RuntimeHostBinding{Port: 7437})
+	if err := openingScope.Completion(t.Context()); err != nil {
 		t.Fatalf("completion: %v", err)
 	}
 	if invocationCalls != 1 || output.String() != "done" {
@@ -489,6 +498,7 @@ func runWithTestRuntimeRunnerAndMockWorkersLoader(
 	factory := testRunnerOpeners{
 		runtime: builder, invocation: openTestInvocationRunner,
 	}
+	factory.presentations = factorysessionwire.NewOpeningPresentationOwner()
 	operation, err := Open(
 		ctx,
 		cfg,
@@ -498,6 +508,7 @@ func runWithTestRuntimeRunnerAndMockWorkersLoader(
 		prepareSingleWorkTargetForTest,
 		loadMockWorkers,
 		testRuntimeOpeningRequestFactory,
+		factory.presentations,
 	)
 	if err != nil {
 		return err

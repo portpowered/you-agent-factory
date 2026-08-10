@@ -23,8 +23,6 @@ import (
 
 type InvocationMetricsRecorder = factorysessions.InvocationMetricsRecorder
 
-type ApplicationOpeningPresentation = factorysessions.ApplicationOpeningPresentation
-
 type ApplicationOpeningRequest = factorysessions.ApplicationOpeningRequest
 
 type RuntimeResources struct {
@@ -139,7 +137,6 @@ type StdioOpeningOperation interface {
 	OpenStdio(
 		context.Context,
 		factorysessions.StdioOpeningRequest,
-		factorysessions.StdioOpeningPresentation,
 	) (StdioApplication, error)
 }
 
@@ -148,13 +145,13 @@ type DirectJavaScriptRunOperation interface {
 	Open(
 		context.Context,
 		factorysessions.DirectJavaScriptRunRequest,
-		factorysessions.DirectJavaScriptRunPresentation,
 	) (factorysessions.DirectJavaScriptApplication, error)
 }
 
 type DirectJavaScriptHostAdapter func(
 	OwnedExecutionService,
-	factorysessions.DirectJavaScriptRunPresentation,
+	factorysessions.RuntimeHostRequest,
+	factorysessions.RuntimeHostObserver,
 ) (lifecycle.Component, error)
 
 type DirectJavaScriptSyncRunner func(
