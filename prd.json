@@ -119,8 +119,8 @@
         "Tests pass"
       ],
       "priority": 6,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added tests/functional/providers/acp/btrc_p0_characterization_test.go. Offline ACP helper-process success and JSON-RPC protocol failure run through root-composed Process.Execute and assert the literal ten-event RUN_REQUEST through DISPATCH_RESPONSE order, contiguous event sequences, request/dispatch/Worker Session correlation, cursor-acp/acp-session-functional-1 provider correlation, one canonical dispatch terminal payload, bounded typed failure detail, provider terminal response mapping, and complete IDLE session/Work projections. The deterministic command/protocol edge uses no live provider or sleeps; no production behavior or public/generated contract changed."
     },
     {
       "id": "btrc-p0-characterization-007",
