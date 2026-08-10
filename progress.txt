@@ -1099,3 +1099,18 @@
 - **Learnings for future iterations:**
   - A moving `main` can make a completed task PR dirty even when CI is green; resolve shared bookkeeping conflicts by keeping the active task PRD authoritative, combining append-only progress histories, and rerunning the owner and process-boundary evidence after the merge.
 ---
+## 2026-08-10 09:28 -07:00 - pf-stale-scope-diagnostic CI verification follow-up
+- What was implemented
+  - Diagnosed the first post-synchronization Backend Functional Coverage failure as the unchanged `tests/functional/work/root_composition/TestWorkRecoveryActivatesThroughRootBuildProcessAfterLifecycle` parallel-suite race; its CI observation missed the intermediate `New state: init` event while the isolated run passed.
+  - Reran the failed GitHub Actions jobs without changing the implementation; the retry completed successfully on the same PR head.
+- Files changed
+  - No source files; this entry records CI diagnosis and retry evidence.
+- Verification
+  - `go test ./tests/functional/work/root_composition -run '^TestWorkRecoveryActivatesThroughRootBuildProcessAfterLifecycle$' -count=5 -v -timeout 300s` — passed 5/5.
+  - PR #1853 retry Backend Functional Coverage — passed.
+  - PR #1853 retry Verification Policy — passed.
+  - All required PR checks are terminal and passing on `de46e3c39`.
+  - Thread-aware PR inspection — no conversation comments, reviews, or unresolved threads.
+- **Learnings for future iterations:**
+  - When a full functional suite loses an expected intermediate lifecycle event, isolate the named test repeatedly before changing runtime code; a clean isolated run plus no PR diff in that package supports retrying the CI lane rather than broadening feature scope.
+---
