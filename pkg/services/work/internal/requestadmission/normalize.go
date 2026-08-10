@@ -275,16 +275,12 @@ func applyGeneratedSubmissionOverrides(next SubmitRequest, submitted SubmitReque
 }
 
 func validateBatchWork(req Request, opts NormalizeOptions) (map[string]normalizedBatchWork, error) {
-	workNames := make(map[string]bool, len(req.Works))
+	workNames := make(map[string]int, len(req.Works))
 	workIndex := make(map[string]normalizedBatchWork, len(req.Works))
 	for i, work := range req.Works {
-		if strings.TrimSpace(work.Name) == "" {
-			return nil, fmt.Errorf("work_request: works[%d] is missing required name", i)
+		if err := validateBatchWorkName(workNames, i, work); err != nil {
+			return nil, err
 		}
-		if workNames[work.Name] {
-			return nil, fmt.Errorf("work_request: works[%d] has duplicate name %q", i, work.Name)
-		}
-		workNames[work.Name] = true
 
 		workTypeID := work.WorkTypeID
 		if workTypeID == "" {
@@ -313,6 +309,22 @@ func validateBatchWork(req Request, opts NormalizeOptions) (map[string]normalize
 		}
 	}
 	return workIndex, nil
+}
+
+func validateBatchWorkName(workNames map[string]int, index int, work Work) error {
+	if strings.TrimSpace(work.Name) == "" {
+		return fmt.Errorf("work_request: works[%d] is missing required name", index)
+	}
+	if original, exists := workNames[work.Name]; exists {
+		return fmt.Errorf(
+			"work_request: duplicate name %q: works[%d].name conflicts with works[%d].name; works[].name must be unique across the entire batch, including across different workTypeName values; rename or remove one entry",
+			work.Name,
+			index,
+			original,
+		)
+	}
+	workNames[work.Name] = index
+	return nil
 }
 
 func validateAndIndexBatchRelations(req Request, workIndex map[string]normalizedBatchWork, opts NormalizeOptions) (map[string][]Relation, error) {

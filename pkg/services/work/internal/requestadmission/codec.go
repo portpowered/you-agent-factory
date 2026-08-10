@@ -45,6 +45,12 @@ func (factoryRequestBatchPreparation) PrepareFactoryRequestBatch(
 	if len(request.Works) == 0 {
 		return PreparedFactoryRequestBatch{}, errors.New("batch works must contain at least one item")
 	}
+	workNames := make(map[string]int, len(request.Works))
+	for index, work := range request.Works {
+		if err := validateBatchWorkName(workNames, index, work); err != nil {
+			return PreparedFactoryRequestBatch{}, err
+		}
+	}
 	return PreparedFactoryRequestBatch{
 		Request:       request,
 		CanonicalJSON: append([]byte(nil), data...),

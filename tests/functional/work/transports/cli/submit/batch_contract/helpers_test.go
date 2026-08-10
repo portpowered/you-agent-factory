@@ -134,6 +134,26 @@ func successSubmitBatchFactoryConfig() map[string]any {
 	}
 }
 
+func duplicateSubmitBatchFactoryConfig() map[string]any {
+	config := successSubmitBatchFactoryConfig()
+	config["workTypes"] = append(config["workTypes"].([]map[string]any), map[string]any{
+		"name": "story",
+		"states": []map[string]any{
+			{"name": "init", "type": "INITIAL"},
+			{"name": "complete", "type": "TERMINAL"},
+			{"name": "failed", "type": "FAILED"},
+		},
+	})
+	config["workstations"] = append(config["workstations"].([]map[string]any), map[string]any{
+		"name":      "process-story",
+		"worker":    "mock-worker",
+		"inputs":    []map[string]string{{"workType": "story", "state": "init"}},
+		"outputs":   []map[string]string{{"workType": "story", "state": "complete"}},
+		"onFailure": []map[string]string{{"workType": "story", "state": "failed"}},
+	})
+	return config
+}
+
 func decodeSubmitBatchJSONResult(t *testing.T, output string) batchContractSubmitJSON {
 	t.Helper()
 
@@ -202,6 +222,17 @@ func inlineBatchJSON(requestID, workName, workType, title string) string {
 		"type": "FACTORY_REQUEST_BATCH",
 		"works": [
 			{"name": "` + workName + `", "workTypeName": "` + workType + `", "payload": {"title": "` + title + `"}}
+		]
+	}`
+}
+
+func duplicateBatchJSON(requestID string) string {
+	return `{
+		"requestId": "` + requestID + `",
+		"type": "FACTORY_REQUEST_BATCH",
+		"works": [
+			{"name": "release", "workTypeName": "task", "payload": {"title": "Task release"}},
+			{"name": "release", "workTypeName": "story", "payload": {"title": "Story release"}}
 		]
 	}`
 }

@@ -26,6 +26,8 @@
 - Replay completeness must be derived from a terminal lifecycle record inside the captured Events range, not from a separately synchronized terminal session state.
 - When a package has a strict file-count baseline, put a small refactor in an existing focused file before adding a new helper file or changing the baseline.
 - When broad functional coverage reports a cancellation-observation failure, rerun the failed lane and isolate the named test before changing an unrelated feature; parallel-suite failures can move between existing durability/restart tests while isolated runs pass.
+- Topology-independent batch admission checks must be shared by Work request preparation (dry-run) and live normalization; topology-dependent checks remain in normalization.
+- Keep new CLI submit tests in responsibility-aligned existing files when `pkg/transports/cli/submit/batch_test.go` approaches the repository's 1,000-line maintainability limit.
 
 ## 2026-08-09 13:12 - wo-d1-packaged-factories-docs-001
 - What was implemented
@@ -760,4 +762,35 @@
   - Documentation parsers for Markdown output must match the report’s structural contract and tolerate the platform’s CRLF line endings; a single-line `Overall recommendation:` pattern is not equivalent to the emitted H2-plus-body form.
   - AGY structured-output replays enforce exact echoed-schema equivalence, so a contract schema change requires the historical replay envelope to be synchronized without changing its recorded response evidence.
   - When a backend package is at the 15-file limit, consolidate focused behavioral tests into an existing responsibility-aligned file before adding another package-local test file.
+---
+
+## 2026-08-10 04:40 -07:00 - pf-batch-submit-diagnostics-001
+- What was implemented
+  - Added one shared deterministic duplicate-name diagnostic to Work request admission and the topology-independent batch preparation path used by `you submit batch --dry-run`.
+  - The diagnostic identifies the duplicate value, both zero-based `works[]` entries, the whole-batch rule across `workTypeName` values, and the rename/remove repair.
+  - Preserved bounded `work_request:` admission diagnostics through live human and structured CLI HTTP error handling while continuing to redact arbitrary server messages.
+  - Marked story `pf-batch-submit-diagnostics-001` as passing in `prd.json`; stories 002 and 003 remain for later iterations.
+- Files changed
+  - `pkg/services/work/internal/requestadmission/codec.go`
+  - `pkg/services/work/internal/requestadmission/normalize.go`
+  - `pkg/services/work/internal/requestadmission/normalize_test.go`
+  - `pkg/services/work/internal/requestadmission/submit_test.go`
+  - `pkg/services/factory_runtime/internal/services/orchestration/engine/engine_submit_test.go`
+  - `pkg/transports/cli/submit/error_output.go`
+  - `pkg/transports/cli/submit/batch_input_test.go`
+  - `pkg/transports/cli/submit/submit_transport_test.go`
+  - `tests/functional/work/transports/cli/submit/batch_contract/batch_contract_test.go`
+  - `tests/functional/work/transports/cli/submit/batch_contract/helpers_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Focused admission, CLI transport, orchestration, root-built functional, and focused `go vet` tests — passed.
+  - `make test` — passed.
+  - `make vet` — passed when run after `make test` completed; a concurrent first attempt hit a Windows Go-cache file lock.
+  - `make pkg-maint pkg-file-count pkg-structure` — passed.
+  - `make verify-fast` — blocked at the pre-existing UI typecheck baseline (`@types/bun` missing and TypeScript 6 `baseUrl` deprecation errors); no UI files changed.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - Topology-independent checks must be shared between batch preparation and live normalization so dry-run and live admission agree without requiring Factory topology.
+  - CLI submit tests belong in existing responsibility-aligned files when the package maintainability ceiling leaves no room in the broad batch test file.
 ---

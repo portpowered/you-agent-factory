@@ -50,6 +50,20 @@ func TestFactoryRequestBatchPreparationRejectsInvalidCanonicalBatches(t *testing
 	}
 }
 
+func TestFactoryRequestBatchPreparationUsesDuplicateNameDiagnostic(t *testing.T) {
+	t.Parallel()
+
+	data := []byte(`{"requestId":"batch-duplicate-diagnostic","type":"FACTORY_REQUEST_BATCH","works":[{"name":"release","workTypeName":"story-set"},{"name":"release","workTypeName":"story"}]}`)
+	_, err := NewFactoryRequestBatchPreparation().PrepareFactoryRequestBatch(context.Background(), data)
+	if err == nil {
+		t.Fatal("PrepareFactoryRequestBatch succeeded for duplicate names")
+	}
+	want := "work_request: duplicate name \"release\": works[1].name conflicts with works[0].name; works[].name must be unique across the entire batch, including across different workTypeName values; rename or remove one entry"
+	if got := err.Error(); got != want {
+		t.Fatalf("duplicate-name diagnostic = %q, want %q", got, want)
+	}
+}
+
 func TestFactoryRequestBatchPreparationFailsClosedWithoutLiveContext(t *testing.T) {
 	t.Parallel()
 

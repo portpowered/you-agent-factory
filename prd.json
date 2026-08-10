@@ -1,75 +1,71 @@
 {
-  "project": "WO-B2 — Reusable AGY Production Review Roles",
-  "branchName": "wo-b2-agy-production-review-roles",
-  "description": "Ship two first-party packaged AGY review roles: a context-free cold-watch reviewer for completed cuts and a deterministic clip-QA gate for rendered clips. Both roles pass media paths unchanged through the existing ANTIGRAVITY provider, define exact success and failure contracts, remain offline in ordinary CI, and include operator guidance for production composition.",
+  "project": "you submit batch Constraint Diagnostics",
+  "branchName": "pf-batch-submit-diagnostics",
+  "description": "Make you submit batch reject duplicate Work names and relations outside the submitted batch with deterministic, actionable diagnostics that identify the offending entries, explain the governing rule, and tell customers how to repair the request. Run these topology-independent checks during dry-run, preserve atomic valid-batch behavior, and document the constraints in the packaged batch and relationship references.",
   "context": {
-    "customerAsk": "Deliver WO-B2 as one coherent reusable role slice: a cold-watch final reviewer that receives only a completed-cut path and reports what happens plus temporal and audio defects, and a clip-QA gate that receives a clip path and shot specification and returns a deterministic structured pass-or-reroll verdict. Reuse the existing ANTIGRAVITY provider and real recorded AGY traces, keep normal CI offline, pass file paths directly for AGY to parse, and document exact input, output, failure, and missing-file behavior.",
-    "problem": "WO-B1 and merged PR #1826 provide AGY execution and real video/audio traces, but the repository does not ship reusable production role definitions. Factory authors must invent prompts, schemas, workspace rules, and refusal handling, which creates hidden context and false-success risk because AGY can exit zero and report SUCCESS while declining a missing file.",
-    "solution": "Add independently invocable @you/agy-cold-watch and @you/agy-clip-qa authored Factories to the first-party packaged catalog, generate their distribution artifacts through the existing generator, document and exemplify their production composition, and prove their successful and missing-file behavior through root.BuildProcess, Process.Execute, ProviderCommandRunner, and the real recorded AGY traces without live CI calls or wrapper media transformation."
+    "customerAsk": "Improve you submit batch validation so batch-wide duplicate Work names and relations outside the submitted batch produce precise, actionable errors naming the offending Work or relation. Document both constraints in the batch reference docs. A relation-to-existing-Work opt-in is only a stretch goal if cheap; otherwise clearly explain the intra-batch rule.",
+    "problem": "Batch admission requires every works[].name to be unique across the complete request and every relation endpoint to resolve through that request's Work-name index. Existing failures can identify only the later duplicate or call an endpoint unknown, leaving customers to infer the earlier conflict, whether uniqueness spans Work types, and whether previously submitted Work is a valid endpoint. This causes avoidable trial and error and obscures an atomic admission rule.",
+    "solution": "Keep canonical validation in Work request admission and make deterministic errors include entry indexes, names, relation type and endpoints, the violated batch rule, and a correction. Reuse the topology-independent checks for CLI dry runs, preserve the diagnostic through human and structured CLI errors, retain whole-batch rejection with no partial side effects, and update packaged batch and relationship documentation. Do not add cross-batch relation resolution or an opt-in flag in this delivery."
   },
   "acceptanceCriteria": [
-    "The first-party catalog ships independently invocable @you/agy-cold-watch and @you/agy-clip-qa Factories with discoverable descriptions, examples, exact invocation signatures, explicit primary results, and canonical generated catalog artifacts derived from authored sources rather than hand-edited generated files.",
-    "Cold watch accepts only a completed-cut path as creative input and returns the documented observation report covering chronological events, temporal or transient defects, audio content and defects, observed speech, and a pass or reroll recommendation; it neither receives nor seeks creative-brief, shot-specification, intended-beat, or prior-verdict context.",
-    "Clip QA accepts a clip path and shot specification and returns a schema-valid object containing action_completed, spec_deviations, temporal_artifacts, audio_content, unexpected_speech, verdict, and confidence; verdict is exactly pass or reroll, and a missing, invalid, or incomplete result cannot become successful Work.",
-    "Both roles preserve the media path in prompt text and use the existing ANTIGRAVITY Provider and mandatory --add-dir-compatible workspace path without decoding, uploading, copying, probing, frame-stripping, extracting audio from, or otherwise transforming media; missing, unreadable, or inaccessible media fails Work with an actionable non-empty diagnostic and is not a pass or reroll.",
-    "Focused offline functional coverage constructs through root.BuildProcess, executes through Process.Execute, replaces only edges.Edges.ProviderCommandRunner, replays the real AGY video, audio, clip-QA, and missing-file recordings, and proves the selected Factory, provider command, returned content, Factory Events, and terminal Work outcome.",
-    "Quality gates pass: go test ./tests/functional/providers/agy -run '^TestAgyProductionReviewRolesThroughRootBuildProcess$' -count=1, make packaged-factory-catalog-check, make docs-reference-smoke, and make verify-fast pass; Typecheck passes; Tests pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
-    "The implementation and review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared or generated-file churn are resolved, and the PR is actually merged; opened, green, approved, or ready-to-merge is not complete."
+    "A batch with duplicate works[].name values is rejected with a deterministic diagnostic that names the duplicate value, identifies both conflicting entries, states that names are unique across the whole batch even across Work types, and advises renaming or removing one entry.",
+    "A relation whose source or target is absent from the same request's works[] is rejected with a deterministic diagnostic that identifies the relation entry, relation type, source and target names, the missing endpoint field and value, and the intra-batch rule plus corrective action.",
+    "Normal you submit batch and you submit batch --dry-run expose these topology-independent diagnostics through supported human and structured error modes without admitting partial Work or relationships, while valid batches retain established behavior.",
+    "Canonical packaged batch and relationship documentation explicitly describes both constraints and includes invalid and corrected authoring examples consistent with runtime behavior.",
+    "Validation remains owned by Work request admission with pure deterministic rule evaluation and isolated transport and network side effects; no cross-batch lookup, mutable state, alternate validator, or unrelated public contract change is introduced.",
+    "Typecheck and focused tests pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
+    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared/generated-file churn are resolved against current main, and the PR is actually merged."
   ],
   "userStories": [
     {
-      "id": "wo-b2-agy-production-review-roles-001",
-      "title": "Ship the context-free cold-watch reviewer",
-      "description": "As a production operator, I want an independent reviewer to watch the completed cut without creative-brief context so I can learn what the artifact actually communicates and catch motion or soundtrack defects that upstream authors may have normalized.",
+      "id": "pf-batch-submit-diagnostics-001",
+      "title": "Diagnose batch-wide duplicate Work names",
+      "description": "As a batch author, I want duplicate-name rejection to identify both conflicting Work entries and the uniqueness rule so I can repair the batch without searching or guessing.",
       "acceptanceCriteria": [
-        "@you/agy-cold-watch is independently invocable with one required cutPath input bound to a clearly named CLI argument; provider model, effort, and timeout may use documented safe defaults or explicit role overrides, but there is no brief, shot-specification, expected-action, or prior-verdict input.",
-        "The effective reviewer instruction treats cutPath as the only creative context, watches the whole file including audio, does not inspect nearby briefs or manifests for intended meaning, and does not infer correctness from filenames or upstream status.",
-        "Successful primary output follows one documented report contract with a chronological description of what happens, timestamped temporal or transient defects, audio content and timestamped audio defects, observed speech, and an overall pass or reroll recommendation; empty sections are explicit rather than omitted.",
-        "The cut path is forwarded unchanged in the AGY prompt and execution uses the existing workspace --add-dir; no wrapper media decoding, upload, copy, probing, frame extraction, or audio extraction occurs.",
-        "An absent, unreadable, unsupported, or workspace-inaccessible cut does not produce a review recommendation: Work reaches the failed path with a non-empty actionable explanation, including when replayed AGY exits zero and reports provider status SUCCESS while refusing the file.",
-        "The cold-watch functional subtest replays the real video and audio recordings and asserts facts from both picture and soundtrack through root.BuildProcess, Process.Execute, and ProviderCommandRunner without a live AGY call.",
+        "When a later works[] entry repeats an earlier name, the diagnostic includes the repeated name and both zero-based entry paths, such as works[3] and works[0].",
+        "The diagnostic states that works[].name must be unique across the entire batch, including when the conflicting entries have different workTypeName values, and tells the author to rename or remove one entry.",
+        "If multiple duplicate pairs exist, validation reports the first conflict in stable request order so identical input produces identical output.",
+        "Normal live submission and --dry-run reject the invalid request through supported human and structured CLI error modes before any Work is admitted; a batch with distinct names continues to validate and submit normally.",
+        "Focused Work request-admission and CLI behavioral tests assert the customer-visible diagnostic and no-partial-admission outcome rather than source topology.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Implemented @you/agy-cold-watch with a single cutPath input, context-free AGY prompt, and a runtime markdown-observation-report/v1 postcondition requiring inspection status, chronology, timestamped defect/audio sections, observed speech, and exactly one pass-or-reroll recommendation. A complete report is accepted through root.BuildProcess, while both existing real incomplete video/audio traces and the exit-zero missing-file refusal fail Work without a primary recommendation; path and provider evidence remain observable. Focused story, factory-definition, mapping, API-contract, catalog, and docs checks pass."
+      "notes": "Implemented one shared Work request-admission duplicate-name diagnostic for live normalization and topology-independent batch preparation used by --dry-run. The deterministic first conflict names the duplicate value, both zero-based works[] entries, the whole-batch cross-workTypeName rule, and the rename/remove repair. Bounded work_request: server diagnostics now survive the existing human and --json CLI error paths through SubmissionHTTPError.Message. Admission, engine atomicity, direct CLI, and root-built functional tests cover cross-type collisions, stable ordering, dry-run no-HTTP behavior, live human/structured diagnostics, valid existing submission behavior, and zero partial Work."
     },
     {
-      "id": "wo-b2-agy-production-review-roles-002",
-      "title": "Ship the deterministic clip-QA gate",
-      "description": "As a shot pipeline author, I want a clip reviewed against its shot specification with a stable pass-or-reroll result so downstream routing can act on the verdict without parsing free-form prose.",
+      "id": "pf-batch-submit-diagnostics-002",
+      "title": "Diagnose relation endpoints outside the submitted batch",
+      "description": "As a batch author, I want an invalid relation to identify its missing endpoint and explain the same-batch requirement so I can add the Work to this request or correct the endpoint name.",
       "acceptanceCriteria": [
-        "@you/agy-clip-qa is independently invocable with exactly two required creative inputs, clipPath and shotSpecification, bound to discoverable named CLI arguments and preserved without hidden brief or prior-verdict context.",
-        "The role watches the complete clip and evaluates whether the specified action finishes, deviations from the supplied specification, transient and temporal artifacts across time, audio content, and unexpected speech.",
-        "The primary result validates against the recorded B2 schema: action_completed is boolean; spec_deviations and temporal_artifacts are string arrays; audio_content is speech, music, noise, silence, or mixed; unexpected_speech is boolean; verdict is pass or reroll; confidence is from 0 through 1; every field is required.",
-        "pass means the action completes and no specification deviation, reroll-worthy temporal artifact, or disallowed speech is observed; otherwise the role returns reroll and records each reason in the applicable arrays rather than hiding it in prose.",
-        "Missing or inaccessible media, provider or process failure, malformed output, or schema-invalid output fails Work with an actionable diagnostic and never becomes a production reroll, because reroll is reserved for a successfully inspected but unacceptable clip.",
-        "The clip-QA functional subtest replays agy-trace-clipqa-schema.stream.jsonl and the recorded missing-file trace through the public process boundary, asserts the real pass result and audio or no-speech evidence, and proves missing-file refusal reaches failed Work without live AGY.",
+        "If sourceWorkName or targetWorkName does not exactly match a name in the same request's works[], the diagnostic includes the relations[] index, relation type, source and target names, and the missing endpoint field and value.",
+        "The diagnostic explicitly says relation endpoints must name Work declared in this batch and advises either adding the named Work to works[] or correcting the endpoint; it does not imply that existing Work from an earlier submission can be targeted.",
+        "Source validation precedes target validation for a relation and relations are checked in request order, producing stable output when multiple endpoints are invalid.",
+        "Normal live submission and --dry-run expose the same actionable rule context through supported human and structured CLI error modes, reject the whole request without Work or relationship side effects, and preserve valid DEPENDS_ON and PARENT_CHILD submission behavior.",
+        "Focused Work request-admission and CLI behavioral tests cover missing source, missing target, a name that exists only in prior Factory state, and valid same-batch relations.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 2,
-      "passes": true,
-      "notes": "Implemented the explicit structured-clip-qa/v1 runtime contract for confidence bounds, required fields, pass invariants, and meaningful inspected rerolls. Structured failure detection now checks status/outcome/success markers before allowing a reroll and rejects unscoped structured rerolls; root.BuildProcess coverage proves pass, accepted reroll, out-of-range/inconsistent results, mixed provider status, schema failure, provider failure, and missing-file failure. The review follow-up also encodes confidence minimum/maximum in the authored and generated provider schema, asserts those bounds in the AGY command, and keeps the validator below the package maintainability threshold. Executor, focused AGY functional, and packaged catalog checks pass."
+      "passes": false,
+      "notes": ""
     },
     {
-      "id": "wo-b2-agy-production-review-roles-003",
-      "title": "Document and verify production composition",
-      "description": "As a Factory author, I want a worked, validated example of the two roles and their failure boundaries so I can place them in a production pipeline without hidden media handling or ambiguous routing.",
+      "id": "pf-batch-submit-diagnostics-003",
+      "title": "Document batch naming and relation membership constraints",
+      "description": "As a customer preparing a batch, I want the packaged reference guides to state the validation rules and remedies so I can author a valid request before submitting it.",
       "acceptanceCriteria": [
-        "The packaged-factories reference catalog documents both roles, their purpose, invocation inputs, result shape, default AGY model and timeout policy, workspace-relative and absolute-path expectations, and representative PowerShell-safe invocations whose flags agree with generated help.",
-        "A repository-owned worked example shows clip QA after clip creation and cold watch after mechanical checks assemble the completed cut; it routes pass, reroll, and failed execution distinctly and states that cold watch receives no creative brief even when upstream stages have one.",
-        "The example and operator documentation state that paths must identify readable files within the directory exposed to AGY by the existing --add-dir execution, that the wrapper never transforms media, and that a missing or inaccessible path is an execution failure rather than a review verdict.",
-        "you factory config validate accepts each authored role and example; you run --named @you/agy-cold-watch --help and you run --named @you/agy-clip-qa --help expose the documented inputs; generated catalog files are refreshed only with make packaged-factory-catalog-generate.",
-        "The documentation names go test ./tests/functional/providers/agy -run '^TestAgyProductionReviewRolesThroughRootBuildProcess$' -count=1 as the independently runnable fully offline end-to-end command; any live AGY smoke remains the existing operator-gated B1 smoke and is not duplicated or enabled in ordinary CI.",
-        "Behavioral validation exercises loading, invocation, successful result, schema rejection, provider failure, and missing-file outcomes through public runtime behavior; it does not scan source trees, assert command, route, or catalog inventories, or inspect generated bundle internals as a substitute for those outcomes.",
-        "Typecheck passes",
-        "Tests pass"
+        "you docs batch-inputs states that works[].name is unique across the whole batch, not per Work type, and that both relation endpoints must match names in that request's works[].",
+        "The batch guide includes compact invalid duplicate-name and outside-batch relation examples, the kind of diagnostic each produces, and corrected examples or corrections a customer can apply.",
+        "The canonical relationship guide states that submitted DEPENDS_ON and PARENT_CHILD endpoints are intra-batch name references and that previously submitted or otherwise existing Work cannot be targeted by name.",
+        "Documentation accurately distinguishes topology-independent --dry-run checks from live Factory topology validation and preserves the whole-batch and no-partial-Work guarantee.",
+        "Packaged reference rendering exposes the updated content through you docs batch-inputs, its compatibility alias, and you docs relationships; make docs-reference-smoke passes.",
+        "Typecheck passes"
       ],
       "priority": 3,
-      "passes": true,
-      "notes": "Documented both roles in the packaged-factory reference catalog with exact live-help signatures, pinned ANTIGRAVITY/gemini-3.6-flash-high/8m policy, report schemas, path and failure boundaries, and PowerShell-safe invocations. Added the repository-owned AGY production composition example with distinct pass/reroll/failed routing and the offline root-process command; updated catalog-count/docs smoke coverage. Corrected cold-watch documentation to match live help: required cutPath is available positionally and through --cut-path, and corrected both documented PowerShell parsers to consume the two-line H2 recommendation contract. Authored/generated catalog checks, factory validation, focused root-process coverage, package gates, packaged catalog/source checks, readme-check, and docs-reference smoke pass."
+      "passes": false,
+      "notes": ""
     }
   ]
 }

@@ -505,6 +505,29 @@ func TestNormalizeWorkRequest_RejectsDependencyCycle(t *testing.T) {
 	}
 }
 
+func TestNormalizeWorkRequest_DuplicateNameDiagnosticIsStableAcrossWorkTypes(t *testing.T) {
+	request := Request{
+		RequestID: "request-duplicate-diagnostic",
+		Type:      RequestTypeFactoryRequestBatch,
+		Works: []Work{
+			{Name: "first", WorkTypeID: "task"},
+			{Name: "second", WorkTypeID: "review"},
+			{Name: "first", WorkTypeID: "review"},
+			{Name: "second", WorkTypeID: "task"},
+		},
+	}
+	_, err := NormalizeWorkRequest(request, NormalizeOptions{
+		ValidWorkTypes: map[string]bool{"task": true, "review": true},
+	})
+	if err == nil {
+		t.Fatal("NormalizeWorkRequest succeeded for duplicate names")
+	}
+	want := "work_request: duplicate name \"first\": works[2].name conflicts with works[0].name; works[].name must be unique across the entire batch, including across different workTypeName values; rename or remove one entry"
+	if got := err.Error(); got != want {
+		t.Fatalf("duplicate-name diagnostic = %q, want %q", got, want)
+	}
+}
+
 func TestNormalizeWorkRequest_RejectsValidationFailures_WorkArrayAndEndpoints(t *testing.T) {
 	runNormalizeWorkRequestValidationTests(t, []normalizeValidationTestCase{
 		{

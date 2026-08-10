@@ -43,6 +43,82 @@ func TestCLISubmitBatchDryRunEmitsSummaryWithoutMutation(t *testing.T) {
 	}
 }
 
+// TestCLISubmitBatchDuplicateNameDiagnosticIsActionableAndAtomic proves the
+// duplicate-name rule at the public process boundary for live human output,
+// live structured mode, and topology-independent dry-run validation. The
+// invalid live requests are rejected before the Factory Session creates any
+// Work, while dry-run never contacts its unreachable server.
+func TestCLISubmitBatchDuplicateNameDiagnosticIsActionableAndAtomic(t *testing.T) {
+	factoryDir := support.ScaffoldFactory(t, duplicateSubmitBatchFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:     factoryDir,
+		UseMockWorkers: true,
+	})
+	defer server.Stop(t)
+
+	process := buildBatchContractProcess(t, serviceedges.Edges{})
+	support.CleanupProcess(t, process)
+	messageMarkers := []string{
+		"duplicate name \"release\"",
+		"works[1].name",
+		"works[0].name",
+		"unique across the entire batch",
+		"different workTypeName values",
+		"rename or remove one entry",
+	}
+	for _, test := range []struct {
+		name      string
+		json      bool
+		requestID string
+	}{
+		{name: "human", requestID: "batch-duplicate-human"},
+		{name: "structured", json: true, requestID: "batch-duplicate-structured"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			args := []string{"you", "--server", server.URL(), "submit", "batch"}
+			if test.json {
+				args = []string{"you", "--server", server.URL(), "--json", "submit", "batch"}
+			}
+			args = append(args, duplicateBatchJSON(test.requestID))
+			stdout, stderr, err := executeSubmitBatchCLIExpectError(t, process, args)
+			if err == nil {
+				t.Fatal("duplicate-name submission succeeded")
+			}
+			diagnostic := err.Error() + "\n" + stderr
+			for _, marker := range messageMarkers {
+				if !strings.Contains(diagnostic, marker) {
+					t.Fatalf("diagnostic missing %q:\n%s", marker, diagnostic)
+				}
+			}
+			if stdout != "" {
+				t.Fatalf("duplicate-name submission emitted success stdout: %q", stdout)
+			}
+
+			listed := support.ListDefaultSessionWork(t, server.URL())
+			if len(listed.Results) != 0 {
+				t.Fatalf("duplicate-name submission admitted partial Work: %#v", listed.Results)
+			}
+		})
+	}
+
+	stdout, stderr, err := executeSubmitBatchCLIExpectError(t, process, []string{
+		"you", "--server", "http://127.0.0.1:1", "--json",
+		"submit", "batch", "--dry-run", duplicateBatchJSON("batch-duplicate-dry-run"),
+	})
+	if err == nil {
+		t.Fatal("duplicate-name dry-run succeeded")
+	}
+	diagnostic := err.Error() + "\n" + stderr
+	for _, marker := range messageMarkers {
+		if !strings.Contains(diagnostic, marker) {
+			t.Fatalf("dry-run diagnostic missing %q:\n%s", marker, diagnostic)
+		}
+	}
+	if stdout != "" {
+		t.Fatalf("duplicate-name dry-run emitted stdout: %q", stdout)
+	}
+}
+
 // TestCLISubmitBatchSuccessHumanAndJSONShapes proves successful you submit batch
 // emits stable human text and --json shapes with request identity, trace context,
 // work count, and accepted work entries when exercised through Process.Execute

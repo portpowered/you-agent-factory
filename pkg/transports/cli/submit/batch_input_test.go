@@ -5,7 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"io/fs"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -36,6 +39,34 @@ func (testFactoryRequestBatchPreparation) PrepareFactoryRequestBatch(
 		Request:       request,
 		CanonicalJSON: append([]byte(nil), data...),
 	}, nil
+}
+
+func TestSubmitBatch_DuplicateNameDryRunFailsBeforeHTTP(t *testing.T) {
+	called := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+	}))
+	defer srv.Close()
+
+	batch := `{"requestId":"batch-duplicate-dry-run","type":"FACTORY_REQUEST_BATCH","works":[{"name":"release","workTypeName":"story-set"},{"name":"release","workTypeName":"story"}]}`
+	err := submitBatchForTestWithPreparation(t, BatchConfig{
+		Context: context.Background(), Args: []string{batch}, DryRun: true,
+		Server: mustServerBase(t, srv.URL), Output: io.Discard,
+	}, workservice.NewFactoryRequestBatchPreparation())
+	if err == nil {
+		t.Fatal("SubmitBatch dry-run succeeded for duplicate names")
+	}
+	for _, marker := range []string{
+		"works[1].name", "works[0].name", "duplicate name \"release\"",
+		"unique across the entire batch", "rename or remove one entry",
+	} {
+		if !strings.Contains(err.Error(), marker) {
+			t.Fatalf("dry-run diagnostic missing %q: %v", marker, err)
+		}
+	}
+	if called {
+		t.Fatal("duplicate-name dry-run sent an HTTP request")
+	}
 }
 
 type batchInputFileSystemFake struct {
