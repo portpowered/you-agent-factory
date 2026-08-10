@@ -50,6 +50,8 @@ import (
 
 const (
 	defaultMockWorkersConfigPathSentinel = "__agent_factory_default_mock_workers_config__"
+	runListenInputID                     = "you.run.flag.listen"
+	serverListenInputID                  = "you.server.flag.listen"
 )
 
 const cliBinaryName = "you"
@@ -396,6 +398,12 @@ func newMCPCommand(options CommandFactory) (*cobra.Command, error) {
 // pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, globals *cliGlobalOptions, operatorDefaults *cliOperatorDefaultsOptions, policy terminalpolicy.Policy, rootOptions CommandFactory, defaultInvocation bool) error {
 	cfg = applyRunScopedServerMode(cfg)
+	if cfg.ListenExplicit || strings.TrimSpace(cfg.ListenAddress) != "" {
+		cfg.ListenExplicit = true
+		if !defaultInvocation && !cfg.WithServer && !cfg.WithSite {
+			return fmt.Errorf("--listen requires --with-server or --with-site on you run")
+		}
+	}
 	logger, err := policy.BuildLogger(rootOptions.buildTerminalLogger)
 	if err != nil {
 		return err
@@ -409,6 +417,7 @@ func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs 
 		if err := resolveRunBindFromServer(cmd, globals.server, &cfg); err != nil {
 			return err
 		}
+		warnLegacyListenerBinding(cmd, cfg, defaultInvocation, persistentInputWasCLI(cmd, "you.flag.server", "server"))
 	}
 	homeDir, err := resolveProcessHomeDir(rootOptions)
 	if err != nil {
@@ -617,6 +626,20 @@ func persistentFlagValueIfChanged(cmd *cobra.Command, name, value string) string
 	return ""
 }
 
+func persistentInputWasCLI(cmd *cobra.Command, inputID, legacyName string) bool {
+	if cmd == nil {
+		return false
+	}
+	inputs, err := climanifestcobra.ResolvedPersistentInputs(cmd)
+	if err == nil {
+		state, found := inputs.State(inputID)
+		if found {
+			return state.Provenance == resolvedinput.SourceCLIFlag
+		}
+	}
+	return cmd.Root().PersistentFlags().Changed(legacyName)
+}
+
 func resolvedPersistentStringIfCLI(
 	cmd *cobra.Command,
 	inputID string,
@@ -712,6 +735,20 @@ func operatorConfigSourceValue(
 }
 
 func resolveRunBindFromServer(cmd *cobra.Command, server string, cfg *runcli.RunConfig) error {
+	if cfg == nil {
+		return fmt.Errorf("resolve local listener: run config is required")
+	}
+	if cfg.ListenExplicit || strings.TrimSpace(cfg.ListenAddress) != "" {
+		target, err := cliserver.LocalBindTargetFromListen(cfg.ListenAddress)
+		if err != nil {
+			return err
+		}
+		cfg.BindHost = target.Host
+		cfg.Port = target.Port
+		cfg.AutoPort = false
+		cfg.ListenExplicit = true
+		return nil
+	}
 	target, err := cliserver.LocalBindTargetFromServer(server)
 	if err != nil {
 		return err
@@ -720,6 +757,30 @@ func resolveRunBindFromServer(cmd *cobra.Command, server string, cfg *runcli.Run
 	cfg.Port = target.Port
 	cfg.AutoPort = true
 	return nil
+}
+
+func listenerOwner(defaultInvocation bool, cfg runcli.RunConfig) bool {
+	return defaultInvocation || cfg.WithServer || cfg.WithSite
+}
+
+func warnLegacyListenerBinding(cmd *cobra.Command, cfg runcli.RunConfig, defaultInvocation, explicitServer bool) {
+	if !explicitServer || !listenerOwner(defaultInvocation, cfg) {
+		return
+	}
+	if cmd == nil || cmd.ErrOrStderr() == nil {
+		return
+	}
+	if cfg.ListenExplicit {
+		_, _ = fmt.Fprintln(
+			cmd.ErrOrStderr(),
+			"warning: --listen takes precedence over --server for the local listener; use --listen for the listener and reserve --server for the factory API endpoint",
+		)
+		return
+	}
+	_, _ = fmt.Fprintln(
+		cmd.ErrOrStderr(),
+		"warning: --server is deprecated for local listener binding; use --listen <host:port> instead",
+	)
 }
 
 func resolveRunFactorySelection(

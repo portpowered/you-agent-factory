@@ -187,7 +187,8 @@ func TestRunScopedServerUsesProductionListenerAndReportsFallback(t *testing.T) {
 		"you", "--server", requestedURL, "run", "--factory", workflowPath,
 		"--with-mock-workers", "--with-server",
 	}, "")
-	if stderr != "" || !strings.Contains(stdout, "completed (SUCCEEDED)") {
+	if !strings.Contains(stderr, "--server is deprecated") || strings.Count(stderr, "warning:") != 1 ||
+		!strings.Contains(stdout, "completed (SUCCEEDED)") {
 		t.Fatalf("JavaScript stdout=%q stderr=%q", stdout, stderr)
 	}
 
@@ -211,6 +212,74 @@ func TestRunScopedServerUsesProductionListenerAndReportsFallback(t *testing.T) {
 		t.Fatalf("production listener remained bound after completion: %v", err)
 	}
 	_ = rebound.Close()
+}
+
+// TestRunScopedServerUsesExactListenAddress proves --listen binds the requested
+// loopback port without entering the legacy ascending fallback path.
+func TestRunScopedServerUsesExactListenAddress(t *testing.T) {
+	workingDirectory := t.TempDir()
+	workflowPath := filepath.Join(workingDirectory, "workflow.js")
+	if err := os.WriteFile(workflowPath, []byte(`return "hosted JavaScript";`), 0o600); err != nil {
+		t.Fatalf("write workflow: %v", err)
+	}
+	requestedPort := reserveExactPort(t)
+	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+	homeDir := t.TempDir()
+	environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	stdout, stderr := execute(t, process, environment, workingDirectory, []string{
+		"you", "run", "--factory", workflowPath, "--with-mock-workers", "--with-server",
+		"--listen", "127.0.0.1:" + strconv.Itoa(requestedPort),
+	}, "")
+	if stderr != "" || !strings.Contains(stdout, "completed (SUCCEEDED)") {
+		t.Fatalf("JavaScript stdout=%q stderr=%q", stdout, stderr)
+	}
+	wantURL := "Dashboard URL: http://127.0.0.1:" + strconv.Itoa(requestedPort) + "/dashboard/ui"
+	if !strings.Contains(stdout, wantURL) {
+		t.Fatalf("stdout = %q, want exact listener URL %q", stdout, wantURL)
+	}
+	rebound, err := net.Listen("tcp4", "127.0.0.1:"+strconv.Itoa(requestedPort))
+	if err != nil {
+		t.Fatalf("exact listener remained bound after completion: %v", err)
+	}
+	_ = rebound.Close()
+}
+
+func TestRunScopedServerRejectsUnavailableExactListenAddress(t *testing.T) {
+	busyListener, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("reserve exact listener port: %v", err)
+	}
+	defer busyListener.Close()
+	requestedPort := busyListener.Addr().(*net.TCPAddr).Port
+	workingDirectory := t.TempDir()
+	workflowPath := filepath.Join(workingDirectory, "workflow.js")
+	if err := os.WriteFile(workflowPath, []byte(`return "unreachable";`), 0o600); err != nil {
+		t.Fatalf("write workflow: %v", err)
+	}
+	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+	homeDir := t.TempDir()
+	environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	var stdout, stderr bytes.Buffer
+	err = process.Execute(root.Input{
+		Args: []string{
+			"you", "run", "--factory", workflowPath, "--with-mock-workers", "--with-server",
+			"--listen", "127.0.0.1:" + strconv.Itoa(requestedPort),
+		},
+		Env: environment, Context: t.Context(), WorkingDirectory: workingDirectory,
+		Stdout: &stdout, Stderr: &stderr,
+	})
+	if err == nil || !strings.Contains(err.Error(), "SERVER_BIND_FAILED") {
+		t.Fatalf("exact bind error = %v, want SERVER_BIND_FAILED; stdout=%q stderr=%q", err, stdout.String(), stderr.String())
+	}
+	if strings.Contains(stdout.String(), "Dashboard URL:") || !strings.Contains(stderr.String(), `"code":"SERVER_BIND_FAILED"`) {
+		t.Fatalf("stdout=%q stderr=%q, want no readiness and one structured bind failure", stdout.String(), stderr.String())
+	}
 }
 
 // TestRunScopedServerRejectsRemoteBindTargetAtCLIBoundary proves remote bind
@@ -414,4 +483,17 @@ func execute(
 		t.Fatalf("Process.Execute(%v) error = %v; stdout=%q stderr=%q", args, err, stdout.String(), stderr.String())
 	}
 	return stdout.String(), stderr.String()
+}
+
+func reserveExactPort(t *testing.T) int {
+	t.Helper()
+	listener, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("reserve exact listener port: %v", err)
+	}
+	port := listener.Addr().(*net.TCPAddr).Port
+	if err := listener.Close(); err != nil {
+		t.Fatalf("release exact listener port: %v", err)
+	}
+	return port
 }

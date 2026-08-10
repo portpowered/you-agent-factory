@@ -1,6 +1,6 @@
 Load workflow and run the factory engine.
 
-Without an explicit --dir, --named, or --factory selector, you run validates the exact invocation-local ./factory/factory.json as the Current Factory; it does not bootstrap a missing Factory or follow another current-factory pointer. Run you run --work ./docs/examples/startup-work.json to submit explicit default Work; Factory directory runs can consume factory/inputs/task/default while active. Missing and invalid definitions fail before runtime, listener, or browser activation. Ordinary batch, continuous, named, portable Factory, replay, mock-worker, and JavaScript runs start no HTTP listener. Add --with-server to serve the Current Factory API for exactly the run lifetime without opening a browser, or --with-site to imply that server and open the embedded dashboard once after readiness. Server-enabled runs bind only the loopback host and preferred port from global --server, advance monotonically through port 65535 on collisions, report the actual bound URL, and join the listener before returning.
+Without an explicit --dir, --named, or --factory selector, you run validates the exact invocation-local ./factory/factory.json as the Current Factory; it does not bootstrap a missing Factory or follow another current-factory pointer. Run you run --work ./docs/examples/startup-work.json to submit explicit default Work; Factory directory runs can consume factory/inputs/task/default while active. Missing and invalid definitions fail before runtime, listener, or browser activation. Ordinary batch, continuous, named, portable Factory, replay, mock-worker, and JavaScript runs start no HTTP listener. Add --with-server to serve the Current Factory API for exactly the run lifetime without opening a browser, or --with-site to imply that server and open the embedded dashboard once after readiness. Server-enabled runs bind only the loopback host and port from --listen host:port when provided; --listen is an exact bind request. Without it, an explicit local --server URI remains a warned compatibility path that can advance monotonically through port 65535 on collisions; report the actual bound URL and join the listener before returning.
 
 Default execution uses batch mode and exits after idle completion. Use --continuously to keep the factory alive while idle until you cancel it. Use --with-mock-workers with an optional JSON config path for deterministic outcomes. Use --worktree <name> to create or reuse a Git worktree under the invocation working directory and execute every worker dispatch in that checkout, independent of provider. Use --quiet to suppress dashboard output for scripted or CI-oriented runs. Use --skip-permissions to request an invocation-only unsafe permission bypass for agent workers without changing persisted factory configuration. Normal live runs record by default unless you pass --no-record. Replay artifacts are sensitive and can contain prompts, payloads, stdout, stderr, and diagnostic metadata.
 
@@ -30,11 +30,15 @@ Examples:
   # Opt into ordered canonical Factory Event progress instead of primary-result-only stdout.
   you run --named @you/goal --output response-stream "Ship the login bugfix"
 
+  # Bind an exact local listener for a server-enabled run.
+  you run --with-server --listen 127.0.0.1:7437
+
 Flags:
       --continuously                                                                 keep the factory alive while idle until cancelled
       --dir string                                                                   factory base directory (default "factory")
       --factory string                                                               path to a JSON or YAML Factory file, or an unambiguous Factory directory, for portable one-shot runs; use positional text, --to-file, or piped stdin for the invocation input
   -h, --help                                                                         help for run
+      --listen string                                                                exact local listener host:port for --with-server or --with-site (for example 127.0.0.1:7437); loopback hosts only
       --model string                                                                 override the optional model selected within the provider for this run
   -a, --named string                                                                 canonical persisted factory name resolved from ./factory before ~/.you-agent-factory/factories; built-ins materialize there on first use and remain editable
       --no-record                                                                    disable the default replay artifact for this invocation
@@ -55,5 +59,6 @@ Flags:
 Global Flags:
   -d, --debug           emit lower-level command diagnostics where supported (implies --verbose)
       --json            emit structured JSON on stdout for supported commands; diagnostics remain on stderr
-      --server string   factory API base URI (http:// or https://); HTTP client commands target this URI, while you server and server-enabled runs bind its loopback host and port (default "http://localhost:7437")
+      --remote          execute a supported operation through a running You server; does not wait, follow, continue, or start a listener
+      --server string   factory API base URI (http:// or https://) for HTTP client commands and remote placement; listener-owning commands use --listen host:port for explicit local binds, while local --server binding remains a warned compatibility path (default "http://localhost:7437")
   -v, --verbose         emit concise command diagnostics to stderr

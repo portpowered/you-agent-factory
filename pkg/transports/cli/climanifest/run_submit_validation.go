@@ -15,7 +15,7 @@ var runSubmitFamilySpecs = []struct {
 		id: "you.run", path: "you run",
 		flags: []string{
 			"continuously", "debug", "dir",
-			"factory", "json", "model", "named", "no-record", "output", "port", "provider", "quiet", "record", "replay", "to-file",
+			"factory", "json", "listen", "model", "named", "no-record", "output", "port", "provider", "quiet", "record", "replay", "to-file",
 			"runtime-log-compress", "runtime-log-dir", "runtime-log-max-age-days", "runtime-log-max-backups",
 			"runtime-log-max-size-mb", "runtime-metrics-compress", "runtime-metrics-dir",
 			"runtime-metrics-max-age-days", "runtime-metrics-max-backups", "runtime-metrics-max-size-mb",
@@ -25,7 +25,7 @@ var runSubmitFamilySpecs = []struct {
 	},
 	{
 		id: "you.server", path: "you server",
-		flags: []string{"debug", "json", "remote", "server", "verbose"},
+		flags: []string{"debug", "json", "listen", "remote", "server", "verbose"},
 	},
 	{
 		id: "you.submit", path: "you submit", operationID: "submitWorkBySessionId",
@@ -170,6 +170,7 @@ func validateRunInputPolicy(run Command) error {
 		"you.run.rel.recording",
 		"you.run.rel.quiet-json",
 		"you.run.rel.quiet-output",
+		"you.run.rel.listen-server",
 	} {
 		if _, ok := run.Relationships[relationshipID]; !ok {
 			return fmt.Errorf("command %q missing relationship %q", run.ID, relationshipID)
@@ -185,7 +186,8 @@ func validateRunStaticServerSurface(run Command) error {
 	}
 	withServer, _ := run.FlagByLong("with-server")
 	withSite, _ := run.FlagByLong("with-site")
-	if withServer.ValueType != "bool" || withSite.ValueType != "bool" {
+	listen, _ := run.FlagByLong("listen")
+	if withServer.ValueType != "bool" || withSite.ValueType != "bool" || listen.ValueType != "string" {
 		return fmt.Errorf("command %q has contradictory server/site metadata", run.ID)
 	}
 	if run.Exits["you.run.exit.cancel"].Code != 130 {

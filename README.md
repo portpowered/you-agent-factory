@@ -130,13 +130,13 @@ Run YOU as a backend that you can submit work against.
 Start a continuous named Factory with an API listener:
 
 ```bash
-you run --named @you/goal --continuously --with-server --to "finish up some random-job"
+you run --named @you/goal --continuously --with-server --listen 127.0.0.1:7437 --to "finish up some random-job"
 ```
 
 Or serve the project-local Current Factory (`./factory/factory.json`) with the dashboard:
 
 ```bash
-you server
+you server --listen 127.0.0.1:7437
 ```
 
 Submit one work item to a running session (payload is a file path):
@@ -152,6 +152,9 @@ Then watch the session run with `you session list` / `you work list`.
 
 Open the dashboard at [http://localhost:7437/dashboard/ui](http://localhost:7437/dashboard/ui)
 (or the bound URL printed when you start with `--with-site` / `you server`).
+Use `--listen <host:port>` on listener-owning commands when the local bind must
+be exact; an explicit local `--server` remains a warned legacy compatibility
+path.
 
 The live graph shows workstations, routing, and Factory Session status as work
 moves through the factory. The submit card posts one work item into the running

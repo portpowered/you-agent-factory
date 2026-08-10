@@ -28,6 +28,7 @@
 - When broad functional coverage reports a cancellation-observation failure, rerun the failed lane and isolate the named test before changing an unrelated feature; parallel-suite failures can move between existing durability/restart tests while isolated runs pass.
 - Persistent CLI globals are authored once on the root stable input ID; family manifests that project inherited inputs must mirror that ID, and the committed CLI inventory baseline should be refreshed through its repository update test.
 - Placement dispatch belongs at the CLI transport boundary: normalize once, pass the request to exactly one injected local or HTTP adapter, and preserve remote failures without local retry.
+- Listener-owned inputs belong in the detached run/server family manifest as local flags; resolve `--listen` to `BindHost`/`Port`/`AutoPort` at the CLI boundary and emit legacy `--server` migration warnings only for commands that actually own a listener.
 
 ## 2026-08-09 13:12 - wo-d1-packaged-factories-docs-001
 - What was implemented
@@ -832,4 +833,34 @@
 - **Learnings for future iterations:**
   - Authored CLI placement changes must run both `make cli-manifest-generate` and `make contracts-generate`; the worker contract-staging test detects drift in the published package artifacts.
   - The shared normalized invocation projection can be reused by local and remote adapters while keeping placement selection out of domain services.
+---
+
+## 2026-08-10 06:16 -07:00 - dwro-s1-remote-placement-flags-003
+- What was implemented
+  - Added explicit `--listen <host:port>` parsing for loopback listener addresses and resolved it into the existing bind host, port, and auto-port configuration at the CLI boundary.
+  - Applied `--listen` to `you server`, `you run --with-server`, and `you run --with-site`; ordinary runs reject misplaced listener input before invoking the run handler.
+  - Preserved explicitly supplied local `--server` listener binding as a compatibility fallback with one actionable migration warning, while making explicit `--listen` take precedence and explaining the retained `--server` endpoint role.
+  - Added manifest relationships, help/examples, reference documentation, generated CLI artifacts, and behavioral tests for exact binding, precedence, warnings, invalid placement, unavailable ports, and joined shutdown.
+- Files changed
+  - `contracts/cli/commands.json`
+  - `contracts/testdata/baseline/{cli-command-inputs.json,cli-commands.json}`
+  - `docs/internal/baselines/backend-package-file-count.json`
+  - `docs/reference/{agents,operations,run,sessions}.md`
+  - `README.md`
+  - `packages/api/generated/{cli/commands.json,manifest.json}`
+  - `pkg/transports/cli/baseline/testdata/{docs_help.txt,docs_topic_index.txt,root_help.txt,run_flags.txt,run_help.txt}`
+  - `pkg/transports/cli/{climanifest/run_submit_validation.go,climanifestcobra/constructor_coverage_test.go,cliserver/local_bind.go,cliserver/local_bind_test.go,generated/family_manifests_gen.go,root.go,root_factory.go,root_submit_batch.go,root_submit_test.go,root_work.go,runconfig/config.go}`
+  - `tests/functional/{cli/root_discovery/root_discovery_test.go,transport/run_scoped_server/run_scoped_server_test.go}`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `make contracts-validate`, `make cli-manifest-check`, `make docs-reference-smoke`, and `make test` — passed.
+  - `go test ./pkg/transports/cli/... -count=1` — passed after refreshing the observable command/help baselines.
+  - Focused CLI and full `run_scoped_server` functional tests — passed.
+  - `make backend-size`, `make pkg-maint`, `make pkg-file-count`, `make vet`, and `git diff --check` — passed.
+  - Aggregate `make lint` reached passing UI lint and structural checks but remains blocked by the pre-existing missing UI `knip` binary in the dead-code lane; the backend-only continuation reaches existing package-boundary baseline violations, and no new lint violation was reported.
+- **Learnings for future iterations:**
+  - Listener-owned inputs belong in the detached run/server family manifest as local flags; resolve `--listen` to `BindHost`/`Port`/`AutoPort` at the CLI boundary and emit legacy `--server` migration warnings only for commands that actually own a listener.
+  - Exact listener lifecycle tests should assert readiness and shutdown through the returned process state; this avoids arbitrary sleeps while still catching unavailable-port failures.
+  - The remaining story owns the `--remote` plus local-hosting conflict validation and its final migration guidance; do not fold that work into listener compatibility changes.
 ---

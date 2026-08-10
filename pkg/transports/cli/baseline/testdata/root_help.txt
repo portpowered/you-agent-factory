@@ -44,7 +44,8 @@ Flags:
   -d, --debug           emit lower-level command diagnostics where supported (implies --verbose)
   -h, --help            help for you
       --json            emit structured JSON on stdout for supported commands; diagnostics remain on stderr
-      --server string   factory API base URI (http:// or https://); HTTP client commands target this URI, while you server and server-enabled runs bind its loopback host and port (default "http://localhost:7437")
+      --remote          execute a supported operation through a running You server; does not wait, follow, continue, or start a listener
+      --server string   factory API base URI (http:// or https://) for HTTP client commands and remote placement; listener-owning commands use --listen host:port for explicit local binds, while local --server binding remains a warned compatibility path (default "http://localhost:7437")
   -v, --verbose         emit concise command diagnostics to stderr
       --version         version for you
 

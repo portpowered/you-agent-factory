@@ -58,13 +58,25 @@ func executeServerCommand(
 	rootOptions CommandFactory,
 ) error {
 	cfg := defaultcmd.ServerRunConfig(rootOptions.runDefaults)
+	values, err := generatedCommandInputs(cmd)
+	if err != nil {
+		return err
+	}
+	cfg.ListenAddress, err = commandInputValue[string](values, serverListenInputID)
+	if err != nil {
+		return err
+	}
+	cfg.ListenExplicit, err = climanifestcobra.InputChanged(cmd, serverListenInputID)
+	if err != nil {
+		return err
+	}
 	if err := selectCurrentFactoryFromWorkingDirectory(cmd, &cfg); err != nil {
 		mapped := runcli.MapCurrentFactoryFailure(err)
 		_ = runcli.WriteInvocationError(cmd.ErrOrStderr(), mapped, globals.json)
 		return mapped
 	}
 	policy := diagnostics.resolvePolicy(false)
-	err := runFactoryWithOptions(
+	err = runFactoryWithOptions(
 		cmd, cfg, nil, globals, operatorDefaults, policy, rootOptions, true,
 	)
 	if err == nil {
@@ -88,20 +100,20 @@ func productionFactoryConfigInitCommands(
 ) factoryConfigInitProductionCommands {
 	handler := commandregistry.NewFactoryConfigInitCommandHandler(
 		commandregistry.FactoryConfigInitServices{
-			QueryFactory:          options.QueryFactory,
-			ListFactories:         options.ListFactories,
-			CreateFactoryFromFile: options.CreateFactoryFromFile,
-			UpdateFactoryFromFile: options.UpdateFactoryFromFile,
-			DeleteFactory:         options.DeleteFactory,
-			ReplaceFactoryCurrent: options.ReplaceFactoryCurrent,
-			ValidateFactory:       options.ValidateFactory,
-			FlattenFactoryConfig:  options.FlattenFactoryConfig,
-			ExpandFactoryConfig:   options.ExpandFactoryConfig,
-			ConfigureInit:         options.ConfigureInit,
+			QueryFactory:           options.QueryFactory,
+			ListFactories:          options.ListFactories,
+			CreateFactoryFromFile:  options.CreateFactoryFromFile,
+			UpdateFactoryFromFile:  options.UpdateFactoryFromFile,
+			DeleteFactory:          options.DeleteFactory,
+			ReplaceFactoryCurrent:  options.ReplaceFactoryCurrent,
+			ValidateFactory:        options.ValidateFactory,
+			FlattenFactoryConfig:   options.FlattenFactoryConfig,
+			ExpandFactoryConfig:    options.ExpandFactoryConfig,
+			ConfigureInit:          options.ConfigureInit,
 			InstallPackagedFactory: options.InstallPackagedFactory,
-			HomeDir:               options.homeDir,
-			ResolveFactoryRoots:   options.resolveNamedFactoryRoots,
-			DiagnosticsWriter:     diagnostics.writer,
+			HomeDir:                options.homeDir,
+			ResolveFactoryRoots:    options.resolveNamedFactoryRoots,
+			DiagnosticsWriter:      diagnostics.writer,
 		},
 	)
 	components, err := climanifestcobra.NewFactoryConfigInitFamilyComponents(handler)

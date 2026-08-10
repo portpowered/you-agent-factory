@@ -534,6 +534,10 @@ func resolveRunCommandInvocationInput(cmd *cobra.Command, args []string, base ru
 	if err != nil {
 		return nil, base, err
 	}
+	cfg.ListenExplicit, err = climanifestcobra.InputChanged(cmd, runListenInputID)
+	if err != nil {
+		return nil, base, err
+	}
 	cfg.InvocationFileExplicit, err = climanifestcobra.InputChanged(cmd, "you.run.flag.to-file")
 	if err != nil {
 		return nil, base, err
@@ -606,6 +610,9 @@ func newRunServerHandlerRegistry(
 				if err := validateRunServerPlacement(globals, "you.run"); err != nil {
 					return err
 				}
+				if err := validateRunListenPlacement(cmd); err != nil {
+					return err
+				}
 				return rejectDeprecatedPortFlag(cmd, args)
 			},
 			RunE: func(cmd *cobra.Command, args []string) error {
@@ -648,6 +655,28 @@ func validateRunServerPlacement(globals *cliGlobalOptions, commandID string) err
 		return err
 	}
 	return nil
+}
+
+func validateRunListenPlacement(cmd *cobra.Command) error {
+	changed, err := climanifestcobra.InputChanged(cmd, runListenInputID)
+	if err != nil {
+		return err
+	}
+	if !changed {
+		return nil
+	}
+	withServer, err := climanifestcobra.InputChanged(cmd, "you.run.flag.with-server")
+	if err != nil {
+		return err
+	}
+	withSite, err := climanifestcobra.InputChanged(cmd, "you.run.flag.with-site")
+	if err != nil {
+		return err
+	}
+	if withServer || withSite {
+		return nil
+	}
+	return fmt.Errorf("input relationship %q: --listen requires --with-server or --with-site", "you.run.rel.listen-server")
 }
 
 func productionWorkCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions, injected ...CommandFactory) *cobra.Command {
