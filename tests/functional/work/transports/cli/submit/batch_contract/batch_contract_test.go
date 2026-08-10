@@ -124,9 +124,11 @@ func TestCLISubmitBatchDuplicateNameDiagnosticIsActionableAndAtomic(t *testing.T
 // endpoints are rejected in live human, live structured, and dry-run modes,
 // including when the target name belongs to an earlier submission.
 func TestCLISubmitBatchRelationEndpointDiagnosticIsActionableAndAtomic(t *testing.T) {
-	factoryDir := support.ScaffoldFactory(t, batchAdmissionFactoryConfig())
+	factoryDir := support.ScaffoldFactory(t, successSubmitBatchFactoryConfig())
+	runner := testutil.NewProviderCommandRunner()
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: factoryDir,
+		Edges:      serviceedges.Edges{ProviderCommandRunner: runner},
 	})
 	defer server.Stop(t)
 
