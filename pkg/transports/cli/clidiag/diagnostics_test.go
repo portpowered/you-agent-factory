@@ -85,7 +85,7 @@ func (err testInvocationCodedError) InvocationErrorCode() string { return err.co
 
 func (err testInvocationCodedError) InvocationErrorMessage() string { return err.message }
 
-func TestFailureAndDiagnosticWriterCoverNilAndDefaultEdges(t *testing.T) {
+func TestFailureNilAndDefaultEdges(t *testing.T) {
 	t.Parallel()
 
 	var nilFailure *Failure
@@ -104,6 +104,10 @@ func TestFailureAndDiagnosticWriterCoverNilAndDefaultEdges(t *testing.T) {
 	if !errors.Is(failure, cause) {
 		t.Fatal("default Failure did not unwrap its cause")
 	}
+}
+
+func TestDiagnosticWriterCoversMarkersAndNilOutputs(t *testing.T) {
+	t.Parallel()
 
 	var output bytes.Buffer
 	writer := NewDiagnosticWriter(&output)

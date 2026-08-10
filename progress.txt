@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- When resolving long append-only progress conflicts, read merge-stage files in bounded chunks and validate the reconstructed line count so tool-output truncation cannot drop history.
 - Asynchronous service characterizations should wait on observed edge/context signals rather than arbitrary `time.After` ceilings; the test context remains the failure escape hatch.
 - Continuous Petri service sessions intentionally remain `IDLE` after terminal Work; characterize the dispatch and Work/progress projection as the caller-visible result and assert the live-result route's typed unavailability instead of inventing a finite session result.
 - Use an authored capacity-one resource in a deterministic fixture to serialize multi-work dispatches when exact Factory Event order must be characterized; this avoids sleeps and preserves the real dispatch/resource boundary.
@@ -1804,5 +1805,22 @@
   - Final functional coverage artifact reports `clidiag` 61/76 statements (80.3%) and `terminalpolicy` 22/26 statements (84.6%), both meeting their manifest floors.
   - PR #1856 has no conversation comments, reviews, or review threads; all four PRD stories remain `passes:true`.
 - **Learnings for future iterations:**
-  - When a broad functional coverage job fails before producing a coverage profile because of unrelated scenario flakes, rerun only the failed job before changing feature code; the clean rerun can validate the intended coverage delta directly.
+- When a broad functional coverage job fails before producing a coverage profile because of unrelated scenario flakes, rerun only the failed job before changing feature code; the clean rerun can validate the intended coverage delta directly.
+---
+## 2026-08-10 09:28 -07:00 - pf-cli-exit-codes current-main sync and gate repair
+- What was implemented
+  - Reconciled the branch with current `origin/main`, retained the CLI task PRD, and preserved the complete current-main and CLI append-only progress history.
+  - Split the process exit-code case data, submit functional scenarios, and diagnostic nil/default coverage into focused test units so backend-size and pkg-maintainability gates remain green without changing observable behavior.
+- Files changed
+  - Current-main merge files plus `progress.txt`
+  - `cmd/factory/main_test.go`
+  - `tests/functional/transport/submit/submit_test.go`
+  - `pkg/transports/cli/clidiag/diagnostics_test.go`
+- Verification
+  - CLI process, Worker Sessions stream, server-binding, CLI package, submit, current-main characterization, and short Go tests passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` passed.
+  - `make typecheck` passed after `bun install --frozen-lockfile` restored ignored checkout dependencies.
+  - `git diff --check` passed; `prd.json` parses with all four stories marked `passes:true`.
+- **Learnings for future iterations:**
+  - Maintainability gates apply to test helpers and coverage tests as well as production code; move large tables or independent assertion groups into focused helpers while retaining the same public assertions.
 ---

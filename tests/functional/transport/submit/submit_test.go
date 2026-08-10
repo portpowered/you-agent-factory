@@ -27,6 +27,10 @@ const functionalBatch = `{
 	]
 }`
 
+type processExecutor interface {
+	Execute(root.Input) error
+}
+
 // TestSubmitFamilyExecutesThroughRootBuiltProcess proves batch dry-run and unary
 // submit commands execute through root.BuildProcess with the expected customer output.
 func TestSubmitFamilyExecutesThroughRootBuiltProcess(t *testing.T) {
@@ -36,122 +40,135 @@ func TestSubmitFamilyExecutesThroughRootBuiltProcess(t *testing.T) {
 	}
 
 	t.Run("batch dry-run", func(t *testing.T) {
-		var stdout bytes.Buffer
-		if err := process.Execute(functionalInput(
-			t,
-			[]string{
-				"you", "--server", "http://127.0.0.1:1",
-				"submit", "batch", "--dry-run", functionalBatch,
-			},
-			&stdout,
-		)); err != nil {
-			t.Fatalf("Process.Execute(batch dry-run) error = %v", err)
-		}
-		for _, marker := range []string{
-			"requestId: functional-submit-batch",
-			"batchSource: inline",
-			"dry-run: no request sent",
-		} {
-			if !strings.Contains(stdout.String(), marker) {
-				t.Fatalf("batch dry-run output omitted %q: %q", marker, stdout.String())
-			}
-		}
+		runSubmitBatchDryRun(t, process)
 	})
-
 	t.Run("unary named session", func(t *testing.T) {
-		payloadPath := filepath.Join(t.TempDir(), "request.md")
-		if err := os.WriteFile(payloadPath, []byte("# Review\n\nCheck the release."), 0o600); err != nil {
-			t.Fatalf("write unary payload: %v", err)
-		}
-		var method, path string
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			method, path = r.Method, r.URL.Path
-			_, _ = io.Copy(io.Discard, r.Body)
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusCreated)
-			_, _ = io.WriteString(w, `{
-				"accepted": true,
-				"requestId": "functional-unary-request",
-				"traceId": "functional-unary-trace",
-				"workId": "functional-unary-work",
-				"name": "release-review",
-				"workTypeName": "task"
-			}`)
-		}))
-		t.Cleanup(server.Close)
-
-		var stdout bytes.Buffer
-		if err := process.Execute(functionalInput(
-			t,
-			[]string{
-				"you", "--server", server.URL, "--json",
-				"submit", "--name", "release-review", "--work-type-name", "task",
-				"--payload", payloadPath, "--session", "functional-session",
-			},
-			&stdout,
-		)); err != nil {
-			t.Fatalf("Process.Execute(unary submit) error = %v", err)
-		}
-		if method != http.MethodPost || path != "/factory-sessions/functional-session/work" {
-			t.Fatalf("unary request = %s %s", method, path)
-		}
-		for _, marker := range []string{
-			`"sessionId":"functional-session"`,
-			`"name":"release-review"`,
-			`"workTypeName":"task"`,
-		} {
-			if !strings.Contains(stdout.String(), marker) {
-				t.Fatalf("unary output omitted %q: %q", marker, stdout.String())
-			}
-		}
+		runSubmitUnaryNamedSession(t, process)
 	})
-
 	t.Run("unary JSON payload", func(t *testing.T) {
-		payloadPath := filepath.Join(t.TempDir(), "request.json")
-		if err := os.WriteFile(payloadPath, []byte(`{"title":"Review JSON"}`), 0o600); err != nil {
-			t.Fatalf("write unary JSON payload: %v", err)
-		}
-		var method, path string
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			method, path = r.Method, r.URL.Path
-			_, _ = io.Copy(io.Discard, r.Body)
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusCreated)
-			_, _ = io.WriteString(w, `{
-				"accepted": true,
-				"requestId": "functional-json-request",
-				"traceId": "functional-json-trace",
-				"workId": "functional-json-work",
-				"name": "json-review",
-				"workTypeName": "task"
-			}`)
-		}))
-		t.Cleanup(server.Close)
-
-		var stdout bytes.Buffer
-		if err := process.Execute(functionalInput(
-			t,
-			[]string{
-				"you", "--server", server.URL, "--json",
-				"submit", "--name", "json-review", "--work-type-name", "task",
-				"--payload", payloadPath,
-			},
-			&stdout,
-		)); err != nil {
-			t.Fatalf("Process.Execute(unary JSON submit) error = %v", err)
-		}
-		if method != http.MethodPost || path != "/factory-sessions/~default/work" {
-			t.Fatalf("unary JSON request = %s %s", method, path)
-		}
-		for _, marker := range []string{
-			`"name":"json-review"`,
-			`"workTypeName":"task"`,
-		} {
-			if !strings.Contains(stdout.String(), marker) {
-				t.Fatalf("unary JSON output omitted %q: %q", marker, stdout.String())
-			}
-		}
+		runSubmitUnaryJSONPayload(t, process)
 	})
+}
+
+func runSubmitBatchDryRun(t *testing.T, process processExecutor) {
+	t.Helper()
+	var stdout bytes.Buffer
+	if err := process.Execute(functionalInput(
+		t,
+		[]string{
+			"you", "--server", "http://127.0.0.1:1",
+			"submit", "batch", "--dry-run", functionalBatch,
+		},
+		&stdout,
+	)); err != nil {
+		t.Fatalf("Process.Execute(batch dry-run) error = %v", err)
+	}
+	for _, marker := range []string{
+		"requestId: functional-submit-batch",
+		"batchSource: inline",
+		"dry-run: no request sent",
+	} {
+		if !strings.Contains(stdout.String(), marker) {
+			t.Fatalf("batch dry-run output omitted %q: %q", marker, stdout.String())
+		}
+	}
+}
+
+func runSubmitUnaryNamedSession(t *testing.T, process processExecutor) {
+	t.Helper()
+	payloadPath := filepath.Join(t.TempDir(), "request.md")
+	if err := os.WriteFile(payloadPath, []byte("# Review\n\nCheck the release."), 0o600); err != nil {
+		t.Fatalf("write unary payload: %v", err)
+	}
+	var method, path string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		method, path = r.Method, r.URL.Path
+		_, _ = io.Copy(io.Discard, r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = io.WriteString(w, `{
+			"accepted": true,
+			"requestId": "functional-unary-request",
+			"traceId": "functional-unary-trace",
+			"workId": "functional-unary-work",
+			"name": "release-review",
+			"workTypeName": "task"
+		}`)
+	}))
+	t.Cleanup(server.Close)
+
+	var stdout bytes.Buffer
+	if err := process.Execute(functionalInput(
+		t,
+		[]string{
+			"you", "--server", server.URL, "--json",
+			"submit", "--name", "release-review", "--work-type-name", "task",
+			"--payload", payloadPath, "--session", "functional-session",
+		},
+		&stdout,
+	)); err != nil {
+		t.Fatalf("Process.Execute(unary submit) error = %v", err)
+	}
+	if method != http.MethodPost || path != "/factory-sessions/functional-session/work" {
+		t.Fatalf("unary request = %s %s", method, path)
+	}
+	for _, marker := range []string{
+		`"sessionId":"functional-session"`,
+		`"name":"release-review"`,
+		`"workTypeName":"task"`,
+	} {
+		if !strings.Contains(stdout.String(), marker) {
+			t.Fatalf("unary output omitted %q: %q", marker, stdout.String())
+		}
+	}
+}
+
+func runSubmitUnaryJSONPayload(t *testing.T, process processExecutor) {
+	t.Helper()
+	payloadPath := filepath.Join(t.TempDir(), "request.json")
+	if err := os.WriteFile(payloadPath, []byte(`{"title":"Review JSON"}`), 0o600); err != nil {
+		t.Fatalf("write unary JSON payload: %v", err)
+	}
+	var method, path string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		method, path = r.Method, r.URL.Path
+		_, _ = io.Copy(io.Discard, r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = io.WriteString(w, `{
+			"accepted": true,
+			"requestId": "functional-json-request",
+			"traceId": "functional-json-trace",
+			"workId": "functional-json-work",
+			"name": "json-review",
+			"workTypeName": "task"
+		}`)
+	}))
+	t.Cleanup(server.Close)
+
+	var stdout bytes.Buffer
+	if err := process.Execute(functionalInput(
+		t,
+		[]string{
+			"you", "--server", server.URL, "--json",
+			"submit", "--name", "json-review", "--work-type-name", "task",
+			"--payload", payloadPath,
+		},
+		&stdout,
+	)); err != nil {
+		t.Fatalf("Process.Execute(unary JSON submit) error = %v", err)
+	}
+	if method != http.MethodPost || path != "/factory-sessions/~default/work" {
+		t.Fatalf("unary JSON request = %s %s", method, path)
+	}
+	for _, marker := range []string{
+		`"name":"json-review"`,
+		`"workTypeName":"task"`,
+	} {
+		if !strings.Contains(stdout.String(), marker) {
+			t.Fatalf("unary JSON output omitted %q: %q", marker, stdout.String())
+		}
+	}
 }
 
 // TestSubmitFamilyEnqueuesWorkBeforeDownstreamStructuredOutputFailure proves live
