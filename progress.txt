@@ -73,7 +73,6 @@
   - After `bun install --frozen-lockfile` in `ui/`, `make verify-fast` passed: dashboard typecheck, MCP contract boundary, 355 UI files / 2,970 tests, and the short Go suite.
 - **Learnings for future iterations:**
 - This checkout may have `ui/node_modules` without all lockfile dependencies; run the pinned Bun install before treating a typecheck failure as a source regression.
----
 ## 2026-08-10 04:32 -07:00 - sac-s0-2-pkg-boundary-ignores-001
 - What was implemented
   - Centralized repository-root-relative pruning for `.artifacts`, `.artifacts/bootstrap/worktrees`, generated transient worktrees, and the supported root worktree locations.
@@ -1458,4 +1457,20 @@
 - **Learnings for future iterations:**
   - When a branch is rebased onto a moving `main`, regenerate generated contracts and CLI baselines from the combined authored sources; do not choose one side of generated conflicts manually.
   - Keep large behavior-specific tests in adjacent existing responsibility files when package file-count and file-size gates are strict; small pure helpers are preferable to weakening a gate.
+---
+## 2026-08-10 08:10 -07:00 - e2-structured-worker-results-ci-follow-up
+- What was implemented
+  - Diagnosed the first CI run: the unit coverage lane rejected the new `pkg/platform/jsonvalue` package because the checked-in package manifest had no entry, while the functional lane hit the unrelated flaky `TestJavaScriptResumeRestoresCheckpointAndFinalResult` durability test.
+  - Added the new package's sorted unit coverage floor at the conservative 55.10% measured by the affected recording test packages; the full updater could not run on Windows because its expanded Go test command exceeds the Windows command-line limit.
+- Files changed
+  - `docs/internal/baselines/go-unit-coverage-package-minimums.json`
+  - `progress.txt`
+- Verification
+  - `go test ./cmd/gocoveragecheck -count=1` — passed.
+  - Targeted `gocoveragecheck` manifest generation measured `pkg/platform/jsonvalue` at 55.1% and generated the matching 55.10 floor.
+  - Manifest JSON/order validation and `git diff --check` — passed.
+  - Commit `d4f12723f` was pushed to `origin/e2-structured-worker-results`; CI rerun is pending.
+- **Learnings for future iterations:**
+  - Adding a Go package to the unit coverage surface requires a sorted entry in `docs/internal/baselines/go-unit-coverage-package-minimums.json`; use the coverage tool's update/generate flow where the platform permits.
+  - The Windows full-lane coverage command can exceed the OS command-line limit, so use a small explicit package set for local measurement and rely on Linux CI for the complete lane.
 ---
