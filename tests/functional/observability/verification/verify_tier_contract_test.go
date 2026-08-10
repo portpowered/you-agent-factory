@@ -14,6 +14,87 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 )
 
+// TestFunctionalLaneTargetsSeparateCachedAndFreshModes proves the two public
+// Make targets keep the same boundary and runner settings while selecting
+// Go's cache mode versus explicit execution.
+func TestFunctionalLaneTargetsSeparateCachedAndFreshModes(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	fakeGo := writeExecutableScript(t, "fake-go-functional-lane", `#!/bin/sh
+printf '%s\n' "$*" >> "$FUNCTIONAL_LANE_ARGS"
+if [ "${FUNCTIONAL_LANE_FAIL:-0}" = "1" ]; then
+  exit 23
+fi
+`)
+
+	for _, tc := range []struct {
+		target   string
+		wantMode string
+	}{
+		{target: "test-functional", wantMode: "cached"},
+		{target: "test-functional-fresh", wantMode: "fresh"},
+	} {
+		t.Run(tc.wantMode+" success", func(t *testing.T) {
+			argsPath := filepath.Join(t.TempDir(), "go-args.txt")
+			t.Setenv("FUNCTIONAL_LANE_ARGS", argsPath)
+			makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
+				"functional-boundary-check": "@printf '%s\\n' 'stub:functional-boundary'\n",
+			})
+
+			output, err := runMakefileTargetWithArgs(
+				repoRoot,
+				makefilePath,
+				fmt.Sprintf("GO=%s", fakeGo),
+				"FUNCTIONAL_DEFAULT_JOBS=3",
+				"GO_TEST_TIMEOUT=17s",
+				tc.target,
+			)
+			if err != nil {
+				t.Fatalf("run %s: %v\\n%s", tc.target, err, output)
+			}
+			if count := strings.Count(output, "stub:functional-boundary"); count != 1 {
+				t.Fatalf("%s ran boundary check %d times, want once:\\n%s", tc.target, count, output)
+			}
+
+			args, err := os.ReadFile(argsPath)
+			if err != nil {
+				t.Fatalf("read fake go args: %v", err)
+			}
+			got := strings.TrimSpace(string(args))
+			wantBase := "run ./cmd/functionallane -jobs 3 -timeout 17s"
+			if tc.wantMode == "cached" && got != wantBase {
+				t.Fatalf("cached target args = %q, want %q", got, wantBase)
+			}
+			if tc.wantMode == "fresh" && got != "run ./cmd/functionallane -jobs 3 -count=1 -timeout 17s" {
+				t.Fatalf("fresh target args = %q, want explicit count", got)
+			}
+		})
+
+		t.Run(tc.wantMode+" failure", func(t *testing.T) {
+			argsPath := filepath.Join(t.TempDir(), "go-args.txt")
+			t.Setenv("FUNCTIONAL_LANE_ARGS", argsPath)
+			t.Setenv("FUNCTIONAL_LANE_FAIL", "1")
+			makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
+				"functional-boundary-check": "@printf '%s\\n' 'stub:functional-boundary'\n",
+			})
+
+			output, err := runMakefileTargetWithArgs(
+				repoRoot,
+				makefilePath,
+				fmt.Sprintf("GO=%s", fakeGo),
+				"FUNCTIONAL_DEFAULT_JOBS=3",
+				"GO_TEST_TIMEOUT=17s",
+				tc.target,
+			)
+			if err == nil {
+				t.Fatalf("%s unexpectedly succeeded:\\n%s", tc.target, output)
+			}
+			if !strings.Contains(output, "functional-lane") {
+				t.Fatalf("%s failure did not include the runner command:\\n%s", tc.target, output)
+			}
+		})
+	}
+}
+
 // TestVerifyFastCommandSmoke_UsesOnlyShortOwnedSuites prove verify-fast invokes only short owned suites in order.
 func TestVerifyFastCommandSmoke_UsesOnlyShortOwnedSuites(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")

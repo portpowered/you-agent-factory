@@ -1,96 +1,90 @@
 {
-  "project": "SAC S0.1 — Restore Package-Target and Ownership Inventories to the Live Tree",
-  "branchName": "sac-s0-1-ownership-inventories",
-  "description": "Restore the package-target manifest, ownership inventory, architecture guards, and canonical service-owner documentation so every live production package and cross-owner dependency has one reviewed owner and classification, unresolved bidirectional edges remain visible, and provider inference and hosted polling are assigned to Providers and Automations rather than Workers.",
+  "project": "Cut Functional-Lane Wall Time Without Weakening Evidence",
+  "branchName": "thr-functional-lane-speed",
+  "description": "Restore Go test caching on the default functional lane, add an explicit fresh functional target for authoritative execution, replace a measured set of high-impact fixed sleeps with bounded observable-condition waits, and publish reproducible timing evidence while preserving assertions, coverage, CI semantics, and lane ownership. The intent is to shorten every coding and review feedback cycle without weakening behavioral proof.",
   "context": {
-    "customerAsk": "Implement story S0.1 of the Service Abstraction Convergence plan: regenerate and review the package-target manifest and ownership inventory; add the missing Worker Sessions, Events, Chat Sessions, ACP, Factory Sessions, Providers, platform, and mapping packages; correct the eight guards and documentation entries that misassign provider inference or hosted polling to Workers; and reconcile the service-owner tables in AGENTS.md, docs/architecture/architecture.md, and docs/architecture/packaged-structure.md.",
-    "problem": "The checked-in architecture inventories and some enforcement and documentation surfaces lag the live production package graph. Missing packages and edges, future-tense rationale for implemented services, and incorrect Workers ownership assignments prevent maintainers from trusting the inventories as a statement of package ownership, dependency direction, and remaining convergence debt.",
-    "solution": "Regenerate deterministic inventory candidates from the current production tree, review every package and cross-owner edge against durable service boundaries, preserve unresolved bidirectional dependencies as visible debt, correct inference and polling ownership guards, and align the three canonical service-owner tables without changing runtime behavior or widening into unrelated package migrations."
+    "customerAsk": "Split cached and fresh functional targets, preserve fresh semantics wherever CI or documentation requires them, replace high-impact fixed-sleep polling with bounded observation-driven waits, and record cold, warm, and per-package timing evidence without weakening tests or coverage.",
+    "problem": "The default make test-functional path and cmd/functionallane both force -count=1, preventing Go from reusing successful results for unchanged packages. Observable asynchronous functional scenarios also use fixed sleeps that add avoidable worst-case latency. Agents and reviewers therefore repeatedly pay nearly the full functional-suite cost, while the CI functional coverage path is roughly 4.5 minutes.",
+    "solution": "Make the default runner omit go test -count so normal cache validity applies; add make test-functional-fresh with explicit -count=1; keep authoritative CI and coverage workflows fresh; use timing artifacts to select a small number of slow packages and replace only directly observable waits with bounded diagnostic observers; then record comparable cold, warm, fresh, and package timing results. Preserve the full suite, assertions, coverage floor, failure behavior, and JavaScript durability lane ownership."
   },
   "acceptanceCriteria": [
-    "make package-target-manifest-check passes from a clean checkout.",
-    "make ownership-inventory-check passes and reports no missing production package or cross-owner edge.",
-    "Every live production package appears exactly once with a durable owner or the explicit Process Edges exception, including Worker Sessions, Events, Chat Sessions, ACP, Factory Sessions, Providers, platform, and mapping packages.",
-    "Inventory regeneration does not silently reclassify a bidirectional edge as acceptable; every unresolved bidirectional edge remains visible until its owning convergence story lands.",
-    "The eight affected guards and documentation entries assign provider inference to Providers and hosted polling to Automations, and the service-owner tables in AGENTS.md, architecture.md, and packaged-structure.md state the same durable ownership model.",
-    "Enabling/project-level documentation criterion: the canonical service-owner guidance is reconciled with the reviewed inventories; this documentation-only alignment intentionally changes no runtime, public API, CLI, UI, or emitted-event behavior.",
-    "Typecheck and relevant focused tests pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
-    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts are resolved against current main, and the PR is actually merged."
+    "A normal make test-functional run omits go test -count, and a second run with no relevant input change reports cached package results and completes at least 70% faster than the recorded cold run in the same environment.",
+    "make test-functional-fresh explicitly runs the same boundary check and maintained short functional package set with -count=1, and repeated fresh runs execute rather than reuse cached results.",
+    "Required CI, functional coverage, and documented workflows that require unconditional execution retain fresh semantics, package scope, short mode, timeouts, failure propagation, and coverage floors.",
+    "Fixed waits changed by this lane are limited to measured high-impact packages and directly observable conditions; they return promptly on success, fail within a generous bound with useful diagnostics, and retain every scenario assertion.",
+    "Comparable evidence records cold and warm default wall time, a fresh run, and before/after functional-timing-summary.json results; every touched performance-target package shows reduced representative wall time.",
+    "The lane does not modify tests/functional/orchestration/javascript/durability, lower coverage, weaken assertions, mechanically churn all sleep sites, or include unrelated cleanup.",
+    "Quality gate: Typecheck passes; Tests pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green; the full functional suite and required CI checks pass.",
+    "Delivery: the implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared-file contention are resolved against current origin/main, generated files are regenerated rather than hand-merged if encountered, and the PR is actually merged."
   ],
-  "userStories": [],
-  "enablingCriteria": [
+  "userStories": [
     {
-      "id": "sac-s0-1-ownership-inventories-001",
-      "type": "project-enabling",
-      "title": "Complete the package-target manifest",
-      "description": "The package-target manifest is repository-enforcement and maintainer tooling that covers the live production tree exactly once, so placement and migration decisions are based on a reviewed current package graph rather than a stale snapshot.",
+      "id": "thr-functional-lane-speed-001",
+      "title": "Separate cached and fresh functional execution",
+      "description": "As a coding agent, I want the default functional command to reuse valid Go test results while retaining an explicit fresh command so repeated evidence gathering is fast without removing the ability to force execution.",
       "acceptanceCriteria": [
-        "Regeneration accounts for every live production package exactly once as a reviewed retain or move destination, with only the explicit Process Edges exception outside durable service or family ownership.",
-        "Worker Sessions, Events, Chat Sessions, ACP, Factory Sessions, Providers, platform, and mapping package families present in the live tree are represented with destinations consistent with the repository architecture.",
-        "make package-target-manifest-check passes from a clean checkout and fails in a focused regression case when a production package is missing or duplicated.",
-        "Existing reviewed move rows and deletion conditions are preserved unless the live tree proves that their owning convergence work has already landed; unrelated package migrations are not performed in this criterion.",
-        "This project-enabling inventory alignment intentionally changes no runtime, public API, CLI, UI, or emitted-event behavior.",
-        "Tests pass",
-        "Typecheck passes"
+        "make test-functional runs the functional boundary check and maintained short functional suite without supplying a go test -count override.",
+        "make test-functional-fresh runs the same boundary check, package scope, job limit, short mode, and timeout while explicitly supplying -count=1.",
+        "cmd/functionallane omits -count when the caller does not request it, forwards a valid explicit count unchanged, and rejects invalid count input clearly.",
+        "Two back-to-back default runs with unchanged relevant inputs show cached package results on the warm run, while two fresh runs execute the packages both times.",
+        "Runner and target regression tests prove generated go test arguments and success/failure propagation for cached and fresh modes.",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Regenerated the package-target manifest from the live production Go tree (545 packages) and retained the 17 newly discovered paths under platform, Chat Sessions, Events, Factory Sessions, Providers, Worker Sessions, ACP, CLI, and mapping destinations. Added Worker Sessions to the closed package-target owner vocabulary and reconciled the live Chat Sessions/Events/Worker Sessions top-level inventories. Existing package mappings and deletion conditions were preserved. make package-target-manifest-check, focused package-target mapping/coverage tests, and git diff --check pass. This is repository-enforcement and maintainer tooling work with no runtime, public API, CLI, UI, or emitted-event behavior change."
+      "notes": "Implemented cache-aware `cmd/functionallane` execution with count 0 as the default omission mode, positive explicit counts forwarded unchanged, and negative counts rejected before process launch. Added `make test-functional-fresh` with the same boundary check, package scope, jobs, short mode, timeout, and failure propagation as `make test-functional`, but with explicit `-count=1`. Added runner and Make-target regression coverage for cached/fresh command arguments and both success/failure paths. Focused runner tests, repository Go tests, vet, backend size/maintainability/file-count/structure gates, and Make dry-run verification pass. Full cold/warm/fresh timing evidence remains a project-level story 004 concern; the workstation's attempted full measurement hit untouched process-API-server timeouts under concurrent unrelated Go lanes, and typecheck is blocked by missing Bun type definitions."
     },
     {
-      "id": "sac-s0-1-ownership-inventories-002",
-      "type": "project-enabling",
-      "title": "Complete and classify the ownership inventory",
-      "description": "The ownership inventory is repository-enforcement and maintainer tooling that records a reviewed owner and relationship classification for every production package and cross-owner dependency, so dependency direction and remaining convergence debt are explicit without changing product behavior.",
+      "id": "thr-functional-lane-speed-002",
+      "title": "Preserve fresh semantics for authoritative workflows",
+      "description": "As a CI owner, I want workflows that produce authoritative functional evidence to keep forcing real execution so enabling the local cache does not weaken required checks.",
       "acceptanceCriteria": [
-        "The ownership inventory covers every production package from the regenerated package-target manifest and reports no missing or duplicate ownership row.",
-        "Every live cross-owner dependency is reviewed and classified as command, query, event, construction, lifecycle, protocol composition, or external effect, with a rationale consistent with the owning service contract.",
-        "Worker Sessions, Events, Chat Sessions, ACP, Factory Sessions, Providers, platform, and mapping packages and their live cross-owner edges are included.",
-        "Chat Sessions and Events rationale describes their implemented ownership and behavior in the present tense rather than as future work.",
-        "Regeneration preserves every unresolved bidirectional edge as visible debt and a focused regression test proves that such an edge cannot be silently reclassified as acceptable.",
-        "make ownership-inventory-check passes and reports no missing production package or edge.",
-        "This project-enabling inventory alignment intentionally changes no runtime, public API, CLI, UI, or emitted-event behavior.",
-        "Tests pass",
-        "Typecheck passes"
+        "Every required CI or repository workflow that invokes the ordinary functional lane and requires unconditional execution uses test-functional-fresh or an equivalent explicit -count=1 path.",
+        "Functional coverage and visualization execute the maintained short functional suite, generate coverage and timing artifacts from a real run, enforce the existing coverage floor, and fail on the same boundary, suite, coverage, metadata, or rendering failures as before.",
+        "Developer documentation distinguishes the fast cached feedback command from the fresh command and identifies fresh use for CI-equivalent evidence and flake investigation.",
+        "A representative failing functional test makes both cached and fresh targets exit non-zero; caching never converts a failure into success.",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 2,
-      "passes": true,
-      "notes": "Regenerated the ownership inventory from the live package graph (576 existing-scope package rows) and added the 16 package-target paths introduced by story 001, including Worker Sessions, Events, Chat Sessions, ACP, Factory Sessions, Providers, platform, and mapping paths. Added Worker Sessions to the closed owner vocabulary, top-level inventory, and rationale cards; rewrote Chat Sessions and Events rationale in the present tense. Cross-owner discovery now records 155 classified edges, marks all 50 directed entries in reciprocal pairs as unresolved bidirectional debt, and rejects a valid interaction class when those debt markers are removed. make ownership-inventory-check, focused ownership tests, package-target-manifest-check, and git diff --check pass. The full internal ownership package still reports pre-existing Workers/Recordings root-contract baseline drift unrelated to this story."
+      "passes": false,
+      "notes": ""
     },
     {
-      "id": "sac-s0-1-ownership-inventories-004",
-      "type": "project-enabling",
-      "title": "Reconcile canonical service-owner documentation",
-      "description": "As a contributor, I want the canonical service-owner tables to agree with the reviewed inventories so that repository guidance leads changes to the correct package and contract boundary.",
+      "id": "thr-functional-lane-speed-003",
+      "title": "Replace high-impact fixed waits with bounded observations",
+      "description": "As a contributor running functional tests, I want high-impact asynchronous scenarios to proceed when their observable condition is satisfied so tests do not pay a fixed delay after the system is ready.",
       "acceptanceCriteria": [
-        "The service-owner tables in AGENTS.md, docs/architecture/architecture.md, and docs/architecture/packaged-structure.md consistently describe the implemented Worker Sessions, Events, Chat Sessions, Factory Sessions, Providers, Workers, Automations, platform, ACP transport, and mapping ownership boundaries.",
-        "The tables state that Providers owns provider inference and execution policy, Automations owns hosted polling, and Workers consumes owner contracts to perform request-scoped worker execution.",
-        "Events is described as the process-local source-native stream and Recordings as canonical Factory history; Chat Sessions and Worker Sessions are described as current implemented owners rather than future services.",
-        "Documentation uses the customer-facing Factory vocabulary defined by the data model and does not expose internal Petri terminology as a service boundary.",
-        "The package-target and ownership inventory checks still pass after the documentation reconciliation.",
-        "Tests pass",
-        "Typecheck passes"
-      ],
-      "priority": 4,
-      "passes": true,
-      "notes": "Reconciled the three canonical ownership summaries with the implemented package graph. AGENTS.md now names Chat Sessions, Events, Worker Sessions, ACP, mapping, platform, Providers-owned provider inference/execution policy, Automations-owned hosted polling, and Workers request-scoped execution. architecture.md and packaged-structure.md use the same present-tense service-owner model, explicitly distinguish Events source-native delivery from the Recordings canonical Factory Event ledger, and keep internal runtime implementation details behind the customer-facing Factory boundary. This remains an enabling documentation criterion with no runtime, API, CLI, UI, or emitted-event behavior change. make ownership-inventory-check, make package-target-manifest-check, focused ownership-check tests, and git diff --check pass."
-    },
-    {
-      "id": "sac-s0-1-ownership-inventories-003",
-      "type": "project-enabling",
-      "title": "Correct inference and hosted-polling ownership enforcement",
-      "description": "As a service owner, I want architecture enforcement to attribute provider inference and hosted polling to their durable owners so that new code cannot deepen the incorrect Workers boundary.",
-      "acceptanceCriteria": [
-        "All eight affected guard and documentation entries are reviewed and corrected: provider inference is assigned to Providers, hosted polling is assigned to Automations, and Workers retains only its request-scoped execution responsibilities.",
-        "Ownership rationale distinguishes Workers deciding when to execute a worker attempt from Providers owning provider protocol, selection, session, adapter, and execution behavior, and from Automations owning hosted-source observation and polling.",
-        "Focused guard tests reject a new production assignment of provider inference or hosted polling to Workers, reject an expanded Workers-root Provider compatibility port, and accept only the exact reviewed request-scoped contract plus the reviewed Providers and Automations ownership paths.",
-        "No runtime behavior, public API contract, or unrelated Workers migration is changed by this correction.",
-        "Tests pass",
-        "Typecheck passes"
+        "A baseline timing summary ranks packages before edits, and implementation selects only a small set of the slowest packages with waits on observable event-stream, filesystem, HTTP readiness, process, or store state.",
+        "Selected waits use an existing specialized observer or a shared support wait that polls every 10-25 ms, accepts a generous explicit deadline, returns immediately after the condition is observed, and reports the last observation or error at timeout.",
+        "Tests for shared wait behavior prove immediate success, delayed success, timeout, and diagnostic failure behavior without relying on long real-time sleeps.",
+        "Each retained or introduced polling boundary includes an in-code justification for why deterministic observation or edge mocking cannot replace it.",
+        "Assertions and observable scenario outcomes in every touched functional test remain unchanged, and the lane does not touch tests/functional/orchestration/javascript/durability.",
+        "Focused functional tests for each touched package pass repeatedly without increasing flake incidence.",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 3,
-      "passes": true,
-      "notes": "Corrected the package-boundary owner metadata for Providers execution/adapters and rewrote the provider-effect diagnostics to distinguish Providers-owned protocol, selection, session, adapter, and one-attempt execution from the Workers request-scoped compatibility port. The checker now expands grouped Go field declarations before inspecting signature types, so a valid grouped parameter declaration is rejected with a diagnostic instead of panicking; TestRunRejectsGroupedWorkersRequestScopedProviderPortWithoutPanic covers that regression. Added focused tests that allow the reviewed Providers leaf and exact Workers compatibility bridge while rejecting an expanded Workers-root provider port and any new provider-effect owner under Workers; the existing hosted-ownership tests reject polling/reconciliation assigned to Workers and accept Automation Hosted Sources. Burned down all eight stale misplaced-guard inventory entries, made retired entries fail validation, and expanded Providers/Workers rationale cards with present-tense ownership. No runtime behavior, public API shape, or unrelated migration changed. make ownership-inventory-check, make package-target-manifest-check, focused boundary/inventory tests, go test compilation checks, and git diff --check pass. The full internal ownership package and ownership-boundary make target retain the pre-existing Workers/Recordings root-contract and two unrelated baseline violations documented in progress.txt."
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "thr-functional-lane-speed-004",
+      "title": "Prove throughput gains and preserved behavior",
+      "description": "As a reviewer, I want reproducible performance and correctness evidence so I can confirm the lane is materially faster and still trustworthy.",
+      "acceptanceCriteria": [
+        "The PR records commands, environment-relevant context, and wall times for a cold default run, an unchanged warm default run, and a fresh run; the warm run is at least 70% faster than the cold run and visibly uses Go's test cache.",
+        "Before/after functional-timing-summary.json evidence is captured under comparable conditions and lists selected touched packages with reduced representative package wall times.",
+        "The full fresh functional suite passes after wait changes with the same package scope, short mode, assertions, timeout envelope, and coverage floor.",
+        "Required CI checks remain semantically equivalent and are terminal and green; variance or packages intentionally not optimized are documented rather than hidden by weakening evidence.",
+        "Scope review confirms no changes to the JavaScript durability owner package, no unrelated cleanup, and no hand-merged generated artifacts.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
     }
   ]
 }

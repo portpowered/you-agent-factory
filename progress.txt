@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- Go test lane runners use count `0` as cache mode and append `-count` only for positive explicit repeats; a fresh Make wrapper can select `-count=1` without changing the runner's default.
 - Treat repository-enforcement inventories and architecture guards as project-enabling PRD criteria when they have no runtime, API, CLI, UI, or emitted-event behavior; source scans support enforcement but are not customer-behavior evidence.
 - AST scanners must expand grouped Go field declarations before indexing parameter or result types; a field-count helper can exceed the AST field-list length and panic on valid source.
 - Asynchronous service characterizations should wait on observed edge/context signals rather than arbitrary `time.After` ceilings; the test context remains the failure escape hatch.
@@ -123,7 +124,6 @@
 - **Learnings for future iterations:**
   - Keep the root count aligned with the canonical fifteen-entry catalog, but continue placing detailed Factory guidance in `docs/reference/packaged-factories.md`.
 ---
-
 ## 2026-08-09 13:20 - wo-d1-packaged-factories-docs-001 lint follow-up
 - What was implemented
   - No source change; checked the broad repository lint tier against the completed story.
@@ -1949,4 +1949,27 @@
   - `git diff --check` — passed.
 - **Learnings for future iterations:**
   - Acceptance criteria for repository-enforcement work should explicitly identify the project-level nature of the evidence and state the intentionally unchanged customer-facing behavior; keep the PRD valid JSON so automated consumers do not depend on permissive parsers.
+---
+## 2026-08-10 13:55 -07:00 - thr-functional-lane-speed-001
+- What was implemented
+  - Changed `cmd/functionallane` to default to Go's cache-aware mode by omitting `-count`; positive explicit counts remain unchanged, and negative counts return a clear validation error before starting `go test`.
+  - Added `make test-functional-fresh`, preserving the existing functional boundary check, job count, short mode, package scope, timeout, and failure propagation while explicitly selecting `-count=1`.
+  - Added runner argument and Make-target regression coverage for cached and fresh success/failure paths.
+- Files changed
+  - `Makefile`
+  - `cmd/functionallane/main.go`
+  - `cmd/functionallane/main_test.go`
+  - `tests/functional/observability/verification/verify_tier_contract_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./cmd/functionallane -count=1` and the focused runner tests repeated 10 times — passed.
+  - `go vet ./cmd/functionallane` — passed.
+  - `make -n test-functional test-functional-fresh` — confirmed cached output has no `-count` and fresh output has `-count=1` with identical boundary/job/timeout wiring.
+  - `make backend-size`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, `make vet`, `make test`, and `git diff --check` — passed.
+  - `make typecheck` remains blocked by the workstation's missing Bun type definition (`TS2688: Cannot find type definition file for 'bun'`).
+  - A full cold/warm/fresh functional measurement was attempted after clearing the Go test cache; untouched Automations and Bootstrap Portability scenarios timed out starting their process API servers while unrelated Go lanes were already running, so that exact temporary process tree was stopped and no source was changed for the baseline failure.
+- **Learnings for future iterations:**
+  - Make target contract tests in the existing POSIX-only observability verification package can stub `GO` and the boundary target to inspect observable command arguments and exit propagation without running the full functional suite.
+  - Full functional timing measurements are not meaningful while other Go coverage or test processes share the workstation's process/API-server resources; rerun them in an isolated lane for story 004 evidence.
 ---
