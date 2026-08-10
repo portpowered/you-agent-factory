@@ -2527,3 +2527,19 @@
 - **Learnings for future iterations:**
   - After a current-main merge, run ratchets against the working tree rather than relying on staged or historical counts; moving shared helpers into an existing file can restore deletion-only line limits without adding package-file debt.
 ---
+
+## 2026-08-10 14:59 -07:00 - dwro-s1-remote-placement-flags CI follow-up
+- What was implemented
+  - Reconciled the current-main built-server functional assertion with the S1 compatibility contract: the legacy `--server` migration warning is now validated separately from the single structured `SERVER_BIND_FAILED` diagnostic.
+  - Kept product code unchanged; the remaining failed coverage cases were unrelated current-main timing-sensitive tests.
+- Files changed
+  - `tests/functional/transport/server_binding/server_binding_test.go`
+  - `progress.txt`
+- Verification
+  - The sessions partial-result test passed 10 repetitions.
+  - The built CLI cancellation test passed 5 repetitions.
+  - The corrected built server-bind test passed 5 repetitions.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - When a synchronized test still encodes the pre-migration stderr shape, preserve the compatibility warning as an explicit first line and decode the structured diagnostic independently rather than suppressing required customer guidance.
+---
