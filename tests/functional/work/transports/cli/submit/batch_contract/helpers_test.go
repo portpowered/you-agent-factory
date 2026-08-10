@@ -237,6 +237,31 @@ func duplicateBatchJSON(requestID string) string {
 	}`
 }
 
+func validRelationsBatchJSON() string {
+	return `{
+		"requestId": "batch-valid-relations",
+		"type": "FACTORY_REQUEST_BATCH",
+		"works": [
+			{"name": "parent", "workTypeName": "task"},
+			{"name": "prerequisite", "workTypeName": "task"},
+			{"name": "child", "workTypeName": "task"}
+		],
+		"relations": [
+			{"type": "PARENT_CHILD", "sourceWorkName": "child", "targetWorkName": "parent"},
+			{"type": "DEPENDS_ON", "sourceWorkName": "child", "targetWorkName": "prerequisite"}
+		]
+	}`
+}
+
+func relationEndpointBatchJSON(requestID, workName, sourceWorkName, targetWorkName string) string {
+	return `{
+		"requestId": "` + requestID + `",
+		"type": "FACTORY_REQUEST_BATCH",
+		"works": [{"name": "` + workName + `", "workTypeName": "task"}],
+		"relations": [{"type": "DEPENDS_ON", "sourceWorkName": "` + sourceWorkName + `", "targetWorkName": "` + targetWorkName + `"}]
+	}`
+}
+
 func newInstrumentedSubmitBatchServer(t *testing.T) (serverURL string, requests *atomic.Int32) {
 	t.Helper()
 	var count atomic.Int32

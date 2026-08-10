@@ -46,8 +46,15 @@ func (factoryRequestBatchPreparation) PrepareFactoryRequestBatch(
 		return PreparedFactoryRequestBatch{}, errors.New("batch works must contain at least one item")
 	}
 	workNames := make(map[string]int, len(request.Works))
+	workIndex := make(map[string]normalizedBatchWork, len(request.Works))
 	for index, work := range request.Works {
 		if err := validateBatchWorkName(workNames, index, work); err != nil {
+			return PreparedFactoryRequestBatch{}, err
+		}
+		workIndex[work.Name] = normalizedBatchWork{}
+	}
+	for index, relation := range request.Relations {
+		if _, err := validateBatchRelationEndpoints(index, relation, workIndex); err != nil {
 			return PreparedFactoryRequestBatch{}, err
 		}
 	}

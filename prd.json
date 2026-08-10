@@ -48,8 +48,8 @@
         "Tests pass"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented one shared deterministic relation-endpoint diagnostic for Work request normalization and topology-independent batch preparation used by --dry-run. Diagnostics identify the relation index and type, both source/target names, the missing endpoint field/value, the same-batch works[] rule, exclusion of previously submitted Work, and the add-or-correct repair. Source validation precedes target validation and relation order remains stable. Admission, engine atomicity, valid DEPENDS_ON/PARENT_CHILD behavior, root-built live human/structured CLI, dry-run, and prior-state endpoint cases are covered. Typecheck and focused/full tests pass. Story 003 remains for later documentation work."
     },
     {
       "id": "pf-batch-submit-diagnostics-003",

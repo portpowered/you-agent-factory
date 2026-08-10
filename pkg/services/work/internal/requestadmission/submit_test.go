@@ -64,6 +64,25 @@ func TestFactoryRequestBatchPreparationUsesDuplicateNameDiagnostic(t *testing.T)
 	}
 }
 
+func TestFactoryRequestBatchPreparationUsesRelationEndpointDiagnostic(t *testing.T) {
+	t.Parallel()
+
+	data := []byte(`{
+		"requestId":"batch-relation-endpoint-diagnostic",
+		"type":"FACTORY_REQUEST_BATCH",
+		"works":[{"name":"declared","workTypeName":"task"}],
+		"relations":[{"type":"PARENT_CHILD","sourceWorkName":"declared","targetWorkName":"previously-submitted"}]
+	}`)
+	_, err := NewFactoryRequestBatchPreparation().PrepareFactoryRequestBatch(context.Background(), data)
+	if err == nil {
+		t.Fatal("PrepareFactoryRequestBatch succeeded for missing relation endpoint")
+	}
+	want := `work_request: relations[0] relation type "PARENT_CHILD" has sourceWorkName "declared" and targetWorkName "previously-submitted"; endpoint targetWorkName="previously-submitted" is missing from this batch; relation endpoints must name Work declared in this batch's works[] (not previously submitted Work); add the named Work to works[] or correct targetWorkName`
+	if got := err.Error(); got != want {
+		t.Fatalf("relation endpoint diagnostic = %q, want %q", got, want)
+	}
+}
+
 func TestFactoryRequestBatchPreparationFailsClosedWithoutLiveContext(t *testing.T) {
 	t.Parallel()
 

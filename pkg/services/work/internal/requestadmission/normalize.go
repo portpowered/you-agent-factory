@@ -381,19 +381,36 @@ func validateAndIndexBatchRelations(req Request, workIndex map[string]normalized
 
 func validateBatchRelationEndpoints(i int, rel WorkRelation, workIndex map[string]normalizedBatchWork) (normalizedBatchWork, error) {
 	if strings.TrimSpace(rel.SourceWorkName) == "" {
-		return normalizedBatchWork{}, fmt.Errorf("work_request: relations[%d] is missing sourceWorkName", i)
+		return normalizedBatchWork{}, missingBatchRelationEndpointError(i, rel, "sourceWorkName")
 	}
 	if strings.TrimSpace(rel.TargetWorkName) == "" {
-		return normalizedBatchWork{}, fmt.Errorf("work_request: relations[%d] is missing targetWorkName", i)
+		return normalizedBatchWork{}, missingBatchRelationEndpointError(i, rel, "targetWorkName")
 	}
 	if _, ok := workIndex[rel.SourceWorkName]; !ok {
-		return normalizedBatchWork{}, fmt.Errorf("work_request: relations[%d] references unknown sourceWorkName %q", i, rel.SourceWorkName)
+		return normalizedBatchWork{}, missingBatchRelationEndpointError(i, rel, "sourceWorkName")
 	}
 	targetWork, ok := workIndex[rel.TargetWorkName]
 	if !ok {
-		return normalizedBatchWork{}, fmt.Errorf("work_request: relations[%d] references unknown targetWorkName %q", i, rel.TargetWorkName)
+		return normalizedBatchWork{}, missingBatchRelationEndpointError(i, rel, "targetWorkName")
 	}
 	return targetWork, nil
+}
+
+func missingBatchRelationEndpointError(i int, rel WorkRelation, endpointField string) error {
+	endpointValue := rel.SourceWorkName
+	if endpointField == "targetWorkName" {
+		endpointValue = rel.TargetWorkName
+	}
+	return fmt.Errorf(
+		"work_request: relations[%d] relation type %q has sourceWorkName %q and targetWorkName %q; endpoint %s=%q is missing from this batch; relation endpoints must name Work declared in this batch's works[] (not previously submitted Work); add the named Work to works[] or correct %s",
+		i,
+		rel.Type,
+		rel.SourceWorkName,
+		rel.TargetWorkName,
+		endpointField,
+		endpointValue,
+		endpointField,
+	)
 }
 
 func normalizeBatchRelation(i int, rel WorkRelation, targetWork normalizedBatchWork, opts NormalizeOptions) (Relation, string, error) {

@@ -119,6 +119,113 @@ func TestCLISubmitBatchDuplicateNameDiagnosticIsActionableAndAtomic(t *testing.T
 	}
 }
 
+// TestCLISubmitBatchRelationEndpointDiagnosticIsActionableAndAtomic proves
+// relation endpoints resolve only through the submitted works[] names. A
+// valid batch preserves both supported relation types; missing source/target
+// endpoints are rejected in live human, live structured, and dry-run modes,
+// including when the target name belongs to an earlier submission.
+func TestCLISubmitBatchRelationEndpointDiagnosticIsActionableAndAtomic(t *testing.T) {
+	factoryDir := support.ScaffoldFactory(t, successSubmitBatchFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:     factoryDir,
+		UseMockWorkers: true,
+	})
+	defer server.Stop(t)
+
+	process := buildBatchContractProcess(t, serviceedges.Edges{})
+	support.CleanupProcess(t, process)
+
+	validStdout := executeSubmitBatchCLI(t, process, []string{
+		"you", "--server", server.URL(),
+		"submit", "batch", validRelationsBatchJSON(),
+	})
+	if !strings.Contains(validStdout, "work count: 3") {
+		t.Fatalf("valid relation batch output missing work count:\n%s", validStdout)
+	}
+
+	for _, test := range []struct {
+		name       string
+		json       bool
+		dryRun     bool
+		batch      string
+		endpoint   string
+		value      string
+		source     string
+		target     string
+		additional string
+	}{
+		{
+			name:     "live missing source human",
+			batch:    relationEndpointBatchJSON("batch-relation-missing-source-human", "target", "missing-source", "target"),
+			endpoint: "sourceWorkName",
+			value:    "missing-source",
+			source:   "missing-source",
+			target:   "target",
+		},
+		{
+			name:     "live missing target structured",
+			json:     true,
+			batch:    relationEndpointBatchJSON("batch-relation-missing-target-structured", "source", "source", "missing-target"),
+			endpoint: "targetWorkName",
+			value:    "missing-target",
+			source:   "source",
+			target:   "missing-target",
+		},
+		{
+			name:       "dry-run previously submitted target",
+			json:       true,
+			dryRun:     true,
+			batch:      relationEndpointBatchJSON("batch-relation-previously-submitted-target", "new-work", "new-work", "parent"),
+			endpoint:   "targetWorkName",
+			value:      "parent",
+			source:     "new-work",
+			target:     "parent",
+			additional: "not previously submitted Work",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			args := []string{"you", "--server", server.URL(), "submit", "batch"}
+			if test.json {
+				args = []string{"you", "--server", server.URL(), "--json", "submit", "batch"}
+			}
+			if test.dryRun {
+				args = []string{"you", "--server", "http://127.0.0.1:1", "--json", "submit", "batch", "--dry-run"}
+			}
+			args = append(args, test.batch)
+			stdout, stderr, err := executeSubmitBatchCLIExpectError(t, process, args)
+			if err == nil {
+				t.Fatal("relation endpoint submission succeeded")
+			}
+			diagnostic := err.Error() + "\n" + stderr
+			for _, marker := range []string{
+				"relations[0]",
+				`relation type "DEPENDS_ON"`,
+				`sourceWorkName "` + test.source + `"`,
+				`targetWorkName "` + test.target + `"`,
+				"endpoint " + test.endpoint + "=\"" + test.value + "\"",
+				"missing from this batch",
+				"relation endpoints must name Work declared in this batch",
+				"add the named Work to works[] or correct " + test.endpoint,
+			} {
+				if !strings.Contains(diagnostic, marker) {
+					t.Fatalf("diagnostic missing %q:\n%s", marker, diagnostic)
+				}
+			}
+			if test.additional != "" && !strings.Contains(diagnostic, test.additional) {
+				t.Fatalf("diagnostic missing %q:\n%s", test.additional, diagnostic)
+			}
+			if stdout != "" {
+				t.Fatalf("relation endpoint submission emitted success stdout: %q", stdout)
+			}
+		})
+	}
+
+	listed := support.ListDefaultSessionWork(t, server.URL())
+	if len(listed.Results) != 3 {
+		t.Fatalf("invalid relation batches admitted partial Work: %#v", listed.Results)
+	}
+}
+
 // TestCLISubmitBatchSuccessHumanAndJSONShapes proves successful you submit batch
 // emits stable human text and --json shapes with request identity, trace context,
 // work count, and accepted work entries when exercised through Process.Execute
