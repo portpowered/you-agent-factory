@@ -937,3 +937,18 @@
   - For cross-repository PRs, compare local `HEAD`, the fork branch ref, and the explicit PR head SHA; current-branch auto-discovery can inspect the wrong remote.
   - A top-level review comment may remain in the conversation after its requested fix is present; use commit ancestry plus thread-aware state to distinguish addressed feedback from unresolved inline work.
 ---
+## 2026-08-10 02:05 -0700 - wo-b3-provider-capability-discovery-cli-ci-retry
+- What was implemented
+  - Diagnosed the fresh-head `Backend Functional Coverage` failure as an existing nondeterministic package-floor fluctuation: unchanged `dispatch_planning` measured 62.5468% against 62.92%, and unchanged orchestration runtime measured 52.7349% against 52.80%.
+  - Confirmed neither failing package is touched by this PR, changed no feature code or coverage baseline, and reran only the failed jobs with `gh run rerun 31371949039 --failed --repo portpowered/you-agent-factory`.
+- Files changed
+  - `progress.txt`
+  - `prd.json` remains unchanged and all stories remain `passes:true`.
+- Verification
+  - Retry Backend Functional Coverage job `93404454469` — passed.
+  - Retry Verification Policy job `93405593441` — passed.
+  - All 18 PR checks are green on head `de6db78a47666ecc94861ae645b18d6635685a29`.
+- **Learnings for future iterations:**
+  - For functional coverage failures, compare the reported package-floor deltas with the PR file list before changing code; a small drop in untouched packages is evidence for a targeted rerun, not a feature regression.
+  - The dependent Verification Policy job may appear only after the rerun lane completes, so final readiness requires checking both the lane and its policy gate.
+---
