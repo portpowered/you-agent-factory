@@ -11979,7 +11979,7 @@
       },
       "visibility": "visible",
       "runnable": true,
-      "placement": "local-only",
+      "placement": "dual",
       "usage": {
         "line": "run",
         "example": "  # Start the current Factory with explicit Work.\n  you run --work ./docs/examples/startup-work.json\n\n  # Run an existing factory once in explicit batch mode.\n  you run --dir factory --work ./docs/examples/startup-work.json\n\n  # Run a persisted named factory from any working directory.\n  you run --named @you/tts --output primary \"Read the release summary.\"\n\n  # Run a portable JSON or YAML Factory with a one-shot prompt (see handlingBehavior DEFAULT).\n  you run --factory ./factory.yaml \"Fix the lint issues\"\n\n  # Pipe invocation input via stdin (default primary-result stdout).\n  echo \"Ship the login bugfix\" | you run --named @you/goal\n\n  # Opt into ordered canonical Factory Event progress instead of primary-result-only stdout.\n  you run --named @you/goal --output response-stream \"Ship the login bugfix\""

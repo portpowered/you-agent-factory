@@ -115,7 +115,9 @@ func (client remoteInvocationClient) InvokeFactory(
 	if response.HTTP == nil {
 		return factoryapi.InvocationResponse{}, fmt.Errorf("remote invocation failed at %s: HTTP response is unavailable", endpointLabel)
 	}
-	defer response.HTTP.Body.Close()
+	if response.HTTP.Body != nil {
+		defer response.HTTP.Body.Close()
+	}
 	if response.HTTP.StatusCode != http.StatusOK {
 		clidiag.Printf(
 			cfg.Diagnostics,
