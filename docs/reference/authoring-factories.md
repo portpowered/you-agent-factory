@@ -351,12 +351,14 @@ This precedence is selection-only: the CLI chooses exactly one matching named
 factory directory and never merges a project-local definition with a global
 definition of the same canonical name.
 
-The fifteen first-party packaged Factories also use the named-factory path.
+The seventeen first-party packaged Factories also use the named-factory path.
 `you factory list` is the discovery source for their descriptions and runnable
 examples.
 
 | Factory | Orchestrator | Use it for |
 | --- | --- | --- |
+| `@you/agy-clip-qa` | Graph | Gate a rendered clip against its shot specification with a structured pass-or-reroll result. |
+| `@you/agy-cold-watch` | Graph | Review a completed cut from first principles, including visual chronology and audio. |
 | `@you/classify` | Graph | Route a request to a small, medium, or large model lane by complexity. |
 | `@you/deep-research` | JavaScript | Run bounded specialist investigations in parallel and synthesize their findings. |
 | `@you/factory-builder` | Graph | Create and install one validated graph or JavaScript Factory from a request. |

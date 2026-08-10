@@ -3,6 +3,10 @@
 These files are reusable inputs for the factory authoring workflow in
 `you docs authoring-factories`.
 
+- [`agy-production-review.md`](agy-production-review.md) shows the production
+  composition and distinct pass, reroll, and failed routes for the first-party
+  AGY clip-QA and cold-watch review roles.
+
 `javascript-workflows/` contains the runnable authoring examples documented by
 `you docs javascript-workflows`. Focused runtime tests execute these exact files
 so the published primitive usage stays aligned with the shipped host API.

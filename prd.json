@@ -68,8 +68,8 @@
         "Tests pass"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Documented both roles in the packaged-factory reference catalog with exact live-help signatures, pinned ANTIGRAVITY/gemini-3.6-flash-high/8m policy, report schemas, path and failure boundaries, and PowerShell-safe invocations. Added the repository-owned AGY production composition example with distinct pass/reroll/failed routing and the offline root-process command; updated catalog-count/docs smoke coverage. Corrected cold-watch cutPath to required in authored YAML and regenerated only with make packaged-factory-catalog-generate. Validation, focused runtime coverage, docs-reference-smoke, packaged catalog/source checks, readme-check, and verify-fast pass; make lint reaches the unchanged current-main pkg-boundary migration baseline while backend-size and other owned gates pass."
     }
   ]
 }

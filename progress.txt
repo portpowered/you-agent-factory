@@ -12,6 +12,8 @@
 - Multi-input packaged Factories must give required parameters non-ambiguous invocation bindings; the ACP reachability guard requires each required parameter to expose a text-carrying route, while authored validation rejects routing stdin to multiple parameters.
 - AGY structured-output replays require the provider's echoed `json_schema` to be JSON-equivalent to the authored request; reuse the recorded schema exactly when proving a historical trace offline.
 - A schema-valid structured QA `reroll` is an accepted inspection verdict; provider refusal, malformed output, and schema mismatch must fail before verdict interpretation, while provider failures may consume the bounded default retry budget.
+- Packaged Factory additions that change the public catalog require synchronized authored/generated sources, catalog counts, the canonical reference topic, and CLI docs smoke markers; refresh generated output only through `make packaged-factory-catalog-generate`.
+- Verify documented named-Factory commands against isolated live `you run --named ... --help`; role-pinned provider/model defaults should be documented as fixed policy when no override flags are exposed.
 
 - Worker Session finite streams can use the injected Events `Read` contract with the first retained head as a snapshot boundary; replay-only paths must not call `Subscribe`.
 - Authored OpenAPI and CLI contracts generate their Go, TypeScript, published metadata, and family-manifest consumers; update the source contract first, then run the repository generators and drift checks.
@@ -565,4 +567,36 @@
   - The worktree was clean before this append-only verification entry; story 003 remains the only PRD story with `passes:false`.
 - **Learnings for future iterations:**
   - A generated named-Factory help smoke is useful evidence that authored external names and binding fallbacks survived materialization; keep it alongside the behavioral root-process test when documenting the role.
+---
+
+## 2026-08-09 22:06 -07:00 - wo-b2-agy-production-review-roles-003
+- What was implemented
+  - Documented @you/agy-clip-qa and @you/agy-cold-watch in the canonical packaged-factory guide with exact live-help signatures, required inputs, pinned ANTIGRAVITY/gemini-3.6-flash-high/8m policy, result contracts, workspace path rules, failure boundaries, and PowerShell-safe invocations.
+  - Added docs/examples/agy-production-review.md showing clip QA after clip creation, mechanical checks before assembly, cold watch after completed-cut assembly, and distinct pass, reroll, and failed routes; linked it from docs/examples/README.md.
+  - Corrected the authored cold-watch cutPath parameter to required and regenerated its YAML, JSON, and manifest artifacts with make packaged-factory-catalog-generate.
+  - Updated customer-facing catalog counts, authoring-guide entries, and the CLI docs smoke contract; split the AGY functional test into focused helpers so the backend-size gate remains green.
+- Files changed
+  - README.md
+  - docs/examples/README.md
+  - docs/examples/agy-production-review.md
+  - docs/reference/authoring-factories.md
+  - docs/reference/packaged-factories.md
+  - packages/packaged-factories/factories/agy-cold-watch/factory.yaml
+  - packages/packaged-factories/generated/factories/agy-cold-watch/factory.yaml
+  - packages/packaged-factories/generated/factories/agy-cold-watch/factory.json
+  - packages/packaged-factories/generated/manifest.json
+  - tests/functional/providers/agy/production_review_test.go
+  - tests/functional/smoke/cli_docs_smoke_test.go
+  - prd.json
+  - progress.txt
+- Verification
+  - go test ./tests/functional/providers/agy -run '^TestAgyProductionReviewRolesThroughRootBuildProcess$' -count=1 — passed all cold-watch video/audio, missing-file, clip-QA pass, schema-invalid, provider-failure, and missing-file subcases.
+  - go run ./cmd/factory --json factory config validate packages/packaged-factories/factories/agy-cold-watch and .../agy-clip-qa — both passed.
+  - Isolated live help showed required --cut-path for cold watch and required positional/--clip-path plus --shot-specification for clip QA.
+  - make packaged-factory-catalog-check, make packaged-factory-source-check, make docs-reference-smoke, make readme-check, make verify-fast, and make pkg-structure — passed.
+  - make lint passed UI lint/dead-code, go vet, backend-size, pkg-maint, and pkg-file-count checks, but stops at the unchanged current-main pkg-boundary migration baseline; no listed baseline violation touches this story's files. No live AGY smoke was enabled.
+- **Learnings for future iterations:**
+  - The live help contract catches authored requiredness drift that static role prose can hide; verify required parameters after catalog generation.
+  - The backend-size checker enforces a 100-line function limit, so large functional scenario tables should delegate each observable route to focused test helpers.
+  - A generated catalog can be current while operator docs are stale; keep catalog counts, reference entries, help evidence, and repository-owned examples synchronized.
 ---

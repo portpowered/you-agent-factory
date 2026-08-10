@@ -54,7 +54,7 @@ Packaged Factories resolve by name and materialize lazily under
 `~/.you-agent-factory/factories` when first used:
 
 1. Run `you init --provider codex` to configure the default model provider.
-2. Run `you factory list` to inspect the fifteen available packaged Factories.
+2. Run `you factory list` to inspect the seventeen available packaged Factories.
 3. From the project you want the agent to work in, run:
 
 ```sh
@@ -70,7 +70,7 @@ topics, see [`you docs`](./docs/reference/README.md).
 
 ### Pre-packaged factories
 
-YOU comes with [fifteen pre-packaged factories](./docs/reference/packaged-factories.md).
+YOU comes with [seventeen pre-packaged factories](./docs/reference/packaged-factories.md).
 
 #### Save money flow (plan-execute)
 

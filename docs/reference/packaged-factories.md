@@ -1,6 +1,6 @@
 # Packaged Factories
 
-YOU ships **fifteen** first-party Factories under the `@you/` namespace. This
+YOU ships **seventeen** first-party Factories under the `@you/` namespace. This
 page is the canonical operator guide for that catalog. The authored sources
 live in `packages/packaged-factories/factories/`; the published catalog is
 described by `packages/packaged-factories/generated/manifest.json`.
@@ -52,7 +52,7 @@ before replacing its help command with a work request.
 ### Verified discovery output
 
 These commands were run against the current `you` binary while maintaining
-this topic. The catalog output contained all fifteen `@you/*` names; the help
+this topic. The catalog output contained all seventeen `@you/*` names; the help
 output below is the live boundary for `@you/goal`:
 
 ```text
@@ -106,7 +106,7 @@ can compare workflows without guessing which facts are omitted:
 
 The catalog below is the quick navigation index. Search for the exact
 `@you/<name>` in this page, then use the matching detailed entry when choosing
-among the bounded, planning, parallel, subagent, and local-media families.
+among the bounded, planning, parallel, subagent, local-media, and media-review families.
 
 ## Output stability and evidence
 
@@ -144,6 +144,8 @@ it is not a promise of deterministic content.
 | Single bounded call | `@you/subagent` | Graph | Runs one bounded read-only subagent and returns its result. |
 | Parallel investigation and selection | `@you/tournament` | JavaScript | Runs candidates through bounded 1v1 matches, uses a judge to advance each winner, and returns the champion result. |
 | Local media | `@you/tts` | Graph | Converts submitted text to audio with the packaged local text-to-speech model. |
+| Media review | `@you/agy-clip-qa` | Graph | Gates a rendered clip against its shot specification with ANTIGRAVITY and returns a schema-validated pass-or-reroll verdict. |
+| Media review | `@you/agy-cold-watch` | Graph | Reviews a completed cut from first principles with ANTIGRAVITY, including chronology, temporal defects, audio, observed speech, and a pass-or-reroll recommendation. |
 
 Graph Factories use canonical Work, relationships, resources, guards, and
 runtime scheduling. The JavaScript Factories (`@you/deep-research`,
@@ -1205,6 +1207,166 @@ path, and readable audio artifact. The captured audio payload and generated
 identifiers are evidence of the result shape, not a deterministic audio
 golden.
 
+## Detailed media-review entries
+
+`@you/agy-clip-qa` and `@you/agy-cold-watch` are first-party graph Factories
+for production media review. Both use the existing `ANTIGRAVITY` provider with
+the pinned `gemini-3.6-flash-high` model and an `8m` provider timeout. The
+current help output exposes no provider, model, effort, or timeout override for
+either role; those are safe role defaults, not hidden invocation inputs.
+
+The provider receives the existing workspace as AGY's `--add-dir` path and the
+media path exactly as supplied. The Factory wrapper never decodes, uploads,
+copies, probes, extracts frames from, or extracts audio from media. Run from a
+workspace that contains the file: `.\rendered\clip.mp4` is relative to that
+workspace, and an absolute path such as
+`C:\production\job-42\rendered\clip.mp4` is valid only when it resolves inside
+the same directory exposed to AGY. A missing, unreadable, or inaccessible path
+is an execution failure; it is never a successful review verdict, even when
+AGY exits zero and reports provider status `SUCCESS`.
+
+### `@you/agy-clip-qa`
+
+**Purpose and suitable use.** Use this gate immediately after a rendered clip
+is created and before it is accepted into a cut. It compares the complete
+clip—including audio—with exactly one shot specification. The clip path and
+shot specification are its only creative inputs; it does not receive a brief,
+upstream status, filename-based intent, or prior verdict.
+
+**Invocation signature.** The live signature is:
+
+```text
+you run --named @you/agy-clip-qa <clip-path> --shot-specification <value>
+```
+
+Both creative inputs are required. `<clip-path>` can be positional as shown or
+bound with `--clip-path`; `--shot-specification` can be supplied as a named
+value or read from stdin. There are exactly two creative parameters.
+
+**Worker roles and provider/model overrides.** The one worker role is
+`agy-clip-qa-gate`. It uses `ANTIGRAVITY`, `gemini-3.6-flash-high`, and an `8m`
+timeout. No role-specific provider or model flags are exposed; do not invent
+`--provider`, `--model`, or timeout flags for this Factory.
+
+**Expected output shape.** The primary result is one JSON object with every
+field required:
+
+- `action_completed`: boolean.
+- `spec_deviations`: string array; include each material mismatch.
+- `temporal_artifacts`: string array; include each reroll-worthy temporal or
+  transient defect.
+- `audio_content`: one of `speech`, `music`, `noise`, `silence`, or `mixed`.
+- `unexpected_speech`: boolean.
+- `verdict`: exactly `pass` or `reroll`.
+- `confidence`: a number from `0` through `1`.
+
+`pass` means the action completes, both reason arrays are empty, and disallowed
+speech is absent. `reroll` means the clip was successfully inspected but is
+unacceptable; the arrays must record the reasons. A provider/process failure,
+malformed or schema-invalid response, or media-access refusal fails Work and
+returns no production verdict.
+
+**Worked invocation.** This PowerShell-safe command uses only flags in the
+live help output:
+
+```powershell
+$clipPath = (Resolve-Path '.\rendered\SH080.mp4').Path
+$shotSpecification = 'A silver-haired woman points at a bright star; no speech is audible.'
+$qaJson = you run --named @you/agy-clip-qa --clip-path $clipPath --shot-specification $shotSpecification --output primary --no-record
+if ($LASTEXITCODE -ne 0) { throw "clip-QA execution failed with exit code $LASTEXITCODE" }
+$qa = $qaJson | ConvertFrom-Json
+switch ($qa.verdict) {
+  'pass'   { Write-Output 'CLIP_PASS'; break }
+  'reroll' { Write-Output 'CLIP_REROLL'; break }
+  default  { throw "clip-QA returned an invalid verdict: $($qa.verdict)" }
+}
+```
+
+The command's `pass` and `reroll` branches are successful inspection outcomes;
+the non-zero process branch is a distinct failure route. The offline
+behavioral test replays `agy-trace-clipqa-schema.stream.jsonl` for the real
+structured pass and also proves schema-invalid, provider-failure, and
+missing-file paths fail before a verdict is accepted.
+
+### `@you/agy-cold-watch`
+
+**Purpose and suitable use.** Use this reviewer after mechanical checks have
+passed and the completed cut has been assembled. It watches the entire cut
+from first principles so an operator can see what the artifact actually
+communicates, including motion/transient defects and soundtrack content. It
+must not receive or seek a creative brief, shot specification, expected beat,
+upstream status, filename intent, or prior verdict.
+
+**Invocation signature.** The live signature is:
+
+```text
+you run --named @you/agy-cold-watch --cut-path <file-path>
+```
+
+`--cut-path` is the one required creative input. The help output exposes no
+positional cut path and no other creative or role-specific flags.
+
+**Worker roles and provider/model overrides.** The one worker role is
+`agy-cold-watch-reviewer`. It uses `ANTIGRAVITY`, `gemini-3.6-flash-high`, and
+an `8m` timeout. No provider, model, effort, or timeout override is exposed by
+the invocation signature.
+
+**Expected output shape.** The primary result is one Markdown observation
+report with all of these sections present, including explicit empty sections:
+
+1. Chronological events, with timestamps where observable.
+2. Timestamped temporal or transient defects, or `None observed`.
+3. Audio content and timestamped audio defects, or `None observed`.
+4. Observed speech, including an intelligible transcription, or `None
+   observed`.
+5. An overall recommendation of exactly `pass` or `reroll` based only on the
+   artifact.
+
+A file-access refusal is an execution failure, not a recommendation. The
+accepted report must contain an explicit speech audit so an exit-zero AGY
+refusal cannot become a false success.
+
+**Worked invocation.** This command preserves an absolute path while keeping
+the PowerShell invocation safe for paths with spaces:
+
+```powershell
+$completedCut = (Resolve-Path '.\assembled\completed-cut.mp4').Path
+$report = you run --named @you/agy-cold-watch --cut-path $completedCut --output primary --no-record
+if ($LASTEXITCODE -ne 0) { throw "cold-watch execution failed with exit code $LASTEXITCODE" }
+$recommendationMatch = [regex]::Match($report, '(?im)^\s*(?:#{1,6}\s*)?(?:5\.\s*)?Overall recommendation:\s*\**(pass|reroll)\**\s*$')
+if (-not $recommendationMatch.Success) { throw 'cold-watch report has no valid overall recommendation' }
+switch ($recommendationMatch.Groups[1].Value.ToLowerInvariant()) {
+  'pass'   { Write-Output 'COLD_WATCH_PASS'; break }
+  'reroll' { Write-Output 'COLD_WATCH_REROLL'; break }
+}
+```
+
+The report parser must treat a non-zero execution result or a missing
+recommendation as `failed`, never as `reroll`. The offline behavioral test
+replays both the real video/audio observations and the missing-file refusal,
+including the case where AGY reports provider `SUCCESS` while declining the
+file.
+
+See the repository-owned [AGY production review composition example](../examples/agy-production-review.md)
+for the complete clip-creation, mechanical-check, assembly, and routing
+sequence. The fully offline end-to-end command is:
+
+```bash
+go test ./tests/functional/providers/agy -run '^TestAgyProductionReviewRolesThroughRootBuildProcess$' -count=1
+```
+
+This test constructs through `root.BuildProcess`, executes through
+`Process.Execute`, replaces only the `ProviderCommandRunner` edge, and replays
+recorded AGY traces. The existing operator-gated B1 live smoke remains the
+only live AGY check:
+
+```powershell
+$env:YOU_AGY_LIVE_SMOKE = '1'
+go test ./tests/functional/providers/agy/... -run '^TestAgyLiveSmoke$' -count=1
+```
+
+Do not enable that live smoke in ordinary CI.
+
 ## Representative invocations
 
 ```bash
@@ -1292,7 +1454,7 @@ you run --named @you/classify \
 
 ## Materialization and editing
 
-1. `you factory list` — see the fifteen catalog entries.
+1. `you factory list` — see the seventeen catalog entries.
 2. `you run --named @you/goal --help` — materializes `@you/goal` without running
    work when you only need the generated help / local copy.
 3. Edit the materialized Factory under
