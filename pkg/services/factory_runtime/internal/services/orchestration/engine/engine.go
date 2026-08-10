@@ -537,7 +537,18 @@ func (e *FactoryEngine) runUntilQuiescent(ctx context.Context) (bool, error) {
 			return false, err
 		}
 		if shouldTerminate {
-			return e.finishTerminationDrain()
+			terminated, err := e.finishTerminationDrain()
+			if err != nil {
+				return false, err
+			}
+			if !terminated {
+				// A wake-up arrived while the runtime was preparing to
+				// terminate. The drain consumed that signal, so re-run the
+				// canonical tick immediately instead of returning to the
+				// outer wait, which would otherwise wait for a new signal.
+				continue
+			}
+			return true, nil
 		}
 		if !mutated {
 			e.mu.Lock()
