@@ -1700,3 +1700,17 @@
 - **Learnings for future iterations:**
   - PR metadata can be corrected without a source commit, but the handoff is not complete while a required check remains red; keep the PR on the continue path until current-main coverage is green or explicitly repaired by its owning change.
 ---
+## [2026-08-10 16:32 -07:00] - thr-split-acp-stdio-tests-003 review-ready handoff
+- What was implemented
+  - Confirmed the fresh CI run passed all 18 jobs, including Backend Functional Coverage and Verification Policy.
+  - Confirmed PR #1861 is mergeable and marked it ready for review after the empty thread-aware review audit; all three PRD stories remain `passes: true`.
+- Files changed
+  - `progress.txt`
+- Verification
+  - GitHub Actions run `31442041604` — all required checks passed.
+  - PR state — open, ready for review, `MERGEABLE`, `CLEAN`, head `1008faa7440c9406e8968ff855dad7f276c78e61`.
+  - PR body — byte-identical to `prd.json` at 9,931 bytes.
+  - Conversation/review audit — zero top-level comments, formal reviews, and unresolved inline threads.
+- **Learnings for future iterations:**
+  - Once the latest head is green and review threads are empty, `gh pr ready` is the final state transition needed to hand a draft PR to reviewers.
+---
