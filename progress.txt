@@ -1424,3 +1424,19 @@
   - Re-stat'ing after filesystem enumeration does not close an observe-then-suspend release race; suspend the child before inspecting the resource, and resume only when the exact ownership lease is absent.
   - Story 002 still has the separate atomic orphan-reclaimer race and deterministic concurrent reclaimer test requested by the current PR feedback; leave that work for the next story iteration.
 ---
+
+## 2026-08-10 13:35 -07:00 - pf-stale-scope-diagnostic-001 acquisition evidence follow-up
+- What was implemented
+  - Required the deterministic observer to see the atomically published `.owner.json` before accepting the suspended `.staging-owner` lease, avoiding a valid but ownerless directory-creation checkpoint.
+  - Classified Windows sharing/lock violations caused by the suspended child holding a staging handle as retryable observations; the observer resumes and retries within the existing bounded guard while preserving immediate failure for unrelated filesystem errors.
+- Files changed
+  - `tests/functional/transport/cli/process/hard_kill_successor_test.go`
+  - `tests/functional/transport/cli/process/hard_kill_successor_process_windows_test.go`
+  - `tests/functional/transport/cli/process/hard_kill_successor_process_nonwindows_test.go`
+  - `progress.txt`
+- Verification
+  - Focused real-process hard-kill successor test with `-count=3` — passed 3/3 after the owner-metadata and transient-sharing retry adjustments; each run preserved `.staging-owner/.owner.json` and produced the bounded successor diagnostic with predecessor PID evidence.
+  - `gofmt` — passed.
+- **Learnings for future iterations:**
+  - A suspended Windows child can make an otherwise readable staging subtree report `ERROR_SHARING_VIOLATION`; retry only that bounded observation class after resuming the child, and require published ownership metadata before killing.
+---
