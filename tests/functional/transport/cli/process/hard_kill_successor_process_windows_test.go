@@ -9,8 +9,9 @@ import (
 )
 
 var ntSuspendProcess = windows.NewLazySystemDLL("ntdll.dll").NewProc("NtSuspendProcess")
+var ntResumeProcess = windows.NewLazySystemDLL("ntdll.dll").NewProc("NtResumeProcess")
 
-func suspendHardKillProcess(pid int) (func(), error) {
+func suspendHardKillProcess(pid int) (func() error, error) {
 	handle, err := windows.OpenProcess(windows.PROCESS_SUSPEND_RESUME, false, uint32(pid))
 	if err != nil {
 		return nil, fmt.Errorf("open process %d for suspension: %w", pid, err)
@@ -23,5 +24,15 @@ func suspendHardKillProcess(pid int) (func(), error) {
 		}
 		return nil, fmt.Errorf("suspend process %d returned NTSTATUS 0x%x", pid, status)
 	}
-	return func() { _ = windows.CloseHandle(handle) }, nil
+	return func() error {
+		status, _, callErr := ntResumeProcess.Call(uintptr(handle))
+		closeErr := windows.CloseHandle(handle)
+		if status != 0 {
+			if callErr != windows.ERROR_SUCCESS {
+				return fmt.Errorf("resume process %d: %w", pid, callErr)
+			}
+			return fmt.Errorf("resume process %d returned NTSTATUS 0x%x", pid, status)
+		}
+		return closeErr
+	}, nil
 }

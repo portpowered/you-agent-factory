@@ -37,7 +37,7 @@
 - Deterministic Worker Session lifecycle tests can combine the controlled workstation boundary with the real in-memory Events service to verify retained replay ordering without sleeps or cancellation.
 - Detached Cobra command families should project local-only flag relationships without eagerly merging parent persistent flags; otherwise the detached storage can shadow the production root flag when the family is attached.
 - Process-boundary CLI tests should build `./cmd/factory` only when proving OS-level behavior, keep the real server on a root-built process, and assign redirected stdout and diagnostics stderr separately.
-- Hard-kill startup probes should observe a durable checkpoint before listener readiness, then use explicit stdout/stderr/process-state guards; `backendScopeID` is persisted identity, not evidence of a cross-process ownership lock.
+- Hard-kill startup probes should observe a durable checkpoint before listener readiness, then use explicit stdout/stderr/process-state guards; when the child exposes no acquisition event, suspend it before inspecting the exact resource and resume only on a miss so the observed lease cannot be released before the forced kill; `backendScopeID` is persisted identity, not evidence of a cross-process ownership lock.
 - Packaged Factory create/replace ownership uses a deterministic `.<factory>.staging-owner` directory with atomically published PID metadata; existing valid targets skip without taking that write lease, while live or ambiguous owners are preserved and reported with bounded contention diagnostics.
 - Restore package coverage thresholds with focused behavioral tests for typed edge outcomes; do not lower baseline manifests for new branches.
 - Replay completeness must be derived from a terminal lifecycle record inside the captured Events range, not from a separately synchronized terminal session state.
@@ -50,6 +50,7 @@
 - Exclusive directory reservation is a synchronization capability: inject it as a narrowly owned function port and keep generic filesystem adapters limited to inspection and ordinary materialization effects.
 - Treat an absent PID as indeterminate unless the owner probe has stronger proof of orphanhood; compare the owner record again before any explicitly permitted orphan reclaim.
 - When broad functional coverage reports a cancellation-observation failure, rerun the failed lane and isolate the named test before changing an unrelated feature; parallel-suite failures can move between existing durability/restart tests while isolated runs pass.
+- Cross-process lease probes must suspend before filesystem inspection and match the exact ownership-resource suffix; observe-then-suspend leaves a release race even when the path is re-stat'ed.
 
 ## 2026-08-09 13:12 - wo-d1-packaged-factories-docs-001
 - What was implemented
@@ -1402,4 +1403,24 @@
   - `git diff --check` — passed.
 - **Learnings for future iterations:**
   - A final PR handoff should recheck the exact PRD/body/head relationship after current-main synchronization and after the last required CI run; an earlier “pending” follow-up comment is not sufficient evidence by itself.
+---
+
+## 2026-08-10 13:31 -07:00 - pf-stale-scope-diagnostic-001 review follow-up
+- What was implemented
+  - Replaced the hard-kill functional observer's observe-then-suspend sequence with a deterministic suspend-before-observe acquisition barrier. The real predecessor is paused before the exact packaged-factory `.staging-owner` resource is inspected, resumes only when no owner resource is present, and remains paused once the lease is found until the parent hard-kills it.
+  - Added portable Unix `SIGSTOP`/`SIGCONT` behavior alongside the existing Windows `NtSuspendProcess` path, including bounded resume/error handling for misses.
+  - Narrowed the functional evidence to the actual ownership lease suffix instead of matching transient persistence stages.
+- Files changed
+  - `tests/functional/transport/cli/process/hard_kill_successor_test.go`
+  - `tests/functional/transport/cli/process/hard_kill_successor_process_windows_test.go`
+  - `tests/functional/transport/cli/process/hard_kill_successor_process_nonwindows_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/transport/cli/process -run '^TestCLISuccessorAfterHardKillReportsPreRuntimeStagingContention$' -count=1 -v -timeout 300s` — passed.
+  - Same focused real-process test with `-count=3` — passed 3/3; each run retained `.staging-owner` and returned the bounded successor contention diagnostic.
+  - `gofmt` and `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - Re-stat'ing after filesystem enumeration does not close an observe-then-suspend release race; suspend the child before inspecting the resource, and resume only when the exact ownership lease is absent.
+  - Story 002 still has the separate atomic orphan-reclaimer race and deterministic concurrent reclaimer test requested by the current PR feedback; leave that work for the next story iteration.
 ---

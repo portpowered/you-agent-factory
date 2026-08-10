@@ -308,23 +308,29 @@ func waitForPreRuntimeStagingPath(t testing.TB, session *builtcliacceptance.Sess
 	deadline := time.NewTimer(hardKillSuccessorReadinessTimeout)
 	defer deadline.Stop()
 	// The packaged installer and its exclusive directory reservation run in the
-	// child process and expose no parent-process event or injectable edge. Poll
-	// the isolated filesystem so the test can suspend the child at the observed
-	// OS-process boundary before hard-killing it; the deadline is only a failure
-	// guard for a missing acquisition.
+	// child process and expose no parent-process event or injectable edge. Stop
+	// the child before inspecting the isolated filesystem. This is the
+	// acquisition barrier: once the owner directory is observed, the child
+	// cannot reach its normal release path before the parent hard-kills it. If
+	// no owner is present, resume the child and retry; the deadline is only a
+	// failure guard for a missing acquisition.
 	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
 	for {
+		resume, err := suspendHardKillProcess(predecessorPID)
+		if err != nil {
+			t.Fatalf("suspend predecessor before observing pre-runtime staging: %v", err)
+		}
 		path, err := findPreRuntimeStagingPath(root)
 		if err != nil {
+			_ = resume()
 			t.Fatalf("observe pre-runtime packaged-factory staging under %s: %v", root, err)
 		}
 		if path != "" {
-			release, err := suspendHardKillProcess(predecessorPID)
-			if err != nil {
-				t.Fatalf("suspend predecessor at pre-runtime staging acquisition: %v", err)
-			}
-			return path, release
+			return path, func() { _ = resume() }
+		}
+		if err := resume(); err != nil {
+			t.Fatalf("resume predecessor after observing no pre-runtime staging: %v", err)
 		}
 		select {
 		case <-ticker.C:
@@ -343,7 +349,7 @@ func findPreRuntimeStagingPath(root string) (string, error) {
 		if path == root || !entry.IsDir() {
 			return nil
 		}
-		if strings.HasPrefix(entry.Name(), ".") && strings.Contains(entry.Name(), ".staging-") {
+		if strings.HasPrefix(entry.Name(), ".") && strings.HasSuffix(entry.Name(), ".staging-owner") {
 			if _, statErr := os.Stat(path); errors.Is(statErr, os.ErrNotExist) {
 				return nil
 			} else if statErr != nil {
