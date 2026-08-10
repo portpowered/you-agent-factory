@@ -4038,6 +4038,61 @@ export interface components {
     FactoryResponseEventSessionPayload: {
       /** @description Session lifecycle status when applicable. */
       status?: string;
+      /**
+       * Format: date-time
+       * @description Injected-clock timestamp at which the Worker Session opened.
+       */
+      startedAt?: string;
+      /** @description Stable Worker Session identity for the execution. */
+      workerSessionId?: string;
+      /** @description Authored Worker identity when the invocation supplied one. */
+      workerType?: string;
+      /** @description Factory Session identity when the invocation supplied one. */
+      factorySessionId?: string;
+      /** @description Recording identity when the invocation supplied one. */
+      recordingId?: string;
+      /** @description Project identity when the invocation supplied one. */
+      projectId?: string;
+      /** @description Stable dispatch identity for the execution attempt. */
+      dispatchId?: string;
+      /** @description Runtime transition identity when the dispatch supplied one. */
+      transitionId?: string;
+      /** @description Workstation route used by the canonical invocation. */
+      workstationName?: string;
+      /** @description Turn or request identity when the dispatch supplied one. */
+      turnId?: string;
+      /** @description Work trace identity when the dispatch supplied one. */
+      traceId?: string;
+      /** @description Replay correlation key when the dispatch supplied one. */
+      replayKey?: string;
+      /** @description Work identities carried by the canonical dispatch. */
+      workIds?: string[];
+      /** @description Stable identity of the opening attempt. */
+      attemptId?: string;
+      /** @description One-based attempt number when known. */
+      attempt?: number;
+      /**
+       * @description Bounded reason for the attempt lifecycle.
+       * @enum {string}
+       */
+      attemptReason?: FactoryResponseEventSessionPayloadAttemptReason;
+      /** @description Exact provider continuation identity when supplied. */
+      continuation?: {
+        provider?: string;
+        kind?: string;
+        id?: string;
+      };
+      /** @description Explicit provider and runner selection facts. */
+      providerSelection?: {
+        runnerId?: string;
+        source?: components["schemas"]["RunnerSelectionSource"];
+        executorProvider?: string;
+        modelProvider?: string;
+      };
+      /** @description Explicit model selection when supplied. */
+      model?: string;
+      /** @description Explicit reasoning-effort selection when supplied. */
+      reasoningEffort?: string;
       capabilities?: components["schemas"]["FactoryResponseEventCapabilities"];
     };
     /** @description Run-scoped lifecycle metadata payload. */
@@ -8416,6 +8471,13 @@ export const FactoryResponseEventStructuredOutputContentBlockKind = {
 } as const;
 export type FactoryResponseEventStructuredOutputContentBlockKind =
   (typeof FactoryResponseEventStructuredOutputContentBlockKind)[keyof typeof FactoryResponseEventStructuredOutputContentBlockKind];
+export const FactoryResponseEventSessionPayloadAttemptReason = {
+  INITIAL: "INITIAL",
+  RETRY: "RETRY",
+  RESUME: "RESUME",
+} as const;
+export type FactoryResponseEventSessionPayloadAttemptReason =
+  (typeof FactoryResponseEventSessionPayloadAttemptReason)[keyof typeof FactoryResponseEventSessionPayloadAttemptReason];
 export const FactorySaveMode = {
   // Replace the factory already current in the selected live session.
   FactorySaveModeReplaceCurrent: "REPLACE_CURRENT",

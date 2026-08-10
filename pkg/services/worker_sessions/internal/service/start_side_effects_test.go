@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -12,6 +13,7 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	workersessionservice "github.com/portpowered/infinite-you/pkg/services/worker_sessions/internal/service"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -26,6 +28,208 @@ func decodeDraft(t *testing.T, record events.Record) workers.Draft {
 		t.Fatalf("unmarshal record payload as workers.Draft error = %v", err)
 	}
 	return draft
+}
+
+func decodeSessionPayload(t *testing.T, draft workers.Draft) workers.SessionPayload {
+	t.Helper()
+	var payload workers.SessionPayload
+	if err := json.Unmarshal(draft.Payload, &payload); err != nil {
+		t.Fatalf("unmarshal session payload error = %v", err)
+	}
+	return payload
+}
+
+// TestStart_OpeningRecordCarriesCanonicalExecutionCorrelation proves that the
+// opening payload is built from the one resolved execution request before the
+// Workers boundary is entered, and that retained replay returns the exact same
+// immutable lifecycle facts observed by the live boundary callback.
+func TestStart_OpeningRecordCarriesCanonicalExecutionCorrelation(t *testing.T) {
+	eventsSvc := newEventsAppender()
+	topic := workersessions.Topic("worker-1")
+	startedAt := time.Date(2035, time.March, 4, 5, 6, 7, 123000000, time.UTC)
+	clock := platformclock.NewDeterministic(startedAt, time.Second)
+
+	var liveDraft workers.Draft
+	var livePayload workers.SessionPayload
+	execution := &fakeExecution{
+		dispatch: func(ctx context.Context, _ workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+			read, err := eventsSvc.Read(ctx, events.ReadRequest{Topic: topic, From: events.Cursor{Topic: topic}, Limit: 10})
+			if err != nil {
+				t.Fatalf("live opening Read() error = %v", err)
+			}
+			if len(read.Records) != 1 {
+				t.Fatalf("live opening Read() returned %d records, want one", len(read.Records))
+			}
+			liveDraft = decodeDraft(t, read.Records[0])
+			livePayload = decodeSessionPayload(t, liveDraft)
+			return workers.WorkstationDispatchResult{
+				DispatchID: "dispatch-1",
+				Result: workers.WorkResult{
+					DispatchID: "dispatch-1",
+					Outcome:    workers.OutcomeAccepted,
+				},
+			}, nil
+		},
+	}
+	registry, err := newServiceWithClock(executionBoundary{execution: execution}, eventsSvc, nil, clock)
+	if err != nil {
+		t.Fatalf("service.New() error = %v, want nil", err)
+	}
+
+	request := validStartRequest("worker-1", "dispatch-1")
+	resolved := &request.Execution.Execution
+	resolved.WorkerType = "review-worker"
+	resolved.ProjectID = "project-1"
+	resolved.FactorySessionID = "factory-session-1"
+	resolved.RecordingID = "recording-1"
+	resolved.RunnerID = workers.RunnerIDCodex
+	resolved.RunnerSelectionSource = workers.RunnerSelectionSourceFactory
+	resolved.ExecutorProvider = workers.ExecutorProviderACP
+	resolved.Model = "gpt-5"
+	resolved.ModelProvider = workers.RunnerIDCodex
+	resolved.ReasoningEffort = "high"
+	resolved.Capabilities = &workers.Capabilities{
+		NativeStreaming:    true,
+		MessageDeltas:      true,
+		MessageSnapshots:   true,
+		ReasoningSummaries: true,
+		ToolLifecycle:      true,
+		ToolOutputDeltas:   true,
+		FileChanges:        true,
+		Plans:              true,
+		Usage:              true,
+		StableItemIDs:      true,
+		ProviderReconnect:  true,
+	}
+	resolved.Dispatch.WorkerType = resolved.WorkerType
+	resolved.Dispatch.ProjectID = resolved.ProjectID
+	resolved.Dispatch.TransitionID = "transition-1"
+	resolved.Dispatch.Execution.RequestID = "turn-1"
+	resolved.Dispatch.Execution.TraceID = "trace-1"
+	resolved.Dispatch.Execution.ReplayKey = "replay-1"
+	resolved.Dispatch.Execution.WorkIDs = []string{"work-1", "work-2"}
+
+	if _, err := registry.InvokeSession(context.Background(), request); err != nil {
+		t.Fatalf("InvokeSession() error = %v, want nil", err)
+	}
+
+	read, err := eventsSvc.Read(context.Background(), events.ReadRequest{Topic: topic, From: events.Cursor{Topic: topic}, Limit: 10})
+	if err != nil {
+		t.Fatalf("replay opening Read() error = %v", err)
+	}
+	if len(read.Records) != 2 {
+		t.Fatalf("replay Read() returned %d records, want opening plus terminal", len(read.Records))
+	}
+	if read.Records[0].ID.Position != 1 {
+		t.Fatalf("opening position = %d, want 1", read.Records[0].ID.Position)
+	}
+	replayDraft := decodeDraft(t, read.Records[0])
+	replayPayload := decodeSessionPayload(t, replayDraft)
+	if !reflect.DeepEqual(liveDraft, replayDraft) || !reflect.DeepEqual(livePayload, replayPayload) {
+		t.Fatalf("live opening differs from replay: live=%+v/%+v replay=%+v/%+v", liveDraft, livePayload, replayDraft, replayPayload)
+	}
+	if liveDraft.Kind != workers.KindSession || liveDraft.Phase != workers.PhaseStarted {
+		t.Fatalf("opening draft = %+v, want SESSION/STARTED", liveDraft)
+	}
+	if livePayload.StartedAt == nil || !livePayload.StartedAt.Equal(startedAt) {
+		t.Fatalf("startedAt = %v, want injected clock value %v", livePayload.StartedAt, startedAt)
+	}
+	if livePayload.Status != string(workersessions.StateStarting) ||
+		livePayload.WorkerSessionID != "worker-1" ||
+		livePayload.WorkerType != "review-worker" ||
+		livePayload.FactorySessionID != "factory-session-1" ||
+		livePayload.RecordingID != "recording-1" ||
+		livePayload.ProjectID != "project-1" ||
+		livePayload.DispatchID != "dispatch-1" ||
+		livePayload.TransitionID != "transition-1" ||
+		livePayload.TurnID != "turn-1" ||
+		livePayload.TraceID != "trace-1" ||
+		livePayload.ReplayKey != "replay-1" ||
+		!reflect.DeepEqual(livePayload.WorkIDs, []string{"work-1", "work-2"}) ||
+		livePayload.AttemptID != "dispatch-1" ||
+		livePayload.Attempt != 1 ||
+		livePayload.AttemptReason != workers.AttemptReasonInitial {
+		t.Fatalf("opening correlation payload = %+v, want canonical values", livePayload)
+	}
+	if livePayload.ProviderSelection == nil || livePayload.ProviderSelection.RunnerID != workers.RunnerIDCodex ||
+		livePayload.ProviderSelection.Source != workers.RunnerSelectionSourceFactory ||
+		livePayload.ProviderSelection.ExecutorProvider != workers.ExecutorProviderACP ||
+		livePayload.ProviderSelection.ModelProvider != workers.RunnerIDCodex {
+		t.Fatalf("provider selection = %+v, want resolved selection", livePayload.ProviderSelection)
+	}
+	if livePayload.Model != "gpt-5" || livePayload.ReasoningEffort != "high" ||
+		!reflect.DeepEqual(livePayload.Capabilities, resolved.Capabilities) {
+		t.Fatalf("model/capabilities = %q/%q/%+v, want resolved values", livePayload.Model, livePayload.ReasoningEffort, livePayload.Capabilities)
+	}
+}
+
+func TestStart_OpeningRecordOmitsUnknownOptionalCorrelation(t *testing.T) {
+	eventsSvc := newEventsAppender()
+	registry, err := newServiceWithClock(
+		executionBoundary{execution: succeedingExecution()},
+		eventsSvc,
+		nil,
+		platformclock.NewDeterministic(time.Date(2035, time.March, 4, 5, 6, 7, 0, time.UTC), time.Second),
+	)
+	if err != nil {
+		t.Fatalf("service.New() error = %v, want nil", err)
+	}
+	if _, err := registry.InvokeSession(context.Background(), validStartRequest("worker-1", "dispatch-1")); err != nil {
+		t.Fatalf("InvokeSession() error = %v, want nil", err)
+	}
+
+	topic := workersessions.Topic("worker-1")
+	read, err := eventsSvc.Read(context.Background(), events.ReadRequest{Topic: topic, From: events.Cursor{Topic: topic}, Limit: 10})
+	if err != nil {
+		t.Fatalf("Read() error = %v", err)
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(decodeDraft(t, read.Records[0]).Payload, &fields); err != nil {
+		t.Fatalf("unmarshal opening fields error = %v", err)
+	}
+	for _, key := range []string{
+		"factorySessionId", "recordingId", "projectId", "turnId", "traceId", "replayKey",
+		"workIds", "providerSelection", "continuation", "model", "reasoningEffort", "capabilities",
+	} {
+		if _, present := fields[key]; present {
+			t.Fatalf("opening field %q = %s, want unknown optional field omitted", key, fields[key])
+		}
+	}
+}
+
+func TestStart_OpeningRecordCarriesExactContinuationAndResumeReason(t *testing.T) {
+	eventsSvc := newEventsAppender()
+	registry, err := newServiceWithClock(
+		executionBoundary{execution: succeedingExecution()},
+		eventsSvc,
+		nil,
+		platformclock.NewDeterministic(time.Date(2035, time.March, 4, 5, 6, 7, 0, time.UTC), time.Second),
+	)
+	if err != nil {
+		t.Fatalf("service.New() error = %v, want nil", err)
+	}
+	request := validStartRequest("worker-1", "dispatch-1")
+	request.Execution.Execution.ResumeSession = &providers.SessionRef{
+		Provider: providers.IDCodex,
+		Kind:     providers.SessionIDKind,
+		ID:       "opaque-provider-session",
+	}
+	if _, err := registry.InvokeSession(context.Background(), request); err != nil {
+		t.Fatalf("InvokeSession() error = %v, want nil", err)
+	}
+
+	topic := workersessions.Topic("worker-1")
+	read, err := eventsSvc.Read(context.Background(), events.ReadRequest{Topic: topic, From: events.Cursor{Topic: topic}, Limit: 10})
+	if err != nil {
+		t.Fatalf("Read() error = %v", err)
+	}
+	payload := decodeSessionPayload(t, decodeDraft(t, read.Records[0]))
+	if payload.AttemptReason != workers.AttemptReasonResume || payload.Continuation == nil {
+		t.Fatalf("opening continuation = %+v, want RESUME with exact reference", payload)
+	}
+	if payload.Continuation.Provider != string(providers.IDCodex) || payload.Continuation.Kind != providers.SessionIDKind || payload.Continuation.ID != "opaque-provider-session" {
+		t.Fatalf("continuation = %+v, want exact provider reference", payload.Continuation)
+	}
 }
 
 // TestStart_CommitsOpeningRecordBeforeWorkersInvocation proves the W3

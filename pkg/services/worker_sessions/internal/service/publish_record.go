@@ -205,20 +205,21 @@ const (
 // the append itself has committed: no PublishRecord call can be accepted for
 // id until this succeeds. A non-nil return means no record was committed and
 // the window stays closed: Start must not proceed to Workers handoff.
-func (r *registry) publishOpeningRecord(ctx context.Context, id, attemptID string) error {
+func (r *registry) publishOpeningRecord(ctx context.Context, id, attemptID string, payload workers.SessionPayload) error {
 	pub := r.publicationFor(id)
 	pub.mu.Lock()
 	defer pub.mu.Unlock()
 
-	// workers.SessionPayload{Status: string} has one string field, so
-	// json.Marshal cannot fail here; the error is intentionally discarded
-	// rather than defended against.
-	draftPayload, _ := json.Marshal(workers.SessionPayload{Status: string(workersessions.StateStarting)})
+	// SessionPayload contains only JSON value fields, so json.Marshal cannot
+	// fail here; the error is intentionally discarded rather than defended
+	// against.
+	draftPayload, _ := json.Marshal(payload)
 	draft := workers.Draft{
 		Kind:       workers.KindSession,
 		Phase:      workers.PhaseStarted,
 		Payload:    draftPayload,
 		DispatchID: attemptID,
+		TurnID:     payload.TurnID,
 	}
 	identity := events.AppendIdentity{
 		SourceType:     lifecycleSourceType,

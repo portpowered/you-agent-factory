@@ -52,14 +52,19 @@ func (r *registry) InvokeSession(ctx context.Context, req workersessions.InvokeS
 		r.logger.Info("worker session start rejected", "sessionID", req.ID, "attemptID", attemptID, "outcome", "not_startable")
 		return workersessions.InvokeSessionResult{}, err
 	}
-	r.ensureObservation(
+	startedAt := r.ensureObservation(
 		req.ID,
 		attemptID,
 		req.Execution.Execution.Dispatch.Execution.RequestID,
 		req.Execution.Execution.Dispatch.Execution.WorkIDs,
 	)
 
-	if err := r.publishOpeningRecord(ctx, req.ID, attemptID); err != nil {
+	if err := r.publishOpeningRecord(
+		ctx,
+		req.ID,
+		attemptID,
+		openingSessionPayload(req.ID, attemptID, startedAt, req.Execution.Execution),
+	); err != nil {
 		terminal := failedTerminal(workersessions.FailureCauseEventPublicationFailure, safeDetail(workersessions.FailureCauseEventPublicationFailure, nil))
 		final, committed := r.commitTerminal(req.ID, workersessions.StateFailed, terminal)
 		if committed {
@@ -282,18 +287,89 @@ type observation struct {
 	endedAt   *time.Time
 }
 
-func (r *registry) ensureObservation(id, attemptID, turnID string, workIDs []string) {
+func (r *registry) ensureObservation(id, attemptID, turnID string, workIDs []string) time.Time {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if _, exists := r.observations[id]; exists {
-		return
+	if current, exists := r.observations[id]; exists {
+		return current.startedAt
 	}
+	startedAt := r.clock.Now()
 	r.observations[id] = &observation{
 		workIDs:   append([]string(nil), workIDs...),
 		turnID:    turnID,
 		attemptID: attemptID,
-		startedAt: r.clock.Now(),
+		startedAt: startedAt,
 	}
+	return startedAt
+}
+
+func openingSessionPayload(
+	id string,
+	attemptID string,
+	startedAt time.Time,
+	request workers.WorkstationExecutionRequest,
+) workers.SessionPayload {
+	dispatch := request.Dispatch
+	payload := workers.SessionPayload{
+		Status:           string(workersessions.StateStarting),
+		StartedAt:        timeValue(startedAt),
+		WorkerSessionID:  id,
+		FactorySessionID: strings.TrimSpace(request.FactorySessionID),
+		RecordingID:      strings.TrimSpace(request.RecordingID),
+		ProjectID:        strings.TrimSpace(request.ProjectID),
+		DispatchID:       attemptID,
+		TransitionID:     strings.TrimSpace(dispatch.TransitionID),
+		WorkstationName:  strings.TrimSpace(dispatch.WorkstationName),
+		TurnID:           strings.TrimSpace(dispatch.Execution.RequestID),
+		TraceID:          strings.TrimSpace(dispatch.Execution.TraceID),
+		ReplayKey:        strings.TrimSpace(dispatch.Execution.ReplayKey),
+		WorkIDs:          append([]string(nil), dispatch.Execution.WorkIDs...),
+		AttemptID:        attemptID,
+		Attempt:          1,
+		AttemptReason:    workers.AttemptReasonInitial,
+		Model:            strings.TrimSpace(request.Model),
+		ReasoningEffort:  strings.TrimSpace(request.ReasoningEffort),
+		Capabilities:     cloneCapabilities(request.Capabilities),
+	}
+	if payload.WorkerType = strings.TrimSpace(request.WorkerType); payload.WorkerType == "" {
+		payload.WorkerType = strings.TrimSpace(dispatch.WorkerType)
+	}
+	if payload.ProjectID == "" {
+		payload.ProjectID = strings.TrimSpace(dispatch.ProjectID)
+	}
+	selection := workers.SessionProviderSelection{
+		RunnerID:         strings.TrimSpace(request.RunnerID),
+		Source:           request.RunnerSelectionSource,
+		ExecutorProvider: strings.TrimSpace(request.ExecutorProvider),
+		ModelProvider:    strings.TrimSpace(request.ModelProvider),
+	}
+	if selection.RunnerID != "" || selection.Source != "" || selection.ExecutorProvider != "" || selection.ModelProvider != "" {
+		payload.ProviderSelection = &selection
+	}
+	if request.ResumeSession != nil {
+		continuation := workers.SessionContinuation{
+			Provider: strings.TrimSpace(string(request.ResumeSession.Provider)),
+			Kind:     strings.TrimSpace(request.ResumeSession.Kind),
+			ID:       strings.TrimSpace(request.ResumeSession.ID),
+		}
+		if continuation.Provider != "" || continuation.Kind != "" || continuation.ID != "" {
+			payload.Continuation = &continuation
+			payload.AttemptReason = workers.AttemptReasonResume
+		}
+	}
+	return payload
+}
+
+func timeValue(value time.Time) *time.Time {
+	return &value
+}
+
+func cloneCapabilities(value *workers.Capabilities) *workers.Capabilities {
+	if value == nil {
+		return nil
+	}
+	clone := *value
+	return &clone
 }
 
 func (r *registry) finishObservationLocked(id string, endedAt time.Time) {

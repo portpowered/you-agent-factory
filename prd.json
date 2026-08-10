@@ -1,75 +1,76 @@
 {
-  "project": "WO-B2 — Reusable AGY Production Review Roles",
-  "branchName": "wo-b2-agy-production-review-roles",
-  "description": "Ship two first-party packaged AGY review roles: a context-free cold-watch reviewer for completed cuts and a deterministic clip-QA gate for rendered clips. Both roles pass media paths unchanged through the existing ANTIGRAVITY provider, define exact success and failure contracts, remain offline in ordinary CI, and include operator guidance for production composition.",
+  "project": "WSR-001 Worker Opening Record Identifies the Execution",
+  "branchName": "wsr-001-opening-record",
+  "description": "Implement WSR-001 so every Worker event topic begins with an authoritative SESSION/STARTED record containing stable session, Factory, provider-selection, timing, Work, and attempt correlation before provider output, with synthesized lifecycle provenance and valid opening-to-terminal history even when no Provider Session reference exists.",
   "context": {
-    "customerAsk": "Deliver WO-B2 as one coherent reusable role slice: a cold-watch final reviewer that receives only a completed-cut path and reports what happens plus temporal and audio defects, and a clip-QA gate that receives a clip path and shot specification and returns a deterministic structured pass-or-reroll verdict. Reuse the existing ANTIGRAVITY provider and real recorded AGY traces, keep normal CI offline, pass file paths directly for AGY to parse, and document exact input, output, failure, and missing-file behavior.",
-    "problem": "WO-B1 and merged PR #1826 provide AGY execution and real video/audio traces, but the repository does not ship reusable production role definitions. Factory authors must invent prompts, schemas, workspace rules, and refusal handling, which creates hidden context and false-success risk because AGY can exit zero and report SUCCESS while declining a missing file.",
-    "solution": "Add independently invocable @you/agy-cold-watch and @you/agy-clip-qa authored Factories to the first-party packaged catalog, generate their distribution artifacts through the existing generator, document and exemplify their production composition, and prove their successful and missing-file behavior through root.BuildProcess, Process.Execute, ProviderCommandRunner, and the real recorded AGY traces without live CI calls or wrapper media transformation."
+    "customerAsk": "Make SESSION/STARTED the first record on every Worker topic with stable session, provider-selection, timing, attempt, and Factory correlation before provider output; declare synthesized lifecycle provenance; and preserve valid opening and terminal history for providers with no Provider Session reference. Provide WSR-FT-001, WSR-FT-002, WSR-FT-003 plus focused unit, provider conformance, and Events ordering evidence.",
+    "problem": "Worker history does not yet guarantee that the first record carries every authoritative correlation and provenance fact needed to identify the execution. Provider identity may become observable too late, and consumers can incorrectly depend on an optional provider-native session reference, making live and replayed timelines ambiguous across providers.",
+    "solution": "Extend the provider-neutral Worker lifecycle contract and canonical Worker Sessions invocation path so an injected-clock timestamp and all known execution correlation are published in SESSION/STARTED at topic position 1. Bind actual provider identity before provider-authored output, retain optional Provider Session references without inference, and prove stable live/replay behavior across streaming, session-bearing, final-only, and no-session-reference providers without implementing later recording-persistence stories."
   },
   "acceptanceCriteria": [
-    "The first-party catalog ships independently invocable @you/agy-cold-watch and @you/agy-clip-qa Factories with discoverable descriptions, examples, exact invocation signatures, explicit primary results, and canonical generated catalog artifacts derived from authored sources rather than hand-edited generated files.",
-    "Cold watch accepts only a completed-cut path as creative input and returns the documented observation report covering chronological events, temporal or transient defects, audio content and defects, observed speech, and a pass or reroll recommendation; it neither receives nor seeks creative-brief, shot-specification, intended-beat, or prior-verdict context.",
-    "Clip QA accepts a clip path and shot specification and returns a schema-valid object containing action_completed, spec_deviations, temporal_artifacts, audio_content, unexpected_speech, verdict, and confidence; verdict is exactly pass or reroll, and a missing, invalid, or incomplete result cannot become successful Work.",
-    "Both roles preserve the media path in prompt text and use the existing ANTIGRAVITY Provider and mandatory --add-dir-compatible workspace path without decoding, uploading, copying, probing, frame-stripping, extracting audio from, or otherwise transforming media; missing, unreadable, or inaccessible media fails Work with an actionable non-empty diagnostic and is not a pass or reroll.",
-    "Focused offline functional coverage constructs through root.BuildProcess, executes through Process.Execute, replaces only edges.Edges.ProviderCommandRunner, replays the real AGY video, audio, clip-QA, and missing-file recordings, and proves the selected Factory, provider command, returned content, Factory Events, and terminal Work outcome.",
-    "Quality gates pass: go test ./tests/functional/providers/agy -run '^TestAgyProductionReviewRolesThroughRootBuildProcess$' -count=1, make packaged-factory-catalog-check, make docs-reference-smoke, and make verify-fast pass; Typecheck passes; Tests pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
-    "The implementation and review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared or generated-file churn are resolved, and the PR is actually merged; opened, green, approved, or ready-to-merge is not complete."
+    "Every exercised Worker path publishes exactly one SESSION/STARTED as topic position 1 before provider-authored output and finishes with a legal terminal lifecycle record.",
+    "The opening exposes every known WSR lifecycle field while genuinely unknown optional facts remain absent rather than zero-filled, defaulted, or inferred.",
+    "Live and replay observations preserve the exact opening startedAt and known Worker, Factory, dispatch, turn, Work, and attempt identities, and lifecycle provenance is SYNTHESIZED, notification-shaped, and LIFECYCLE_ONLY.",
+    "Actual provider identity is present in the opening or established by a preceding provider-binding SESSION/UPDATED, so no provider-authored event is observable first.",
+    "Streaming, session-bearing, final-only, and no-Provider-Session-reference executions retain legal provider-neutral ordering, honest fidelity, and inspectable opening-to-terminal history, demonstrated by WSR-FT-001, WSR-FT-002, WSR-FT-003 and focused unit, conformance, and ordering tests.",
+    "Implementation respects service ownership and the single Events publication path, introduces no recording persistence barrier or dual write, and includes no broad unrelated cleanup.",
+    "Typecheck passes and tests pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
+    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared/generated-file churn are resolved against current main, and the PR is actually merged."
   ],
   "userStories": [
     {
-      "id": "wo-b2-agy-production-review-roles-001",
-      "title": "Ship the context-free cold-watch reviewer",
-      "description": "As a production operator, I want an independent reviewer to watch the completed cut without creative-brief context so I can learn what the artifact actually communicates and catch motion or soundtrack defects that upstream authors may have normalized.",
+      "id": "wsr-001-opening-record-001",
+      "title": "Publish a stable, correlated opening record",
+      "description": "As a customer inspecting a Worker Session, I want its first event to state which execution began and when so that I can interpret the stream without relying on later output.",
       "acceptanceCriteria": [
-        "@you/agy-cold-watch is independently invocable with one required cutPath input bound to a clearly named CLI argument; provider model, effort, and timeout may use documented safe defaults or explicit role overrides, but there is no brief, shot-specification, expected-action, or prior-verdict input.",
-        "The effective reviewer instruction treats cutPath as the only creative context, watches the whole file including audio, does not inspect nearby briefs or manifests for intended meaning, and does not infer correctness from filenames or upstream status.",
-        "Successful primary output follows one documented report contract with a chronological description of what happens, timestamped temporal or transient defects, audio content and timestamped audio defects, observed speech, and an overall pass or reroll recommendation; empty sections are explicit rather than omitted.",
-        "The cut path is forwarded unchanged in the AGY prompt and execution uses the existing workspace --add-dir; no wrapper media decoding, upload, copy, probing, frame extraction, or audio extraction occurs.",
-        "An absent, unreadable, unsupported, or workspace-inaccessible cut does not produce a review recommendation: Work reaches the failed path with a non-empty actionable explanation, including when replayed AGY exits zero and reports provider status SUCCESS while refusing the file.",
-        "The cold-watch functional subtest replays the real video and audio recordings and asserts facts from both picture and soundtrack through root.BuildProcess, Process.Execute, and ProviderCommandRunner without a live AGY call.",
-        "Typecheck passes",
-        "Tests pass"
+        "Each Worker Session topic begins at position 1 with exactly one SESSION/STARTED, committed before provider handoff or provider-authored output.",
+        "The opening includes status, injected-clock startedAt, workerSessionId, and every known Factory Session, recording, dispatch, turn, Work, attempt, continuation, provider-selection, model, and capabilities value supplied through the canonical invocation path.",
+        "attemptReason uses INITIAL, RETRY, or RESUME as appropriate, and known correlation is preserved through the Petri and JavaScript paths that share Worker Sessions invocation.",
+        "Unknown optional metadata remains absent and is not replaced with zero values, empty provider facts, or reconstructed Provider Session data.",
+        "The opening timestamp and known Worker, Factory, dispatch, turn, Work, and attempt identities are identical in live observation and replay projection, covering WSR-FT-002.",
+        "Focused Worker Sessions unit and projection/replay tests pass.",
+        "Typecheck passes.",
+        "Tests pass."
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Implemented @you/agy-cold-watch with a single cutPath input, context-free AGY prompt, and a runtime markdown-observation-report/v1 postcondition requiring inspection status, chronology, timestamped defect/audio sections, observed speech, and exactly one pass-or-reroll recommendation. A complete report is accepted through root.BuildProcess, while both existing real incomplete video/audio traces and the exit-zero missing-file refusal fail Work without a primary recommendation; path and provider evidence remain observable. Focused story, factory-definition, mapping, API-contract, catalog, and docs checks pass."
+      "notes": "Opening SESSION/STARTED now carries the injected-clock timestamp, stable Worker/Factory/recording/dispatch/turn/Work/attempt correlations, explicit provider/model/capability selections, and exact continuation metadata when supplied. Unknown optionals remain omitted. Runtime dispatch planning and JavaScript invocation both preserve the new request facts, and focused live/replay plus omission tests pass."
     },
     {
-      "id": "wo-b2-agy-production-review-roles-002",
-      "title": "Ship the deterministic clip-QA gate",
-      "description": "As a shot pipeline author, I want a clip reviewed against its shot specification with a stable pass-or-reroll result so downstream routing can act on the verdict without parsing free-form prose.",
+      "id": "wsr-001-opening-record-002",
+      "title": "Establish lifecycle provenance and provider-before-output ordering",
+      "description": "As a customer reading a Worker timeline, I want to distinguish system-authored lifecycle facts from provider output and know the selected provider before its output so that provenance and attribution are unambiguous.",
       "acceptanceCriteria": [
-        "@you/agy-clip-qa is independently invocable with exactly two required creative inputs, clipPath and shotSpecification, bound to discoverable named CLI arguments and preserved without hidden brief or prior-verdict context.",
-        "The role watches the complete clip and evaluates whether the specified action finishes, deviations from the supplied specification, transient and temporal artifacts across time, audio content, and unexpected speech.",
-        "The primary result validates against the recorded B2 schema: action_completed is boolean; spec_deviations and temporal_artifacts are string arrays; audio_content is speech, music, noise, silence, or mixed; unexpected_speech is boolean; verdict is pass or reroll; confidence is from 0 through 1; every field is required.",
-        "pass means the action completes and no specification deviation, reroll-worthy temporal artifact, or disallowed speech is observed; otherwise the role returns reroll and records each reason in the applicable arrays rather than hiding it in prose.",
-        "Missing or inaccessible media, provider or process failure, malformed output, or schema-invalid output fails Work with an actionable diagnostic and never becomes a production reroll, because reroll is reserved for a successfully inspected but unacceptable clip.",
-        "The clip-QA functional subtest replays agy-trace-clipqa-schema.stream.jsonl and the recorded missing-file trace through the public process boundary, asserts the real pass result and audio or no-speech evidence, and proves missing-file refusal reaches failed Work without live AGY.",
-        "Typecheck passes",
-        "Tests pass"
+        "Worker Sessions-owned opening and terminal lifecycle records declare DeliverySynthesized, RepresentationNotification, and FidelityLifecycleOnly without claiming provider-native authorship or fidelity.",
+        "The actual provider is present in SESSION/STARTED whenever resolved at opening.",
+        "When actual provider resolution genuinely occurs after opening, the first provider-bound record is SESSION/UPDATED and establishes actual provider identity before every dependent provider-authored event.",
+        "Events ordering integration evidence rejects provider output before the opening or required provider binding and proves the legal opening/provider-output/terminal sequence under streaming execution.",
+        "WSR-FT-001 proves opening-first, provider-identity-before-output, exactly-once live records in finalized history, and terminal-last behavior without adding a Worker Sessions-to-Recordings payload write.",
+        "Focused Worker Sessions unit and Events ordering integration tests pass.",
+        "Typecheck passes.",
+        "Tests pass."
       ],
       "priority": 2,
-      "passes": true,
-      "notes": "Implemented the explicit structured-clip-qa/v1 runtime contract for confidence bounds, required fields, pass invariants, and meaningful inspected rerolls. Structured failure detection now checks status/outcome/success markers before allowing a reroll and rejects unscoped structured rerolls; root.BuildProcess coverage proves pass, accepted reroll, out-of-range/inconsistent results, mixed provider status, schema failure, provider failure, and missing-file failure. The review follow-up also encodes confidence minimum/maximum in the authored and generated provider schema, asserts those bounds in the AGY command, and keeps the validator below the package maintainability threshold. Executor, focused AGY functional, and packaged catalog checks pass."
+      "passes": false,
+      "notes": ""
     },
     {
-      "id": "wo-b2-agy-production-review-roles-003",
-      "title": "Document and verify production composition",
-      "description": "As a Factory author, I want a worked, validated example of the two roles and their failure boundaries so I can place them in a production pipeline without hidden media handling or ambiguous routing.",
+      "id": "wsr-001-opening-record-003",
+      "title": "Preserve provider-independent opening and terminal history",
+      "description": "As a customer using any supported provider, I want a valid Worker lifecycle even when the provider has no native session identifier so that Worker history is not conditional on provider transcript capabilities.",
       "acceptanceCriteria": [
-        "The packaged-factories reference catalog documents both roles, their purpose, invocation inputs, result shape, default AGY model and timeout policy, workspace-relative and absolute-path expectations, and representative PowerShell-safe invocations whose flags agree with generated help.",
-        "A repository-owned worked example shows clip QA after clip creation and cold watch after mechanical checks assemble the completed cut; it routes pass, reroll, and failed execution distinctly and states that cold watch receives no creative brief even when upstream stages have one.",
-        "The example and operator documentation state that paths must identify readable files within the directory exposed to AGY by the existing --add-dir execution, that the wrapper never transforms media, and that a missing or inaccessible path is an execution failure rather than a review verdict.",
-        "you factory config validate accepts each authored role and example; you run --named @you/agy-cold-watch --help and you run --named @you/agy-clip-qa --help expose the documented inputs; generated catalog files are refreshed only with make packaged-factory-catalog-generate.",
-        "The documentation names go test ./tests/functional/providers/agy -run '^TestAgyProductionReviewRolesThroughRootBuildProcess$' -count=1 as the independently runnable fully offline end-to-end command; any live AGY smoke remains the existing operator-gated B1 smoke and is not duplicated or enabled in ordinary CI.",
-        "Behavioral validation exercises loading, invocation, successful result, schema rejection, provider failure, and missing-file outcomes through public runtime behavior; it does not scan source trees, assert command, route, or catalog inventories, or inspect generated bundle internals as a substitute for those outcomes.",
-        "Typecheck passes",
-        "Tests pass"
+        "A provider that emits no providers.SessionRef still yields an inspectable SESSION/STARTED, normalized provider output when available, and a legal terminal lifecycle record; the reference remains absent rather than synthesized.",
+        "Shared provider conformance covers representative Claude tool lifecycle, Codex streaming, Cursor/ACP session-bearing, and Agy final-only fixtures through production registrations.",
+        "Each representative provider produces legal provider-neutral Kind/Phase pairs, actual provider provenance on provider-authored drafts, correct source-event idempotency, and terminal behavior.",
+        "Streaming providers report their actual delivery and fidelity, while final-only providers expose only minimal synthesized lifecycle plus final authoritative output and do not fabricate streaming capability.",
+        "WSR-FT-003 proves the same legal normalized protocol and honest fidelity across providers without requiring a provider-specific transcript reader for opening-to-terminal replay.",
+        "Functional evidence uses root.BuildProcess and Process.Execute, production registrations, ProviderCommandRunner with sanitized recorded fixtures, and deterministic event or terminal synchronization rather than Mock Workers or arbitrary sleeps.",
+        "Typecheck passes.",
+        "Tests pass."
       ],
       "priority": 3,
-      "passes": true,
-      "notes": "Documented both roles in the packaged-factory reference catalog with exact live-help signatures, pinned ANTIGRAVITY/gemini-3.6-flash-high/8m policy, report schemas, path and failure boundaries, and PowerShell-safe invocations. Added the repository-owned AGY production composition example with distinct pass/reroll/failed routing and the offline root-process command; updated catalog-count/docs smoke coverage. Corrected cold-watch documentation to match live help: required cutPath is available positionally and through --cut-path, and corrected both documented PowerShell parsers to consume the two-line H2 recommendation contract. Authored/generated catalog checks, factory validation, focused root-process coverage, package gates, packaged catalog/source checks, readme-check, and docs-reference smoke pass."
+      "passes": false,
+      "notes": ""
     }
   ]
 }

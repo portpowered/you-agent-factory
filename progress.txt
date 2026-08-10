@@ -16,6 +16,8 @@
 - Verify documented named-Factory commands against isolated live `you run --named ... --help`; role-pinned provider/model defaults should be documented as fixed policy when no override flags are exposed.
 
 - Worker Session finite streams can use the injected Events `Read` contract with the first retained head as a snapshot boundary; replay-only paths must not call `Subscribe`.
+- Capture the Worker Session start timestamp once at the observation boundary and reuse that exact value in the lifecycle opening payload; calling the injected clock separately for projection and publication breaks live/replay identity.
+- Lifecycle metadata uses optional pointers/`omitempty` and exact typed continuation values; unknown provider, Factory, recording, and capability facts must stay absent instead of being inferred from runner or model defaults.
 - Authored OpenAPI and CLI contracts generate their Go, TypeScript, published metadata, and family-manifest consumers; update the source contract first, then run the repository generators and drift checks.
 - Provider-neutral output contracts belong on the workstation definition and are enforced after a successful worker response; provider process success or transport parsing alone must not satisfy a semantic report contract.
 - Stream transport dispatch stays below the package maintainability threshold by delegating lifecycle-specific frame handling to focused helpers.
@@ -60,8 +62,6 @@
   - After `bun install --frozen-lockfile` in `ui/`, `make verify-fast` passed: dashboard typecheck, MCP contract boundary, 355 UI files / 2,970 tests, and the short Go suite.
 - **Learnings for future iterations:**
 - This checkout may have `ui/node_modules` without all lockfile dependencies; run the pinned Bun install before treating a typecheck failure as a source regression.
----
-
 ## 2026-08-09 13:17 - wo-d1-packaged-factories-docs-001 documentation routing follow-up
 - What was implemented
   - Corrected the root README's packaged-Factory count from fourteen to fifteen while keeping the root page as routing/quick-start material.
@@ -760,4 +760,40 @@
   - Documentation parsers for Markdown output must match the report’s structural contract and tolerate the platform’s CRLF line endings; a single-line `Overall recommendation:` pattern is not equivalent to the emitted H2-plus-body form.
   - AGY structured-output replays enforce exact echoed-schema equivalence, so a contract schema change requires the historical replay envelope to be synchronized without changing its recorded response evidence.
   - When a backend package is at the 15-file limit, consolidate focused behavioral tests into an existing responsibility-aligned file before adding another package-local test file.
+---
+## 2026-08-10 04:54 -07:00 - wsr-001-opening-record-001
+- What was implemented
+  - Extended the provider-neutral Worker Session lifecycle payload with injected-clock `startedAt`, Worker/Factory/recording/dispatch/turn/Work/attempt correlation, explicit provider/model/capability selection, and exact continuation metadata when supplied.
+  - Captured the opening timestamp once in Worker Sessions and reused it for the live observation and retained opening record; the opening remains the single position-1 record before the Workers handoff.
+  - Preserved the new optional facts through Factory Runtime dispatch planning and JavaScript `InvokeWorker` requests, with detached capability values and omission-preserving behavior.
+  - Updated the authored Factory response-event schema and regenerated the OpenAPI bundle, Go clients/server models, and TypeScript client.
+- Files changed
+  - `api/components/schemas/response-events/payloads/FactoryResponseEventSessionPayload.yaml`
+  - `api/openapi.yaml`
+  - `pkg/services/factory_runtime/invoke_worker_contract.go`
+  - `pkg/services/factory_runtime/internal/services/dispatch_planning/service.go`
+  - `pkg/services/factory_runtime/internal/services/dispatch_planning/internal/service/service.go`
+  - `pkg/services/factory_runtime/internal/services/dispatch_planning/internal/service/service_test.go`
+  - `pkg/services/factory_runtime/internal/services/orchestration/runtime/invoke_worker.go`
+  - `pkg/services/factory_runtime/internal/services/orchestration/runtime/invoke_worker_test.go`
+  - `pkg/services/worker_sessions/internal/service/fakes_test.go`
+  - `pkg/services/worker_sessions/internal/service/invoke_session.go`
+  - `pkg/services/worker_sessions/internal/service/publish_record.go`
+  - `pkg/services/worker_sessions/internal/service/start_side_effects_test.go`
+  - `pkg/services/workers/execution_requests.go`
+  - `pkg/services/workers/response_drafts.go`
+  - `pkg/transports/http/client/client.gen.go`
+  - `pkg/transports/http/generated/server.gen.go`
+  - `ui/src/api/generated/openapi.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/worker_sessions/... -count=1` — passed.
+  - `go test ./pkg/services/factory_runtime/... -count=1` — passed.
+  - `go test ./pkg/transports/http/... ./pkg/transports/mapping/... -count=1` — passed.
+  - `make bundle-api generate-go-api` and the pinned-tool OpenAPI UI generation — passed.
+  - `make api-smoke` validated and regenerated the contract, then stopped at its intentional uncommitted-generated-diff guard; the generated changes are part of this story and `git diff --check` passes.
+- **Learnings for future iterations:**
+  - The canonical resolved `WorkstationExecutionRequest` is the shared handoff for Petri and JavaScript paths; add optional lifecycle facts there, clone pointer values at the boundary, and let Worker Sessions publish them once.
+  - The API smoke drift guard expects generated files to be clean relative to HEAD, so run it again after the intentional generated artifacts are committed or compare generator output against the worktree deliberately.
 ---
