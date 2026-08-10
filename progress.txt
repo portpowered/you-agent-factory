@@ -8124,3 +8124,21 @@
   - A package floor can move when a new contract helper is added even if focused feature tests pass; cover the resolver's success and typed-error paths in the contract owner package before considering a manifest change.
   - Linux and Windows focused coverage can differ by one or more statements even for the same Go tests; leave measurable margin above the manifest floor when adding a coverage-restoration test.
 ---
+
+## 2026-08-10 09:12 -07:00 - e3-event-webhooks-004 review and rebase follow-up
+- What was implemented
+  - Rebased the task branch onto the current `origin/main` and preserved the task-scoped PRD and append-only progress history.
+  - Split the Webhooks service test support stubs into `service_test_helpers_test.go`, keeping the service test file below the repository's 1,000-line backend-size limit without changing observable coverage.
+  - Confirmed the blocking review fixes remain present: subscription-gap reconnect, strict 500-599 retry classification, platform-owned durable dead letters, and CLI-driven ordinary Work actions in the functional cell.
+- Files changed
+  - `pkg/services/webhooks/internal/service/service_test.go`
+  - `pkg/services/webhooks/internal/service/service_test_helpers_test.go`
+  - `progress.txt`
+- Verification
+  - Focused Webhooks tests, race-enabled Webhooks tests, and the root-built functional webhook cell — passed.
+  - `make backend-size`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, `make functional-boundary-check`, `make vet`, `make contracts-check`, `make wire-smoke`, and aggregate `make test` — passed.
+  - `make pkg-boundary` reports 176 violations, equal to the current-main baseline, with no new Webhooks violation; the repository's deletion-only baseline checker still exits nonzero for that retained baseline.
+- **Learnings for future iterations:**
+  - Rebase before final gate verification because current main can advance while a PR is under review; compare the boundary count to the freshly fetched main baseline rather than the stale PR base.
+  - Large behavioral test helpers can be split into a same-package helper test file to satisfy backend file-size limits without weakening observable tests or introducing production abstractions.
+---
