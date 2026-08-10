@@ -2354,3 +2354,16 @@
 - **Learnings for future iterations:**
   - Independent functional timing flakes can rotate across unrelated packages; preserve the source scope, isolate the named test, and require a successful failed-job rerun before handoff.
 ---
+
+## 2026-08-10 13:06 -07:00 - pf-cli-exit-codes-004 CI follow-up
+- What was implemented
+  - Investigated a fourth post-review CI failure: `TestAPIPartialResultIsAvailableBeforeTerminalCompletion` timed out in the sessions execution lane.
+  - Repeated the exact sessions-execution test ten times locally and reran only the failed functional/policy jobs; both completed successfully without source changes.
+- Files changed
+  - `progress.txt`
+- Verification
+  - The sessions-execution test passed ten consecutive local runs.
+  - CI run `31426250442` is green after the failed-job rerun, including Backend Functional Coverage and Verification Policy.
+- **Learnings for future iterations:**
+  - Broad functional coverage timing failures can occur in several independent packages; keep the feature diff unchanged when the named test is stable locally and validate recovery through the narrow failed-job rerun.
+---
