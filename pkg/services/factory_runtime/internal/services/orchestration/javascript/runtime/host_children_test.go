@@ -15,6 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/javascript/runtime"
 	workflowpolicy "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/orchestratorcontract"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func TestRun_DocumentedSimpleFinalWorkflow(t *testing.T) {
@@ -308,6 +309,225 @@ func TestRun_AgentRunFakeChild_EmitsOrderedChildDispatchRecords(t *testing.T) {
 	}
 	if string(first.Value.JSON) != string(second.Value.JSON) {
 		t.Fatalf("value drift across runs: first=%s second=%s", first.Value.JSON, second.Value.JSON)
+	}
+}
+
+const btrcDirectJavaScriptWorkflowSource = `
+return (async function () {
+  phase("activate");
+  const child = await agent.run({
+    prompt: "summarize direct JavaScript",
+    label: "direct-child",
+  });
+  phase("apply-result");
+  return {
+    execution: meta.name,
+    child: child,
+  };
+})();
+`
+
+func TestBTRCP0DirectJavaScriptSuccessCharacterization(t *testing.T) {
+	const sessionID = "session-btrc-direct-javascript-success"
+	req := factory.JavaScriptRuntimeRequest{
+		Source:    btrcDirectJavaScriptWorkflowSource,
+		SourceRef: "btrc-direct-javascript-success.workflow.js",
+		SessionID: sessionID,
+		Args:      marshalArgs(t, map[string]any{"subject": "characterization"}),
+		Metadata:  map[string]string{"name": "btrc-direct-javascript"},
+		Policy:    workflowpolicy.DefaultEffectivePolicy(),
+	}
+
+	var (
+		timeline      []string
+		terminalValue factory.TypedValue
+		resultCalls   int
+	)
+	outcome, err := runtimeWorkflows.Run(t.Context(), req, factory.JavaScriptRuntimeHooks{
+		OnRecord: func(record factory.JavaScriptRuntimeRecord) {
+			timeline = append(timeline, btrcDirectRuntimeTimelineEntry(record))
+		},
+		OnResult: func(value factory.TypedValue) error {
+			timeline = append(timeline, "terminal_result")
+			terminalValue = value
+			resultCalls++
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if !outcome.OK {
+		t.Fatalf("Run() failure = %#v", outcome.Failure)
+	}
+	if resultCalls != 1 || !reflect.DeepEqual(terminalValue, outcome.Value) {
+		t.Fatalf("terminal result callbacks = %d value=%#v outcome=%#v, want one callback with outcome value", resultCalls, terminalValue, outcome.Value)
+	}
+
+	wantTimeline := []string{
+		"phase:activate",
+		"child_dispatch:dispatch-1:QUEUED",
+		"child_dispatch:dispatch-1:RUNNING",
+		"child_dispatch:dispatch-1:COMPLETED",
+		"phase:apply-result",
+		"terminal_result",
+	}
+	if !reflect.DeepEqual(timeline, wantTimeline) {
+		t.Fatalf("direct JavaScript timeline = %#v, want %#v", timeline, wantTimeline)
+	}
+	if len(outcome.Records) != 5 {
+		t.Fatalf("runtime record count = %d, want 5 before terminal result", len(outcome.Records))
+	}
+	assertBTRCDirectJavaScriptSuccessRecords(t, outcome.Records, sessionID)
+
+	projected := projectPrimaryJSON(t, sessionID, outcome.Value)
+	want := map[string]any{
+		"execution": "btrc-direct-javascript",
+		"child": map[string]any{
+			"status":             factory.JavaScriptChildDispatchStatusCompleted,
+			"dispatchId":         "dispatch-1",
+			"childIndex":         float64(1),
+			"executionMode":      factory.JavaScriptChildExecutionModeFake,
+			"providerSessionRef": "fake-provider-session-1",
+			"artifactRef":        factory.FormatArtifactURI(sessionID, "child-artifact-1"),
+			"promptDigest":       workflowruntime.TextDigest("summarize direct JavaScript"),
+			"output": map[string]any{
+				"text":            "fake:btrc-direct-javascript:direct-child:summarize direct JavaScript:characterization",
+				"subject":         "characterization",
+				"schemaValidated": false,
+			},
+			"label": "direct-child",
+		},
+	}
+	if !reflect.DeepEqual(projected, want) {
+		t.Fatalf("direct JavaScript terminal projection = %#v, want %#v", projected, want)
+	}
+}
+
+func TestBTRCP0DirectJavaScriptChildFailureCharacterization(t *testing.T) {
+	const sessionID = "session-btrc-direct-javascript-failure"
+	request := factory.JavaScriptRuntimeRequest{
+		Source: `return (async function () {
+  phase("activate");
+  await agent.run({ prompt: "fail:provider rejected", label: "direct-child" });
+  phase("apply-result");
+  return { execution: meta.name };
+})();`,
+		SourceRef: "btrc-direct-javascript-failure.workflow.js",
+		SessionID: sessionID,
+		Metadata:  map[string]string{"name": "btrc-direct-javascript"},
+		Policy:    workflowpolicy.DefaultEffectivePolicy(),
+	}
+
+	var (
+		timeline    []string
+		resultCalls int
+	)
+	outcome, err := runtimeWorkflows.Run(t.Context(), request, factory.JavaScriptRuntimeHooks{
+		OnRecord: func(record factory.JavaScriptRuntimeRecord) {
+			timeline = append(timeline, btrcDirectRuntimeTimelineEntry(record))
+		},
+		OnResult: func(factory.TypedValue) error {
+			timeline = append(timeline, "terminal_result")
+			resultCalls++
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if outcome.OK || outcome.Failure.Code != factory.JavaScriptRuntimeCodeScriptError {
+		t.Fatalf("Run() outcome = %#v, want typed script failure", outcome)
+	}
+	if !strings.Contains(outcome.Failure.Message, "fake child failed: provider rejected") {
+		t.Fatalf("failure message = %q, want deterministic child diagnostic", outcome.Failure.Message)
+	}
+	if resultCalls != 0 {
+		t.Fatalf("terminal result callbacks = %d, want none after child failure", resultCalls)
+	}
+
+	wantTimeline := []string{
+		"phase:activate",
+		"child_dispatch:dispatch-1:QUEUED",
+		"child_dispatch:dispatch-1:RUNNING",
+		"child_dispatch:dispatch-1:FAILED",
+	}
+	if !reflect.DeepEqual(timeline, wantTimeline) {
+		t.Fatalf("failed direct JavaScript timeline = %#v, want %#v", timeline, wantTimeline)
+	}
+	if len(outcome.Records) != 4 {
+		t.Fatalf("failed runtime record count = %d, want 4", len(outcome.Records))
+	}
+	assertBTRCDirectJavaScriptFailureRecord(t, outcome.Records[3])
+	assertFailureDoesNotProjectPrimaryResult(t, sessionID, outcome)
+}
+
+func btrcDirectRuntimeTimelineEntry(record factory.JavaScriptRuntimeRecord) string {
+	switch record.Kind {
+	case factory.JavaScriptRecordKindPhase:
+		return "phase:" + record.Phase.Name
+	case factory.JavaScriptRecordKindChildDispatch:
+		return fmt.Sprintf("child_dispatch:%s:%s", record.ChildDispatch.DispatchID, record.ChildDispatch.Status)
+	default:
+		return record.Kind
+	}
+}
+
+func assertBTRCDirectJavaScriptSuccessRecords(
+	t *testing.T,
+	records []factory.JavaScriptRuntimeRecord,
+	sessionID string,
+) {
+	t.Helper()
+	wantKinds := []string{
+		factory.JavaScriptRecordKindPhase,
+		factory.JavaScriptRecordKindChildDispatch,
+		factory.JavaScriptRecordKindChildDispatch,
+		factory.JavaScriptRecordKindChildDispatch,
+		factory.JavaScriptRecordKindPhase,
+	}
+	wantStatuses := []string{"", factory.JavaScriptChildDispatchStatusQueued, factory.JavaScriptChildDispatchStatusRunning, factory.JavaScriptChildDispatchStatusCompleted, ""}
+	for index, record := range records {
+		if record.Sequence != index+1 || record.Kind != wantKinds[index] {
+			t.Fatalf("success record[%d] = %#v, want sequence %d kind %q", index, record, index+1, wantKinds[index])
+		}
+		if record.Kind == factory.JavaScriptRecordKindPhase {
+			wantPhase := "activate"
+			if index == len(records)-1 {
+				wantPhase = "apply-result"
+			}
+			if record.Phase == nil || record.Phase.Name != wantPhase {
+				t.Fatalf("success phase record[%d] = %#v, want %q", index, record.Phase, wantPhase)
+			}
+			continue
+		}
+		child := record.ChildDispatch
+		if child == nil || child.DispatchID != "dispatch-1" || child.ChildIndex != 1 || child.Status != wantStatuses[index] {
+			t.Fatalf("success child record[%d] = %#v, want dispatch-1 child 1 status %q", index, child, wantStatuses[index])
+		}
+		if child.ArtifactRef != factory.FormatArtifactURI(sessionID, "child-artifact-1") {
+			t.Fatalf("success child record[%d] artifactRef = %q, want session-scoped child artifact", index, child.ArtifactRef)
+		}
+	}
+}
+
+func assertBTRCDirectJavaScriptFailureRecord(t *testing.T, record factory.JavaScriptRuntimeRecord) {
+	t.Helper()
+	if record.Sequence != 4 || record.Kind != factory.JavaScriptRecordKindChildDispatch || record.ChildDispatch == nil {
+		t.Fatalf("failure terminal record = %#v, want child dispatch sequence 4", record)
+	}
+	child := record.ChildDispatch
+	if child.DispatchID != "dispatch-1" || child.ChildIndex != 1 || child.Status != factory.JavaScriptChildDispatchStatusFailed {
+		t.Fatalf("failure child record = %#v, want one FAILED dispatch-1 child", child)
+	}
+	if child.ArtifactRef != "" || child.ProviderSessionRef != "" {
+		t.Fatalf("failure child record = %#v, want no completed artifact/provider session", child)
+	}
+	if child.FailureDetail == nil || child.FailureDetail.Reason != workerexecution.WorkFailureTypeUnknown || child.FailureDetail.Message != "fake child failed: provider rejected" {
+		t.Fatalf("failure detail = %#v, want typed deterministic unknown failure", child.FailureDetail)
+	}
+	if child.PromptDigest != workflowruntime.TextDigest("fail:provider rejected") {
+		t.Fatalf("failure prompt digest = %q, want stable child digest", child.PromptDigest)
 	}
 }
 
