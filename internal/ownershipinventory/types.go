@@ -76,8 +76,8 @@ type Inventory struct {
 }
 
 // MisplacedGuardEntry records one normative standard, allowlist, package guard,
-// baseline, or diagnostic that still assigns provider inference or hosted
-// polling to Workers, plus the durable replacement owner for later DEL/CUT.
+// baseline, or diagnostic that incorrectly assigns provider inference or
+// hosted polling to Workers. The committed inventory is empty once corrected.
 type MisplacedGuardEntry struct {
 	ID                string `json:"id"`
 	Kind              string `json:"kind"`

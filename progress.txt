@@ -27,6 +27,8 @@
 - When a package has a strict file-count baseline, put a small refactor in an existing focused file before adding a new helper file or changing the baseline.
 - When broad functional coverage reports a cancellation-observation failure, rerun the failed lane and isolate the named test before changing an unrelated feature; parallel-suite failures can move between existing durability/restart tests while isolated runs pass.
 - Package-target discovery is the stable-sorted set of directories containing non-test Go sources; adding a durable service owner requires updating the checker vocabulary and its live top-level inventory before regenerating the manifest.
+- Boundary check compatibility bridges should be exact package/type exceptions with request-scoped rationale; broad service-prefix allowlists can hide new durable ownership claims.
+- When an ownership burn-down ledger is corrected, regenerate it as an explicit empty array and reject retired rows so stale debt cannot silently return.
 
 ## 2026-08-09 13:12 - wo-d1-packaged-factories-docs-001
 - What was implemented
@@ -823,4 +825,39 @@
   - Keep the package-target and ownership ledgers distinct: package-target coverage is the 545 non-test production-package set, while the ownership freeze currently retains its established 576-directory scope that includes test-only Go packages.
   - Reciprocal owner imports need a separate unresolved-debt marker in addition to a valid interaction class; classifying both directions alone can make convergence debt look resolved.
   - Adding a product owner requires synchronized destination vocabulary, package mapping, top-level child inventory, rationale generation, and regenerated JSON before the ownership gate can pass.
+---
+
+## 2026-08-10 05:16 -07:00 - sac-s0-1-ownership-inventories-003
+- What was implemented
+  - Corrected package-boundary owner metadata for Providers execution/adapters and removed stale migration wording from the provider-effect diagnostics and related boundary comments.
+  - Kept the existing `pkg/services/workers.Provider` public shape as an exact request-scoped compatibility bridge over Providers, while adding a guard regression test that rejects any new provider-effect owner under a Workers subpackage.
+  - Expanded Providers and Workers ownership rationale to distinguish provider protocol, selection, session identity, adapter choice, and one native attempt from Workers request-scoped scheduling/retry and runner execution.
+  - Confirmed hosted polling/reconciliation ownership remains Automation Hosted Sources and hosted runner execution remains Workers through the existing responsibility-based guard tests.
+  - Burned down all eight corrected misplaced-guard inventory entries, made retired entries invalid, regenerated `docs/internal/baselines/ownership-inventory.json`, and marked story 003 complete in `prd.json`.
+- Files changed
+  - `cmd/functionalboundarycheck/main.go`
+  - `cmd/ownershipboundarycheck/main.go`
+  - `cmd/pkgboundarycheck/main.go`
+  - `cmd/pkgboundarycheck/provider_effect_ownership.go`
+  - `cmd/pkgboundarycheck/provider_effect_ownership_test.go`
+  - `docs/internal/baselines/ownership-inventory.json`
+  - `internal/ownershipinventory/misplaced_surfaces.go`
+  - `internal/ownershipinventory/misplaced_surfaces_test.go`
+  - `internal/ownershipinventory/rationale_service_owners.go`
+  - `internal/ownershipinventory/types.go`
+  - `internal/ownershipinventory/validate.go`
+  - `pkg/services/workers/provider_port.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `make ownership-inventory-check` — passed.
+  - `make package-target-manifest-check` — passed with 545 inventory rows and 545 package rows.
+  - Focused Providers/Workers provider-effect tests, hosted ownership tests, misplaced-guard tests, and `cmd/functionalboundarycheck` tests — passed.
+  - `go test ./pkg/services/workers -run '^$' -count=1` — passed compile-only typecheck.
+  - `git diff --check` — passed.
+  - Full `go test ./cmd/pkgboundarycheck ./cmd/ownershipboundarycheck ./internal/ownershipinventory` still reports the pre-existing Workers/Recordings root-contract baseline drift; `make ownership-boundary-check` still reports two unrelated existing violations. `make pkg-boundary` still fails its existing baseline, but no provider-effect finding remains for the reviewed Workers compatibility port.
+- **Learnings for future iterations:**
+  - Keep compatibility exceptions exact: the Workers root `Provider` bridge is allowed by package and type name, while new nested Workers provider-effect declarations remain prohibited.
+  - Hosted ownership is responsibility-based rather than folder-based; transitional `workers/services/hosted_logic` locations do not override Automation Hosted Sources or Workers Hosted Runner claims.
+  - The next iteration is story 004, which should reconcile the three canonical service-owner documentation tables without reopening the completed enforcement work.
 ---

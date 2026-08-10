@@ -27,6 +27,60 @@ type Provider interface {
 	}
 }
 
+func TestRunAllowsWorkersRequestScopedProviderCompatibilityPort(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeGoSourceFile(t, repoRoot, "pkg/services/workers/provider_port.go", `package workers
+
+import "context"
+
+// Deliberate fixture: the reviewed Workers compatibility port is a
+// request-scoped adapter over Providers, not a durable provider owner.
+type Provider interface {
+	Infer(context.Context, string) (string, error)
+}
+`)
+
+	stderr := &bytes.Buffer{}
+	if err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr); err != nil {
+		t.Fatalf("run() error = %v, want reviewed Workers compatibility port allowed; stderr=%q", err, stderr.String())
+	}
+}
+
+func TestRunRejectsNewWorkersProviderEffectOwner(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeGoSourceFile(t, repoRoot, "pkg/services/workers/provider_inference/contract.go", `package provider_inference
+
+import "context"
+
+// Deliberate fixture: a new Workers package must not become a provider-effect
+// owner even though the existing root compatibility port is reviewed.
+type InferenceProvider interface {
+	Infer(context.Context, string) (string, error)
+}
+`)
+
+	stderr := &bytes.Buffer{}
+	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)
+	if err == nil {
+		t.Fatal("run() error = nil, want new Workers provider-effect ownership rejected")
+	}
+	got := stderr.String()
+	for _, want := range []string{
+		"prohibited durable provider-effect ownership",
+		"pkg/services/workers/provider_inference",
+		"InferenceProvider",
+		"canonical owner: " + providersLeafEffectContractPackage,
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("run() stderr = %q, want substring %q", got, want)
+		}
+	}
+}
+
 func TestRunRejectsRenamedNonProvidersDurableProviderEffectOwner(t *testing.T) {
 	t.Parallel()
 
@@ -600,11 +654,11 @@ type InferenceProvider interface {
 	}
 }
 
-func TestRunAllowsWorkersProviderEffectMigrationDebtDeclaration(t *testing.T) {
+func TestRunAllowsProvidersExecutionCompatibilityDeclaration(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := t.TempDir()
-	writeGoSourceFile(t, repoRoot, workersProviderEffectMigrationDebtPackage+"/contract.go", `package inferencecontract
+	writeGoSourceFile(t, repoRoot, providersExecutionCompatibilityPackage+"/contract.go", `package inferencecontract
 
 import "context"
 
@@ -613,7 +667,7 @@ type Provider interface {
 }
 
 // Deliberate fixture: generalized nested-expression inspection preserves this
-// exact package's explicit migration-debt exception.
+// exact Providers-owned compatibility package.
 type Dependencies struct {
 	ProviderOverride interface {
 		Infer(context.Context, string) (string, error)
@@ -623,7 +677,7 @@ type Dependencies struct {
 
 	stderr := &bytes.Buffer{}
 	if err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr); err != nil {
-		t.Fatalf("run() error = %v, want Workers inferencecontract migration debt allowed; stderr=%q", err, stderr.String())
+		t.Fatalf("run() error = %v, want Providers Execution compatibility declaration allowed; stderr=%q", err, stderr.String())
 	}
 }
 
@@ -778,4 +832,3 @@ type Provider interface {
 		}
 	}
 }
-

@@ -173,10 +173,10 @@ var convergedServiceSubpackageRoots = map[string]string{
 	"pkg/services/recordings/artifacts":                                                             "recordings",
 	"pkg/services/recordings/replay":                                                                "recordings",
 	"pkg/services/recordings/service":                                                               "recordings",
-	"pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty":               "workers",
+	"pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty":               "providers",
 	"pkg/services/workers/invocation":                                                               "workers",
 	"pkg/services/workers/prompting":                                                                "workers",
-	"pkg/services/providers/internal/services/execution/internal/provider":                          "workers",
+	"pkg/services/providers/internal/services/execution/internal/provider":                          "providers",
 	"pkg/services/automations/internal/services/hosted_sources":                                     "automations",
 	"pkg/services/workers/services/testing":                                                         "workers",
 }
@@ -245,10 +245,10 @@ var approvedApplicationGraphImporters = []string{
 // external effects. This is deliberately not a general service-subpackage
 // exception.
 //
-// Provider inference/process effects: the durable owner is the Providers
-// Execution leaf (providersLeafEffectContractImport). Workers
-// provider/inferencecontract entries remain only as migration debt until later
-// Providers packets land; they are not the durable normative owner.
+// Provider inference/process effects belong to the Providers Execution leaf
+// (providersLeafEffectContractImport). Workers may retain only its
+// request-scoped compatibility adapter and must not add a provider protocol,
+// catalog, adapter, session, or native execution owner.
 var approvedPeerServiceContractImports = map[string]struct{}{
 	"pkg/services/edges\x00github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty": {},
 	"pkg/platform/pty\x00github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty":   {},
@@ -267,8 +267,8 @@ var approvedPeerServiceContractImports = map[string]struct{}{
 // leaf adapter that crosses the process, network, filesystem, clock, or host
 // boundary. Tests may import these exact ports to supply edges.Edges values;
 // they are not permission to construct the owning service implementation.
-// Workers provider/inferencecontract remains migration debt; Providers leaf is
-// the durable public effect port.
+// Providers owns the durable public effect port; Workers consumes it through
+// its request-scoped compatibility adapter.
 var publicExternalEffectContractImports = map[string]struct{}{
 	providersLeafEffectContractImport: {},
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty": {},

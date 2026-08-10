@@ -680,11 +680,11 @@
       "owner": "providers",
       "kind": "top_level",
       "targetPath": "pkg/services/providers",
-      "authority": "Provider catalog/enumeration, identity, availability, capabilities, one normalized execution attempt, native adapters, SessionRef extraction.",
+      "authority": "Provider protocol, catalog/enumeration, identity and selection, availability/capabilities, SessionRef identity, native adapters, and one normalized execution attempt.",
       "stateStore": "Provider catalog descriptors and availability/capability snapshots; execution is attempt-scoped.",
       "lifecycle": "Catalog refresh and one-shot Execute attempts; no Work retry policy.",
       "consumers": "Workers (selection/retry), Operator Settings (validation), transports (`you providers list`), Provider Sessions (SessionRef).",
-      "transactionBoundary": "Catalog identity and one Execute attempt are Providers-local; Workers owns dispatch retry/scheduling.",
+      "transactionBoundary": "Provider protocol, selection, session identity, adapter choice, and one Execute attempt are Providers-local; Workers owns dispatch retry/scheduling.",
       "failureRecovery": "Availability/prerequisite and native execution failures classify at Providers; Workers decides retry."
     },
     {
@@ -706,11 +706,11 @@
       "kind": "nested",
       "parentServiceId": "providers",
       "targetPath": "pkg/services/providers/internal/services/execution",
-      "authority": "Select native adapter and perform one normalized provider attempt with stream decode, progress, diagnostics, optional SessionRef.",
+      "authority": "Own provider protocol selection, native adapter choice, stream decode, progress, diagnostics, optional SessionRef, and one normalized provider attempt.",
       "stateStore": "Attempt-scoped execution state; no durable Work store.",
       "lifecycle": "One Execute attempt lifecycle.",
       "consumers": "Workers via Providers root; Provider Sessions resolves emitted SessionRef.",
-      "transactionBoundary": "Attempt boundary is Providers-local; Workers owns multi-attempt policy.",
+      "transactionBoundary": "Provider selection, session identity, adapter execution, and the attempt boundary are Providers-local; Workers owns when to invoke and any multi-attempt policy.",
       "failureRecovery": "Native adapter and failure-normalization faults are Execution facts."
     },
     {
@@ -883,7 +883,7 @@
       "owner": "workers",
       "kind": "top_level",
       "targetPath": "pkg/services/workers",
-      "authority": "Runner selection/assembly, workstation behavior, capacity, dispatch execution policy, retry, and Work results.",
+      "authority": "Request-scoped runner selection/assembly, workstation behavior, capacity, dispatch execution policy, retry, and Work results; Providers owns provider protocol and one native attempt.",
       "stateStore": "Worker registry/execution store and immutable runtime assembly artifacts.",
       "lifecycle": "Dispatch execution and runner lifecycles; Providers owns native provider attempts.",
       "consumers": "Factory Runtime dispatch, Factory Sessions, Models, Providers, Work, Recordings.",
@@ -935,11 +935,11 @@
       "kind": "nested",
       "parentServiceId": "workers/runners",
       "targetPath": "pkg/services/workers/internal/services/runners/internal/services/inference",
-      "authority": "Implement Runner for model binding/readiness/invocation through Models and output mapping.",
+      "authority": "Implement a request-scoped Runner for model binding/readiness, provider invocation through Providers, and output mapping; it does not own provider protocol, selection, session, adapter, or native execution behavior.",
       "stateStore": "Inference runner attempt state under Workers.",
-      "lifecycle": "Inference attempt lifecycle coordinating Models root.",
-      "consumers": "Workers Runner registry and Models Inference.",
-      "transactionBoundary": "Workers owns when to infer; Models owns how inference runs.",
+      "lifecycle": "Request-scoped worker attempt lifecycle coordinating Models and one Providers attempt.",
+      "consumers": "Workers Runner registry, Models Inference, and Providers root.",
+      "transactionBoundary": "Workers decides when and which worker attempt runs; Providers owns provider protocol, selection, session, adapter, and one native attempt while Models owns local model readiness/inference.",
       "failureRecovery": "Binding/readiness/output-mapping failures are Inference Runner facts."
     },
     {
@@ -2215,80 +2215,7 @@
       "note": "Retain System Bootstrap with no nested subservice. Legacy migration remains a deletion-only responsibility cluster, not a discovery-open nested service."
     }
   ],
-  "misplacedGuards": [
-    {
-      "id": "allowlist:pkgboundary:inferencecontract-leaf-effect",
-      "kind": "allowlist",
-      "surfacePath": "cmd/pkgboundarycheck/main.go",
-      "currentOwnerClaim": "workers",
-      "misplacedConcern": "provider_inference",
-      "replacementOwner": "providers",
-      "note": "Package-boundary leaf-effect allowlist still treats pkg/services/providers/internal/services/execution/internal/provider/inferencecontract as the Workers-owned provider inference port."
-    },
-    {
-      "id": "baseline:architecture:workers-and-providers-row",
-      "kind": "baseline",
-      "surfacePath": "docs/architecture/architecture.md",
-      "currentOwnerClaim": "workers",
-      "misplacedConcern": "provider_inference",
-      "replacementOwner": "providers",
-      "note": "Architecture ownership table still places provider adapters and inference under the Workers family instead of Providers Execution."
-    },
-    {
-      "id": "baseline:architecture:workers-hosted-logic",
-      "kind": "baseline",
-      "surfacePath": "docs/architecture/architecture.md",
-      "currentOwnerClaim": "workers",
-      "misplacedConcern": "hosted_polling",
-      "replacementOwner": "automations",
-      "note": "Architecture ownership table still places hosted logic under Workers; hosted polling/source reconciliation moves to Automation Hosted Sources."
-    },
-    {
-      "id": "diagnostic:pkgboundary:retired-hostedworkers",
-      "kind": "diagnostic",
-      "surfacePath": "cmd/pkgboundarycheck/main.go",
-      "currentOwnerClaim": "workers",
-      "misplacedConcern": "hosted_polling",
-      "replacementOwner": "automations",
-      "note": "Retired pkg/hostedworkers diagnostic still directs maintainers to a Workers hosted path instead of Automation Hosted Sources for polling/reconciliation."
-    },
-    {
-      "id": "package_guard:pkgboundary:converged-hosted-logic",
-      "kind": "package_guard",
-      "surfacePath": "cmd/pkgboundarycheck/main.go",
-      "currentOwnerClaim": "workers",
-      "misplacedConcern": "hosted_polling",
-      "replacementOwner": "automations",
-      "note": "convergedServiceSubpackageRoots still assigns pkg/services/workers/services/hosted_logic to workers."
-    },
-    {
-      "id": "package_guard:pkgboundary:converged-workers-provider",
-      "kind": "package_guard",
-      "surfacePath": "cmd/pkgboundarycheck/main.go",
-      "currentOwnerClaim": "workers",
-      "misplacedConcern": "provider_inference",
-      "replacementOwner": "providers",
-      "note": "convergedServiceSubpackageRoots still assigns pkg/services/providers/internal/services/execution/internal/provider to workers."
-    },
-    {
-      "id": "standard:general-backend-standards:hosted-polling",
-      "kind": "standard",
-      "surfacePath": "docs/internal/standards/code/general-backend-standards.md",
-      "currentOwnerClaim": "workers",
-      "misplacedConcern": "hosted_polling",
-      "replacementOwner": "automations",
-      "note": "Normative backend standard still directs retired pkg/hostedworkers imports to pkg/services/workers/services/hosted_logic instead of Automation Hosted Sources."
-    },
-    {
-      "id": "standard:general-backend-standards:provider-inference",
-      "kind": "standard",
-      "surfacePath": "docs/internal/standards/code/general-backend-standards.md",
-      "currentOwnerClaim": "workers",
-      "misplacedConcern": "provider_inference",
-      "replacementOwner": "providers",
-      "note": "Normative backend standard still names pkg/services/providers/internal/services/execution/internal/provider/inferencecontract as the provider inference leaf-effect owner."
-    }
-  ],
+  "misplacedGuards": [],
   "publicSurfaces": [
     {
       "id": "behavior_test:provider-functionaltests",
@@ -2507,7 +2434,7 @@
       "kind": "lifecycle_role",
       "name": "Automation Hosted Sources lifecycle",
       "destination": "automations",
-      "note": "Hosted polling/source reconciliation lifecycle moves to Automations."
+      "note": "Hosted polling/source reconciliation lifecycle is owned by Automations."
     },
     {
       "id": "lifecycle_role:factory-session",
@@ -2535,7 +2462,7 @@
       "kind": "lifecycle_role",
       "name": "Providers Execution attempt lifecycle",
       "destination": "providers",
-      "note": "Normalized provider inference attempt lifecycle moves to Providers Execution."
+      "note": "Normalized provider inference attempt lifecycle is owned by Providers Execution."
     },
     {
       "id": "lifecycle_role:recordings",

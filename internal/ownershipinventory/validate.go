@@ -115,10 +115,17 @@ func validateMisplacedGuards(inventory Inventory, report *Report) {
 	}
 
 	byID := map[string]MisplacedGuardEntry{}
+	required := map[string]struct{}{}
+	for _, id := range RequiredMisplacedGuardIDs() {
+		required[id] = struct{}{}
+	}
 	for _, entry := range inventory.MisplacedGuards {
 		byID[entry.ID] = entry
 		if msg := validateMisplacedGuardEntry(entry); msg != "" {
 			report.InvalidMisplacedGuards = append(report.InvalidMisplacedGuards, msg)
+		}
+		if _, expected := required[entry.ID]; !expected {
+			report.InvalidMisplacedGuards = append(report.InvalidMisplacedGuards, entry.ID+": no longer a committed misplaced guard; remove it after correcting ownership")
 		}
 	}
 	for _, id := range RequiredMisplacedGuardIDs() {
