@@ -1,5 +1,6 @@
 ## Codebase Patterns
 - Terminal lifecycle publication must require the opening record's committed publication window; a failed opening must never be followed by a terminal append that becomes topic position 1.
+- Cancellation-sensitive functional fixtures must signal provider-edge entry before issuing an interrupt; a published RUNNING status can precede provider handoff and otherwise makes context-cancellation assertions race.
 - For broad functional coverage concurrency flakes, isolate the named test and rerun only the failed CI jobs before changing untouched behavior.
 - When resolving long append-only progress conflicts, read merge-stage files in bounded chunks and validate the reconstructed line count so tool-output truncation cannot drop history.
 - When splitting oversized same-package tests into focused files, remove stale file/maintainability exemptions and update the package file-count baseline for the intentional net increase; keep shared fixtures in one package-local helper file.
@@ -1914,4 +1915,26 @@
   - `git diff --check`, `git merge-tree --write-tree origin/main HEAD`, and PRD JSON validation — passed; all three stories remain `passes:true`.
 - **Learnings for future iterations:**
   - When the shared local Go cache is busy, distinguish a wrapper timeout with no diagnostics from a vet finding; use scoped vet as local evidence and rely on isolated CI for the full repository sweep.
+---
+
+## 2026-08-10 16:57 -07:00 - wsr-001-opening-record CI deflake and current-main synchronization
+- What was implemented
+  - Stabilized the existing cancellation-sensitive functional fixtures by waiting for the injected provider edge to enter its blocking call before sending interrupt controls; production behavior and the WSR PRD remain unchanged.
+  - Synchronized with current `origin/main` at `acbd13fcc`; retained main's approved JavaScript durability `ProviderCommandRunner` deflake and its fixture provider selections while resolving the task-scoped PRD/progress conflicts.
+- Files changed
+  - `tests/functional/cli/mcp_resume/serve_runtime_resume_smoke_test.go`
+  - `tests/functional/cli/session_resume/resume_smoke_test.go`
+  - `tests/functional/orchestration/javascript/durability/resume_test.go`
+  - `tests/functional/sessions/execution/helpers_test.go`
+  - `tests/functional/sessions/restart/logical_identity_test.go`
+  - `tests/fixtures/javascript_runtime/resumable-two-step-fake-children.workflow.js`
+  - `progress.txt`
+- Verification
+  - Affected functional packages, Worker Sessions/Factory Runtime packages, WSR-FT-001/002/003 — passed.
+  - `make interfaces-all` — passed with no generated drift.
+  - `make test` — passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` — passed.
+  - `git diff --check` and `git merge-tree --write-tree origin/main HEAD` — passed.
+- **Learnings for future iterations:**
+  - Current main can carry a concurrent test-deflake implementation that supersedes a local fixture change; prefer the newer approved edge-based synchronization when resolving overlapping test conflicts.
 ---
