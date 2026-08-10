@@ -540,3 +540,26 @@
 - **Learnings for future iterations:**
   - When a broad coverage lane fails at an unchanged cancellation observation, isolate the exact test, repeat it locally, and retry only the failed CI jobs before modifying stable runtime behavior.
 ---
+## 2026-08-10 13:16 -07:00 - wsr-001-opening-record package-boundary review follow-up
+- What was implemented
+  - Addressed the latest blocking PR feedback without changing product behavior: replaced the added internal Worker Sessions `eventswire.NewService` constructor helper with a local `EventsAppender` stub, and moved the unavailable-owner Worker Session route assertion from the functional suite into the owning HTTP transport tests.
+  - Kept the customer-facing WSR functional scenarios on the required `root.BuildProcess`/`Process.Execute` path while preserving structured `500 INTERNAL_ERROR` coverage for the transport-owned defensive branch.
+  - Updated the WSR-003 PRD note to record the boundary-safe test placement and committed the code/test fix as `e07f04edb`.
+- Files changed
+  - `pkg/services/worker_sessions/internal/service/internal_test.go`
+  - `pkg/transports/http/server_models_events_additional_test.go`
+  - `tests/functional/transport/http/server/routing_safe_requests_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Focused Worker Sessions and HTTP transport tests — passed.
+  - `make functional-boundary-check` — passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` — passed.
+  - `make test` — passed.
+  - `go run ./cmd/pkgboundarycheck -root .` — reports only the known 175-entry migration baseline; the removed functional construction no longer appears and the remaining Events construction is the exact pre-existing baseline entry.
+  - `make test-functional-coverage` — exceeded the local 15-minute command wrapper timeout while its Go coverage workers continued running; no result was returned by that invocation and terminal CI remains the authoritative follow-up.
+  - `git diff --check` — passed before bookkeeping changes.
+- **Learnings for future iterations:**
+  - API-owned defensive transport assertions belong in the owning transport package; functional coverage should reserve `root.BuildProcess` for customer-visible composition and behavior.
+  - A constructor-validation test that only needs a narrow port should use a local stub, even when a real in-memory peer service is convenient elsewhere in the same package.
+---
