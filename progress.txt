@@ -54,6 +54,8 @@
 - For cross-repository PRs, resolve review and CI state with an explicit owner/repository and compare local, fork-branch, and PR head SHAs; current-branch discovery may follow a different local origin.
 - New functional scenarios must use an allowed product-domain noun plus subsection path such as `tests/functional/factory/batch`; transport names like `cli` and internal implementation names like `factory_runtime` are not durable domain cells.
 - Ordered functional provider outcomes can use `support.NewShapedProviderCommandRunner` with queued provider-native `CommandResult` values, including a later non-zero result, while preserving the real command-runner edge and typed provider classification.
+- JavaScript live-child functional tests that inject `ProviderCommandRunner` must explicitly select a registered model provider (for example `CODEX`) so the public child route reaches the provider command adapter; return sanitized provider-native JSONL from the command edge.
+- A callback or signal emitted inside a canceled external-effect call is not necessarily a quiescent lifecycle boundary; for persistence assertions, use an owned process stop/join or another public terminal observation that waits for the caller/runtime cleanup too.
 
 - The production CLI process boundary should silence Cobra's implicit error text, preserve command-owned coded diagnostics with a writer marker, and wrap only unclassified failures in a constant safe fallback; direct Cobra callers can retain legacy presentation through a context switch.
 - Keep cancellation compatibility explicit at the boundary: a typed returned cancellation can retain the existing `Error: context canceled` diagnostic while still preserving `errors.Is(context.Canceled)` for declared exit-status handling.
@@ -2435,4 +2437,25 @@
 - **Learnings for future iterations:**
   - A shared injected-edge synchronization fixture is sufficient when sibling scenarios demonstrably exercise the same provider-entry race; keep each scenario's public assertions intact rather than adding separate timing controls.
   - The required fresh-run evidence is strongest when each `-count=1` invocation is launched as a separate command and the numbered outcomes are retained alongside the PRD notes.
+---
+## 2026-08-10 15:10 -07:00 - thr-deflake-js-durability-002 review follow-up
+- What was implemented
+  - Addressed the blocking PR feedback by replacing the durability test's custom in-process `ProviderOverride` fake with a `ProviderCommandRunner` edge runner that returns sanitized provider-shaped Codex JSONL, blocks its second command until the dispatch context is canceled, and exposes entry/cancellation signals.
+  - Made the copied workflow explicitly select `CODEX` for both live children so the public JavaScript worker route reaches the injected command edge.
+  - Replaced the premature no-snapshot completion signal with the root-built `FunctionalAPIServer.Stop` shutdown/join boundary. The test still reads the public interrupted session before stopping the process, then rejects both the durable-session snapshot and its parent directory after `Process.Execute` has returned.
+- Files changed
+  - `tests/functional/orchestration/javascript/durability/resume_test.go`
+  - `tests/fixtures/javascript_runtime/resumable-two-step-fake-children.workflow.js`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/orchestration/javascript/durability -count=1 -v -timeout 240s` — all three scenarios passed.
+  - CLI resume, MCP resume, sessions restart, and lower-level runtime resume consumers of the shared workflow fixture — all targeted cases passed.
+  - `go test -race ./tests/functional/orchestration/javascript/durability -count=1 -v -timeout 900s` — passed without a race report.
+  - Twenty separate fresh `go test ./tests/functional/orchestration/javascript/durability -count=1 -timeout 900s` commands — `RUN 1/20 PASS` through `RUN 20/20 PASS`.
+  - `go vet ./tests/functional/orchestration/javascript/durability`, `make typecheck`, `git diff --check`, and PRD JSON validation — passed.
+- **Learnings for future iterations:**
+  - `inferCompleted` was still too early when emitted from a deferred callback inside `Infer`; it only proved the edge function was returning, not that the caller/runtime had processed cancellation and cleanup. An owned process shutdown/join is the correct boundary for the negative persistence assertion.
+  - The command-runner edge is wired only after the JavaScript child has a concrete registered provider selection; an empty `agent.run` selection produces a live child with no provider command call rather than exercising the injected runner.
+  - PR #1858's blocking comment required both the lifecycle-quiescence correction and removal of the custom provider fake; both are now represented in the source diff and updated PRD notes.
 ---
