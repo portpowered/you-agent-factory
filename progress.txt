@@ -2500,3 +2500,19 @@
 - **Learnings for future iterations:**
   - A PR can report `CONFLICTING` immediately after creation when the repository base advances; fetch the PR repository's live base, preserve task-scoped PRD content, merge append-only progress tails, and rerun the local gates before pushing the new head.
 ---
+
+## 2026-08-10 15:02 -07:00 - thr-worktree-build-cache-002 CI/base follow-up
+- What was implemented
+  - Investigated the first PR #1860 Backend Functional Coverage failure, which named `TestJavaScriptDurabilityDoesNotPersistSnapshotsByDefault` in an unrelated JavaScript durability package.
+  - Repeated that exact test ten consecutive times locally; all runs passed, so no unrelated source change was made.
+  - Merged the latest `origin/main` at `78584efb52dacb6989604f8f7cc6c12ed08da028` after main advanced, preserving this task's `prd.json` and append-only progress history.
+- Files changed
+  - `progress.txt`
+  - Merge commit `ed57e3770` incorporates current-main changes; the PR diff against live `origin/main` remains limited to `Makefile`, `prd.json`, and `progress.txt`.
+- Verification
+  - `go test ./tests/functional/orchestration/javascript/durability -run '^TestJavaScriptDurabilityDoesNotPersistSnapshotsByDefault$' -count=10 -v -timeout 600s` — passed all ten runs.
+  - `prd.json` parses as JSON and both build-cache stories remain `passes:true`.
+  - `git diff --check` — passed; no conflict markers remain.
+- **Learnings for future iterations:**
+  - When a broad CI lane names an unchanged test that is stable across ten isolated local runs, preserve the feature scope and validate recovery after syncing the latest PR base rather than changing unrelated production code.
+---
