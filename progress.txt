@@ -921,3 +921,19 @@
 - **Learnings for future iterations:**
   - Preserve the exact failing test, focused repetition result, rerun ID, and final head in the append-only log when CI recovery uses a known flaky lane.
 ---
+## 2026-08-10 01:50 -0700 - wo-b3-provider-capability-discovery-cli-final-review
+- What was implemented
+  - Confirmed the three PRD stories remain marked `passes:true`; no additional story implementation or authored contract change was required.
+  - Inspected PR #1843 through the GitHub connector and the bundled thread-aware `gh` review workflow. The earlier blocking top-level feedback is addressed by the existing provider-policy alignment commits; no inline review threads or formal reviews remain.
+  - Confirmed the PR head, fork branch, and local `HEAD` all match `7cb98beaa33dc3cfac028478efa11406eb54dcd2`, the PR is open/mergeable/non-draft, and its 18 reported checks pass.
+- Files changed
+  - `progress.txt`
+  - `prd.json` was verified unchanged because every story already passes and the PR description is an exact content match.
+- Verification
+  - `go test ./tests/functional/providers/discovery/... -run '^TestProvidersListThroughRootBuildProcess$' -count=1` — passed.
+  - `git diff --check` — passed.
+  - PRD pass-state, PR description parity, thread-aware comment, and all-checks inspection — passed.
+- **Learnings for future iterations:**
+  - For cross-repository PRs, compare local `HEAD`, the fork branch ref, and the explicit PR head SHA; current-branch auto-discovery can inspect the wrong remote.
+  - A top-level review comment may remain in the conversation after its requested fix is present; use commit ancestry plus thread-aware state to distinguish addressed feedback from unresolved inline work.
+---
