@@ -50,6 +50,8 @@
 - For cross-repository PRs, resolve review and CI state with an explicit owner/repository and compare local, fork-branch, and PR head SHAs; current-branch discovery may follow a different local origin.
 - New functional scenarios must use an allowed product-domain noun plus subsection path such as `tests/functional/factory/batch`; transport names like `cli` and internal implementation names like `factory_runtime` are not durable domain cells.
 - Ordered functional provider outcomes can use `support.NewShapedProviderCommandRunner` with queued provider-native `CommandResult` values, including a later non-zero result, while preserving the real command-runner edge and typed provider classification.
+- For Go build-policy comparisons, use separate build/install destinations and an isolated `GOCACHE`, then record cold, unchanged-warm, forced-`-a`, artifact-hash, CLI-probe, and `go version -m` evidence in one sequential run.
+- In a Windows linked worktree, Go VCS build metadata can reflect the common checkout's revision/dirty state; compare that metadata across cache policies and document the environment instead of treating `-a` as a VCS-stamping fix.
 
 ## 2026-08-09 13:12 - wo-d1-packaged-factories-docs-001
 - What was implemented
@@ -1971,4 +1973,26 @@
   - Go's cache remained source-fresh across the main checkout and linked worktree on Windows without repository-local or process-global cache isolation; no reproduced cache-key risk justified a narrower isolation policy.
   - The first full build/test attempts were affected by many concurrent Go builds from other worktrees; retry after the cache warmed completed, so timing claims must state host-load and cache-state assumptions.
   - Story 002 still owns forced-rebuild parity, install verification, and comparable cold/primed/warm throughput evidence; do not claim those acceptance results from this story's warm build alone.
+---
+## 2026-08-10 14:32 -07:00 - thr-worktree-build-cache-002
+- What was implemented
+  - Completed cache-enabled versus explicit forced-rebuild parity and throughput verification in a fresh detached linked worktree on Windows with go1.25.0 windows/amd64 and source revision `6c81ae487cad95487e9931139aa43bf7622aa5b2`.
+  - Used isolated temporary `GOCACHE`, `BIN_DIR`, `INSTALL_DIR`, `HOME`, and `USERPROFILE` paths so build/install verification did not mutate a user installation or delete broad cache state.
+  - Confirmed the cache-enabled and `GO_BUILD_FLAGS=-a` build/install artifacts were byte-identical, and confirmed identical CLI version/help behavior and VCS build metadata across all four artifacts.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Sequential benchmark commands: `make BIN_DIR=.artifacts/worktree-build-cache-002/cache-build build`; unchanged warm rerun; `make INSTALL_DIR=.artifacts/worktree-build-cache-002/cache-install install`; `make GO_BUILD_FLAGS=-a BIN_DIR=.artifacts/worktree-build-cache-002/forced-build build`; and `make GO_BUILD_FLAGS=-a INSTALL_DIR=.artifacts/worktree-build-cache-002/forced-install install`.
+  - Raw wall times: cold cache build `109.321s`; unchanged warm cache build `3.346s`; warm cache install `3.898s`; forced build `25.536s`; forced install `30.937s`.
+  - All four artifacts had SHA-256 `6a4667af82485916ce1bbf82070133790d2998ad615f20e5669d6b3af9c716ab`; all `--version` probes returned `v0.0.8-0.20260810184644-947152348b23+dirty`; all `--help` probes matched; and `go version -m` matched `vcs.revision=947152348b235f3dd0ede47f233947fcadddcc6a`, `vcs.time=2026-08-10T18:46:44Z`, and `vcs.modified=true`.
+  - `make -n verify-build` and `make -n default` showed the cache-enabled `go build` recipe; only explicit `GO_BUILD_FLAGS=-a` showed `-a`.
+  - `go test ./cmd/factory ./pkg/root -count=1 -timeout 300s` — passed.
+  - `make test` — passed.
+  - `make typecheck` — passed.
+  - `make backend-size`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, and `make vet` — passed.
+  - Temporary benchmark worktree and artifacts were removed from the exact repository-local paths after verification.
+- **Learnings for future iterations:**
+  - For Go build-policy comparisons, record cold, unchanged-warm, forced-`-a`, artifact-hash, CLI-probe, and `go version -m` results from one sequential run with separate output/install paths and an isolated `GOCACHE`.
+  - On Windows linked worktrees, Go VCS metadata can reflect the common checkout's revision/dirty state; compare it across policies and document the environment rather than treating `-a` as a fix.
 ---
