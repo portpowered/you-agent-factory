@@ -2086,3 +2086,16 @@
 - **Learnings for future iterations:**
   - A PR can report a stale cached base SHA after another main merge; compare both the hosting repository's live main ref and the PR base, then synchronize and rerun CI on the resulting head.
 ---
+
+## [2026-08-10 15:42 -07:00] - thr-split-fake-service-runtime-tests-005 merged-head gates
+- What was implemented
+  - No source changes after synchronization; verified the move-only split against current `main` and confirmed both retired giant test files remain absent.
+- Files changed
+  - No additional source files.
+- Verification
+  - `go test ./pkg/services/factory_sessions/internal/execution/...`, `go vet ./pkg/services/factory_sessions/internal/execution/...`, `make backend-size`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, and `make typecheck` — passed.
+  - The final inventory comparison remains 269 baseline entries versus 269 current entries with zero differences.
+  - `go test -covermode=atomic ./pkg/services/factory_sessions/internal/execution/...` remains 79.6% execution, 80.0% fixtures, 83.1% recordingreplay, and 89.8% runtimepersist; `git diff --check` passed.
+- **Learnings for future iterations:**
+  - After reconciling current-main changes, rerun both focused behavior checks and the repository ratchets before relying on the prior PR workflow result.
+---
