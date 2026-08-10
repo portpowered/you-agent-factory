@@ -1,5 +1,6 @@
 ## Codebase Patterns
 - Optional native JSON channels use an explicit presence bit plus custom JSON at durable boundaries to distinguish omitted values from JSON null; clone map/slice trees at projection and transport ownership boundaries.
+- Generated `interface{}` transport types collapse explicit JSON null during ordinary decoding; inspect raw HTTP/SSE JSON at the transport boundary and carry an internal normalized marker until final rendering.
 - Canonical packaged CLI docs live under `docs/reference/`; adding a topic also requires its authored file in `docs/reference/embed.go` and a registry entry in `pkg/transports/cli/docs/docs.go`.
 - The `you run --named <factory> --help` output is the authoritative invocation contract; omitted role provider/model values resolve through operator defaults.
 - Documentation for model-backed workflows should describe observable result shape and status/artifact evidence rather than byte-stable generated prose.
@@ -838,4 +839,29 @@
 - **Learnings for future iterations:**
   - Schema validation errors from `jsonschema/v6` already provide safe property or instance-location summaries; prefix them with a stable classification message without appending raw provider output.
   - The root-built functional command-runner edge makes terminal routing observable through public Factory Events and Work listings; assert request count to prove a failure cannot enter the next workstation.
+---
+
+## 2026-08-10 07:20 -07:00 - e2-structured-worker-results-004
+- What was implemented
+  - Exposed optional native `structuredResult` values in `you work list --json` and Work show JSON while preserving explicit JSON null and omitting older or unstructured fields.
+  - Added deterministic compact structured-result rendering to human Work list output.
+  - Extended the canonical Work watch reducer to consume non-projecting dispatch responses, hand off each result by Work ID to the first following state transition, preserve JSON types and null, omit failures/unrelated transitions, and keep replay/reconnect ordering and one-line NDJSON framing intact.
+  - Added focused CLI, stream/reducer, contract, and replay-backed functional coverage for objects, arrays, strings, booleans, null, omission, framing, ordering, failed dispatches, and recorded output.
+  - Documented `outputSchema`, `.Inputs[n].StructuredResult`, typed schema violations, and artifact-free list/watch inspection in the public Work and Workstation references.
+  - Regenerated the authored CLI published projection and refreshed intentional CLI/docs baseline fixtures.
+- Files changed
+  - Work CLI list/show/watch transports and reducer tests
+  - `contracts/cli/commands.json`, generated API-package CLI metadata, CLI family metadata, and baseline fixtures
+  - `docs/reference/work.md` and `docs/reference/workstations.md`
+  - Replay-backed Work watch functional tests
+  - `prd.json` and `progress.txt`
+- Verification
+  - `go test ./pkg/services/work/... ./pkg/transports/cli/... ./tests/functional/work/... -count=1 -timeout 300s` — passed.
+  - `make cli-manifest-check`, `make contracts-check`, and `make docs-reference-smoke` — passed.
+  - `make verify-fast` — passed: dashboard typecheck, MCP contract boundary, 355 UI files / 2,970 tests, 191 Bun tests, and the short Go suite.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - Work watch emits only canonical `WORK_STATE_CHANGE` lines, so dispatch-result events need a short-lived per-Work pending handoff keyed by canonical Work ID.
+  - The published CLI metadata is generated from `contracts/cli/commands.json` through `make contracts-generate`; intentional command-description changes also require the CLI identity baseline refresh.
+  - Replay fixtures are a useful end-to-end assertion for watch behavior because they exercise SSE decoding, event ordering, reducer state, and output framing together.
 ---
