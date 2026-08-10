@@ -95,6 +95,8 @@ func packagedInstallationTestPersistence() factorydefinitions.PackagedFactoryPer
 }
 
 func TestEnsurePackagedFactories_InvalidPayloadDoesNotCommitTarget(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
 	definition := factorydefinitions.PackagedDefinition{
 		Name: "@test/invalid",
@@ -115,6 +117,8 @@ func TestEnsurePackagedFactories_InvalidPayloadDoesNotCommitTarget(t *testing.T)
 }
 
 func TestEnsurePackagedFactories_PreparationFailurePreservesExistingRoot(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
 	marker := root + string(os.PathSeparator) + "customer-owned.txt"
 	if err := os.WriteFile(marker, []byte("keep"), 0o600); err != nil {
@@ -132,6 +136,8 @@ func TestEnsurePackagedFactories_PreparationFailurePreservesExistingRoot(t *test
 }
 
 func TestEnsurePackagedFactories_FailsClosedWithoutFileSystem(t *testing.T) {
+	t.Parallel()
+
 	_, err := New(packagedInstallationTestPersistence(), nil, os.Mkdir).EnsurePackagedFactories(
 		t.Context(),
 		t.TempDir(),
@@ -481,6 +487,8 @@ func (fileSystem *failingPackagedInstallationFileSystem) Rename(oldPath, newPath
 }
 
 func TestInstallPackagedFactory_MaterializesPortableEditableFormats(t *testing.T) {
+	t.Parallel()
+
 	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
 	if err != nil {
 		t.Fatalf("LoadPublishedDefinitionCatalog() error = %v", err)
@@ -500,6 +508,8 @@ func TestInstallPackagedFactory_MaterializesPortableEditableFormats(t *testing.T
 	for _, test := range tests {
 		test := test
 		t.Run(string(test.format), func(t *testing.T) {
+			t.Parallel()
+
 			root := t.TempDir()
 			result, installErr := New(
 				packagedInstallationTestPersistence(),
@@ -526,6 +536,8 @@ func TestInstallPackagedFactory_MaterializesPortableEditableFormats(t *testing.T
 }
 
 func TestInstallPackagedFactory_DefaultsToJSONAndRejectsUnsupportedFormat(t *testing.T) {
+	t.Parallel()
+
 	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
 	if err != nil {
 		t.Fatalf("LoadPublishedDefinitionCatalog() error = %v", err)
@@ -574,6 +586,8 @@ func TestInstallPackagedFactory_DefaultsToJSONAndRejectsUnsupportedFormat(t *tes
 }
 
 func TestInstallPackagedFactory_MaterializesEveryPublishedFactory(t *testing.T) {
+	t.Parallel()
+
 	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
 	if err != nil {
 		t.Fatalf("LoadPublishedDefinitionCatalog() error = %v", err)
@@ -581,6 +595,8 @@ func TestInstallPackagedFactory_MaterializesEveryPublishedFactory(t *testing.T) 
 	for _, definition := range catalog.All() {
 		definition := definition
 		t.Run(definition.Name, func(t *testing.T) {
+			t.Parallel()
+
 			result, installErr := New(
 				packagedInstallationTestPersistence(),
 				platformfilesystem.Local{},
@@ -611,6 +627,8 @@ func TestInstallPackagedFactory_MaterializesEveryPublishedFactory(t *testing.T) 
 }
 
 func TestInstallPackagedFactory_RepeatSkipsWithoutContentDrift(t *testing.T) {
+	t.Parallel()
+
 	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
 	if err != nil {
 		t.Fatalf("LoadPublishedDefinitionCatalog() error = %v", err)
@@ -656,6 +674,8 @@ func TestInstallPackagedFactory_RepeatSkipsWithoutContentDrift(t *testing.T) {
 }
 
 func TestInstallPackagedFactory_ExplicitReplaceRestoresPackagedLayout(t *testing.T) {
+	t.Parallel()
+
 	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
 	if err != nil {
 		t.Fatalf("LoadPublishedDefinitionCatalog() error = %v", err)
@@ -706,6 +726,8 @@ func TestInstallPackagedFactory_ExplicitReplaceRestoresPackagedLayout(t *testing
 }
 
 func TestInstallPackagedFactory_RefusesAlternateFormatWithoutReplace(t *testing.T) {
+	t.Parallel()
+
 	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
 	if err != nil {
 		t.Fatalf("LoadPublishedDefinitionCatalog() error = %v", err)
@@ -740,6 +762,8 @@ func TestInstallPackagedFactory_RefusesAlternateFormatWithoutReplace(t *testing.
 }
 
 func TestInstallPackagedFactory_CancellationBeforeCommitLeavesTargetAbsent(t *testing.T) {
+	t.Parallel()
+
 	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
 	if err != nil {
 		t.Fatalf("LoadPublishedDefinitionCatalog() error = %v", err)
@@ -773,6 +797,8 @@ func TestInstallPackagedFactory_CancellationBeforeCommitLeavesTargetAbsent(t *te
 }
 
 func TestInstallPackagedFactory_FailedReplacePreservesCommittedLayout(t *testing.T) {
+	t.Parallel()
+
 	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
 	if err != nil {
 		t.Fatalf("LoadPublishedDefinitionCatalog() error = %v", err)
