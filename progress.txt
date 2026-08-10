@@ -157,4 +157,15 @@
   - The worktree's `origin` remote points at `infinite-you`; PR delivery for this repository uses the `fork` remote at `portpowered/you-agent-factory`, so compare and push against `fork` when verifying synchronization.
   - A progress-only delivery commit still needs the complete local gate set and a fresh remote CI run before the PR can be reported ready for review.
   - Keep `prd.json` unchanged when every story is already passed and the iteration adds only verification evidence.
+
+## 2026-08-09 17:13 -07:00 - wo-c1-ext-stream-replay-only-delivery-review
+- What was implemented
+  - Confirmed all four PRD stories remain marked `passes:true`; no additional story implementation or contract change was required.
+  - Inspected PR #1840 with the thread-aware GitHub review workflow. The prior blocking correctness/lint feedback is addressed in the current head, and there are no unresolved inline review threads or external actionable comments.
+  - Confirmed local HEAD `97d6e77e` matches the fork PR head and the required CI run for that exact commit is executing.
+- Files changed
+  - `progress.txt`
+- **Learnings for future iterations:**
+  - A cross-repository PR needs the head repository and PR number passed explicitly to the thread-aware GraphQL comment reader when the local branch tracks a different remote.
+  - Do not change the completed `prd.json` story state during delivery-only iterations; append review and CI evidence to the progress log instead.
 ---
