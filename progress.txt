@@ -2273,3 +2273,17 @@
 - **Learnings for future iterations:**
   - For a known current-main runtime-shutdown race, first repeat the exact behavioral test locally and rerun the failed CI job before changing unrelated feature code; a clean repeated run can distinguish transient timing from a deterministic regression.
 ---
+## 2026-08-10 11:51 -07:00 - e2-structured-worker-results CI follow-up
+- What was implemented
+  - Investigated the second post-merge GitHub Actions failure in current-main `TestFunctionalAPIServer_RuntimeLogDirectoryIsAProcessInput`; the test intermittently missed the `factory started` log line, and no E2 source change was warranted.
+  - Repeated the exact runtime-log test five times locally and reran only the failed functional/policy jobs.
+- Files changed
+  - `progress.txt`
+- Verification
+  - The focused runtime-log test passed all five local repetitions.
+  - GitHub Actions run `31419909852`, attempt 1, failed only Backend Functional Coverage on that timing-sensitive test; Backend Unit Coverage and all other checks passed.
+  - GitHub Actions run `31419909852`, attempt 2, passed Backend Functional Coverage and Verification Policy; all PR checks are now green.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - Runtime file-log assertions can race startup even when the runtime behavior is correct; reproduce the exact test and rerun the failed CI lane before modifying unrelated logging or structured-result code.
+---
