@@ -698,11 +698,7 @@ func (r *factoryWorldReducer) recordWorkFailureDetail(completion interfaces.Fact
 func cloneExpectedArtifactTemplateContext(
 	context *work.ExpectedArtifactTemplateContext,
 ) *work.ExpectedArtifactTemplateContext {
-	if context == nil {
-		return nil
-	}
-	clone := *context
-	return &clone
+	return work.CloneExpectedArtifactTemplateContext(context)
 }
 
 func (r *factoryWorldReducer) applyDispatchLifecycleEvent(event interfaces.FactoryEvent) (bool, error) {

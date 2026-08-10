@@ -1,7 +1,6 @@
 package executor
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -11,12 +10,11 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"text/template"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-	workerprompting "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/prompting"
 )
 
 func workDiagnosticsForInferenceRequest(req workerexecution.ProviderInferenceRequest) *workerexecution.WorkDiagnostics {
@@ -246,7 +244,7 @@ func (we *WorkstationExecutor) verifyExpectedArtifacts(
 func verifyExpectedArtifactDeclarations(
 	workspace string,
 	tokens []workerexecution.Token,
-	context *workerexecution.Context,
+	context *work.ExpectedArtifactTemplateContext,
 	declarations []interfaces.ExpectedArtifactConfig,
 	fileSystem platformfilesystem.GlobInspector,
 ) []workerexecution.ExpectedArtifactVerificationEntry {
@@ -286,15 +284,12 @@ func verifyExpectedArtifactDeclarations(
 	return entries
 }
 
-func expectedArtifactContext(request workerexecution.WorkstationExecutionRequest) *workerexecution.Context {
+func expectedArtifactContext(request workerexecution.WorkstationExecutionRequest) *work.ExpectedArtifactTemplateContext {
 	if recorded := request.Dispatch.ExpectedArtifactContext; recorded != nil {
-		return &workerexecution.Context{
-			ProjectID: recorded.Project,
-			SessionID: recorded.SessionID,
-		}
+		return work.CloneExpectedArtifactTemplateContext(recorded)
 	}
-	return &workerexecution.Context{
-		ProjectID: request.ProjectID,
+	return &work.ExpectedArtifactTemplateContext{
+		Project:   request.ProjectID,
 		SessionID: request.FactorySessionID,
 	}
 }
@@ -316,34 +311,38 @@ func expectedArtifactFailureEntry(
 func renderExpectedArtifactPattern(
 	pattern string,
 	tokens []workerexecution.Token,
-	context *workerexecution.Context,
+	context *work.ExpectedArtifactTemplateContext,
 ) (string, error) {
-	parsed, err := template.New("expected_artifact").Option("missingkey=error").Parse(pattern)
-	if err != nil {
-		return "", err
+	templateContext := work.ExpectedArtifactTemplateContext{}
+	if context != nil {
+		templateContext = *context
 	}
-	promptData := workerprompting.BuildPromptData(tokens, context)
-	data := struct {
-		Inputs  []workerprompting.TokenData
-		Context struct {
-			Project   string
-			SessionID string
-		}
-	}{
-		Inputs: promptData.Inputs,
-		Context: struct {
-			Project   string
-			SessionID string
-		}{
-			Project:   promptData.Context.Project,
-			SessionID: promptData.Context.SessionID,
-		},
+	return work.RenderExpectedArtifactPattern(
+		pattern,
+		expectedArtifactInputs(tokens),
+		templateContext,
+	)
+}
+
+func expectedArtifactInputs(tokens []workerexecution.Token) []work.ExpectedArtifactInput {
+	if len(tokens) == 0 {
+		return nil
 	}
-	var rendered bytes.Buffer
-	if err := parsed.Execute(&rendered, data); err != nil {
-		return "", err
+	inputs := make([]work.ExpectedArtifactInput, 0, len(tokens))
+	for _, token := range tokens {
+		inputs = append(inputs, work.ExpectedArtifactInput{
+			Name:       token.Color.Name,
+			WorkID:     token.Color.WorkID,
+			WorkTypeID: token.Color.WorkTypeID,
+			DataType:   string(token.Color.DataType),
+			TraceID:    token.Color.TraceID,
+			ParentID:   token.Color.ParentID,
+			Project:    token.Color.Tags[workerexecution.ProjectTagKey],
+			Tags:       work.CloneTags(token.Color.Tags),
+			Payload:    string(token.Color.Payload),
+		})
 	}
-	return rendered.String(), nil
+	return inputs
 }
 
 func safeExpectedArtifactPattern(value string) (string, bool) {

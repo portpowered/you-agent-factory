@@ -99,20 +99,26 @@ type ExpectedArtifactReadModel struct {
 // authored artifact pattern from recorded Work inputs. It deliberately omits
 // filesystem and host-runtime details.
 type ExpectedArtifactInput struct {
-	Name       string
-	WorkID     string
-	WorkTypeID string
-	DataType   string
-	TraceID    string
-	ParentID   string
-	Project    string
-	Tags       map[string]string
-	Payload    string
+	Name       string            `json:"name"`
+	WorkID     string            `json:"workId"`
+	WorkTypeID string            `json:"workTypeId"`
+	DataType   string            `json:"dataType"`
+	TraceID    string            `json:"traceId"`
+	ParentID   string            `json:"parentId"`
+	Project    string            `json:"project"`
+	Tags       map[string]string `json:"tags,omitempty"`
+	Payload    string            `json:"payload,omitempty"`
 }
 
 // ExpectedArtifactTemplateContext carries the non-host context exposed to
-// artifact templates. Replay callers normally leave these values empty.
+// artifact templates. Artifact-bearing dispatches record Inputs here so
+// completion verification and historical reads share the same values.
 type ExpectedArtifactTemplateContext struct {
+	// Inputs is the exact stable input snapshot used when the dispatch's
+	// artifact patterns were rendered. It is recorded so replay and Work reads
+	// use the same values as completion verification instead of reconstructing
+	// a reduced or later Work view.
+	Inputs []ExpectedArtifactInput `json:"inputs,omitempty"`
 	// Project is the stable project value available to artifact templates.
 	Project string `json:"project,omitempty"`
 	// SessionID is the stable Factory Session value available to artifact
@@ -131,11 +137,32 @@ const (
 func cloneExpectedArtifactTemplateContext(
 	context *ExpectedArtifactTemplateContext,
 ) *ExpectedArtifactTemplateContext {
+	return CloneExpectedArtifactTemplateContext(context)
+}
+
+// CloneExpectedArtifactTemplateContext returns a detached copy of the stable
+// artifact template data carried with a dispatch.
+func CloneExpectedArtifactTemplateContext(
+	context *ExpectedArtifactTemplateContext,
+) *ExpectedArtifactTemplateContext {
 	if context == nil {
 		return nil
 	}
 	clone := *context
+	clone.Inputs = cloneExpectedArtifactInputs(context.Inputs)
 	return &clone
+}
+
+func cloneExpectedArtifactInputs(inputs []ExpectedArtifactInput) []ExpectedArtifactInput {
+	if len(inputs) == 0 {
+		return nil
+	}
+	clone := make([]ExpectedArtifactInput, len(inputs))
+	for index, input := range inputs {
+		clone[index] = input
+		clone[index].Tags = CloneTags(input.Tags)
+	}
+	return clone
 }
 
 // ExpectedArtifactVerificationEntry is one recorded unmet declaration.
@@ -255,7 +282,12 @@ func expectedArtifactTemplateContext(
 ) ExpectedArtifactTemplateContext {
 	var context ExpectedArtifactTemplateContext
 	if len(templateContexts) > 0 {
-		context = templateContexts[0]
+		context = *CloneExpectedArtifactTemplateContext(&templateContexts[0])
+	}
+	if len(context.Inputs) == 0 {
+		context.Inputs = cloneExpectedArtifactInputs(inputs)
+	} else {
+		inputs = context.Inputs
 	}
 	if strings.TrimSpace(context.Project) == "" || context.Project == defaultExpectedArtifactProject {
 		for _, input := range inputs {
@@ -279,16 +311,41 @@ func renderExpectedArtifactPattern(
 	inputs []ExpectedArtifactInput,
 	templateContext ExpectedArtifactTemplateContext,
 ) (string, error) {
+	return RenderExpectedArtifactPattern(pattern, inputs, templateContext)
+}
+
+// RenderExpectedArtifactPattern renders an artifact pattern using the one
+// replay-safe input/context vocabulary shared by definition validation,
+// completion verification, live reads, and replay reads. Prompt-only fields
+// such as relations, content, retry history, filesystem paths, environment,
+// and Factory docs are intentionally not present in this DTO.
+func RenderExpectedArtifactPattern(
+	pattern string,
+	inputs []ExpectedArtifactInput,
+	templateContext ExpectedArtifactTemplateContext,
+) (string, error) {
 	parsed, err := template.New("expected_artifact").Option("missingkey=error").Parse(pattern)
 	if err != nil {
 		return "", err
 	}
+	context := expectedArtifactTemplateContext(inputs, templateContext)
+	if len(context.Inputs) > 0 {
+		inputs = context.Inputs
+	}
 	data := struct {
 		Inputs  []ExpectedArtifactInput
-		Context ExpectedArtifactTemplateContext
+		Context struct {
+			Project   string
+			SessionID string
+		}
 	}{
-		Inputs:  inputs,
-		Context: templateContext,
+		Inputs: inputs,
+		Context: struct {
+			Project   string
+			SessionID string
+		}{
+			Project: context.Project, SessionID: context.SessionID,
+		},
 	}
 	var rendered bytes.Buffer
 	if err := parsed.Execute(&rendered, data); err != nil {

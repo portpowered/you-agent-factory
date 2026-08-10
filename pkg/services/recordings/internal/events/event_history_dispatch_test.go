@@ -40,14 +40,18 @@ func assertJSONObject(t *testing.T, object map[string]any, field string) map[str
 
 func assertExpectedArtifactContext(t *testing.T, context *work.ExpectedArtifactTemplateContext) {
 	t.Helper()
-	if context == nil || context.Project != "project-7" || context.SessionID != "session-9" {
+	if context == nil || context.Project != "project-7" || context.SessionID != "session-9" ||
+		len(context.Inputs) != 1 || context.Inputs[0].Project != "input-project-7" || context.Inputs[0].Payload != "payload-7" {
 		t.Fatalf("canonical expected artifact context = %#v", context)
 	}
 }
 
 func assertGeneratedExpectedArtifactContext(t *testing.T, context *factoryapi.ExpectedArtifactTemplateContext) {
 	t.Helper()
-	if context == nil || stringValueForEventHistoryTest(context.Project) != "project-7" || stringValueForEventHistoryTest(context.SessionId) != "session-9" {
+	if context == nil || stringValueForEventHistoryTest(context.Project) != "project-7" || stringValueForEventHistoryTest(context.SessionId) != "session-9" ||
+		context.Inputs == nil || len(*context.Inputs) != 1 ||
+		stringValueForEventHistoryTest((*context.Inputs)[0].Project) != "input-project-7" ||
+		stringValueForEventHistoryTest((*context.Inputs)[0].Payload) != "payload-7" {
 		t.Fatalf("generated expected artifact context = %#v", context)
 	}
 }
@@ -60,11 +64,18 @@ func TestFactoryEventHistory_RecordWorkstationRequest_UsesContextForRequestIdent
 		DispatchID:  "dispatch-1",
 		CreatedTick: 4,
 		Dispatch: work.WorkDispatch{
-			DispatchID:              "dispatch-1",
-			TransitionID:            "build",
-			WorkerType:              "builder",
-			WorkstationName:         "Build",
-			ExpectedArtifactContext: &work.ExpectedArtifactTemplateContext{Project: "project-7", SessionID: "session-9"},
+			DispatchID:      "dispatch-1",
+			TransitionID:    "build",
+			WorkerType:      "builder",
+			WorkstationName: "Build",
+			ExpectedArtifactContext: &work.ExpectedArtifactTemplateContext{
+				Project:   "project-7",
+				SessionID: "session-9",
+				Inputs: []work.ExpectedArtifactInput{{
+					Project: "input-project-7",
+					Payload: "payload-7",
+				}},
+			},
 			Execution: work.ExecutionMetadata{
 				RequestID: "request-1",
 				ReplayKey: "replay-1",

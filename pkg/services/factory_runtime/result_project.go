@@ -616,9 +616,5 @@ func expectedArtifactInput(token workers.Token) work.ExpectedArtifactInput {
 }
 
 func cloneExpectedArtifactTemplateContext(context *work.ExpectedArtifactTemplateContext) *work.ExpectedArtifactTemplateContext {
-	if context == nil {
-		return nil
-	}
-	clone := *context
-	return &clone
+	return work.CloneExpectedArtifactTemplateContext(context)
 }

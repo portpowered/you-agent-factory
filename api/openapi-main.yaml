@@ -1999,6 +1999,8 @@ components:
       $ref: './components/schemas/data-models/ExpectedArtifactVerificationEntry.yaml'
     ExpectedArtifactTemplateContext:
       $ref: './components/schemas/data-models/ExpectedArtifactTemplateContext.yaml'
+    ExpectedArtifactTemplateInput:
+      $ref: './components/schemas/data-models/ExpectedArtifactTemplateInput.yaml'
     WorkExpectedArtifact:
       $ref: './components/schemas/data-models/WorkExpectedArtifact.yaml'
     WorkExpectedArtifactVerification:

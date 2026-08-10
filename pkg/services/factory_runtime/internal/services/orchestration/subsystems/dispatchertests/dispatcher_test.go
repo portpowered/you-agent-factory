@@ -333,7 +333,7 @@ func TestDispatcher_RecordsStableExpectedArtifactTemplateContext(t *testing.T) {
 	}}}, &factory_context.FactoryContext{ProjectID: "project-7", SessionID: "session-9"}, nil, nil, time.Now, testDispatchID)
 	snapshot := &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: makeDispatcherSnapshot(map[string]*factorytoken.Token{
-			"token-1": {ID: "token-1", PlaceID: "task:init", Color: factorytoken.Color{WorkID: "work-1", WorkTypeID: "task", DataType: factorytoken.DataTypeWork}},
+			"token-1": {ID: "token-1", PlaceID: "task:init", Color: factorytoken.Color{WorkID: "work-1", WorkTypeID: "task", DataType: factorytoken.DataTypeWork, Payload: []byte("payload-1")}},
 		}),
 	}
 	result, err := dispatcher.Execute(context.Background(), snapshot)
@@ -344,7 +344,8 @@ func TestDispatcher_RecordsStableExpectedArtifactTemplateContext(t *testing.T) {
 		t.Fatalf("dispatch result = %#v, want one dispatch with artifact context", result)
 	}
 	got := result.Dispatches[0].Dispatch.ExpectedArtifactContext
-	if got.Project != "project-7" || got.SessionID != "session-9" {
+	if got.Project != "project-7" || got.SessionID != "session-9" || len(got.Inputs) != 1 ||
+		got.Inputs[0].WorkID != "work-1" || got.Inputs[0].Payload != "payload-1" {
 		t.Fatalf("expected artifact context = %#v, want project/session context", got)
 	}
 }

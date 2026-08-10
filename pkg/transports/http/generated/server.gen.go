@@ -1452,7 +1452,7 @@ type ErrorTarget struct {
 	Kind string `json:"kind"`
 }
 
-// ExpectedArtifact One expected output declaration relative to the dispatch workspace. Pattern is a workspace-relative literal path or glob and may use the replay-safe dispatch template fields `.Inputs`, `.Context.Project`, and `.Context.SessionID` inside a Go template action. Host paths, environment variables, and Factory documentation are not supported.
+// ExpectedArtifact One expected output declaration relative to the dispatch workspace. Pattern is a workspace-relative literal path or glob and may use the replay-safe dispatch template fields `.Inputs` (the replay-safe fields are documented by `ExpectedArtifactTemplateInput`), `.Context.Project`, and `.Context.SessionID` inside a Go template action. Prompt-only fields, host paths, environment variables, and Factory documentation are not supported.
 type ExpectedArtifact struct {
 	// Name Customer-visible name for this expected output declaration.
 	Name string `json:"name"`
@@ -1466,11 +1466,29 @@ type ExpectedArtifact struct {
 
 // ExpectedArtifactTemplateContext Stable, non-host context used when rendering expected-artifact patterns. Filesystem paths, environment variables, and Factory documentation are not part of this replayable vocabulary.
 type ExpectedArtifactTemplateContext struct {
+	// Inputs Exact replay-safe input values captured when the dispatch was created. Artifact templates expose these values through `.Inputs`; prompt-only relations, content, retry history, and host context are not included.
+	Inputs *[]ExpectedArtifactTemplateInput `json:"inputs,omitempty"`
+
 	// Project Stable project identifier for the dispatch.
 	Project *string `json:"project,omitempty"`
 
 	// SessionId Stable Factory Session identifier for the dispatch.
 	SessionId *string `json:"sessionId,omitempty"`
+}
+
+// ExpectedArtifactTemplateInput Stable replay-safe input value available to an expected-artifact template. This is intentionally smaller than the workstation prompt input surface so completion verification and historical Work reads can use the same values.
+type ExpectedArtifactTemplateInput struct {
+	DataType *string `json:"dataType,omitempty"`
+	Name     *string `json:"name,omitempty"`
+	ParentId *string `json:"parentId,omitempty"`
+
+	// Payload The dispatch-time textual payload value. It is retained only in the artifact template context and is not added to the normal Work read.
+	Payload    *string    `json:"payload,omitempty"`
+	Project    *string    `json:"project,omitempty"`
+	Tags       *StringMap `json:"tags,omitempty"`
+	TraceId    *string    `json:"traceId,omitempty"`
+	WorkId     *string    `json:"workId,omitempty"`
+	WorkTypeId *string    `json:"workTypeId,omitempty"`
 }
 
 // ExpectedArtifactVerification Stable terminal verification summary emitted when a successful worker does not satisfy its effective expected artifact declarations.

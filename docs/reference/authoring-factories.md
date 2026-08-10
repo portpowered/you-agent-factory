@@ -89,10 +89,15 @@ canonical routing contract, including continue and rejection routes.
 Work Types and Workstations can declare files that a dispatch is expected to
 produce. The `pattern` is relative to the dispatch workspace and may be a
 literal path, a glob, or a Go template. The replayable template vocabulary is
-limited to `.Inputs` (the same input fields available to workstation prompts)
-and `.Context.Project` and `.Context.SessionID`. Host paths, environment
-variables, and Factory documentation are intentionally not available to
-expected-artifact templates. This complete JSON example can be saved as
+limited to `.Inputs` with the stable fields `Name`, `WorkID`, `WorkTypeID`,
+`DataType`, `TraceID`, `ParentID`, `Project`, `Tags`, and `Payload`, plus
+`.Context.Project` and `.Context.SessionID`. These fields are captured at
+dispatch creation, so completion verification and historical Work reads use
+the same values. Prompt-only fields such as `Relations`, `Content`,
+`PreviousOutput`, `RejectionFeedback`, and `History` are not part of the
+artifact contract. Host paths, environment variables, and Factory
+documentation are intentionally not available to expected-artifact templates.
+This complete JSON example can be saved as
 `factory.json` and checked
 with `you factory config validate ./factory.json`:
 
@@ -156,8 +161,9 @@ declarations. Exact duplicates are removed while preserving the first authored
 position. `nonEmpty: true` requires every regular file matched by the pattern
 to contain data. Empty names or patterns, invalid templates or globs, absolute
 paths, paths containing `..`, or unsupported template fields such as
-`.Context.WorkDir`, `.Context.ArtifactDir`, `.Context.Env`, and `.Docs` are
-rejected with the owning Work Type or Workstation in the validation diagnostic.
+`.Inputs[0].Relations`, `.Inputs[0].History`, `.Context.WorkDir`,
+`.Context.ArtifactDir`, `.Context.Env`, and `.Docs` are rejected with the
+owning Work Type or Workstation in the validation diagnostic.
 Omitting `expectedArtifacts` keeps the legacy behavior unchanged.
 
 ## Build Your First Workflow

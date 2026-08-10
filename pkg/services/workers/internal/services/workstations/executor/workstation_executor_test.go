@@ -372,7 +372,7 @@ func TestExpectedArtifactVerification_RejectsExternalSymlinks(t *testing.T) {
 	entries := verifyExpectedArtifactDeclarations(
 		workspace,
 		nil,
-		&workerexecution.Context{},
+		&work.ExpectedArtifactTemplateContext{},
 		[]interfaces.ExpectedArtifactConfig{
 			{Name: "literal", Pattern: "literal.txt"},
 			{Name: "glob", Pattern: "*.json"},
@@ -402,7 +402,7 @@ func TestExpectedArtifactVerification_DistinguishesDuplicateNamesAndUnrenderable
 	entries := verifyExpectedArtifactDeclarations(
 		workspace,
 		[]workerexecution.Token{{Color: workerexecution.Color{Name: "input"}}},
-		&workerexecution.Context{},
+		&work.ExpectedArtifactTemplateContext{},
 		declarations,
 		platformfilesystem.Local{},
 	)
@@ -417,7 +417,7 @@ func TestExpectedArtifactVerification_DistinguishesDuplicateNamesAndUnrenderable
 func TestWorkstationExecutor_VerifiesRecordedProjectAndSessionContext(t *testing.T) {
 	t.Parallel()
 	workspace := t.TempDir()
-	contextDir := filepath.Join(workspace, "project-7", "session-9")
+	contextDir := filepath.Join(workspace, "project-7", "session-9", "input-project", "payload-7")
 	if err := os.MkdirAll(contextDir, 0o755); err != nil {
 		t.Fatalf("create context artifact directory: %v", err)
 	}
@@ -431,7 +431,7 @@ func TestWorkstationExecutor_VerifiesRecordedProjectAndSessionContext(t *testing
 			"standard": {
 				Type: interfaces.WorkstationTypeModel,
 				ExpectedArtifacts: []interfaces.ExpectedArtifactConfig{{
-					Name: "context report", Pattern: "{{ .Context.Project }}/{{ .Context.SessionID }}/report.txt",
+					Name: "context report", Pattern: "{{ .Context.Project }}/{{ .Context.SessionID }}/{{ (index .Inputs 0).Project }}/{{ (index .Inputs 0).Payload }}/report.txt",
 				}},
 			},
 		},
@@ -440,7 +440,13 @@ func TestWorkstationExecutor_VerifiesRecordedProjectAndSessionContext(t *testing
 	mock := &wsMockExecutor{result: workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted, Output: "worker output"}}
 	we := newTestWorkstationExecutor(config, mock)
 	dispatch := expectedArtifactDispatch("recorded-context", "task-report")
-	dispatch.ExpectedArtifactContext = &work.ExpectedArtifactTemplateContext{Project: "project-7", SessionID: "session-9"}
+	dispatch.ExpectedArtifactContext = &work.ExpectedArtifactTemplateContext{
+		Project:   "project-7",
+		SessionID: "session-9",
+		Inputs: []work.ExpectedArtifactInput{{
+			Project: "input-project", Payload: "payload-7",
+		}},
+	}
 	result, err := we.Execute(context.Background(), dispatch)
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)

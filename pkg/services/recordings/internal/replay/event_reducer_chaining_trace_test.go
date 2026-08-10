@@ -275,6 +275,11 @@ func TestReplayDispatchFromEvent_PreservesExpectedArtifactTemplateContext(t *tes
 		TransitionId: "publish",
 		Inputs:       []factoryapi.DispatchConsumedWorkRef{{WorkId: "work-generated"}},
 		ExpectedArtifactContext: &factoryapi.ExpectedArtifactTemplateContext{
+			Inputs: &[]factoryapi.ExpectedArtifactTemplateInput{{
+				Name:    stringPtrIfNotEmpty("input-7"),
+				Project: stringPtrIfNotEmpty("input-project-7"),
+				Payload: stringPtrIfNotEmpty("payload-7"),
+			}},
 			Project:   stringPtrIfNotEmpty("project-7"),
 			SessionId: stringPtrIfNotEmpty("session-9"),
 		},
@@ -304,6 +309,13 @@ func TestReplayDispatchFromEvent_PreservesExpectedArtifactTemplateContext(t *tes
 		replayed.dispatch.ExpectedArtifactContext.Project != "project-7" ||
 		replayed.dispatch.ExpectedArtifactContext.SessionID != "session-9" {
 		t.Fatalf("replayed expected artifact context = %#v", replayed.dispatch.ExpectedArtifactContext)
+	}
+	if replayed.dispatch.ExpectedArtifactContext == nil ||
+		len(replayed.dispatch.ExpectedArtifactContext.Inputs) != 1 ||
+		replayed.dispatch.ExpectedArtifactContext.Inputs[0].Name != "input-7" ||
+		replayed.dispatch.ExpectedArtifactContext.Inputs[0].Project != "input-project-7" ||
+		replayed.dispatch.ExpectedArtifactContext.Inputs[0].Payload != "payload-7" {
+		t.Fatalf("replayed expected artifact inputs = %#v", replayed.dispatch.ExpectedArtifactContext)
 	}
 }
 

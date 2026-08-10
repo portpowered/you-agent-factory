@@ -1,0 +1,28 @@
+type: object
+additionalProperties: false
+description: >-
+  Stable replay-safe input value available to an expected-artifact template.
+  This is intentionally smaller than the workstation prompt input surface so
+  completion verification and historical Work reads can use the same values.
+properties:
+  name:
+    type: string
+  workId:
+    type: string
+  workTypeId:
+    type: string
+  dataType:
+    type: string
+  traceId:
+    type: string
+  parentId:
+    type: string
+  project:
+    type: string
+  tags:
+    $ref: '../shared/StringMap.yaml'
+  payload:
+    type: string
+    description: >-
+      The dispatch-time textual payload value. It is retained only in the
+      artifact template context and is not added to the normal Work read.

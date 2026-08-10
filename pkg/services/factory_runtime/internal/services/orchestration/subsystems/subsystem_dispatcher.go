@@ -266,9 +266,33 @@ func (d *DispatcherSubsystem) expectedArtifactContext(
 		sessionID = strings.TrimSpace(d.wfCtx.SessionID)
 	}
 	return &work.ExpectedArtifactTemplateContext{
+		Inputs:    expectedArtifactTemplateInputs(inputTokens),
 		Project:   workers.ResolveProjectID(project),
 		SessionID: sessionID,
 	}
+}
+
+func expectedArtifactTemplateInputs(
+	inputTokens []factorytoken.Token,
+) []work.ExpectedArtifactInput {
+	if len(inputTokens) == 0 {
+		return nil
+	}
+	inputs := make([]work.ExpectedArtifactInput, 0, len(inputTokens))
+	for _, token := range inputTokens {
+		inputs = append(inputs, work.ExpectedArtifactInput{
+			Name:       token.Color.Name,
+			WorkID:     token.Color.WorkID,
+			WorkTypeID: token.Color.WorkTypeID,
+			DataType:   string(token.Color.DataType),
+			TraceID:    token.Color.TraceID,
+			ParentID:   token.Color.ParentID,
+			Project:    token.Color.Tags[workers.ProjectTagKey],
+			Tags:       work.CloneTags(token.Color.Tags),
+			Payload:    string(token.Color.Payload),
+		})
+	}
+	return inputs
 }
 
 func (d *DispatcherSubsystem) transitionHasExpectedArtifacts(

@@ -216,7 +216,7 @@ func TestReadSnapshotFromFactoryWorldStateProjectsRecordedArtifactContext(t *tes
 			WorkTypes: []interfaces.FactoryWorkType{{
 				ID: "story",
 				ExpectedArtifacts: []work.ExpectedArtifactDeclaration{{
-					Name: "report", Pattern: "{{ .Context.Project }}/{{ .Context.SessionID }}/report.txt",
+					Name: "report", Pattern: "{{ .Context.Project }}/{{ .Context.SessionID }}/{{ (index .Inputs 0).Project }}/{{ (index .Inputs 0).Payload }}/report.txt",
 				}},
 			}},
 			Workstations: []interfaces.FactoryWorkstation{{ID: "publish", Name: "publish"}},
@@ -226,14 +226,21 @@ func TestReadSnapshotFromFactoryWorldStateProjectsRecordedArtifactContext(t *tes
 		},
 		CompletedDispatches: []interfaces.FactoryWorldDispatchCompletion{{
 			DispatchID: "dispatch-1", TransitionID: "publish", Workstation: interfaces.FactoryWorkstationRef{ID: "publish", Name: "publish"},
-			ExpectedArtifactContext: &work.ExpectedArtifactTemplateContext{Project: "project-7", SessionID: "session-9"},
-			WorkItemIDs:             []string{"work-1"}, InputWorkItems: []work.FactoryWorkItem{{ID: "work-1", WorkTypeID: "story", DisplayName: "story"}},
+			ExpectedArtifactContext: &work.ExpectedArtifactTemplateContext{
+				Project:   "project-7",
+				SessionID: "session-9",
+				Inputs: []work.ExpectedArtifactInput{{
+					Project: "input-project-7",
+					Payload: "payload-7",
+				}},
+			},
+			WorkItemIDs: []string{"work-1"}, InputWorkItems: []work.FactoryWorkItem{{ID: "work-1", WorkTypeID: "story", DisplayName: "story"}},
 			Result: interfaces.WorkstationResult{Outcome: string(workerexecution.OutcomeAccepted)},
 		}},
 	}
 	snapshot := readSnapshotFromFactoryWorldState(state)
 	if len(snapshot.Items) != 1 || len(snapshot.Items[0].ExpectedArtifacts) != 1 ||
-		snapshot.Items[0].ExpectedArtifacts[0].Pattern != "project-7/session-9/report.txt" ||
+		snapshot.Items[0].ExpectedArtifacts[0].Pattern != "project-7/session-9/input-project-7/payload-7/report.txt" ||
 		snapshot.Items[0].ExpectedArtifacts[0].Verification != work.ExpectedArtifactVerificationSatisfied {
 		t.Fatalf("recorded context projection = %#v", snapshot.Items)
 	}

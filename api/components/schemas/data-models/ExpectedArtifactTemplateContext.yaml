@@ -5,6 +5,14 @@ description: >-
   Filesystem paths, environment variables, and Factory documentation are not
   part of this replayable vocabulary.
 properties:
+  inputs:
+    type: array
+    description: >-
+      Exact replay-safe input values captured when the dispatch was created.
+      Artifact templates expose these values through `.Inputs`; prompt-only
+      relations, content, retry history, and host context are not included.
+    items:
+      $ref: './ExpectedArtifactTemplateInput.yaml'
   project:
     type: string
     description: Stable project identifier for the dispatch.

@@ -1339,6 +1339,11 @@ func TestExpectedArtifactConfig_ValidatesTemplatesAndWorkspacePaths(t *testing.T
 			inputCount:  1,
 		},
 		{
+			name:        "replay safe input vocabulary",
+			declaration: ExpectedArtifactConfig{Name: "payload", Pattern: "reports/{{ (index .Inputs 0).Project }}/{{ (index .Inputs 0).Payload }}.json"},
+			inputCount:  1,
+		},
+		{
 			name:        "project and session context vocabulary",
 			declaration: ExpectedArtifactConfig{Name: "context", Pattern: "reports/{{ .Context.Project }}/{{ .Context.SessionID }}.json"},
 		},
@@ -1350,6 +1355,12 @@ func TestExpectedArtifactConfig_ValidatesTemplatesAndWorkspacePaths(t *testing.T
 		{
 			name:        "factory docs are rejected",
 			declaration: ExpectedArtifactConfig{Name: "docs", Pattern: "{{ .Docs.readme }}.txt"},
+			wantError:   "cannot be rendered",
+		},
+		{
+			name:        "prompt history is rejected",
+			declaration: ExpectedArtifactConfig{Name: "history", Pattern: "{{ (index .Inputs 0).History.AttemptNumber }}.txt"},
+			inputCount:  1,
 			wantError:   "cannot be rendered",
 		},
 		{

@@ -317,11 +317,7 @@ func (t *TransitionerSubsystem) buildCompletedDispatch(
 func cloneExpectedArtifactTemplateContext(
 	context *work.ExpectedArtifactTemplateContext,
 ) *work.ExpectedArtifactTemplateContext {
-	if context == nil {
-		return nil
-	}
-	clone := *context
-	return &clone
+	return work.CloneExpectedArtifactTemplateContext(context)
 }
 
 func completedDispatchReason(result resolvedWorkResult) string {

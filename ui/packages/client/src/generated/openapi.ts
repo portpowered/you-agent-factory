@@ -2102,10 +2102,25 @@ export interface components {
     };
     /** @description Stable, non-host context used when rendering expected-artifact patterns. Filesystem paths, environment variables, and Factory documentation are not part of this replayable vocabulary. */
     ExpectedArtifactTemplateContext: {
+      /** @description Exact replay-safe input values captured when the dispatch was created. Artifact templates expose these values through `.Inputs`; prompt-only relations, content, retry history, and host context are not included. */
+      inputs?: components["schemas"]["ExpectedArtifactTemplateInput"][];
       /** @description Stable project identifier for the dispatch. */
       project?: string;
       /** @description Stable Factory Session identifier for the dispatch. */
       sessionId?: string;
+    };
+    /** @description Stable replay-safe input value available to an expected-artifact template. This is intentionally smaller than the workstation prompt input surface so completion verification and historical Work reads can use the same values. */
+    ExpectedArtifactTemplateInput: {
+      name?: string;
+      workId?: string;
+      workTypeId?: string;
+      dataType?: string;
+      traceId?: string;
+      parentId?: string;
+      project?: string;
+      tags?: components["schemas"]["StringMap"];
+      /** @description The dispatch-time textual payload value. It is retained only in the artifact template context and is not added to the normal Work read. */
+      payload?: string;
     };
     /** @description One effective expected artifact declaration projected on a Work item. Pattern is the rendered workspace-relative literal path or glob, never a host path. */
     WorkExpectedArtifact: {
@@ -5661,7 +5676,7 @@ export interface components {
      * @enum {string}
      */
     WorkTypeHandlingBehavior: WorkTypeHandlingBehavior;
-    /** @description One expected output declaration relative to the dispatch workspace. Pattern is a workspace-relative literal path or glob and may use the replay-safe dispatch template fields `.Inputs`, `.Context.Project`, and `.Context.SessionID` inside a Go template action. Host paths, environment variables, and Factory documentation are not supported. */
+    /** @description One expected output declaration relative to the dispatch workspace. Pattern is a workspace-relative literal path or glob and may use the replay-safe dispatch template fields `.Inputs` (the replay-safe fields are documented by `ExpectedArtifactTemplateInput`), `.Context.Project`, and `.Context.SessionID` inside a Go template action. Prompt-only fields, host paths, environment variables, and Factory documentation are not supported. */
     ExpectedArtifact: {
       /** @description Customer-visible name for this expected output declaration. */
       name: string;

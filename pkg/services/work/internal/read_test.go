@@ -267,6 +267,28 @@ func TestProjectExpectedArtifactReadModels_UsesRecordedContextAndDeclarationIden
 	}
 }
 
+func TestProjectExpectedArtifactReadModels_UsesRecordedReplaySafeInputs(t *testing.T) {
+	t.Parallel()
+	declarations := []work.ExpectedArtifactDeclaration{{
+		Name:    "payload",
+		Pattern: "{{ (index .Inputs 0).Project }}/{{ (index .Inputs 0).Payload }}.txt",
+	}}
+	got := work.ExpectedArtifactReadModelProjector{}.Project(
+		declarations,
+		nil,
+		[]work.ExpectedArtifactInput{{Project: "live-project", Payload: "live-payload"}},
+		work.ExpectedArtifactObservation{Verified: true},
+		work.ExpectedArtifactTemplateContext{
+			Project: "project-7",
+			Inputs:  []work.ExpectedArtifactInput{{Project: "recorded-project", Payload: "recorded-payload"}},
+		},
+	)
+	if len(got) != 1 || got[0].Pattern != "recorded-project/recorded-payload.txt" ||
+		got[0].Verification != work.ExpectedArtifactVerificationSatisfied {
+		t.Fatalf("recorded input projection = %#v", got)
+	}
+}
+
 func TestProjectExpectedArtifactReadModels_RedactedDuplicateEntriesUseDeclarationIdentity(t *testing.T) {
 	t.Parallel()
 	declarations := []work.ExpectedArtifactDeclaration{

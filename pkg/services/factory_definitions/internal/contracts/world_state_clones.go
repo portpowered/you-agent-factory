@@ -27,11 +27,7 @@ func CloneFactoryWorldDispatchCompletion(completion FactoryWorldDispatchCompleti
 func cloneExpectedArtifactTemplateContext(
 	context *work.ExpectedArtifactTemplateContext,
 ) *work.ExpectedArtifactTemplateContext {
-	if context == nil {
-		return nil
-	}
-	clone := *context
-	return &clone
+	return work.CloneExpectedArtifactTemplateContext(context)
 }
 
 // CloneFactoryWorldProviderSessionRecord returns a detached copy of one

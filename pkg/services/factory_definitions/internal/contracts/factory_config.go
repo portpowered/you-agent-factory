@@ -5,7 +5,6 @@
 package factorycontracts
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -504,19 +503,12 @@ func validateExpectedArtifactPattern(pattern string, inputCount int) error {
 	if err := validateExpectedArtifactPathSafety(pattern); err != nil {
 		return err
 	}
-	parsed, err := template.New("expected_artifact").Option("missingkey=error").Parse(pattern)
-	if err != nil {
+	if _, err := template.New("expected_artifact").Option("missingkey=error").Parse(pattern); err != nil {
 		return fmt.Errorf("invalid template: %w", err)
 	}
-	data := expectedArtifactTemplateData{
-		Inputs: make([]expectedArtifactInputData, inputCount),
-		Context: expectedArtifactContextData{
-			Project:   "project",
-			SessionID: "session",
-		},
-	}
-	for index := range data.Inputs {
-		data.Inputs[index] = expectedArtifactInputData{
+	inputs := make([]work.ExpectedArtifactInput, inputCount)
+	for index := range inputs {
+		inputs[index] = work.ExpectedArtifactInput{
 			Name:       fmt.Sprintf("work-%d", index),
 			WorkID:     fmt.Sprintf("work-id-%d", index),
 			WorkTypeID: "work-type",
@@ -528,11 +520,15 @@ func validateExpectedArtifactPattern(pattern string, inputCount int) error {
 			Payload:    "payload",
 		}
 	}
-	var rendered bytes.Buffer
-	if err := parsed.Execute(&rendered, data); err != nil {
+	rendered, err := work.RenderExpectedArtifactPattern(
+		pattern,
+		inputs,
+		work.ExpectedArtifactTemplateContext{Project: "project", SessionID: "session"},
+	)
+	if err != nil {
 		return fmt.Errorf("template cannot be rendered for the dispatch inputs: %w", err)
 	}
-	return validateExpectedArtifactPathSafety(rendered.String())
+	return validateExpectedArtifactPathSafety(rendered)
 }
 
 func validateExpectedArtifactPathSafety(value string) error {
@@ -560,28 +556,6 @@ func validateExpectedArtifactPathSafety(value string) error {
 
 func isASCIIAlpha(value byte) bool {
 	return (value >= 'a' && value <= 'z') || (value >= 'A' && value <= 'Z')
-}
-
-type expectedArtifactTemplateData struct {
-	Inputs  []expectedArtifactInputData
-	Context expectedArtifactContextData
-}
-
-type expectedArtifactInputData struct {
-	Name       string
-	WorkID     string
-	WorkTypeID string
-	DataType   string
-	TraceID    string
-	ParentID   string
-	Project    string
-	Tags       map[string]string
-	Payload    string
-}
-
-type expectedArtifactContextData struct {
-	Project   string
-	SessionID string
 }
 
 // StateConfig declares a state within a work type.
