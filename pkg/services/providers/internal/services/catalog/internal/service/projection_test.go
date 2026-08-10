@@ -67,6 +67,16 @@ func TestProjectAvailabilityPostures(t *testing.T) {
 			wantAvail:     providers.AvailabilitySupportedButUnavailable,
 			wantReadiness: providers.ReadinessUnavailable,
 		},
+		{
+			name: "unknown publication values",
+			manifest: publishedProviderManifest{
+				ID:                         "unknown-publication",
+				TechnicalSupportLevel:      "unknown",
+				ImplementationAvailability: "unknown",
+			},
+			wantAvail:     providers.AvailabilitySupportedButUnavailable,
+			wantReadiness: providers.ReadinessUnavailable,
+		},
 	}
 
 	for _, testCase := range cases {
@@ -228,4 +238,111 @@ func TestProjectStructuredPrerequisitesReplaceLegacyExecutableDuplicate(t *testi
 			t.Fatal("legacy AGY executable prerequisite duplicated the structured executable fact")
 		}
 	}
+}
+
+type invalidProjectionCase struct {
+	name     string
+	manifest publishedProviderManifest
+}
+
+func TestProjectManifestRejectsInvalidCapabilityFacts(t *testing.T) {
+	t.Parallel()
+	for _, testCase := range invalidProjectionCases() {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			if _, err := projectManifests([]publishedProviderManifest{testCase.manifest}); err == nil {
+				t.Fatal("projectManifests() error = nil, want invalid capability error")
+			}
+		})
+	}
+}
+
+func invalidProjectionCases() []invalidProjectionCase {
+	return append(
+		invalidProviderModelCases(),
+		append(invalidModalityCases(), append(invalidToolCases(), invalidLimitCases()...)...)...,
+	)
+}
+
+func invalidProviderModelCases() []invalidProjectionCase {
+	return []invalidProjectionCase{
+		{name: "empty provider id", manifest: publishedProviderManifest{}},
+		{name: "model id required", manifest: withModels([]publishedModel{{}})},
+		{name: "duplicate model id", manifest: withModels([]publishedModel{projectionModel(), projectionModel()})},
+		{name: "unknown effort", manifest: withModels([]publishedModel{{ID: "gpt-5.6", Efforts: []string{"unknown"}}})},
+		{name: "duplicate effort", manifest: withModels([]publishedModel{{ID: "gpt-5.6", Efforts: []string{"low", "low"}}})},
+	}
+}
+
+func invalidModalityCases() []invalidProjectionCase {
+	return []invalidProjectionCase{
+		{name: "unknown modality direction", manifest: withModality("direction", "sideways")},
+		{name: "unknown modality kind", manifest: withModality("kind", "document")},
+		{name: "unknown modality support", manifest: withModality("support", "maybe")},
+		{name: "unknown modality transport", manifest: withModality("transport", "socket")},
+		{name: "inconsistent modality", manifest: withModality("support", "unsupported")},
+		{name: "duplicate modality", manifest: withModels([]publishedModel{{ID: "gpt-5.6", Modalities: []publishedModality{projectionModality(), projectionModality()}}})},
+	}
+}
+
+func invalidToolCases() []invalidProjectionCase {
+	return []invalidProjectionCase{
+		{name: "incomplete tool", manifest: withTools([]publishedTool{{Name: "shell"}})},
+		{name: "unknown tool support", manifest: withTools([]publishedTool{{Name: "shell", Support: "maybe", Description: "Run shell."}})},
+		{name: "duplicate tool", manifest: withTools([]publishedTool{{Name: "shell", Support: "supported", Description: "Run shell."}, {Name: "shell", Support: "supported", Description: "Run shell again."}})},
+	}
+}
+
+func invalidLimitCases() []invalidProjectionCase {
+	return []invalidProjectionCase{
+		{name: "invalid maximum limit", manifest: withLimits([]publishedKnownLimit{{Name: "limit", Kind: "maximum", Unit: "items", Description: "Maximum items."}})},
+		{name: "invalid default limit", manifest: withLimits([]publishedKnownLimit{{Name: "limit", Kind: "default", Unit: "seconds", Description: "Default seconds."}})},
+		{name: "invalid behavior limit", manifest: withLimits([]publishedKnownLimit{{Name: "limit", Kind: "behavior", Unit: "flag", Description: "Behavior flag."}})},
+		{name: "unknown limit kind", manifest: withLimits([]publishedKnownLimit{{Name: "limit", Kind: "unknown", Unit: "items", Description: "Unknown limit."}})},
+	}
+}
+
+func validProjectionManifest() publishedProviderManifest {
+	return publishedProviderManifest{ID: "codex", TechnicalSupportLevel: "production", ImplementationAvailability: "bundled"}
+}
+
+func projectionModel() publishedModel {
+	return publishedModel{ID: "gpt-5.6"}
+}
+
+func projectionModality() publishedModality {
+	return publishedModality{Direction: "input", Kind: "text", Support: "supported", Transport: "inline"}
+}
+
+func withModels(models []publishedModel) publishedProviderManifest {
+	manifest := validProjectionManifest()
+	manifest.Models = models
+	return manifest
+}
+
+func withModality(field, value string) publishedProviderManifest {
+	item := projectionModality()
+	switch field {
+	case "direction":
+		item.Direction = value
+	case "kind":
+		item.Kind = value
+	case "support":
+		item.Support = value
+	case "transport":
+		item.Transport = value
+	}
+	return withModels([]publishedModel{{ID: "gpt-5.6", Modalities: []publishedModality{item}}})
+}
+
+func withTools(tools []publishedTool) publishedProviderManifest {
+	manifest := validProjectionManifest()
+	manifest.Tools = tools
+	return manifest
+}
+
+func withLimits(limits []publishedKnownLimit) publishedProviderManifest {
+	manifest := validProjectionManifest()
+	manifest.KnownLimits = limits
+	return manifest
 }

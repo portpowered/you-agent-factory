@@ -1,7 +1,6 @@
 package discovery_test
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"os"
@@ -11,8 +10,8 @@ import (
 	"testing"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
 
@@ -24,17 +23,10 @@ func TestProvidersListThroughRootBuildProcess(t *testing.T) {
 	t.Parallel()
 
 	runner := &countingCommandRunner{}
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+	process := support.BuildProcess(t, serviceedges.Edges{
 		ProviderCommandRunner: runner,
 	})
-	if err != nil {
-		t.Fatalf("root.BuildProcess() error = %v", err)
-	}
-	t.Cleanup(func() {
-		if err := process.Close(context.Background()); err != nil {
-			t.Errorf("close process: %v", err)
-		}
-	})
+	support.CleanupProcess(t, process)
 
 	humanStdout, humanStderr, err := execute(t, process, []string{"you", "providers", "list"})
 	if err != nil {
@@ -76,23 +68,19 @@ func (runner *countingCommandRunner) Run(context.Context, platformprocess.Comman
 	return platformprocess.CommandResult{}, nil
 }
 
-func execute(t *testing.T, process interface{ Execute(root.Input) error }, args []string) (string, string, error) {
+func execute(t *testing.T, process support.Process, args []string) (string, string, error) {
 	t.Helper()
-	var stdout, stderr bytes.Buffer
+	inputs := support.FakeInputs(t.Context(), args)
 	stdinIsTTY := false
 	stdoutIsTTY := false
-	err := process.Execute(root.Input{
-		Args:             args,
-		Env:              os.Environ(),
-		Stdin:            strings.NewReader(""),
-		Stdout:           &stdout,
-		Stderr:           &stderr,
-		Context:          t.Context(),
-		WorkingDirectory: t.TempDir(),
-		StdinIsTTY:       &stdinIsTTY,
-		StdoutIsTTY:      &stdoutIsTTY,
-	})
-	return stdout.String(), stderr.String(), err
+	inputs.Input.Env = os.Environ()
+	inputs.Input.Stdin = strings.NewReader("")
+	inputs.Input.Context = t.Context()
+	inputs.Input.WorkingDirectory = t.TempDir()
+	inputs.Input.StdinIsTTY = &stdinIsTTY
+	inputs.Input.StdoutIsTTY = &stdoutIsTTY
+	err := process.Execute(inputs.Input)
+	return inputs.Stdout(), inputs.Stderr(), err
 }
 
 func assertHumanFacts(t *testing.T, output string) {
