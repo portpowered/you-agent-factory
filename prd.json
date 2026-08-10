@@ -1,56 +1,57 @@
 {
-  "project": "Split Oversized CLI Root and Run Tests",
-  "branchName": "thr-split-cli-root-run-tests",
-  "description": "Mechanically reorganize the oversized CLI root and run-invocation test files into focused command- or behavior-group files within their existing packages, preserving the exact test inventory, assertions, observable behavior, and package coverage while reducing contention for active CLI delivery lanes.",
+  "project": "Diagnose and Fix Silent Pre-Runtime Blocking After a Hard Kill",
+  "branchName": "pf-stale-scope-diagnostic",
+  "description": "Reproduce the silent pre-runtime block that can follow a hard-killed you process, identify the actual retained serialization resource, and make same-scope successor startup either reclaim a provably orphaned resource or fail promptly with a non-success, actionable diagnostic naming the resource and safe clearing steps.",
   "context": {
-    "customerAsk": "Split pkg/transports/cli/root_run_test.go and pkg/transports/cli/run/run_invocation_test.go into focused files with shared fixtures in package-local helper test files. Work from current origin/main, accept mechanical rework after concurrent CLI lanes merge, and regenerate rather than hand-merge generated CLI contract artifacts if contention reaches them.",
-    "problem": "Two oversized test files concentrate many independent CLI command and behavior groups, forcing active exit-code, remote-placement, grammar, and cutover lanes to contend on the same files and increasing navigation, review, and rework cost.",
-    "solution": "Capture baseline test inventories and coverage for both packages, mechanically move unchanged tests into focused files in their existing packages, relocate only genuinely shared fixtures into package-local helper test files, keep resulting files at or below approximately 1,200 lines, and prove identical discovery, behavior, and coverage after the split."
+    "customerAsk": "Diagnose and fix probe-finding backlog item 3 from docs/temp/progress.md: after a predecessor you process is hard-killed, a fresh session can block silently before runtime start. Reproduce it, add a functional regression test, and either recover automatically or fail fast with an actionable error naming the stale resource and how to clear it, while following docs/temp/scale-program-rules.md.",
+    "problem": "A hard kill bypasses normal lifecycle cleanup, and a later process using the same local backend scope can encounter retained ownership or serialization state before runtime startup and wait without a bounded outcome or useful diagnostic. The suspected backend-scope serialization path has not yet been proven to be the actual source.",
+    "solution": "Use deterministic real-process hard-kill evidence to identify the exact retained resource and owner, then make acquisition explicit and bounded at that owner: atomically reclaim only ownership proven orphaned, otherwise preserve the resource and return a typed non-success startup failure that identifies it and gives safe clearing instructions. Preserve active-owner exclusion and prove both hard-kill recovery/failure and live contention with focused and functional tests."
   },
   "acceptanceCriteria": [
-    "The before/after go test -list '.*' outputs for both affected packages have identical discovered test names, and the PR shows the normalized diffs.",
-    "The focused CLI root and run package tests pass after the split, with no test assertion, input, expected output, or customer-observable CLI behavior changed.",
-    "Before/after package coverage results are recorded in the PR and are unchanged for both affected packages.",
-    "No resulting hand-maintained Go test file in the split is above approximately 1,200 lines, and tests remain grouped by coherent command or behavior responsibility in their existing packages.",
-    "The final branch is rebased onto current origin/main; overlapping semantic test changes from merged lanes are retained and the mechanical moves are redone as needed. Generated CLI contract artifacts are never hand-merged and, if affected by reconciliation, are regenerated through the contracts/cli/commands.json flow.",
-    "Typecheck, focused package tests, and required CI pass; there are no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
-    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts are resolved, and the PR is merged."
+    "A deterministic functional scenario hard-kills a real predecessor after the relevant pre-runtime resource is acquired, then starts a successor against the same backend scope and proves the successor never waits indefinitely.",
+    "The implementation identifies and handles the actual retained resource found by reproduction; it does not encode backend-scope serialization as the cause unless evidence confirms it.",
+    "When ownership is provably orphaned, startup atomically reclaims it and reaches the normal runtime-start observation; if safe reclamation cannot be proven, startup returns a bounded non-success outcome whose stderr names the resource and gives concrete safe clearing instructions.",
+    "A live predecessor retains exclusive ownership: a competing successor neither steals nor removes its resource and instead receives the documented bounded contention outcome.",
+    "Startup acquisition, recovery, contention, and failure emit structured, safe diagnostics with the backend-scope identifier, resource identifier or path, outcome, and owner/liveness classification, without leaking work payloads or credentials.",
+    "Typecheck and focused package/functional tests pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
+    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, conflicts and shared-file churn are reconciled against current main, and the PR is actually merged."
   ],
   "userStories": [
     {
-      "id": "thr-split-cli-root-run-tests-001",
-      "title": "Preserve CLI root test behavior in focused groups",
-      "description": "As a CLI maintainer, I want root command tests organized into focused behavior groups so that I can change or review one command area without navigating or contending on a single oversized test file.",
+      "id": "pf-stale-scope-diagnostic-001",
+      "title": "Give a successor a bounded outcome after predecessor hard kill",
+      "description": "As an operator restarting you after a crash or hard kill, I want the successor to recover safely or stop with an actionable diagnostic so that startup can never hang silently before runtime begins.",
       "acceptanceCriteria": [
-        "Every test discovered from pkg/transports/cli/root_run_test.go on the implementation baseline remains discoverable under the same test name in the pkg/transports/cli package after the split.",
-        "A normalized before/after diff of go test -list '.*' for ./pkg/transports/cli is empty and is included in the PR evidence.",
-        "Existing root-test assertions, inputs, expected outputs, fixture semantics, and CLI outcomes are unchanged; the diff is limited to mechanical moves and necessary package-local fixture relocation.",
-        "Root tests are grouped into focused command- or behavior-owned test files, genuinely shared fixtures live in focused package-local helper test files, and no resulting split test file is above approximately 1,200 lines.",
-        "Before/after coverage for ./pkg/transports/cli is recorded in the PR and unchanged.",
-        "Tests pass",
-        "Typecheck passes"
+        "A functional regression test uses a real OS process because hard-kill cleanup behavior cannot be proven through root.BuildProcess alone: it observes deterministic acquisition of the actual pre-runtime resource, hard-kills the predecessor, and launches a successor with the same home/config and Factory target.",
+        "The test uses an explicit acquisition/startup observation rather than a sleep, runs offline with deterministic injected or recorded external effects, and has a bounded test guard that reports captured stdout/stderr and process state on failure.",
+        "Reproduction evidence identifies the concrete serialization resource and its owning service; the fix remains in that owner, keeps ownership state explicit, and isolates filesystem/process/liveness side effects behind existing injected edges or a narrowly owned platform capability.",
+        "If predecessor ownership is provably orphaned, the successor atomically reclaims the resource and reaches the existing runtime-start observation without requiring manual cleanup.",
+        "If orphan status or safe reclamation cannot be established, the successor exits within the startup acquisition bound with a non-success result; stderr identifies the blocking resource or path and explains the exact safe steps to verify the old owner is stopped and clear that resource before retrying.",
+        "The normal no-residue startup path remains behaviorally unchanged, and no public API or generated-contract change is introduced unless the diagnostic cannot be represented by the existing typed startup failure path.",
+        "Focused owner-level tests and the hard-kill functional regression test pass.",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 1,
-      "passes": true,
-      "notes": "2026-08-10: mechanically split pkg/transports/cli/root_run_test.go into focused completion, selection, composition, input, flags, run-config, and operator-default test files plus root_run_test_helpers_test.go. The normalized ./pkg/transports/cli go test -list '.*' inventory stayed at 273 names with an empty diff; before/after coverage stayed at 67.6%. Focused package tests, go vet, backend-size, pkg-maint, and pkg-file-count pass; the largest new split file is 548 lines."
+      "passes": false,
+      "notes": "Diagnostic iteration 2026-08-10: the real built-process hard-kill regression passes with a bounded successor and same persisted backend scope, but no retained serialization resource was found in the isolated HOME. The backend-scope path is identity persistence, not a proven ownership lock; keep this story incomplete until the actual retained resource and owner are identified."
     },
     {
-      "id": "thr-split-cli-root-run-tests-002",
-      "title": "Preserve run-invocation test behavior in focused groups",
-      "description": "As a CLI maintainer, I want run-invocation tests organized into focused behavior groups so that placement, grammar, exit-code, and cutover work can evolve with less shared-file contention.",
+      "id": "pf-stale-scope-diagnostic-002",
+      "title": "Preserve live ownership and actionable contention diagnostics",
+      "description": "As an operator with a you process that is still running, I want a competing process to respect its ownership and explain the contention promptly so that stale recovery cannot create two runtimes for one scope or destroy a live resource.",
       "acceptanceCriteria": [
-        "Every test discovered from pkg/transports/cli/run/run_invocation_test.go on the implementation baseline remains discoverable under the same test name in the pkg/transports/cli/run package after the split.",
-        "A normalized before/after diff of go test -list '.*' for ./pkg/transports/cli/run is empty and is included in the PR evidence.",
-        "Existing run-invocation assertions, inputs, expected outputs, fixture semantics, and CLI outcomes are unchanged; the diff is limited to mechanical moves and necessary package-local fixture relocation.",
-        "Run-invocation tests are grouped into focused command- or behavior-owned test files, genuinely shared fixtures live in focused package-local helper test files, and no resulting split test file is above approximately 1,200 lines.",
-        "Before/after coverage for ./pkg/transports/cli/run is recorded in the PR and unchanged.",
-        "Tests pass",
-        "Typecheck passes"
+        "With the predecessor demonstrably live and holding the same resource, a successor does not delete, replace, or take ownership of that resource and does not reach runtime start.",
+        "The competing successor reaches a bounded non-success outcome whose stderr names the contended resource, identifies available owner evidence such as PID without assuming PID reuse proves identity, and explains how to stop or verify the owner before retrying.",
+        "Owner-liveness checks treat missing, malformed, reused, permission-denied, and racing ownership metadata conservatively; only a provably orphaned resource is reclaimed, and compare-and-reclaim behavior cannot remove ownership newly acquired by another process.",
+        "Structured operation diagnostics distinguish acquired, reclaimed-orphan, active-contention, indeterminate-contention, and failed outcomes using safe identifiers, while runtime-start output is emitted only after ownership succeeds.",
+        "Focused concurrent-owner tests deterministically cover the live-owner, indeterminate-owner, and acquisition-race paths without sleeps, deadlock, or leaked child processes/resources.",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 2,
-      "passes": true,
-      "notes": "2026-08-10: mechanically split pkg/transports/cli/run/run_invocation_test.go into lifecycle, input, output, CLI/API parity, no-server integration, and shared-helper test files. Isolated before/after go test ./pkg/transports/cli/run -count=1 -run '^$' -list '.*' inventories both contained 146 names with identical SHA-256 8A65F4CD3D63F0384D960E239E4EC434A2AD1F74E92ED8CBC8389B6C33C84E15 and an empty normalized diff; full before/after coverage stayed at 72.1%. Full focused tests, go vet, backend-size, pkg-maint, pkg-file-count, and pkg-structure pass; the largest split file is 513 lines."
+      "passes": false,
+      "notes": ""
     }
   ]
 }
-
