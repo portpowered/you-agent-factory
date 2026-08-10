@@ -257,7 +257,7 @@ func expectedArtifactTemplateContext(
 	if len(templateContexts) > 0 {
 		context = templateContexts[0]
 	}
-	if strings.TrimSpace(context.Project) == "" {
+	if strings.TrimSpace(context.Project) == "" || context.Project == defaultExpectedArtifactProject {
 		for _, input := range inputs {
 			if project := strings.TrimSpace(input.Project); project != "" {
 				context.Project = project

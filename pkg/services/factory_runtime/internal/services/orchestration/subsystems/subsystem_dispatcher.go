@@ -245,7 +245,10 @@ func (d *DispatcherSubsystem) expectedArtifactContext(
 	}
 	project := ""
 	if d.wfCtx != nil {
-		project = d.wfCtx.ProjectID
+		candidate := strings.TrimSpace(d.wfCtx.ProjectID)
+		if candidate != "" && candidate != workers.DefaultProjectID {
+			project = candidate
+		}
 	}
 	if strings.TrimSpace(project) == "" {
 		for _, token := range inputTokens {
@@ -282,12 +285,28 @@ func (d *DispatcherSubsystem) transitionHasExpectedArtifacts(
 		if token.Color.DataType == workers.DataTypeResource {
 			continue
 		}
-		workType, ok := d.state.WorkTypes[token.Color.WorkTypeID]
-		if ok && workType != nil && len(workType.ExpectedArtifacts) > 0 {
-			return true
+		if workType := dispatchWorkType(d.state.WorkTypes, token.Color.WorkTypeID); workType != nil {
+			if len(workType.ExpectedArtifacts) > 0 {
+				return true
+			}
 		}
 	}
 	return false
+}
+
+func dispatchWorkType(
+	workTypes map[string]*state.WorkType,
+	workTypeID string,
+) *state.WorkType {
+	if workType, ok := workTypes[workTypeID]; ok {
+		return workType
+	}
+	for _, workType := range workTypes {
+		if workType != nil && (workType.ID == workTypeID || workType.Name == workTypeID) {
+			return workType
+		}
+	}
+	return nil
 }
 
 func (d *DispatcherSubsystem) logDispatch(decision interfaces.FiringDecision, inputTokens []factorytoken.Token, dispatch work.WorkDispatch) {
