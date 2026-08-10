@@ -548,13 +548,13 @@ func expectedArtifactDispatch(name, inputName string) work.WorkDispatch {
 		TransitionID:    "transition-artifact",
 		WorkerType:      "worker-a",
 		WorkstationName: "standard",
-		InputTokens: InputTokens(factoryruntime.RuntimeToken{
+		InputTokens: InputTokens(workerexecution.Token{
 			ID: "token-artifact",
-			Color: factoryruntime.RuntimeTokenColor{
+			Color: workerexecution.Color{
 				Name:       inputName,
 				WorkID:     "work-artifact",
 				WorkTypeID: "task",
-				DataType:   factoryruntime.RuntimeTokenDataTypeWork,
+				DataType:   workerexecution.DataTypeWork,
 			},
 		}),
 	}

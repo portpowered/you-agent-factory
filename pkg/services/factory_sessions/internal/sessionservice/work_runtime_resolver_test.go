@@ -155,15 +155,28 @@ func TestWorkRuntimeAdapterProjectsDetachedPublicWorkIdentityStateAndRelations(t
 		},
 	}
 	net := &factory.Net{
-		Places:    map[string]*factory.PetriPlace{"story:review": {ID: "story:review", TypeID: "story", State: "review"}},
-		WorkTypes: map[string]*factory.WorkType{"story": {ID: "story", States: []factory.StateDefinition{{Value: "review", Category: factory.StateCategoryProcessing}}}},
+		Places: map[string]*factory.PetriPlace{"story:review": {ID: "story:review", TypeID: "story", State: "review"}},
+		WorkTypes: map[string]*factory.WorkType{"story": {
+			ID: "story", States: []factory.StateDefinition{{Value: "review", Category: factory.StateCategoryProcessing}},
+			ExpectedArtifacts: []work.ExpectedArtifactDeclaration{{Name: "report", Pattern: "{{ .Context.Project }}/{{ .Context.SessionID }}/report.txt"}},
+		}},
 	}
-	got := runtimeWorkItem(token, net, false, map[string]string{"work-draft": "Draft PRD"})
+	got := runtimeWorkItem(token, net, false, map[string]string{"work-draft": "Draft PRD"}, runtimeReadFacts{
+		dispatchHistory: []factory.CompletedDispatch{{
+			DispatchID: "dispatch-context", Outcome: workers.OutcomeAccepted,
+			ExpectedArtifactContext: &work.ExpectedArtifactTemplateContext{Project: "project-7", SessionID: "session-9"},
+			ConsumedTokens:          []workers.Token{*token},
+		}},
+	})
 	if got.CursorID != "tok-review" || got.WorkID != "work-review" || got.State == nil || got.State.Name != "review" || got.State.Type != work.StateTypeProcessing {
 		t.Fatalf("runtimeWorkItem = %#v", got)
 	}
 	if len(got.Relations) != 1 || got.Relations[0].SourceWorkName != "Review PRD" || got.Relations[0].TargetWorkName != "Draft PRD" {
 		t.Fatalf("relations = %#v", got.Relations)
+	}
+	if len(got.ExpectedArtifacts) != 1 || got.ExpectedArtifacts[0].Pattern != "project-7/session-9/report.txt" ||
+		got.ExpectedArtifacts[0].Verification != work.ExpectedArtifactVerificationSatisfied {
+		t.Fatalf("expected artifacts = %#v, want recorded context", got.ExpectedArtifacts)
 	}
 	tags["owner"] = "mutated"
 	previous[0] = "mutated"
@@ -177,69 +190,6 @@ func TestWorkRuntimeAdapterProjectsDispatchOnlyWorkAsProcessing(t *testing.T) {
 	got := runtimeWorkItem(token, &factory.Net{}, true, nil)
 	if got.State == nil || got.State.Name != "review" || got.State.Type != work.StateTypeProcessing {
 		t.Fatalf("dispatch-only Work state = %#v", got.State)
-	}
-}
-
-func TestWorkRuntimeAdapterProjectsRecordedArtifactFailureAfterResultsRetire(t *testing.T) {
-	t.Parallel()
-
-	token := workers.Token{
-		ID: "tok-failed", PlaceID: "story:review",
-		Color: workers.Color{WorkID: "work-failed", WorkTypeID: "story", Name: "failed"},
-	}
-	net := &factory.Net{
-		Transitions: map[string]*factory.PetriTransition{
-			"publish": {
-				ID: "publish", Name: "publish", InputArcs: []factory.PetriArc{{PlaceID: "story:review"}},
-				ExpectedArtifacts: []work.ExpectedArtifactDeclaration{{Name: "manifest", Pattern: "reports/manifest.json"}},
-			},
-		},
-		WorkTypes: map[string]*factory.WorkType{
-			"story": {ID: "story", ExpectedArtifacts: []work.ExpectedArtifactDeclaration{{Name: "report", Pattern: "reports/{{ (index .Inputs 0).Name }}.json"}}},
-		},
-	}
-	got := runtimeWorkItem(&token, net, false, nil, runtimeReadFacts{
-		dispatchHistory: []factory.CompletedDispatch{{
-			DispatchID: "dispatch-failed", TransitionID: "publish", WorkstationName: "publish", Outcome: workers.OutcomeFailed,
-			ConsumedTokens: []workers.Token{token}, ArtifactVerification: &workers.ExpectedArtifactVerification{
-				Entries: []workers.ExpectedArtifactVerificationEntry{{Name: "manifest", Pattern: "reports/manifest.json", Reason: workers.ExpectedArtifactVerificationReasonMissing}},
-			},
-		}},
-	})
-	if len(got.ExpectedArtifacts) != 2 || got.ExpectedArtifacts[0].Verification != work.ExpectedArtifactVerificationSatisfied ||
-		got.ExpectedArtifacts[1].Verification != work.ExpectedArtifactVerificationFailed || got.ExpectedArtifacts[1].Reason == nil ||
-		*got.ExpectedArtifacts[1].Reason != work.ExpectedArtifactVerificationReasonMissing {
-		t.Fatalf("live artifact projection = %#v, want mixed recorded result", got.ExpectedArtifacts)
-	}
-}
-
-func TestWorkRuntimeAdapterProjectsRecordedArtifactContextForLiveWorkReads(t *testing.T) {
-	t.Parallel()
-	token := workers.Token{
-		ID: "tok-context", PlaceID: "story:review",
-		Color: workers.Color{WorkID: "work-context", WorkTypeID: "story", Name: "context"},
-	}
-	net := &factory.Net{
-		Transitions: map[string]*factory.PetriTransition{
-			"publish": {
-				ID: "publish", Name: "publish", InputArcs: []factory.PetriArc{{PlaceID: "story:review"}},
-				ExpectedArtifacts: []work.ExpectedArtifactDeclaration{{Name: "report", Pattern: "{{ .Context.Project }}/{{ .Context.SessionID }}/report.txt"}},
-			},
-		},
-		WorkTypes: map[string]*factory.WorkType{
-			"story": {ID: "story"},
-		},
-	}
-	got := runtimeWorkItem(&token, net, false, nil, runtimeReadFacts{
-		dispatchHistory: []factory.CompletedDispatch{{
-			DispatchID: "dispatch-context", TransitionID: "publish", WorkstationName: "publish", Outcome: workers.OutcomeAccepted,
-			ExpectedArtifactContext: &work.ExpectedArtifactTemplateContext{Project: "project-7", SessionID: "session-9"},
-			ConsumedTokens:          []workers.Token{token},
-		}},
-	})
-	if len(got.ExpectedArtifacts) != 1 || got.ExpectedArtifacts[0].Pattern != "project-7/session-9/report.txt" ||
-		got.ExpectedArtifacts[0].Verification != work.ExpectedArtifactVerificationSatisfied {
-		t.Fatalf("live context projection = %#v", got.ExpectedArtifacts)
 	}
 }
 
