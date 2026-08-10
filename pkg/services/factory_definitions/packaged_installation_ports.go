@@ -9,4 +9,5 @@ import (
 // applied.
 type PackagedInstallationFileSystem interface {
 	Stat(string) (fs.FileInfo, error)
+	ReadDir(string) ([]fs.DirEntry, error)
 }

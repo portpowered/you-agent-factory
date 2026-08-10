@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"io/fs"
 	"path/filepath"
+	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	authoringlayoutpersist "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/persist"
 	namedfactorypath "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedpaths"
 )
 
@@ -79,6 +81,9 @@ func (service *Service) InstallPackagedFactory(
 	if service == nil || service.persistence == nil {
 		return result, installError(definition.Name, namedFactoriesRoot, fmt.Errorf("Factory Definitions persistence service is required"))
 	}
+	if err := ensureNoPreExistingStaging(service.fileSystem, namedFactoriesRoot, definition.Name); err != nil {
+		return result, installError(definition.Name, namedFactoriesRoot, err)
+	}
 	if _, err := service.fileSystem.Stat(targetDir); err == nil {
 		if err := service.persistence.ValidateFactoryLayout(targetDir); err != nil {
 			return result, installError(definition.Name, namedFactoriesRoot, fmt.Errorf("existing target %s is invalid: %w", targetDir, err))
@@ -123,6 +128,48 @@ func (service *Service) InstallPackagedFactory(
 		rootFileName,
 		result,
 	)
+}
+
+func ensureNoPreExistingStaging(
+	fileSystem factorydefinitions.PackagedInstallationFileSystem,
+	rootDir string,
+	name string,
+) error {
+	stagingPath, err := findPreExistingStaging(fileSystem, rootDir, name)
+	if err != nil {
+		return err
+	}
+	if stagingPath == "" {
+		return nil
+	}
+	return fmt.Errorf(
+		"%w: resource=%s outcome=indeterminate-contention owner_liveness=indeterminate; verify no you process is still installing packaged Factory %q, then remove only %s and retry",
+		factorydefinitions.ErrFactoryInstallationContention,
+		stagingPath,
+		name,
+		stagingPath,
+	)
+}
+
+func findPreExistingStaging(
+	fileSystem factorydefinitions.PackagedInstallationFileSystem,
+	rootDir string,
+	name string,
+) (string, error) {
+	entries, err := fileSystem.ReadDir(rootDir)
+	if errors.Is(err, fs.ErrNotExist) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("inspect packaged Factory staging directory %s: %w", rootDir, err)
+	}
+	prefix := authoringlayoutpersist.StagingDirectoryPrefix(name)
+	for _, entry := range entries {
+		if entry.IsDir() && strings.HasPrefix(entry.Name(), prefix) {
+			return filepath.Join(rootDir, entry.Name()), nil
+		}
+	}
+	return "", nil
 }
 
 func (service *Service) createPackagedFactory(

@@ -17,6 +17,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/inboxgitkeep"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryauthoredlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout"
+	authoringlayoutpersist "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/persist"
 	authoringlayoutprepare "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/prepare"
 	factorypersistence "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/persistence"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig"
@@ -136,6 +137,54 @@ func TestEnsurePackagedFactories_FailsClosedWithoutFileSystem(t *testing.T) {
 	)
 	if err == nil || !strings.Contains(err.Error(), "installation filesystem is required") {
 		t.Fatalf("EnsurePackagedFactories() error = %v", err)
+	}
+}
+
+func TestInstallPackagedFactory_PreExistingStagingReturnsBoundedContention(t *testing.T) {
+	root := t.TempDir()
+	name := "@test/contended"
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatalf("create Factory root: %v", err)
+	}
+	stagingPath := filepath.Join(root, authoringlayoutpersist.StagingDirectoryPrefix(name)+"owner")
+	if err := os.Mkdir(stagingPath, 0o755); err != nil {
+		t.Fatalf("create retained staging resource: %v", err)
+	}
+
+	_, err := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}).InstallPackagedFactory(
+		t.Context(),
+		factorydefinitions.PackagedFactoryInstallParams{
+			NamedFactoriesRoot: root,
+			Definition: factorydefinitions.PackagedDefinition{
+				Name: name,
+				JSON: []byte(`{}`),
+			},
+			Format: factorydefinitions.PackagedFactoryFormatJSON,
+		},
+	)
+	if err == nil {
+		t.Fatal("InstallPackagedFactory() error = nil, want bounded contention")
+	}
+	if !errors.Is(err, factorydefinitions.ErrFactoryInstallationContention) {
+		t.Fatalf("InstallPackagedFactory() error = %v, want ErrFactoryInstallationContention", err)
+	}
+	for _, want := range []string{
+		stagingPath,
+		"outcome=indeterminate-contention",
+		"owner_liveness=indeterminate",
+		"verify no you process is still installing",
+		"remove only " + stagingPath,
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("InstallPackagedFactory() error = %q, want %q", err, want)
+		}
+	}
+	if _, statErr := os.Stat(stagingPath); statErr != nil {
+		t.Fatalf("retained staging resource was removed: %v", statErr)
+	}
+	targetPath := filepath.Join(root, "@test", "contended")
+	if _, statErr := os.Stat(targetPath); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("target path stat error = %v, want target absent", statErr)
 	}
 }
 

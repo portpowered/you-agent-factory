@@ -1,8 +1,10 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cobracompletion"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
@@ -28,7 +30,15 @@ func newRootCommandWithFactory(options CommandFactory) *cobra.Command {
 				return err
 			}
 			if err := options.initializer.InitializeSystem(cmd.Context(), homeDir); err != nil {
-				return fmt.Errorf("initialize system: %w", err)
+				wrapped := fmt.Errorf("initialize system: %w", err)
+				if errors.Is(err, factorydefinitions.ErrFactoryInstallationContention) {
+					diagnostic := wrapped
+					if cause := errors.Unwrap(err); cause != nil {
+						diagnostic = fmt.Errorf("%s: %v", wrapped, cause)
+					}
+					_, _ = fmt.Fprintln(cmd.ErrOrStderr(), diagnostic)
+				}
+				return wrapped
 			}
 		}
 		if previous != nil {
@@ -88,20 +98,20 @@ func productionFactoryConfigInitCommands(
 ) factoryConfigInitProductionCommands {
 	handler := commandregistry.NewFactoryConfigInitCommandHandler(
 		commandregistry.FactoryConfigInitServices{
-			QueryFactory:          options.QueryFactory,
-			ListFactories:         options.ListFactories,
-			CreateFactoryFromFile: options.CreateFactoryFromFile,
-			UpdateFactoryFromFile: options.UpdateFactoryFromFile,
-			DeleteFactory:         options.DeleteFactory,
-			ReplaceFactoryCurrent: options.ReplaceFactoryCurrent,
-			ValidateFactory:       options.ValidateFactory,
-			FlattenFactoryConfig:  options.FlattenFactoryConfig,
-			ExpandFactoryConfig:   options.ExpandFactoryConfig,
-			ConfigureInit:         options.ConfigureInit,
+			QueryFactory:           options.QueryFactory,
+			ListFactories:          options.ListFactories,
+			CreateFactoryFromFile:  options.CreateFactoryFromFile,
+			UpdateFactoryFromFile:  options.UpdateFactoryFromFile,
+			DeleteFactory:          options.DeleteFactory,
+			ReplaceFactoryCurrent:  options.ReplaceFactoryCurrent,
+			ValidateFactory:        options.ValidateFactory,
+			FlattenFactoryConfig:   options.FlattenFactoryConfig,
+			ExpandFactoryConfig:    options.ExpandFactoryConfig,
+			ConfigureInit:          options.ConfigureInit,
 			InstallPackagedFactory: options.InstallPackagedFactory,
-			HomeDir:               options.homeDir,
-			ResolveFactoryRoots:   options.resolveNamedFactoryRoots,
-			DiagnosticsWriter:     diagnostics.writer,
+			HomeDir:                options.homeDir,
+			ResolveFactoryRoots:    options.resolveNamedFactoryRoots,
+			DiagnosticsWriter:      diagnostics.writer,
 		},
 	)
 	components, err := climanifestcobra.NewFactoryConfigInitFamilyComponents(handler)

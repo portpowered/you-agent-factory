@@ -25,13 +25,14 @@ const (
 	hardKillProcessExitTimeout        = 5 * time.Second
 )
 
-// TestCLISuccessorAfterHardKillReachesRuntime proves the actual process
-// boundary around startup. It observes the first durable startup checkpoint,
-// force-kills the predecessor at that boundary, and starts a successor with the
-// same isolated HOME, factory, and persisted backend scope. The test
-// deliberately inventories the isolated home rather than assuming that backend
+// TestCLISuccessorAfterHardKillReportsPreRuntimeStagingContention proves the
+// actual process boundary around startup. It observes the first durable
+// startup checkpoint and packaged-factory staging acquisition, force-kills the
+// predecessor at that boundary, and starts a successor with the same isolated
+// HOME, factory, and persisted backend scope. The test deliberately observes
+// the packaged-factory staging resource rather than assuming that backend
 // scope identity is a lock.
-func TestCLISuccessorAfterHardKillReachesRuntime(t *testing.T) {
+func TestCLISuccessorAfterHardKillReportsPreRuntimeStagingContention(t *testing.T) {
 	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
 	session := harness.NewSession(t).WithNoExternalServer(t)
 	writeIdleCurrentFactory(t, session.WorkDir)
@@ -47,19 +48,17 @@ func TestCLISuccessorAfterHardKillReachesRuntime(t *testing.T) {
 	// operator-settings path. Observe it before waiting for the runtime
 	// listener, while keeping its identity separate from any ownership claim.
 	predecessorScope := waitForPersistedBackendScopeID(t, session)
-	select {
-	case startupURL := <-predecessor.ready:
-		t.Logf("predecessor reached listener readiness before hard kill: %s", startupURL)
-	default:
-		t.Log("predecessor was hard-killed at the durable checkpoint before listener readiness")
-	}
-
 	if !operatorsettings.IsLocalBackendScopeID(predecessorScope) {
 		t.Fatalf("predecessor persisted backendScopeID = %q, want local scope", predecessorScope)
 	}
-
+	stagingPath, releasePredecessor := waitForPreRuntimeStagingPath(t, session, predecessor.command.Process.Pid)
+	t.Cleanup(releasePredecessor)
 	if err := predecessor.stop(); err != nil {
 		t.Fatalf("hard-kill predecessor: %v; stdout=%q stderr=%q process=%s", err, predecessor.stdoutText(), predecessor.stderrText(), predecessor.processState())
+	}
+	t.Logf("predecessor acquired pre-runtime packaged-factory staging resource and was hard-killed: %s", stagingPath)
+	if _, err := os.Stat(stagingPath); err != nil {
+		t.Fatalf("hard-killed predecessor did not retain staged resource %s: %v", stagingPath, err)
 	}
 	retainedFiles := listRegularFiles(t, session.HomeDir)
 	ownershipCandidates := make([]string, 0)
@@ -78,15 +77,29 @@ func TestCLISuccessorAfterHardKillReachesRuntime(t *testing.T) {
 
 	successor := startHardKillCLIProcess(t, binaryPath, session, args...)
 	t.Cleanup(func() { _ = successor.stop() })
-	successorURL := successor.waitForDashboardURL(t, "successor")
-	if successorURL != session.ServerURL+"/dashboard/ui" {
-		t.Fatalf("successor readiness URL = %q, want %q", successorURL, session.ServerURL+"/dashboard/ui")
+	successorErr := successor.waitForBoundedFailure(t, "successor")
+	if successorErr == nil {
+		t.Fatal("successor returned success after retained pre-runtime staging contention")
+	}
+	if stdout := successor.stdoutText(); strings.Contains(stdout, "Dashboard URL:") {
+		t.Fatalf("successor reached runtime despite retained staging contention: stdout=%q stderr=%q", stdout, successor.stderrText())
+	}
+	for _, want := range []string{
+		stagingPath,
+		"outcome=indeterminate-contention",
+		"owner_liveness=indeterminate",
+		"verify no you process is still installing",
+		"remove only " + stagingPath,
+	} {
+		if !strings.Contains(successor.stderrText(), want) {
+			t.Fatalf("successor stderr = %q, want %q; process=%s", successor.stderrText(), want, successor.processState())
+		}
 	}
 	if got := readPersistedBackendScopeID(t, session); got != predecessorScope {
 		t.Fatalf("successor changed persisted backendScopeID to %q, want predecessor scope %q", got, predecessorScope)
 	}
-	if err := successor.stop(); err != nil {
-		t.Fatalf("stop successor: %v; stdout=%q stderr=%q process=%s", err, successor.stdoutText(), successor.stderrText(), successor.processState())
+	if _, err := os.Stat(stagingPath); err != nil {
+		t.Fatalf("successor removed retained staging resource %s: %v", stagingPath, err)
 	}
 }
 
@@ -105,7 +118,6 @@ func hardKillSuccessorArgs(session *builtcliacceptance.Session) []string {
 
 type hardKillCLIProcess struct {
 	command   *exec.Cmd
-	ready     chan string
 	stdout    processOutput
 	stderr    processOutput
 	stdoutErr chan error
@@ -124,7 +136,6 @@ func startHardKillCLIProcess(t testing.TB, binaryPath string, session *builtclia
 	}
 	process := &hardKillCLIProcess{
 		command:   command,
-		ready:     make(chan string, 1),
 		stdoutErr: make(chan error, 1),
 	}
 	command.Stderr = lockedProcessWriter{output: &process.stderr}
@@ -136,31 +147,42 @@ func startHardKillCLIProcess(t testing.TB, binaryPath string, session *builtclia
 		for scanner.Scan() {
 			line := scanner.Text()
 			process.stdout.append([]byte(line + "\n"))
-			if target, ok := strings.CutPrefix(line, "Dashboard URL: "); ok {
-				select {
-				case process.ready <- target:
-				default:
-				}
-			}
 		}
 		process.stdoutErr <- scanner.Err()
 	}()
 	return process
 }
 
-func (process *hardKillCLIProcess) waitForDashboardURL(t testing.TB, role string) string {
+func (process *hardKillCLIProcess) waitForBoundedFailure(t testing.TB, role string) error {
 	t.Helper()
+	waitResult := make(chan error, 1)
+	go func() { waitResult <- process.command.Wait() }()
 	timer := time.NewTimer(hardKillSuccessorReadinessTimeout)
 	defer timer.Stop()
+	var waitErr error
 	select {
-	case target := <-process.ready:
-		return target
-	case err := <-process.stdoutErr:
-		t.Fatalf("%s exited before dashboard readiness: scanner=%v stdout=%q stderr=%q process=%s", role, err, process.stdoutText(), process.stderrText(), process.processState())
+	case waitErr = <-waitResult:
+		process.waited = true
 	case <-timer.C:
-		t.Fatalf("timed out waiting for %s dashboard readiness: stdout=%q stderr=%q process=%s", role, process.stdoutText(), process.stderrText(), process.processState())
+		if process.command.Process != nil && process.command.ProcessState == nil {
+			_ = process.command.Process.Kill()
+		}
+		waitErr = <-waitResult
+		process.waited = true
+		t.Fatalf("%s did not return a bounded failure: stdout=%q stderr=%q process=%s", role, process.stdoutText(), process.stderrText(), process.processState())
 	}
-	return ""
+	select {
+	case scanErr := <-process.stdoutErr:
+		if scanErr != nil {
+			t.Fatalf("%s stdout scanner failed: %v; stdout=%q stderr=%q process=%s", role, scanErr, process.stdoutText(), process.stderrText(), process.processState())
+		}
+	case <-time.After(hardKillProcessExitTimeout):
+		t.Fatalf("%s stdout scanner did not finish within %s: stdout=%q stderr=%q process=%s", role, hardKillProcessExitTimeout, process.stdoutText(), process.stderrText(), process.processState())
+	}
+	if waitErr == nil {
+		t.Fatalf("%s returned success; stdout=%q stderr=%q process=%s", role, process.stdoutText(), process.stderrText(), process.processState())
+	}
+	return waitErr
 }
 
 func (process *hardKillCLIProcess) stop() error {
@@ -251,6 +273,7 @@ func waitForPersistedBackendScopeID(t testing.TB, session *builtcliacceptance.Se
 	defer deadline.Stop()
 	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
+	var lastReadErr error
 	for {
 		data, err := os.ReadFile(path)
 		if err == nil {
@@ -265,16 +288,67 @@ func waitForPersistedBackendScopeID(t testing.TB, session *builtcliacceptance.Se
 			}
 			t.Fatalf("pre-runtime operator config %s has empty backendScopeID; data=%q", path, data)
 		}
-		if !errors.Is(err, os.ErrNotExist) {
-			t.Fatalf("observe pre-runtime operator config %s: %v", path, err)
-		}
+		lastReadErr = err
 
 		select {
 		case <-ticker.C:
 		case <-deadline.C:
-			t.Fatalf("timed out observing pre-runtime operator config %s", path)
+			t.Fatalf("timed out observing pre-runtime operator config %s; last read error: %v", path, lastReadErr)
 		}
 	}
+}
+
+func waitForPreRuntimeStagingPath(t testing.TB, session *builtcliacceptance.Session, predecessorPID int) (string, func()) {
+	t.Helper()
+	root := filepath.Join(session.HomeDir, ".you-agent-factory", "factories")
+	deadline := time.NewTimer(hardKillSuccessorReadinessTimeout)
+	defer deadline.Stop()
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		path, err := findPreRuntimeStagingPath(root)
+		if err != nil {
+			t.Fatalf("observe pre-runtime packaged-factory staging under %s: %v", root, err)
+		}
+		if path != "" {
+			release, err := suspendHardKillProcess(predecessorPID)
+			if err != nil {
+				t.Fatalf("suspend predecessor at pre-runtime staging acquisition: %v", err)
+			}
+			return path, release
+		}
+		select {
+		case <-ticker.C:
+		case <-deadline.C:
+			t.Fatalf("timed out observing pre-runtime packaged-factory staging under %s", root)
+		}
+	}
+}
+
+func findPreRuntimeStagingPath(root string) (string, error) {
+	var found string
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if path == root || !entry.IsDir() {
+			return nil
+		}
+		if strings.HasPrefix(entry.Name(), ".") && strings.Contains(entry.Name(), ".staging-") {
+			if _, statErr := os.Stat(path); errors.Is(statErr, os.ErrNotExist) {
+				return nil
+			} else if statErr != nil {
+				return statErr
+			}
+			found = path
+			return filepath.SkipDir
+		}
+		return nil
+	})
+	if errors.Is(err, os.ErrNotExist) {
+		return "", nil
+	}
+	return found, err
 }
 
 func listRegularFiles(t testing.TB, root string) []string {

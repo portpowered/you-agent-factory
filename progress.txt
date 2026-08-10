@@ -1,6 +1,8 @@
 ## Codebase Patterns
 - Git Worktree preparation treats a retained Git `*.lock` as indeterminate ownership: retry within a named bound, preserve the resource, and return its exact path with verify/remove/retry guidance.
 - Git's `.git/config.lock` has no trustworthy owner or PID evidence; after a bounded retry, report the exact lock with `owner_liveness=indeterminate` and require verification before removing only that file—never auto-delete it.
+- Named Factory persistence stages under the catalog root before an atomic directory move; a matching pre-existing `.<factory>.staging-*` must be preserved and surfaced as indeterminate contention with exact verify/remove/retry guidance, and pre-run Cobra failures need an explicit stderr write because the command tree silences them.
+- Cross-process startup observers must treat a readable-path failure such as a transient Windows sharing violation as retryable within the existing bounded observation window, because file existence can precede release of the writer handle.
 - Canonical packaged CLI docs live under `docs/reference/`; adding a topic also requires its authored file in `docs/reference/embed.go` and a registry entry in `pkg/transports/cli/docs/docs.go`.
 - The `you run --named <factory> --help` output is the authoritative invocation contract; omitted role provider/model values resolve through operator defaults.
 - Documentation for model-backed workflows should describe observable result shape and status/artifact evidence rather than byte-stable generated prose.
@@ -871,4 +873,92 @@
   - `git diff --check` — passed.
 - **Learnings for future iterations:**
   - The focused Go owner change is compatible with the existing real-process startup regression and packaged Full Flow lock tests; neither test proves the lock is acquired before application runtime readiness.
+---
+
+## 2026-08-10 06:09 -07:00 - pf-stale-scope-diagnostic-001 pre-runtime staging owner
+- What was implemented
+  - Identified the actual pre-runtime retained resource as the packaged Factory installer’s `.<factory>.staging-*` directory under the global Factory root; it is created by System Initialization before runtime opening and can survive a hard process kill.
+  - Added owner-side detection and a typed `ErrFactoryInstallationContention` outcome. Matching pre-existing staging is classified as `outcome=indeterminate-contention` with `owner_liveness=indeterminate`, preserved without automatic deletion, and reported with exact verify-no-owner/remove-only-that-path/retry guidance.
+  - Made the CLI print this pre-run contention diagnostic to stderr despite Cobra’s intentionally silenced command errors.
+  - Updated the real built-process regression to observe staging acquisition explicitly, hard-kill the predecessor, require bounded non-success from the same-scope successor, and prove the retained resource remains intact.
+  - Marked Story 001 complete in `prd.json`; Story 002 remains for live-owner and acquisition-race behavior.
+- Files changed
+  - `pkg/services/factory_definitions/packaged_installation_ports.go`
+  - `pkg/services/factory_definitions/internal/contracts/application_errors.go`
+  - `pkg/services/factory_definitions/contracts_root.go`
+  - `pkg/services/factory_definitions/internal/services/authoring_layout/persist/persist.go`
+  - `pkg/services/factory_definitions/internal/services/distribution/packagedinstallation/service.go`
+  - `pkg/services/factory_definitions/internal/services/distribution/packagedinstallation/service_test.go`
+  - `pkg/transports/cli/root_factory.go`
+  - `tests/functional/transport/cli/process/hard_kill_successor_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/factory_definitions/internal/services/distribution/packagedinstallation -count=1 -timeout 180s` — passed.
+  - `go test ./pkg/services/factory_definitions/... -run '^$' -count=1 -timeout 180s` — passed compile sweep.
+  - `go vet ./pkg/services/factory_definitions/internal/services/distribution/packagedinstallation ./pkg/transports/cli` — passed.
+  - `go test ./pkg/transports/cli -run 'Test.*System|Test.*Initialization|Test.*Factory' -count=1 -timeout 180s` — passed.
+  - `go test ./tests/functional/transport/cli/process -run '^TestCLISuccessorAfterHardKillReportsPreRuntimeStagingContention$' -count=1 -v -timeout 300s` — passed; successor returned non-success with the exact staging path and did not reach dashboard readiness.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - The persistence stage is created at the named-factory catalog root, not the scoped target’s parent directory; detection must inspect the root and reuse the shared staging-prefix policy.
+  - Cobra’s run/server command silences execution errors, and `PersistentPreRunE` failures are otherwise invisible to a real CLI process; actionable startup contention must explicitly write its safe diagnostic to `cmd.ErrOrStderr()`.
+  - A retained stage has no trustworthy owner identity, so this slice safely fails closed; Story 002 should add live-owner and race coverage before considering any reclamation.
+---
+
+## 2026-08-10 06:15 -07:00 - pf-stale-scope-diagnostic-001 observer-race follow-up
+- What was implemented
+  - Made the real-process observer retry transient read failures while the predecessor is atomically writing the durable operator config, preserving the existing bounded deadline instead of treating a Windows sharing violation as a reproduction failure.
+- Files changed
+  - `tests/functional/transport/cli/process/hard_kill_successor_test.go`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/transport/cli/process -run '^TestCLISuccessorAfterHardKillReportsPreRuntimeStagingContention$' -count=1 -v -timeout 300s` — passed serially; the predecessor acquired the retained staging path and the successor returned the bounded diagnostic.
+- **Learnings for future iterations:**
+  - A durable checkpoint’s path can exist before its writer handle is released on Windows; bounded observers should retry that transient cross-process condition rather than weakening the acquisition boundary.
+---
+
+## 2026-08-10 06:16 -07:00 - pf-stale-scope-diagnostic-001 maintainability follow-up
+- What was implemented
+  - Extracted the pre-existing staging policy check from `Service.InstallPackagedFactory` so the changed operation remains within the repository’s cyclomatic-complexity limit while retaining the same typed contention diagnostic and preservation behavior.
+- Files changed
+  - `pkg/services/factory_definitions/internal/services/distribution/packagedinstallation/service.go`
+  - `progress.txt`
+- Verification
+  - `make pkg-maint` — passed.
+  - `make pkg-file-count` — passed.
+  - `make pkg-structure` — passed.
+- **Learnings for future iterations:**
+  - Keep preflight ownership policy in a focused helper when extending an already complex service operation; the repository maintainability gate enforces a cyclomatic limit of 15.
+---
+
+## 2026-08-10 06:23 -07:00 - pf-stale-scope-diagnostic-001 acquisition-boundary follow-up
+- What was implemented
+  - Hardened the real-process acquisition observer against a directory-enumeration/atomic-rename race by re-stat-ing the candidate stage and freezing the live Windows predecessor immediately after the resource is observed, before the forced kill.
+  - Added the non-Windows no-op companion so the functional test remains portable while retaining the same bounded process choreography.
+- Files changed
+  - `tests/functional/transport/cli/process/hard_kill_successor_test.go`
+  - `tests/functional/transport/cli/process/hard_kill_successor_process_windows_test.go`
+  - `tests/functional/transport/cli/process/hard_kill_successor_process_nonwindows_test.go`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/transport/cli/process -run '^TestCLISuccessorAfterHardKillReportsPreRuntimeStagingContention$' -count=3 -v -timeout 600s` — passed in all three runs; each successor returned the bounded contention diagnostic and preserved the observed staging path.
+- **Learnings for future iterations:**
+  - Filesystem enumeration can return a staging entry that has already been atomically renamed by the time the caller acts; re-stat the candidate and suspend the live Windows process at the observation boundary when a hard-kill test must retain the exact resource.
+---
+
+## 2026-08-10 06:25 -07:00 - pf-stale-scope-diagnostic-001 final verification
+- What was implemented
+  - Removed the superseded dashboard-readiness helper from the hard-kill harness after the regression moved to bounded successor failure assertions.
+- Files changed
+  - `tests/functional/transport/cli/process/hard_kill_successor_test.go`
+  - `progress.txt`
+- Verification
+  - `make pkg-maint` — passed.
+  - `make pkg-file-count` — passed.
+  - `make pkg-structure` — passed.
+  - `go vet ./tests/functional/transport/cli/process` — passed.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - Keep process-harness helpers aligned with the current observable contract; once startup readiness is intentionally forbidden, retain only bounded-failure and output-drain assertions.
 ---

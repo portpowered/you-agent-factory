@@ -33,8 +33,8 @@
         "Tests pass"
       ],
       "priority": 1,
-      "passes": false,
-      "notes": "Diagnostic iteration 2026-08-10: the real built-process regression now hard-kills the predecessor immediately after the first durable config.json backendScopeID checkpoint and before dashboard readiness. The successor reaches runtime within the bound and reuses the scope; the isolated HOME retained only config.json, with no serialization resource, lock, lease, temp, or PID owner marker. The backend-scope path is identity persistence, not a proven ownership lock. The Full Flow task-worktree owner and the Go Factory Worktree owner now report bounded, non-reclaiming `.git/config.lock` contention with an exact path and safe verify/remove/retry guidance; child-process and owner-level tests prove the resource is preserved. Keep this story incomplete until that concrete resource is shown to be acquired at the actual application pre-runtime startup boundary."
+      "passes": true,
+      "notes": "Completed 2026-08-10: the real built-process regression observes the first durable config.json backendScopeID checkpoint and then the actual pre-runtime packaged-factory `.<factory>.staging-*` acquisition, hard-kills the predecessor, and starts a same-HOME/same-scope successor. The owning System Initialization packaged-factory installer now detects a pre-existing stage at the global Factory root, classifies it as `outcome=indeterminate-contention` with `owner_liveness=indeterminate`, preserves it, and returns a typed bounded startup failure. The CLI writes the exact resource path plus verify-no-owner/remove-only-that-path/retry guidance to stderr; the successor never reaches runtime. Focused owner tests and the real process test prove the resource is preserved. Backend-scope identity remains identity persistence, not an ownership lock. Story 002 remains open for live-owner and acquisition-race coverage."
     },
     {
       "id": "pf-stale-scope-diagnostic-002",
