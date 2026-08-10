@@ -2,8 +2,8 @@ package ownershipinventory
 
 import "slices"
 
-// ProductOwners is the closed destination vocabulary. Chat Sessions and Events
-// were confirmed as distinct L1 ACP Core owners in
+// ProductOwners is the closed destination vocabulary. Chat Sessions, Events,
+// and Worker Sessions are confirmed as distinct L1 ACP Core owners in
 // docs/internal/projects/acp-program/README.md (D2, cross-lane contracts); this
 // reconciles the committed tree with that already-settled decision rather than
 // reopening owner discovery.
@@ -23,6 +23,7 @@ var ProductOwners = []string{
 	"system_initialization",
 	"chat_sessions",
 	"events",
+	"worker_sessions",
 }
 
 // ApprovedFamilies are retain destinations that are not product services.
@@ -48,6 +49,7 @@ var AdditionalCurrentRoots = []string{
 	"pkg/platform",
 	"pkg/transports",
 	"pkg/services/providers",
+	"pkg/services/worker_sessions",
 	"pkg/services/operator_settings",
 	"pkg/services/system_initialization",
 	"pkg/services/factory_visualization",
@@ -55,7 +57,8 @@ var AdditionalCurrentRoots = []string{
 }
 
 // StructuresSeedServices are the structures.md TARGET seed services mapped onto
-// the committed 13-owner tree without reopening discovery.
+// the committed owner tree without reopening discovery. ACP Core owners that
+// are not structures.md seeds are listed in AdditionalCurrentRoots.
 var StructuresSeedServices = []SeedService{
 	{Name: "Factory Definition", Source: "docs/architecture/structures.md", Destination: "factory_definitions"},
 	{Name: "Factory Session", Source: "docs/architecture/structures.md", Destination: "factory_sessions"},

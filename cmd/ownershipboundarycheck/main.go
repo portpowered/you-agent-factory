@@ -60,11 +60,12 @@ var deletionGates = map[string]string{
 // performs the effect. Platform may implement those ports but may not depend on
 // a composed service, service root, or implementation package.
 //
-// Providers Execution leaf ownership is durable; Workers inferencecontract
-// remains migration debt until later Providers packets land.
+// Providers Execution owns the durable provider effect contract. The second
+// entry is a current Providers-owned implementation compatibility path, not a
+// Workers ownership exception.
 var approvedPlatformLeafPorts = map[string]struct{}{
-	modulePath + "/pkg/services/providers/execution/inferencecontract": {},
-	modulePath + "/pkg/services/providers/internal/services/execution/internal/provider/inferencecontract":    {},
+	modulePath + "/pkg/services/providers/execution/inferencecontract":                                     {},
+	modulePath + "/pkg/services/providers/internal/services/execution/internal/provider/inferencecontract": {},
 }
 
 // approvedPlatformAdapterPorts records narrow source-to-owner exceptions for a
@@ -639,4 +640,3 @@ func writeFinding(writer io.Writer, label string, item finding) {
 		remediation,
 	)
 }
-

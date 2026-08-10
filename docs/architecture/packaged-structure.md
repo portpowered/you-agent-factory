@@ -33,7 +33,7 @@ Their responsibilities are:
 | `pkg/wire` | Canonical dependency graph and production provider selection. Construction is inert; lifecycle activation happens later. |
 | `pkg/initializer` | Application and process lifecycle. It starts, stops, cancels, joins, and unwinds roles that were already constructed. |
 | `pkg/services` | Product-domain contracts, operations, and implementations grouped by durable owner. |
-| `pkg/transports` | CLI, HTTP, MCP, generated transport contracts and clients, and boundary mapping/composition. |
+| `pkg/transports` | CLI, HTTP, MCP, ACP, generated transport contracts and clients, and boundary mapping/composition. |
 | `pkg/platform` | Policy-free implementations for cross-cutting effects and infrastructure. |
 
 Do not recreate retired domain roots beside these families. New product behavior
@@ -106,25 +106,30 @@ transports as callers or adapters.
 | Service | Durable responsibility |
 | --- | --- |
 | `factory_definitions` | Authored Factory loading, validation, compilation, persistence, catalogs, packaged distribution, and invocation policy derived from definitions. |
-| `factory_runtime` | Event-first orchestration, scheduling, dispatch, Petri execution, JavaScript workflows, runtime projections, and checkpoint recovery. |
+| `factory_runtime` | Event-first Factory orchestration, scheduling, dispatch, JavaScript workflows, runtime projections, and checkpoint recovery. Implementation-specific runtime primitives remain behind the customer-facing Factory boundary. |
 | `factory_sessions` | Live and durable Factory Session state, runtime opening, invocation, response streams, lifecycle gateways, controls, and persisted execution behavior. |
 | `recordings` | Canonical Factory Event ledger, recording lifecycle, replay, artifacts, and historical/read-model projections. |
 | `work` | Work and Work Request admission, content, staging, materialization, lineage, reads, and pure invocation return policy. |
-| `workers` | Worker and workstation execution, runner policy, prompts and output shaping, worktrees, mock workers, and worker capability policy. |
-| `providers` | Provider identity, catalog, lifecycle, configuration, ACP integration, and provider execution. |
+| `workers` | Request-scoped worker and workstation execution, runner policy, prompts and output shaping, worktrees, mock workers, and worker capability policy. Workers consumes Providers and Models through public contracts; provider inference/execution and hosted polling remain outside Workers. |
+| `providers` | Provider identity, catalog, lifecycle, configuration, provider protocol and selection, session identity, adapter choice, provider inference, provider execution policy, and one normalized execution attempt. Workers retains request-scoped scheduling and retry policy while consuming Providers through public contracts. |
 | `models` | Managed local-model catalog, assets, runtime readiness and lifecycle, host supervision, source resolution, cache, pull, and local inference support. |
-| `automations` | Cron, filesystem watcher, script poller, hosted-source, reconciliation, and invocation scheduling behavior. |
+| `automations` | Cron, filesystem watcher, script poller, hosted-source observation and polling, reconciliation, and invocation scheduling behavior. Hosted polling remains outside Workers. |
 | `provider_sessions` | Provider-session discovery and provider transcript/session inspection. |
+| `chat_sessions` | Customer conversation and control context used by ACP: selected targets, ordered turns, target episodes, attachments, and control intents. Chat Sessions sequences source-native observations onto Events without owning Factory replay history. |
+| `events` | Process-local, in-memory session-scoped source-native stream for append/attachment, retained reads, cursors, subscriptions, retention gaps, and backpressure. Events is not the canonical Factory Event ledger. |
+| `worker_sessions` | Worker Session identity, attempt supervision, lifecycle classification, dispatch association, and publication of source-native Worker observations to Events. Worker Sessions does not own Worker execution policy or Factory replay history. |
 | `operator_settings` | Operator configuration documents, defaults, input inventory, and effective settings resolution. |
 | `factory_visualization` | Factory runtime presentation, live-view projections, and response-event presentation. |
 | `system_initialization` | System bootstrap and rollback operations. |
 | `edges` | Aggregation of replaceable external-effect ports accepted at the root construction boundary. It is not a general service locator. |
 
-Providers and Workers are separate owners. Providers owns provider protocols,
-catalogs, lifecycle, and execution. Workers owns worker/workstation behavior and
-consumes Providers through public contracts. Likewise, Recordings owns the
-canonical ledger and replay even when Factory Runtime or Factory Sessions emits
-or consumes those records.
+Providers and Workers are separate owners. Providers owns provider protocol,
+selection, session identity, adapter choice, inference, and one normalized
+execution attempt; Workers owns request-scoped worker scheduling, retry, and
+workstation execution. Automations owns hosted-source observation and polling.
+Recordings owns the canonical Factory Event ledger and replay even when Factory
+Runtime or Factory Sessions emits or consumes those records, while Events owns
+only process-local source-native delivery.
 
 ## Platform Packages
 
@@ -134,6 +139,14 @@ content staging, filesystem and directory replacement, generated-artifact
 support, HTTP server mechanics, logging, metrics, portable files, process and
 PTY execution, randomness, replay storage, standard streams, and runtime
 artifacts.
+
+The platform and transport ownership boundaries are:
+
+| Package family | Ownership |
+| --- | --- |
+| `pkg/platform` | Policy-free implementations for cross-cutting effects and infrastructure, including logging, filesystem/replay storage, metrics, clocks, process/PTY execution, and runtime artifacts. Platform code does not choose Factory, Factory Session, Work, worker, provider, model, or scheduling policy. |
+| `pkg/transports/acp` | ACP protocol negotiation, envelopes, session transport, response bridging, and transport mapping over service-owned contracts. It does not own Factory state. |
+| `pkg/transports/mapping` | Representation conversion at public boundaries. It translates protocol payloads into service contracts without owning canonical policy or state. |
 
 Platform packages may implement effect interfaces owned by a service. They
 should not decide which Factory, Work, worker, provider, model, schedule, or

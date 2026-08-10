@@ -6,7 +6,7 @@ import (
 )
 
 // RequiredNamedOwners are the PRD-named owners that must be confirmed onto the
-// committed 13-owner tree without another discovery or decomposition task.
+// committed product-owner tree without another discovery or decomposition task.
 var RequiredNamedOwners = []string{
 	"factory_visualization",
 	"operator_settings",

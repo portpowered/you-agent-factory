@@ -68,6 +68,7 @@ func closedDestinationVocabulary() DestinationVocabulary {
 			"system_initialization",
 			"chat_sessions",
 			"events",
+			"worker_sessions",
 		},
 		NonServiceFamilies: []string{
 			"initializer",
@@ -162,7 +163,7 @@ func validateManifestSchema(manifest Manifest) error {
 func validateVocabulary(got DestinationVocabulary) error {
 	want := closedDestinationVocabulary()
 	if !slices.Equal(got.ProductOwners, want.ProductOwners) {
-		return fmt.Errorf("destination vocabulary productOwners must exactly match the closed 13-owner set")
+		return fmt.Errorf("destination vocabulary productOwners must exactly match the closed product-owner set")
 	}
 	if !slices.Equal(got.NonServiceFamilies, want.NonServiceFamilies) {
 		return fmt.Errorf("destination vocabulary nonServiceFamilies must exactly match the closed approved family set")
