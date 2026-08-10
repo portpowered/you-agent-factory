@@ -133,8 +133,8 @@ func TestRetiredEncodedPathResolution_MaterializeLeavesEncodedSiblingUntouched(t
 	encodedDir := seedLegacyEncodedGoalFactory(t, namedFactoriesRoot)
 	beforeSnapshot := snapshotDirectoryContents(t, encodedDir)
 
-	result, err := distributionpackagedinstallation.New(ownerFactoryDefinitionPersistence(), platformfilesystem.Local{}).
-		EnsurePackagedFactories(t.Context(), namedFactoriesRoot, publishedPackagedDefinitions(t))
+	result, err := distributionpackagedinstallation.New(ownerFactoryDefinitionPersistence(), platformfilesystem.Local{}, os.Mkdir).
+		EnsurePackagedFactories(t.Context(), namedFactoriesRoot, "", publishedPackagedDefinitions(t))
 	if err != nil {
 		t.Fatalf("system initialization: %v", err)
 	}
@@ -253,8 +253,8 @@ func TestRetiredSurfaceResidue_ConfigInitLeavesLegacyEncodedSiblingUntouched(t *
 	encodedDir := seedLegacyEncodedGoalFactoryForResidueTest(t, namedFactoriesRoot)
 	beforeSnapshot := snapshotDirectoryContents(t, encodedDir)
 
-	result, err := distributionpackagedinstallation.New(ownerFactoryDefinitionPersistence(), platformfilesystem.Local{}).
-		EnsurePackagedFactories(t.Context(), namedFactoriesRoot, publishedPackagedDefinitions(t))
+	result, err := distributionpackagedinstallation.New(ownerFactoryDefinitionPersistence(), platformfilesystem.Local{}, os.Mkdir).
+		EnsurePackagedFactories(t.Context(), namedFactoriesRoot, "", publishedPackagedDefinitions(t))
 	if err != nil {
 		t.Fatalf("system initialization: %v", err)
 	}

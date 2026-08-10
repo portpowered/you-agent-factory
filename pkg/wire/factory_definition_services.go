@@ -254,6 +254,15 @@ func provideFactoryDefinitionPackagedInstallationFileSystem(
 	return platformfilesystem.Local{}
 }
 
+func provideFactoryDefinitionPackagedInstallationDirectoryCreator(
+	edges serviceedges.Edges,
+) factorydefinitions.PackagedInstallationDirectoryCreator {
+	if edges.FactoryDefinitionPackagedInstallationDirectoryCreator != nil {
+		return edges.FactoryDefinitionPackagedInstallationDirectoryCreator
+	}
+	return os.Mkdir
+}
+
 func provideFactoryDefinitionAuthoredReaderFileSystem(
 	edges serviceedges.Edges,
 ) factorydefinitions.AuthoredLayoutReaderFileSystem {

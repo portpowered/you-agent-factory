@@ -115,9 +115,11 @@ func (initializer *Initializer) Initialize(
 	}
 
 	systemConfigOutcome := systeminitialization.SystemConfigCreated
+	backendScopeID := ""
 	settings := initializer.operatorSettings
 	if _, err := initializer.inspectPath(configPath); err == nil {
-		if _, err := settings.LoadFileConfig(configPath); err != nil {
+		config, err := settings.LoadFileConfig(configPath)
+		if err != nil {
 			return systeminitialization.Result{}, partialInitializeFailure(
 				"read existing operator config failed",
 				rollbackFactsAfterLegacyMigration(
@@ -129,11 +131,13 @@ func (initializer *Initializer) Initialize(
 				fmt.Errorf("read existing operator config %q: %w", configPath, err),
 			)
 		}
+		backendScopeID = strings.TrimSpace(config.BackendScopeID)
 		systemConfigOutcome = systeminitialization.SystemConfigSkipped
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return systeminitialization.Result{}, fmt.Errorf("stat operator config %q: %w", configPath, err)
 	} else {
-		if _, err := settings.EnsureLocalBackendScope(configPath); err != nil {
+		resolvedScope, err := settings.EnsureLocalBackendScope(configPath)
+		if err != nil {
 			return systeminitialization.Result{}, partialInitializeFailure(
 				"create system config failed",
 				rollbackFactsAfterLegacyMigration(
@@ -145,6 +149,7 @@ func (initializer *Initializer) Initialize(
 				fmt.Errorf("create system config at %q: %w", configPath, err),
 			)
 		}
+		backendScopeID = strings.TrimSpace(resolvedScope.BackendScopeID)
 		if _, err := settings.LoadFileConfig(configPath); err != nil {
 			return systeminitialization.Result{}, partialInitializeFailure(
 				"validate created operator config failed",
@@ -162,6 +167,7 @@ func (initializer *Initializer) Initialize(
 	installed, err := initializer.packagedInstaller.EnsurePackagedFactories(
 		ctx,
 		namedFactoriesRoot,
+		backendScopeID,
 		definitions,
 	)
 	packagedFactories := projectPackagedFactoryResults(installed)
