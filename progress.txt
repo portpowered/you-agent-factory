@@ -181,3 +181,15 @@
   - When multiple worktrees use a repository-local `prd.json`, a PR merge can conflict with another story's PRD even when product files are conflict-free; resolve that file in favor of the active branch's task contract.
   - A green CI run on the pre-merge head does not establish merge readiness after GitHub reports `CONFLICTING`; fetch the PR's actual head repository `main`, resolve the conflict, and rerun checks for the merged head.
 ---
+
+## 2026-08-09 17:51 -07:00 - wo-c1-ext-stream-replay-only-delivery-review
+- What was implemented
+  - Confirmed all four PRD stories remain marked `passes:true`; no additional story implementation or contract change was required.
+  - Rechecked PR #1840 in `portpowered/you-agent-factory` with thread-aware review data: there are no unresolved inline review threads or formal reviews, and the earlier correctness and lint feedback is addressed in the current head.
+  - Confirmed local HEAD `e769770b6` matches the PR head, the PR description still uses the current `prd.json`, GitHub reports the PR mergeable and clean, and every listed required check is terminal and successful.
+- Files changed
+  - `progress.txt`
+- **Learnings for future iterations:**
+  - For a cross-repository PR, verify the head OID and check state in the PR's actual repository rather than relying on the local branch's default remote association.
+  - When all stories and review feedback are complete, preserve `prd.json` and append delivery evidence to the progress log instead of creating unrelated source changes.
+---
