@@ -1,0 +1,13 @@
+type: object
+additionalProperties: false
+description: >-
+  Stable, non-host context used when rendering expected-artifact patterns.
+  Filesystem paths, environment variables, and Factory documentation are not
+  part of this replayable vocabulary.
+properties:
+  project:
+    type: string
+    description: Stable project identifier for the dispatch.
+  sessionId:
+    type: string
+    description: Stable Factory Session identifier for the dispatch.

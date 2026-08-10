@@ -783,10 +783,11 @@ func verifyExpectedArtifactDeclarations(
 ) []workerexecution.ExpectedArtifactVerificationEntry {
 	workspace = strings.TrimSpace(workspace)
 	entries := make([]workerexecution.ExpectedArtifactVerificationEntry, 0, len(declarations))
-	for _, declaration := range declarations {
+	for declarationIndex, declaration := range declarations {
 		pattern, renderErr := renderExpectedArtifactPattern(declaration.Pattern, tokens, context)
 		if renderErr != nil {
 			entries = append(entries, expectedArtifactFailureEntry(
+				declarationIndex,
 				declaration.Name,
 				unrenderableArtifactPatternReport,
 				workerexecution.ExpectedArtifactVerificationReasonMissing,
@@ -796,6 +797,7 @@ func verifyExpectedArtifactDeclarations(
 		pattern, safe := safeExpectedArtifactPattern(pattern)
 		if !safe {
 			entries = append(entries, expectedArtifactFailureEntry(
+				declarationIndex,
 				declaration.Name,
 				unsafeArtifactPatternReport,
 				workerexecution.ExpectedArtifactVerificationReasonMissing,
@@ -809,34 +811,36 @@ func verifyExpectedArtifactDeclarations(
 			fileSystem,
 		)
 		if !satisfied {
-			entries = append(entries, expectedArtifactFailureEntry(declaration.Name, pattern, reason))
+			entries = append(entries, expectedArtifactFailureEntry(declarationIndex, declaration.Name, pattern, reason))
 		}
 	}
 	return entries
 }
 
 func expectedArtifactContext(request workerexecution.WorkstationExecutionRequest) *workerexecution.Context {
-	workDirectory := strings.TrimSpace(request.WorkingDirectory)
-	if workDirectory == "" && filepath.IsAbs(request.Worktree) {
-		workDirectory = filepath.Clean(request.Worktree)
+	if recorded := request.Dispatch.ExpectedArtifactContext; recorded != nil {
+		return &workerexecution.Context{
+			ProjectID: recorded.Project,
+			SessionID: recorded.SessionID,
+		}
 	}
 	return &workerexecution.Context{
-		ProjectID:     request.ProjectID,
-		SessionID:     request.FactorySessionID,
-		WorkDirectory: workDirectory,
-		EnvVars:       cloneEnvVars(request.EnvVars),
+		ProjectID: request.ProjectID,
+		SessionID: request.FactorySessionID,
 	}
 }
 
 func expectedArtifactFailureEntry(
+	declarationIndex int,
 	name string,
 	pattern string,
 	reason workerexecution.ExpectedArtifactVerificationReason,
 ) workerexecution.ExpectedArtifactVerificationEntry {
 	return workerexecution.ExpectedArtifactVerificationEntry{
-		Name:    strings.TrimSpace(name),
-		Pattern: pattern,
-		Reason:  reason,
+		DeclarationIndex: declarationIndex + 1,
+		Name:             strings.TrimSpace(name),
+		Pattern:          pattern,
+		Reason:           reason,
 	}
 }
 
@@ -849,7 +853,23 @@ func renderExpectedArtifactPattern(
 	if err != nil {
 		return "", err
 	}
-	data := workerprompting.BuildPromptData(tokens, context)
+	promptData := workerprompting.BuildPromptData(tokens, context)
+	data := struct {
+		Inputs  []workerprompting.TokenData
+		Context struct {
+			Project   string
+			SessionID string
+		}
+	}{
+		Inputs: promptData.Inputs,
+		Context: struct {
+			Project   string
+			SessionID string
+		}{
+			Project:   promptData.Context.Project,
+			SessionID: promptData.Context.SessionID,
+		},
+	}
 	var rendered bytes.Buffer
 	if err := parsed.Execute(&rendered, data); err != nil {
 		return "", err
@@ -901,7 +921,11 @@ func expectedArtifactLiteralStatus(
 	nonEmpty bool,
 	fileSystem platformfilesystem.GlobInspector,
 ) (workerexecution.ExpectedArtifactVerificationReason, bool) {
-	info, err := fileSystem.Stat(filepath.Join(workspace, filepath.FromSlash(pattern)))
+	candidate := filepath.Join(workspace, filepath.FromSlash(pattern))
+	if !expectedArtifactPathWithinWorkspace(workspace, candidate, fileSystem) {
+		return workerexecution.ExpectedArtifactVerificationReasonMissing, false
+	}
+	info, err := fileSystem.Stat(candidate)
 	if err != nil || info == nil || !info.Mode().IsRegular() {
 		return workerexecution.ExpectedArtifactVerificationReasonMissing, false
 	}
@@ -924,7 +948,7 @@ func expectedArtifactGlobStatus(
 	sort.Strings(matches)
 	regularFiles := 0
 	for _, match := range matches {
-		if !pathWithinWorkspace(workspace, match) {
+		if !expectedArtifactPathWithinWorkspace(workspace, match, fileSystem) {
 			continue
 		}
 		info, statErr := fileSystem.Stat(match)
@@ -940,6 +964,25 @@ func expectedArtifactGlobStatus(
 		return workerexecution.ExpectedArtifactVerificationReasonMissing, false
 	}
 	return "", true
+}
+
+func expectedArtifactPathWithinWorkspace(
+	workspace string,
+	candidate string,
+	fileSystem platformfilesystem.GlobInspector,
+) bool {
+	if fileSystem == nil {
+		return false
+	}
+	resolvedWorkspace, err := fileSystem.EvalSymlinks(workspace)
+	if err != nil {
+		return false
+	}
+	resolvedCandidate, err := fileSystem.EvalSymlinks(candidate)
+	if err != nil {
+		return false
+	}
+	return pathWithinWorkspace(filepath.Clean(resolvedWorkspace), filepath.Clean(resolvedCandidate))
 }
 
 func pathWithinWorkspace(workspace, candidate string) bool {

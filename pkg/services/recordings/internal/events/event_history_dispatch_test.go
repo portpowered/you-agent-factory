@@ -46,10 +46,11 @@ func TestFactoryEventHistory_RecordWorkstationRequest_UsesContextForRequestIdent
 		DispatchID:  "dispatch-1",
 		CreatedTick: 4,
 		Dispatch: work.WorkDispatch{
-			DispatchID:      "dispatch-1",
-			TransitionID:    "build",
-			WorkerType:      "builder",
-			WorkstationName: "Build",
+			DispatchID:              "dispatch-1",
+			TransitionID:            "build",
+			WorkerType:              "builder",
+			WorkstationName:         "Build",
+			ExpectedArtifactContext: &work.ExpectedArtifactTemplateContext{Project: "project-7", SessionID: "session-9"},
 			Execution: work.ExecutionMetadata{
 				RequestID: "request-1",
 				ReplayKey: "replay-1",
@@ -72,6 +73,9 @@ func TestFactoryEventHistory_RecordWorkstationRequest_UsesContextForRequestIdent
 	if canonicalPayload.Metadata == nil || stringValueForEventHistoryTest(canonicalPayload.Metadata.ReplayKey) != "replay-1" {
 		t.Fatalf("canonical metadata = %#v, want replay-1", canonicalPayload.Metadata)
 	}
+	if canonicalPayload.ExpectedArtifactContext == nil || canonicalPayload.ExpectedArtifactContext.Project != "project-7" || canonicalPayload.ExpectedArtifactContext.SessionID != "session-9" {
+		t.Fatalf("canonical expected artifact context = %#v", canonicalPayload.ExpectedArtifactContext)
+	}
 
 	events := generatedHistoryEvents(t, history)
 	if len(events) != 1 {
@@ -93,6 +97,9 @@ func TestFactoryEventHistory_RecordWorkstationRequest_UsesContextForRequestIdent
 	}
 	if stringValueForEventHistoryTest(payload.Metadata.ReplayKey) != "replay-1" {
 		t.Fatalf("metadata replayKey = %q, want replay-1", stringValueForEventHistoryTest(payload.Metadata.ReplayKey))
+	}
+	if payload.ExpectedArtifactContext == nil || stringValueForEventHistoryTest(payload.ExpectedArtifactContext.Project) != "project-7" || stringValueForEventHistoryTest(payload.ExpectedArtifactContext.SessionId) != "session-9" {
+		t.Fatalf("generated expected artifact context = %#v", payload.ExpectedArtifactContext)
 	}
 }
 

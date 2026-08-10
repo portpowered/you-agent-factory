@@ -56,15 +56,16 @@ func (r *factoryWorldReducer) applyDispatchCreated(event interfaces.FactoryEvent
 
 	worker := r.workerForTransition(payload.TransitionID)
 	dispatch := interfaces.FactoryWorldDispatch{
-		DispatchID:   dispatchID,
-		TransitionID: payload.TransitionID,
-		Workstation:  r.workstationRefForTransition(payload.TransitionID),
-		Provider:     worker.Provider,
-		Model:        worker.Model,
-		StartedTick:  event.Context.Tick,
-		StartedAt:    event.Context.EventTime,
-		Inputs:       inputs,
-		WorkItemIDs:  sortedStrings(workIDs),
+		DispatchID:              dispatchID,
+		TransitionID:            payload.TransitionID,
+		Workstation:             r.workstationRefForTransition(payload.TransitionID),
+		ExpectedArtifactContext: work.CloneExpectedArtifactTemplateContext(payload.ExpectedArtifactContext),
+		Provider:                worker.Provider,
+		Model:                   worker.Model,
+		StartedTick:             event.Context.Tick,
+		StartedAt:               event.Context.EventTime,
+		Inputs:                  inputs,
+		WorkItemIDs:             sortedStrings(workIDs),
 		CurrentChainingTraceID: dispatchCurrentChainingTraceID(
 			event.Context.CurrentChainingTraceID,
 			payload.CurrentChainingTraceID,
@@ -367,14 +368,15 @@ func (r *factoryWorldReducer) dispatchCompletionFromResponse(
 	inputWorkItems := dispatchInputWorkItems(dispatch)
 	latestAttempt := r.latestInferenceAttemptForDispatch(dispatchID)
 	return interfaces.FactoryWorldDispatchCompletion{
-		DispatchID:     dispatchID,
-		TransitionID:   payload.TransitionID,
-		Workstation:    dispatch.Workstation,
-		StartedTick:    dispatch.StartedTick,
-		CompletedTick:  event.Context.Tick,
-		StartedAt:      dispatch.StartedAt,
-		CompletedAt:    event.Context.EventTime,
-		DurationMillis: int64Value(payload.DurationMillis),
+		DispatchID:              dispatchID,
+		TransitionID:            payload.TransitionID,
+		Workstation:             dispatch.Workstation,
+		ExpectedArtifactContext: work.CloneExpectedArtifactTemplateContext(dispatch.ExpectedArtifactContext),
+		StartedTick:             dispatch.StartedTick,
+		CompletedTick:           event.Context.Tick,
+		StartedAt:               dispatch.StartedAt,
+		CompletedAt:             event.Context.EventTime,
+		DurationMillis:          int64Value(payload.DurationMillis),
 		Result: interfaces.WorkstationResult{
 			Outcome:                     string(payload.Outcome),
 			Output:                      stringValue(payload.Output),
@@ -683,12 +685,13 @@ func (r *factoryWorldReducer) recordFailedWorkDetail(completion interfaces.Facto
 
 func (r *factoryWorldReducer) recordWorkFailureDetail(completion interfaces.FactoryWorldDispatchCompletion, item workdomain.FactoryWorkItem) {
 	r.stateValue.FailureDetailsByWorkID[item.ID] = interfaces.FactoryWorldFailureDetail{
-		DispatchID:           completion.DispatchID,
-		TransitionID:         completion.TransitionID,
-		WorkstationName:      completion.Workstation.Name,
-		WorkItem:             item,
-		FailureDetail:        workerexecution.CloneFailureDetail(completion.Result.FailureDetail),
-		ArtifactVerification: completion.Result.ArtifactVerification.Clone(),
+		DispatchID:              completion.DispatchID,
+		TransitionID:            completion.TransitionID,
+		WorkstationName:         completion.Workstation.Name,
+		ExpectedArtifactContext: work.CloneExpectedArtifactTemplateContext(completion.ExpectedArtifactContext),
+		WorkItem:                item,
+		FailureDetail:           workerexecution.CloneFailureDetail(completion.Result.FailureDetail),
+		ArtifactVerification:    completion.Result.ArtifactVerification.Clone(),
 	}
 }
 

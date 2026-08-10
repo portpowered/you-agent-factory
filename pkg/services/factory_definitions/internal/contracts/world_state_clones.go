@@ -10,6 +10,7 @@ import (
 // selected-tick dispatch completion record.
 func CloneFactoryWorldDispatchCompletion(completion FactoryWorldDispatchCompletion) FactoryWorldDispatchCompletion {
 	clone := completion
+	clone.ExpectedArtifactContext = work.CloneExpectedArtifactTemplateContext(completion.ExpectedArtifactContext)
 	clone.Result = workerexecution.CloneWorkstationResult(completion.Result)
 	clone.WorkItemIDs = cloneStringSlice(completion.WorkItemIDs)
 	clone.ConsumedInputs = cloneWorkstationInputs(completion.ConsumedInputs)

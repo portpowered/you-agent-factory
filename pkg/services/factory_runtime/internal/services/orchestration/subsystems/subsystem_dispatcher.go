@@ -232,7 +232,62 @@ func (d *DispatcherSubsystem) buildWorkDispatch(snapshot *interfaces.EngineState
 	if d.wfCtx != nil {
 		dispatch.ProjectID = d.wfCtx.ProjectID
 	}
+	dispatch.ExpectedArtifactContext = d.expectedArtifactContext(tr, inputTokens)
 	return dispatch
+}
+
+func (d *DispatcherSubsystem) expectedArtifactContext(
+	tr *petri.Transition,
+	inputTokens []factorytoken.Token,
+) *work.ExpectedArtifactTemplateContext {
+	if tr == nil || !d.transitionHasExpectedArtifacts(tr, inputTokens) {
+		return nil
+	}
+	project := ""
+	if d.wfCtx != nil {
+		project = d.wfCtx.ProjectID
+	}
+	if strings.TrimSpace(project) == "" {
+		for _, token := range inputTokens {
+			if token.Color.DataType == workers.DataTypeResource {
+				continue
+			}
+			if candidate := strings.TrimSpace(token.Color.Tags[workers.ProjectTagKey]); candidate != "" {
+				project = candidate
+				break
+			}
+		}
+	}
+	sessionID := workers.DefaultSessionID
+	if d.wfCtx != nil && strings.TrimSpace(d.wfCtx.SessionID) != "" {
+		sessionID = strings.TrimSpace(d.wfCtx.SessionID)
+	}
+	return &work.ExpectedArtifactTemplateContext{
+		Project:   workers.ResolveProjectID(project),
+		SessionID: sessionID,
+	}
+}
+
+func (d *DispatcherSubsystem) transitionHasExpectedArtifacts(
+	tr *petri.Transition,
+	inputTokens []factorytoken.Token,
+) bool {
+	if len(tr.ExpectedArtifacts) > 0 {
+		return true
+	}
+	if d.state == nil {
+		return false
+	}
+	for _, token := range inputTokens {
+		if token.Color.DataType == workers.DataTypeResource {
+			continue
+		}
+		workType, ok := d.state.WorkTypes[token.Color.WorkTypeID]
+		if ok && workType != nil && len(workType.ExpectedArtifacts) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func (d *DispatcherSubsystem) logDispatch(decision interfaces.FiringDecision, inputTokens []factorytoken.Token, dispatch work.WorkDispatch) {

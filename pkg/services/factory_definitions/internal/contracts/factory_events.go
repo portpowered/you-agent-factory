@@ -648,12 +648,13 @@ type DispatchResourceRef struct {
 // Correlation identity belongs to FactoryEventContext; the deprecated chaining
 // fields remain readable for compatibility with historical recordings.
 type DispatchRequestEventPayload struct {
-	CurrentChainingTraceID   *string                       `json:"currentChainingTraceId,omitempty"`
-	Inputs                   []DispatchConsumedWorkRef     `json:"inputs"`
-	Metadata                 *DispatchRequestEventMetadata `json:"metadata,omitempty"`
-	PreviousChainingTraceIDs *[]string                     `json:"previousChainingTraceIds,omitempty"`
-	Resources                *[]DispatchResourceRef        `json:"resources,omitempty"`
-	TransitionID             string                        `json:"transitionId"`
+	CurrentChainingTraceID   *string                               `json:"currentChainingTraceId,omitempty"`
+	Inputs                   []DispatchConsumedWorkRef             `json:"inputs"`
+	Metadata                 *DispatchRequestEventMetadata         `json:"metadata,omitempty"`
+	PreviousChainingTraceIDs *[]string                             `json:"previousChainingTraceIds,omitempty"`
+	Resources                *[]DispatchResourceRef                `json:"resources,omitempty"`
+	ExpectedArtifactContext  *work.ExpectedArtifactTemplateContext `json:"expectedArtifactContext,omitempty"`
+	TransitionID             string                                `json:"transitionId"`
 }
 
 // DispatchWorkerSessionAssociationEventPayload records the canonical,

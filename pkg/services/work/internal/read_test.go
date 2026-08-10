@@ -236,3 +236,58 @@ func TestProjectExpectedArtifactReadModels_RedactsUnsafeRenderedPatterns(t *test
 		t.Fatalf("unsafe projection = %#v, want redacted pending artifact", got)
 	}
 }
+
+func TestProjectExpectedArtifactReadModels_UsesRecordedContextAndDeclarationIdentity(t *testing.T) {
+	t.Parallel()
+	declarations := []work.ExpectedArtifactDeclaration{
+		{Name: "same", Pattern: "{{ .Context.Project }}/{{ .Context.SessionID }}/one.txt"},
+		{Name: "same", Pattern: "{{ .Context.Project }}/{{ .Context.SessionID }}/two.txt"},
+	}
+	got := work.ExpectedArtifactReadModelProjector{}.Project(
+		declarations,
+		nil,
+		[]work.ExpectedArtifactInput{{Name: "input", Project: "input-project"}},
+		work.ExpectedArtifactObservation{
+			Verified: true,
+			Entries: []work.ExpectedArtifactVerificationEntry{{
+				DeclarationIndex: 2,
+				Name:             "same",
+				Pattern:          "project-7/session-9/two.txt",
+				Reason:           work.ExpectedArtifactVerificationReasonMissing,
+			}},
+		},
+		work.ExpectedArtifactTemplateContext{Project: "project-7", SessionID: "session-9"},
+	)
+	if len(got) != 2 || got[0].Pattern != "project-7/session-9/one.txt" ||
+		got[0].Verification != work.ExpectedArtifactVerificationSatisfied ||
+		got[1].Pattern != "project-7/session-9/two.txt" ||
+		got[1].Verification != work.ExpectedArtifactVerificationFailed || got[1].Reason == nil ||
+		*got[1].Reason != work.ExpectedArtifactVerificationReasonMissing {
+		t.Fatalf("context and identity projection = %#v", got)
+	}
+}
+
+func TestProjectExpectedArtifactReadModels_RedactedDuplicateEntriesUseDeclarationIdentity(t *testing.T) {
+	t.Parallel()
+	declarations := []work.ExpectedArtifactDeclaration{
+		{Name: "same", Pattern: "{{ (index .Inputs 9).Name }}.one"},
+		{Name: "same", Pattern: "{{ (index .Inputs 8).Name }}.two"},
+	}
+	got := work.ExpectedArtifactReadModelProjector{}.Project(
+		declarations,
+		nil,
+		[]work.ExpectedArtifactInput{{Name: "input"}},
+		work.ExpectedArtifactObservation{
+			Entries: []work.ExpectedArtifactVerificationEntry{{
+				DeclarationIndex: 2,
+				Name:             "same",
+				Pattern:          "<unrenderable>",
+				Reason:           work.ExpectedArtifactVerificationReasonMissing,
+			}},
+		},
+	)
+	if len(got) != 2 || got[0].Verification != work.ExpectedArtifactVerificationPending ||
+		got[1].Verification != work.ExpectedArtifactVerificationFailed || got[1].Pattern != "<unrenderable>" {
+		t.Fatalf("redacted duplicate projection = %#v", got)
+	}
+}

@@ -149,7 +149,7 @@ func expectedArtifactsFromWorldItem(
 	state interfaces.FactoryWorldState,
 ) []work.ExpectedArtifactReadModel {
 	workTypeDeclarations := worldWorkTypeArtifactDeclarations(state.Topology, item.WorkTypeID)
-	workstationDeclarations, inputs, observation, workstationFound := worldDispatchArtifactFacts(item, state)
+	workstationDeclarations, inputs, observation, templateContext, workstationFound := worldDispatchArtifactFacts(item, state)
 	if !workstationFound {
 		workstationDeclarations = worldCandidateWorkstationArtifactDeclarations(item, state.Topology)
 		inputs = []work.ExpectedArtifactInput{worldExpectedArtifactInput(item)}
@@ -159,6 +159,7 @@ func expectedArtifactsFromWorldItem(
 		workstationDeclarations,
 		inputs,
 		observation,
+		worldExpectedArtifactTemplateContext(templateContext)...,
 	)
 }
 
@@ -196,30 +197,31 @@ type worldArtifactDispatchFacts struct {
 	transitionID    string
 	inputs          []work.FactoryWorkItem
 	observation     work.ExpectedArtifactObservation
+	templateContext *work.ExpectedArtifactTemplateContext
 }
 
 func worldDispatchArtifactFacts(
 	item work.FactoryWorkItem,
 	state interfaces.FactoryWorldState,
-) ([]work.ExpectedArtifactDeclaration, []work.ExpectedArtifactInput, work.ExpectedArtifactObservation, bool) {
+) ([]work.ExpectedArtifactDeclaration, []work.ExpectedArtifactInput, work.ExpectedArtifactObservation, *work.ExpectedArtifactTemplateContext, bool) {
 	if dispatch, ok := latestWorldActiveArtifactDispatch(item, state.ActiveDispatches); ok {
 		return worldWorkstationArtifactDeclarations(state.Topology, dispatch.transitionID, dispatch.workstationName),
-			worldExpectedArtifactInputs(dispatch.inputs, item), dispatch.observation, true
+			worldExpectedArtifactInputs(dispatch.inputs, item), dispatch.observation, dispatch.templateContext, true
 	}
 	if dispatch, ok := latestWorldCompletedArtifactDispatch(item, state.CompletedDispatches); ok {
 		return worldWorkstationArtifactDeclarations(state.Topology, dispatch.transitionID, dispatch.workstationName),
-			worldExpectedArtifactInputs(dispatch.inputs, item), dispatch.observation, true
+			worldExpectedArtifactInputs(dispatch.inputs, item), dispatch.observation, dispatch.templateContext, true
 	}
 	if dispatch, ok := latestWorldCompletedArtifactDispatch(item, state.FailedDispatches); ok {
 		return worldWorkstationArtifactDeclarations(state.Topology, dispatch.transitionID, dispatch.workstationName),
-			worldExpectedArtifactInputs(dispatch.inputs, item), dispatch.observation, true
+			worldExpectedArtifactInputs(dispatch.inputs, item), dispatch.observation, dispatch.templateContext, true
 	}
 	if detail, ok := state.FailureDetailsByWorkID[item.ID]; ok && detail.ArtifactVerification != nil {
 		return worldWorkstationArtifactDeclarations(state.Topology, detail.TransitionID, detail.WorkstationName),
 			[]work.ExpectedArtifactInput{worldExpectedArtifactInput(detail.WorkItem)},
-			worldArtifactObservation(detail.ArtifactVerification), true
+			worldArtifactObservation(detail.ArtifactVerification), work.CloneExpectedArtifactTemplateContext(detail.ExpectedArtifactContext), true
 	}
-	return nil, nil, work.ExpectedArtifactObservation{}, false
+	return nil, nil, work.ExpectedArtifactObservation{}, nil, false
 }
 
 func latestWorldActiveArtifactDispatch(
@@ -240,6 +242,7 @@ func latestWorldActiveArtifactDispatch(
 			workstationName: dispatch.Workstation.Name,
 			transitionID:    dispatch.TransitionID,
 			inputs:          worldWorkstationInputs(dispatch.Inputs),
+			templateContext: work.CloneExpectedArtifactTemplateContext(dispatch.ExpectedArtifactContext),
 		}, true
 	}
 	return worldArtifactDispatchFacts{}, false
@@ -259,6 +262,7 @@ func latestWorldCompletedArtifactDispatch(
 			transitionID:    dispatch.TransitionID,
 			inputs:          append([]work.FactoryWorkItem(nil), dispatch.InputWorkItems...),
 			observation:     worldArtifactObservationFromResult(dispatch.Result),
+			templateContext: work.CloneExpectedArtifactTemplateContext(dispatch.ExpectedArtifactContext),
 		}, true
 	}
 	return worldArtifactDispatchFacts{}, false
@@ -334,6 +338,7 @@ func worldExpectedArtifactInput(item work.FactoryWorkItem) work.ExpectedArtifact
 		DataType:   "work",
 		TraceID:    item.TraceID,
 		ParentID:   item.ParentID,
+		Project:    item.Tags["project"],
 		Tags:       work.CloneTags(item.Tags),
 	}
 }
@@ -347,10 +352,20 @@ func worldArtifactObservation(
 	observation := work.ExpectedArtifactObservation{Verified: true}
 	for _, entry := range verification.Entries {
 		observation.Entries = append(observation.Entries, work.ExpectedArtifactVerificationEntry{
-			Name: entry.Name, Pattern: entry.Pattern, Reason: work.ExpectedArtifactVerificationReason(entry.Reason),
+			DeclarationIndex: entry.DeclarationIndex,
+			Name:             entry.Name, Pattern: entry.Pattern, Reason: work.ExpectedArtifactVerificationReason(entry.Reason),
 		})
 	}
 	return observation
+}
+
+func worldExpectedArtifactTemplateContext(
+	context *work.ExpectedArtifactTemplateContext,
+) []work.ExpectedArtifactTemplateContext {
+	if context == nil {
+		return nil
+	}
+	return []work.ExpectedArtifactTemplateContext{*context}
 }
 
 func worldArtifactObservationFromResult(

@@ -1367,8 +1367,11 @@ type DispatchRequestEventMetadata struct {
 type DispatchRequestEventPayload struct {
 	// CurrentChainingTraceId Deprecated compatibility copy of the dispatch chaining-trace identifier; prefer FactoryEvent.context.currentChainingTraceId.
 	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
-	CurrentChainingTraceId *string                   `json:"currentChainingTraceId,omitempty"`
-	Inputs                 []DispatchConsumedWorkRef `json:"inputs"`
+	CurrentChainingTraceId *string `json:"currentChainingTraceId,omitempty"`
+
+	// ExpectedArtifactContext Stable, non-host context used when rendering expected-artifact patterns. Filesystem paths, environment variables, and Factory documentation are not part of this replayable vocabulary.
+	ExpectedArtifactContext *ExpectedArtifactTemplateContext `json:"expectedArtifactContext,omitempty"`
+	Inputs                  []DispatchConsumedWorkRef        `json:"inputs"`
 
 	// Metadata Optional non-identity dispatch metadata retained on dispatch-request events. Request, trace, work, and dispatch identity must remain on FactoryEvent.context rather than reappearing here.
 	Metadata *DispatchRequestEventMetadata `json:"metadata,omitempty"`
@@ -1459,6 +1462,15 @@ type ExpectedArtifact struct {
 	Pattern string `json:"pattern"`
 }
 
+// ExpectedArtifactTemplateContext Stable, non-host context used when rendering expected-artifact patterns. Filesystem paths, environment variables, and Factory documentation are not part of this replayable vocabulary.
+type ExpectedArtifactTemplateContext struct {
+	// Project Stable project identifier for the dispatch.
+	Project *string `json:"project,omitempty"`
+
+	// SessionId Stable Factory Session identifier for the dispatch.
+	SessionId *string `json:"sessionId,omitempty"`
+}
+
 // ExpectedArtifactVerification Stable terminal verification summary emitted when a successful worker does not satisfy its effective expected artifact declarations.
 type ExpectedArtifactVerification struct {
 	// Code Stable machine-readable failure type used to classify failed work across providers and runtimes.
@@ -1468,7 +1480,9 @@ type ExpectedArtifactVerification struct {
 
 // ExpectedArtifactVerificationEntry defines model for ExpectedArtifactVerificationEntry.
 type ExpectedArtifactVerificationEntry struct {
-	Name string `json:"name"`
+	// DeclarationIndex One-based position in the normalized expected-artifact declaration list.
+	DeclarationIndex *int   `json:"declarationIndex,omitempty"`
+	Name             string `json:"name"`
 
 	// Pattern Workspace-relative rendered artifact pattern; host paths are never emitted.
 	Pattern string `json:"pattern"`

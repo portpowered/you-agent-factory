@@ -442,6 +442,7 @@ func (h *FactoryEventHistory) RecordWorkstationRequest(tick int, record interfac
 		},
 		interfaces.DispatchRequestEventPayload{
 			TransitionID:             record.Dispatch.TransitionID,
+			ExpectedArtifactContext:  work.CloneExpectedArtifactTemplateContext(record.Dispatch.ExpectedArtifactContext),
 			CurrentChainingTraceID:   stringPtrIfNotEmpty(record.Dispatch.CurrentChainingTraceID),
 			PreviousChainingTraceIDs: stringSlicePtr(record.Dispatch.PreviousChainingTraceIDs),
 			Inputs:                   dispatchConsumedWorkRefsFromTokens(inputTokens),

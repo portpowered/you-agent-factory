@@ -350,6 +350,106 @@ func TestWorkstationExecutor_VerifiesExpectedArtifactsAfterWorkerSuccess(t *test
 	}
 }
 
+func TestExpectedArtifactVerification_RejectsExternalSymlinks(t *testing.T) {
+	t.Parallel()
+	workspace := t.TempDir()
+	external := t.TempDir()
+	literalTarget := filepath.Join(external, "literal.txt")
+	globTarget := filepath.Join(external, "glob.json")
+	if err := os.WriteFile(literalTarget, []byte("literal"), 0o644); err != nil {
+		t.Fatalf("write literal target: %v", err)
+	}
+	if err := os.WriteFile(globTarget, []byte("glob"), 0o644); err != nil {
+		t.Fatalf("write glob target: %v", err)
+	}
+	if err := os.Symlink(literalTarget, filepath.Join(workspace, "literal.txt")); err != nil {
+		t.Skipf("symlink creation is unavailable: %v", err)
+	}
+	if err := os.Symlink(globTarget, filepath.Join(workspace, "glob.json")); err != nil {
+		t.Skipf("symlink creation is unavailable: %v", err)
+	}
+
+	entries := verifyExpectedArtifactDeclarations(
+		workspace,
+		nil,
+		&workerexecution.Context{},
+		[]interfaces.ExpectedArtifactConfig{
+			{Name: "literal", Pattern: "literal.txt"},
+			{Name: "glob", Pattern: "*.json"},
+		},
+		platformfilesystem.Local{},
+	)
+	if len(entries) != 2 {
+		t.Fatalf("verification entries = %#v, want both external symlinks rejected", entries)
+	}
+	for index, entry := range entries {
+		if entry.DeclarationIndex != index+1 || entry.Reason != workerexecution.ExpectedArtifactVerificationReasonMissing {
+			t.Fatalf("verification entry %d = %#v, want indexed MISSING entry", index, entry)
+		}
+	}
+}
+
+func TestExpectedArtifactVerification_DistinguishesDuplicateNamesAndUnrenderablePatterns(t *testing.T) {
+	t.Parallel()
+	workspace := t.TempDir()
+	if err := os.WriteFile(filepath.Join(workspace, "present.txt"), []byte("present"), 0o644); err != nil {
+		t.Fatalf("write present artifact: %v", err)
+	}
+	declarations := []interfaces.ExpectedArtifactConfig{
+		{Name: "same", Pattern: "{{ (index .Inputs 9).Name }}.txt"},
+		{Name: "same", Pattern: "missing.txt"},
+	}
+	entries := verifyExpectedArtifactDeclarations(
+		workspace,
+		[]workerexecution.Token{{Color: workerexecution.Color{Name: "input"}}},
+		&workerexecution.Context{},
+		declarations,
+		platformfilesystem.Local{},
+	)
+	if len(entries) != 2 || entries[0].DeclarationIndex != 1 || entries[1].DeclarationIndex != 2 {
+		t.Fatalf("verification entries = %#v, want both duplicate-name declarations indexed", entries)
+	}
+	if entries[0].Pattern != unrenderableArtifactPatternReport || entries[1].Pattern != "missing.txt" {
+		t.Fatalf("verification patterns = %#v, want redacted and missing patterns", entries)
+	}
+}
+
+func TestWorkstationExecutor_VerifiesRecordedProjectAndSessionContext(t *testing.T) {
+	t.Parallel()
+	workspace := t.TempDir()
+	contextDir := filepath.Join(workspace, "project-7", "session-9")
+	if err := os.MkdirAll(contextDir, 0o755); err != nil {
+		t.Fatalf("create context artifact directory: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(contextDir, "report.txt"), []byte("report"), 0o644); err != nil {
+		t.Fatalf("write context artifact: %v", err)
+	}
+	config := staticRuntimeConfig{
+		Factory: &interfaces.FactoryConfig{WorkTypes: []interfaces.WorkTypeConfig{{ID: "task", Name: "task"}}},
+		Workers: map[string]*interfaces.FactoryWorkerConfig{"worker-a": {Type: interfaces.WorkerTypeModel}},
+		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+			"standard": {
+				Type: interfaces.WorkstationTypeModel,
+				ExpectedArtifacts: []interfaces.ExpectedArtifactConfig{{
+					Name: "context report", Pattern: "{{ .Context.Project }}/{{ .Context.SessionID }}/report.txt",
+				}},
+			},
+		},
+		FactoryPath: workspace,
+	}
+	mock := &wsMockExecutor{result: workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted, Output: "worker output"}}
+	we := newTestWorkstationExecutor(config, mock)
+	dispatch := expectedArtifactDispatch("recorded-context", "task-report")
+	dispatch.ExpectedArtifactContext = &work.ExpectedArtifactTemplateContext{Project: "project-7", SessionID: "session-9"}
+	result, err := we.Execute(context.Background(), dispatch)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Outcome != workerexecution.OutcomeAccepted || result.ArtifactVerification != nil {
+		t.Fatalf("result = %#v, want accepted result using recorded context", result)
+	}
+}
+
 func writeExpectedArtifactFixtures(t *testing.T, workspace string) {
 	t.Helper()
 	if err := os.Mkdir(filepath.Join(workspace, "reports"), 0o755); err != nil {

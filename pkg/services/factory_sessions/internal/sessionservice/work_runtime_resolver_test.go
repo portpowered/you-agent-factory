@@ -213,6 +213,36 @@ func TestWorkRuntimeAdapterProjectsRecordedArtifactFailureAfterResultsRetire(t *
 	}
 }
 
+func TestWorkRuntimeAdapterProjectsRecordedArtifactContextForLiveWorkReads(t *testing.T) {
+	t.Parallel()
+	token := workers.Token{
+		ID: "tok-context", PlaceID: "story:review",
+		Color: workers.Color{WorkID: "work-context", WorkTypeID: "story", Name: "context"},
+	}
+	net := &factory.Net{
+		Transitions: map[string]*factory.PetriTransition{
+			"publish": {
+				ID: "publish", Name: "publish", InputArcs: []factory.PetriArc{{PlaceID: "story:review"}},
+				ExpectedArtifacts: []work.ExpectedArtifactDeclaration{{Name: "report", Pattern: "{{ .Context.Project }}/{{ .Context.SessionID }}/report.txt"}},
+			},
+		},
+		WorkTypes: map[string]*factory.WorkType{
+			"story": {ID: "story"},
+		},
+	}
+	got := runtimeWorkItem(&token, net, false, nil, runtimeReadFacts{
+		dispatchHistory: []factory.CompletedDispatch{{
+			DispatchID: "dispatch-context", TransitionID: "publish", WorkstationName: "publish", Outcome: workers.OutcomeAccepted,
+			ExpectedArtifactContext: &work.ExpectedArtifactTemplateContext{Project: "project-7", SessionID: "session-9"},
+			ConsumedTokens:          []workers.Token{token},
+		}},
+	})
+	if len(got.ExpectedArtifacts) != 1 || got.ExpectedArtifacts[0].Pattern != "project-7/session-9/report.txt" ||
+		got.ExpectedArtifacts[0].Verification != work.ExpectedArtifactVerificationSatisfied {
+		t.Fatalf("live context projection = %#v", got.ExpectedArtifacts)
+	}
+}
+
 func TestWorkRuntimeAdapterDetachesFactorySessionStopSummary(t *testing.T) {
 	workID := "work-1"
 	summary := &factorysessions.StopSummary{

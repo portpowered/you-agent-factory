@@ -42,6 +42,7 @@ type ReadFileInspector interface {
 type GlobInspector interface {
 	Glob(string) ([]string, error)
 	Stat(string) (fs.FileInfo, error)
+	EvalSymlinks(string) (string, error)
 }
 
 // ReadFileTree is the policy-free read-only effect for inspecting, walking,

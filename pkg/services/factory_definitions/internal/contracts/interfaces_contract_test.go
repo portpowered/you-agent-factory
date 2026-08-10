@@ -1339,6 +1339,20 @@ func TestExpectedArtifactConfig_ValidatesTemplatesAndWorkspacePaths(t *testing.T
 			inputCount:  1,
 		},
 		{
+			name:        "project and session context vocabulary",
+			declaration: ExpectedArtifactConfig{Name: "context", Pattern: "reports/{{ .Context.Project }}/{{ .Context.SessionID }}.json"},
+		},
+		{
+			name:        "host context is rejected",
+			declaration: ExpectedArtifactConfig{Name: "context", Pattern: "{{ .Context.ArtifactDir }}/report.json"},
+			wantError:   "cannot be rendered",
+		},
+		{
+			name:        "factory docs are rejected",
+			declaration: ExpectedArtifactConfig{Name: "docs", Pattern: "{{ .Docs.readme }}.txt"},
+			wantError:   "cannot be rendered",
+		},
+		{
 			name:        "glob",
 			declaration: ExpectedArtifactConfig{Name: "logs", Pattern: "logs/*.json"},
 		},

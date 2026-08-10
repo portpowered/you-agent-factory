@@ -308,6 +308,7 @@ func (t *TransitionerSubsystem) buildCompletedDispatch(
 	}
 
 	completed.WorkstationName = dispatchEntry.WorkstationName
+	completed.ExpectedArtifactContext = work.CloneExpectedArtifactTemplateContext(dispatchEntry.ExpectedArtifactContext)
 	completed.StartTime = dispatchEntry.StartTime
 	completed.Duration = completed.EndTime.Sub(dispatchEntry.StartTime)
 	return completed

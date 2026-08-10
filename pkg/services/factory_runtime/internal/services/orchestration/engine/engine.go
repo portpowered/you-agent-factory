@@ -719,12 +719,13 @@ func (e *FactoryEngine) forwardDispatchRecord(ctx context.Context, rec interface
 	rec.Dispatch.Execution.DispatchCreatedTick = e.runtimeState.TickCount
 	rec.Dispatch.Execution.CurrentTick = e.runtimeState.TickCount
 	e.runtimeState.Dispatches[rec.Dispatch.DispatchID] = &interfaces.DispatchEntry{
-		DispatchID:      rec.Dispatch.DispatchID,
-		TransitionID:    rec.Dispatch.TransitionID,
-		WorkstationName: rec.Dispatch.WorkstationName,
-		StartTime:       now,
-		ConsumedTokens:  workers.WorkDispatchInputTokens(rec.Dispatch),
-		HeldMutations:   rec.Mutations,
+		DispatchID:              rec.Dispatch.DispatchID,
+		TransitionID:            rec.Dispatch.TransitionID,
+		WorkstationName:         rec.Dispatch.WorkstationName,
+		ExpectedArtifactContext: work.CloneExpectedArtifactTemplateContext(rec.Dispatch.ExpectedArtifactContext),
+		StartTime:               now,
+		ConsumedTokens:          workers.WorkDispatchInputTokens(rec.Dispatch),
+		HeldMutations:           rec.Mutations,
 	}
 	e.runtimeState.InFlightCount++
 	if e.recordDispatch != nil {

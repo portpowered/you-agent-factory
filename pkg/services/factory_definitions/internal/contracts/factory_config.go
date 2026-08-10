@@ -511,13 +511,9 @@ func validateExpectedArtifactPattern(pattern string, inputCount int) error {
 	data := expectedArtifactTemplateData{
 		Inputs: make([]expectedArtifactInputData, inputCount),
 		Context: expectedArtifactContextData{
-			WorkDir:     "workspace",
-			ArtifactDir: "artifacts",
-			Project:     "project",
-			SessionID:   "session",
-			Env:         map[string]string{"KEY": "value"},
+			Project:   "project",
+			SessionID: "session",
 		},
-		Docs: map[string]string{},
 	}
 	for index := range data.Inputs {
 		data.Inputs[index] = expectedArtifactInputData{
@@ -567,7 +563,6 @@ func isASCIIAlpha(value byte) bool {
 }
 
 type expectedArtifactTemplateData struct {
-	Docs    map[string]string
 	Inputs  []expectedArtifactInputData
 	Context expectedArtifactContextData
 }
@@ -585,11 +580,8 @@ type expectedArtifactInputData struct {
 }
 
 type expectedArtifactContextData struct {
-	WorkDir     string
-	ArtifactDir string
-	Project     string
-	SessionID   string
-	Env         map[string]string
+	Project   string
+	SessionID string
 }
 
 // StateConfig declares a state within a work type.

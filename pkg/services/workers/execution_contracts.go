@@ -512,9 +512,10 @@ const (
 // for one unmet expected artifact declaration. Pattern never contains the
 // absolute dispatch workspace.
 type ExpectedArtifactVerificationEntry struct {
-	Name    string                             `json:"name"`
-	Pattern string                             `json:"pattern"`
-	Reason  ExpectedArtifactVerificationReason `json:"reason"`
+	DeclarationIndex int                                `json:"declarationIndex,omitempty"`
+	Name             string                             `json:"name"`
+	Pattern          string                             `json:"pattern"`
+	Reason           ExpectedArtifactVerificationReason `json:"reason"`
 }
 
 // ExpectedArtifactVerification is the durable terminal failure summary for

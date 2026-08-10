@@ -113,18 +113,39 @@ type ExpectedArtifactInput struct {
 // ExpectedArtifactTemplateContext carries the non-host context exposed to
 // artifact templates. Replay callers normally leave these values empty.
 type ExpectedArtifactTemplateContext struct {
-	WorkDir     string
-	ArtifactDir string
-	Project     string
-	SessionID   string
-	Env         map[string]string
+	// Project is the stable project value available to artifact templates.
+	Project string `json:"project,omitempty"`
+	// SessionID is the stable Factory Session value available to artifact
+	// templates. Host paths, environment variables, and Factory docs are not
+	// part of the artifact template vocabulary.
+	SessionID string `json:"sessionId,omitempty"`
+}
+
+const (
+	defaultExpectedArtifactProject = "default-project"
+	defaultExpectedArtifactSession = "~default"
+)
+
+// CloneExpectedArtifactTemplateContext returns a detached copy of the stable
+// context recorded with an artifact-bearing dispatch.
+func CloneExpectedArtifactTemplateContext(
+	context *ExpectedArtifactTemplateContext,
+) *ExpectedArtifactTemplateContext {
+	if context == nil {
+		return nil
+	}
+	clone := *context
+	return &clone
 }
 
 // ExpectedArtifactVerificationEntry is one recorded unmet declaration.
 type ExpectedArtifactVerificationEntry struct {
-	Name    string
-	Pattern string
-	Reason  ExpectedArtifactVerificationReason
+	// DeclarationIndex is the one-based position in the normalized declaration
+	// list. It disambiguates declarations that intentionally share a name.
+	DeclarationIndex int
+	Name             string
+	Pattern          string
+	Reason           ExpectedArtifactVerificationReason
 }
 
 // ExpectedArtifactObservation describes the durable verification fact for a
@@ -148,6 +169,7 @@ func (ExpectedArtifactReadModelProjector) Project(
 	workstationDeclarations []ExpectedArtifactDeclaration,
 	inputs []ExpectedArtifactInput,
 	observation ExpectedArtifactObservation,
+	templateContexts ...ExpectedArtifactTemplateContext,
 ) []ExpectedArtifactReadModel {
 	declarations := normalizeExpectedArtifactDeclarations(
 		workTypeDeclarations,
@@ -157,9 +179,10 @@ func (ExpectedArtifactReadModelProjector) Project(
 		return nil
 	}
 
+	templateContext := expectedArtifactTemplateContext(inputs, templateContexts...)
 	readModels := make([]ExpectedArtifactReadModel, 0, len(declarations))
-	for _, declaration := range declarations {
-		pattern, renderErr := renderExpectedArtifactPattern(declaration.Pattern, inputs)
+	for declarationIndex, declaration := range declarations {
+		pattern, renderErr := renderExpectedArtifactPattern(declaration.Pattern, inputs, templateContext)
 		if renderErr != nil {
 			pattern = "<unrenderable>"
 		} else if safe, ok := safeExpectedArtifactPattern(pattern); ok {
@@ -174,7 +197,7 @@ func (ExpectedArtifactReadModelProjector) Project(
 			NonEmpty:     declaration.NonEmpty,
 			Verification: ExpectedArtifactVerificationPending,
 		}
-		if entry, ok := expectedArtifactFailureEntry(declaration.Name, pattern, observation.Entries); ok {
+		if entry, ok := expectedArtifactFailureEntry(declarationIndex, declaration.Name, pattern, observation.Entries); ok {
 			readModel.Verification = ExpectedArtifactVerificationFailed
 			readModel.Reason = expectedArtifactReasonPtr(entry.Reason)
 			if entry.Pattern != "" {
@@ -203,26 +226,6 @@ func normalizeExpectedArtifactDeclarations(groups ...[]ExpectedArtifactDeclarati
 	return normalized
 }
 
-func renderExpectedArtifactPattern(pattern string, inputs []ExpectedArtifactInput) (string, error) {
-	parsed, err := template.New("expected_artifact").Option("missingkey=error").Parse(pattern)
-	if err != nil {
-		return "", err
-	}
-	data := struct {
-		Docs    map[string]string
-		Inputs  []ExpectedArtifactInput
-		Context ExpectedArtifactTemplateContext
-	}{
-		Docs:   map[string]string{},
-		Inputs: inputs,
-	}
-	var rendered bytes.Buffer
-	if err := parsed.Execute(&rendered, data); err != nil {
-		return "", err
-	}
-	return rendered.String(), nil
-}
-
 func safeExpectedArtifactPattern(value string) (string, bool) {
 	trimmed := strings.TrimSpace(value)
 	if trimmed == "" {
@@ -246,19 +249,82 @@ func safeExpectedArtifactPattern(value string) (string, bool) {
 	return portable, true
 }
 
+func expectedArtifactTemplateContext(
+	inputs []ExpectedArtifactInput,
+	templateContexts ...ExpectedArtifactTemplateContext,
+) ExpectedArtifactTemplateContext {
+	var context ExpectedArtifactTemplateContext
+	if len(templateContexts) > 0 {
+		context = templateContexts[0]
+	}
+	if strings.TrimSpace(context.Project) == "" {
+		for _, input := range inputs {
+			if project := strings.TrimSpace(input.Project); project != "" {
+				context.Project = project
+				break
+			}
+		}
+	}
+	if strings.TrimSpace(context.Project) == "" {
+		context.Project = defaultExpectedArtifactProject
+	}
+	if strings.TrimSpace(context.SessionID) == "" {
+		context.SessionID = defaultExpectedArtifactSession
+	}
+	return context
+}
+
+func renderExpectedArtifactPattern(
+	pattern string,
+	inputs []ExpectedArtifactInput,
+	templateContext ExpectedArtifactTemplateContext,
+) (string, error) {
+	parsed, err := template.New("expected_artifact").Option("missingkey=error").Parse(pattern)
+	if err != nil {
+		return "", err
+	}
+	data := struct {
+		Inputs  []ExpectedArtifactInput
+		Context ExpectedArtifactTemplateContext
+	}{
+		Inputs:  inputs,
+		Context: templateContext,
+	}
+	var rendered bytes.Buffer
+	if err := parsed.Execute(&rendered, data); err != nil {
+		return "", err
+	}
+	return rendered.String(), nil
+}
+
 func expectedArtifactFailureEntry(
+	declarationIndex int,
 	name string,
 	pattern string,
 	entries []ExpectedArtifactVerificationEntry,
 ) (ExpectedArtifactVerificationEntry, bool) {
+	declarationNumber := declarationIndex + 1
+	for _, entry := range entries {
+		if entry.DeclarationIndex == declarationNumber {
+			return entry, true
+		}
+	}
 	for _, entry := range entries {
 		if entry.Name == name && entry.Pattern == pattern {
 			return entry, true
 		}
 	}
+	matchingNames := 0
 	for _, entry := range entries {
 		if entry.Name == name {
-			return entry, true
+			matchingNames++
+		}
+	}
+	if matchingNames == 1 {
+		for _, entry := range entries {
+			if entry.Name == name {
+				return entry, true
+			}
 		}
 	}
 	return ExpectedArtifactVerificationEntry{}, false

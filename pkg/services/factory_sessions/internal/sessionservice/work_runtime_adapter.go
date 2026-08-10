@@ -120,6 +120,7 @@ func runtimeExpectedArtifacts(
 			runtimeWorkstationArtifactDeclarations(net, dispatch.transitionID, dispatch.workstationName),
 			runtimeExpectedArtifactInputs(dispatch.inputs, token),
 			work.ExpectedArtifactObservation{},
+			runtimeExpectedArtifactTemplateContext(dispatch.templateContext)...,
 		)
 	}
 	if dispatch, ok := runtimeCompletedArtifactDispatch(token, dispatchHistory, results); ok {
@@ -128,6 +129,7 @@ func runtimeExpectedArtifacts(
 			runtimeWorkstationArtifactDeclarations(net, dispatch.transitionID, dispatch.workstationName),
 			runtimeExpectedArtifactInputs(dispatch.inputs, token),
 			dispatch.observation,
+			runtimeExpectedArtifactTemplateContext(dispatch.templateContext)...,
 		)
 	}
 
@@ -169,6 +171,7 @@ type runtimeArtifactDispatchFacts struct {
 	workstationName string
 	inputs          []workers.Token
 	observation     work.ExpectedArtifactObservation
+	templateContext *work.ExpectedArtifactTemplateContext
 }
 
 func runtimeActiveArtifactDispatch(
@@ -189,6 +192,7 @@ func runtimeActiveArtifactDispatch(
 			transitionID:    dispatch.TransitionID,
 			workstationName: dispatch.WorkstationName,
 			inputs:          append([]workers.Token(nil), dispatch.ConsumedTokens...),
+			templateContext: work.CloneExpectedArtifactTemplateContext(dispatch.ExpectedArtifactContext),
 		}, true
 	}
 	return runtimeArtifactDispatchFacts{}, false
@@ -209,6 +213,7 @@ func runtimeCompletedArtifactDispatch(
 			workstationName: dispatch.WorkstationName,
 			inputs:          append([]workers.Token(nil), dispatch.ConsumedTokens...),
 			observation:     runtimeArtifactObservation(dispatch, results),
+			templateContext: work.CloneExpectedArtifactTemplateContext(dispatch.ExpectedArtifactContext),
 		}, true
 	}
 	return runtimeArtifactDispatchFacts{}, false
@@ -257,7 +262,8 @@ func runtimeExpectedArtifactObservation(
 	observation := work.ExpectedArtifactObservation{Verified: true}
 	for _, entry := range verification.Entries {
 		observation.Entries = append(observation.Entries, work.ExpectedArtifactVerificationEntry{
-			Name: entry.Name, Pattern: entry.Pattern, Reason: work.ExpectedArtifactVerificationReason(entry.Reason),
+			DeclarationIndex: entry.DeclarationIndex,
+			Name:             entry.Name, Pattern: entry.Pattern, Reason: work.ExpectedArtifactVerificationReason(entry.Reason),
 		})
 	}
 	return observation
@@ -301,9 +307,19 @@ func runtimeExpectedArtifactInput(token workers.Token) work.ExpectedArtifactInpu
 		DataType:   string(token.Color.DataType),
 		TraceID:    token.Color.TraceID,
 		ParentID:   token.Color.ParentID,
+		Project:    token.Color.Tags[workers.ProjectTagKey],
 		Tags:       work.CloneTags(token.Color.Tags),
 		Payload:    string(token.Color.Payload),
 	}
+}
+
+func runtimeExpectedArtifactTemplateContext(
+	context *work.ExpectedArtifactTemplateContext,
+) []work.ExpectedArtifactTemplateContext {
+	if context == nil {
+		return nil
+	}
+	return []work.ExpectedArtifactTemplateContext{*context}
 }
 
 func runtimeWorkState(token *workers.Token, net *factoryruntime.Net, inFlight bool) *work.State {

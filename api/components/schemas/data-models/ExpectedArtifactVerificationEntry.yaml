@@ -5,6 +5,10 @@ required:
   - pattern
   - reason
 properties:
+  declarationIndex:
+    type: integer
+    minimum: 1
+    description: One-based position in the normalized expected-artifact declaration list.
   name:
     type: string
     minLength: 1

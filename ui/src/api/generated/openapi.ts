@@ -2087,10 +2087,19 @@ export interface components {
       entries: components["schemas"]["ExpectedArtifactVerificationEntry"][];
     };
     ExpectedArtifactVerificationEntry: {
+      /** @description One-based position in the normalized expected-artifact declaration list. */
+      declarationIndex?: number;
       name: string;
       /** @description Workspace-relative rendered artifact pattern; host paths are never emitted. */
       pattern: string;
       reason: components["schemas"]["ExpectedArtifactVerificationReason"];
+    };
+    /** @description Stable, non-host context used when rendering expected-artifact patterns. Filesystem paths, environment variables, and Factory documentation are not part of this replayable vocabulary. */
+    ExpectedArtifactTemplateContext: {
+      /** @description Stable project identifier for the dispatch. */
+      project?: string;
+      /** @description Stable Factory Session identifier for the dispatch. */
+      sessionId?: string;
     };
     /** @description One effective expected artifact declaration projected on a Work item. Pattern is the rendered workspace-relative literal path or glob, never a host path. */
     WorkExpectedArtifact: {
@@ -3496,6 +3505,7 @@ export interface components {
       inputs: components["schemas"]["DispatchConsumedWorkRef"][];
       resources?: components["schemas"]["Resource"][];
       metadata?: components["schemas"]["DispatchRequestEventMetadata"];
+      expectedArtifactContext?: components["schemas"]["ExpectedArtifactTemplateContext"];
     };
     /** @description Canonical association between one Factory dispatch and the Worker Session allocated to execute it. Dispatch identity remains authoritative in FactoryEvent.context.dispatchId and is not repeated in this payload. */
     DispatchWorkerSessionAssociationEventPayload: {

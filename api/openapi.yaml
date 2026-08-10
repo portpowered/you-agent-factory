@@ -4516,6 +4516,10 @@ components:
         - pattern
         - reason
       properties:
+        declarationIndex:
+          type: integer
+          minimum: 1
+          description: One-based position in the normalized expected-artifact declaration list.
         name:
           type: string
           minLength: 1
@@ -4525,6 +4529,17 @@ components:
           description: Workspace-relative rendered artifact pattern; host paths are never emitted.
         reason:
           $ref: '#/components/schemas/ExpectedArtifactVerificationReason'
+    ExpectedArtifactTemplateContext:
+      type: object
+      additionalProperties: false
+      description: Stable, non-host context used when rendering expected-artifact patterns. Filesystem paths, environment variables, and Factory documentation are not part of this replayable vocabulary.
+      properties:
+        project:
+          type: string
+          description: Stable project identifier for the dispatch.
+        sessionId:
+          type: string
+          description: Stable Factory Session identifier for the dispatch.
     WorkExpectedArtifact:
       type: object
       additionalProperties: false
@@ -7354,6 +7369,8 @@ components:
             $ref: '#/components/schemas/Resource'
         metadata:
           $ref: '#/components/schemas/DispatchRequestEventMetadata'
+        expectedArtifactContext:
+          $ref: '#/components/schemas/ExpectedArtifactTemplateContext'
     DispatchWorkerSessionAssociationEventPayload:
       type: object
       additionalProperties: false
