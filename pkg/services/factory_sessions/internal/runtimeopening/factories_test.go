@@ -3,9 +3,13 @@ package runtimeopening
 import (
 	"bytes"
 	"context"
+	"errors"
+	"fmt"
 	"reflect"
 	"slices"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -302,6 +306,7 @@ func assertFactorySessionsPortsRetained(t *testing.T, factory *Factory, dependen
 	t.Helper()
 	group := dependencies.FactorySessions
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Sessions service", factory.factorySessionsService, group.Service)
+	assertRuntimeOpeningDependencyIdentity(t, "Factory Sessions runtime assembly", factory.factorySessionsRuntimeAssembly, group.RuntimeAssembly)
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Sessions durable execution", factory.durableExecutionFactory, group.DurableExecutionFactory)
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Sessions execution", factory.factorySessionExecutionFactory, group.FactorySessionExecutionFactory)
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Sessions scaffold", factory.factoryScaffoldInitializer, group.FactoryScaffoldInitializer)
@@ -420,6 +425,7 @@ func runtimeOpeningMemberOmissions() []runtimeOpeningDependencyOmission {
 		{"Factory Definitions replay runtime config decoder", func(d *runtimeOpeningFixture) { d.FactoryDefinitions.DecodeReplayConfig = nil }},
 		{"Factory Definitions loaded factory snapshot capturer", func(d *runtimeOpeningFixture) { d.FactoryDefinitions.CaptureLoadedFactorySnapshot = nil }},
 		{"Factory Sessions service", func(d *runtimeOpeningFixture) { d.FactorySessions.Service = nil }},
+		{"Factory Sessions runtime assembly", func(d *runtimeOpeningFixture) { d.FactorySessions.RuntimeAssembly = nil }},
 		{"Factory Sessions durable execution factory", func(d *runtimeOpeningFixture) { d.FactorySessions.DurableExecutionFactory = nil }},
 		{"Factory Sessions session execution factory", func(d *runtimeOpeningFixture) { d.FactorySessions.FactorySessionExecutionFactory = nil }},
 		{"Factory Sessions factory scaffold initializer", func(d *runtimeOpeningFixture) { d.FactorySessions.FactoryScaffoldInitializer = nil }},
@@ -452,6 +458,7 @@ func runtimeOpeningMemberOmissions() []runtimeOpeningDependencyOmission {
 }
 
 func validRuntimeOpeningOwnerPorts(calls *int) runtimeOpeningFixture {
+	factorySessionsRoot := &factorySessionsConstructionStub{}
 	return runtimeOpeningFixture{
 		ProviderSessions: &ProviderSessionsPorts{
 			Service: providerSessionsConstructionStub{},
@@ -478,7 +485,8 @@ func validRuntimeOpeningOwnerPorts(calls *int) runtimeOpeningFixture {
 			CaptureLoadedFactorySnapshot:  inertRuntimeOpeningFunction[factorydefinitions.LoadedFactorySnapshotCapturer](calls),
 		},
 		FactorySessions: &FactorySessionsPorts{
-			Service:                        factorySessionsConstructionStub{},
+			Service:                        factorySessionsRoot,
+			RuntimeAssembly:                factorySessionsRoot,
 			DurableExecutionFactory:        inertRuntimeOpeningFunction[DurableExecutionFactory](calls),
 			FactorySessionExecutionFactory: inertRuntimeOpeningFunction[FactorySessionExecutionFactory](calls),
 			FactoryScaffoldInitializer:     inertRuntimeOpeningFunction[factorysessions.FactoryScaffoldInitializer](calls),
@@ -545,7 +553,10 @@ type validatorConstructionStub struct{ factorydefinitions.Validator }
 type namedPathsConstructionStub struct {
 	factorydefinitions.NamedPathResolver
 }
-type factorySessionsConstructionStub struct{ factorysessions.Service }
+type factorySessionsConstructionStub struct {
+	factorysessions.Service
+	roles.RuntimeAssembly
+}
 type factoryRuntimeAssemblerConstructionStub struct{ FactoryRuntimeAssembler }
 type processRuntimeFactoryConstructionStub struct{ roles.ProcessRuntimeFactory }
 type modelsConstructionStub struct{ models.Service }
@@ -590,3 +601,124 @@ func (recorder *historicalReplayInputsRecorder) LoadReplayInput(
 }
 
 var _ recordings.ReplayInputLoader = (*historicalReplayInputsRecorder)(nil)
+
+// TestConcurrentRuntimeOpeningUsesSharedFactorySessionsRoot proves the
+// operation path consumes the process root's private runtime capability
+// directly. The compatibility ForRuntime method deliberately returns an
+// error, so any accidental child-service construction fails this test.
+func TestConcurrentRuntimeOpeningUsesSharedFactorySessionsRoot(t *testing.T) {
+	t.Parallel()
+
+	root := &concurrentFactorySessionsRoot{}
+	modelsRoot := &concurrentModelsRoot{}
+	factory := newOpeningCoordinatorFactory(t, modelsRoot)
+	factory.factorySessionsService = root
+	factory.factorySessionsRuntimeAssembly = root
+
+	wantFailure := errors.New("worker opening failed")
+	var runtimeCalls, runtimeMismatches int
+	failure := &openingCoordinatorFailure{
+		err:             wantFailure,
+		wantRuntime:     root,
+		runtimeCalls:    &runtimeCalls,
+		runtimeMismatch: &runtimeMismatches,
+		mu:              &sync.Mutex{},
+	}
+	factory.workerExecutionFactory = failure.openWorkerExecution
+
+	requests := []*factorysessions.RuntimeOpeningRequest{
+		{
+			FactoryDefinition:   factoryDefinitionRequest(t.TempDir()),
+			FactorySession:      factorysessions.SessionRuntimeOpeningRequest{BackendScopeID: "scope-first"},
+			ModelCacheDirectory: "/cache/first",
+		},
+		{
+			FactoryDefinition:   factoryDefinitionRequest(t.TempDir()),
+			FactorySession:      factorysessions.SessionRuntimeOpeningRequest{BackendScopeID: "scope-second"},
+			ModelCacheDirectory: "/cache/second",
+		},
+	}
+	results := make(chan error, len(requests))
+	var wait sync.WaitGroup
+	for _, request := range requests {
+		request := request
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			_, err := factory.openRuntime(context.Background(), request, zap.NewNop(), nil, nil)
+			results <- err
+		}()
+	}
+	wait.Wait()
+	close(results)
+
+	for err := range results {
+		if !errors.Is(err, wantFailure) {
+			t.Fatalf("concurrent openRuntime() error = %v, want worker failure", err)
+		}
+	}
+	if runtimeCalls != len(requests) {
+		t.Fatalf("worker runtime-root calls = %d, want %d", runtimeCalls, len(requests))
+	}
+	if runtimeMismatches != 0 {
+		t.Fatalf("worker runtime-root mismatches = %d, want none", runtimeMismatches)
+	}
+	if got := root.forRuntimeCalls.Load(); got != 0 {
+		t.Fatalf("compatibility ForRuntime calls = %d, want none", got)
+	}
+	if got := modelsRoot.opens.Load(); got != int32(len(requests)) {
+		t.Fatalf("Models root open calls = %d, want %d", got, len(requests))
+	}
+	if got := modelsRoot.closes.Load(); got != int32(len(requests)) {
+		t.Fatalf("Models root close calls = %d, want one private close per failed session", got)
+	}
+}
+
+func factoryDefinitionRequest(directory string) factorydefinitions.RuntimeOpeningRequest {
+	return factorydefinitions.RuntimeOpeningRequest{Directory: directory}
+}
+
+type concurrentFactorySessionsRoot struct {
+	factorysessions.Service
+	roles.RuntimeAssembly
+	forRuntimeCalls atomic.Int32
+}
+
+func (root *concurrentFactorySessionsRoot) ForRuntime(factorysessions.OpeningBindingRequest) (factorysessions.Service, error) {
+	root.forRuntimeCalls.Add(1)
+	return nil, errors.New("ForRuntime must not be called")
+}
+
+func (root *concurrentFactorySessionsRoot) CurrentRuntime() *factorysessions.LiveRuntime {
+	return nil
+}
+
+func (root *concurrentFactorySessionsRoot) InferenceProgressPublisherFactory(*zap.Logger) func(string) factorysessions.ProgressPublisher {
+	return nil
+}
+
+type concurrentModelsRoot struct {
+	models.Service
+	opens  atomic.Int32
+	closes atomic.Int32
+}
+
+func (root *concurrentModelsRoot) OpenRuntimeScope(
+	context.Context,
+	models.OpenRuntimeScopeRequest,
+) (models.OpenRuntimeScopeResult, error) {
+	sequence := root.opens.Add(1)
+	scope, err := (models.RuntimeScopeRef{}).Parse(fmt.Sprintf("factory-session:concurrent:%d", sequence))
+	if err != nil {
+		return models.OpenRuntimeScopeResult{}, err
+	}
+	return models.OpenRuntimeScopeResult{Scope: scope}, nil
+}
+
+func (root *concurrentModelsRoot) CloseRuntimeScope(
+	context.Context,
+	models.CloseRuntimeScopeRequest,
+) (models.CloseRuntimeScopeResult, error) {
+	root.closes.Add(1)
+	return models.CloseRuntimeScopeResult{Closed: true}, nil
+}

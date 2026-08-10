@@ -66,6 +66,7 @@ func NewService(
 	initialWorkFiles fileeffects.InitialWorkReader,
 	resolveSymlinks factorysessions.LogicalTargetResolveSymlinks,
 	eventsService events.Service,
+	clock factoryruntime.Clock,
 ) (factorysessions.Service, error) {
 	if sessionResultProjection == nil {
 		return nil, fmt.Errorf("construct Factory Sessions: session result projection is required")
@@ -115,6 +116,7 @@ func NewService(
 		initialWorkFiles,
 		identityService,
 		responseStreams,
+		clock,
 	)
 	if err != nil {
 		return nil, err

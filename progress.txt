@@ -17,6 +17,7 @@
 - Canonical Wire should pass one explicit owner-port contract per service owner; aggregate composition helpers belong only in tests and must not cross the production constructor boundary.
 - Process-scoped external effects should be adapted or defaulted in canonical Wire providers and captured by closures; operation factories receive the selected owner ports and only values or observation fallbacks.
 - Regenerate `pkg/wire/wire_gen.go` through `make wire-smoke` after changing a Wire provider signature so drift and focused composition tests run together.
+- When a public service root also owns a private runtime capability, construct the capability once in Wire, narrow the same root once at composition time, and pass that retained role to operations; keep per-operation gateways/state private and never replace the shared root slot during concurrent completion.
 
 - Worker Session finite streams can use the injected Events `Read` contract with the first retained head as a snapshot boundary; replay-only paths must not call `Subscribe`.
 - Authored OpenAPI and CLI contracts generate their Go, TypeScript, published metadata, and family-manifest consumers; update the source contract first, then run the repository generators and drift checks.
@@ -814,5 +815,37 @@
 - **Learnings for future iterations:**
   - Keep required process effects as typed owner ports with defaults resolved by Wire; do not let runtime input resolvers copy or reconstruct edge implementations.
   - When removing a shared construction seam, search all package tests as well as production Wire callers; integration fakes may implement the old signature outside the directly changed service package.
-  - Hosted and visualization effects can remain process-scoped without entering runtime requests by capturing their exact edge values in provider closures or adapters.
+- Hosted and visualization effects can remain process-scoped without entering runtime requests by capturing their exact edge values in provider closures or adapters.
+---
+
+## 2026-08-10 06:20 -07:00 - btrc-p1-root-injection-003
+- What was implemented
+  - Changed Factory Sessions Wire construction to accept the process-selected clock and construct the live-session assembly once inside the process-scoped root.
+  - Added a direct owner-private runtime-assembly port derived once from the same published Factory Sessions root; canonical Wire injects both exact views into the runtime-opening owner contract.
+  - Removed runtime opening's `Service.ForRuntime` call and stored child-assembly path. The compatibility method now validates legacy input and returns the existing root without constructing anything.
+  - Kept per-runtime gateways and cleanup state operation-scoped, and stopped concurrent completions from replacing the shared root's service slot.
+  - Added root identity, concurrent opening, legacy-path non-use, and failed-session Models-scope isolation assertions, including race/repeat coverage; extended the owner-contract register.
+- Files changed
+  - `pkg/services/factory_sessions/internal/service/root.go`
+  - `pkg/services/factory_sessions/internal/sessionservice/assembly.go`
+  - `pkg/services/factory_sessions/internal/runtimeopening/factory.go`
+  - `pkg/services/factory_sessions/internal/runtimeopening/open.go`
+  - `pkg/services/factory_sessions/internal/runtimeopening/factories_test.go`
+  - `pkg/services/factory_sessions/internal/runtimeopening/models_bind_test.go`
+  - `pkg/services/factory_sessions/service_contracts.go`
+  - `pkg/services/factory_sessions/wire/application_graph.go`
+  - `pkg/services/factory_sessions/wire/wire.go`
+  - `pkg/services/factory_sessions/wire/wire_test.go`
+  - `pkg/wire/session_runtime_providers.go`, `pkg/wire/wire.go`, `pkg/wire/wire_gen.go`
+  - `docs/internal/packaged-service-structure/btrc-p1-owner-contracts.md`
+  - `prd.json`, `progress.txt`
+- Verification
+  - `go test ./pkg/services/factory_sessions/... -count=1` — passed.
+  - `go test -race ./pkg/services/factory_sessions/internal/runtimeopening -run TestConcurrentRuntimeOpeningUsesSharedFactorySessionsRoot -count=5` — passed.
+  - `make test`, `make wire-smoke`, `make verify-fast`, root/functional support tests, `make pkg-structure`, `make pkg-maint`, `make pkg-file-count`, and `git diff --check` — passed.
+  - `make lint` passed UI lint/dead-code, vet, backend-size, maintainability, and file-count checks, then stopped at the unchanged 176-violation `pkg-boundary` migration baseline; no reported violation touches these files.
+- **Learnings for future iterations:**
+  - A private runtime role can be derived from a canonical public root once at composition time, but the operation must receive that role directly; type-asserting or binding the public root inside each operation recreates the secondary composition path.
+  - Shared root slots must remain immutable after construction; return per-session gateways as operation products instead of replacing a root field when multiple openings can complete concurrently.
+  - The runtime-opening package is at its file-count baseline, so focused tests belong in an existing responsibility-aligned test file unless the baseline is intentionally changed.
 ---

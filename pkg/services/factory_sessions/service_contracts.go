@@ -83,14 +83,12 @@ type RuntimeBinding struct {
 // ErrResponseStreamSubscriptionClosed on SubscribeFactoryResponseEvents; peers
 // must not import private response-stream store or manager types and must not
 // depend on a nested stream interface for peer import.
-// The published opening/binding slice uses OpeningBindingRequest,
-// OpeningBindingResult, *OpeningBindingError, and ErrOpeningBindingInvalid on
-// ForRuntime; peers supply already-constructed peer root capabilities through
-// plain binding inputs without downcasting or bundling nested opening
-// interfaces. Binding stays inert during construction characterization.
-// The process-scoped root uses ForRuntime to create an isolated runtime view; a
-// bound view serves the remaining application operations. Peers must depend on
-// the smallest owner-published capability it uses: LiveControlService for
+// The published opening/binding slice remains a compatibility boundary for
+// callers that have not yet migrated to the direct Wire-owned runtime role.
+// Peers in the canonical runtime-opening graph receive that role alongside the
+// same process root; they do not downcast the root or ask it to construct a
+// nested service. Binding stays inert during compatibility characterization.
+// Peers must depend on the smallest owner-published capability it uses: LiveControlService for
 // live control, DurableExecutionService for durable execution,
 // InvocationService for one-shot invocation, or TargetExecutionService for the
 // established combined target behavior. Service remains the singular aggregate

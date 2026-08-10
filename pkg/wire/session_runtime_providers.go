@@ -544,10 +544,17 @@ func provideFactorySessionsService(
 	initialWorkFiles factorysessionwire.InitialWorkReader,
 	resolveSymlinks factorysessions.LogicalTargetResolveSymlinks,
 	eventsService events.Service,
+	clock factoryruntime.Clock,
 ) (factorysessions.Service, error) {
 	return factorysessionwire.NewService(func() factoryruntime.JavaScriptCheckpointStore {
 		return factoryruntimewire.NewJavaScriptCheckpointStore()
-	}, sessionResultProjection, interpolation, invocationWorkTypes, ttsObservability, eventIDs, responseEventRetentionLimits, sessionIDs, resolveHome, directories, namedPaths, invocationInputFiles, initialWorkFiles, resolveSymlinks, eventsService)
+	}, sessionResultProjection, interpolation, invocationWorkTypes, ttsObservability, eventIDs, responseEventRetentionLimits, sessionIDs, resolveHome, directories, namedPaths, invocationInputFiles, initialWorkFiles, resolveSymlinks, eventsService, clock)
+}
+
+func provideFactorySessionsRuntimeAssembly(
+	service factorysessions.Service,
+) (factorysessionwire.RuntimeAssembly, error) {
+	return factorysessionwire.RuntimeAssemblyFromService(service)
 }
 
 func provideOrchestrationJavaScriptExecution(

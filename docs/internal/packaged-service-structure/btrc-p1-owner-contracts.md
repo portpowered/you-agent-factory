@@ -1,9 +1,10 @@
 # BTRC P1 owner-contract register
 
-This register records the dependency classification for the first two BTRC P1
+This register records the dependency classification for the first three BTRC P1
 cutovers. It is intentionally limited to the Factory Sessions runtime-opening
 boundary changed by stories `btrc-p1-root-injection-001` and
-`btrc-p1-root-injection-002`; later P1 stories extend the register when they
+`btrc-p1-root-injection-002`, plus the shared Factory Sessions root cutover in
+`btrc-p1-root-injection-003`; later P1 stories extend the register when they
 move additional operation contracts or private observability state.
 
 ## Build-time owner ports
@@ -18,7 +19,7 @@ retain the aggregate `edges.Edges` value or select another service graph.
 | Provider Sessions | `ProviderSessionsPorts` | Provider Sessions root |
 | Factory Runtime | `FactoryRuntimePorts` | workflow definitions, preview, runtime executors, provider invocation, mock runner, assembler, clock resolver, session logger factory, selected clock, provider override, submission recorder, and dispatch recorder |
 | Factory Definitions | `FactoryDefinitionsPorts` | validator, named paths, loading, replay decoding, and snapshot capabilities |
-| Factory Sessions | `FactorySessionsPorts` | Sessions root, execution/scaffold/validation capabilities, runtime identity, home, provider identity, invocation metrics recorder, and runtime-host observer |
+| Factory Sessions | `FactorySessionsPorts` | Sessions root, its directly retained runtime assembly, execution/scaffold/validation capabilities, runtime identity, home, provider identity, invocation metrics recorder, and runtime-host observer |
 | Work | `WorkPorts` | Work factory and content materializer |
 | Automations | `AutomationsPorts` | automation and hosted-source factories |
 | Models | `ModelsPorts` | Models root |
@@ -52,11 +53,21 @@ sink/root-observer effects are captured by their canonical Wire providers or
 application adapter once; dynamic log and metric destinations remain deferred
 to the observability-owner story.
 
+The Factory Sessions root is constructed once with the selected process clock.
+Canonical Wire narrows that same root to its owner-private runtime assembly
+once, and runtime opening consumes the retained capability directly. The
+compatibility `ForRuntime` method is not part of the runtime-opening path and
+does not construct a child service. Session gateways, runtime handles, model
+scopes, and cleanup stacks remain private to each opened operation.
+
 ## Construction evidence
 
 `pkg/services/factory_sessions/internal/runtimeopening/factories_test.go`
 supplies distinct fakes for every owner-port contract, asserts exact identity
 retention, and verifies construction does not invoke collaborator functions.
+`pkg/services/factory_sessions/internal/runtimeopening/root_reuse_test.go`
+opens two failing runtimes concurrently and proves both use the same injected
+Factory Sessions runtime root while each private Models scope is closed once.
 `pkg/wire/runtime_inputs_test.go` verifies exact edge projection and one-time
 default runner selection. The root functional support test
 `tests/functional/internal/support/public_process_observation_test.go` enters

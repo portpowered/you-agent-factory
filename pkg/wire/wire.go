@@ -146,6 +146,7 @@ var servicesSet = wire.NewSet(
 	provideTTSObservabilityService,
 	provideAutomationFactory,
 	provideFactorySessionsService,
+	provideFactorySessionsRuntimeAssembly,
 	providePortableRecordingWriter,
 	provideOrchestrationJavaScriptExecution,
 	provideOrchestrationCompilation,

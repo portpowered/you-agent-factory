@@ -68,8 +68,8 @@
         "Tests pass"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented one process-scoped Factory Sessions root with the selected clock and its owner-private runtime assembly constructed during canonical Wire composition. Runtime opening retains the exact root and consumes the direct runtime capability; it no longer calls Service.ForRuntime or creates a child Factory Sessions assembly. Added construction identity coverage, direct-root identity coverage, concurrent two-operation failure isolation with race/repeat coverage, and private Models-scope close assertions. The compatibility ForRuntime method remains inert and returns the same root for callers not yet migrated; it is not used by runtime opening. pkg/services/factory_sessions/... tests, make test, make wire-smoke, make verify-fast, root/support tests, focused race coverage, and package structure/maintainability/file-count gates pass. make lint still stops at the unchanged pkg-boundary migration baseline documented in progress.txt. Stories 004-006 remain pending."
     },
     {
       "id": "btrc-p1-root-injection-004",

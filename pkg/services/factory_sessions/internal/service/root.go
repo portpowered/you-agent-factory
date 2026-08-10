@@ -13,25 +13,16 @@ import (
 	legacyservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
 )
 
-// Root retains process-scoped Factory Sessions dependencies. It is inert until
-// runtime opening binds a clock selected from the invocation's external edges.
+// Root is the one process-scoped Factory Sessions root. Its live-session
+// assembly is constructed once by Wire and retains process-scoped registries;
+// opening a session only adds private session/runtime state to that assembly.
 type Root struct {
 	factorysessions.Service
-	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory
-	sessionResultProjection      factoryruntime.SessionResultProjectionOperation
-	interpolation                factorydefinitions.InvocationInterpolationService
-	invocationWorkTypes          factorydefinitions.InvocationWorkTypeService
-	ttsObservability             factorydefinitions.TTSObservabilityService
-	eventIDs                     factorysessions.ResponseEventIDGenerator
-	sessionIDs                   factorysessions.SessionIDGenerator
-	resolveHome                  factorysessions.HomeDirectoryResolver
-	directoryInspection          roles.DirectoryInspection
-	namedPaths                   factorydefinitions.NamedPathResolver
-	invocationInputFiles         fileeffects.InvocationInputReader
-	initialWorkFiles             fileeffects.InitialWorkReader
-	identity                     identity.Service
-	responseStreams              responsestreamservice.Service
+	*legacyservice.Assembly
 }
+
+var _ factorysessions.Service = (*Root)(nil)
+var _ roles.RuntimeAssembly = (*Root)(nil)
 
 // NewRoot constructs the process-scoped Factory Sessions service without
 // starting runtimes, listeners, or background work.
@@ -50,6 +41,7 @@ func NewRoot(
 	initialWorkFiles fileeffects.InitialWorkReader,
 	identityService identity.Service,
 	responseStreams responsestreamservice.Service,
+	clock factoryruntime.Clock,
 ) (*Root, error) {
 	if sessionResultProjection == nil {
 		return nil, fmt.Errorf("construct Factory Sessions: session result projection is required")
@@ -81,27 +73,36 @@ func NewRoot(
 	if responseStreams == nil {
 		return nil, fmt.Errorf("construct Factory Sessions: response-stream service is required")
 	}
-	return &Root{
-		Service:                      &legacyservice.Service{},
-		newJavaScriptCheckpointStore: newJavaScriptCheckpointStore,
-		sessionResultProjection:      sessionResultProjection,
-		interpolation:                interpolation,
-		invocationWorkTypes:          invocationWorkTypes,
-		ttsObservability:             ttsObservability,
-		eventIDs:                     eventIDs,
-		sessionIDs:                   sessionIDs,
-		resolveHome:                  resolveHome,
-		directoryInspection:          directoryInspection,
-		namedPaths:                   namedPaths,
-		invocationInputFiles:         invocationInputFiles,
-		initialWorkFiles:             initialWorkFiles,
-		identity:                     identityService,
-		responseStreams:              responseStreams,
-	}, nil
+	if clock == nil {
+		return nil, fmt.Errorf("construct Factory Sessions: clock is required")
+	}
+	assemblyRole := legacyservice.NewAssembly(
+		newJavaScriptCheckpointStore,
+		sessionResultProjection,
+		interpolation,
+		invocationWorkTypes,
+		ttsObservability,
+		clock,
+		eventIDs,
+		sessionIDs,
+		resolveHome,
+		directoryInspection,
+		namedPaths,
+		invocationInputFiles,
+		initialWorkFiles,
+		identityService,
+		responseStreams,
+	)
+	assembly, ok := assemblyRole.(*legacyservice.Assembly)
+	if !ok || assembly == nil {
+		return nil, fmt.Errorf("construct Factory Sessions: implementation rejected its dependencies")
+	}
+	return &Root{Service: &legacyservice.Service{}, Assembly: assembly}, nil
 }
 
-// ForRuntime binds invocation-local runtime data to the already-constructed
-// service and returns an isolated live-session assembly.
+// ForRuntime is retained as a compatibility binding for callers that have not
+// yet moved to the direct runtime-root port. It never constructs or returns a
+// child service; the process root already owns the shared assembly.
 func (r *Root) ForRuntime(binding factorysessions.RuntimeBinding) (factorysessions.Service, error) {
 	if r == nil {
 		return nil, fmt.Errorf("construct Factory Sessions runtime: service is required")
@@ -112,29 +113,5 @@ func (r *Root) ForRuntime(binding factorysessions.RuntimeBinding) (factorysessio
 			Message: "clock is required",
 		}
 	}
-	assembly := legacyservice.NewAssembly(
-		r.newJavaScriptCheckpointStore,
-		r.sessionResultProjection,
-		r.interpolation,
-		r.invocationWorkTypes,
-		r.ttsObservability,
-		binding.Clock,
-		r.eventIDs,
-		r.sessionIDs,
-		r.resolveHome,
-		r.directoryInspection,
-		r.namedPaths,
-		r.invocationInputFiles,
-		r.initialWorkFiles,
-		r.identity,
-		r.responseStreams,
-	)
-	if assembly == nil {
-		return nil, fmt.Errorf("construct Factory Sessions runtime: implementation rejected its dependencies")
-	}
-	bound, ok := assembly.(factorysessions.Service)
-	if !ok {
-		return nil, fmt.Errorf("construct Factory Sessions runtime: implementation does not expose the root service")
-	}
-	return bound, nil
+	return r, nil
 }

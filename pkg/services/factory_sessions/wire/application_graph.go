@@ -1,6 +1,8 @@
 package wire
 
 import (
+	"fmt"
+
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -35,6 +37,7 @@ type (
 	InvocationMetricsRecorder            = roles.InvocationMetricsRecorder
 	RuntimeResolver                      = roles.RuntimeResolver
 	CurrentRuntimeResolver               = roles.CurrentRuntimeResolver
+	RuntimeAssembly                      = roles.RuntimeAssembly
 	RuntimeReader                        = roles.RuntimeReader
 	OwnedExecutionService                = roles.OwnedExecutionService
 	ExecutionServiceBuilder              = roles.ExecutionServiceBuilder
@@ -134,6 +137,21 @@ type (
 	ExecutionOpeningFactory             = executionopening.Factory
 	StdioOpeningService                 = executionopening.StdioOpeningService
 )
+
+// RuntimeAssemblyFromService narrows the one Wire-constructed Factory
+// Sessions root to its owner-private runtime capability. The assertion is
+// performed once during process composition; runtime operations never ask the
+// public root to construct or discover another service.
+func RuntimeAssemblyFromService(service factorysessions.Service) (RuntimeAssembly, error) {
+	if service == nil {
+		return nil, fmt.Errorf("Factory Sessions runtime assembly requires the service root")
+	}
+	assembly, ok := service.(RuntimeAssembly)
+	if !ok || assembly == nil {
+		return nil, fmt.Errorf("Factory Sessions service root does not expose its runtime capability")
+	}
+	return assembly, nil
+}
 
 var (
 	NewCursorFileStore         = persistence.NewFileStore

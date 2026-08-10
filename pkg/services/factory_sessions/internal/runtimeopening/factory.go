@@ -104,6 +104,7 @@ type FactoryDefinitionsPorts struct {
 // FactorySessionsPorts contains Factory Sessions-owned opening collaborators.
 type FactorySessionsPorts struct {
 	Service                        factorysessions.Service
+	RuntimeAssembly                roles.RuntimeAssembly
 	DurableExecutionFactory        DurableExecutionFactory
 	FactorySessionExecutionFactory FactorySessionExecutionFactory
 	FactoryScaffoldInitializer     factorysessions.FactoryScaffoldInitializer
@@ -222,6 +223,7 @@ type Factory struct {
 	generateRuntimeInstanceID        factorysessions.RuntimeInstanceIDGenerator
 	resolveHome                      factorysessions.HomeDirectoryResolver
 	providerIdentities               factorysessions.ProviderIdentityResolver
+	factorySessionsRuntimeAssembly   roles.RuntimeAssembly
 	clock                            factoryruntime.Clock
 	providerOverride                 workers.Provider
 	invocationMetricsRecorder        roles.InvocationMetricsRecorder
@@ -272,6 +274,7 @@ func NewFactory(
 		workFactory:                      workPorts.Factory,
 		automationFactory:                automations.Factory,
 		factorySessionsService:           factorySessions.Service,
+		factorySessionsRuntimeAssembly:   factorySessions.RuntimeAssembly,
 		factorySessionExecutionFactory:   factorySessions.FactorySessionExecutionFactory,
 		recordingsProjectionFactory:      recordingsPorts.ProjectionFactory,
 		recordingLifecycleFactory:        recordingsPorts.LifecycleFactory,
@@ -403,6 +406,7 @@ func validateFactorySessions(group *FactorySessionsPorts) error {
 	}
 	return validateRuntimeOpeningRequirements("Factory Sessions",
 		runtimeOpeningRequirement{"service", group.Service},
+		runtimeOpeningRequirement{"runtime assembly", group.RuntimeAssembly},
 		runtimeOpeningRequirement{"durable execution factory", group.DurableExecutionFactory},
 		runtimeOpeningRequirement{"session execution factory", group.FactorySessionExecutionFactory},
 		runtimeOpeningRequirement{"factory scaffold initializer", group.FactoryScaffoldInitializer},
@@ -538,7 +542,7 @@ func (f *Factory) openRuntime(
 		f.modelService,
 		f.workFactory,
 		f.automationFactory,
-		f.factorySessionsService,
+		f.factorySessionsRuntimeAssembly,
 		f.factorySessionExecutionFactory,
 		f.recordingsProjectionFactory,
 		f.recordingLifecycleFactory,

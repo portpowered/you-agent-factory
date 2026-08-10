@@ -281,7 +281,11 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	v35 := provideFactorySessionInvocationInputReader(edges2)
 	v36 := provideFactorySessionInitialWorkReader(edges2)
 	logicalTargetResolveSymlinks := provideFactorySessionResolveLogicalTargetSymlinks(edges2)
-	factorysessionsService, err := provideFactorySessionsService(sessionResultProjectionOperation, invocationInterpolationService, invocationWorkTypeService, ttsObservabilityService, responseEventIDGenerator, responseEventRetentionLimits, v33, homeDirectoryResolver, v34, namedPathResolver, v35, v36, logicalTargetResolveSymlinks, eventsService)
+	factorysessionsService, err := provideFactorySessionsService(sessionResultProjectionOperation, invocationInterpolationService, invocationWorkTypeService, ttsObservabilityService, responseEventIDGenerator, responseEventRetentionLimits, v33, homeDirectoryResolver, v34, namedPathResolver, v35, v36, logicalTargetResolveSymlinks, eventsService, clock)
+	if err != nil {
+		return nil, err
+	}
+	runtimeAssembly, err := provideFactorySessionsRuntimeAssembly(factorysessionsService)
 	if err != nil {
 		return nil, err
 	}
@@ -320,6 +324,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	runtimeHostObserver := provideFactorySessionRuntimeHostObserver(edges2)
 	v47 := &wire.FactorySessionsRuntimeOpeningPorts{
 		Service:                        factorysessionsService,
+		RuntimeAssembly:                runtimeAssembly,
 		DurableExecutionFactory:        durableExecutionFactory,
 		FactorySessionExecutionFactory: v42,
 		FactoryScaffoldInitializer:     factoryScaffoldInitializer,
@@ -751,6 +756,7 @@ var servicesSet = wire4.NewSet(
 	provideTTSObservabilityService,
 	provideAutomationFactory,
 	provideFactorySessionsService,
+	provideFactorySessionsRuntimeAssembly,
 	providePortableRecordingWriter,
 	provideOrchestrationJavaScriptExecution,
 	provideOrchestrationCompilation,

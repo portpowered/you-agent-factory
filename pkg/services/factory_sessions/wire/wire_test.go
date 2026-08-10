@@ -33,6 +33,7 @@ func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 		{name: "initial Work reader", mutate: func(in *newServiceInputs) { in.initialWorkFiles = nil }},
 		{name: "symlink resolver", mutate: func(in *newServiceInputs) { in.resolveSymlinks = nil }},
 		{name: "events root", mutate: func(in *newServiceInputs) { in.eventsService = nil }},
+		{name: "clock", mutate: func(in *newServiceInputs) { in.clock = nil }},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -69,6 +70,22 @@ func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 	}
 	if any(liveControl) != any(root) {
 		t.Fatalf("LiveControlService = %T, want the same authoritative Service instance %T", liveControl, root)
+	}
+}
+
+func TestNewServiceRetainsOneRuntimeAssemblyOnThePublishedRoot(t *testing.T) {
+	t.Parallel()
+
+	service, err := validNewServiceInputs().callNewService()
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	assembly, err := RuntimeAssemblyFromService(service)
+	if err != nil {
+		t.Fatalf("RuntimeAssemblyFromService() error = %v", err)
+	}
+	if any(assembly) != any(service) {
+		t.Fatalf("runtime assembly = %T(%[1]v), want the same process root %T(%[2]v)", assembly, service)
 	}
 }
 
@@ -209,6 +226,9 @@ func TestNewServiceServesPublishedForRuntimePeerBehavior(t *testing.T) {
 	if bound == nil {
 		t.Fatal("ForRuntime() returned nil Service view")
 	}
+	if any(bound) != any(service) {
+		t.Fatalf("ForRuntime() returned %T, want the same process root %T", bound, service)
+	}
 	var runtimeView factorysessions.Service = bound
 	if runtimeView == nil {
 		t.Fatal("bound runtime view is nil")
@@ -250,6 +270,7 @@ type newServiceInputs struct {
 	initialWorkFiles             fileeffects.InitialWorkReader
 	resolveSymlinks              factorysessions.LogicalTargetResolveSymlinks
 	eventsService                events.Service
+	clock                        factoryruntime.Clock
 }
 
 func validNewServiceInputs() newServiceInputs {
@@ -265,6 +286,7 @@ func validNewServiceInputs() newServiceInputs {
 		initialWorkFiles:        fileeffects.InitialWorkReader(func(string) ([]byte, error) { return nil, nil }),
 		resolveSymlinks:         func(path string) (string, error) { return path, nil },
 		eventsService:           eventsService,
+		clock:                   &recordingClock{},
 	}
 }
 
@@ -285,6 +307,7 @@ func (in newServiceInputs) callNewService() (factorysessions.Service, error) {
 		in.initialWorkFiles,
 		in.resolveSymlinks,
 		in.eventsService,
+		in.clock,
 	)
 }
 

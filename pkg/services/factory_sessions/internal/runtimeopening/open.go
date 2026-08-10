@@ -40,7 +40,7 @@ func openRuntime(
 	modelService models.Service,
 	workFactory WorkFactory,
 	automationFactory AutomationFactory,
-	factorySessionsService factorysessions.Service,
+	factorySessionsRuntimeAssembly roles.RuntimeAssembly,
 	factorySessionExecutionFactory FactorySessionExecutionFactory,
 	recordingsProjectionFactory RecordingsProjectionFactory,
 	recordingLifecycleFactory RecordingLifecycleFactory,
@@ -190,20 +190,10 @@ func openRuntime(
 		return runtimeProducts{}, err
 	}
 	factorysessionexecutionService := durableExecution.Service
-	if factorySessionsService == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Sessions service is required")
+	if factorySessionsRuntimeAssembly == nil {
+		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Sessions runtime assembly is required")
 	}
-	boundService, err := factorySessionsService.ForRuntime(factorysessions.RuntimeBinding{Clock: clock})
-	if err != nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Sessions service: %w", err)
-	}
-	if boundService == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Sessions service returned nil runtime view")
-	}
-	runtimeService, ok := boundService.(roles.RuntimeAssembly)
-	if !ok {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Sessions runtime view does not expose its private assembly")
-	}
+	runtimeService := factorySessionsRuntimeAssembly
 	currentRuntimeConfig := func() *models.RuntimeConfig {
 		runtime := runtimeService.CurrentRuntime()
 		if runtime != nil {
