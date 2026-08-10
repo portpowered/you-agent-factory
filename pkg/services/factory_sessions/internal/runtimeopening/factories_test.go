@@ -242,8 +242,9 @@ func TestNewFactoryOpensHistoricalReplayWithoutLiveRuntimeCollaborators(t *testi
 			FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{Directory: t.TempDir()},
 			Recordings:        recordings.RuntimeOpeningRequest{ReplayPath: "recording.json"},
 		},
-		ExternalEffects{},
 		zap.NewNop(),
+		nil,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("OpenApplicationRuntime() error = %v", err)
@@ -280,6 +281,7 @@ func assertFactoryRuntimePortsRetained(t *testing.T, factory *Factory, dependenc
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Runtime mock runner", factory.workersMockCommandRunnerFactory, group.WorkersMockCommandRunnerFactory)
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Runtime assembler", factory.factoryRuntimeAssembler, group.FactoryRuntimeAssembler)
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Runtime clock", factory.resolveClock, group.ResolveClock)
+	assertRuntimeOpeningDependencyIdentity(t, "Factory Runtime selected clock", factory.clock, group.Clock)
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Runtime logger", factory.newSessionLogger, group.NewSessionLogger)
 }
 
@@ -360,6 +362,8 @@ func assertWorkersPortsRetained(t *testing.T, factory *Factory, dependencies run
 	assertRuntimeOpeningDependencyIdentity(t, "Workers hooks", factory.workersLocalRuntimeHooksFactory, group.LocalRuntimeHooksFactory)
 	assertRuntimeOpeningDependencyIdentity(t, "Workers command adapter", factory.adaptWorkerCommandRunner, group.AdaptCommandRunner)
 	assertRuntimeOpeningDependencyIdentity(t, "Workers provider adapter", factory.providerFromCommandRunnerFactory, group.ProviderFromCommandRunnerFactory)
+	assertRuntimeOpeningDependencyIdentity(t, "Workers provider command runner", factory.providerCommandRunner, group.ProviderCommandRunner)
+	assertRuntimeOpeningDependencyIdentity(t, "Workers script command runner", factory.scriptCommandRunner, group.ScriptCommandRunner)
 }
 
 func assertOperatorSettingsPortsRetained(t *testing.T, factory *Factory, dependencies runtimeOpeningFixture) {
@@ -406,6 +410,7 @@ func runtimeOpeningMemberOmissions() []runtimeOpeningDependencyOmission {
 		{"Factory Runtime runtime assembler", func(d *runtimeOpeningFixture) { d.FactoryRuntime.FactoryRuntimeAssembler = nil }},
 		{"Factory Runtime clock resolver", func(d *runtimeOpeningFixture) { d.FactoryRuntime.ResolveClock = nil }},
 		{"Factory Runtime session logger factory", func(d *runtimeOpeningFixture) { d.FactoryRuntime.NewSessionLogger = nil }},
+		{"Factory Runtime clock", func(d *runtimeOpeningFixture) { d.FactoryRuntime.Clock = nil }},
 		{"Factory Definitions validator", func(d *runtimeOpeningFixture) { d.FactoryDefinitions.Validator = nil }},
 		{"Factory Definitions named path resolver", func(d *runtimeOpeningFixture) { d.FactoryDefinitions.NamedPaths = nil }},
 		{"Factory Definitions factory", func(d *runtimeOpeningFixture) { d.FactoryDefinitions.Factory = nil }},
@@ -440,6 +445,8 @@ func runtimeOpeningMemberOmissions() []runtimeOpeningDependencyOmission {
 		{"Workers local runtime hooks factory", func(d *runtimeOpeningFixture) { d.Workers.LocalRuntimeHooksFactory = nil }},
 		{"Workers command runner adapter", func(d *runtimeOpeningFixture) { d.Workers.AdaptCommandRunner = nil }},
 		{"Workers provider-from-command-runner factory", func(d *runtimeOpeningFixture) { d.Workers.ProviderFromCommandRunnerFactory = nil }},
+		{"Workers provider command runner", func(d *runtimeOpeningFixture) { d.Workers.ProviderCommandRunner = nil }},
+		{"Workers script command runner", func(d *runtimeOpeningFixture) { d.Workers.ScriptCommandRunner = nil }},
 		{"Operator Settings backend scope ensurer", func(d *runtimeOpeningFixture) { d.OperatorSettings.EnsureBackendScope = nil }},
 	}
 }
@@ -458,6 +465,7 @@ func validRuntimeOpeningOwnerPorts(calls *int) runtimeOpeningFixture {
 			FactoryRuntimeAssembler:         factoryRuntimeAssemblerConstructionStub{},
 			ResolveClock:                    inertRuntimeOpeningFunction[factoryruntime.ClockResolver](calls),
 			NewSessionLogger:                inertRuntimeOpeningFunction[factoryruntime.SessionLoggerFactory](calls),
+			Clock:                           openingCoordinatorClock{},
 		},
 		FactoryDefinitions: &FactoryDefinitionsPorts{
 			Validator:                     validatorConstructionStub{},
@@ -504,6 +512,8 @@ func validRuntimeOpeningOwnerPorts(calls *int) runtimeOpeningFixture {
 			LocalRuntimeHooksFactory:         inertRuntimeOpeningFunction[WorkersLocalRuntimeHooksFactory](calls),
 			AdaptCommandRunner:               inertRuntimeOpeningFunction[WorkerCommandRunnerAdapter](calls),
 			ProviderFromCommandRunnerFactory: inertRuntimeOpeningFunction[ProviderFromCommandRunnerFactory](calls),
+			ProviderCommandRunner:            workersRootBindingProbeRunner{tag: "provider"},
+			ScriptCommandRunner:              workersRootBindingProbeRunner{tag: "script"},
 		},
 		OperatorSettings: &OperatorSettingsPorts{
 			EnsureBackendScope: inertRuntimeOpeningFunction[operatorsettings.BackendScopeEnsurer](calls),

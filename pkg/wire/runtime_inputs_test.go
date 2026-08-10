@@ -14,7 +14,6 @@ import (
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -459,22 +458,12 @@ func TestRuntimeOpeningRequestFactoryMapsSelectionsIntoOwnerRequests(t *testing.
 	}
 }
 
-func TestRuntimeInputResolverMergesEdgesAndProjectsExactExternalEffects(t *testing.T) {
+func TestRuntimeInputResolverCopiesRequestWithoutSelectingEffects(t *testing.T) {
 	t.Parallel()
-	defaultClock := platformclock.Real{}
-	defaultMetrics := &runtimeInputMetricsRecorder{}
-	invocationMetrics := &runtimeInputMetricsRecorder{}
-	invocationObserver := factorysessions.RuntimeHostObserver(func(factorysessions.RuntimeHostBinding) {})
 	request := &factorysessions.RuntimeOpeningRequest{
 		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{Directory: "factory"},
 	}
-	resolver := provideRuntimeInputResolver(
-		serviceedges.Edges{Clock: defaultClock, InvocationMetricsRecorder: defaultMetrics}, provideFactoryRuntimeClockResolver(),
-	)
-	resolved, err := resolver(t.Context(), request, factorysessionwire.ApplicationOpeningPorts{
-		InvocationMetricsRecorder: invocationMetrics,
-		RuntimeHostObserver:       invocationObserver,
-	}, zap.NewNop())
+	resolved, err := provideRuntimeInputResolver()(t.Context(), request, zap.NewNop())
 	if err != nil {
 		t.Fatalf("resolve inputs: %v", err)
 	}
@@ -485,70 +474,62 @@ func TestRuntimeInputResolverMergesEdgesAndProjectsExactExternalEffects(t *testi
 	if resolved.Request.FactoryDefinition.Directory != "factory" {
 		t.Fatal("resolved request retained caller mutation")
 	}
-	if resolved.Effects.Clock == nil || resolved.Logger == nil {
-		t.Fatalf("resolved effects/logger = %#v / %#v", resolved.Effects, resolved.Logger)
-	}
-	if resolved.Effects.InvocationMetricsRecorder != invocationMetrics || resolved.Effects.RuntimeHostObserver == nil {
-		t.Fatalf("resolved invocation ports = %#v, want exact invocation replacements", resolved.Effects)
+	if resolved.Logger == nil {
+		t.Fatal("resolved logger = nil")
 	}
 }
 
-func TestProjectRuntimeOpeningExternalEffectsSelectsExactPortsFromProcessEdges(t *testing.T) {
+func TestFactoryRuntimeEffectProvidersSelectExactProcessEdges(t *testing.T) {
 	t.Parallel()
-
 	clock := platformclock.Real{}
 	metrics := &runtimeInputMetricsRecorder{}
 	observer := factorysessions.RuntimeHostObserver(func(factorysessions.RuntimeHostBinding) {})
-	effects := projectRuntimeOpeningExternalEffects(serviceedges.Edges{
+	providerRunner := &processCommandRunner{}
+	scriptRunner := &processCommandRunner{}
+	edges := serviceedges.Edges{
 		Clock:                     clock,
 		InvocationMetricsRecorder: metrics,
 		RuntimeHostObserver:       observer,
-		HostedLinearEndpoint:      "https://example.test",
-	})
-	if effects.Clock != clock {
-		t.Fatalf("Clock = %v, want process-edge override", effects.Clock)
+		ProviderCommandRunner:     providerRunner,
+		ScriptCommandRunner:       scriptRunner,
 	}
-	if effects.InvocationMetricsRecorder != metrics || effects.RuntimeHostObserver == nil {
-		t.Fatalf("invocation ports = %#v, want projected replacements", effects)
+	if got := provideFactoryRuntimeClock(edges); got != clock {
+		t.Fatalf("clock = %v, want exact edge", got)
 	}
-	if effects.HostedLinearEndpoint != "https://example.test" {
-		t.Fatalf("HostedLinearEndpoint = %q, want process-edge override", effects.HostedLinearEndpoint)
+	if got := provideFactorySessionInvocationMetricsRecorder(edges); got != metrics {
+		t.Fatalf("metrics recorder = %v, want exact edge", got)
+	}
+	if got := provideFactorySessionRuntimeHostObserver(edges); got == nil {
+		t.Fatal("runtime host observer = nil, want edge observer")
+	}
+	gotProvider, err := provideFactoryRuntimeProviderCommandRunner(edges)
+	if err != nil {
+		t.Fatalf("provider command runner: %v", err)
+	}
+	gotScript, err := provideFactoryRuntimeScriptCommandRunner(edges)
+	if err != nil {
+		t.Fatalf("script command runner: %v", err)
+	}
+	if workers.ProjectPlatformCommandRunner(gotProvider) != providerRunner {
+		t.Fatalf("provider command runner = %v, want edge runner %v", gotProvider, providerRunner)
+	}
+	if workers.ProjectPlatformCommandRunner(gotScript) != scriptRunner {
+		t.Fatalf("script command runner = %v, want edge runner %v", gotScript, scriptRunner)
 	}
 }
 
-func TestProjectRuntimeOpeningExternalEffectsDefaultsCommandRunnersWhenUnset(t *testing.T) {
+func TestFactoryRuntimeEffectProvidersDefaultCommandRunnersWhenUnset(t *testing.T) {
 	t.Parallel()
-
-	effects := projectRuntimeOpeningExternalEffects(serviceedges.Edges{
-		Clock: platformclock.Real{},
-	})
-	if effects.ProviderCommandRunner == nil || effects.ScriptCommandRunner == nil {
-		t.Fatalf(
-			"command runners = (%v, %v), want default platform runners when process edges omit overrides",
-			effects.ProviderCommandRunner,
-			effects.ScriptCommandRunner,
-		)
+	providerRunner, err := provideFactoryRuntimeProviderCommandRunner(serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("provider command runner: %v", err)
 	}
-}
-
-func TestProjectRuntimeOpeningExternalEffectsPreservesCommandRunnerOverrides(t *testing.T) {
-	t.Parallel()
-
-	providerRunner := &processCommandRunner{}
-	scriptRunner := &processCommandRunner{}
-	effects := projectRuntimeOpeningExternalEffects(serviceedges.Edges{
-		Clock:                 platformclock.Real{},
-		ProviderCommandRunner: providerRunner,
-		ScriptCommandRunner:   scriptRunner,
-	})
-	if effects.ProviderCommandRunner != providerRunner || effects.ScriptCommandRunner != scriptRunner {
-		t.Fatalf(
-			"command runners = (%v, %v), want explicit process-edge overrides (%v, %v)",
-			effects.ProviderCommandRunner,
-			effects.ScriptCommandRunner,
-			providerRunner,
-			scriptRunner,
-		)
+	scriptRunner, err := provideFactoryRuntimeScriptCommandRunner(serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("script command runner: %v", err)
+	}
+	if providerRunner == nil || scriptRunner == nil {
+		t.Fatalf("command runners = (%v, %v), want defaults", providerRunner, scriptRunner)
 	}
 }
 
@@ -559,25 +540,20 @@ func (*runtimeInputMetricsRecorder) RecordInvocationMetric(factorysessions.Invoc
 func TestRuntimeInputResolverRejectsMissingRequiredInputs(t *testing.T) {
 	t.Parallel()
 	request := &factorysessions.RuntimeOpeningRequest{}
-	validEdges := serviceedges.Edges{Clock: platformclock.Real{}}
 	tests := []struct {
 		name    string
 		ctx     context.Context
 		request *factorysessions.RuntimeOpeningRequest
-		edges   serviceedges.Edges
 		logger  *zap.Logger
 		want    string
 	}{
-		{name: "nil context", request: request, edges: validEdges, logger: zap.NewNop(), want: "context is required"},
-		{name: "nil request", ctx: t.Context(), edges: validEdges, logger: zap.NewNop(), want: "runtime opening request is required"},
-		{name: "nil logger", ctx: t.Context(), request: request, edges: validEdges, want: "runtime logger is required"},
-		{name: "nil clock", ctx: t.Context(), request: request, logger: zap.NewNop(), want: "runtime clock edge is required"},
+		{name: "nil context", request: request, logger: zap.NewNop(), want: "context is required"},
+		{name: "nil request", ctx: t.Context(), logger: zap.NewNop(), want: "runtime opening request is required"},
+		{name: "nil logger", ctx: t.Context(), request: request, want: "runtime logger is required"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			_, err := provideRuntimeInputResolver(test.edges, func(clock factoryruntime.Clock) factoryruntime.Clock {
-				return clock
-			})(test.ctx, test.request, factorysessionwire.ApplicationOpeningPorts{}, test.logger)
+			_, err := provideRuntimeInputResolver()(test.ctx, test.request, test.logger)
 			if err == nil || err.Error() != test.want {
 				t.Fatalf("error = %v, want %q", err, test.want)
 			}

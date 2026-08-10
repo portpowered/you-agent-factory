@@ -613,6 +613,7 @@ func (a runtimeMetricRecordWriterAdapter) Close() error {
 }
 
 func provideApplicationRuntimeAdapter(
+	edges serviceedges.Edges,
 	visualizationFactory factoryvisualization.RuntimeFactory,
 	httpHandler *httpapplication.Handler,
 	newRunner lifecycle.RunnerFactory,
@@ -620,11 +621,15 @@ func provideApplicationRuntimeAdapter(
 	if visualizationFactory == nil || httpHandler == nil || newRunner == nil {
 		return nil, errors.New("Factory visualization, HTTP handler, and lifecycle component operations are required")
 	}
+	fixedSink := edges.FactoryVisualizationSink
+	fixedRootObserver := edges.FactoryVisualizationRootObserver
 	return func(
 		opened factorysessionwire.OpenedApplicationRuntime,
-		effects factorysessionwire.RuntimeOpeningExternalEffects,
 		sink factoryvisualization.Sink,
 	) (factorysessions.BoundProcessComponents, error) {
+		if fixedSink != nil {
+			sink = fixedSink
+		}
 		var visualization lifecycle.Component
 		var err error
 		if sink != nil {
@@ -633,7 +638,7 @@ func provideApplicationRuntimeAdapter(
 				logger = zap.NewNop()
 			}
 			visualized, err := visualizationFactory(
-				opened.Visualization.Reader, opened.Visualization.Projections, effects.Clock, sink,
+				opened.Visualization.Reader, opened.Visualization.Projections, opened.Resources.Clock, sink,
 				func(err error) {
 					logger.Error("Factory visualization failed", zap.Error(err))
 				},
@@ -641,8 +646,8 @@ func provideApplicationRuntimeAdapter(
 			if err != nil {
 				return factorysessions.BoundProcessComponents{}, err
 			}
-			if effects.FactoryVisualizationRootObserver != nil {
-				effects.FactoryVisualizationRootObserver(visualized)
+			if fixedRootObserver != nil {
+				fixedRootObserver(visualized)
 			}
 			// Factory Session lifecycle must not auto-activate Visualization.
 			// Peers leave the composed root inert until explicit Activate.

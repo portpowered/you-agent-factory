@@ -25,7 +25,6 @@ import (
 type operation struct {
 	openRuntime       runtimeopening.InvocationRuntimeOpening
 	modelsRoot        models.Service
-	effects           runtimeopening.ExternalEffects
 	workingDirectory  platformfilesystem.WorkingDirectory
 	resolveCurrentDir factorydefinitions.CurrentFactoryDirectoryResolver
 	artifactExporter  factorysessioncontracts.InvocationArtifactExporter
@@ -43,7 +42,6 @@ type operation struct {
 func NewOperation(
 	openRuntime runtimeopening.InvocationRuntimeOpening,
 	modelsRoot models.Service,
-	effects runtimeopening.ExternalEffects,
 	workingDirectory platformfilesystem.WorkingDirectory,
 	resolveCurrentDir factorydefinitions.CurrentFactoryDirectoryResolver,
 	artifactExporter factorysessioncontracts.InvocationArtifactExporter,
@@ -75,7 +73,6 @@ func NewOperation(
 	return &operation{
 		openRuntime:       openRuntime,
 		modelsRoot:        modelsRoot,
-		effects:           effects,
 		workingDirectory:  workingDirectory,
 		resolveCurrentDir: resolveCurrentDir,
 		artifactExporter:  artifactExporter,
@@ -725,11 +722,7 @@ func (o *operation) open(
 		return roles.OpenedInvocationRuntime{}, nil, errors.New("invocation operation is required")
 	}
 	config := o.runtimeConfig(target)
-	effects := o.effects
-	if target.MetricsRecorder != nil {
-		effects.InvocationMetricsRecorder = target.MetricsRecorder
-	}
-	opened, err := o.openRuntime.OpenInvocationRuntime(ctx, &config, effects, target.Logger)
+	opened, err := o.openRuntime.OpenInvocationRuntime(ctx, &config, target.Logger, target.MetricsRecorder)
 	if err != nil {
 		return roles.OpenedInvocationRuntime{}, nil, fmt.Errorf("open invocation runtime: %w", err)
 	}

@@ -51,8 +51,8 @@
         "Tests pass"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented exact process-scoped effect selection. Canonical Wire now resolves the runtime clock and required provider/script command runners once, projects provider overrides, recorders, invocation metrics, runtime-host observation, hosted effects, and visualization effects into their permanent owner ports, and regenerates wire_gen.go. Runtime opening no longer accepts the aggregate external-effect bag; fixed ports win over operation observation fallbacks. Construction omission/identity tests, edge projection/default tests, root BuildProcess + Process.Execute provider override evidence, focused Factory Sessions/Wire/root tests, make test, make wire-smoke, make verify-fast, pkg-maint, pkg-file-count, pkg-structure, and git diff checks pass. Stories 003-006 remain pending."
     },
     {
       "id": "btrc-p1-root-injection-003",

@@ -11,7 +11,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/wiretranscript"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 	chatsessionswire "github.com/portpowered/infinite-you/pkg/services/chat_sessions/wire"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -138,14 +137,12 @@ func acpOperatorDefaultsEnvironment() operatorsettings.Defaults {
 // independently constructed activations.
 func provideACPServerFactoryTarget(
 	openRuntime factorysessionwire.InvocationRuntimeOpening,
-	edges serviceedges.Edges,
 	resolveTarget factorysessionwire.FactoryTargetRuntimeResolver,
 	generateSessionID factorysessions.SessionIDGenerator,
 	logger *zap.Logger,
 ) (*factorysessionwire.OnDemandFactoryTargetService, error) {
 	return factorysessionwire.NewOnDemandFactoryTargetService(
 		openRuntime,
-		projectRuntimeOpeningExternalEffects(edges),
 		resolveTarget,
 		generateSessionID,
 		logger,

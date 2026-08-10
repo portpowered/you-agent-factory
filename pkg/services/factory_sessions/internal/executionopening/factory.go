@@ -43,31 +43,27 @@ type WorkerInvocationWithProgressFactory = func(
 
 // Factory owns provider selection and lazy runtime-backed execution scopes.
 type Factory struct {
-	runtimes       runtimeopening.ExecutionRuntimeOpening
-	runtimeEffects runtimeopening.ExternalEffects
-	commandRunner  workers.CommandRunner
-	allocator      workers.PTYAllocator
-	standalone     StandaloneSessionExecutionFactory
-	invocation     WorkerInvocationFactory
-	resolveClock   factory.ClockResolver
-	artifactRoots  factory.RuntimeArtifactRootResolver
-	adaptRunner    runtimeopening.WorkerCommandRunnerAdapter
-	paths          roles.ExecutionOpeningFileSystem
-	logger         *zap.Logger
+	runtimes      runtimeopening.ExecutionRuntimeOpening
+	commandRunner workers.CommandRunner
+	allocator     workers.PTYAllocator
+	standalone    StandaloneSessionExecutionFactory
+	invocation    WorkerInvocationFactory
+	resolveClock  factory.ClockResolver
+	artifactRoots factory.RuntimeArtifactRootResolver
+	paths         roles.ExecutionOpeningFileSystem
+	logger        *zap.Logger
 }
 
 var _ roles.StdioExecutionOpening = (*Factory)(nil)
 
 func NewFactory(
 	runtimes runtimeopening.ExecutionRuntimeOpening,
-	runtimeEffects runtimeopening.ExternalEffects,
 	commandRunner workers.CommandRunner,
 	allocator workers.PTYAllocator,
 	build StandaloneSessionExecutionFactory,
 	invocation WorkerInvocationFactory,
 	resolveClock factory.ClockResolver,
 	artifactRoots factory.RuntimeArtifactRootResolver,
-	adaptRunner runtimeopening.WorkerCommandRunnerAdapter,
 	paths roles.ExecutionOpeningFileSystem,
 	logger *zap.Logger,
 ) (*Factory, error) {
@@ -92,9 +88,6 @@ func NewFactory(
 	if artifactRoots == nil {
 		return nil, fmt.Errorf("Factory Runtime artifact root resolver is required")
 	}
-	if adaptRunner == nil {
-		return nil, fmt.Errorf("Worker command runner adapter is required")
-	}
 	if paths == nil {
 		return nil, fmt.Errorf("Factory Session execution-opening filesystem is required")
 	}
@@ -102,8 +95,8 @@ func NewFactory(
 		return nil, fmt.Errorf("runtime logger is required")
 	}
 	return &Factory{
-		runtimes: runtimes, runtimeEffects: runtimeEffects, commandRunner: commandRunner, allocator: allocator, standalone: build,
-		invocation: invocation, resolveClock: resolveClock, artifactRoots: artifactRoots, adaptRunner: adaptRunner, paths: paths,
+		runtimes: runtimes, commandRunner: commandRunner, allocator: allocator, standalone: build,
+		invocation: invocation, resolveClock: resolveClock, artifactRoots: artifactRoots, paths: paths,
 		logger: logger,
 	}, nil
 }
@@ -260,7 +253,7 @@ func (f *Factory) OpenExecutionRuntime(
 			MetricsDirectory: artifactRoots.Metrics,
 		},
 	}
-	opened, err := f.runtimes.OpenExecutionRuntime(ctx, request, f.runtimeEffects, f.logger)
+	opened, err := f.runtimes.OpenExecutionRuntime(ctx, request, f.logger)
 	if err != nil {
 		return roles.OpenedExecutionRuntime{}, fmt.Errorf("construct runtime-backed execution graph: %w", err)
 	}

@@ -3,7 +3,6 @@ package runtimeopening
 import (
 	"fmt"
 
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -17,8 +16,7 @@ func resolveDurableExecutionProvider(
 	providerOverride workers.Provider,
 	mockWorkers *workers.MockWorkersConfig,
 	runtimeCfg interfaces.RuntimeDefinitionLookup,
-	platformRunner platformprocess.CommandRunner,
-	adaptRunner WorkerCommandRunnerAdapter,
+	platformRunner workers.CommandRunner,
 	mockRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory,
 	buildProvider ProviderFromCommandRunnerFactory,
 ) (workers.Provider, error) {
@@ -31,11 +29,7 @@ func resolveDurableExecutionProvider(
 		buildProvider == nil {
 		return nil, nil
 	}
-	runner := adaptRunner(platformRunner)
-	if runner == nil {
-		return nil, nil
-	}
-	wrapped := mockRunnerFactory(mockWorkers, runtimeCfg, runner)
+	wrapped := mockRunnerFactory(mockWorkers, runtimeCfg, platformRunner)
 	if wrapped == nil {
 		return nil, nil
 	}

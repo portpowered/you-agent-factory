@@ -89,7 +89,6 @@ type (
 	ProcessLifecycleFactory = processlifecycle.Factory
 	RuntimeHostService      = runtimehosting.Service
 
-	RuntimeOpeningExternalEffects          = runtimeopening.ExternalEffects
 	ApplicationRuntimeOpening              = runtimeopening.ApplicationRuntimeOpening
 	InvocationRuntimeOpening               = runtimeopening.InvocationRuntimeOpening
 	ExecutionRuntimeOpening                = runtimeopening.ExecutionRuntimeOpening
@@ -119,6 +118,8 @@ type (
 	DurableExecution                       = runtimeopening.DurableExecution
 	WorkerExecutionFactory                 = runtimeopening.WorkerExecutionFactory
 	WorkerCommandRunnerAdapter             = runtimeopening.WorkerCommandRunnerAdapter
+	ProviderCommandRunner                  = runtimeopening.ProviderCommandRunner
+	ScriptCommandRunner                    = runtimeopening.ScriptCommandRunner
 	ProviderFromCommandRunnerFactory       = runtimeopening.ProviderFromCommandRunnerFactory
 	FactoryRuntimeAssembler                = runtimeopening.FactoryRuntimeAssembler
 	RuntimeOpening                         = runtimeopening.Factory
@@ -188,7 +189,6 @@ func NewApplicationService(
 func NewInvocationOperation(
 	openRuntime InvocationRuntimeOpening,
 	modelsRoot models.Service,
-	effects RuntimeOpeningExternalEffects,
 	workingDirectory platformfilesystem.WorkingDirectory,
 	resolveCurrentDir factorydefinitions.CurrentFactoryDirectoryResolver,
 	artifactExporter InvocationArtifactExporter,
@@ -199,7 +199,6 @@ func NewInvocationOperation(
 	return invocationwire.NewOperation(
 		openRuntime,
 		modelsRoot,
-		effects,
 		workingDirectory,
 		resolveCurrentDir,
 		artifactExporter,

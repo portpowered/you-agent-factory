@@ -33,8 +33,8 @@ type fakeOpener struct {
 func (f *fakeOpener) OpenInvocationRuntime(
 	_ context.Context,
 	request *factorysessions.RuntimeOpeningRequest,
-	_ runtimeopening.ExternalEffects,
 	_ *zap.Logger,
+	_ roles.InvocationMetricsRecorder,
 ) (roles.OpenedInvocationRuntime, error) {
 	f.calls = append(f.calls, *request)
 	if f.err != nil {
@@ -303,7 +303,7 @@ func TestNewRejectsMissingRequiredDependencies(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if _, err := New(tt.opening, runtimeopening.ExternalEffects{}, tt.resolve, tt.generateID, tt.logger); err == nil {
+			if _, err := New(tt.opening, tt.resolve, tt.generateID, tt.logger); err == nil {
 				t.Fatal("New() error = nil, want a construction error")
 			}
 		})
@@ -326,7 +326,6 @@ func TestNewUsesInvocationOpeningCapabilityLazily(t *testing.T) {
 	var opening runtimeopening.InvocationRuntimeOpening = opener
 	svc, err := New(
 		opening,
-		runtimeopening.ExternalEffects{},
 		func(context.Context, string, string) (factorysessions.RuntimeOpeningRequest, error) {
 			return factorysessions.RuntimeOpeningRequest{}, nil
 		},
@@ -707,8 +706,8 @@ type sequencedOpener struct {
 func (f *sequencedOpener) OpenInvocationRuntime(
 	_ context.Context,
 	request *factorysessions.RuntimeOpeningRequest,
-	_ runtimeopening.ExternalEffects,
 	_ *zap.Logger,
+	_ roles.InvocationMetricsRecorder,
 ) (roles.OpenedInvocationRuntime, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

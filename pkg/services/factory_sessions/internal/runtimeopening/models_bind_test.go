@@ -444,8 +444,9 @@ func TestOpenRuntimeClosesModelsScopeExactlyOnceAfterLaterStepFails(t *testing.T
 			FactorySession:      factorysessions.SessionRuntimeOpeningRequest{BackendScopeID: "test-scope"},
 			ModelCacheDirectory: "/cache/models",
 		},
-		ExternalEffects{},
 		zap.NewNop(),
+		nil,
+		nil,
 	)
 	if !errors.Is(err, laterErr) {
 		t.Fatalf("openRuntime() error = %v, want later-step failure", err)
@@ -498,8 +499,9 @@ func TestBTRCP0RuntimeOpeningPartialFailureCharacterization(t *testing.T) {
 			FactorySession:      factorysessions.SessionRuntimeOpeningRequest{BackendScopeID: "test-scope"},
 			ModelCacheDirectory: "/cache/models",
 		},
-		ExternalEffects{},
 		zap.NewNop(),
+		nil,
+		nil,
 	)
 	if err == nil || !strings.Contains(err.Error(), "Automations factory returned nil service") {
 		t.Fatalf("openRuntime() error = %v, want original Automations opening failure", err)

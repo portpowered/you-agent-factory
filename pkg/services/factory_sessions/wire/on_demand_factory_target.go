@@ -30,10 +30,9 @@ var _ factorysessions.TargetExecutionService = (*OnDemandFactoryTargetService)(n
 // Construction alone performs no I/O and opens no runtime.
 func NewOnDemandFactoryTargetService(
 	factory InvocationRuntimeOpening,
-	effects RuntimeOpeningExternalEffects,
 	resolve FactoryTargetRuntimeResolver,
 	generateID factorysessions.SessionIDGenerator,
 	logger *zap.Logger,
 ) (*OnDemandFactoryTargetService, error) {
-	return ondemandtarget.New(factory, effects, resolve, generateID, logger)
+	return ondemandtarget.New(factory, resolve, generateID, logger)
 }

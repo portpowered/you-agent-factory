@@ -82,7 +82,6 @@ type RuntimeResolver func(
 // call. Callers must treat the returned identity as opaque.
 type Service struct {
 	opening    runtimeopening.InvocationRuntimeOpening
-	effects    runtimeopening.ExternalEffects
 	resolve    RuntimeResolver
 	generateID factorysessions.SessionIDGenerator
 	logger     *zap.Logger
@@ -149,7 +148,6 @@ type capturedTurnControlKey struct {
 // opens no runtime.
 func New(
 	opening runtimeopening.InvocationRuntimeOpening,
-	effects runtimeopening.ExternalEffects,
 	resolve RuntimeResolver,
 	generateID factorysessions.SessionIDGenerator,
 	logger *zap.Logger,
@@ -168,7 +166,6 @@ func New(
 	}
 	return &Service{
 		opening:           opening,
-		effects:           effects,
 		resolve:           resolve,
 		generateID:        generateID,
 		logger:            logger,
@@ -248,7 +245,7 @@ func (s *Service) openActivatedRuntime(
 	s.logger.Info("activating on-demand Factory target runtime",
 		zap.String("factoryTargetId", factoryTargetID))
 
-	opened, err := s.opening.OpenInvocationRuntime(ctx, &config, s.effects, s.logger)
+	opened, err := s.opening.OpenInvocationRuntime(ctx, &config, s.logger, nil)
 	if err != nil {
 		s.logger.Error("failed to open on-demand Factory target runtime",
 			zap.String("factoryTargetId", factoryTargetID))

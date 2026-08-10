@@ -31,6 +31,7 @@ type RuntimeResources struct {
 	Directory         string
 	RuntimeInstanceID string
 	BackendScopeID    string
+	Clock             factoryruntime.Clock
 	Diagnostics       factoryruntime.RuntimeLogDiagnostics
 	Logger            *zap.Logger
 	Close             func() error

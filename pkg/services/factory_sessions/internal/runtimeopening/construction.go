@@ -45,7 +45,7 @@ func PrepareRuntime(
 	modelCacheDirectory string,
 	operatorDefaults operatorconfig.ResolvedDefaults,
 	baseLogger *zap.Logger,
-	runtimeEdges ExternalEffects,
+	clockEdge factoryruntime.Clock,
 	factoryDefinitionValidator factorydefinitions.Validator,
 	namedPaths factorydefinitions.NamedPathResolver,
 	loadFactory factorydefinitions.LoadedFactoryLoader,
@@ -158,7 +158,7 @@ func PrepareRuntime(
 		)
 	}
 	selectedClock, clockErr := clockForReplay(
-		runtimeEdges.Clock, load.ReplayArtifact, replayClockFactory, resolveClock,
+		clockEdge, load.ReplayArtifact, replayClockFactory, resolveClock,
 	)
 	if clockErr != nil {
 		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, nil, clockErr
@@ -170,10 +170,10 @@ func PrepareRuntime(
 		root.BaseLogger,
 		hostedPollersFactory(
 			root.BaseLogger,
-			runtimeEdges.HostedClock,
-			runtimeEdges.HostedHTTPClient,
-			runtimeEdges.HostedSecretResolver,
-			runtimeEdges.HostedLinearEndpoint,
+			nil,
+			nil,
+			nil,
+			"",
 		),
 		nil
 }

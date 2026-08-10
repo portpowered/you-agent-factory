@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening"
@@ -124,7 +123,6 @@ func TestNewFactoryRequiresRuntimeArtifactRootResolver(t *testing.T) {
 
 	_, err := NewFactory(
 		&runtimeopening.Factory{},
-		runtimeopening.ExternalEffects{},
 		executionOpeningCommandRunner{},
 		&workers.MockPTYAllocator{},
 		func(factorysessions.ExecutionProvider, string, string, string, workers.InvocationExecutor, factoryruntime.Clock) (durableexecution.Service, error) {
@@ -135,7 +133,6 @@ func TestNewFactoryRequiresRuntimeArtifactRootResolver(t *testing.T) {
 		},
 		func(factoryruntime.Clock) factoryruntime.Clock { return nil },
 		nil,
-		func(platformprocess.CommandRunner) workers.CommandRunner { return nil },
 		platformfilesystem.Local{},
 		zap.NewNop(),
 	)
@@ -149,7 +146,6 @@ func TestNewFactoryRequiresExecutionOpeningFileSystem(t *testing.T) {
 
 	_, err := NewFactory(
 		&runtimeopening.Factory{},
-		runtimeopening.ExternalEffects{},
 		executionOpeningCommandRunner{},
 		&workers.MockPTYAllocator{},
 		func(factorysessions.ExecutionProvider, string, string, string, workers.InvocationExecutor, factoryruntime.Clock) (durableexecution.Service, error) {
@@ -160,7 +156,6 @@ func TestNewFactoryRequiresExecutionOpeningFileSystem(t *testing.T) {
 		},
 		func(factoryruntime.Clock) factoryruntime.Clock { return nil },
 		func(string) factoryruntime.RuntimeArtifactRoots { return factoryruntime.RuntimeArtifactRoots{} },
-		func(platformprocess.CommandRunner) workers.CommandRunner { return nil },
 		nil,
 		zap.NewNop(),
 	)

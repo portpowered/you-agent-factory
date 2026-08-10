@@ -26,8 +26,15 @@ import (
 func openRuntime(
 	ctx context.Context,
 	request *factorysessions.RuntimeOpeningRequest,
-	edges ExternalEffects,
 	baseLogger *zap.Logger,
+	clockEdge factoryruntime.Clock,
+	providerOverride workers.Provider,
+	invocationMetricsRecorder roles.InvocationMetricsRecorder,
+	providerCommandRunner workers.CommandRunner,
+	scriptCommandRunner workers.CommandRunner,
+	submissionRecorder recordings.SubmissionRecorder,
+	dispatchRecorder recordings.DispatchRecorder,
+	runtimeHostObserver factorysessions.RuntimeHostObserver,
 	durableExecutionFactory DurableExecutionFactory,
 	workerExecutionFactory WorkerExecutionFactory,
 	modelService models.Service,
@@ -72,6 +79,8 @@ func openRuntime(
 	generateRuntimeInstanceID factorysessions.RuntimeInstanceIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
 	providerIdentities factorysessions.ProviderIdentityResolver,
+	operationObserver factorysessions.RuntimeHostObserver,
+	operationMetrics roles.InvocationMetricsRecorder,
 ) (products runtimeProducts, err error) {
 	if request == nil {
 		return runtimeProducts{}, fmt.Errorf("runtime opening request is required")
@@ -93,7 +102,7 @@ func openRuntime(
 		modelCacheDirectory,
 		operatorDefaults,
 		baseLogger,
-		edges,
+		clockEdge,
 		factoryDefinitionValidator,
 		namedPaths,
 		loadFactory,
@@ -156,11 +165,10 @@ func openRuntime(
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: durable execution operation is required")
 	}
 	providerForDurable, err := resolveDurableExecutionProvider(
-		edges.ProviderOverride,
+		providerOverride,
 		configured.Workers.MockWorkers,
 		load.LoadedFactoryCfg,
-		edges.ProviderCommandRunner,
-		adaptWorkerCommandRunner,
+		providerCommandRunner,
 		workersMockCommandRunnerFactory,
 		providerFromCommandRunnerFactory,
 	)
@@ -226,8 +234,6 @@ func openRuntime(
 	if workerExecutionFactory == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: worker execution operation is required")
 	}
-	providerCommandRunner := adaptWorkerCommandRunner(edges.ProviderCommandRunner)
-	scriptCommandRunner := adaptWorkerCommandRunner(edges.ScriptCommandRunner)
 	var initialProgressPublisher workers.ProgressPublisher
 	if inferenceProgressPublisherFactory := runtimeService.InferenceProgressPublisherFactory(logger); inferenceProgressPublisherFactory != nil {
 		initialProgressPublisher = inferenceProgressPublisherFactory(factorysessions.DefaultSessionID)
@@ -245,7 +251,7 @@ func openRuntime(
 		scriptCommandRunner,
 		initialProgressPublisher,
 		nil,
-		edges.ProviderOverride,
+		providerOverride,
 		runtimeService,
 		selectedModels, modelsBind.Scope, workService,
 		workersRuntimeFactory,
@@ -294,7 +300,7 @@ func openRuntime(
 			factorysessions.DefaultSessionID,
 			nil,
 			loadFactory,
-			edges.ProviderOverride,
+			providerOverride,
 			providerCommandRunner,
 			scriptCommandRunner,
 			configured.Workers.MockWorkers,
@@ -303,8 +309,8 @@ func openRuntime(
 			nil,
 			nil,
 			false,
-			edges.SubmissionRecorder,
-			edges.DispatchRecorder,
+			submissionRecorder,
+			dispatchRecorder,
 			configured.Runtime.LogDirectory,
 			configured.Runtime.LogConfig,
 			factoryruntime.RuntimeFileLoggingPolicy(configured.Runtime.FileLoggingPolicy),
@@ -377,7 +383,7 @@ func openRuntime(
 			return recordingProjections.ValidateReconnectReplay(recorded, cursor, scope)
 		},
 		recordingProjections.ReconstructFactoryWorldState,
-		edges.InvocationMetricsRecorder,
+		effectiveInvocationMetricsRecorder(invocationMetricsRecorder, operationMetrics),
 	)
 	if err != nil {
 		return runtimeProducts{}, err
@@ -434,7 +440,7 @@ func openRuntime(
 			Host: configured.Session.Host.Host, Port: configured.Session.Host.Port,
 			AutoPort: configured.Session.Host.AutoPort,
 		},
-		edges.RuntimeHostObserver,
+		effectiveRuntimeHostObserver(runtimeHostObserver, operationObserver),
 		startupRuntime.RuntimeLogger(),
 	)
 	if err != nil {
@@ -472,7 +478,28 @@ func openRuntime(
 		configured.Session.BackendScopeID,
 		cleanup.Close,
 	)
+	opened.application.Resources.Clock = clock
 	return opened, nil
+}
+
+func effectiveInvocationMetricsRecorder(
+	configured roles.InvocationMetricsRecorder,
+	operation roles.InvocationMetricsRecorder,
+) roles.InvocationMetricsRecorder {
+	if configured != nil {
+		return configured
+	}
+	return operation
+}
+
+func effectiveRuntimeHostObserver(
+	configured factorysessions.RuntimeHostObserver,
+	operation factorysessions.RuntimeHostObserver,
+) factorysessions.RuntimeHostObserver {
+	if configured != nil {
+		return configured
+	}
+	return operation
 }
 
 // bindRuntimeRecordingLifecycle binds the runtime recorder to the already-

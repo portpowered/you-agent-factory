@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/models"
@@ -36,12 +35,8 @@ func TestRuntimeOpeningRolesNameWorkersRootContracts(t *testing.T) {
 		_ ProviderFromCommandRunnerFactory
 	)
 
-	var _ ExternalEffects = ExternalEffects{
-		ProviderOverride:     (workers.Provider)(nil),
-		HostedClock:          (automations.HostedLinearClock)(nil),
-		HostedHTTPClient:     (automations.HostedLinearHTTPDoer)(nil),
-		HostedSecretResolver: (automations.HostedLinearSecretResolver)(nil),
-	}
+	var _ ProviderCommandRunner = workersRootBindingProbeRunner{}
+	var _ ScriptCommandRunner = workersRootBindingProbeRunner{}
 }
 
 // workersRootBindingProbeRunner is a workers.CommandRunner fake carrying a

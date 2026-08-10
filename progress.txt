@@ -15,6 +15,7 @@
 - Packaged Factory additions that change the public catalog require synchronized authored/generated sources, catalog counts, the canonical reference topic, and CLI docs smoke markers; refresh generated output only through `make packaged-factory-catalog-generate`.
 - Verify documented named-Factory commands against isolated live `you run --named ... --help`; role-pinned provider/model defaults should be documented as fixed policy when no override flags are exposed.
 - Canonical Wire should pass one explicit owner-port contract per service owner; aggregate composition helpers belong only in tests and must not cross the production constructor boundary.
+- Process-scoped external effects should be adapted or defaulted in canonical Wire providers and captured by closures; operation factories receive the selected owner ports and only values or observation fallbacks.
 - Regenerate `pkg/wire/wire_gen.go` through `make wire-smoke` after changing a Wire provider signature so drift and focused composition tests run together.
 
 - Worker Session finite streams can use the injected Events `Read` contract with the first retained head as a snapshot boundary; replay-only paths must not call `Subscribe`.
@@ -789,4 +790,29 @@
   - Keep one constructor argument per owner contract at the canonical Wire boundary; test-only fixtures may aggregate those arguments for omission matrices without exposing an aggregate production dependency seam.
   - Wire output must be regenerated after changing a provider signature; `make wire-smoke` runs the drift check and focused Wire tests together.
   - The next story should move default selection and exact external-effect instances out of runtime-opening operation inputs; this story only establishes the build-time owner-port boundary.
+---
+
+## 2026-08-10 05:42 -07:00 - btrc-p1-root-injection-002
+- What was implemented
+  - Removed the production runtime-opening external-effect aggregate and stopped application, invocation, execution, and on-demand operation factories from carrying it.
+  - Added fixed Factory Runtime ports for the selected clock, provider override, submission recorder, and dispatch recorder; fixed Factory Sessions ports for invocation metrics and runtime-host observation; and distinct Workers provider/script command-runner ports.
+  - Canonical Wire now adapts edge runners and resolves required process defaults once, captures hosted and visualization effects in their owning providers/adapters, and passes selected effects directly into the reusable runtime-opening Factory.
+  - Fixed runtime opening to use process-selected effects for replay clocks, provider/worker execution, recordings, metrics, hosting, and visualization. Operation observer/metrics callbacks remain compatibility fallbacks only when no process replacement is configured.
+  - Updated the owner-contract register and regenerated `pkg/wire/wire_gen.go`; refreshed dependent test seams, including the captured-turn on-demand integration test.
+- Files changed
+  - `pkg/wire/runtime_inputs.go`, `pkg/wire/session_runtime_providers.go`, `pkg/wire/hosted_sources.go`, `pkg/wire/profiles.go`, `pkg/wire/wire.go`, `pkg/wire/wire_gen.go`
+  - `pkg/services/factory_sessions/internal/runtimeopening/`, `pkg/services/factory_sessions/internal/applicationopening/`, `pkg/services/factory_sessions/internal/executionopening/`, `pkg/services/factory_sessions/internal/ondemandtarget/`
+  - `pkg/services/factory_sessions/wire/`, `pkg/services/factory_sessions/internal/services/invocation/wire/`
+  - `pkg/services/factory_runtime/internal/services/orchestration/runtime/captured_turn_terminate_integration_test.go`
+  - `docs/internal/packaged-service-structure/btrc-p1-owner-contracts.md`, `prd.json`, `progress.txt`
+- Verification
+  - Focused Factory Sessions, Wire, root, and functional support tests — passed.
+  - `make test` — passed the short Go suite.
+  - `make wire-smoke` — passed, including generated Wire drift and Wire tests.
+  - `make verify-fast` — passed after `bun install --frozen-lockfile`: dashboard typecheck, MCP contract boundary, 355 UI files / 2,970 tests, 191 Bun unit checks, and the short Go suite.
+  - `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, and `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - Keep required process effects as typed owner ports with defaults resolved by Wire; do not let runtime input resolvers copy or reconstruct edge implementations.
+  - When removing a shared construction seam, search all package tests as well as production Wire callers; integration fakes may implement the old signature outside the directly changed service package.
+  - Hosted and visualization effects can remain process-scoped without entering runtime requests by capturing their exact edge values in provider closures or adapters.
 ---

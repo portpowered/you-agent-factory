@@ -22,7 +22,6 @@ import (
 func NewOperation(
 	openRuntime runtimeopening.InvocationRuntimeOpening,
 	modelsRoot models.Service,
-	effects runtimeopening.ExternalEffects,
 	workingDirectory platformfilesystem.WorkingDirectory,
 	resolveCurrentDir factorydefinitions.CurrentFactoryDirectoryResolver,
 	artifactExporter factorysessioncontracts.InvocationArtifactExporter,
@@ -33,7 +32,6 @@ func NewOperation(
 	return legacyopening.NewOperation(
 		openRuntime,
 		modelsRoot,
-		effects,
 		workingDirectory,
 		resolveCurrentDir,
 		artifactExporter,

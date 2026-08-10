@@ -30,8 +30,9 @@ type ApplicationRuntimeOpening interface {
 	OpenApplicationRuntime(
 		context.Context,
 		*factorysessions.RuntimeOpeningRequest,
-		ExternalEffects,
 		*zap.Logger,
+		factorysessions.RuntimeHostObserver,
+		roles.InvocationMetricsRecorder,
 	) (roles.OpenedApplicationRuntime, error)
 }
 
@@ -42,8 +43,8 @@ type InvocationRuntimeOpening interface {
 	OpenInvocationRuntime(
 		context.Context,
 		*factorysessions.RuntimeOpeningRequest,
-		ExternalEffects,
 		*zap.Logger,
+		roles.InvocationMetricsRecorder,
 	) (roles.OpenedInvocationRuntime, error)
 }
 
@@ -54,7 +55,6 @@ type ExecutionRuntimeOpening interface {
 	OpenExecutionRuntime(
 		context.Context,
 		*factorysessions.RuntimeOpeningRequest,
-		ExternalEffects,
 		*zap.Logger,
 	) (roles.OpenedExecutionRuntime, error)
 }
@@ -82,6 +82,10 @@ type FactoryRuntimePorts struct {
 	FactoryRuntimeAssembler         FactoryRuntimeAssembler
 	ResolveClock                    factoryruntime.ClockResolver
 	NewSessionLogger                factoryruntime.SessionLoggerFactory
+	Clock                           factoryruntime.Clock
+	ProviderOverride                workers.Provider
+	SubmissionRecorder              recordings.SubmissionRecorder
+	DispatchRecorder                recordings.DispatchRecorder
 }
 
 // FactoryDefinitionsPorts contains Factory Definitions-owned opening
@@ -108,6 +112,8 @@ type FactorySessionsPorts struct {
 	GenerateRuntimeInstanceID      factorysessions.RuntimeInstanceIDGenerator
 	ResolveHome                    factorysessions.HomeDirectoryResolver
 	ProviderIdentities             factorysessions.ProviderIdentityResolver
+	InvocationMetricsRecorder      roles.InvocationMetricsRecorder
+	RuntimeHostObserver            factorysessions.RuntimeHostObserver
 }
 
 // WorkPorts contains Work-owned opening collaborators.
@@ -145,6 +151,20 @@ type WorkersPorts struct {
 	LocalRuntimeHooksFactory         WorkersLocalRuntimeHooksFactory
 	AdaptCommandRunner               WorkerCommandRunnerAdapter
 	ProviderFromCommandRunnerFactory ProviderFromCommandRunnerFactory
+	ProviderCommandRunner            ProviderCommandRunner
+	ScriptCommandRunner              ScriptCommandRunner
+}
+
+// ProviderCommandRunner and ScriptCommandRunner are distinct Wire keys for
+// the two Workers-owned command ports. They expose the same narrow Workers
+// command contract without allowing Wire to bind one selected runner to both
+// effect owners.
+type ProviderCommandRunner interface {
+	workers.CommandRunner
+}
+
+type ScriptCommandRunner interface {
+	workers.CommandRunner
 }
 
 // OperatorSettingsPorts contains the Operator Settings capability used
@@ -154,8 +174,9 @@ type OperatorSettingsPorts struct {
 }
 
 // Factory is the process-scoped, inert Factory Session opening operation.
-// Wire selects all implementation functions once; OpenRuntime supplies only
-// invocation data and external edges.
+// Wire selects all implementation functions and fixed owner effects once;
+// OpenRuntime supplies only invocation data and operation-scoped observation
+// fallbacks.
 type Factory struct {
 	durableExecutionFactory          DurableExecutionFactory
 	workerExecutionFactory           WorkerExecutionFactory
@@ -201,6 +222,14 @@ type Factory struct {
 	generateRuntimeInstanceID        factorysessions.RuntimeInstanceIDGenerator
 	resolveHome                      factorysessions.HomeDirectoryResolver
 	providerIdentities               factorysessions.ProviderIdentityResolver
+	clock                            factoryruntime.Clock
+	providerOverride                 workers.Provider
+	invocationMetricsRecorder        roles.InvocationMetricsRecorder
+	providerCommandRunner            workers.CommandRunner
+	scriptCommandRunner              workers.CommandRunner
+	submissionRecorder               recordings.SubmissionRecorder
+	dispatchRecorder                 recordings.DispatchRecorder
+	runtimeHostObserver              factorysessions.RuntimeHostObserver
 }
 
 var (
@@ -281,6 +310,14 @@ func NewFactory(
 		generateRuntimeInstanceID:        factorySessions.GenerateRuntimeInstanceID,
 		resolveHome:                      factorySessions.ResolveHome,
 		providerIdentities:               factorySessions.ProviderIdentities,
+		clock:                            factoryRuntime.Clock,
+		providerOverride:                 factoryRuntime.ProviderOverride,
+		invocationMetricsRecorder:        factorySessions.InvocationMetricsRecorder,
+		providerCommandRunner:            workersPorts.ProviderCommandRunner,
+		scriptCommandRunner:              workersPorts.ScriptCommandRunner,
+		submissionRecorder:               factoryRuntime.SubmissionRecorder,
+		dispatchRecorder:                 factoryRuntime.DispatchRecorder,
+		runtimeHostObserver:              factorySessions.RuntimeHostObserver,
 	}, nil
 }
 
@@ -340,6 +377,7 @@ func validateFactoryRuntime(group *FactoryRuntimePorts) error {
 		runtimeOpeningRequirement{"runtime assembler", group.FactoryRuntimeAssembler},
 		runtimeOpeningRequirement{"clock resolver", group.ResolveClock},
 		runtimeOpeningRequirement{"session logger factory", group.NewSessionLogger},
+		runtimeOpeningRequirement{"clock", group.Clock},
 	)
 }
 
@@ -430,6 +468,8 @@ func validateWorkers(group *WorkersPorts) error {
 		runtimeOpeningRequirement{"local runtime hooks factory", group.LocalRuntimeHooksFactory},
 		runtimeOpeningRequirement{"command runner adapter", group.AdaptCommandRunner},
 		runtimeOpeningRequirement{"provider-from-command-runner factory", group.ProviderFromCommandRunnerFactory},
+		runtimeOpeningRequirement{"provider command runner", group.ProviderCommandRunner},
+		runtimeOpeningRequirement{"script command runner", group.ScriptCommandRunner},
 	)
 }
 
@@ -479,11 +519,20 @@ func missingRuntimeOpeningDependency(value any) bool {
 func (f *Factory) openRuntime(
 	ctx context.Context,
 	request *factorysessions.RuntimeOpeningRequest,
-	effects ExternalEffects,
 	logger *zap.Logger,
+	observer factorysessions.RuntimeHostObserver,
+	metrics roles.InvocationMetricsRecorder,
 ) (runtimeProducts, error) {
 	return openRuntime(
-		ctx, request, effects, logger,
+		ctx, request, logger,
+		f.clock,
+		f.providerOverride,
+		f.invocationMetricsRecorder,
+		f.providerCommandRunner,
+		f.scriptCommandRunner,
+		f.submissionRecorder,
+		f.dispatchRecorder,
+		f.runtimeHostObserver,
 		f.durableExecutionFactory,
 		f.workerExecutionFactory,
 		f.modelService,
@@ -528,6 +577,8 @@ func (f *Factory) openRuntime(
 		f.generateRuntimeInstanceID,
 		f.resolveHome,
 		f.providerIdentities,
+		observer,
+		metrics,
 	)
 }
 
@@ -536,10 +587,11 @@ func (f *Factory) openRuntime(
 func (f *Factory) OpenApplicationRuntime(
 	ctx context.Context,
 	request *factorysessions.RuntimeOpeningRequest,
-	effects ExternalEffects,
 	logger *zap.Logger,
+	observer factorysessions.RuntimeHostObserver,
+	metrics roles.InvocationMetricsRecorder,
 ) (roles.OpenedApplicationRuntime, error) {
-	opened, err := f.openRuntime(ctx, request, effects, logger)
+	opened, err := f.openRuntime(ctx, request, logger, observer, metrics)
 	return opened.application, err
 }
 
@@ -557,10 +609,10 @@ func (f *Factory) ModelsRoot() models.Service {
 func (f *Factory) OpenInvocationRuntime(
 	ctx context.Context,
 	request *factorysessions.RuntimeOpeningRequest,
-	effects ExternalEffects,
 	logger *zap.Logger,
+	metrics roles.InvocationMetricsRecorder,
 ) (roles.OpenedInvocationRuntime, error) {
-	opened, err := f.openRuntime(ctx, request, effects, logger)
+	opened, err := f.openRuntime(ctx, request, logger, nil, metrics)
 	return opened.invocation, err
 }
 
@@ -569,9 +621,8 @@ func (f *Factory) OpenInvocationRuntime(
 func (f *Factory) OpenExecutionRuntime(
 	ctx context.Context,
 	request *factorysessions.RuntimeOpeningRequest,
-	effects ExternalEffects,
 	logger *zap.Logger,
 ) (roles.OpenedExecutionRuntime, error) {
-	opened, err := f.openRuntime(ctx, request, effects, logger)
+	opened, err := f.openRuntime(ctx, request, logger, nil, nil)
 	return opened.execution, err
 }

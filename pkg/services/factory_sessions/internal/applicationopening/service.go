@@ -16,18 +16,16 @@ import (
 	"go.uber.org/zap"
 )
 
-// RuntimeInputs are the resolved operation inputs selected by the canonical
-// injector. They contain values and exact external effects only.
+// RuntimeInputs are the resolved invocation values selected by the canonical
+// injector.
 type RuntimeInputs struct {
 	Request *factorysessions.RuntimeOpeningRequest
-	Effects runtimeopening.ExternalEffects
 	Logger  *zap.Logger
 }
 
 type RuntimeInputResolver func(
 	context.Context,
 	*factorysessions.RuntimeOpeningRequest,
-	roles.ApplicationOpeningPorts,
 	*zap.Logger,
 ) (RuntimeInputs, error)
 
@@ -36,13 +34,12 @@ type RuntimeInputResolver func(
 // lifecycle selection or ordering policy.
 type RuntimeAdapter func(
 	roles.OpenedApplicationRuntime,
-	runtimeopening.ExternalEffects,
 	factoryvisualization.Sink,
 ) (factorysessions.BoundProcessComponents, error)
 
 // Service is constructed once by Wire. OpenApplication supplies only
-// invocation values and exact external-effect replacements to the already-selected
-// runtime-opening and application-binding operations.
+// invocation values to the already-selected runtime-opening and
+// application-binding operations.
 type Service struct {
 	resolveInputs RuntimeInputResolver
 	openRuntime   runtimeopening.ApplicationRuntimeOpening
@@ -85,12 +82,12 @@ func (service *Service) OpenApplication(
 		return roles.OpenedProcessApplication{}, errors.New("open Factory Session application: service is required")
 	}
 	ports, completion := gateCompletionOnRuntimeHost(request.Ports, request.Completion)
-	inputs, err := service.resolveInputs(ctx, request.Runtime, ports, logger)
+	inputs, err := service.resolveInputs(ctx, request.Runtime, logger)
 	if err != nil {
 		return roles.OpenedProcessApplication{}, fmt.Errorf("open Factory Session application: %w", err)
 	}
 	opened, err := service.openRuntime.OpenApplicationRuntime(
-		ctx, inputs.Request, inputs.Effects, inputs.Logger,
+		ctx, inputs.Request, inputs.Logger, ports.RuntimeHostObserver, ports.InvocationMetricsRecorder,
 	)
 	if err != nil {
 		return roles.OpenedProcessApplication{}, fmt.Errorf("open Factory Session application runtime: %w", err)
@@ -104,11 +101,7 @@ func (service *Service) OpenApplication(
 	if ports.RuntimeHTTPServicesBound != nil {
 		ports.RuntimeHTTPServicesBound(opened.HTTP)
 	}
-	effectiveSink := visualizationSink
-	if inputs.Effects.FactoryVisualizationSink != nil {
-		effectiveSink = inputs.Effects.FactoryVisualizationSink
-	}
-	components, err := service.adaptRuntime(opened, inputs.Effects, effectiveSink)
+	components, err := service.adaptRuntime(opened, visualizationSink)
 	if err != nil {
 		err = closeOpenedRuntime(opened, err)
 		return roles.OpenedProcessApplication{}, fmt.Errorf("bind Factory Session application: %w", err)

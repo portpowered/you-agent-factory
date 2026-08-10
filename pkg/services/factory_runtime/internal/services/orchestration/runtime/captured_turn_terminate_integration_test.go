@@ -340,7 +340,6 @@ func newCapturedTurnTarget(
 	}
 	target, err := factorysessionswire.NewOnDemandFactoryTargetService(
 		capturedTurnTargetOpening{opened: factorysessionswire.OpenedInvocationRuntime{Lifecycle: lifecycle}},
-		factorysessionswire.RuntimeOpeningExternalEffects{},
 		func(context.Context, string, string) (factorysessions.RuntimeOpeningRequest, error) {
 			return factorysessions.RuntimeOpeningRequest{}, nil
 		},
@@ -383,8 +382,8 @@ type capturedTurnTargetOpening struct {
 func (o capturedTurnTargetOpening) OpenInvocationRuntime(
 	context.Context,
 	*factorysessions.RuntimeOpeningRequest,
-	factorysessionswire.RuntimeOpeningExternalEffects,
 	*zap.Logger,
+	factorysessionswire.InvocationMetricsRecorder,
 ) (factorysessionswire.OpenedInvocationRuntime, error) {
 	return o.opened, nil
 }

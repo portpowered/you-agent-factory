@@ -480,6 +480,10 @@ func provideAutomationFactory(
 	edges serviceedges.Edges,
 	workstationExecution factorydefinitions.WorkstationExecutionPolicyService,
 ) factorysessionwire.AutomationFactory {
+	hostedClock := edges.HostedClock
+	if hostedClock == nil {
+		hostedClock = clockwork.NewRealClock()
+	}
 	return func(
 		logger *zap.Logger,
 		clock factoryruntime.Clock,
@@ -496,10 +500,6 @@ func provideAutomationFactory(
 			string,
 		) automations.HostedPollers {
 			return hostedPollers
-		}
-		hostedClock := edges.HostedClock
-		if hostedClock == nil {
-			hostedClock = clockwork.NewRealClock()
 		}
 		service, err := automationswire.NewService(
 			logger,
@@ -575,11 +575,11 @@ func provideFactorySessionExecutionFactory(
 	responseEventRetentionLimits *factorysessions.ResponseEventRetentionLimits,
 	allocator workers.PTYAllocator,
 	adaptRunner factorysessionwire.WorkerCommandRunnerAdapter,
-	edges serviceedges.Edges,
+	providerOverride workers.Provider,
 	eventsService events.Service,
 ) factorysessionwire.FactorySessionExecutionFactory {
-	// The allocator, runner adapter, and edges are read only to decide whether
-	// this process can reach a provider at all. No invocation executor is built
+	// The allocator, runner adapter, and fixed provider override are read only
+	// to decide whether this process can reach a provider at all. No invocation executor is built
 	// here any more: a runtime-backed session's children are Workers, and the
 	// provider edge they use is the one Workers already composes for that
 	// session, reached through workers.ProviderInvocationRoute. Rebuilding a
@@ -602,7 +602,7 @@ func provideFactorySessionExecutionFactory(
 		mockAllowsLive := mockWorkers == nil || mockWorkers.UnmatchedDispatchPolicy.PassthroughUnmatched()
 		childExecutorMode := factorysessions.ChildExecutorModeFake
 		if provider != nil ||
-			(mockAllowsLive && edges.ProviderOverride == nil && adaptRunner != nil && allocator != nil) {
+			(mockAllowsLive && providerOverride == nil && adaptRunner != nil && allocator != nil) {
 			childExecutorMode = factorysessions.ChildExecutorModeLive
 		}
 		return factorysessionwire.NewDurableExecution(
@@ -776,6 +776,8 @@ func provideWorkersRuntimeFactory(
 	workstationFiles platformfilesystem.ReadFileInspector,
 	temporaryFiles platformfilesystem.TemporaryFileSystem,
 	defaultAllocator workers.PTYAllocator,
+	defaultProviderCommandRunner factorysessionwire.ProviderCommandRunner,
+	defaultScriptCommandRunner factorysessionwire.ScriptCommandRunner,
 	edges serviceedges.Edges,
 	providerRegistry workers.ProviderRegistry,
 	providerRegistryRebinder workerswire.ProviderRegistryRebinder,
@@ -846,18 +848,20 @@ func provideWorkersRuntimeFactory(
 		contentMaterializer work.ContentMaterializer,
 		acpIntegrations []operatorsettings.ACPIntegration,
 	) (workers.RuntimeService, error) {
-		providerInjected := providerCommandRunner != nil
-		scriptInjected := scriptCommandRunner != nil
-		defaultCommandRunner, err := providePlatformProcessCommandRunner(edges)
-		if err != nil {
-			return nil, err
+		if providerCommandRunner == nil {
+			providerCommandRunner = defaultProviderCommandRunner
 		}
 		if providerCommandRunner == nil {
-			providerCommandRunner = workers.AdaptCommandRunner(defaultCommandRunner)
+			return nil, errors.New("Workers provider command runner is required")
 		}
 		if scriptCommandRunner == nil {
-			scriptCommandRunner = workers.AdaptCommandRunner(defaultCommandRunner)
+			scriptCommandRunner = defaultScriptCommandRunner
 		}
+		if scriptCommandRunner == nil {
+			return nil, errors.New("Workers script command runner is required")
+		}
+		providerInjected := true
+		scriptInjected := true
 		if allocator == nil {
 			allocator = defaultAllocator
 		}
@@ -1018,24 +1022,23 @@ func provideProviderInvocationExecutorFactory(
 	conductorInvocation factorysessionwire.ConductorInvocationWithProgressFactory,
 	registryRebinder workerswire.ProviderRegistryRebinder,
 	allocator workers.PTYAllocator,
-	edges serviceedges.Edges,
+	providerOverride workers.Provider,
+	defaultProviderCommandRunner factorysessionwire.ProviderCommandRunner,
 ) factoryruntime.ProviderInvocationExecutorFactory {
 	return func(
 		sessionCommandRunner workers.CommandRunner,
 		publisher workers.ProgressPublisher,
 	) (workers.WorkstationRequestExecutor, error) {
-		if edges.ProviderOverride != nil {
+		if providerOverride != nil {
 			return workerswire.NewProviderInvocationExecutor(
-				workerswire.NewExecutor(edges.ProviderOverride),
+				workerswire.NewExecutor(providerOverride),
 			), nil
 		}
 		if conductorInvocation == nil || allocator == nil {
 			return nil, nil
 		}
 		selectedProviders, runner, err := providerInvocationProviderEdge(
-			registryRebinder,
-			edges,
-			sessionCommandRunner,
+			registryRebinder, sessionCommandRunner, defaultProviderCommandRunner,
 		)
 		if err != nil {
 			return nil, err
@@ -1060,15 +1063,11 @@ func provideProviderInvocationExecutorFactory(
 // edge and the registry the application already built.
 func providerInvocationProviderEdge(
 	registryRebinder workerswire.ProviderRegistryRebinder,
-	edges serviceedges.Edges,
 	sessionCommandRunner workers.CommandRunner,
+	defaultProviderCommandRunner factorysessionwire.ProviderCommandRunner,
 ) (providers.Service, workers.CommandRunner, error) {
 	if sessionCommandRunner == nil {
-		runner, err := provideWorkersProviderCommandRunner(edges)
-		if err != nil {
-			return nil, nil, fmt.Errorf("resolve provider runner for provider-invocation Worker: %w", err)
-		}
-		return nil, runner, nil
+		return nil, defaultProviderCommandRunner, nil
 	}
 	if registryRebinder == nil {
 		return nil, nil, fmt.Errorf(

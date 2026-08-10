@@ -56,7 +56,7 @@ func TestRuntimeOpeningDoesNotImportProcessEdgesBag(t *testing.T) {
 			t.Fatalf("read %s: %v", entry.Name(), err)
 		}
 		if strings.Contains(string(source), "pkg/services/edges") {
-			t.Errorf("%s imports process-edge bag; consume ExternalEffects projected at Wire instead", entry.Name())
+			t.Errorf("%s imports process-edge bag; consume owner ports supplied by Wire instead", entry.Name())
 		}
 	}
 }
