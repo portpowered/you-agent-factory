@@ -1950,3 +1950,29 @@
 - **Learnings for future iterations:**
   - Acceptance criteria for repository-enforcement work should explicitly identify the project-level nature of the evidence and state the intentionally unchanged customer-facing behavior; keep the PRD valid JSON so automated consumers do not depend on permissive parsers.
 ---
+## 2026-08-10 13:58 -07:00 - thr-split-acp-stdio-tests-001
+- What was implemented
+  - Moved the 22 prompt command and admission tests into `session_prompt_admission_test.go` with their exact names, setup, assertions, and observable outcomes.
+  - Consolidated shared ACP stdio fakes, server builders, request payload helpers, identity helpers, and cross-suite stream/control fixtures in `session_test_helpers_test.go` without adding alternate fixture behavior.
+  - Kept the change move-dominated and limited to package tests; no production code, public contract, generated artifact, or assertion semantics changed.
+- Files changed
+  - `pkg/transports/acp/internal/stdio/session_prompt_admission_test.go`
+  - `pkg/transports/acp/internal/stdio/session_test_helpers_test.go`
+  - `pkg/transports/acp/internal/stdio/session_prompt_test.go`
+  - `pkg/transports/acp/internal/stdio/session_new_test.go`
+  - `pkg/transports/acp/internal/stdio/session_set_config_option_test.go`
+  - `pkg/transports/acp/internal/stdio/prompt_stream_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Focused command/admission tests — passed.
+  - `go test -p 1 -vet=off ./pkg/transports/acp/internal/stdio -count=1 -timeout 120s` — passed.
+  - Normalized `go test ./pkg/transports/acp/internal/stdio -list '.*'` — 222 tests before and after, zero diff.
+  - `go test -cover -count=1` — 94.3% of statements before and after.
+  - Package compile/typecheck with `go test -run '^$'` — passed.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - Package-local Go test fixtures are visible across all files, so shared fakes and constructors can be moved once into a helper while behavioral tests move independently.
+  - Normalize and sort `go test -list` output for a stable inventory comparison; moving tests between filenames can otherwise change discovery order without changing the test set.
+  - On this shared Windows workspace, use a task-specific `GOCACHE` and serial `-p 1` verification when concurrent worktrees hold the default Go cache; timed-out wrappers can leave child processes that must be identified by their exact command before cleanup.
+---

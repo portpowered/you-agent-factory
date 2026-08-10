@@ -1,96 +1,72 @@
 {
-  "project": "SAC S0.1 — Restore Package-Target and Ownership Inventories to the Live Tree",
-  "branchName": "sac-s0-1-ownership-inventories",
-  "description": "Restore the package-target manifest, ownership inventory, architecture guards, and canonical service-owner documentation so every live production package and cross-owner dependency has one reviewed owner and classification, unresolved bidirectional edges remain visible, and provider inference and hosted polling are assigned to Providers and Automations rather than Workers.",
+  "project": "Split Oversized ACP Stdio Tests into Focused Behavioral Suites",
+  "branchName": "thr-split-acp-stdio-tests",
+  "description": "Mechanically split the oversized ACP stdio prompt and streaming test suites into focused behavioral files with one shared fixture file, preserving the exact test inventory, assertions, runtime outcomes, and coverage so the queued BTRC P5B cutover can work against a readable package.",
   "context": {
-    "customerAsk": "Implement story S0.1 of the Service Abstraction Convergence plan: regenerate and review the package-target manifest and ownership inventory; add the missing Worker Sessions, Events, Chat Sessions, ACP, Factory Sessions, Providers, platform, and mapping packages; correct the eight guards and documentation entries that misassign provider inference or hosted polling to Workers; and reconcile the service-owner tables in AGENTS.md, docs/architecture/architecture.md, and docs/architecture/packaged-structure.md.",
-    "problem": "The checked-in architecture inventories and some enforcement and documentation surfaces lag the live production package graph. Missing packages and edges, future-tense rationale for implemented services, and incorrect Workers ownership assignments prevent maintainers from trusting the inventories as a statement of package ownership, dependency direction, and remaining convergence debt.",
-    "solution": "Regenerate deterministic inventory candidates from the current production tree, review every package and cross-owner edge against durable service boundaries, preserve unresolved bidirectional dependencies as visible debt, correct inference and polling ownership guards, and align the three canonical service-owner tables without changing runtime behavior or widening into unrelated package migrations."
+    "customerAsk": "Land a move-only split of the 3,518-line session_prompt_test.go and 1,667-line prompt_stream_test.go before BTRC P5B releases, deriving cohesive behavior groups from the real tests, consolidating shared fixtures into one helper file, and rebasing under the contention protocol if ACP stdio ownership changes.",
+    "problem": "Prompt admission, dispatch, terminal-state, cancellation, attachment, delivery, stream-gap, retry, and live-drain scenarios are mixed in two oversized files, causing unnecessary context burn, slow comprehension, and error-prone edits for ACP transport maintainers.",
+    "solution": "Move existing tests without semantic changes into package-local suites organized around prompt command/admission, prompt dispatch/terminal lifecycle, cancellation/connection failures, stream attachment/delivery, and stream gap/error/live-drain behavior; share cross-suite fixtures through one test-helper file and prove equivalence with before/after inventory, coverage, and focused package-test evidence."
   },
   "acceptanceCriteria": [
-    "make package-target-manifest-check passes from a clean checkout.",
-    "make ownership-inventory-check passes and reports no missing production package or cross-owner edge.",
-    "Every live production package appears exactly once with a durable owner or the explicit Process Edges exception, including Worker Sessions, Events, Chat Sessions, ACP, Factory Sessions, Providers, platform, and mapping packages.",
-    "Inventory regeneration does not silently reclassify a bidirectional edge as acceptable; every unresolved bidirectional edge remains visible until its owning convergence story lands.",
-    "The eight affected guards and documentation entries assign provider inference to Providers and hosted polling to Automations, and the service-owner tables in AGENTS.md, architecture.md, and packaged-structure.md state the same durable ownership model.",
-    "Enabling/project-level documentation criterion: the canonical service-owner guidance is reconciled with the reviewed inventories; this documentation-only alignment intentionally changes no runtime, public API, CLI, UI, or emitted-event behavior.",
-    "Typecheck and relevant focused tests pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
-    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts are resolved against current main, and the PR is actually merged."
+    "Normalized output from go test ./pkg/transports/acp/internal/stdio -list '.*' is identical before and after the split, with the zero diff shown in the PR.",
+    "Existing prompt, dispatch, terminal-state, cancellation, attachment, stream-delivery, gap, retry, and live-drain tests retain their names, setup semantics, assertions, and observable outcomes, and focused package tests pass.",
+    "Before/after ACP stdio package coverage numbers are recorded in the PR and are unchanged using the same command and baseline revision.",
+    "Tests are grouped by cohesive behavior, fixtures shared across groups live in one test-helper file, no resulting Go test file exceeds approximately 1,200 lines, and the diff is dominated by moves.",
+    "No production code, public contract, generated artifact, assertion semantics, test inventory, or unrelated cleanup changes are included.",
+    "Typecheck and tests pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
+    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts are resolved against current main, and the PR is merged."
   ],
-  "userStories": [],
-  "enablingCriteria": [
+  "userStories": [
     {
-      "id": "sac-s0-1-ownership-inventories-001",
-      "type": "project-enabling",
-      "title": "Complete the package-target manifest",
-      "description": "The package-target manifest is repository-enforcement and maintainer tooling that covers the live production tree exactly once, so placement and migration decisions are based on a reviewed current package graph rather than a stale snapshot.",
+      "id": "thr-split-acp-stdio-tests-001",
+      "title": "Isolate Prompt Command and Admission Behavior",
+      "description": "As an ACP transport maintainer, I want prompt command parsing and prompt admission scenarios in focused suites so I can understand request validation and admission behavior without loading dispatch and cancellation cases.",
       "acceptanceCriteria": [
-        "Regeneration accounts for every live production package exactly once as a reviewed retain or move destination, with only the explicit Process Edges exception outside durable service or family ownership.",
-        "Worker Sessions, Events, Chat Sessions, ACP, Factory Sessions, Providers, platform, and mapping package families present in the live tree are represented with destinations consistent with the repository architecture.",
-        "make package-target-manifest-check passes from a clean checkout and fails in a focused regression case when a production package is missing or duplicated.",
-        "Existing reviewed move rows and deletion conditions are preserved unless the live tree proves that their owning convergence work has already landed; unrelated package migrations are not performed in this criterion.",
-        "This project-enabling inventory alignment intentionally changes no runtime, public API, CLI, UI, or emitted-event behavior.",
+        "Existing factory-command parsing, target-change, malformed or invalid prompt, identity, version, busy, duplicate-delivery, and connection-isolation tests remain discoverable under their exact test names and produce the same results.",
+        "Moved tests retain their existing setup and assertions, and setup shared by more than one behavioral suite is consolidated into the single package test-helper file without changing fixture behavior.",
+        "The partial split is move-dominated and does not change ACP production code or public contracts.",
+        "Focused ACP stdio package tests pass.",
         "Tests pass",
         "Typecheck passes"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Regenerated the package-target manifest from the live production Go tree (545 packages) and retained the 17 newly discovered paths under platform, Chat Sessions, Events, Factory Sessions, Providers, Worker Sessions, ACP, CLI, and mapping destinations. Added Worker Sessions to the closed package-target owner vocabulary and reconciled the live Chat Sessions/Events/Worker Sessions top-level inventories. Existing package mappings and deletion conditions were preserved. make package-target-manifest-check, focused package-target mapping/coverage tests, and git diff --check pass. This is repository-enforcement and maintainer tooling work with no runtime, public API, CLI, UI, or emitted-event behavior change."
+      "notes": "Moved the 22 prompt command/admission tests into session_prompt_admission_test.go with their original names, setup, assertions, and outcomes. Consolidated the package-shared ACP stdio fakes and fixtures in session_test_helpers_test.go, including helpers previously defined in session_prompt_test.go, session_new_test.go, session_set_config_option_test.go, and prompt_stream_test.go. No production code or public contract changed. Normalized go test ./pkg/transports/acp/internal/stdio -list '.*' remained identical at 222 tests before and after; go test -cover -count=1 remained 94.3% of statements; focused story tests, the full package suite, and the package compile/typecheck passed."
     },
     {
-      "id": "sac-s0-1-ownership-inventories-002",
-      "type": "project-enabling",
-      "title": "Complete and classify the ownership inventory",
-      "description": "The ownership inventory is repository-enforcement and maintainer tooling that records a reviewed owner and relationship classification for every production package and cross-owner dependency, so dependency direction and remaining convergence debt are explicit without changing product behavior.",
+      "id": "thr-split-acp-stdio-tests-002",
+      "title": "Isolate Prompt Dispatch, Terminal Lifecycle, and Cancellation Behavior",
+      "description": "As an ACP transport maintainer, I want prompt execution and control-flow scenarios separated by behavior so I can reason about first and later-turn dispatch, response terminalization, and cancellation races independently.",
       "acceptanceCriteria": [
-        "The ownership inventory covers every production package from the regenerated package-target manifest and reports no missing or duplicate ownership row.",
-        "Every live cross-owner dependency is reviewed and classified as command, query, event, construction, lifecycle, protocol composition, or external effect, with a rationale consistent with the owning service contract.",
-        "Worker Sessions, Events, Chat Sessions, ACP, Factory Sessions, Providers, platform, and mapping packages and their live cross-owner edges are included.",
-        "Chat Sessions and Events rationale describes their implemented ownership and behavior in the present tense rather than as future work.",
-        "Regeneration preserves every unresolved bidirectional edge as visible debt and a focused regression test proves that such an edge cannot be silently reclassified as acceptable.",
-        "make ownership-inventory-check passes and reports no missing production package or edge.",
-        "This project-enabling inventory alignment intentionally changes no runtime, public API, CLI, UI, or emitted-event behavior.",
+        "Existing first-turn start and bind, later-turn invocation, notification and response mapping, retry and recovery, transition-failure, and terminal-outcome tests remain discoverable under their exact names and produce the same results.",
+        "Existing cancellation routing, committed-intent, completion and supersession race, repeated identity, malformed or unknown request, retryability, and asynchronous connection-failure tests remain discoverable under their exact names and produce the same results.",
+        "Prompt lifecycle and cancellation suites use the same package-local shared fixtures without duplicating or altering fixture semantics.",
+        "Every resulting prompt-related Go test file is approximately 1,200 lines or fewer, and the diff remains dominated by moves.",
+        "Focused ACP stdio package tests pass.",
         "Tests pass",
         "Typecheck passes"
       ],
       "priority": 2,
-      "passes": true,
-      "notes": "Regenerated the ownership inventory from the live package graph (576 existing-scope package rows) and added the 16 package-target paths introduced by story 001, including Worker Sessions, Events, Chat Sessions, ACP, Factory Sessions, Providers, platform, and mapping paths. Added Worker Sessions to the closed owner vocabulary, top-level inventory, and rationale cards; rewrote Chat Sessions and Events rationale in the present tense. Cross-owner discovery now records 155 classified edges, marks all 50 directed entries in reciprocal pairs as unresolved bidirectional debt, and rejects a valid interaction class when those debt markers are removed. make ownership-inventory-check, focused ownership tests, package-target-manifest-check, and git diff --check pass. The full internal ownership package still reports pre-existing Workers/Recordings root-contract baseline drift unrelated to this story."
+      "passes": false,
+      "notes": ""
     },
     {
-      "id": "sac-s0-1-ownership-inventories-004",
-      "type": "project-enabling",
-      "title": "Reconcile canonical service-owner documentation",
-      "description": "As a contributor, I want the canonical service-owner tables to agree with the reviewed inventories so that repository guidance leads changes to the correct package and contract boundary.",
+      "id": "thr-split-acp-stdio-tests-003",
+      "title": "Isolate Streaming, Attachment, Gap, and Live-Drain Behavior",
+      "description": "As an ACP transport maintainer, I want stream delivery scenarios grouped by responsibility so I can inspect attachment lifecycle, ordered delivery, and stream recovery or failure behavior without reading one monolithic suite.",
       "acceptanceCriteria": [
-        "The service-owner tables in AGENTS.md, docs/architecture/architecture.md, and docs/architecture/packaged-structure.md consistently describe the implemented Worker Sessions, Events, Chat Sessions, Factory Sessions, Providers, Workers, Automations, platform, ACP transport, and mapping ownership boundaries.",
-        "The tables state that Providers owns provider inference and execution policy, Automations owns hosted polling, and Workers consumes owner contracts to perform request-scoped worker execution.",
-        "Events is described as the process-local source-native stream and Recordings as canonical Factory history; Chat Sessions and Worker Sessions are described as current implemented owners rather than future services.",
-        "Documentation uses the customer-facing Factory vocabulary defined by the data model and does not expose internal Petri terminology as a service boundary.",
-        "The package-target and ownership inventory checks still pass after the documentation reconciliation.",
-        "Tests pass",
-        "Typecheck passes"
-      ],
-      "priority": 4,
-      "passes": true,
-      "notes": "Reconciled the three canonical ownership summaries with the implemented package graph. AGENTS.md now names Chat Sessions, Events, Worker Sessions, ACP, mapping, platform, Providers-owned provider inference/execution policy, Automations-owned hosted polling, and Workers request-scoped execution. architecture.md and packaged-structure.md use the same present-tense service-owner model, explicitly distinguish Events source-native delivery from the Recordings canonical Factory Event ledger, and keep internal runtime implementation details behind the customer-facing Factory boundary. This remains an enabling documentation criterion with no runtime, API, CLI, UI, or emitted-event behavior change. make ownership-inventory-check, make package-target-manifest-check, focused ownership-check tests, and git diff --check pass."
-    },
-    {
-      "id": "sac-s0-1-ownership-inventories-003",
-      "type": "project-enabling",
-      "title": "Correct inference and hosted-polling ownership enforcement",
-      "description": "As a service owner, I want architecture enforcement to attribute provider inference and hosted polling to their durable owners so that new code cannot deepen the incorrect Workers boundary.",
-      "acceptanceCriteria": [
-        "All eight affected guard and documentation entries are reviewed and corrected: provider inference is assigned to Providers, hosted polling is assigned to Automations, and Workers retains only its request-scoped execution responsibilities.",
-        "Ownership rationale distinguishes Workers deciding when to execute a worker attempt from Providers owning provider protocol, selection, session, adapter, and execution behavior, and from Automations owning hosted-source observation and polling.",
-        "Focused guard tests reject a new production assignment of provider inference or hosted polling to Workers, reject an expanded Workers-root Provider compatibility port, and accept only the exact reviewed request-scoped contract plus the reviewed Providers and Automations ownership paths.",
-        "No runtime behavior, public API contract, or unrelated Workers migration is changed by this correction.",
+        "Existing attachment cache, resume, detach, reconnect, concurrency, seeded-message, fallback, ordering, independent-delivery, and notifier-retry tests retain their exact names, assertions, and outcomes.",
+        "Existing retention-gap, invalid-cursor, acknowledgment conflict and retry, malformed projection, cancellation, subscription or read or version failure, and live-drain tests retain their exact names, assertions, and outcomes.",
+        "Stream suites reuse the single package test-helper file where fixtures are shared, and fixture extraction introduces no alternate execution path or state.",
+        "Every resulting stream-related Go test file is approximately 1,200 lines or fewer, and the diff remains dominated by moves.",
+        "The before and after test-list inventory has a zero diff, and before and after coverage numbers are unchanged and recorded for review.",
+        "Focused ACP stdio package tests pass.",
         "Tests pass",
         "Typecheck passes"
       ],
       "priority": 3,
-      "passes": true,
-      "notes": "Corrected the package-boundary owner metadata for Providers execution/adapters and rewrote the provider-effect diagnostics to distinguish Providers-owned protocol, selection, session, adapter, and one-attempt execution from the Workers request-scoped compatibility port. The checker now expands grouped Go field declarations before inspecting signature types, so a valid grouped parameter declaration is rejected with a diagnostic instead of panicking; TestRunRejectsGroupedWorkersRequestScopedProviderPortWithoutPanic covers that regression. Added focused tests that allow the reviewed Providers leaf and exact Workers compatibility bridge while rejecting an expanded Workers-root provider port and any new provider-effect owner under Workers; the existing hosted-ownership tests reject polling/reconciliation assigned to Workers and accept Automation Hosted Sources. Burned down all eight stale misplaced-guard inventory entries, made retired entries fail validation, and expanded Providers/Workers rationale cards with present-tense ownership. No runtime behavior, public API shape, or unrelated migration changed. make ownership-inventory-check, make package-target-manifest-check, focused boundary/inventory tests, go test compilation checks, and git diff --check pass. The full internal ownership package and ownership-boundary make target retain the pre-existing Workers/Recordings root-contract and two unrelated baseline violations documented in progress.txt."
+      "passes": false,
+      "notes": ""
     }
   ]
 }
