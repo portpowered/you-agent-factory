@@ -47,8 +47,8 @@
         "Tests pass"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Preserved the existing typed SERVER_BIND_FAILED mapping and startup-failure lifecycle transition, suppressed recording success output when a hosted run returns an error, and added direct plus built-executable regressions. A deterministic occupied 127.0.0.1:65535 listener proves the shipped server exits non-zero, emits one SERVER_BIND_FAILED ErrorResponse on stderr, and emits no readiness or success output on stdout."
     },
     {
       "id": "pf-cli-exit-codes-003",
