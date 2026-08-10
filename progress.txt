@@ -1,5 +1,8 @@
 ## Codebase Patterns
 - Reusable Go checker caches should fingerprint `go list -deps -json` source/embed inputs plus the build environment; hashing the transitive inputs prevents a valid-looking executable from masking dependency changes.
+- Concurrent process lanes should capture each child result independently, wait for every started child, and emit a stable target-attributed report after completion so one failure cannot hide later failures.
+- When concurrent Windows Make processes contend on the default recipe shell, prefer a discovered native Git `sh.exe` when available and isolate child `TEMP`/`TMP`/`TMPDIR`; fall back to the platform shell without assuming WSL Bash is a compatible recipe shell.
+- Per-invocation compiled helper executables should live under unique temporary directories inside the ignored cache; a shared output path can race when separate test or lint invocations run concurrently.
 - On Windows, `go run` may launch its child with inherited process handles instead of redirected `exec.Cmd` buffers; use a `go run -exec` shim with a temporary status file when an exact child exit code must be preserved while forwarding streams.
 - Treat repository-enforcement inventories and architecture guards as project-enabling PRD criteria when they have no runtime, API, CLI, UI, or emitted-event behavior; source scans support enforcement but are not customer-behavior evidence.
 - AST scanners must expand grouped Go field declarations before indexing parameter or result types; a field-count helper can exceed the AST field-list length and panic on valid source.
@@ -1978,4 +1981,34 @@
 - **Learnings for future iterations:**
   - The cache driver can remain a small Go process wrapper while checker binaries are built once per transitive-input fingerprint; direct Make targets stay the compatibility boundary for target-specific arguments.
   - The next story can compose concurrency around these target recipes without changing checker cache semantics; avoid sharing one output file between different checker fingerprints.
+---
+## 2026-08-10 15:24 -07:00 - thr-lint-speed-002
+- What was implemented
+  - Added `cmd/lintlane`, a bounded worker-pool process driver for independent Make lint targets. `LINT_JOBS` defaults to 4 and validates explicit positive limits; all started targets reach terminal state before aggregate success/failure is decided.
+  - Added stable target-delimited reporting with per-target stdout/stderr capture, PASS/FAIL markers, an explicit success summary, and a final failure list containing standalone `make <target>` reruns.
+  - Preserved `LINT_TARGETS`, root-variable overrides, non-Go target recipes, direct sub-target behavior, and `LINT_CHECKER_FALLBACK=1`. Aggregate lanes compile `cmd/lintcheck` once into a unique temporary executable under the ignored checker cache and pass it to each child Make target.
+  - Added Windows process isolation: discovered native Git `sh.exe` avoids concurrent `cmd.exe` temporary-batch contention, and each child gets isolated temporary process-artifact variables. WSL `bash.exe` is not selected as a recipe shell.
+  - Updated aggregate lint output assertions to recognize the compiled checker driver while retaining direct `go run` assertions for standalone checker targets.
+- Files changed
+  - `Makefile`
+  - `cmd/lintlane/main.go`
+  - `cmd/lintlane/main_test.go`
+  - `cmd/pkgfilecountcheck/main_test.go`
+  - `cmd/pkgboundarycheck/main_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./cmd/lintlane -count=10` and `go test -race ./cmd/lintlane -count=1` — passed.
+  - `go vet ./cmd/lintlane` — passed.
+  - `go test ./cmd/pkgmaintcheck ./cmd/pkgfilecountcheck ./cmd/pkgboundarycheck -count=1` — passed concurrently.
+  - `make test` — passed.
+  - `make typecheck` — passed.
+  - `make lint LINT_TARGETS="backend-size pkg-maint pkg-file-count pkg-structure vet" LINT_JOBS=4` — passed with target-attributed success output.
+  - `make lint LINT_TARGETS=backend-size LINT_CHECKER_FALLBACK=1 LINT_JOBS=1` — passed.
+  - Three valid equal-work full-lane benchmark runs on main revision `947152348`: 173.292s, 184.979s, 163.251s (median 173.292s), using `make -k lint`; the known `pkg-boundary`, `packaged-factory-consumption-check`, `ownership-inventory-check`, and `deadcode` failures remained non-zero.
+  - Three optimized benchmark runs on commit `c931a4013`: 150.522s, 85.924s, 87.756s (median 87.756s), using `make lint LINT_JOBS=4`; the same four failures were all reported after completion. Median wall-time reduction: 49.4%. One host-terminated baseline attempt (282.178s, exit -1) was excluded from the median.
+- **Learnings for future iterations:**
+  - GNU Make’s Windows default shell can contend across concurrent Make processes even when recipes only echo; shell selection belongs at the child Make boundary and should prefer native Git shell paths over WSL shims.
+  - A stable aggregate wrapper path is unsafe when independent package tests invoke `make lint` concurrently; compile to a per-lane temporary path and remove it only after all target processes have exited.
+  - Full-lane speed comparisons must make baseline and optimized revisions perform equal target work; the historical baseline stops at the first failure, so `make -k lint` is the fair baseline for terminal-result timing.
 ---

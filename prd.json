@@ -50,8 +50,8 @@
         "Tests pass"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added cmd/lintlane as the cross-platform bounded worker-pool driver used by make lint. LINT_JOBS defaults to 4 and accepts any explicit positive limit; every started target runs to terminal completion, captures stdout/stderr independently, emits target-delimited output in requested order, and reports every failed target with a standalone make rerun. LINT_TARGETS and command-line root overrides continue through child Make invocations, non-Go targets retain their recipes, Windows child Make runs use an available native Git sh.exe when present to avoid concurrent cmd.exe temporary-batch contention, and each target gets an isolated temporary environment for platform process artifacts. Aggregate lint compiles cmd/lintcheck once per lane into a unique temporary executable under the gitignored checker cache, while direct checker targets and LINT_CHECKER_FALLBACK=1 remain supported. Deterministic tests cover actual overlap, job-limit enforcement, terminal waiting, mixed failure aggregation, target attribution, success output, argument/environment forwarding, positive job validation, and target selection. Benchmark on main revision 947152348 versus optimized commit c931a4013 used equal-work commands make -k lint and make lint LINT_JOBS=4 with the default target set: valid main runs were 173.292s, 184.979s, and 163.251s (median 173.292s, exit 2 for the existing pkg-boundary, packaged-factory-consumption-check, ownership-inventory-check, and deadcode debt); optimized runs were 150.522s, 85.924s, and 87.756s (median 87.756s, exit 2 with the same four named failures), a 49.4% median reduction. One host-terminated baseline attempt (282.178s, exit -1) was excluded from the three-run median. go test -race ./cmd/lintlane, make test, make typecheck, focused lint gates, and aggregate fallback verification pass."
     },
     {
       "id": "thr-lint-speed-003",
