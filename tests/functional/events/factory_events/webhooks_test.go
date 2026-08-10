@@ -140,7 +140,6 @@ func testFunctionalWebhookRetryExhaustion(t *testing.T) {
 	var attemptsMu sync.Mutex
 	attempts := make(map[string]int)
 	var failingEventID string
-	deadLetterStore := newFunctionalDeadLetterStore()
 	receiver := newFunctionalWebhookReceiver(t, func(request functionalWebhookRequest) functionalWebhookResponse {
 		attemptsMu.Lock()
 		if failingEventID == "" {
@@ -162,7 +161,7 @@ func testFunctionalWebhookRetryExhaustion(t *testing.T) {
 	})
 	resolver := newFunctionalWebhookSecretResolver()
 	server := startWebhookFunctionalServer(t, dir, serviceedges.Edges{
-		Clock: fakeClock, FactoryWebhookSecretResolver: resolver.resolve, FactoryWebhookDeadLetterAppender: deadLetterStore.append,
+		Clock: fakeClock, FactoryWebhookSecretResolver: resolver.resolve,
 	})
 	resolver.waitForCount(t, 1, 5*time.Second)
 
@@ -178,7 +177,23 @@ func testFunctionalWebhookRetryExhaustion(t *testing.T) {
 		receiver.waitForEvent(t, first.eventID, 5*time.Second)
 	}
 	terminalEvent := waitForTerminalWorkEvent(t, stream, workID, 15*time.Second)
-	record := deadLetterStore.wait(t, 5*time.Second)
+
+	// The default appender is synchronous within the endpoint's event loop. A
+	// subsequent successful event therefore gives this test a deterministic
+	// happens-after point without polling the filesystem.
+	followupWorkID := submitFunctionalWebhookWork(t, process, server.URL(), "retry-exhaustion-follow-up")
+	moveFunctionalWebhookWork(t, process, server.URL(), followupWorkID, "complete")
+	receiver.waitForWorkEvent(t, followupWorkID, 5*time.Second)
+
+	deadLetterPath := filepath.Join(dir, filepath.FromSlash(webhooks.DeadLetterRelativePath))
+	recordLine, err := os.ReadFile(deadLetterPath)
+	if err != nil {
+		t.Fatalf("read default dead-letter file: %v", err)
+	}
+	if got := bytes.Count(recordLine, []byte{'\n'}); got != 1 || !bytes.HasSuffix(recordLine, []byte{'\n'}) {
+		t.Fatalf("dead-letter record count = %d, want one newline-terminated record: %s", got, recordLine)
+	}
+	recordLine = bytes.TrimSuffix(recordLine, []byte{'\n'})
 
 	var deadLetter struct {
 		EndpointName      string          `json:"endpointName"`
@@ -191,11 +206,8 @@ func testFunctionalWebhookRetryExhaustion(t *testing.T) {
 		StatusCode        int             `json:"statusCode"`
 		CanonicalBody     json.RawMessage `json:"canonicalBody"`
 	}
-	if err := json.Unmarshal(record.line, &deadLetter); err != nil {
-		t.Fatalf("decode dead-letter line: %v: %s", err, record.line)
-	}
-	if record.path != filepath.Join(dir, filepath.FromSlash(webhooks.DeadLetterRelativePath)) {
-		t.Fatalf("dead-letter path = %q, want session path below %q", record.path, dir)
+	if err := json.Unmarshal(recordLine, &deadLetter); err != nil {
+		t.Fatalf("decode dead-letter line: %v: %s", err, recordLine)
 	}
 	if deadLetter.EndpointName != "exhaust" || deadLetter.EventID != first.eventID || deadLetter.EventID != terminalEvent.Id {
 		t.Fatalf("dead-letter identity = %#v, want exhaust and event %q", deadLetter, first.eventID)
@@ -206,11 +218,8 @@ func testFunctionalWebhookRetryExhaustion(t *testing.T) {
 	if !bytes.Equal(deadLetter.CanonicalBody, first.body) {
 		t.Fatalf("dead-letter canonical body differs from request: got=%s want=%s", deadLetter.CanonicalBody, first.body)
 	}
-	if bytes.Contains(record.line, []byte(functionalWebhookSecret)) || bytes.Contains(record.line, []byte("receiver response must not be retained")) {
-		t.Fatalf("dead-letter retained secret or receiver response: %s", record.line)
-	}
-	if got := deadLetterStore.count(); got != 1 {
-		t.Fatalf("dead-letter append count = %d, want 1", got)
+	if bytes.Contains(recordLine, []byte(functionalWebhookSecret)) || bytes.Contains(recordLine, []byte("receiver response must not be retained")) {
+		t.Fatalf("dead-letter retained secret or receiver response: %s", recordLine)
 	}
 }
 
@@ -386,67 +395,6 @@ func (resolver *functionalWebhookSecretResolver) assertNotResolved(t *testing.T,
 	}
 }
 
-type functionalDeadLetterRecord struct {
-	path string
-	line []byte
-}
-
-type functionalDeadLetterStore struct {
-	mu      sync.Mutex
-	records []functionalDeadLetterRecord
-	ready   chan functionalDeadLetterRecord
-}
-
-func newFunctionalDeadLetterStore() *functionalDeadLetterStore {
-	return &functionalDeadLetterStore{ready: make(chan functionalDeadLetterRecord, 8)}
-}
-
-func (store *functionalDeadLetterStore) append(path string, line []byte) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return err
-	}
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
-	if err != nil {
-		return err
-	}
-	if _, err := file.Write(line); err != nil {
-		_ = file.Close()
-		return err
-	}
-	if err := file.Sync(); err != nil {
-		_ = file.Close()
-		return err
-	}
-	if err := file.Close(); err != nil {
-		return err
-	}
-	record := functionalDeadLetterRecord{path: path, line: append([]byte(nil), line...)}
-	store.mu.Lock()
-	store.records = append(store.records, record)
-	store.mu.Unlock()
-	store.ready <- record
-	return nil
-}
-
-func (store *functionalDeadLetterStore) wait(t *testing.T, timeout time.Duration) functionalDeadLetterRecord {
-	t.Helper()
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
-	select {
-	case record := <-store.ready:
-		return record
-	case <-timer.C:
-		t.Fatal("timed out waiting for dead-letter append")
-		return functionalDeadLetterRecord{}
-	}
-}
-
-func (store *functionalDeadLetterStore) count() int {
-	store.mu.Lock()
-	defer store.mu.Unlock()
-	return len(store.records)
-}
-
 func startWebhookFunctionalServer(
 	t *testing.T,
 	dir string,
@@ -616,5 +564,3 @@ func assertWebhookSignature(t *testing.T, request functionalWebhookRequest, secr
 		t.Fatalf("signature = %q, want independently verified %q", request.headers.Get(webhooks.SignatureHeader), want)
 	}
 }
-
-var _ webhooks.DeadLetterAppender = (*functionalDeadLetterStore)(nil).append
