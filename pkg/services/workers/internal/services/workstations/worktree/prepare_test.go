@@ -272,6 +272,52 @@ func TestPrepareFactoryGitWorktree_ReturnsFailureWhenWorktreeAddFails(t *testing
 	}
 }
 
+func TestPrepareFactoryGitWorktree_ReturnsBoundedActionableLockContention(t *testing.T) {
+	repoRoot := t.TempDir()
+	factoryRoot := filepath.Join(repoRoot, "factory")
+	if err := os.MkdirAll(filepath.Join(repoRoot, ".git"), 0o755); err != nil {
+		t.Fatalf("MkdirAll(.git): %v", err)
+	}
+	if err := os.MkdirAll(factoryRoot, 0o755); err != nil {
+		t.Fatalf("MkdirAll(factory): %v", err)
+	}
+	lockPath := filepath.Join(repoRoot, ".git", "config.lock")
+	if err := os.WriteFile(lockPath, []byte("owned-by-test\n"), 0o600); err != nil {
+		t.Fatalf("WriteFile(config.lock): %v", err)
+	}
+
+	lockFailure := fmt.Sprintf("fatal: Unable to create '%s': File exists.", lockPath)
+	responses := []gitResponse{{stdout: repoRoot}}
+	for range gitSerializationLockRetries {
+		responses = append(responses, gitResponse{exitCode: 128, stderr: lockFailure})
+	}
+	git := &recordingGitCommander{next: responses}
+
+	_, err := PrepareFactoryGitWorktree(context.Background(), factoryRoot, "feature-a", platformfilesystem.Local{}, git)
+	if err == nil {
+		t.Fatal("PrepareFactoryGitWorktree() error = nil, want bounded lock contention")
+	}
+	message := err.Error()
+	for _, expected := range []string{
+		"git worktree serialization contention",
+		"resource=" + lockPath,
+		"owner_liveness=indeterminate",
+		"verify no Git or worktree setup process",
+		"remove only " + lockPath,
+		"retry",
+	} {
+		if !strings.Contains(message, expected) {
+			t.Fatalf("error = %q, want %q", message, expected)
+		}
+	}
+	if len(git.calls) != 1+gitSerializationLockRetries {
+		t.Fatalf("Git calls = %d, want initial root lookup plus %d bounded retries", len(git.calls), gitSerializationLockRetries)
+	}
+	if _, statErr := os.Stat(lockPath); statErr != nil {
+		t.Fatalf("lock path %q was removed during contention: %v", lockPath, statErr)
+	}
+}
+
 func TestPrepareFactoryGitWorktree_ReturnsFailureWhenPathExistsButIsNotWorktree(t *testing.T) {
 	requireGitIntegration(t)
 	repoRoot := initGitRepository(t)

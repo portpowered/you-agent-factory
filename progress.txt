@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- Git Worktree preparation treats a retained Git `*.lock` as indeterminate ownership: retry within a named bound, preserve the resource, and return its exact path with verify/remove/retry guidance.
 - Git's `.git/config.lock` has no trustworthy owner or PID evidence; after a bounded retry, report the exact lock with `owner_liveness=indeterminate` and require verification before removing only that file—never auto-delete it.
 - Canonical packaged CLI docs live under `docs/reference/`; adding a topic also requires its authored file in `docs/reference/embed.go` and a registry entry in `pkg/transports/cli/docs/docs.go`.
 - The `you run --named <factory> --help` output is the authoritative invocation contract; omitted role provider/model values resolve through operator defaults.
@@ -836,4 +837,38 @@
 - **Learnings for future iterations:**
   - A Git config lock has no trustworthy owner identity even when a known live test process created it; classify it conservatively as indeterminate and preserve it rather than deleting it.
   - The live-owner test can synchronize on the child’s flushed `acquired` marker and inspect `poll()` after contention, avoiding sleeps and proving both ownership preservation and bounded failure.
+---
+
+## 2026-08-10 05:42 -07:00 - pf-stale-scope-diagnostic-001 Go Worktree owner follow-up
+- What was implemented
+  - Extended the actual Go Factory Worktree owner used by `you` worker dispatch to recognize Git serialization-lock failures instead of returning the raw Git error.
+  - Added a bounded retry window for transient lock contention, exact lock-path extraction, conservative `owner_liveness=indeterminate` classification, and verify/remove/retry guidance that never removes the lock automatically.
+  - Added an owner-level regression that retains `.git/config.lock`, exercises the initial repository lookup plus all bounded retries, and proves the resource remains present while the diagnostic names the exact path.
+- Files changed
+  - `pkg/services/workers/internal/services/workstations/worktree/prepare.go`
+  - `pkg/services/workers/internal/services/workstations/worktree/prepare_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/workers/internal/services/workstations/worktree -run 'TestPrepareFactoryGitWorktree_(ReturnsBoundedActionableLockContention|ReturnsFailureWhenWorktreeAddFails|CreatesWorktreeWhenMissing)$' -count=1 -v -timeout 120s` — passed.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - The Go Worktree path and the packaged Full Flow helper are separate owners of Git effects; bounded lock diagnostics must be implemented at both call sites when both are in scope.
+  - A successful Git command must bypass lock retry classification even when it emits progress text on stdout; only non-zero or execution-error results enter the retry path.
+- This iteration still does not prove that `.git/config.lock` is acquired before application runtime readiness, so Story 001 remains incomplete and no backend-scope lease was introduced.
+---
+
+## 2026-08-10 05:42 -07:00 - pf-stale-scope-diagnostic-001 verification follow-up
+- What was implemented
+  - Re-ran the complete Go Worktree package after the successful-command regression fix and verified the package's real Git integration path remains intact.
+- Files changed
+  - No additional source files; this entry records the completed verification for the preceding Worktree owner slice.
+- Verification
+  - `go test ./pkg/services/workers/internal/services/workstations/worktree -count=1 -timeout 180s` — passed.
+  - `go vet ./pkg/services/workers/internal/services/workstations/worktree` — passed.
+  - `go test ./tests/functional/transport/cli/process -run '^TestCLISuccessorAfterHardKillReachesRuntime$' -count=1 -timeout 300s` — passed.
+  - `python tests/factory/scripts/test_full_flow_setup_task_worktree.py` — passed, 6 tests.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - The focused Go owner change is compatible with the existing real-process startup regression and packaged Full Flow lock tests; neither test proves the lock is acquired before application runtime readiness.
 ---
