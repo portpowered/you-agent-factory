@@ -13,20 +13,17 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
-	"go.uber.org/zap"
 )
 
 // RuntimeInputs are the resolved invocation values selected by the canonical
 // injector.
 type RuntimeInputs struct {
 	Request *factorysessions.RuntimeOpeningRequest
-	Logger  *zap.Logger
 }
 
 type RuntimeInputResolver func(
 	context.Context,
 	*factorysessions.RuntimeOpeningRequest,
-	*zap.Logger,
 ) (RuntimeInputs, error)
 
 // RuntimeAdapter binds the exact HTTP and optional visualization components
@@ -75,19 +72,18 @@ func New(
 func (service *Service) OpenApplication(
 	ctx context.Context,
 	request roles.ApplicationOpeningRequest,
-	logger *zap.Logger,
 	visualizationSink factoryvisualization.Sink,
 ) (roles.OpenedProcessApplication, error) {
 	if service == nil || service.resolveInputs == nil || service.openRuntime == nil || service.adaptRuntime == nil || service.planLifecycle == nil {
 		return roles.OpenedProcessApplication{}, errors.New("open Factory Session application: service is required")
 	}
 	ports, completion := gateCompletionOnRuntimeHost(request.Ports, request.Completion)
-	inputs, err := service.resolveInputs(ctx, request.Runtime, logger)
+	inputs, err := service.resolveInputs(ctx, request.Runtime)
 	if err != nil {
 		return roles.OpenedProcessApplication{}, fmt.Errorf("open Factory Session application: %w", err)
 	}
 	opened, err := service.openRuntime.OpenApplicationRuntime(
-		ctx, inputs.Request, inputs.Logger, ports.RuntimeHostObserver, ports.InvocationMetricsRecorder,
+		ctx, inputs.Request, ports.RuntimeHostObserver,
 	)
 	if err != nil {
 		return roles.OpenedProcessApplication{}, fmt.Errorf("open Factory Session application runtime: %w", err)

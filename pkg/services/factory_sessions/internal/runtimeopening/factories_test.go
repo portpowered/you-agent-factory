@@ -246,8 +246,6 @@ func TestNewFactoryOpensHistoricalReplayWithoutLiveRuntimeCollaborators(t *testi
 			FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{Directory: t.TempDir()},
 			Recordings:        recordings.RuntimeOpeningRequest{ReplayPath: "recording.json"},
 		},
-		zap.NewNop(),
-		nil,
 		nil,
 	)
 	if err != nil {
@@ -648,7 +646,7 @@ func TestConcurrentRuntimeOpeningUsesSharedFactorySessionsRoot(t *testing.T) {
 		wait.Add(1)
 		go func() {
 			defer wait.Done()
-			_, err := factory.openRuntime(context.Background(), request, zap.NewNop(), nil, nil)
+			_, err := factory.openRuntime(context.Background(), request, zap.NewNop(), nil)
 			results <- err
 		}()
 	}

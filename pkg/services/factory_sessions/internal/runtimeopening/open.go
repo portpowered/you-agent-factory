@@ -80,7 +80,6 @@ func openRuntime(
 	resolveHome factorysessions.HomeDirectoryResolver,
 	providerIdentities factorysessions.ProviderIdentityResolver,
 	operationObserver factorysessions.RuntimeHostObserver,
-	operationMetrics roles.InvocationMetricsRecorder,
 ) (products runtimeProducts, err error) {
 	if request == nil {
 		return runtimeProducts{}, fmt.Errorf("runtime opening request is required")
@@ -373,7 +372,7 @@ func openRuntime(
 			return recordingProjections.ValidateReconnectReplay(recorded, cursor, scope)
 		},
 		recordingProjections.ReconstructFactoryWorldState,
-		effectiveInvocationMetricsRecorder(invocationMetricsRecorder, operationMetrics),
+		invocationMetricsRecorder,
 	)
 	if err != nil {
 		return runtimeProducts{}, err
@@ -470,16 +469,6 @@ func openRuntime(
 	)
 	opened.application.Resources.Clock = clock
 	return opened, nil
-}
-
-func effectiveInvocationMetricsRecorder(
-	configured roles.InvocationMetricsRecorder,
-	operation roles.InvocationMetricsRecorder,
-) roles.InvocationMetricsRecorder {
-	if configured != nil {
-		return configured
-	}
-	return operation
 }
 
 func effectiveRuntimeHostObserver(

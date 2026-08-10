@@ -11,25 +11,20 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
-	"go.uber.org/zap"
 )
 
 type runtimeOpenerFunc func(
 	context.Context,
 	*factorysessions.RuntimeOpeningRequest,
-	*zap.Logger,
 	factorysessions.RuntimeHostObserver,
-	roles.InvocationMetricsRecorder,
 ) (roles.OpenedApplicationRuntime, error)
 
 func (open runtimeOpenerFunc) OpenApplicationRuntime(
 	ctx context.Context,
 	request *factorysessions.RuntimeOpeningRequest,
-	logger *zap.Logger,
 	observer factorysessions.RuntimeHostObserver,
-	metrics roles.InvocationMetricsRecorder,
 ) (roles.OpenedApplicationRuntime, error) {
-	return open(ctx, request, logger, observer, metrics)
+	return open(ctx, request, observer)
 }
 
 func TestNewRequiresEveryInjectedOperation(t *testing.T) {
@@ -38,16 +33,13 @@ func TestNewRequiresEveryInjectedOperation(t *testing.T) {
 	resolve := RuntimeInputResolver(func(
 		context.Context,
 		*factorysessions.RuntimeOpeningRequest,
-		*zap.Logger,
 	) (RuntimeInputs, error) {
 		return RuntimeInputs{}, nil
 	})
 	open := runtimeOpenerFunc(func(
 		context.Context,
 		*factorysessions.RuntimeOpeningRequest,
-		*zap.Logger,
 		factorysessions.RuntimeHostObserver,
-		roles.InvocationMetricsRecorder,
 	) (roles.OpenedApplicationRuntime, error) {
 		return roles.OpenedApplicationRuntime{}, nil
 	})
@@ -84,29 +76,25 @@ func TestOpenApplicationResolvesThenOpensAndBindsExactInputs(t *testing.T) {
 	resolvedRequest := &factorysessions.RuntimeOpeningRequest{}
 	observer := factorysessions.RuntimeHostObserver(func(factorysessions.RuntimeHostBinding) {})
 	invocationPorts := roles.ApplicationOpeningPorts{RuntimeHostObserver: observer}
-	logger := zap.NewNop()
 	var order []string
 	service, err := New(
 		func(
 			ctx context.Context,
 			gotRequest *factorysessions.RuntimeOpeningRequest,
-			gotLogger *zap.Logger,
 		) (RuntimeInputs, error) {
 			order = append(order, "resolve")
-			if ctx == nil || gotRequest != request || gotLogger != logger {
+			if ctx == nil || gotRequest != request {
 				t.Fatal("resolver received different invocation inputs")
 			}
-			return RuntimeInputs{Request: resolvedRequest, Logger: logger}, nil
+			return RuntimeInputs{Request: resolvedRequest}, nil
 		},
 		runtimeOpenerFunc(func(
 			_ context.Context,
 			gotRequest *factorysessions.RuntimeOpeningRequest,
-			gotLogger *zap.Logger,
 			gotObserver factorysessions.RuntimeHostObserver,
-			_ roles.InvocationMetricsRecorder,
 		) (roles.OpenedApplicationRuntime, error) {
 			order = append(order, "open")
-			if gotRequest != resolvedRequest || gotLogger != logger {
+			if gotRequest != resolvedRequest {
 				t.Fatal("runtime opener did not receive resolved inputs")
 			}
 			if gotObserver == nil {
@@ -132,7 +120,7 @@ func TestOpenApplicationResolvesThenOpensAndBindsExactInputs(t *testing.T) {
 
 	opened, err := service.OpenApplication(context.Background(), roles.ApplicationOpeningRequest{
 		Runtime: request, Ports: invocationPorts,
-	}, logger, nil)
+	}, nil)
 	if err != nil {
 		t.Fatalf("OpenApplication(): %v", err)
 	}
@@ -155,19 +143,15 @@ func TestOpenApplicationPassesVisualizationSinkToAdapter(t *testing.T) {
 		func(
 			context.Context,
 			*factorysessions.RuntimeOpeningRequest,
-			*zap.Logger,
 		) (RuntimeInputs, error) {
 			return RuntimeInputs{
 				Request: &factorysessions.RuntimeOpeningRequest{},
-				Logger:  zap.NewNop(),
 			}, nil
 		},
 		runtimeOpenerFunc(func(
 			context.Context,
 			*factorysessions.RuntimeOpeningRequest,
-			*zap.Logger,
 			factorysessions.RuntimeHostObserver,
-			roles.InvocationMetricsRecorder,
 		) (roles.OpenedApplicationRuntime, error) {
 			return roles.OpenedApplicationRuntime{}, nil
 		}),
@@ -189,7 +173,6 @@ func TestOpenApplicationPassesVisualizationSinkToAdapter(t *testing.T) {
 	if _, err := service.OpenApplication(
 		context.Background(),
 		roles.ApplicationOpeningRequest{Runtime: &factorysessions.RuntimeOpeningRequest{}},
-		zap.NewNop(),
 		sink,
 	); err != nil {
 		t.Fatalf("OpenApplication(): %v", err)
@@ -244,16 +227,13 @@ func TestOpenApplicationClosesOpenedResourcesWhenBindingFails(t *testing.T) {
 		func(
 			context.Context,
 			*factorysessions.RuntimeOpeningRequest,
-			*zap.Logger,
 		) (RuntimeInputs, error) {
-			return RuntimeInputs{Request: &factorysessions.RuntimeOpeningRequest{}, Logger: zap.NewNop()}, nil
+			return RuntimeInputs{Request: &factorysessions.RuntimeOpeningRequest{}}, nil
 		},
 		runtimeOpenerFunc(func(
 			context.Context,
 			*factorysessions.RuntimeOpeningRequest,
-			*zap.Logger,
 			factorysessions.RuntimeHostObserver,
-			roles.InvocationMetricsRecorder,
 		) (roles.OpenedApplicationRuntime, error) {
 			return roles.OpenedApplicationRuntime{Resources: roles.RuntimeResources{Close: func() error {
 				closed++
@@ -273,7 +253,7 @@ func TestOpenApplicationClosesOpenedResourcesWhenBindingFails(t *testing.T) {
 	}
 
 	_, err = service.OpenApplication(
-		context.Background(), roles.ApplicationOpeningRequest{Runtime: &factorysessions.RuntimeOpeningRequest{}}, zap.NewNop(), nil,
+		context.Background(), roles.ApplicationOpeningRequest{Runtime: &factorysessions.RuntimeOpeningRequest{}}, nil,
 	)
 	if !errors.Is(err, bindErr) || !errors.Is(err, closeErr) {
 		t.Fatalf("OpenApplication() error = %v, want binding and cleanup causes", err)
@@ -293,16 +273,13 @@ func TestOpenApplicationClosesOpenedResourcesExactlyOnceWhenLifecyclePlanningFai
 		func(
 			context.Context,
 			*factorysessions.RuntimeOpeningRequest,
-			*zap.Logger,
 		) (RuntimeInputs, error) {
-			return RuntimeInputs{Request: &factorysessions.RuntimeOpeningRequest{}, Logger: zap.NewNop()}, nil
+			return RuntimeInputs{Request: &factorysessions.RuntimeOpeningRequest{}}, nil
 		},
 		runtimeOpenerFunc(func(
 			context.Context,
 			*factorysessions.RuntimeOpeningRequest,
-			*zap.Logger,
 			factorysessions.RuntimeHostObserver,
-			roles.InvocationMetricsRecorder,
 		) (roles.OpenedApplicationRuntime, error) {
 			return roles.OpenedApplicationRuntime{Resources: roles.RuntimeResources{Close: func() error {
 				closed++
@@ -324,7 +301,7 @@ func TestOpenApplicationClosesOpenedResourcesExactlyOnceWhenLifecyclePlanningFai
 	}
 
 	_, err = service.OpenApplication(
-		context.Background(), roles.ApplicationOpeningRequest{Runtime: &factorysessions.RuntimeOpeningRequest{}}, zap.NewNop(), nil,
+		context.Background(), roles.ApplicationOpeningRequest{Runtime: &factorysessions.RuntimeOpeningRequest{}}, nil,
 	)
 	if !errors.Is(err, planErr) || !errors.Is(err, closeErr) {
 		t.Fatalf("OpenApplication() error = %v, want planning and cleanup causes", err)
@@ -357,19 +334,16 @@ func TestOpenApplicationStopsAtResolveAndOpenFailures(t *testing.T) {
 				func(
 					context.Context,
 					*factorysessions.RuntimeOpeningRequest,
-					*zap.Logger,
 				) (RuntimeInputs, error) {
 					if test.resolveErr != nil {
 						return RuntimeInputs{}, test.resolveErr
 					}
-					return RuntimeInputs{Request: &factorysessions.RuntimeOpeningRequest{}, Logger: zap.NewNop()}, nil
+					return RuntimeInputs{Request: &factorysessions.RuntimeOpeningRequest{}}, nil
 				},
 				runtimeOpenerFunc(func(
 					context.Context,
 					*factorysessions.RuntimeOpeningRequest,
-					*zap.Logger,
 					factorysessions.RuntimeHostObserver,
-					roles.InvocationMetricsRecorder,
 				) (roles.OpenedApplicationRuntime, error) {
 					opened++
 					return roles.OpenedApplicationRuntime{}, test.openErr
@@ -388,7 +362,7 @@ func TestOpenApplicationStopsAtResolveAndOpenFailures(t *testing.T) {
 			}
 
 			_, err = service.OpenApplication(
-				context.Background(), roles.ApplicationOpeningRequest{Runtime: &factorysessions.RuntimeOpeningRequest{}}, zap.NewNop(), nil,
+				context.Background(), roles.ApplicationOpeningRequest{Runtime: &factorysessions.RuntimeOpeningRequest{}}, nil,
 			)
 			wantErr := test.resolveErr
 			if wantErr == nil {
@@ -412,16 +386,13 @@ func TestOpenApplicationInvokesRuntimeHTTPServicesBound(t *testing.T) {
 		func(
 			context.Context,
 			*factorysessions.RuntimeOpeningRequest,
-			*zap.Logger,
 		) (RuntimeInputs, error) {
-			return RuntimeInputs{Request: &factorysessions.RuntimeOpeningRequest{}, Logger: zap.NewNop()}, nil
+			return RuntimeInputs{Request: &factorysessions.RuntimeOpeningRequest{}}, nil
 		},
 		runtimeOpenerFunc(func(
 			context.Context,
 			*factorysessions.RuntimeOpeningRequest,
-			*zap.Logger,
 			factorysessions.RuntimeHostObserver,
-			roles.InvocationMetricsRecorder,
 		) (roles.OpenedApplicationRuntime, error) {
 			return roles.OpenedApplicationRuntime{
 				HTTP: roles.RuntimeHTTPServices{},
@@ -452,7 +423,6 @@ func TestOpenApplicationInvokesRuntimeHTTPServicesBound(t *testing.T) {
 			Runtime: &factorysessions.RuntimeOpeningRequest{},
 			Ports:   ports,
 		},
-		zap.NewNop(),
 		nil,
 	)
 	if err != nil {
@@ -479,16 +449,13 @@ func TestOpenApplicationPublishesHistoricalReplayInspectionWithoutLiveBindings(t
 		func(
 			context.Context,
 			*factorysessions.RuntimeOpeningRequest,
-			*zap.Logger,
 		) (RuntimeInputs, error) {
-			return RuntimeInputs{Request: &factorysessions.RuntimeOpeningRequest{}, Logger: zap.NewNop()}, nil
+			return RuntimeInputs{Request: &factorysessions.RuntimeOpeningRequest{}}, nil
 		},
 		runtimeOpenerFunc(func(
 			context.Context,
 			*factorysessions.RuntimeOpeningRequest,
-			*zap.Logger,
 			factorysessions.RuntimeHostObserver,
-			roles.InvocationMetricsRecorder,
 		) (roles.OpenedApplicationRuntime, error) {
 			return roles.OpenedApplicationRuntime{HistoricalReplay: &inspection}, nil
 		}),
@@ -521,7 +488,6 @@ func TestOpenApplicationPublishesHistoricalReplayInspectionWithoutLiveBindings(t
 				},
 			},
 		},
-		zap.NewNop(),
 		nil,
 	)
 	if err != nil {
@@ -553,16 +519,13 @@ func TestOpenApplicationClosesHistoricalReplayResourcesWhenLifecyclePlanningFail
 		func(
 			context.Context,
 			*factorysessions.RuntimeOpeningRequest,
-			*zap.Logger,
 		) (RuntimeInputs, error) {
-			return RuntimeInputs{Request: &factorysessions.RuntimeOpeningRequest{}, Logger: zap.NewNop()}, nil
+			return RuntimeInputs{Request: &factorysessions.RuntimeOpeningRequest{}}, nil
 		},
 		runtimeOpenerFunc(func(
 			context.Context,
 			*factorysessions.RuntimeOpeningRequest,
-			*zap.Logger,
 			factorysessions.RuntimeHostObserver,
-			roles.InvocationMetricsRecorder,
 		) (roles.OpenedApplicationRuntime, error) {
 			return roles.OpenedApplicationRuntime{
 				HistoricalReplay: &inspection,
@@ -590,7 +553,6 @@ func TestOpenApplicationClosesHistoricalReplayResourcesWhenLifecyclePlanningFail
 	_, err = service.OpenApplication(
 		context.Background(),
 		roles.ApplicationOpeningRequest{Runtime: &factorysessions.RuntimeOpeningRequest{}},
-		zap.NewNop(),
 		nil,
 	)
 	if !errors.Is(err, planErr) || !errors.Is(err, closeErr) ||

@@ -78,9 +78,6 @@ type FactoryEventConsumer func([]interfaces.FactoryEvent)
 
 // ApplicationOpeningPorts contains invocation-local observation edges.
 type ApplicationOpeningPorts struct {
-	InvocationMetricsRecorder interface {
-		RecordInvocationMetric(InvocationMetric)
-	}
 	RuntimeHostObserver RuntimeHostObserver
 	// RuntimeHTTPServicesBound is called once after the application runtime opens
 	// and before component binding. Hosted CLI invocations use it to route factory

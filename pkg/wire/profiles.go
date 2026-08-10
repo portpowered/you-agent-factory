@@ -849,11 +849,10 @@ func provideRunRuntimeRunnerBuilder(
 	return func(
 		ctx context.Context,
 		request factorysessionwire.ApplicationOpeningRequest,
-		logger *zap.Logger,
 		sink factoryvisualization.Sink,
 	) (initializer.LocalRuntimeRunner, error) {
 		return build(ctx, func(openCtx context.Context) (initializer.OpenedApplication, error) {
-			opened, err := open.OpenApplication(openCtx, request, logger, sink)
+			opened, err := open.OpenApplication(openCtx, request, sink)
 			if err != nil {
 				return initializer.OpenedApplication{}, err
 			}

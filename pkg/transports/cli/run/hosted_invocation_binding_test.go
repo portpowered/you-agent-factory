@@ -32,7 +32,6 @@ func TestOpenHostedRuntimeBindsFactorySessionsInvocationCapability(t *testing.T)
 		func(
 			_ context.Context,
 			opening factorysessions.ApplicationOpeningRequest,
-			_ *zap.Logger,
 			_ factoryvisualization.Sink,
 		) (initializer.LocalRuntimeRunner, error) {
 			if opening.Ports.RuntimeHTTPServicesBound == nil {

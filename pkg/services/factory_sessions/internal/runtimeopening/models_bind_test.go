@@ -447,7 +447,6 @@ func TestOpenRuntimeClosesModelsScopeExactlyOnceAfterLaterStepFails(t *testing.T
 		},
 		zap.NewNop(),
 		nil,
-		nil,
 	)
 	if !errors.Is(err, laterErr) {
 		t.Fatalf("openRuntime() error = %v, want later-step failure", err)
@@ -501,7 +500,6 @@ func TestBTRCP0RuntimeOpeningPartialFailureCharacterization(t *testing.T) {
 			ModelCacheDirectory: "/cache/models",
 		},
 		zap.NewNop(),
-		nil,
 		nil,
 	)
 	if err == nil || !strings.Contains(err.Error(), "Automations factory returned nil service") {

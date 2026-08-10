@@ -67,7 +67,6 @@ type cleanInvocationWorkTarget struct {
 type RuntimeRunnerBuilder func(
 	context.Context,
 	factorysessions.ApplicationOpeningRequest,
-	*zap.Logger,
 	factoryvisualization.Sink,
 ) (initializer.LocalRuntimeRunner, error)
 
@@ -261,7 +260,7 @@ func openHostedRuntime(
 		emitVerboseStartupDiagnostics(cfg, recordPath, requestedPort)
 	}
 	visualizationSink := runVisualizationSink(cfg, presentation)
-	factorySvc, err = buildRunner(ctx, openingRequest, logger, visualizationSink)
+	factorySvc, err = buildRunner(ctx, openingRequest, visualizationSink)
 	if err != nil {
 		return nil, err
 	}

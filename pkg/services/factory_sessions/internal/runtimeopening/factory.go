@@ -30,9 +30,7 @@ type ApplicationRuntimeOpening interface {
 	OpenApplicationRuntime(
 		context.Context,
 		*factorysessions.RuntimeOpeningRequest,
-		*zap.Logger,
 		factorysessions.RuntimeHostObserver,
-		roles.InvocationMetricsRecorder,
 	) (roles.OpenedApplicationRuntime, error)
 }
 
@@ -527,7 +525,6 @@ func (f *Factory) openRuntime(
 	request *factorysessions.RuntimeOpeningRequest,
 	logger *zap.Logger,
 	observer factorysessions.RuntimeHostObserver,
-	metrics roles.InvocationMetricsRecorder,
 ) (runtimeProducts, error) {
 	return openRuntime(
 		ctx, request, logger,
@@ -584,7 +581,6 @@ func (f *Factory) openRuntime(
 		f.resolveHome,
 		f.providerIdentities,
 		observer,
-		metrics,
 	)
 }
 
@@ -593,11 +589,9 @@ func (f *Factory) openRuntime(
 func (f *Factory) OpenApplicationRuntime(
 	ctx context.Context,
 	request *factorysessions.RuntimeOpeningRequest,
-	logger *zap.Logger,
 	observer factorysessions.RuntimeHostObserver,
-	metrics roles.InvocationMetricsRecorder,
 ) (roles.OpenedApplicationRuntime, error) {
-	opened, err := f.openRuntime(ctx, request, logger, observer, metrics)
+	opened, err := f.openRuntime(ctx, request, f.baseLogger, observer)
 	return opened.application, err
 }
 
@@ -616,7 +610,7 @@ func (f *Factory) OpenInvocationRuntime(
 	ctx context.Context,
 	request *factorysessions.RuntimeOpeningRequest,
 ) (roles.OpenedInvocationRuntime, error) {
-	opened, err := f.openRuntime(ctx, request, f.baseLogger, nil, nil)
+	opened, err := f.openRuntime(ctx, request, f.baseLogger, nil)
 	return opened.invocation, err
 }
 
@@ -626,6 +620,6 @@ func (f *Factory) OpenExecutionRuntime(
 	ctx context.Context,
 	request *factorysessions.RuntimeOpeningRequest,
 ) (roles.OpenedExecutionRuntime, error) {
-	opened, err := f.openRuntime(ctx, request, f.baseLogger, nil, nil)
+	opened, err := f.openRuntime(ctx, request, f.baseLogger, nil)
 	return opened.execution, err
 }

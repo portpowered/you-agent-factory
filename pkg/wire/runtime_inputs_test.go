@@ -19,7 +19,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
-	"go.uber.org/zap"
 )
 
 type recordingStdioOpening struct {
@@ -453,7 +452,7 @@ func TestRuntimeOpeningRequestFactoryMapsSelectionsIntoOwnerRequests(t *testing.
 	if request.Recordings.RecordPath != "record.json" || request.Recordings.ReplayPath != "replay.json" || request.Recordings.WorkflowID != "flow" {
 		t.Fatalf("Recordings request = %#v", request.Recordings)
 	}
-	if request.ModelCacheDirectory != "models" || opening.Ports.InvocationMetricsRecorder != nil || opening.Ports.RuntimeHostObserver == nil {
+	if request.ModelCacheDirectory != "models" || opening.Ports.RuntimeHostObserver == nil {
 		t.Fatalf("Models/ports = %#v / %#v", request.ModelCacheDirectory, opening.Ports)
 	}
 }
@@ -463,7 +462,7 @@ func TestRuntimeInputResolverCopiesRequestWithoutSelectingEffects(t *testing.T) 
 	request := &factorysessions.RuntimeOpeningRequest{
 		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{Directory: "factory"},
 	}
-	resolved, err := provideRuntimeInputResolver()(t.Context(), request, zap.NewNop())
+	resolved, err := provideRuntimeInputResolver()(t.Context(), request)
 	if err != nil {
 		t.Fatalf("resolve inputs: %v", err)
 	}
@@ -473,9 +472,6 @@ func TestRuntimeInputResolverCopiesRequestWithoutSelectingEffects(t *testing.T) 
 	request.FactoryDefinition.Directory = "mutated"
 	if resolved.Request.FactoryDefinition.Directory != "factory" {
 		t.Fatal("resolved request retained caller mutation")
-	}
-	if resolved.Logger == nil {
-		t.Fatal("resolved logger = nil")
 	}
 }
 
@@ -544,16 +540,14 @@ func TestRuntimeInputResolverRejectsMissingRequiredInputs(t *testing.T) {
 		name    string
 		ctx     context.Context
 		request *factorysessions.RuntimeOpeningRequest
-		logger  *zap.Logger
 		want    string
 	}{
-		{name: "nil context", request: request, logger: zap.NewNop(), want: "context is required"},
-		{name: "nil request", ctx: t.Context(), logger: zap.NewNop(), want: "runtime opening request is required"},
-		{name: "nil logger", ctx: t.Context(), request: request, want: "runtime logger is required"},
+		{name: "nil context", request: request, want: "context is required"},
+		{name: "nil request", ctx: t.Context(), want: "runtime opening request is required"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			_, err := provideRuntimeInputResolver()(test.ctx, test.request, test.logger)
+			_, err := provideRuntimeInputResolver()(test.ctx, test.request)
 			if err == nil || err.Error() != test.want {
 				t.Fatalf("error = %v, want %q", err, test.want)
 			}

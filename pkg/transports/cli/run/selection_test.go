@@ -12,7 +12,6 @@ import (
 	runtimeapplication "github.com/portpowered/infinite-you/pkg/initializer/runtimeapplication"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
-	"go.uber.org/zap"
 )
 
 func TestSplitFlagTerminatorPreservesCanonicalRunTokenization(t *testing.T) {
@@ -39,7 +38,7 @@ func TestRunSelectionOwnsDirectJavaScriptTransportChoice(t *testing.T) {
 			t.Fatal("regular run opener called for direct JavaScript")
 			return nil, nil
 		},
-		func(context.Context, factorysessions.ApplicationOpeningRequest, *zap.Logger, factoryvisualization.Sink) (initializer.LocalRuntimeRunner, error) {
+		func(context.Context, factorysessions.ApplicationOpeningRequest, factoryvisualization.Sink) (initializer.LocalRuntimeRunner, error) {
 			return nil, nil
 		},
 		testInvocationOperation{},

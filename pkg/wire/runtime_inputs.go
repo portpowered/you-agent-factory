@@ -108,8 +108,7 @@ func provideRuntimeOpeningRequestFactory() runcli.RuntimeOpeningRequestFactory {
 		return factorysessionwire.ApplicationOpeningRequest{
 			Runtime: request,
 			Ports: factorysessionwire.ApplicationOpeningPorts{
-				InvocationMetricsRecorder: cfg.InvocationMetricsRecorder,
-				RuntimeHostObserver:       observer,
+				RuntimeHostObserver: observer,
 			},
 		}
 	}
@@ -122,15 +121,13 @@ func provideRuntimeInputResolver() factorysessionwire.ApplicationRuntimeInputRes
 	return func(
 		ctx context.Context,
 		request *factorysessions.RuntimeOpeningRequest,
-		logger *zap.Logger,
 	) (factorysessionwire.ApplicationRuntimeInputs, error) {
-		if err := validateRuntimeOpeningInputs(ctx, request, logger); err != nil {
+		if err := validateRuntimeOpeningInputs(ctx, request); err != nil {
 			return factorysessionwire.ApplicationRuntimeInputs{}, err
 		}
 		configured := *request
 		return factorysessionwire.ApplicationRuntimeInputs{
 			Request: &configured,
-			Logger:  logger,
 		}, nil
 	}
 }
@@ -138,7 +135,6 @@ func provideRuntimeInputResolver() factorysessionwire.ApplicationRuntimeInputRes
 func validateRuntimeOpeningInputs(
 	ctx context.Context,
 	request *factorysessions.RuntimeOpeningRequest,
-	logger *zap.Logger,
 ) error {
 	switch {
 	case ctx == nil:
@@ -147,8 +143,6 @@ func validateRuntimeOpeningInputs(
 		return ctx.Err()
 	case request == nil:
 		return errors.New("runtime opening request is required")
-	case logger == nil:
-		return errors.New("runtime logger is required")
 	default:
 		return nil
 	}

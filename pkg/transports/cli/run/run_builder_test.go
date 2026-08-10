@@ -27,7 +27,6 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	contentmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
-	"go.uber.org/zap"
 )
 
 type testRuntimeRunnerOpener func(
@@ -121,8 +120,7 @@ func testRuntimeOpeningRequestFactory(
 		ModelCacheDirectory: cfg.ModelCacheDir,
 		OperatorDefaults:    cfg.OperatorDefaults,
 	}, Ports: factorysessions.ApplicationOpeningPorts{
-		InvocationMetricsRecorder: cfg.InvocationMetricsRecorder,
-		RuntimeHostObserver:       observer,
+		RuntimeHostObserver: observer,
 	}}
 }
 
@@ -194,7 +192,6 @@ type testRunnerOpeners struct {
 func (f testRunnerOpeners) BuildRunner(
 	ctx context.Context,
 	request factorysessions.ApplicationOpeningRequest,
-	_ *zap.Logger,
 	visualizationSink factoryvisualization.Sink,
 ) (initializer.LocalRuntimeRunner, error) {
 	if f.runtime == nil {
@@ -202,8 +199,7 @@ func (f testRunnerOpeners) BuildRunner(
 	}
 	selections := flattenTestRuntimeRequest(request.Runtime)
 	edges := serviceedges.Edges{
-		InvocationMetricsRecorder: request.Ports.InvocationMetricsRecorder,
-		RuntimeHostObserver:       request.Ports.RuntimeHostObserver,
+		RuntimeHostObserver: request.Ports.RuntimeHostObserver,
 	}
 	if selections != nil {
 		selections.RuntimeHostObserver = edges.RuntimeHostObserver
@@ -264,7 +260,6 @@ func TestOpenRunScopedServerAttachesInvocationCompletionAndKeepsOneShotResult(t 
 		func(
 			_ context.Context,
 			request factorysessions.ApplicationOpeningRequest,
-			_ *zap.Logger,
 			_ factoryvisualization.Sink,
 		) (initializer.LocalRuntimeRunner, error) {
 			opening = request
