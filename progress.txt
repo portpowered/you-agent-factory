@@ -3001,3 +3001,14 @@
 - **Learnings for future iterations:**
   - When the live base advances during PR verification, resolve shared task bookkeeping by retaining the active PRD and both append-only histories, then rerun the exact generated and repository gates on the new merge head.
 ---
+## 2026-08-10 15:58 -07:00 - e2-structured-worker-results merged-head CI follow-up
+- What was implemented
+  - Completed the fresh required CI matrix after merging live `origin/main`; no product-code changes were needed for the earlier transient functional-coverage failure.
+- Files changed
+  - `progress.txt`
+- Verification
+  - GitHub Actions run `31439657345` for head `9569de807` — all 18 required checks passed, including Backend Functional Coverage, Backend Unit Coverage, and Verification Policy.
+  - The PR remains open, cleanly mergeable against base `e8c0a248`, and its body still matches `prd.json` exactly.
+- **Learnings for future iterations:**
+  - After a current-main synchronization, validate the entire required matrix on that exact merge head; an earlier failed retry on the superseded head is not evidence against the new head.
+---
