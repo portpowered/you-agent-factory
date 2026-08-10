@@ -3,6 +3,36 @@
   "factorySchema": "https://schemas.portpowered.com/you/config/factory.schema.json",
   "factories": [
     {
+      "name": "@you/agy-clip-qa",
+      "project": "builtin-agy-clip-qa",
+      "slug": "agy-clip-qa",
+      "json": {
+        "locator": "generated/factories/agy-clip-qa/factory.json",
+        "sha256": "9213ab61d3ed82637d8431e36e9f92469768180c81faae97918214704dcc4b1b"
+      },
+      "yaml": {
+        "locator": "generated/factories/agy-clip-qa/factory.yaml",
+        "sha256": "d75e4f308125529205a617dc3f843a8ff3a6c4c9b81755c32e58c67bef9fb324"
+      },
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Deterministically gates a rendered clip against its shot specification with ANTIGRAVITY and returns a schema-validated pass-or-reroll verdict."
+      },
+      "examples": [
+        {
+          "name": "gate-rendered-clip",
+          "description": {
+            "type": "LOCALIZABLE_ASSET",
+            "value": "Check a rendered clip against its shot specification and return a deterministic verdict."
+          },
+          "args": {
+            "clipPath": ".\\clip.mp4",
+            "shotSpecification": "A silver-haired woman points at a bright star; no speech is audible."
+          }
+        }
+      ]
+    },
+    {
       "name": "@you/agy-cold-watch",
       "project": "builtin-agy-cold-watch",
       "slug": "agy-cold-watch",

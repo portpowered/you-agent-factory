@@ -163,8 +163,8 @@ func TestPackagedFactoriesAPI_ReturnsPublishedCatalog(t *testing.T) {
 	if len(catalog.Factories) == 0 {
 		t.Fatal("GET /packaged-factories returned no published factories")
 	}
-	if len(catalog.Factories) != 16 {
-		t.Fatalf("GET /packaged-factories count = %d, want exact published catalog count 16", len(catalog.Factories))
+	if len(catalog.Factories) != 17 {
+		t.Fatalf("GET /packaged-factories count = %d, want exact published catalog count 17", len(catalog.Factories))
 	}
 	for _, factory := range catalog.Factories {
 		if factory.Name == "" || factory.Project == "" || factory.Slug == "" || len(factory.Json) == 0 || factory.Yaml == "" {

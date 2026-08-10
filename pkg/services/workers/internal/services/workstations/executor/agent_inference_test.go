@@ -333,10 +333,10 @@ func TestAgentExecutorAcceptsSchemaValidatedStructuredOutput(t *testing.T) {
 	}
 }
 
-func TestAgentExecutorFailsExplicitStructuredRerollVerdict(t *testing.T) {
-	const schema = `{"type":"object","properties":{"verdict":{"type":"string","enum":["pass","reroll"]}},"required":["verdict"]}`
+func TestAgentExecutorAcceptsExplicitStructuredRerollVerdict(t *testing.T) {
+	const schema = `{"type":"object","properties":{"action_completed":{"type":"boolean"},"verdict":{"type":"string","enum":["pass","reroll"]}},"required":["action_completed","verdict"]}`
 	provider := &agentMockProvider{response: workerexecution.InferenceResponse{
-		Content: `{"verdict":"reroll"}`,
+		Content: `{"action_completed":false,"verdict":"reroll"}`,
 	}}
 	executor := NewAgentExecutor(staticRuntimeConfig{
 		Workers: map[string]*workerconfig.FactoryWorkerConfig{
@@ -351,11 +351,11 @@ func TestAgentExecutorFailsExplicitStructuredRerollVerdict(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	if result.Outcome != workerexecution.OutcomeFailed {
-		t.Fatalf("outcome = %q, want %q", result.Outcome, workerexecution.OutcomeFailed)
+	if result.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("outcome = %q, want %q", result.Outcome, workerexecution.OutcomeAccepted)
 	}
-	if result.Error == "" || result.FailureMetadata == nil || result.FailureMetadata.Type != workerexecution.WorkFailureTypePermanentBadRequest {
-		t.Fatalf("failure = %#v, want actionable permanent bad-request failure", result)
+	if result.Error != "" || result.FailureMetadata != nil {
+		t.Fatalf("failure fields = error %q metadata %#v, want no execution failure", result.Error, result.FailureMetadata)
 	}
 }
 

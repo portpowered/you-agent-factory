@@ -1,0 +1,122 @@
+name: "@you/agy-clip-qa"
+id: builtin-agy-clip-qa
+description:
+  type: LOCALIZABLE_ASSET
+  value: Deterministically gates a rendered clip against its shot specification with ANTIGRAVITY and returns a schema-validated pass-or-reroll verdict.
+invocationReturn:
+  policy: EXPLICIT
+  workTypeName: clip-qa-review
+  terminalState: complete
+invocationSignature:
+  unknownNamedArgumentPolicy: REJECT
+  outputContract:
+    mode: JSON
+    contentType: application/json
+    description: A schema-validated clip-QA verdict with action, deviation, temporal, audio, speech, verdict, and confidence fields.
+  parameters:
+    - name: clipPath
+      description: Path to the rendered clip, relative to the AGY workspace or an absolute path within it.
+      externalName: clip-path
+      required: true
+      typeHint: FILE_PATH
+      bindings:
+        - kind: NAMED
+        - kind: POSITIONAL
+          position: 1
+    - name: shotSpecification
+      description: The shot specification to evaluate against; this is the only creative expectation supplied to the gate.
+      externalName: shot-specification
+      required: true
+      typeHint: STRING
+      bindings:
+        - kind: NAMED
+        - kind: STDIN
+examples:
+  - name: gate-rendered-clip
+    description:
+      type: LOCALIZABLE_ASSET
+      value: Check a rendered clip against its shot specification and return a deterministic verdict.
+    args:
+      clipPath: .\clip.mp4
+      shotSpecification: A silver-haired woman points at a bright star; no speech is audible.
+workTypes:
+  - name: clip-qa-review
+    handlingBehavior:
+      - DEFAULT
+    states:
+      - name: init
+        type: INITIAL
+      - name: complete
+        type: TERMINAL
+      - name: failed
+        type: FAILED
+workers:
+  - name: agy-clip-qa-gate
+    type: AGENT_WORKER
+    modelProvider: ANTIGRAVITY
+    model: gemini-3.6-flash-high
+    skipPermissions: true
+    timeout: 8m
+    body: |-
+      You are the deterministic clip-QA gate for @you/agy-clip-qa. The
+      rendered clip path and the shot specification below are your only
+      creative inputs. Watch the complete clip, including its audio track,
+      and compare what is actually present with the supplied specification.
+      Do not inspect nearby briefs, manifests, filenames as evidence of
+      intent, upstream status, or any prior verdict. Do not transform,
+      decode, copy, upload, probe, extract frames from, or extract audio from
+      the media; use the existing workspace file-reading workflow directly.
+      If the file cannot be opened or read, do not emit a QA verdict.
+
+      Return only one JSON object satisfying the workstation output schema.
+      Every field is required. Set action_completed to whether the specified
+      action actually finishes in the clip. Record every material mismatch in
+      spec_deviations, and every temporal or transient defect in
+      temporal_artifacts. Set audio_content to speech, music, noise, silence,
+      or mixed; set unexpected_speech true when disallowed speech is observed.
+      Use verdict pass only when action_completed is true, both reason arrays
+      are empty, and unexpected_speech is false. Otherwise use verdict reroll.
+      A reroll is a successful inspection result, not a file-access or
+      provider-execution failure. Confidence must be a number from 0 through
+      1.
+workstations:
+  - name: gate-rendered-clip
+    type: AGENT_RUN
+    worker: agy-clip-qa-gate
+    outputSchema: |-
+      {
+        "type": "object",
+        "properties": {
+          "action_completed": { "type": "boolean" },
+          "spec_deviations": { "type": "array", "items": { "type": "string" } },
+          "temporal_artifacts": { "type": "array", "items": { "type": "string" } },
+          "audio_content": { "type": "string", "enum": ["speech", "music", "noise", "silence", "mixed"] },
+          "unexpected_speech": { "type": "boolean" },
+          "verdict": { "type": "string", "enum": ["pass", "reroll"] },
+          "confidence": { "type": "number" }
+        },
+        "required": ["action_completed", "spec_deviations", "temporal_artifacts", "audio_content", "unexpected_speech", "verdict", "confidence"]
+      }
+    inputs:
+      - workType: clip-qa-review
+        state: init
+    outputs:
+      - workType: clip-qa-review
+        state: complete
+    onFailure:
+      - workType: clip-qa-review
+        state: failed
+    body: |-
+      Inspect exactly this rendered clip against exactly this shot specification.
+      Preserve both values as written; the clip path must be passed directly to
+      AGY and the specification must be the only intended-behavior context.
+
+      CLIP PATH:
+      ${clipPath}
+
+      SHOT SPECIFICATION:
+      ${shotSpecification}
+
+      Return only the schema-valid JSON QA verdict. Do not return Markdown,
+      prose outside the JSON object, a second object, or a file-access refusal
+      disguised as pass or reroll.

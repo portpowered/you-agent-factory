@@ -203,13 +203,20 @@ func structuredOutputFailure(content string) string {
 		return ""
 	}
 
+	// A reroll is a valid inspected-artifact verdict for structured QA roles.
+	// Provider/file failures are rejected before this helper, while the schema
+	// validator guarantees that the role supplied the complete verdict object.
+	if value, ok := object["verdict"].(string); ok && strings.EqualFold(strings.TrimSpace(value), "reroll") {
+		return ""
+	}
+
 	for _, key := range []string{"verdict", "status", "outcome"} {
 		value, ok := object[key].(string)
 		if !ok {
 			continue
 		}
 		switch strings.ToLower(strings.TrimSpace(value)) {
-		case "fail", "failed", "failure", "error", "reroll", "reject", "rejected":
+		case "fail", "failed", "failure", "error", "reject", "rejected":
 			return fmt.Sprintf("%s=%s", key, strings.TrimSpace(value))
 		}
 	}
