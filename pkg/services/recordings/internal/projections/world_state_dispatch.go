@@ -59,7 +59,7 @@ func (r *factoryWorldReducer) applyDispatchCreated(event interfaces.FactoryEvent
 		DispatchID:              dispatchID,
 		TransitionID:            payload.TransitionID,
 		Workstation:             r.workstationRefForTransition(payload.TransitionID),
-		ExpectedArtifactContext: work.CloneExpectedArtifactTemplateContext(payload.ExpectedArtifactContext),
+		ExpectedArtifactContext: cloneExpectedArtifactTemplateContext(payload.ExpectedArtifactContext),
 		Provider:                worker.Provider,
 		Model:                   worker.Model,
 		StartedTick:             event.Context.Tick,
@@ -371,7 +371,7 @@ func (r *factoryWorldReducer) dispatchCompletionFromResponse(
 		DispatchID:              dispatchID,
 		TransitionID:            payload.TransitionID,
 		Workstation:             dispatch.Workstation,
-		ExpectedArtifactContext: work.CloneExpectedArtifactTemplateContext(dispatch.ExpectedArtifactContext),
+		ExpectedArtifactContext: cloneExpectedArtifactTemplateContext(dispatch.ExpectedArtifactContext),
 		StartedTick:             dispatch.StartedTick,
 		CompletedTick:           event.Context.Tick,
 		StartedAt:               dispatch.StartedAt,
@@ -688,11 +688,21 @@ func (r *factoryWorldReducer) recordWorkFailureDetail(completion interfaces.Fact
 		DispatchID:              completion.DispatchID,
 		TransitionID:            completion.TransitionID,
 		WorkstationName:         completion.Workstation.Name,
-		ExpectedArtifactContext: work.CloneExpectedArtifactTemplateContext(completion.ExpectedArtifactContext),
+		ExpectedArtifactContext: cloneExpectedArtifactTemplateContext(completion.ExpectedArtifactContext),
 		WorkItem:                item,
 		FailureDetail:           workerexecution.CloneFailureDetail(completion.Result.FailureDetail),
 		ArtifactVerification:    completion.Result.ArtifactVerification.Clone(),
 	}
+}
+
+func cloneExpectedArtifactTemplateContext(
+	context *work.ExpectedArtifactTemplateContext,
+) *work.ExpectedArtifactTemplateContext {
+	if context == nil {
+		return nil
+	}
+	clone := *context
+	return &clone
 }
 
 func (r *factoryWorldReducer) applyDispatchLifecycleEvent(event interfaces.FactoryEvent) (bool, error) {

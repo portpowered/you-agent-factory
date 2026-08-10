@@ -554,7 +554,7 @@ func CloneExecutionMetadata(metadata ExecutionMetadata) ExecutionMetadata {
 
 func CloneWorkDispatch(dispatch WorkDispatch) WorkDispatch {
 	clone := dispatch
-	clone.ExpectedArtifactContext = CloneExpectedArtifactTemplateContext(dispatch.ExpectedArtifactContext)
+	clone.ExpectedArtifactContext = cloneExpectedArtifactTemplateContext(dispatch.ExpectedArtifactContext)
 	clone.PreviousChainingTraceIDs = cloneStringSlice(dispatch.PreviousChainingTraceIDs)
 	clone.Execution = CloneExecutionMetadata(dispatch.Execution)
 	clone.InputTokens = cloneAnySlice(dispatch.InputTokens)

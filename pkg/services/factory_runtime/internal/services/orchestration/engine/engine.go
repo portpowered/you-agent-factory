@@ -722,7 +722,7 @@ func (e *FactoryEngine) forwardDispatchRecord(ctx context.Context, rec interface
 		DispatchID:              rec.Dispatch.DispatchID,
 		TransitionID:            rec.Dispatch.TransitionID,
 		WorkstationName:         rec.Dispatch.WorkstationName,
-		ExpectedArtifactContext: work.CloneExpectedArtifactTemplateContext(rec.Dispatch.ExpectedArtifactContext),
+		ExpectedArtifactContext: cloneExpectedArtifactTemplateContext(rec.Dispatch.ExpectedArtifactContext),
 		StartTime:               now,
 		ConsumedTokens:          workers.WorkDispatchInputTokens(rec.Dispatch),
 		HeldMutations:           rec.Mutations,

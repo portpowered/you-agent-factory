@@ -442,7 +442,7 @@ func (h *FactoryEventHistory) RecordWorkstationRequest(tick int, record interfac
 		},
 		interfaces.DispatchRequestEventPayload{
 			TransitionID:             record.Dispatch.TransitionID,
-			ExpectedArtifactContext:  work.CloneExpectedArtifactTemplateContext(record.Dispatch.ExpectedArtifactContext),
+			ExpectedArtifactContext:  cloneExpectedArtifactTemplateContext(record.Dispatch.ExpectedArtifactContext),
 			CurrentChainingTraceID:   stringPtrIfNotEmpty(record.Dispatch.CurrentChainingTraceID),
 			PreviousChainingTraceIDs: stringSlicePtr(record.Dispatch.PreviousChainingTraceIDs),
 			Inputs:                   dispatchConsumedWorkRefsFromTokens(inputTokens),
@@ -989,4 +989,14 @@ func uniqueStrings(input []string) []string {
 		out = append(out, value)
 	}
 	return out
+}
+
+func cloneExpectedArtifactTemplateContext(
+	context *work.ExpectedArtifactTemplateContext,
+) *work.ExpectedArtifactTemplateContext {
+	if context == nil {
+		return nil
+	}
+	clone := *context
+	return &clone
 }

@@ -192,7 +192,7 @@ func runtimeActiveArtifactDispatch(
 			transitionID:    dispatch.TransitionID,
 			workstationName: dispatch.WorkstationName,
 			inputs:          append([]workers.Token(nil), dispatch.ConsumedTokens...),
-			templateContext: work.CloneExpectedArtifactTemplateContext(dispatch.ExpectedArtifactContext),
+			templateContext: cloneExpectedArtifactTemplateContext(dispatch.ExpectedArtifactContext),
 		}, true
 	}
 	return runtimeArtifactDispatchFacts{}, false
@@ -213,10 +213,20 @@ func runtimeCompletedArtifactDispatch(
 			workstationName: dispatch.WorkstationName,
 			inputs:          append([]workers.Token(nil), dispatch.ConsumedTokens...),
 			observation:     runtimeArtifactObservation(dispatch, results),
-			templateContext: work.CloneExpectedArtifactTemplateContext(dispatch.ExpectedArtifactContext),
+			templateContext: cloneExpectedArtifactTemplateContext(dispatch.ExpectedArtifactContext),
 		}, true
 	}
 	return runtimeArtifactDispatchFacts{}, false
+}
+
+func cloneExpectedArtifactTemplateContext(
+	context *work.ExpectedArtifactTemplateContext,
+) *work.ExpectedArtifactTemplateContext {
+	if context == nil {
+		return nil
+	}
+	clone := *context
+	return &clone
 }
 
 func runtimeDispatchContainsWork(tokens []workers.Token, workID string) bool {

@@ -43,7 +43,7 @@ func (rs *RuntimeState) Snapshot() interfaces.EngineStateSnapshot[petri.MarkingS
 		snap.Dispatches = make(map[string]*interfaces.DispatchEntry, len(rs.Dispatches))
 		for k, v := range rs.Dispatches {
 			cp := *v
-			cp.ExpectedArtifactContext = work.CloneExpectedArtifactTemplateContext(v.ExpectedArtifactContext)
+			cp.ExpectedArtifactContext = cloneExpectedArtifactTemplateContext(v.ExpectedArtifactContext)
 			cp.ConsumedTokens = factorytoken.CloneSlice(v.ConsumedTokens)
 			if v.HeldMutations != nil {
 				cp.HeldMutations = make([]interfaces.MarkingMutation, len(v.HeldMutations))
@@ -79,7 +79,7 @@ func (rs *RuntimeState) Snapshot() interfaces.EngineStateSnapshot[petri.MarkingS
 
 func deepCopyCompletedDispatch(d interfaces.CompletedDispatch) interfaces.CompletedDispatch {
 	cp := d
-	cp.ExpectedArtifactContext = work.CloneExpectedArtifactTemplateContext(d.ExpectedArtifactContext)
+	cp.ExpectedArtifactContext = cloneExpectedArtifactTemplateContext(d.ExpectedArtifactContext)
 	cp.ArtifactVerification = d.ArtifactVerification.Clone()
 	cp.ProviderSession = workerexecution.CloneProviderSessionMetadata(d.ProviderSession)
 	cp.ConsumedTokens = factorytoken.CloneSlice(d.ConsumedTokens)
@@ -90,6 +90,16 @@ func deepCopyCompletedDispatch(d interfaces.CompletedDispatch) interfaces.Comple
 		}
 	}
 	return cp
+}
+
+func cloneExpectedArtifactTemplateContext(
+	context *work.ExpectedArtifactTemplateContext,
+) *work.ExpectedArtifactTemplateContext {
+	if context == nil {
+		return nil
+	}
+	clone := *context
+	return &clone
 }
 
 func deepCopyWorkResult(result workerexecution.WorkResult) workerexecution.WorkResult {

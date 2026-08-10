@@ -440,7 +440,7 @@ func replayDispatchFromEvent(runtimeConfig interfaces.ReplayRuntimeConfig, event
 		TransitionID:            payload.TransitionID,
 		WorkerType:              replayWorkerName(workstation),
 		WorkstationName:         replayWorkstationName(workstation, payload.TransitionID),
-		ExpectedArtifactContext: work.CloneExpectedArtifactTemplateContext(payload.ExpectedArtifactContext),
+		ExpectedArtifactContext: cloneExpectedArtifactTemplateContext(payload.ExpectedArtifactContext),
 		InputTokens:             replayInputTokensFromDispatchPayload(event.Context, payload, workByID),
 		Execution: work.ExecutionMetadata{
 			RequestID:           stringValue(event.Context.RequestID),
@@ -732,4 +732,14 @@ func resourceValues(resources *[]interfaces.DispatchResourceRef) []interfaces.Di
 
 func isWorkerOutputSource(source string) bool {
 	return len(source) >= len("worker-output:") && source[:len("worker-output:")] == "worker-output:"
+}
+
+func cloneExpectedArtifactTemplateContext(
+	context *work.ExpectedArtifactTemplateContext,
+) *work.ExpectedArtifactTemplateContext {
+	if context == nil {
+		return nil
+	}
+	clone := *context
+	return &clone
 }

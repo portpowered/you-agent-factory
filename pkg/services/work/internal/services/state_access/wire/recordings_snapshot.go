@@ -219,7 +219,7 @@ func worldDispatchArtifactFacts(
 	if detail, ok := state.FailureDetailsByWorkID[item.ID]; ok && detail.ArtifactVerification != nil {
 		return worldWorkstationArtifactDeclarations(state.Topology, detail.TransitionID, detail.WorkstationName),
 			[]work.ExpectedArtifactInput{worldExpectedArtifactInput(detail.WorkItem)},
-			worldArtifactObservation(detail.ArtifactVerification), work.CloneExpectedArtifactTemplateContext(detail.ExpectedArtifactContext), true
+			worldArtifactObservation(detail.ArtifactVerification), cloneExpectedArtifactTemplateContext(detail.ExpectedArtifactContext), true
 	}
 	return nil, nil, work.ExpectedArtifactObservation{}, nil, false
 }
@@ -242,7 +242,7 @@ func latestWorldActiveArtifactDispatch(
 			workstationName: dispatch.Workstation.Name,
 			transitionID:    dispatch.TransitionID,
 			inputs:          worldWorkstationInputs(dispatch.Inputs),
-			templateContext: work.CloneExpectedArtifactTemplateContext(dispatch.ExpectedArtifactContext),
+			templateContext: cloneExpectedArtifactTemplateContext(dispatch.ExpectedArtifactContext),
 		}, true
 	}
 	return worldArtifactDispatchFacts{}, false
@@ -262,10 +262,20 @@ func latestWorldCompletedArtifactDispatch(
 			transitionID:    dispatch.TransitionID,
 			inputs:          append([]work.FactoryWorkItem(nil), dispatch.InputWorkItems...),
 			observation:     worldArtifactObservationFromResult(dispatch.Result),
-			templateContext: work.CloneExpectedArtifactTemplateContext(dispatch.ExpectedArtifactContext),
+			templateContext: cloneExpectedArtifactTemplateContext(dispatch.ExpectedArtifactContext),
 		}, true
 	}
 	return worldArtifactDispatchFacts{}, false
+}
+
+func cloneExpectedArtifactTemplateContext(
+	context *work.ExpectedArtifactTemplateContext,
+) *work.ExpectedArtifactTemplateContext {
+	if context == nil {
+		return nil
+	}
+	clone := *context
+	return &clone
 }
 
 func worldDispatchContainsWork(

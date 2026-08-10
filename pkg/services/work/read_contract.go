@@ -126,9 +126,9 @@ const (
 	defaultExpectedArtifactSession = "~default"
 )
 
-// CloneExpectedArtifactTemplateContext returns a detached copy of the stable
+// cloneExpectedArtifactTemplateContext returns a detached copy of the stable
 // context recorded with an artifact-bearing dispatch.
-func CloneExpectedArtifactTemplateContext(
+func cloneExpectedArtifactTemplateContext(
 	context *ExpectedArtifactTemplateContext,
 ) *ExpectedArtifactTemplateContext {
 	if context == nil {
