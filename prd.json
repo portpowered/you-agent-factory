@@ -1,86 +1,56 @@
 {
-  "project": "CLI Exits Non-Zero on Startup and Stream Errors",
-  "branchName": "pf-cli-exit-codes",
-  "description": "Make every failed you CLI command return a typed error, write one safe coded diagnostic to stderr, and exit non-zero, including server startup failures and Worker Sessions stream aborts, while preserving exit 0 for success and exit 130 for commands with declared cancellation semantics.",
+  "project": "Split Oversized CLI Root and Run Tests",
+  "branchName": "thr-split-cli-root-run-tests",
+  "description": "Mechanically reorganize the oversized CLI root and run-invocation test files into focused command- or behavior-group files within their existing packages, preserving the exact test inventory, assertions, observable behavior, and package coverage while reducing contention for active CLI delivery lanes.",
   "context": {
-    "customerAsk": "Audit CLI command paths for swallowed failures and ensure every failed command, including server startup and Worker Sessions stream-abort failures, exits non-zero with a typed error on stderr without changing exit-130 cancellation semantics. Use the operator probe backlog in docs/temp/progress.md and the functional CLI patterns under tests/functional/work/transports/cli as evidence and verification guidance.",
-    "problem": "Operator probes observed four invocations that printed errors but exited 0. Shell automation and supervisors therefore treated failed server startups and incomplete streams as successful, and stream consumers could mistake partial stdout frames for a complete run.",
-    "solution": "Apply one CLI-owned failure propagation and presentation policy that preserves authored typed errors, safely classifies otherwise untyped failures, writes the coded diagnostic exactly once to stderr, and returns the failure through Process.Execute to cmd/factory for non-zero status selection. Add direct regressions for server bind failure and WORKER_SESSION_STREAM_CLOSED, and preserve manifest-declared exit-130 cancellation behavior."
+    "customerAsk": "Split pkg/transports/cli/root_run_test.go and pkg/transports/cli/run/run_invocation_test.go into focused files with shared fixtures in package-local helper test files. Work from current origin/main, accept mechanical rework after concurrent CLI lanes merge, and regenerate rather than hand-merge generated CLI contract artifacts if contention reaches them.",
+    "problem": "Two oversized test files concentrate many independent CLI command and behavior groups, forcing active exit-code, remote-placement, grammar, and cutover lanes to contend on the same files and increasing navigation, review, and rework cost.",
+    "solution": "Capture baseline test inventories and coverage for both packages, mechanically move unchanged tests into focused files in their existing packages, relocate only genuinely shared fixtures into package-local helper test files, keep resulting files at or below approximately 1,200 lines, and prove identical discovery, behavior, and coverage after the split."
   },
   "acceptanceCriteria": [
-    "Every representative CLI failure class—usage/parsing, system initialization, local validation, remote request rejection, server startup, stream abort, and command cleanup—returns a non-nil typed error, writes one safe coded diagnostic to stderr, and never reports exit 0.",
-    "you server startup failure, including deterministic listener bind failure, preserves its stable typed code on stderr and exits non-zero without printing a success or readiness message.",
-    "you worker-sessions stream exits non-zero and reports WORKER_SESSION_STREAM_CLOSED on stderr when an opened event stream closes before a terminal frame; complete frames emitted before the abort remain on stdout without being duplicated or rewritten as success.",
-    "Successful commands continue to exit 0, while user cancellation continues to exit 130 only for commands whose manifest declares that cancellation status; ordinary failures on those commands remain non-cancellation failures.",
-    "Error propagation remains owned by the CLI transport and executable process boundary, preserves service ownership and isolated side effects, introduces no second command or dependency graph, and does not change REST, OpenAPI, UI, or domain-service contracts.",
-    "Quality gates pass: focused package, process-boundary, and functional tests; Typecheck passes; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green; and the required PR CI tier is terminal and passing.",
-    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared-file churn are resolved against current main, and the PR is actually merged."
+    "The before/after go test -list '.*' outputs for both affected packages have identical discovered test names, and the PR shows the normalized diffs.",
+    "The focused CLI root and run package tests pass after the split, with no test assertion, input, expected output, or customer-observable CLI behavior changed.",
+    "Before/after package coverage results are recorded in the PR and are unchanged for both affected packages.",
+    "No resulting hand-maintained Go test file in the split is above approximately 1,200 lines, and tests remain grouped by coherent command or behavior responsibility in their existing packages.",
+    "The final branch is rebased onto current origin/main; overlapping semantic test changes from merged lanes are retained and the mechanical moves are redone as needed. Generated CLI contract artifacts are never hand-merged and, if affected by reconciliation, are regenerated through the contracts/cli/commands.json flow.",
+    "Typecheck, focused package tests, and required CI pass; there are no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
+    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts are resolved, and the PR is merged."
   ],
   "userStories": [
     {
-      "id": "pf-cli-exit-codes-001",
-      "title": "Propagate typed command failures through the CLI boundary",
-      "description": "As an automation author, I want any failed you command to return a typed failure and write it once to stderr so I can trust the command result without parsing success-looking output.",
+      "id": "thr-split-cli-root-run-tests-001",
+      "title": "Preserve CLI root test behavior in focused groups",
+      "description": "As a CLI maintainer, I want root command tests organized into focused behavior groups so that I can change or review one command area without navigating or contending on a single oversized test file.",
       "acceptanceCriteria": [
-        "A command operation's authored typed error and stable code survive the command adapter and Process.Execute boundary without being converted to success or replaced by an untyped string.",
-        "An unclassified command failure is mapped at the CLI boundary to a stable typed fallback with a non-empty safe code and message; classification does not depend on parsing text already written to a terminal.",
-        "Representative usage/parsing, system-initialization, local-validation, remote-request, and cleanup failures each return a non-nil error and render exactly one typed diagnostic on stderr; they do not emit an error payload on stdout.",
-        "Existing command-specific sanitization is preserved so stderr does not expose payload content, credentials, or unsanitized underlying errors.",
-        "Focused tests use root.BuildProcess plus Process.Execute for ordinary CLI behavior and replace external effects only through edges.Edges.",
-        "Typecheck passes",
-        "Tests pass"
+        "Every test discovered from pkg/transports/cli/root_run_test.go on the implementation baseline remains discoverable under the same test name in the pkg/transports/cli package after the split.",
+        "A normalized before/after diff of go test -list '.*' for ./pkg/transports/cli is empty and is included in the PR evidence.",
+        "Existing root-test assertions, inputs, expected outputs, fixture semantics, and CLI outcomes are unchanged; the diff is limited to mechanical moves and necessary package-local fixture relocation.",
+        "Root tests are grouped into focused command- or behavior-owned test files, genuinely shared fixtures live in focused package-local helper test files, and no resulting split test file is above approximately 1,200 lines.",
+        "Before/after coverage for ./pkg/transports/cli is recorded in the PR and unchanged.",
+        "Tests pass",
+        "Typecheck passes"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Implemented the CLI-owned process-boundary diagnostic policy. Authored invocation errors remain typed and preserve stable codes; unclassified failures become safe CLI_COMMAND_FAILED fallbacks without terminal-output parsing; command-owned structured renderers are marked to prevent duplicates; Worker Sessions JSON error payloads route to stderr under the central policy; and root.BuildProcess/Process.Execute coverage proves typed propagation, safe diagnostics, and stdout isolation. Focused tests, root/CLI/service tests, go vet, pkg-maint, and pkg-file-count pass. The broad package command is otherwise clean except the pre-existing docs-topic fixture drift. Review follow-up keeps nil caller contexts nil instead of creating an implicit context in the transport package, restoring the pkg-boundary count to the exact base baseline."
+      "notes": "2026-08-10: mechanically split pkg/transports/cli/root_run_test.go into focused completion, selection, composition, input, flags, run-config, and operator-default test files plus root_run_test_helpers_test.go. The normalized ./pkg/transports/cli go test -list '.*' inventory stayed at 273 names with an empty diff; before/after coverage stayed at 67.6%. Focused package tests, go vet, backend-size, pkg-maint, and pkg-file-count pass; the largest new split file is 548 lines."
     },
     {
-      "id": "pf-cli-exit-codes-002",
-      "title": "Fail visibly when the server cannot start",
-      "description": "As an operator, I want you server to fail with a coded diagnostic and non-zero status when its listener cannot start so supervisors do not record an unavailable server as healthy.",
+      "id": "thr-split-cli-root-run-tests-002",
+      "title": "Preserve run-invocation test behavior in focused groups",
+      "description": "As a CLI maintainer, I want run-invocation tests organized into focused behavior groups so that placement, grammar, exit-code, and cutover work can evolve with less shared-file contention.",
       "acceptanceCriteria": [
-        "A deterministic startup failure such as an occupied configured listener address returns a typed server-startup error through the runtime, CLI command, and process boundaries.",
-        "The stderr diagnostic includes the stable server-startup error code and a safe actionable message exactly once, while stdout contains no dashboard URL, readiness statement, or other success output for that attempt.",
-        "The built you server process exits non-zero for the startup failure; the OS-process test is limited to proving the exit-status behavior that Process.Execute cannot express.",
-        "Startup failure still records the existing runtime startup-failure transition and joins owned resources before the command returns; no listener or lifecycle work is stranded.",
-        "Typecheck passes",
-        "Tests pass"
+        "Every test discovered from pkg/transports/cli/run/run_invocation_test.go on the implementation baseline remains discoverable under the same test name in the pkg/transports/cli/run package after the split.",
+        "A normalized before/after diff of go test -list '.*' for ./pkg/transports/cli/run is empty and is included in the PR evidence.",
+        "Existing run-invocation assertions, inputs, expected outputs, fixture semantics, and CLI outcomes are unchanged; the diff is limited to mechanical moves and necessary package-local fixture relocation.",
+        "Run-invocation tests are grouped into focused command- or behavior-owned test files, genuinely shared fixtures live in focused package-local helper test files, and no resulting split test file is above approximately 1,200 lines.",
+        "Before/after coverage for ./pkg/transports/cli/run is recorded in the PR and unchanged.",
+        "Tests pass",
+        "Typecheck passes"
       ],
       "priority": 2,
-      "passes": true,
-      "notes": "Preserved the existing typed SERVER_BIND_FAILED mapping and startup-failure lifecycle transition, suppressed recording success output when a hosted run returns an error, and added direct plus built-executable regressions. A deterministic occupied 127.0.0.1:65535 listener proves the shipped server exits non-zero, emits one SERVER_BIND_FAILED ErrorResponse on stderr, and emits no readiness or success output on stdout."
-    },
-    {
-      "id": "pf-cli-exit-codes-003",
-      "title": "Fail visibly when a Worker Sessions stream aborts",
-      "description": "As an operator consuming Worker Session events, I want an incomplete stream to end with a typed non-zero failure so partial output cannot be mistaken for a complete successful stream.",
-      "acceptanceCriteria": [
-        "When an HTTP event stream opens, emits one or more complete frames, and closes before TERMINAL, TERMINAL_REPLAY, or a complete replay summary, the command returns a typed WORKER_SESSION_STREAM_CLOSED error.",
-        "The coded failure is written exactly once to stderr; complete frames that arrived before the abort remain unchanged on stdout, and no terminal or success frame is synthesized.",
-        "The built you worker-sessions stream process exits non-zero for this abort, with a focused subprocess test used only to verify the OS exit status.",
-        "Other source-failure, malformed-frame, transport, and write failures also remain non-nil typed stream failures rather than falling through as success.",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 3,
-      "passes": true,
-      "notes": "Added typed post-open stream failure coverage and process-boundary regressions. An early SSE close after a complete frame returns WORKER_SESSION_STREAM_CLOSED, preserves the frame on stdout, emits exactly one coded stderr diagnostic, and exits the built you process non-zero. Malformed frames, source failures, transport failures, and output-write failures remain typed; output-write failures now use the safe WORKER_SESSION_STREAM_FAILED code. The full Worker Sessions CLI functional package, focused transport tests, go vet, pkg-maint, pkg-file-count, and git diff --check pass. Typecheck remains blocked by the pre-existing checkout dependency baseline: @types/bun is unavailable after the pinned UI install."
-    },
-    {
-      "id": "pf-cli-exit-codes-004",
-      "title": "Preserve success and declared cancellation exit semantics",
-      "description": "As a shell user, I want successful commands, failures, and interruptions to retain distinct statuses so existing automation remains compatible while error-swallowing is removed.",
-      "acceptanceCriteria": [
-        "Successful finite commands and normally completed streams exit 0 and do not gain a failure diagnostic.",
-        "Direct and wrapped context.Canceled outcomes from you run, you server, and you worker-sessions stream continue to exit 130 according to their declared CLI lifecycle contracts.",
-        "Cancellation of a command without a declared exit-130 contract remains a non-zero ordinary failure, and a non-cancellation startup or stream error is never misclassified as exit 130.",
-        "Focused executable-boundary coverage proves the 0/non-zero/130 status matrix, while in-process coverage proves the returned typed error and stderr channel contract.",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 4,
-      "passes": true,
-      "notes": "Confirmed the manifest-derived executable boundary preserves exit 0 for a successful finite run, exit 1 for ordinary failures, and exit 130 only for run/server/Worker Sessions stream commands that declare cancellation. Added wrapped-cancellation and canceled-parent/non-cancellation unit coverage, actual built-process run/server interrupt checks, and a built Worker Sessions stream interrupt regression. Aligned stale functional assertions with the story-001 safe CLI_COMMAND_FAILED diagnostic contract. Addressed review feedback by moving worker success/failure assertions to root.BuildProcess with an injected ProviderCommandRunner and limiting built-executable status coverage to deterministic help/unknown-command cases without MockWorkers. Focused CLI, Worker Sessions, process, server-binding, go vet, pkg-maint, pkg-file-count, typecheck, and diff checks pass; signal tests run on Unix and are skipped on Windows because child os.Interrupt delivery is unsupported."
+      "passes": false,
+      "notes": ""
     }
   ]
 }
+
