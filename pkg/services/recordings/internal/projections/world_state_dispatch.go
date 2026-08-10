@@ -381,7 +381,7 @@ func (r *factoryWorldReducer) dispatchCompletionFromResponse(
 			Error:                       stringValue(payload.Error),
 			Feedback:                    stringValue(payload.Feedback),
 			SelectedClassificationLabel: stringValue(payload.SelectedClassificationLabel),
-			ArtifactVerification:        workerexecution.CloneExpectedArtifactVerification(payload.ArtifactVerification),
+			ArtifactVerification:        payload.ArtifactVerification.Clone(),
 			FailureDetail:               workerexecution.CloneFailureDetail(payload.FailureDetail),
 			FailureMetadata:             workerexecution.CloneWorkFailureMetadata(payload.ProviderFailure),
 		},
@@ -688,7 +688,7 @@ func (r *factoryWorldReducer) recordWorkFailureDetail(completion interfaces.Fact
 		WorkstationName:      completion.Workstation.Name,
 		WorkItem:             item,
 		FailureDetail:        workerexecution.CloneFailureDetail(completion.Result.FailureDetail),
-		ArtifactVerification: workerexecution.CloneExpectedArtifactVerification(completion.Result.ArtifactVerification),
+		ArtifactVerification: completion.Result.ArtifactVerification.Clone(),
 	}
 }
 

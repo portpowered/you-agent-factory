@@ -154,7 +154,7 @@ func expectedArtifactsFromWorldItem(
 		workstationDeclarations = worldCandidateWorkstationArtifactDeclarations(item, state.Topology)
 		inputs = []work.ExpectedArtifactInput{worldExpectedArtifactInput(item)}
 	}
-	return work.ProjectExpectedArtifactReadModels(
+	return work.ExpectedArtifactReadModelProjector{}.Project(
 		workTypeDeclarations,
 		workstationDeclarations,
 		inputs,

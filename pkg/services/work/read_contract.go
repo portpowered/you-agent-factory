@@ -135,11 +135,15 @@ type ExpectedArtifactObservation struct {
 	Entries  []ExpectedArtifactVerificationEntry
 }
 
-// ProjectExpectedArtifactReadModels combines effective declarations and a
+// ExpectedArtifactReadModelProjector combines effective declarations and a
 // recorded verification observation into a deterministic Work read model. It
 // performs no filesystem access, so replay remains stable after workspace
 // contents change.
-func ProjectExpectedArtifactReadModels(
+type ExpectedArtifactReadModelProjector struct{}
+
+// Project combines effective declarations and a recorded verification
+// observation into a deterministic Work read model.
+func (ExpectedArtifactReadModelProjector) Project(
 	workTypeDeclarations []ExpectedArtifactDeclaration,
 	workstationDeclarations []ExpectedArtifactDeclaration,
 	inputs []ExpectedArtifactInput,

@@ -115,7 +115,7 @@ func runtimeExpectedArtifacts(
 	}
 
 	if dispatch, ok := runtimeActiveArtifactDispatch(token, dispatches); ok {
-		return work.ProjectExpectedArtifactReadModels(
+		return work.ExpectedArtifactReadModelProjector{}.Project(
 			workTypeDeclarations,
 			runtimeWorkstationArtifactDeclarations(net, dispatch.transitionID, dispatch.workstationName),
 			runtimeExpectedArtifactInputs(dispatch.inputs, token),
@@ -123,7 +123,7 @@ func runtimeExpectedArtifacts(
 		)
 	}
 	if dispatch, ok := runtimeCompletedArtifactDispatch(token, dispatchHistory, results); ok {
-		return work.ProjectExpectedArtifactReadModels(
+		return work.ExpectedArtifactReadModelProjector{}.Project(
 			workTypeDeclarations,
 			runtimeWorkstationArtifactDeclarations(net, dispatch.transitionID, dispatch.workstationName),
 			runtimeExpectedArtifactInputs(dispatch.inputs, token),
@@ -156,7 +156,7 @@ func runtimeExpectedArtifacts(
 			workstationDeclarations = append(workstationDeclarations, transition.ExpectedArtifacts...)
 		}
 	}
-	return work.ProjectExpectedArtifactReadModels(
+	return work.ExpectedArtifactReadModelProjector{}.Project(
 		workTypeDeclarations,
 		workstationDeclarations,
 		[]work.ExpectedArtifactInput{runtimeExpectedArtifactInput(*token)},

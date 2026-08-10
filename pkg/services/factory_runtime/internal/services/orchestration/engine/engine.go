@@ -191,7 +191,7 @@ func (e *FactoryEngine) retireCompletedDispatches(results []workerexecution.Work
 					WorkstationName:      entry.WorkstationName,
 					Outcome:              r.Outcome,
 					Reason:               completedDispatchReasonFromResult(r),
-					ArtifactVerification: workerexecution.CloneExpectedArtifactVerification(r.ArtifactVerification),
+					ArtifactVerification: r.ArtifactVerification.Clone(),
 					ProviderSession:      workerexecution.CloneProviderSessionMetadata(r.ProviderSession),
 					StartTime:            entry.StartTime,
 					EndTime:              now,

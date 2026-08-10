@@ -267,25 +267,7 @@ func TestFactoryEventHistory_RecordWorkstationResponse_FailedResultIncludesFailu
 func TestFactoryEventHistory_RecordWorkstationResponse_PersistsExpectedArtifactVerification(t *testing.T) {
 	eventTime := time.Date(2026, 8, 10, 9, 30, 0, 0, time.UTC)
 	history := newTestFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return eventTime })
-	result := workerexecution.WorkResult{
-		DispatchID:   "dispatch-artifact-failed",
-		TransitionID: "build",
-		Outcome:      workerexecution.OutcomeFailed,
-		Output:       "worker output retained",
-		Error:        "EXPECTED_ARTIFACTS_UNSATISFIED: report=reports/*.json (EMPTY)",
-		ArtifactVerification: &workerexecution.ExpectedArtifactVerification{
-			Code: workerexecution.WorkFailureTypeExpectedArtifactsUnsatisfied,
-			Entries: []workerexecution.ExpectedArtifactVerificationEntry{{
-				Name:    "report",
-				Pattern: "reports/*.json",
-				Reason:  workerexecution.ExpectedArtifactVerificationReasonEmpty,
-			}},
-		},
-		FailureMetadata: &workerexecution.WorkFailureMetadata{
-			Family: workerexecution.WorkFailureFamilyTerminal,
-			Type:   workerexecution.WorkFailureTypeExpectedArtifactsUnsatisfied,
-		},
-	}
+	result := expectedArtifactFailureWorkResult()
 	history.RecordWorkstationResponse(4, result, interfaces.CompletedDispatch{
 		DispatchID:      result.DispatchID,
 		TransitionID:    result.TransitionID,
@@ -295,7 +277,33 @@ func TestFactoryEventHistory_RecordWorkstationResponse_PersistsExpectedArtifactV
 		EndTime:         eventTime,
 		Duration:        time.Second,
 	})
+	assertExpectedArtifactCanonicalEvent(t, history)
+	assertExpectedArtifactPublicEvent(t, history)
+	assertExpectedArtifactWorldState(t, history)
+}
 
+func expectedArtifactFailureWorkResult() workerexecution.WorkResult {
+	return workerexecution.WorkResult{
+		DispatchID:   "dispatch-artifact-failed",
+		TransitionID: "build",
+		Outcome:      workerexecution.OutcomeFailed,
+		Output:       "worker output retained",
+		Error:        "EXPECTED_ARTIFACTS_UNSATISFIED: report=reports/*.json (EMPTY)",
+		ArtifactVerification: &workerexecution.ExpectedArtifactVerification{
+			Code: workerexecution.WorkFailureTypeExpectedArtifactsUnsatisfied,
+			Entries: []workerexecution.ExpectedArtifactVerificationEntry{{
+				Name: "report", Pattern: "reports/*.json", Reason: workerexecution.ExpectedArtifactVerificationReasonEmpty,
+			}},
+		},
+		FailureMetadata: &workerexecution.WorkFailureMetadata{
+			Family: workerexecution.WorkFailureFamilyTerminal,
+			Type:   workerexecution.WorkFailureTypeExpectedArtifactsUnsatisfied,
+		},
+	}
+}
+
+func assertExpectedArtifactCanonicalEvent(t *testing.T, history *FactoryEventHistory) {
+	t.Helper()
 	events := history.CanonicalEvents()
 	if len(events) != 1 {
 		t.Fatalf("canonical event count = %d, want 1", len(events))
@@ -313,6 +321,10 @@ func TestFactoryEventHistory_RecordWorkstationResponse_PersistsExpectedArtifactV
 	if canonicalPayload.FailureDetail == nil || canonicalPayload.FailureDetail.Reason != workerexecution.WorkFailureTypeExpectedArtifactsUnsatisfied {
 		t.Fatalf("canonical failure detail = %#v, want expected-artifact code", canonicalPayload.FailureDetail)
 	}
+}
+
+func assertExpectedArtifactPublicEvent(t *testing.T, history *FactoryEventHistory) {
+	t.Helper()
 	generated := generatedHistoryEvents(t, history)
 	publicPayload, err := generated[0].Payload.AsDispatchResponseEventPayload()
 	if err != nil {
@@ -321,7 +333,11 @@ func TestFactoryEventHistory_RecordWorkstationResponse_PersistsExpectedArtifactV
 	if publicPayload.ArtifactVerification == nil || len(publicPayload.ArtifactVerification.Entries) != 1 {
 		t.Fatalf("generated verification = %#v, want one entry", publicPayload.ArtifactVerification)
 	}
+}
 
+func assertExpectedArtifactWorldState(t *testing.T, history *FactoryEventHistory) {
+	t.Helper()
+	events := history.CanonicalEvents()
 	world, err := projections.ReconstructCanonicalFactoryWorldState(events, 4)
 	if err != nil {
 		t.Fatalf("reconstruct world state: %v", err)

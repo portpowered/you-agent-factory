@@ -193,19 +193,19 @@ func TestProjectExpectedArtifactReadModels_TracksPendingSatisfiedFailedAndMixed(
 	}
 	inputs := []work.ExpectedArtifactInput{{Name: "review", WorkID: "work-1", WorkTypeID: "story"}}
 
-	pending := work.ProjectExpectedArtifactReadModels(declarations, nil, inputs, work.ExpectedArtifactObservation{})
+	pending := work.ExpectedArtifactReadModelProjector{}.Project(declarations, nil, inputs, work.ExpectedArtifactObservation{})
 	if len(pending) != 3 || pending[0].Pattern != "reports/review.json" ||
 		pending[0].Verification != work.ExpectedArtifactVerificationPending {
 		t.Fatalf("pending projection = %#v", pending)
 	}
 
-	satisfied := work.ProjectExpectedArtifactReadModels(declarations, nil, inputs, work.ExpectedArtifactObservation{Verified: true})
+	satisfied := work.ExpectedArtifactReadModelProjector{}.Project(declarations, nil, inputs, work.ExpectedArtifactObservation{Verified: true})
 	if len(satisfied) != 3 || satisfied[0].Verification != work.ExpectedArtifactVerificationSatisfied ||
 		satisfied[1].Verification != work.ExpectedArtifactVerificationSatisfied {
 		t.Fatalf("satisfied projection = %#v", satisfied)
 	}
 
-	failed := work.ProjectExpectedArtifactReadModels(declarations, nil, inputs, work.ExpectedArtifactObservation{
+	failed := work.ExpectedArtifactReadModelProjector{}.Project(declarations, nil, inputs, work.ExpectedArtifactObservation{
 		Verified: true,
 		Entries: []work.ExpectedArtifactVerificationEntry{{
 			Name: "manifest", Pattern: "reports/manifest.json", Reason: work.ExpectedArtifactVerificationReasonEmpty,
@@ -218,7 +218,7 @@ func TestProjectExpectedArtifactReadModels_TracksPendingSatisfiedFailedAndMixed(
 		t.Fatalf("mixed projection = %#v", failed)
 	}
 
-	if got := work.ProjectExpectedArtifactReadModels(nil, nil, inputs, work.ExpectedArtifactObservation{Verified: true}); got != nil {
+	if got := (work.ExpectedArtifactReadModelProjector{}).Project(nil, nil, inputs, work.ExpectedArtifactObservation{Verified: true}); got != nil {
 		t.Fatalf("no-declaration projection = %#v, want nil", got)
 	}
 }
@@ -226,7 +226,7 @@ func TestProjectExpectedArtifactReadModels_TracksPendingSatisfiedFailedAndMixed(
 func TestProjectExpectedArtifactReadModels_RedactsUnsafeRenderedPatterns(t *testing.T) {
 	t.Parallel()
 
-	got := work.ProjectExpectedArtifactReadModels(
+	got := work.ExpectedArtifactReadModelProjector{}.Project(
 		[]work.ExpectedArtifactDeclaration{{Name: "unsafe", Pattern: "{{ (index .Inputs 0).Name }}"}},
 		nil,
 		[]work.ExpectedArtifactInput{{Name: "C:\\workspace\\report.json"}},

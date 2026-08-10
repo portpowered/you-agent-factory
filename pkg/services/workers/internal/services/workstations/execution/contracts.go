@@ -100,7 +100,6 @@ var CanonicalProviderSessionProvider = workers.CanonicalProviderSessionProvider
 var FailureDecisionFromMetadata = workers.FailureDecisionFromMetadata
 var CloneProviderSessionMetadata = workers.CloneProviderSessionMetadata
 var CloneWorkFailureMetadata = workers.CloneWorkFailureMetadata
-var CloneExpectedArtifactVerification = workers.CloneExpectedArtifactVerification
 var CloneFailureDetail = workers.CloneFailureDetail
 var CloneWorkDiagnostics = workers.CloneWorkDiagnostics
 var CloneInvocationDiagnostic = workers.CloneInvocationDiagnostic

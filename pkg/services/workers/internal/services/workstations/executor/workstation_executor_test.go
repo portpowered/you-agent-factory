@@ -325,54 +325,61 @@ func TestWorkstationExecutor_ModelWorkstation_RendersPromptAndDelegates(t *testi
 	}
 }
 
+type expectedArtifactTestCase struct {
+	name          string
+	workType      []interfaces.ExpectedArtifactConfig
+	workstation   []interfaces.ExpectedArtifactConfig
+	wantOutcome   workerexecution.WorkOutcome
+	wantReasons   []workerexecution.ExpectedArtifactVerificationReason
+	wantPatterns  []string
+	wantErrorPart string
+	writeEmpty    bool
+	unsafeInput   bool
+}
+
 func TestWorkstationExecutor_VerifiesExpectedArtifactsAfterWorkerSuccess(t *testing.T) {
 	t.Parallel()
-
 	workspace := t.TempDir()
+	writeExpectedArtifactFixtures(t, workspace)
+	for _, testCase := range expectedArtifactTestCases() {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			runExpectedArtifactTestCase(t, workspace, testCase)
+		})
+	}
+}
+
+func writeExpectedArtifactFixtures(t *testing.T, workspace string) {
+	t.Helper()
 	if err := os.Mkdir(filepath.Join(workspace, "reports"), 0o755); err != nil {
 		t.Fatalf("mkdir reports: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(workspace, "literal.txt"), []byte("done"), 0o644); err != nil {
-		t.Fatalf("write literal artifact: %v", err)
+	fixtures := map[string]string{
+		"literal.txt":                        "done",
+		filepath.Join("reports", "one.json"): "{}",
+		filepath.Join("reports", "two.json"): "{}",
+		"task-report.json":                   "report",
 	}
-	if err := os.WriteFile(filepath.Join(workspace, "reports", "one.json"), []byte("{}"), 0o644); err != nil {
-		t.Fatalf("write glob artifact: %v", err)
+	for relativePath, contents := range fixtures {
+		if err := os.WriteFile(filepath.Join(workspace, relativePath), []byte(contents), 0o644); err != nil {
+			t.Fatalf("write artifact %q: %v", relativePath, err)
+		}
 	}
-	if err := os.WriteFile(filepath.Join(workspace, "reports", "two.json"), []byte("{}"), 0o644); err != nil {
-		t.Fatalf("write second glob artifact: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(workspace, "task-report.json"), []byte("report"), 0o644); err != nil {
-		t.Fatalf("write templated artifact: %v", err)
-	}
+}
 
-	tests := []struct {
-		name          string
-		workType      []interfaces.ExpectedArtifactConfig
-		workstation   []interfaces.ExpectedArtifactConfig
-		wantOutcome   workerexecution.WorkOutcome
-		wantReasons   []workerexecution.ExpectedArtifactVerificationReason
-		wantPatterns  []string
-		wantErrorPart string
-	}{
+func expectedArtifactTestCases() []expectedArtifactTestCase {
+	return []expectedArtifactTestCase{
+		{name: "no declarations leaves success unchanged", wantOutcome: workerexecution.OutcomeAccepted},
 		{
-			name:        "no declarations leaves success unchanged",
+			name:        "literal and glob success",
+			workType:    []interfaces.ExpectedArtifactConfig{{Name: "literal", Pattern: "literal.txt", NonEmpty: true}},
+			workstation: []interfaces.ExpectedArtifactConfig{{Name: "reports", Pattern: "reports/*.json", NonEmpty: true}},
 			wantOutcome: workerexecution.OutcomeAccepted,
 		},
 		{
-			name: "literal and glob success",
-			workType: []interfaces.ExpectedArtifactConfig{
-				{Name: "literal", Pattern: "literal.txt", NonEmpty: true},
-			},
-			workstation: []interfaces.ExpectedArtifactConfig{
-				{Name: "reports", Pattern: "reports/*.json", NonEmpty: true},
-			},
-			wantOutcome: workerexecution.OutcomeAccepted,
-		},
-		{
-			name: "name template success",
-			workstation: []interfaces.ExpectedArtifactConfig{
-				{Name: "named report", Pattern: "{{ (index .Inputs 0).Name }}.json", NonEmpty: true},
-			},
+			name:        "name template success",
+			workstation: []interfaces.ExpectedArtifactConfig{{Name: "named report", Pattern: "{{ (index .Inputs 0).Name }}.json", NonEmpty: true}},
 			wantOutcome: workerexecution.OutcomeAccepted,
 		},
 		{
@@ -381,107 +388,130 @@ func TestWorkstationExecutor_VerifiesExpectedArtifactsAfterWorkerSuccess(t *test
 				{Name: "missing-z", Pattern: "missing/z.txt"},
 				{Name: "empty-work", Pattern: "empty-work.txt", NonEmpty: true},
 			},
-			workstation: []interfaces.ExpectedArtifactConfig{
-				{Name: "missing-a", Pattern: "missing/a.txt"},
-			},
+			workstation:   []interfaces.ExpectedArtifactConfig{{Name: "missing-a", Pattern: "missing/a.txt"}},
 			wantOutcome:   workerexecution.OutcomeFailed,
 			wantReasons:   []workerexecution.ExpectedArtifactVerificationReason{workerexecution.ExpectedArtifactVerificationReasonMissing, workerexecution.ExpectedArtifactVerificationReasonEmpty, workerexecution.ExpectedArtifactVerificationReasonMissing},
 			wantPatterns:  []string{"missing/z.txt", "empty-work.txt", "missing/a.txt"},
 			wantErrorPart: "EXPECTED_ARTIFACTS_UNSATISFIED",
+			writeEmpty:    true,
 		},
 		{
-			name: "unsafe rendered input is redacted",
-			workstation: []interfaces.ExpectedArtifactConfig{
-				{Name: "unsafe", Pattern: "{{ (index .Inputs 0).Name }}.txt"},
-			},
+			name:          "unsafe rendered input is redacted",
+			workstation:   []interfaces.ExpectedArtifactConfig{{Name: "unsafe", Pattern: "{{ (index .Inputs 0).Name }}.txt"}},
 			wantOutcome:   workerexecution.OutcomeFailed,
 			wantReasons:   []workerexecution.ExpectedArtifactVerificationReason{workerexecution.ExpectedArtifactVerificationReasonMissing},
 			wantPatterns:  []string{"<invalid>"},
 			wantErrorPart: "<invalid>",
+			unsafeInput:   true,
 		},
 	}
+}
 
-	for _, test := range tests {
-		test := test
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			if test.name == "multiple missing and empty are stable" {
-				if err := os.WriteFile(filepath.Join(workspace, "empty-work.txt"), nil, 0o644); err != nil {
-					t.Fatalf("write empty artifact: %v", err)
-				}
-			}
-			mock := &wsMockExecutor{result: workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted, Output: "worker output"}}
-			runtimeConfig := staticRuntimeConfig{
-				Factory: &interfaces.FactoryConfig{
-					WorkTypes: []interfaces.WorkTypeConfig{{ID: "task", Name: "task", ExpectedArtifacts: test.workType}},
-				},
-				Workers: map[string]*interfaces.FactoryWorkerConfig{
-					"worker-a": {Type: interfaces.WorkerTypeModel},
-				},
-				Workstations: map[string]*interfaces.FactoryWorkstationConfig{
-					"standard": {Type: interfaces.WorkstationTypeModel, ExpectedArtifacts: test.workstation},
-				},
-				FactoryPath: workspace,
-			}
-			we := newTestWorkstationExecutor(runtimeConfig, mock)
-			inputName := "task-report"
-			if test.name == "unsafe rendered input is redacted" {
-				inputName = filepath.Join(workspace, "secret")
-			}
-			result, err := we.Execute(context.Background(), work.WorkDispatch{
-				DispatchID:      "artifact-" + strings.ReplaceAll(test.name, " ", "-"),
-				TransitionID:    "transition-artifact",
-				WorkerType:      "worker-a",
-				WorkstationName: "standard",
-				InputTokens: InputTokens(factoryruntime.RuntimeToken{
-					ID: "token-artifact",
-					Color: factoryruntime.RuntimeTokenColor{
-						Name:       inputName,
-						WorkID:     "work-artifact",
-						WorkTypeID: "task",
-						DataType:   factoryruntime.RuntimeTokenDataTypeWork,
-					},
-				}),
-			})
-			if err != nil {
-				t.Fatalf("Execute() error = %v", err)
-			}
-			if result.Outcome != test.wantOutcome {
-				t.Fatalf("Outcome = %s, want %s; result = %#v", result.Outcome, test.wantOutcome, result)
-			}
-			if !mock.called {
-				t.Fatal("worker executor was not called")
-			}
-			if result.Output != "worker output" {
-				t.Fatalf("Output = %q, want preserved worker output", result.Output)
-			}
-			if test.wantOutcome == workerexecution.OutcomeAccepted {
-				if result.ArtifactVerification != nil || result.FailureMetadata != nil {
-					t.Fatalf("successful result carries verification failure: %#v", result)
-				}
-				return
-			}
-			if result.ArtifactVerification == nil || result.ArtifactVerification.Code != workerexecution.WorkFailureTypeExpectedArtifactsUnsatisfied {
-				t.Fatalf("verification = %#v, want stable code", result.ArtifactVerification)
-			}
-			if len(result.ArtifactVerification.Entries) != len(test.wantReasons) {
-				t.Fatalf("verification entries = %#v, want %d entries", result.ArtifactVerification.Entries, len(test.wantReasons))
-			}
-			for index, entry := range result.ArtifactVerification.Entries {
-				if entry.Reason != test.wantReasons[index] || entry.Pattern != test.wantPatterns[index] {
-					t.Fatalf("verification entry %d = %#v, want reason=%s pattern=%q", index, entry, test.wantReasons[index], test.wantPatterns[index])
-				}
-				if strings.Contains(entry.Pattern, workspace) {
-					t.Fatalf("verification entry %d leaked workspace %q: %#v", index, workspace, entry)
-				}
-			}
-			if result.FailureMetadata == nil || result.FailureMetadata.Type != workerexecution.WorkFailureTypeExpectedArtifactsUnsatisfied {
-				t.Fatalf("FailureMetadata = %#v, want expected-artifact terminal type", result.FailureMetadata)
-			}
-			if !strings.Contains(result.Error, test.wantErrorPart) || strings.Contains(result.Error, workspace) {
-				t.Fatalf("Error = %q, want safe stable summary containing %q", result.Error, test.wantErrorPart)
-			}
-		})
+func runExpectedArtifactTestCase(t *testing.T, workspace string, testCase expectedArtifactTestCase) {
+	t.Helper()
+	if testCase.writeEmpty {
+		if err := os.WriteFile(filepath.Join(workspace, "empty-work.txt"), nil, 0o644); err != nil {
+			t.Fatalf("write empty artifact: %v", err)
+		}
+	}
+	mock := &wsMockExecutor{result: workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted, Output: "worker output"}}
+	we := newTestWorkstationExecutor(expectedArtifactRuntimeConfig(workspace, testCase), mock)
+	inputName := "task-report"
+	if testCase.unsafeInput {
+		inputName = filepath.Join(workspace, "secret")
+	}
+	result, err := we.Execute(context.Background(), expectedArtifactDispatch(testCase.name, inputName))
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	assertExpectedArtifactResult(t, result, mock, testCase, workspace)
+}
+
+func expectedArtifactRuntimeConfig(workspace string, testCase expectedArtifactTestCase) staticRuntimeConfig {
+	return staticRuntimeConfig{
+		Factory: &interfaces.FactoryConfig{
+			WorkTypes: []interfaces.WorkTypeConfig{{ID: "task", Name: "task", ExpectedArtifacts: testCase.workType}},
+		},
+		Workers: map[string]*interfaces.FactoryWorkerConfig{
+			"worker-a": {Type: interfaces.WorkerTypeModel},
+		},
+		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+			"standard": {Type: interfaces.WorkstationTypeModel, ExpectedArtifacts: testCase.workstation},
+		},
+		FactoryPath: workspace,
+	}
+}
+
+func expectedArtifactDispatch(name, inputName string) work.WorkDispatch {
+	return work.WorkDispatch{
+		DispatchID:      "artifact-" + strings.ReplaceAll(name, " ", "-"),
+		TransitionID:    "transition-artifact",
+		WorkerType:      "worker-a",
+		WorkstationName: "standard",
+		InputTokens: InputTokens(factoryruntime.RuntimeToken{
+			ID: "token-artifact",
+			Color: factoryruntime.RuntimeTokenColor{
+				Name:       inputName,
+				WorkID:     "work-artifact",
+				WorkTypeID: "task",
+				DataType:   factoryruntime.RuntimeTokenDataTypeWork,
+			},
+		}),
+	}
+}
+
+func assertExpectedArtifactResult(t *testing.T, result workerexecution.WorkResult, mock *wsMockExecutor, testCase expectedArtifactTestCase, workspace string) {
+	t.Helper()
+	if result.Outcome != testCase.wantOutcome {
+		t.Fatalf("Outcome = %s, want %s; result = %#v", result.Outcome, testCase.wantOutcome, result)
+	}
+	if !mock.called {
+		t.Fatal("worker executor was not called")
+	}
+	if result.Output != "worker output" {
+		t.Fatalf("Output = %q, want preserved worker output", result.Output)
+	}
+	if testCase.wantOutcome == workerexecution.OutcomeAccepted {
+		assertExpectedArtifactSuccess(t, result)
+		return
+	}
+	assertExpectedArtifactFailure(t, result, testCase, workspace)
+}
+
+func assertExpectedArtifactSuccess(t *testing.T, result workerexecution.WorkResult) {
+	t.Helper()
+	if result.ArtifactVerification != nil || result.FailureMetadata != nil {
+		t.Fatalf("successful result carries verification failure: %#v", result)
+	}
+}
+
+func assertExpectedArtifactFailure(t *testing.T, result workerexecution.WorkResult, testCase expectedArtifactTestCase, workspace string) {
+	t.Helper()
+	verification := result.ArtifactVerification
+	if verification == nil || verification.Code != workerexecution.WorkFailureTypeExpectedArtifactsUnsatisfied {
+		t.Fatalf("verification = %#v, want stable code", verification)
+	}
+	if len(verification.Entries) != len(testCase.wantReasons) {
+		t.Fatalf("verification entries = %#v, want %d entries", verification.Entries, len(testCase.wantReasons))
+	}
+	assertExpectedArtifactEntries(t, verification.Entries, testCase, workspace)
+	if result.FailureMetadata == nil || result.FailureMetadata.Type != workerexecution.WorkFailureTypeExpectedArtifactsUnsatisfied {
+		t.Fatalf("FailureMetadata = %#v, want expected-artifact terminal type", result.FailureMetadata)
+	}
+	if !strings.Contains(result.Error, testCase.wantErrorPart) || strings.Contains(result.Error, workspace) {
+		t.Fatalf("Error = %q, want safe stable summary containing %q", result.Error, testCase.wantErrorPart)
+	}
+}
+
+func assertExpectedArtifactEntries(t *testing.T, entries []workerexecution.ExpectedArtifactVerificationEntry, testCase expectedArtifactTestCase, workspace string) {
+	t.Helper()
+	for index, entry := range entries {
+		if entry.Reason != testCase.wantReasons[index] || entry.Pattern != testCase.wantPatterns[index] {
+			t.Fatalf("verification entry %d = %#v, want reason=%s pattern=%q", index, entry, testCase.wantReasons[index], testCase.wantPatterns[index])
+		}
+		if strings.Contains(entry.Pattern, workspace) {
+			t.Fatalf("verification entry %d leaked workspace %q: %#v", index, workspace, entry)
+		}
 	}
 }
 

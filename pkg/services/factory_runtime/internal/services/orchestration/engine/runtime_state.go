@@ -77,7 +77,7 @@ func (rs *RuntimeState) Snapshot() interfaces.EngineStateSnapshot[petri.MarkingS
 
 func deepCopyCompletedDispatch(d interfaces.CompletedDispatch) interfaces.CompletedDispatch {
 	cp := d
-	cp.ArtifactVerification = workerexecution.CloneExpectedArtifactVerification(d.ArtifactVerification)
+	cp.ArtifactVerification = d.ArtifactVerification.Clone()
 	cp.ProviderSession = workerexecution.CloneProviderSessionMetadata(d.ProviderSession)
 	cp.ConsumedTokens = factorytoken.CloneSlice(d.ConsumedTokens)
 	if d.OutputMutations != nil {
@@ -92,7 +92,7 @@ func deepCopyCompletedDispatch(d interfaces.CompletedDispatch) interfaces.Comple
 func deepCopyWorkResult(result workerexecution.WorkResult) workerexecution.WorkResult {
 	cp := result
 	cp.ProviderSession = workerexecution.CloneProviderSessionMetadata(result.ProviderSession)
-	cp.ArtifactVerification = workerexecution.CloneExpectedArtifactVerification(result.ArtifactVerification)
+	cp.ArtifactVerification = result.ArtifactVerification.Clone()
 	return cp
 }
 

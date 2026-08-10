@@ -307,7 +307,7 @@ type WorkstationResult struct {
 
 func CloneWorkstationResult(result WorkstationResult) WorkstationResult {
 	clone := result
-	clone.ArtifactVerification = CloneExpectedArtifactVerification(result.ArtifactVerification)
+	clone.ArtifactVerification = result.ArtifactVerification.Clone()
 	clone.FailureDetail = CloneFailureDetail(result.FailureDetail)
 	clone.FailureMetadata = CloneWorkFailureMetadata(result.FailureMetadata)
 	return clone
@@ -524,10 +524,8 @@ type ExpectedArtifactVerification struct {
 	Entries []ExpectedArtifactVerificationEntry `json:"entries"`
 }
 
-// CloneExpectedArtifactVerification returns a detached verification summary.
-func CloneExpectedArtifactVerification(
-	verification *ExpectedArtifactVerification,
-) *ExpectedArtifactVerification {
+// Clone returns a detached verification summary.
+func (verification *ExpectedArtifactVerification) Clone() *ExpectedArtifactVerification {
 	if verification == nil {
 		return nil
 	}

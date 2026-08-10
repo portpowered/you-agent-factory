@@ -507,7 +507,7 @@ func (h *FactoryEventHistory) RecordWorkstationResponse(tick int, result workers
 			Error:                       stringPtrIfNotEmpty(result.Error),
 			Feedback:                    stringPtrIfNotEmpty(result.Feedback),
 			SelectedClassificationLabel: stringPtrIfNotEmpty(result.SelectedClassificationLabel),
-			ArtifactVerification:        workers.CloneExpectedArtifactVerification(result.ArtifactVerification),
+			ArtifactVerification:        result.ArtifactVerification.Clone(),
 			FailureDetail:               failureDetail(failureReason, failureMessage),
 			DurationMillis:              int64Ptr(completed.Duration.Milliseconds()),
 			OutputWork:                  eventWorksPtr(outputWorkItems(completed.OutputMutations, completed.ConsumedTokens)),

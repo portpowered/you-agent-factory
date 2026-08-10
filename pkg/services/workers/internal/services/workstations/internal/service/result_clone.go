@@ -16,7 +16,7 @@ func cloneDispatchResult(result workers.WorkstationDispatchResult) workers.Works
 
 func cloneWorkResult(result workers.WorkResult) workers.WorkResult {
 	result.RecordedOutputWork = cloneFactoryWorkItems(result.RecordedOutputWork)
-	result.ArtifactVerification = workers.CloneExpectedArtifactVerification(result.ArtifactVerification)
+	result.ArtifactVerification = result.ArtifactVerification.Clone()
 	result.FailureMetadata = workers.CloneWorkFailureMetadata(result.FailureMetadata)
 	result.ProviderSession = workers.CloneProviderSessionMetadata(result.ProviderSession)
 	result.Diagnostics = workers.CloneWorkDiagnostics(result.Diagnostics)
