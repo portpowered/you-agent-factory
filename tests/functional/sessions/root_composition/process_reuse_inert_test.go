@@ -1,16 +1,11 @@
 package root_composition_test
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -28,30 +23,46 @@ import (
 const (
 	rootProcessReuseSuccessOutput = "root process reuse success COMPLETE"
 	rootProcessReuseFailureOutput = "root process reuse failure"
+	rootProcessStreamReadCeiling  = 5 * time.Second
 )
 
 // TestRootBuildProcessIsInertAndReusableAcrossFactorySessions proves the full
-// P1 process boundary through public session APIs: BuildProcess does not
-// activate injected effects, one process serves two isolated sessions, and
-// both terminal outcomes retain their canonical event and response streams.
+// P1 process boundary through the public CLI and session observation APIs:
+// BuildProcess does not activate injected effects, one process serves two
+// isolated sessions, and both terminal outcomes retain their canonical event
+// and response streams.
 func TestRootBuildProcessIsInertAndReusableAcrossFactorySessions(t *testing.T) {
 	t.Parallel()
 
-	dir := support.ScaffoldFactory(t, rootProcessReuseFactoryConfig())
-	support.WriteAgentConfig(
-		t,
-		dir,
-		"processor",
-		support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"),
-	)
+	fixture := newRootProcessReuseFixture(t)
+	assertRootProcessBuildIsInert(t, fixture)
 
+	first := runRootProcessCLIInvocation(t, fixture, 0, "run the successful session")
+	assertRootProcessSuccess(t, first)
+
+	second := runRootProcessCLIInvocation(t, fixture, 1, "run the failing session")
+	assertRootProcessFailure(t, second)
+	assertRootProcessReuse(t, fixture, first.session, second.session)
+}
+
+type rootProcessReuseFixture struct {
+	process        support.Process
+	dir            string
+	identities     *rootProcessReuseIdentities
+	providerRunner *gatedRootProviderCommandRunner
+	router         *reusableRootAPIServerStarter
+	logsRoot       string
+	metricsRoot    string
+}
+
+func newRootProcessReuseFixture(t *testing.T) *rootProcessReuseFixture {
+	t.Helper()
+	dir := support.ScaffoldFactory(t, rootProcessReuseFactoryConfig())
+	support.WriteAgentConfig(t, dir, "processor", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
 	identities := &rootProcessReuseIdentities{}
-	providerRunner := support.NewShapedProviderCommandRunner(
+	providerRunner := newGatedRootProviderCommandRunner(
 		platformprocess.CommandResult{Stdout: []byte(rootProcessReuseSuccessOutput)},
-		platformprocess.CommandResult{
-			Stderr:   []byte(rootProcessReuseFailureOutput),
-			ExitCode: 1,
-		},
+		platformprocess.CommandResult{Stderr: []byte(rootProcessReuseFailureOutput), ExitCode: 1},
 	)
 	logsRoot := filepath.Join(t.TempDir(), "logs")
 	metricsRoot := filepath.Join(t.TempDir(), "metrics")
@@ -65,95 +76,144 @@ func TestRootBuildProcessIsInertAndReusableAcrossFactorySessions(t *testing.T) {
 	edges.APIServerStarter = router.start
 	process := support.BuildProcess(t, edges)
 	support.CleanupProcess(t, process)
-	if got := providerRunner.CallCount(); got != 0 {
+	return &rootProcessReuseFixture{
+		process: process, dir: dir, identities: identities,
+		providerRunner: providerRunner, router: router,
+		logsRoot: logsRoot, metricsRoot: metricsRoot,
+	}
+}
+
+func assertRootProcessBuildIsInert(t *testing.T, fixture *rootProcessReuseFixture) {
+	t.Helper()
+	if got := fixture.providerRunner.CallCount(); got != 0 {
 		t.Fatalf("provider command calls during BuildProcess = %d, want 0", got)
 	}
-	if got := identities.session.Load(); got != 0 {
+	if got := fixture.identities.session.Load(); got != 0 {
 		t.Fatalf("session IDs generated during BuildProcess = %d, want 0", got)
 	}
-	if got := identities.runtime.Load(); got != 0 {
+	if got := fixture.identities.runtime.Load(); got != 0 {
 		t.Fatalf("runtime IDs generated during BuildProcess = %d, want 0", got)
 	}
-	if got := identities.responseEvent.Load(); got != 0 {
+	if got := fixture.identities.responseEvent.Load(); got != 0 {
 		t.Fatalf("response-event IDs generated during BuildProcess = %d, want 0", got)
 	}
-	if got := router.starts.Load(); got != 0 {
+	if got := fixture.router.starts.Load(); got != 0 {
 		t.Fatalf("API server starts during BuildProcess = %d, want 0", got)
 	}
-	assertPathDoesNotExist(t, logsRoot, "runtime log root")
-	assertPathDoesNotExist(t, metricsRoot, "runtime metrics root")
+	assertPathDoesNotExist(t, fixture.logsRoot, "runtime log root")
+	assertPathDoesNotExist(t, fixture.metricsRoot, "runtime metrics root")
+}
 
-	firstServer := support.NewProcessAPIServer()
-	router.setCurrent(firstServer)
-	firstCommand := startReusableRootProcessServer(t, process, firstServer, dir, logsRoot, metricsRoot)
-	firstURL := firstServer.WaitForURL(t)
-	firstSession := support.GetDefaultSession(t, firstURL)
-	if firstSession.Id == "" || firstSession.Runtime.StreamIdentity == nil {
-		t.Fatalf("first default session = %#v, want session and stream identities", firstSession)
-	}
+type rootProcessInvocation struct {
+	response       factoryapi.InvocationResponse
+	session        factoryapi.FactorySession
+	events         []factoryapi.FactoryEvent
+	responseEvents []factoryapi.FactoryResponseEvent
+	executeErr     error
+}
 
-	successInvocation, successEvents, successResponseEvents := runRootProcessSessionInvocation(
-		t,
-		firstURL,
-		factorysessions.DefaultSessionID,
-		"run the successful session",
-	)
-	if successInvocation.Status != factoryapi.InvocationTerminalStatusCompleted {
-		t.Fatalf("successful session invocation status = %q, want COMPLETED", successInvocation.Status)
+func runRootProcessCLIInvocation(
+	t *testing.T,
+	fixture *rootProcessReuseFixture,
+	callIndex int,
+	text string,
+) rootProcessInvocation {
+	t.Helper()
+	shutdown := make(chan struct{})
+	server := support.NewProcessAPIServer()
+	server.HoldShutdownUntilSignaled(shutdown)
+	fixture.router.setCurrent(server)
+	inputs := support.FakeInputs(context.Background(), []string{
+		"you", "--json", "run", "--factory", filepath.Join(fixture.dir, "factory.json"),
+		"--with-server", "--server", "http://127.0.0.1:1", "--no-record",
+		"--runtime-log-dir", fixture.logsRoot, "--runtime-metrics-dir", fixture.metricsRoot, text,
+	})
+	home := t.TempDir()
+	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+	inputs.Input.WorkingDirectory = fixture.dir
+	command := support.StartProcessCommand(t, fixture.process, inputs.Input)
+	baseURL := server.WaitForURL(t)
+	session := support.GetDefaultSession(t, baseURL)
+	eventStream := support.OpenFactoryEventStreamAt(t, support.SessionEventsURL(baseURL, session.Id))
+	responseStream := support.OpenFactoryResponseEventStreamAt(t, support.SessionResponseEventsURL(baseURL, session.Id))
+	fixture.providerRunner.Release(callIndex)
+	events := readRootProcessEventsUntilDispatchResponse(t, eventStream)
+	responseEvents := readRootProcessResponseEventsUntilTerminal(t, responseStream)
+	eventStream.Close()
+	responseStream.Close()
+	close(shutdown)
+	<-command.Done()
+	executeErr := command.Err()
+	if executeErr != nil {
+		command.AcceptError()
 	}
-	assertInvocationPrimaryResultText(t, successInvocation, rootProcessReuseSuccessOutput)
-	assertRootProcessFactoryEvents(t, successEvents, factorysessions.DefaultSessionID, factoryapi.WorkOutcomeAccepted)
-	assertRootProcessResponseEvents(t, successResponseEvents, firstSession.Id, factoryapi.FactoryResponseEventPhaseCompleted)
-	firstCommand.Stop(t)
+	return rootProcessInvocation{
+		response: support.DecodeInvocationResponseJSON(t, inputs.Stdout()),
+		session:  session, events: events, responseEvents: responseEvents,
+		executeErr: executeErr,
+	}
+}
 
-	secondServer := support.NewProcessAPIServer()
-	router.setCurrent(secondServer)
-	secondCommand := startReusableRootProcessServer(t, process, secondServer, dir, logsRoot, metricsRoot)
-	secondURL := secondServer.WaitForURL(t)
-	secondSession := support.GetDefaultSession(t, secondURL)
-	if secondSession.Id == "" || secondSession.Runtime.StreamIdentity == nil {
-		t.Fatalf("second default session = %#v, want session and stream identities", secondSession)
+func assertRootProcessSuccess(t *testing.T, invocation rootProcessInvocation) {
+	t.Helper()
+	if invocation.executeErr != nil {
+		t.Fatalf("successful CLI invocation error = %v", invocation.executeErr)
 	}
-	if secondSession.Id == firstSession.Id {
-		t.Fatalf("second session id = %q, want distinct from first %q", secondSession.Id, firstSession.Id)
+	if invocation.response.Status != factoryapi.InvocationTerminalStatusCompleted {
+		t.Fatalf("successful CLI invocation status = %q, want COMPLETED", invocation.response.Status)
 	}
-	if secondSession.Runtime.StreamIdentity.StreamGenerationID == firstSession.Runtime.StreamIdentity.StreamGenerationID {
-		t.Fatalf("second stream generation = %q, want distinct from first %q", secondSession.Runtime.StreamIdentity.StreamGenerationID, firstSession.Runtime.StreamIdentity.StreamGenerationID)
-	}
+	assertInvocationPrimaryResultText(t, invocation.response, rootProcessReuseSuccessOutput)
+	assertRootProcessFactoryEvents(t, invocation.events, factorysessions.DefaultSessionID, factoryapi.WorkOutcomeAccepted)
+	assertRootProcessResponseEvents(t, invocation.responseEvents, invocation.session.Id, factoryapi.FactoryResponseEventPhaseCompleted)
+}
 
-	failureInvocation, failureEvents, failureResponseEvents := runRootProcessSessionInvocation(
-		t,
-		secondURL,
-		factorysessions.DefaultSessionID,
-		"run the failing session",
-	)
-	if failureInvocation.Status != factoryapi.InvocationTerminalStatusFailed {
-		t.Fatalf("failing session invocation status = %q, want FAILED", failureInvocation.Status)
+func assertRootProcessFailure(t *testing.T, invocation rootProcessInvocation) {
+	t.Helper()
+	if invocation.response.Status != factoryapi.InvocationTerminalStatusFailed {
+		t.Fatalf("failing CLI invocation status = %q, want FAILED", invocation.response.Status)
 	}
-	if failureInvocation.SessionId != nil && *failureInvocation.SessionId != secondSession.Id {
-		t.Fatalf("failing invocation session id = %#v, want nil or %q", failureInvocation.SessionId, secondSession.Id)
+	if invocation.response.SessionId != nil && *invocation.response.SessionId != invocation.session.Id {
+		t.Fatalf("failing invocation session id = %#v, want nil or %q", invocation.response.SessionId, invocation.session.Id)
 	}
-	if failureInvocation.Message == nil && failureInvocation.ErrorCode == nil {
-		t.Fatalf("failing invocation = %#v, want a terminal error summary", failureInvocation)
+	if invocation.response.Message == nil && invocation.response.ErrorCode == nil {
+		t.Fatalf("failing invocation = %#v, want a terminal error summary", invocation.response)
 	}
-	assertRootProcessFactoryEvents(t, failureEvents, factorysessions.DefaultSessionID, factoryapi.WorkOutcomeFailed)
+	assertRootProcessFactoryEvents(t, invocation.events, factorysessions.DefaultSessionID, factoryapi.WorkOutcomeFailed)
 	// A failed invocation may still have a completed provider-native response
 	// stream: the canonical dispatch outcome and InvocationResponse carry the
 	// failure, while Response Events describe provider activity.
-	assertRootProcessResponseEvents(t, failureResponseEvents, secondSession.Id, "")
-	secondCommand.Stop(t)
+	assertRootProcessResponseEvents(t, invocation.responseEvents, invocation.session.Id, "")
+}
 
-	if got := providerRunner.CallCount(); got != 2 {
+func assertRootProcessReuse(
+	t *testing.T,
+	fixture *rootProcessReuseFixture,
+	first, second factoryapi.FactorySession,
+) {
+	t.Helper()
+	if first.Id == "" || first.Runtime.StreamIdentity == nil {
+		t.Fatalf("first default session = %#v, want session and stream identities", first)
+	}
+	if second.Id == "" || second.Runtime.StreamIdentity == nil {
+		t.Fatalf("second default session = %#v, want session and stream identities", second)
+	}
+	if second.Id == first.Id {
+		t.Fatalf("second session id = %q, want distinct from first %q", second.Id, first.Id)
+	}
+	if second.Runtime.StreamIdentity.StreamGenerationID == first.Runtime.StreamIdentity.StreamGenerationID {
+		t.Fatalf("second stream generation = %q, want distinct from first %q", second.Runtime.StreamIdentity.StreamGenerationID, first.Runtime.StreamIdentity.StreamGenerationID)
+	}
+	if got := fixture.providerRunner.CallCount(); got != 2 {
 		t.Fatalf("injected provider runner calls = %d, want exactly one per session invocation", got)
 	}
-	if got := identities.runtime.Load(); got != 2 {
+	if got := fixture.identities.runtime.Load(); got != 2 {
 		t.Fatalf("runtime IDs generated after two process executions = %d, want exactly 2", got)
 	}
-	if got := identities.responseEvent.Load(); got == 0 {
+	if got := fixture.identities.responseEvent.Load(); got == 0 {
 		t.Fatalf("response-event IDs generated after invocations = %d, want > 0", got)
 	}
-	assertPathExists(t, logsRoot, "runtime log root after execution")
-	assertPathExists(t, metricsRoot, "runtime metrics root after execution")
+	assertPathExists(t, fixture.logsRoot, "runtime log root after execution")
+	assertPathExists(t, fixture.metricsRoot, "runtime metrics root after execution")
 }
 
 type rootProcessReuseIdentities struct {
@@ -161,6 +221,60 @@ type rootProcessReuseIdentities struct {
 	runtime       atomic.Int32
 	responseEvent atomic.Int32
 }
+
+type gatedRootProviderCommandRunner struct {
+	mu       sync.Mutex
+	releases []chan struct{}
+	results  []platformprocess.CommandResult
+	calls    int
+}
+
+func newGatedRootProviderCommandRunner(results ...platformprocess.CommandResult) *gatedRootProviderCommandRunner {
+	releases := make([]chan struct{}, len(results))
+	for index := range releases {
+		releases[index] = make(chan struct{})
+	}
+	return &gatedRootProviderCommandRunner{releases: releases, results: results}
+}
+
+func (runner *gatedRootProviderCommandRunner) Run(
+	ctx context.Context,
+	_ platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
+	runner.mu.Lock()
+	index := runner.calls
+	runner.calls++
+	if index >= len(runner.results) {
+		runner.mu.Unlock()
+		return platformprocess.CommandResult{}, fmt.Errorf("unexpected provider command call %d", index+1)
+	}
+	release := runner.releases[index]
+	result := runner.results[index]
+	runner.mu.Unlock()
+	select {
+	case <-release:
+	case <-ctx.Done():
+		return platformprocess.CommandResult{}, ctx.Err()
+	}
+	if result.ExitCode == 0 {
+		result.Stdout = support.CodexSuccessStdout(string(result.Stdout))
+	}
+	return result, nil
+}
+
+func (runner *gatedRootProviderCommandRunner) Release(index int) {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	close(runner.releases[index])
+}
+
+func (runner *gatedRootProviderCommandRunner) CallCount() int {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	return runner.calls
+}
+
+var _ platformprocess.CommandRunner = (*gatedRootProviderCommandRunner)(nil)
 
 type reusableRootAPIServerStarter struct {
 	mu      sync.Mutex
@@ -188,34 +302,6 @@ func (s *reusableRootAPIServerStarter) start(
 	return server.Start(ctx, request)
 }
 
-func startReusableRootProcessServer(
-	t *testing.T,
-	process support.Process,
-	server *support.ProcessAPIServer,
-	dir string,
-	logsRoot string,
-	metricsRoot string,
-) *support.ProcessCommand {
-	t.Helper()
-
-	inputs := support.FakeInputs(context.Background(), []string{
-		"you", "run", "--continuously", "--with-server", "--quiet",
-		"--dir", dir,
-		"--no-record",
-		"--runtime-log-dir", logsRoot,
-		"--runtime-metrics-dir", metricsRoot,
-	})
-	home := t.TempDir()
-	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
-	inputs.Input.WorkingDirectory = dir
-	command := support.StartProcessCommand(t, process, inputs.Input)
-	baseURL := server.WaitForURL(t)
-	support.WaitForStatus(t, baseURL, 15*time.Second, func(status factoryapi.StatusResponse) bool {
-		return status.RuntimeStatus != ""
-	})
-	return command
-}
-
 func (r *rootProcessReuseIdentities) generateSessionID() string {
 	return fmt.Sprintf("story006-session-%d", r.session.Add(1))
 }
@@ -228,53 +314,6 @@ func (r *rootProcessReuseIdentities) generateResponseEventID() string {
 	return fmt.Sprintf("story006-response-event-%d", r.responseEvent.Add(1))
 }
 
-func runRootProcessSessionInvocation(
-	t *testing.T,
-	baseURL string,
-	sessionID string,
-	text string,
-) (factoryapi.InvocationResponse, []factoryapi.FactoryEvent, []factoryapi.FactoryResponseEvent) {
-	t.Helper()
-
-	eventStream := support.OpenFactoryEventStreamAt(t, support.SessionEventsURL(baseURL, sessionID))
-	responseStream := support.OpenFactoryResponseEventStreamAt(t, support.SessionResponseEventsURL(baseURL, sessionID))
-	invocation := postRootProcessSessionInvocation(t, baseURL, sessionID, sessionsTextInvocationRequest(t, text))
-	events := readRootProcessEventsUntilDispatchResponse(t, eventStream)
-	responseEvents := readRootProcessResponseEventsUntilTerminal(t, responseStream)
-	eventStream.Close()
-	responseStream.Close()
-	return invocation, events, responseEvents
-}
-
-func postRootProcessSessionInvocation(
-	t *testing.T,
-	baseURL string,
-	sessionID string,
-	request factoryapi.InvocationRequest,
-) factoryapi.InvocationResponse {
-	t.Helper()
-
-	body, err := json.Marshal(request)
-	if err != nil {
-		t.Fatalf("marshal session invocation request: %v", err)
-	}
-	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + sessionID + "/invocations"
-	response, err := http.Post(endpoint, "application/json", bytes.NewReader(body))
-	if err != nil {
-		t.Fatalf("POST %s: %v", endpoint, err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		payload, _ := io.ReadAll(response.Body)
-		t.Fatalf("POST %s status = %d, want 200: %s", endpoint, response.StatusCode, payload)
-	}
-	var decoded factoryapi.InvocationResponse
-	if err := json.NewDecoder(response.Body).Decode(&decoded); err != nil {
-		t.Fatalf("decode session invocation response: %v", err)
-	}
-	return decoded
-}
-
 func readRootProcessEventsUntilDispatchResponse(
 	t *testing.T,
 	stream *support.FactoryEventStream,
@@ -284,7 +323,10 @@ func readRootProcessEventsUntilDispatchResponse(
 	const maxEvents = 256
 	events := make([]factoryapi.FactoryEvent, 0, 16)
 	for len(events) < maxEvents {
-		event := stream.NextEvent(10 * time.Second)
+		// The provider command is held on an explicit release channel until both
+		// streams are open. This timeout is only a failure ceiling, not polling
+		// or synchronization padding.
+		event := stream.NextEvent(rootProcessStreamReadCeiling)
 		events = append(events, event)
 		if event.Type == factoryapi.FactoryEventTypeDispatchResponse {
 			return events
@@ -303,7 +345,9 @@ func readRootProcessResponseEventsUntilTerminal(
 	const maxEvents = 256
 	events := make([]factoryapi.FactoryResponseEvent, 0, 16)
 	for len(events) < maxEvents {
-		event := stream.NextFrame(10 * time.Second).Event
+		// The provider command gate makes terminal publication deterministic; the
+		// bounded read protects the test from a malformed or stalled stream.
+		event := stream.NextFrame(rootProcessStreamReadCeiling).Event
 		events = append(events, event)
 		if event.Kind == factoryapi.FactoryResponseEventKindRun &&
 			(event.Phase == factoryapi.FactoryResponseEventPhaseCompleted ||
@@ -392,6 +436,14 @@ func assertRootProcessResponseEvents(
 				event.Phase == factoryapi.FactoryResponseEventPhaseFailed ||
 				event.Phase == factoryapi.FactoryResponseEventPhaseCanceled) &&
 			(wantTerminalPhase == "" || event.Phase == wantTerminalPhase) {
+			terminal = true
+		}
+		if event.Kind == factoryapi.FactoryResponseEventKindError &&
+			(event.Phase == factoryapi.FactoryResponseEventPhaseFailed ||
+				event.Phase == factoryapi.FactoryResponseEventPhaseCanceled) &&
+			wantTerminalPhase == "" {
+			// A direct CLI provider failure may publish a synthesized ERROR terminal
+			// event instead of a provider-native RUN terminal event.
 			terminal = true
 		}
 	}
