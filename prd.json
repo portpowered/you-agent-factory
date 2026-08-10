@@ -2,6 +2,17 @@
   "project": "E3 Outbound Event Webhooks",
   "branchName": "e3-event-webhooks",
   "description": "Add Factory-configured outbound webhooks that subscribe to the existing canonical Factory Event stream and POST signed Work state-transition and dispatch-failure envelopes with filtering, bounded retry/backoff, and durable dead-letter logging. The feature lets external monitors react without polling while preserving Recordings as the event authority and keeping delivery failure isolated from Factory Runtime state.",
+  "deliveryAudit": {
+    "pr": 1850,
+    "head": "adf176da39695e3f2eca83be8d25f5fa73738a32",
+    "base": "78584efb52dacb6989604f8f7cc6c12ed08da028",
+    "ciRun": 31436572954,
+    "ciAttempt": 2,
+    "requiredChecks": 18,
+    "requiredChecksStatus": "passing",
+    "reviewThreads": 0,
+    "allStoriesPassing": true
+  },
   "context": {
     "customerAsk": "Factory configuration declares webhook endpoints with an event filter; the server POSTs a signed JSON envelope on Work state transitions and dispatch failures, retries receiver failures with backoff, retains exhausted deliveries in a dead-letter log, and proves transition delivery, filtering, retry, and disabled behavior with a local test HTTP receiver.",
     "problem": "Operators currently poll Work state and independently reconstruct transitions and failures even though the engine already records those facts in its canonical Factory Event stream. This adds latency and load and leaves external integrations without authenticated, reliable push delivery.",
