@@ -2007,3 +2007,17 @@
 - **Learnings for future iterations:**
   - Treat historical top-level gate comments as head-specific evidence: compare their cited SHA with the live PR head, then re-run the named ratchets before deciding whether a blocker remains.
 ---
+
+## 2026-08-10 12:22 -07:00 - dwro-s1-remote-placement-flags CI retry follow-up
+- What was implemented
+  - Investigated the fresh-head Backend Functional Coverage failure and isolated it to the unchanged runtime-log observation test `TestFunctionalAPIServer_RuntimeLogDirectoryIsAProcessInput`; no placement-related test or source path failed.
+  - Repeated the exact test locally five times, then reran the failed GitHub Actions jobs without changing source code; the retry completed successfully.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Local exact-test repetition — passed 5/5.
+  - PR #1852 run `31422601284` retry — all 18 reported checks passed, including Backend Functional Coverage and Verification Policy, on head `78540b12e`.
+  - PR merge state — `CLEAN`; body remains identical to `prd.json`; no inline review threads or formal reviews.
+- **Learnings for future iterations:**
+  - For a broad coverage failure, isolate the first failing observable test and repeat it locally before changing feature code; a clean repetition plus a successful failed-job rerun is stronger evidence of a transient race than a speculative fix.
+---
