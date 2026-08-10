@@ -1988,3 +1988,22 @@
 - **Learnings for future iterations:**
   - When a broad functional lane fails only in pre-existing concurrency or stream-fidelity tests and the changed files are unrelated, inspect the exact assertion and rerun the failed lane before making speculative source changes.
 ---
+
+## 2026-08-10 12:07 -07:00 - dwro-s1-remote-placement-flags PR blocker revalidation
+- What was implemented
+  - Revalidated the six historical blocking PR conversation comments against the current head; the duplicate manifest declarations, unsafe malformed-endpoint diagnostic, ratchet regressions, noncompliant listener functional setup, and marker-only docs assertions are all addressed in the existing commits.
+  - Confirmed the four PRD stories remain marked `passes: true`; no product or PRD change was needed in this verification-only iteration.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `make pkg-maint` — passed.
+  - `make pkg-file-count` — passed.
+  - `make backend-size`, `make pkg-structure`, `make vet` — passed.
+  - `make contracts-validate`, `make cli-manifest-check`, `make docs-reference-smoke` — passed.
+  - `go test ./pkg/transports/cli/... -count=1 -timeout 300s` — passed.
+  - `go test ./tests/functional/transport/run_scoped_server -count=1 -timeout 300s` — passed.
+  - `make test` — passed.
+  - PR #1852 head `796d36073515829297e6bf3a22d5a1e2e5a1aea2` has all 18 reported checks passing, clean mergeability, and a body identical to `prd.json`; thread-aware review data has no inline threads or formal reviews.
+- **Learnings for future iterations:**
+  - Treat historical top-level gate comments as head-specific evidence: compare their cited SHA with the live PR head, then re-run the named ratchets before deciding whether a blocker remains.
+---
