@@ -817,3 +817,16 @@
 - **Learnings for future iterations:**
   - The functional boundary lane is intentionally stricter than package tests: public harness tests verify observable process behavior, while `errors.As` checks for service-owned types belong in the owning service package.
 ---
+
+## 2026-08-10 05:09 -07:00 - pf-plain-batch-drain-001 PR handoff follow-up
+- What was implemented
+  - Re-submitted the current branch as review PR #1846 after the migrated PR #1845 retained checks for its obsolete pre-boundary-fix commit.
+- Files changed
+  - `progress.txt`
+- Verification
+  - PR #1846 is open, non-draft, points at commit `f3f6db0b5`, has no comments or reviews, and its body matches `prd.json` after newline normalization.
+  - Local focused tests, the functional boundary checker, and the previously recorded repository quality gates remain passing; the checkout-local `make verify-fast` UI baseline remains blocked by missing `@types/bun` and TypeScript 6 `baseUrl` deprecation errors.
+  - GitHub currently reports no fresh Actions run for the current head after the repository-migration PR recreation; this remains PR follow-up rather than a claimed green CI result.
+- **Learnings for future iterations:**
+  - When a repository migration leaves a PR’s checks attached to an obsolete head, recreating the review PR can restore a clean handoff, but verify that the new pull-request event actually creates checks before declaring review readiness.
+---
