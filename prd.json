@@ -81,8 +81,8 @@
         "Typecheck passes"
       ],
       "priority": 4,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Reconciled the three canonical ownership summaries with the implemented package graph. AGENTS.md now names Chat Sessions, Events, Worker Sessions, ACP, mapping, platform, Providers-owned provider inference/execution policy, Automations-owned hosted polling, and Workers request-scoped execution. architecture.md and packaged-structure.md use the same present-tense service-owner model, explicitly distinguish Events source-native delivery from the Recordings canonical Factory Event ledger, and keep internal runtime implementation details behind the customer-facing Factory boundary. make ownership-inventory-check, make package-target-manifest-check, focused ownership-check tests, and git diff --check pass; no runtime, API, or unrelated migration changes were made."
     }
   ]
 }
