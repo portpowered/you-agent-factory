@@ -55,8 +55,10 @@ const (
 const cliBinaryName = "you"
 
 type cliGlobalOptions struct {
-	server string
-	json   bool
+	server    string
+	json      bool
+	remote    bool
+	placement climanifest.ExecutionPlacement
 }
 
 type cliOperatorDefaultsOptions struct {

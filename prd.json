@@ -1,75 +1,95 @@
 {
-  "project": "WO-B2 — Reusable AGY Production Review Roles",
-  "branchName": "wo-b2-agy-production-review-roles",
-  "description": "Ship two first-party packaged AGY review roles: a context-free cold-watch reviewer for completed cuts and a deterministic clip-QA gate for rendered clips. Both roles pass media paths unchanged through the existing ANTIGRAVITY provider, define exact success and failure contracts, remain offline in ordinary CI, and include operator guidance for production composition.",
+  "project": "DWRO S1 — Explicit Remote Placement and Listener Selection",
+  "branchName": "dwro-s1-remote-placement-flags",
+  "description": "Implement story S1 of Direct Worker and Remote Operations by adding persistent root --remote and authored command placement capabilities, dispatching one normalized request through either the local service or exactly the selected --server endpoint without fallback, introducing --listen for local binds with a warned legacy compatibility path, and rejecting documented conflicts with run --with-server and run --with-site.",
   "context": {
-    "customerAsk": "Deliver WO-B2 as one coherent reusable role slice: a cold-watch final reviewer that receives only a completed-cut path and reports what happens plus temporal and audio defects, and a clip-QA gate that receives a clip path and shot specification and returns a deterministic structured pass-or-reroll verdict. Reuse the existing ANTIGRAVITY provider and real recorded AGY traces, keep normal CI offline, pass file paths directly for AGY to parse, and document exact input, output, failure, and missing-file behavior.",
-    "problem": "WO-B1 and merged PR #1826 provide AGY execution and real video/audio traces, but the repository does not ship reusable production role definitions. Factory authors must invent prompts, schemas, workspace rules, and refusal handling, which creates hidden context and false-success risk because AGY can exit zero and report SUCCESS while declining a missing file.",
-    "solution": "Add independently invocable @you/agy-cold-watch and @you/agy-clip-qa authored Factories to the first-party packaged catalog, generate their distribution artifacts through the existing generator, document and exemplify their production composition, and prove their successful and missing-file behavior through root.BuildProcess, Process.Execute, ProviderCommandRunner, and the real recorded AGY traces without live CI calls or wrapper media transformation."
+    "customerAsk": "Implement DWRO story S1: persistent root --remote, authored command placement capabilities, endpoint-only --server, new --listen for local listener binds, no silent local fallback, and documented conflicts with run --with-server and run --with-site.",
+    "problem": "The CLI has no explicit execution-placement input and its authored manifest cannot state whether a command is local-only, remote-only, or dual-placement. The global --server flag also selects both HTTP client endpoints and local listener binds, so customers and scripts cannot unambiguously distinguish calling an existing server from hosting one, and unsupported remote requests lack one centralized no-fallback rule.",
+    "solution": "Add persistent root --remote, a resolved local/remote placement value, and per-command placement capabilities to the authored CLI contract. Normalize command inputs once and select exactly one injected local-service or HTTP-client adapter, rejecting unsupported or failed remote placement without fallback. Make --server the remote endpoint selector, add --listen to listener-owning commands, preserve explicit legacy --server binding with a deprecation warning when --listen is absent, give --listen precedence, and enforce documented usage conflicts before side effects."
   },
   "acceptanceCriteria": [
-    "The first-party catalog ships independently invocable @you/agy-cold-watch and @you/agy-clip-qa Factories with discoverable descriptions, examples, exact invocation signatures, explicit primary results, and canonical generated catalog artifacts derived from authored sources rather than hand-edited generated files.",
-    "Cold watch accepts only a completed-cut path as creative input and returns the documented observation report covering chronological events, temporal or transient defects, audio content and defects, observed speech, and a pass or reroll recommendation; it neither receives nor seeks creative-brief, shot-specification, intended-beat, or prior-verdict context.",
-    "Clip QA accepts a clip path and shot specification and returns a schema-valid object containing action_completed, spec_deviations, temporal_artifacts, audio_content, unexpected_speech, verdict, and confidence; verdict is exactly pass or reroll, and a missing, invalid, or incomplete result cannot become successful Work.",
-    "Both roles preserve the media path in prompt text and use the existing ANTIGRAVITY Provider and mandatory --add-dir-compatible workspace path without decoding, uploading, copying, probing, frame-stripping, extracting audio from, or otherwise transforming media; missing, unreadable, or inaccessible media fails Work with an actionable non-empty diagnostic and is not a pass or reroll.",
-    "Focused offline functional coverage constructs through root.BuildProcess, executes through Process.Execute, replaces only edges.Edges.ProviderCommandRunner, replays the real AGY video, audio, clip-QA, and missing-file recordings, and proves the selected Factory, provider command, returned content, Factory Events, and terminal Work outcome.",
-    "Quality gates pass: go test ./tests/functional/providers/agy -run '^TestAgyProductionReviewRolesThroughRootBuildProcess$' -count=1, make packaged-factory-catalog-check, make docs-reference-smoke, and make verify-fast pass; Typecheck passes; Tests pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
-    "The implementation and review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared or generated-file churn are resolved, and the PR is actually merged; opened, green, approved, or ready-to-merge is not complete."
+    "The authored CLI manifest defines persistent root --remote, a resolved local/remote placement value, and local-only, remote-only, or dual-placement capabilities for affected commands; executable help and parsing match that contract.",
+    "A representative dual-placement operation produces the same normalized request locally without --remote and sends that request to exactly the --server <uri> HTTP endpoint with --remote, with equivalent domain intent across adapters.",
+    "Unsupported remote placement, an invalid or unavailable selected server, and remote transport failure return stable actionable errors and never invoke the local product operation, start a listener, or silently select another endpoint.",
+    "you server --listen, you run --with-server --listen, and you run --with-site --listen bind the requested local address; when --listen is absent, legacy listener use of an explicitly supplied --server remains functional for the compatibility window and warns, while explicit --listen takes precedence.",
+    "--remote with run --with-server or run --with-site is rejected as a documented stable usage conflict before listener, browser, Factory, or remote-operation side effects begin; reference docs and examples use the new placement vocabulary.",
+    "Quality gates pass with direct CLI and manifest, package, functional, help and reference, and compatibility evidence as applicable; Typecheck passes, Tests pass, and there are no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
+    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared or generated-file churn are resolved against current main, and the PR is actually merged."
   ],
   "userStories": [
     {
-      "id": "wo-b2-agy-production-review-roles-001",
-      "title": "Ship the context-free cold-watch reviewer",
-      "description": "As a production operator, I want an independent reviewer to watch the completed cut without creative-brief context so I can learn what the artifact actually communicates and catch motion or soundtrack defects that upstream authors may have normalized.",
+      "id": "dwro-s1-remote-placement-flags-001",
+      "title": "Declare explicit placement in the authored CLI contract",
+      "description": "As a CLI user and command implementer, I want root placement and each command's supported placements to be explicit so help, validation, and dispatch share one authoritative contract.",
       "acceptanceCriteria": [
-        "@you/agy-cold-watch is independently invocable with one required cutPath input bound to a clearly named CLI argument; provider model, effort, and timeout may use documented safe defaults or explicit role overrides, but there is no brief, shot-specification, expected-action, or prior-verdict input.",
-        "The effective reviewer instruction treats cutPath as the only creative context, watches the whole file including audio, does not inspect nearby briefs or manifests for intended meaning, and does not infer correctness from filenames or upstream status.",
-        "Successful primary output follows one documented report contract with a chronological description of what happens, timestamped temporal or transient defects, audio content and timestamped audio defects, observed speech, and an overall pass or reroll recommendation; empty sections are explicit rather than omitted.",
-        "The cut path is forwarded unchanged in the AGY prompt and execution uses the existing workspace --add-dir; no wrapper media decoding, upload, copy, probing, frame extraction, or audio extraction occurs.",
-        "An absent, unreadable, unsupported, or workspace-inaccessible cut does not produce a review recommendation: Work reaches the failed path with a non-empty actionable explanation, including when replayed AGY exits zero and reports provider status SUCCESS while refusing the file.",
-        "The cold-watch functional subtest replays the real video and audio recordings and asserts facts from both picture and soundtrack through root.BuildProcess, Process.Execute, and ProviderCommandRunner without a live AGY call.",
+        "The authored CLI manifest exposes a visible persistent root --remote boolean whose documented meaning is to execute a supported operation through a running You server; it does not imply async, follow, continuous, or listener behavior.",
+        "The executable parser resolves the root input to explicit local placement by default and remote placement when --remote appears before or after the command path, consistent with other persistent flags.",
+        "A command can authoritatively declare local-only, remote-only, or dual-placement capability, and manifest validation rejects a runnable command whose placement declaration is missing or invalid where the placement contract applies.",
+        "Existing HTTP-only commands retain their historical remote-default compatibility for this window, accept explicit --remote, and do not gain a local implementation merely to satisfy the new vocabulary.",
+        "Root and representative command help show the placement meaning and supported usage without describing --remote as a waiting or server-start option.",
+        "Focused contract and parser tests prove manifest validation, persistent flag inheritance, before and after command parsing, default placement, and explicit remote placement through observable CLI inputs and help.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Implemented @you/agy-cold-watch with a single cutPath input, context-free AGY prompt, and a runtime markdown-observation-report/v1 postcondition requiring inspection status, chronology, timestamped defect/audio sections, observed speech, and exactly one pass-or-reroll recommendation. A complete report is accepted through root.BuildProcess, while both existing real incomplete video/audio traces and the exit-zero missing-file refusal fail Work without a primary recommendation; path and provider evidence remain observable. Focused story, factory-definition, mapping, API-contract, catalog, and docs checks pass."
+      "notes": ""
     },
     {
-      "id": "wo-b2-agy-production-review-roles-002",
-      "title": "Ship the deterministic clip-QA gate",
-      "description": "As a shot pipeline author, I want a clip reviewed against its shot specification with a stable pass-or-reroll result so downstream routing can act on the verdict without parsing free-form prose.",
+      "id": "dwro-s1-remote-placement-flags-002",
+      "title": "Dispatch normalized operations without placement fallback",
+      "description": "As a customer, I want the same operation to run locally by default or on exactly my selected server with --remote so placement is predictable and cannot silently change during failure.",
       "acceptanceCriteria": [
-        "@you/agy-clip-qa is independently invocable with exactly two required creative inputs, clipPath and shotSpecification, bound to discoverable named CLI arguments and preserved without hidden brief or prior-verdict context.",
-        "The role watches the complete clip and evaluates whether the specified action finishes, deviations from the supplied specification, transient and temporal artifacts across time, audio content, and unexpected speech.",
-        "The primary result validates against the recorded B2 schema: action_completed is boolean; spec_deviations and temporal_artifacts are string arrays; audio_content is speech, music, noise, silence, or mixed; unexpected_speech is boolean; verdict is pass or reroll; confidence is from 0 through 1; every field is required.",
-        "pass means the action completes and no specification deviation, reroll-worthy temporal artifact, or disallowed speech is observed; otherwise the role returns reroll and records each reason in the applicable arrays rather than hiding it in prose.",
-        "Missing or inaccessible media, provider or process failure, malformed output, or schema-invalid output fails Work with an actionable diagnostic and never becomes a production reroll, because reroll is reserved for a successfully inspected but unacceptable clip.",
-        "The clip-QA functional subtest replays agy-trace-clipqa-schema.stream.jsonl and the recorded missing-file trace through the public process boundary, asserts the real pass result and audio or no-speech evidence, and proves missing-file refusal reaches failed Work without live AGY.",
+        "At least one representative supported dual-placement command normalizes customer inputs once before dispatch, calls its already-injected local service adapter without --remote, and calls its HTTP client adapter with --remote.",
+        "Behavioral parity coverage proves the local and remote adapters receive contract-equivalent normalized request values for the same customer input, allowing only transport metadata differences.",
+        "you --remote --server <uri> <dual-placement-command> sends the operation to exactly <uri> and does not invoke the local product operation, start or probe a local listener, or substitute the default endpoint.",
+        "A local-only command invoked with --remote exits with a stable actionable usage error that identifies the unsupported placement before command side effects occur.",
+        "Invalid endpoint configuration, connection refusal, timeout, and other remote transport failures remain remote failures and do not retry through the local adapter; diagnostics identify the selected endpoint without leaking credentials or sensitive request content.",
+        "Placement selection remains a CLI transport concern: domain services receive normalized operation requests and do not inspect CLI placement flags or discover alternate dependencies.",
+        "Focused package and public CLI behavioral tests cover local dispatch, exact remote dispatch, unsupported placement, and failed remote transport with zero local fallback.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 2,
-      "passes": true,
-      "notes": "Implemented the explicit structured-clip-qa/v1 runtime contract for confidence bounds, required fields, pass invariants, and meaningful inspected rerolls. Structured failure detection now checks status/outcome/success markers before allowing a reroll and rejects unscoped structured rerolls; root.BuildProcess coverage proves pass, accepted reroll, out-of-range/inconsistent results, mixed provider status, schema failure, provider failure, and missing-file failure. The review follow-up also encodes confidence minimum/maximum in the authored and generated provider schema, asserts those bounds in the AGY command, and keeps the validator below the package maintainability threshold. Executor, focused AGY functional, and packaged catalog checks pass."
+      "passes": false,
+      "notes": ""
     },
     {
-      "id": "wo-b2-agy-production-review-roles-003",
-      "title": "Document and verify production composition",
-      "description": "As a Factory author, I want a worked, validated example of the two roles and their failure boundaries so I can place them in a production pipeline without hidden media handling or ambiguous routing.",
+      "id": "dwro-s1-remote-placement-flags-003",
+      "title": "Bind local servers with --listen and preserve legacy scripts",
+      "description": "As an operator, I want local listener addresses selected with --listen so --server can mean a remote endpoint while my existing listener scripts have a safe migration window.",
       "acceptanceCriteria": [
-        "The packaged-factories reference catalog documents both roles, their purpose, invocation inputs, result shape, default AGY model and timeout policy, workspace-relative and absolute-path expectations, and representative PowerShell-safe invocations whose flags agree with generated help.",
-        "A repository-owned worked example shows clip QA after clip creation and cold watch after mechanical checks assemble the completed cut; it routes pass, reroll, and failed execution distinctly and states that cold watch receives no creative brief even when upstream stages have one.",
-        "The example and operator documentation state that paths must identify readable files within the directory exposed to AGY by the existing --add-dir execution, that the wrapper never transforms media, and that a missing or inaccessible path is an execution failure rather than a review verdict.",
-        "you factory config validate accepts each authored role and example; you run --named @you/agy-cold-watch --help and you run --named @you/agy-clip-qa --help expose the documented inputs; generated catalog files are refreshed only with make packaged-factory-catalog-generate.",
-        "The documentation names go test ./tests/functional/providers/agy -run '^TestAgyProductionReviewRolesThroughRootBuildProcess$' -count=1 as the independently runnable fully offline end-to-end command; any live AGY smoke remains the existing operator-gated B1 smoke and is not duplicated or enabled in ordinary CI.",
-        "Behavioral validation exercises loading, invocation, successful result, schema rejection, provider failure, and missing-file outcomes through public runtime behavior; it does not scan source trees, assert command, route, or catalog inventories, or inspect generated bundle internals as a substitute for those outcomes.",
+        "you server --listen <address>, you run --with-server --listen <address>, and you run --with-site --listen <address> bind the requested valid local address and report existing stable bind failures for invalid, non-local, or unavailable addresses.",
+        "Listener-owning commands use the existing default local bind when neither an explicit --listen nor an explicit legacy bind value is supplied.",
+        "During the compatibility window, an explicitly supplied legacy --server <local-uri> continues to select the listener bind only when --listen is absent and emits one actionable deprecation warning on stderr directing the user to --listen.",
+        "When both inputs are supplied to a listener-owning command, explicit --listen determines the bind address; --server does not override it, and compatibility diagnostics accurately explain any retained endpoint role.",
+        "Ordinary local commands and ordinary you run do not start a listener merely because --listen or the default server endpoint exists; invalid flag placement is rejected before runtime side effects.",
+        "CLI manifest relationships, help, and examples describe --listen as the local bind input and --server as the selected You server URI, including the legacy migration behavior.",
+        "Focused listener lifecycle tests use observable readiness and bind behavior and prove requested binding, precedence, warning, bind failure, and joined shutdown without arbitrary sleeps.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 3,
-      "passes": true,
-      "notes": "Documented both roles in the packaged-factory reference catalog with exact live-help signatures, pinned ANTIGRAVITY/gemini-3.6-flash-high/8m policy, report schemas, path and failure boundaries, and PowerShell-safe invocations. Added the repository-owned AGY production composition example with distinct pass/reroll/failed routing and the offline root-process command; updated catalog-count/docs smoke coverage. Corrected cold-watch documentation to match live help: required cutPath is available positionally and through --cut-path, and corrected both documented PowerShell parsers to consume the two-line H2 recommendation contract. Authored/generated catalog checks, factory validation, focused root-process coverage, package gates, packaged catalog/source checks, readme-check, and docs-reference smoke pass."
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "dwro-s1-remote-placement-flags-004",
+      "title": "Reject remote and local-hosting conflicts and publish migration guidance",
+      "description": "As a customer, I want contradictory placement modes rejected with clear guidance so the CLI never both calls a remote server and hosts the same run locally.",
+      "acceptanceCriteria": [
+        "you --remote run --with-server and you --remote run --with-site each exit with the same stable usage classification and actionable conflict message, regardless of persistent-flag position.",
+        "Conflict validation occurs before Factory execution, HTTP dispatch, listener startup, browser launch, recording, or other run-owned side effects.",
+        "Authored CLI relationships, executable help, and packaged reference docs state that --remote selects a running server, --server selects its URI, and --listen selects a local bind; they document both run-mode conflicts and the legacy bind migration.",
+        "New customer-facing examples use you --remote --server <uri> for supported remote operations and --listen <address> for local server or server-enabled run binding; they do not present legacy --server listener syntax as the preferred form.",
+        "Behavioral CLI tests prove both conflicts, stable exit and error output, zero side effects, and help and reference guidance rather than relying on source or route inventories.",
+        "Documentation reference smoke checks pass",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
     }
   ]
 }

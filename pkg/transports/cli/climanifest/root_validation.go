@@ -63,6 +63,10 @@ func validateRootFlags(root Command) error {
 	if server, exists := root.Flags[root.RootLifecycle.Ownership.Server]; !exists || server.Long != "server" {
 		return fmt.Errorf("root command %q server ownership does not reference the active server input", root.ID)
 	}
+	remote, exists := root.Flags["you.flag.remote"]
+	if !exists || remote.Long != "remote" || remote.ValueType != "bool" {
+		return fmt.Errorf("root command %q must declare persistent --remote input", root.ID)
+	}
 	return nil
 }
 

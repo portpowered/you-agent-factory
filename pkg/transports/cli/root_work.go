@@ -9,6 +9,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/cliversion"
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cobracompletion"
@@ -23,7 +24,10 @@ import (
 )
 
 func newRootCommandWithGeneratedRepresentativeFamily(options CommandFactory) *cobra.Command {
-	globals := &cliGlobalOptions{server: cliserver.DefaultBaseURI}
+	globals := &cliGlobalOptions{
+		server:    cliserver.DefaultBaseURI,
+		placement: climanifest.ResolveRootPlacement(false),
+	}
 	diagnostics := &cliDiagnosticsOptions{}
 	operatorDefaults := &cliOperatorDefaultsOptions{}
 
@@ -159,6 +163,10 @@ func applyRepresentativeResolvedInputs(
 	if err != nil {
 		return err
 	}
+	remote, err := inputs.Bool("you.flag.remote")
+	if err != nil {
+		return err
+	}
 	verbose, err := inputs.Bool("you.flag.verbose")
 	if err != nil {
 		return err
@@ -167,6 +175,8 @@ func applyRepresentativeResolvedInputs(
 	diagnostics.debug = debug
 	globals.json = jsonOutput
 	globals.server = server
+	globals.remote = remote
+	globals.placement = climanifest.ResolveRootPlacement(remote)
 	diagnostics.verbose = verbose
 	return nil
 }

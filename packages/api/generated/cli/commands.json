@@ -133,6 +133,41 @@
           "valueType": "bool",
           "visibility": "visible"
         },
+        "you.flag.remote": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
+          "aliases": [],
+          "completion": "none",
+          "defaultValue": {
+            "boolean": false
+          },
+          "handlerBindingId": "you.binding.remote",
+          "id": "you.flag.remote",
+          "kind": "named",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.flag.remote",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "remote",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "noOptionDefaultValue": {
+            "boolean": true
+          },
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "sensitivity": "public",
+          "scope": "persistent",
+          "shorthand": "",
+          "usage": "execute a supported operation through a running You server; does not wait, follow, continue, or start a listener",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
         "you.flag.server": {
           "acceptedSources": [
             "cli",
@@ -210,6 +245,10 @@
           "id": "you.binding.json",
           "inputId": "you.flag.json"
         },
+        "you.binding.remote": {
+          "id": "you.binding.remote",
+          "inputId": "you.flag.remote"
+        },
         "you.binding.server": {
           "id": "you.binding.server",
           "inputId": "you.flag.server"
@@ -260,6 +299,7 @@
         "multipleBindings": "reject"
       },
       "runnable": true,
+      "placement": "dual",
       "rootLifecycle": {
         "exitCode": 0,
         "helpOutput": "stdout",
@@ -359,6 +399,30 @@
           "required": false,
           "scope": "inherited",
           "inheritedFromInputId": "you.flag.json",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.config.flag.remote": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.config.flag.remote",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.config.flag.remote",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "remote",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.remote",
           "shorthand": "",
           "valueType": "bool",
           "visibility": "visible"
@@ -500,6 +564,30 @@
           "valueType": "bool",
           "visibility": "visible"
         },
+        "you.factory.flag.remote": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.factory.flag.remote",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.flag.remote",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "remote",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.remote",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
         "you.factory.flag.server": {
           "aliases": [],
           "binding": "",
@@ -633,6 +721,30 @@
           "required": false,
           "scope": "inherited",
           "inheritedFromInputId": "you.flag.json",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.factory.config.flag.remote": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.factory.config.flag.remote",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.flag.remote",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "remote",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.remote",
           "shorthand": "",
           "valueType": "bool",
           "visibility": "visible"
@@ -840,6 +952,30 @@
           "valueType": "bool",
           "visibility": "visible"
         },
+        "you.factory.config.expand.flag.remote": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.factory.config.expand.flag.remote",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.expand.flag.remote",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "remote",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.remote",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
         "you.factory.config.expand.flag.server": {
           "aliases": [],
           "binding": "",
@@ -931,6 +1067,7 @@
         "multipleBindings": "reject"
       },
       "runnable": true,
+      "placement": "local-only",
       "sideEffects": {
         "you.factory.config.expand.side-effect.filesystem": {
           "id": "you.factory.config.expand.side-effect.filesystem",
@@ -1081,6 +1218,30 @@
           "valueType": "bool",
           "visibility": "visible"
         },
+        "you.factory.config.flatten.flag.remote": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.factory.config.flatten.flag.remote",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.flatten.flag.remote",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "remote",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.remote",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
         "you.factory.config.flatten.flag.server": {
           "aliases": [],
           "binding": "",
@@ -1172,6 +1333,7 @@
         "multipleBindings": "reject"
       },
       "runnable": true,
+      "placement": "local-only",
       "sideEffects": {
         "you.factory.config.flatten.side-effect.filesystem": {
           "id": "you.factory.config.flatten.side-effect.filesystem",
@@ -1324,6 +1486,30 @@
           "valueType": "bool",
           "visibility": "visible"
         },
+        "you.factory.config.validate.flag.remote": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.factory.config.validate.flag.remote",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.validate.flag.remote",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "remote",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.remote",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
         "you.factory.config.validate.flag.server": {
           "aliases": [],
           "binding": "",
@@ -1421,6 +1607,7 @@
         "multipleBindings": "reject"
       },
       "runnable": true,
+      "placement": "local-only",
       "sideEffects": {
         "you.factory.config.validate.side-effect.filesystem": {
           "id": "you.factory.config.validate.side-effect.filesystem",
@@ -1633,6 +1820,30 @@
           "valueType": "bool",
           "visibility": "visible"
         },
+        "you.factory.create.flag.remote": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.factory.create.flag.remote",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.create.flag.remote",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "remote",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.remote",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
         "you.factory.create.flag.server": {
           "aliases": [],
           "binding": "",
@@ -1776,6 +1987,7 @@
         "multipleBindings": "reject"
       },
       "runnable": true,
+      "placement": "local-only",
       "sideEffects": {
         "you.factory.create.side-effect.filesystem": {
           "id": "you.factory.create.side-effect.filesystem",
@@ -1959,6 +2171,30 @@
           "valueType": "bool",
           "visibility": "visible"
         },
+        "you.factory.delete.flag.remote": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.factory.delete.flag.remote",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.delete.flag.remote",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "remote",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.remote",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
         "you.factory.delete.flag.server": {
           "aliases": [],
           "binding": "",
@@ -2059,6 +2295,7 @@
         "multipleBindings": "reject"
       },
       "runnable": true,
+      "placement": "local-only",
       "sideEffects": {
         "you.factory.delete.side-effect.filesystem": {
           "id": "you.factory.delete.side-effect.filesystem",
@@ -2214,6 +2451,30 @@
           "valueType": "bool",
           "visibility": "visible"
         },
+        "you.factory.list.flag.remote": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.factory.list.flag.remote",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.list.flag.remote",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "remote",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.remote",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
         "you.factory.list.flag.server": {
           "aliases": [],
           "binding": "",
@@ -2310,6 +2571,8 @@
         "multipleBindings": "reject"
       },
       "runnable": true,
+     "placement": "remote-only",
+      "placement": "local-only",
       "sideEffects": {
         "you.factory.list.side-effect.filesystem": {
           "id": "you.factory.list.side-effect.filesystem",
@@ -2465,6 +2728,30 @@
           "valueType": "int",
           "visibility": "hidden"
         },
+        "you.factory.query.flag.remote": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.factory.query.flag.remote",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.query.flag.remote",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "remote",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.remote",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
         "you.factory.query.flag.server": {
           "aliases": [],
           "binding": "",
@@ -2562,6 +2849,7 @@
         "multipleBindings": "reject"
       },
       "runnable": true,
+      "placement": "remote-only",
       "sideEffects": {
         "you.factory.query.side-effect.network": {
           "id": "you.factory.query.side-effect.network",
@@ -2716,6 +3004,30 @@
           "valueType": "int",
           "visibility": "hidden"
         },
+        "you.factory.replace-current.flag.remote": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.factory.replace-current.flag.remote",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.replace-current.flag.remote",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "remote",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.remote",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
         "you.factory.replace-current.flag.server": {
           "aliases": [],
           "binding": "",
@@ -2849,6 +3161,8 @@
         "multipleBindings": "reject"
       },
       "runnable": true,
+     "placement": "local-only",
+      "placement": "remote-only",
       "sideEffects": {
         "you.factory.replace-current.side-effect.network": {
           "id": "you.factory.replace-current.side-effect.network",
@@ -3060,6 +3374,30 @@
           "valueType": "bool",
           "visibility": "visible"
         },
+        "you.factory.update.flag.remote": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.factory.update.flag.remote",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.update.flag.remote",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "remote",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.remote",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
         "you.factory.update.flag.server": {
           "aliases": [],
           "binding": "",
@@ -3164,6 +3502,7 @@
         "multipleBindings": "reject"
       },
       "runnable": true,
+      "placement": "local-only",
       "sideEffects": {
         "you.factory.update.side-effect.filesystem": {
           "id": "you.factory.update.side-effect.filesystem",
@@ -3284,6 +3623,30 @@
           "required": false,
           "scope": "inherited",
           "inheritedFromInputId": "you.flag.json",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.init.flag.remote": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.init.flag.remote",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.init.flag.remote",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "remote",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.remote",
           "shorthand": "",
           "valueType": "bool",
           "visibility": "visible"
@@ -3596,6 +3959,8 @@
         "multipleBindings": "reject"
       },
       "runnable": true,
+     "placement": "remote-only",
+      "placement": "local-only",
       "sideEffects": {
         "you.init.side-effect.filesystem": {
           "id": "you.init.side-effect.filesystem",
@@ -3676,6 +4041,30 @@
           "required": false,
           "scope": "inherited",
           "inheritedFromInputId": "you.flag.json",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.session.flag.remote": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.session.flag.remote",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.session.flag.remote",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "remote",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.remote",
           "shorthand": "",
           "valueType": "bool",
           "visibility": "visible"
@@ -3948,6 +4337,30 @@
           "valueType": "int",
           "visibility": "visible"
         },
+        "you.session.create.flag.remote": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.session.create.flag.remote",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.session.create.flag.remote",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "remote",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.remote",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
         "you.session.create.flag.server": {
           "aliases": [],
           "binding": "",
@@ -4127,6 +4540,7 @@
         }
       },
       "runnable": true,
+      "placement": "remote-only",
       "sideEffects": {
         "you.session.create.side-effect.filesystem": {
           "id": "you.session.create.side-effect.filesystem",
@@ -4296,6 +4710,30 @@
           "valueType": "int",
           "visibility": "visible"
         },
+        "you.session.delete.flag.remote": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.session.delete.flag.remote",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.session.delete.flag.remote",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "remote",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.remote",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
         "you.session.delete.flag.server": {
           "aliases": [],
           "binding": "",
@@ -4387,6 +4825,7 @@
         "multipleBindings": "reject"
       },
       "runnable": true,
+      "placement": "remote-only",
       "sideEffects": {
         "you.session.delete.side-effect.network": {
           "id": "you.session.delete.side-effect.network",
@@ -4577,6 +5016,30 @@
           "valueType": "int",
           "visibility": "hidden"
         },
+        "you.session.dispatches.flag.remote": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.session.dispatches.flag.remote",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.session.dispatches.flag.remote",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "remote",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.remote",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
         "you.session.dispatches.flag.server": {
           "aliases": [],
           "binding": "",
@@ -4692,6 +5155,7 @@
         "multipleBindings": "reject"
       },
       "runnable": true,
+      "placement": "remote-only",
       "sideEffects": {
         "you.session.dispatches.side-effect.network": {
           "id": "you.session.dispatches.side-effect.network",
@@ -4883,6 +5347,30 @@
           "valueType": "string",
           "visibility": "visible"
         },
+        "you.session.list.flag.remote": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.session.list.flag.remote",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.session.list.flag.remote",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "remote",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.remote",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
         "you.session.list.flag.server": {
           "aliases": [],
           "binding": "",
@@ -4974,6 +5462,7 @@
         "multipleBindings": "reject"
       },
       "runnable": true,
+      "placement": "remote-only",
       "sideEffects": {
         "you.session.list.side-effect.network": {
           "id": "you.session.list.side-effect.network",
@@ -5142,6 +5631,30 @@
           "valueType": "int",
           "visibility": "hidden"
         },
+        "you.session.pause.flag.remote": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.session.pause.flag.remote",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.session.pause.flag.remote",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "remote",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.remote",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
         "you.session.pause.flag.server": {
           "aliases": [],
           "binding": "",
@@ -5233,6 +5746,7 @@
         "multipleBindings": "reject"
       },
       "runnable": true,
+      "placement": "remote-only",
       "sideEffects": {
         "you.session.pause.side-effect.network": {
           "id": "you.session.pause.side-effect.network",
@@ -5401,6 +5915,30 @@
           "valueType": "int",
           "visibility": "hidden"
         },
+        "you.session.resume.flag.remote": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.session.resume.flag.remote",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.session.resume.flag.remote",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "remote",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.remote",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
         "you.session.resume.flag.server": {
           "aliases": [],
           "binding": "",
@@ -5492,6 +6030,7 @@
         "multipleBindings": "reject"
       },
       "runnable": true,
+      "placement": "remote-only",
       "sideEffects": {
         "you.session.resume.side-effect.network": {
           "id": "you.session.resume.side-effect.network",
@@ -5659,6 +6198,30 @@
           "valueType": "int",
           "visibility": "hidden"
         },
+        "you.session.show.flag.remote": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.session.show.flag.remote",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.session.show.flag.remote",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "remote",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.remote",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
         "you.session.show.flag.server": {
           "aliases": [],
           "binding": "",
@@ -5750,6 +6313,7 @@
         "multipleBindings": "reject"
       },
       "runnable": true,
+      "placement": "remote-only",
       "sideEffects": {
         "you.session.show.side-effect.network": {
           "id": "you.session.show.side-effect.network",
@@ -5849,6 +6413,30 @@
             "since": "1.0.0"
           }
         },
+        "you.work.flag.remote": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.work.flag.remote",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.work.flag.remote",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "remote",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.remote",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
         "you.work.flag.server": {
           "id": "you.work.flag.server",
           "long": "server",
@@ -5932,6 +6520,7 @@
       },
       "visibility": "visible",
       "runnable": true,
+      "placement": "remote-only",
       "usage": {
         "line": "list",
         "example": "  you work list\n\n  you work list --name startup --max-results 25"
@@ -5984,6 +6573,30 @@
             "state": "active",
             "since": "1.0.0"
           }
+        },
+        "you.work.list.flag.remote": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.work.list.flag.remote",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.work.list.flag.remote",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "remote",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.remote",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
         },
         "you.work.list.flag.server": {
           "id": "you.work.list.flag.server",
@@ -6477,6 +7090,7 @@
       },
       "visibility": "visible",
       "runnable": true,
+      "placement": "remote-only",
       "usage": {
         "line": "watch [--session <session>] [--follow]",
         "example": "  # Emit one NDJSON transition per observed Work state change.\n  you work watch\n\n  # Keep watching after terminal Work transitions.\n  you work watch --session session-beta --follow"
@@ -6529,6 +7143,30 @@
             "state": "active",
             "since": "1.0.0"
           }
+        },
+        "you.work.watch.flag.remote": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.work.watch.flag.remote",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.work.watch.flag.remote",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "remote",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.remote",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
         },
         "you.work.watch.flag.server": {
           "id": "you.work.watch.flag.server",
@@ -6756,6 +7394,7 @@
       },
       "visibility": "visible",
       "runnable": true,
+      "placement": "remote-only",
       "usage": {
         "line": "show <work-id>",
         "example": "  you work show work-123\n\n  you --json work show work-123"
@@ -6828,6 +7467,30 @@
             "state": "active",
             "since": "1.0.0"
           }
+        },
+        "you.work.show.flag.remote": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.work.show.flag.remote",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.work.show.flag.remote",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "remote",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.remote",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
         },
         "you.work.show.flag.server": {
           "id": "you.work.show.flag.server",
@@ -7037,6 +7700,8 @@
       },
       "visibility": "visible",
       "runnable": true,
+     "placement": "local-only",
+      "placement": "remote-only",
       "usage": {
         "line": "move <work-id> <state-name>",
         "example": "  you work move work-123 ready\n\n  you work move work-123 ready --request-id op-1"
@@ -7127,6 +7792,30 @@
             "state": "active",
             "since": "1.0.0"
           }
+        },
+        "you.work.move.flag.remote": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.work.move.flag.remote",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.work.move.flag.remote",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "remote",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.remote",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
         },
         "you.work.move.flag.server": {
           "id": "you.work.move.flag.server",
@@ -7360,6 +8049,7 @@
       },
       "visibility": "visible",
       "runnable": true,
+      "placement": "local-only",
       "usage": {
         "line": "visualize <batch-file.json>",
         "example": "  # Default: raw Mermaid flowchart to stdout.\n  you work visualize batch.json > my-graph.mermaid\n\n  # Markdown with embedded Mermaid diagram.\n  you work visualize --format markdown-mermaid batch.json > graph.md"
@@ -7432,6 +8122,30 @@
             "state": "active",
             "since": "1.0.0"
           }
+        },
+        "you.work.visualize.flag.remote": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.work.visualize.flag.remote",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.work.visualize.flag.remote",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "remote",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.remote",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
         },
         "you.work.visualize.flag.server": {
           "id": "you.work.visualize.flag.server",
@@ -7641,6 +8355,8 @@
       },
       "visibility": "visible",
       "runnable": true,
+     "placement": "remote-only",
+      "placement": "local-only",
       "usage": {
         "line": "docs [topic]",
         "example": "  # Print the packaged docs index and quick-start blurb.\n  you docs\n\n  # Print one authored reference topic.\n  you docs agents"
@@ -7744,6 +8460,30 @@
             "state": "active",
             "since": "1.0.0"
           }
+        },
+        "you.docs.flag.remote": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.docs.flag.remote",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.docs.flag.remote",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "remote",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.remote",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
         },
         "you.docs.flag.server": {
           "id": "you.docs.flag.server",
@@ -7944,6 +8684,7 @@
       },
       "visibility": "visible",
       "runnable": true,
+      "placement": "remote-only",
       "usage": {
         "line": "list",
         "example": "  you worker-sessions list --work-id work-123 --output json"
@@ -8133,6 +8874,7 @@
       },
       "visibility": "visible",
       "runnable": true,
+      "placement": "remote-only",
       "usage": {
         "line": "show",
         "example": "  you worker-sessions show --provider codex --kind session_id --id session-123"
@@ -8370,6 +9112,7 @@
       },
       "visibility": "visible",
       "runnable": true,
+      "placement": "remote-only",
       "usage": {
         "line": "read",
         "example": "  you worker-sessions read --provider codex --kind session_id --id session-123"
@@ -8609,6 +9352,8 @@
       },
       "visibility": "visible",
       "runnable": true,
+     "placement": "local-only",
+      "placement": "remote-only",
       "usage": {
         "line": "stream",
         "example": "  you worker-sessions stream --provider codex --kind session_id --id session-123\n\n  # Explicitly follow retained history with live events (the default).\n  you worker-sessions stream --provider codex --kind session_id --id session-123 --follow\n\n  # Drain retained events to redirect-safe NDJSON. The final replay-summary marks ACTIVE captures incomplete.\n  you worker-sessions stream --provider codex --kind session_id --id session-123 --replay-only --output json > worker-session.jsonl"
@@ -8956,6 +9701,7 @@
       },
       "visibility": "visible",
       "runnable": true,
+      "placement": "local-only",
       "usage": {
         "line": "list"
       },
@@ -9102,6 +9848,7 @@
       },
       "visibility": "visible",
       "runnable": true,
+      "placement": "local-only",
       "usage": {
         "line": "add --name <provider> --transport stdio --argument <command>"
       },
@@ -9166,6 +9913,7 @@
       },
       "visibility": "visible",
       "runnable": true,
+      "placement": "local-only",
       "usage": {
         "line": "delete --name <provider>"
       },
@@ -9273,6 +10021,30 @@
             "state": "active",
             "since": "1.0.0"
           }
+        },
+        "you.mcp.flag.remote": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.mcp.flag.remote",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.mcp.flag.remote",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "remote",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.remote",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
         },
         "you.mcp.flag.server": {
           "id": "you.mcp.flag.server",
@@ -9561,6 +10333,30 @@
           "valueType": "bool",
           "visibility": "visible"
         },
+        "you.mcp.serve.flag.remote": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.mcp.serve.flag.remote",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.mcp.serve.flag.remote",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "remote",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.remote",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
         "you.mcp.serve.flag.server": {
           "aliases": [],
           "binding": "",
@@ -9681,6 +10477,8 @@
         }
       },
       "runnable": true,
+     "placement": "remote-only",
+      "placement": "local-only",
       "sideEffects": {
         "you.mcp.serve.side-effect.filesystem": {
           "id": "you.mcp.serve.side-effect.filesystem",
@@ -9788,6 +10586,30 @@
             "since": "1.0.0"
           }
         },
+        "you.models.flag.remote": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.models.flag.remote",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.flag.remote",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "remote",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.remote",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
         "you.models.flag.server": {
           "id": "you.models.flag.server",
           "long": "server",
@@ -9871,6 +10693,7 @@
       },
       "visibility": "visible",
       "runnable": true,
+      "placement": "remote-only",
       "usage": {
         "line": "list",
         "example": "  # List models on the default local service.\n  you models list\n\n  # Emit API-shaped JSON for automation.\n  you --json models list"
@@ -9923,6 +10746,30 @@
             "state": "active",
             "since": "1.0.0"
           }
+        },
+        "you.models.list.flag.remote": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.models.list.flag.remote",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.list.flag.remote",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "remote",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.remote",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
         },
         "you.models.list.flag.server": {
           "id": "you.models.list.flag.server",
@@ -10107,6 +10954,7 @@
       },
       "visibility": "visible",
       "runnable": true,
+      "placement": "remote-only",
       "usage": {
         "line": "inspect <model-name>",
         "example": "  # Inspect one model on the default local service.\n  you models inspect OMNIVOICE_Q4_K_M\n\n  # Emit API-shaped JSON for automation.\n  you --json models inspect OMNIVOICE_Q4_K_M"
@@ -10188,6 +11036,30 @@
             "state": "active",
             "since": "1.0.0"
           }
+        },
+        "you.models.inspect.flag.remote": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.models.inspect.flag.remote",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.inspect.flag.remote",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "remote",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.remote",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
         },
         "you.models.inspect.flag.server": {
           "id": "you.models.inspect.flag.server",
@@ -10378,6 +11250,7 @@
       },
       "visibility": "visible",
       "runnable": true,
+      "placement": "remote-only",
       "usage": {
         "line": "invoke <model-name>",
         "example": "  # Stream TTS audio to a file.\n  you models invoke OMNIVOICE_Q4_K_M --operation TTS --text \"Read the release summary.\" --output ./speech.wav\n\n  # Emit structured invocation metadata.\n  you --json models invoke OMNIVOICE_Q4_K_M --operation TTS --text \"Read the release summary.\""
@@ -10459,6 +11332,30 @@
             "state": "active",
             "since": "1.0.0"
           }
+        },
+        "you.models.invoke.flag.remote": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.models.invoke.flag.remote",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.invoke.flag.remote",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "remote",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.remote",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
         },
         "you.models.invoke.flag.server": {
           "id": "you.models.invoke.flag.server",
@@ -10781,6 +11678,8 @@
       },
       "visibility": "visible",
       "runnable": true,
+     "placement": "local-only",
+      "placement": "remote-only",
       "usage": {
         "line": "pull <model-name>",
         "example": "  # Pull managed local assets for one model.\n  you models pull OMNIVOICE_Q4_K_M\n\n  # Emit API-shaped JSON for automation.\n  you --json models pull OMNIVOICE_Q4_K_M"
@@ -10862,6 +11761,30 @@
             "state": "active",
             "since": "1.0.0"
           }
+        },
+        "you.models.pull.flag.remote": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.models.pull.flag.remote",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.pull.flag.remote",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "remote",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.remote",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
         },
         "you.models.pull.flag.server": {
           "id": "you.models.pull.flag.server",
@@ -11056,6 +11979,7 @@
       },
       "visibility": "visible",
       "runnable": true,
+      "placement": "local-only",
       "usage": {
         "line": "run",
         "example": "  # Start the current Factory with explicit Work.\n  you run --work ./docs/examples/startup-work.json\n\n  # Run an existing factory once in explicit batch mode.\n  you run --dir factory --work ./docs/examples/startup-work.json\n\n  # Run a persisted named factory from any working directory.\n  you run --named @you/tts --output primary \"Read the release summary.\"\n\n  # Run a portable JSON or YAML Factory with a one-shot prompt (see handlingBehavior DEFAULT).\n  you run --factory ./factory.yaml \"Fix the lint issues\"\n\n  # Pipe invocation input via stdin (default primary-result stdout).\n  echo \"Ship the login bugfix\" | you run --named @you/goal\n\n  # Opt into ordered canonical Factory Event progress instead of primary-result-only stdout.\n  you run --named @you/goal --output response-stream \"Ship the login bugfix\""
@@ -11730,6 +12654,30 @@
             "since": "1.0.0"
           }
         },
+        "you.run.flag.remote": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.run.flag.remote",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.run.flag.remote",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "remote",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.remote",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
         "you.run.flag.server": {
           "id": "you.run.flag.server",
           "long": "server",
@@ -12205,6 +13153,8 @@
       },
       "visibility": "visible",
       "runnable": true,
+     "placement": "remote-only",
+      "placement": "local-only",
       "usage": {
         "line": "server",
         "example": "  you server\n\n  you --server http://127.0.0.1:7437 server"
@@ -12257,6 +13207,30 @@
             "state": "active",
             "since": "1.0.0"
           }
+        },
+        "you.server.flag.remote": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.server.flag.remote",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.server.flag.remote",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "remote",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.remote",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
         },
         "you.server.flag.server": {
           "id": "you.server.flag.server",
@@ -12442,6 +13416,7 @@
       },
       "visibility": "visible",
       "runnable": true,
+      "placement": "remote-only",
       "usage": {
         "line": "submit"
       },
@@ -12565,6 +13540,30 @@
             "state": "active",
             "since": "1.0.0"
           }
+        },
+        "you.submit.flag.remote": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.submit.flag.remote",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.submit.flag.remote",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "remote",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.remote",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
         },
         "you.submit.flag.server": {
           "id": "you.submit.flag.server",
@@ -12776,6 +13775,8 @@
       },
       "visibility": "visible",
       "runnable": true,
+     "placement": "local-only",
+      "placement": "remote-only",
       "usage": {
         "line": "batch [path|-|<inline-json>]",
         "example": "  # Upsert a batch file to the default session.\n  you submit batch ./factory/inputs/BATCH/my-batch.json\n\n  # Explicit file flag (wins over a positional path when both are set).\n  you submit batch --file ./batches/deploy.json\n\n  # Pipe batch JSON without a temp file.\n  cat batch.json | you submit batch\n\n  # Read batch JSON from stdin explicitly.\n  you submit batch - < batch.json\n\n  # Validate locally without contacting the server.\n  you submit batch --dry-run ./batch.json\n\n  # Target a non-default live session with structured output.\n  you --server http://localhost:9090 --json submit batch --session session-beta ./batch.json"
@@ -12921,6 +13922,30 @@
             "state": "active",
             "since": "1.0.0"
           }
+        },
+        "you.submit.batch.flag.remote": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.submit.batch.flag.remote",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.submit.batch.flag.remote",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "remote",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.remote",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
         },
         "you.submit.batch.flag.server": {
           "id": "you.submit.batch.flag.server",
@@ -13157,6 +14182,30 @@
             "since": "1.0.0"
           }
         },
+        "you.serve.flag.remote": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.serve.flag.remote",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.serve.flag.remote",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "remote",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.remote",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
         "you.serve.flag.server": {
           "id": "you.serve.flag.server",
           "long": "server",
@@ -13388,6 +14437,7 @@
       },
       "path": "you serve acp",
       "runnable": true,
+      "placement": "local-only",
       "sideEffects": {
         "you.serve.acp.side-effect.process": {
           "id": "you.serve.acp.side-effect.process",

@@ -19,21 +19,21 @@ var runSubmitFamilySpecs = []struct {
 			"runtime-log-compress", "runtime-log-dir", "runtime-log-max-age-days", "runtime-log-max-backups",
 			"runtime-log-max-size-mb", "runtime-metrics-compress", "runtime-metrics-dir",
 			"runtime-metrics-max-age-days", "runtime-metrics-max-backups", "runtime-metrics-max-size-mb",
-			"server", "skip-permissions", "verbose", "with-mock-workers", "with-server", "with-site", "work",
+			"remote", "server", "skip-permissions", "verbose", "with-mock-workers", "with-server", "with-site", "work",
 			"worker-reasoning-effort", "worktree",
 		},
 	},
 	{
 		id: "you.server", path: "you server",
-		flags: []string{"debug", "json", "server", "verbose"},
+		flags: []string{"debug", "json", "remote", "server", "verbose"},
 	},
 	{
 		id: "you.submit", path: "you submit", operationID: "submitWorkBySessionId",
-		flags: []string{"debug", "json", "name", "payload", "port", "server", "session", "verbose", "work-type-name"},
+		flags: []string{"debug", "json", "name", "payload", "port", "remote", "server", "session", "verbose", "work-type-name"},
 	},
 	{
 		id: "you.submit.batch", path: "you submit batch", operationID: "upsertWorkRequestBySessionId",
-		flags: []string{"debug", "dry-run", "file", "json", "port", "server", "session", "verbose"},
+		flags: []string{"debug", "dry-run", "file", "json", "port", "remote", "server", "session", "verbose"},
 	},
 }
 

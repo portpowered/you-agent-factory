@@ -24,6 +24,9 @@ func LoadProduction(store generatedartifacts.SourceStore, path string) (Manifest
 	if err := ValidateRootContract(manifest); err != nil {
 		return Manifest{}, fmt.Errorf("validate root contract: %w", err)
 	}
+	if err := ValidatePlacementContract(manifest); err != nil {
+		return Manifest{}, fmt.Errorf("validate placement contract: %w", err)
+	}
 	return manifest, nil
 }
 

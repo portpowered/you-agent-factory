@@ -26,6 +26,7 @@
 - Replay completeness must be derived from a terminal lifecycle record inside the captured Events range, not from a separately synchronized terminal session state.
 - When a package has a strict file-count baseline, put a small refactor in an existing focused file before adding a new helper file or changing the baseline.
 - When broad functional coverage reports a cancellation-observation failure, rerun the failed lane and isolate the named test before changing an unrelated feature; parallel-suite failures can move between existing durability/restart tests while isolated runs pass.
+- Persistent CLI globals are authored once on the root stable input ID; family manifests that project inherited inputs must mirror that ID, and the committed CLI inventory baseline should be refreshed through its repository update test.
 
 ## 2026-08-09 13:12 - wo-d1-packaged-factories-docs-001
 - What was implemented
@@ -760,4 +761,41 @@
   - Documentation parsers for Markdown output must match the report’s structural contract and tolerate the platform’s CRLF line endings; a single-line `Overall recommendation:` pattern is not equivalent to the emitted H2-plus-body form.
   - AGY structured-output replays enforce exact echoed-schema equivalence, so a contract schema change requires the historical replay envelope to be synchronized without changing its recorded response evidence.
   - When a backend package is at the 15-file limit, consolidate focused behavioral tests into an existing responsibility-aligned file before adding another package-local test file.
+---
+
+## 2026-08-10 05:04 -07:00 - dwro-s1-remote-placement-flags-001
+- What was implemented
+  - Added the authored persistent root `--remote` boolean with explicit running-server semantics, typed local/remote placement resolution, and root input validation.
+  - Added local-only, remote-only, or dual placement capabilities to all runnable authored command records; existing server-bearing family records now project the inherited remote input without adding local implementations to HTTP-only commands.
+  - Added manifest-load and generic-constructor placement validation, resolved placement propagation at the CLI transport boundary, root global placement state, and ACP suppression/rejection for the unrelated remote flag.
+  - Added observable parser coverage for default, before-command, and after-command placement; contract and help coverage; and refreshed the committed CLI input inventory baseline.
+  - Regenerated the published CLI contracts, manifest metadata, and family Go consumers.
+- Files changed
+  - `contracts/cli/command-manifest.schema.json`
+  - `contracts/cli/commands.json`
+  - `contracts/testdata/baseline/cli-command-inputs.json`
+  - `packages/api/generated/cli/command-manifest.schema.json`
+  - `packages/api/generated/cli/commands.json`
+  - `packages/api/generated/manifest.json`
+  - `pkg/transports/cli/cliinputs/root_process_test.go`
+  - `pkg/transports/cli/climanifest/*`
+  - `pkg/transports/cli/climanifestcobra/bindings.go`
+  - `pkg/transports/cli/climanifestcobra/constructor.go`
+  - `pkg/transports/cli/generated/family_manifests_gen.go`
+  - `pkg/transports/cli/root.go`
+  - `pkg/transports/cli/root_docs_test.go`
+  - `pkg/transports/cli/root_serve.go`
+  - `pkg/transports/cli/root_serve_test.go`
+  - `pkg/transports/cli/root_work.go`
+  - `prd.json`
+- Verification
+  - `make contracts-validate`, `make cli-manifest-check`, and `make test` — passed.
+  - Focused manifest, generic-constructor, parser, generated-family, contract, and help tests — passed.
+  - `make lint` reached passing UI lint checks but stopped at the pre-existing missing `knip` binary in the UI dead-code lane.
+  - `make verify-fast` stopped at the pre-existing missing `@types/bun` dashboard type definitions.
+  - Backend size, maintainability, file-count, and vet lanes passed; package-boundary checks remain blocked by the repository's existing baseline violations.
+- **Learnings for future iterations:**
+  - Persistent root inputs resolve from the root Cobra storage even when detached families omit local declarations; inherited manifest records are still needed wherever a family contract explicitly enumerates global inputs.
+  - Adding a persistent global to a root requires auditing protocol/listener-style commands that intentionally shadow unrelated globals so they do not advertise or silently accept the new input.
+  - Generated CLI Go and published contract artifacts must be refreshed after authored manifest changes before parser and inventory baselines are trustworthy.
 ---
