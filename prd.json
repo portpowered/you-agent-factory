@@ -51,8 +51,8 @@
         "Tests pass"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added tests/functional/factory_runtime/root_composition/batch_characterization_test.go. Root-built Process.Execute runs a two-work parent/child batch through a capacity-one resource fixture and an injected provider edge; tests assert the literal 20-event success/partial-failure order, request/relation and work counts, stable ~default session and dispatch-to-Worker-Session identities, terminal per-work states, typed permanent_bad_request classification, no stranded work, and the current SUCCEEDED/FINAL aggregate session projection. Repeated focused runs pass without sleeps, network, or live providers."
     },
     {
       "id": "btrc-p0-characterization-003",

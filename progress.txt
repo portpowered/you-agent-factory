@@ -1,4 +1,6 @@
 ## Codebase Patterns
+- Use an authored capacity-one resource in a deterministic fixture to serialize multi-work dispatches when exact Factory Event order must be characterized; this avoids sleeps and preserves the real dispatch/resource boundary.
+- Correlate batch history from both sources: request/relationship and dispatch identity live in Factory Event context, while terminal per-work state is carried by dispatch-response `outputWork`.
 - Runtime-opening ownership inventories should source grouped fields from runtimeopening.Dependencies, invocation-local values from ExternalEffects, and late seams from the opener; keep the reconciliation reviewer-visible in documentation instead of adding source-inventory tests.
 - Canonical packaged CLI docs live under `docs/reference/`; adding a topic also requires its authored file in `docs/reference/embed.go` and a registry entry in `pkg/transports/cli/docs/docs.go`.
 - The `you run --named <factory> --help` output is the authoritative invocation contract; omitted role provider/model values resolve through operator defaults.
@@ -780,4 +782,23 @@
   - The canonical grouped dependency count is ten Dependencies structs totaling 44 fields; the flattened private opener fields are projections and should not be counted again.
   - ExternalEffects is the narrow invocation-local projection selected in pkg/wire/runtime_inputs.go; future characterization rows should distinguish these operation values from process-scoped construction inputs.
   - Workers.LocalRuntimeHooksFactory is composed and validated but not invoked by the current opener, so it is an explicit deletion row rather than a destination-owned capability.
+---
+## 2026-08-10 05:13 -07:00 - btrc-p0-characterization-002
+- What was implemented
+  - Added deterministic root-composition characterization for successful and partially failed two-work parent/child batches.
+  - Froze the literal 20-event canonical sequence from RUN_REQUEST through WORK_REQUEST, relationship admission, serialized child dispatches, model/dispatch responses, RUN_RESPONSE, and the two session terminal events.
+  - Asserted request/work counts, parent-child relation identity, default session identity, one-to-one dispatch/Worker Session correlation, terminal work states, typed `permanent_bad_request` failure metadata, and the current `SUCCEEDED`/`FINAL` aggregate result for both all-success and partial-failure batches.
+  - Marked story btrc-p0-characterization-002 as passed in prd.json; no production behavior changed.
+- Files changed
+  - tests/functional/factory_runtime/root_composition/batch_characterization_test.go
+  - prd.json
+  - progress.txt
+- Verification
+  - `go test ./tests/functional/factory_runtime/root_composition -run '^TestBTRCP0Batch(Success|PartialFailure)Characterization$' -count=5 -timeout 240s` — passed.
+  - `git diff --check` — passed.
+  - The full `./tests/functional/factory_runtime/root_composition` package remains blocked by the unchanged neighboring W4 test `TestFactoryRuntimeMixedDirectAndFactoryChildDispatchesStayIsolatedThroughCLI`, which reports 18 `unexpected provider prompt` calls even when run alone; the failure is outside this story's changed files.
+- **Learnings for future iterations:**
+  - A capacity-one authored resource is the current deterministic boundary for serializing a multi-work batch without sleeps; it produces stable dispatch request/association/model/response ordering while retaining multiple child works.
+  - A partially failed work can still yield a `SUCCEEDED`/`FINAL` Factory Session when every work token reaches a terminal state; the typed per-dispatch failure remains in `DISPATCH_RESPONSE`.
+  - Canonical batch work identity is split across the WORK_REQUEST/relationship event context and the dispatch response `outputWork`; assert both instead of relying on a projection derived from the test itself.
 ---
