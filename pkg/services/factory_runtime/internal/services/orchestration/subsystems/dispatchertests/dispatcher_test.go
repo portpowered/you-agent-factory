@@ -15,6 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/subsystems"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -307,6 +308,85 @@ func TestDispatcher_PreservesCanonicalChainingLineageWhenLegacyTraceDiffers(t *t
 	}
 	if dispatch.Execution.TraceID != "trace-1" {
 		t.Fatalf("execution trace ID = %q, want legacy trace-1 compatibility", dispatch.Execution.TraceID)
+	}
+}
+
+func TestDispatcher_RecordsStableExpectedArtifactTemplateContext(t *testing.T) {
+	n := &state.Net{
+		Places: map[string]*petri.Place{
+			"task:init": {ID: "task:init"},
+			"task:done": {ID: "task:done"},
+		},
+		WorkTypes: map[string]*state.WorkType{
+			"task": {ID: "task", ExpectedArtifacts: []work.ExpectedArtifactDeclaration{{Name: "report", Pattern: "report.txt"}}},
+		},
+		Transitions: map[string]*petri.Transition{
+			"publish": {
+				ID: "publish", Name: "publish", WorkerType: "script",
+				InputArcs:  []petri.Arc{{ID: "in", Name: "work", PlaceID: "task:init", Direction: petri.ArcInput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}}},
+				OutputArcs: []petri.Arc{{ID: "out", Name: "done", PlaceID: "task:done", Direction: petri.ArcOutput}},
+			},
+		},
+	}
+	dispatcher := subsystems.NewDispatcher(n, &mockScheduler{decisions: []interfaces.FiringDecision{{
+		TransitionID: "publish", ConsumeTokens: []string{"token-1"}, WorkerType: "script",
+	}}}, &factory_context.FactoryContext{ProjectID: "project-7", SessionID: "session-9"}, nil, nil, time.Now, testDispatchID)
+	snapshot := &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+		Marking: makeDispatcherSnapshot(map[string]*factorytoken.Token{
+			"token-1": {ID: "token-1", PlaceID: "task:init", Color: factorytoken.Color{WorkID: "work-1", WorkTypeID: "task", DataType: factorytoken.DataTypeWork, Payload: []byte("payload-1")}},
+		}),
+	}
+	result, err := dispatcher.Execute(context.Background(), snapshot)
+	if err != nil {
+		t.Fatalf("dispatcher.Execute: %v", err)
+	}
+	if len(result.Dispatches) != 1 || result.Dispatches[0].Dispatch.ExpectedArtifactContext == nil {
+		t.Fatalf("dispatch result = %#v, want one dispatch with artifact context", result)
+	}
+	got := result.Dispatches[0].Dispatch.ExpectedArtifactContext
+	if got.Project != "project-7" || got.SessionID != "session-9" || len(got.Inputs) != 1 ||
+		got.Inputs[0].WorkID != "work-1" || got.Inputs[0].Project != "project-7" || got.Inputs[0].Payload != "payload-1" {
+		t.Fatalf("expected artifact context = %#v, want project/session context", got)
+	}
+}
+
+func TestDispatcher_UsesTokenProjectAndFallbackWorkTypeIdentityForArtifactContext(t *testing.T) {
+	t.Parallel()
+
+	n := &state.Net{
+		Places: map[string]*petri.Place{"task:init": {ID: "task:init"}},
+		WorkTypes: map[string]*state.WorkType{
+			"alias": {ID: "task", ExpectedArtifacts: []work.ExpectedArtifactDeclaration{{Name: "report", Pattern: "report.txt"}}},
+		},
+		Transitions: map[string]*petri.Transition{
+			"publish": {
+				ID: "publish", Name: "publish", WorkerType: "script",
+				InputArcs: []petri.Arc{{ID: "in", Name: "work", PlaceID: "task:init", Direction: petri.ArcInput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}}},
+			},
+		},
+	}
+	dispatcher := subsystems.NewDispatcher(n, &mockScheduler{decisions: []interfaces.FiringDecision{{
+		TransitionID: "publish", ConsumeTokens: []string{"token-1"}, WorkerType: "script",
+	}}}, nil, nil, nil, time.Now, testDispatchID)
+	snapshot := &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+		Marking: makeDispatcherSnapshot(map[string]*factorytoken.Token{
+			"token-1": {ID: "token-1", PlaceID: "task:init", Color: factorytoken.Color{
+				WorkID: "work-1", WorkTypeID: "task", DataType: factorytoken.DataTypeWork,
+				Tags: map[string]string{workers.ProjectTagKey: "token-project"},
+			}},
+		}),
+	}
+
+	result, err := dispatcher.Execute(context.Background(), snapshot)
+	if err != nil {
+		t.Fatalf("dispatcher.Execute: %v", err)
+	}
+	if len(result.Dispatches) != 1 || result.Dispatches[0].Dispatch.ExpectedArtifactContext == nil {
+		t.Fatalf("dispatch result = %#v, want artifact context", result)
+	}
+	got := result.Dispatches[0].Dispatch.ExpectedArtifactContext
+	if got.Project != "token-project" || got.SessionID != workers.DefaultSessionID {
+		t.Fatalf("expected artifact context = %#v, want token project and default session", got)
 	}
 }
 

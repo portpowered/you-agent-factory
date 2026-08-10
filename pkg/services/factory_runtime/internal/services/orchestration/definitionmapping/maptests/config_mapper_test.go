@@ -67,6 +67,42 @@ func TestConfigMapping_SimplePath(t *testing.T) {
 	assertEquality(t, expectedNet, outputNet)
 }
 
+func TestConfigMapping_PreservesExpectedArtifactDeclarationsOnWorkTypesAndWorkstations(t *testing.T) {
+	input := &interfaces.FactoryConfig{
+		WorkTypes: []interfaces.WorkTypeConfig{{
+			Name: "task",
+			States: []interfaces.StateConfig{
+				{Name: "init", Type: interfaces.StateTypeInitial},
+				{Name: "complete", Type: interfaces.StateTypeTerminal},
+			},
+			ExpectedArtifacts: []interfaces.ExpectedArtifactConfig{{
+				Name: "report", Pattern: "reports/report.json", NonEmpty: true,
+			}},
+		}},
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name:    "transformer",
+			Inputs:  []interfaces.IOConfig{{StateName: "init", WorkTypeName: "task"}},
+			Outputs: []interfaces.IOConfig{{StateName: "complete", WorkTypeName: "task"}},
+			ExpectedArtifacts: []interfaces.ExpectedArtifactConfig{{
+				Name: "manifest", Pattern: "reports/manifest.json",
+			}},
+		}},
+	}
+
+	output, err := (testConfigMapper{}).Map(context.Background(), input)
+	if err != nil {
+		t.Fatalf("Map() error = %v", err)
+	}
+	workType := output.WorkTypes["task"]
+	if workType == nil || len(workType.ExpectedArtifacts) != 1 || workType.ExpectedArtifacts[0].Name != "report" || !workType.ExpectedArtifacts[0].NonEmpty {
+		t.Fatalf("mapped work-type artifacts = %#v", workType)
+	}
+	transition := output.Transitions["transformer"]
+	if transition == nil || len(transition.ExpectedArtifacts) != 1 || transition.ExpectedArtifacts[0].Pattern != "reports/manifest.json" {
+		t.Fatalf("mapped workstation artifacts = %#v", transition)
+	}
+}
+
 func TestConfigMapping_RejectionAndFailure(t *testing.T) {
 	input := &interfaces.FactoryConfig{
 		WorkTypes: []interfaces.WorkTypeConfig{

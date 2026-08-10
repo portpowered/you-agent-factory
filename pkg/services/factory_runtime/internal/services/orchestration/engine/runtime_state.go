@@ -9,6 +9,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime/buffers"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -42,6 +43,7 @@ func (rs *RuntimeState) Snapshot() interfaces.EngineStateSnapshot[petri.MarkingS
 		snap.Dispatches = make(map[string]*interfaces.DispatchEntry, len(rs.Dispatches))
 		for k, v := range rs.Dispatches {
 			cp := *v
+			cp.ExpectedArtifactContext = cloneExpectedArtifactTemplateContext(v.ExpectedArtifactContext)
 			cp.ConsumedTokens = factorytoken.CloneSlice(v.ConsumedTokens)
 			if v.HeldMutations != nil {
 				cp.HeldMutations = make([]interfaces.MarkingMutation, len(v.HeldMutations))
@@ -77,6 +79,8 @@ func (rs *RuntimeState) Snapshot() interfaces.EngineStateSnapshot[petri.MarkingS
 
 func deepCopyCompletedDispatch(d interfaces.CompletedDispatch) interfaces.CompletedDispatch {
 	cp := d
+	cp.ExpectedArtifactContext = cloneExpectedArtifactTemplateContext(d.ExpectedArtifactContext)
+	cp.ArtifactVerification = d.ArtifactVerification.Clone()
 	cp.ProviderSession = workerexecution.CloneProviderSessionMetadata(d.ProviderSession)
 	cp.ConsumedTokens = factorytoken.CloneSlice(d.ConsumedTokens)
 	if d.OutputMutations != nil {
@@ -88,9 +92,16 @@ func deepCopyCompletedDispatch(d interfaces.CompletedDispatch) interfaces.Comple
 	return cp
 }
 
+func cloneExpectedArtifactTemplateContext(
+	context *work.ExpectedArtifactTemplateContext,
+) *work.ExpectedArtifactTemplateContext {
+	return context.Clone()
+}
+
 func deepCopyWorkResult(result workerexecution.WorkResult) workerexecution.WorkResult {
 	cp := result
 	cp.ProviderSession = workerexecution.CloneProviderSessionMetadata(result.ProviderSession)
+	cp.ArtifactVerification = result.ArtifactVerification.Clone()
 	return cp
 }
 

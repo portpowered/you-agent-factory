@@ -10,6 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workwire "github.com/portpowered/infinite-you/pkg/services/work/wire"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // TestRecordingsBackedWorkReadsUseRecordingsRootContract proves functional
@@ -176,6 +177,170 @@ func TestRecordingsBackedWorkReadsSurfaceTypedProjectionFailures(t *testing.T) {
 	}
 	if !errors.Is(err, recordings.ErrInvalidProjectionInput) {
 		t.Fatalf("ListWork error = %v, want ErrInvalidProjectionInput", err)
+	}
+}
+
+func TestRecordingsBackedWorkReadsRejectInvalidWorldStateViews(t *testing.T) {
+	t.Parallel()
+
+	for name, view := range map[string]recordings.WorldStateView{
+		"unsupported schema": {SchemaVersion: "v0", Payload: `{}`},
+		"empty payload":      {SchemaVersion: recordings.WorldStateViewSchemaV1, Payload: "  "},
+		"invalid payload":    {SchemaVersion: recordings.WorldStateViewSchemaV1, Payload: "{not-json"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			svc := workwire.RecordingsStateAccessService(&functionalRecordingsRootFake{worldState: view})
+			_, err := svc.ListWork(context.Background(), "session-recordings-functional", work.ListOptions{})
+			if err == nil || !errors.Is(err, recordings.ErrUnsupportedProjectionView) && !errors.Is(err, recordings.ErrInvalidProjectionInput) {
+				t.Fatalf("ListWork error = %v, want typed invalid projection error", err)
+			}
+		})
+	}
+}
+
+func TestRecordingsBackedWorkReadsProjectDispatchArtifactFacts(t *testing.T) {
+	t.Parallel()
+
+	scope := recordings.CanonicalEventScope{FactorySessionID: "session-artifacts-functional"}
+	state := recordingsArtifactProjectionWorldState()
+	payload, err := json.Marshal(state)
+	if err != nil {
+		t.Fatalf("marshal world state: %v", err)
+	}
+	fake := &functionalRecordingsRootFake{
+		events:     []recordings.CanonicalEvent{{Scope: scope, FactoryTick: 9}},
+		worldState: recordings.WorldStateView{SchemaVersion: recordings.WorldStateViewSchemaV1, Scope: scope, Payload: string(payload)},
+	}
+	list, err := workwire.RecordingsStateAccessService(fake).ListWork(context.Background(), scope.FactorySessionID, work.ListOptions{MaxResults: 100})
+	if err != nil {
+		t.Fatalf("ListWork: %v", err)
+	}
+	byID := make(map[string]work.ReadModel, len(list.Results))
+	for _, read := range list.Results {
+		byID[read.WorkID] = read
+	}
+	assertArtifactDispatchProjection(t, byID)
+}
+
+func recordingsArtifactProjectionWorldState() interfaces.FactoryWorldState {
+	topology := recordingsArtifactProjectionTopology()
+	active := recordingsArtifactProjectionItem("active", "Active story", "story", "review")
+	activeInput := recordingsArtifactProjectionItem("active-input", "Active input", "story", "review")
+	completed := recordingsArtifactProjectionItem("completed", "Completed story", "story", "review")
+	completedOutput := recordingsArtifactProjectionItem("completed-output", "Completed output", "story", "review")
+	failed := recordingsArtifactProjectionItem("failed", "Failed story", "story", "review")
+	detail := recordingsArtifactProjectionItem("detail", "Detail story", "story", "review")
+	noVerification := recordingsArtifactProjectionItem("no-verification", "No verification", "story", "review")
+	fallback := recordingsArtifactProjectionItem("fallback", "Fallback story", "story", "review")
+	plain := recordingsArtifactProjectionItem("plain", "Plain work", "plain", "review")
+	emptyState := recordingsArtifactProjectionItem("empty-state", "Empty state", "story", "")
+	return interfaces.FactoryWorldState{
+		Topology: topology,
+		WorkItemsByID: map[string]work.FactoryWorkItem{
+			active.ID: active, activeInput.ID: activeInput, completed.ID: completed,
+			completedOutput.ID: completedOutput, failed.ID: failed, detail.ID: detail,
+			noVerification.ID: noVerification, fallback.ID: fallback, plain.ID: plain,
+			emptyState.ID: emptyState,
+		},
+		ActiveWorkItemsByID: map[string]work.FactoryWorkItem{active.ID: active, activeInput.ID: activeInput},
+		FailedWorkItemsByID: map[string]work.FactoryWorkItem{failed.ID: failed, detail.ID: detail},
+		TerminalWorkByID: map[string]interfaces.FactoryTerminalWork{
+			completed.ID: {WorkItem: work.FactoryWorkItem{ID: completed.ID, WorkTypeID: "story", State: "done"}},
+		},
+		RelationsByWorkID: map[string][]work.FactoryRelation{
+			plain.ID: {{Type: "depends_on", TargetWorkID: "", RequiredState: "done"}},
+		},
+		ActiveDispatches: map[string]interfaces.FactoryWorldDispatch{
+			"active-direct": {
+				TransitionID: "publish", Workstation: interfaces.FactoryWorkstationRef{ID: "publish", Name: "publish"},
+				WorkItemIDs: []string{active.ID}, ExpectedArtifactContext: &work.ExpectedArtifactTemplateContext{Project: "active-project"},
+			},
+			"active-input": {
+				TransitionID: "publish-name", Workstation: interfaces.FactoryWorkstationRef{Name: "publish"},
+				Inputs: []interfaces.WorkstationInput{{}, {WorkItem: &work.FactoryWorkItem{ID: activeInput.ID, DisplayName: "Input source", WorkTypeID: "story"}}},
+			},
+			"active-skip": {WorkItemIDs: []string{"unrelated"}},
+		},
+		CompletedDispatches: recordingsArtifactCompletedDispatches(completed, completedOutput),
+		FailedDispatches:    recordingsArtifactFailedDispatches(failed, noVerification),
+		FailureDetailsByWorkID: map[string]interfaces.FactoryWorldFailureDetail{
+			detail.ID: {
+				TransitionID: "unknown", WorkstationName: "publish", WorkItem: detail,
+				ExpectedArtifactContext: &work.ExpectedArtifactTemplateContext{Project: "detail-project"},
+				ArtifactVerification: &workerexecution.ExpectedArtifactVerification{Entries: []workerexecution.ExpectedArtifactVerificationEntry{{
+					DeclarationIndex: 2, Name: "manifest", Pattern: "detail-project/manifests/Detail story.json", Reason: workerexecution.ExpectedArtifactVerificationReasonMissing,
+				}}},
+			},
+		},
+	}
+}
+
+func recordingsArtifactProjectionTopology() interfaces.InitialStructurePayload {
+	storyStates := []interfaces.FactoryStateDefinition{
+		{Value: "review", Category: work.StateTypeProcessing}, {Value: "done", Category: work.StateTypeTerminal},
+	}
+	return interfaces.InitialStructurePayload{
+		WorkTypes: []interfaces.FactoryWorkType{
+			{ID: "story", Name: "story", States: storyStates, ExpectedArtifacts: []work.ExpectedArtifactDeclaration{{
+				Name: "report", Pattern: "reports/{{ (index .Inputs 0).Name }}/report.txt", NonEmpty: true,
+			}}},
+			{ID: "other", Name: "other", States: storyStates},
+		},
+		Workstations: []interfaces.FactoryWorkstation{
+			{ID: "ignore", Name: "ignore", InputPlaceIDs: []string{"other:review"}},
+			{ID: "publish", Name: "publish", InputPlaceIDs: []string{"story:review"}, ExpectedArtifacts: []work.ExpectedArtifactDeclaration{{
+				Name: "manifest", Pattern: "{{ .Context.Project }}/manifests/{{ (index .Inputs 0).Name }}.json",
+			}}},
+		},
+	}
+}
+
+func recordingsArtifactProjectionItem(id, displayName, workType, state string) work.FactoryWorkItem {
+	return work.FactoryWorkItem{ID: id, DisplayName: displayName, WorkTypeID: workType, State: state, PlaceID: workType + ":" + state, Tags: map[string]string{"project": "input-project"}}
+}
+
+func recordingsArtifactCompletedDispatches(completed, completedOutput work.FactoryWorkItem) []interfaces.FactoryWorldDispatchCompletion {
+	return []interfaces.FactoryWorldDispatchCompletion{
+		{TransitionID: "publish-name", Workstation: interfaces.FactoryWorkstationRef{Name: "publish"}, InputWorkItems: []work.FactoryWorkItem{completed}, ExpectedArtifactContext: &work.ExpectedArtifactTemplateContext{SessionID: "session-completed"}, Result: interfaces.WorkstationResult{Outcome: string(workerexecution.OutcomeAccepted)}},
+		{TransitionID: "publish-name", Workstation: interfaces.FactoryWorkstationRef{Name: "publish"}, OutputWorkItems: []work.FactoryWorkItem{completedOutput}, Result: interfaces.WorkstationResult{Outcome: string(workerexecution.OutcomeAccepted)}},
+		{WorkItemIDs: []string{"completed-skip"}},
+	}
+}
+
+func recordingsArtifactFailedDispatches(failed, noVerification work.FactoryWorkItem) []interfaces.FactoryWorldDispatchCompletion {
+	return []interfaces.FactoryWorldDispatchCompletion{
+		{TransitionID: "unknown", Workstation: interfaces.FactoryWorkstationRef{Name: "publish"}, WorkItemIDs: []string{failed.ID}, Result: interfaces.WorkstationResult{Outcome: string(workerexecution.OutcomeFailed), ArtifactVerification: &workerexecution.ExpectedArtifactVerification{Entries: []workerexecution.ExpectedArtifactVerificationEntry{{
+			DeclarationIndex: 2, Name: "manifest", Pattern: "default-project/manifests/Failed story.json", Reason: workerexecution.ExpectedArtifactVerificationReasonEmpty,
+		}}}}},
+		{TransitionID: "missing", Workstation: interfaces.FactoryWorkstationRef{Name: "missing"}, WorkItemIDs: []string{noVerification.ID}, Result: interfaces.WorkstationResult{Outcome: string(workerexecution.OutcomeFailed)}},
+	}
+}
+
+func assertArtifactDispatchProjection(t *testing.T, byID map[string]work.ReadModel) {
+	t.Helper()
+	if got := byID["active"].ExpectedArtifacts; len(got) != 2 || got[0].Verification != work.ExpectedArtifactVerificationPending {
+		t.Fatalf("active artifact projection = %#v, want pending effective declarations", got)
+	}
+	if got := byID["active-input"].ExpectedArtifacts; len(got) != 2 || got[0].Pattern != "reports/Input source/report.txt" {
+		t.Fatalf("active input artifact projection = %#v, want input-derived pattern", got)
+	}
+	for _, id := range []string{"completed", "completed-output"} {
+		if got := byID[id].ExpectedArtifacts; len(got) != 2 || got[0].Verification != work.ExpectedArtifactVerificationSatisfied || got[1].Verification != work.ExpectedArtifactVerificationSatisfied {
+			t.Fatalf("completed artifact projection for %q = %#v, want satisfied declarations", id, got)
+		}
+	}
+	if got := byID["failed"].ExpectedArtifacts; len(got) != 2 || got[0].Verification != work.ExpectedArtifactVerificationSatisfied || got[1].Verification != work.ExpectedArtifactVerificationFailed {
+		t.Fatalf("failed artifact projection = %#v, want mixed satisfied/failed declarations", got)
+	}
+	if got := byID["detail"].ExpectedArtifacts; len(got) != 2 || got[1].Verification != work.ExpectedArtifactVerificationFailed || got[1].Reason == nil || *got[1].Reason != work.ExpectedArtifactVerificationReasonMissing {
+		t.Fatalf("failure detail artifact projection = %#v, want recorded missing declaration", got)
+	}
+	if got := byID["fallback"].ExpectedArtifacts; len(got) != 2 || got[0].Verification != work.ExpectedArtifactVerificationPending {
+		t.Fatalf("fallback artifact projection = %#v, want topology-derived pending declarations", got)
+	}
+	if byID["empty-state"].State != nil || len(byID["plain"].Relations) != 1 || byID["plain"].Relations[0].TargetWorkName != "" {
+		t.Fatalf("edge state/relation projection = empty=%#v plain=%#v", byID["empty-state"].State, byID["plain"].Relations)
 	}
 }
 

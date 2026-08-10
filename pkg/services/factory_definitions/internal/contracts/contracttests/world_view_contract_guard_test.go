@@ -21,6 +21,7 @@ var approvedWorkDispatchFields = map[string]string{
 	"Execution":                "execution",
 	"InputTokens":              "input_tokens",
 	"InputBindings":            "input_bindings",
+	"ExpectedArtifactContext":  "expected_artifact_context",
 }
 
 var retiredWorkDispatchWorkerFields = []string{

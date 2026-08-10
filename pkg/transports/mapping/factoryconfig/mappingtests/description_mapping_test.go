@@ -239,3 +239,43 @@ func topologyIdentity(cfg *interfaces.FactoryConfig) []string {
 		cfg.Workstations[0].Outputs[0].StateName,
 	}
 }
+
+func TestFactoryConfigMapper_ExpectedArtifactsRoundTripThroughPublicJSON(t *testing.T) {
+	mapper := NewFactoryConfigMapper()
+	payload := []byte(`{
+		"name": "artifact-contracts",
+		"workTypes": [{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}],"expectedArtifacts":[{"name":"report","pattern":"reports/{{ (index .Inputs 0).Name }}.json","nonEmpty":true}]}],
+		"workers": [{"name":"processor"}],
+		"workstations": [{"name":"process-task","worker":"processor","inputs":[{"workType":"task","state":"init"}],"outputs":[{"workType":"task","state":"complete"}],"expectedArtifacts":[{"name":"manifest","pattern":"reports/manifest.json"}]}]
+	}`)
+
+	cfg, err := mapper.Expand(payload)
+	if err != nil {
+		t.Fatalf("mapper.Expand: %v", err)
+	}
+	if len(cfg.WorkTypes[0].ExpectedArtifacts) != 1 || cfg.WorkTypes[0].ExpectedArtifacts[0].Pattern != "reports/{{ (index .Inputs 0).Name }}.json" || !cfg.WorkTypes[0].ExpectedArtifacts[0].NonEmpty {
+		t.Fatalf("expanded work type expected artifacts = %#v", cfg.WorkTypes[0].ExpectedArtifacts)
+	}
+	if len(cfg.Workstations[0].ExpectedArtifacts) != 1 || cfg.Workstations[0].ExpectedArtifacts[0].Name != "manifest" {
+		t.Fatalf("expanded workstation expected artifacts = %#v", cfg.Workstations[0].ExpectedArtifacts)
+	}
+
+	flattened, err := mapper.Flatten(cfg)
+	if err != nil {
+		t.Fatalf("mapper.Flatten: %v", err)
+	}
+	var object map[string]any
+	if err := json.Unmarshal(flattened, &object); err != nil {
+		t.Fatalf("json.Unmarshal flattened payload: %v", err)
+	}
+	workType := object["workTypes"].([]any)[0].(map[string]any)
+	workTypeArtifact := workType["expectedArtifacts"].([]any)[0].(map[string]any)
+	if workTypeArtifact["pattern"] != "reports/{{ (index .Inputs 0).Name }}.json" {
+		t.Fatalf("flattened work type expected artifact = %#v", workTypeArtifact)
+	}
+	workstation := object["workstations"].([]any)[0].(map[string]any)
+	workstationArtifact := workstation["expectedArtifacts"].([]any)[0].(map[string]any)
+	if workstationArtifact["name"] != "manifest" {
+		t.Fatalf("flattened workstation expected artifact = %#v", workstationArtifact)
+	}
+}

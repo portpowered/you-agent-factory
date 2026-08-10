@@ -524,16 +524,17 @@ func SupportedContentParts(parts []WorkContentPart) []WorkContentPart {
 
 // WorkDispatch is the canonical dispatch-owned runtime payload.
 type WorkDispatch struct {
-	DispatchID               string              `json:"dispatch_id"`
-	TransitionID             string              `json:"transition_id"`
-	WorkerType               string              `json:"worker_type,omitempty"`
-	WorkstationName          string              `json:"workstation_name,omitempty"`
-	ProjectID                string              `json:"project_id,omitempty"`
-	CurrentChainingTraceID   string              `json:"current_chaining_trace_id,omitempty"`
-	PreviousChainingTraceIDs []string            `json:"previous_chaining_trace_ids,omitempty"`
-	Execution                ExecutionMetadata   `json:"execution,omitempty"`
-	InputTokens              []any               `json:"input_tokens"`
-	InputBindings            map[string][]string `json:"input_bindings,omitempty"`
+	DispatchID               string                           `json:"dispatch_id"`
+	TransitionID             string                           `json:"transition_id"`
+	WorkerType               string                           `json:"worker_type,omitempty"`
+	WorkstationName          string                           `json:"workstation_name,omitempty"`
+	ProjectID                string                           `json:"project_id,omitempty"`
+	ExpectedArtifactContext  *ExpectedArtifactTemplateContext `json:"expected_artifact_context,omitempty"`
+	CurrentChainingTraceID   string                           `json:"current_chaining_trace_id,omitempty"`
+	PreviousChainingTraceIDs []string                         `json:"previous_chaining_trace_ids,omitempty"`
+	Execution                ExecutionMetadata                `json:"execution,omitempty"`
+	InputTokens              []any                            `json:"input_tokens"`
+	InputBindings            map[string][]string              `json:"input_bindings,omitempty"`
 }
 
 type ExecutionMetadata struct {
@@ -553,6 +554,7 @@ func CloneExecutionMetadata(metadata ExecutionMetadata) ExecutionMetadata {
 
 func CloneWorkDispatch(dispatch WorkDispatch) WorkDispatch {
 	clone := dispatch
+	clone.ExpectedArtifactContext = cloneExpectedArtifactTemplateContext(dispatch.ExpectedArtifactContext)
 	clone.PreviousChainingTraceIDs = cloneStringSlice(dispatch.PreviousChainingTraceIDs)
 	clone.Execution = CloneExecutionMetadata(dispatch.Execution)
 	clone.InputTokens = cloneAnySlice(dispatch.InputTokens)

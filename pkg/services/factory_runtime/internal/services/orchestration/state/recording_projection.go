@@ -118,9 +118,10 @@ func factoryWorkTypes(workTypes map[string]*WorkType) []interfaces.FactoryWorkTy
 			})
 		}
 		out = append(out, interfaces.FactoryWorkType{
-			ID:     workType.ID,
-			Name:   workType.Name,
-			States: states,
+			ID:                workType.ID,
+			Name:              workType.Name,
+			States:            states,
+			ExpectedArtifacts: append([]work.ExpectedArtifactDeclaration(nil), workType.ExpectedArtifacts...),
 		})
 	}
 	return out
@@ -224,6 +225,7 @@ func factoryWorkstations(transitions map[string]*petri.Transition, runtimeConfig
 			ContinuePlaceIDs:  arcPlaceIDs(transition.ContinueArcs),
 			RejectionPlaceIDs: arcPlaceIDs(transition.RejectionArcs),
 			FailurePlaceIDs:   arcPlaceIDs(transition.FailureArcs),
+			ExpectedArtifacts: append([]work.ExpectedArtifactDeclaration(nil), transition.ExpectedArtifacts...),
 		})
 	}
 	return out

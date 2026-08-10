@@ -154,6 +154,9 @@ func TestOpenAPIAuthoring_EventSchemasUseDedicatedFragments(t *testing.T) {
 		"WorkOutcome":                                  "./components/schemas/events/WorkOutcome.yaml",
 		"WorkFailureFamily":                            "./components/schemas/events/WorkFailureFamily.yaml",
 		"WorkFailureType":                              "./components/schemas/events/WorkFailureType.yaml",
+		"ExpectedArtifactVerificationReason":           "./components/schemas/events/ExpectedArtifactVerificationReason.yaml",
+		"ExpectedArtifactVerification":                 "./components/schemas/data-models/ExpectedArtifactVerification.yaml",
+		"ExpectedArtifactVerificationEntry":            "./components/schemas/data-models/ExpectedArtifactVerificationEntry.yaml",
 		"ProviderFailureMetadata":                      "./components/schemas/events/ProviderFailureMetadata.yaml",
 		"ProviderSessionMetadata":                      "./components/schemas/events/ProviderSessionMetadata.yaml",
 		"WorkMetrics":                                  "./components/schemas/events/WorkMetrics.yaml",
@@ -449,6 +452,7 @@ func assertBundledEventPayloadRefs(t *testing.T, schemas map[string]any) {
 
 	dispatchResponseProperties := schemaProperties(t, schemaObject(t, schemas, "DispatchResponseEventPayload"), "DispatchResponseEventPayload")
 	assertPropertyRef(t, dispatchResponseProperties, "outcome", "#/components/schemas/WorkOutcome")
+	assertPropertyRef(t, dispatchResponseProperties, "artifactVerification", "#/components/schemas/ExpectedArtifactVerification")
 	assertPropertyRef(t, dispatchResponseProperties, "failureDetail", "#/components/schemas/FailureDetail")
 	assertPropertyRef(t, dispatchResponseProperties, "providerFailure", "#/components/schemas/ProviderFailureMetadata")
 	assertPropertyRef(t, dispatchResponseProperties, "metrics", "#/components/schemas/WorkMetrics")
@@ -485,6 +489,7 @@ func assertPublishedWorkFailureSchemas(t *testing.T, schemas map[string]any, pro
 		"misconfigured",
 		"missing_executable",
 		"command_line_too_long",
+		"EXPECTED_ARTIFACTS_UNSATISFIED",
 	})
 }
 

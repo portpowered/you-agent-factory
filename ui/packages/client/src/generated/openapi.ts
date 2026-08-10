@@ -63,7 +63,7 @@ export interface paths {
     };
     /**
      * Stream retained and live Worker Session events
-     * @description Streams the canonical Worker Session Events topic for the exact Provider Session identity in the explicitly selected Factory Session. Retained records are emitted first in aggregate order, followed by live records. Each data frame is serialized JSON matching WorkerSessionEvent. The terminal event is marked TERMINAL for an active session or TERMINAL_REPLAY for an already-terminal session, after which the connection closes successfully. Source failures are emitted as an explicit SOURCE_FAILURE frame so clients can preserve complete records already written and return a typed non-success result.
+     * @description Streams the canonical Worker Session Events topic for the exact Provider Session identity in the explicitly selected Factory Session. Retained records are emitted first in aggregate order, followed by live records unless replayOnly is true. In replay-only mode the retained head is captured before delivery, no live follower is registered, and one REPLAY_SUMMARY frame closes the stream after the retained drain. Each data frame is serialized JSON matching WorkerSessionEvent. The terminal event is marked TERMINAL for an active session or TERMINAL_REPLAY for an already-terminal session. Source failures are emitted as an explicit SOURCE_FAILURE frame so clients can preserve complete records already written and return a typed non-success result.
      */
     get: operations["streamWorkerSessionEventsBySessionId"];
     put?: never;
@@ -1171,6 +1171,24 @@ export interface components {
       errorCode: string | null;
       /** @description Safe source-failure message when delivery is SOURCE_FAILURE. */
       errorMessage: string | null;
+      /** @description Completeness marker when delivery is REPLAY_SUMMARY. */
+      replaySummary?: components["schemas"]["WorkerSessionReplaySummary"];
+    };
+    WorkerSessionReplaySummary: {
+      /**
+       * @description Stable record kind for the finite Worker Session replay marker.
+       * @enum {string}
+       */
+      kind: WorkerSessionReplaySummaryKind;
+      /** @description Whether the retained capture represents a terminal Worker Session. */
+      complete: boolean;
+      /** @description Stable lifecycle classification for the replay result. */
+      reason: string;
+      /**
+       * Format: int64
+       * @description Number of canonical event records emitted before this summary.
+       */
+      eventsEmitted: number;
     };
     /**
      * @description Delivery outcome for one Worker Session stream frame. RECORD is a retained or live canonical event, TERMINAL marks the live terminal event, and TERMINAL_REPLAY marks the terminal event in an already-terminal replay. SOURCE_FAILURE is an explicit non-event outcome after the stream has opened.
@@ -2069,6 +2087,59 @@ export interface components {
       /** @description Customer-safe, actionable explanation of the failure. */
       message: string;
     };
+    /** @description Stable terminal verification summary emitted when a successful worker does not satisfy its effective expected artifact declarations. */
+    ExpectedArtifactVerification: {
+      code: components["schemas"]["WorkFailureType"];
+      entries: components["schemas"]["ExpectedArtifactVerificationEntry"][];
+    };
+    ExpectedArtifactVerificationEntry: {
+      /** @description One-based position in the normalized expected-artifact declaration list. */
+      declarationIndex?: number;
+      name: string;
+      /** @description Workspace-relative rendered artifact pattern; host paths are never emitted. */
+      pattern: string;
+      reason: components["schemas"]["ExpectedArtifactVerificationReason"];
+    };
+    /** @description Stable, non-host context used when rendering expected-artifact patterns. Filesystem paths, environment variables, and Factory documentation are not part of this replayable vocabulary. */
+    ExpectedArtifactTemplateContext: {
+      /** @description Exact replay-safe input values captured when the dispatch was created. Artifact templates expose these values through `.Inputs`; prompt-only relations, content, retry history, and host context are not included. */
+      inputs?: components["schemas"]["ExpectedArtifactTemplateInput"][];
+      /** @description Stable project identifier for the dispatch. */
+      project?: string;
+      /** @description Stable Factory Session identifier for the dispatch. */
+      sessionId?: string;
+    };
+    /** @description Stable replay-safe input value available to an expected-artifact template. This is intentionally smaller than the workstation prompt input surface so completion verification and historical Work reads can use the same values. */
+    ExpectedArtifactTemplateInput: {
+      name?: string;
+      workId?: string;
+      workTypeId?: string;
+      dataType?: string;
+      traceId?: string;
+      parentId?: string;
+      /** @description Per-input project value resolved from the input project tag, dispatch context, or the default project. */
+      project?: string;
+      tags?: components["schemas"]["StringMap"];
+      /** @description The dispatch-time textual payload value. It is retained only in the artifact template context and is not added to the normal Work read. */
+      payload?: string;
+    };
+    /** @description One effective expected artifact declaration projected on a Work item. Pattern is the rendered workspace-relative literal path or glob, never a host path. */
+    WorkExpectedArtifact: {
+      /** @description Customer-visible declaration name. */
+      name: string;
+      /** @description Safe rendered path or glob relative to the dispatch workspace. */
+      pattern: string;
+      /** @description Whether every matching regular file must contain at least one byte. */
+      nonEmpty: boolean;
+      verification: components["schemas"]["WorkExpectedArtifactVerification"];
+      /** @description Why this declaration failed, when verification is FAILED. */
+      reason?: components["schemas"]["ExpectedArtifactVerificationReason"];
+    };
+    /**
+     * @description Latest recorded verification state for one expected artifact declaration on a Work item.
+     * @enum {string}
+     */
+    WorkExpectedArtifactVerification: WorkExpectedArtifactVerification;
     FactoryArtifact: {
       /** @description Stable artifact identifier referenced by session projections. */
       id: string;
@@ -3456,6 +3527,7 @@ export interface components {
       inputs: components["schemas"]["DispatchConsumedWorkRef"][];
       resources?: components["schemas"]["Resource"][];
       metadata?: components["schemas"]["DispatchRequestEventMetadata"];
+      expectedArtifactContext?: components["schemas"]["ExpectedArtifactTemplateContext"];
     };
     /** @description Canonical association between one Factory dispatch and the Worker Session allocated to execute it. Dispatch identity remains authoritative in FactoryEvent.context.dispatchId and is not repeated in this payload. */
     DispatchWorkerSessionAssociationEventPayload: {
@@ -3631,6 +3703,7 @@ export interface components {
       error?: string;
       feedback?: string;
       selectedClassificationLabel?: string;
+      artifactVerification?: components["schemas"]["ExpectedArtifactVerification"];
       failureDetail?: components["schemas"]["FailureDetail"];
       providerFailure?: components["schemas"]["ProviderFailureMetadata"];
       metrics?: components["schemas"]["WorkMetrics"];
@@ -3704,6 +3777,11 @@ export interface components {
      * @enum {string}
      */
     WorkFailureType: WorkFailureType;
+    /**
+     * @description Stable reason that an expected artifact declaration was not satisfied.
+     * @enum {string}
+     */
+    ExpectedArtifactVerificationReason: ExpectedArtifactVerificationReason;
     ProviderFailureMetadata: {
       family?: components["schemas"]["WorkFailureFamily"];
       type?: components["schemas"]["WorkFailureType"];
@@ -4548,6 +4626,8 @@ export interface components {
       states: components["schemas"]["WorkState"][];
       /** @description Optional CLI routing markers for this work type. Factories used with you run --factory must declare handlingBehavior DEFAULT on exactly one work type. */
       handlingBehavior?: components["schemas"]["WorkTypeHandlingBehavior"][];
+      /** @description Expected output declarations inherited by workstations handling this work type. */
+      expectedArtifacts?: components["schemas"]["ExpectedArtifact"][];
     };
     /** @description A lifecycle state that a work item can occupy inside one work type. */
     WorkState: {
@@ -4696,6 +4776,12 @@ export interface components {
       maximumExecutionCapabilities: components["schemas"]["ProviderExecutionCapabilities"];
       maximumResponseFidelityCapabilities: components["schemas"]["ProviderResponseFidelityCapabilities"];
       discovery: components["schemas"]["ProviderDiscoveryPrerequisites"];
+      /** @description Named provider models and their complete capability facts in canonical model-ID order. */
+      models?: components["schemas"]["ProviderModel"][];
+      /** @description Named provider tool facts in canonical tool-name order. */
+      tools?: components["schemas"]["ProviderTool"][];
+      /** @description Named provider constraints and bounded behavior facts in canonical name order. */
+      knownLimits?: components["schemas"]["ProviderKnownLimit"][];
       deprecation?: components["schemas"]["ProviderDeprecation"];
     };
     /**
@@ -4772,12 +4858,107 @@ export interface components {
       endpointKinds: components["schemas"]["ProviderDiscoveryEndpointKind"][];
       /** @description Required configuration-key names only; configuration and environment values are forbidden. */
       configurationKeys: string[];
+      /** @description Sanitized executable, authentication, workspace, or configuration requirements. */
+      prerequisites?: components["schemas"]["ProviderDiscoveryPrerequisite"][];
+    };
+    /** @description Sanitized prerequisite guidance that never carries a secret or machine-local value. */
+    ProviderDiscoveryPrerequisite: {
+      /**
+       * @description Sanitized prerequisite category.
+       * @enum {string}
+       */
+      kind: ProviderDiscoveryPrerequisiteKind;
+      /** @description Stable prerequisite name, never a secret value. */
+      name: string;
+      /** @description Bounded setup guidance without environment values or paths. */
+      description: string;
     };
     /**
      * @description Static endpoint transport kind that may be checked without credentials.
      * @enum {string}
      */
     ProviderDiscoveryEndpointKind: ProviderDiscoveryEndpointKind;
+    /**
+     * @description Provider-supported reasoning effort setting for one model.
+     * @enum {string}
+     */
+    ProviderEffort: ProviderEffort;
+    /** @description Capability facts for one named model exposed by a provider. */
+    ProviderModel: {
+      /** @description Exact model identifier accepted by the provider adapter. */
+      id: string;
+      /** @description Reasoning effort values accepted independently by this model. */
+      efforts: components["schemas"]["ProviderEffort"][];
+      /** @description Complete directional modality facts, including unsupported values. */
+      modalities: components["schemas"]["ProviderModality"][];
+    };
+    /** @description One explicit supported or unsupported directional modality fact. */
+    ProviderModality: {
+      direction: components["schemas"]["ProviderModalityDirection"];
+      modality: components["schemas"]["ProviderModalityKind"];
+      support: components["schemas"]["ProviderModalitySupport"];
+      transport: components["schemas"]["ProviderModalityTransport"];
+    };
+    /**
+     * @description Direction in which a provider model accepts or emits a modality.
+     * @enum {string}
+     */
+    ProviderModalityDirection: ProviderModalityDirection;
+    /**
+     * @description Media or content modality understood by a provider model.
+     * @enum {string}
+     */
+    ProviderModalityKind: ProviderModalityKind;
+    /**
+     * @description Whether the provider model supports the modality in this direction.
+     * @enum {string}
+     */
+    ProviderModalitySupport: ProviderModalitySupport;
+    /**
+     * @description How a supported modality is supplied or returned.
+     * @enum {string}
+     */
+    ProviderModalityTransport: ProviderModalityTransport;
+    /** @description One named provider tool fact used for execution planning. */
+    ProviderTool: {
+      /** @description Stable provider-neutral tool name. */
+      name: string;
+      support: components["schemas"]["ProviderToolSupport"];
+      /** @description Bounded explanation of the tool fact. */
+      description: string;
+    };
+    /**
+     * @description Whether the provider exposes a named tool through its integration.
+     * @enum {string}
+     */
+    ProviderToolSupport: ProviderToolSupport;
+    /** @description Named bounded provider constraint or documented behavior. */
+    ProviderKnownLimit: {
+      /** @description Stable machine-readable limit name. */
+      name: string;
+      kind: components["schemas"]["ProviderKnownLimitKind"];
+      /** @description Unit or flag domain for the value. */
+      unit: string;
+      /** @description Bounded operator-facing explanation of the limit. */
+      description: string;
+      /**
+       * Format: int64
+       * @description Positive numeric maximum when kind is maximum.
+       */
+      maximum?: number;
+      /**
+       * Format: int64
+       * @description Positive numeric default when kind is default.
+       */
+      default?: number;
+      /** @description Bounded non-numeric behavior value when kind is behavior. */
+      value?: string;
+    };
+    /**
+     * @description Meaning of the value recorded by one named provider limit fact.
+     * @enum {string}
+     */
+    ProviderKnownLimitKind: ProviderKnownLimitKind;
     /** @description Coherent metadata for a deprecated provider entry. Presence of this object means the provider is deprecated. replacementProviderId, when present, must name a different canonical provider in the same catalog; it cannot identify the deprecated provider itself. */
     ProviderDeprecation: {
       /**
@@ -4853,6 +5034,8 @@ export interface components {
       promptFile?: string;
       /** @description JSON schema string used to validate or parse structured model output when configured. */
       outputSchema?: string;
+      /** @description Provider-neutral semantic contract applied to a successful workstation response after provider execution. */
+      outputContract?: string;
       /** @description Optional worker-output parsing mode for model workstations. When set to `decision-envelope`, agent output is parsed as a reviewer/checker JSON envelope that maps directly onto WorkResult outcome, feedback, output, and optional recorded output work instead of stop-token routing. */
       outcomeFormat?: components["schemas"]["WorkstationOutcomeFormat"];
       /** @description Retry and execution ceilings applied to this workstation. */
@@ -4875,6 +5058,8 @@ export interface components {
       onRejection?: components["schemas"]["WorkstationIO"][];
       /** @description Optional destination emitted when the workstation fails permanently. */
       onFailure?: components["schemas"]["WorkstationIO"][];
+      /** @description Expected output declarations added by this workstation to its applicable work type contract. */
+      expectedArtifacts?: components["schemas"]["ExpectedArtifact"][];
       /** @description Resource capacity this workstation consumes while one dispatch is in flight. */
       resources?: components["schemas"]["ResourceRequirement"][];
       /** @description Copy supported referenced script files into the expanded workstation layout when config expand runs. */
@@ -5364,6 +5549,8 @@ export interface components {
       tags?: components["schemas"]["StringMap"];
       /** @description Current outbound relationships attached to this listed source work item when returned by read APIs. */
       relations?: components["schemas"]["Relation"][];
+      /** @description Effective expected artifact declarations and their latest recorded verification state. */
+      expectedArtifacts?: components["schemas"]["WorkExpectedArtifact"][];
       /** @description Canonical stopped-state summary for existing work inspection reads when this work item explains paused, blocked, needs-human, or interrupted automation. */
       stopSummary?: components["schemas"]["FactoryStopSummary"];
     };
@@ -5490,6 +5677,18 @@ export interface components {
      * @enum {string}
      */
     WorkTypeHandlingBehavior: WorkTypeHandlingBehavior;
+    /** @description One expected output declaration relative to the dispatch workspace. Pattern is a workspace-relative literal path or glob and may use the replay-safe dispatch template fields `.Inputs` (the replay-safe fields are documented by `ExpectedArtifactTemplateInput`), `.Context.Project`, and `.Context.SessionID` inside a Go template action. Prompt-only fields, host paths, environment variables, and Factory documentation are not supported. */
+    ExpectedArtifact: {
+      /** @description Customer-visible name for this expected output declaration. */
+      name: string;
+      /** @description Workspace-relative literal path or glob template to verify. */
+      pattern: string;
+      /**
+       * @description Require every regular file matched by the pattern to be non-empty.
+       * @default false
+       */
+      nonEmpty: boolean;
+    };
     /** @description Two-dimensional authored graph layout coordinate. */
     FactoryLayoutPoint: {
       /** @description Horizontal graph layout coordinate in authored canvas space. */
@@ -6101,6 +6300,8 @@ export interface operations {
         kind: components["schemas"]["LoadableProviderSessionKind"];
         /** @description Provider-issued session identifier, not a filesystem path. */
         id: string;
+        /** @description Drain the retained history through a captured Events head without registering a live follower. */
+        replayOnly?: boolean;
       };
       header?: never;
       path: {
@@ -6111,7 +6312,7 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description Retained then live Worker Session event frames. */
+      /** @description Retained then live Worker Session event frames, or a finite retained replay ending in REPLAY_SUMMARY. */
       200: {
         headers: {
           [name: string]: unknown;
@@ -7546,10 +7747,16 @@ export const WorkerSessionObservationTranscript = {
 } as const;
 export type WorkerSessionObservationTranscript =
   (typeof WorkerSessionObservationTranscript)[keyof typeof WorkerSessionObservationTranscript];
+export const WorkerSessionReplaySummaryKind = {
+  replay_summary: "replay-summary",
+} as const;
+export type WorkerSessionReplaySummaryKind =
+  (typeof WorkerSessionReplaySummaryKind)[keyof typeof WorkerSessionReplaySummaryKind];
 export const WorkerSessionEventDelivery = {
   WorkerSessionEventDeliveryRecord: "RECORD",
   WorkerSessionEventDeliveryTerminal: "TERMINAL",
   WorkerSessionEventDeliveryTerminalReplay: "TERMINAL_REPLAY",
+  WorkerSessionEventDeliveryReplaySummary: "REPLAY_SUMMARY",
   WorkerSessionEventDeliverySourceFailure: "SOURCE_FAILURE",
 } as const;
 export type WorkerSessionEventDelivery =
@@ -7815,6 +8022,13 @@ export const FactoryDispatchJavaScriptTaskKind = {
 } as const;
 export type FactoryDispatchJavaScriptTaskKind =
   (typeof FactoryDispatchJavaScriptTaskKind)[keyof typeof FactoryDispatchJavaScriptTaskKind];
+export const WorkExpectedArtifactVerification = {
+  WorkExpectedArtifactVerificationPending: "PENDING",
+  WorkExpectedArtifactVerificationSatisfied: "SATISFIED",
+  WorkExpectedArtifactVerificationFailed: "FAILED",
+} as const;
+export type WorkExpectedArtifactVerification =
+  (typeof WorkExpectedArtifactVerification)[keyof typeof WorkExpectedArtifactVerification];
 export const FactoryArtifactKind = {
   // Final session result artifact.
   FactoryArtifactKindFINALRESULT: "FINAL_RESULT",
@@ -8253,9 +8467,17 @@ export const WorkFailureType = {
   WorkFailureTypeMissingExecutable: "missing_executable",
   // The provider command exceeded the operating system command-line size limit.
   WorkFailureTypeCommandLineTooLong: "command_line_too_long",
+  // A successful worker did not satisfy its expected artifact declarations.
+  WorkFailureTypeExpectedArtifactsUnsatisfied: "EXPECTED_ARTIFACTS_UNSATISFIED",
 } as const;
 export type WorkFailureType =
   (typeof WorkFailureType)[keyof typeof WorkFailureType];
+export const ExpectedArtifactVerificationReason = {
+  ExpectedArtifactVerificationReasonMissing: "MISSING",
+  ExpectedArtifactVerificationReasonEmpty: "EMPTY",
+} as const;
+export type ExpectedArtifactVerificationReason =
+  (typeof ExpectedArtifactVerificationReason)[keyof typeof ExpectedArtifactVerificationReason];
 export const SafeAgentRunDiagnosticExecutionBehavior = {
   // Agent-loop execution through AGENT_RUN workstations.
   agent_run: "agent_run",
@@ -8545,6 +8767,14 @@ export const ProviderDocumentationLinkKind = {
 } as const;
 export type ProviderDocumentationLinkKind =
   (typeof ProviderDocumentationLinkKind)[keyof typeof ProviderDocumentationLinkKind];
+export const ProviderDiscoveryPrerequisiteKind = {
+  executable: "executable",
+  authentication: "authentication",
+  workspace: "workspace",
+  configuration: "configuration",
+} as const;
+export type ProviderDiscoveryPrerequisiteKind =
+  (typeof ProviderDiscoveryPrerequisiteKind)[keyof typeof ProviderDiscoveryPrerequisiteKind];
 export const ProviderDiscoveryEndpointKind = {
   local_http: "local-http",
   remote_http: "remote-http",
@@ -8553,6 +8783,56 @@ export const ProviderDiscoveryEndpointKind = {
 } as const;
 export type ProviderDiscoveryEndpointKind =
   (typeof ProviderDiscoveryEndpointKind)[keyof typeof ProviderDiscoveryEndpointKind];
+export const ProviderEffort = {
+  minimal: "minimal",
+  low: "low",
+  medium: "medium",
+  high: "high",
+  xhigh: "xhigh",
+  max: "max",
+} as const;
+export type ProviderEffort =
+  (typeof ProviderEffort)[keyof typeof ProviderEffort];
+export const ProviderModalityDirection = {
+  input: "input",
+  output: "output",
+} as const;
+export type ProviderModalityDirection =
+  (typeof ProviderModalityDirection)[keyof typeof ProviderModalityDirection];
+export const ProviderModalityKind = {
+  text: "text",
+  image: "image",
+  audio: "audio",
+  video: "video",
+} as const;
+export type ProviderModalityKind =
+  (typeof ProviderModalityKind)[keyof typeof ProviderModalityKind];
+export const ProviderModalitySupport = {
+  supported: "supported",
+  unsupported: "unsupported",
+} as const;
+export type ProviderModalitySupport =
+  (typeof ProviderModalitySupport)[keyof typeof ProviderModalitySupport];
+export const ProviderModalityTransport = {
+  inline: "inline",
+  file_path: "file_path",
+  none: "none",
+} as const;
+export type ProviderModalityTransport =
+  (typeof ProviderModalityTransport)[keyof typeof ProviderModalityTransport];
+export const ProviderToolSupport = {
+  supported: "supported",
+  unsupported: "unsupported",
+} as const;
+export type ProviderToolSupport =
+  (typeof ProviderToolSupport)[keyof typeof ProviderToolSupport];
+export const ProviderKnownLimitKind = {
+  maximum: "maximum",
+  default: "default",
+  behavior: "behavior",
+} as const;
+export type ProviderKnownLimitKind =
+  (typeof ProviderKnownLimitKind)[keyof typeof ProviderKnownLimitKind];
 export const WorkerModelLocality = {
   LOCAL: "LOCAL",
   CLOUD: "CLOUD",
