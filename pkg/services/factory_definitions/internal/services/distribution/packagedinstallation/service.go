@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync/atomic"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -30,8 +29,6 @@ const (
 	stagingOwnerMetadataName = ".owner.json"
 	stagingAcquireAttempts   = 2
 )
-
-var stagingReclaimSequence uint64
 
 type ownerRecord struct {
 	PID int `json:"pid"`
@@ -155,62 +152,23 @@ func (service *Service) InstallPackagedFactory(
 	if err != nil {
 		return result, service.wrapInstallationError(definition.Name, namedFactoriesRoot, err)
 	}
-	if _, err := service.fileSystem.Stat(targetDir); err == nil {
-		if err := service.persistence.ValidateFactoryLayout(targetDir); err != nil {
-			if releaseErr := service.releaseStagingOwnership(recoveredLease); releaseErr != nil {
-				err = errors.Join(err, releaseErr)
-			}
-			return result, service.installationError(backendScopeID, namedFactoriesRoot, definition.Name, targetDir, ownerLivenessIndeterminate, fmt.Errorf("existing target %s is invalid: %w", targetDir, err))
-		}
-		if params.Replace {
-			return service.withStagingOwnership(
-				ctx,
-				namedFactoriesRoot,
-				definition.Name,
-				backendScopeID,
-				result,
-				recoveredLease,
-				func() (factorydefinitions.PackagedFactoryInstallResult, error) {
-					return service.replaceExistingPackagedFactory(
-						ctx,
-						namedFactoriesRoot,
-						definition.Name,
-						targetDir,
-						payload,
-						rootFileName,
-						result,
-					)
-				},
-			)
-		}
+	if _, statErr := service.fileSystem.Stat(targetDir); statErr == nil {
+		return service.installExistingPackagedFactory(
+			ctx,
+			params,
+			backendScopeID,
+			normalizedFormat,
+			targetDir,
+			payload,
+			rootFileName,
+			result,
+			recoveredLease,
+		)
+	} else if !errors.Is(statErr, fs.ErrNotExist) {
 		if releaseErr := service.releaseStagingOwnership(recoveredLease); releaseErr != nil {
-			return result, service.wrapInstallationError(definition.Name, namedFactoriesRoot, releaseErr)
+			statErr = errors.Join(statErr, releaseErr)
 		}
-		existingFormat, formatErr := authoredRootFormat(targetDir, service.fileSystem)
-		if formatErr != nil {
-			return result, service.installationError(backendScopeID, namedFactoriesRoot, definition.Name, targetDir, ownerLivenessIndeterminate, formatErr)
-		}
-		if existingFormat != normalizedFormat {
-			return result, service.installationError(
-				backendScopeID,
-				namedFactoriesRoot,
-				definition.Name,
-				targetDir,
-				ownerLivenessIndeterminate,
-				fmt.Errorf(
-					"%w: factory %q already exists",
-					factorydefinitions.ErrNamedFactoryAlreadyExists,
-					definition.Name,
-				),
-			)
-		}
-		result.Outcome = factorydefinitions.PackagedFactoryInstallSkipped
-		return result, nil
-	} else if !errors.Is(err, fs.ErrNotExist) {
-		if releaseErr := service.releaseStagingOwnership(recoveredLease); releaseErr != nil {
-			err = errors.Join(err, releaseErr)
-		}
-		return result, service.installationError(backendScopeID, namedFactoriesRoot, definition.Name, targetDir, ownerLivenessIndeterminate, fmt.Errorf("inspect target %s: %w", targetDir, err))
+		return result, service.installationError(backendScopeID, namedFactoriesRoot, definition.Name, targetDir, ownerLivenessIndeterminate, fmt.Errorf("inspect target %s: %w", targetDir, statErr))
 	}
 	return service.withStagingOwnership(
 		ctx,
@@ -231,6 +189,59 @@ func (service *Service) InstallPackagedFactory(
 			)
 		},
 	)
+}
+
+func (service *Service) installExistingPackagedFactory(
+	ctx context.Context,
+	params factorydefinitions.PackagedFactoryInstallParams,
+	backendScopeID string,
+	normalizedFormat factorydefinitions.PackagedFactoryFormat,
+	targetDir string,
+	payload []byte,
+	rootFileName string,
+	result factorydefinitions.PackagedFactoryInstallResult,
+	recoveredLease *stagingLease,
+) (factorydefinitions.PackagedFactoryInstallResult, error) {
+	name := params.Definition.Name
+	rootDir := params.NamedFactoriesRoot
+	if err := service.persistence.ValidateFactoryLayout(targetDir); err != nil {
+		if releaseErr := service.releaseStagingOwnership(recoveredLease); releaseErr != nil {
+			err = errors.Join(err, releaseErr)
+		}
+		return result, service.installationError(backendScopeID, rootDir, name, targetDir, ownerLivenessIndeterminate, fmt.Errorf("existing target %s is invalid: %w", targetDir, err))
+	}
+	if params.Replace {
+		return service.withStagingOwnership(
+			ctx,
+			rootDir,
+			name,
+			backendScopeID,
+			result,
+			recoveredLease,
+			func() (factorydefinitions.PackagedFactoryInstallResult, error) {
+				return service.replaceExistingPackagedFactory(ctx, rootDir, name, targetDir, payload, rootFileName, result)
+			},
+		)
+	}
+	if releaseErr := service.releaseStagingOwnership(recoveredLease); releaseErr != nil {
+		return result, service.wrapInstallationError(name, rootDir, releaseErr)
+	}
+	existingFormat, err := authoredRootFormat(targetDir, service.fileSystem)
+	if err != nil {
+		return result, service.installationError(backendScopeID, rootDir, name, targetDir, ownerLivenessIndeterminate, err)
+	}
+	if existingFormat != normalizedFormat {
+		return result, service.installationError(
+			backendScopeID,
+			rootDir,
+			name,
+			targetDir,
+			ownerLivenessIndeterminate,
+			fmt.Errorf("%w: factory %q already exists", factorydefinitions.ErrNamedFactoryAlreadyExists, name),
+		)
+	}
+	result.Outcome = factorydefinitions.PackagedFactoryInstallSkipped
+	return result, nil
 }
 
 func (service *Service) requireDependencies() error {
@@ -544,156 +555,6 @@ func (service *Service) readOwnerRecord(path string) (ownerRecord, ownerLiveness
 		return ownerRecord{}, ownerLivenessIndeterminate, fmt.Errorf("invalid staging owner metadata: %w", err)
 	}
 	return owner, service.ownerProbe.Classify(owner), nil
-}
-
-func (service *Service) reclaimOrphanedStaging(
-	backendScopeID string,
-	rootDir string,
-	name string,
-	stagingPath string,
-	expected ownerRecord,
-) (*stagingLease, error) {
-	current, liveness, err := service.readOwnerRecord(stagingPath)
-	if err != nil {
-		return nil, service.installationContention(
-			backendScopeID,
-			rootDir,
-			name,
-			stagingPath,
-			"indeterminate-contention",
-			liveness,
-			current.PID,
-		)
-	}
-	if current != expected || liveness != ownerLivenessOrphaned {
-		return nil, service.installationContention(
-			backendScopeID,
-			rootDir,
-			name,
-			stagingPath,
-			"indeterminate-contention",
-			ownerLivenessRacing,
-			current.PID,
-		)
-	}
-	recoveredLeasePath, err := service.claimOrphanedStaging(
-		backendScopeID,
-		rootDir,
-		name,
-		stagingPath,
-		expected,
-	)
-	if err != nil {
-		return nil, err
-	}
-	return service.publishRecoveredStagingLease(
-		backendScopeID,
-		rootDir,
-		name,
-		recoveredLeasePath,
-		stagingPath,
-		expected,
-	)
-}
-
-func (service *Service) claimOrphanedStaging(
-	backendScopeID string,
-	rootDir string,
-	name string,
-	stagingPath string,
-	expected ownerRecord,
-) (string, error) {
-	sequence := atomic.AddUint64(&stagingReclaimSequence, 1)
-	// Renaming the exact lease directory is the atomic claim. The winner moves
-	// it to a distinct recovery path, so a delayed reclaimer cannot remove a
-	// replacement lease at the deterministic path.
-	recoveredLeasePath := fmt.Sprintf("%s-recovered-%d-%d", stagingPath, os.Getpid(), sequence)
-	if err := service.fileSystem.Rename(stagingPath, recoveredLeasePath); err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return "", service.installationContention(
-				backendScopeID,
-				rootDir,
-				name,
-				stagingPath,
-				"indeterminate-contention",
-				ownerLivenessRacing,
-				expected.PID,
-			)
-		}
-		return "", service.installationFailure(
-			backendScopeID,
-			rootDir,
-			name,
-			stagingPath,
-			ownerLivenessOrphaned,
-			err,
-		)
-	}
-	return recoveredLeasePath, nil
-}
-
-func (service *Service) publishRecoveredStagingLease(
-	backendScopeID string,
-	rootDir string,
-	name string,
-	recoveredLeasePath string,
-	stagingPath string,
-	expected ownerRecord,
-) (*stagingLease, error) {
-	owner, err := service.ownerProbe.Current()
-	if err != nil {
-		return nil, service.installationFailure(
-			backendScopeID,
-			rootDir,
-			name,
-			recoveredLeasePath,
-			ownerLivenessIndeterminate,
-			err,
-		)
-	}
-	if owner.PID <= 0 {
-		return nil, service.installationFailure(
-			backendScopeID,
-			rootDir,
-			name,
-			recoveredLeasePath,
-			ownerLivenessIndeterminate,
-			fmt.Errorf("owner PID is invalid: %d", owner.PID),
-		)
-	}
-	if err := service.publishOwnerRecord(recoveredLeasePath, owner); err != nil {
-		return nil, service.installationFailure(
-			backendScopeID,
-			rootDir,
-			name,
-			recoveredLeasePath,
-			ownerLivenessIndeterminate,
-			err,
-		)
-	}
-	service.logOutcome(
-		backendScopeID,
-		name,
-		stagingPath,
-		"reclaimed-orphan",
-		ownerLivenessOrphaned,
-		expected.PID,
-	)
-	service.logOutcome(
-		backendScopeID,
-		name,
-		recoveredLeasePath,
-		"acquired",
-		ownerLivenessActive,
-		owner.PID,
-	)
-	return &stagingLease{
-		path:           recoveredLeasePath,
-		root:           rootDir,
-		name:           name,
-		backendScopeID: backendScopeID,
-		owner:          owner,
-	}, nil
 }
 
 func (service *Service) releaseStagingOwnership(lease *stagingLease) error {
