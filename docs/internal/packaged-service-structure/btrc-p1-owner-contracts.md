@@ -108,7 +108,7 @@ supplies distinct fakes for every owner-port contract, asserts exact identity
 retention, and verifies construction does not invoke collaborator functions.
 `pkg/services/factory_sessions/internal/applicationopening/service_test.go`
 proves the value-only resolver/opening handoff and lifecycle cleanup behavior.
-`pkg/services/factory_sessions/internal/runtimeopening/root_reuse_test.go`
+`pkg/services/factory_sessions/internal/runtimeopening/factories_test.go`
 opens two failing runtimes concurrently and proves both use the same injected
 Factory Sessions runtime root while each private Models scope is closed once.
 `pkg/wire/runtime_inputs_test.go` verifies exact edge projection and one-time

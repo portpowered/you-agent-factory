@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"io/fs"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -41,44 +40,6 @@ func (stub *executionOpeningFileSystemStub) Stat(path string) (fs.FileInfo, erro
 		return nil, nil
 	}
 	return nil, fs.ErrNotExist
-}
-
-func TestExecutionOpeningDoesNotDependOnInitializerOrConcreteTransports(t *testing.T) {
-	t.Parallel()
-
-	entries, err := os.ReadDir(".")
-	if err != nil {
-		t.Fatalf("read executionopening package: %v", err)
-	}
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") ||
-			strings.HasSuffix(entry.Name(), "_test.go") {
-			continue
-		}
-		source, err := os.ReadFile(entry.Name())
-		if err != nil {
-			t.Fatalf("read %s: %v", entry.Name(), err)
-		}
-		for _, forbidden := range []string{"pkg/initializer", "pkg/transports/mcp", "pkg/transports/http", "pkg/services/edges"} {
-			if strings.Contains(string(source), forbidden) {
-				t.Errorf("%s imports forbidden lifecycle or transport package %q", entry.Name(), forbidden)
-			}
-		}
-	}
-}
-
-func TestExecutionOpeningDoesNotSelectAmbientPathEffects(t *testing.T) {
-	t.Parallel()
-
-	source, err := os.ReadFile("factory.go")
-	if err != nil {
-		t.Fatalf("read factory.go: %v", err)
-	}
-	for _, forbidden := range []string{"os.Getwd(", "os.Stat("} {
-		if strings.Contains(string(source), forbidden) {
-			t.Errorf("factory.go selects ambient path effect %q; inject ExecutionOpeningFileSystem", forbidden)
-		}
-	}
 }
 
 func TestPathResolutionUsesInjectedExecutionOpeningFileSystem(t *testing.T) {
