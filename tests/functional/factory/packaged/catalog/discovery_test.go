@@ -302,9 +302,10 @@ func TestFactoryListReportsCatalogDiscoveryFailuresAtomically(t *testing.T) {
 			if err == nil || !strings.Contains(err.Error(), test.want) || !errors.Is(err, sourceErr) {
 				t.Fatalf("Process.Execute(factory list) error = %v, want %q wrapping source failure", err, test.want)
 			}
-			if inputs.Stdout() != "" || !strings.Contains(inputs.Stderr(), test.want) {
-				t.Fatalf("failed listing output: stdout=%q stderr=%q", inputs.Stdout(), inputs.Stderr())
+			if inputs.Stdout() != "" {
+				t.Fatalf("failed listing output wrote stdout=%q", inputs.Stdout())
 			}
+			support.RequireSafeCLIDiagnostic(t, inputs.Stderr())
 		})
 	}
 }
