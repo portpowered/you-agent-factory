@@ -28,6 +28,7 @@
 - Replay completeness must be derived from a terminal lifecycle record inside the captured Events range, not from a separately synchronized terminal session state.
 - When a package has a strict file-count baseline, put a small refactor in an existing focused file before adding a new helper file or changing the baseline.
 - When broad functional coverage reports a cancellation-observation failure, rerun the failed lane and isolate the named test before changing an unrelated feature; parallel-suite failures can move between existing durability/restart tests while isolated runs pass.
+- For cross-repository PRs, resolve review and CI state with an explicit owner/repository and compare local, fork-branch, and PR head SHAs; current-branch discovery may follow a different local origin.
 
 ## 2026-08-09 13:12 - wo-d1-packaged-factories-docs-001
 - What was implemented
@@ -1080,5 +1081,22 @@
   - All 18 required PR checks are green on commit `330e7d8e1`.
 - **Learnings for future iterations:**
   - When a broad functional lane fails in an untouched timing-sensitive test, extract the exact failing test and message from the job log before changing feature code; a clean targeted retry is the appropriate recovery when the failure is nondeterministic and unrelated.
-  - A failed dependent policy job should be evaluated only after the failed lane is rerun and terminal; the policy check can pass on the same workflow attempt once the selected lane succeeds.
+- A failed dependent policy job should be evaluated only after the failed lane is rerun and terminal; the policy check can pass on the same workflow attempt once the selected lane succeeds.
+---
+## 2026-08-10 04:49 -0700 - wo-b3-provider-capability-discovery-cli-final-review-audit
+- What was implemented
+  - Re-read `prd.json` and the consolidated Codebase Patterns; all three provider discovery stories remain marked `passes:true`.
+  - Inspected PR #1843 with the connector and the bundled thread-aware GraphQL workflow. The historical AGY/Codex and Claude/readiness blockers each have a subsequent author response documenting the corresponding fixes; no inline review threads or formal reviews remain.
+  - Confirmed the existing requested PR is already current, so no duplicate PR or feature-code change is needed.
+- Files changed
+  - `progress.txt`
+  - `prd.json` was verified unchanged because all story pass states and the PR description are current.
+- Verification
+  - Thread-aware review inspection — four top-level conversation comments, zero reviews, zero inline review threads; the latest blocker is addressed by commit `330e7d8e1`.
+  - Local `HEAD`, the fork branch, and PR #1843 head all match `3319b2109373de62d791178568cfa3b297c507d5`.
+  - PR #1843 is open, non-draft, mergeable, clean, and its description exactly matches `prd.json`.
+  - `gh pr checks 1843 --repo portpowered/you-agent-factory` — all 18 reported checks pass.
+- **Learnings for future iterations:**
+  - A historical blocking conversation item is resolved when the current PR contains the requested behavioral fix and the thread-aware audit finds no unresolved inline work; preserve the original comment as review history.
+  - Progress-only commits still change the PR head, so rerun the focused regression and verify terminal CI after pushing the bookkeeping update.
 ---
