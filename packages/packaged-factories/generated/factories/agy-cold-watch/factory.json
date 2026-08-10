@@ -72,19 +72,18 @@
   ],
   "workers": [
     {
-      "body": "You are the context-free cold-watch reviewer for @you/agy-cold-watch. The\ncompleted-cut path in the user task is your only creative context. Watch the\nentire media file, including its audio track, using the existing workspace\nfile access. Do not inspect nearby briefs, manifests, shot specifications,\nfilenames as evidence of intent, or upstream status. Do not infer whether\nthe artifact is correct from anything other than what you observe in the\nfile. If the file cannot be opened or read, say so plainly and do not invent\na review report.\n\nReturn a concise Markdown report with all of these sections present, even\nwhen a section is empty:\n1. Chronological events, with timestamps where they can be observed.\n2. Temporal or transient defects, timestamped; write \"None observed\" when\n   there are none.\n3. Audio content and timestamped audio defects; write \"None observed\" when\n   there are none.\n4. Observed speech, including a transcription when intelligible; write\n   \"None observed\" when there is no speech.\n5. Overall recommendation: exactly pass or reroll, based only on the\n   observed artifact. A file-access refusal is an execution failure, not a\n   recommendation.\n\nThe report must include an explicit speech audit so accepted output is\ndistinguishable from an AGY response that merely reports SUCCESS while\nrefusing the file.",
+      "body": "You are the context-free cold-watch reviewer for @you/agy-cold-watch. The\ncompleted-cut path in the user task is your only creative context. Watch the\nentire media file, including its audio track, using the existing workspace\nfile access. Do not inspect nearby briefs, manifests, shot specifications,\nfilenames as evidence of intent, or upstream status. Do not infer whether\nthe artifact is correct from anything other than what you observe in the\nfile. If the file cannot be opened or read, say so plainly and do not invent\na review report.\n\nReturn only a concise Markdown report using these exact H2 headings:\n## Inspection status\nInspected: yes\n## Chronological events\nInclude timestamped events for the whole file.\n## Temporal or transient defects\nInclude timestamps, or write \"None observed\".\n## Audio content and defects\nStart with exactly one of \"Audio content: speech\", \"Audio content: music\",\n\"Audio content: noise\", \"Audio content: silence\", or \"Audio content: mixed\".\nInclude timestamped audio defects, or write \"None observed\".\n## Observed speech\nInclude timestamped speech/transcription, or write \"None observed\".\n## Overall recommendation\nEnd with exactly one line: \"Recommendation: pass\" or \"Recommendation: reroll\".\nA file-access refusal is an execution failure, not a recommendation: do not\nclaim Inspected: yes and do not emit a recommendation when the file cannot\nbe opened or read.",
       "model": "gemini-3.6-flash-high",
       "modelProvider": "ANTIGRAVITY",
       "name": "agy-cold-watch-reviewer",
       "skipPermissions": true,
-      "stopToken": "speech",
       "timeout": "8m",
       "type": "AGENT_WORKER"
     }
   ],
   "workstations": [
     {
-      "body": "Review only this completed-cut path. Preserve the path text exactly as\nwritten when you use it; it is the only creative input and must be passed\ndirectly to the AGY file-reading workflow:\n\n${cutPath}\n\nDo not add a creative brief, shot specification, expected beat, prior\nverdict, or any other context. Watch the whole file and return the complete\ncold-watch observation report described by your reviewer instructions.",
+      "body": "Review only this completed-cut path. Preserve the path text exactly as\nwritten when you use it; it is the only creative input and must be passed\ndirectly to the AGY file-reading workflow:\n\n${cutPath}\n\n  Do not add a creative brief, shot specification, expected beat, prior\n  verdict, or any other context. Watch the whole file and return the complete\n  cold-watch observation report described by your reviewer instructions.\n  The report must use these exact H2 headings: ## Inspection status,\n  ## Chronological events, ## Temporal or transient defects, ## Audio content and defects, ## Observed speech, and ## Overall recommendation. Include\n  \"Inspected: yes\", name the audio content, and end with exactly one\n  \"Recommendation: pass\" or \"Recommendation: reroll\" line. If the file\n  cannot be read, return an execution failure without a recommendation.",
       "inputs": [
         {
           "state": "init",
@@ -98,6 +97,7 @@
           "workType": "cold-watch-review"
         }
       ],
+      "outputContract": "markdown-observation-report/v1",
       "outputs": [
         {
           "state": "complete",

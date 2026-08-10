@@ -863,6 +863,7 @@ func workstationHasInlineRuntimeDefinitionFields(
 		workstation.Runner == "" &&
 		workstation.PromptFile == "" &&
 		workstation.OutputSchema == "" &&
+		workstation.OutputContract == "" &&
 		workstation.Timeout == "" &&
 		workstation.Limits.MaxRetries == 0 &&
 		workstation.Limits.MaxExecutionTime == "" &&
@@ -888,6 +889,7 @@ func workstationHasRuntimeFields(
 		workstation.Runner != "" ||
 		workstation.PromptFile != "" ||
 		workstation.OutputSchema != "" ||
+		workstation.OutputContract != "" ||
 		workstation.Timeout != "" ||
 		workstation.Limits.MaxRetries != 0 ||
 		workstation.Limits.MaxExecutionTime != "" ||

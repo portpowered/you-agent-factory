@@ -35,7 +35,9 @@ type agyClipQAVerdict struct {
 // root.BuildProcess + Process.Execute boundary. The provider edge replays the
 // real AGY media traces, so the test never starts a live AGY process.
 func TestAgyProductionReviewRolesThroughRootBuildProcess(t *testing.T) {
-	t.Run("cold-watch-video-and-audio", testAgyColdWatchVideoAndAudio)
+	t.Run("cold-watch-complete-report-contract", testAgyColdWatchCompleteReportContract)
+
+	t.Run("cold-watch-incomplete-real-traces-fail", testAgyColdWatchIncompleteRealTracesFail)
 
 	t.Run("missing-file-fails-work-after-provider-success", testAgyColdWatchMissingFile)
 
@@ -48,34 +50,66 @@ func TestAgyProductionReviewRolesThroughRootBuildProcess(t *testing.T) {
 	t.Run("clip-qa-provider-failure-fails-work", testAgyClipQAProviderFailure)
 }
 
-func testAgyColdWatchVideoAndAudio(t *testing.T) {
+func testAgyColdWatchCompleteReportContract(t *testing.T) {
+	response, events, runner, assetPath := runAgyColdWatchInvocationWithStdout(
+		t,
+		agyColdWatchCompleteReportTrace(t),
+		"clip-fixture.mp4",
+		false,
+	)
+	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
+		t.Fatalf("invocation status = %q, want COMPLETED; response=%#v", response.Status, response)
+	}
+	if response.PrimaryResult == nil {
+		t.Fatal("primaryResult is nil, want complete cold-watch report")
+	}
+	result := invocationPrimaryText(t, *response.PrimaryResult)
+	for _, want := range []string{
+		"## Inspection status",
+		"## Chronological events",
+		"## Temporal or transient defects",
+		"## Audio content and defects",
+		"## Observed speech",
+		"## Overall recommendation",
+		"Recommendation: pass",
+	} {
+		if !strings.Contains(result, want) {
+			t.Fatalf("cold-watch primary result missing %q: %s", want, result)
+		}
+	}
+	if runner.CallCount() != 1 {
+		t.Fatalf("AGY provider command calls = %d, want exactly one", runner.CallCount())
+	}
+	assertAgyColdWatchCommand(t, runner.LastRequest(), assetPath)
+	assertAgyColdWatchEvents(t, events, factoryapi.WorkOutcomeAccepted, result)
+}
+
+func testAgyColdWatchIncompleteRealTracesFail(t *testing.T) {
 	for _, test := range []struct {
 		name         string
 		trace        string
 		asset        string
-		wantResponse []string
+		wantEvidence []string
 	}{
 		{
 			name:  "video-watch",
 			trace: "agy-trace-video-watch.stream.jsonl",
 			asset: "clip-fixture.mp4",
-			wantResponse: []string{
+			wantEvidence: []string{
 				"silver-haired woman",
 				"ambient atmospheric drone",
 				"clock ticking",
-				"speech",
 			},
 		},
 		{
 			name:  "groundtruth-video",
 			trace: "agy-trace-groundtruth-verbose.stream.jsonl",
 			asset: "groundtruth-fixture.mp4",
-			wantResponse: []string{
+			wantEvidence: []string{
 				"PHASE 1",
 				"PHASE 2",
 				"00:02.000",
 				"440.00 Hz",
-				"speech",
 			},
 		},
 	} {
@@ -85,25 +119,31 @@ func testAgyColdWatchVideoAndAudio(t *testing.T) {
 				t,
 				test.trace,
 				test.asset,
-				false,
+				true,
 			)
-			if response.Status != factoryapi.InvocationTerminalStatusCompleted {
-				t.Fatalf("invocation status = %q, want COMPLETED; response=%#v", response.Status, response)
+			if response.Status != factoryapi.InvocationTerminalStatusFailed {
+				t.Fatalf("invocation status = %q, want FAILED for incomplete report; response=%#v", response.Status, response)
 			}
-			if response.PrimaryResult == nil {
-				t.Fatal("primaryResult is nil, want cold-watch report")
+			if response.PrimaryResult != nil {
+				t.Fatalf("primaryResult = %#v, want no recommendation for incomplete report", response.PrimaryResult)
 			}
-			result := invocationPrimaryText(t, *response.PrimaryResult)
-			for _, want := range test.wantResponse {
-				if !strings.Contains(result, want) {
-					t.Fatalf("cold-watch primary result missing %q: %s", want, result)
+			if response.Message == nil || strings.TrimSpace(*response.Message) == "" {
+				t.Fatalf("failure message = %#v, want actionable diagnostic", response.Message)
+			}
+			providerResponse := agyGoldenInferenceResponse(t, events, factoryapi.InferenceOutcomeSucceeded)
+			if providerResponse.Response == nil {
+				t.Fatal("real AGY trace did not retain provider response evidence")
+			}
+			for _, want := range test.wantEvidence {
+				if !strings.Contains(*providerResponse.Response, want) {
+					t.Fatalf("provider response missing real-trace evidence %q: %s", want, *providerResponse.Response)
 				}
 			}
 			if runner.CallCount() != 1 {
 				t.Fatalf("AGY provider command calls = %d, want exactly one", runner.CallCount())
 			}
 			assertAgyColdWatchCommand(t, runner.LastRequest(), assetPath)
-			assertAgyColdWatchEvents(t, events, factoryapi.WorkOutcomeAccepted, result)
+			assertAgyColdWatchEventsFailure(t, events, "output contract failed")
 		})
 	}
 }
@@ -237,6 +277,21 @@ func runAgyColdWatchInvocation(
 	expectFailure bool,
 ) (factoryapi.InvocationResponse, []factoryapi.FactoryEvent, *testutil.ProviderCommandRunner, string) {
 	t.Helper()
+	return runAgyColdWatchInvocationWithStdout(
+		t,
+		readAgyGoldenAsset(t, trace),
+		asset,
+		expectFailure,
+	)
+}
+
+func runAgyColdWatchInvocationWithStdout(
+	t *testing.T,
+	stdout []byte,
+	asset string,
+	expectFailure bool,
+) (factoryapi.InvocationResponse, []factoryapi.FactoryEvent, *testutil.ProviderCommandRunner, string) {
+	t.Helper()
 
 	homeDir := t.TempDir()
 	workingDirectory := t.TempDir()
@@ -250,7 +305,7 @@ func runAgyColdWatchInvocation(
 	}
 
 	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
-		Stdout:   readAgyGoldenAsset(t, trace),
+		Stdout:   stdout,
 		ExitCode: 0,
 	})
 	process := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: runner})
@@ -361,6 +416,44 @@ func decodeAgyClipQAVerdict(t *testing.T, content string) agyClipQAVerdict {
 	return verdict
 }
 
+func agyColdWatchCompleteReportTrace(t *testing.T) []byte {
+	t.Helper()
+	response := `## Inspection status
+Inspected: yes
+
+## Chronological events
+- 00:00.000 — The subject enters frame.
+- 00:02.000 — The subject turns toward the light.
+
+## Temporal or transient defects
+None observed.
+
+## Audio content and defects
+Audio content: noise
+None observed.
+
+## Observed speech
+None observed.
+
+## Overall recommendation
+Recommendation: pass`
+	line, err := json.Marshal(map[string]any{
+		"event":           "result",
+		"conversation_id": "agy-cold-watch-contract",
+		"result": map[string]any{
+			"status":           "SUCCESS",
+			"response":         response,
+			"duration_seconds": 1.25,
+			"num_turns":        1,
+			"usage":            map[string]int64{"input_tokens": 1, "output_tokens": 1, "thinking_tokens": 0, "cache_read_tokens": 0, "total_tokens": 2},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal complete cold-watch trace: %v", err)
+	}
+	return append(line, '\n')
+}
+
 func assertAgyClipQACommand(
 	t *testing.T,
 	request platformprocess.CommandRequest,
@@ -443,6 +536,18 @@ func assertAgyColdWatchCommand(t *testing.T, request platformprocess.CommandRequ
 		!strings.Contains(prompt, "only creative input") {
 		t.Fatalf("provider prompt = %q, want exact cut path and context-free review instruction", prompt)
 	}
+	for _, heading := range []string{
+		"## Inspection status",
+		"## Chronological events",
+		"## Temporal or transient defects",
+		"## Audio content and defects",
+		"## Observed speech",
+		"## Overall recommendation",
+	} {
+		if !strings.Contains(prompt, heading) {
+			t.Fatalf("provider prompt missing report-contract heading %q: %s", heading, prompt)
+		}
+	}
 }
 
 func assertAgyColdWatchEvents(
@@ -471,17 +576,21 @@ func assertAgyColdWatchEventsFailure(t *testing.T, events []factoryapi.FactoryEv
 	}
 	assertAgyGoldenDispatchFailure(t, events)
 	for _, observation := range support.ObserveDispatchEvents(t, events) {
-		if observation.Response == nil || observation.Response.Output == nil {
+		if observation.Response == nil {
 			continue
 		}
 		if observation.Response.Outcome != factoryapi.WorkOutcomeFailed &&
 			observation.Response.Outcome != factoryapi.WorkOutcomeRejected {
 			continue
 		}
-		if !strings.Contains(*observation.Response.Output, wantDiagnostic) {
-			t.Fatalf("failure output = %q, want actionable diagnostic containing %q", *observation.Response.Output, wantDiagnostic)
+		if observation.Response.FailureDetail != nil &&
+			strings.Contains(observation.Response.FailureDetail.Message, wantDiagnostic) {
+			return
 		}
-		return
+		if observation.Response.Output != nil && strings.Contains(*observation.Response.Output, wantDiagnostic) {
+			return
+		}
+		continue
 	}
 	t.Fatalf("failed cold-watch dispatch has no output containing %q", wantDiagnostic)
 }

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -234,6 +235,95 @@ func structuredOutputFailureMetadata() *workerexecution.WorkFailureMetadata {
 		Family: workerexecution.WorkFailureFamilyTerminal,
 		Type:   workerexecution.WorkFailureTypePermanentBadRequest,
 	}
+}
+
+const outputContractMarkdownObservationReportV1 = "markdown-observation-report/v1"
+
+var (
+	observationReportTimestampPattern      = regexp.MustCompile(`(?i)(?:\b\d{1,2}:\d{2}(?:\.\d{1,3})?\b|\b\d+(?:\.\d+)?\s*(?:s|sec|secs|seconds)\b)`)
+	observationReportStatusPattern         = regexp.MustCompile(`(?im)^\s*inspected\s*:\s*yes\s*$`)
+	observationReportAudioPattern          = regexp.MustCompile(`(?im)^\s*audio\s+content\s*:\s*(speech|music|noise|silence|mixed)\s*$`)
+	observationReportRecommendationPattern = regexp.MustCompile(`(?im)^\s*(?:overall\s+)?recommendation\s*:\s*(pass|reroll)\s*$`)
+)
+
+// validateOutputContract validates provider-neutral semantic contracts after
+// a worker returns. Provider adapters still own transport/schema parsing; this
+// layer owns contracts that cannot be expressed by a provider output mode.
+func validateOutputContract(content, contract string) error {
+	switch strings.TrimSpace(contract) {
+	case "":
+		return nil
+	case outputContractMarkdownObservationReportV1:
+		return validateMarkdownObservationReport(content)
+	default:
+		return fmt.Errorf("unsupported output contract %q", contract)
+	}
+}
+
+func validateMarkdownObservationReport(content string) error {
+	sections := markdownReportSections(content)
+	for _, name := range []string{
+		"inspection status",
+		"chronological events",
+		"temporal or transient defects",
+		"audio content and defects",
+		"observed speech",
+		"overall recommendation",
+	} {
+		if _, ok := sections[name]; !ok {
+			return fmt.Errorf("missing required section %q", name)
+		}
+		if strings.TrimSpace(sections[name]) == "" {
+			return fmt.Errorf("section %q is empty; state none observed when applicable", name)
+		}
+	}
+
+	if !observationReportStatusPattern.MatchString(sections["inspection status"]) {
+		return fmt.Errorf("inspection status must contain exactly Inspected: yes")
+	}
+	if !observationReportTimestampPattern.MatchString(sections["chronological events"]) {
+		return fmt.Errorf("chronological events must include timestamps")
+	}
+	for _, name := range []string{"temporal or transient defects", "audio content and defects", "observed speech"} {
+		body := strings.ToLower(sections[name])
+		if !strings.Contains(body, "none observed") && !observationReportTimestampPattern.MatchString(body) {
+			return fmt.Errorf("section %q must include timestamps or an explicit none observed statement", name)
+		}
+	}
+	if !observationReportAudioPattern.MatchString(sections["audio content and defects"]) {
+		return fmt.Errorf("audio content and defects must name speech, music, noise, silence, or mixed")
+	}
+	recommendations := observationReportRecommendationPattern.FindAllStringSubmatch(content, -1)
+	if len(recommendations) != 1 {
+		return fmt.Errorf("report must contain exactly one pass or reroll recommendation")
+	}
+	if len(observationReportRecommendationPattern.FindAllStringSubmatch(sections["overall recommendation"], -1)) != 1 {
+		return fmt.Errorf("overall recommendation must contain exactly one pass or reroll recommendation")
+	}
+	return nil
+}
+
+func markdownReportSections(content string) map[string]string {
+	sections := make(map[string]string)
+	current := ""
+	for _, rawLine := range strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n") {
+		line := strings.TrimSpace(rawLine)
+		if strings.HasPrefix(line, "## ") {
+			current = strings.ToLower(strings.TrimSpace(strings.TrimPrefix(line, "## ")))
+			if _, exists := sections[current]; !exists {
+				sections[current] = ""
+			}
+			continue
+		}
+		if current == "" || line == "" {
+			continue
+		}
+		if sections[current] != "" {
+			sections[current] += "\n"
+		}
+		sections[current] += line
+	}
+	return sections
 }
 
 const (

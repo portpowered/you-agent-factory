@@ -38,11 +38,11 @@
       "slug": "agy-cold-watch",
       "json": {
         "locator": "generated/factories/agy-cold-watch/factory.json",
-        "sha256": "140b77abc6229de28b91e05ecc412c73bb264e3e0ae72ee69165894c37b749e6"
+        "sha256": "70b6fd94488c6214f052783d3845850479666d4884181b009e03a2c920f6edad"
       },
       "yaml": {
         "locator": "generated/factories/agy-cold-watch/factory.yaml",
-        "sha256": "a4d496e0e92ce0367c437ff0b44d896f28d90e909fd72a8ed85612a9ee86f609"
+        "sha256": "4c99a01a5e744942c57bef7a74c805c7ef239ed524036c7884a6eb247bf721f8"
       },
       "description": {
         "type": "LOCALIZABLE_ASSET",

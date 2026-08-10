@@ -33,7 +33,7 @@
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Implemented @you/agy-cold-watch with a single cutPath input, context-free AGY prompt, explicit report contract, failed missing-file handling, generated catalog artifacts, and root.BuildProcess offline coverage. Focused story tests, catalog/source checks, factory validation, and typecheck pass; the broad Go lane still encounters the existing worker-session timeout TestPause_ControlOutcomesKeepTheLifecycleTruthful."
+      "notes": "Implemented @you/agy-cold-watch with a single cutPath input, context-free AGY prompt, and a runtime markdown-observation-report/v1 postcondition requiring inspection status, chronology, timestamped defect/audio sections, observed speech, and exactly one pass-or-reroll recommendation. A complete report is accepted through root.BuildProcess, while both existing real incomplete video/audio traces and the exit-zero missing-file refusal fail Work without a primary recommendation; path and provider evidence remain observable. Focused story, factory-definition, mapping, API-contract, catalog, and docs checks pass."
     },
     {
       "id": "wo-b2-agy-production-review-roles-002",
@@ -50,8 +50,8 @@
         "Tests pass"
       ],
       "priority": 2,
-      "passes": true,
-      "notes": "Implemented @you/agy-clip-qa with exactly two required named inputs, direct AGY path/spec forwarding, the recorded B2 structured verdict schema, and valid pass/reroll handling. Root-built offline coverage replays the real clip-QA and missing-file traces and covers schema mismatch and provider failure; the focused role test, executor tests, catalog checks, and package tests pass."
+      "passes": false,
+      "notes": "Initial clip-QA implementation remains in the PR, but blocking review follow-up is still outstanding: confidence bounds and pass/reroll semantic invariants need runtime/schema enforcement, and mixed provider/status failures must not be accepted as rerolls."
     },
     {
       "id": "wo-b2-agy-production-review-roles-003",
@@ -68,8 +68,8 @@
         "Tests pass"
       ],
       "priority": 3,
-      "passes": true,
-      "notes": "Documented both roles in the packaged-factory reference catalog with exact live-help signatures, pinned ANTIGRAVITY/gemini-3.6-flash-high/8m policy, report schemas, path and failure boundaries, and PowerShell-safe invocations. Added the repository-owned AGY production composition example with distinct pass/reroll/failed routing and the offline root-process command; updated catalog-count/docs smoke coverage. Corrected cold-watch cutPath to required in authored YAML and regenerated only with make packaged-factory-catalog-generate. Validation, focused runtime coverage, docs-reference-smoke, packaged catalog/source checks, readme-check, and verify-fast pass; make lint reaches the unchanged current-main pkg-boundary migration baseline while backend-size and other owned gates pass."
+      "passes": false,
+      "notes": "The reference catalog and worked composition example are present, but blocking review follow-up is still outstanding: the cold-watch help/docs statement about positional cutPath disagrees with live help and must be corrected and reverified."
     }
   ]
 }

@@ -17,6 +17,7 @@
 
 - Worker Session finite streams can use the injected Events `Read` contract with the first retained head as a snapshot boundary; replay-only paths must not call `Subscribe`.
 - Authored OpenAPI and CLI contracts generate their Go, TypeScript, published metadata, and family-manifest consumers; update the source contract first, then run the repository generators and drift checks.
+- Provider-neutral output contracts belong on the workstation definition and are enforced after a successful worker response; provider process success or transport parsing alone must not satisfy a semantic report contract.
 - Stream transport dispatch stays below the package maintainability threshold by delegating lifecycle-specific frame handling to focused helpers.
 - Deterministic Worker Session lifecycle tests can combine the controlled workstation boundary with the real in-memory Events service to verify retained replay ordering without sleeps or cancellation.
 - Detached Cobra command families should project local-only flag relationships without eagerly merging parent persistent flags; otherwise the detached storage can shadow the production root flag when the family is attached.
@@ -628,5 +629,56 @@
   - `go test ./tests/functional/providers/agy -run '^TestAgyProductionReviewRolesThroughRootBuildProcess$' -count=1` — passed.
   - `make packaged-factory-catalog-check` and `make packaged-factory-package-verify` — passed; all 38 package-script subtests passed except the expected Windows symlink-creation skip.
 - **Learnings for future iterations:**
-  - Required named file arguments still need a positional or STDIN binding when the packaged Factory participates in ACP single-text-prompt invocability; named CLI help alone does not satisfy that contract.
+- Required named file arguments still need a positional or STDIN binding when the packaged Factory participates in ACP single-text-prompt invocability; named CLI help alone does not satisfy that contract.
+---
+
+## 2026-08-09 23:18 -07:00 - wo-b2-agy-production-review-roles-001 review follow-up
+- What was implemented
+  - Addressed the blocking cold-watch review finding by adding the provider-neutral `markdown-observation-report/v1` workstation contract. A successful response now requires explicit inspection status, exact chronology/defect/audio/speech/recommendation sections, timestamps for observed timelines, named audio content, and exactly one `Recommendation: pass` or `Recommendation: reroll` line; the old `stopToken: speech` substring acceptance is gone.
+  - Put the contract on the authored public Workstation schema and synchronized the OpenAPI bundle, Go/TypeScript clients, packaged contract artifacts, authored/generated cold-watch Factory, and runtime interpolation/layout/merge paths.
+  - Extended root.BuildProcess/Process.Execute coverage with a complete report acceptance case, real video and ground-truth traces that retain picture/audio evidence but fail as incomplete reports, and the exit-zero missing-file refusal that fails without a recommendation.
+- Files changed
+  - `api/components/schemas/data-models/Workstation.yaml`
+  - `api/openapi.yaml`
+  - `contracts/config/factory.schema.json`
+  - `packages/api/generated/manifest.json`
+  - `packages/api/generated/openapi/openapi.yaml`
+  - `packages/api/generated/schemas/factory.schema.json`
+  - `packages/api/generated/schemas/factory-event.schema.json`
+  - `packages/api/generated/schemas/factory-recording.schema.json`
+  - `packages/packaged-factories/factories/agy-cold-watch/factory.yaml`
+  - `packages/packaged-factories/generated/factories/agy-cold-watch/factory.yaml`
+  - `packages/packaged-factories/generated/factories/agy-cold-watch/factory.json`
+  - `packages/packaged-factories/generated/manifest.json`
+  - `packages/packaged-factories/schemas/factory.schema.json`
+  - `packages/packaged-factories/schemas/factory.schema.yaml`
+  - `pkg/services/factory_definitions/internal/contracts/factory_config.go`
+  - `pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout/writer.go`
+  - `pkg/services/factory_definitions/internal/services/compilation/loading/loader.go`
+  - `pkg/services/factory_definitions/internal/services/compilation/runtimeconfig/merge.go`
+  - `pkg/services/factory_definitions/internal/services/invocation_policy/invocationinterpolation/service.go`
+  - `pkg/services/workers/execution_requests.go`
+  - `pkg/services/workers/internal/services/workstations/executor/helpers.go`
+  - `pkg/services/workers/internal/services/workstations/executor/workstation_executor.go`
+  - `pkg/services/workers/internal/services/workstations/executor/response_contract_test.go`
+  - `pkg/transports/http/client/client.gen.go`
+  - `pkg/transports/http/generated/server.gen.go`
+  - `pkg/transports/mapping/factoryconfig/authored/agents_config.go`
+  - `pkg/transports/mapping/factoryconfig/factory_config_mapping.go`
+  - `pkg/transports/mapping/factoryconfig/factory_config_mapping_internal.go`
+  - `tests/functional/providers/agy/production_review_test.go`
+  - `ui/src/api/generated/openapi.ts`
+- Verification
+  - `go test ./tests/functional/providers/agy -run '^TestAgyProductionReviewRolesThroughRootBuildProcess$' -count=1 -v -timeout 900s` — passed complete-contract acceptance, both incomplete real-trace rejections, missing-file refusal, and existing clip-QA cases.
+  - `go test ./pkg/services/workers/internal/services/workstations/executor -run 'TestValidateMarkdownObservationReport|TestWorkstationExecutor_ModelWorkstationUsesCanonicalWorkstationRuntimeFields' -count=1` — passed.
+  - `go test ./pkg/services/factory_definitions/... -count=1` — passed.
+  - `go test ./pkg/transports/mapping/factoryconfig/... -count=1` — passed.
+  - `go test ./pkg/transports/http/... ./tests/functional/transport/http/server -count=1` — passed.
+  - `go run ./cmd/factory --json factory config validate packages/packaged-factories/factories/agy-cold-watch` — passed.
+  - `make packaged-factory-source-check`, `make packaged-factory-catalog-check`, `make contracts-generate`, `make contracts-check`, and `make docs-reference-smoke` — passed.
+  - `make ui-deps` remains blocked by the pre-existing checkout state where multiple `ui/packages/*` directories are deleted; generated UI OpenAPI was refreshed with the repository's pinned openapi-typescript/Biome versions through the standalone generator path.
+- **Learnings for future iterations:**
+  - A Markdown contract needs a post-worker validation hook; AGY stream success and a stop-token substring are insufficient evidence of a complete review.
+  - Keep provider-neutral workstation contract fields flowing through the authored API schema, mapping, layout expansion, invocation interpolation, runtime merge, and generated consumer artifacts together.
+  - Existing “real” recordings can be valuable negative fixtures when their prose predates a stricter production contract; pair them with a minimal complete provider envelope so the acceptance path is also observable.
 ---

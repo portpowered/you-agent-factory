@@ -48,10 +48,6 @@ workers:
     model: gemini-3.6-flash-high
     skipPermissions: true
     timeout: 8m
-    # Every accepted observation must include the required speech audit. The
-    # recorded AGY missing-file refusal has exit-zero SUCCESS but no audit, so
-    # it is rejected rather than becoming a false review result.
-    stopToken: speech
     body: |-
       You are the context-free cold-watch reviewer for @you/agy-cold-watch. The
       completed-cut path in the user task is your only creative context. Watch the
@@ -62,27 +58,30 @@ workers:
       file. If the file cannot be opened or read, say so plainly and do not invent
       a review report.
 
-      Return a concise Markdown report with all of these sections present, even
-      when a section is empty:
-      1. Chronological events, with timestamps where they can be observed.
-      2. Temporal or transient defects, timestamped; write "None observed" when
-         there are none.
-      3. Audio content and timestamped audio defects; write "None observed" when
-         there are none.
-      4. Observed speech, including a transcription when intelligible; write
-         "None observed" when there is no speech.
-      5. Overall recommendation: exactly pass or reroll, based only on the
-         observed artifact. A file-access refusal is an execution failure, not a
-         recommendation.
-
-      The report must include an explicit speech audit so accepted output is
-      distinguishable from an AGY response that merely reports SUCCESS while
-      refusing the file.
+      Return only a concise Markdown report using these exact H2 headings:
+      ## Inspection status
+      Inspected: yes
+      ## Chronological events
+      Include timestamped events for the whole file.
+      ## Temporal or transient defects
+      Include timestamps, or write "None observed".
+      ## Audio content and defects
+      Start with exactly one of "Audio content: speech", "Audio content: music",
+      "Audio content: noise", "Audio content: silence", or "Audio content: mixed".
+      Include timestamped audio defects, or write "None observed".
+      ## Observed speech
+      Include timestamped speech/transcription, or write "None observed".
+      ## Overall recommendation
+      End with exactly one line: "Recommendation: pass" or "Recommendation: reroll".
+      A file-access refusal is an execution failure, not a recommendation: do not
+      claim Inspected: yes and do not emit a recommendation when the file cannot
+      be opened or read.
 
 workstations:
   - name: watch-completed-cut
     type: AGENT_RUN
     worker: agy-cold-watch-reviewer
+    outputContract: markdown-observation-report/v1
     inputs:
       - workType: cold-watch-review
         state: init
@@ -99,6 +98,11 @@ workstations:
 
       ${cutPath}
 
-      Do not add a creative brief, shot specification, expected beat, prior
-      verdict, or any other context. Watch the whole file and return the complete
-      cold-watch observation report described by your reviewer instructions.
+        Do not add a creative brief, shot specification, expected beat, prior
+        verdict, or any other context. Watch the whole file and return the complete
+        cold-watch observation report described by your reviewer instructions.
+        The report must use these exact H2 headings: ## Inspection status,
+        ## Chronological events, ## Temporal or transient defects, ## Audio content and defects, ## Observed speech, and ## Overall recommendation. Include
+        "Inspected: yes", name the audio content, and end with exactly one
+        "Recommendation: pass" or "Recommendation: reroll" line. If the file
+        cannot be read, return an execution failure without a recommendation.
