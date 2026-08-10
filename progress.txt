@@ -1491,5 +1491,18 @@
   - `git diff --check` — passed.
 - **Learnings for future iterations:**
   - Current-main synchronization can bring unrelated product files into the merge; preserve them as part of the base update while keeping the active task PRD and append-only progress history scoped and authoritative.
-  - The public inventory gates are the relevant evidence for this story; the broader ownership package's root-contract fixture baseline remains a separate known debt and should not be silently folded into an inventory story.
+- The public inventory gates are the relevant evidence for this story; the broader ownership package's root-contract fixture baseline remains a separate known debt and should not be silently folded into an inventory story.
+---
+## 2026-08-10 07:26 -0700 - sac-s0-1-ownership-inventories CI retry follow-up
+- What was implemented
+  - Investigated the first post-merge `Backend Functional Coverage` failure and confirmed it was an unrelated current-main sidecar-start timing failure in `TestWithServerDrainCannotReportSuccessWhileWorkIsNonTerminal/site` (`listener starts = 0, want 1`) followed by a secondary missing-artifact upload error.
+  - Made no SAC source changes; reran only the failed functional coverage and dependent verification jobs after the focused test passed locally five consecutive times.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Focused `go test ./tests/functional/sessions/execution -run '^TestWithServerDrainCannotReportSuccessWhileWorkIsNonTerminal$' -count=5 -timeout 300s` — passed.
+  - GitHub Actions run `31396678693`, attempt 2 — `Backend Functional Coverage` passed and `Verification Policy` passed; all 18 checks on `c469def708a68331604fc7ea9646ca7e4b64de0d` are green.
+  - The PR remains conflict-free and the authoritative description is synchronized from `prd.json`.
+- **Learnings for future iterations:**
+  - When a broad functional lane fails in a current-main scenario, inspect the first test assertion before treating artifact-upload errors as the root cause; a repeated focused pass can justify a failed-job-only rerun without changing unrelated product code.
 ---
