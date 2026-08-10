@@ -20,6 +20,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 const (
@@ -316,6 +317,157 @@ func TestRunScopedServerRejectsRemoteBindTargetAtCLIBoundary(t *testing.T) {
 	}
 }
 
+// TestRemotePlacementRejectsLocalHostingBeforeInitialization proves the
+// public process rejects contradictory placement before any local or remote
+// runtime effect can start, regardless of persistent-flag position.
+func TestRemotePlacementRejectsLocalHostingBeforeInitialization(t *testing.T) {
+	const wantCode = factoryapi.ErrorResponseCode("REMOTE_LOCAL_HOSTING_CONFLICT")
+	const wantMessage = "--remote selects a running server through --server and cannot be combined with --with-server or --with-site; remove --remote for local hosting and use --listen <host:port> to choose an exact local bind"
+
+	var effects atomic.Int32
+	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+		APIServerStarter: func(context.Context, platformhttpserver.StartRequest) error {
+			effects.Add(1)
+			return nil
+		},
+		BrowserOpener: func(context.Context, string) error {
+			effects.Add(1)
+			return nil
+		},
+		FactorySessionIDGenerator: func() string {
+			effects.Add(1)
+			return "unexpected-session"
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+
+	for _, test := range []struct {
+		name string
+		args []string
+	}{
+		{
+			name: "persistent flags before run",
+			args: []string{"you", "--remote", "--server", "https://selected.example:7443", "run", "--with-server"},
+		},
+		{
+			name: "persistent flags after run",
+			args: []string{"you", "run", "--with-site", "--remote", "--server", "https://selected.example:7443"},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			homeDir := t.TempDir()
+			stdinIsTTY := true
+			stdoutIsTTY := false
+			err := process.Execute(root.Input{
+				Args:             test.args,
+				Env:              append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir),
+				Stdin:            strings.NewReader(""),
+				Stdout:           &stdout,
+				Stderr:           &stderr,
+				Context:          t.Context(),
+				WorkingDirectory: t.TempDir(),
+				StdinIsTTY:       &stdinIsTTY,
+				StdoutIsTTY:      &stdoutIsTTY,
+			})
+			if err == nil {
+				t.Fatal("remote/local hosting conflict unexpectedly succeeded")
+			}
+			var response factoryapi.ErrorResponse
+			if decodeErr := json.Unmarshal([]byte(strings.TrimSpace(stderr.String())), &response); decodeErr != nil {
+				t.Fatalf("stderr = %q, want one ErrorResponse: %v", stderr.String(), decodeErr)
+			}
+			if response.Code != wantCode || response.Family != factoryapi.ErrorFamilyBadRequest || response.Message != wantMessage {
+				t.Fatalf("ErrorResponse = %#v, want stable placement conflict", response)
+			}
+			if stdout.Len() != 0 {
+				t.Fatalf("stdout = %q, want empty", stdout.String())
+			}
+		})
+	}
+	if effects.Load() != 0 {
+		t.Fatalf("placement conflict effects = %d, want no listener, browser, or session effects", effects.Load())
+	}
+}
+
+// TestRemotePlacementRejectsLocalOnlyServerCommand proves remote placement
+// remains explicit for commands that can only own local listener state.
+func TestRemotePlacementRejectsLocalOnlyServerCommand(t *testing.T) {
+	var listenerStarts atomic.Int32
+	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+		APIServerStarter: func(context.Context, platformhttpserver.StartRequest) error {
+			listenerStarts.Add(1)
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+
+	stdout, stderr, executeErr := executeFactoryArgsForRunScopedTest(
+		t,
+		process,
+		[]string{"you", "--remote", "--server", "https://selected.example:7443", "server"},
+	)
+	if executeErr == nil || !strings.Contains(executeErr.Error(), "supports local placement only") {
+		t.Fatalf("remote server error = %v, want local-placement guidance; stdout=%q stderr=%q", executeErr, stdout, stderr)
+	}
+	if listenerStarts.Load() != 0 {
+		t.Fatalf("listener starts = %d, want 0", listenerStarts.Load())
+	}
+}
+
+// TestRemotePlacementRejectsLocalOnlyFactoryCommand proves manifest-projected
+// local-only commands fail at the generic placement boundary before their
+// handler can inspect the requested file.
+func TestRemotePlacementRejectsLocalOnlyFactoryCommand(t *testing.T) {
+	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+
+	stdout, stderr, executeErr := executeFactoryArgsForRunScopedTest(
+		t,
+		process,
+		[]string{
+			"you", "--remote", "--server", "https://selected.example:7443",
+			"factory", "config", "validate", filepath.Join(t.TempDir(), "factory.json"),
+		},
+	)
+	if executeErr == nil || !strings.Contains(executeErr.Error(), "supports local placement only") {
+		t.Fatalf("remote local-only factory error = %v, want placement guidance; stdout=%q stderr=%q", executeErr, stdout, stderr)
+	}
+}
+
+// TestRunRejectsMalformedExactListenAddress proves --listen is parsed as an
+// exact local host:port before the listener or Factory runtime starts.
+func TestRunRejectsMalformedExactListenAddress(t *testing.T) {
+	var listenerStarts atomic.Int32
+	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+		APIServerStarter: func(context.Context, platformhttpserver.StartRequest) error {
+			listenerStarts.Add(1)
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+
+	stdout, stderr, executeErr := executeFactoryArgsForRunScopedTest(
+		t,
+		process,
+		[]string{"you", "run", "--with-server", "--listen", "127.0.0.1"},
+	)
+	if executeErr == nil || !strings.Contains(executeErr.Error(), "invalid --listen address") {
+		t.Fatalf("malformed listen error = %v, want exact-address guidance; stdout=%q stderr=%q", executeErr, stdout, stderr)
+	}
+	if listenerStarts.Load() != 0 {
+		t.Fatalf("listener starts = %d, want 0", listenerStarts.Load())
+	}
+}
+
 // TestRunScopedServerReportsExhaustedTerminalPortAtCLIBoundary proves port
 // exhaustion is reported through the customer CLI contract.
 func TestRunScopedServerReportsExhaustedTerminalPortAtCLIBoundary(t *testing.T) {
@@ -483,6 +635,29 @@ func execute(
 		t.Fatalf("Process.Execute(%v) error = %v; stdout=%q stderr=%q", args, err, stdout.String(), stderr.String())
 	}
 	return stdout.String(), stderr.String()
+}
+
+func executeFactoryArgsForRunScopedTest(
+	t *testing.T,
+	application process,
+	args []string,
+) (string, string, error) {
+	t.Helper()
+	var stdout, stderr bytes.Buffer
+	stdinIsTTY := true
+	stdoutIsTTY := false
+	err := application.Execute(root.Input{
+		Args:             args,
+		Env:              append(os.Environ(), "HOME="+t.TempDir(), "USERPROFILE="+t.TempDir()),
+		Stdin:            strings.NewReader(""),
+		Stdout:           &stdout,
+		Stderr:           &stderr,
+		Context:          t.Context(),
+		WorkingDirectory: t.TempDir(),
+		StdinIsTTY:       &stdinIsTTY,
+		StdoutIsTTY:      &stdoutIsTTY,
+	})
+	return stdout.String(), stderr.String(), err
 }
 
 func reserveExactPort(t *testing.T) int {
