@@ -157,10 +157,24 @@ type limitOutput struct {
 
 func assertJSONFacts(t *testing.T, output string) {
 	t.Helper()
+	decoded := decodeJSONOutput(t, output)
+	byID := assertJSONProviderInventory(t, decoded)
+	assertJSONCodexFacts(t, byID["codex"])
+	assertJSONAntigravityFacts(t, byID["antigravity"])
+	assertJSONClaudeFacts(t, byID["claude"])
+}
+
+func decodeJSONOutput(t *testing.T, output string) listOutput {
+	t.Helper()
 	var decoded listOutput
 	if err := json.Unmarshal([]byte(output), &decoded); err != nil {
 		t.Fatalf("providers list JSON is invalid: %v\n%s", err, output)
 	}
+	return decoded
+}
+
+func assertJSONProviderInventory(t *testing.T, decoded listOutput) map[string]providerOutput {
+	t.Helper()
 	if len(decoded.Providers) == 0 {
 		t.Fatal("providers list JSON returned no providers")
 	}
@@ -193,8 +207,11 @@ func assertJSONFacts(t *testing.T, output string) {
 			}
 		}
 	}
+	return byID
+}
 
-	codex := byID["codex"]
+func assertJSONCodexFacts(t *testing.T, codex providerOutput) {
+	t.Helper()
 	for _, modelID := range []string{"gpt-5.6", "gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra"} {
 		gpt := findModel(codex.Models, modelID)
 		if gpt == nil {
@@ -207,8 +224,10 @@ func assertJSONFacts(t *testing.T, output string) {
 	if imageLimit == nil || imageLimit.Maximum == nil || *imageLimit.Maximum != 5 {
 		t.Fatalf("Codex image-path limit = %#v, want maximum 5", imageLimit)
 	}
+}
 
-	antigravity := byID["antigravity"]
+func assertJSONAntigravityFacts(t *testing.T, antigravity providerOutput) {
+	t.Helper()
 	agyModel := findModel(antigravity.Models, "claude-opus-4-6-thinking")
 	if agyModel == nil || len(agyModel.Efforts) != 0 {
 		t.Fatalf("AGY model/efforts = %#v, want claude-opus-4-6-thinking with explicit empty efforts", agyModel)
@@ -224,8 +243,10 @@ func assertJSONFacts(t *testing.T, output string) {
 	if limit := findLimit(antigravity.KnownLimits, "print_timeout"); limit == nil || limit.Default == nil || *limit.Default != 300 {
 		t.Fatalf("AGY timeout limit = %#v, want default 300", limit)
 	}
+}
 
-	claude := byID["claude"]
+func assertJSONClaudeFacts(t *testing.T, claude providerOutput) {
+	t.Helper()
 	wantClaudeModels := []string{"claude-opus-4-6-thinking", "claude-sonnet-4-20250514", "claude-sonnet-5"}
 	if len(claude.Models) != len(wantClaudeModels) {
 		t.Fatalf("Claude models = %#v, want exact IDs %v", claude.Models, wantClaudeModels)
