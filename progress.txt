@@ -1470,5 +1470,26 @@
   - `git diff --check` — passed; PRD parses with the single story still marked `passes:true`.
 - **Learnings for future iterations:**
   - When current main changes the task bookkeeping files, preserve the active task PRD exactly for PR-description parity and merge each side's progress entries rather than replacing the append-only log.
-  - A clean local merge head can still report the repository's known `pkg-boundary` migration baseline; distinguish that baseline from changed-file regressions using the dedicated checker and functional-boundary gate.
+- A clean local merge head can still report the repository's known `pkg-boundary` migration baseline; distinguish that baseline from changed-file regressions using the dedicated checker and functional-boundary gate.
+---
+## 2026-08-10 07:09 -0700 - sac-s0-1-ownership-inventories current-main conflict follow-up
+- What was implemented
+  - Merged the current `origin/main` head `ccea14bf8` into the ownership-inventories branch after resolving the shared `prd.json` and `progress.txt` conflicts.
+  - Kept the SAC S0.1 `prd.json` authoritative with all four story/enabling items marked `passes:true`, and preserved both branches' append-only progress history and reusable patterns.
+  - Retained the current-main runtime and plain-batch regression changes in the merge commit `73beee2e6` without widening the SAC S0.1 implementation scope.
+- Files changed
+  - `prd.json` was retained as the authoritative task PRD during conflict resolution.
+  - `progress.txt`
+  - Current-main `pkg/services/factory_runtime/internal/services/orchestration/engine/` changes and `tests/functional/workers/mock/plain_batch_drain_test.go` were retained by the merge.
+- Verification
+  - `make package-target-manifest-check` — passed with 545 inventory rows and 545 production package rows.
+  - `make ownership-inventory-check` — passed with the ownership inventory and path-lease freeze verified.
+  - `go test ./cmd/pkgboundarycheck ./cmd/ownershipinventorycheck -count=1` — passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` — passed.
+  - `prd.json` parses successfully and every story/enabling criterion remains `passes:true`.
+  - `go test ./internal/ownershipinventory -count=1` still reports the documented pre-existing Workers/Recordings root-contract baseline drift; no SAC inventory gate reports a new failure.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - Current-main synchronization can bring unrelated product files into the merge; preserve them as part of the base update while keeping the active task PRD and append-only progress history scoped and authoritative.
+  - The public inventory gates are the relevant evidence for this story; the broader ownership package's root-contract fixture baseline remains a separate known debt and should not be silently folded into an inventory story.
 ---
