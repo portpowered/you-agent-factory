@@ -1,4 +1,14 @@
 ## Codebase Patterns
+- For final PR handoff, compare the PR body byte-for-byte with `prd.json` and use the thread-aware GraphQL review audit because flat PR comments do not expose inline-thread resolution state.
+- Treat repository-enforcement inventories and architecture guards as project-enabling PRD criteria when they have no runtime, API, CLI, UI, or emitted-event behavior; source scans support enforcement but are not customer-behavior evidence.
+- AST scanners must expand grouped Go field declarations before indexing parameter or result types; a field-count helper can exceed the AST field-list length and panic on valid source.
+- A PR's cached base SHA can lag the remote default branch after another PR merges; fetch the current base ref and compare/merge against that ref before final handoff.
+- Public CLI manifest additions require regenerating family metadata and the published CLI contract, then updating command input/help/tree baselines.
+- Reviewed functional CLI coverage requires a sorted scenario declaration, an evidence-registry entry, a manifest mapping, and one literal `functionalevidence.Covers` marker.
+- Package-target discovery is the stable-sorted set of directories containing non-test Go sources; adding a durable service owner requires updating the checker vocabulary and its live top-level inventory before regenerating the manifest.
+- Boundary check compatibility bridges should be exact package/type exceptions with request-scoped rationale; broad service-prefix allowlists can hide new durable ownership claims.
+- Compatibility guard exceptions must match the reviewed method/field shape as well as the package and type name; name-only exemptions can hide ownership-expanding contract growth.
+- When an ownership burn-down ledger is corrected, regenerate it as an explicit empty array and reject retired rows so stale debt cannot silently return.
 - OS-boundary functional tests may poll an isolated durable filesystem checkpoint only when the child exposes no parent-process event or injected edge; document that reason at each polling helper and keep the bound as a failure guard.
 - Git Worktree preparation treats a retained Git `*.lock` as indeterminate ownership: retry within a named bound, preserve the resource, and return its exact path with verify/remove/retry guidance.
 - Git's `.git/config.lock` has no trustworthy owner or PID evidence; after a bounded retry, report the exact lock with `owner_liveness=indeterminate` and require verification before removing only that file—never auto-delete it.
@@ -1197,4 +1207,167 @@
   - `prd.json` reports zero stories with `passes:false`; `git diff --check` — passed.
 - **Learnings for future iterations:**
   - When a full functional coverage lane fails in an unchanged package and the focused test repeats cleanly, preserve the task scope and retry the GitHub Actions lane rather than changing unrelated behavior.
+---
+## 2026-08-10 04:32 -07:00 - sac-s0-2-pkg-boundary-ignores-001
+- What was implemented
+  - Centralized repository-root-relative pruning for `.artifacts`, `.artifacts/bootstrap/worktrees`, generated transient worktrees, and the supported root worktree locations.
+  - Applied the same skip decision before parsing in every `pkg-boundary` production traversal, including secondary service, transport, provider, edge, test-behavior, Petri, and production-default scans.
+  - Preserved the existing Git metadata, dependency/vendor, node-module, and testdata exclusions without matching artifact-like or worktree-like names inside tracked production packages.
+  - Expanded the normal `run` regression to use malformed stale `pkg/wire` imports beneath artifact/bootstrap/generated transient layouts and existing ignored roots, proving those files are pruned before parsing.
+- Files changed
+  - `cmd/pkgboundarycheck/main.go`
+  - `cmd/pkgboundarycheck/main_test.go`
+  - `cmd/pkgboundarycheck/constructed_service_edges.go`
+  - `cmd/pkgboundarycheck/functional_process_edges.go`
+  - `cmd/pkgboundarycheck/initializer_behavior.go`
+  - `cmd/pkgboundarycheck/provider_effect_ownership.go`
+  - `cmd/pkgboundarycheck/production_defaults.go`
+  - `cmd/pkgboundarycheck/support_service_imports.go`
+  - `cmd/pkgboundarycheck/transport_behavior.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./cmd/pkgboundarycheck -run '^TestRunIgnoresRepositoryPolicyNonSourceRoots$' -count=1` — passed.
+  - `go test ./cmd/pkgboundarycheck -count=1` — passed.
+  - `make pkg-boundary` — reaches the checker and reports only the unchanged 176-violation baseline on current `main`; no new violation was introduced by this story.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - The checker has many independent `WalkDir` callbacks; updating only the primary repository scan leaves secondary scanners able to rediscover ignored files.
+  - A malformed ignored fixture is useful behavioral evidence for prune-before-parse: a valid stale import alone may not exercise every parser path.
+  - The next story should add the paired production `pkg` failure fixture and verify the `make pkg-boundary` subprocess path while keeping nested artifact-like directory names visible.
+ ---
+## 2026-08-09 14:04 - wo-d1-packaged-factories-docs-003
+- What was implemented
+  - Added distinct operator-ready entries for `@you/factory-builder`, `@you/plan-execute`, `@you/plan-parallel`, and `@you/full-flow` in `docs/reference/packaged-factories.md`.
+  - Documented each live help signature, all worker roles and provider/model overrides, relative workflow choice, workspace and Git side effects, concurrency and retry bounds, validation/installation, local merge/replanning, and final versus intermediate output behavior.
+  - Added exact current-binary smoke evidence: the builder returned `mock worker accepted`; plan-execute returned `mock worker accepted` and `<COMPLETE>`; plan-parallel returned `mock worker accepted`; full-flow's controlled invalid-bound check returned the documented `maxCycles` choice-validation error.
+  - Marked Story 003 as passing in `prd.json` and recorded the generic-mock limitation so protocol-valid planner responses are not confused with end-to-end orchestration evidence.
+- Files changed
+  - `docs/reference/packaged-factories.md`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `make docs-reference-smoke` — passed.
+  - `go test ./tests/functional/factory/packaged/factory_builder ./tests/functional/factory/packaged/plan_execute ./tests/functional/factory/packaged/plan_parallel ./tests/functional/factory/packaged/full_flow -count=1 -timeout 300s` — passed.
+  - `make verify-fast` — passed: dashboard typecheck, MCP contract boundary, 355 UI files / 2,970 tests, 191 Bun unit checks, and the short Go suite.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - The planning entries are not interchangeable: builder installs a new Factory, plan-execute stays sequential in the current workspace, plan-parallel shares one repository across a bounded DAG, and full-flow owns worktrees, local merges, and replanning.
+  - Generic mock workers accept a planner dispatch without producing its required `FACTORY_REQUEST_BATCH`; use protocol-valid fixtures or provider-backed functional tests when verifying generated Work, concurrency, or cycle control.
+  - Keep full-flow CLI smoke examples bounded and terminating; use controlled argument validation for the public command example and the isolated functional test for actual worktree/merge behavior.
+---
+## 2026-08-10 09:13 -07:00 - sac-s0-1-ownership-inventories current-main conflict follow-up
+- What was implemented
+  - Merged the server's current `main` head `59fd5748` into the SAC branch after GitHub reported the existing PR as conflicting.
+  - Preserved the SAC `prd.json` as the authoritative PR description and retained both branches' append-only `progress.txt` histories while resolving the bookkeeping conflicts.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+  - Current-main characterization sources and tests were retained by the merge.
+- Verification
+  - `make package-target-manifest-check` — passed (545 inventory rows / 545 production package rows).
+  - `make ownership-inventory-check` — passed.
+  - `go test ./cmd/pkgboundarycheck ./cmd/ownershipinventorycheck -count=1` — passed.
+  - `git diff --check` and PRD JSON validation — passed.
+  - Merge commit `b13db64f0` is pushed; fresh required CI and final PR mergeability are pending.
+- **Learnings for future iterations:**
+  - Compare the server's live base SHA with the local remote-tracking ref before treating a PR as conflict-free; stale base metadata can hide a conflict in shared `prd.json` and `progress.txt`.
+---
+## 2026-08-10 09:45 -07:00 - sac-s0-1-ownership-inventories CI retry follow-up
+- What was implemented
+  - Investigated the first latest-head CI failure and confirmed that Backend Functional Coverage failed in unchanged timing-sensitive tests: two restart/history cancellation observations and the CLI writer-failure cancellation race.
+  - Reran the exact restart and CLI writer tests locally 10 times each; all passed. The first failed-job retry moved to the known JavaScript concurrency observation, which passed five consecutive focused repetitions after one intermittent failure in a 20-run stress sample.
+  - Reran only the failed GitHub jobs; the latest-head run completed successfully.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Focused restart tests — passed 10 repetitions.
+  - Focused CLI writer-failure test — passed 10 repetitions.
+  - Focused JavaScript parallel-dispatch test — passed five consecutive repetitions after the isolated stress flake.
+  - GitHub Actions run `31407831161` — all 18 checks passed, including Backend Functional Coverage and Verification Policy, on head `5ed5afbcf`.
+- **Learnings for future iterations:**
+  - For broad functional-coverage failures, inspect the first assertion; unchanged cancellation/concurrency observations can move between tests across retries. Repeat the exact test and rerun failed jobs before changing unrelated runtime code.
+---
+## 2026-08-10 10:25 -07:00 - sac-s0-1-ownership-inventories-003 review follow-up
+- What was implemented
+  - Fixed the provider-effect boundary checker panic on valid grouped Go parameters such as `Infer(ctx, req context.Context)` by expanding grouped AST fields before signature inspection.
+  - Added a focused regression proving the malformed grouped Workers-root compatibility port is rejected with the normal ownership diagnostic and never panics.
+  - Reclassified story `sac-s0-1-ownership-inventories-003` as a `project-enabling` criterion because its architecture-guard evidence is repository-enforcement behavior rather than customer runtime/API/CLI/UI/event behavior; the remaining package-target and ownership inventory stories still need the same review-gate acceptance-shape decision.
+- Files changed
+  - `cmd/pkgboundarycheck/provider_effect_ownership.go`
+  - `cmd/pkgboundarycheck/provider_effect_ownership_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./cmd/pkgboundarycheck -run '^TestRun(AllowsWorkersRequestScopedProviderCompatibilityPort|RejectsGroupedWorkersRequestScopedProviderPortWithoutPanic|RejectsExpandedWorkersRequestScopedProviderPort)$' -count=10` — passed.
+  - `go test ./cmd/pkgboundarycheck -count=1` — passed.
+  - `go vet ./cmd/pkgboundarycheck` — passed.
+  - `git diff --check` and PRD JSON validation — passed.
+- **Learnings for future iterations:**
+  - The latest review still blocks the PR on acceptance evidence for stories 001 and 002; inventory/package-target checker tests are repository-enforcement evidence, not customer-facing behavioral coverage under the review gate. Address those stories in separate iterations by moving them to explicit project-enabling criteria or adding appropriate observable contract behavior.
+---
+## 2026-08-10 10:26 -07:00 - sac-s0-1-ownership-inventories-003 PR handoff follow-up
+- What was implemented
+  - Re-ran the package-target manifest gate sequentially after an initial parallel Go-process file-lock message; the standalone gate completed cleanly with 545 inventory rows and 545 production package rows.
+  - Updated PR #1848 from the current `prd.json`, verified the description matches the file, and posted resolution evidence for the grouped-AST blocker. The thread-aware audit found no inline review threads; stories 001 and 002 remain the explicit acceptance-shape follow-up.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `make package-target-manifest-check` — passed (545 inventory rows / 545 production package rows).
+  - `make ownership-inventory-check` — passed.
+  - PR description comparison against `prd.json` — passed.
+  - Worktree clean and `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - On Windows, avoid running independent `go run` Make gates in parallel when they may contend for the generated executable; a sequential rerun distinguishes a transient file-lock message from a gate failure.
+---
+## 2026-08-10 10:28 -07:00 - sac-s0-1-ownership-inventories-001 review follow-up
+- What was implemented
+  - Reclassified `sac-s0-1-ownership-inventories-001` from a behavioral user story to an explicit `project-enabling` criterion in `prd.json`, because the package-target manifest is repository-enforcement and maintainer tooling rather than customer runtime, API, CLI, UI, or emitted-event behavior.
+  - Preserved the completed package-target acceptance evidence and added an explicit no-runtime/API/CLI/UI/event-behavior criterion so the PRD matches the review gate's acceptance model.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `make package-target-manifest-check` — passed (545 inventory rows / 545 production package rows).
+  - `make ownership-inventory-check` — passed.
+  - `go test ./cmd/packagetargetmanifestcheck -run 'Test(PackageTarget|Manifest|Coverage|Owner|Edges)' -count=1` — passed.
+  - PRD JSON validation reports story 001 exactly once under `enablingCriteria`, no failed items, and one remaining behavioral user story (002).
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - Repository inventory and architecture-guard checks are valid enforcement evidence, but they do not satisfy a customer-behavior acceptance gate; model genuinely non-behavioral work as explicit project-enabling criteria.
+  - The broad `go test ./cmd/packagetargetmanifestcheck` package also exercises current-main Workers/Recordings root-file inventories and currently reports unrelated baseline drift (`kind_phase_validation.go` and `lifecycle_capability.go`); the public package-target Make gate and focused manifest tests remain green.
+  - Story 002 still needs the same acceptance-shape follow-up in a separate iteration; do not combine it with this story's bookkeeping change.
+---
+## 2026-08-10 10:34 -07:00 - sac-s0-1-ownership-inventories-002 review follow-up
+- What was implemented
+  - Reclassified `sac-s0-1-ownership-inventories-002` from a behavioral user story to an explicit `project-enabling` criterion in `prd.json`, because the ownership inventory and reciprocal-edge validation are repository-enforcement and maintainer tooling rather than customer runtime, API, CLI, UI, or emitted-event behavior.
+  - Preserved the completed package, cross-owner classification, present-tense rationale, and unresolved-bidirectional-edge acceptance evidence, and added an explicit no-runtime/API/CLI/UI/event-behavior criterion.
+  - Corrected the existing trailing comma so `prd.json` is valid standard JSON.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `make ownership-inventory-check` — passed.
+  - `make package-target-manifest-check` — passed (545 inventory rows / 545 package rows).
+  - `go test ./cmd/ownershipinventorycheck -count=1` — passed.
+  - PRD validation reports valid JSON, four unique passing enabling criteria, and no behavioral user stories.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - Acceptance criteria for repository-enforcement work should explicitly identify the project-level nature of the evidence and state the intentionally unchanged customer-facing behavior; keep the PRD valid JSON so automated consumers do not depend on permissive parsers.
+---
+## 2026-08-10 11:23 -07:00 - pf-stale-scope-diagnostic final PR audit
+- What was implemented
+  - Corrected the stale story 001 note so it records story 002's completed live-owner and acquisition-race coverage.
+  - Audited the existing PR #1853 after the latest review follow-up; no additional implementation work or unresolved review thread remains.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - PRD JSON validation reports both `pf-stale-scope-diagnostic-001` and `pf-stale-scope-diagnostic-002` as `passes:true`.
+  - Thread-aware GitHub audit reports 3 conversation comments, 0 reviews, and 0 inline review threads, including 0 unresolved threads.
+  - Local `HEAD` matches the PR head; the PR body matches `prd.json` exactly; PR #1853 is open, mergeable, and clean.
+  - Latest required CI checks are terminal and successful, including Backend Functional Coverage and Verification Policy.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - A completed PR handoff still needs a thread-aware review audit and an exact PRD/body/head comparison; green checks alone do not prove that review state and task metadata are synchronized.
 ---
