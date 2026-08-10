@@ -180,6 +180,7 @@ var servicesSet = wire.NewSet(
 	provideFactoryDefinitionNamedPathResolver,
 	provideFactoryDefinitionNamedFactoryCatalogFileSystem,
 	provideFactoryDefinitionPackagedInstallationFileSystem,
+	provideFactoryDefinitionPackagedInstallationDirectoryCreator,
 	providePackagedFactoryInstallation,
 	provideFactoryDefinitionAuthoredReaderFileSystem,
 	provideFactoryDefinitionAuthoredWriterFileSystem,

@@ -1,7 +1,6 @@
 ## Codebase Patterns
 - For broad functional coverage concurrency flakes, isolate the named test and rerun only the failed CI jobs before changing untouched behavior.
 - When resolving long append-only progress conflicts, read merge-stage files in bounded chunks and validate the reconstructed line count so tool-output truncation cannot drop history.
-- When splitting oversized same-package tests into focused files, remove stale file/maintainability exemptions and update the package file-count baseline for the intentional net increase; keep shared fixtures in one package-local helper file.
 - Treat repository-enforcement inventories and architecture guards as project-enabling PRD criteria when they have no runtime, API, CLI, UI, or emitted-event behavior; source scans support enforcement but are not customer-behavior evidence.
 - AST scanners must expand grouped Go field declarations before indexing parameter or result types; a field-count helper can exceed the AST field-list length and panic on valid source.
 - Asynchronous service characterizations should wait on observed edge/context signals rather than arbitrary `time.After` ceilings; the test context remains the failure escape hatch.
@@ -58,6 +57,8 @@
 - Placement conflicts should use the same typed `ErrorResponse` contract at every validation boundary so flag ordering has one stable code, family, and actionable message.
 - New functional scenarios must use an allowed product-domain noun plus subsection path such as `tests/functional/factory/batch`; transport names like `cli` and internal implementation names like `factory_runtime` are not durable domain cells.
 - Ordered functional provider outcomes can use `support.NewShapedProviderCommandRunner` with queued provider-native `CommandResult` values, including a later non-zero result, while preserving the real command-runner edge and typed provider classification.
+- JavaScript live-child functional tests that inject `ProviderCommandRunner` must explicitly select a registered model provider (for example `CODEX`) so the public child route reaches the provider command adapter; return sanitized provider-native JSONL from the command edge.
+- A callback or signal emitted inside a canceled external-effect call is not necessarily a quiescent lifecycle boundary; for persistence assertions, use an owned process stop/join or another public terminal observation that waits for the caller/runtime cleanup too.
 - For mechanical same-package Go test splits, run before/after discovery and coverage from isolated `HEAD` and current worktrees when the original source file is being moved; this keeps package-level evidence independent of the moved-file layout.
 
 - The production CLI process boundary should silence Cobra's implicit error text, preserve command-owned coded diagnostics with a writer marker, and wrap only unclassified failures in a constant safe fallback; direct Cobra callers can retain legacy presentation through a context switch.
@@ -2506,8 +2507,86 @@
 - Verification
   - The sessions-restart test passed ten consecutive local runs.
   - CI run `31427408109` is green after the failed-job rerun, including Backend Functional Coverage and Verification Policy.
+ - **Learnings for future iterations:**
+   - Keep repeated CI flake evidence scoped to the named test and package; a successful isolated rerun is sufficient to validate recovery when the feature diff is untouched.
+---
+## 2026-08-10 13:41 -07:00 - thr-deflake-js-durability-001
+- What was implemented
+  - Reproduced the named CI evidence from Backend Functional Coverage attempt 2 of run 31426292402, job 93582274257: `TestJavaScriptDurabilityDoesNotPersistSnapshotsByDefault` failed at `resume_test.go:208` because the provider did not observe the canceled workflow context.
+  - Identified the competing operations: the runtime publishes dispatch `RUNNING` before the worker necessarily enters the injected provider `Infer` edge; the test interrupted immediately after observing `RUNNING`, so cancellation could occur before the blocking provider call began.
+  - Replaced the durability provider's counter polling and timing gap with deterministic `inferStarted` and `contextCanceled` channel signals. The interruption helper now waits for provider entry before issuing interrupt-dispatch and waits for provider cancellation through a bounded failure timer select.
+- Files changed
+  - `tests/functional/orchestration/javascript/durability/resume_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Baseline `go test ./tests/functional/orchestration/javascript/durability -run '^TestJavaScriptDurabilityDoesNotPersistSnapshotsByDefault$' -count=20 -v -timeout 900s` — 20/20 passed.
+  - Baseline three-sibling durability run with `-count=20` — passed.
+  - Post-change focused no-snapshot run with `-count=5` — passed.
+  - Post-change three-sibling focused run — passed.
+  - `go test -race ./tests/functional/orchestration/javascript/durability -count=1 -v -timeout 900s` — passed.
+  - `go vet ./tests/functional/orchestration/javascript/durability` and `git diff --check` — passed.
 - **Learnings for future iterations:**
-  - Keep repeated CI flake evidence scoped to the named test and package; a successful isolated rerun is sufficient to validate recovery when the feature diff is untouched.
+  - A public dispatch `RUNNING` projection is not proof that an external provider call has started; cancellation tests must synchronize on the injected edge's entry signal before issuing lifecycle control.
+  - Channel-based edge observations remove both the pre-entry race and the test's counter-polling sleep without changing product durability behavior. Story 002 still needed the no-snapshot filesystem boundary, and story 003 still owned fresh-run and sibling-scope proof.
+---
+## 2026-08-10 14:14 -07:00 - thr-deflake-js-durability-002
+- What was implemented
+  - Made `TestJavaScriptDurabilityDoesNotPersistSnapshotsByDefault` wait for the injected blocking provider's `Infer` call to return after cancellation, closing the gap where the public `INTERRUPTED` projection could be observed before the external edge completed.
+  - Kept the public Factory Session assertions for in-memory `INTERRUPTED` status and `interruptedAt` lifecycle data, and expanded the negative durability proof to reject both the project-local durable-session snapshot and its parent directory.
+  - Confirmed no product durability change is needed: default execution remains in-memory-only, and the correction stays in the JavaScript durability functional test.
+- Files changed
+  - `tests/functional/orchestration/javascript/durability/resume_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test -p=1 -vet=off ./tests/functional/orchestration/javascript/durability -run '^TestJavaScriptDurabilityDoesNotPersistSnapshotsByDefault$' -count=1 -v -timeout 180s` — passed.
+  - The same focused test with `-count=5 -v` — five consecutive passes.
+  - All three JavaScript durability resume scenarios with `-count=1 -v` — passed.
+  - `go vet ./tests/functional/orchestration/javascript/durability` — passed.
+  - `make ui-deps` followed by `make typecheck` — passed; dependency setup changed no tracked lockfile.
+  - `git diff --check` and `prd.json` JSON validation — passed.
+- **Learnings for future iterations:**
+  - A cancellation-observed signal is not the same as an external provider call's completion; negative persistence assertions should wait for the injected edge to return before reading the filesystem.
+  - When the local UI dependency tree is incomplete, `make ui-deps` restores the pinned Bun workspace without changing tracked files.
+  - Story 003 owns the 20 fresh package runs, race-enabled package run, and sibling-scope proof.
+---
+## 2026-08-10 14:21 -07:00 - thr-deflake-js-durability-003
+- What was implemented
+  - Completed the sibling-scope review: the durability package contains exactly three scenarios, all using the shared blocking-provider fixture and the same confirmed dispatch-`RUNNING`/provider-entry race. The existing correction covers each sibling through provider entry, cancellation, and completion channel observations while preserving the original public lifecycle, dispatch, checkpoint, result, and no-snapshot assertions.
+  - No additional sibling with a different race mechanism was changed, and no product durability code, sleep, retry loop, timeout padding, relaxed assertion, `cmd/functionallane`, Makefile functional target, or shared functional wait helper was modified.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Twenty separate fresh `go test ./tests/functional/orchestration/javascript/durability -count=1 -v -timeout 900s` commands passed. Retained command output records `RUN 1/20 PASS`, `RUN 2/20 PASS`, `RUN 3/20 PASS`, `RUN 4/20 PASS`, `RUN 5/20 PASS`, `RUN 6/20 PASS`, `RUN 7/20 PASS`, `RUN 8/20 PASS`, `RUN 9/20 PASS`, `RUN 10/20 PASS`, `RUN 11/20 PASS`, `RUN 12/20 PASS`, `RUN 13/20 PASS`, `RUN 14/20 PASS`, `RUN 15/20 PASS`, `RUN 16/20 PASS`, `RUN 17/20 PASS`, `RUN 18/20 PASS`, `RUN 19/20 PASS`, and `RUN 20/20 PASS`.
+  - `go test -race ./tests/functional/orchestration/javascript/durability -count=1 -v -timeout 900s` passed all three scenarios without a race report.
+  - `go vet ./tests/functional/orchestration/javascript/durability`, `make typecheck`, `git diff --check`, and PRD JSON validation passed.
+- **Learnings for future iterations:**
+  - A shared injected-edge synchronization fixture is sufficient when sibling scenarios demonstrably exercise the same provider-entry race; keep each scenario's public assertions intact rather than adding separate timing controls.
+  - The required fresh-run evidence is strongest when each `-count=1` invocation is launched as a separate command and the numbered outcomes are retained alongside the PRD notes.
+---
+## 2026-08-10 15:10 -07:00 - thr-deflake-js-durability-002 review follow-up
+- What was implemented
+  - Addressed the blocking PR feedback by replacing the durability test's custom in-process `ProviderOverride` fake with a `ProviderCommandRunner` edge runner that returns sanitized provider-shaped Codex JSONL, blocks its second command until the dispatch context is canceled, and exposes entry/cancellation signals.
+  - Made the copied workflow explicitly select `CODEX` for both live children so the public JavaScript worker route reaches the injected command edge.
+  - Replaced the premature no-snapshot completion signal with the root-built `FunctionalAPIServer.Stop` shutdown/join boundary. The test still reads the public interrupted session before stopping the process, then rejects both the durable-session snapshot and its parent directory after `Process.Execute` has returned.
+- Files changed
+  - `tests/functional/orchestration/javascript/durability/resume_test.go`
+  - `tests/fixtures/javascript_runtime/resumable-two-step-fake-children.workflow.js`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/orchestration/javascript/durability -count=1 -v -timeout 240s` — all three scenarios passed.
+  - CLI resume, MCP resume, sessions restart, and lower-level runtime resume consumers of the shared workflow fixture — all targeted cases passed.
+  - `go test -race ./tests/functional/orchestration/javascript/durability -count=1 -v -timeout 900s` — passed without a race report.
+  - Twenty separate fresh `go test ./tests/functional/orchestration/javascript/durability -count=1 -timeout 900s` commands — `RUN 1/20 PASS` through `RUN 20/20 PASS`.
+  - `go vet ./tests/functional/orchestration/javascript/durability`, `make typecheck`, `git diff --check`, and PRD JSON validation — passed.
+- **Learnings for future iterations:**
+  - `inferCompleted` was still too early when emitted from a deferred callback inside `Infer`; it only proved the edge function was returning, not that the caller/runtime had processed cancellation and cleanup. An owned process shutdown/join is the correct boundary for the negative persistence assertion.
+  - The command-runner edge is wired only after the JavaScript child has a concrete registered provider selection; an empty `agent.run` selection produces a live child with no provider command call rather than exercising the injected runner.
+  - PR #1858's blocking comment required both the lifecycle-quiescence correction and removal of the custom provider fake; both are now represented in the source diff and updated PRD notes.
+---
 ## 2026-08-10 13:48 -07:00 - thr-split-cli-root-run-tests-001
 - What was implemented
   - Mechanically split `pkg/transports/cli/root_run_test.go` into focused completion, named-factory selection, root composition, input/presentation, run flags, run configuration, and operator-default test files, with shared package-local fixtures in `root_run_test_helpers_test.go`.
@@ -2565,7 +2644,23 @@
   - Largest resulting split test file is 513 lines; `git diff --check` passed.
 - **Learnings for future iterations:**
   - Keep no-server bootstrap fixtures and their integration assertions together because they share the capturing runner, mock-worker configuration, and API-projection helpers; keep metric recorder helpers with input-resolution observability tests.
-  - A full package-level inventory includes tests from every same-package file; compare isolated `HEAD` and current worktrees rather than only the moved file’s declarations.
+  - A full package-level inventory includes tests from every same-package file; compare isolated `HEAD` and current worktrees rather than only the moved file's declarations.
+---
+
+## 2026-08-10 16:05 -07:00 - thr-deflake-js-durability current-main synchronization follow-up
+- What was implemented
+  - Merged the live `origin/main` head `e8c0a248a` into the durability branch after the PR base advanced again.
+  - Preserved the task-scoped `prd.json` as the PR description source and retained the append-only durability and prior current-main progress history while resolving the shared bookkeeping-file conflict.
+  - Retained the unrelated current-main packaged-installation ownership, hard-kill functional regression, and CLI test-split changes in the merge tree without widening this task's implementation scope.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+  - Current-main packaged-installation, system-initialization, CLI, and hard-kill functional test files included by the synchronization merge.
+- Verification
+  - `prd.json` remains the durability PRD with all three stories marked `passes:true`.
+  - Merge conflict markers were removed; the staged merge will be checked with `git diff --cached --check` and JSON validation before push.
+- **Learnings for future iterations:**
+  - Keep the active task PRD authoritative when current main carries another task's PRD, and record the base SHA in the append-only progress log so PR description parity remains auditable after repeated base advances.
 ---
 
 ## 2026-08-10 14:47 -07:00 - dwro-s1-remote-placement-flags current-main synchronization follow-up
