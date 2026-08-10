@@ -3511,6 +3511,86 @@ func TestPhaseEventProjection_PreservesOrderedRunningAndTerminalPhases(t *testin
 	}
 }
 
+func TestRuntimeRecordProjection_RebuildsCanonicalPhaseCheckpointAndDispatchEvents(t *testing.T) {
+	t.Parallel()
+	startedAt := time.Date(2026, 6, 29, 12, 0, 0, 0, time.UTC)
+	finishedAt := startedAt.Add(2 * time.Minute)
+	checkpointAt := startedAt.Add(time.Minute)
+	sessionID := "dur-sess-runtime-record-projection-001"
+	checkpoint := factory.JavaScriptRuntimeRecord{
+		Sequence: 2,
+		Kind:     factory.JavaScriptRecordKindCheckpoint,
+		Checkpoint: &factory.JavaScriptCheckpointRecord{
+			ID: "checkpoint-1", Summary: "checkpoint summary",
+		},
+	}
+	state := &runtimeSessionState{
+		session: SessionReadResult{
+			SessionID:        sessionID,
+			Status:           LifecycleStatusSucceeded,
+			OrchestratorKind: interfaces.OrchestratorKindJavaScript,
+			Dialect:          "you-workflow-v1",
+			SourceHash:       "sha256:runtime-records",
+			Lifecycle:        &LifecycleTimestamps{StartedAt: &startedAt, FinishedAt: &finishedAt},
+		},
+		result: ResultReadResult{
+			SessionID:    sessionID,
+			ResultStatus: ResultStatusFinal,
+		},
+		dispatches: []DispatchSummary{{
+			ID: "dispatch-1", Status: DispatchStatusCompleted,
+			Label: "summarize", RunnerID: "runner-1", PresetID: "preset-1",
+			ModelProvider: "provider-1", Model: "model-1", ReasoningEffort: "medium",
+			Provider: "provider-1",
+		}},
+		checkpointSummary: &factory.JavaScriptCheckpointSummary{
+			CheckpointID: "checkpoint-1", CreatedAt: checkpointAt,
+		},
+		runtimeRecords: []factory.JavaScriptRuntimeRecord{
+			{Sequence: 1, Kind: factory.JavaScriptRecordKindPhase, Phase: &factory.JavaScriptPhaseRecord{Name: " plan "}},
+			{Sequence: 1, Kind: factory.JavaScriptRecordKindPhase, Phase: &factory.JavaScriptPhaseRecord{Name: " "}},
+			checkpoint,
+			checkpoint,
+			{Sequence: 3, Kind: factory.JavaScriptRecordKindPhase, Phase: &factory.JavaScriptPhaseRecord{Name: "execute"}},
+			{Sequence: 4, Kind: factory.JavaScriptRecordKindCheckpoint, Checkpoint: &factory.JavaScriptCheckpointRecord{ID: " "}},
+		},
+	}
+
+	input := runtimeDispatchEventInputFromState(state)
+	if got, want := len(input.RuntimeRecords), 5; got != want {
+		t.Fatalf("unique runtime records = %d, want %d", got, want)
+	}
+	events := rebuildRuntimeSessionCanonicalEvents(state)
+	var eventTypes []string
+	for _, raw := range events {
+		var event struct {
+			Type string `json:"type"`
+		}
+		if err := json.Unmarshal(raw, &event); err != nil {
+			t.Fatalf("decode canonical event: %v", err)
+		}
+		eventTypes = append(eventTypes, event.Type)
+	}
+	for _, want := range []string{
+		"ORCHESTRATOR_PHASE_CHANGED",
+		"ORCHESTRATOR_CHECKPOINT_WRITTEN",
+		"DISPATCH_QUEUED",
+		"DISPATCH_RECONCILED",
+		"SESSION_COMPLETED",
+	} {
+		found := false
+		for _, eventType := range eventTypes {
+			if eventType == want {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("event types = %v, missing %s", eventTypes, want)
+		}
+	}
+}
+
 func phaseEventStatuses(t *testing.T, events []json.RawMessage) []string {
 	t.Helper()
 	statuses := make([]string, 0, len(events))

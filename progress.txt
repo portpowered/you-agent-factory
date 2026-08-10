@@ -1558,3 +1558,17 @@
 - **Learnings for future iterations:**
   - When current main mechanically splits a test file touched by an active branch, accept the split or deletion and port only the behavioral contract edits into the new focused files before rerunning package gates.
 ---
+
+## 2026-08-10 15:44 -07:00 - btrc-p1-root-injection-006 unit-coverage follow-up
+- What was implemented
+  - Added a focused canonical runtime-record projection scenario after fresh CI identified a 0.0326 percentage-point unit-coverage ratchet regression in Factory Sessions execution. The scenario covers duplicate runtime-record deduplication, ordered phase/checkpoint projection, resolved dispatch selection fields, and terminal dispatch/session events.
+  - Merged the latest `origin/main` tip `e8c0a248` and regenerated canonical Wire after resolving the shared generated-file and append-only progress conflicts.
+- Files changed
+  - `pkg/services/factory_sessions/internal/execution/fake_service_runtime_test.go`
+  - `progress.txt`
+- Verification
+  - Focused projection test and the full `pkg/services/factory_sessions/internal/execution` package test pass.
+  - Package coverage rises to 79.6% in the isolated coverage check; `git diff --check` passes.
+- **Learnings for future iterations:**
+  - When removing event-delivery tests, retain direct value-derived canonical-event coverage for runtime-record branches; a thin package ratchet can expose lost projection scenarios even when the broader behavior suite remains green.
+---
