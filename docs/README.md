@@ -5,8 +5,8 @@ The installed CLI also packages a fixed reference surface under
 run `you docs <topic>` for packaged topics such as `agents`,
 `authoring-factories`, `config`, `factory-validation`, `mock-workers`,
 `record-replay`, `guards`, `relationships`, `operations`, `work`,
-`workstations`, `workers`, `resources`, `models`, `batch-inputs`, or
-`templates`.
+`workstations`, `workers`, `resources`, `models`, `providers`, `batch-inputs`,
+or `templates`.
 
 ## For agents
 
@@ -59,6 +59,9 @@ These are the fixed topic names accepted by `you docs <topic>`.
   workstations` for the canonical workstation guide.
 - `workers` is the packaged worker quick reference. Run `you docs workers` for
   the canonical worker guide.
+- `providers` is the canonical worker/provider selection and limits guide. Run
+  `you docs providers` for configured model roles, modality and tool limits,
+  Factory versus ad-hoc settings, AGY semantics, and ACP integrations.
 - `resources` is the packaged bounded-concurrency reference. Run `you docs
   resources` for the resource slice and `you docs config` for top-level topology
   fields.
@@ -84,6 +87,9 @@ These are the fixed topic names accepted by `you docs <topic>`.
     behavior, and workstation-scoped execution settings.
   - `you docs workers` owns worker types, worker-scoped runtime fields, and split
     `workers/<name>/AGENTS.md` placement.
+  - `you docs providers` owns worker/provider selection, model capabilities and
+    limits, provider-specific effort, Factory versus ad-hoc settings, and AGY
+    or ACP provider guidance.
   - `you docs batch-inputs` owns `FACTORY_REQUEST_BATCH` ingress, watched-file
     placement, and authored relation types (`batch-work` remains a CLI alias for
     the same guide).
