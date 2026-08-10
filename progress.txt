@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- For broad functional coverage concurrency flakes, isolate the named test and rerun only the failed CI jobs before changing untouched behavior.
 - When resolving long append-only progress conflicts, read merge-stage files in bounded chunks and validate the reconstructed line count so tool-output truncation cannot drop history.
 - Asynchronous service characterizations should wait on observed edge/context signals rather than arbitrary `time.After` ceilings; the test context remains the failure escape hatch.
 - Continuous Petri service sessions intentionally remain `IDLE` after terminal Work; characterize the dispatch and Work/progress projection as the caller-visible result and assert the live-result route's typed unavailability instead of inventing a finite session result.
@@ -1823,4 +1824,17 @@
   - `git diff --check` passed; `prd.json` parses with all four stories marked `passes:true`.
 - **Learnings for future iterations:**
   - Maintainability gates apply to test helpers and coverage tests as well as production code; move large tables or independent assertion groups into focused helpers while retaining the same public assertions.
+---
+## 2026-08-10 09:45 -07:00 - pf-cli-exit-codes CI rerun follow-up
+- What was implemented
+  - Investigated CI run `31409217326` and isolated its only primary failure to the unchanged JavaScript parallel-concurrency functional test under coverage instrumentation.
+  - Reran that test ten times locally and reran only the failed GitHub Actions jobs; no feature change was made for the non-reproducible flake.
+- Files changed
+  - `progress.txt`
+- Verification
+  - The isolated concurrency test passed `-count=10`.
+  - CI run `31409217326`, attempt 2, passed Backend Functional Coverage, Verification Policy, and all other required jobs for head `ffc60b3994cf8c7a22f7bf2ba80dcb57709d833f`.
+  - PR #1856 remains conflict-free with no conversation comments, reviews, or unresolved threads.
+- **Learnings for future iterations:**
+  - A missing coverage artifact can be secondary to a single flaky functional test; inspect the named failure, rerun it in isolation, and rerun only failed jobs before modifying unrelated orchestration behavior.
 ---
