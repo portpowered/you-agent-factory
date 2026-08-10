@@ -31,6 +31,13 @@
 - Restore package coverage thresholds with focused behavioral tests for typed edge outcomes; do not lower baseline manifests for new branches.
 - Replay completeness must be derived from a terminal lifecycle record inside the captured Events range, not from a separately synchronized terminal session state.
 - When a package has a strict file-count baseline, put a small refactor in an existing focused file before adding a new helper file or changing the baseline.
+- When a functional coverage job reports a missing evidence artifact, inspect the earlier test output first; the missing artifact can be a secondary symptom of the primary test failure.
+- For cross-repository PRs, resolve review and CI state with an explicit owner/repository and compare local, fork-branch, and PR head SHAs; current-branch discovery may follow a different local origin.
+- New functional scenarios must use an allowed product-domain noun plus subsection path such as `tests/functional/factory/batch`; transport names like `cli` and internal implementation names like `factory_runtime` are not durable domain cells.
+- Ordered functional provider outcomes can use `support.NewShapedProviderCommandRunner` with queued provider-native `CommandResult` values, including a later non-zero result, while preserving the real command-runner edge and typed provider classification.
+- Cross-process ownership diagnostics should carry the persisted backend-scope ID through the owning service request and emit safe structured fields for resource, outcome, owner liveness, and unverified PID evidence.
+- Exclusive directory reservation is a synchronization capability: inject it as a narrowly owned function port and keep generic filesystem adapters limited to inspection and ordinary materialization effects.
+- Treat an absent PID as indeterminate unless the owner probe has stronger proof of orphanhood; compare the owner record again before any explicitly permitted orphan reclaim.
 - When broad functional coverage reports a cancellation-observation failure, rerun the failed lane and isolate the named test before changing an unrelated feature; parallel-suite failures can move between existing durability/restart tests while isolated runs pass.
 
 ## 2026-08-09 13:12 - wo-d1-packaged-factories-docs-001
@@ -1113,4 +1120,30 @@
   - Thread-aware PR inspection — no conversation comments, reviews, or unresolved threads.
 - **Learnings for future iterations:**
   - When a full functional suite loses an expected intermediate lifecycle event, isolate the named test repeatedly before changing runtime code; a clean isolated run plus no PR diff in that package supports retrying the CI lane rather than broadening feature scope.
+---
+## 2026-08-10 10:21 -07:00 - pf-stale-scope-diagnostic-002
+- What was implemented
+  - Threaded the persisted `backendScopeID` from System Initialization through the packaged Factory installer parameters so startup diagnostics identify the actual backend scope instead of mislabeling the Factory root as a scope.
+  - Injected the repository logger into packaged installation and emitted structured safe acquisition, success, explicitly revalidated orphan-reclaim, active/indeterminate contention, and failure outcomes with resource paths and owner evidence.
+  - Split exclusive staging-directory creation into a narrowly owned `PackagedInstallationDirectoryCreator` edge; removed `Local.Mkdir` so the generic platform filesystem no longer hides the synchronization effect.
+  - Preserved conservative live, malformed, permission-denied, and racing ownership behavior; added deterministic logger, scope propagation, owner-reclaim, and edge-override assertions.
+- Files changed
+  - `pkg/services/factory_definitions/internal/services/distribution/packagedinstallation/service.go`
+  - `pkg/services/factory_definitions/internal/services/distribution/packagedinstallation/owner_liveness_*.go`
+  - `pkg/services/factory_definitions/internal/services/distribution/packagedinstallation/diagnostics_test.go`
+  - `pkg/services/factory_definitions/packaged_installation*.go`
+  - `pkg/services/system_initialization/internal/workflow/workflow.go` and affected installer fakes/tests
+  - `pkg/services/edges/definition.go`, `pkg/wire/*`, and generated `pkg/wire/wire_gen.go`
+  - `pkg/platform/filesystem/local.go`
+  - `progress.txt` and `prd.json`
+- Verification
+  - `make test` — passed.
+  - `make wire-smoke` — passed, including generated-wire drift check.
+  - `make backend-size pkg-maint pkg-file-count vet logging-boundary-check` — passed.
+  - Focused packaged-installation, System Initialization, edge, and Wire tests — passed.
+  - Built-process hard-kill successor regression — passed on Windows; successor returned bounded contention and preserved the staged resource.
+  - `make pkg-boundary` still reports the repository's existing migration backlog; the review-specific `Local.Mkdir` finding is removed and no new packaged-installation finding remains.
+- **Learnings for future iterations:**
+  - The durable operator config is the source of the backend-scope identity, while the deterministic `.<factory>.staging-owner` directory is the actual serialization resource; keep those concepts separate in errors, logs, and tests.
+  - The local OS probe deliberately does not equate a missing PID with safe reclamation because PID reuse and incomplete stage contents are not identity proof; only a stronger injected orphan classification may enter compare-and-reclaim.
 ---
