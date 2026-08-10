@@ -34,3 +34,5 @@ properties:
       $ref: '../../../../openapi-main.yaml#/components/schemas/Resource'
   metadata:
     $ref: '../../../../openapi-main.yaml#/components/schemas/DispatchRequestEventMetadata'
+  expectedArtifactContext:
+    $ref: '../../../../openapi-main.yaml#/components/schemas/ExpectedArtifactTemplateContext'

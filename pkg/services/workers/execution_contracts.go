@@ -258,22 +258,23 @@ type ScriptResponseEventPayload struct {
 // contract consumed by Factory event reducers. FactoryEvent context remains
 // authoritative for dispatch identity and ordering.
 type DispatchResponseEventPayload struct {
-	CompletionID                *string                      `json:"completionId,omitempty"`
-	CurrentChainingTraceID      *string                      `json:"currentChainingTraceId,omitempty"`
-	DurationMillis              *int64                       `json:"durationMillis,omitempty"`
-	Error                       *string                      `json:"error,omitempty"`
-	FailureDetail               *FailureDetail               `json:"failureDetail,omitempty"`
-	Feedback                    *string                      `json:"feedback,omitempty"`
-	Metadata                    map[string]string            `json:"metadata,omitempty"`
-	Metrics                     *WorkMetricsEventPayload     `json:"metrics,omitempty"`
-	Outcome                     WorkOutcome                  `json:"outcome"`
-	Output                      *string                      `json:"output,omitempty"`
-	OutputResources             *[]DispatchResourceEventRef  `json:"outputResources,omitempty"`
-	OutputWork                  *[]work.WorkRequestEventWork `json:"outputWork,omitempty"`
-	PreviousChainingTraceIDs    *[]string                    `json:"previousChainingTraceIds,omitempty"`
-	ProviderFailure             *WorkFailureMetadata         `json:"providerFailure,omitempty"`
-	SelectedClassificationLabel *string                      `json:"selectedClassificationLabel,omitempty"`
-	TransitionID                string                       `json:"transitionId"`
+	CompletionID                *string                       `json:"completionId,omitempty"`
+	CurrentChainingTraceID      *string                       `json:"currentChainingTraceId,omitempty"`
+	DurationMillis              *int64                        `json:"durationMillis,omitempty"`
+	Error                       *string                       `json:"error,omitempty"`
+	ArtifactVerification        *ExpectedArtifactVerification `json:"artifactVerification,omitempty"`
+	FailureDetail               *FailureDetail                `json:"failureDetail,omitempty"`
+	Feedback                    *string                       `json:"feedback,omitempty"`
+	Metadata                    map[string]string             `json:"metadata,omitempty"`
+	Metrics                     *WorkMetricsEventPayload      `json:"metrics,omitempty"`
+	Outcome                     WorkOutcome                   `json:"outcome"`
+	Output                      *string                       `json:"output,omitempty"`
+	OutputResources             *[]DispatchResourceEventRef   `json:"outputResources,omitempty"`
+	OutputWork                  *[]work.WorkRequestEventWork  `json:"outputWork,omitempty"`
+	PreviousChainingTraceIDs    *[]string                     `json:"previousChainingTraceIds,omitempty"`
+	ProviderFailure             *WorkFailureMetadata          `json:"providerFailure,omitempty"`
+	SelectedClassificationLabel *string                       `json:"selectedClassificationLabel,omitempty"`
+	TransitionID                string                        `json:"transitionId"`
 }
 
 // DispatchResourceEventRef preserves the public resource facts emitted with a
@@ -294,17 +295,19 @@ type WorkMetricsEventPayload struct {
 // WorkstationResult describes the business result of one workstation execution
 // carried by Factory event payloads and world-state projections.
 type WorkstationResult struct {
-	Outcome                     string               `json:"outcome"`
-	Output                      string               `json:"output,omitempty"`
-	Error                       string               `json:"error,omitempty"`
-	Feedback                    string               `json:"feedback,omitempty"`
-	SelectedClassificationLabel string               `json:"selected_classification_label,omitempty"`
-	FailureDetail               *FailureDetail       `json:"failureDetail,omitempty"`
-	FailureMetadata             *WorkFailureMetadata `json:"failure_metadata,omitempty"`
+	Outcome                     string                        `json:"outcome"`
+	Output                      string                        `json:"output,omitempty"`
+	Error                       string                        `json:"error,omitempty"`
+	Feedback                    string                        `json:"feedback,omitempty"`
+	SelectedClassificationLabel string                        `json:"selected_classification_label,omitempty"`
+	ArtifactVerification        *ExpectedArtifactVerification `json:"artifact_verification,omitempty"`
+	FailureDetail               *FailureDetail                `json:"failureDetail,omitempty"`
+	FailureMetadata             *WorkFailureMetadata          `json:"failure_metadata,omitempty"`
 }
 
 func CloneWorkstationResult(result WorkstationResult) WorkstationResult {
 	clone := result
+	clone.ArtifactVerification = result.ArtifactVerification.Clone()
 	clone.FailureDetail = CloneFailureDetail(result.FailureDetail)
 	clone.FailureMetadata = CloneWorkFailureMetadata(result.FailureMetadata)
 	return clone
@@ -313,16 +316,17 @@ func CloneWorkstationResult(result WorkstationResult) WorkstationResult {
 // WorkResult is returned by a worker after processing.
 // The Outcome determines which arc set is used to route the resulting tokens.
 type WorkResult struct {
-	DispatchID                  string                   `json:"dispatch_id"`
-	TransitionID                string                   `json:"transition_id"`
-	Outcome                     WorkOutcome              `json:"outcome"`
-	Output                      string                   `json:"output,omitempty"`
-	RecordedOutputWork          []work.FactoryWorkItem   `json:"recorded_output_work,omitempty"`
-	Error                       string                   `json:"error,omitempty"`
-	Feedback                    string                   `json:"feedback,omitempty"`
-	SelectedClassificationLabel string                   `json:"selected_classification_label,omitempty"`
-	FailureMetadata             *WorkFailureMetadata     `json:"failure_metadata,omitempty"`
-	ProviderSession             *ProviderSessionMetadata `json:"provider_session,omitempty"`
+	DispatchID                  string                        `json:"dispatch_id"`
+	TransitionID                string                        `json:"transition_id"`
+	Outcome                     WorkOutcome                   `json:"outcome"`
+	Output                      string                        `json:"output,omitempty"`
+	RecordedOutputWork          []work.FactoryWorkItem        `json:"recorded_output_work,omitempty"`
+	Error                       string                        `json:"error,omitempty"`
+	Feedback                    string                        `json:"feedback,omitempty"`
+	SelectedClassificationLabel string                        `json:"selected_classification_label,omitempty"`
+	ArtifactVerification        *ExpectedArtifactVerification `json:"artifact_verification,omitempty"`
+	FailureMetadata             *WorkFailureMetadata          `json:"failure_metadata,omitempty"`
+	ProviderSession             *ProviderSessionMetadata      `json:"provider_session,omitempty"`
 	// ProviderFailureKind and ProviderContinuation* retain Providers-owned
 	// classifications across the in-process Workers result boundary. They are
 	// deliberately excluded from event serialization: Factory Event contracts
@@ -488,7 +492,48 @@ const (
 	WorkFailureTypeMisconfigured       WorkFailureType = "misconfigured"
 	WorkFailureTypeCommandLineTooLong  WorkFailureType = "command_line_too_long"
 	WorkFailureTypeMissingExecutable   WorkFailureType = "missing_executable"
+	// WorkFailureTypeExpectedArtifactsUnsatisfied is a terminal, deterministic
+	// failure emitted when a successful worker did not produce its declared
+	// workspace files.
+	WorkFailureTypeExpectedArtifactsUnsatisfied WorkFailureType = "EXPECTED_ARTIFACTS_UNSATISFIED"
 )
+
+// ExpectedArtifactVerificationReason identifies why one expected artifact
+// declaration was not satisfied. The values are deliberately small and stable
+// because they cross the canonical Factory event boundary.
+type ExpectedArtifactVerificationReason string
+
+const (
+	ExpectedArtifactVerificationReasonMissing ExpectedArtifactVerificationReason = "MISSING"
+	ExpectedArtifactVerificationReasonEmpty   ExpectedArtifactVerificationReason = "EMPTY"
+)
+
+// ExpectedArtifactVerificationEntry is a safe, workspace-relative diagnostic
+// for one unmet expected artifact declaration. Pattern never contains the
+// absolute dispatch workspace.
+type ExpectedArtifactVerificationEntry struct {
+	DeclarationIndex int                                `json:"declarationIndex,omitempty"`
+	Name             string                             `json:"name"`
+	Pattern          string                             `json:"pattern"`
+	Reason           ExpectedArtifactVerificationReason `json:"reason"`
+}
+
+// ExpectedArtifactVerification is the durable terminal failure summary for
+// expected artifact enforcement.
+type ExpectedArtifactVerification struct {
+	Code    WorkFailureType                     `json:"code"`
+	Entries []ExpectedArtifactVerificationEntry `json:"entries"`
+}
+
+// Clone returns a detached verification summary.
+func (verification *ExpectedArtifactVerification) Clone() *ExpectedArtifactVerification {
+	if verification == nil {
+		return nil
+	}
+	clone := *verification
+	clone.Entries = append([]ExpectedArtifactVerificationEntry(nil), verification.Entries...)
+	return &clone
+}
 
 // FailureDetail is the canonical customer-safe explanation of a failed
 // operation. Runtime projections copy this value without reclassifying or
@@ -529,7 +574,8 @@ func FailureDecisionFromMetadata(metadata *WorkFailureMetadata) WorkFailureDecis
 		WorkFailureTypeUnknown,
 		WorkFailureTypeMisconfigured,
 		WorkFailureTypeMissingExecutable,
-		WorkFailureTypeCommandLineTooLong:
+		WorkFailureTypeCommandLineTooLong,
+		WorkFailureTypeExpectedArtifactsUnsatisfied:
 		return WorkFailureDecision{Terminal: true}
 	}
 	switch metadata.Family {

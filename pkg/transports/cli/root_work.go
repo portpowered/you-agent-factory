@@ -3,12 +3,14 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"io"
 	"path/filepath"
 	"strings"
 
 	"github.com/portpowered/infinite-you/internal/cliversion"
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
@@ -466,7 +468,7 @@ func handleRunExecutionError(cmd *cobra.Command, resolvedConfig runcli.RunConfig
 	if len(promptArgs) > 0 {
 		err = runcli.MapInvocationFailure(err)
 	}
-	if runcli.WriteIncompleteDrainError(cmd.ErrOrStderr(), err) {
+	if writeRunIncompleteDrainError(cmd, err) {
 		return err
 	}
 	if runcli.WriteInvocationError(cmd.ErrOrStderr(), err, globals.json) {
@@ -478,9 +480,23 @@ func handleRunExecutionError(cmd *cobra.Command, resolvedConfig runcli.RunConfig
 		errorWriter = cmd.ErrOrStderr()
 	}
 	if errorWriter != nil {
-		_, _ = fmt.Fprintln(errorWriter, err)
+		writeRunHumanError(cmd, errorWriter, err)
 	}
 	return err
+}
+
+func writeRunIncompleteDrainError(cmd *cobra.Command, err error) bool {
+	if clidiag.CentralDiagnosticsEnabled(cmd.Context()) {
+		return false
+	}
+	return runcli.WriteIncompleteDrainError(cmd.ErrOrStderr(), err)
+}
+
+func writeRunHumanError(cmd *cobra.Command, output io.Writer, err error) {
+	if clidiag.CentralDiagnosticsEnabled(cmd.Context()) {
+		return
+	}
+	_, _ = fmt.Fprintln(output, err)
 }
 
 func applyRunScopedServerMode(cfg runcli.RunConfig) runcli.RunConfig {

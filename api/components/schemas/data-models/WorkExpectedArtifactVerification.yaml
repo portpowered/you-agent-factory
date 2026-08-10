@@ -1,0 +1,10 @@
+type: string
+description: Latest recorded verification state for one expected artifact declaration on a Work item.
+x-enum-varnames:
+  - WorkExpectedArtifactVerificationPending
+  - WorkExpectedArtifactVerificationSatisfied
+  - WorkExpectedArtifactVerificationFailed
+enum:
+  - PENDING
+  - SATISFIED
+  - FAILED

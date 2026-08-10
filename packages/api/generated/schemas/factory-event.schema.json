@@ -412,6 +412,9 @@
           "description": "Deprecated compatibility copy of the dispatch chaining-trace identifier; prefer FactoryEvent.context.currentChainingTraceId.",
           "type": "string"
         },
+        "expectedArtifactContext": {
+          "$ref": "#/$defs/ExpectedArtifactTemplateContext"
+        },
         "inputs": {
           "items": {
             "$ref": "#/$defs/DispatchConsumedWorkRef"
@@ -448,6 +451,9 @@
       "additionalProperties": false,
       "description": "Customer-visible dispatch completion event. Output work is represented with the same Work schema used by request submission rather than token or marking-mutation internals. FactoryEvent.context owns dispatch, trace, and work identity; workstation and worker topology must be derived from the matching dispatch-request event plus the initial structure. Provider-attempt session and safe diagnostic facts stay on inference response events instead of being copied onto dispatch completion payloads.",
       "properties": {
+        "artifactVerification": {
+          "$ref": "#/$defs/ExpectedArtifactVerification"
+        },
         "completionId": {
           "type": "string"
         },
@@ -529,6 +535,147 @@
         "workerSessionId"
       ],
       "type": "object"
+    },
+    "ExpectedArtifact": {
+      "additionalProperties": false,
+      "description": "One expected output declaration relative to the dispatch workspace. Pattern is a workspace-relative literal path or glob and may use the replay-safe dispatch template fields `.Inputs` (the replay-safe fields are documented by `ExpectedArtifactTemplateInput`), `.Context.Project`, and `.Context.SessionID` inside a Go template action. Prompt-only fields, host paths, environment variables, and Factory documentation are not supported.",
+      "properties": {
+        "name": {
+          "description": "Customer-visible name for this expected output declaration.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "nonEmpty": {
+          "default": false,
+          "description": "Require every regular file matched by the pattern to be non-empty.",
+          "type": "boolean"
+        },
+        "pattern": {
+          "description": "Workspace-relative literal path or glob template to verify.",
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "pattern"
+      ],
+      "type": "object"
+    },
+    "ExpectedArtifactTemplateContext": {
+      "additionalProperties": false,
+      "description": "Stable, non-host context used when rendering expected-artifact patterns. Filesystem paths, environment variables, and Factory documentation are not part of this replayable vocabulary.",
+      "properties": {
+        "inputs": {
+          "description": "Exact replay-safe input values captured when the dispatch was created. Artifact templates expose these values through `.Inputs`; prompt-only relations, content, retry history, and host context are not included.",
+          "items": {
+            "$ref": "#/$defs/ExpectedArtifactTemplateInput"
+          },
+          "type": "array"
+        },
+        "project": {
+          "description": "Stable project identifier for the dispatch.",
+          "type": "string"
+        },
+        "sessionId": {
+          "description": "Stable Factory Session identifier for the dispatch.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "ExpectedArtifactTemplateInput": {
+      "additionalProperties": false,
+      "description": "Stable replay-safe input value available to an expected-artifact template. This is intentionally smaller than the workstation prompt input surface so completion verification and historical Work reads can use the same values.",
+      "properties": {
+        "dataType": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "parentId": {
+          "type": "string"
+        },
+        "payload": {
+          "description": "The dispatch-time textual payload value. It is retained only in the artifact template context and is not added to the normal Work read.",
+          "type": "string"
+        },
+        "project": {
+          "description": "Per-input project value resolved from the input project tag, dispatch context, or the default project.",
+          "type": "string"
+        },
+        "tags": {
+          "$ref": "#/$defs/StringMap"
+        },
+        "traceId": {
+          "type": "string"
+        },
+        "workId": {
+          "type": "string"
+        },
+        "workTypeId": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "ExpectedArtifactVerification": {
+      "additionalProperties": false,
+      "description": "Stable terminal verification summary emitted when a successful worker does not satisfy its effective expected artifact declarations.",
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/WorkFailureType"
+        },
+        "entries": {
+          "items": {
+            "$ref": "#/$defs/ExpectedArtifactVerificationEntry"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "code",
+        "entries"
+      ],
+      "type": "object"
+    },
+    "ExpectedArtifactVerificationEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "declarationIndex": {
+          "description": "One-based position in the normalized expected-artifact declaration list.",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "name": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "pattern": {
+          "description": "Workspace-relative rendered artifact pattern; host paths are never emitted.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "reason": {
+          "$ref": "#/$defs/ExpectedArtifactVerificationReason"
+        }
+      },
+      "required": [
+        "name",
+        "pattern",
+        "reason"
+      ],
+      "type": "object"
+    },
+    "ExpectedArtifactVerificationReason": {
+      "description": "Stable reason that an expected artifact declaration was not satisfied.",
+      "enum": [
+        "MISSING",
+        "EMPTY"
+      ],
+      "type": "string"
     },
     "Factory": {
       "additionalProperties": false,
@@ -3914,6 +4061,13 @@
           "description": "Explicit chaining-trace identifier for this submitted work item.",
           "type": "string"
         },
+        "expectedArtifacts": {
+          "description": "Effective expected artifact declarations and their latest recorded verification state.",
+          "items": {
+            "$ref": "#/$defs/WorkExpectedArtifact"
+          },
+          "type": "array"
+        },
         "name": {
           "description": "A human readable name for the work, not unique",
           "type": "string"
@@ -4114,6 +4268,46 @@
       "minLength": 1,
       "type": "string"
     },
+    "WorkExpectedArtifact": {
+      "additionalProperties": false,
+      "description": "One effective expected artifact declaration projected on a Work item. Pattern is the rendered workspace-relative literal path or glob, never a host path.",
+      "properties": {
+        "name": {
+          "description": "Customer-visible declaration name.",
+          "type": "string"
+        },
+        "nonEmpty": {
+          "description": "Whether every matching regular file must contain at least one byte.",
+          "type": "boolean"
+        },
+        "pattern": {
+          "description": "Safe rendered path or glob relative to the dispatch workspace.",
+          "type": "string"
+        },
+        "reason": {
+          "$ref": "#/$defs/ExpectedArtifactVerificationReason"
+        },
+        "verification": {
+          "$ref": "#/$defs/WorkExpectedArtifactVerification"
+        }
+      },
+      "required": [
+        "name",
+        "pattern",
+        "nonEmpty",
+        "verification"
+      ],
+      "type": "object"
+    },
+    "WorkExpectedArtifactVerification": {
+      "description": "Latest recorded verification state for one expected artifact declaration on a Work item.",
+      "enum": [
+        "PENDING",
+        "SATISFIED",
+        "FAILED"
+      ],
+      "type": "string"
+    },
     "WorkFailureFamily": {
       "description": "Stable machine-readable failure family used to decide retry and routing behavior for failed work.",
       "enum": [
@@ -4134,7 +4328,8 @@
         "unknown",
         "misconfigured",
         "missing_executable",
-        "command_line_too_long"
+        "command_line_too_long",
+        "EXPECTED_ARTIFACTS_UNSATISFIED"
       ],
       "type": "string"
     },
@@ -4436,6 +4631,13 @@
           ],
           "description": "Optional localized customer-facing explanation of this work type."
         },
+        "expectedArtifacts": {
+          "description": "Expected output declarations inherited by workstations handling this work type.",
+          "items": {
+            "$ref": "#/$defs/ExpectedArtifact"
+          },
+          "type": "array"
+        },
         "handlingBehavior": {
           "description": "Optional CLI routing markers for this work type. Factories used with you run --factory must declare handlingBehavior DEFAULT on exactly one work type.",
           "items": {
@@ -4691,6 +4893,13 @@
             }
           ],
           "description": "Environment variables added to the workstation execution context."
+        },
+        "expectedArtifacts": {
+          "description": "Expected output declarations added by this workstation to its applicable work type contract.",
+          "items": {
+            "$ref": "#/$defs/ExpectedArtifact"
+          },
+          "type": "array"
         },
         "guards": {
           "description": "Guarded loop breakers should use `VISIT_COUNT` guards here with a `LOGICAL_MOVE` workstation instead of top-level exhaustion rules.",

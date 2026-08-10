@@ -157,15 +157,26 @@ func workerSessionShowHTTPError(response *http.Response, status int) error {
 }
 
 func emitShowCLIError(config ShowConfig, jsonOutput bool, err error) error {
-	if !jsonOutput || err == nil || config.Output == nil {
+	if !jsonOutput || err == nil {
+		return err
+	}
+	output := config.Output
+	centralDiagnostics := clidiag.CentralDiagnosticsEnabled(config.Context)
+	if centralDiagnostics {
+		output = config.Diagnostics
+	}
+	if output == nil {
 		return err
 	}
 	payload := struct {
 		Code    string `json:"code"`
 		Message string `json:"message"`
 	}{Code: cliErrorCodeWithFallback(err, "WORKER_SESSION_SHOW_FAILED"), Message: cliErrorMessage(err)}
-	if encodeErr := json.NewEncoder(config.Output).Encode(payload); encodeErr != nil {
+	if encodeErr := json.NewEncoder(output).Encode(payload); encodeErr != nil {
 		return errors.Join(err, encodeErr)
+	}
+	if centralDiagnostics {
+		clidiag.MarkDiagnosticRendered(output)
 	}
 	return err
 }

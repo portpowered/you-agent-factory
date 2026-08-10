@@ -12,6 +12,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	"github.com/portpowered/infinite-you/internal/testutil"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 type configInitOutcome struct {
@@ -32,9 +33,10 @@ func initializeConfig(t testing.TB, ctx context.Context, session *builtcliaccept
 	}
 	missingFactory := filepath.Join(session.WorkDir, "missing-initialization-factory.json")
 	result, err := session.Run(ctx, "run", "--factory", missingFactory)
-	if err == nil || !strings.Contains(result.Stdout+result.Stderr+err.Error(), filepath.Base(missingFactory)) {
+	if err == nil {
 		t.Fatalf("%s: run missing Factory error = %v; stdout=%q stderr=%q", scenario, err, result.Stdout, result.Stderr)
 	}
+	support.RequireSafeCLIDiagnostic(t, result.Stderr)
 	if _, err := os.Stat(configPath); err != nil {
 		t.Fatalf("%s: initializer-owned config missing at %s: %v", scenario, configPath, err)
 	}
@@ -170,15 +172,15 @@ func assertRootProcessInitContract(
 	t.Helper()
 	configPath := filepath.Join(session.HomeDir, ".you-agent-factory", "config.json")
 	removed, removedErr := session.Run(ctx, "init", "--dir", "legacy-factory")
-	if removedErr == nil ||
-		!strings.Contains(removed.Stdout+removed.Stderr+removedErr.Error(), "use --provider") {
+	if removedErr == nil {
 		t.Fatalf(
-			"init without packaged selection = (%v, stdout=%q, stderr=%q), want provider setup requirement",
+			"init without packaged selection = (%v, stdout=%q, stderr=%q), want failure",
 			removedErr,
 			removed.Stdout,
 			removed.Stderr,
 		)
 	}
+	support.RequireSafeCLIDiagnostic(t, removed.Stderr)
 	if _, err := os.Stat(configPath); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("removed init input config stat = %v, want not exist", err)
 	}

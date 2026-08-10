@@ -1236,3 +1236,41 @@ func TestRuleAgentWorkerTools_AllowsAgentWorkerPolicy(t *testing.T) {
 		t.Fatalf("findings = %#v, want none", findings)
 	}
 }
+
+func TestExpectedArtifactTargets_ReportsActionableOwningDefinitionPaths(t *testing.T) {
+	cfg := &factorydefinitions.FactoryConfig{
+		WorkTypes: []factorydefinitions.WorkTypeConfig{{
+			Name: "story",
+			ExpectedArtifacts: []factorydefinitions.ExpectedArtifactConfig{{
+				Name: "", Pattern: "artifacts/story.json",
+			}},
+		}},
+		Workstations: []factorydefinitions.FactoryWorkstationConfig{{
+			Name:   "execute-story",
+			Inputs: []factorydefinitions.IOConfig{{WorkTypeName: "story", StateName: "init"}},
+			ExpectedArtifacts: []factorydefinitions.ExpectedArtifactConfig{{
+				Name: "manifest", Pattern: "artifacts/{{ (index .Inputs 1).Name }}/manifest.json",
+			}},
+		}},
+	}
+
+	targets := ExpectedArtifactTargets(cfg)
+	if len(targets) != 2 {
+		t.Fatalf("ExpectedArtifactTargets() returned %d targets, want 2: %#v", len(targets), targets)
+	}
+	workTypeTarget, workstationTarget := targets[0], targets[1]
+	if workTypeTarget.Code != CodeWorkTypeInvalidExpectedArtifact ||
+		workTypeTarget.Subject.Type != SubjectTypeWorkType || workTypeTarget.Subject.ID != "story" ||
+		workTypeTarget.Path != "factory.workTypes[0](story).expectedArtifacts[0]" ||
+		!strings.Contains(workTypeTarget.Message, "work type \"story\"") ||
+		!strings.Contains(workTypeTarget.Message, "name is required") {
+		t.Fatalf("work type target = %#v, want owning definition path and diagnostic", workTypeTarget)
+	}
+	if workstationTarget.Code != CodeWorkstationInvalidExpectedArtifact ||
+		workstationTarget.Subject.Type != SubjectTypeWorkstation || workstationTarget.Subject.ID != "execute-story" ||
+		workstationTarget.Path != "factory.workstations[0](execute-story).expectedArtifacts[0]" ||
+		!strings.Contains(workstationTarget.Message, "workstation \"execute-story\"") ||
+		!strings.Contains(workstationTarget.Message, "cannot be rendered") {
+		t.Fatalf("workstation target = %#v, want owning definition path and diagnostic", workstationTarget)
+	}
+}

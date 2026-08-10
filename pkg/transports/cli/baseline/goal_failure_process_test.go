@@ -3,6 +3,7 @@ package baseline_test
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
@@ -118,6 +120,10 @@ func TestFailureBaseline_QuietInvalidTopologyWritesStructuredInvocationFailure(t
 	if !strings.Contains(result.err.Error(), "invalid graph references") {
 		t.Fatalf("error = %q, want invalid graph references guidance", result.err.Error())
 	}
+	var invocationErr *runcli.InvocationError
+	if !errors.As(result.err, &invocationErr) || invocationErr.Code != runcli.InvocationErrorCodeFailed {
+		t.Fatalf("error = %T (%v), want authored invocation error %q", result.err, result.err, runcli.InvocationErrorCodeFailed)
+	}
 	if result.stdout.Len() != 0 {
 		t.Fatalf("stdout = %q, want no quiet terminal value", result.stdout.String())
 	}
@@ -147,6 +153,22 @@ func TestFailureBaseline_NoServer_ModelsListCommandReportsUnreachableEndpoint(t 
 	want := "models endpoint not reachable at http://127.0.0.1:1/models"
 	if !strings.Contains(result.err.Error(), want) {
 		t.Fatalf("error = %q, want %q", result.err.Error(), want)
+	}
+	var fallback *clidiag.Failure
+	if !errors.As(result.err, &fallback) || fallback.Code != clidiag.DefaultFailureCode {
+		t.Fatalf("error = %T (%v), want safe CLI fallback", result.err, result.err)
+	}
+	if result.stdout.Len() != 0 {
+		t.Fatalf("stdout = %q, want no error payload", result.stdout.String())
+	}
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal(result.stderr.Bytes(), &response); err != nil {
+		t.Fatalf("stderr is not one ErrorResponse: %v\n%s", err, result.stderr.String())
+	}
+	if response.Code != factoryapi.ErrorResponseCode(clidiag.DefaultFailureCode) ||
+		response.Message != "command failed" ||
+		strings.Contains(result.stderr.String(), "127.0.0.1:1") {
+		t.Fatalf("safe fallback response = %#v, stderr=%q", response, result.stderr.String())
 	}
 }
 

@@ -29,3 +29,8 @@ properties:
       must declare handlingBehavior DEFAULT on exactly one work type.
     items:
       $ref: './WorkTypeHandlingBehavior.yaml'
+  expectedArtifacts:
+    type: array
+    description: Expected output declarations inherited by workstations handling this work type.
+    items:
+      $ref: './ExpectedArtifact.yaml'

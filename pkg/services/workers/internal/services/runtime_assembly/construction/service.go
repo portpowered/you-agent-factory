@@ -507,6 +507,14 @@ func workstationResult(
 			RunWorktree:        runWorktree,
 			RunReasoningEffort: runReasoningEffort,
 			FileSystem:         workstationFiles,
+			ArtifactFileSystem: artifactFileSystem(workstationFiles),
 		},
 	}
+}
+
+func artifactFileSystem(fileSystem platformfilesystem.ReadFileInspector) platformfilesystem.GlobInspector {
+	if inspector, ok := fileSystem.(platformfilesystem.GlobInspector); ok {
+		return inspector
+	}
+	return nil
 }

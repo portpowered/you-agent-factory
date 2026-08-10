@@ -209,29 +209,32 @@ type TokenMutationRecord struct {
 
 // DispatchEntry tracks an in-flight dispatch awaiting a worker result.
 type DispatchEntry struct {
-	DispatchID      string                  `json:"dispatch_id"`
-	TransitionID    string                  `json:"transition_id"`
-	WorkstationName string                  `json:"workstation_name,omitempty"`
-	StartTime       time.Time               `json:"start_time"`
-	ConsumedTokens  []workerexecution.Token `json:"consumed_tokens"`
-	HeldMutations   []MarkingMutation       `json:"held_mutations"`
+	DispatchID              string                                `json:"dispatch_id"`
+	TransitionID            string                                `json:"transition_id"`
+	WorkstationName         string                                `json:"workstation_name,omitempty"`
+	ExpectedArtifactContext *work.ExpectedArtifactTemplateContext `json:"expected_artifact_context,omitempty"`
+	StartTime               time.Time                             `json:"start_time"`
+	ConsumedTokens          []workerexecution.Token               `json:"consumed_tokens"`
+	HeldMutations           []MarkingMutation                     `json:"held_mutations"`
 }
 
 // CompletedDispatch records a dispatch that has finished, with timing data.
 type CompletedDispatch struct {
-	DispatchID                  string                                   `json:"dispatch_id"`
-	TransitionID                string                                   `json:"transition_id"`
-	WorkstationName             string                                   `json:"workstation_name,omitempty"`
-	Outcome                     workerexecution.WorkOutcome              `json:"outcome"`
-	SelectedClassificationLabel string                                   `json:"selected_classification_label,omitempty"`
-	Reason                      string                                   `json:"reason,omitempty"`
-	FailureMetadata             *workerexecution.WorkFailureMetadata     `json:"failure_metadata,omitempty"`
-	ProviderSession             *workerexecution.ProviderSessionMetadata `json:"provider_session,omitempty"`
-	StartTime                   time.Time                                `json:"start_time"`
-	EndTime                     time.Time                                `json:"end_time"`
-	Duration                    time.Duration                            `json:"duration"`
-	ConsumedTokens              []workerexecution.Token                  `json:"consumed_tokens,omitempty"`
-	OutputMutations             []TokenMutationRecord                    `json:"output_mutations,omitempty"`
+	DispatchID                  string                                        `json:"dispatch_id"`
+	TransitionID                string                                        `json:"transition_id"`
+	WorkstationName             string                                        `json:"workstation_name,omitempty"`
+	ExpectedArtifactContext     *work.ExpectedArtifactTemplateContext         `json:"expected_artifact_context,omitempty"`
+	Outcome                     workerexecution.WorkOutcome                   `json:"outcome"`
+	SelectedClassificationLabel string                                        `json:"selected_classification_label,omitempty"`
+	Reason                      string                                        `json:"reason,omitempty"`
+	ArtifactVerification        *workerexecution.ExpectedArtifactVerification `json:"artifact_verification,omitempty"`
+	FailureMetadata             *workerexecution.WorkFailureMetadata          `json:"failure_metadata,omitempty"`
+	ProviderSession             *workerexecution.ProviderSessionMetadata      `json:"provider_session,omitempty"`
+	StartTime                   time.Time                                     `json:"start_time"`
+	EndTime                     time.Time                                     `json:"end_time"`
+	Duration                    time.Duration                                 `json:"duration"`
+	ConsumedTokens              []workerexecution.Token                       `json:"consumed_tokens,omitempty"`
+	OutputMutations             []TokenMutationRecord                         `json:"output_mutations,omitempty"`
 }
 
 // ActiveThrottlePause records an active provider/model dispatch pause window.
