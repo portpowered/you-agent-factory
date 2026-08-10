@@ -1,5 +1,6 @@
 ## Codebase Patterns
 - Provider-output bridges must suppress provider-authored forwarding when Worker Sessions cannot resolve or bind the dispatch; forwarding an uncommitted observation can violate opening-first ordering, while ordinary downstream publication failures may follow an explicit forwarding policy.
+- Package coverage ratchets should be restored with behavioral tests for the uncovered boundary and error paths; a passing package test suite alone does not prove the checked-in per-package floor.
 - When a historical Worker Session projection is merged with the live Worker Sessions service, preserve the live canonical opening timestamp; dispatch-request time is only a fallback and can precede the authoritative opening.
 - Customer-boundary Worker Session evidence should parse the nested lifecycle payload, assert SESSION/UPDATED provider binding before provider records, and compare replay timestamps to the public observation rather than relying on fixed delays.
 - Provider-authored Worker progress must carry explicit provider identity independently from optional Provider Session references; never infer a resumable reference from that identity.
@@ -26,6 +27,27 @@
 
 - Worker Session finite streams can use the injected Events `Read` contract with the first retained head as a snapshot boundary; replay-only paths must not call `Subscribe`.
 - Provider progress bridges name the current attempt dispatch; resolve that dispatch through Worker Sessions before publishing onto the stable Worker Session topic.
+
+---
+## 2026-08-10 08:50 -0700 - wsr-001-opening-record coverage follow-up
+- What was implemented
+  - Addressed the first PR CI rerun's Worker Sessions unit coverage ratchet failure by adding focused behavioral coverage for provider binding validation, provider attribution conflicts and duplicates, publication-state failures, append failures/duplicates, dispatch lookup, and missing constructor dependencies.
+  - Kept the tests split into focused helpers so the backend maintainability limit remains satisfied.
+- Files changed
+  - `pkg/services/worker_sessions/internal/service/internal_test.go`
+  - `progress.txt`
+  - `prd.json` remains unchanged with all three stories marked `passes:true`.
+- Verification
+  - `make test` — passed.
+  - Package-scoped `gocoveragecheck` with the CI floor — passed at 99.1% against the 98.72% package minimum.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure` — passed.
+  - `go vet ./...` — passed.
+  - `git diff --check` — passed.
+  - The repository-wide coverage command remains host-limited on Windows because its default all-package process arguments exceed the Windows command-line limit; the equivalent scoped lane passed, and CI will validate the Linux-wide lane after push.
+- **Learnings for future iterations:**
+  - Coverage regressions can be isolated by reading the package manifest's uncovered functions, then testing their externally visible error/result contracts through the narrowest real service setup.
+  - Keep coverage-only edge tests in focused subtests/helpers; the package maintainability gate counts test complexity as well as production complexity.
+---
 - Capture the Worker Session start timestamp once at the observation boundary and reuse that exact value in the lifecycle opening payload; calling the injected clock separately for projection and publication breaks live/replay identity.
 - Lifecycle metadata uses optional pointers/`omitempty` and exact typed continuation values; unknown provider, Factory, recording, and capability facts must stay absent instead of being inferred from runner or model defaults.
 - Authored OpenAPI and CLI contracts generate their Go, TypeScript, published metadata, and family-manifest consumers; update the source contract first, then run the repository generators and drift checks.
