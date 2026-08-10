@@ -897,3 +897,17 @@
 - **Learnings for future iterations:**
   - After merging a newer main into a PR, run the contract generator even when the feature does not change the API; generated package manifests can encode hashes for base-branch artifacts changed by the merge.
 ---
+## 2026-08-10 01:18 -0700 - wo-b3-provider-capability-discovery-cli-final-handoff
+- What was implemented
+  - Completed the current-main merge and generated-contract reconciliation, including the API manifest refresh required by the base branch's newer generated CLI/OpenAPI artifacts.
+  - Confirmed the blocking provider-capability conversation is addressed in the authored catalog, generated output, execution-policy regression, and reference documentation.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Final CI run `31368861656` completed successfully on head `897830ffaf57a24d2c331641b88e55bfedda6bb4`; all 18 PR checks pass.
+  - PR #1843 is open, mergeable, clean, and its description matches `prd.json`; all PRD stories have `passes:true`.
+  - Thread-aware review inspection reports zero inline review threads and zero formal reviews; the only conversation item is the addressed top-level blocker.
+  - `git status --porcelain` is clean.
+- **Learnings for future iterations:**
+  - Final readiness requires checking the exact PR head against the terminal CI run, not only the latest successful run visible for an earlier commit.
+---
