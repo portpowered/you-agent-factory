@@ -1457,3 +1457,16 @@
 - **Learnings for future iterations:**
   - When merging a long append-only progress file, retain both sides' content, validate conflict-marker absence and line-count/headings, and keep the active task PRD authoritative before regenerating the PR body.
 ---
+
+## 2026-08-10 14:08 -07:00 - pf-stale-scope-diagnostic merged-head verification follow-up
+- What was implemented
+  - Pushed the current-main synchronization merge and the deterministic Story 001 hard-kill test changes to `origin/pf-stale-scope-diagnostic` at `968afcc82`.
+  - Attempted the owner-package regression on the merged tree. The first run emitted an `ok` package result but the surrounding command returned nonzero; a repeat was inconclusive because the outer command limit expired during concurrent Go builds. No assertion failure was reported.
+- Files changed
+  - `progress.txt`
+- Verification
+  - The pre-synchronization focused hard-kill scenario passed three consecutive runs, and the pre-synchronization owner package, `make test`, backend structure gates, `go vet`, and whitespace checks passed.
+  - The merged tree is pushed for GitHub CI validation; the local merged-head owner-package rerun remains inconclusive because of workspace build contention.
+- **Learnings for future iterations:**
+  - Do not treat an `ok` line from a command that returns nonzero as a clean verification; retain the distinction between test output and process-level command status when concurrent build work is present.
+---
