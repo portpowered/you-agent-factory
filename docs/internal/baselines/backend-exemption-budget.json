@@ -1263,7 +1263,7 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_sessions/internal/execution/fake_service_runtime_test.go#TestFakeService_InternalLifecycleHelpers",
+      "target": "pkg/services/factory_sessions/internal/execution/fake_service_lifecycle_inspection_test.go#TestFakeService_InternalLifecycleHelpers",
       "owner": "backend-maintainers",
       "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
     },

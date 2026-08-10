@@ -123,9 +123,9 @@
     },
     {
       "packagePath": "pkg/services/factory_sessions/internal/execution",
-      "fileCount": 28,
+      "fileCount": 31,
       "owner": "factory-session-maintainers",
-      "removalReason": "Separate execution coordination from invocation policy."
+      "removalReason": "Remove this ratchet after the remaining execution test seams are split into focused files."
     },
     {
       "packagePath": "pkg/services/factory_sessions/internal/runtimeopening",

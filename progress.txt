@@ -1,5 +1,6 @@
 ## Codebase Patterns
 - For mechanical test splits, capture the exact go test inventory, repeatable coverage command/output, and one-to-one behavior/helper placement map in a review artifact before moving tests.
+- When moving a test with a pkgmaintcheck exemption, move the existing budget target with the test and retain legacy file suppressions until the remaining staged split retires the source file.
 - Treat repository-enforcement inventories and architecture guards as project-enabling PRD criteria when they have no runtime, API, CLI, UI, or emitted-event behavior; source scans support enforcement but are not customer-behavior evidence.
 - AST scanners must expand grouped Go field declarations before indexing parameter or result types; a field-count helper can exceed the AST field-list length and panic on valid source.
 - Asynchronous service characterizations should wait on observed edge/context signals rather than arbitrary `time.After` ceilings; the test context remains the failure escape hatch.
@@ -1978,5 +1979,31 @@
   - `make typecheck` — passed.
   - `git diff --check` — passed after removing an extra artifact EOF blank line.
 - **Learnings for future iterations:**
-  - A fresh worktree may have an incomplete `ui/node_modules`; run `make ui-deps` before treating missing `@types/bun` from `make typecheck` as a source failure.
+- A fresh worktree may have an incomplete `ui/node_modules`; run `make ui-deps` before treating missing `@types/bun` from `make typecheck` as a source failure.
+---
+## [2026-08-10 14:18 -07:00] - thr-split-fake-service-runtime-tests-002
+- What was implemented
+  - Moved the fixture-backed fake-service construction, synchronous/asynchronous start, lifecycle-control, read, listing, event-cursor, result, artifact, and projection-validation tests into behavior-focused package-local files without changing test bodies or assertions.
+  - Centralized shared fixture, clock, event-envelope, JSON, and pointer helpers in `execution_test_helpers_test.go`; moved the story-owned internal fake-service start/lifecycle characterization seams with their helper functions.
+  - Relocated the existing `pkgmaintcheck` exemption target for the moved lifecycle test and raised the execution package file-count baseline from 28 to 31 for the three focused files.
+- Files changed
+  - `pkg/services/factory_sessions/internal/execution/execution_test_helpers_test.go`
+  - `pkg/services/factory_sessions/internal/execution/fake_service_construction_start_test.go`
+  - `pkg/services/factory_sessions/internal/execution/fake_service_lifecycle_inspection_test.go`
+  - `pkg/services/factory_sessions/internal/execution/fake_service_test.go`
+  - `pkg/services/factory_sessions/internal/execution/fake_service_runtime_test.go`
+  - `docs/internal/baselines/backend-exemption-budget.json`
+  - `docs/internal/baselines/backend-package-file-count.json`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/factory_sessions/internal/execution/...` — passed.
+  - `go test -covermode=atomic ./pkg/services/factory_sessions/internal/execution/...` — passed with unchanged coverage: 79.6%, 80.0%, 83.1%, and 89.8% for the four packages.
+  - Baseline/current `go test -list '.*'` comparison — 267 entries versus 267 entries; no added, removed, or renamed entries.
+  - `go vet ./pkg/services/factory_sessions/internal/execution/...` — passed.
+  - `make typecheck`, `make pkg-maint`, `make backend-size`, and `make pkg-file-count` — passed.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - A phased test split must move exemption-budget ownership with the test; keep the old consolidated-file suppressions until later stories remove the remaining legacy seams.
+  - The focused files are below the 1,200-line target; `fake_service_test.go` and `fake_service_runtime_test.go` intentionally remain as transitional owners for the replay/dispatch and JavaScript-runtime stories.
 ---

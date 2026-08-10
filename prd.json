@@ -47,8 +47,8 @@
         "Tests pass"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Moved the fixture-service construction/start and lifecycle/inspection tests from the two consolidated files into fake_service_construction_start_test.go and fake_service_lifecycle_inspection_test.go, with shared fixture/event helpers owned by execution_test_helpers_test.go. The full go test -list '.*' comparison remains 267 baseline entries versus 267 current entries with no differences, and exact baseline coverage remains 79.6% (execution), 80.0% (fixtures), 83.1% (recordingreplay), and 89.8% (runtimepersist). New focused files are 100, 557, and 748 lines; the legacy source files retain their staged-split suppressions for stories 003-005."
     },
     {
       "id": "thr-split-fake-service-runtime-tests-003",
