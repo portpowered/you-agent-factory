@@ -130,30 +130,30 @@ func (service *Service) InstallPackagedFactory(
 		Format: format,
 	}
 	if err := ctx.Err(); err != nil {
-		return result, service.installationFailure(backendScopeID, namedFactoriesRoot, definition.Name, "", ownerLivenessIndeterminate, err)
+		return result, service.installationError(backendScopeID, namedFactoriesRoot, definition.Name, "", ownerLivenessIndeterminate, err)
 	}
 	payload, rootFileName, normalizedFormat, err := selectPayload(
 		definition,
 		format,
 	)
 	if err != nil {
-		return result, service.installationFailure(backendScopeID, namedFactoriesRoot, definition.Name, "", ownerLivenessIndeterminate, err)
+		return result, service.installationError(backendScopeID, namedFactoriesRoot, definition.Name, "", ownerLivenessIndeterminate, err)
 	}
 	result.Format = normalizedFormat
 	targetDir, err := namedfactorypath.MapDir(namedFactoriesRoot, definition.Name)
 	if err != nil {
-		return result, service.installationFailure(backendScopeID, namedFactoriesRoot, definition.Name, "", ownerLivenessIndeterminate, err)
+		return result, service.installationError(backendScopeID, namedFactoriesRoot, definition.Name, "", ownerLivenessIndeterminate, err)
 	}
 	result.FactoryDir = targetDir
 	if err := service.requireDependencies(); err != nil {
-		return result, service.installationFailure(backendScopeID, namedFactoriesRoot, definition.Name, "", ownerLivenessIndeterminate, err)
+		return result, service.installationError(backendScopeID, namedFactoriesRoot, definition.Name, "", ownerLivenessIndeterminate, err)
 	}
 	if err := service.rejectPreExistingStaging(backendScopeID, namedFactoriesRoot, definition.Name); err != nil {
 		return result, service.wrapInstallationError(definition.Name, namedFactoriesRoot, err)
 	}
 	if _, err := service.fileSystem.Stat(targetDir); err == nil {
 		if err := service.persistence.ValidateFactoryLayout(targetDir); err != nil {
-			return result, service.installationFailure(backendScopeID, namedFactoriesRoot, definition.Name, targetDir, ownerLivenessIndeterminate, fmt.Errorf("existing target %s is invalid: %w", targetDir, err))
+			return result, service.installationError(backendScopeID, namedFactoriesRoot, definition.Name, targetDir, ownerLivenessIndeterminate, fmt.Errorf("existing target %s is invalid: %w", targetDir, err))
 		}
 		if params.Replace {
 			return service.withStagingOwnership(
@@ -177,10 +177,10 @@ func (service *Service) InstallPackagedFactory(
 		}
 		existingFormat, formatErr := authoredRootFormat(targetDir, service.fileSystem)
 		if formatErr != nil {
-			return result, service.installationFailure(backendScopeID, namedFactoriesRoot, definition.Name, targetDir, ownerLivenessIndeterminate, formatErr)
+			return result, service.installationError(backendScopeID, namedFactoriesRoot, definition.Name, targetDir, ownerLivenessIndeterminate, formatErr)
 		}
 		if existingFormat != normalizedFormat {
-			return result, service.installationFailure(
+			return result, service.installationError(
 				backendScopeID,
 				namedFactoriesRoot,
 				definition.Name,
@@ -196,7 +196,7 @@ func (service *Service) InstallPackagedFactory(
 		result.Outcome = factorydefinitions.PackagedFactoryInstallSkipped
 		return result, nil
 	} else if !errors.Is(err, fs.ErrNotExist) {
-		return result, service.installationFailure(backendScopeID, namedFactoriesRoot, definition.Name, targetDir, ownerLivenessIndeterminate, fmt.Errorf("inspect target %s: %w", targetDir, err))
+		return result, service.installationError(backendScopeID, namedFactoriesRoot, definition.Name, targetDir, ownerLivenessIndeterminate, fmt.Errorf("inspect target %s: %w", targetDir, err))
 	}
 	return service.withStagingOwnership(
 		ctx,
@@ -674,6 +674,18 @@ func (service *Service) installationFailure(
 ) error {
 	service.logOutcome(backendScopeID, name, resource, "failed", liveness, 0)
 	return installationFailure(backendScopeID, rootDir, name, resource, liveness, cause)
+}
+
+func (service *Service) installationError(
+	backendScopeID string,
+	rootDir string,
+	name string,
+	resource string,
+	liveness ownerLiveness,
+	cause error,
+) error {
+	service.logOutcome(backendScopeID, name, resource, "failed", liveness, 0)
+	return installError(name, rootDir, cause)
 }
 
 func (service *Service) wrapInstallationError(name, rootDir string, err error) error {
