@@ -14,6 +14,7 @@ import (
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
 
 // TestWSRFT003ProviderNeutralLifecycleWorksWithoutProviderSession replays the
@@ -56,6 +57,10 @@ func TestWSRFT003ProviderNeutralLifecycleWorksWithoutProviderSession(t *testing.
 	assertAgyOpeningRecordProviderNeutrality(t, factoryEvents)
 	assertAgyFinalOnlyOpeningRecord(t, responseEvents)
 	assertAgyWorkerSessionHistory(t, workerEvents)
+	functionalevidence.Covers(t,
+		"rest/streamWorkerSessionEventsByWorkerSessionId",
+		"sse/streamWorkerSessionEventsByWorkerSessionId",
+	)
 }
 
 func loadOpeningRecordFixture(
