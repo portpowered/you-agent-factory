@@ -28,6 +28,7 @@
 - Process-boundary CLI tests should build `./cmd/factory` only when proving OS-level behavior, keep the real server on a root-built process, and assign redirected stdout and diagnostics stderr separately.
 - Restore package coverage thresholds with focused behavioral tests for typed edge outcomes; do not lower baseline manifests for new branches.
 - Replay completeness must be derived from a terminal lifecycle record inside the captured Events range, not from a separately synchronized terminal session state.
+- Replay characterization should assert literal IDs, event kinds, sequences, and ticks from a checked-in recording before asserting reducer or delivery results; use replay side-effect substitutes to verify recorded terminal outcomes without invoking live effects.
 - When a package has a strict file-count baseline, put a small refactor in an existing focused file before adding a new helper file or changing the baseline.
 - When broad functional coverage reports a cancellation-observation failure, rerun the failed lane and isolate the named test before changing an unrelated feature; parallel-suite failures can move between existing durability/restart tests while isolated runs pass.
 
@@ -65,7 +66,6 @@
 - **Learnings for future iterations:**
 - This checkout may have `ui/node_modules` without all lockfile dependencies; run the pinned Bun install before treating a typecheck failure as a source regression.
 ---
-
 ## 2026-08-09 13:17 - wo-d1-packaged-factories-docs-001 documentation routing follow-up
 - What was implemented
   - Corrected the root README's packaged-Factory count from fourteen to fifteen while keeping the root page as routing/quick-start material.
@@ -821,4 +821,23 @@
   - Hosted service mode remains live with runtime status IDLE after a terminal Work; its caller-visible terminal result is the dispatch response plus session-scoped Work/progress projection rather than a durable session-result endpoint.
   - A poller workstation without a worker executor fails after admission; use a separate normal workstation for the hosted target state when characterizing successful hosted ingress.
   - A blocking HTTP edge makes source cleanup observable through request-context cancellation, while a separate process with a distinct hosted Work ID provides a direct isolation assertion.
+---
+## 2026-08-10 05:54 -07:00 - btrc-p0-characterization-004
+- What was implemented
+  - Added `pkg/services/recordings/internal/replay/btrc_p0_characterization_test.go` using the checked-in `inference-events.replay.json` recording as the expected source of replay order.
+  - The success characterization asserts the literal seven-event Factory Event order and IDs, sequence `0..6`, tick placement, request/work correlation, dispatch replay key, recorded provider output, submission timing, completion delivery tick, and `ACCEPTED` terminal result.
+  - The failed-recording characterization mutates only the recorded terminal payload, then asserts the same event prefix, `FAILED`/`permanent_bad_request` result, typed `workers.ProviderError`, and typed `dispatch_mismatch` divergence for an incompatible observed dispatch.
+  - Marked story `btrc-p0-characterization-004` as passed in `prd.json`; no production behavior or public/generated contract changed.
+- Files changed
+  - `pkg/services/recordings/internal/replay/btrc_p0_characterization_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/recordings/internal/replay -run '^TestBTRCP0ReplayCharacterization_' -count=1 -v` — passed.
+  - `go test ./pkg/root -run 'TestProcessExecute(RejectsInvalidPortableReplay|ReturnsPortableReplayInspection)' -count=1 -v` — passed; malformed replay and valid portable inspection each made zero provider/script/session/host calls.
+  - `go test ./pkg/services/recordings/internal/replay ./pkg/services/recordings/internal/services/replay/internal/service -run 'Test(BTRCP0ReplayCharacterization_|TestLoadReplay|TestCreateReplayPlan|TestObserveReplay)' -count=1` — passed for the selected replay packages.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - The checked-in legacy inference fixture is a useful stable event-order source for reducer/delivery characterization even though its historical metadata is not a valid full current-root runtime input; full root replay should use a recording produced by the current runtime harness.
+  - Portable historical replay rejects malformed order before live runtime construction, so its observable failure contract is a typed `ReplayInputError` with zero live effect calls; legacy runtime replay reports incompatible dispatches as typed `DivergenceError`.
 ---

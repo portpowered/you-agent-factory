@@ -85,8 +85,8 @@
         "Tests pass"
       ],
       "priority": 4,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added pkg/services/recordings/internal/replay/btrc_p0_characterization_test.go against the checked-in inference-events.replay.json fixture. The tests assert the literal seven-event RUN_REQUEST → WORK_REQUEST → DISPATCH_REQUEST → INFERENCE_REQUEST → INFERENCE_RESPONSE → DISPATCH_RESPONSE → RUN_RESPONSE order, IDs, sequences 0..6, ticks, reconstructed submission/dispatch/provider output, delivery tick, and ACCEPTED terminal result. A mutated failed recording asserts the same terminal prefix, FAILED/permanent_bad_request result and typed ProviderError, while an observed transition mismatch asserts typed dispatch divergence. Existing root BuildProcess replay tests continue to prove valid inspection and malformed-order rejection do not invoke provider, script, session, or host effects. No production behavior or public/generated contract changed."
     },
     {
       "id": "btrc-p0-characterization-005",
