@@ -1,6 +1,7 @@
 package ownershipinventory
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -64,12 +65,14 @@ func WriteInventory(root string, inventory Inventory) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("mkdir ownership inventory: %w", err)
 	}
-	payload, err := json.MarshalIndent(inventory, "", "  ")
-	if err != nil {
+	var payload bytes.Buffer
+	encoder := json.NewEncoder(&payload)
+	encoder.SetEscapeHTML(false)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(inventory); err != nil {
 		return fmt.Errorf("marshal ownership inventory: %w", err)
 	}
-	payload = append(payload, '\n')
-	if err := os.WriteFile(path, payload, 0o644); err != nil {
+	if err := os.WriteFile(path, payload.Bytes(), 0o644); err != nil {
 		return fmt.Errorf("write ownership inventory: %w", err)
 	}
 	return nil

@@ -62,8 +62,8 @@ var forbiddenProviderImplementationImports = []string{
 // root-built process harness. Keep this set aligned with the package-boundary
 // policy's publicExternalEffectContractImports.
 //
-// Providers Execution leaf is the durable provider-effect owner; Workers
-// inferencecontract remains migration debt until later Providers packets land.
+// Providers Execution is the durable provider-effect owner; Workers retains
+// only a request-scoped compatibility adapter over the Providers contract.
 var providerPublicEffectContractImports = map[string]struct{}{
 	"github.com/portpowered/infinite-you/pkg/services/providers/execution/inferencecontract":                              {},
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty": {},

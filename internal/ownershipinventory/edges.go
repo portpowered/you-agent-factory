@@ -107,8 +107,28 @@ func DiscoverCrossServiceEdges(root string, packages []PackageRow) ([]CrossServi
 		edge.Evidence = evidence
 		edges = append(edges, edge)
 	}
+	markUnresolvedBidirectionalEdges(edges)
 	slices.SortFunc(edges, compareCrossServiceEdges)
 	return edges, nil
+}
+
+// markUnresolvedBidirectionalEdges keeps reciprocal owner imports visible as
+// convergence debt. A later convergence story may remove the reciprocal
+// dependency, but regeneration must not make it disappear merely because each
+// direction has an otherwise valid interaction class.
+func markUnresolvedBidirectionalEdges(edges []CrossServiceEdge) {
+	pairs := make(map[string]struct{}, len(edges))
+	for _, edge := range edges {
+		pairs[edgePairKey(edge.FromOwner, edge.ToOwner)] = struct{}{}
+	}
+	for i := range edges {
+		reverse := edgePairKey(edges[i].ToOwner, edges[i].FromOwner)
+		if _, ok := pairs[reverse]; !ok {
+			continue
+		}
+		edges[i].Bidirectional = true
+		edges[i].Unresolved = true
+	}
 }
 
 func packagePathForFile(root, path string) (string, error) {
@@ -175,4 +195,11 @@ func isAllowedEdgeClass(class string) bool {
 
 func edgePairKey(fromOwner, toOwner string) string {
 	return fromOwner + "->" + toOwner
+}
+
+func bidirectionalPairKey(fromOwner, toOwner string) string {
+	if strings.Compare(fromOwner, toOwner) <= 0 {
+		return edgePairKey(fromOwner, toOwner)
+	}
+	return edgePairKey(toOwner, fromOwner)
 }

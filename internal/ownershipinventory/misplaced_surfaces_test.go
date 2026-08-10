@@ -1,44 +1,45 @@
 package ownershipinventory_test
 
 import (
-	"slices"
 	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/ownershipinventory"
 )
 
-func TestValidateRequiresMisplacedGuards(t *testing.T) {
+func TestNoMisplacedGuardsRemainAfterOwnershipCorrection(t *testing.T) {
 	inventory, packages := loadedInventoryAndPackages(t)
-	inventory.MisplacedGuards = nil
+	if got := ownershipinventory.RequiredMisplacedGuardIDs(); len(got) != 0 {
+		t.Fatalf("required misplaced guards = %v, want none after ownership correction", got)
+	}
+	if len(inventory.MisplacedGuards) != 0 {
+		t.Fatalf("frozen misplaced guards = %#v, want none after ownership correction", inventory.MisplacedGuards)
+	}
 
 	report := ownershipinventory.ValidateInventory(inventory, packages)
-	if report.OK() {
-		t.Fatal("ValidateInventory() unexpectedly passed without misplaced guards")
-	}
-	if len(report.MissingMisplacedGuards) == 0 {
-		t.Fatalf("missing misplaced guards empty; report=%#v", report)
-	}
-	for _, id := range ownershipinventory.RequiredMisplacedGuardIDs() {
-		if !slices.Contains(report.MissingMisplacedGuards, id) {
-			t.Fatalf("expected missing misplaced guard %q; got %#v", id, report.MissingMisplacedGuards)
-		}
+	if len(report.MissingMisplacedGuards) != 0 || len(report.InvalidMisplacedGuards) != 0 {
+		t.Fatalf("corrected misplaced-guard ledger produced defects: %#v", report)
 	}
 }
 
-func TestValidateFailsWhenMisplacedGuardLacksReplacementOwner(t *testing.T) {
+func TestValidateRejectsRetiredMisplacedGuard(t *testing.T) {
 	inventory, packages := loadedInventoryAndPackages(t)
-	if len(inventory.MisplacedGuards) == 0 {
-		t.Fatal("expected misplaced guards in frozen inventory")
-	}
-	inventory.MisplacedGuards[0].ReplacementOwner = ""
+	inventory.MisplacedGuards = []ownershipinventory.MisplacedGuardEntry{{
+		ID:                "retired:workers-provider-effect",
+		Kind:              ownershipinventory.MisplacedGuardKindStandard,
+		SurfacePath:       "docs/internal/standards/code/general-backend-standards.md",
+		CurrentOwnerClaim: "workers",
+		MisplacedConcern:  ownershipinventory.MisplacedConcernProviderInference,
+		ReplacementOwner:  "providers",
+		Note:              "retired stale assignment",
+	}}
 
 	report := ownershipinventory.ValidateInventory(inventory, packages)
 	if report.OK() {
-		t.Fatal("ValidateInventory() unexpectedly passed with blank replacement owner")
+		t.Fatal("ValidateInventory() unexpectedly accepted a retired misplaced guard")
 	}
-	if len(report.InvalidMisplacedGuards) == 0 {
-		t.Fatalf("invalid misplaced guards empty; report=%#v", report)
+	if !strings.Contains(strings.Join(report.InvalidMisplacedGuards, "\n"), "retired:workers-provider") {
+		t.Fatalf("retired misplaced guard was not reported: %#v", report)
 	}
 }
 
@@ -100,46 +101,15 @@ func TestValidateFailsWhenOwnedRoleLacksDestination(t *testing.T) {
 	}
 }
 
-func TestBuildInventoryIncludesMisplacedGuardsAndPublicSurfaces(t *testing.T) {
+func TestBuildInventoryIncludesCorrectedGuardLedgerAndPublicSurfaces(t *testing.T) {
 	root := repositoryRoot(t)
 	inventory, err := ownershipinventory.BuildInventory(root, []string{"pkg/services/workers"})
 	if err != nil {
 		t.Fatalf("BuildInventory() error = %v", err)
 	}
 
-	if len(inventory.MisplacedGuards) != len(ownershipinventory.RequiredMisplacedGuardIDs()) {
-		t.Fatalf("misplaced guards = %d, want %d", len(inventory.MisplacedGuards), len(ownershipinventory.RequiredMisplacedGuardIDs()))
-	}
-	guardByID := map[string]ownershipinventory.MisplacedGuardEntry{}
-	for _, entry := range inventory.MisplacedGuards {
-		guardByID[entry.ID] = entry
-		if strings.TrimSpace(entry.ReplacementOwner) == "" {
-			t.Fatalf("misplaced guard %q missing replacementOwner", entry.ID)
-		}
-		if entry.CurrentOwnerClaim != "workers" {
-			t.Fatalf("misplaced guard %q currentOwnerClaim = %q, want workers", entry.ID, entry.CurrentOwnerClaim)
-		}
-		switch entry.MisplacedConcern {
-		case ownershipinventory.MisplacedConcernProviderInference,
-			ownershipinventory.MisplacedConcernHostedPolling:
-		default:
-			t.Fatalf("misplaced guard %q has unknown concern %q", entry.ID, entry.MisplacedConcern)
-		}
-		switch entry.MisplacedConcern {
-		case ownershipinventory.MisplacedConcernProviderInference:
-			if entry.ReplacementOwner != "providers" {
-				t.Fatalf("provider_inference guard %q replacement = %q, want providers", entry.ID, entry.ReplacementOwner)
-			}
-		case ownershipinventory.MisplacedConcernHostedPolling:
-			if entry.ReplacementOwner != "automations" {
-				t.Fatalf("hosted_polling guard %q replacement = %q, want automations", entry.ID, entry.ReplacementOwner)
-			}
-		}
-	}
-	for _, id := range ownershipinventory.RequiredMisplacedGuardIDs() {
-		if _, ok := guardByID[id]; !ok {
-			t.Fatalf("missing misplaced guard %q", id)
-		}
+	if len(inventory.MisplacedGuards) != 0 {
+		t.Fatalf("misplaced guards = %#v, want none after ownership correction", inventory.MisplacedGuards)
 	}
 
 	if len(inventory.PublicSurfaces) != len(ownershipinventory.RequiredPublicSurfaceIDs()) {

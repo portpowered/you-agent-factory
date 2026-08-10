@@ -7,7 +7,7 @@ import (
 
 // MapPackage returns the committed destination row for one production package.
 // Explicit move/delete rules from the Packaged Service Structure plan override
-// path-prefix retain defaults; the 13-owner tree is not reopened here.
+// path-prefix retain defaults; the committed owner tree is not reopened here.
 func MapPackage(packagePath string) (PackageRow, error) {
 	if packagePath == "" {
 		return PackageRow{}, fmt.Errorf("package path is empty")
@@ -72,6 +72,8 @@ func MapPackage(packagePath string) (PackageRow, error) {
 		return retainRow(packagePath, "chat_sessions", DestinationKindOwner), nil
 	case strings.HasPrefix(packagePath, "pkg/services/events"):
 		return retainRow(packagePath, "events", DestinationKindOwner), nil
+	case strings.HasPrefix(packagePath, "pkg/services/worker_sessions"):
+		return retainRow(packagePath, "worker_sessions", DestinationKindOwner), nil
 	case strings.HasPrefix(packagePath, "pkg/initializer"):
 		return retainRow(packagePath, "initializer", DestinationKindFamily), nil
 	case packagePath == "pkg/root" || strings.HasPrefix(packagePath, "pkg/root/"):

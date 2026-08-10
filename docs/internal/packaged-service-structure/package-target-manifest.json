@@ -17,7 +17,8 @@
       "operator_settings",
       "system_initialization",
       "chat_sessions",
-      "events"
+      "events",
+      "worker_sessions"
     ],
     "nonServiceFamilies": [
       "initializer",
@@ -65,6 +66,7 @@
     "pkg/platform/runtimeartifact",
     "pkg/platform/stdio",
     "pkg/platform/taskgroup",
+    "pkg/platform/wiretranscript",
     "pkg/root",
     "pkg/services/automations",
     "pkg/services/automations/internal",
@@ -87,10 +89,13 @@
     "pkg/services/automations/transports/http",
     "pkg/services/automations/wire",
     "pkg/services/chat_sessions",
+    "pkg/services/chat_sessions/internal/responsebridge",
     "pkg/services/chat_sessions/internal/service",
     "pkg/services/chat_sessions/wire",
     "pkg/services/edges",
     "pkg/services/events",
+    "pkg/services/events/internal/service",
+    "pkg/services/events/wire",
     "pkg/services/factory_definitions",
     "pkg/services/factory_definitions/definition",
     "pkg/services/factory_definitions/internal",
@@ -246,6 +251,7 @@
     "pkg/services/factory_sessions/internal/legacysnapshot",
     "pkg/services/factory_sessions/internal/livesession",
     "pkg/services/factory_sessions/internal/logicaltarget",
+    "pkg/services/factory_sessions/internal/ondemandtarget",
     "pkg/services/factory_sessions/internal/processlifecycle",
     "pkg/services/factory_sessions/internal/requestpreparation",
     "pkg/services/factory_sessions/internal/responseevents",
@@ -282,6 +288,7 @@
     "pkg/services/factory_sessions/internal/sessionservice",
     "pkg/services/factory_sessions/internal/sessionvalidation",
     "pkg/services/factory_sessions/internal/stream",
+    "pkg/services/factory_sessions/internal/testing/eventsstub",
     "pkg/services/factory_sessions/transports/cli/session",
     "pkg/services/factory_sessions/transports/cli/sessionexecution",
     "pkg/services/factory_sessions/transports/http",
@@ -372,6 +379,7 @@
     "pkg/services/providers/internal/service",
     "pkg/services/providers/internal/services/acp",
     "pkg/services/providers/internal/services/acp/internal/service",
+    "pkg/services/providers/internal/services/acp/internal/service/cancelwindow",
     "pkg/services/providers/internal/services/acp/wire",
     "pkg/services/providers/internal/services/builtins",
     "pkg/services/providers/internal/services/builtins/internal/service",
@@ -461,6 +469,11 @@
     "pkg/services/work/transports/http",
     "pkg/services/work/transports/mcp",
     "pkg/services/work/wire",
+    "pkg/services/worker_sessions",
+    "pkg/services/worker_sessions/internal/service",
+    "pkg/services/worker_sessions/transports/cli",
+    "pkg/services/worker_sessions/transports/http",
+    "pkg/services/worker_sessions/wire",
     "pkg/services/workers",
     "pkg/services/workers/internal",
     "pkg/services/workers/internal/diagnostics",
@@ -503,9 +516,12 @@
     "pkg/transports/acp",
     "pkg/transports/acp/internal/envelope",
     "pkg/transports/acp/internal/identity",
+    "pkg/transports/acp/internal/mapping",
     "pkg/transports/acp/internal/negotiation",
     "pkg/transports/acp/internal/protocol",
     "pkg/transports/acp/internal/session",
+    "pkg/transports/acp/internal/stdio",
+    "pkg/transports/acp/wire",
     "pkg/transports/cli",
     "pkg/transports/cli/acp",
     "pkg/transports/cli/baseline",
@@ -540,6 +556,7 @@
     "pkg/transports/cli/terminalpolicy",
     "pkg/transports/cli/timedisplay",
     "pkg/transports/cli/work",
+    "pkg/transports/cli/worker_sessions",
     "pkg/transports/cli/workflow",
     "pkg/transports/http",
     "pkg/transports/http/apitypes",
@@ -559,6 +576,7 @@
     "pkg/transports/mapping/factoryeventprojection",
     "pkg/transports/mapping/factorysession",
     "pkg/transports/mapping/factorysnapshot",
+    "pkg/transports/mapping/factorytarget",
     "pkg/transports/mapping/optional",
     "pkg/transports/mapping/validationentry",
     "pkg/transports/mapping/workcontent",
@@ -692,6 +710,11 @@
       "destination": "platform"
     },
     {
+      "packagePath": "pkg/platform/wiretranscript",
+      "disposition": "retain",
+      "destination": "platform"
+    },
+    {
       "packagePath": "pkg/root",
       "disposition": "retain",
       "destination": "root"
@@ -802,6 +825,11 @@
       "destination": "chat_sessions"
     },
     {
+      "packagePath": "pkg/services/chat_sessions/internal/responsebridge",
+      "disposition": "retain",
+      "destination": "chat_sessions"
+    },
+    {
       "packagePath": "pkg/services/chat_sessions/internal/service",
       "disposition": "retain",
       "destination": "chat_sessions"
@@ -818,6 +846,16 @@
     },
     {
       "packagePath": "pkg/services/events",
+      "disposition": "retain",
+      "destination": "events"
+    },
+    {
+      "packagePath": "pkg/services/events/internal/service",
+      "disposition": "retain",
+      "destination": "events"
+    },
+    {
+      "packagePath": "pkg/services/events/wire",
       "disposition": "retain",
       "destination": "events"
     },
@@ -1597,6 +1635,11 @@
       "destination": "factory_sessions"
     },
     {
+      "packagePath": "pkg/services/factory_sessions/internal/ondemandtarget",
+      "disposition": "retain",
+      "destination": "factory_sessions"
+    },
+    {
       "packagePath": "pkg/services/factory_sessions/internal/processlifecycle",
       "disposition": "retain",
       "destination": "factory_sessions"
@@ -1773,6 +1816,11 @@
     },
     {
       "packagePath": "pkg/services/factory_sessions/internal/stream",
+      "disposition": "retain",
+      "destination": "factory_sessions"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/testing/eventsstub",
       "disposition": "retain",
       "destination": "factory_sessions"
     },
@@ -2227,6 +2275,11 @@
       "destination": "providers"
     },
     {
+      "packagePath": "pkg/services/providers/internal/services/acp/internal/service/cancelwindow",
+      "disposition": "retain",
+      "destination": "providers"
+    },
+    {
       "packagePath": "pkg/services/providers/internal/services/acp/wire",
       "disposition": "retain",
       "destination": "providers"
@@ -2672,6 +2725,31 @@
       "destination": "work"
     },
     {
+      "packagePath": "pkg/services/worker_sessions",
+      "disposition": "retain",
+      "destination": "worker_sessions"
+    },
+    {
+      "packagePath": "pkg/services/worker_sessions/internal/service",
+      "disposition": "retain",
+      "destination": "worker_sessions"
+    },
+    {
+      "packagePath": "pkg/services/worker_sessions/transports/cli",
+      "disposition": "retain",
+      "destination": "worker_sessions"
+    },
+    {
+      "packagePath": "pkg/services/worker_sessions/transports/http",
+      "disposition": "retain",
+      "destination": "worker_sessions"
+    },
+    {
+      "packagePath": "pkg/services/worker_sessions/wire",
+      "disposition": "retain",
+      "destination": "worker_sessions"
+    },
+    {
       "packagePath": "pkg/services/workers",
       "disposition": "retain",
       "destination": "workers"
@@ -2882,6 +2960,11 @@
       "destination": "transports"
     },
     {
+      "packagePath": "pkg/transports/acp/internal/mapping",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
       "packagePath": "pkg/transports/acp/internal/negotiation",
       "disposition": "retain",
       "destination": "transports"
@@ -2893,6 +2976,16 @@
     },
     {
       "packagePath": "pkg/transports/acp/internal/session",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/acp/internal/stdio",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/acp/wire",
       "disposition": "retain",
       "destination": "transports"
     },
@@ -3067,6 +3160,11 @@
       "destination": "transports"
     },
     {
+      "packagePath": "pkg/transports/cli/worker_sessions",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
       "packagePath": "pkg/transports/cli/workflow",
       "disposition": "retain",
       "destination": "transports"
@@ -3158,6 +3256,11 @@
     },
     {
       "packagePath": "pkg/transports/mapping/factorysnapshot",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/mapping/factorytarget",
       "disposition": "retain",
       "destination": "transports"
     },
