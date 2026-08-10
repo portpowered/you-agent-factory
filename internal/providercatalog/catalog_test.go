@@ -42,7 +42,7 @@ func TestBuildProducesDeterministicValidatedSortedArtifacts(t *testing.T) {
 	for _, value := range providers {
 		ids = append(ids, value.(map[string]any)["id"].(string))
 	}
-	want := "agy, claude, codex, cursor, gemini, kiro, opencode, pi"
+	want := "antigravity, claude, codex"
 	if got := strings.Join(ids, ", "); got != want {
 		t.Fatalf("provider order = %s, want %s", got, want)
 	}
@@ -57,9 +57,9 @@ func TestBuildRejectsInvalidAuthoredManifestValues(t *testing.T) {
 		new     string
 		wantErr string
 	}{
-		{name: "malformed canonical id", old: "id: agy", new: "id: Agy", wantErr: "schema validation failed"},
+		{name: "malformed canonical id", old: "id: antigravity", new: "id: Antigravity", wantErr: "schema validation failed"},
 		{name: "malformed alias", old: "aliases: []", new: "aliases: [Bad_Alias]", wantErr: "schema validation failed"},
-		{name: "unknown support level", old: "technicalSupportLevel: not-supported", new: "technicalSupportLevel: preview", wantErr: "schema validation failed"},
+		{name: "unknown support level", old: "technicalSupportLevel: experimental", new: "technicalSupportLevel: preview", wantErr: "schema validation failed"},
 		{name: "secret value", old: "  configurationKeys: []", new: "  configurationKeys: []\n  credentialValue: secret", wantErr: "schema validation failed"},
 		{name: "environment value", old: "  configurationKeys: []", new: "  configurationKeys: []\n  environmentValues: [TOKEN=secret]", wantErr: "schema validation failed"},
 		{name: "live readiness", old: "  configurationKeys: []", new: "  configurationKeys: []\n  ready: true", wantErr: "schema validation failed"},
@@ -72,7 +72,7 @@ func TestBuildRejectsInvalidAuthoredManifestValues(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			source := repositoryFixture(t)
-			mutateFixture(t, source, "packages/model-providers/providers/agy/provider.yaml", test.old, test.new)
+			mutateFixture(t, source, "packages/model-providers/providers/antigravity/provider.yaml", test.old, test.new)
 			_, err := Build(source)
 			if err == nil || !strings.Contains(err.Error(), test.wantErr) {
 				t.Fatalf("Build() error = %v, want containing %q", err, test.wantErr)
@@ -135,6 +135,76 @@ func TestValidateCatalogSemanticsRejectsImpossibleCapabilitiesAndDeprecation(t *
 	missing["deprecation"] = map[string]any{"replacementProviderId": "missing"}
 	if err := validateCatalogSemantics([]any{missing}); err == nil || !strings.Contains(err.Error(), "not a canonical provider id") {
 		t.Fatalf("missing replacement error = %v", err)
+	}
+}
+
+func TestValidateCatalogSemanticsRejectsInvalidCapabilityFactsAndLimits(t *testing.T) {
+	tests := []struct {
+		name    string
+		mutate  func(map[string]any)
+		wantErr string
+	}{
+		{
+			name: "duplicate models",
+			mutate: func(manifest map[string]any) {
+				model := semanticModel("gpt-5.6")
+				manifest["models"] = []any{model, semanticModel("gpt-5.6")}
+			},
+			wantErr: `duplicate model id "gpt-5.6"`,
+		},
+		{
+			name: "unknown effort",
+			mutate: func(manifest map[string]any) {
+				model := semanticModel("gpt-5.6")
+				model["efforts"] = []any{"extreme"}
+				manifest["models"] = []any{model}
+			},
+			wantErr: `unknown effort "extreme"`,
+		},
+		{
+			name: "unknown modality direction",
+			mutate: func(manifest map[string]any) {
+				model := semanticModel("gpt-5.6")
+				model["modalities"].([]any)[0].(map[string]any)["direction"] = "sideways"
+				manifest["models"] = []any{model}
+			},
+			wantErr: `unknown modality direction "sideways"`,
+		},
+		{
+			name: "non-positive maximum",
+			mutate: func(manifest map[string]any) {
+				manifest["knownLimits"] = []any{map[string]any{
+					"name":        "referenced_image_paths",
+					"kind":        "maximum",
+					"unit":        "paths",
+					"description": "Image paths.",
+					"maximum":     float64(0),
+				}}
+			},
+			wantErr: `maximum record is incomplete`,
+		},
+		{
+			name: "incomplete named limit",
+			mutate: func(manifest map[string]any) {
+				manifest["knownLimits"] = []any{map[string]any{
+					"name":        "referenced_image_paths",
+					"kind":        "maximum",
+					"unit":        "paths",
+					"description": "Image paths.",
+				}}
+			},
+			wantErr: `maximum record is incomplete`,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			manifest := semanticManifest("codex", nil)
+			test.mutate(manifest)
+			err := validateCatalogSemantics([]any{manifest})
+			if err == nil || !strings.Contains(err.Error(), test.wantErr) {
+				t.Fatalf("validateCatalogSemantics() error = %v, want containing %q", err, test.wantErr)
+			}
+		})
 	}
 }
 
@@ -211,6 +281,21 @@ func semanticManifest(id string, aliases []any) map[string]any {
 			"toolOutputDeltas":  false,
 			"providerReconnect": false,
 			"toolLifecycle":     false,
+		},
+	}
+}
+
+func semanticModel(id string) map[string]any {
+	return map[string]any{
+		"id":      id,
+		"efforts": []any{"low"},
+		"modalities": []any{
+			map[string]any{
+				"direction": "input",
+				"modality":  "text",
+				"support":   "supported",
+				"transport": "inline",
+			},
 		},
 	}
 }

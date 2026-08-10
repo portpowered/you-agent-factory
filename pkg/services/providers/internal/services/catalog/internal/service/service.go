@@ -194,11 +194,11 @@ func clonePrerequisites(prerequisites []providers.Prerequisite) []providers.Prer
 
 func isProviderSelectable(descriptor providers.Descriptor) bool {
 	if descriptor.Availability != providers.AvailabilitySelectable ||
-		descriptor.Readiness != providers.ReadinessReady ||
 		hasMissingPrerequisite(descriptor.Prerequisites) {
 		return false
 	}
-	return true
+	return descriptor.Readiness == providers.ReadinessReady ||
+		descriptor.Readiness == providers.ReadinessUnverified
 }
 
 func hasMissingPrerequisite(prerequisites []providers.Prerequisite) bool {

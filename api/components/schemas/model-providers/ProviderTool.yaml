@@ -1,0 +1,21 @@
+type: object
+additionalProperties: false
+description: One named provider tool fact used for execution planning.
+required:
+  - name
+  - support
+  - description
+properties:
+  name:
+    type: string
+    minLength: 1
+    maxLength: 128
+    pattern: '^[a-z][a-z0-9._-]*$'
+    description: Stable provider-neutral tool name.
+  support:
+    $ref: './ProviderToolSupport.yaml'
+  description:
+    type: string
+    minLength: 1
+    maxLength: 256
+    description: Bounded explanation of the tool fact.
