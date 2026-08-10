@@ -5,13 +5,15 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
 // WorkType defines a type of work and its state machine.
 type WorkType struct {
-	ID     string            `json:"id"`
-	Name   string            `json:"name"`
-	States []StateDefinition `json:"states"`
+	ID                string                             `json:"id"`
+	Name              string                             `json:"name"`
+	States            []StateDefinition                  `json:"states"`
+	ExpectedArtifacts []work.ExpectedArtifactDeclaration `json:"expected_artifacts,omitempty"`
 }
 
 // StateDefinition defines a single state within a work type.

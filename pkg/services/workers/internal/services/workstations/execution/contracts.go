@@ -44,6 +44,9 @@ type WorkFailureType = workers.WorkFailureType
 type FailureDetail = workers.FailureDetail
 type WorkFailureDecision = workers.WorkFailureDecision
 type WorkFailureMetadata = workers.WorkFailureMetadata
+type ExpectedArtifactVerificationReason = workers.ExpectedArtifactVerificationReason
+type ExpectedArtifactVerificationEntry = workers.ExpectedArtifactVerificationEntry
+type ExpectedArtifactVerification = workers.ExpectedArtifactVerification
 
 const (
 	InferenceEventKindRequest  = workers.InferenceEventKindRequest
@@ -78,15 +81,19 @@ const (
 	WorkFailureFamilyRetryable = workers.WorkFailureFamilyRetryable
 	WorkFailureFamilyThrottle  = workers.WorkFailureFamilyThrottle
 
-	WorkFailureTypeAuthFailure         = workers.WorkFailureTypeAuthFailure
-	WorkFailureTypePermanentBadRequest = workers.WorkFailureTypePermanentBadRequest
-	WorkFailureTypeThrottled           = workers.WorkFailureTypeThrottled
-	WorkFailureTypeInternalServerError = workers.WorkFailureTypeInternalServerError
-	WorkFailureTypeTimeout             = workers.WorkFailureTypeTimeout
-	WorkFailureTypeUnknown             = workers.WorkFailureTypeUnknown
-	WorkFailureTypeMisconfigured       = workers.WorkFailureTypeMisconfigured
-	WorkFailureTypeCommandLineTooLong  = workers.WorkFailureTypeCommandLineTooLong
-	WorkFailureTypeMissingExecutable   = workers.WorkFailureTypeMissingExecutable
+	WorkFailureTypeAuthFailure                  = workers.WorkFailureTypeAuthFailure
+	WorkFailureTypePermanentBadRequest          = workers.WorkFailureTypePermanentBadRequest
+	WorkFailureTypeThrottled                    = workers.WorkFailureTypeThrottled
+	WorkFailureTypeInternalServerError          = workers.WorkFailureTypeInternalServerError
+	WorkFailureTypeTimeout                      = workers.WorkFailureTypeTimeout
+	WorkFailureTypeUnknown                      = workers.WorkFailureTypeUnknown
+	WorkFailureTypeMisconfigured                = workers.WorkFailureTypeMisconfigured
+	WorkFailureTypeCommandLineTooLong           = workers.WorkFailureTypeCommandLineTooLong
+	WorkFailureTypeMissingExecutable            = workers.WorkFailureTypeMissingExecutable
+	WorkFailureTypeExpectedArtifactsUnsatisfied = workers.WorkFailureTypeExpectedArtifactsUnsatisfied
+
+	ExpectedArtifactVerificationReasonMissing = workers.ExpectedArtifactVerificationReasonMissing
+	ExpectedArtifactVerificationReasonEmpty   = workers.ExpectedArtifactVerificationReasonEmpty
 )
 
 var CanonicalProviderSessionProvider = workers.CanonicalProviderSessionProvider

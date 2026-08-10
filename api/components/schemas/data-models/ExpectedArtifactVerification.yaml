@@ -1,0 +1,16 @@
+type: object
+additionalProperties: false
+description: >-
+  Stable terminal verification summary emitted when a successful worker does
+  not satisfy its effective expected artifact declarations.
+required:
+  - code
+  - entries
+properties:
+  code:
+    $ref: '../../../openapi-main.yaml#/components/schemas/WorkFailureType'
+  entries:
+    type: array
+    minItems: 1
+    items:
+      $ref: './ExpectedArtifactVerificationEntry.yaml'

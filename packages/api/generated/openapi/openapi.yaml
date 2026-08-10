@@ -4533,6 +4533,118 @@ components:
           type: string
           minLength: 1
           description: Customer-safe, actionable explanation of the failure.
+    ExpectedArtifactVerification:
+      type: object
+      additionalProperties: false
+      description: Stable terminal verification summary emitted when a successful worker does not satisfy its effective expected artifact declarations.
+      required:
+        - code
+        - entries
+      properties:
+        code:
+          $ref: '#/components/schemas/WorkFailureType'
+        entries:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/ExpectedArtifactVerificationEntry'
+    ExpectedArtifactVerificationEntry:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - pattern
+        - reason
+      properties:
+        declarationIndex:
+          type: integer
+          minimum: 1
+          description: One-based position in the normalized expected-artifact declaration list.
+        name:
+          type: string
+          minLength: 1
+        pattern:
+          type: string
+          minLength: 1
+          description: Workspace-relative rendered artifact pattern; host paths are never emitted.
+        reason:
+          $ref: '#/components/schemas/ExpectedArtifactVerificationReason'
+    ExpectedArtifactTemplateContext:
+      type: object
+      additionalProperties: false
+      description: Stable, non-host context used when rendering expected-artifact patterns. Filesystem paths, environment variables, and Factory documentation are not part of this replayable vocabulary.
+      properties:
+        inputs:
+          type: array
+          description: Exact replay-safe input values captured when the dispatch was created. Artifact templates expose these values through `.Inputs`; prompt-only relations, content, retry history, and host context are not included.
+          items:
+            $ref: '#/components/schemas/ExpectedArtifactTemplateInput'
+        project:
+          type: string
+          description: Stable project identifier for the dispatch.
+        sessionId:
+          type: string
+          description: Stable Factory Session identifier for the dispatch.
+    ExpectedArtifactTemplateInput:
+      type: object
+      additionalProperties: false
+      description: Stable replay-safe input value available to an expected-artifact template. This is intentionally smaller than the workstation prompt input surface so completion verification and historical Work reads can use the same values.
+      properties:
+        name:
+          type: string
+        workId:
+          type: string
+        workTypeId:
+          type: string
+        dataType:
+          type: string
+        traceId:
+          type: string
+        parentId:
+          type: string
+        project:
+          type: string
+          description: Per-input project value resolved from the input project tag, dispatch context, or the default project.
+        tags:
+          $ref: '#/components/schemas/StringMap'
+        payload:
+          type: string
+          description: The dispatch-time textual payload value. It is retained only in the artifact template context and is not added to the normal Work read.
+    WorkExpectedArtifact:
+      type: object
+      additionalProperties: false
+      description: One effective expected artifact declaration projected on a Work item. Pattern is the rendered workspace-relative literal path or glob, never a host path.
+      required:
+        - name
+        - pattern
+        - nonEmpty
+        - verification
+      properties:
+        name:
+          type: string
+          description: Customer-visible declaration name.
+        pattern:
+          type: string
+          description: Safe rendered path or glob relative to the dispatch workspace.
+        nonEmpty:
+          type: boolean
+          description: Whether every matching regular file must contain at least one byte.
+        verification:
+          $ref: '#/components/schemas/WorkExpectedArtifactVerification'
+        reason:
+          $ref: '#/components/schemas/ExpectedArtifactVerificationReason'
+          description: Why this declaration failed, when verification is FAILED.
+    WorkExpectedArtifactVerification:
+      type: string
+      description: Latest recorded verification state for one expected artifact declaration on a Work item.
+      x-enum-varnames:
+        - WorkExpectedArtifactVerificationPending
+        - WorkExpectedArtifactVerificationSatisfied
+        - WorkExpectedArtifactVerificationFailed
+      enum:
+        - PENDING
+        - SATISFIED
+        - FAILED
     FactoryArtifact:
       type: object
       additionalProperties: false
@@ -7327,6 +7439,8 @@ components:
             $ref: '#/components/schemas/Resource'
         metadata:
           $ref: '#/components/schemas/DispatchRequestEventMetadata'
+        expectedArtifactContext:
+          $ref: '#/components/schemas/ExpectedArtifactTemplateContext'
     DispatchWorkerSessionAssociationEventPayload:
       type: object
       additionalProperties: false
@@ -7655,6 +7769,8 @@ components:
           type: string
         selectedClassificationLabel:
           type: string
+        artifactVerification:
+          $ref: '#/components/schemas/ExpectedArtifactVerification'
         failureDetail:
           $ref: '#/components/schemas/FailureDetail'
         providerFailure:
@@ -7844,6 +7960,7 @@ components:
         - WorkFailureTypeMisconfigured
         - WorkFailureTypeMissingExecutable
         - WorkFailureTypeCommandLineTooLong
+        - WorkFailureTypeExpectedArtifactsUnsatisfied
       enum:
         - auth_failure
         - permanent_bad_request
@@ -7854,6 +7971,7 @@ components:
         - misconfigured
         - missing_executable
         - command_line_too_long
+        - EXPECTED_ARTIFACTS_UNSATISFIED
       x-enum-descriptions:
         - Authentication or authorization failed and operator action is required.
         - The request is invalid in a non-retryable way and should be fixed before retrying.
@@ -7864,6 +7982,16 @@ components:
         - The worker or runtime was misconfigured and requires operator intervention.
         - The configured provider executable could not be found.
         - The provider command exceeded the operating system command-line size limit.
+        - A successful worker did not satisfy its expected artifact declarations.
+    ExpectedArtifactVerificationReason:
+      type: string
+      description: Stable reason that an expected artifact declaration was not satisfied.
+      x-enum-varnames:
+        - ExpectedArtifactVerificationReasonMissing
+        - ExpectedArtifactVerificationReasonEmpty
+      enum:
+        - MISSING
+        - EMPTY
     ProviderFailureMetadata:
       type: object
       additionalProperties: false
@@ -9458,6 +9586,11 @@ components:
           description: Optional CLI routing markers for this work type. Factories used with you run --factory must declare handlingBehavior DEFAULT on exactly one work type.
           items:
             $ref: '#/components/schemas/WorkTypeHandlingBehavior'
+        expectedArtifacts:
+          type: array
+          description: Expected output declarations inherited by workstations handling this work type.
+          items:
+            $ref: '#/components/schemas/ExpectedArtifact'
     WorkState:
       type: object
       additionalProperties: false
@@ -10326,6 +10459,11 @@ components:
           description: Optional destination emitted when the workstation fails permanently.
           items:
             $ref: '#/components/schemas/WorkstationIO'
+        expectedArtifacts:
+          type: array
+          description: Expected output declarations added by this workstation to its applicable work type contract.
+          items:
+            $ref: '#/components/schemas/ExpectedArtifact'
         resources:
           type: array
           description: Resource capacity this workstation consumes while one dispatch is in flight.
@@ -11207,6 +11345,11 @@ components:
           description: Current outbound relationships attached to this listed source work item when returned by read APIs.
           items:
             $ref: '#/components/schemas/Relation'
+        expectedArtifacts:
+          type: array
+          description: Effective expected artifact declarations and their latest recorded verification state.
+          items:
+            $ref: '#/components/schemas/WorkExpectedArtifact'
         stopSummary:
           $ref: '#/components/schemas/FactoryStopSummary'
           description: Canonical stopped-state summary for existing work inspection reads when this work item explains paused, blocked, needs-human, or interrupted automation.
@@ -11456,6 +11599,26 @@ components:
       description: Declares how the CLI should route simplified one-shot prompt submissions for this work type. DEFAULT marks the single work type that receives positional prompts from you run --factory.
       enum:
         - DEFAULT
+    ExpectedArtifact:
+      type: object
+      additionalProperties: false
+      description: One expected output declaration relative to the dispatch workspace. Pattern is a workspace-relative literal path or glob and may use the replay-safe dispatch template fields `.Inputs` (the replay-safe fields are documented by `ExpectedArtifactTemplateInput`), `.Context.Project`, and `.Context.SessionID` inside a Go template action. Prompt-only fields, host paths, environment variables, and Factory documentation are not supported.
+      required:
+        - name
+        - pattern
+      properties:
+        name:
+          type: string
+          minLength: 1
+          description: Customer-visible name for this expected output declaration.
+        pattern:
+          type: string
+          minLength: 1
+          description: Workspace-relative literal path or glob template to verify.
+        nonEmpty:
+          type: boolean
+          default: false
+          description: Require every regular file matched by the pattern to be non-empty.
     FactoryLayoutPoint:
       type: object
       description: Two-dimensional authored graph layout coordinate.

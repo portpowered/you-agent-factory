@@ -91,6 +91,12 @@ const (
 	ErrorResponseCodeWORKERSESSIONTRANSCRIPTUNAVAILABLE           ErrorResponseCode = "WORKER_SESSION_TRANSCRIPT_UNAVAILABLE"
 )
 
+// Defines values for ExpectedArtifactVerificationReason.
+const (
+	ExpectedArtifactVerificationReasonEmpty   ExpectedArtifactVerificationReason = "EMPTY"
+	ExpectedArtifactVerificationReasonMissing ExpectedArtifactVerificationReason = "MISSING"
+)
+
 // Defines values for FactoryArtifactAuditMode.
 const (
 	FactoryArtifactAuditModeFULL     FactoryArtifactAuditMode = "FULL"
@@ -976,6 +982,13 @@ const (
 	WorkContentPartTypeTextUpper  WorkContentPartType = "TEXT"
 )
 
+// Defines values for WorkExpectedArtifactVerification.
+const (
+	WorkExpectedArtifactVerificationFailed    WorkExpectedArtifactVerification = "FAILED"
+	WorkExpectedArtifactVerificationPending   WorkExpectedArtifactVerification = "PENDING"
+	WorkExpectedArtifactVerificationSatisfied WorkExpectedArtifactVerification = "SATISFIED"
+)
+
 // Defines values for WorkFailureFamily.
 const (
 	WorkFailureFamilyRetryable WorkFailureFamily = "retryable"
@@ -985,15 +998,16 @@ const (
 
 // Defines values for WorkFailureType.
 const (
-	WorkFailureTypeAuthFailure         WorkFailureType = "auth_failure"
-	WorkFailureTypeCommandLineTooLong  WorkFailureType = "command_line_too_long"
-	WorkFailureTypeInternalServerError WorkFailureType = "internal_server_error"
-	WorkFailureTypeMisconfigured       WorkFailureType = "misconfigured"
-	WorkFailureTypeMissingExecutable   WorkFailureType = "missing_executable"
-	WorkFailureTypePermanentBadRequest WorkFailureType = "permanent_bad_request"
-	WorkFailureTypeThrottled           WorkFailureType = "throttled"
-	WorkFailureTypeTimeout             WorkFailureType = "timeout"
-	WorkFailureTypeUnknown             WorkFailureType = "unknown"
+	WorkFailureTypeAuthFailure                  WorkFailureType = "auth_failure"
+	WorkFailureTypeCommandLineTooLong           WorkFailureType = "command_line_too_long"
+	WorkFailureTypeExpectedArtifactsUnsatisfied WorkFailureType = "EXPECTED_ARTIFACTS_UNSATISFIED"
+	WorkFailureTypeInternalServerError          WorkFailureType = "internal_server_error"
+	WorkFailureTypeMisconfigured                WorkFailureType = "misconfigured"
+	WorkFailureTypeMissingExecutable            WorkFailureType = "missing_executable"
+	WorkFailureTypePermanentBadRequest          WorkFailureType = "permanent_bad_request"
+	WorkFailureTypeThrottled                    WorkFailureType = "throttled"
+	WorkFailureTypeTimeout                      WorkFailureType = "timeout"
+	WorkFailureTypeUnknown                      WorkFailureType = "unknown"
 )
 
 // Defines values for WorkOutcome.
@@ -1360,8 +1374,11 @@ type DispatchRequestEventMetadata struct {
 type DispatchRequestEventPayload struct {
 	// CurrentChainingTraceId Deprecated compatibility copy of the dispatch chaining-trace identifier; prefer FactoryEvent.context.currentChainingTraceId.
 	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
-	CurrentChainingTraceId *string                   `json:"currentChainingTraceId,omitempty"`
-	Inputs                 []DispatchConsumedWorkRef `json:"inputs"`
+	CurrentChainingTraceId *string `json:"currentChainingTraceId,omitempty"`
+
+	// ExpectedArtifactContext Stable, non-host context used when rendering expected-artifact patterns. Filesystem paths, environment variables, and Factory documentation are not part of this replayable vocabulary.
+	ExpectedArtifactContext *ExpectedArtifactTemplateContext `json:"expectedArtifactContext,omitempty"`
+	Inputs                  []DispatchConsumedWorkRef        `json:"inputs"`
 
 	// Metadata Optional non-identity dispatch metadata retained on dispatch-request events. Request, trace, work, and dispatch identity must remain on FactoryEvent.context rather than reappearing here.
 	Metadata *DispatchRequestEventMetadata `json:"metadata,omitempty"`
@@ -1375,7 +1392,9 @@ type DispatchRequestEventPayload struct {
 
 // DispatchResponseEventPayload Customer-visible dispatch completion event. Output work is represented with the same Work schema used by request submission rather than token or marking-mutation internals. FactoryEvent.context owns dispatch, trace, and work identity; workstation and worker topology must be derived from the matching dispatch-request event plus the initial structure. Provider-attempt session and safe diagnostic facts stay on inference response events instead of being copied onto dispatch completion payloads.
 type DispatchResponseEventPayload struct {
-	CompletionId *string `json:"completionId,omitempty"`
+	// ArtifactVerification Stable terminal verification summary emitted when a successful worker does not satisfy its effective expected artifact declarations.
+	ArtifactVerification *ExpectedArtifactVerification `json:"artifactVerification,omitempty"`
+	CompletionId         *string                       `json:"completionId,omitempty"`
 
 	// CurrentChainingTraceId Deprecated compatibility copy of the dispatch chaining-trace identifier; prefer FactoryEvent.context.currentChainingTraceId.
 	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
@@ -1437,6 +1456,70 @@ type ErrorTarget struct {
 	// Kind Client-visible target category such as form, node, edge, field, or save.
 	Kind string `json:"kind"`
 }
+
+// ExpectedArtifact One expected output declaration relative to the dispatch workspace. Pattern is a workspace-relative literal path or glob and may use the replay-safe dispatch template fields `.Inputs` (the replay-safe fields are documented by `ExpectedArtifactTemplateInput`), `.Context.Project`, and `.Context.SessionID` inside a Go template action. Prompt-only fields, host paths, environment variables, and Factory documentation are not supported.
+type ExpectedArtifact struct {
+	// Name Customer-visible name for this expected output declaration.
+	Name string `json:"name"`
+
+	// NonEmpty Require every regular file matched by the pattern to be non-empty.
+	NonEmpty *bool `json:"nonEmpty,omitempty"`
+
+	// Pattern Workspace-relative literal path or glob template to verify.
+	Pattern string `json:"pattern"`
+}
+
+// ExpectedArtifactTemplateContext Stable, non-host context used when rendering expected-artifact patterns. Filesystem paths, environment variables, and Factory documentation are not part of this replayable vocabulary.
+type ExpectedArtifactTemplateContext struct {
+	// Inputs Exact replay-safe input values captured when the dispatch was created. Artifact templates expose these values through `.Inputs`; prompt-only relations, content, retry history, and host context are not included.
+	Inputs *[]ExpectedArtifactTemplateInput `json:"inputs,omitempty"`
+
+	// Project Stable project identifier for the dispatch.
+	Project *string `json:"project,omitempty"`
+
+	// SessionId Stable Factory Session identifier for the dispatch.
+	SessionId *string `json:"sessionId,omitempty"`
+}
+
+// ExpectedArtifactTemplateInput Stable replay-safe input value available to an expected-artifact template. This is intentionally smaller than the workstation prompt input surface so completion verification and historical Work reads can use the same values.
+type ExpectedArtifactTemplateInput struct {
+	DataType *string `json:"dataType,omitempty"`
+	Name     *string `json:"name,omitempty"`
+	ParentId *string `json:"parentId,omitempty"`
+
+	// Payload The dispatch-time textual payload value. It is retained only in the artifact template context and is not added to the normal Work read.
+	Payload *string `json:"payload,omitempty"`
+
+	// Project Per-input project value resolved from the input project tag, dispatch context, or the default project.
+	Project    *string    `json:"project,omitempty"`
+	Tags       *StringMap `json:"tags,omitempty"`
+	TraceId    *string    `json:"traceId,omitempty"`
+	WorkId     *string    `json:"workId,omitempty"`
+	WorkTypeId *string    `json:"workTypeId,omitempty"`
+}
+
+// ExpectedArtifactVerification Stable terminal verification summary emitted when a successful worker does not satisfy its effective expected artifact declarations.
+type ExpectedArtifactVerification struct {
+	// Code Stable machine-readable failure type used to classify failed work across providers and runtimes.
+	Code    WorkFailureType                     `json:"code"`
+	Entries []ExpectedArtifactVerificationEntry `json:"entries"`
+}
+
+// ExpectedArtifactVerificationEntry defines model for ExpectedArtifactVerificationEntry.
+type ExpectedArtifactVerificationEntry struct {
+	// DeclarationIndex One-based position in the normalized expected-artifact declaration list.
+	DeclarationIndex *int   `json:"declarationIndex,omitempty"`
+	Name             string `json:"name"`
+
+	// Pattern Workspace-relative rendered artifact pattern; host paths are never emitted.
+	Pattern string `json:"pattern"`
+
+	// Reason Stable reason that an expected artifact declaration was not satisfied.
+	Reason ExpectedArtifactVerificationReason `json:"reason"`
+}
+
+// ExpectedArtifactVerificationReason Stable reason that an expected artifact declaration was not satisfied.
+type ExpectedArtifactVerificationReason string
 
 // Factory Top-level factory.json contract. Declare the work types, resources, portability resources, workers, and workstations that make up one authored factory here. Guarded loop breakers should be authored as guarded LOGICAL_MOVE workstations using VISIT_COUNT guards instead of a top-level exhaustion-rules field.
 type Factory struct {
@@ -6482,6 +6565,9 @@ type Work struct {
 	// CurrentChainingTraceId Explicit chaining-trace identifier for this submitted work item.
 	CurrentChainingTraceId *string `json:"currentChainingTraceId,omitempty"`
 
+	// ExpectedArtifacts Effective expected artifact declarations and their latest recorded verification state.
+	ExpectedArtifacts *[]WorkExpectedArtifact `json:"expectedArtifacts,omitempty"`
+
 	// Name A human readable name for the work, not unique
 	Name string `json:"name"`
 
@@ -6618,6 +6704,27 @@ type WorkDiagnostics struct {
 	Provider       *ProviderDiagnostic       `json:"provider,omitempty"`
 	RenderedPrompt *RenderedPromptDiagnostic `json:"renderedPrompt,omitempty"`
 }
+
+// WorkExpectedArtifact One effective expected artifact declaration projected on a Work item. Pattern is the rendered workspace-relative literal path or glob, never a host path.
+type WorkExpectedArtifact struct {
+	// Name Customer-visible declaration name.
+	Name string `json:"name"`
+
+	// NonEmpty Whether every matching regular file must contain at least one byte.
+	NonEmpty bool `json:"nonEmpty"`
+
+	// Pattern Safe rendered path or glob relative to the dispatch workspace.
+	Pattern string `json:"pattern"`
+
+	// Reason Stable reason that an expected artifact declaration was not satisfied.
+	Reason *ExpectedArtifactVerificationReason `json:"reason,omitempty"`
+
+	// Verification Latest recorded verification state for one expected artifact declaration on a Work item.
+	Verification WorkExpectedArtifactVerification `json:"verification"`
+}
+
+// WorkExpectedArtifactVerification Latest recorded verification state for one expected artifact declaration on a Work item.
+type WorkExpectedArtifactVerification string
 
 // WorkFailureFamily Stable machine-readable failure family used to decide retry and routing behavior for failed work.
 type WorkFailureFamily string
@@ -6802,6 +6909,9 @@ type WorkTextContentPart struct {
 type WorkType struct {
 	// Description Optional localized customer-facing explanation of this work type.
 	Description *NameValue `json:"description,omitempty"`
+
+	// ExpectedArtifacts Expected output declarations inherited by workstations handling this work type.
+	ExpectedArtifacts *[]ExpectedArtifact `json:"expectedArtifacts,omitempty"`
 
 	// HandlingBehavior Optional CLI routing markers for this work type. Factories used with you run --factory must declare handlingBehavior DEFAULT on exactly one work type.
 	HandlingBehavior *[]WorkTypeHandlingBehavior `json:"handlingBehavior,omitempty"`
@@ -7208,6 +7318,9 @@ type Workstation struct {
 
 	// Env Environment variables added to the workstation execution context.
 	Env *StringMap `json:"env,omitempty"`
+
+	// ExpectedArtifacts Expected output declarations added by this workstation to its applicable work type contract.
+	ExpectedArtifacts *[]ExpectedArtifact `json:"expectedArtifacts,omitempty"`
 
 	// Guards Guarded loop breakers should use `VISIT_COUNT` guards here with a `LOGICAL_MOVE` workstation instead of top-level exhaustion rules.
 	Guards *[]WorkstationGuard `json:"guards,omitempty"`

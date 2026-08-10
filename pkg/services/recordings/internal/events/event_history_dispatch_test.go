@@ -8,6 +8,7 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/projections"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -37,6 +38,24 @@ func assertJSONObject(t *testing.T, object map[string]any, field string) map[str
 	return value
 }
 
+func assertExpectedArtifactContext(t *testing.T, context *work.ExpectedArtifactTemplateContext) {
+	t.Helper()
+	if context == nil || context.Project != "project-7" || context.SessionID != "session-9" ||
+		len(context.Inputs) != 1 || context.Inputs[0].Project != "input-project-7" || context.Inputs[0].Payload != "payload-7" {
+		t.Fatalf("canonical expected artifact context = %#v", context)
+	}
+}
+
+func assertGeneratedExpectedArtifactContext(t *testing.T, context *factoryapi.ExpectedArtifactTemplateContext) {
+	t.Helper()
+	if context == nil || stringValueForEventHistoryTest(context.Project) != "project-7" || stringValueForEventHistoryTest(context.SessionId) != "session-9" ||
+		context.Inputs == nil || len(*context.Inputs) != 1 ||
+		stringValueForEventHistoryTest((*context.Inputs)[0].Project) != "input-project-7" ||
+		stringValueForEventHistoryTest((*context.Inputs)[0].Payload) != "payload-7" {
+		t.Fatalf("generated expected artifact context = %#v", context)
+	}
+}
+
 func TestFactoryEventHistory_RecordWorkstationRequest_UsesContextForRequestIdentity(t *testing.T) {
 	eventTime := time.Date(2026, 4, 22, 16, 0, 0, 0, time.UTC)
 	history := newTestFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
@@ -49,6 +68,14 @@ func TestFactoryEventHistory_RecordWorkstationRequest_UsesContextForRequestIdent
 			TransitionID:    "build",
 			WorkerType:      "builder",
 			WorkstationName: "Build",
+			ExpectedArtifactContext: &work.ExpectedArtifactTemplateContext{
+				Project:   "project-7",
+				SessionID: "session-9",
+				Inputs: []work.ExpectedArtifactInput{{
+					Project: "input-project-7",
+					Payload: "payload-7",
+				}},
+			},
 			Execution: work.ExecutionMetadata{
 				RequestID: "request-1",
 				ReplayKey: "replay-1",
@@ -71,6 +98,7 @@ func TestFactoryEventHistory_RecordWorkstationRequest_UsesContextForRequestIdent
 	if canonicalPayload.Metadata == nil || stringValueForEventHistoryTest(canonicalPayload.Metadata.ReplayKey) != "replay-1" {
 		t.Fatalf("canonical metadata = %#v, want replay-1", canonicalPayload.Metadata)
 	}
+	assertExpectedArtifactContext(t, canonicalPayload.ExpectedArtifactContext)
 
 	events := generatedHistoryEvents(t, history)
 	if len(events) != 1 {
@@ -93,6 +121,7 @@ func TestFactoryEventHistory_RecordWorkstationRequest_UsesContextForRequestIdent
 	if stringValueForEventHistoryTest(payload.Metadata.ReplayKey) != "replay-1" {
 		t.Fatalf("metadata replayKey = %q, want replay-1", stringValueForEventHistoryTest(payload.Metadata.ReplayKey))
 	}
+	assertGeneratedExpectedArtifactContext(t, payload.ExpectedArtifactContext)
 }
 
 func TestFactoryEventHistory_RecordWorkstationRequest_NormalizesEventTimeToUTC(t *testing.T) {
@@ -261,6 +290,93 @@ func TestFactoryEventHistory_RecordWorkstationResponse_FailedResultIncludesFailu
 	providerFailure := assertJSONObject(t, payloadObject, "providerFailure")
 	assertJSONField(t, providerFailure, "family", "throttle")
 	assertJSONField(t, providerFailure, "type", "throttled")
+}
+
+func TestFactoryEventHistory_RecordWorkstationResponse_PersistsExpectedArtifactVerification(t *testing.T) {
+	eventTime := time.Date(2026, 8, 10, 9, 30, 0, 0, time.UTC)
+	history := newTestFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return eventTime })
+	result := expectedArtifactFailureWorkResult()
+	history.RecordWorkstationResponse(4, result, interfaces.CompletedDispatch{
+		DispatchID:      result.DispatchID,
+		TransitionID:    result.TransitionID,
+		WorkstationName: "Build",
+		Outcome:         workerexecution.OutcomeFailed,
+		Reason:          result.Error,
+		EndTime:         eventTime,
+		Duration:        time.Second,
+	})
+	assertExpectedArtifactCanonicalEvent(t, history)
+	assertExpectedArtifactPublicEvent(t, history)
+	assertExpectedArtifactWorldState(t, history)
+}
+
+func expectedArtifactFailureWorkResult() workerexecution.WorkResult {
+	return workerexecution.WorkResult{
+		DispatchID:   "dispatch-artifact-failed",
+		TransitionID: "build",
+		Outcome:      workerexecution.OutcomeFailed,
+		Output:       "worker output retained",
+		Error:        "EXPECTED_ARTIFACTS_UNSATISFIED: report=reports/*.json (EMPTY)",
+		ArtifactVerification: &workerexecution.ExpectedArtifactVerification{
+			Code: workerexecution.WorkFailureTypeExpectedArtifactsUnsatisfied,
+			Entries: []workerexecution.ExpectedArtifactVerificationEntry{{
+				Name: "report", Pattern: "reports/*.json", Reason: workerexecution.ExpectedArtifactVerificationReasonEmpty,
+			}},
+		},
+		FailureMetadata: &workerexecution.WorkFailureMetadata{
+			Family: workerexecution.WorkFailureFamilyTerminal,
+			Type:   workerexecution.WorkFailureTypeExpectedArtifactsUnsatisfied,
+		},
+	}
+}
+
+func assertExpectedArtifactCanonicalEvent(t *testing.T, history *FactoryEventHistory) {
+	t.Helper()
+	events := history.CanonicalEvents()
+	if len(events) != 1 {
+		t.Fatalf("canonical event count = %d, want 1", len(events))
+	}
+	var canonicalPayload workerexecution.DispatchResponseEventPayload
+	if err := events[0].DecodePayload(&canonicalPayload); err != nil {
+		t.Fatalf("decode canonical dispatch response: %v", err)
+	}
+	if canonicalPayload.ArtifactVerification == nil || len(canonicalPayload.ArtifactVerification.Entries) != 1 {
+		t.Fatalf("canonical verification = %#v, want one entry", canonicalPayload.ArtifactVerification)
+	}
+	if canonicalPayload.ArtifactVerification.Code != workerexecution.WorkFailureTypeExpectedArtifactsUnsatisfied {
+		t.Fatalf("canonical verification code = %q", canonicalPayload.ArtifactVerification.Code)
+	}
+	if canonicalPayload.FailureDetail == nil || canonicalPayload.FailureDetail.Reason != workerexecution.WorkFailureTypeExpectedArtifactsUnsatisfied {
+		t.Fatalf("canonical failure detail = %#v, want expected-artifact code", canonicalPayload.FailureDetail)
+	}
+}
+
+func assertExpectedArtifactPublicEvent(t *testing.T, history *FactoryEventHistory) {
+	t.Helper()
+	generated := generatedHistoryEvents(t, history)
+	publicPayload, err := generated[0].Payload.AsDispatchResponseEventPayload()
+	if err != nil {
+		t.Fatalf("decode generated dispatch response: %v", err)
+	}
+	if publicPayload.ArtifactVerification == nil || len(publicPayload.ArtifactVerification.Entries) != 1 {
+		t.Fatalf("generated verification = %#v, want one entry", publicPayload.ArtifactVerification)
+	}
+}
+
+func assertExpectedArtifactWorldState(t *testing.T, history *FactoryEventHistory) {
+	t.Helper()
+	events := history.CanonicalEvents()
+	world, err := projections.ReconstructCanonicalFactoryWorldState(events, 4)
+	if err != nil {
+		t.Fatalf("reconstruct world state: %v", err)
+	}
+	if len(world.CompletedDispatches) != 1 || world.CompletedDispatches[0].Result.ArtifactVerification == nil {
+		t.Fatalf("world completion = %#v, want persisted verification", world.CompletedDispatches)
+	}
+	entry := world.CompletedDispatches[0].Result.ArtifactVerification.Entries[0]
+	if entry.Name != "report" || entry.Pattern != "reports/*.json" || entry.Reason != workerexecution.ExpectedArtifactVerificationReasonEmpty {
+		t.Fatalf("world verification entry = %#v", entry)
+	}
 }
 
 func TestFactoryEventHistory_RecordWorkstationResponse_UsesUTCFallbackAndDurationMillisForMissingEndTime(t *testing.T) {

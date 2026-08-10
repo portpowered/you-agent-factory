@@ -10,6 +10,7 @@ x-enum-varnames:
   - WorkFailureTypeMisconfigured
   - WorkFailureTypeMissingExecutable
   - WorkFailureTypeCommandLineTooLong
+  - WorkFailureTypeExpectedArtifactsUnsatisfied
 enum:
   - auth_failure
   - permanent_bad_request
@@ -20,6 +21,7 @@ enum:
   - misconfigured
   - missing_executable
   - command_line_too_long
+  - EXPECTED_ARTIFACTS_UNSATISFIED
 x-enum-descriptions:
   - Authentication or authorization failed and operator action is required.
   - The request is invalid in a non-retryable way and should be fixed before retrying.
@@ -30,3 +32,4 @@ x-enum-descriptions:
   - The worker or runtime was misconfigured and requires operator intervention.
   - The configured provider executable could not be found.
   - The provider command exceeded the operating system command-line size limit.
+  - A successful worker did not satisfy its expected artifact declarations.
