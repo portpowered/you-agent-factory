@@ -51,7 +51,5 @@ func TestFactoryValidation_RejectsWorkstationWithNonexistentWorker(t *testing.T)
 	if fakeEnv.Stdout() != "" {
 		t.Errorf("expected no stdout before validation failed, got: %q", fakeEnv.Stdout())
 	}
-	if !strings.Contains(fakeEnv.Stderr(), "factory.worker.danglingReference") {
-		t.Errorf("expected validation diagnostic on stderr, got: %q", fakeEnv.Stderr())
-	}
+	support.RequireSafeCLIDiagnostic(t, fakeEnv.Stderr())
 }

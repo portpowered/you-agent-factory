@@ -99,47 +99,48 @@ type Edges struct {
 		Open(string) (io.ReadCloser, error)
 		Create(string) (io.WriteCloser, error)
 	}
-	FactorySessionsWorkingDirectory                 platformfilesystem.WorkingDirectory
-	FactorySessionExecutionOpeningFileSystem        factorysessions.ExecutionOpeningFileSystem
-	FactorySessionDirectoryInspection               factorysessions.DirectoryInspection
-	FactorySessionResolveHomeDirectory              factorysessions.HomeDirectoryResolver
-	FactorySessionResolveLogicalTargetSymlinks      factorysessions.LogicalTargetResolveSymlinks
-	FactorySessionIDGenerator                       factorysessions.SessionIDGenerator
-	FactorySessionRuntimeInstanceIDGenerator        factorysessions.RuntimeInstanceIDGenerator
-	FactorySessionResponseEventIDGenerator          factorysessions.ResponseEventIDGenerator
-	FactorySessionResponseEventRetentionLimits      *factorysessions.ResponseEventRetentionLimits
-	FactorySessionCursorPersistenceFileSystem       factorysessions.CursorPersistenceFileSystem
-	FactorySessionCursorCreateTemporaryFile         factorysessions.CursorPersistenceCreateTemporaryFile
-	FactorySessionRuntimePersistenceFileSystem      factorysessions.RuntimePersistenceFileSystem
-	FactorySessionContractFixtureReader             factorysessions.ContractFixtureReader
-	FactorySessionInvocationInputReader             factorysessions.InvocationInputReader
-	FactorySessionReplayRecordingReader             factorysessions.ReplayRecordingReader
-	FactorySessionInitialWorkReader                 factorysessions.InitialWorkReader
-	FactoryRuntimeIDGenerator                       factoryruntime.IDGenerator
-	FactoryRuntimeDirectories                       factoryruntime.RuntimeDirectoryFileSystem
-	FactoryRuntimeInputs                            factoryruntime.InputFileSystem
-	FactoryRuntimeInputDirectoryWalker              factoryruntime.InputDirectoryWalker
-	FactoryRuntimeWorkflowSources                   factoryruntime.WorkflowSourceFileSystem
-	FactoryRuntimeWorkflowSourceResolveSymlinks     factoryruntime.WorkflowSourceResolveSymlinks
-	FactoryRuntimeWorkflowHome                      factoryruntime.WorkflowHomeResolver
-	FactoryDefinitionPortableFileSystem             portablefiles.FileSystem
-	FactoryDefinitionLoadingFileSystem              factorydefinitions.LoadingFileSystem
-	FactoryDefinitionClock                          factorydefinitions.Clock
-	FactoryDefinitionVersionFileSystem              factorydefinitions.VersionFileSystem
-	FactoryDefinitionPackagedGoalPromptFileSystem   factorydefinitions.PackagedGoalPromptFileSystem
-	FactoryDefinitionPortableBundledFileInspection  factorydefinitions.PortableBundledFileInspection
-	FactoryDefinitionRequiredToolPathLookup         factorydefinitions.RequiredToolPathLookup
-	FactoryDefinitionRequiredToolVersionProbe       factorydefinitions.RequiredToolVersionProbe
-	FactoryDefinitionPersistenceFileSystem          factorydefinitions.PersistenceFileSystem
-	FactoryDefinitionDirectoryReplacementStore      factorydefinitions.DirectoryReplacementStore
-	FactoryDefinitionNamedPathFileSystem            factorydefinitionswire.NamedPathFileSystem
-	FactoryDefinitionNamedFactoryCatalogFileSystem  factorydefinitions.NamedFactoryCatalogFileSystem
-	FactoryDefinitionPackagedInstallationFileSystem factorydefinitions.PackagedInstallationFileSystem
-	FactoryDefinitionAuthoredReaderFileSystem       factorydefinitions.AuthoredLayoutReaderFileSystem
-	FactoryDefinitionAuthoredWriterFileSystem       factorydefinitions.AuthoredLayoutWriterFileSystem
-	FactoryDefinitionScaffoldFileSystem             factorydefinitions.ScaffoldFileSystem
-	FactoryDefinitionScaffoldOutput                 factorydefinitions.ScaffoldOutput
-	ProviderSessionFileSystem                       interface {
+	FactorySessionsWorkingDirectory                       platformfilesystem.WorkingDirectory
+	FactorySessionExecutionOpeningFileSystem              factorysessions.ExecutionOpeningFileSystem
+	FactorySessionDirectoryInspection                     factorysessions.DirectoryInspection
+	FactorySessionResolveHomeDirectory                    factorysessions.HomeDirectoryResolver
+	FactorySessionResolveLogicalTargetSymlinks            factorysessions.LogicalTargetResolveSymlinks
+	FactorySessionIDGenerator                             factorysessions.SessionIDGenerator
+	FactorySessionRuntimeInstanceIDGenerator              factorysessions.RuntimeInstanceIDGenerator
+	FactorySessionResponseEventIDGenerator                factorysessions.ResponseEventIDGenerator
+	FactorySessionResponseEventRetentionLimits            *factorysessions.ResponseEventRetentionLimits
+	FactorySessionCursorPersistenceFileSystem             factorysessions.CursorPersistenceFileSystem
+	FactorySessionCursorCreateTemporaryFile               factorysessions.CursorPersistenceCreateTemporaryFile
+	FactorySessionRuntimePersistenceFileSystem            factorysessions.RuntimePersistenceFileSystem
+	FactorySessionContractFixtureReader                   factorysessions.ContractFixtureReader
+	FactorySessionInvocationInputReader                   factorysessions.InvocationInputReader
+	FactorySessionReplayRecordingReader                   factorysessions.ReplayRecordingReader
+	FactorySessionInitialWorkReader                       factorysessions.InitialWorkReader
+	FactoryRuntimeIDGenerator                             factoryruntime.IDGenerator
+	FactoryRuntimeDirectories                             factoryruntime.RuntimeDirectoryFileSystem
+	FactoryRuntimeInputs                                  factoryruntime.InputFileSystem
+	FactoryRuntimeInputDirectoryWalker                    factoryruntime.InputDirectoryWalker
+	FactoryRuntimeWorkflowSources                         factoryruntime.WorkflowSourceFileSystem
+	FactoryRuntimeWorkflowSourceResolveSymlinks           factoryruntime.WorkflowSourceResolveSymlinks
+	FactoryRuntimeWorkflowHome                            factoryruntime.WorkflowHomeResolver
+	FactoryDefinitionPortableFileSystem                   portablefiles.FileSystem
+	FactoryDefinitionLoadingFileSystem                    factorydefinitions.LoadingFileSystem
+	FactoryDefinitionClock                                factorydefinitions.Clock
+	FactoryDefinitionVersionFileSystem                    factorydefinitions.VersionFileSystem
+	FactoryDefinitionPackagedGoalPromptFileSystem         factorydefinitions.PackagedGoalPromptFileSystem
+	FactoryDefinitionPortableBundledFileInspection        factorydefinitions.PortableBundledFileInspection
+	FactoryDefinitionRequiredToolPathLookup               factorydefinitions.RequiredToolPathLookup
+	FactoryDefinitionRequiredToolVersionProbe             factorydefinitions.RequiredToolVersionProbe
+	FactoryDefinitionPersistenceFileSystem                factorydefinitions.PersistenceFileSystem
+	FactoryDefinitionDirectoryReplacementStore            factorydefinitions.DirectoryReplacementStore
+	FactoryDefinitionNamedPathFileSystem                  factorydefinitionswire.NamedPathFileSystem
+	FactoryDefinitionNamedFactoryCatalogFileSystem        factorydefinitions.NamedFactoryCatalogFileSystem
+	FactoryDefinitionPackagedInstallationFileSystem       factorydefinitions.PackagedInstallationFileSystem
+	FactoryDefinitionPackagedInstallationDirectoryCreator factorydefinitions.PackagedInstallationDirectoryCreator
+	FactoryDefinitionAuthoredReaderFileSystem             factorydefinitions.AuthoredLayoutReaderFileSystem
+	FactoryDefinitionAuthoredWriterFileSystem             factorydefinitions.AuthoredLayoutWriterFileSystem
+	FactoryDefinitionScaffoldFileSystem                   factorydefinitions.ScaffoldFileSystem
+	FactoryDefinitionScaffoldOutput                       factorydefinitions.ScaffoldOutput
+	ProviderSessionFileSystem                             interface {
 		Open(string) (io.ReadCloser, error)
 		Stat(string) (fs.FileInfo, error)
 	}
@@ -434,6 +435,9 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.FactoryDefinitionPackagedInstallationFileSystem != nil {
 		defaults.FactoryDefinitionPackagedInstallationFileSystem = replacements.FactoryDefinitionPackagedInstallationFileSystem
+	}
+	if replacements.FactoryDefinitionPackagedInstallationDirectoryCreator != nil {
+		defaults.FactoryDefinitionPackagedInstallationDirectoryCreator = replacements.FactoryDefinitionPackagedInstallationDirectoryCreator
 	}
 	if replacements.FactoryDefinitionAuthoredReaderFileSystem != nil {
 		defaults.FactoryDefinitionAuthoredReaderFileSystem = replacements.FactoryDefinitionAuthoredReaderFileSystem

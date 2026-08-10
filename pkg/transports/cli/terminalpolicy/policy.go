@@ -115,7 +115,7 @@ func (p Policy) BuildLogger(build LoggerBuilder) (*zap.Logger, error) {
 	if build == nil {
 		return nil, errors.New("terminal policy requires an injected logger builder")
 	}
-	return build(p.Mode(), p.DebugEnabled())
+	return build(p.Mode(), p.AllowsStructuredLogTerminal())
 }
 
 // DiagnosticsEnabled chooses whether command diagnostics should emit, honoring
