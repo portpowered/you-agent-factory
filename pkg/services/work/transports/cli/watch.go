@@ -14,8 +14,6 @@ import (
 // WatchSchemaVersion identifies the stable line-oriented Work watch contract.
 const WatchSchemaVersion = "you.work.watch.v1"
 
-const watchStructuredResultNullMarker = "\x00you.work.watch.structured-result-null"
-
 // WatchConfig holds the public options shared by the Work watch command and
 // the event-stream implementation that will consume them.
 type WatchConfig struct {

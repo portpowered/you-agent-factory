@@ -301,9 +301,6 @@ func structuredResultJSON(value any, present bool) ([]byte, error) {
 	if value == nil {
 		return []byte("null"), nil
 	}
-	if marker, ok := value.(string); ok && marker == watchStructuredResultNullMarker {
-		return []byte("null"), nil
-	}
 	if raw, ok := value.(json.RawMessage); ok {
 		var compact bytes.Buffer
 		if err := json.Compact(&compact, raw); err != nil {

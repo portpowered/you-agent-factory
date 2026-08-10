@@ -702,9 +702,87 @@ func TestDecodeWatchSSEEventPreservesExplicitStructuredResultNull(t *testing.T) 
 	if err != nil {
 		t.Fatalf("decode dispatch response payload: %v", err)
 	}
-	value, ok := response.StructuredResult.(string)
-	if !ok || value != watchStructuredResultNullMarker {
-		t.Fatalf("structuredResult = %#v (marker=%t), want internal explicit-null marker", response.StructuredResult, ok)
+	if response.StructuredResult != nil {
+		t.Fatalf("decoded structuredResult = %#v, want generated interface nil before reducer sidecar restoration", response.StructuredResult)
+	}
+	decodedPayload, err := json.Marshal(decoded.Payload)
+	if err != nil {
+		t.Fatalf("encode decoded dispatch payload: %v", err)
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(decodedPayload, &fields); err != nil {
+		t.Fatalf("decode raw dispatch payload: %v", err)
+	}
+	if got := string(fields["structuredResult"]); got != "null" {
+		t.Fatalf("raw structuredResult = %q, want explicit null", got)
+	}
+}
+
+func TestWatchReducerKeepsStructuredResultStringDistinctFromExplicitNull(t *testing.T) {
+	reducer := newWatchReducer("session-1")
+	metadata := watchFactoryEvent(t, factoryapi.FactoryEventTypeInitialStructureRequest, "factory", 1,
+		factoryapi.InitialStructureRequestEventPayload{Factory: factoryapi.Factory{
+			WorkTypes: &[]factoryapi.WorkType{{Name: "task", States: []factoryapi.WorkState{
+				{Name: "ready", Type: factoryapi.WorkStateTypeINITIAL},
+				{Name: "processing", Type: factoryapi.WorkStateTypePROCESSING},
+			}}},
+		}})
+	request := watchFactoryEvent(t, factoryapi.FactoryEventTypeWorkRequest, "request", 2,
+		factoryapi.WorkRequestEventPayload{Works: &[]factoryapi.Work{
+			{WorkId: watchStringPtr("work-string"), WorkTypeName: watchStringPtr("task"), State: &factoryapi.WorkState{Name: "ready", Type: factoryapi.WorkStateTypeINITIAL}},
+			{WorkId: watchStringPtr("work-null"), WorkTypeName: watchStringPtr("task"), State: &factoryapi.WorkState{Name: "ready", Type: factoryapi.WorkStateTypeINITIAL}},
+		}})
+	stringResult := "\x00you.work.watch.structured-result-null"
+	response := watchFactoryEvent(t, factoryapi.FactoryEventTypeDispatchResponse, "dispatch-response", 3,
+		factoryapi.DispatchResponseEventPayload{
+			Outcome: factoryapi.WorkOutcomeAccepted,
+			OutputWork: &[]factoryapi.Work{
+				{WorkId: watchStringPtr("work-string"), StructuredResult: stringResult},
+				{WorkId: watchStringPtr("work-null"), StructuredResult: json.RawMessage("null")},
+			},
+		})
+	stringTransition := watchTransitionEvent(t, "move-string", 4, "work-string", "ready", "processing", false)
+	nullTransition := watchTransitionEvent(t, "move-null", 5, "work-null", "ready", "processing", false)
+
+	for _, event := range []factoryapi.FactoryEvent{metadata, request, response} {
+		if _, emit, _, err := reducer.Accept(event); err != nil || emit {
+			t.Fatalf("Accept(%q): emit=%t error=%v, want no output line", event.Id, emit, err)
+		}
+	}
+	gotString, emit, _, err := reducer.Accept(stringTransition)
+	if err != nil || !emit {
+		t.Fatalf("string transition: emit=%t error=%v, want output line", emit, err)
+	}
+	if !gotString.StructuredResultPresent || gotString.StructuredResult != stringResult {
+		t.Fatalf("string transition structuredResult = %#v (present=%t), want exact customer string", gotString.StructuredResult, gotString.StructuredResultPresent)
+	}
+	gotNull, emit, _, err := reducer.Accept(nullTransition)
+	if err != nil || !emit {
+		t.Fatalf("null transition: emit=%t error=%v, want output line", emit, err)
+	}
+	if !gotNull.StructuredResultPresent {
+		t.Fatalf("null transition structuredResult = %#v, want explicit null", gotNull.StructuredResult)
+	}
+	rawNull, ok := gotNull.StructuredResult.(json.RawMessage)
+	if !ok || string(rawNull) != "null" {
+		t.Fatalf("null transition structuredResult = %#v (raw=%t), want internal raw null", gotNull.StructuredResult, ok)
+	}
+	assertRenderedWatchStructuredResult(t, gotString, `"\u0000you.work.watch.structured-result-null"`)
+	assertRenderedWatchStructuredResult(t, gotNull, "null")
+}
+
+func assertRenderedWatchStructuredResult(t *testing.T, transition WatchTransition, want string) {
+	t.Helper()
+	var output bytes.Buffer
+	if err := RenderWatchTransition(&output, transition); err != nil {
+		t.Fatalf("RenderWatchTransition() error = %v", err)
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(bytes.TrimSpace(output.Bytes()), &fields); err != nil {
+		t.Fatalf("decode rendered watch line: %v", err)
+	}
+	if got := string(fields["structuredResult"]); got != want {
+		t.Fatalf("rendered structuredResult = %q, want %q", got, want)
 	}
 }
 

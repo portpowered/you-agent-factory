@@ -1829,3 +1829,28 @@
   - The jsonschema compiler expands resource IDs to absolute file URLs and may append a fragment, so customer diagnostics should use a stable authored label such as `output schema#/pattern`.
   - The remaining review blocker is story 004’s watch null sentinel collision; keep that fix isolated to the next story iteration.
 ---
+## 2026-08-10 10:45 -07:00 - e2-structured-worker-results-004 review follow-up
+- What was implemented
+  - Removed the customer-representable string sentinel used to carry explicit JSON null through the generated `interface{}` watch payload projection.
+  - Preserved raw canonical event payload fields until reducer application, restoring only an actually present JSON `null` as an internal `json.RawMessage("null")`; omitted fields remain absent and valid customer strings, including the former sentinel text, remain strings.
+  - Added decode, reducer, and rendered NDJSON assertions proving the exact scalar string and explicit null remain distinct.
+  - Marked story `e2-structured-worker-results-004` as passed in `prd.json`.
+- Files changed
+  - `pkg/services/work/transports/cli/list.go`
+  - `pkg/services/work/transports/cli/watch.go`
+  - `pkg/services/work/transports/cli/watch_reducer.go`
+  - `pkg/services/work/transports/cli/watch_retry_test.go`
+  - `pkg/services/work/transports/cli/watch_stream.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Focused watch null/string regression tests — passed.
+  - `go test ./pkg/services/work/transports/cli -count=1 -timeout 300s` — passed.
+  - `go test ./pkg/services/work/... ./pkg/transports/cli/... ./tests/functional/work/... -count=1 -timeout 300s` — passed.
+  - `go vet ./...`, `make backend-size`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, `make typecheck`, and `make test` — passed.
+  - `make contracts-check cli-manifest-check docs-reference-smoke` — passed.
+  - `make lint` reached the unchanged repository `pkg-boundary` baseline of 176 violations; no changed file appears in that inventory. `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - Generated OpenAPI `interface{}` fields collapse explicit null during decode; preserve presence from the raw canonical event payload and delay normalization until the reducer owns the value.
+  - A string sentinel is unsafe for any native JSON channel because every valid JSON string is customer-representable; use a sidecar presence bit or raw field metadata instead.
+---

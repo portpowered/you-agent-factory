@@ -82,8 +82,7 @@ func (r *watchReducer) Accept(event factoryapi.FactoryEvent) (WatchTransition, b
 // It reports true when event is an exact replay or a refreshed non-projecting
 // enrichment at a strictly later canonical position.
 func (r *watchReducer) acceptOrdering(event factoryapi.FactoryEvent) (bool, error) {
-	signatureEvent := normalizeWatchStructuredResultNullMarkers(event)
-	signature, err := json.Marshal(signatureEvent)
+	signature, err := json.Marshal(event)
 	if err != nil {
 		return false, fmt.Errorf("fingerprint work watch event %q: %w", event.Id, err)
 	}
@@ -132,50 +131,6 @@ func (r *watchReducer) acceptOrdering(event factoryapi.FactoryEvent) (bool, erro
 	r.lastID = event.Id
 	r.hasLast = true
 	return false, nil
-}
-
-func normalizeWatchStructuredResultNullMarkers(event factoryapi.FactoryEvent) factoryapi.FactoryEvent {
-	switch event.Type {
-	case factoryapi.FactoryEventTypeWorkRequest:
-		payload, err := event.Payload.AsWorkRequestEventPayload()
-		if err != nil || payload.Works == nil {
-			return event
-		}
-		changed := false
-		for index, work := range *payload.Works {
-			if work.StructuredResult != watchStructuredResultNullMarker {
-				continue
-			}
-			(*payload.Works)[index].StructuredResult = json.RawMessage("null")
-			changed = true
-		}
-		if changed {
-			_ = event.Payload.FromWorkRequestEventPayload(payload)
-		}
-	case factoryapi.FactoryEventTypeDispatchResponse:
-		payload, err := event.Payload.AsDispatchResponseEventPayload()
-		if err != nil {
-			return event
-		}
-		changed := false
-		if payload.StructuredResult == watchStructuredResultNullMarker {
-			payload.StructuredResult = json.RawMessage("null")
-			changed = true
-		}
-		if payload.OutputWork != nil {
-			for index, work := range *payload.OutputWork {
-				if work.StructuredResult != watchStructuredResultNullMarker {
-					continue
-				}
-				(*payload.OutputWork)[index].StructuredResult = json.RawMessage("null")
-				changed = true
-			}
-		}
-		if changed {
-			_ = event.Payload.FromDispatchResponseEventPayload(payload)
-		}
-	}
-	return event
 }
 
 // isNonProjectingWatchEvent identifies event families this reducer consumes
@@ -297,6 +252,9 @@ func (r *watchReducer) applyDispatchResponseEvent(event factoryapi.FactoryEvent)
 		r.clearDispatchStructuredResult(event, payload)
 		return nil
 	}
+	if err := restoreDispatchStructuredResultNulls(event, &payload); err != nil {
+		return err
+	}
 	responseResultPresent := payload.StructuredResult != nil
 	outputWorkIDs := make(map[string]struct{})
 	if payload.OutputWork != nil {
@@ -415,6 +373,9 @@ func (r *watchReducer) applyWorkRequest(
 	payload factoryapi.WorkRequestEventPayload,
 ) error {
 	if payload.Works != nil {
+		if err := restoreWorkRequestStructuredResultNulls(event, payload.Works); err != nil {
+			return err
+		}
 		for _, item := range *payload.Works {
 			workID, observation, include, err := r.workRequestObservation(event, item)
 			if err != nil {
@@ -439,6 +400,48 @@ func (r *watchReducer) applyWorkRequest(
 		}
 	}
 	return nil
+}
+
+func restoreWorkRequestStructuredResultNulls(event factoryapi.FactoryEvent, works *[]factoryapi.Work) error {
+	fields, err := watchEventPayloadFields(event)
+	if err != nil {
+		return fmt.Errorf("decode Work request structured result presence: %w", err)
+	}
+	if _, err := restoreWatchWorkResultNulls(fields["works"], works); err != nil {
+		return fmt.Errorf("restore Work request structured result presence: %w", err)
+	}
+	return nil
+}
+
+func restoreDispatchStructuredResultNulls(event factoryapi.FactoryEvent, payload *factoryapi.DispatchResponseEventPayload) error {
+	if payload == nil {
+		return nil
+	}
+	data, err := json.Marshal(event)
+	if err != nil {
+		return fmt.Errorf("encode dispatch structured result presence: %w", err)
+	}
+	fields, err := watchPayloadFields(data)
+	if err != nil {
+		return fmt.Errorf("decode dispatch structured result presence: %w", err)
+	}
+	if rawJSONFieldIsNull(fields, "structuredResult") {
+		payload.StructuredResult = json.RawMessage("null")
+	}
+	if payload.OutputWork != nil {
+		if _, err := restoreWatchWorkResultNulls(fields["outputWork"], payload.OutputWork); err != nil {
+			return fmt.Errorf("restore dispatch output structured result presence: %w", err)
+		}
+	}
+	return nil
+}
+
+func watchEventPayloadFields(event factoryapi.FactoryEvent) (map[string]json.RawMessage, error) {
+	data, err := json.Marshal(event)
+	if err != nil {
+		return nil, err
+	}
+	return watchPayloadFields(data)
 }
 
 func (r *watchReducer) workRequestObservation(

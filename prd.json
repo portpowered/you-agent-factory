@@ -84,8 +84,8 @@
         "Tests pass"
       ],
       "priority": 4,
-      "passes": false,
-      "notes": "Initial implementation is present, but blocking PR review found that the watch null sentinel collides with a customer-valid scalar string. The next iteration must replace that sentinel with collision-free presence handling and add behavioral coverage proving the exact string and explicit null remain distinct."
+      "passes": true,
+      "notes": "Replaced the customer-representable watch null sentinel with raw event-payload presence handling. Reducer application restores only fields whose canonical raw value is JSON null, preserving the exact historical sentinel string as a string while keeping explicit null and omission distinct. Added focused decode/reducer/render coverage for both values; Work/CLI/functional suites, contract/docs checks, typecheck, test, vet, and repository quality gates pass."
     }
   ]
 }
