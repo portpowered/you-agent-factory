@@ -2465,3 +2465,18 @@
   - Package file-count baselines must be patched with package-specific context: generic `fileCount` hunks can accidentally update an unrelated entry when multiple packages share the same recorded count.
   - When helpers were previously extracted into a shared file, move their adjacent test documentation with the tests so the helper file remains readable and semantically focused.
 ---
+## [2026-08-10 14:54 -07:00] - thr-split-acp-stdio-tests-003 review follow-up
+- What was implemented
+  - Merged current `origin/main` at `6e01bee689bbddbffbd920632f07e6b09586cf5c` into the ACP split branch, preserving the task-scoped `prd.json` and both branches' append-only `progress.txt` histories.
+  - Published merge commit `2292b2696`; the PR has no conversation comments, reviews, or unresolved inline threads.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Merged-head normalized ACP stdio test inventory — 222 tests before and after baseline `2943d7328ed6c11e37e2c138346124e9b3b744bf`, zero diff.
+  - Merged-head ACP stdio coverage — 94.3% before and after.
+  - Focused package tests, three-run concurrent-attachment race test, `make vet`, `make backend-size`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, `make typecheck`, PRD/baseline JSON validation, and `git diff --check` — passed.
+  - The broad `make test` attempt reached its 300-second wrapper timeout without a result; its exact spawned process tree was stopped after the timeout. This did not affect the focused ACP evidence or structural gates.
+- **Learnings for future iterations:**
+  - Recheck PR mergeability after pushing a current-main merge; a newly created PR can report conflicts immediately when its branch starts behind the live base.
+  - On this Windows checkout, broad `make test` may outlive the wrapper while focused package and repository enforcement gates remain responsive; record the timeout separately from deterministic pass/fail evidence.
+---
