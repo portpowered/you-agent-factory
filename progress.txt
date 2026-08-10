@@ -1011,3 +1011,17 @@
 - **Learnings for future iterations:**
   - Per-package coverage gates count newly introduced error branches, so each ownership failure mode needs an observable test rather than relying only on the happy-path concurrency tests.
 ---
+
+## 2026-08-10 08:31 -07:00 - pf-stale-scope-diagnostic-002 CI follow-up
+- What was implemented
+  - Reconciled the updated PR against CI results and retried the failed functional lane twice without changing the scoped implementation.
+- Files changed
+  - `progress.txt`
+- Verification
+  - PR #1853 Backend Unit Coverage — passed on commit `390b3a387`.
+  - PR #1853 other required build, API, UI, packaged-factory, provider, inference, docs, and README lanes — passed.
+  - PR #1853 Backend Functional Coverage — remains blocked by the unrelated checked-in worktree package floor (`45.2381%` actual vs `53.54%` minimum); one retry instead exposed an unrelated flaky JavaScript durability cancellation assertion before the floor check.
+  - PR comment/review/thread inspection — no feedback present.
+- **Learnings for future iterations:**
+  - A green changed-package/unit lane does not clear the PR while the shared functional coverage manifest has an unrelated package-floor regression; record the exact package and measured delta and leave that baseline issue scoped for its owning change.
+---
