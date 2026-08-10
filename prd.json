@@ -86,7 +86,7 @@
       ],
       "priority": 4,
       "passes": false,
-      "notes": ""
+      "notes": "This iteration detached InvocationTarget, invocation-only and execution-only runtime opening requests, and the application-opening resolver/CLI runner from per-call loggers and metrics recorders. The retained Factory Runtime logger and Factory Sessions metrics/host ports now own those effects; hosted live services remain in a CLI-local adapter. Focused Factory Sessions, CLI run, Models CLI, Wire, and make wire-smoke checks pass. The story remains pending because application-opening readiness/completion and hosted-service callbacks, StartRequest.EventConsumer, and direct JavaScript/stdio output and host-observation boundaries still carry transport callbacks or handles and require the later transport/response-stream cutover."
     },
     {
       "id": "btrc-p1-root-injection-005",

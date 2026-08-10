@@ -1,10 +1,11 @@
 # BTRC P1 owner-contract register
 
-This register records the dependency classification for the first three BTRC P1
+This register records the dependency classification for the first four BTRC P1
 cutovers. It is intentionally limited to the Factory Sessions runtime-opening
 boundary changed by stories `btrc-p1-root-injection-001` and
 `btrc-p1-root-injection-002`, plus the shared Factory Sessions root cutover in
-`btrc-p1-root-injection-003`; later P1 stories extend the register when they
+`btrc-p1-root-injection-003`, and the value-only opening cutover in
+`btrc-p1-root-injection-004`; later P1 stories extend the register when they
 move additional operation contracts or private observability state.
 
 ## Build-time owner ports
@@ -17,7 +18,7 @@ retain the aggregate `edges.Edges` value or select another service graph.
 | Owner | Contract | Contents |
 | --- | --- | --- |
 | Provider Sessions | `ProviderSessionsPorts` | Provider Sessions root |
-| Factory Runtime | `FactoryRuntimePorts` | workflow definitions, preview, runtime executors, provider invocation, mock runner, assembler, clock resolver, session logger factory, selected clock, provider override, submission recorder, and dispatch recorder |
+| Factory Runtime | `FactoryRuntimePorts` | base logger, workflow definitions, preview, runtime executors, provider invocation, mock runner, assembler, clock resolver, session logger factory, selected clock, provider override, submission recorder, and dispatch recorder |
 | Factory Definitions | `FactoryDefinitionsPorts` | validator, named paths, loading, replay decoding, and snapshot capabilities |
 | Factory Sessions | `FactorySessionsPorts` | Sessions root, its directly retained runtime assembly, execution/scaffold/validation capabilities, runtime identity, home, provider identity, invocation metrics recorder, and runtime-host observer |
 | Work | `WorkPorts` | Work factory and content materializer |
@@ -35,13 +36,21 @@ runtime clock.
 
 ## Operation values
 
-`factorysessions.RuntimeOpeningRequest` remains the value-only request for the
-runtime-opening operation. It contains factory, runtime, session, worker,
-recording, model-cache, and resolved operator selections. Runtime operation
-adapters may still carry observation callbacks as compatibility fallbacks, but
-the fixed observer and metrics ports selected by Wire take precedence. No
-operation callback can re-read `edges.Edges`, adapt a runner, or replace a fixed
-owner effect.
+`factorysessions.RuntimeOpeningRequest` and `factorysessions.InvocationTarget`
+are value-only selections for runtime opening and one-shot invocation. The
+invocation and execution opening interfaces accept only the request and context;
+their logger and metrics behavior comes from the retained Factory Runtime and
+Factory Sessions owner ports. The application-opening resolver and CLI runner
+adapter likewise no longer accept a per-call logger.
+
+Some presentation boundaries are still intentionally transitional. The
+application-opening request retains host-readiness, lifecycle-completion,
+historical-replay, and hosted-service callbacks; `StartRequest` still exposes
+its durable event consumer; and direct JavaScript/stdio opening retains output
+and host-observation values needed by the protocol adapters. These callbacks do
+not select or replace process effects, but they mean story 004 remains pending
+until the later transport and response-stream cutover can move them to owner
+results or transport-local adapters.
 
 ## Private owner state
 
@@ -51,7 +60,8 @@ runtime scopes are operation-scoped state and are not exposed through the
 construction contract. Hosted clock/client/secret effects and visualization
 sink/root-observer effects are captured by their canonical Wire providers or
 application adapter once; dynamic log and metric destinations remain deferred
-to the observability-owner story.
+to the observability-owner story. The base logger is also retained by the
+Factory Runtime owner, so application and invocation calls cannot rebind it.
 
 The Factory Sessions root is constructed once with the selected process clock.
 Canonical Wire narrows that same root to its owner-private runtime assembly
@@ -65,6 +75,8 @@ scopes, and cleanup stacks remain private to each opened operation.
 `pkg/services/factory_sessions/internal/runtimeopening/factories_test.go`
 supplies distinct fakes for every owner-port contract, asserts exact identity
 retention, and verifies construction does not invoke collaborator functions.
+`pkg/services/factory_sessions/internal/applicationopening/service_test.go`
+proves the value-only resolver/opening handoff and lifecycle cleanup behavior.
 `pkg/services/factory_sessions/internal/runtimeopening/root_reuse_test.go`
 opens two failing runtimes concurrently and proves both use the same injected
 Factory Sessions runtime root while each private Models scope is closed once.

@@ -16,6 +16,7 @@
 - Verify documented named-Factory commands against isolated live `you run --named ... --help`; role-pinned provider/model defaults should be documented as fixed policy when no override flags are exposed.
 - Canonical Wire should pass one explicit owner-port contract per service owner; aggregate composition helpers belong only in tests and must not cross the production constructor boundary.
 - Process-scoped external effects should be adapted or defaulted in canonical Wire providers and captured by closures; operation factories receive the selected owner ports and only values or observation fallbacks.
+- Value-only runtime-opening interfaces should use owner-retained logger/metrics ports; keep remaining transport readiness and event callbacks explicitly at the boundary until their result/stream migration is ready.
 - Regenerate `pkg/wire/wire_gen.go` through `make wire-smoke` after changing a Wire provider signature so drift and focused composition tests run together.
 - When a public service root also owns a private runtime capability, construct the capability once in Wire, narrow the same root once at composition time, and pass that retained role to operations; keep per-operation gateways/state private and never replace the shared root slot during concurrent completion.
 
@@ -848,4 +849,31 @@
   - A private runtime role can be derived from a canonical public root once at composition time, but the operation must receive that role directly; type-asserting or binding the public root inside each operation recreates the secondary composition path.
   - Shared root slots must remain immutable after construction; return per-session gateways as operation products instead of replacing a root field when multiple openings can complete concurrently.
   - The runtime-opening package is at its file-count baseline, so focused tests belong in an existing responsibility-aligned test file unless the baseline is intentionally changed.
+---
+
+## 2026-08-10 07:13 -07:00 - btrc-p1-root-injection-004
+- What was implemented
+  - Detached `InvocationTarget` from logger, metrics, and hosted live-service handles; hosted CLI invocation now uses a CLI-local adapter around the already-opened runtime.
+  - Made invocation-only and durable-execution runtime opening interfaces accept only context plus the value-only runtime request; the reusable Factory uses its Wire-injected base logger and fixed metrics owner.
+  - Removed per-call metrics from application opening and removed the per-call logger from the application resolver, runtime runner adapter, and CLI-to-Factory Sessions opening path.
+  - Kept terminal result/error handling and hosted invocation event behavior intact while recording the remaining presentation callbacks as explicit compatibility boundaries.
+- Files changed
+  - `pkg/services/factory_sessions/contracts.go`
+  - `pkg/services/factory_sessions/execution_opening_contract.go`
+  - `pkg/services/factory_sessions/internal/runtimeopening/`
+  - `pkg/services/factory_sessions/internal/applicationopening/`
+  - `pkg/services/factory_sessions/internal/executionopening/`
+  - `pkg/services/factory_sessions/internal/ondemandtarget/`
+  - `pkg/transports/cli/run/`
+  - `pkg/services/models/transports/cli/bootstrap_invoke.go`
+  - `pkg/wire/profiles.go`, `pkg/wire/runtime_inputs.go`, `pkg/wire/runtime_inputs_test.go`, `pkg/wire/wire_gen.go`
+  - `docs/internal/packaged-service-structure/btrc-p1-owner-contracts.md`, `prd.json`, `progress.txt`
+- Verification
+  - `go test ./pkg/services/factory_sessions/... ./pkg/transports/cli/run ./pkg/services/models/transports/cli ./pkg/wire -count=1` — passed.
+  - `make wire-smoke` — passed, including generated Wire drift and focused Wire tests.
+  - `git diff --check` — passed.
+  - A compile-only `go test ./... -run '^$' -count=1` attempt exceeded the 124-second command limit without reporting a compile error; focused affected packages passed.
+- **Learnings for future iterations:**
+  - Moving a per-call logger out of a runtime request also requires cutting it from the application resolver and transport runner adapter; otherwise the owner still has a hidden rebinding path even when the runtime Factory ignores it.
+  - Host readiness, lifecycle completion, historical replay publication, and event streaming are presentation contracts rather than effect-selection ports, but they still need a dedicated transport/result cutover before the value-only story can be marked passed.
 ---
