@@ -2529,3 +2529,17 @@
 - **Learnings for future iterations:**
   - If sequential failed-job reruns rotate among unchanged functional timing assertions while each isolated test passes repeatedly, keep the feature diff untouched and use the repository's failed-job rerun path until the required lane completes.
 ---
+
+## 2026-08-10 15:39 -07:00 - thr-worktree-build-cache-002 CI coverage follow-up
+- What was implemented
+  - Investigated and recovered the Backend Unit Coverage failure that reported `pkg/services/chat_sessions/internal/responsebridge` at 86.9258% against its unchanged 87.20% package minimum.
+  - Reran only the failed Backend Unit Coverage and Verification Policy jobs; no production or test source was changed.
+- Files changed
+  - `progress.txt`
+- Verification
+  - The unit-coverage rerun passed in 6m7s, including the full backend coverage command; Backend Functional Coverage and every other required check on run `31437559400` also passed.
+  - The exact Windows `make test-unit-coverage` attempt could not reach measurement because the expanded Go command exceeded Windows' command-line length limit; the Linux CI rerun is the authoritative coverage result.
+  - `gh pr checks 1860` — all required checks passed, including Verification Policy.
+- **Learnings for future iterations:**
+  - A small unchanged package-coverage floor miss can be measurement variance in a broad CI lane; use the failed-job rerun result as evidence before modifying a baseline or unrelated package, and record platform-specific local command-length limits separately.
+---
