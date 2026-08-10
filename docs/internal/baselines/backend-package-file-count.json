@@ -309,9 +309,9 @@
     },
     {
       "packagePath": "pkg/transports/cli",
-      "fileCount": 23,
+      "fileCount": 31,
       "owner": "cli-maintainers",
-      "removalReason": "Move command behavior into focused command packages; this baseline absorbs the DWRO placement command coverage."
+      "removalReason": "Split oversized root run tests and retain explicit remote-placement coverage; continue extracting command ownership into focused packages."
     },
     {
       "packagePath": "pkg/transports/cli/baseline",
@@ -345,9 +345,9 @@
     },
     {
       "packagePath": "pkg/transports/cli/run",
-      "fileCount": 29,
+      "fileCount": 34,
       "owner": "cli-maintainers",
-      "removalReason": "Split run invocation, presentation, and input behavior; this baseline absorbs the DWRO remote invocation adapter."
+      "removalReason": "Split run invocation, presentation, and input behavior while retaining the DWRO remote invocation adapter and tests."
     },
     {
       "packagePath": "pkg/transports/cli/submit",
