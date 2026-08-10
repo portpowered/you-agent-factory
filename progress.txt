@@ -2304,3 +2304,17 @@
 - **Learnings for future iterations:**
   - When main advances with an adjacent result-channel feature, resolve shared contracts additively and regenerate every public interface; then freeze ownership inventories from the merged tree before running repository gates.
 ---
+## 2026-08-10 12:22 -07:00 - e2-structured-worker-results CI follow-up
+- What was implemented
+  - Investigated the latest-head functional CI failure in current-main `TestFactorySessionResumeDoesNotRepeatCompletedDispatch`; no E2 source change was warranted because the failure was the known timing-sensitive provider-context cancellation assertion.
+  - Repeated the exact restart test five times locally and reran only the failed functional/policy lane.
+- Files changed
+  - `progress.txt`
+- Verification
+  - The focused restart test passed all five local repetitions.
+  - GitHub Actions run `31422767531`, attempt 1, failed only Backend Functional Coverage on the restart timing assertion; every other lane passed.
+  - GitHub Actions run `31422767531`, attempt 2, passed Backend Functional Coverage and Verification Policy; all PR checks are green.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - Session restart cancellation assertions are timing-sensitive under the full functional lane; reproduce the exact test and rerun the failed lane before altering unrelated runtime result-channel code.
+---
