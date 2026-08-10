@@ -16,6 +16,7 @@
 - A schema-valid structured QA `reroll` is an accepted inspection verdict; provider refusal, malformed output, and schema mismatch must fail before verdict interpretation, while provider failures may consume the bounded default retry budget.
 - Packaged Factory additions that change the public catalog require synchronized authored/generated sources, catalog counts, the canonical reference topic, and CLI docs smoke markers; refresh generated output only through `make packaged-factory-catalog-generate`.
 - Verify documented named-Factory commands against isolated live `you run --named ... --help`; role-pinned provider/model defaults should be documented as fixed policy when no override flags are exposed.
+- Stable closed-vocabulary failure reasons must be added together to worker terminal policy, canonical event normalization, replay/session projections, worker-session diagnostics, and public transport whitelists; otherwise a valid new reason can be downgraded to `unknown` at a later boundary.
 
 - Worker Session finite streams can use the injected Events `Read` contract with the first retained head as a snapshot boundary; replay-only paths must not call `Subscribe`.
 - Authored OpenAPI and CLI contracts generate their Go, TypeScript, published metadata, and family-manifest consumers; update the source contract first, then run the repository generators and drift checks.
@@ -818,4 +819,23 @@
   - The runtime token already carried structured results; the prompt `TokenData` projection was the boundary where downstream templates lost them.
   - Optional-result availability needs a separate prompt-render validation pass because the general template contract cannot know which runtime inputs contain a result.
   - Functional Codex JSON responses must not include a configured worker stop token when the response is schema JSON; use a schema-only worker fixture so the JSON can be parsed as the complete result.
+---
+
+## 2026-08-10 06:38 - e2-structured-worker-results-003
+- What was implemented
+  - Classified malformed JSON and schema-invalid JSON from schema-bound workstations as terminal, non-retryable `structured_output_schema_violation` failures while retaining raw output for diagnostics and omitting rejected structured values.
+  - Added the public OpenAPI failure enum and regenerated Go, TypeScript, and packaged schema consumers; updated canonical event, replay, Factory Session, Work, worker-session, and transport mappings to preserve the reason.
+  - Added unit coverage for worker classification, safe validation summaries, terminal policy, event serialization, replay, Factory Session projections, worker-session diagnostics, and public mapping.
+  - Added root-built functional coverage for malformed and schema-mismatch responses, configured `onFailure` routing, failed Work projection, public failure detail, raw event output, and the absence of downstream dispatches.
+- Files changed
+  - `api/components/schemas/events/WorkFailureType.yaml`, generated API/UI/package contract artifacts, worker execution and failure mappings, event/replay/session projection tests, and `tests/functional/workstations/execution/structured_result_prompt_test.go`.
+- Verification
+  - `make interfaces-all` — passed before the focused test pass.
+  - Focused worker, recordings/replay, orchestration, session, mapping, and HTTP contract tests — passed.
+  - `go test -tags=functionallong ./tests/functional/workstations/execution -run 'TestStructured(ResultFlowsIntoDownstreamPromptThroughRootBuildProcess|OutputSchemaViolationRoutesFailureWithoutDownstreamDispatch)$' -count=1 -timeout=180s` — passed.
+  - `make verify-fast` — passed: dashboard typecheck, MCP contract check, 355 UI files / 2,970 tests, 191 Bun tests, and the short Go suite.
+  - Commit: `a4bb9bd64` (`classify structured output schema violations`).
+- **Learnings for future iterations:**
+  - Schema validation errors from `jsonschema/v6` already provide safe property or instance-location summaries; prefix them with a stable classification message without appending raw provider output.
+  - The root-built functional command-runner edge makes terminal routing observable through public Factory Events and Work listings; assert request count to prove a failure cannot enter the next workstation.
 ---
