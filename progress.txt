@@ -543,3 +543,17 @@
   - A single timeout in the unchanged packaged-loop functional lane should be reproduced in isolation before changing feature code; a stable local repetition supports rerunning the failed CI job instead.
   - When the rerun has no new source changes, record the exact test and terminal check state in the append-only progress log so the PR handoff remains auditable.
 ---
+## 2026-08-09 23:47 -0700 - wo-b3-provider-capability-discovery-cli-delivery-review
+- What was implemented
+  - Confirmed all three PRD stories remain marked `passes:true`; no additional story implementation or authored contract change was required.
+  - Rechecked PR #1843 in `portpowered/you-agent-factory`: the local head `c57a47de5012033c60a212a41873e2975f8cc266` matches the PR head, GitHub reports the PR mergeable, and the PR description remains the current `prd.json` content.
+  - Used the thread-aware GitHub review fetch to confirm there are no conversation comments, formal reviews, or unresolved inline review threads.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `gh pr checks 1843 --repo portpowered/you-agent-factory` — all 18 required checks pass.
+  - `git status --short --branch` — clean before this progress-only append.
+- **Learnings for future iterations:**
+  - For a cross-repository PR whose local branch is associated with a different default remote, pass the PR head repository explicitly to `gh` and the thread-aware review fetch instead of relying on branch auto-discovery.
+  - When all stories, checks, and review threads are complete, preserve `prd.json` and append the delivery evidence to `progress.txt`; no source churn is needed.
+---
