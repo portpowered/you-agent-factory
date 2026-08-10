@@ -562,3 +562,23 @@
   - When current main changes the task bookkeeping files, preserve the active task PRD exactly for PR-description parity and merge each side's progress entries rather than replacing the append-only log.
   - A clean local merge head can still report the repository's known `pkg-boundary` migration baseline; distinguish that baseline from changed-file regressions using the dedicated checker and functional-boundary gate.
 ---
+## 2026-08-10 07:25 -0700 - wsr-001-opening-record current-main verification
+- What was implemented
+  - Merged the latest `origin/main` at `ccea14bf8` as merge commit `9bc01fdd1`, retaining the WSR task PRD, append-only progress history, current-main runtime changes, and functional coverage.
+  - Regenerated bundled, Go, package, and UI interface artifacts after synchronization; generation produced no tracked drift.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+  - Current-main orchestration engine and plain-batch functional changes were retained by the merge.
+- Verification
+  - `make interfaces-all` — passed with a clean working tree.
+  - `make verify-fast` — passed dashboard typecheck, MCP contract boundary, 355 UI files / 2,970 tests, 191 Bun checks, and the short Go suite.
+  - `make pkg-structure` — passed; 573 deletion-only baseline entries remain.
+  - `go test ./pkg/services/worker_sessions/... ./pkg/services/factory_runtime/... -count=1` — passed.
+  - WSR-FT-001/002 and WSR-FT-003 focused functional tests — passed on the merged head.
+  - `make lint` passed UI lint/dead-code, vet, backend-size, maintainability, and file-count stages, then stopped at the existing 176-entry `pkg-boundary` migration baseline; no changed WSR file was reported as a new violation.
+  - `git diff --check` — passed; `prd.json` parses with all three stories still marked `passes:true`.
+- **Learnings for future iterations:**
+  - A current-main merge can add unrelated product tests and runtime fixes while leaving the active PRD unchanged; preserve those files and rerun both the shared fast tier and task-specific functional cells.
+  - The repository lint aggregate reports the known package-boundary migration baseline after all preceding checks pass; use the focused boundary output to distinguish baseline debt from task regressions.
+---
