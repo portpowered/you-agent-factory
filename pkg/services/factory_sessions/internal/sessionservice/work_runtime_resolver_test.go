@@ -155,15 +155,28 @@ func TestWorkRuntimeAdapterProjectsDetachedPublicWorkIdentityStateAndRelations(t
 		},
 	}
 	net := &factory.Net{
-		Places:    map[string]*factory.PetriPlace{"story:review": {ID: "story:review", TypeID: "story", State: "review"}},
-		WorkTypes: map[string]*factory.WorkType{"story": {ID: "story", States: []factory.StateDefinition{{Value: "review", Category: factory.StateCategoryProcessing}}}},
+		Places: map[string]*factory.PetriPlace{"story:review": {ID: "story:review", TypeID: "story", State: "review"}},
+		WorkTypes: map[string]*factory.WorkType{"story": {
+			ID: "story", States: []factory.StateDefinition{{Value: "review", Category: factory.StateCategoryProcessing}},
+			ExpectedArtifacts: []work.ExpectedArtifactDeclaration{{Name: "report", Pattern: "{{ .Context.Project }}/{{ .Context.SessionID }}/report.txt"}},
+		}},
 	}
-	got := runtimeWorkItem(token, net, false, map[string]string{"work-draft": "Draft PRD"})
+	got := runtimeWorkItem(token, net, false, map[string]string{"work-draft": "Draft PRD"}, runtimeReadFacts{
+		dispatchHistory: []factory.CompletedDispatch{{
+			DispatchID: "dispatch-context", Outcome: workers.OutcomeAccepted,
+			ExpectedArtifactContext: &work.ExpectedArtifactTemplateContext{Project: "project-7", SessionID: "session-9"},
+			ConsumedTokens:          []workers.Token{*token},
+		}},
+	})
 	if got.CursorID != "tok-review" || got.WorkID != "work-review" || got.State == nil || got.State.Name != "review" || got.State.Type != work.StateTypeProcessing {
 		t.Fatalf("runtimeWorkItem = %#v", got)
 	}
 	if len(got.Relations) != 1 || got.Relations[0].SourceWorkName != "Review PRD" || got.Relations[0].TargetWorkName != "Draft PRD" {
 		t.Fatalf("relations = %#v", got.Relations)
+	}
+	if len(got.ExpectedArtifacts) != 1 || got.ExpectedArtifacts[0].Pattern != "project-7/session-9/report.txt" ||
+		got.ExpectedArtifacts[0].Verification != work.ExpectedArtifactVerificationSatisfied {
+		t.Fatalf("expected artifacts = %#v, want recorded context", got.ExpectedArtifacts)
 	}
 	tags["owner"] = "mutated"
 	previous[0] = "mutated"

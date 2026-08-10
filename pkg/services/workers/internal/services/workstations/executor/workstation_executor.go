@@ -68,6 +68,7 @@ type WorkstationExecutor struct {
 	RunWorktree             string
 	RunReasoningEffort      string
 	FileSystem              platformfilesystem.ReadFileInspector
+	ArtifactFileSystem      platformfilesystem.GlobInspector
 	Now                     func() time.Time
 }
 
@@ -228,12 +229,12 @@ func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, disp
 		return result, err
 	}
 	if workstationDef.Type == factorydefinitions.WorkstationTypeClassify {
-		return normalizeClassifierWorkResult(
+		result = normalizeClassifierWorkResult(
 			result,
 			workerDef.Type == factorydefinitions.WorkerTypeScript,
-		), nil
+		)
 	}
-	return result, nil
+	return we.verifyExpectedArtifacts(request, workstationDef, result), nil
 }
 
 func (we *WorkstationExecutor) resolveInvocationProvider(
@@ -879,6 +880,53 @@ func (we *WorkstationExecutor) runtimeWorkstation(dispatch work.WorkDispatch) (*
 	fallback := *workstationDef
 	fallback.Type = factorydefinitions.WorkstationTypeModel
 	return &fallback, true
+}
+
+func (we *WorkstationExecutor) expectedArtifactDeclarations(
+	tokens []workerexecution.Token,
+	workstation *interfaces.FactoryWorkstationConfig,
+) []interfaces.ExpectedArtifactConfig {
+	if workstation == nil {
+		return nil
+	}
+	var declarations []interfaces.ExpectedArtifactConfig
+	if we != nil && we.RuntimeConfig != nil {
+		if factory := we.RuntimeConfig.FactoryConfig(); factory != nil {
+			seenWorkTypes := make(map[string]struct{})
+			for _, token := range tokens {
+				if token.Color.DataType == workerexecution.DataTypeResource {
+					continue
+				}
+				workTypeID := strings.TrimSpace(token.Color.WorkTypeID)
+				if workTypeID == "" {
+					continue
+				}
+				if _, seen := seenWorkTypes[workTypeID]; seen {
+					continue
+				}
+				seenWorkTypes[workTypeID] = struct{}{}
+				for _, workType := range factory.WorkTypes {
+					if workType.ID == workTypeID || workType.Name == workTypeID {
+						declarations = append(declarations, workType.ExpectedArtifacts...)
+						break
+					}
+				}
+			}
+		}
+	}
+	declarations = append(declarations, workstation.ExpectedArtifacts...)
+	return interfaces.NormalizeExpectedArtifactConfigs(declarations)
+}
+
+func (we *WorkstationExecutor) expectedArtifactFileSystem() platformfilesystem.GlobInspector {
+	if we == nil {
+		return nil
+	}
+	if we.ArtifactFileSystem != nil {
+		return we.ArtifactFileSystem
+	}
+	inspector, _ := we.FileSystem.(platformfilesystem.GlobInspector)
+	return inspector
 }
 
 func workstationWorkerName(workstationDef *interfaces.FactoryWorkstationConfig, dispatch work.WorkDispatch) string {

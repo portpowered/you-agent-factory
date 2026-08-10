@@ -1,0 +1,8 @@
+type: string
+description: Stable reason that an expected artifact declaration was not satisfied.
+x-enum-varnames:
+  - ExpectedArtifactVerificationReasonMissing
+  - ExpectedArtifactVerificationReasonEmpty
+enum:
+  - MISSING
+  - EMPTY

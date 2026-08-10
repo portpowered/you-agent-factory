@@ -442,6 +442,7 @@ func (h *FactoryEventHistory) RecordWorkstationRequest(tick int, record interfac
 		},
 		interfaces.DispatchRequestEventPayload{
 			TransitionID:             record.Dispatch.TransitionID,
+			ExpectedArtifactContext:  cloneExpectedArtifactTemplateContext(record.Dispatch.ExpectedArtifactContext),
 			CurrentChainingTraceID:   stringPtrIfNotEmpty(record.Dispatch.CurrentChainingTraceID),
 			PreviousChainingTraceIDs: stringSlicePtr(record.Dispatch.PreviousChainingTraceIDs),
 			Inputs:                   dispatchConsumedWorkRefsFromTokens(inputTokens),
@@ -507,6 +508,7 @@ func (h *FactoryEventHistory) RecordWorkstationResponse(tick int, result workers
 			Error:                       stringPtrIfNotEmpty(result.Error),
 			Feedback:                    stringPtrIfNotEmpty(result.Feedback),
 			SelectedClassificationLabel: stringPtrIfNotEmpty(result.SelectedClassificationLabel),
+			ArtifactVerification:        result.ArtifactVerification.Clone(),
 			FailureDetail:               failureDetail(failureReason, failureMessage),
 			DurationMillis:              int64Ptr(completed.Duration.Milliseconds()),
 			OutputWork:                  eventWorksPtr(outputWorkItems(completed.OutputMutations, completed.ConsumedTokens)),
@@ -965,7 +967,8 @@ func normalizedFailureReason(reason string) workers.WorkFailureType {
 		workers.WorkFailureTypeTimeout,
 		workers.WorkFailureTypeMisconfigured,
 		workers.WorkFailureTypeMissingExecutable,
-		workers.WorkFailureTypeCommandLineTooLong:
+		workers.WorkFailureTypeCommandLineTooLong,
+		workers.WorkFailureTypeExpectedArtifactsUnsatisfied:
 		return candidate
 	default:
 		return workers.WorkFailureTypeUnknown

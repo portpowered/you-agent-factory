@@ -55,6 +55,7 @@ type RuntimePromptSourceLookup = contracts.RuntimePromptSourceLookup
 type WorkstationKind = contracts.WorkstationKind
 type WorkstationLimits = contracts.WorkstationLimits
 type Workstation = contracts.Workstation
+type ExpectedArtifactConfig = contracts.ExpectedArtifactConfig
 type GuardMatchConfig = contracts.GuardMatchConfig
 type GuardType = contracts.GuardType
 type InputGuardConfig = contracts.InputGuardConfig
@@ -227,6 +228,9 @@ var EffectiveAgentToolPolicy = workerconfig.EffectiveAgentToolPolicy
 var IsKnownAgentToolPolicy = workerconfig.IsKnownAgentToolPolicy
 var NormalizeAgentToolPolicy = workerconfig.NormalizeAgentToolPolicy
 var CloneWorkerConfig = workerconfig.Clone
+var EffectiveExpectedArtifacts = contracts.EffectiveExpectedArtifacts
+var NormalizeExpectedArtifactConfigs = contracts.NormalizeExpectedArtifactConfigs
+var ValidateExpectedArtifactConfig = contracts.ValidateExpectedArtifactConfig
 
 // Foreign-vocabulary deletion-only aliases below are retained until
 // CLN-DEF-CONTRACTS story 007 deletes the contracts mega-barrel. Event envelope

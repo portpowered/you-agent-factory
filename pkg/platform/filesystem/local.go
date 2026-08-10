@@ -36,6 +36,15 @@ type ReadFileInspector interface {
 	Stat(string) (fs.FileInfo, error)
 }
 
+// GlobInspector is the exact read-only filesystem effect used when a service
+// verifies a caller-selected workspace pattern. The service owns the pattern
+// policy; this adapter only performs the filesystem lookup.
+type GlobInspector interface {
+	Glob(string) ([]string, error)
+	Stat(string) (fs.FileInfo, error)
+	EvalSymlinks(string) (string, error)
+}
+
 // ReadFileTree is the policy-free read-only effect for inspecting, walking,
 // and loading files beneath a caller-selected directory.
 type ReadFileTree interface {
@@ -74,6 +83,7 @@ func (Local) EvalSymlinks(path string) (string, error)     { return filepath.Eva
 func (Local) Abs(path string) (string, error)              { return filepath.Abs(path) }
 func (Local) WalkDir(path string, fn fs.WalkDirFunc) error { return filepath.WalkDir(path, fn) }
 func (Local) ReadFile(path string) ([]byte, error)         { return os.ReadFile(path) }
+func (Local) Glob(pattern string) ([]string, error)        { return filepath.Glob(pattern) }
 func (Local) ReadDir(path string) ([]fs.DirEntry, error)   { return os.ReadDir(path) }
 func (Local) Remove(path string) error                     { return os.Remove(path) }
 func (Local) RemoveAll(path string) error                  { return os.RemoveAll(path) }
@@ -102,5 +112,6 @@ var _ WorkingDirectory = Local{}
 var _ ReadOpener = Local{}
 var _ PathInspector = Local{}
 var _ ReadFileInspector = Local{}
+var _ GlobInspector = Local{}
 var _ ReadFileTree = Local{}
 var _ TemporaryFileSystem = Local{}

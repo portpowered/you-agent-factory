@@ -1,0 +1,25 @@
+type: object
+additionalProperties: false
+description: >-
+  One effective expected artifact declaration projected on a Work item. Pattern
+  is the rendered workspace-relative literal path or glob, never a host path.
+required:
+  - name
+  - pattern
+  - nonEmpty
+  - verification
+properties:
+  name:
+    type: string
+    description: Customer-visible declaration name.
+  pattern:
+    type: string
+    description: Safe rendered path or glob relative to the dispatch workspace.
+  nonEmpty:
+    type: boolean
+    description: Whether every matching regular file must contain at least one byte.
+  verification:
+    $ref: './WorkExpectedArtifactVerification.yaml'
+  reason:
+    $ref: '../events/ExpectedArtifactVerificationReason.yaml'
+    description: Why this declaration failed, when verification is FAILED.

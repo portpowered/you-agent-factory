@@ -400,6 +400,7 @@ func assertUnifiedDispatchEvents(t *testing.T, schemas map[string]any) {
 	dispatchResponse := schemaObject(t, schemas, "DispatchResponseEventPayload")
 	dispatchResponseProperties := schemaProperties(t, dispatchResponse, "DispatchResponseEventPayload")
 	assertPropertyRef(t, dispatchResponseProperties, "failureDetail", "#/components/schemas/FailureDetail")
+	assertPropertyRef(t, dispatchResponseProperties, "artifactVerification", "#/components/schemas/ExpectedArtifactVerification")
 	assertPropertiesAbsent(t, dispatchResponseProperties, "DispatchResponseEventPayload", "failureReason", "failureMessage", "errorClass")
 	assertDeprecatedEventFields(t, dispatchResponseProperties, "DispatchResponseEventPayload", "currentChainingTraceId", "previousChainingTraceIds")
 	assertArrayItemRef(t, dispatchResponseProperties, "outputWork", "#/components/schemas/Work")
