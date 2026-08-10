@@ -275,16 +275,12 @@ func applyGeneratedSubmissionOverrides(next SubmitRequest, submitted SubmitReque
 }
 
 func validateBatchWork(req Request, opts NormalizeOptions) (map[string]normalizedBatchWork, error) {
-	workNames := make(map[string]bool, len(req.Works))
+	workNames := make(map[string]int, len(req.Works))
 	workIndex := make(map[string]normalizedBatchWork, len(req.Works))
 	for i, work := range req.Works {
-		if strings.TrimSpace(work.Name) == "" {
-			return nil, fmt.Errorf("work_request: works[%d] is missing required name", i)
+		if err := validateBatchWorkName(workNames, i, work); err != nil {
+			return nil, err
 		}
-		if workNames[work.Name] {
-			return nil, fmt.Errorf("work_request: works[%d] has duplicate name %q", i, work.Name)
-		}
-		workNames[work.Name] = true
 
 		workTypeID := work.WorkTypeID
 		if workTypeID == "" {
@@ -313,6 +309,22 @@ func validateBatchWork(req Request, opts NormalizeOptions) (map[string]normalize
 		}
 	}
 	return workIndex, nil
+}
+
+func validateBatchWorkName(workNames map[string]int, index int, work Work) error {
+	if strings.TrimSpace(work.Name) == "" {
+		return fmt.Errorf("work_request: works[%d] is missing required name", index)
+	}
+	if original, exists := workNames[work.Name]; exists {
+		return fmt.Errorf(
+			"work_request: duplicate name %q: works[%d].name conflicts with works[%d].name; works[].name must be unique across the entire batch, including across different workTypeName values; rename or remove one entry",
+			work.Name,
+			index,
+			original,
+		)
+	}
+	workNames[work.Name] = index
+	return nil
 }
 
 func validateAndIndexBatchRelations(req Request, workIndex map[string]normalizedBatchWork, opts NormalizeOptions) (map[string][]Relation, error) {
@@ -369,19 +381,36 @@ func validateAndIndexBatchRelations(req Request, workIndex map[string]normalized
 
 func validateBatchRelationEndpoints(i int, rel WorkRelation, workIndex map[string]normalizedBatchWork) (normalizedBatchWork, error) {
 	if strings.TrimSpace(rel.SourceWorkName) == "" {
-		return normalizedBatchWork{}, fmt.Errorf("work_request: relations[%d] is missing sourceWorkName", i)
+		return normalizedBatchWork{}, missingBatchRelationEndpointError(i, rel, "sourceWorkName")
 	}
 	if strings.TrimSpace(rel.TargetWorkName) == "" {
-		return normalizedBatchWork{}, fmt.Errorf("work_request: relations[%d] is missing targetWorkName", i)
+		return normalizedBatchWork{}, missingBatchRelationEndpointError(i, rel, "targetWorkName")
 	}
 	if _, ok := workIndex[rel.SourceWorkName]; !ok {
-		return normalizedBatchWork{}, fmt.Errorf("work_request: relations[%d] references unknown sourceWorkName %q", i, rel.SourceWorkName)
+		return normalizedBatchWork{}, missingBatchRelationEndpointError(i, rel, "sourceWorkName")
 	}
 	targetWork, ok := workIndex[rel.TargetWorkName]
 	if !ok {
-		return normalizedBatchWork{}, fmt.Errorf("work_request: relations[%d] references unknown targetWorkName %q", i, rel.TargetWorkName)
+		return normalizedBatchWork{}, missingBatchRelationEndpointError(i, rel, "targetWorkName")
 	}
 	return targetWork, nil
+}
+
+func missingBatchRelationEndpointError(i int, rel WorkRelation, endpointField string) error {
+	endpointValue := rel.SourceWorkName
+	if endpointField == "targetWorkName" {
+		endpointValue = rel.TargetWorkName
+	}
+	return fmt.Errorf(
+		"work_request: relations[%d] relation type %q has sourceWorkName %q and targetWorkName %q; endpoint %s=%q is missing from this batch; relation endpoints must name Work declared in this batch's works[] (not previously submitted Work); add the named Work to works[] or correct %s",
+		i,
+		rel.Type,
+		rel.SourceWorkName,
+		rel.TargetWorkName,
+		endpointField,
+		endpointValue,
+		endpointField,
+	)
 }
 
 func normalizeBatchRelation(i int, rel WorkRelation, targetWork normalizedBatchWork, opts NormalizeOptions) (Relation, string, error) {

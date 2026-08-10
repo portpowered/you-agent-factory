@@ -1,4 +1,10 @@
 ## Codebase Patterns
+- Asynchronous service characterizations should wait on observed edge/context signals rather than arbitrary `time.After` ceilings; the test context remains the failure escape hatch.
+- Continuous Petri service sessions intentionally remain `IDLE` after terminal Work; characterize the dispatch and Work/progress projection as the caller-visible result and assert the live-result route's typed unavailability instead of inventing a finite session result.
+- Use an authored capacity-one resource in a deterministic fixture to serialize multi-work dispatches when exact Factory Event order must be characterized; this avoids sleeps and preserves the real dispatch/resource boundary.
+- Correlate batch history from both sources: request/relationship and dispatch identity live in Factory Event context, while terminal per-work state is carried by dispatch-response outputWork.
+- For hosted-source characterization, route the poller through an unseeded processing input and map its external submission to a separate normal processor; this isolates source effects from the downstream dispatch executor while preserving the real runtime path.
+- Runtime-opening ownership inventories should source grouped fields from runtimeopening.Dependencies, invocation-local values from ExternalEffects, and late seams from the opener; keep the reconciliation reviewer-visible in documentation instead of adding source-inventory tests.
 - When synchronizing a task branch with current main, preserve the active branch's task-scoped `prd.json` and merge unrelated main history into `progress.txt`; validate the resulting PRD before staging.
 - When a termination drain consumes a runtime wake signal, the engine must re-enter its tick loop directly; returning to the outer wait loses the already-consumed wake and can strand a finite run.
 - Customer-facing functional tests must compose through `root.BuildProcess` and assert public process/CLI behavior; keep service-specific typed-error assertions in service-layer tests because the functional boundary check rejects direct Runtime imports.
@@ -39,6 +45,8 @@
 - For cross-repository PRs, resolve review and CI state with an explicit owner/repository and compare local, fork-branch, and PR head SHAs; current-branch discovery may follow a different local origin.
 - Custom `run` flag parsing happens inside the command handler, so relationship checks for local run flags must execute after parsing; use a raw pre-initialization guard as well when the initializer itself is a side effect.
 - Placement conflicts should use the same typed `ErrorResponse` contract at every validation boundary so flag ordering has one stable code, family, and actionable message.
+- New functional scenarios must use an allowed product-domain noun plus subsection path such as `tests/functional/factory/batch`; transport names like `cli` and internal implementation names like `factory_runtime` are not durable domain cells.
+- Ordered functional provider outcomes can use `support.NewShapedProviderCommandRunner` with queued provider-native `CommandResult` values, including a later non-zero result, while preserving the real command-runner edge and typed provider classification.
 
 ## 2026-08-09 13:12 - wo-d1-packaged-factories-docs-001
 - What was implemented
@@ -1331,7 +1339,270 @@
   - `git diff --check` — passed; PRD parses with the single story still marked `passes:true`.
 - **Learnings for future iterations:**
   - When current main changes the task bookkeeping files, preserve the active task PRD exactly for PR-description parity and merge each side's progress entries rather than replacing the append-only log.
-  - A clean local merge head can still report the repository's known `pkg-boundary` migration baseline; distinguish that baseline from changed-file regressions using the dedicated checker and functional-boundary gate.
+ - A clean local merge head can still report the repository's known `pkg-boundary` migration baseline; distinguish that baseline from changed-file regressions using the dedicated checker and functional-boundary gate.
+---
+## 2026-08-10 04:42 -07:00 - btrc-p0-characterization-001
+- What was implemented
+  - Published docs/internal/packaged-service-structure/runtime-opening-ownership-matrix.md as the authoritative P0 ownership map.
+  - Reconciled the ten grouped dependency structs to 44 D rows, ExternalEffects to 15 E rows, deferred construction/callback roles to 38 F rows, and late completion/attachment/binding operations to 13 L rows.
+  - Classified every row exactly once, assigned one destination owner or explicit deletion, documented lifecycle/cleanup responsibility, and linked the downstream retirement packet.
+  - Marked story btrc-p0-characterization-001 as passed in prd.json; no production code or inventory-checker test was added.
+- Files changed
+  - docs/internal/packaged-service-structure/runtime-opening-ownership-matrix.md
+  - prd.json
+  - progress.txt
+- Verification
+  - git diff --check — passed.
+  - go test ./pkg/services/factory_sessions/internal/runtimeopening ./pkg/services/factory_sessions/wire ./pkg/services/factory_sessions/internal/applicationopening -count=1 — passed.
+  - Row totals and source sections were reviewed directly against factory.go, factories.go, open.go, and the adjacent Wire/application binding surfaces.
+- **Learnings for future iterations:**
+  - The canonical grouped dependency count is ten Dependencies structs totaling 44 fields; the flattened private opener fields are projections and should not be counted again.
+  - ExternalEffects is the narrow invocation-local projection selected in pkg/wire/runtime_inputs.go; future characterization rows should distinguish these operation values from process-scoped construction inputs.
+  - Workers.LocalRuntimeHooksFactory is composed and validated but not invoked by the current opener, so it is an explicit deletion row rather than a destination-owned capability.
+---
+## 2026-08-10 05:13 -07:00 - btrc-p0-characterization-002
+- What was implemented
+  - Added deterministic root-composition characterization for successful and partially failed two-work parent/child batches.
+  - Froze the literal 20-event canonical sequence from RUN_REQUEST through WORK_REQUEST, relationship admission, serialized child dispatches, model/dispatch responses, RUN_RESPONSE, and the two session terminal events.
+  - Asserted request/work counts, parent-child relation identity, default session identity, one-to-one dispatch/Worker Session correlation, terminal work states, typed `permanent_bad_request` failure metadata, and the current `SUCCEEDED`/`FINAL` aggregate result for both all-success and partial-failure batches.
+  - Marked story btrc-p0-characterization-002 as passed in prd.json; no production behavior changed.
+- Files changed
+  - tests/functional/factory_runtime/root_composition/batch_characterization_test.go
+  - prd.json
+  - progress.txt
+- Verification
+  - `go test ./tests/functional/factory_runtime/root_composition -run '^TestBTRCP0Batch(Success|PartialFailure)Characterization$' -count=5 -timeout 240s` — passed.
+  - `git diff --check` — passed.
+  - The full `./tests/functional/factory_runtime/root_composition` package remains blocked by the unchanged neighboring W4 test `TestFactoryRuntimeMixedDirectAndFactoryChildDispatchesStayIsolatedThroughCLI`, which reports 18 `unexpected provider prompt` calls even when run alone; the failure is outside this story's changed files.
+- **Learnings for future iterations:**
+  - A capacity-one authored resource is the current deterministic boundary for serializing a multi-work batch without sleeps; it produces stable dispatch request/association/model/response ordering while retaining multiple child works.
+  - A partially failed work can still yield a `SUCCEEDED`/`FINAL` Factory Session when every work token reaches a terminal state; the typed per-dispatch failure remains in `DISPATCH_RESPONSE`.
+  - Canonical batch work identity is split across the WORK_REQUEST/relationship event context and the dispatch response `outputWork`; assert both instead of relying on a projection derived from the test itself.
+---
+## 2026-08-10 05:33 -07:00 - btrc-p0-characterization-003
+- What was implemented
+  - Added deterministic hosted/service characterization in tests/functional/automations/hosted_characterization_test.go without changing production code or public/generated contracts.
+  - Root-composed service tests replace the hosted clock, Linear HTTP client, secret resolver, and provider command runner through edges.Edges; successful hosted ingress asserts the literal ten-event startup-to-dispatch sequence, ACCEPTED dispatch payload, terminal `complete` Work, and IDLE service progress.
+  - Execution failure asserts the same literal event sequence, typed dispatch failure detail/error, terminal `failed` Work, one provider attempt, and no non-terminal progress.
+  - Blocked hosted HTTP asserts the startup-only four-event prefix, no submission or dispatch, observed request-context cancellation during service stop, and an isolated independent second session that completes only its own Work.
+  - Marked story btrc-p0-characterization-003 as passed in prd.json.
+- Files changed
+  - tests/functional/automations/hosted_characterization_test.go
+  - prd.json
+  - progress.txt
+- Verification
+  - `go test ./tests/functional/automations -run 'TestBTRCP0HostedService' -count=1 -v -timeout 120s` — passed.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - Hosted service mode remains live with runtime status IDLE after a terminal Work; its caller-visible terminal result is the dispatch response plus session-scoped Work/progress projection rather than a durable session-result endpoint.
+  - A poller workstation without a worker executor fails after admission; use a separate normal workstation for the hosted target state when characterizing successful hosted ingress.
+  - A blocking HTTP edge makes source cleanup observable through request-context cancellation, while a separate process with a distinct hosted Work ID provides a direct isolation assertion.
+---
+## 2026-08-10 05:54 -07:00 - btrc-p0-characterization-004
+- What was implemented
+  - Added `pkg/services/recordings/internal/replay/btrc_p0_characterization_test.go` using the checked-in `inference-events.replay.json` recording as the expected source of replay order.
+  - The success characterization asserts the literal seven-event Factory Event order and IDs, sequence `0..6`, tick placement, request/work correlation, dispatch replay key, recorded provider output, submission timing, completion delivery tick, and `ACCEPTED` terminal result.
+  - The failed-recording characterization mutates only the recorded terminal payload, then asserts the same event prefix, `FAILED`/`permanent_bad_request` result, typed `workers.ProviderError`, and typed `dispatch_mismatch` divergence for an incompatible observed dispatch.
+  - Marked story `btrc-p0-characterization-004` as passed in `prd.json`; no production behavior or public/generated contract changed.
+- Files changed
+  - `pkg/services/recordings/internal/replay/btrc_p0_characterization_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/recordings/internal/replay -run '^TestBTRCP0ReplayCharacterization_' -count=1 -v` — passed.
+  - `go test ./pkg/root -run 'TestProcessExecute(RejectsInvalidPortableReplay|ReturnsPortableReplayInspection)' -count=1 -v` — passed; malformed replay and valid portable inspection each made zero provider/script/session/host calls.
+  - `go test ./pkg/services/recordings/internal/replay ./pkg/services/recordings/internal/services/replay/internal/service -run 'Test(BTRCP0ReplayCharacterization_|TestLoadReplay|TestCreateReplayPlan|TestObserveReplay)' -count=1` — passed for the selected replay packages.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - The checked-in legacy inference fixture is a useful stable event-order source for reducer/delivery characterization even though its historical metadata is not a valid full current-root runtime input; full root replay should use a recording produced by the current runtime harness.
+  - Portable historical replay rejects malformed order before live runtime construction, so its observable failure contract is a typed `ReplayInputError` with zero live effect calls; legacy runtime replay reports incompatible dispatches as typed `DivergenceError`.
+---
+## 2026-08-10 06:08 -07:00 - btrc-p0-characterization-005
+- What was implemented
+  - Added deterministic one-shot success and provider-failure characterization at the root `BuildProcess`/`Process.Execute` boundary in `tests/functional/cli/one_shot/characterization_test.go`.
+  - Froze the literal 14-event `RUN_REQUEST` through `SESSION_COMPLETED` order from a recorded response, including request, trace, work, dispatch, Worker Session, and `~default` session identities.
+  - Asserted the complete successful primary-result projection, terminal `SUCCEEDED`/`FINAL` session result, failed dispatch `unknown`/terminal typed metadata, failed `INVOCATION_RUNTIME_FAILURE` response, one provider command, and one terminal `invocation_result`.
+  - Marked story `btrc-p0-characterization-005` as passed in `prd.json`; no production behavior or public/generated contract changed.
+- Files changed
+  - tests/functional/cli/one_shot/characterization_test.go
+  - prd.json
+  - progress.txt
+- Verification
+  - `go test ./tests/functional/cli/one_shot -count=5 -v -timeout 300s` — passed.
+  - `go test ./tests/functional/cli/one_shot -race -count=1 -timeout 300s` — passed.
+  - `go vet ./tests/functional/cli/one_shot` — passed.
+  - `go test ./tests/functional/cli/... -count=1 -timeout 600s` — the new one-shot, output, input-contract, MCP-resume, root-discovery, and session-resume packages passed; unchanged `tests/functional/cli/named_invocation` has four pre-existing failures around unknown `--mode` compatibility input and unresolved `${executorProvider}` provider selection.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - The one-shot invocation requires the provider-shaped output to contain the authored `COMPLETE` stop token; the current primary-result projection retains that marker in the returned text.
+- A failed one-shot dispatch currently returns a typed failed `InvocationResponse` and process error while the aggregate canonical session terminal event still projects `SUCCEEDED`/`FINAL` once the single work is terminal; preserve both surfaces in future characterization.
+- `--output response-stream` emits canonical Factory Event records followed by one `invocation_result`, making duplicate terminal publication observable without a live server or timing helper.
+---
+## 2026-08-10 06:26 -07:00 - btrc-p0-characterization-006
+- What was implemented
+  - Added deterministic ACP target success and JSON-RPC protocol-failure characterization at the existing offline ACP command/process boundary in `tests/functional/providers/acp/btrc_p0_characterization_test.go`.
+  - Asserted the literal ten-event `RUN_REQUEST` through `DISPATCH_RESPONSE` order, contiguous sequences, request/dispatch/Worker Session correlation, provider/session identity, one canonical dispatch terminal payload, bounded typed failure detail, provider terminal response mapping, and complete IDLE session/Work projections.
+  - Marked story `btrc-p0-characterization-006` as passed in `prd.json`; no production behavior or public/generated contract changed.
+- Files changed
+  - `tests/functional/providers/acp/btrc_p0_characterization_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/providers/acp -run '^TestBTRCP0ACPTarget(Success|ProtocolFailure)Characterization$' -count=1 -v -timeout 240s` — passed.
+  - `go test ./tests/functional/providers/acp -run '^TestBTRCP0ACPTarget(Success|ProtocolFailure)Characterization$' -count=5 -timeout 300s` — passed.
+  - `go test ./tests/functional/providers/acp -race -run '^TestBTRCP0ACPTarget(Success|ProtocolFailure)Characterization$' -count=1 -timeout 300s` — passed.
+  - `go vet ./tests/functional/providers/acp` — passed.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - The ACP worker path publishes ten canonical Factory events through one `DISPATCH_RESPONSE`; the continuous service session remains public `IDLE` while the Work projection carries the terminal target outcome.
+  - ACP success ends in a provider `RUN/COMPLETED` response event, while protocol failure is surfaced as a synthesized provider `ERROR/FAILED` response event; canonical dispatch terminal uniqueness is asserted separately from provider-native response observations.
+  - The existing JSON-RPC helper process is a deterministic command/protocol edge for ACP characterization and avoids live provider access or sleep-based coordination.
+---
+## 2026-08-10 06:33 -07:00 - btrc-p0-characterization-007
+- What was implemented
+  - Added deterministic direct JavaScript success and child-failure characterization at the existing `pkg/services/factory_runtime/internal/services/orchestration/javascript/runtime` owner boundary.
+  - Froze the literal `phase:activate` → `child_dispatch` QUEUED/RUNNING/COMPLETED → `phase:apply-result` → `terminal_result` order and checked contiguous runtime record sequences.
+  - Asserted stable `dispatch-1`, child index, session-scoped artifact URI, fake Provider Session reference, prompt digest, complete projected child output, one terminal result callback, and typed script failure with `unknown` child failure detail and no primary result.
+  - Marked story `btrc-p0-characterization-007` as passed in `prd.json`; no production behavior, public/generated contract, or Factory Sessions cutover changed.
+- Files changed
+  - `pkg/services/factory_runtime/internal/services/orchestration/javascript/runtime/host_children_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/factory_runtime/internal/services/orchestration/javascript/runtime -run '^TestBTRCP0DirectJavaScript' -count=5 -v` — passed.
+  - `go test ./pkg/services/factory_runtime/internal/services/orchestration/javascript/runtime -count=1` — passed.
+  - `go vet ./pkg/services/factory_runtime/internal/services/orchestration/javascript/runtime` — passed.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - The direct JavaScript owner publishes ordered `RuntimeRecord` facts through `OnRecord`; terminal typed-value application is observed afterward through exactly one `OnResult` callback rather than a separate runtime record.
+  - The deterministic fake child executor gives the direct boundary stable dispatch, artifact, Provider Session, and failure metadata without constructing Factory Sessions or invoking a live provider.
+  - A failed fake child emits QUEUED/RUNNING/FAILED records before the JavaScript runtime returns `WORKFLOW_RUNTIME_SCRIPT_ERROR`; the child failure detail remains typed and the terminal result hook is not called.
+---
+## 2026-08-10 06:50 -07:00 - btrc-p0-characterization-008
+- What was implemented
+  - Added deterministic standalone fixture characterization in `tests/functional/sessions/standalone/fixture_characterization_test.go` through `root.BuildProcess` and `Process.Execute` at the public fixture-backed MCP stdio boundary.
+  - Froze the literal three-event `SESSION_STARTED` → `SESSION_RESULT_UPDATED` → `SESSION_COMPLETED` sequence, event IDs, session identities, sequence/tick cursors, terminal payload statuses, and the complete successful `Ticket triaged and resolved.` result with its artifact reference.
+  - Characterized the `missing-source` failure as `FAILED`/`UNAVAILABLE` with no primary result, the same terminal event sequence, a typed `unknown` failure on the session projection, and zero lingering dispatches.
+  - Repeated the same success request against two temporary catalog variants with independent session IDs and result text, asserting separate event histories, separate results, and a typed `factory_session.session.not_found` cross-store read.
+  - Marked story `btrc-p0-characterization-008` as passed in `prd.json`; no production behavior or public/generated contract changed.
+- Files changed
+  - `tests/functional/sessions/standalone/fixture_characterization_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/sessions/standalone -run '^TestBTRCP0StandaloneFixture' -count=1 -v -timeout 240s` — passed.
+  - `go test ./tests/functional/sessions/standalone -count=5 -timeout 300s` — passed.
+  - `go test ./tests/functional/sessions/standalone -race -count=1 -timeout 300s` — passed.
+  - `go vet ./tests/functional/sessions/standalone` — passed.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - Standalone fixture sessions synthesize canonical lifecycle events when the fixture omits an explicit event array; terminal success and failure therefore share the three-event lifecycle shape while result/session projections carry the meaningful outcome detail.
+  - Fixture catalog variants must update the scenario session ID and both the sync-start and read-result session/result identities; the in-memory fake service keeps those projections separate.
+- The current failure mapping intentionally preserves `UNAVAILABLE` without `failureDetail` on `start_sync` and `get_result`; the typed missing-source detail is observable on `get` and should remain characterized at that surface.
+---
+## [2026-08-10 07:20 -07:00] - btrc-p0-characterization-009
+- What was implemented
+  - Added a root `BuildProcess`/`Process.Execute` one-shot cancellation characterization with a deterministic blocking provider edge. It freezes the 13-event cancellation artifact, typed `CANCELED`/`INVOCATION_CANCELED` result and process error, current `SUCCEEDED`/`FINAL` aggregate session projection, one terminal response-stream record, one provider attempt, and repeated-stop idempotence.
+  - Promoted the runtime-opening partial-failure coverage to a named characterization. It records Models and worker acquisition, the late Automations failure, reverse cleanup, the joined initiating/worker-cleanup errors, exactly-once resource stops, and the absence of Factory Runtime assembly.
+  - Added concurrent on-demand target characterization proving cancellation and replacement of one opaque target does not affect a second blocked target; it asserts per-target result/session/request identity, isolated cleanup, and repeated cancel/close idempotence.
+  - Marked story `btrc-p0-characterization-009` as passed in `prd.json`; no production behavior or public/generated contract changed.
+- Files changed
+  - `tests/functional/cli/one_shot/btrc_p0_cancellation_characterization_test.go`
+  - `pkg/services/factory_sessions/internal/runtimeopening/models_bind_test.go`
+  - `pkg/services/factory_sessions/internal/ondemandtarget/target_execution_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/cli/one_shot -run '^TestBTRCP0OneShotCancellationCharacterization$' -count=10` — passed.
+  - `go test -race ./tests/functional/cli/one_shot -run '^TestBTRCP0OneShotCancellationCharacterization$' -count=5` — passed.
+  - Focused runtime-opening and on-demand target repeat tests (`-count=10`) — passed.
+  - Focused runtime-opening and on-demand target race tests (`-race -count=10`) — passed.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - The blocked one-shot cancellation path currently permits two complete artifact orders differing only in the adjacent `MODEL_RESPONSE` and `FACTORY_STATE_RESPONSE`; both retain contiguous canonical sequence numbers and exactly-once terminal publication.
+  - On-demand cancellation closes the captured runtime, publishes the canceled invocation only after replacement succeeds, and treats controls against the replacement or an evicted identity as idempotent no-ops.
+- Late runtime-opening failures use joined errors: the initiating Automations failure remains discoverable alongside earlier worker cleanup failure, while acquired resources close in reverse order and later assembly is not called.
+---
+## [2026-08-10 07:31 -07:00] - btrc-p0-characterization-009 verification follow-up
+- What was implemented
+  - Refactored the concurrent target characterization into a deterministic fixture and focused assertion helpers so the new test stays within repository maintainability limits.
+  - Consolidated the replay characterization into the existing `pkg/services/recordings/internal/replay/runtime_decoder_test.go` file and split its success assertions, preserving the same observable replay coverage while restoring package file-count and maintainability baselines.
+  - Updated the replay story note in `prd.json` to match the reconciled file location; the PR description will be refreshed from this exact PRD.
+- Files changed
+  - `pkg/services/factory_sessions/internal/ondemandtarget/target_execution_test.go`
+  - `pkg/services/recordings/internal/replay/runtime_decoder_test.go`
+  - `pkg/services/recordings/internal/replay/btrc_p0_characterization_test.go` (consolidated/deleted)
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `make test` — passed (short Go suite).
+  - `make backend-size` — passed.
+  - `make pkg-maint` — passed.
+  - `make pkg-file-count` — passed.
+  - Affected replay and concurrent-target repeat/race tests and vet — passed.
+- **Learnings for future iterations:**
+  - Characterization tests should be split into owner-focused helpers before running `pkg-maint`; detailed observable assertions can remain rich without making one test function exceed complexity or line limits.
+  - When a P0 test adds a file to a package at its exact file-count baseline, consolidate it into a semantically adjacent existing test file rather than recording a new baseline entry.
+---
+## 2026-08-10 07:53 -07:00 - btrc-p0-characterization-003 review follow-up
+- What was implemented
+  - Reconciled the branch with current `upstream/main`, retaining the active BTRC `prd.json`, both append-only progress histories, and the current-main source/generated changes.
+  - Moved the hosted characterization into the approved `tests/functional/workstations/poller/` domain/subsection cell.
+  - Replaced hosted test timeout waits with `testing.T` context and a context-aware Factory Event stream observation helper.
+  - Added explicit continuous-service result reconciliation: success and execution failure assert the typed `NOT_FOUND` live `/result` response while dispatch plus terminal Work/progress remains the complete caller-visible service result. The in-code comment documents why this hosted service path uses the public HTTP inspection contract; finite CLI result mapping is covered by story 005.
+- Files changed
+  - `tests/functional/workstations/poller/hosted_characterization_test.go`
+  - `tests/functional/internal/support/factory_event_stream.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/workstations/poller -run '^TestBTRCP0HostedService' -count=1 -v -timeout 180s` — passed.
+- **Learnings for future iterations:**
+  - The hosted/service success contract is intentionally not a terminal live Factory Session result: continuous Petri sessions stay IDLE, so `/result` returns typed NOT_FOUND while dispatch response, terminal Work, and progress are the stable service result.
+  - Moving a functional scenario into an approved domain/subsection can preserve its package-private fixture helpers when the destination owns the same workstation behavior.
+---
+## 2026-08-10 08:10 -07:00 - btrc-p0-characterization review follow-up
+- What was implemented
+  - Addressed the blocking PR gate feedback by moving the batch characterization to `tests/functional/factory/batch/` and both one-shot characterizations to `tests/functional/factory/invocation/`, clearing the ratcheted functional package-structure violations.
+  - Replaced the batch-specific in-process `ProviderOverride` with the existing `ProviderCommandRunner` edge and queued shaped command results; success remains two accepted dispatches and the failure case now observes the real command-edge `permanent_bad_request` classification on the second work.
+  - Added an in-code explanation for the ACP completion ceiling: public terminal Factory Session observation is the positive synchronization, while the duration is only a bounded failure guard around an out-of-process protocol edge.
+  - Added an observable runtime-preservation acceptance criterion to story `btrc-p0-characterization-001` and reconciled its notes and all moved test paths in `prd.json`.
+- Files changed
+  - `tests/functional/factory/batch/batch_characterization_test.go`
+  - `tests/functional/factory/invocation/characterization_test.go`
+  - `tests/functional/factory/invocation/btrc_p0_cancellation_characterization_test.go`
+  - `tests/functional/providers/acp/btrc_p0_characterization_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/factory/batch -count=3 -v -timeout 300s` — passed.
+  - `go test ./tests/functional/factory/invocation -count=3 -v -timeout 300s` — passed.
+  - `go test ./tests/functional/providers/acp -run '^TestBTRCP0ACPTarget(Success|ProtocolFailure)Characterization$' -count=3 -v -timeout 300s` — passed.
+  - `make pkg-structure` — passed with no new violations.
+  - `go vet ./tests/functional/factory/batch ./tests/functional/factory/invocation ./tests/functional/providers/acp` — passed.
+  - `git diff --check` — passed.
+  - Parsed `prd.json` reports zero stories with `passes:false`.
+- **Learnings for future iterations:**
+  - The prior PR head’s Backend Functional Coverage failure was an unrelated flaky `runtime_api` log assertion (`TestFunctionalAPIServer_RuntimeLogDirectoryIsAProcessInput`); the required local characterization and structure gates remain green, so rerun CI after publishing before changing unrelated runtime-api behavior.
+  - `gh pr view` confirmed current `upstream/main` is already the PR base and the PR is mergeable; compare the explicit base/head SHAs before creating a needless merge commit.
+---
+## 2026-08-10 08:16 -07:00 - btrc-p0-characterization review verification follow-up
+- What was implemented
+  - Completed the local review-gate verification after the path, edge, ACP documentation, and PRD acceptance updates; no production behavior or public/generated contract changed.
+- Files changed
+  - No additional tracked files.
+- Verification
+  - `make test` — passed.
+  - `make backend-size` — passed.
+  - `make pkg-maint` — passed.
+  - `make pkg-file-count` — passed.
+  - `make pkg-structure` — passed.
+  - `make vet` — passed.
+  - `make typecheck` — passed.
+  - Hosted characterization repeated twice — passed.
+  - The previously failing `TestFunctionalAPIServer_RuntimeLogDirectoryIsAProcessInput` repeated three times locally — passed.
+- **Learnings for future iterations:**
+  - The prior GitHub functional-coverage failure is reproducible as a transient baseline failure rather than a deterministic source failure; fresh CI after this head is the authoritative check.
 ---
 
 ## 2026-08-10 05:04 -07:00 - dwro-s1-remote-placement-flags-001
@@ -1507,4 +1778,20 @@
   - The four PRD stories remain marked `passes: true`, and the local worktree is clean.
 - **Learnings for future iterations:**
   - When a full functional lane fails on a cancellation-observation race, inspect the emitted package/test artifact before changing unrelated runtime code; rerunning the failed lane can distinguish a transient failure from a regression.
+---
+
+## 2026-08-10 09:17 -07:00 - dwro-s1-remote-placement-flags-004 main synchronization
+- What was implemented
+  - Merged the current `origin/main` into the placement branch, preserving the active S1 PRD while incorporating main's unrelated characterization, documentation, and smoke-test updates.
+  - Reconciled the append-only progress log and retained reusable patterns from both branches.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+  - Current-main characterization and documentation files included by the merge.
+- Verification
+  - Resolved merge conflicts in `prd.json` and `progress.txt`; no conflict markers remain.
+  - `prd.json` parses with four user stories and zero failed `passes` values.
+  - `git diff --check` passed; a new PR check run is required for the merged head.
+- **Learnings for future iterations:**
+  - When a task branch is behind main, keep the task-scoped PRD authoritative and merge main's progress entries and unrelated changes so PR description parity and append-only history remain intact.
 ---
