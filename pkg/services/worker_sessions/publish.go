@@ -236,6 +236,11 @@ func resolveWorkerSessionID(observer Service, dispatchID string) (string, error)
 	return observer.WorkerSessionIDForDispatch(context.Background(), dispatchID)
 }
 
+func suppressProviderOutput(err error) bool {
+	return errors.Is(err, ErrProviderBindingConflict) ||
+		errors.Is(err, ErrProviderBindingAttemptMismatch)
+}
+
 func (p *ProviderSessionObservationPublisher) publishCanonicalWorkerRecord(
 	observer Service,
 	fragment workers.ProgressFragment,
@@ -252,14 +257,14 @@ func (p *ProviderSessionObservationPublisher) publishCanonicalWorkerRecord(
 		})
 		if err != nil {
 			p.reportRejectedRecord(sessionID, draft, err)
-			return !errors.Is(err, ErrProviderBindingConflict)
+			return !suppressProviderOutput(err)
 		}
 		if binding.WorkerSessionID != "" {
 			sessionID = binding.WorkerSessionID
 		}
 	} else if resolved, err := resolveWorkerSessionID(observer, sessionID); err != nil {
 		p.reportRejectedRecord(sessionID, draft, err)
-		return !errors.Is(err, ErrProviderBindingConflict)
+		return !suppressProviderOutput(err)
 	} else {
 		sessionID = resolved
 	}
@@ -300,14 +305,14 @@ func (p *ProviderSessionObservationPublisher) publishWorkerRecord(
 		})
 		if err != nil {
 			p.reportRejectedRecord(sessionID, draft, err)
-			return !errors.Is(err, ErrProviderBindingConflict)
+			return !suppressProviderOutput(err)
 		}
 		if binding.WorkerSessionID != "" {
 			sessionID = binding.WorkerSessionID
 		}
 	} else if resolved, err := resolveWorkerSessionID(observer, sessionID); err != nil {
 		p.reportRejectedRecord(sessionID, draft, err)
-		return true
+		return !errors.Is(err, ErrProviderBindingAttemptMismatch)
 	} else {
 		sessionID = resolved
 	}
