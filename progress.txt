@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- Optional native JSON channels use an explicit presence bit plus custom JSON at durable boundaries to distinguish omitted values from JSON null; clone map/slice trees at projection and transport ownership boundaries.
 - Canonical packaged CLI docs live under `docs/reference/`; adding a topic also requires its authored file in `docs/reference/embed.go` and a registry entry in `pkg/transports/cli/docs/docs.go`.
 - The `you run --named <factory> --help` output is the authoritative invocation contract; omitted role provider/model values resolve through operator defaults.
 - Documentation for model-backed workflows should describe observable result shape and status/artifact evidence rather than byte-stable generated prose.
@@ -760,4 +761,31 @@
   - Documentation parsers for Markdown output must match the report’s structural contract and tolerate the platform’s CRLF line endings; a single-line `Overall recommendation:` pattern is not equivalent to the emitted H2-plus-body form.
   - AGY structured-output replays enforce exact echoed-schema equivalence, so a contract schema change requires the historical replay envelope to be synchronized without changing its recorded response evidence.
   - When a backend package is at the 15-file limit, consolidate focused behavioral tests into an existing responsibility-aligned file before adding another package-local test file.
+---
+
+## 2026-08-10 05:51 -07:00 - e2-structured-worker-results-001
+- What was implemented
+  - Added optional native `structuredResult` data with an explicit presence bit so schema-valid JSON null remains distinct from an omitted result; raw worker output remains available.
+  - Validated workstation `outputSchema` before provider execution, decoded conforming object, array, scalar, boolean, and null responses once with `jsonschema/v6`, and returned detached native JSON. Invalid configuration now returns typed terminal misconfiguration metadata before a provider call.
+  - Carried the value through Work and WorkResult contracts, canonical dispatch events, runtime tokens, live projections, persisted snapshots, replay, session mutation clones, Work reads, HTTP mappings, and regenerated Go/TypeScript/publishable interfaces.
+  - Added focused execution, event serialization, projection, replay, checkpoint/token, API mapping, and factory-definition validation coverage; moved policy-free JSON ownership helpers into `pkg/platform/jsonvalue` to preserve package boundaries.
+- Files changed
+  - `api/components/schemas/data-models/Work.yaml`
+  - `api/components/schemas/events/payloads/DispatchResponseEventPayload.yaml`
+  - `pkg/platform/jsonvalue/jsonvalue.go`
+  - `pkg/services/work/**`, `pkg/services/workers/**`, `pkg/services/factory_runtime/**`, `pkg/services/factory_sessions/**`, `pkg/services/recordings/**`, and `pkg/services/factory_definitions/**` structured-result contracts, mappings, clone paths, validation, executors, and tests
+  - Generated API, package, and UI client artifacts
+  - `prd.json`, `progress.txt`
+- Verification
+  - `make interfaces-all` — passed.
+  - `make verify-fast` and `make typecheck` — passed.
+  - Affected service families with `go test ... -count=1` — passed, including recordings replay/projections and all workstation executor subpackages.
+  - `make backend-size`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure` — passed.
+  - `git diff --check` — passed.
+  - `make lint` reaches the existing `pkg-boundary` migration baseline (176 violations, including the unchanged Petri/provider ownership entries); the changed files introduce no new boundary entry.
+- **Learnings for future iterations:**
+  - `jsonschema.UnmarshalJSON` uses `json.Number`; preserving that type avoids numeric precision/type drift across durable event and checkpoint boundaries.
+  - Optional JSON fields need both a native value and a presence bit when JSON null must survive custom marshaling and generated `omitempty` mappings.
+  - Shared clone/marshal mechanics belong in `pkg/platform` rather than adding exported utility functions to a service root; `pkg-structure` enforces that boundary.
+  - Static output-schema validation must leave invocation interpolations and existing legacy `.json` schema references for their later resolution path while validating inline schemas immediately.
 ---
