@@ -40,6 +40,7 @@ type routingPackagedInstaller struct {
 func (installer *routingPackagedInstaller) EnsurePackagedFactories(
 	context.Context,
 	string,
+	string,
 	[]factorydefinitions.PackagedDefinition,
 ) ([]factorydefinitions.PackagedFactoryInstallResult, error) {
 	installer.called = true
@@ -54,7 +55,9 @@ func (localMigrationFileSystem) ReadDir(path string) ([]os.DirEntry, error) { re
 func (localMigrationFileSystem) MkdirAll(path string, mode os.FileMode) error {
 	return os.MkdirAll(path, mode)
 }
-func (localMigrationFileSystem) Rename(oldPath, newPath string) error { return os.Rename(oldPath, newPath) }
+func (localMigrationFileSystem) Rename(oldPath, newPath string) error {
+	return os.Rename(oldPath, newPath)
+}
 
 // TestRootService_InitializeRoutesThroughInternalWorkflow proves the published
 // root Service.Initialize seam is fulfilled through internal workflow ownership

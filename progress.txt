@@ -2519,3 +2519,19 @@
   - Keep no-server bootstrap fixtures and their integration assertions together because they share the capturing runner, mock-worker configuration, and API-projection helpers; keep metric recorder helpers with input-resolution observability tests.
   - A full package-level inventory includes tests from every same-package file; compare isolated `HEAD` and current worktrees rather than only the moved file's declarations.
 ---
+
+## 2026-08-10 16:05 -07:00 - thr-deflake-js-durability current-main synchronization follow-up
+- What was implemented
+  - Merged the live `origin/main` head `e8c0a248a` into the durability branch after the PR base advanced again.
+  - Preserved the task-scoped `prd.json` as the PR description source and retained the append-only durability and prior current-main progress history while resolving the shared bookkeeping-file conflict.
+  - Retained the unrelated current-main packaged-installation ownership, hard-kill functional regression, and CLI test-split changes in the merge tree without widening this task's implementation scope.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+  - Current-main packaged-installation, system-initialization, CLI, and hard-kill functional test files included by the synchronization merge.
+- Verification
+  - `prd.json` remains the durability PRD with all three stories marked `passes:true`.
+  - Merge conflict markers were removed; the staged merge will be checked with `git diff --cached --check` and JSON validation before push.
+- **Learnings for future iterations:**
+  - Keep the active task PRD authoritative when current main carries another task's PRD, and record the base SHA in the append-only progress log so PR description parity remains auditable after repeated base advances.
+---
