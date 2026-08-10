@@ -171,8 +171,8 @@
         "Tests pass"
       ],
       "priority": 9,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added tests/functional/cli/one_shot/btrc_p0_cancellation_characterization_test.go, pkg/services/factory_sessions/internal/runtimeopening/models_bind_test.go, and pkg/services/factory_sessions/internal/ondemandtarget/target_execution_test.go. The root-built one-shot cancellation test uses an injected blocking command edge and freezes the exact 13-event cancellation artifact (including both currently observed adjacent MODEL_RESPONSE/FACTORY_STATE_RESPONSE order variants), typed CANCELED/INVOCATION_CANCELED response and process error, one terminal response-stream record, one provider attempt, and idempotent repeated Stop. Runtime-opening characterization records models → worker → late Automations failure → reverse worker/models cleanup, no Factory Runtime assembly call, and joined initiating/cleanup errors with exactly-once cleanup. Concurrent target characterization proves one canceled target is replaced under its opaque identity while a second blocked target completes unchanged, with per-target result/session/request identities, isolated cleanup, and idempotent repeated cancel/close. Focused repeat and race tests pass; no production behavior or public/generated contract changed."
     }
   ]
 }

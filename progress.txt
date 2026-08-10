@@ -34,6 +34,9 @@
 - For one-shot invocation characterization, pair a recorded artifact with `--output response-stream`: the artifact freezes canonical Factory Event order while the stream independently proves one terminal `invocation_result` and caller-visible mapping.
 - Direct JavaScript runtime characterization should observe ordered `RuntimeRecord` facts through `OnRecord` and terminal typed-value application through `OnResult`; the `Outcome` alone does not establish callback ordering or exactly-once publication.
 - Standalone fixture characterization can use a root-built `Process.Execute` with the public MCP stdio boundary and an explicit temporary catalog; a terminal failed fixture currently exposes typed failure on `get` while `start_sync` and `get_result` retain the `UNAVAILABLE` result projection.
+- For blocked runtime characterization, release an injected edge only from an observed context cancellation and use channels for readiness; repeated owner controls can then assert exactly-once terminal and cleanup effects without sleeps.
+- When concurrent event producers can swap adjacent observations, freeze each observed complete order as an explicit allowed variant while still asserting every event's canonical sequence and identity.
+- On-demand target isolation is observable through opaque target identities, per-target invocation results, replacement opens, and idempotent repeated controls; keep the second target blocked until the first control has completed.
 
 ## 2026-08-09 13:12 - wo-d1-packaged-factories-docs-001
 - What was implemented
@@ -925,5 +928,28 @@
 - **Learnings for future iterations:**
   - Standalone fixture sessions synthesize canonical lifecycle events when the fixture omits an explicit event array; terminal success and failure therefore share the three-event lifecycle shape while result/session projections carry the meaningful outcome detail.
   - Fixture catalog variants must update the scenario session ID and both the sync-start and read-result session/result identities; the in-memory fake service keeps those projections separate.
-  - The current failure mapping intentionally preserves `UNAVAILABLE` without `failureDetail` on `start_sync` and `get_result`; the typed missing-source detail is observable on `get` and should remain characterized at that surface.
+- The current failure mapping intentionally preserves `UNAVAILABLE` without `failureDetail` on `start_sync` and `get_result`; the typed missing-source detail is observable on `get` and should remain characterized at that surface.
+---
+## [2026-08-10 07:20 -07:00] - btrc-p0-characterization-009
+- What was implemented
+  - Added a root `BuildProcess`/`Process.Execute` one-shot cancellation characterization with a deterministic blocking provider edge. It freezes the 13-event cancellation artifact, typed `CANCELED`/`INVOCATION_CANCELED` result and process error, current `SUCCEEDED`/`FINAL` aggregate session projection, one terminal response-stream record, one provider attempt, and repeated-stop idempotence.
+  - Promoted the runtime-opening partial-failure coverage to a named characterization. It records Models and worker acquisition, the late Automations failure, reverse cleanup, the joined initiating/worker-cleanup errors, exactly-once resource stops, and the absence of Factory Runtime assembly.
+  - Added concurrent on-demand target characterization proving cancellation and replacement of one opaque target does not affect a second blocked target; it asserts per-target result/session/request identity, isolated cleanup, and repeated cancel/close idempotence.
+  - Marked story `btrc-p0-characterization-009` as passed in `prd.json`; no production behavior or public/generated contract changed.
+- Files changed
+  - `tests/functional/cli/one_shot/btrc_p0_cancellation_characterization_test.go`
+  - `pkg/services/factory_sessions/internal/runtimeopening/models_bind_test.go`
+  - `pkg/services/factory_sessions/internal/ondemandtarget/target_execution_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/cli/one_shot -run '^TestBTRCP0OneShotCancellationCharacterization$' -count=10` — passed.
+  - `go test -race ./tests/functional/cli/one_shot -run '^TestBTRCP0OneShotCancellationCharacterization$' -count=5` — passed.
+  - Focused runtime-opening and on-demand target repeat tests (`-count=10`) — passed.
+  - Focused runtime-opening and on-demand target race tests (`-race -count=10`) — passed.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - The blocked one-shot cancellation path currently permits two complete artifact orders differing only in the adjacent `MODEL_RESPONSE` and `FACTORY_STATE_RESPONSE`; both retain contiguous canonical sequence numbers and exactly-once terminal publication.
+  - On-demand cancellation closes the captured runtime, publishes the canceled invocation only after replacement succeeds, and treats controls against the replacement or an evicted identity as idempotent no-ops.
+  - Late runtime-opening failures use joined errors: the initiating Automations failure remains discoverable alongside earlier worker cleanup failure, while acquired resources close in reverse order and later assembly is not called.
 ---
