@@ -64,8 +64,8 @@
         "Typecheck passes"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Updated the canonical packaged batch and relationship references with whole-batch name uniqueness, same-request relation endpoint membership, exact actionable duplicate and missing-endpoint diagnostic examples, corrected JSON repairs, topology-independent --dry-run coverage, live Factory-topology boundaries, and whole-batch/no-partial-Work guarantees. Added rendered CLI docs smoke markers for batch-inputs, its batch-work compatibility alias, and relationships. docs-reference-smoke and verify-fast pass."
     }
   ]
 }

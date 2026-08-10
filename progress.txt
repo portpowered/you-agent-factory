@@ -29,6 +29,7 @@
 - Topology-independent batch admission checks must be shared by Work request preparation (dry-run) and live normalization; topology-dependent checks remain in normalization.
 - Batch endpoint diagnostics should be emitted by the Work admission helper with the relation index/type, both endpoint fields, the missing `field=value`, and the repair rule so dry-run preparation and live normalization remain equivalent.
 - Keep new CLI submit tests in responsibility-aligned existing files when `pkg/transports/cli/submit/batch_test.go` approaches the repository's 1,000-line maintainability limit.
+- Packaged docs behavior is verified through root-built `you docs` output; when a canonical topic has an alias, update rendered smoke markers for both topics and prefer short contiguous markers for wrapped prose.
 
 ## 2026-08-09 13:12 - wo-d1-packaged-factories-docs-001
 - What was implemented
@@ -820,5 +821,26 @@
   - `git diff --check` — passed.
 - **Learnings for future iterations:**
   - Endpoint failures should retain both endpoint values even when only one is absent so the diagnostic is useful without reopening the request.
-  - The repository's fast verification tier can fail before source checks when the worktree lacks `ui/node_modules/@types/bun`; the pinned `bun install --frozen-lockfile` restores dependencies without changing tracked sources.
+- The repository's fast verification tier can fail before source checks when the worktree lacks `ui/node_modules/@types/bun`; the pinned `bun install --frozen-lockfile` restores dependencies without changing tracked sources.
+---
+
+## 2026-08-10 05:13 -07:00 - pf-batch-submit-diagnostics-003
+- What was implemented
+  - Expanded the packaged batch reference with explicit whole-batch name uniqueness and same-request relation endpoint rules, deterministic duplicate and missing-endpoint diagnostic examples, corrected JSON repairs, and the live versus topology-independent `--dry-run` validation boundary.
+  - Added a dedicated relationship-reference section stating that submitted `DEPENDS_ON` and `PARENT_CHILD` endpoints are intra-batch name references and cannot target previously submitted or otherwise existing Work by name.
+  - Extended the root-built rendered CLI docs smoke contract for `batch-inputs`, the `batch-work` compatibility alias, and `relationships`.
+  - Marked story `pf-batch-submit-diagnostics-003` as passing in `prd.json`; all user stories are now complete.
+- Files changed
+  - `docs/reference/batch-inputs.md`
+  - `docs/reference/relationships.md`
+  - `tests/functional/smoke/cli_docs_smoke_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `make docs-reference-smoke` — passed markdown lint, CLI docs tests, rendered canonical/alias topic smoke, and factory-docs smoke.
+  - `make verify-fast` — passed dashboard typecheck, MCP contract boundary, 355 UI files / 2,970 tests, 191 Bun unit checks, and the short Go suite.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - Packaged reference rules are customer-visible CLI behavior; keep canonical docs, compatibility aliases, and root-built rendered smoke markers synchronized.
+  - Rendered Markdown smoke markers should be short contiguous phrases because line wrapping is preserved in the CLI output.
 ---
