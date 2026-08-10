@@ -2,6 +2,7 @@ package factorycontracts
 
 import (
 	"encoding/json"
+	"math"
 	"testing"
 	"time"
 )
@@ -198,6 +199,71 @@ func TestResolveFactoryWebhookDeliveryPolicyAppliesDefaults(t *testing.T) {
 		effective.BackoffMultiplier != DefaultFactoryWebhookBackoffMultiplier ||
 		effective.MaxBackoff != DefaultFactoryWebhookMaxBackoff {
 		t.Fatalf("effective defaults = %#v", effective)
+	}
+}
+
+func TestResolveFactoryWebhookDeliveryPolicyParsesAuthoredValues(t *testing.T) {
+	maxAttempts := 3
+	multiplier := 1.5
+	effective, err := ResolveFactoryWebhookDeliveryPolicy(&FactoryWebhookDeliveryPolicyConfig{
+		RequestTimeout:    stringPointer("15s"),
+		MaxAttempts:       &maxAttempts,
+		InitialBackoff:    stringPointer("2s"),
+		BackoffMultiplier: &multiplier,
+		MaxBackoff:        stringPointer("10s"),
+	})
+	if err != nil {
+		t.Fatalf("ResolveFactoryWebhookDeliveryPolicy: %v", err)
+	}
+	if effective.RequestTimeout != 15*time.Second ||
+		effective.MaxAttempts != maxAttempts ||
+		effective.InitialBackoff != 2*time.Second ||
+		effective.BackoffMultiplier != multiplier ||
+		effective.MaxBackoff != 10*time.Second {
+		t.Fatalf("effective authored values = %#v", effective)
+	}
+
+	defaults, err := ResolveFactoryWebhookDeliveryPolicy(&FactoryWebhookDeliveryPolicyConfig{})
+	if err != nil {
+		t.Fatalf("ResolveFactoryWebhookDeliveryPolicy(empty): %v", err)
+	}
+	if defaults.RequestTimeout != DefaultFactoryWebhookRequestTimeout ||
+		defaults.MaxAttempts != DefaultFactoryWebhookMaxAttempts ||
+		defaults.InitialBackoff != DefaultFactoryWebhookInitialBackoff ||
+		defaults.BackoffMultiplier != DefaultFactoryWebhookBackoffMultiplier ||
+		defaults.MaxBackoff != DefaultFactoryWebhookMaxBackoff {
+		t.Fatalf("effective empty-policy defaults = %#v", defaults)
+	}
+}
+
+func TestResolveFactoryWebhookDeliveryPolicyRejectsInvalidValues(t *testing.T) {
+	maxAttempts := 0
+	tooSmallMultiplier := 0.5
+	nanMultiplier := math.NaN()
+	infiniteMultiplier := math.Inf(1)
+	cases := []struct {
+		name   string
+		config FactoryWebhookDeliveryPolicyConfig
+	}{
+		{name: "invalid request timeout", config: FactoryWebhookDeliveryPolicyConfig{RequestTimeout: stringPointer("not-a-duration")}},
+		{name: "nonpositive request timeout", config: FactoryWebhookDeliveryPolicyConfig{RequestTimeout: stringPointer("0s")}},
+		{name: "nonpositive max attempts", config: FactoryWebhookDeliveryPolicyConfig{MaxAttempts: &maxAttempts}},
+		{name: "invalid initial backoff", config: FactoryWebhookDeliveryPolicyConfig{InitialBackoff: stringPointer("-1s")}},
+		{name: "small multiplier", config: FactoryWebhookDeliveryPolicyConfig{BackoffMultiplier: &tooSmallMultiplier}},
+		{name: "nan multiplier", config: FactoryWebhookDeliveryPolicyConfig{BackoffMultiplier: &nanMultiplier}},
+		{name: "infinite multiplier", config: FactoryWebhookDeliveryPolicyConfig{BackoffMultiplier: &infiniteMultiplier}},
+		{name: "invalid max backoff", config: FactoryWebhookDeliveryPolicyConfig{MaxBackoff: stringPointer("not-a-duration")}},
+		{name: "max backoff before initial backoff", config: FactoryWebhookDeliveryPolicyConfig{
+			InitialBackoff: stringPointer("5s"),
+			MaxBackoff:     stringPointer("1s"),
+		}},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := ResolveFactoryWebhookDeliveryPolicy(&test.config); err == nil {
+				t.Fatal("ResolveFactoryWebhookDeliveryPolicy succeeded, want validation error")
+			}
+		})
 	}
 }
 
