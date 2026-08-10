@@ -34,7 +34,7 @@
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Opening SESSION/STARTED now carries the injected-clock timestamp, stable Worker/Factory/recording/dispatch/turn/Work/attempt correlations, explicit provider/model/capability selections, and exact continuation metadata when supplied. Unknown optionals remain omitted. Runtime dispatch planning and JavaScript invocation both preserve the new request facts, and focused live/replay plus omission tests pass. WSR-FT-002 now verifies the exact opening timestamp across the public observation and replay stream."
+      "notes": "Opening SESSION/STARTED now carries the injected-clock timestamp, stable Worker/Factory/recording/dispatch/turn/Work/attempt correlations, explicit provider/model/capability selections, and exact continuation metadata when supplied. Unknown optionals remain omitted. Runtime dispatch planning and JavaScript invocation both preserve the new request facts, and focused live/replay plus omission tests pass. WSR-FT-002 now verifies the exact opening timestamp across the public observation and replay stream. Terminal publication now also requires a committed opening, and a fail-first/succeed-second Events regression proves an opening append failure cannot create terminal-only history."
     },
     {
       "id": "wsr-001-opening-record-002",

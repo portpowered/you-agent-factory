@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- Terminal lifecycle publication must require the opening record's committed publication window; a failed opening must never be followed by a terminal append that becomes topic position 1.
 - For broad functional coverage concurrency flakes, isolate the named test and rerun only the failed CI jobs before changing untouched behavior.
 - When resolving long append-only progress conflicts, read merge-stage files in bounded chunks and validate the reconstructed line count so tool-output truncation cannot drop history.
 - When splitting oversized same-package tests into focused files, remove stale file/maintainability exemptions and update the package file-count baseline for the intentional net increase; keep shared fixtures in one package-local helper file.
@@ -2774,4 +2775,22 @@
   - `make interfaces-all`, `git diff --check`, and `git merge-tree --write-tree origin/main HEAD` — passed with `origin/main` at `78584efb5`.
 - **Learnings for future iterations:**
   - After reconciling a moving default branch, rerun both contract generation and the shared fast tier before pushing so unrelated merged test reorganizations are covered by the same handoff evidence.
+---
+
+## 2026-08-10 15:23 -07:00 - wsr-001-opening-record story-001 opening-failure review follow-up
+- What was implemented
+  - Addressed the latest blocking PR feedback by requiring `publishTerminalRecord` to observe an open Worker publication window, which exists only after `SESSION/STARTED` has committed; unknown session publications now return the typed not-found error.
+  - Added a fail-first/succeed-second Events regression proving an opening append failure leaves no terminal-only Worker topic, retains the typed `EVENT_PUBLICATION_FAILURE` session result, and never calls Workers.
+- Files changed
+  - `pkg/services/worker_sessions/internal/service/publish_record.go`
+  - `pkg/services/worker_sessions/internal/service/start_side_effects_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Focused opening/terminal publication failure tests — passed.
+  - `go test ./pkg/services/worker_sessions/... -count=1` — passed.
+  - `go test ./pkg/services/factory_runtime/... -count=1` — passed.
+  - `git diff --check` — passed before bookkeeping changes.
+- **Learnings for future iterations:**
+  - The publication `open` flag is the authoritative in-process proof that the topic has a valid opening; terminal callers must check it before closing or appending so a failed opening cannot manufacture position 1.
 ---
