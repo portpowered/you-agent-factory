@@ -280,6 +280,11 @@ func startInterruptedJavaScriptDurabilitySession(
 		factoryapi.FactoryDispatchStatusRUNNING,
 		5*time.Second,
 	)
+	// RUNNING is published before the worker necessarily reaches the provider
+	// edge. Wait for the injected provider's entry signal before interrupting;
+	// otherwise the cancellation can win before Infer observes the workflow
+	// context, which is the scheduling race behind the CI failure.
+	provider.waitForBlockedInfer(t, 5*time.Second)
 
 	reason := "javascript durability resume interrupt"
 	postJavaScriptDurabilityJSON[factoryapi.FactorySessionLifecycleControlResponse](
@@ -646,15 +651,22 @@ func strPtr(value string) *string {
 }
 
 type javascriptDurabilityResumeBlockingProvider struct {
-	mu              sync.Mutex
-	calls           int
-	blockedOnce     bool
-	contextCanceled int
-	workflowName    string
+	mu                  sync.Mutex
+	calls               int
+	blockedOnce         bool
+	workflowName        string
+	inferStarted        chan struct{}
+	inferStartedOnce    sync.Once
+	contextCanceled     chan struct{}
+	contextCanceledOnce sync.Once
 }
 
 func newJavaScriptDurabilityResumeBlockingProvider(workflowName string) *javascriptDurabilityResumeBlockingProvider {
-	return &javascriptDurabilityResumeBlockingProvider{workflowName: workflowName}
+	return &javascriptDurabilityResumeBlockingProvider{
+		workflowName:    workflowName,
+		inferStarted:    make(chan struct{}),
+		contextCanceled: make(chan struct{}),
+	}
 }
 
 func (p *javascriptDurabilityResumeBlockingProvider) callCount() int {
@@ -671,6 +683,10 @@ func (p *javascriptDurabilityResumeBlockingProvider) Infer(
 	p.calls++
 	call := p.calls
 	alreadyBlocked := p.blockedOnce
+	if call == 2 && !alreadyBlocked {
+		p.blockedOnce = true
+		p.inferStartedOnce.Do(func() { close(p.inferStarted) })
+	}
 	p.mu.Unlock()
 
 	if call == 1 {
@@ -685,14 +701,8 @@ func (p *javascriptDurabilityResumeBlockingProvider) Infer(
 	}
 
 	if !alreadyBlocked {
-		p.mu.Lock()
-		p.blockedOnce = true
-		p.mu.Unlock()
-
 		<-ctx.Done()
-		p.mu.Lock()
-		p.contextCanceled++
-		p.mu.Unlock()
+		p.contextCanceledOnce.Do(func() { close(p.contextCanceled) })
 		return workerexecution.InferenceResponse{}, ctx.Err()
 	}
 
@@ -706,17 +716,26 @@ func (p *javascriptDurabilityResumeBlockingProvider) Infer(
 	}, nil
 }
 
+func (p *javascriptDurabilityResumeBlockingProvider) waitForBlockedInfer(t *testing.T, timeout time.Duration) {
+	t.Helper()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-p.inferStarted:
+		return
+	case <-timer.C:
+		t.Fatal("provider Infer did not start the blocking call")
+	}
+}
+
 func (p *javascriptDurabilityResumeBlockingProvider) waitForCanceledInfer(t *testing.T, timeout time.Duration) {
 	t.Helper()
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		p.mu.Lock()
-		canceled := p.contextCanceled
-		p.mu.Unlock()
-		if canceled > 0 {
-			return
-		}
-		time.Sleep(5 * time.Millisecond)
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-p.contextCanceled:
+		return
+	case <-timer.C:
+		t.Fatal("provider Infer did not observe canceled workflow context")
 	}
-	t.Fatal("provider Infer did not observe canceled workflow context")
 }

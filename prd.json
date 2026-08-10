@@ -1,96 +1,71 @@
 {
-  "project": "SAC S0.1 — Restore Package-Target and Ownership Inventories to the Live Tree",
-  "branchName": "sac-s0-1-ownership-inventories",
-  "description": "Restore the package-target manifest, ownership inventory, architecture guards, and canonical service-owner documentation so every live production package and cross-owner dependency has one reviewed owner and classification, unresolved bidirectional edges remain visible, and provider inference and hosted polling are assigned to Providers and Automations rather than Workers.",
+  "project": "Deflake JavaScript Durability Functional Tests",
+  "branchName": "thr-deflake-js-durability",
+  "description": "Make TestJavaScriptDurabilityDoesNotPersistSnapshotsByDefault and only confirmed sibling JavaScript orchestration functional tests deterministic by identifying the exact race mechanism, synchronizing on an observable lifecycle boundary instead of elapsed time, preserving the no-default-snapshot durability contract, and proving stability through repeated fresh runs and race detection.",
   "context": {
-    "customerAsk": "Implement story S0.1 of the Service Abstraction Convergence plan: regenerate and review the package-target manifest and ownership inventory; add the missing Worker Sessions, Events, Chat Sessions, ACP, Factory Sessions, Providers, platform, and mapping packages; correct the eight guards and documentation entries that misassign provider inference or hosted polling to Workers; and reconcile the service-owner tables in AGENTS.md, docs/architecture/architecture.md, and docs/architecture/packaged-structure.md.",
-    "problem": "The checked-in architecture inventories and some enforcement and documentation surfaces lag the live production package graph. Missing packages and edges, future-tense rationale for implemented services, and incorrect Workers ownership assignments prevent maintainers from trusting the inventories as a statement of package ownership, dependency direction, and remaining convergence debt.",
-    "solution": "Regenerate deterministic inventory candidates from the current production tree, review every package and cross-owner edge against durable service boundaries, preserve unresolved bidirectional dependencies as visible debt, correct inference and polling ownership guards, and align the three canonical service-owner tables without changing runtime behavior or widening into unrelated package migrations."
+    "customerAsk": "Deflake TestJavaScriptDurabilityDoesNotPersistSnapshotsByDefault and any sibling JavaScript orchestration functional tests with the identical race shape. Reproduce and explain the failure mechanism, fix the root cause without sleeps or retries, prove 20 consecutive fresh durability package runs and a clean race-enabled run, and do not modify cmd/functionallane, Makefile functional targets, or shared wait helpers under tests/functional/internal/support.",
+    "problem": "CI run 31426292402 job 93582274257 failed the required Backend Functional Coverage check in TestJavaScriptDurabilityDoesNotPersistSnapshotsByDefault after 6.24 seconds on an unrelated webhook-only PR. The test observes interrupted in-memory session state and then makes a negative filesystem assertion without yet proving that all relevant lifecycle, persistence, or cleanup work is quiescent. The exact competing operations still require direct diagnosis, but the nondeterministic check blocks innocent changes and wastes implementation and review time.",
+    "solution": "Use repeated and race-enabled package runs plus bounded diagnostics to establish the exact causal interleaving. Replace the unsafe timing assumption with deterministic observation of the relevant public lifecycle, injected edge, or owned shutdown boundary. Preserve the behavioral proof that an interrupted JavaScript session remains inspectable in memory and default execution leaves no retired project-local durable-session snapshot. Fix product durability code only if evidence proves it owns the defect, and apply the correction only to siblings demonstrated to share the same mechanism."
   },
   "acceptanceCriteria": [
-    "make package-target-manifest-check passes from a clean checkout.",
-    "make ownership-inventory-check passes and reports no missing production package or cross-owner edge.",
-    "Every live production package appears exactly once with a durable owner or the explicit Process Edges exception, including Worker Sessions, Events, Chat Sessions, ACP, Factory Sessions, Providers, platform, and mapping packages.",
-    "Inventory regeneration does not silently reclassify a bidirectional edge as acceptable; every unresolved bidirectional edge remains visible until its owning convergence story lands.",
-    "The eight affected guards and documentation entries assign provider inference to Providers and hosted polling to Automations, and the service-owner tables in AGENTS.md, architecture.md, and packaged-structure.md state the same durable ownership model.",
-    "Enabling/project-level documentation criterion: the canonical service-owner guidance is reconciled with the reviewed inventories; this documentation-only alignment intentionally changes no runtime, public API, CLI, UI, or emitted-event behavior.",
-    "Typecheck and relevant focused tests pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
-    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts are resolved against current main, and the PR is actually merged."
+    "The PR records the exact race mechanism behind the observed failure, including the competing operations, the premature or unsafe observation, and direct reproduction or diagnostic evidence connected to CI run 31426292402/job 93582274257.",
+    "TestJavaScriptDurabilityDoesNotPersistSnapshotsByDefault deterministically proves that an interrupted session remains inspectable in memory and default execution does not leave the retired project-local durable-session directory after relevant lifecycle activity is complete.",
+    "The root cause is fixed without a longer sleep, a retry of the negative filesystem assertion, relaxed expectations, or a timeout increase; any remaining polling is justified by a public observable transition rather than elapsed time alone.",
+    "Only sibling tests under tests/functional/orchestration/javascript demonstrated to share the identical race mechanism are corrected; if product durability code is proven responsible, the smallest owning-package fix has direct regression coverage.",
+    "The durability package passes 20 consecutive fresh -count=1 runs with loop output retained in the PR and completes cleanly under -race.",
+    "Quality gates pass: typecheck, focused functional tests, required CI, no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
+    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared-file changes are reconciled against current origin/main, and the PR is actually merged."
   ],
-  "userStories": [],
-  "enablingCriteria": [
+  "userStories": [
     {
-      "id": "sac-s0-1-ownership-inventories-001",
-      "type": "project-enabling",
-      "title": "Complete the package-target manifest",
-      "description": "The package-target manifest is repository-enforcement and maintainer tooling that covers the live production tree exactly once, so placement and migration decisions are based on a reviewed current package graph rather than a stale snapshot.",
+      "id": "thr-deflake-js-durability-001",
+      "title": "Establish the failure mechanism",
+      "description": "As a maintainer, I need direct evidence of the durability test's failing interleaving so the correction removes the cause instead of concealing the symptom.",
       "acceptanceCriteria": [
-        "Regeneration accounts for every live production package exactly once as a reviewed retain or move destination, with only the explicit Process Edges exception outside durable service or family ownership.",
-        "Worker Sessions, Events, Chat Sessions, ACP, Factory Sessions, Providers, platform, and mapping package families present in the live tree are represented with destinations consistent with the repository architecture.",
-        "make package-target-manifest-check passes from a clean checkout and fails in a focused regression case when a production package is missing or duplicated.",
-        "Existing reviewed move rows and deletion conditions are preserved unless the live tree proves that their owning convergence work has already landed; unrelated package migrations are not performed in this criterion.",
-        "This project-enabling inventory alignment intentionally changes no runtime, public API, CLI, UI, or emitted-event behavior.",
-        "Tests pass",
-        "Typecheck passes"
+        "Run the durability package with -count=20 and with -race, preserving enough output and diagnostics to distinguish a test lifecycle race, shared-state collision, cleanup race, or product durability defect.",
+        "The investigation identifies the exact competing operations and the observation that can occur too early or concurrently, and the PR connects that mechanism to the CI assertion failure from run 31426292402/job 93582274257.",
+        "If the initial stress runs do not fail, targeted deterministic instrumentation or an isolated regression setup demonstrates the causal ordering without adding permanent sleeps or probabilistic failure expectations.",
+        "The selected correction stays within the JavaScript durability test boundary unless evidence proves an owning product durability defect, and it does not modify cmd/functionallane, Makefile functional targets, or tests/functional/internal/support.",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Regenerated the package-target manifest from the live production Go tree (545 packages) and retained the 17 newly discovered paths under platform, Chat Sessions, Events, Factory Sessions, Providers, Worker Sessions, ACP, CLI, and mapping destinations. Added Worker Sessions to the closed package-target owner vocabulary and reconciled the live Chat Sessions/Events/Worker Sessions top-level inventories. Existing package mappings and deletion conditions were preserved. make package-target-manifest-check, focused package-target mapping/coverage tests, and git diff --check pass. This is repository-enforcement and maintainer tooling work with no runtime, public API, CLI, UI, or emitted-event behavior change."
+      "notes": "Established the CI failure mechanism in tests/functional/orchestration/javascript/durability/resume_test.go. Backend Functional Coverage attempt 2 of run 31426292402 (job 93582274257) failed TestJavaScriptDurabilityDoesNotPersistSnapshotsByDefault at resume_test.go:208 because the provider did not observe cancellation; the exact race is that dispatch status RUNNING is published before the worker reaches the injected ProviderOverride Infer edge, so interrupt-dispatch can cancel the workflow context before the blocking Infer call starts. The durability provider now exposes deterministic infer-started and context-canceled channels, and the helper waits on those observable edge signals with bounded failure timers instead of polling or sleeping. The correction stays within the JavaScript durability test boundary and does not touch cmd/functionallane, Makefile functional targets, or tests/functional/internal/support. Baseline go test -count=20 runs passed for the no-snapshot test and the three durability siblings; post-change focused tests, the three-sibling package run, go vet, and go test -race all pass."
     },
     {
-      "id": "sac-s0-1-ownership-inventories-002",
-      "type": "project-enabling",
-      "title": "Complete and classify the ownership inventory",
-      "description": "The ownership inventory is repository-enforcement and maintainer tooling that records a reviewed owner and relationship classification for every production package and cross-owner dependency, so dependency direction and remaining convergence debt are explicit without changing product behavior.",
+      "id": "thr-deflake-js-durability-002",
+      "title": "Make the default no-snapshot proof deterministic",
+      "description": "As a contributor, I need the no-snapshot durability scenario to report only real product regressions so unrelated pull requests are not blocked by test timing.",
       "acceptanceCriteria": [
-        "The ownership inventory covers every production package from the regenerated package-target manifest and reports no missing or duplicate ownership row.",
-        "Every live cross-owner dependency is reviewed and classified as command, query, event, construction, lifecycle, protocol composition, or external effect, with a rationale consistent with the owning service contract.",
-        "Worker Sessions, Events, Chat Sessions, ACP, Factory Sessions, Providers, platform, and mapping packages and their live cross-owner edges are included.",
-        "Chat Sessions and Events rationale describes their implemented ownership and behavior in the present tense rather than as future work.",
-        "Regeneration preserves every unresolved bidirectional edge as visible debt and a focused regression test proves that such an edge cannot be silently reclassified as acceptable.",
-        "make ownership-inventory-check passes and reports no missing production package or edge.",
-        "This project-enabling inventory alignment intentionally changes no runtime, public API, CLI, UI, or emitted-event behavior.",
-        "Tests pass",
-        "Typecheck passes"
+        "The scenario waits for or induces a deterministic observable boundary that guarantees all operations relevant to the no-snapshot assertion have completed before inspecting persistence behavior.",
+        "The scenario still proves through public Factory Session behavior that the interrupted JavaScript session is inspectable in memory with INTERRUPTED status and interruption lifecycle data.",
+        "The scenario still proves that default execution does not leave the retired project-local durable-session directory or snapshot, and a deliberate regression of that behavior makes the test fail.",
+        "The correction does not add a longer sleep, retry the negative filesystem assertion, weaken the absence requirement, or increase a timeout to mask the race.",
+        "If the evidence locates the defect in product durability code, the fix preserves explicit lifecycle state and isolated persistence side effects in the owning service and includes a focused regression test at the narrowest effective layer.",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 2,
-      "passes": true,
-      "notes": "Regenerated the ownership inventory from the live package graph (576 existing-scope package rows) and added the 16 package-target paths introduced by story 001, including Worker Sessions, Events, Chat Sessions, ACP, Factory Sessions, Providers, platform, and mapping paths. Added Worker Sessions to the closed owner vocabulary, top-level inventory, and rationale cards; rewrote Chat Sessions and Events rationale in the present tense. Cross-owner discovery now records 155 classified edges, marks all 50 directed entries in reciprocal pairs as unresolved bidirectional debt, and rejects a valid interaction class when those debt markers are removed. make ownership-inventory-check, focused ownership tests, package-target-manifest-check, and git diff --check pass. The full internal ownership package still reports pre-existing Workers/Recordings root-contract baseline drift unrelated to this story."
+      "passes": false,
+      "notes": ""
     },
     {
-      "id": "sac-s0-1-ownership-inventories-004",
-      "type": "project-enabling",
-      "title": "Reconcile canonical service-owner documentation",
-      "description": "As a contributor, I want the canonical service-owner tables to agree with the reviewed inventories so that repository guidance leads changes to the correct package and contract boundary.",
+      "id": "thr-deflake-js-durability-003",
+      "title": "Remove confirmed sibling races and prove stability",
+      "description": "As a maintainer, I need JavaScript orchestration siblings with the same confirmed race to use the deterministic boundary and need repeat-run evidence that the required functional check is trustworthy.",
       "acceptanceCriteria": [
-        "The service-owner tables in AGENTS.md, docs/architecture/architecture.md, and docs/architecture/packaged-structure.md consistently describe the implemented Worker Sessions, Events, Chat Sessions, Factory Sessions, Providers, Workers, Automations, platform, ACP transport, and mapping ownership boundaries.",
-        "The tables state that Providers owns provider inference and execution policy, Automations owns hosted polling, and Workers consumes owner contracts to perform request-scoped worker execution.",
-        "Events is described as the process-local source-native stream and Recordings as canonical Factory history; Chat Sessions and Worker Sessions are described as current implemented owners rather than future services.",
-        "Documentation uses the customer-facing Factory vocabulary defined by the data model and does not expose internal Petri terminology as a service boundary.",
-        "The package-target and ownership inventory checks still pass after the documentation reconciliation.",
-        "Tests pass",
-        "Typecheck passes"
-      ],
-      "priority": 4,
-      "passes": true,
-      "notes": "Reconciled the three canonical ownership summaries with the implemented package graph. AGENTS.md now names Chat Sessions, Events, Worker Sessions, ACP, mapping, platform, Providers-owned provider inference/execution policy, Automations-owned hosted polling, and Workers request-scoped execution. architecture.md and packaged-structure.md use the same present-tense service-owner model, explicitly distinguish Events source-native delivery from the Recordings canonical Factory Event ledger, and keep internal runtime implementation details behind the customer-facing Factory boundary. This remains an enabling documentation criterion with no runtime, API, CLI, UI, or emitted-event behavior change. make ownership-inventory-check, make package-target-manifest-check, focused ownership-check tests, and git diff --check pass."
-    },
-    {
-      "id": "sac-s0-1-ownership-inventories-003",
-      "type": "project-enabling",
-      "title": "Correct inference and hosted-polling ownership enforcement",
-      "description": "As a service owner, I want architecture enforcement to attribute provider inference and hosted polling to their durable owners so that new code cannot deepen the incorrect Workers boundary.",
-      "acceptanceCriteria": [
-        "All eight affected guard and documentation entries are reviewed and corrected: provider inference is assigned to Providers, hosted polling is assigned to Automations, and Workers retains only its request-scoped execution responsibilities.",
-        "Ownership rationale distinguishes Workers deciding when to execute a worker attempt from Providers owning provider protocol, selection, session, adapter, and execution behavior, and from Automations owning hosted-source observation and polling.",
-        "Focused guard tests reject a new production assignment of provider inference or hosted polling to Workers, reject an expanded Workers-root Provider compatibility port, and accept only the exact reviewed request-scoped contract plus the reviewed Providers and Automations ownership paths.",
-        "No runtime behavior, public API contract, or unrelated Workers migration is changed by this correction.",
-        "Tests pass",
-        "Typecheck passes"
+        "Only sibling scenarios under tests/functional/orchestration/javascript demonstrated to share the exact competing operations and premature observation are changed, and each continues to assert its original observable behavior.",
+        "Each changed sibling uses deterministic lifecycle or edge observation and does not add sleeps, timeout padding, retry loops, or relaxed assertions as a substitute for readiness.",
+        "Twenty consecutive fresh commands equivalent to go test ./tests/functional/orchestration/javascript/durability -count=1 pass, with all 20 outcomes visible in output attached to or quoted in the PR.",
+        "go test -race ./tests/functional/orchestration/javascript/durability completes without a race report or test failure.",
+        "Focused tests covering every changed sibling package pass, and unrelated JavaScript orchestration behavior remains unchanged.",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 3,
-      "passes": true,
-      "notes": "Corrected the package-boundary owner metadata for Providers execution/adapters and rewrote the provider-effect diagnostics to distinguish Providers-owned protocol, selection, session, adapter, and one-attempt execution from the Workers request-scoped compatibility port. The checker now expands grouped Go field declarations before inspecting signature types, so a valid grouped parameter declaration is rejected with a diagnostic instead of panicking; TestRunRejectsGroupedWorkersRequestScopedProviderPortWithoutPanic covers that regression. Added focused tests that allow the reviewed Providers leaf and exact Workers compatibility bridge while rejecting an expanded Workers-root provider port and any new provider-effect owner under Workers; the existing hosted-ownership tests reject polling/reconciliation assigned to Workers and accept Automation Hosted Sources. Burned down all eight stale misplaced-guard inventory entries, made retired entries fail validation, and expanded Providers/Workers rationale cards with present-tense ownership. No runtime behavior, public API shape, or unrelated migration changed. make ownership-inventory-check, make package-target-manifest-check, focused boundary/inventory tests, go test compilation checks, and git diff --check pass. The full internal ownership package and ownership-boundary make target retain the pre-existing Workers/Recordings root-contract and two unrelated baseline violations documented in progress.txt."
+      "passes": false,
+      "notes": ""
     }
   ]
 }

@@ -1950,3 +1950,25 @@
 - **Learnings for future iterations:**
   - Acceptance criteria for repository-enforcement work should explicitly identify the project-level nature of the evidence and state the intentionally unchanged customer-facing behavior; keep the PRD valid JSON so automated consumers do not depend on permissive parsers.
 ---
+## 2026-08-10 13:41 -07:00 - thr-deflake-js-durability-001
+- What was implemented
+  - Reproduced the named CI evidence from Backend Functional Coverage attempt 2 of run 31426292402, job 93582274257: `TestJavaScriptDurabilityDoesNotPersistSnapshotsByDefault` failed at `resume_test.go:208` because the provider did not observe the canceled workflow context.
+  - Identified the competing operations: the runtime publishes dispatch `RUNNING` before the worker necessarily enters the injected provider `Infer` edge; the test interrupted immediately after observing `RUNNING`, so cancellation could occur before the blocking provider call began.
+  - Replaced the durability provider's counter polling and timing gap with deterministic `inferStarted` and `contextCanceled` channel signals. The interruption helper now waits for provider entry before issuing interrupt-dispatch and waits for provider cancellation through a bounded timer select.
+- Files changed
+  - `tests/functional/orchestration/javascript/durability/resume_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Baseline `go test ./tests/functional/orchestration/javascript/durability -run '^TestJavaScriptDurabilityDoesNotPersistSnapshotsByDefault$' -count=20 -v -timeout 900s` — 20/20 passed.
+  - Baseline three-sibling durability run with `-count=20` — passed.
+  - Post-change focused no-snapshot run with `-count=5` — passed.
+  - Post-change three-sibling focused run — passed.
+  - `go test -race ./tests/functional/orchestration/javascript/durability -count=1 -v -timeout 900s` — passed.
+  - `go vet ./tests/functional/orchestration/javascript/durability` — passed.
+  - `git diff --check` — passed.
+  - Post-change full-package `-count=20` was started but stopped after the target Go process remained idle behind unrelated repository-wide Go verification processes already running on the host; no result is claimed for that attempt.
+- **Learnings for future iterations:**
+  - A public dispatch `RUNNING` projection is not proof that an external provider call has started; cancellation tests must synchronize on the injected edge's entry signal before issuing lifecycle control.
+  - Channel-based edge observations remove both the pre-entry race and the test's counter-polling sleep without changing product durability behavior. Story 002 still needs a separate review of the no-snapshot filesystem boundary, and story 003 still needs fresh-run and sibling-scope proof.
+---
