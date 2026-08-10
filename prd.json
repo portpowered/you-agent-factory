@@ -1,75 +1,54 @@
 {
-  "project": "WO-B2 — Reusable AGY Production Review Roles",
-  "branchName": "wo-b2-agy-production-review-roles",
-  "description": "Ship two first-party packaged AGY review roles: a context-free cold-watch reviewer for completed cuts and a deterministic clip-QA gate for rendered clips. Both roles pass media paths unchanged through the existing ANTIGRAVITY provider, define exact success and failure contracts, remain offline in ordinary CI, and include operator guidance for production composition.",
+  "project": "SAC S0.2: pkg-boundary Runs Against Production Code Only",
+  "branchName": "sac-s0-2-pkg-boundary-ignores",
+  "description": "Make the pkg-boundary architecture gate inspect production source only by consistently excluding explicit repository-policy non-source roots, including .artifacts, bootstrap worktrees, and generated transient worktrees, while preserving detection of the same prohibited import under production pkg.",
   "context": {
-    "customerAsk": "Deliver WO-B2 as one coherent reusable role slice: a cold-watch final reviewer that receives only a completed-cut path and reports what happens plus temporal and audio defects, and a clip-QA gate that receives a clip path and shot specification and returns a deterministic structured pass-or-reroll verdict. Reuse the existing ANTIGRAVITY provider and real recorded AGY traces, keep normal CI offline, pass file paths directly for AGY to parse, and document exact input, output, failure, and missing-file behavior.",
-    "problem": "WO-B1 and merged PR #1826 provide AGY execution and real video/audio traces, but the repository does not ship reusable production role definitions. Factory authors must invent prompts, schemas, workspace rules, and refusal handling, which creates hidden context and false-success risk because AGY can exit zero and report SUCCESS while declining a missing file.",
-    "solution": "Add independently invocable @you/agy-cold-watch and @you/agy-clip-qa authored Factories to the first-party packaged catalog, generate their distribution artifacts through the existing generator, document and exemplify their production composition, and prove their successful and missing-file behavior through root.BuildProcess, Process.Execute, ProviderCommandRunner, and the real recorded AGY traces without live CI calls or wrapper media transformation."
+    "customerAsk": "Implement story S0.2 of the Service Abstraction Convergence plan: make pkg-boundary consistently ignore .artifacts, bootstrap worktrees, generated transient worktrees, and other non-source roots already excluded by repository policy, with a regression proving ignored stale imports cannot fail the gate while production imports still do.",
+    "problem": "Multiple repository-wide scans contribute to pkg-boundary and do not apply a fully consistent source-universe policy. Disposable artifacts or stale worktree copies can therefore be interpreted as production code and create false architecture failures, while an overly broad ignore rule could hide real tracked production violations.",
+    "solution": "Apply one explicit repository-root-relative non-source directory policy to every applicable pkg-boundary traversal, prune ignored roots before parsing, and add paired behavioral fixtures showing ignored artifact/worktree source passes while the identical violation in production pkg fails. Keep all changes exclusive to the boundary checker and its focused tests."
   },
   "acceptanceCriteria": [
-    "The first-party catalog ships independently invocable @you/agy-cold-watch and @you/agy-clip-qa Factories with discoverable descriptions, examples, exact invocation signatures, explicit primary results, and canonical generated catalog artifacts derived from authored sources rather than hand-edited generated files.",
-    "Cold watch accepts only a completed-cut path as creative input and returns the documented observation report covering chronological events, temporal or transient defects, audio content and defects, observed speech, and a pass or reroll recommendation; it neither receives nor seeks creative-brief, shot-specification, intended-beat, or prior-verdict context.",
-    "Clip QA accepts a clip path and shot specification and returns a schema-valid object containing action_completed, spec_deviations, temporal_artifacts, audio_content, unexpected_speech, verdict, and confidence; verdict is exactly pass or reroll, and a missing, invalid, or incomplete result cannot become successful Work.",
-    "Both roles preserve the media path in prompt text and use the existing ANTIGRAVITY Provider and mandatory --add-dir-compatible workspace path without decoding, uploading, copying, probing, frame-stripping, extracting audio from, or otherwise transforming media; missing, unreadable, or inaccessible media fails Work with an actionable non-empty diagnostic and is not a pass or reroll.",
-    "Focused offline functional coverage constructs through root.BuildProcess, executes through Process.Execute, replaces only edges.Edges.ProviderCommandRunner, replays the real AGY video, audio, clip-QA, and missing-file recordings, and proves the selected Factory, provider command, returned content, Factory Events, and terminal Work outcome.",
-    "Quality gates pass: go test ./tests/functional/providers/agy -run '^TestAgyProductionReviewRolesThroughRootBuildProcess$' -count=1, make packaged-factory-catalog-check, make docs-reference-smoke, and make verify-fast pass; Typecheck passes; Tests pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
-    "The implementation and review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared or generated-file churn are resolved, and the PR is actually merged; opened, green, approved, or ready-to-merge is not complete."
+    "make pkg-boundary runs to completion when stale prohibited imports exist only beneath .artifacts, including bootstrap and generated transient worktree layouts, and beneath existing explicitly ignored non-source roots.",
+    "Every repository-wide traversal owned by pkg-boundary applies the same repository-root-relative source-universe decision so ignored files cannot be rediscovered by a secondary scan.",
+    "The same stale prohibited import placed beneath production pkg fails with the applicable package-boundary diagnostic and a non-zero result.",
+    "Exclusions match explicit non-source roots or root-relative subtrees and cannot hide a tracked production package merely because a nested segment has an artifact-like or worktree-like name.",
+    "The diff remains exclusive to the boundary checker and focused behavioral regression coverage, with no production-service, public-contract, generated-interface, baseline-debt, or unrelated cleanup changes.",
+    "Typecheck, focused checker tests, and required verification pass with no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
+    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts are resolved against current main, and the PR is actually merged."
   ],
   "userStories": [
     {
-      "id": "wo-b2-agy-production-review-roles-001",
-      "title": "Ship the context-free cold-watch reviewer",
-      "description": "As a production operator, I want an independent reviewer to watch the completed cut without creative-brief context so I can learn what the artifact actually communicates and catch motion or soundtrack defects that upstream authors may have normalized.",
+      "id": "sac-s0-2-pkg-boundary-ignores-001",
+      "title": "Ignore repository-policy non-source roots consistently",
+      "description": "As a maintainer running architecture verification, I want every package-boundary scan to exclude disposable repository roots consistently so stale generated or copied source cannot create a false boundary failure.",
       "acceptanceCriteria": [
-        "@you/agy-cold-watch is independently invocable with one required cutPath input bound to a clearly named CLI argument; provider model, effort, and timeout may use documented safe defaults or explicit role overrides, but there is no brief, shot-specification, expected-action, or prior-verdict input.",
-        "The effective reviewer instruction treats cutPath as the only creative context, watches the whole file including audio, does not inspect nearby briefs or manifests for intended meaning, and does not infer correctness from filenames or upstream status.",
-        "Successful primary output follows one documented report contract with a chronological description of what happens, timestamped temporal or transient defects, audio content and timestamped audio defects, observed speech, and an overall pass or reroll recommendation; empty sections are explicit rather than omitted.",
-        "The cut path is forwarded unchanged in the AGY prompt and execution uses the existing workspace --add-dir; no wrapper media decoding, upload, copy, probing, frame extraction, or audio extraction occurs.",
-        "An absent, unreadable, unsupported, or workspace-inaccessible cut does not produce a review recommendation: Work reaches the failed path with a non-empty actionable explanation, including when replayed AGY exits zero and reports provider status SUCCESS while refusing the file.",
-        "The cold-watch functional subtest replays the real video and audio recordings and asserts facts from both picture and soundtrack through root.BuildProcess, Process.Execute, and ProviderCommandRunner without a live AGY call.",
+        "A fixture with stale prohibited imports beneath root .artifacts passes package-boundary evaluation when no production violation exists.",
+        "Representative bootstrap and generated transient worktree layouts beneath the artifact root are pruned before their Go source is parsed.",
+        "Existing repository-policy exclusions for Git metadata, dependency/vendor trees, and supported worktree roots continue to be ignored by every applicable repository-wide scan.",
+        "Exclusion decisions are based on explicit paths relative to the configured repository root and behave consistently with native Windows and slash-normalized fixture paths.",
+        "Focused tests exercise the checker through its normal run behavior rather than asserting a source-file or rule inventory.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Implemented @you/agy-cold-watch with a single cutPath input, context-free AGY prompt, and a runtime markdown-observation-report/v1 postcondition requiring inspection status, chronology, timestamped defect/audio sections, observed speech, and exactly one pass-or-reroll recommendation. A complete report is accepted through root.BuildProcess, while both existing real incomplete video/audio traces and the exit-zero missing-file refusal fail Work without a primary recommendation; path and provider evidence remain observable. Focused story, factory-definition, mapping, API-contract, catalog, and docs checks pass."
+      "notes": "Centralized repository-root-relative pruning for .artifacts and supported worktree roots, preserved the existing Git metadata/vendor/node_modules/testdata exclusions, and applied the same decision to every pkg-boundary traversal. The normal checker regression uses malformed stale imports under bootstrap/generated transient artifact worktrees and existing ignored roots, proving they are pruned before parsing. Focused cmd/pkgboundarycheck tests pass; make pkg-boundary reports only the unchanged 176-violation main baseline."
     },
     {
-      "id": "wo-b2-agy-production-review-roles-002",
-      "title": "Ship the deterministic clip-QA gate",
-      "description": "As a shot pipeline author, I want a clip reviewed against its shot specification with a stable pass-or-reroll result so downstream routing can act on the verdict without parsing free-form prose.",
+      "id": "sac-s0-2-pkg-boundary-ignores-002",
+      "title": "Preserve enforcement for production pkg source",
+      "description": "As a maintainer relying on the architecture gate, I want ignored-root handling to remain narrowly scoped so a real prohibited import in production code still blocks the change.",
       "acceptanceCriteria": [
-        "@you/agy-clip-qa is independently invocable with exactly two required creative inputs, clipPath and shotSpecification, bound to discoverable named CLI arguments and preserved without hidden brief or prior-verdict context.",
-        "The role watches the complete clip and evaluates whether the specified action finishes, deviations from the supplied specification, transient and temporal artifacts across time, audio content, and unexpected speech.",
-        "The primary result validates against the recorded B2 schema: action_completed is boolean; spec_deviations and temporal_artifacts are string arrays; audio_content is speech, music, noise, silence, or mixed; unexpected_speech is boolean; verdict is pass or reroll; confidence is from 0 through 1; every field is required.",
-        "pass means the action completes and no specification deviation, reroll-worthy temporal artifact, or disallowed speech is observed; otherwise the role returns reroll and records each reason in the applicable arrays rather than hiding it in prose.",
-        "Missing or inaccessible media, provider or process failure, malformed output, or schema-invalid output fails Work with an actionable diagnostic and never becomes a production reroll, because reroll is reserved for a successfully inspected but unacceptable clip.",
-        "The clip-QA functional subtest replays agy-trace-clipqa-schema.stream.jsonl and the recorded missing-file trace through the public process boundary, asserts the real pass result and audio or no-speech evidence, and proves missing-file refusal reaches failed Work without live AGY.",
+        "A paired regression fixture places the same stale prohibited import used in the ignored-root case beneath production pkg and observes a non-zero package-boundary result.",
+        "The failure identifies the applicable production package/import violation rather than failing because of artifact or worktree contents.",
+        "A tracked production subtree is not excluded solely because a nested directory name resembles an artifact, bootstrap, generated, or worktree directory.",
+        "The make pkg-boundary entry path retains the same production failure behavior as the focused checker invocation.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 2,
       "passes": true,
-      "notes": "Implemented the explicit structured-clip-qa/v1 runtime contract for confidence bounds, required fields, pass invariants, and meaningful inspected rerolls. Structured failure detection now checks status/outcome/success markers before allowing a reroll and rejects unscoped structured rerolls; root.BuildProcess coverage proves pass, accepted reroll, out-of-range/inconsistent results, mixed provider status, schema failure, provider failure, and missing-file failure. The review follow-up also encodes confidence minimum/maximum in the authored and generated provider schema, asserts those bounds in the AGY command, and keeps the validator below the package maintainability threshold. Executor, focused AGY functional, and packaged catalog checks pass."
-    },
-    {
-      "id": "wo-b2-agy-production-review-roles-003",
-      "title": "Document and verify production composition",
-      "description": "As a Factory author, I want a worked, validated example of the two roles and their failure boundaries so I can place them in a production pipeline without hidden media handling or ambiguous routing.",
-      "acceptanceCriteria": [
-        "The packaged-factories reference catalog documents both roles, their purpose, invocation inputs, result shape, default AGY model and timeout policy, workspace-relative and absolute-path expectations, and representative PowerShell-safe invocations whose flags agree with generated help.",
-        "A repository-owned worked example shows clip QA after clip creation and cold watch after mechanical checks assemble the completed cut; it routes pass, reroll, and failed execution distinctly and states that cold watch receives no creative brief even when upstream stages have one.",
-        "The example and operator documentation state that paths must identify readable files within the directory exposed to AGY by the existing --add-dir execution, that the wrapper never transforms media, and that a missing or inaccessible path is an execution failure rather than a review verdict.",
-        "you factory config validate accepts each authored role and example; you run --named @you/agy-cold-watch --help and you run --named @you/agy-clip-qa --help expose the documented inputs; generated catalog files are refreshed only with make packaged-factory-catalog-generate.",
-        "The documentation names go test ./tests/functional/providers/agy -run '^TestAgyProductionReviewRolesThroughRootBuildProcess$' -count=1 as the independently runnable fully offline end-to-end command; any live AGY smoke remains the existing operator-gated B1 smoke and is not duplicated or enabled in ordinary CI.",
-        "Behavioral validation exercises loading, invocation, successful result, schema rejection, provider failure, and missing-file outcomes through public runtime behavior; it does not scan source trees, assert command, route, or catalog inventories, or inspect generated bundle internals as a substitute for those outcomes.",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 3,
-      "passes": true,
-      "notes": "Documented both roles in the packaged-factory reference catalog with exact live-help signatures, pinned ANTIGRAVITY/gemini-3.6-flash-high/8m policy, report schemas, path and failure boundaries, and PowerShell-safe invocations. Added the repository-owned AGY production composition example with distinct pass/reroll/failed routing and the offline root-process command; updated catalog-count/docs smoke coverage. Corrected cold-watch documentation to match live help: required cutPath is available positionally and through --cut-path, and corrected both documented PowerShell parsers to consume the two-line H2 recommendation contract. Authored/generated catalog checks, factory validation, focused root-process coverage, package gates, packaged catalog/source checks, readme-check, and docs-reference smoke pass."
+      "notes": "Added paired normal-run and make-target regressions using the same prohibited pkg/wire import as the ignored-root fixture. Production files under nested .artifacts, .claude/worktrees, and worktrees directories still produce the applicable application-composition diagnostic and a non-zero result; the make entry path preserves that behavior."
     }
   ]
 }
