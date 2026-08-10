@@ -7,38 +7,12 @@ import (
 	"errors"
 	"strings"
 	"testing"
-	"time"
 
 	acpsdk "github.com/coder/acp-go-sdk"
 
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/identity"
 )
-
-// setConfigOptionParams builds a raw session/set_config_option value-id
-// params payload addressing the Factory target select option.
-func setConfigOptionParams(sessionID, value string) string {
-	return `{"sessionId":"` + sessionID + `","configId":"target","value":"` + value + `"}`
-}
-
-// sessionAt builds a GetSessionResult for a session addressed by id, with the
-// given selected target, version, and WorkingRoot -- mirroring what a prior
-// successful "session/new" call would have produced.
-func sessionAt(id string, target string, version uint64, workingRoot string) chatsessions.GetSessionResult {
-	now := time.Unix(0, 1)
-	return chatsessions.GetSessionResult{Session: chatsessions.Session{
-		ID:    id,
-		State: chatsessions.SessionStateCreated,
-		SelectedTarget: chatsessions.ChatTargetRef{
-			Kind: chatsessions.ChatTargetKindFactory,
-			Ref:  target,
-		},
-		Version:     version,
-		WorkingRoot: workingRoot,
-		CreatedAt:   now,
-		UpdatedAt:   now,
-	}}
-}
 
 func TestHandleSessionSetConfigOptionSucceedsAndRevalidatesThroughCatalog(t *testing.T) {
 	chatSessions := &fakeChatSessionsService{getSessionResult: sessionAt("session-1", "factory:@you/factory-builder", 3, "/work/project")}
@@ -456,15 +430,5 @@ func TestServeRespondsMethodNotFoundForEveryUnimplementedMethodStillExcludesSess
 	}
 	if resp.Error.Code == -32601 {
 		t.Fatal("error code = method-not-found (-32601), want session/set_config_option to be dispatched, not rejected as unsupported")
-	}
-}
-
-func catalogResultWithCurrent(current string) chatsessions.ResolveFactoryTargetCatalogResult {
-	return chatsessions.ResolveFactoryTargetCatalogResult{
-		CurrentTarget: current,
-		Choices: []chatsessions.FactoryTargetCatalogChoice{
-			{Value: "factory:@you/factory-builder", Name: "Factory Builder"},
-			{Value: "factory:@you/review", Name: "Review"},
-		},
 	}
 }
