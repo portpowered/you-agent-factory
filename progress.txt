@@ -1066,7 +1066,7 @@
 - **Learnings for future iterations:**
   - Static authored provider manifests describe maximum/publication facts only; production catalog projections must never imply current installation, authentication, or executable readiness without a probe.
   - Keep static and live readiness vocabularies distinguishable at the public Providers boundary: `unverified`/`required` describe no probe, while `ready`/`unavailable` and `satisfied`/`missing` describe probe outcomes.
-- Exact model IDs should be asserted at the manifest, projection, JSON, human, and root-process boundaries when docs or execution harnesses name a model.
+  - Exact model IDs should be asserted at the manifest, projection, JSON, human, and root-process boundaries when docs or execution harnesses name a model.
 ---
 ## 2026-08-10 04:24 -0700 - wo-b3-provider-capability-discovery-cli-ci-retry
 - What was implemented
