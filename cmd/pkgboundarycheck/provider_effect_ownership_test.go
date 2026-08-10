@@ -17,8 +17,12 @@ import "context"
 // Deliberate fixture: the Providers Execution leaf owns the provider inference
 // effect port named by the normative backend standard.
 type Provider interface {
-	Infer(context.Context, string) (string, error)
+	Infer(context.Context, ProviderInferenceRequest) (InferenceResponse, error)
 }
+
+type ProviderInferenceRequest struct{}
+
+type InferenceResponse struct{}
 `)
 
 	stderr := &bytes.Buffer{}
@@ -38,13 +42,55 @@ import "context"
 // Deliberate fixture: the reviewed Workers compatibility port is a
 // request-scoped adapter over Providers, not a durable provider owner.
 type Provider interface {
-	Infer(context.Context, string) (string, error)
+	Infer(context.Context, ProviderInferenceRequest) (InferenceResponse, error)
 }
+
+type ProviderInferenceRequest struct{}
+
+type InferenceResponse struct{}
 `)
 
 	stderr := &bytes.Buffer{}
 	if err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr); err != nil {
 		t.Fatalf("run() error = %v, want reviewed Workers compatibility port allowed; stderr=%q", err, stderr.String())
+	}
+}
+
+func TestRunRejectsExpandedWorkersRequestScopedProviderPort(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeGoSourceFile(t, repoRoot, "pkg/services/workers/provider_port.go", `package workers
+
+import "context"
+
+// Deliberate fixture: the Workers compatibility port cannot grow provider
+// catalog, session, or native-execution behavior under the same type name.
+type Provider interface {
+	Infer(context.Context, ProviderInferenceRequest) (InferenceResponse, error)
+	ListModels(context.Context) ([]string, error)
+}
+
+type ProviderInferenceRequest struct{}
+
+type InferenceResponse struct{}
+`)
+
+	stderr := &bytes.Buffer{}
+	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)
+	if err == nil {
+		t.Fatal("run() error = nil, want expanded Workers provider compatibility port rejected")
+	}
+	got := stderr.String()
+	for _, want := range []string{
+		"prohibited durable provider-effect ownership",
+		"pkg/services/workers",
+		"Provider",
+		"canonical owner: " + providersLeafEffectContractPackage,
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("run() stderr = %q, want substring %q", got, want)
+		}
 	}
 }
 

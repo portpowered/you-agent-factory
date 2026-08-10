@@ -177,7 +177,7 @@ func providerEffectOwnershipFindingForType(
 	if finding, hit := competingProviderCatalogOrExecutionAbstraction(packagePath, filePath, typed); hit {
 		return finding, true
 	}
-	if isWorkersRequestScopedProviderPort(packagePath, typed) ||
+	if isWorkersRequestScopedProviderPort(packagePath, typed, imports) ||
 		isDurableProvidersLeafOwner(packagePath) ||
 		packagePath == providersExecutionCompatibilityPackage {
 		return providerEffectOwnershipFinding{}, false
@@ -194,10 +194,49 @@ func providerEffectOwnershipFindingForType(
 	}, true
 }
 
-func isWorkersRequestScopedProviderPort(packagePath string, typed *ast.TypeSpec) bool {
+func isWorkersRequestScopedProviderPort(
+	packagePath string,
+	typed *ast.TypeSpec,
+	imports map[string]string,
+) bool {
 	return packagePath == workersRequestScopedProviderPortPackage &&
 		typed.Name != nil &&
-		typed.Name.Name == workersRequestScopedProviderPortType
+		typed.Name.Name == workersRequestScopedProviderPortType &&
+		declaresWorkersRequestScopedProviderContract(typed, imports)
+}
+
+func declaresWorkersRequestScopedProviderContract(
+	typed *ast.TypeSpec,
+	imports map[string]string,
+) bool {
+	interfaceType, ok := typed.Type.(*ast.InterfaceType)
+	if !ok || interfaceType.Methods == nil || len(interfaceType.Methods.List) != 1 {
+		return false
+	}
+	method := interfaceType.Methods.List[0]
+	if len(method.Names) != 1 || method.Names[0].Name != providerEffectMethodName {
+		return false
+	}
+	signature, ok := method.Type.(*ast.FuncType)
+	if !ok || fieldCount(signature.Params) != 2 || fieldCount(signature.Results) != 2 {
+		return false
+	}
+	if !isStandardContextType(signature.Params.List[0].Type, imports) ||
+		!isLocalNamedType(signature.Params.List[1].Type, "ProviderInferenceRequest") {
+		return false
+	}
+	return isLocalNamedType(signature.Results.List[0].Type, "InferenceResponse") &&
+		isErrorType(signature.Results.List[1].Type)
+}
+
+func isLocalNamedType(expression ast.Expr, name string) bool {
+	identifier, ok := expression.(*ast.Ident)
+	return ok && identifier.Name == name
+}
+
+func isErrorType(expression ast.Expr) bool {
+	identifier, ok := expression.(*ast.Ident)
+	return ok && identifier.Name == "error"
 }
 
 func isDurableProvidersLeafOwner(packagePath string) bool {
