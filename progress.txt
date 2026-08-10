@@ -50,6 +50,8 @@
 - For cross-repository PRs, resolve review and CI state with an explicit owner/repository and compare local, fork-branch, and PR head SHAs; current-branch discovery may follow a different local origin.
 - New functional scenarios must use an allowed product-domain noun plus subsection path such as `tests/functional/factory/batch`; transport names like `cli` and internal implementation names like `factory_runtime` are not durable domain cells.
 - Ordered functional provider outcomes can use `support.NewShapedProviderCommandRunner` with queued provider-native `CommandResult` values, including a later non-zero result, while preserving the real command-runner edge and typed provider classification.
+- When a move-only split removes a file-level size exemption, remove stale file/file-lines budget entries and carry only still-needed pre-existing function exemptions to the new owner file.
+- For move-only test refactors, compare normalized `go test -list` output and the same coverage command against the exact pre-change revision before recording equivalence.
 
 ## 2026-08-09 13:12 - wo-d1-packaged-factories-docs-001
 - What was implemented
@@ -1975,4 +1977,37 @@
   - Package-local Go test fixtures are visible across all files, so shared fakes and constructors can be moved once into a helper while behavioral tests move independently.
   - Normalize and sort `go test -list` output for a stable inventory comparison; moving tests between filenames can otherwise change discovery order without changing the test set.
   - On this shared Windows workspace, use a task-specific `GOCACHE` and serial `-p 1` verification when concurrent worktrees hold the default Go cache; timed-out wrappers can leave child processes that must be identified by their exact command before cleanup.
+---
+## 2026-08-10 14:23 -07:00 - thr-split-acp-stdio-tests-002
+- What was implemented
+  - Split the oversized ACP stdio prompt suite into focused dispatch, dispatch-recovery, terminal-lifecycle, and cancellation/connection-failure files while preserving every test name, setup path, assertion, and runtime outcome.
+  - Moved shared prompt/control fixtures into `session_test_helpers_test.go` and stream-only event fixtures into `prompt_stream_test_helpers_test.go`, keeping package-local behavior unchanged and every owned file within the enforced backend-size and maintainability limits.
+  - Removed stale monolith exemption entries, carried the pre-existing cancellation safety function exemption to its new file, updated the exact package file-count baseline for the intentional suite split, and corrected related source comments.
+- Files changed
+  - `pkg/transports/acp/internal/stdio/session_prompt_cancellation_test.go`
+  - `pkg/transports/acp/internal/stdio/session_prompt_dispatch_recovery_test.go`
+  - `pkg/transports/acp/internal/stdio/session_prompt_dispatch_test.go`
+  - `pkg/transports/acp/internal/stdio/session_prompt_terminal_test.go`
+  - `pkg/transports/acp/internal/stdio/prompt_stream_test_helpers_test.go`
+  - `pkg/transports/acp/internal/stdio/session_test_helpers_test.go`
+  - `pkg/transports/acp/internal/stdio/session_prompt_test.go`
+  - `pkg/transports/acp/internal/stdio/server_test.go`
+  - `tests/functional/chat_sessions/root_composition/acp_prompt_delegation_test.go`
+  - `docs/internal/baselines/backend-exemption-budget.json`
+  - `docs/internal/baselines/backend-package-file-count.json`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Normalized `go test -p 1 -vet=off ./pkg/transports/acp/internal/stdio -list '.*' -count=1` — 222 tests before and after baseline `a4fc62824`, zero diff.
+  - `go test -p 1 -vet=off -cover -count=1 ./pkg/transports/acp/internal/stdio` — 94.3% before and after baseline `a4fc62824`.
+  - Full ACP stdio package tests and package compile/typecheck — passed.
+  - `go vet ./pkg/transports/acp/internal/stdio` — passed.
+  - `make backend-size` — passed.
+  - `make pkg-maint` — passed.
+  - `make pkg-file-count` — passed.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - Package-wide Go test symbols allow focused suites to reuse one session/factory/control fixture owner while stream-only event fixtures move to their own small helper when the enforced file-size gate requires it.
+  - Exact package file-count baselines must be updated for intentional test-suite additions; the count and rationale must describe the ownership split rather than hiding it behind a broad exemption.
+  - Compare both inventory and coverage against the pre-change commit so a move-only split has reviewer-visible equivalence evidence.
 ---

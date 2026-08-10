@@ -47,8 +47,8 @@
         "Typecheck passes"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Moved the prompt dispatch, prompt terminal-transition, and cancellation/connection-failure tests into session_prompt_dispatch_test.go, session_prompt_dispatch_recovery_test.go, session_prompt_terminal_test.go, and session_prompt_cancellation_test.go with their exact names, setup, assertions, and observable outcomes. Kept session, factory, control, and prompt fixtures package-shared in session_test_helpers_test.go; isolated stream-only fixtures in prompt_stream_test_helpers_test.go so all owned files remain within the enforced backend-size and maintainability limits. No production code, public contract, generated artifact, or assertion semantics changed. Against baseline revision a4fc62824, normalized go test ./pkg/transports/acp/internal/stdio -list '.*' remained identical at 222 tests with zero diff; go test -p 1 -vet=off -cover -count=1 remained 94.3% of statements before and after. Full focused package tests, compile/typecheck, vet, backend-size, pkg-maint, and pkg-file-count passed; stale file-level exemptions were removed, and only the pre-existing cancellation safety function exemption was carried to its new file."
     },
     {
       "id": "thr-split-acp-stdio-tests-003",
