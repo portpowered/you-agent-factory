@@ -2333,3 +2333,16 @@
 - **Learnings for future iterations:**
   - A prior blocking conversation comment can remain visible after its findings are cleared; use the latest head-specific comment plus thread-aware review state, current-base mergeability, and terminal checks to determine whether follow-up is actually outstanding.
 ---
+## 2026-08-10 12:53 -07:00 - e2-structured-worker-results final CI follow-up
+- What was implemented
+  - Investigated the post-audit CI failure without changing structured-result code: the first run lacked the unrelated pinned ACP evidence artifact, and the first retry exposed the known current-main `TestFactorySessionResumeDoesNotRepeatCompletedDispatch` cancellation-timing flake.
+  - Reproduced that exact test successfully five times locally and reran the failed GitHub jobs; the final rerun completed the functional coverage lane and pinned real-ACP evidence successfully.
+- Files changed
+  - `progress.txt`
+- Verification
+  - All PR #1855 checks are terminal and successful on the pushed head before this bookkeeping entry, including Backend Functional Coverage, Backend Unit Coverage, Verification Policy, and all contract, frontend, package, documentation, and inference lanes.
+  - No new source or generated-file changes were needed; the failure was isolated to external CI timing/evidence behavior.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - When a full functional lane first fails in post-test evidence publication and then exposes a known timing-sensitive current-main test on retry, reproduce the exact test locally, rerun the failed jobs on the same head, and avoid unrelated production changes when the rerun passes.
+---
