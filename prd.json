@@ -34,7 +34,7 @@
       ],
       "priority": 1,
       "passes": false,
-      "notes": "Diagnostic iteration 2026-08-10: the real built-process hard-kill regression passes with a bounded successor and same persisted backend scope, but no retained serialization resource was found in the isolated HOME. The backend-scope path is identity persistence, not a proven ownership lock; keep this story incomplete until the actual retained resource and owner are identified."
+      "notes": "Diagnostic iteration 2026-08-10: the real built-process regression now hard-kills the predecessor immediately after the first durable config.json backendScopeID checkpoint and before dashboard readiness. The successor reaches runtime within the bound and reuses the scope; the isolated HOME retained only config.json, with no serialization resource, lock, lease, temp, or PID owner marker. The backend-scope path is identity persistence, not a proven ownership lock; keep this story incomplete until the actual retained resource and owner are identified."
     },
     {
       "id": "pf-stale-scope-diagnostic-002",

@@ -780,3 +780,17 @@
   - The runtime artifact reserver uses unique `O_EXCL` files and the current startup path leaves no persistent owner marker, so the next iteration must identify a different retained serialization resource before adding reclamation or contention behavior.
   - `docs/temp/progress.md` and `docs/temp/scale-program-rules.md` referenced by the task context are absent from this checkout; the real-process evidence above is the available source of truth until those inputs are restored.
 ---
+
+## 2026-08-10 12:10 -07:00 - pf-stale-scope-diagnostic-001 startup-boundary follow-up
+- What was implemented
+  - Tightened the hard-kill regression to terminate the predecessor immediately after the first durable `config.json` checkpoint and before the dashboard readiness line when the process is still in startup.
+  - Captured the isolated-home inventory at that boundary; the run retained exactly `.you-agent-factory/config.json` and no temp, lock, lease, or PID artifact.
+- Files changed
+  - `tests/functional/transport/cli/process/hard_kill_successor_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/transport/cli/process -run '^TestCLISuccessorAfterHardKillReachesRuntime$' -count=1 -v` — passed; successor reached dashboard readiness and reused the predecessor scope.
+- **Learnings for future iterations:**
+  - Killing at the earliest observable durable startup checkpoint still leaves no serialization candidate, so a future reproduction must exercise a different startup effect or the actual worker/worktree path rather than adding a backend-scope lease.
+---

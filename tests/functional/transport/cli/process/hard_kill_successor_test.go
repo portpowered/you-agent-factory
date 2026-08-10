@@ -26,10 +26,11 @@ const (
 )
 
 // TestCLISuccessorAfterHardKillReachesRuntime proves the actual process
-// boundary around startup. It records the listener readiness observation,
-// force-kills the predecessor, and starts a successor with the same isolated
-// HOME, factory, and persisted backend scope. The test deliberately inventories
-// the isolated home rather than assuming that backend scope identity is a lock.
+// boundary around startup. It observes the first durable startup checkpoint,
+// force-kills the predecessor at that boundary, and starts a successor with the
+// same isolated HOME, factory, and persisted backend scope. The test
+// deliberately inventories the isolated home rather than assuming that backend
+// scope identity is a lock.
 func TestCLISuccessorAfterHardKillReachesRuntime(t *testing.T) {
 	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
 	session := harness.NewSession(t).WithNoExternalServer(t)
@@ -46,9 +47,11 @@ func TestCLISuccessorAfterHardKillReachesRuntime(t *testing.T) {
 	// operator-settings path. Observe it before waiting for the runtime
 	// listener, while keeping its identity separate from any ownership claim.
 	predecessorScope := waitForPersistedBackendScopeID(t, session)
-	predecessorURL := predecessor.waitForDashboardURL(t, "predecessor")
-	if predecessorURL != session.ServerURL+"/dashboard/ui" {
-		t.Fatalf("predecessor readiness URL = %q, want %q", predecessorURL, session.ServerURL+"/dashboard/ui")
+	select {
+	case startupURL := <-predecessor.ready:
+		t.Logf("predecessor reached listener readiness before hard kill: %s", startupURL)
+	default:
+		t.Log("predecessor was hard-killed at the durable checkpoint before listener readiness")
 	}
 
 	if !operatorsettings.IsLocalBackendScopeID(predecessorScope) {
@@ -67,13 +70,17 @@ func TestCLISuccessorAfterHardKillReachesRuntime(t *testing.T) {
 			t.Errorf("hard-killed predecessor left ownership-looking file %q", path)
 		}
 	}
-	t.Logf("isolated HOME after hard-killing predecessor: files=%d ownership_candidates=%v", len(retainedFiles), ownershipCandidates)
+	if len(retainedFiles) <= 20 {
+		t.Logf("isolated HOME after hard-killing predecessor: files=%d paths=%v ownership_candidates=%v", len(retainedFiles), retainedFiles, ownershipCandidates)
+	} else {
+		t.Logf("isolated HOME after hard-killing predecessor: files=%d ownership_candidates=%v", len(retainedFiles), ownershipCandidates)
+	}
 
 	successor := startHardKillCLIProcess(t, binaryPath, session, args...)
 	t.Cleanup(func() { _ = successor.stop() })
 	successorURL := successor.waitForDashboardURL(t, "successor")
-	if successorURL != predecessorURL {
-		t.Fatalf("successor readiness URL = %q, predecessor URL = %q", successorURL, predecessorURL)
+	if successorURL != session.ServerURL+"/dashboard/ui" {
+		t.Fatalf("successor readiness URL = %q, want %q", successorURL, session.ServerURL+"/dashboard/ui")
 	}
 	if got := readPersistedBackendScopeID(t, session); got != predecessorScope {
 		t.Fatalf("successor changed persisted backendScopeID to %q, want predecessor scope %q", got, predecessorScope)
