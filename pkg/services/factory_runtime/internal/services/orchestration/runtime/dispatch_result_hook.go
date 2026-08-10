@@ -545,7 +545,8 @@ func recordedFailureType(typ workers.WorkFailureType) (string, bool) {
 		return "", true
 	case workers.WorkFailureTypeAuthFailure, workers.WorkFailureTypePermanentBadRequest, workers.WorkFailureTypeThrottled,
 		workers.WorkFailureTypeInternalServerError, workers.WorkFailureTypeTimeout, workers.WorkFailureTypeUnknown,
-		workers.WorkFailureTypeMisconfigured, workers.WorkFailureTypeCommandLineTooLong, workers.WorkFailureTypeMissingExecutable:
+		workers.WorkFailureTypeMisconfigured, workers.WorkFailureTypeCommandLineTooLong, workers.WorkFailureTypeMissingExecutable,
+		workers.WorkFailureTypeStructuredOutputSchemaViolation:
 		return string(typ), true
 	default:
 		return "", false

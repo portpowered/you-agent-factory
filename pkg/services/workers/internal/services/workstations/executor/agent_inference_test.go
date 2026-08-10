@@ -339,6 +339,91 @@ func TestAgentExecutorAcceptsSchemaValidatedStructuredOutput(t *testing.T) {
 	}
 }
 
+func TestAgentExecutorClassifiesStructuredOutputSchemaViolations(t *testing.T) {
+	const schema = `{"type":"object","properties":{"verdict":{"type":"string"}},"required":["verdict"]}`
+	const rejectedMarker = "do-not-leak-this-rejected-value"
+	tests := []struct {
+		name              string
+		response          string
+		validationSummary string
+	}{
+		{name: "malformed_json", response: `{"verdict":`},
+		{name: "schema_mismatch", response: `{"wrong":"` + rejectedMarker + `"}`, validationSummary: "verdict"},
+	}
+
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			provider := &agentMockProvider{response: workerexecution.InferenceResponse{Content: test.response}}
+			executor := NewAgentExecutor(staticRuntimeConfig{
+				Workers: map[string]*workerconfig.FactoryWorkerConfig{
+					"worker-a": {Model: "test-model", ModelProvider: workerexecution.RunnerIDAntigravity},
+				},
+			}, provider, nil, time.Now)
+
+			result, err := executor.Execute(context.Background(), testAgentRequest(
+				work.WorkDispatch{DispatchID: "structured-schema-" + test.name, TransitionID: "parse", WorkerType: "worker-a"},
+				withAgentOutputSchema(schema),
+			))
+			if err != nil {
+				t.Fatalf("Execute() error = %v", err)
+			}
+			if result.Outcome != workerexecution.OutcomeFailed {
+				t.Fatalf("outcome = %q, want failed", result.Outcome)
+			}
+			if result.FailureMetadata == nil || result.FailureMetadata.Family != workerexecution.WorkFailureFamilyTerminal ||
+				result.FailureMetadata.Type != workerexecution.WorkFailureTypeStructuredOutputSchemaViolation {
+				t.Fatalf("failure metadata = %#v, want terminal structured schema violation", result.FailureMetadata)
+			}
+			decision := workerexecution.FailureDecisionFromMetadata(result.FailureMetadata)
+			if decision.Retryable || !decision.Terminal || decision.TriggersThrottlePause {
+				t.Fatalf("failure decision = %#v, want terminal non-retryable non-throttle", decision)
+			}
+			if result.StructuredResult != nil || result.StructuredResultPresent {
+				t.Fatalf("structured result = %#v (present=%t), want rejected value omitted", result.StructuredResult, result.StructuredResultPresent)
+			}
+			if result.Output != test.response {
+				t.Fatalf("raw output = %q, want provider response retained for diagnostics", result.Output)
+			}
+			if !strings.HasPrefix(result.Error, "structured output schema violation: ") {
+				t.Fatalf("error = %q, want stable schema-violation prefix", result.Error)
+			}
+			if test.validationSummary != "" && !strings.Contains(result.Error, test.validationSummary) {
+				t.Fatalf("error = %q, want validation summary containing %q", result.Error, test.validationSummary)
+			}
+			if strings.Contains(result.Error, rejectedMarker) {
+				t.Fatalf("error = %q, want rejected response value excluded from diagnostic", result.Error)
+			}
+		})
+	}
+}
+
+func TestAttachStructuredResultClassifiesStructuredOutputSchemaViolation(t *testing.T) {
+	const response = `{"wrong":"do-not-leak-this-rejected-value"}`
+	result := attachStructuredResult(
+		workerexecution.WorkstationExecutionRequest{
+			OutputSchema: `{"type":"object","required":["verdict"]}`,
+		},
+		workerexecution.WorkResult{
+			Outcome: workerexecution.OutcomeAccepted,
+			Output:  response,
+		},
+	)
+
+	if result.Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("outcome = %q, want failed", result.Outcome)
+	}
+	if result.FailureMetadata == nil || result.FailureMetadata.Type != workerexecution.WorkFailureTypeStructuredOutputSchemaViolation {
+		t.Fatalf("failure metadata = %#v, want structured schema violation", result.FailureMetadata)
+	}
+	if result.StructuredResult != nil || result.StructuredResultPresent {
+		t.Fatalf("structured result = %#v (present=%t), want rejected value omitted", result.StructuredResult, result.StructuredResultPresent)
+	}
+	if result.Output != response {
+		t.Fatalf("raw output = %q, want provider response retained for diagnostics", result.Output)
+	}
+}
+
 func TestAgentExecutorPreservesNativeStructuredResultTypes(t *testing.T) {
 	t.Parallel()
 

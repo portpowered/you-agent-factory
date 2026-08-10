@@ -4140,7 +4140,8 @@
         "unknown",
         "misconfigured",
         "missing_executable",
-        "command_line_too_long"
+        "command_line_too_long",
+        "structured_output_schema_violation"
       ],
       "type": "string"
     },

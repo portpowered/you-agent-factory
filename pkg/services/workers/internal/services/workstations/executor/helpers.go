@@ -256,8 +256,10 @@ func attachStructuredResult(
 	structured, err := parseOutputAgainstSchema(result.Output, []byte(request.OutputSchema))
 	if err != nil {
 		result.Outcome = workerexecution.OutcomeFailed
-		result.Error = "output parse failed: " + err.Error()
-		result.FailureMetadata = structuredOutputFailureMetadata()
+		result.StructuredResult = nil
+		result.StructuredResultPresent = false
+		result.Error = "structured output schema violation: " + err.Error()
+		result.FailureMetadata = structuredOutputSchemaViolationMetadata()
 		return result
 	}
 	result.StructuredResult = jsonvalue.Clone(structured)
@@ -303,6 +305,13 @@ func structuredOutputFailureMetadata() *workerexecution.WorkFailureMetadata {
 	return &workerexecution.WorkFailureMetadata{
 		Family: workerexecution.WorkFailureFamilyTerminal,
 		Type:   workerexecution.WorkFailureTypePermanentBadRequest,
+	}
+}
+
+func structuredOutputSchemaViolationMetadata() *workerexecution.WorkFailureMetadata {
+	return &workerexecution.WorkFailureMetadata{
+		Family: workerexecution.WorkFailureFamilyTerminal,
+		Type:   workerexecution.WorkFailureTypeStructuredOutputSchemaViolation,
 	}
 }
 

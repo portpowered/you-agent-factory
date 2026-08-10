@@ -8285,6 +8285,9 @@ export const WorkFailureType = {
   WorkFailureTypeMissingExecutable: "missing_executable",
   // The provider command exceeded the operating system command-line size limit.
   WorkFailureTypeCommandLineTooLong: "command_line_too_long",
+  // The worker response was malformed JSON or did not satisfy the workstation output schema.
+  WorkFailureTypeStructuredOutputSchemaViolation:
+    "structured_output_schema_violation",
 } as const;
 export type WorkFailureType =
   (typeof WorkFailureType)[keyof typeof WorkFailureType];

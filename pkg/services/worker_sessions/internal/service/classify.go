@@ -250,15 +250,16 @@ var knownFailureFamilies = map[workers.WorkFailureFamily]bool{
 // knownFailureTypes whitelists the exact WorkFailureType constants Workers
 // documents. See knownFailureFamilies for why this whitelist exists.
 var knownFailureTypes = map[workers.WorkFailureType]bool{
-	workers.WorkFailureTypeAuthFailure:         true,
-	workers.WorkFailureTypePermanentBadRequest: true,
-	workers.WorkFailureTypeThrottled:           true,
-	workers.WorkFailureTypeInternalServerError: true,
-	workers.WorkFailureTypeTimeout:             true,
-	workers.WorkFailureTypeUnknown:             true,
-	workers.WorkFailureTypeMisconfigured:       true,
-	workers.WorkFailureTypeCommandLineTooLong:  true,
-	workers.WorkFailureTypeMissingExecutable:   true,
+	workers.WorkFailureTypeAuthFailure:                     true,
+	workers.WorkFailureTypePermanentBadRequest:             true,
+	workers.WorkFailureTypeThrottled:                       true,
+	workers.WorkFailureTypeInternalServerError:             true,
+	workers.WorkFailureTypeTimeout:                         true,
+	workers.WorkFailureTypeUnknown:                         true,
+	workers.WorkFailureTypeMisconfigured:                   true,
+	workers.WorkFailureTypeCommandLineTooLong:              true,
+	workers.WorkFailureTypeMissingExecutable:               true,
+	workers.WorkFailureTypeStructuredOutputSchemaViolation: true,
 }
 
 // safeDetail derives the public FailureCause.Detail for kind exclusively

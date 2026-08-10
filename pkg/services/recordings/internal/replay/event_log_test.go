@@ -385,6 +385,35 @@ func TestReduceReplayEvents_MapsLegacyProviderFailureOnlyWireToFailureMetadata(t
 	}
 }
 
+func TestReduceReplayEvents_PreservesStructuredSchemaViolationClassification(t *testing.T) {
+	artifact := testReplayArtifact(
+		t,
+		replayDispatchCompletedEvent(t, "completion-schema-violation", workerexecution.WorkResult{
+			DispatchID:   "dispatch-schema-violation",
+			TransitionID: "process",
+			Outcome:      workerexecution.OutcomeFailed,
+			Error:        "structured output schema violation: required property verdict is missing",
+			FailureMetadata: &workerexecution.WorkFailureMetadata{
+				Family: workerexecution.WorkFailureFamilyTerminal,
+				Type:   workerexecution.WorkFailureTypeStructuredOutputSchemaViolation,
+			},
+		}, 3),
+	)
+
+	reduced, err := reduceReplayEvents(artifact, testFactorySnapshotDecoder, testRuntimeConfigDecoder)
+	if err != nil {
+		t.Fatalf("reduceReplayEvents: %v", err)
+	}
+	if len(reduced.Completions) != 1 {
+		t.Fatalf("reduced completions = %d, want 1", len(reduced.Completions))
+	}
+	completion := reduced.Completions[0].result
+	if completion.FailureMetadata == nil || completion.FailureMetadata.Family != workerexecution.WorkFailureFamilyTerminal ||
+		completion.FailureMetadata.Type != workerexecution.WorkFailureTypeStructuredOutputSchemaViolation {
+		t.Fatalf("replayed failure metadata = %#v, want terminal structured schema violation", completion.FailureMetadata)
+	}
+}
+
 func TestReduceReplayEvents_CompletionsOmitDiagnosticsWhenReplayArtifactOmitsThem(t *testing.T) {
 	artifact := testReplayArtifact(
 		t,

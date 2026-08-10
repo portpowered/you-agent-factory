@@ -650,6 +650,18 @@ func TestSafeDetail_WithPartialFailureMetadata_FillsMissingHalfWithUnknown(t *te
 	}
 }
 
+func TestSafeDetail_WithStructuredSchemaViolationPreservesClosedVocabularyType(t *testing.T) {
+	metadata := &workers.WorkFailureMetadata{
+		Family: workers.WorkFailureFamilyTerminal,
+		Type:   workers.WorkFailureTypeStructuredOutputSchemaViolation,
+	}
+	got := safeDetail(workersessions.FailureCauseWorkersExecutionFailure, metadata)
+	want := "family=terminal type=structured_output_schema_violation"
+	if got != want {
+		t.Fatalf("safeDetail() = %q, want %q", got, want)
+	}
+}
+
 func TestSafeDetail_WithEmptyFailureMetadata_FallsBackToGenericPlaceholder(t *testing.T) {
 	got := safeDetail(workersessions.FailureCauseWorkersExecutionFailure, &workers.WorkFailureMetadata{})
 	want := genericFailureDetail[workersessions.FailureCauseWorkersExecutionFailure]

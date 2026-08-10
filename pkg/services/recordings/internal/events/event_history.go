@@ -970,7 +970,8 @@ func normalizedFailureReason(reason string) workers.WorkFailureType {
 		workers.WorkFailureTypeTimeout,
 		workers.WorkFailureTypeMisconfigured,
 		workers.WorkFailureTypeMissingExecutable,
-		workers.WorkFailureTypeCommandLineTooLong:
+		workers.WorkFailureTypeCommandLineTooLong,
+		workers.WorkFailureTypeStructuredOutputSchemaViolation:
 		return candidate
 	default:
 		return workers.WorkFailureTypeUnknown

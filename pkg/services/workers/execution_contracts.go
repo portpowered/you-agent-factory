@@ -567,15 +567,16 @@ const (
 type WorkFailureType string
 
 const (
-	WorkFailureTypeAuthFailure         WorkFailureType = "auth_failure"
-	WorkFailureTypePermanentBadRequest WorkFailureType = "permanent_bad_request"
-	WorkFailureTypeThrottled           WorkFailureType = "throttled"
-	WorkFailureTypeInternalServerError WorkFailureType = "internal_server_error"
-	WorkFailureTypeTimeout             WorkFailureType = "timeout"
-	WorkFailureTypeUnknown             WorkFailureType = "unknown"
-	WorkFailureTypeMisconfigured       WorkFailureType = "misconfigured"
-	WorkFailureTypeCommandLineTooLong  WorkFailureType = "command_line_too_long"
-	WorkFailureTypeMissingExecutable   WorkFailureType = "missing_executable"
+	WorkFailureTypeAuthFailure                     WorkFailureType = "auth_failure"
+	WorkFailureTypePermanentBadRequest             WorkFailureType = "permanent_bad_request"
+	WorkFailureTypeThrottled                       WorkFailureType = "throttled"
+	WorkFailureTypeInternalServerError             WorkFailureType = "internal_server_error"
+	WorkFailureTypeTimeout                         WorkFailureType = "timeout"
+	WorkFailureTypeUnknown                         WorkFailureType = "unknown"
+	WorkFailureTypeMisconfigured                   WorkFailureType = "misconfigured"
+	WorkFailureTypeCommandLineTooLong              WorkFailureType = "command_line_too_long"
+	WorkFailureTypeMissingExecutable               WorkFailureType = "missing_executable"
+	WorkFailureTypeStructuredOutputSchemaViolation WorkFailureType = "structured_output_schema_violation"
 )
 
 // FailureDetail is the canonical customer-safe explanation of a failed
@@ -617,7 +618,8 @@ func FailureDecisionFromMetadata(metadata *WorkFailureMetadata) WorkFailureDecis
 		WorkFailureTypeUnknown,
 		WorkFailureTypeMisconfigured,
 		WorkFailureTypeMissingExecutable,
-		WorkFailureTypeCommandLineTooLong:
+		WorkFailureTypeCommandLineTooLong,
+		WorkFailureTypeStructuredOutputSchemaViolation:
 		return WorkFailureDecision{Terminal: true}
 	}
 	switch metadata.Family {

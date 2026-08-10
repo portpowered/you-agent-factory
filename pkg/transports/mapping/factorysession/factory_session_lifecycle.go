@@ -330,7 +330,8 @@ func failureReasonToAPI(reason string) factoryapi.WorkFailureType {
 		factoryapi.WorkFailureTypeTimeout,
 		factoryapi.WorkFailureTypeMisconfigured,
 		factoryapi.WorkFailureTypeMissingExecutable,
-		factoryapi.WorkFailureTypeCommandLineTooLong:
+		factoryapi.WorkFailureTypeCommandLineTooLong,
+		factoryapi.WorkFailureTypeStructuredOutputSchemaViolation:
 		return candidate
 	default:
 		return factoryapi.WorkFailureTypeUnknown
