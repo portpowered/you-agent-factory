@@ -2341,3 +2341,16 @@
 - **Learnings for future iterations:**
   - Functional coverage can expose independent timing-sensitive failures on different attempts; isolate each named test, require repeated local passes, and rerun only the failed jobs before modifying unrelated production code.
 ---
+
+## 2026-08-10 12:52 -07:00 - pf-cli-exit-codes-004 CI follow-up
+- What was implemented
+  - Investigated a third post-review CI failure: `TestJavaScriptDurabilityDoesNotPersistSnapshotsByDefault` did not observe provider context cancellation in the broad functional lane.
+  - Repeated the exact durability test ten times locally and reran only the failed functional/policy jobs; both completed successfully without source changes.
+- Files changed
+  - `progress.txt`
+- Verification
+  - The durability test passed ten consecutive local runs.
+  - CI run `31425022246` is green after the failed-job rerun, including Backend Functional Coverage and Verification Policy.
+- **Learnings for future iterations:**
+  - Independent functional timing flakes can rotate across unrelated packages; preserve the source scope, isolate the named test, and require a successful failed-job rerun before handoff.
+---
