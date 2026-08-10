@@ -218,6 +218,20 @@ func (err *CLIError) Unwrap() error {
 	return err.Cause
 }
 
+func (err *CLIError) CLIErrorCode() string {
+	if err == nil {
+		return ""
+	}
+	return err.Code
+}
+
+func (err *CLIError) CLIErrorMessage() string {
+	if err == nil {
+		return ""
+	}
+	return err.Message
+}
+
 func newCLIError(code, message string, cause error) *CLIError {
 	return &CLIError{Code: code, Message: message, Cause: cause}
 }
@@ -226,12 +240,23 @@ func emitCLIError(config ListConfig, jsonOutput bool, err error) error {
 	if !jsonOutput || err == nil {
 		return err
 	}
+	output := config.Output
+	centralDiagnostics := clidiag.CentralDiagnosticsEnabled(config.Context)
+	if centralDiagnostics {
+		output = config.Diagnostics
+	}
+	if output == nil {
+		return err
+	}
 	payload := struct {
 		Code    string `json:"code"`
 		Message string `json:"message"`
 	}{Code: cliErrorCode(err), Message: cliErrorMessage(err)}
-	if encodeErr := json.NewEncoder(config.Output).Encode(payload); encodeErr != nil {
+	if encodeErr := json.NewEncoder(output).Encode(payload); encodeErr != nil {
 		return errors.Join(err, encodeErr)
+	}
+	if centralDiagnostics {
+		clidiag.MarkDiagnosticRendered(output)
 	}
 	return err
 }

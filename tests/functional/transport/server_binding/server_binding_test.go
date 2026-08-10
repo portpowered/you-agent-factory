@@ -3,11 +3,16 @@ package server_binding_test
 import (
 	"bufio"
 	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -15,6 +20,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	"github.com/portpowered/infinite-you/internal/testutil"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // TestBuiltExecutableFallsBackFromOccupiedLoopbackPortAndReportsActualURL proves the shipped socket fallback contract.
@@ -163,6 +169,72 @@ func TestBuiltExecutableServerInterruptExits130AndReleasesListener(t *testing.T)
 		t.Fatalf("parse reported dashboard URL %q: %v", actualURL, err)
 	}
 	waitForListenerRelease(t, parsed.Host)
+}
+
+// TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput proves
+// the OS process observes a deterministic listener-startup failure instead of
+// treating the command as a successful server launch. Port 65535 is used so
+// the normal auto-port scan has no higher candidate to select.
+func TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput(t *testing.T) {
+	busyListener, err := net.Listen("tcp4", "127.0.0.1:65535")
+	if err != nil {
+		t.Skipf("reserve terminal loopback port for deterministic bind failure: %v", err)
+	}
+	defer busyListener.Close()
+
+	repoRoot := testutil.MustRepoRoot(t)
+	binaryName := "you"
+	if runtime.GOOS == "windows" {
+		binaryName += ".exe"
+	}
+	binaryPath := filepath.Join(t.TempDir(), binaryName)
+	build := exec.CommandContext(t.Context(), "go", "build", "-o", binaryPath, "./cmd/factory")
+	build.Dir = repoRoot
+	if output, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build you CLI: %v\n%s", err, output)
+	}
+
+	workingDirectory := t.TempDir()
+	writeCurrentFactory(t, workingDirectory)
+	homeDirectory := t.TempDir()
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	command := exec.CommandContext(
+		ctx,
+		binaryPath,
+		"--server", "http://127.0.0.1:65535", "server",
+	)
+	command.Dir = workingDirectory
+	command.Env = builtcliacceptance.ProcessEnvForIsolatedHome(homeDirectory)
+	var stdout, stderr bytes.Buffer
+	command.Stdout = &stdout
+	command.Stderr = &stderr
+
+	err = command.Run()
+	if ctx.Err() != nil {
+		t.Fatalf("server bind-failure process timed out: %v; stdout=%q stderr=%q", ctx.Err(), stdout.String(), stderr.String())
+	}
+	var exitErr *exec.ExitError
+	if err == nil || !errors.As(err, &exitErr) {
+		t.Fatalf("server bind-failure process error = %v; stdout=%q stderr=%q, want non-zero process exit", err, stdout.String(), stderr.String())
+	}
+	if exitErr.ExitCode() == 0 {
+		t.Fatalf("server bind-failure process exit code = 0; stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+
+	if strings.TrimSpace(stdout.String()) != "" {
+		t.Fatalf("server bind-failure stdout = %q, want no readiness or success output", stdout.String())
+	}
+	if got := strings.TrimSpace(stderr.String()); strings.Count(got, "\n") != 0 {
+		t.Fatalf("server bind-failure stderr = %q, want exactly one diagnostic line", got)
+	}
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stderr.String())), &response); err != nil {
+		t.Fatalf("server bind-failure stderr is not one ErrorResponse: %v\n%s", err, stderr.String())
+	}
+	if response.Code != factoryapi.ErrorResponseCode("SERVER_BIND_FAILED") {
+		t.Fatalf("server bind-failure response = %#v, want SERVER_BIND_FAILED", response)
+	}
 }
 
 func waitForListenerRelease(t *testing.T, address string) {

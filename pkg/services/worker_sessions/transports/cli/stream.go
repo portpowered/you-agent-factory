@@ -178,7 +178,7 @@ func consumeStreamPayload(config StreamConfig, jsonOutput, started bool, payload
 	}
 	started = true
 	if err := writeStreamFrame(config.Output, jsonOutput, frame); err != nil {
-		return started, false, err
+		return started, false, newCLIError("WORKER_SESSION_STREAM_FAILED", "failed to write Worker Session event stream", err)
 	}
 	if frame.Delivery == "REPLAY_SUMMARY" {
 		if frame.ReplaySummary == nil {
@@ -412,15 +412,26 @@ func stringValue(value *string, fallback string) string {
 }
 
 func emitStreamCLIError(config StreamConfig, jsonOutput bool, err error) error {
-	if !jsonOutput || err == nil || config.Output == nil {
+	if !jsonOutput || err == nil {
+		return err
+	}
+	output := config.Output
+	centralDiagnostics := clidiag.CentralDiagnosticsEnabled(config.Context)
+	if centralDiagnostics {
+		output = config.Diagnostics
+	}
+	if output == nil {
 		return err
 	}
 	payload := struct {
 		Code    string `json:"code"`
 		Message string `json:"message"`
 	}{Code: cliErrorCode(err), Message: cliErrorMessage(err)}
-	if encodeErr := json.NewEncoder(config.Output).Encode(payload); encodeErr != nil {
+	if encodeErr := json.NewEncoder(output).Encode(payload); encodeErr != nil {
 		return errors.Join(err, encodeErr)
+	}
+	if centralDiagnostics {
+		clidiag.MarkDiagnosticRendered(output)
 	}
 	return err
 }
