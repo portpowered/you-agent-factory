@@ -385,6 +385,173 @@ func TestInvokeAndCancelIsolationBetweenMultipleStartedTargets(t *testing.T) {
 	}
 }
 
+// TestBTRCP0ConcurrentTargetCancellationIsolationCharacterization freezes the
+// concurrent target boundary: canceling one active target publishes exactly
+// one canceled result and replaces only that target's runtime while a second
+// target continues its blocked invocation to completion. Repeated cancel and
+// close controls must not replay terminal work or cleanup effects.
+func TestBTRCP0ConcurrentTargetCancellationIsolationCharacterization(t *testing.T) {
+	firstStarted := make(chan struct{})
+	secondStarted := make(chan struct{})
+	secondRelease := make(chan struct{})
+	firstSessions := &fakeSessions{invoke: func(ctx context.Context, _ string, _ factorysessions.InvocationRequest) (factorysessions.InvocationResult, error) {
+		close(firstStarted)
+		<-ctx.Done()
+		return factorysessions.InvocationResult{}, ctx.Err()
+	}}
+	secondSessions := &fakeSessions{invoke: func(ctx context.Context, _ string, request factorysessions.InvocationRequest) (factorysessions.InvocationResult, error) {
+		close(secondStarted)
+		select {
+		case <-secondRelease:
+			result := factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusCompleted}
+			if request.RequestID != nil {
+				result.RequestID = *request.RequestID
+			}
+			return result, nil
+		case <-ctx.Done():
+			return factorysessions.InvocationResult{}, ctx.Err()
+		}
+	}}
+	replacementSessions := &fakeSessions{invokeResult: factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusCompleted}}
+	firstLifecycle := &fakeLifecycle{}
+	secondLifecycle := &fakeLifecycle{}
+	replacementLifecycle := &fakeLifecycle{}
+	firstArtifactsClosed := 0
+	secondArtifactsClosed := 0
+	replacementArtifactsClosed := 0
+	opener := &sequencedOpener{results: []openResult{
+		{opened: roles.OpenedInvocationRuntime{
+			Sessions: firstSessions, Lifecycle: firstLifecycle,
+			CloseArtifacts: func() error { firstArtifactsClosed++; return nil },
+		}},
+		{opened: roles.OpenedInvocationRuntime{
+			Sessions: secondSessions, Lifecycle: secondLifecycle,
+			CloseArtifacts: func() error { secondArtifactsClosed++; return nil },
+		}},
+		{opened: roles.OpenedInvocationRuntime{
+			Sessions: replacementSessions, Lifecycle: replacementLifecycle,
+			CloseArtifacts: func() error { replacementArtifactsClosed++; return nil },
+		}},
+	}}
+	svc := newTestService(t, opener, func(context.Context, string, string) (factorysessions.RuntimeOpeningRequest, error) {
+		return factorysessions.RuntimeOpeningRequest{}, nil
+	}, sequentialIDs("wrapper"))
+
+	first, err := svc.StartAsync(t.Context(), factorysessions.StartRequest{
+		Source: factorysessions.Source{FactoryID: "@you/first"},
+	})
+	if err != nil {
+		t.Fatalf("StartAsync(first) error = %v", err)
+	}
+	second, err := svc.StartAsync(t.Context(), factorysessions.StartRequest{
+		Source: factorysessions.Source{FactoryID: "@you/second"},
+	})
+	if err != nil {
+		t.Fatalf("StartAsync(second) error = %v", err)
+	}
+
+	firstRequestID := "invoke-first"
+	secondRequestID := "invoke-second"
+	type invocationOutcome struct {
+		result factorysessions.InvocationResult
+		err    error
+	}
+	firstDone := make(chan invocationOutcome, 1)
+	secondDone := make(chan invocationOutcome, 1)
+	go func() {
+		result, invokeErr := svc.InvokeFactorySession(t.Context(), first.SessionID, factorysessions.InvocationRequest{RequestID: &firstRequestID})
+		firstDone <- invocationOutcome{result: result, err: invokeErr}
+	}()
+	go func() {
+		result, invokeErr := svc.InvokeFactorySession(t.Context(), second.SessionID, factorysessions.InvocationRequest{RequestID: &secondRequestID})
+		secondDone <- invocationOutcome{result: result, err: invokeErr}
+	}()
+	select {
+	case <-firstStarted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for first target invocation")
+	}
+	select {
+	case <-secondStarted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for second target invocation")
+	}
+
+	canceled, err := svc.Cancel(t.Context(), first.SessionID, factorysessions.ControlRequest{RequestID: "cancel-first"})
+	if err != nil {
+		t.Fatalf("Cancel(first) error = %v", err)
+	}
+	if canceled.SessionID != first.SessionID || canceled.Outcome != factorysessions.LifecycleControlOutcomeAccepted || canceled.Status != factorysessions.LifecycleStatusRunning {
+		t.Fatalf("Cancel(first) result = %+v, want ACCEPTED/RUNNING for first target", canceled)
+	}
+	select {
+	case outcome := <-secondDone:
+		t.Fatalf("second target terminalized during first cancellation = %+v, want it still blocked", outcome)
+	default:
+	}
+	if secondLifecycle.stopCalls != 0 || len(secondSessions.closeCalls) != 0 || secondArtifactsClosed != 0 {
+		t.Fatalf("second target cleanup during first cancellation = lifecycle:%d session:%d artifacts:%d, want all zero", secondLifecycle.stopCalls, len(secondSessions.closeCalls), secondArtifactsClosed)
+	}
+
+	repeatedCancel, err := svc.Cancel(t.Context(), first.SessionID, factorysessions.ControlRequest{RequestID: "cancel-first"})
+	if err != nil {
+		t.Fatalf("repeated Cancel(first) error = %v", err)
+	}
+	if repeatedCancel.SessionID != first.SessionID || repeatedCancel.Outcome != factorysessions.LifecycleControlOutcomeNoOp {
+		t.Fatalf("repeated Cancel(first) result = %+v, want a no-op on the replacement runtime", repeatedCancel)
+	}
+	if replacementLifecycle.stopCalls != 0 || replacementArtifactsClosed != 0 {
+		t.Fatalf("replacement cleanup after repeated cancel = lifecycle:%d artifacts:%d, want all zero", replacementLifecycle.stopCalls, replacementArtifactsClosed)
+	}
+
+	close(secondRelease)
+	var firstOutcome, secondOutcome invocationOutcome
+	select {
+	case firstOutcome = <-firstDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for canceled first target result")
+	}
+	select {
+	case secondOutcome = <-secondDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for completed second target result")
+	}
+	if firstOutcome.err != nil || firstOutcome.result.Status != factorysessions.InvocationTerminalStatusCanceled || firstOutcome.result.ErrorCode != string(factorysessions.InvocationErrorCodeCanceled) || firstOutcome.result.RequestID != firstRequestID || firstOutcome.result.SessionID != first.SessionID {
+		t.Fatalf("first invocation outcome = (%+v, %v), want one canceled result scoped to first", firstOutcome.result, firstOutcome.err)
+	}
+	if secondOutcome.err != nil || secondOutcome.result.Status != factorysessions.InvocationTerminalStatusCompleted || secondOutcome.result.RequestID != secondRequestID || secondOutcome.result.SessionID != second.SessionID {
+		t.Fatalf("second invocation outcome = (%+v, %v), want one completed result scoped to second", secondOutcome.result, secondOutcome.err)
+	}
+	if firstLifecycle.stopCalls != 1 || firstArtifactsClosed != 1 || len(firstSessions.closeCalls) != 1 {
+		t.Fatalf("first canceled runtime cleanup = lifecycle:%d session:%d artifacts:%d, want exactly one each", firstLifecycle.stopCalls, len(firstSessions.closeCalls), firstArtifactsClosed)
+	}
+
+	if err := svc.CloseFactorySession(t.Context(), first.SessionID); err != nil {
+		t.Fatalf("CloseFactorySession(first) error = %v", err)
+	}
+	if err := svc.CloseFactorySession(t.Context(), first.SessionID); err != nil {
+		t.Fatalf("repeated CloseFactorySession(first) error = %v", err)
+	}
+	if err := svc.CloseFactorySession(t.Context(), second.SessionID); err != nil {
+		t.Fatalf("CloseFactorySession(second) error = %v", err)
+	}
+	if err := svc.CloseFactorySession(t.Context(), second.SessionID); err != nil {
+		t.Fatalf("repeated CloseFactorySession(second) error = %v", err)
+	}
+	if replacementLifecycle.stopCalls != 1 || replacementArtifactsClosed != 1 || len(replacementSessions.closeCalls) != 1 {
+		t.Fatalf("replacement runtime cleanup = lifecycle:%d session:%d artifacts:%d, want exactly one each", replacementLifecycle.stopCalls, len(replacementSessions.closeCalls), replacementArtifactsClosed)
+	}
+	if secondLifecycle.stopCalls != 1 || secondArtifactsClosed != 1 || len(secondSessions.closeCalls) != 1 {
+		t.Fatalf("second runtime cleanup = lifecycle:%d session:%d artifacts:%d, want exactly one each", secondLifecycle.stopCalls, len(secondSessions.closeCalls), secondArtifactsClosed)
+	}
+	if len(firstSessions.invokeCalls) != 1 || len(secondSessions.invokeCalls) != 1 || len(replacementSessions.invokeCalls) != 0 {
+		t.Fatalf("target invocation calls = first:%v second:%v replacement:%v, want one/original one/none", firstSessions.invokeCalls, secondSessions.invokeCalls, replacementSessions.invokeCalls)
+	}
+	if len(opener.calls) != 3 {
+		t.Fatalf("OpenInvocationRuntime calls = %d, want first, second, and first replacement only", len(opener.calls))
+	}
+}
+
 // TestCloseFactorySessionTearsDownAndEvicts proves a close call tears down
 // the cached runtime and evicts it, so a later call against the same
 // identity reports ErrSessionNotFound instead of reusing a torn-down runtime.
