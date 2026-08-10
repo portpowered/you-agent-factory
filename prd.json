@@ -67,8 +67,8 @@
         "Tests pass"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Extended the session-scoped Webhooks subscriber to match canonical dispatch failures without introducing a synthetic event: DISPATCH_RESPONSE outcome FAILED, DISPATCH_RECONCILED reconciledStatus FAILED, and DISPATCH_INTERRUPTED observedStatus INTERRUPTED. Dispatch status filters are honored, omitted status filters select only the event type's failure status, successful/unrelated events are omitted, and original canonical envelopes are delivered unchanged. Added local HTTP receiver coverage for all three failure event types, status filtering, nonmatching successes, event identity/type/payload preservation, and default failure selection. Focused, race, lifecycle/wire, structure, and full short Go tests pass."
     },
     {
       "id": "e3-event-webhooks-004",

@@ -133,7 +133,7 @@ func (service *Service) runEndpoint(
 		outcome := subscribed.Subscription.Next(ctx)
 		switch outcome.Kind {
 		case recordings.SubscriptionEvent:
-			if !matchesWorkStateFilter(definition, outcome.Event) {
+			if !matchesEventFilter(definition, outcome.Event) {
 				continue
 			}
 			service.deliver(ctx, definition, outcome.Event, secret, policy.RequestTimeout)
@@ -146,15 +146,62 @@ func (service *Service) runEndpoint(
 	}
 }
 
-func matchesWorkStateFilter(
+func matchesEventFilter(
 	definition factorydefinitions.FactoryWebhookConfig,
 	event recordings.CanonicalEvent,
 ) bool {
-	if event.Kind != recordings.CanonicalEventKind(factorydefinitions.FactoryWebhookEventTypeWorkStateChange) {
+	switch event.Kind {
+	case recordings.CanonicalEventKind(factorydefinitions.FactoryWebhookEventTypeWorkStateChange):
+		return containsWebhookValue(definition.Filter.EventTypes, string(event.Kind))
+	case recordings.CanonicalEventKind(factorydefinitions.FactoryWebhookEventTypeDispatchResponse):
+		return matchesDispatchFailureFilter(definition, event, "outcome", factorydefinitions.FactoryWebhookDispatchStatusFailed)
+	case recordings.CanonicalEventKind(factorydefinitions.FactoryWebhookEventTypeDispatchReconciled):
+		return matchesDispatchFailureFilter(definition, event, "reconciledStatus", factorydefinitions.FactoryWebhookDispatchStatusFailed)
+	case recordings.CanonicalEventKind(factorydefinitions.FactoryWebhookEventTypeDispatchInterrupted):
+		return matchesDispatchFailureFilter(definition, event, "observedStatus", factorydefinitions.FactoryWebhookDispatchStatusInterrupted)
+	default:
 		return false
 	}
-	for _, eventType := range definition.Filter.EventTypes {
-		if eventType == factorydefinitions.FactoryWebhookEventTypeWorkStateChange {
+}
+
+func matchesDispatchFailureFilter(
+	definition factorydefinitions.FactoryWebhookConfig,
+	event recordings.CanonicalEvent,
+	statusField string,
+	expectedStatus string,
+) bool {
+	if !containsWebhookValue(definition.Filter.EventTypes, string(event.Kind)) {
+		return false
+	}
+	status, ok := canonicalDispatchStatus(event.Payload, statusField)
+	if !ok || status != expectedStatus {
+		return false
+	}
+	if len(definition.Filter.DispatchStatuses) == 0 {
+		return true
+	}
+	return containsWebhookValue(definition.Filter.DispatchStatuses, status)
+}
+
+func canonicalDispatchStatus(payload, field string) (string, bool) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(payload), &fields); err != nil {
+		return "", false
+	}
+	value, ok := fields[field]
+	if !ok {
+		return "", false
+	}
+	var status string
+	if err := json.Unmarshal(value, &status); err != nil {
+		return "", false
+	}
+	return status, true
+}
+
+func containsWebhookValue(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
 			return true
 		}
 	}

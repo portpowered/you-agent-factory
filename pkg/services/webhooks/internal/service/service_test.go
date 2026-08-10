@@ -159,6 +159,138 @@ func TestServiceEvaluatesEnabledEndpointFiltersIndependently(t *testing.T) {
 	}
 }
 
+func TestServiceDeliversOnlyMatchingCanonicalDispatchFailures(t *testing.T) {
+	root := newRecordingRootStub()
+	received := make(chan receivedRequest, 8)
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		body, err := io.ReadAll(request.Body)
+		if err != nil {
+			t.Errorf("read request body: %v", err)
+		}
+		received <- receivedRequest{body: body, headers: request.Header.Clone()}
+		writer.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	service := New(http.DefaultClient, testSecretResolver, platformclock.Real{}, logging.NoopLogger{})
+	subscription, err := service.Start(context.Background(), webhooks.StartRequest{
+		Definitions: []factorydefinitions.FactoryWebhookConfig{{
+			Name:             "dispatch-failures",
+			Enabled:          true,
+			URL:              server.URL,
+			SigningSecretRef: "secrets/dispatch-failures",
+			Filter: factorydefinitions.FactoryWebhookFilterConfig{
+				EventTypes: []string{
+					factorydefinitions.FactoryWebhookEventTypeDispatchResponse,
+					factorydefinitions.FactoryWebhookEventTypeDispatchReconciled,
+					factorydefinitions.FactoryWebhookEventTypeDispatchInterrupted,
+				},
+				DispatchStatuses: []string{
+					factorydefinitions.FactoryWebhookDispatchStatusFailed,
+					factorydefinitions.FactoryWebhookDispatchStatusInterrupted,
+				},
+			},
+		}},
+		Events:        root,
+		RuntimeSource: testLoadedFactorySource{},
+	})
+	if err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	defer subscription(context.Background())
+	waitForSubscriptions(t, root, 1)
+
+	matchingResponse := testDispatchEvent(t, "dispatch-response-failed", factorydefinitions.FactoryWebhookEventTypeDispatchResponse, `{"outcome":"FAILED","transitionId":"execute"}`)
+	nonMatchingResponse := testDispatchEvent(t, "dispatch-response-success", factorydefinitions.FactoryWebhookEventTypeDispatchResponse, `{"outcome":"ACCEPTED","transitionId":"execute"}`)
+	matchingReconciled := testDispatchEvent(t, "dispatch-reconciled-failed", factorydefinitions.FactoryWebhookEventTypeDispatchReconciled, `{"reconciledStatus":"FAILED","reconciliationSource":"RUNTIME_RECONCILER"}`)
+	nonMatchingReconciled := testDispatchEvent(t, "dispatch-reconciled-completed", factorydefinitions.FactoryWebhookEventTypeDispatchReconciled, `{"reconciledStatus":"COMPLETED","reconciliationSource":"RUNTIME_RECONCILER"}`)
+	matchingInterrupted := testDispatchEvent(t, "dispatch-interrupted", factorydefinitions.FactoryWebhookEventTypeDispatchInterrupted, `{"observedStatus":"INTERRUPTED","reason":"operator stop"}`)
+	nonMatchingInterrupted := testDispatchEvent(t, "dispatch-interrupted-failed", factorydefinitions.FactoryWebhookEventTypeDispatchInterrupted, `{"observedStatus":"FAILED","reason":"provider failure"}`)
+	for _, event := range []recordings.CanonicalEvent{
+		matchingResponse,
+		nonMatchingResponse,
+		matchingReconciled,
+		nonMatchingReconciled,
+		matchingInterrupted,
+		nonMatchingInterrupted,
+		testWorkEvent(t),
+	} {
+		root.Publish(recordings.SubscriptionOutcome{Kind: recordings.SubscriptionEvent, Event: event})
+	}
+
+	seen := make(map[string]bool, 3)
+	for index := 0; index < 3; index++ {
+		request := receiveRequest(t, received)
+		var envelope factorydefinitions.FactoryEvent
+		if err := json.Unmarshal(request.body, &envelope); err != nil {
+			t.Fatalf("decode delivered Factory Event: %v", err)
+		}
+		seen[envelope.Id] = true
+		if envelope.Id == string(nonMatchingResponse.ID) || envelope.Id == string(nonMatchingReconciled.ID) || envelope.Id == string(nonMatchingInterrupted.ID) {
+			t.Fatalf("delivered nonmatching dispatch event %q: %s", envelope.Id, request.body)
+		}
+		if envelope.Type == factorydefinitions.FactoryEventTypeDispatchResponse && !bytes.Equal(envelope.Payload, []byte(matchingResponse.Payload)) {
+			t.Fatalf("response payload = %s, want canonical payload %s", envelope.Payload, matchingResponse.Payload)
+		}
+	}
+	for _, id := range []string{string(matchingResponse.ID), string(matchingReconciled.ID), string(matchingInterrupted.ID)} {
+		if !seen[id] {
+			t.Fatalf("matching dispatch event %q was not delivered; seen=%v", id, seen)
+		}
+	}
+	select {
+	case request := <-received:
+		t.Fatalf("received unexpected extra dispatch event: %s", request.body)
+	case <-time.After(100 * time.Millisecond):
+	}
+}
+
+func TestServiceDefaultsDispatchSelectionToFailureStatus(t *testing.T) {
+	root := newRecordingRootStub()
+	received := make(chan receivedRequest, 2)
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		body, _ := io.ReadAll(request.Body)
+		received <- receivedRequest{body: body, headers: request.Header.Clone()}
+		writer.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	service := New(http.DefaultClient, testSecretResolver, platformclock.Real{}, logging.NoopLogger{})
+	subscription, err := service.Start(context.Background(), webhooks.StartRequest{
+		Definitions: []factorydefinitions.FactoryWebhookConfig{{
+			Name:    "response-failures",
+			Enabled: true,
+			URL:     server.URL,
+			Filter: factorydefinitions.FactoryWebhookFilterConfig{
+				EventTypes: []string{factorydefinitions.FactoryWebhookEventTypeDispatchResponse},
+			},
+		}},
+		Events:        root,
+		RuntimeSource: testLoadedFactorySource{},
+	})
+	if err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	defer subscription(context.Background())
+	waitForSubscriptions(t, root, 1)
+	failed := testDispatchEvent(t, "default-filter-failed", factorydefinitions.FactoryWebhookEventTypeDispatchResponse, `{"outcome":"FAILED"}`)
+	root.Publish(recordings.SubscriptionOutcome{Kind: recordings.SubscriptionEvent, Event: failed})
+	root.Publish(recordings.SubscriptionOutcome{Kind: recordings.SubscriptionEvent, Event: testDispatchEvent(t, "default-filter-success", factorydefinitions.FactoryWebhookEventTypeDispatchResponse, `{"outcome":"ACCEPTED"}`)})
+	request := receiveRequest(t, received)
+	var envelope factorydefinitions.FactoryEvent
+	if err := json.Unmarshal(request.body, &envelope); err != nil {
+		t.Fatalf("decode delivered Factory Event: %v", err)
+	}
+	if envelope.Id != string(failed.ID) || envelope.Type != factorydefinitions.FactoryEventTypeDispatchResponse {
+		t.Fatalf("delivered envelope = %#v, want failed response %q", envelope, failed.ID)
+	}
+	select {
+	case request := <-received:
+		t.Fatalf("successful dispatch response was delivered: %s", request.body)
+	case <-time.After(100 * time.Millisecond):
+	}
+}
+
 func TestServiceDoesNotResolveOrSubscribeDisabledEndpoint(t *testing.T) {
 	root := newRecordingRootStub()
 	var resolved int
@@ -318,6 +450,15 @@ func testWorkEvent(t *testing.T) recordings.CanonicalEvent {
 		Payload:       `{"workId":"work-1","fromState":"queued","toState":"done"}`,
 		SourceContext: string(encoded),
 	}
+}
+
+func testDispatchEvent(t *testing.T, id string, kind string, payload string) recordings.CanonicalEvent {
+	t.Helper()
+	event := testWorkEvent(t)
+	event.ID = recordings.CanonicalEventID(id)
+	event.Kind = recordings.CanonicalEventKind(kind)
+	event.Payload = payload
+	return event
 }
 
 type receivedRequest struct {

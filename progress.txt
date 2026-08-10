@@ -7758,6 +7758,31 @@
  - Final webhook handoff requires checking the historical feedback against the latest implementation, then verifying exact head/base, terminal required checks, thread state, and PRD/body synchronization together.
 ---
 
+## 2026-08-10 05:43 -07:00 - e3-event-webhooks-003
+- What was implemented
+  - Extended the Webhooks subscriber beyond Work transitions to select canonical dispatch failures from the existing event stream.
+  - Matched `DISPATCH_RESPONSE` only when `payload.outcome` is `FAILED`, `DISPATCH_RECONCILED` only when `payload.reconciledStatus` is `FAILED`, and `DISPATCH_INTERRUPTED` only when `payload.observedStatus` is `INTERRUPTED`.
+  - Honored endpoint event-type and dispatch-status filters, defaulting an omitted status list to the event type's only failure status; successful dispatches, unrelated events, and incompatible statuses remain omitted.
+  - Kept delivery on the original canonical Factory Event envelope and preserved the original event ID/type/payload rather than synthesizing `DISPATCH_FAILURE`.
+  - Added local `httptest` receiver coverage for all matching and nonmatching dispatch cases plus default failure selection.
+- Files changed
+  - `pkg/services/webhooks/internal/service/service.go`
+  - `pkg/services/webhooks/internal/service/service_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/webhooks/... -count=1 -timeout 120s` — passed.
+  - `go test -race ./pkg/services/webhooks/internal/service -count=1 -timeout 120s` — passed.
+  - `go vet ./pkg/services/webhooks/...` — passed.
+  - `go test ./pkg/services/factory_sessions/internal/runtimeopening ./pkg/services/factory_sessions/wire ./pkg/wire ./pkg/services/edges -count=1 -timeout 180s` — passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure` — passed.
+  - `make test` — passed.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - Existing dispatch failure semantics are already encoded in the canonical payload fields; the webhook layer should classify them at the subscription boundary and leave Recordings and Factory Runtime unchanged.
+  - The optional dispatch-status filter is most useful as a narrowing selector: event-type subscriptions still deliver only their canonical failure status when the list is omitted, while explicit statuses further restrict delivery.
+---
+
 ## 2026-08-10 08:42 -07:00 - e3-event-webhooks-004 unit coverage follow-up
 - What was implemented
   - Added unit coverage for durable filesystem appender validation, directory-creation failure, open failure, Linux write failure, and Linux sync failure paths so the new platform adapter preserves the existing `pkg/platform/filesystem` unit coverage floor.
