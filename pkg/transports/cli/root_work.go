@@ -3,6 +3,7 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"io"
 	"path/filepath"
 	"strings"
 
@@ -441,7 +442,7 @@ func executeRunCommand(cmd *cobra.Command, args []string, globals *cliGlobalOpti
 		if len(promptArgs) > 0 {
 			err = runcli.MapInvocationFailure(err)
 		}
-		if !clidiag.CentralDiagnosticsEnabled(cmd.Context()) && runcli.WriteIncompleteDrainError(cmd.ErrOrStderr(), err) {
+		if writeRunIncompleteDrainError(cmd, err) {
 			return err
 		}
 		if runcli.WriteInvocationError(cmd.ErrOrStderr(), err, globals.json) {
@@ -452,11 +453,25 @@ func executeRunCommand(cmd *cobra.Command, args []string, globals *cliGlobalOpti
 		if errors.As(err, &ambiguousInputErr) {
 			errorWriter = cmd.ErrOrStderr()
 		}
-		if errorWriter != nil && !clidiag.CentralDiagnosticsEnabled(cmd.Context()) {
-			_, _ = fmt.Fprintln(errorWriter, err)
+		if errorWriter != nil {
+			writeRunHumanError(cmd, errorWriter, err)
 		}
 	}
 	return err
+}
+
+func writeRunIncompleteDrainError(cmd *cobra.Command, err error) bool {
+	if clidiag.CentralDiagnosticsEnabled(cmd.Context()) {
+		return false
+	}
+	return runcli.WriteIncompleteDrainError(cmd.ErrOrStderr(), err)
+}
+
+func writeRunHumanError(cmd *cobra.Command, output io.Writer, err error) {
+	if clidiag.CentralDiagnosticsEnabled(cmd.Context()) {
+		return
+	}
+	_, _ = fmt.Fprintln(output, err)
 }
 
 func applyRunScopedServerMode(cfg runcli.RunConfig) runcli.RunConfig {
