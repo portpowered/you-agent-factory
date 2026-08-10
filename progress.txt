@@ -2039,3 +2039,23 @@
   - When broad functional coverage fails in an unchanged concurrency-sensitive test, isolate and repeat the exact test before changing feature code; a clean repetition plus a failed-job rerun can establish a transient suite failure.
   - When comparing multiline GitHub CLI output in PowerShell, join captured output lines before comparing it with a file; array `.Length` reports line count rather than character count.
 ---
+
+## 2026-08-10 12:53 -07:00 - dwro-s1-remote-placement-flags final handoff audit
+- What was implemented
+  - Re-read `prd.json` and `progress.txt` and confirmed all four S1 stories remain marked `passes: true`; no product-code change was needed in this verification-only iteration.
+  - Re-ran the thread-aware PR audit for PR #1852. The historical blocking gate comments are addressed by the existing commits; there are no inline review threads, submitted reviews, or newer unresolved feedback.
+  - Confirmed the open PR is clean and mergeable, all reported checks are passing, and its description is synchronized with `prd.json`.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `gh auth status` — passed.
+  - Bundled `fetch_comments.py` review audit — no review threads or submitted reviews.
+  - `gh pr checks 1852` — all 18 reported checks passed on head `fd8b29593e79e895ad3fb176e29bea40c0391f2c`.
+  - `gh pr view 1852` — PR open, `MERGEABLE`, clean merge state; body matches `prd.json`.
+  - PRD JSON validation — all user stories pass.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - Thread-aware review state is separate from historical top-level gate comments; only current unresolved threads should block final handoff.
+  - Compare multiline PR descriptions from one parsed `gh pr view --json body` string; line-oriented PowerShell capture can make an otherwise identical body appear different.
+  - When a story is already complete and the PR is fully verified, preserve the task-owned `prd.json` and append only the verification record to the progress log.
+---
