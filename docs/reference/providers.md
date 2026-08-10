@@ -1,6 +1,6 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-07-29
+last-modified: 2026-08-09
 doc-id: agent-factory/guides/providers
 ---
 
@@ -46,6 +46,48 @@ you workers list
 `selectable` means the identity is present in the Providers catalog. The
 definitive readiness check is a small `you run`, because the agent executable,
 authentication, and negotiated ACP session are checked when execution starts.
+
+## Discover provider capabilities before execution
+
+Use the side-effect-free provider inventory before choosing a provider or
+model:
+
+```bash
+you providers list
+you providers list --json
+```
+
+The command reports the same catalog facts in both formats. Each provider entry
+has:
+
+| Field | Meaning |
+| --- | --- |
+| `id`, display name, and aliases | The canonical identity accepted by worker and run configuration. |
+| `availability`, `readiness`, and `prerequisites` | Whether the provider is selectable and which sanitized authentication, executable, configuration, or workspace facts affect readiness. |
+| `models` and `efforts` | Supported model IDs and the effort values accepted for each model. |
+| `modalities` | Directional input/output support, including the transport such as `inline`, `file_path`, or `none`. Unsupported values are explicit. |
+| `tools` | Named tools and whether the provider advertises them as supported. |
+| `knownLimits` | Named behavior, default, or maximum constraints with typed values such as seconds, paths, and flags. |
+
+The current first-party entries make several preflight constraints explicit:
+
+- Codex `gpt-5.6` supports text and image input but marks audio and video
+  understanding as unsupported. Image generation accepts at most five
+  `referenced_image_paths`.
+- `antigravity` is the AGY provider. Its catalog includes
+  `claude-opus-4-6-thinking`, `claude-sonnet-4-6`, the Gemini 3.1/3.5/3.6
+  variants, and `gpt-oss-120b-medium`, with `low`, `medium`, and `high`
+  efforts. Audio and video inputs use `file_path` transport. Its named limits
+  expose workspace extension through `--add-dir` and a five-minute default
+  `print_timeout` (300 seconds).
+- Claude and any configured ACP identity use the same field shape. Empty model,
+  tool, or limit arrays are reported explicitly, so missing metadata is not
+  mistaken for support.
+
+`you providers list` reads the authored catalog and does not launch a provider,
+open a network session, or negotiate ACP. Treat the command output as the
+preflight authority, then use `you run` to verify an installed executable,
+authentication, and provider-specific session behavior.
 
 ## Add a custom ACP integration
 

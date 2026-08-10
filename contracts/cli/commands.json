@@ -11279,7 +11279,6 @@
           "kind": "usage"
         }
       },
-      "sideEffects": {},
       "constraints": {
         "runtime": [
           "local"

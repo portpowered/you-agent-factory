@@ -10951,6 +10951,349 @@
         "operationId": "pullModel"
       }
     },
+    "you.providers": {
+      "id": "you.providers",
+      "name": "providers",
+      "path": "you providers",
+      "aliases": [],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.providers",
+        "documentation": {
+          "title": {
+            "id": "you.providers.title",
+            "canonicalEnglish": "Discover provider capabilities"
+          },
+          "description": {
+            "id": "you.providers.description",
+            "canonicalEnglish": "Inspect the authored provider capability catalog before execution. Use `you providers list` to compare provider identity, availability, prerequisites, models, efforts, modalities, tools, and known limits without making a live provider call."
+          }
+        },
+        "examples": [
+          "you providers list",
+          "you --json providers list"
+        ],
+        "visibility": "public",
+        "sourceHash": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.providers",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "visibility": "visible",
+      "runnable": false,
+      "usage": {
+        "line": "providers",
+        "example": "  # Discover provider capabilities without executing a provider.\n  you providers list\n\n  # Emit the same catalog facts as structured JSON.\n  you --json providers list"
+      },
+      "flags": {
+        "you.providers.flag.debug": {
+          "id": "you.providers.flag.debug",
+          "long": "debug",
+          "shorthand": "d",
+          "aliases": [],
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.providers.flag.debug",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.providers.flag.json": {
+          "id": "you.providers.flag.json",
+          "long": "json",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.providers.flag.json",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.providers.flag.server": {
+          "id": "you.providers.flag.server",
+          "long": "server",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
+          "valueType": "string",
+          "required": false,
+          "default": "http://localhost:7437",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.providers.flag.server",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.providers.flag.verbose": {
+          "id": "you.providers.flag.verbose",
+          "long": "verbose",
+          "shorthand": "v",
+          "aliases": [],
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.providers.flag.verbose",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        }
+      }
+    },
+    "you.providers.list": {
+      "id": "you.providers.list",
+      "name": "list",
+      "path": "you providers list",
+      "aliases": [],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.providers.list",
+        "documentation": {
+          "title": {
+            "id": "you.providers.list.title",
+            "canonicalEnglish": "List provider capabilities"
+          },
+          "description": {
+            "id": "you.providers.list.description",
+            "canonicalEnglish": "List every first-party provider exactly once in deterministic order. Each entry includes identity, availability and readiness, sanitized prerequisites, models and effort settings, directional input/output modalities, tools, and named known limits. Global `--json` keeps the same facts machine-readable; the command never executes a provider."
+          }
+        },
+        "examples": [
+          "you providers list",
+          "you providers list --json"
+        ],
+        "visibility": "public",
+        "sourceHash": "1111111111111111111111111111111111111111111111111111111111111111"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.providers.list",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "usage": {
+        "line": "list",
+        "example": "  # Compare provider capability facts before execution.\n  you providers list\n\n  # Emit the same catalog as JSON for preflight automation.\n  you providers list --json"
+      },
+      "flags": {
+        "you.providers.list.flag.debug": {
+          "id": "you.providers.list.flag.debug",
+          "long": "debug",
+          "shorthand": "d",
+          "aliases": [],
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.providers.list.flag.debug",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.providers.list.flag.json": {
+          "id": "you.providers.list.flag.json",
+          "long": "json",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.providers.list.flag.json",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.providers.list.flag.server": {
+          "id": "you.providers.list.flag.server",
+          "long": "server",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
+          "valueType": "string",
+          "required": false,
+          "default": "http://localhost:7437",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.providers.list.flag.server",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.providers.list.flag.verbose": {
+          "id": "you.providers.list.flag.verbose",
+          "long": "verbose",
+          "shorthand": "v",
+          "aliases": [],
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.providers.list.flag.verbose",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        }
+      },
+      "precedence": {
+        "order": [
+          "cli",
+          "stdin",
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
+      },
+      "channels": {
+        "input": [
+          "cli",
+          "env",
+          "config",
+          "stdin"
+        ],
+        "output": [
+          "stdout",
+          "stderr"
+        ]
+      },
+      "outputs": {
+        "you.providers.list.output.human": {
+          "id": "you.providers.list.output.human",
+          "channel": "stdout",
+          "format": "text"
+        },
+        "you.providers.list.output.json": {
+          "id": "you.providers.list.output.json",
+          "channel": "stdout",
+          "format": "json"
+        }
+      },
+      "exits": {
+        "you.providers.list.exit.success": {
+          "id": "you.providers.list.exit.success",
+          "code": 0,
+          "kind": "success"
+        },
+        "you.providers.list.exit.failure": {
+          "id": "you.providers.list.exit.failure",
+          "code": 1,
+          "kind": "failure"
+        },
+        "you.providers.list.exit.usage": {
+          "id": "you.providers.list.exit.usage",
+          "code": 1,
+          "kind": "usage"
+        }
+      },
+      "constraints": {
+        "runtime": [
+          "local"
+        ],
+        "platforms": [
+          "linux",
+          "darwin",
+          "windows"
+        ]
+      },
+      "handler": {
+        "id": "you.providers.list.handler",
+        "operationId": "listProviders"
+      }
+    },
     "you.run": {
       "id": "you.run",
       "name": "run",
