@@ -308,6 +308,33 @@ actionable deprecation warning directing scripts to `--listen`. `--server` is
 not a local listener selector for ordinary `you run`; ordinary runs remain
 serverless, and `--listen` requires `--with-server` or `--with-site`.
 
+## Remote placement and local hosting
+
+Use `--remote` when the operation should go through an already-running You
+server. Global `--server` selects that server's HTTP API URI; it does not
+choose a local bind for a listener-owning command:
+
+```bash
+you --remote --server <uri> run "Review the release notes"
+```
+
+Remote placement never starts a local runtime, listener, dashboard browser, or
+recording for the `run` command. `--remote` conflicts with `--with-server` and
+`--with-site`, because those flags ask the run to host its own local API or
+dashboard. The conflict returns the stable `REMOTE_LOCAL_HOSTING_CONFLICT`
+bad-request code. Remove `--remote` for local hosting, then use `--listen
+<host:port>` when the local bind must be exact:
+
+```bash
+you run --with-server --listen 127.0.0.1:7437 "Review the release notes"
+you run --with-site --listen 127.0.0.1:7437 "Review the release notes"
+```
+
+An explicit local `--server http://localhost:<port>` remains a warned legacy
+compatibility form. Migrate it to `--listen <host:port>` for `you server` and
+server-enabled local runs; use `--remote --server <uri>` when the endpoint is
+already running.
+
 ## Invocation output
 
 Supported one-shot `--factory` and `--named` invocations expose three stdout

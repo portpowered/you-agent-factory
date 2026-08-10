@@ -33,12 +33,15 @@ Examples:
   # Bind an exact local listener for a server-enabled run.
   you run --with-server --listen 127.0.0.1:7437
 
+  # Run a supported operation through an already-running server.
+  you --remote --server <uri> run "Review the release notes"
+
 Flags:
       --continuously                                                                 keep the factory alive while idle until cancelled
       --dir string                                                                   factory base directory (default "factory")
       --factory string                                                               path to a JSON or YAML Factory file, or an unambiguous Factory directory, for portable one-shot runs; use positional text, --to-file, or piped stdin for the invocation input
   -h, --help                                                                         help for run
-      --listen string                                                                exact local listener host:port for --with-server or --with-site (for example 127.0.0.1:7437); loopback hosts only
+      --listen string                                                                exact local listener host:port for local --with-server or --with-site (for example 127.0.0.1:7437); loopback hosts only; conflicts with --remote
       --model string                                                                 override the optional model selected within the provider for this run
   -a, --named string                                                                 canonical persisted factory name resolved from ./factory before ~/.you-agent-factory/factories; built-ins materialize there on first use and remain editable
       --no-record                                                                    disable the default replay artifact for this invocation
@@ -50,8 +53,8 @@ Flags:
       --skip-permissions                                                             request an invocation-only unsafe permission bypass for agent workers without changing persisted factory configuration
       --to-file string                                                               read one exact, logically non-empty UTF-8 primary prompt from a regular file for one-shot invocation; preserves spaces, Unicode, line endings, blank lines, and a trailing newline; strictly conflicts with signature-defined --to, positional input, and supplied non-empty stdin
       --with-mock-workers string[="__agent_factory_default_mock_workers_config__"]   enable mock-worker execution with an optional mock-workers JSON config path
-      --with-server                                                                  serve the Current Factory API for the lifetime of this run without opening a browser
-      --with-site                                                                    serve the embedded dashboard and open it once after listener readiness
+      --with-server                                                                  serve the Current Factory API locally for the lifetime of this run without opening a browser; conflicts with --remote
+      --with-site                                                                    serve the embedded dashboard locally and open it once after listener readiness; conflicts with --remote
       --work string                                                                  path to initial FACTORY_REQUEST_BATCH JSON file to submit
       --worker-reasoning-effort string                                               override the worker reasoning effort for applicable one-shot worker invocations; accepts canonical authored-Worker values minimal, low, medium, high, xhigh, or max with case and surrounding whitespace normalized; unsupported values fail before dispatch
       --worktree string                                                              create or reuse a Git worktree under the invocation working directory and execute this run in its checkout

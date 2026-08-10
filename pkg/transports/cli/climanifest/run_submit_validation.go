@@ -171,6 +171,8 @@ func validateRunInputPolicy(run Command) error {
 		"you.run.rel.quiet-json",
 		"you.run.rel.quiet-output",
 		"you.run.rel.listen-server",
+		"you.run.rel.remote-with-server",
+		"you.run.rel.remote-with-site",
 	} {
 		if _, ok := run.Relationships[relationshipID]; !ok {
 			return fmt.Errorf("command %q missing relationship %q", run.ID, relationshipID)

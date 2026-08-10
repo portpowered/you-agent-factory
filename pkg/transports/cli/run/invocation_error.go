@@ -18,6 +18,7 @@ const (
 	CurrentFactoryInvalidCode       = factoryruntimecli.CurrentFactoryInvalidCode
 	InvocationOutputConflictCode    = factoryruntimecli.InvocationOutputConflictCode
 	InvocationOutputUnsupportedCode = factoryruntimecli.InvocationOutputUnsupportedCode
+	RemoteLocalHostingConflictCode  = factoryruntimecli.RemoteLocalHostingConflictCode
 	ServerBindFailedCode            = factoryruntimecli.ServerBindFailedCode
 	InvocationOutputPrimaryResult   = factoryruntimecli.InvocationOutputPrimaryResult
 	InvocationOutputResponseStream  = factoryruntimecli.InvocationOutputResponseStream

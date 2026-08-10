@@ -19,6 +19,10 @@ func newRootCommandWithFactory(options CommandFactory) *cobra.Command {
 	}
 	previous := root.PersistentPreRunE
 	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		if err := validateRunRemoteHostingBeforeInitialization(cmd, args); err != nil {
+			_ = runcli.WriteInvocationError(cmd.ErrOrStderr(), err, false)
+			return err
+		}
 		if requiresSystemInitialization(cmd.CommandPath(), args) {
 			if options.initializer == nil {
 				return fmt.Errorf("system initializer is required")
@@ -37,6 +41,47 @@ func newRootCommandWithFactory(options CommandFactory) *cobra.Command {
 		return nil
 	}
 	return root
+}
+
+func validateRunRemoteHostingBeforeInitialization(cmd *cobra.Command, args []string) error {
+	if cmd == nil || cmd.CommandPath() != "you run" {
+		return nil
+	}
+	remote := runFlagEnabled(cmd, "remote") || rawRunFlagEnabled(args, "remote")
+	if !remote {
+		return nil
+	}
+	if !rawRunFlagEnabled(args, "with-server") && !rawRunFlagEnabled(args, "with-site") {
+		return nil
+	}
+	return newRunRemoteLocalHostingConflictError()
+}
+
+func runFlagEnabled(cmd *cobra.Command, name string) bool {
+	if cmd == nil {
+		return false
+	}
+	flag := cmd.Flag(name)
+	return flag != nil && flag.Changed && flag.Value != nil && flag.Value.String() == "true"
+}
+
+func rawRunFlagEnabled(args []string, name string) bool {
+	enabled := false
+	prefix := "--" + name
+	for _, arg := range args {
+		if arg == "--" {
+			break
+		}
+		switch arg {
+		case prefix:
+			enabled = true
+		case prefix + "=true":
+			enabled = true
+		case prefix + "=false":
+			enabled = false
+		}
+	}
+	return enabled
 }
 
 func requiresSystemInitialization(commandPath string, args []string) bool {

@@ -681,6 +681,16 @@ you --server http://localhost:9090 --json work list
 | `you run --with-server --listen <host:port>` / `--with-site` | Binds only for the run lifetime to the exact loopback host/port | N/A — starts a runtime |
 | Ordinary `you run` | Does not bind an HTTP listener | N/A — starts a runtime |
 
+For a server that is already running, use remote placement explicitly:
+
+```bash
+you --remote --server <uri> run "Review the release notes"
+```
+
+`--remote` selects the running API endpoint and never starts local hosting.
+It conflicts with `--with-server` and `--with-site`; use `--listen
+<host:port>` on those local server-enabled forms instead.
+
 When `--session` is omitted on submit and work commands, the CLI accepts the
 `~default` compatibility selector. A list row's `SESSION ID` may itself remain
 `~default`; use `runtime.streamIdentity.factorySessionId` from JSON list output

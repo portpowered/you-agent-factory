@@ -412,6 +412,10 @@ func executeRunCommand(cmd *cobra.Command, args []string, globals *cliGlobalOpti
 		_ = runcli.WriteInvocationError(cmd.ErrOrStderr(), err, globals.json)
 		return err
 	}
+	if err := validateRunRemoteHostingConflict(cmd, globals); err != nil {
+		_ = runcli.WriteInvocationError(cmd.ErrOrStderr(), err, globals.json)
+		return err
+	}
 	if err := applyRunCommandInvocationOutputMode(cmd, &resolvedConfig); err != nil {
 		_ = runcli.WriteInvocationError(cmd.ErrOrStderr(), err, globals.json)
 		return err
@@ -677,6 +681,31 @@ func validateRunListenPlacement(cmd *cobra.Command) error {
 		return nil
 	}
 	return fmt.Errorf("input relationship %q: --listen requires --with-server or --with-site", "you.run.rel.listen-server")
+}
+
+func validateRunRemoteHostingConflict(cmd *cobra.Command, globals *cliGlobalOptions) error {
+	if globals == nil || !globals.remote {
+		return nil
+	}
+	withServer, err := climanifestcobra.InputChanged(cmd, "you.run.flag.with-server")
+	if err != nil {
+		return err
+	}
+	withSite, err := climanifestcobra.InputChanged(cmd, "you.run.flag.with-site")
+	if err != nil {
+		return err
+	}
+	if !withServer && !withSite {
+		return nil
+	}
+	return newRunRemoteLocalHostingConflictError()
+}
+
+func newRunRemoteLocalHostingConflictError() error {
+	return &runcli.InvocationError{
+		Code:    runcli.RemoteLocalHostingConflictCode,
+		Message: "--remote selects a running server through --server and cannot be combined with --with-server or --with-site; remove --remote for local hosting and use --listen <host:port> to choose an exact local bind",
+	}
 }
 
 func productionWorkCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions, injected ...CommandFactory) *cobra.Command {

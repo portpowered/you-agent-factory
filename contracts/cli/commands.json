@@ -11966,6 +11966,7 @@
           }
         },
         "examples": [
+          "  # Run a supported operation through an already-running server.\n  you --remote --server <uri> run \"Review the release notes\"",
           "  # Start the current Factory with explicit Work.\n  you run --work ./docs/examples/startup-work.json\n\n  # Run an existing factory once in explicit batch mode.\n  you run --dir factory --work ./docs/examples/startup-work.json\n\n  # Run a persisted named factory from any working directory.\n  you run --named @you/tts --output primary \"Read the release summary.\"\n\n  # Run a portable JSON or YAML Factory with a one-shot prompt (see handlingBehavior DEFAULT).\n  you run --factory ./factory.yaml \"Fix the lint issues\"\n\n  # Pipe invocation input via stdin (default primary-result stdout).\n  echo \"Ship the login bugfix\" | you run --named @you/goal\n\n  # Opt into ordered canonical Factory Event progress instead of primary-result-only stdout.\n  you run --named @you/goal --output response-stream \"Ship the login bugfix\"\n\n  # Bind an exact local listener for a server-enabled run.\n  you run --with-server --listen 127.0.0.1:7437"
         ],
         "visibility": "public",
@@ -11982,7 +11983,7 @@
       "placement": "dual",
       "usage": {
         "line": "run",
-        "example": "  # Start the current Factory with explicit Work.\n  you run --work ./docs/examples/startup-work.json\n\n  # Run an existing factory once in explicit batch mode.\n  you run --dir factory --work ./docs/examples/startup-work.json\n\n  # Run a persisted named factory from any working directory.\n  you run --named @you/tts --output primary \"Read the release summary.\"\n\n  # Run a portable JSON or YAML Factory with a one-shot prompt (see handlingBehavior DEFAULT).\n  you run --factory ./factory.yaml \"Fix the lint issues\"\n\n  # Pipe invocation input via stdin (default primary-result stdout).\n  echo \"Ship the login bugfix\" | you run --named @you/goal\n\n  # Opt into ordered canonical Factory Event progress instead of primary-result-only stdout.\n  you run --named @you/goal --output response-stream \"Ship the login bugfix\"\n\n  # Bind an exact local listener for a server-enabled run.\n  you run --with-server --listen 127.0.0.1:7437"
+        "example": "  # Start the current Factory with explicit Work.\n  you run --work ./docs/examples/startup-work.json\n\n  # Run an existing factory once in explicit batch mode.\n  you run --dir factory --work ./docs/examples/startup-work.json\n\n  # Run a persisted named factory from any working directory.\n  you run --named @you/tts --output primary \"Read the release summary.\"\n\n  # Run a portable JSON or YAML Factory with a one-shot prompt (see handlingBehavior DEFAULT).\n  you run --factory ./factory.yaml \"Fix the lint issues\"\n\n  # Pipe invocation input via stdin (default primary-result stdout).\n  echo \"Ship the login bugfix\" | you run --named @you/goal\n\n  # Opt into ordered canonical Factory Event progress instead of primary-result-only stdout.\n  you run --named @you/goal --output response-stream \"Ship the login bugfix\"\n\n  # Bind an exact local listener for a server-enabled run.\n  you run --with-server --listen 127.0.0.1:7437\n\n  # Run a supported operation through an already-running server.\n  you --remote --server <uri> run \"Review the release notes\""
       },
       "arguments": {
         "you.run.arg.0": {
@@ -12177,7 +12178,7 @@
         "you.run.flag.listen": {
           "id": "you.run.flag.listen",
           "long": "listen",
-          "usage": "exact local listener host:port for --with-server or --with-site (for example 127.0.0.1:7437); loopback hosts only",
+          "usage": "exact local listener host:port for local --with-server or --with-site (for example 127.0.0.1:7437); loopback hosts only; conflicts with --remote",
           "shorthand": "",
           "aliases": [],
           "scope": "local",
@@ -12801,7 +12802,7 @@
         "you.run.flag.with-server": {
           "id": "you.run.flag.with-server",
           "long": "with-server",
-          "usage": "serve the Current Factory API for the lifetime of this run without opening a browser",
+          "usage": "serve the Current Factory API locally for the lifetime of this run without opening a browser; conflicts with --remote",
           "shorthand": "",
           "aliases": [],
           "scope": "local",
@@ -12825,7 +12826,7 @@
         "you.run.flag.with-site": {
           "id": "you.run.flag.with-site",
           "long": "with-site",
-          "usage": "serve the embedded dashboard and open it once after listener readiness",
+          "usage": "serve the embedded dashboard locally and open it once after listener readiness; conflicts with --remote",
           "shorthand": "",
           "aliases": [],
           "scope": "local",
@@ -13029,6 +13030,34 @@
               "id": "you.run.flag.with-server"
             }
           ]
+        },
+        "you.run.rel.remote-with-server": {
+          "id": "you.run.rel.remote-with-server",
+          "kind": "conflict",
+          "participants": [
+            {
+              "type": "flag",
+              "id": "you.run.flag.remote"
+            },
+            {
+              "type": "flag",
+              "id": "you.run.flag.with-server"
+            }
+          ]
+        },
+        "you.run.rel.remote-with-site": {
+          "id": "you.run.rel.remote-with-site",
+          "kind": "conflict",
+          "participants": [
+            {
+              "type": "flag",
+              "id": "you.run.flag.remote"
+            },
+            {
+              "type": "flag",
+              "id": "you.run.flag.with-site"
+            }
+          ]
         }
       },
       "precedence": {
@@ -13102,6 +13131,10 @@
           "id": "you.run.error.output-unsupported",
           "code": "INVOCATION_OUTPUT_UNSUPPORTED"
         },
+        "you.run.error.remote-local-hosting-conflict": {
+          "id": "you.run.error.remote-local-hosting-conflict",
+          "code": "REMOTE_LOCAL_HOSTING_CONFLICT"
+        },
         "you.run.error.server-bind-failed": {
           "id": "you.run.error.server-bind-failed",
           "code": "SERVER_BIND_FAILED"
@@ -13173,13 +13206,13 @@
           },
           "description": {
             "id": "you.server.description",
-            "canonicalEnglish": "Validate and serve the exact Current Factory from ./factory/factory.json. The listener remains loopback-only; use --listen host:port for an exact local bind, or omit it for the default local bind. An explicit --server local URI remains a warned compatibility path. The command opens the embedded dashboard once after readiness and runs until cancellation."
+            "canonicalEnglish": "Validate and serve the exact Current Factory from ./factory/factory.json. This command is local-only and rejects --remote. The listener remains loopback-only; use --listen host:port for an exact local bind, or omit it for the default local bind. An explicit --server local URI remains a warned compatibility path. The command opens the embedded dashboard once after readiness and runs until cancellation."
           }
         },
         "examples": [
           "you server",
           "you server --listen 127.0.0.1:7437",
-          "you --server http://127.0.0.1:7437 server"
+          "# Legacy local binding; emits a deprecation warning.\nyou --server http://127.0.0.1:7437 server"
         ],
         "visibility": "public",
         "sourceHash": "6b32edebf7ea06619c958a4723cb96eb5f7c10aa2fcc112c273bf3f809c6424c"
@@ -13192,7 +13225,6 @@
       },
       "visibility": "visible",
       "runnable": true,
-     "placement": "remote-only",
       "placement": "local-only",
       "usage": {
         "line": "server",

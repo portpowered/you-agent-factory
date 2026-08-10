@@ -148,6 +148,17 @@ you submit --name "task-1" --work-type-name "goal" --payload goal.md
 
 Then watch the session run with `you session list` / `you work list`.
 
+Run a supported operation through an already-running server:
+
+```bash
+you --remote --server <uri> run "Review the release notes"
+```
+
+`--remote` selects the running server at `--server`; it never starts local
+hosting. Use `--listen <host:port>` with `--with-server`, `--with-site`, or
+`you server` when the command itself owns a local listener. `--remote` cannot
+be combined with `--with-server` or `--with-site`.
+
 ### Website mode
 
 Open the dashboard at [http://localhost:7437/dashboard/ui](http://localhost:7437/dashboard/ui)
