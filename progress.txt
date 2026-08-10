@@ -682,3 +682,33 @@
   - Keep provider-neutral workstation contract fields flowing through the authored API schema, mapping, layout expansion, invocation interpolation, runtime merge, and generated consumer artifacts together.
   - Existing “real” recordings can be valuable negative fixtures when their prose predates a stricter production contract; pair them with a minimal complete provider envelope so the acceptance path is also observable.
 ---
+
+## 2026-08-09 23:36 -07:00 - wo-b2-agy-production-review-roles-002 review follow-up
+- What was implemented
+  - Added the explicit `structured-clip-qa/v1` workstation contract for `@you/agy-clip-qa`, enforcing all required fields, finite confidence in `[0,1]`, pass invariants, and meaningful inspected rerolls at the shared runtime boundary used by `AGENT_RUN`.
+  - Changed structured-output failure detection to inspect `status`, `outcome`, and `success` failure markers before accepting a reroll, reject unscoped structured rerolls, and preserve valid clip-QA rerolls.
+  - Added executor and root-built offline functional coverage for out-of-range confidence, inconsistent pass objects, empty-reason rerolls, mixed provider/status failures, an accepted reroll, and the existing recorded pass/missing-file/schema/provider failures.
+  - Regenerated the clip-QA authored distribution artifact and manifest through `make packaged-factory-catalog-generate`; marked story 002 complete in `prd.json`.
+- Files changed
+  - `packages/packaged-factories/factories/agy-clip-qa/factory.yaml`
+  - `packages/packaged-factories/generated/factories/agy-clip-qa/factory.yaml`
+  - `packages/packaged-factories/generated/factories/agy-clip-qa/factory.json`
+  - `packages/packaged-factories/generated/manifest.json`
+  - `pkg/services/workers/internal/services/workstations/executor/agent.go`
+  - `pkg/services/workers/internal/services/workstations/executor/agent_inference_test.go`
+  - `pkg/services/workers/internal/services/workstations/executor/agent_test.go`
+  - `pkg/services/workers/internal/services/workstations/executor/helpers.go`
+  - `pkg/services/workers/internal/services/workstations/executor/response_contract_test.go`
+  - `tests/functional/providers/agy/production_review_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/workers/internal/services/workstations/executor/... -count=1` — passed.
+  - `go test ./tests/functional/providers/agy -run '^TestAgyProductionReviewRolesThroughRootBuildProcess$' -count=1 -v -timeout 300s` — passed, including accepted reroll and all semantic/mixed-failure rejection cases.
+  - `make packaged-factory-catalog-check` — passed.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - `AGENT_RUN` workstations bypass the model-only `AgentExecutor`; provider-neutral output contracts must be enforced at the shared `WorkstationExecutor` boundary so both agent-run and inference paths receive the same semantic validation.
+  - A structured reroll is only a successful inspection verdict when its explicit contract is present; check provider/status failure markers before interpreting domain-level reroll fields.
+  - Recorded AGY traces can be reused for synthetic semantic variants by changing only the terminal structured output while preserving the echoed provider schema and stream envelope.
+---

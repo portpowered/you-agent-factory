@@ -50,8 +50,8 @@
         "Tests pass"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": "Initial clip-QA implementation remains in the PR, but blocking review follow-up is still outstanding: confidence bounds and pass/reroll semantic invariants need runtime/schema enforcement, and mixed provider/status failures must not be accepted as rerolls."
+      "passes": true,
+      "notes": "Implemented the explicit structured-clip-qa/v1 runtime contract for confidence bounds, required fields, pass invariants, and meaningful inspected rerolls. Structured failure detection now checks status/outcome/success markers before allowing a reroll and rejects unscoped structured rerolls; root.BuildProcess coverage proves pass, accepted reroll, out-of-range/inconsistent results, mixed provider status, schema failure, provider failure, and missing-file failure. Executor, focused AGY functional, and packaged catalog checks pass."
     },
     {
       "id": "wo-b2-agy-production-review-roles-003",
