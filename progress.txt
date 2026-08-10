@@ -1081,3 +1081,21 @@
   - Once deterministic reproduction identifies the owning resource, remove speculative ownership mechanisms and their generated/test surfaces instead of preserving competing explanations for coverage or convenience.
   - A full coverage command can fail before package-floor evaluation; isolate the named functional test and report that boundary explicitly rather than lowering a checked-in floor.
 ---
+## 2026-08-10 09:12 -07:00 - pf-stale-scope-diagnostic delivery synchronization
+- What was implemented
+  - Reconciled the branch with current `origin/main` at `59fd57487`, retaining this task’s scoped `prd.json`, combining both append-only progress histories, and preserving all current-main source and test changes.
+  - Committed the conflict-free merge as `a147d3fd4`.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+  - Current-main source and test changes were merged as part of the base synchronization.
+- Verification
+  - Parsed `prd.json` reports zero stories with `passes:false`.
+  - `go test ./pkg/services/factory_definitions/internal/services/distribution/packagedinstallation -count=1 -timeout 180s` — passed.
+  - `go test ./tests/functional/transport/cli/process -run '^TestCLISuccessorAfterHardKillReportsPreRuntimeStagingContention$' -count=1 -v -timeout 300s` — passed; the successor reported the retained staging-owner resource and PID without reaching runtime.
+  - `go test ./cmd/pkgboundarycheck -count=1` — passed.
+  - `make pkg-maint pkg-file-count pkg-structure vet` — passed.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - A moving `main` can make a completed task PR dirty even when CI is green; resolve shared bookkeeping conflicts by keeping the active task PRD authoritative, combining append-only progress histories, and rerunning the owner and process-boundary evidence after the merge.
+---
