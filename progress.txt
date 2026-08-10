@@ -1,7 +1,4 @@
 ## Codebase Patterns
-- For concurrent single-flight state, keep the absent-to-loading election atomic with the observation; a separate precheck can let callers pass stale absent state and overwrite the shared completion signal.
-- For repeated concurrency package runs, synchronize cancellation tests on an injected launcher or process edge; a fixed sleep can cancel before startup under parallel stress and obscure the target regression.
-- For fan-in transitions, preserve a deterministic list of all matched input token IDs separately from the consume-only mutation list; OBSERVE-mode inputs must reach the worker dispatch without being consumed.
 - Terminal lifecycle publication must require the opening record's committed publication window; a failed opening must never be followed by a terminal append that becomes topic position 1.
 - Root-built direct-JavaScript functional probes that do not invoke a worker can run without `--with-mock-workers`; keep Mock Workers usage inside the feature-owning test cells.
 - Cancellation-sensitive functional fixtures must signal provider-edge entry before issuing an interrupt; a published RUNNING status can precede provider handoff and otherwise makes context-cancellation assertions race.
@@ -7142,116 +7139,6 @@
 - **Learnings for future iterations:**
   - A clean merge against a stale remote-tracking base is not sufficient; compare the live hosting ref, fetch it, and resolve shared PRD/progress files again before pushing the replacement head.
 ---
-## 2026-08-10 19:25 -07:00 - pp-merge-context-bug-001
-- What was implemented
-  - Added a deterministic packaged `@you/plan-parallel` functional regression with 10 independent generated children and unique executor output markers.
-  - Captured the actual merger provider request through the injected `ProviderCommandRunner` while executing through `root.BuildProcess` and `Process.Execute`.
-  - Asserted the original request exactly once, every unique completed child result exactly once, each result under its generated Work name, and absence of the planner payload in that Work section.
-  - Updated the story note in `prd.json`; the story remains `passes:false` because the same test passes on the current `origin/main`, so the required current-main red reproduction is not established yet.
-- Files changed
-  - `tests/functional/factory/packaged/plan_parallel/invocation_test.go`
-  - `prd.json`
-  - `progress.txt`
-- Verification
-  - `go test ./tests/functional/factory/packaged/plan_parallel -run '^TestPackagedPlanParallelMergerReceivesEveryUniqueCompletedChildResult$' -count=10 -v -timeout 600s` — passed 10/10.
-  - `go test ./tests/functional/factory/packaged/plan_parallel -count=1 -v -timeout 300s` — passed.
-  - `go test ./pkg/services/factory_runtime/internal/services/orchestration/token_transformer ./pkg/services/factory_runtime/internal/services/orchestration/subsystems -count=1 -timeout 300s` — passed.
-  - Historical inspection localized the earlier omission to packaged merger prompt assembly: `b0bf1dd597` added the Factory-input rendering block, and the current base already contains the `Payload`/`PreviousOutput`/`Content` fallback.
-  - Regression commit: `ab6593506` (`test(plan-parallel): assert unique merger fan-in inputs`).
-- **Learnings for future iterations:**
-  - The existing three-child test's identical executor output marker can pass without proving child-result identity; fan-in coverage must derive unique result markers from each assigned payload and assert section-level association.
-  - A green strengthened regression on the current base is evidence against the recorded omission in this exact scenario; do not mark the story complete or claim a red run until the failing mechanism is reproduced or a distinct current-base gap is proven.
----
-
-## 2026-08-10 19:35 -07:00 - pp-merge-context-bug-001 verification follow-up
-- What was implemented
-  - Restored the frozen UI dependencies required by the repository typecheck; no tracked dependency files changed.
-  - Confirmed the focused Go regression, Go orchestration package tests, backend structural checks, `go vet ./...`, and `make typecheck` all pass.
-- Files changed
-  - `progress.txt`
-- **Learnings for future iterations:**
-  - A fresh checkout may need `bun install --frozen-lockfile` before `make typecheck`; the configured Bun version and lockfile restore the missing `@types/bun` package.
----
-
-## 2026-08-10 19:49 -07:00 - pp-merge-context-bug-001 historical red localization
-- What was implemented
-  - Reproduced the exact regression on a disposable worktree at the pre-fix parent `b0bf1dd597^` (`fb7805bd8`): the merger provider request contained only its static instructions, and the original request occurred zero times.
-  - Strengthened the current functional regression to reject planner payload markers anywhere in the merger input and to require generated Work sections in deterministic name order, while continuing to assert every unique completed result exactly once under the matching Work identity.
-  - Updated `prd.json` to record the red pre-fix output, green current-main output, and the two-part root cause: consume-only scheduler/dispatcher routing plus missing packaged merger `.Inputs` rendering.
-- Files changed
-  - `tests/functional/factory/packaged/plan_parallel/invocation_test.go`
-  - `prd.json`
-  - `progress.txt`
-- Verification
-  - Pre-fix red: `go test ./tests/functional/factory/packaged/plan_parallel -run '^TestPackagedPlanParallelMergerReceivesEveryUniqueCompletedChildResult$' -count=1 -v -timeout 600s` — failed at `invocation_test.go:45` with `merger prompt contains original request 0 times, want exactly once`; the captured prompt had no Factory inputs.
-  - Current implementation: the same regression with `-count=10` — passed all ten runs (`ok ... 20.902s`).
-  - `go test ./tests/functional/factory/packaged/plan_parallel -count=1 -v -timeout 300s` — passed.
-  - `prd.json` parses; `git diff --check` passes.
-- **Learnings for future iterations:**
-  - When the live base already contains a fix for a recorded production incident, preserve the exact historical pre-fix revision for red evidence and state explicitly that current main is post-fix; do not mislabel a historical failure as a current-main failure.
----
-
-## 2026-08-10 19:56 -07:00 - pp-merge-context-bug-002
-- What was implemented
-  - Completed the delivery story against the fan-in correction already present on the synchronized main implementation; no duplicate production change was introduced.
-  - Confirmed the lower-layer invariant: scheduler decisions retain all observed child input token IDs in deterministic order, the dispatcher forwards those tokens to the merger Work dispatch, and only the consumed parent token produces a consume mutation.
-  - Updated `prd.json` to mark `pp-merge-context-bug-002` passed with the exact lower-layer, functional, failure-gating, and root-cause evidence.
-- Files changed
-  - `prd.json`
-  - `progress.txt`
-- Verification
-  - `go test ./pkg/services/factory_runtime/internal/services/orchestration/scheduler ./pkg/services/factory_runtime/internal/services/orchestration/subsystems/... -count=1 -timeout 300s` — passed, including FIFO, priority, and dispatcher observed-input tests.
-  - `go test ./tests/functional/factory/packaged/plan_parallel -run '^TestPackagedPlanParallelMergerReceivesEveryUniqueCompletedChildResult$' -count=10 -v -timeout 600s` — passed all ten N=10 runs.
-  - `go test ./tests/functional/factory/packaged/plan_parallel -count=1 -v -timeout 600s` — full packaged plan-parallel suite passed.
-  - `go test ./pkg/services/factory_sessions/internal/execution/... -count=1 -timeout 600s` — all Factory Sessions execution packages passed.
-- **Learnings for future iterations:**
-  - When the owning production correction is already on main, use the existing lower-layer tests plus an observable end-to-end regression to complete the story without duplicating a fix or widening the fan-in surface.
----
-
-## 2026-08-10 20:00 -07:00 - pp-merge-context-bug current-main synchronization
-- What was implemented
-  - Fetched and merged the live `origin/main` head `aac04248d95de7f5412d58f194e7ae03858a3b39` into the task branch.
-  - Preserved this task's `prd.json` and append-only fan-in evidence while carrying the current-main history forward.
-- Files changed
-  - Current-main merge files are included only as synchronization history.
-  - `progress.txt` records the synchronization evidence.
-- Verification
-  - `prd.json` parses with both `pp-merge-context-bug-001` and `pp-merge-context-bug-002` marked `passes:true`.
-  - `git status --short` is clean; `git diff origin/main...HEAD --stat` is limited to `prd.json`, `progress.txt`, and `tests/functional/factory/packaged/plan_parallel/invocation_test.go`.
-  - The merge index is resolved and the task branch is based on current `origin/main`.
-- **Learnings for future iterations:**
-  - Synchronize against the freshly fetched hosting `main` immediately before final gates, then verify the live-base diff so current-main additions do not become accidental task scope.
----
-
-## 2026-08-10 20:01 -07:00 - pp-merge-context-bug final verification
-- What was implemented
-  - Completed synchronized-head verification without changing the fan-in implementation or broadening the task diff.
-- Files changed
-  - `prd.json` records the final verification gates for story 002.
-  - `progress.txt` records the terminal local gate results.
-- Verification
-  - `make typecheck` — passed.
-  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` — passed; backend file/function limits, maintainability, package count/structure, and `go vet ./...` are green.
-  - `make test` — passed; the repository short Go unit suite completed successfully.
-  - The focused lower-layer and packaged plan-parallel suites remain green after the current-main merge, as recorded in the preceding story entry.
-- **Learnings for future iterations:**
-  - Run the repository-wide gates after the final base synchronization; focused evidence from a pre-sync head is useful but not sufficient for PR handoff.
----
-
-## 2026-08-10 20:27 -07:00 - pp-merge-context-bug PR CI rerun
-- What was implemented
-  - Investigated the first hosted `Backend Functional Coverage` failure and confirmed it was unrelated to the plan-parallel diff: the existing ACP retry test failed with a transient cursor-ACP session/load internal error.
-  - Isolated the failed ACP test, then the two unrelated runtime/API tests exposed by the first rerun; each exact test passed 10/10 locally.
-  - Reran only the failed hosted jobs twice. The final rerun passed both `Backend Functional Coverage` and downstream `Verification Policy`.
-- Files changed
-  - `progress.txt`
-- Verification
-  - Initial backend failure: `TestFactoryRunRetriesACPProviderByResumingExactSession` reported temporary cursor-ACP session/load unavailability; the required real-ACP evidence artifact was absent because the lane stopped on that failure.
-  - First rerun failures: `TestAPIEventReplaySmoke_PublicEventsAndSessionProjectionExposeActiveAndCompletedTimeline` and `TestAPIPartialResultIsAvailableBeforeTerminalCompletion`; both passed 10/10 in isolated local runs.
-  - Final hosted rerun on PR #1870 head `d165f5a1eb3bc6fbc1f2b8c47cd12e6466639ee8`: `Backend Functional Coverage` passed in 5m13s and `Verification Policy` passed; all 17 reported checks are terminal and successful.
-  - No source or PRD change was made in response to unrelated flaky failures.
-- **Learnings for future iterations:**
-  - For broad functional-coverage flakes, isolate every named failing test and repeat it before changing untouched behavior; rerun only the failed CI jobs after the isolated characterization is clean.
 
 ## 2026-08-10 19:12 -07:00 - wsr-001-opening-record latest-main synchronization follow-up
 - What was implemented
@@ -7332,22 +7219,683 @@
   - `prd.json` parses with four passing stories; conflict-marker scan is clean.
 - **Learnings for future iterations:**
   - After resolving a generated-artifact conflict, regenerate the artifact and refresh any runtime-observation baseline from the merged authored contract before staging the merge.
-  - Keep the task PRD authoritative while unioning append-only progress histories when multiple worktrees share the same base.
+ - Keep the task PRD authoritative while unioning append-only progress histories when multiple worktrees share the same base.
 ---
-## [2026-08-10 20:53 -07:00] - pp-merge-context-bug delivery handoff
+
+## 2026-08-10 05:30 -07:00 - e3-event-webhooks-002
 - What was implemented
-  - No additional product change was required; both task stories remain marked `passes:true` and the existing regression/fan-in correction is complete.
-  - Audited PR #1870 with the thread-aware GraphQL review workflow; there are no conversation comments, reviews, or unresolved review threads.
-  - Confirmed the local branch is synchronized with current `origin/main` and the task diff remains limited to the PRD, append-only progress log, and plan-parallel regression test.
+  - Added the Webhooks service root and session-scoped subscriber over the Recordings-owned canonical `SubscribeFrom` contract.
+  - Started one independent endpoint worker for each enabled declaration, with an activation cursor captured from the canonical ledger so pre-activation Work transitions are not replayed.
+  - POSTed the reconstructed canonical Factory Event envelope without delivery metadata in the body, using injected HTTP, secret-resolution, and clock effects plus versioned HMAC-SHA256 signing headers.
+  - Isolated missing-secret and receiver failures from Factory execution, bounded receiver response-body reads, honored request timeouts, and tied subscriber cleanup to runtime opening cleanup.
+  - Added local HTTP receiver coverage for signed body verification, independent filters, disabled endpoints, missing secrets, and bounded response-body consumption.
+- Files changed
+  - `pkg/services/webhooks/contracts.go`
+  - `pkg/services/webhooks/internal/service/service.go`
+  - `pkg/services/webhooks/internal/service/service_test.go`
+  - `pkg/services/webhooks/wire/wire.go`
+  - `pkg/services/edges/definition.go`
+  - `pkg/wire/hosted_sources.go`
+  - `pkg/wire/recordings_providers.go`
+  - `pkg/wire/wire.go`
+  - `pkg/wire/wire_gen.go`
+  - `pkg/services/factory_sessions/internal/runtimeopening/factory.go`
+  - `pkg/services/factory_sessions/internal/runtimeopening/factories.go`
+  - `pkg/services/factory_sessions/internal/runtimeopening/factories_test.go`
+  - `pkg/services/factory_sessions/internal/runtimeopening/open.go`
+  - `pkg/services/factory_sessions/wire/application_graph.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/webhooks/... ./pkg/services/factory_sessions/internal/runtimeopening ./pkg/wire ./pkg/services/edges -count=1 -timeout 120s` — passed.
+  - `go test -race ./pkg/services/webhooks/internal/service -count=1 -timeout 120s` — passed.
+  - `go vet ./pkg/services/webhooks/... ./pkg/services/factory_sessions/internal/runtimeopening ./pkg/wire ./pkg/services/edges` — passed.
+  - `make wire-smoke` — passed.
+  - `make test` — passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure` — passed.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - The package structure checker enforces one named interface at each service root; function-shaped effects and cleanup keep the root contract narrow while preserving injection.
+  - `pkg/wire` has a strict file-count baseline, so small process providers belong in an existing responsibility-aligned wire file.
+  - A Recordings reconnect cursor should be captured from the session-scoped canonical ledger before opening the subscriber to exclude pre-activation history without creating a parallel event source.
+---
+
+
+## 2026-08-10 05:35 -07:00 - e3-event-webhooks-002 verification follow-up
+- What was implemented
+  - No source changes; completed the aggregate lint check for the story.
 - Files changed
   - `progress.txt`
 - Verification
-  - `go test ./tests/functional/factory/packaged/plan_parallel -run '^TestPackagedPlanParallelMergerReceivesEveryUniqueCompletedChildResult$' -count=3 -v -timeout 600s` — passed all three runs.
-  - `prd.json` parses with every story marked `passes:true`; `git diff --check` passes.
-  - The existing PR body is semantically identical to the current `prd.json`; it will be refreshed from the checked-in PRD during handoff.
+  - `make lint` passed UI lint/dead-code, vet, backend-size, pkg-maint, pkg-file-count, and the other preceding checks, then stopped at the repository's known `pkg-boundary` baseline of 176 pre-existing violations; none reference the new Webhooks files.
 - **Learnings for future iterations:**
-  - Before final publication, fetch the live base, inspect the three-way task diff, and audit GraphQL review threads even when the flat PR comment list is empty.
-  - A completed task whose production correction is already on current main should retain its behavioral regression and evidence rather than duplicate the production fix.
+  - The aggregate lint target is currently blocked by the same recorded package-boundary migration debt documented in prior progress entries; use the focused boundary-safe checks plus the full short test lane for this story.
+---
+
+## 2026-08-10 01:35 -07:00 - e3-event-webhooks-001
+- What was implemented
+  - Added the Factory webhook declaration contract with optional webhook subscriptions, secret references, canonical event/status filters, and bounded delivery-policy fields/defaults.
+  - Added generated REST, UI TypeScript, contract-schema, packaged-factory schema, and API package artifacts; kept Go enum naming compatible through the codegen-only overlay.
+  - Added internal webhook declarations, clone-safe policy resolution, endpoint/field-level structural validation, duplicate/incompatible filter checks, URL checks, and secret-value exclusion.
+  - Connected expand/flatten mapping so webhook declarations round-trip through the generated Factory boundary without resolving or serializing secret material.
+  - Added observable mapping, clone/default-resolution, and validation tests; existing definitions without webhooks continue to omit the optional collection.
+- Files changed
+  - `api/codegen_config/factory-codegen-overlay.yaml`
+  - `api/components/schemas/data-models/Factory.yaml`
+  - `api/components/schemas/data-models/FactoryWebhook.yaml`
+  - `api/components/schemas/data-models/FactoryWebhookDeliveryPolicy.yaml`
+  - `api/components/schemas/data-models/FactoryWebhookDispatchStatus.yaml`
+  - `api/components/schemas/data-models/FactoryWebhookEventType.yaml`
+  - `api/components/schemas/data-models/FactoryWebhookFilter.yaml`
+  - `api/openapi-main.yaml`
+  - generated API, contract, package-schema, and UI artifacts
+  - Factory Definition contracts, validation, and Factory config mappings/tests
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/factory_definitions/... ./pkg/transports/http/... ./pkg/transports/mapping/... -count=1 -timeout 300s` — passed.
+  - `bun run typecheck` from `ui` — passed.
+  - `make contracts-generate` and `make contracts-check` — passed.
+  - `make generate-api` — passed; generated API consumers are synchronized.
+  - `git diff --check` — passed.
+  - `make test` was attempted but exceeded the local 120-second command window before producing a result; all story-focused packages and contract surfaces passed.
+- **Learnings for future iterations:**
+  - Keep Go-only `x-enum-varnames` adjustments in `api/codegen_config/factory-codegen-overlay.yaml`; the fail-closed contract converter intentionally rejects that extension in the portable JSON Schema.
+  - Optional authored policy pointers must remain distinct from effective defaults so explicit zero/invalid values can be rejected while omitted values resolve safely at delivery time.
+  - Add new Factory fields to both generated-boundary directions and test a JSON round trip; clone and runtime compilation paths inherit preservation from the canonical JSON clone.
+---
+
+
+## 2026-08-10 01:52 -07:00 - e3-event-webhooks-001 maintainability follow-up
+- What was implemented
+  - Moved the webhook mapping round-trip test into the existing description mapping test file to keep the legacy round-trip fixture below the 1,000-line gate.
+  - Split webhook policy validation and mapping helpers so new branches remain within repository cyclomatic-complexity limits without adding package files.
+- Files changed
+  - `pkg/services/factory_definitions/internal/services/validation/impl/validate.go`
+  - `pkg/transports/mapping/factoryconfig/factory_config_mapping_internal.go`
+  - `pkg/transports/mapping/factoryconfig/mappingtests/description_mapping_test.go`
+  - `pkg/transports/mapping/factoryconfig/mappingtests/factory_config_mapping_roundtrip_test.go`
+  - `progress.txt`
+- Verification
+  - `make backend-size pkg-maint pkg-file-count pkg-structure` — passed.
+  - `go test ./pkg/services/factory_definitions/internal/contracts ./pkg/services/factory_definitions/internal/services/validation/impl ./pkg/transports/mapping/factoryconfig/... ./pkg/transports/http/contracttests -count=1` — passed.
+  - `go vet ./pkg/services/factory_definitions/... ./pkg/transports/http/... ./pkg/transports/mapping/...` — passed.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - Before adding tests to a legacy fixture file, check both line and complexity gates; moving a focused test to an existing responsibility-aligned file preserves package file-count baselines.
+---
+
+
+## 2026-08-10 05:43 -07:00 - e3-event-webhooks-003
+- What was implemented
+  - Extended the Webhooks subscriber beyond Work transitions to select canonical dispatch failures from the existing event stream.
+  - Matched `DISPATCH_RESPONSE` only when `payload.outcome` is `FAILED`, `DISPATCH_RECONCILED` only when `payload.reconciledStatus` is `FAILED`, and `DISPATCH_INTERRUPTED` only when `payload.observedStatus` is `INTERRUPTED`.
+  - Honored endpoint event-type and dispatch-status filters, defaulting an omitted status list to the event type's only failure status; successful dispatches, unrelated events, and incompatible statuses remain omitted.
+  - Kept delivery on the original canonical Factory Event envelope and preserved the original event ID/type/payload rather than synthesizing `DISPATCH_FAILURE`.
+  - Added local `httptest` receiver coverage for all matching and nonmatching dispatch cases plus default failure selection.
+- Files changed
+  - `pkg/services/webhooks/internal/service/service.go`
+  - `pkg/services/webhooks/internal/service/service_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/webhooks/... -count=1 -timeout 120s` — passed.
+  - `go test -race ./pkg/services/webhooks/internal/service -count=1 -timeout 120s` — passed.
+  - `go vet ./pkg/services/webhooks/...` — passed.
+  - `go test ./pkg/services/factory_sessions/internal/runtimeopening ./pkg/services/factory_sessions/wire ./pkg/wire ./pkg/services/edges -count=1 -timeout 180s` — passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure` — passed.
+  - `make test` — passed.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - Existing dispatch failure semantics are already encoded in the canonical payload fields; the webhook layer should classify them at the subscription boundary and leave Recordings and Factory Runtime unchanged.
+  - The optional dispatch-status filter is most useful as a narrowing selector: event-type subscriptions still deliver only their canonical failure status when the list is omitted, while explicit statuses further restrict delivery.
+---
+
+
+## 2026-08-10 06:32 -07:00 - e3-event-webhooks-004
+- What was implemented
+  - Added retry-aware outbound delivery for transport failures, HTTP 408/429/5xx responses, bounded exponential backoff, valid bounded `Retry-After`, injected clock scheduling, cancellation, fresh attempt timestamps/signatures, and safe structured diagnostics.
+  - Added synchronized, append-only redacted JSONL dead-letter records with canonical event identity/context/body, terminal attempt facts, destination origin/path, and nonblocking append-failure diagnostics; wired the default session-owned runtime path and replaceable appender edge.
+  - Preserved canonical session scoping for operator Work state changes by propagating the Factory Session ID and session-local sequence through the Work state-change recorder.
+  - Added root-built functional coverage with a local HTTP receiver and deterministic synchronization/time for filtering/signatures, retry success, retry exhaustion/dead-letter output, terminal Work continuity, and disabled-endpoint isolation.
+- Files changed
+  - `pkg/services/webhooks/internal/service/service.go`
+  - `pkg/services/webhooks/internal/service/delivery.go`
+  - `pkg/services/webhooks/internal/service/dead_letter.go`
+  - `pkg/services/webhooks/internal/service/service_test.go`
+  - `pkg/services/webhooks/wire/wire.go`
+  - `pkg/services/webhooks/contracts.go`
+  - `pkg/services/edges/definition.go`
+  - `pkg/wire/hosted_sources.go`
+  - `pkg/services/factory_sessions/internal/runtimeopening/open.go`
+  - `pkg/services/factory_runtime/internal/services/orchestration/runtime/factory.go`
+  - `pkg/services/recordings/internal/events/event_history.go`
+  - `pkg/services/work/contracts.go`
+  - `tests/functional/events/factory_events/webhooks_test.go`
+- Verification
+  - Focused Webhooks, Recordings, Factory Runtime, Factory Sessions, Edges, Wire, and functional tests — passed.
+  - `go test -race ./pkg/services/webhooks/internal/service` — passed.
+  - `go vet` across affected packages — passed.
+  - `make generate-wire`, `make wire-smoke`, and `make test` — passed on the rerun.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure` — passed.
+  - `git diff --check` — passed.
+  - `make lint` reached the known repository package-boundary baseline (178 existing violations); UI lint, dead-code, vet, and new-file maintainability/structure checks passed, with no reported violation in the new Webhooks files.
+- **Learnings for future iterations:**
+  - A valid activation cursor at the retained tail is not a live-subscription primitive; use the scoped live stream plus explicit activation filtering for durable outbound workers.
+  - Adding a session ID without its session-local sequence makes the canonical scoped ledger report a sequence gap; both fields must be emitted together.
+  - `make test` can expose unrelated parallel-suite flakiness; rerun the aggregate lane and isolate named failures before attributing them to the current change.
+---
+
+
+## 2026-08-10 07:05 -07:00 - e3-event-webhooks-004 review follow-up
+- What was implemented
+  - Reconnected webhook endpoints after bounded Recordings subscription gaps using `SubscriptionGapFacts.ReconnectFrom` and the original session scope, preserving activation filtering and allowing later retained events to arrive after a slow receiver overflows the live buffer.
+  - Restricted retryable HTTP server responses to the valid 500-599 range; added explicit coverage for 500, 599, 600, 700, 408, and 429 behavior.
+  - Moved durable dead-letter append mechanics to the approved `pkg/platform/filesystem` adapter and selected it only from canonical `pkg/wire`; the Webhooks service wire now consumes the injected appender without direct filesystem defaults.
+  - Rewrote functional Work submission and state movement to use `root.BuildProcess`/`Process.Execute` CLI commands, retaining HTTP only for API-owned event observation and receiver assertions.
+- Files changed
+  - `pkg/services/webhooks/internal/service/service.go`
+  - `pkg/services/webhooks/internal/service/delivery.go`
+  - `pkg/services/webhooks/internal/service/service_test.go`
+  - `pkg/platform/filesystem/durable_append.go`
+  - `pkg/platform/filesystem/durable_append_test.go`
+  - `pkg/services/webhooks/wire/wire.go`
+  - `pkg/wire/hosted_sources.go`
+  - `tests/functional/events/factory_events/webhooks_test.go`
+  - `prd.json`
+  - `progress.txt`
+- **Learnings for future iterations:**
+  - The package-boundary checker permits filesystem effects only through exact registered platform adapter methods; adding a new method beside `Local` requires routing through existing `Local` effects or an explicit canonical allowance.
+  - A bounded overflow test should hold the first HTTP delivery open, fill the subscriber buffer, force a gap, and then assert the post-reconnect event ID rather than only checking subscription call counts.
+  - Functional boundary rules treat ordinary Work submit/move as customer CLI actions; use a reusable root-built process and decode CLI JSON output while leaving event-stream observation on the API surface.
+  - Verification: affected package tests, root-built webhook functional tests, race-enabled Webhooks tests, `make functional-boundary-check`, `make vet`, and the package-boundary count comparison all pass; `pkg-boundary` remains at the rebased main baseline of 176 violations.
+---
+
+
+## 2026-08-10 07:12 -07:00 - e3-event-webhooks-004 verification follow-up
+- What was implemented
+  - Refreshed the rebased generated API manifest after the aggregate unit lane identified a stale OpenAPI artifact; no additional product source changes were needed.
+- Files changed
+  - `packages/api/generated/manifest.json`
+  - `progress.txt`
+- **Learnings for future iterations:**
+  - Rebase conflict resolution can preserve a task-generated artifact hash while its generated source reflects newer main content; run the canonical generator and contract check before attributing a generated-contract test failure to product code.
+  - Verification: `make contracts-generate`, `make contracts-check`, isolated stale-staging regression, and the full aggregate `make test` all pass.
+---
+
+
+## 2026-08-10 07:59 -07:00 - e3-event-webhooks-004 functional coverage follow-up
+- What was implemented
+  - Updated the retry-exhaustion functional scenario to leave the dead-letter appender unset so canonical `pkg/wire` selects the platform durable appender used in production.
+  - Replaced the injected-store synchronization with a subsequent successful webhook event as a deterministic happens-after point, then asserted the real session-owned JSONL file contains exactly one redacted record.
+  - Removed the obsolete functional test-only filesystem store.
+- Files changed
+  - `tests/functional/events/factory_events/webhooks_test.go`
+  - `progress.txt`
+- **Learnings for future iterations:**
+  - New platform filesystem behavior must be exercised by the functional lane when its package has a per-package coverage floor; a unit test alone does not contribute to that lane.
+  - A later event observed through the same sequential subscriber can synchronize after terminal side effects without filesystem polling.
+  - The focused root-process functional webhook suite and its targeted coverage profile pass; the full local coverage lane was still running alongside another workspace verification process when the shell window expired.
+---
+
+
+## 2026-08-10 08:08 -07:00 - e3-event-webhooks-004 coverage manifest follow-up
+- What was implemented
+  - Registered the newly measured `pkg/services/webhooks` functional coverage floor at the generated 61.42% baseline.
+  - Extended the production-facing webhook functional cell to exercise durable appender validation, directory-creation, open, write, and Linux device-sync failure paths, preserving the existing 75% filesystem package floor without lowering it.
+- Files changed
+  - `docs/internal/baselines/go-functional-coverage-package-minimums.json`
+  - `tests/functional/events/factory_events/webhooks_test.go`
+  - `prd.json`
+  - `progress.txt`
+- **Learnings for future iterations:**
+  - A new production package measured by `gocoveragecheck` must be added to the lane manifest; the checker fails before evaluating package floors when an entry is missing.
+  - When a platform package has an existing floor, cover new adapter failure branches in the functional lane instead of lowering the established baseline.
+  - The focused retry-exhaustion functional test and `make functional-boundary-check` pass; Linux-only device assertions cover the host-specific write/sync failures used by CI.
+---
+
+
+## 2026-08-10 08:27 -07:00 - e3-event-webhooks-004 coverage package follow-up
+- What was implemented
+  - Added complete functional and unit manifest coverage entries for the new Webhooks root, internal service, and wire packages, using measurement exceptions for declaration-only roots and generated floors for measured packages.
+- Files changed
+  - `docs/internal/baselines/go-functional-coverage-package-minimums.json`
+  - `docs/internal/baselines/go-unit-coverage-package-minimums.json`
+  - `progress.txt`
+- **Learnings for future iterations:**
+  - `gocoveragecheck` requires manifest entries for every resolved package, including declaration-only roots and wire packages with no unit tests; adding only the first reported root entry reveals the next missing subpackage on the following run.
+  - The latest CI profile measured functional floors of 61.36% for `webhooks/internal/service` and 66.66% for `webhooks/wire`; the focused unit profile measured 74.62% for `webhooks/internal/service` and 0.00% for `webhooks/wire`.
+  - The CI failure was manifest completeness only; all functional and unit test execution comp…3830 tokens truncated…mple hit the unchanged `workers/mock` continuous-idle test; the rerun completed successfully.
+  - Synchronized the story-004 PRD evidence with the final rebased head and terminal CI run.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - All 18 required GitHub checks pass in run `31423825871`, including Backend Functional Coverage job `93573278343` and Verification Policy job `93574586414`.
+  - The exact unchanged worker-mock test passed locally on rerun; no webhook-specific failure was reported by the failed CI sample.
+  - Local and remote task heads match at `653d64089`; `origin/main` and the PR base match at `947152348`; GitHub reports PR #1850 `CLEAN`/`MERGEABLE` and open.
+  - All PRD user stories remain `passes:true`; the PR body still needs the final exact-head synchronization after this commit.
+- **Learnings for future iterations:**
+  - On a broad coverage-lane failure, isolate the exact failed behavioral test before changing product code; rerunning the unchanged job can distinguish an inherited timing sample from a regression.
+---
+
+
+## 2026-08-10 12:51 -07:00 - e3-event-webhooks-004 final PR handoff synchronization
+- What was implemented
+  - Audited existing PR #1850 after the historical blocking review comment and confirmed the requested gap reconnect, strict 5xx classification, platform-owned dead-letter append, CLI-based functional actions, current-main rebase, and terminal CI fixes are present in the current head.
+  - Synchronized the story-004 PRD evidence with current head `23d7869a0`, current main `947152348`, CI run `31425164792`, and the thread-aware review state.
+  - Prepared the PR description to be refreshed from the committed `prd.json` after this bookkeeping commit.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `git fetch origin main` confirms `origin/main` remains `947152348b235f3dd0ede47f233947fcadddcc6a`.
+  - `gh pr checks 1850` reports all 18 required checks passing on run `31425164792`.
+  - Thread-aware review inspection reports three conversation comments, no formal reviews, and no unresolved inline threads; the blocking comment is superseded by the follow-up addressing each requested fix.
+  - All four PRD user stories remain `passes:true`; the PR remains open, clean, and mergeable.
+- **Learnings for future iterations:**
+  - A final PR handoff should verify the exact pushed head, current base, terminal checks, PR body, and unresolved-thread state together after the last bookkeeping commit.
+---
+
+
+## 2026-08-10 13:21 -07:00 - e3-event-webhooks-004 final CI retry and PR synchronization
+- What was implemented
+  - Audited PR #1850's historical blocking feedback and confirmed the current head contains the requested gap reconnect, strict 500-599 retry classification, platform-owned dead-letter append, CLI-based functional actions, current-main rebase, and generated/shared-file conflict resolution.
+  - Reproduced the two rotating broad functional-lane failures locally and left unrelated baseline runtime/test code unchanged: the worker-mock continuous-idle test passed focused locally, and the JavaScript durability cancellation test passed 20 consecutive runs.
+  - Refreshed PR #1850's description from the committed `prd.json` through the GitHub API after `gh pr edit` required an unavailable `read:project` scope.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/webhooks/... -count=1` — passed.
+  - `go test -race ./pkg/services/webhooks/internal/service -count=1` — passed.
+  - `go test ./tests/functional/events/factory_events -run 'Webhook|webhook' -count=1 -v` — passed, including transition/filter/signature, failed-dispatch filtering, retry-success, and redacted dead-letter scenarios.
+  - `go test ./tests/functional/orchestration/javascript/durability -run '^TestJavaScriptDurabilityDoesNotPersistSnapshotsByDefault$' -count=20 -timeout 300s` — passed.
+  - `gh run rerun 31426292402 --failed` — attempt 3 passed all 18 required checks, including Backend Functional Coverage job `93584405802` and Verification Policy job `93585959359`.
+  - Local and remote heads remain `0d1408425`; `origin/main` and the PR base remain `947152348`; GitHub reports PR #1850 `CLEAN`/`MERGEABLE` and open.
+  - The PR body matches committed `prd.json` after newline normalization; thread-aware review inspection reports three historical conversation comments, no formal reviews, and no unresolved inline threads. All four PRD stories remain `passes:true`.
+- **Learnings for future iterations:**
+  - Broad functional coverage can expose different unchanged timing-sensitive tests on successive attempts; isolate the exact assertion, run it repeatedly locally, and rerun only failed CI jobs before changing unrelated production code.
+  - When `gh pr edit` is blocked by an unrelated token scope, the authenticated REST `gh api` pull-request update can synchronize the body; verify normalized body equality afterward.
+
+
+## 2026-08-10 13:34 -07:00 - e3-event-webhooks-004 final exact-head review audit
+- What was implemented
+  - Confirmed all four PRD stories remain marked `passes:true`; no additional product implementation was required in this iteration.
+  - Rechecked the existing PR #1850 with the thread-aware GitHub workflow. The historical blocking comment is superseded by the current fixes, and there are no unresolved inline threads or formal review requests.
+  - Synchronized the story-004 evidence in `prd.json` with the exact pushed head and terminal CI run.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - All 18 required checks pass in CI run `31428837278` for head `d9d8feb7e`, including Backend Functional Coverage job `93587133345` and Verification Policy job `93588937158`.
+  - Local and remote task heads match at `d9d8feb7e`; the PR base and `origin/main` match at `947152348`.
+  - GitHub reports PR #1850 open, clean, and mergeable; the PR body will be refreshed from this committed `prd.json` after the bookkeeping commit.
+  - `prd.json` parses with four passing stories, and the thread-aware review audit reports no unresolved inline feedback.
+- **Learnings for future iterations:**
+  - Final handoff evidence must be refreshed after the last bookkeeping commit; synchronize the PRD note, PR body, exact pushed head, current base, terminal checks, and review-thread state together.
+---
+
+
+## 2026-08-10 13:57 -07:00 - e3-event-webhooks-004 current-main rebase and final handoff
+- What was implemented
+  - Rebased the complete webhook branch onto current `origin/main` `6e01bee68` after main advanced during the prior CI run.
+  - Preserved the task-scoped E3 PRD, merged current-main additions into the append-only progress history, refreshed PR #1850 from the rebased branch, and confirmed the historical blocking feedback remains addressed.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - All 18 required checks pass in CI run `31430939480` for rebased head `570a6c5cb`, including Backend Functional Coverage, Backend Unit Coverage, and Verification Policy.
+  - Local and remote task heads match; PR #1850 uses current base `6e01bee68`, reports `CLEAN`/`MERGEABLE`, and its body matches committed `prd.json`.
+  - `prd.json` parses with all four stories marked `passes:true`; thread-aware review inspection reports no formal reviews or unresolved inline threads; `git diff --check` passes.
+- **Learnings for future iterations:**
+  - Recheck the default branch immediately before the final handoff: a main merge during CI can invalidate an otherwise green PR base and requires a conflict-aware rebase before review readiness.
+---
+
+
+## 2026-08-10 14:27 -07:00 - e3-event-webhooks-004 final CI retry audit
+- What was implemented
+  - Investigated the final-head Backend Functional Coverage failure and confirmed it rotated between two unchanged baseline timing cells: workers/mock continuous-idle and JavaScript durability interrupted-session resume.
+  - Reproduced each exact assertion locally with passing focused repetitions and reran only the failed Functional Coverage and Verification Policy jobs without changing product code.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - CI run `31431693454` attempt 3 passes all 18 required checks on head `2d441f115`, including Backend Functional Coverage retry `93602012772` and Verification Policy retry `93603492646`.
+  - `go test ./tests/functional/workers/mock -run '^TestPlainBatchDrainPreservesFiniteAndContinuousCounterexamples/continuous_idle$' -count=1` and `-count=3` — passed.
+  - `go test ./tests/functional/orchestration/javascript/durability -run '^TestJavaScriptInterruptedSessionResumesWithoutRepeatingCompletedChildren$' -count=1` and `-count=10` — passed.
+  - No webhook-specific failure was reported; the task head, current base, PR body, and prior thread audit remain synchronized.
+- **Learnings for future iterations:**
+  - A broad functional coverage lane can rotate among unrelated timing-sensitive baseline tests across retries; isolate each reported assertion, verify repeated focused passes, and rerun failed jobs before modifying the changed feature.
+---
+
+
+## 2026-08-10 14:37 -07:00 - e3-event-webhooks-004 final PR audit
+- What was implemented
+  - Confirmed all four PRD stories remain marked `passes:true`; no additional product implementation was required in this iteration.
+  - Rechecked PR #1850 with the thread-aware GitHub workflow. The historical blocking conversation is superseded by the implemented fixes, and there are no unresolved inline review threads or formal review requests.
+  - Synchronized story-004's terminal CI evidence with implementation head `84652d9e5` and refreshed the committed PRD before the final documentation handoff.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `gh pr checks 1850` — all 18 required checks pass in CI run `31433998558`, including Backend Functional Coverage job `93604026697`, Backend Unit Coverage job `93604026636`, and Verification Policy job `93605582004`.
+  - The PR is open, clean, and mergeable; local and remote task heads matched before this bookkeeping commit, and the PR base remains current `main` at `6e01bee68`.
+  - `prd.json` parses with all four stories passing, and the thread-aware review audit reports no unresolved inline feedback.
+- **Learnings for future iterations:**
+  - Final handoff bookkeeping should distinguish the last tested implementation head from a later documentation-only commit, then rerun required checks and synchronize the PR body on the resulting exact head.
+---
+
+
+## 2026-08-10 15:21 -07:00 - e3-event-webhooks-004 terminal CI retry and delivery audit
+- What was implemented
+  - Confirmed all four PRD stories remain marked `passes:true`; no additional product implementation was required in this iteration.
+  - Inspected PR #1850 with the thread-aware GitHub workflow. The historical blocking comment is superseded by the implemented fixes, and there are no unresolved inline review threads or formal review requests.
+  - Reproduced the reported unrelated JavaScript durability timing failure locally, reran only the failed CI jobs, and left production code unchanged.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - The exact failing test `TestJavaScriptResumeRestoresCheckpointAndFinalResult` passed once and three consecutive times locally.
+  - CI run `31436572954`, attempt 2, passes all 18 required checks on head `adf176da39695e3f2eca83be8d25f5fa73738a32`, including Backend Functional Coverage and Verification Policy; base is current `main` at `78584efb52dacb6989604f8f7cc6c12ed08da028`.
+  - PR #1850 is open, clean, and mergeable; the committed PRD parses with all four stories passing.
+- **Learnings for future iterations:**
+  - When a broad CI lane reports an unchanged timing-sensitive test, reproduce that exact assertion repeatedly and rerun only the failed jobs before changing unrelated production code.
+  - Bookkeeping changes must be followed by a fresh exact-head CI and PR-body synchronization audit.
+---
+
+
+## 2026-08-10 15:49 -07:00 - e3-event-webhooks-004 current-main rebase verification
+- What was implemented
+  - Rebased the complete E3 webhook branch onto current `origin/main` at `e8c0a248`, preserving the task-scoped PRD and merging unrelated current-main progress history.
+  - Resolved generated `pkg/wire/wire_gen.go` construction changes and regenerated wire/API artifacts so the current System Initialization dependencies and webhook wiring are coherent.
+- Files changed
+  - `pkg/wire/wire_gen.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/webhooks/... -count=1` — passed.
+  - `go test -race ./pkg/services/webhooks/internal/service -count=1` — passed.
+  - Root-built functional webhook coverage for transition/filter/signature, failed-dispatch filtering, retry success, and redacted dead letters — passed.
+  - `make wire-smoke contracts-check api-smoke backend-size pkg-maint pkg-file-count pkg-structure functional-boundary-check vet` — passed.
+  - `make test` — passed.
+  - `prd.json` parses with all four stories passing; no conflict markers remain and the branch contains current `main`.
+- **Learnings for future iterations:**
+  - After rebasing across generated dependency-graph changes, run the generator and wire drift check before relying on hand-resolved variable numbering.
+  - A current-main rebase must be followed by a fresh CI run and exact PR-body/thread audit before handoff.
+---
+
+
+## 2026-08-10 16:39 -07:00 - e3-event-webhooks-004 final handoff audit
+- What was implemented
+  - Confirmed the four PRD stories remain complete and recorded the final existing-PR audit before the bookkeeping update.
+  - Verified the historical blocking feedback is addressed by the current implementation: subscription-gap reconnect, strict 500–599 retry classification, platform-owned durable dead-letter append, CLI-based functional actions, current-main rebase, and generated/shared-file resolution.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - PR #1850 is open on head `40fd597a29b8a336c3d15114f042e5dde2d0ce31`, based on `main` `e8c0a248ae1ba354ccc2fc022fa674feefe52f85`.
+  - `gh pr checks 1850` reports all 18 required checks passing in CI run `31439921115`.
+  - The thread-aware GraphQL review audit reports three historical conversation comments, no formal reviews, and no unresolved inline threads.
+  - The PR body matches committed `prd.json` after line-ending normalization, and all four user stories are marked `passes:true`.
+- **Learnings for future iterations:**
+  - A final handoff audit should inspect thread-aware review state, exact PRD/body equality, current base/head, and every required check together; a clean flat comment list alone is not sufficient evidence.
+---
+
+
+## 2026-08-10 17:07 -07:00 - e3-event-webhooks-004 terminal CI and exact-head PR audit
+- What was implemented
+  - Confirmed all four PRD stories remain marked `passes:true`; no additional product implementation was required.
+  - Completed the latest required CI run and synchronized the committed delivery audit to the exact pushed head and current `main` base.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `gh pr checks 1850` reports all 18 required checks passing in CI run `31443796721`, including Backend Functional Coverage and Verification Policy.
+  - The PR head is `90f2be90a65ee289974a74c9429b02c2990333d1`, its base and `origin/main` are `acbd13fcc960926c6118d2e3167426a71345ace6`, and GitHub reports the open PR `CLEAN`/`MERGEABLE`.
+  - Thread-aware review inspection reports three historical conversation comments, no formal reviews, and no unresolved inline threads; the historical blocking comment is superseded by the documented fixes.
+  - `prd.json` parses with all four stories passing; the PR body will be refreshed from this committed file after the bookkeeping commit.
+- **Learnings for future iterations:**
+  - After a documentation-only handoff commit, wait for its exact-head CI run to become terminal, then synchronize the PRD, PR body, base, head, and thread audit as one final check.
+---
+
+
+## 2026-08-10 18:18 -07:00 - e3-event-webhooks-004 final handoff audit
+- What was implemented
+  - Rebased the completed webhook branch onto current `origin/main` and refreshed the delivery audit for the current PR base and green CI evidence.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - All four PRD stories remain marked `passes:true`.
+  - CI run `31447647144` attempt 3 passed all 18 required checks on the rebased webhook head.
+  - PR #1850 is open, non-draft, `MERGEABLE`, and `CLEAN`; its body matches the committed `prd.json`.
+  - Thread-aware review inspection reports no formal reviews, no inline threads, and no unresolved feedback.
+- **Learnings for future iterations:**
+  - Keep the PRD delivery audit aligned with the base and exact code head used for the final CI handoff; update the PR body from the committed PRD after bookkeeping changes.
+---
+
+
+## 2026-08-10 18:41 -07:00 - e3-event-webhooks-004 latest-main rebase follow-up
+- What was implemented
+  - Rebased the complete webhook implementation and handoff history onto the latest `origin/main` (`0b9771fe85fd1aedf9968d636de5e72cd193970c`) after the long final CI cycle made the PR conflict with newer main history.
+  - Preserved the webhook `prd.json`, the append-only webhook progress history, and the current-main progress entries while resolving the shared bookkeeping-file conflicts.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Rebase completed without code conflicts; the worktree is clean and the rebased branch is 39 commits ahead of `origin/main` with no commits behind it.
+  - The post-rebase exact-head CI run is the remaining final verification before refreshing the PR head/body audit.
+- **Learnings for future iterations:**
+  - Shared `prd.json` and `progress.txt` files can conflict on every moving-main rebase; resolve them in favor of the active task, then append the authoritative current-main entries so the task log remains append-only and complete.
+---
+
+
+## 2026-08-10 18:52 -07:00 - e3-event-webhooks-004 final exact-head handoff audit
+- What was implemented
+  - Confirmed all four PRD stories remain marked `passes:true`; no additional product implementation was required in this iteration.
+  - Audited the existing PR #1850 after the historical blocking feedback. The follow-up fixes cover subscription-gap reconnect, strict 500–599 retry classification, platform-owned durable dead-letter append, CLI-based functional actions, current-main synchronization, and generated/shared-file resolution.
+  - Refreshed the committed delivery audit to the exact pushed head, current base, and terminal CI run.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `gh pr checks 1850` — all 18 required checks pass in CI run `31450115236`.
+  - PR #1850 is open, non-draft, `CLEAN`, and `MERGEABLE`; local `HEAD` and `origin/e3-event-webhooks` are `329eaa62b774a33fd77d807a3db363cc63f101d5`, and `origin/main`/the PR base are `0b9771fe85fd1aedf9968d636de5e72cd193970c`.
+  - Thread-aware GraphQL review audit reports three historical conversation comments, no formal reviews, no inline review threads, and no unresolved feedback.
+  - The committed PRD parses with all four stories passing; the PR body will be synchronized from this exact file after the bookkeeping commit.
+- **Learnings for future iterations:**
+ - Final webhook handoff requires checking the historical feedback against the latest implementation, then verifying exact head/base, terminal required checks, thread state, and PRD/body synchronization together.
+---
+
+## 2026-08-10 08:42 -07:00 - e3-event-webhooks-004 unit coverage follow-up
+- What was implemented
+  - Added unit coverage for durable filesystem appender validation, directory-creation failure, open failure, Linux write failure, and Linux sync failure paths so the new platform adapter preserves the existing `pkg/platform/filesystem` unit coverage floor.
+  - Diagnosed the latest CI result: the functional lane's failure was an unrelated flaky JavaScript concurrency assertion, while the unit lane's actionable regression was the new adapter's uncovered branches; the verification-policy failure was downstream of those lane failures.
+- Files changed
+  - `pkg/platform/filesystem/durable_append_test.go`
+  - `prd.json`
+  - `progress.txt`
+- **Learnings for future iterations:**
+  - CI's Linux coverage runner can exercise `/dev/full` and `/dev/null` to make host filesystem write/sync failures observable without weakening a platform package floor.
+  - The complete Windows coverage command may exceed the process command-line limit even when focused tests pass; rely on the Linux CI lane for the repository-wide expanded coverage invocation and report that local limitation rather than changing coverage policy.
+  - Separate unrelated functional concurrency flakes from coverage-floor failures before changing product code; the CI job log names the exact failing test and assertion.
+---
+
+
+## 2026-08-10 08:59 -07:00 - e3-event-webhooks-004 coverage-floor follow-up
+- What was implemented
+  - Added Webhooks service tests for missing construction dependencies, nil-service rejection, and the nil-parent/no-endpoint lifecycle path, raising focused Linux service coverage to 75.0%.
+  - Added complete Factory Webhook delivery-policy resolver coverage for defaults, authored values, positive duration parsing, and invalid attempts/multiplier/duration/order inputs.
+- Files changed
+  - `pkg/services/webhooks/internal/service/service_test.go`
+  - `pkg/services/factory_definitions/internal/contracts/factory_snapshot_test.go`
+  - `prd.json`
+  - `progress.txt`
+- **Learnings for future iterations:**
+  - A package floor can move when a new contract helper is added even if focused feature tests pass; cover the resolver's success and typed-error paths in the contract owner package before considering a manifest change.
+  - Linux and Windows focused coverage can differ by one or more statements even for the same Go tests; leave measurable margin above the manifest floor when adding a coverage-restoration test.
+---
+
+
+## 2026-08-10 09:12 -07:00 - e3-event-webhooks-004 review and rebase follow-up
+- What was implemented
+  - Rebased the task branch onto the current `origin/main` and preserved the task-scoped PRD and append-only progress history.
+  - Split the Webhooks service test support stubs into `service_test_helpers_test.go`, keeping the service test file below the repository's 1,000-line backend-size limit without changing observable coverage.
+  - Confirmed the blocking review fixes remain present: subscription-gap reconnect, strict 500-599 retry classification, platform-owned durable dead letters, and CLI-driven ordinary Work actions in the functional cell.
+- Files changed
+  - `pkg/services/webhooks/internal/service/service_test.go`
+  - `pkg/services/webhooks/internal/service/service_test_helpers_test.go`
+  - `progress.txt`
+- Verification
+  - Focused Webhooks tests, race-enabled Webhooks tests, and the root-built functional webhook cell — passed.
+  - `make backend-size`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, `make functional-boundary-check`, `make vet`, `make contracts-check`, `make wire-smoke`, and aggregate `make test` — passed.
+  - `make pkg-boundary` reports 176 violations, equal to the current-main baseline, with no new Webhooks violation; the repository's deletion-only baseline checker still exits nonzero for that retained baseline.
+- **Learnings for future iterations:**
+  - Rebase before final gate verification because current main can advance while a PR is under review; compare the boundary count to the freshly fetched main baseline rather than the stale PR base.
+  - Large behavioral test helpers can be split into a same-package helper test file to satisfy backend file-size limits without weakening observable tests or introducing production abstractions.
+---
+
+
+## 2026-08-10 09:26 -07:00 - e3-event-webhooks-004 CI follow-up
+- What was implemented
+  - Investigated the first final-head CI result and isolated its only substantive failure to the pre-existing `TestFactorySessionResumeDoesNotRepeatCompletedDispatch` timing assertion in the functional sessions/restart package; no Webhooks or changed-file failure was reported.
+  - Re-ran the failed CI jobs after five consecutive local passes of that test. Backend Functional Coverage and the dependent Verification Policy job passed on the unchanged final rebased head.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - All 18 required CI checks pass for run `31408773708` on head `1e99e7b7a`.
+  - PR #1850 is open, clean, mergeable, and has no unresolved inline review threads; the original blocking feedback is addressed in the follow-up comment.
+- **Learnings for future iterations:**
+  - When a broad functional lane fails on a timing-sensitive test outside the changed files, verify it with repeated focused runs and inspect the exact failing assertion before changing production code.
+  - A failed required lane can be safely retried on the unchanged head when local repeated runs and the failure location identify a transient test flake; record the final green run in the PR progress.
+---
+
+
+## 2026-08-10 10:34 -07:00 - e3-event-webhooks-004 coverage and dispatch-scope follow-up
+- What was implemented
+  - Added a root.BuildProcess plus Process.Execute functional scenario with an injected failing model provider to prove `DISPATCH_RESPONSE` outcome `FAILED` is filtered, signed, and delivered to the configured endpoint.
+  - Fixed the runtime event ledger to carry the active Factory Session identity and session-local delivery sequence through Work Request, dispatch request/response, Worker event, and related runtime events so Recordings' scoped subscribers receive dispatch failures without sequence gaps.
+  - Corrected the behavioral fixture to declare its model workstation type, ensuring the injected provider failure is exercised rather than an invalid-workstation fallback.
+- Files changed
+  - `pkg/services/recordings/internal/events/event_history.go`
+  - `pkg/services/recordings/internal/events/event_history_session_lifecycle.go`
+  - `tests/functional/events/factory_events/webhooks_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Focused dispatch-failure test, full functional webhook package, Webhooks and Recordings race suites, affected package matrix, exact functional coverage profile, aggregate `make test`, and structural/size/contract/vet/wire gates pass.
+  - Exact focused functional coverage is 66.7% for `pkg/services/webhooks/internal/service`, above the 61.36% CI minimum.
+- **Learnings for future iterations:**
+  - Recordings session-scoped subscriptions require both `Context.SessionID` and monotonically allocated `SessionSequence`; adding only the identity makes later events appear as sequence gaps.
+  - Runtime model workstation definitions need an explicit model workstation type when their linked worker is model-backed; otherwise the executor treats the definition as unresolved unless it is a script worker.
+  - When CI reports a package coverage regression, reproduce the exact package/profile locally before changing the manifest; a real behavioral scenario restored margin without weakening the floor.
+---
+
+
+## 2026-08-10 10:46 -07:00 - e3-event-webhooks-004 final review readiness
+- What was implemented
+  - Confirmed all four PRD stories remain marked `passes:true`; no additional story implementation or contract change was required.
+  - Inspected PR #1850 with the thread-aware GitHub review workflow. The historical blocking feedback is addressed by the current commits, and there are no unresolved inline review threads or formal reviews.
+  - Synchronized the story-004 PRD note with the terminal CI and review state.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `gh pr checks 1850` — all 18 required checks pass on final head `b9e493e04` in run `31414764034`.
+  - GitHub reports PR #1850 open, clean, mergeable, and using the current `prd.json` as its description; local `HEAD` matches the PR head.
+  - `git fetch origin main` and `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - A historical top-level blocking comment can remain in PR conversation after its requested fixes land; use commit ancestry plus thread-aware unresolved state to distinguish addressed feedback from remaining work.
+  - Final readiness requires checking the exact pushed head, terminal CI, PR description, and review-thread state together after any bookkeeping commit.
+---
+
+
+## 2026-08-10 11:19 -07:00 - e3-event-webhooks-004 current-main rebase and coverage follow-up
+- What was implemented
+  - Rebased `e3-event-webhooks` onto fetched `origin/main` at `cba6b45f9`, preserving this branch's task-scoped `prd.json` and merging current-main's append-only `progress.txt` history with the webhook history.
+  - No webhook product source changes were needed; the prior review fixes remain in the rebased tree, and all four PRD stories remain marked `passes:true`.
+- Files changed
+  - `prd.json` (conflict resolution retained the E3 task contract)
+  - `progress.txt` (conflict resolution, consolidated pattern, and this entry)
+- Verification
+  - Focused Webhooks/runtime-opening/wire/edges tests, Webhooks race tests, and the root-built functional webhook test — passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure functional-boundary-check vet contracts-check wire-smoke` — passed.
+  - `make test` — passed.
+  - `make test-functional-coverage` reached the inherited current-main failure in `TestFactoryRuntimeMixedDirectAndFactoryChildDispatchesStayIsolatedThroughCLI`; the exact test failed 10/10 on the task head and 3/3 on a detached `origin/main` baseline, with no Webhooks package failure.
+  - No conflict markers remain; `prd.json` parses and all user stories pass; the disposable baseline worktree was removed after comparison.
+- **Learnings for future iterations:**
+  - The rebased branch is ahead of the remote task branch and requires a force-with-lease push before GitHub can recalculate mergeability and CI.
+  - A reproducible failure in an unchanged functional package that also fails on detached current main is inherited baseline flakiness; record the evidence and avoid unrelated runtime changes.
+---
+
+
+## 2026-08-10 11:36 -07:00 - e3-event-webhooks-004 final CI retry and PR synchronization
+- What was implemented
+  - Retried the failed Backend Functional Coverage and dependent Verification Policy jobs on unchanged head `21ed54a99`; both passed after the initial coverage sample dipped below two current-main package floors.
+  - Updated the story-004 PRD note from the pre-rebase head to the rebased final CI head and recorded the terminal check/review state.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - All 18 required GitHub checks pass in run `31418633741`, including Backend Functional Coverage job `93556241940`, Backend Unit Coverage job `93556242551`, and Verification Policy job `93557396633`.
+  - PR #1850 head is `21ed54a99`, base is current `main` `cba6b45f9`, GitHub reports `CLEAN`/`MERGEABLE`, and the PR remains open.
+  - Historical blocking feedback is addressed in the current commits; the top-level review history is informational and the thread-aware GraphQL audit reports no review threads.
+- **Learnings for future iterations:**
+  - A failed coverage-floor sample can be transient when the same unchanged head passes on retry; preserve the exact job evidence and avoid lowering manifests without a reproducible source-specific regression.
+  - Bookkeeping changes to `prd.json` and `progress.txt` must be pushed together and followed by one final exact-head CI/PR synchronization check.
+---
+
+
+## 2026-08-10 11:45 -07:00 - e3-event-webhooks-004 final exact-head audit
+- What was implemented
+  - Synchronized the story-004 PRD note with the latest bookkeeping head `79338a973` and the final CI run `31419987477`.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Local and `origin/e3-event-webhooks` heads match at `79338a973`; `origin/main` and the PR base remain `cba6b45f9`.
+  - All 18 required checks pass on the latest head; GitHub reports PR #1850 `CLEAN`/`MERGEABLE` and open.
+  - The PR body matches committed `prd.json` exactly, all four user stories have `passes:true`, and the thread-aware review audit reports no review threads.
+- **Learnings for future iterations:**
+  - Treat the final pushed bookkeeping head as the review artifact: synchronize PRD evidence, PR description, CI, base freshness, and review-thread state after the last commit.
+---
+
+
+## 2026-08-10 12:27 -07:00 - e3-event-webhooks-004 latest-main rebase and gate cleanup
+- What was implemented
+  - Rebased the task branch onto `origin/main` at `947152348`, preserving the E3 webhook PRD and merging current-main expected-artifact validation with webhook validation.
+  - Regenerated the contract manifest during conflict resolution and retained the canonical generated API artifacts.
+  - Moved the webhook declaration and delivery-policy contract declarations into the existing Factory Events contract file so the combined current-main plus webhook changes satisfy both backend-size and package-file-count enforcement without changing the package or public API.
+- Files changed
+  - `pkg/services/factory_definitions/internal/contracts/factory_config.go`
+  - `pkg/services/factory_definitions/internal/contracts/factory_events.go`
+  - `progress.txt`
+- Verification
+  - Focused Factory Definitions, validation, Webhooks, Factory Sessions runtime-opening, wire, and edge tests pass.
+  - `make contracts-check`, `make api-smoke`, `make backend-size`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, `make functional-boundary-check`, `make vet`, `make wire-smoke`, and the final retry of `make test` pass.
+  - The first post-rebase short-suite sample hit a nondeterministic five-minute timeout in the unchanged worker-session pause test; its focused rerun and the subsequent complete short suite pass.
+- **Learnings for future iterations:**
+  - Current-main can add a contract file-size burden that is only visible after task rebase; run both size and file-count gates after resolving generated/source conflicts.
+  - Keep PRD and progress synchronization as a final commit after the rewritten head and CI run are known.
+---
+
+
+## 2026-08-10 12:43 -07:00 - e3-event-webhooks-004 terminal CI and review synchronization
+- What was implemented
+  - Reran the failed Backend Functional Coverage and dependent Verification Policy jobs on unchanged head `653d64089` after the first sample hit the unchanged `workers/mock` continuous-idle test; the rerun completed successfully.
+  - Synchronized the story-004 PRD evidence with the final rebased head and terminal CI run.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - All 18 required GitHub checks pass in run `31423825871`, including Backend Functional Coverage job `93573278343` and Verification Policy job `93574586414`.
+  - The exact unchanged worker-mock test passed locally on rerun; no webhook-specific failure was reported by the failed CI sample.
+  - Local and remote task heads match at `653d64089`; `origin/main` and the PR base match at `947152348`; GitHub reports PR #1850 `CLEAN`/`MERGEABLE` and open.
+  - All PRD user stories remain `passes:true`; the PR body still needs the final exact-head synchronization after this commit.
+- **Learnings for future iterations:**
+  - On a broad coverage-lane failure, isolate the exact failed behavioral test before changing product code; rerunning the unchanged job can distinguish an inherited timing sample from a regression.
+---
 
 ## 2026-08-10 21:00 -07:00 - wsr-001-opening-record review feedback and current-main synchronization
 - What was implemented
@@ -7453,42 +8001,6 @@
 - **Learnings for future iterations:**
   - For a shared task bookkeeping conflict, keep the branch-specific PRD authoritative and append the branch-specific progress entries after the current-main history; validate both parseability and marker-free output before staging.
 ---
-## 2026-08-10 21:38 -07:00 - pp-merge-context-bug review follow-up
-- What was implemented
-  - Merged the freshly fetched current `origin/main` head `469204421` into PR #1870 as merge commit `e9fa81c95`, resolving the blocking `prd.json` and `progress.txt` conflicts.
-  - Preserved this task's authoritative PRD and both branches' append-only progress history.
-  - Reconciled project acceptance criterion 2 so the required red evidence is tied to the exact pre-fix revision when current main already contains the correction; the PRD now explicitly records why a current-main red run is impossible and retains the historical red, current green, and root-cause evidence.
-  - No additional fan-in production change was introduced; the existing behavioral regression and current-main correction remain the scoped implementation.
-- Files changed
-  - `prd.json`
-  - `progress.txt`
-  - Current-main merge files: `Makefile`, `cmd/ciclassify/main.go`, and `cmd/ciclassify/main_test.go`.
-- Verification
-  - `go test ./tests/functional/factory/packaged/plan_parallel -run '^TestPackagedPlanParallelMergerReceivesEveryUniqueCompletedChildResult$' -count=3 -v -timeout 600s` — passed all three runs.
-  - Focused scheduler/dispatcher orchestration packages — passed.
-  - `go test ./cmd/ciclassify -count=1` — passed.
-  - `make typecheck` — passed.
-  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` — passed.
-  - `make test` — passed.
-  - `prd.json` parses, shared files contain no conflict markers, and `git diff --check` passed before the follow-up append.
-- **Learnings for future iterations:**
-  - When a PR is blocked by a moving base and shared bookkeeping conflicts, merge the live base first, keep the task PRD authoritative, union append-only progress histories, and make any impossible historical acceptance criterion explicit in the authoritative PRD rather than hiding the exception in a story note.
-  - The PR body must be refreshed from the resolved checked-in `prd.json` after any criterion reconciliation, then hosted checks and thread state must be re-audited on the new head.
----
-## 2026-08-10 21:56 -07:00 - pp-merge-context-bug CI flake follow-up
-- What was implemented
-  - Made no product or test-code changes; investigated the initial hosted `Backend Functional Coverage` failure after the conflict-resolution push.
-  - Isolated the exact failing test, `TestFunctionalAPIServer_RuntimeLogDirectoryIsAProcessInput`, which failed because its runtime log did not yet contain `factory started`; the plan-parallel package and remaining functional package inventory passed.
-  - Reran that exact test 10 consecutive times locally; all ten passed.
-  - Reran only the failed hosted jobs from workflow run `31459255828`; the backend functional lane and downstream Verification Policy both passed.
-- Files changed
-  - `progress.txt`
-- Verification
-  - Local isolation: `go test ./tests/functional/runtime_api -run '^TestFunctionalAPIServer_RuntimeLogDirectoryIsAProcessInput$' -count=10 -v -timeout 600s` — passed 10/10.
-  - Hosted rerun on head `b57b8c823`: Backend Functional Coverage passed in 5m8s; Verification Policy passed; all reported checks are terminal and successful.
-  - No source change was made because the isolated evidence identifies an unrelated transient runtime-log observation failure.
-- **Learnings for future iterations:**
-  - For a broad functional-coverage failure with one named runtime-log assertion, inspect the diagnostic artifact and timing summary, isolate the exact test repeatedly, and rerun only the failed jobs before touching unrelated product code.
 
 ## 2026-08-10 21:23 -07:00 - wsr-001-opening-record final pushed-head audit
 - What was implemented
@@ -7502,219 +8014,23 @@
   - Thread-aware review audit reports 8 conversation comments, 0 formal reviews, and 0 unresolved/outdated inline threads.
   - `prd.json` parses with all three stories marked `passes:true`; `git merge-tree --write-tree origin/main HEAD` and `git diff --check` pass; the worktree is clean.
 - **Learnings for future iterations:**
-- A green PR run becomes stale when `origin/main` advances during local verification; fetch immediately before handoff, merge the new base, and wait for checks on the replacement head.
----
-
-## [2026-08-10 19:12 -07:00] - thr-deflake-model-host-concurrent-reuse-001
+  - A green PR run becomes stale when `origin/main` advances during local verification; fetch immediately before handoff, merge the new base, and wait for checks on the replacement head.
+## 2026-08-10 21:26 -07:00 - e3-event-webhooks-004 current-main rebase and gate follow-up
 - What was implemented
-  - Established that the failure is a production EnsureModelHost reuse race, not a test-only choreography race.
-  - Reproduced the reported symptom during an uncontrolled concurrent scheduler sweep (`process starts = 2, want 1`) and confirmed the same failure signature in GitHub Actions run `31449874394`, job `93651926054`, at `service_test.go:255`.
-  - Traced the exact interleaving in `supervisor.go`: callers A and B can both return `nil` from `awaitExistingLoad` while the slot is `absent`; A then publishes `loading` with `loadDoneA`; B enters the later election lock, does not handle the already-published `loading` state, overwrites it with `loadDoneB`, and starts a second supervised process. The unsafe boundary is the split between the precheck and the loading election.
-  - The diagnosis remains inside the Models runtime-host owner, with no public API or generated-contract changes. The atomic election and deterministic regression are left for story 002.
+  - Rebased the existing PR head `78b55fab2` onto the current fork `main` `ee0023397`, preserving the webhook implementation, Factory PRD, and shared append-only progress history.
+  - Regenerated the merged contract manifest and moved the existing model/script/agent dispatch-event methods into the dispatch-lifecycle owner so `event_history.go` stays below the backend-size limit without adding a package file or changing behavior.
 - Files changed
+  - `packages/api/generated/manifest.json`
+  - `pkg/services/recordings/internal/events/event_history.go`
+  - `pkg/services/recordings/internal/events/event_history_dispatch_lifecycle.go`
   - `prd.json`
   - `progress.txt`
 - Verification
-  - Baseline focused regression: `go test -race ./pkg/services/models/internal/services/runtime_host/internal/service -run '^TestEnsureModelHostConcurrentReuseSharesOneSupervisedProcess$' -count=50 -v` passed once, while the concurrent scheduler sweep also observed the duplicate-start failure.
-  - Sequential scheduler evidence: the same race-enabled test with `GOMAXPROCS=1`, `2`, `8`, and `32`, each at `-count=50`, passed with exit code 0.
-  - `go test ./pkg/services/models/internal/services/runtime_host/internal/service`, `go vet ./pkg/services/models/internal/services/runtime_host/internal/service`, `make typecheck`, and `git diff --check` passed.
+  - `make generate-api` and `make contracts-generate` — passed; contract drift is clean.
+  - Focused Webhooks/Recordings tests, `tests/functional/events/factory_events`, `make contracts-check wire-smoke functional-boundary-check`, `make backend-size pkg-file-count pkg-maint pkg-structure vet`, and the second full `make test` run — passed.
+  - The first aggregate run failed only while compiling unrelated hosted-sources tests under 32-way parallelism; the named package passed in isolation and the cached aggregate rerun passed.
+  - Implementation synchronization commit: `41c45cb11` (`fix: sync webhook branch with current main`).
 - **Learnings for future iterations:**
-  - A passing repeated test does not disprove a race when the state machine has a provable read/election gap; preserve both the probabilistic outcome and the lock-level interleaving before choosing the fix.
-  - Keep the one-process assertion strict and fix the shared runtime-host election in story 002; do not add sleeps, retries, or relaxed process-count checks.
----
-## [2026-08-10 19:24 -07:00] - thr-deflake-model-host-concurrent-reuse-002
-- What was implemented
-  - Fixed the Models runtime-host production race by moving the ready/loading/failed observation and absent-to-loading election into one mutex-protected transition in `supervisedRuntime.ensureReady`.
-  - Loading followers now capture the elected attempt's completion channel and await its terminal result; the elected caller alone launches, supervises, and publishes the process, preserving the strict one-process invariant.
-  - Added a test-only `BeforeLoadElection` seam and a channel/WaitGroup barrier that brings all eight `EnsureModelHost` callers to the diagnosed election boundary before release. The regression asserts every caller receives a ready/loaded host and exactly one launcher start, with no sleeps or retries.
-- Files changed
-  - `pkg/services/models/internal/services/runtime_host/internal/service/supervisor.go`
-  - `pkg/services/models/internal/services/runtime_host/internal/service/export_test.go`
-  - `pkg/services/models/internal/services/runtime_host/internal/service/service_test.go`
-  - `prd.json`
-  - `progress.txt`
-- Verification
-  - `go test ./pkg/services/models/internal/services/runtime_host/internal/service -count=1 -v` — passed.
-  - `go test -race ./pkg/services/models/internal/services/runtime_host/internal/service -run '^TestEnsureModelHostConcurrentReuseSharesOneSupervisedProcess$' -count=50` — passed all 50 repetitions with no race report or extra start.
-  - `go test -race ./pkg/services/models/internal/services/runtime_host/internal/service -count=1` — passed.
-  - `go vet ./pkg/services/models/internal/services/runtime_host/internal/service`, `make typecheck`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, and `git diff --check` — passed.
-- **Learnings for future iterations:**
-  - Put the single-flight decision and loading publication in the same lock-protected switch; a separate absence precheck creates a stale observation that can overwrite `loadDone` and process ownership.
-  - A test-only barrier immediately before the atomic election can force all callers to contend at the diagnosed boundary while keeping production free of sleeps, retries, and timing-dependent coordination.
----
-## [2026-08-10 19:41 -07:00] - thr-deflake-model-host-concurrent-reuse-003
-- What was implemented
-  - Completed scheduler-independent stability evidence for the Models runtime-host fix. The exact full-package command `go test -race ./pkg/services/models/internal/services/runtime_host/internal/service -count=50` passed all 50 repetitions after the focused test was also repeated 50 times.
-  - Repeated the strict concurrent-reuse regression at `GOMAXPROCS=1`, `2`, `8`, and `32`, each with `-race -count=50`; every run passed without race reports, deadlocks, failures, or a second launcher start.
-  - Replaced the cancellation test's fixed 50ms startup sleep with an observable injected launcher-start channel and a bounded failure guard. The first whole-package stress attempt showed that this separate test choreography race could cancel before process launch and report `ErrAssetCancelled`; after the change the same full-package stress command passed.
-  - Marked story 003 `passes:true` in `prd.json` with the commands, scheduler settings, outcomes, original CI root-cause classification, and final quality-gate evidence.
-- Files changed
-  - `pkg/services/models/internal/services/runtime_host/internal/service/failure_test.go`
-  - `prd.json`
-  - `progress.txt`
-- Verification
-  - `go test -race ./pkg/services/models/internal/services/runtime_host/internal/service -count=50` — passed in 22.488s.
-  - `go test -race ./pkg/services/models/internal/services/runtime_host/internal/service -run '^TestEnsureModelHostConcurrentReuseSharesOneSupervisedProcess$' -count=50` — passed in 1.411s.
-  - GOMAXPROCS 1/2/8/32 named-regression runs — passed in 1.403s/1.353s/1.286s/1.276s respectively.
-  - Full runtime-host race suite — passed; `make test` — passed in 380s; `make typecheck backend-size pkg-maint pkg-file-count pkg-structure vet` — passed; `git diff --check` — passed.
-- **Learnings for future iterations:**
-  - Treat a repeated package failure outside the target test as a separate characterization: isolate its named test, identify whether the failure is caused by a fixed timing assumption, and observe the injected runtime edge directly before changing production behavior.
-  - Record both the exact package-wide race command and a low/high GOMAXPROCS matrix so reviewers can distinguish broad-suite stability from targeted scheduler contention evidence.
----
-## [2026-08-10 20:04 -07:00] - thr-deflake-model-host-concurrent-reuse-003 final verification
-- What was implemented
-  - No additional production change; completed the post-edit broad-suite verification and retained the final timing in the append-only evidence log.
-- Files changed
-  - `progress.txt`
-- Verification
-  - The first post-edit `make test` attempt exited non-zero without diagnostic output after 518.7s; the immediate captured-output rerun completed with `make test exit code: 0` in 315.9s, with all unit packages passing.
-  - The exact post-edit `go test -race ./pkg/services/models/internal/services/runtime_host/internal/service -count=50` remained green in 22.488s.
-- **Learnings for future iterations:**
-  - When a long-running shell wrapper returns a silent non-zero result, rerun the same command while capturing and reporting its final output before classifying the failure or changing code.
----
-## [2026-08-10 20:23 -07:00] - thr-deflake-model-host-concurrent-reuse final CI rerun
-- What was implemented
-  - Investigated the first PR CI failure and confirmed it was the known unrelated `TestFactorySessionHistoryIsNotPersistedByDefault` cancellation-observation flake, not a Models runtime-host regression.
-  - Reran the exact failing functional test locally ten times, then reran only the failed GitHub Actions jobs; no source behavior changed.
-- Files changed
-  - `progress.txt`
-- Verification
-  - `go test ./tests/functional/sessions/restart -run '^TestFactorySessionHistoryIsNotPersistedByDefault$' -count=10 -v -timeout 300s` — all ten passed in 22.410s.
-  - `gh run rerun 31454365225 --failed` — Backend Functional Coverage passed in 5m5s and Verification Policy passed in 4s; all other required checks remained passing.
-  - PR #1868 remains open, mergeable, non-draft, and synchronized to head `0447883f3`; thread-aware review audit remains empty.
-- **Learnings for future iterations:**
-  - When a broad functional lane fails at an untouched cancellation observation, isolate and repeat the named test before changing task code, then rerun only the failed jobs once the characterization is clean.
----
-## [2026-08-10 20:53 -07:00] - thr-deflake-model-host-concurrent-reuse review follow-up
-- What was implemented
-  - Replaced the pre-election arrival barrier with an `AfterLoadStateObservation` test seam that runs after each caller releases the runtime-state mutex.
-  - Coordinated all eight callers at that edge; the fixed implementation atomically publishes `loading` before followers observe it, while the historical split observation/election implementation fails deterministically with `process starts = 8, want 1`.
-  - Merged current `origin/main` at `ee0023397`, kept this task's `prd.json` authoritative, and retained the unrelated main-line progress history.
-- Files changed
-  - `pkg/services/models/internal/services/runtime_host/internal/service/supervisor.go`
-  - `pkg/services/models/internal/services/runtime_host/internal/service/export_test.go`
-  - `pkg/services/models/internal/services/runtime_host/internal/service/service_test.go`
-  - `prd.json`
-  - `progress.txt`
-  - Current-main synchronization files carried by the merge.
-- Verification
-  - The corrected focused regression passed; the temporary historical implementation failed at the strict single-start assertion with `process starts = 8, want 1`.
-  - `prd.json` parses with all three task stories marked `passes:true`, conflict markers are absent, and the merged worktree has no unmerged entries.
-- **Learnings for future iterations:**
-  - To prove a single-flight regression against a split read/election implementation, synchronize after the state-read lock is released and before the second election lock; a pre-lock arrival barrier alone does not force the unsafe interleaving.
----
-## [2026-08-10 21:08 -07:00] - thr-deflake-model-host-concurrent-reuse-002 review follow-up
-- What was implemented
-  - Completed the blocking review follow-up for the deterministic concurrent-reuse regression. The `AfterLoadStateObservation` seam coordinates all eight callers after they release the runtime-state mutex; the production path has already published `loading` atomically, while the historical split path can be instrumented at the same post-observation/pre-election edge.
-  - Reproduced the former implementation's failure in a detached temporary checkout: the strict launcher assertion reported `process starts = 8, want 1`. The corrected implementation passed the focused race-enabled regression 50 times at `GOMAXPROCS=8`.
-  - Confirmed the branch already contains the current `origin/main` merge at `ee0023397`; `git merge-tree --write-tree HEAD origin/main` completed without conflicts.
-- Files changed
-  - `prd.json`
-  - `progress.txt`
-- Verification
-  - `GOMAXPROCS=8 go test -race ./pkg/services/models/internal/services/runtime_host/internal/service -run '^TestEnsureModelHostConcurrentReuseSharesOneSupervisedProcess$' -count=50` — passed all 50 repetitions in 1.457s with no race report, deadlock, failure, or extra process start.
-  - Instrumented historical split implementation — failed deterministically at `service_test.go:305` with `process starts = 8, want 1 shared supervised process`.
-  - `git merge-tree --write-tree HEAD origin/main`, `git diff --check`, and the conflict audit — passed; all three PRD stories remain `passes:true`.
-- **Learnings for future iterations:**
-  - A deterministic regression for a removed synchronization gap should identify the semantic post-observation/pre-election edge and retain a strict externally visible side-effect assertion; a pre-lock arrival barrier does not distinguish the historical implementation.
----
-## [2026-08-10 21:23 -07:00] - thr-deflake-model-host-concurrent-reuse-002 current-main synchronization
-- What was implemented
-  - Merged the live `origin/main` head `469204421` after it advanced beyond `ee0023397`; preserved this task's authoritative `prd.json` and appended the four current-main `ci-additive-classifier` progress entries without truncating the append-only log.
-  - Kept the deterministic `AfterLoadStateObservation` regression and Models runtime-host production fix unchanged while reconciling the shared bookkeeping files.
-- Files changed
-  - `Makefile`
-  - `cmd/ciclassify/main.go`
-  - `cmd/ciclassify/main_test.go`
-  - `progress.txt`
-- Verification
-  - `GOMAXPROCS=8 go test -race ./pkg/services/models/internal/services/runtime_host/internal/service -run '^TestEnsureModelHostConcurrentReuseSharesOneSupervisedProcess$' -count=50` — passed all 50 repetitions in 3.411s.
-  - `prd.json` parses with three passing stories; `progress.txt` remains 6,872 lines before this entry, has no conflict markers, and retains both branch histories.
-  - `git diff --check` and `git merge-tree --write-tree origin/main HEAD` passed with `origin/main=469204421`.
-- **Learnings for future iterations:**
-  - For long append-only conflict files, resolve from full Git objects or bounded patches; never reconstruct a large file from truncated shell output, and validate line count plus both branch histories before staging.
----
-## [2026-08-10 21:43 -07:00] - thr-deflake-model-host-concurrent-reuse-003 CI flake follow-up
-- What was implemented
-  - Investigated the first post-reconciliation CI failure in run `31458338809`. Backend Functional Coverage failed only at the unrelated `tests/functional/workers/inference/codex:TestCodexGoldenTextAndToolSuccess`, whose fixture transcript omitted the expected tool lifecycle; the required real-ACP evidence artifact was consequently absent and Verification Policy failed downstream.
-  - Made no production or test-code changes. Downloaded the functional diagnostics, isolated the named test locally for ten repetitions, and confirmed it passed every run.
-  - Reran only the failed GitHub Actions jobs with `gh run rerun 31458338809 --failed`; the backend functional rerun and dependent Verification Policy both passed.
-- Files changed
-  - `progress.txt`
-- Verification
-  - `go test ./tests/functional/workers/inference/codex -run '^TestCodexGoldenTextAndToolSuccess$' -count=10 -v -timeout 300s` — all ten passed in 9.537s.
-  - Backend Functional Coverage rerun job `93678695912` — passed.
-  - Verification Policy rerun job `93679483557` — passed.
-  - All other required checks on the replacement head remained passing; the Models runtime-host focused race regression was unaffected.
-- **Learnings for future iterations:**
-- When functional diagnostics name an untouched Codex or worker fixture failure, isolate that exact test before changing task code; rerun only the failed coverage and policy jobs after the characterization passes.
----
-
-## [2026-08-10 21:57 -07:00] - thr-deflake-model-host-concurrent-reuse final current-main reconciliation
-- What was implemented
-  - Merged the live `origin/main` head `7dbeb472a` after it advanced beyond the previously synchronized `469204421`.
-  - Preserved this task's authoritative `prd.json`, retained the complete current-main append-only progress history, and added the task-specific concurrency history and reusable patterns without truncating either branch.
-  - Carried the current-main Worker Sessions/API/generated-artifact changes through the merge; no additional Models runtime-host production change was required.
-- Files changed
-  - Current-main files carried by the merge.
-  - `prd.json`
-  - `progress.txt`
-- Verification
-  - `prd.json` parses with all three task stories marked `passes:true`.
-  - `progress.txt` contains 7,490 lines, no conflict markers, and both branch histories.
-  - `$env:GOMAXPROCS=8; go test -race ./pkg/services/models/internal/services/runtime_host/internal/service -run '^TestEnsureModelHostConcurrentReuseSharesOneSupervisedProcess$' -count=50` — passed all 50 repetitions in 1.650s.
-  - The merge commit is `dd925e6fb`; the staged merge passed `git diff --cached --check` and the committed tree is conflict-free.
-- **Learnings for future iterations:**
-- Fetch `origin/main` immediately before final handoff because another merged PR can invalidate an otherwise green head; resolve shared PRD/progress files from complete Git objects and rerun the focused regression on the replacement merge head.
----
-
-## [2026-08-10 22:16 -07:00] - thr-deflake-model-host-concurrent-reuse final CI flake follow-up
-- What was implemented
-  - Investigated the only failure in final-head CI run `31460167917`: Backend Functional Coverage named the unrelated `tests/functional/providers/acp:TestFactoryRunRetriesACPProviderByResumingExactSession`, which observed zero completed work after a transient ACP session-load failure.
-  - Made no production or test-code changes. Isolated the exact test locally for ten repetitions; every repetition passed.
-  - Reran only the failed Backend Functional Coverage and dependent Verification Policy jobs; both passed on the same pushed head.
-- Files changed
-  - `progress.txt`
-- Verification
-  - `go test ./tests/functional/providers/acp -run '^TestFactoryRunRetriesACPProviderByResumingExactSession$' -count=10 -v -timeout 300s` — all ten passed in 39.776s.
-  - Backend Functional Coverage rerun in `31460167917` — passed.
-  - Verification Policy rerun in `31460167917` — passed.
-  - All other final-head jobs remained passing, including Backend Unit Coverage, Local Inference, UI Backend Integration, and the focused Models runtime-host race regression.
-- **Learnings for future iterations:**
-  - When a functional coverage lane names an untouched ACP session-resume fixture and the exact test passes repeated local characterization, preserve task code and rerun only the failed coverage and policy jobs before recording the flake.
----
-## 2026-08-10 22:02 -07:00 - pp-merge-context-bug latest-main synchronization follow-up
-- What was implemented
-  - Fetched and merged the live `origin/main` head `7dbeb472a` into PR #1870 as merge commit `051c7bb4e` after the base advanced again.
-  - Preserved the task-scoped `prd.json`, retained both branches' append-only progress history, and carried the current-main Worker Sessions/API/generated changes forward without adding another fan-in production change.
-- Files changed
-  - `prd.json`
-  - `progress.txt`
-  - Current-main synchronization files under API, Factory Runtime, Factory Sessions, Worker Sessions, Workers, HTTP/generated clients, and related functional tests.
-- Verification
-  - `go test ./tests/functional/factory/packaged/plan_parallel -run '^TestPackagedPlanParallelMergerReceivesEveryUniqueCompletedChildResult$' -count=3 -timeout 600s` — passed all three runs.
-  - `go test ./pkg/services/factory_runtime/internal/services/orchestration/scheduler ./pkg/services/factory_runtime/internal/services/orchestration/subsystems/... -count=1 -timeout 300s` — passed.
-  - `go test ./pkg/services/worker_sessions/... -count=1 -timeout 600s` — passed.
-  - `go test ./pkg/services/operator_settings/transports/cli -count=1 -timeout 300s` — passed.
-  - `make typecheck` — passed.
-  - `prd.json` parses, no conflict markers remain, and `git diff --check` passed before this append.
-- **Learnings for future iterations:**
-  - A PR can become conflicting again after a successful retry because `main` advances asynchronously; fetch the hosting ref immediately before each final push and repeat the shared-file merge protocol.
-- When parallel Go test processes produce a tool subprocess failure, rerun the named package serially before treating it as a source regression.
----
-
-## [2026-08-10 22:19 -07:00] - thr-deflake-model-host-concurrent-reuse latest-main synchronization follow-up
-- What was implemented
-  - Merged the live `origin/main` head `b68e4bf95` after it advanced beyond `7dbeb472a`.
-  - Preserved this task's authoritative `prd.json`, retained both append-only progress histories, and carried the current-main plan-parallel regression changes forward without adding unrelated task behavior.
-- Files changed
-  - `pkg/services/factory_runtime/internal/services/orchestration/packaged/plan_parallel/invocation_test.go`
-  - `prd.json`
-  - `progress.txt`
-- Verification
-  - `prd.json` parses with all three task stories marked `passes:true`; `progress.txt` contains both branch histories and no conflict markers.
-  - `$env:GOMAXPROCS=8; go test -race ./pkg/services/models/internal/services/runtime_host/internal/service -run '^TestEnsureModelHostConcurrentReuseSharesOneSupervisedProcess$' -count=50` — passed all 50 repetitions in 2.205s.
-  - `git diff --cached --check` passed for the resolved merge, and the merge tree contains no unmerged entries.
-- **Learnings for future iterations:**
-  - Main can advance again while a targeted rerun is in flight; merge the latest hosting ref before the final push and combine the synchronization evidence with the merge commit so CI runs on the actual handoff head.
+  - After rebasing a feature that adds fields to a near-limit shared event-history file, prefer moving an existing responsibility-aligned method group into an existing owner before adding another package file or weakening the size gate.
+  - Regenerate contract staging after resolving generated-file conflicts; `make generate-api` alone does not refresh the contract manifest hashes.
 ---

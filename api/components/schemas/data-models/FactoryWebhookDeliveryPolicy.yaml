@@ -1,0 +1,24 @@
+type: object
+additionalProperties: false
+description: >-
+  Bounded outbound delivery policy. Durations use Go duration syntax. Omitted
+  values resolve to a 10 second request timeout, 5 total attempts, 1 second
+  initial backoff, 2.0 multiplier, and 30 second maximum backoff.
+properties:
+  requestTimeout:
+    type: string
+    description: Positive Go duration allowed for one HTTP request attempt.
+  maxAttempts:
+    type: integer
+    minimum: 1
+    description: Total delivery attempts including the initial request.
+  initialBackoff:
+    type: string
+    description: Positive Go duration before the first retry.
+  backoffMultiplier:
+    type: number
+    minimum: 1
+    description: Exponential retry multiplier; values below 1 are not supported.
+  maxBackoff:
+    type: string
+    description: Positive Go duration cap for one retry delay; it must not be below initialBackoff.

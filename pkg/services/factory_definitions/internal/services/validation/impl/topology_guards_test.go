@@ -1274,3 +1274,87 @@ func TestExpectedArtifactTargets_ReportsActionableOwningDefinitionPaths(t *testi
 		t.Fatalf("workstation target = %#v, want owning definition path and diagnostic", workstationTarget)
 	}
 }
+func TestWebhookTargetsAcceptsCanonicalFilterAndDeliveryPolicy(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Webhooks = []factorydefinitions.FactoryWebhookConfig{{
+		Name:             "monitor",
+		Enabled:          true,
+		URL:              "https://hooks.example.test/factory",
+		SigningSecretRef: "secrets/factory-monitor",
+		Filter: factorydefinitions.FactoryWebhookFilterConfig{
+			EventTypes:       []string{factorydefinitions.FactoryWebhookEventTypeWorkStateChange, factorydefinitions.FactoryWebhookEventTypeDispatchReconciled},
+			DispatchStatuses: []string{factorydefinitions.FactoryWebhookDispatchStatusFailed},
+		},
+		DeliveryPolicy: &factorydefinitions.FactoryWebhookDeliveryPolicyConfig{
+			RequestTimeout:    stringPointerForWebhookTest("15s"),
+			MaxAttempts:       intPointerForWebhookTest(3),
+			InitialBackoff:    stringPointerForWebhookTest("1s"),
+			BackoffMultiplier: floatPointerForWebhookTest(1.5),
+			MaxBackoff:        stringPointerForWebhookTest("5s"),
+		},
+	}}
+
+	findings := WebhookTargets(cfg)
+	if len(findings) != 0 {
+		t.Fatalf("findings = %#v, want none", findings)
+	}
+}
+
+func TestWebhookTargetsRejectsInvalidFieldsWithEndpointPaths(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Webhooks = []factorydefinitions.FactoryWebhookConfig{
+		{
+			Name:             "monitor",
+			URL:              "ftp://hooks.example.test/factory",
+			SigningSecretRef: " ",
+			Filter: factorydefinitions.FactoryWebhookFilterConfig{
+				EventTypes:       []string{factorydefinitions.FactoryWebhookEventTypeWorkStateChange, "NOT_CANONICAL"},
+				DispatchStatuses: []string{factorydefinitions.FactoryWebhookDispatchStatusFailed},
+			},
+			DeliveryPolicy: &factorydefinitions.FactoryWebhookDeliveryPolicyConfig{
+				MaxAttempts:       intPointerForWebhookTest(0),
+				InitialBackoff:    stringPointerForWebhookTest("5s"),
+				MaxBackoff:        stringPointerForWebhookTest("1s"),
+				BackoffMultiplier: floatPointerForWebhookTest(0.5),
+			},
+		},
+		{
+			Name:             " monitor ",
+			Enabled:          true,
+			URL:              "https://hooks.example.test/other",
+			SigningSecretRef: "secrets/other",
+			Filter: factorydefinitions.FactoryWebhookFilterConfig{
+				EventTypes: []string{factorydefinitions.FactoryWebhookEventTypeWorkStateChange},
+			},
+		},
+	}
+
+	findings := WebhookTargets(cfg)
+	assertWebhookTargetMatch(t, findings, CodeWebhookURLInvalid, "factory.webhooks[0](monitor).url", "absolute http or https")
+	assertWebhookTargetMatch(t, findings, CodeWebhookSecretReferenceRequired, "factory.webhooks[0](monitor).signingSecretRef", "non-empty")
+	assertWebhookTargetMatch(t, findings, CodeWebhookEventTypeUnsupported, "factory.webhooks[0](monitor).filter.eventTypes[1]", "NOT_CANONICAL")
+	assertWebhookTargetMatch(t, findings, CodeWebhookDeliveryPolicyInvalid, "factory.webhooks[0](monitor).deliveryPolicy.maxAttempts", "positive")
+	assertWebhookTargetMatch(t, findings, CodeWebhookDeliveryPolicyInvalid, "factory.webhooks[0](monitor).deliveryPolicy.backoffMultiplier", "at least 1")
+	assertWebhookTargetMatch(t, findings, CodeWebhookDeliveryPolicyInvalid, "factory.webhooks[0](monitor).deliveryPolicy.maxBackoff", "initialBackoff")
+	assertWebhookTargetMatch(t, findings, CodeWebhookNameDuplicate, "factory.webhooks[1]( monitor ).name", "duplicates")
+}
+
+func assertWebhookTargetMatch(t *testing.T, targets []Target, code, pathSubstring, messageSubstring string) {
+	t.Helper()
+	for _, target := range targets {
+		if target.Code != code || target.Severity != SeverityError || !strings.Contains(target.Path, pathSubstring) {
+			continue
+		}
+		if !strings.Contains(target.Message, messageSubstring) {
+			t.Fatalf("target message = %q, want substring %q", target.Message, messageSubstring)
+		}
+		return
+	}
+	t.Fatalf("expected error target with code %q, got %v", code, targets)
+}
+
+func stringPointerForWebhookTest(value string) *string { return &value }
+
+func intPointerForWebhookTest(value int) *int { return &value }
+
+func floatPointerForWebhookTest(value float64) *float64 { return &value }

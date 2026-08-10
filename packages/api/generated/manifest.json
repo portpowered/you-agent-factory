@@ -241,7 +241,7 @@
       "path": "generated/openapi/openapi.yaml"
     },
     "generated.schemas.factory": {
-      "artifactHash": "84d8b865689304693cd36f690c4bfe5d663ac9112de5e3a378e261238f82fd0c",
+      "artifactHash": "f432d2be2edd65a8ca349fc6c257b1fd041f0f5fd87af1799c945b1e63d18753",
       "documentation": {
         "documentation": {
           "description": {
@@ -258,7 +258,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.schemas.factory",
-        "sourceHash": "84d8b865689304693cd36f690c4bfe5d663ac9112de5e3a378e261238f82fd0c",
+        "sourceHash": "f432d2be2edd65a8ca349fc6c257b1fd041f0f5fd87af1799c945b1e63d18753",
         "visibility": "public"
       },
       "family": "config",

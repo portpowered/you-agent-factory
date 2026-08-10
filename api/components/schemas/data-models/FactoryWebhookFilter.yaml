@@ -1,0 +1,18 @@
+type: object
+additionalProperties: false
+required:
+  - eventTypes
+description: Canonical event filter for one outbound webhook subscription.
+properties:
+  eventTypes:
+    type: array
+    minItems: 1
+    description: Canonical event types selected for delivery.
+    items:
+      $ref: './FactoryWebhookEventType.yaml'
+  dispatchStatuses:
+    type: array
+    minItems: 1
+    description: Optional canonical dispatch statuses applied only to dispatch event types.
+    items:
+      $ref: './FactoryWebhookDispatchStatus.yaml'

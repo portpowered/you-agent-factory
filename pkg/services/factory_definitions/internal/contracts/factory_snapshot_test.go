@@ -155,3 +155,52 @@ func TestFactorySnapshotWithNameRejectsNilSnapshot(t *testing.T) {
 		t.Fatal("WithName: expected error")
 	}
 }
+
+func TestCloneFactoryConfigPreservesWebhookDeclarations(t *testing.T) {
+	policy := FactoryWebhookDeliveryPolicyConfig{
+		RequestTimeout:    stringPointer("15s"),
+		MaxAttempts:       intPointer(3),
+		InitialBackoff:    stringPointer("2s"),
+		BackoffMultiplier: floatPointer(1.5),
+		MaxBackoff:        stringPointer("10s"),
+	}
+	source := &FactoryConfig{Webhooks: []FactoryWebhookConfig{{
+		Name:             "monitor",
+		Enabled:          true,
+		URL:              "https://hooks.example.test/factory",
+		SigningSecretRef: "secrets/factory-monitor",
+		Filter: FactoryWebhookFilterConfig{
+			EventTypes:       []string{FactoryWebhookEventTypeWorkStateChange},
+			DispatchStatuses: []string{FactoryWebhookDispatchStatusFailed},
+		},
+		DeliveryPolicy: &policy,
+	}}}
+
+	clone, err := CloneFactoryConfig(source)
+	if err != nil {
+		t.Fatalf("CloneFactoryConfig: %v", err)
+	}
+	clone.Webhooks[0].Filter.EventTypes[0] = FactoryWebhookEventTypeDispatchResponse
+	*clone.Webhooks[0].DeliveryPolicy.MaxAttempts = 4
+	if source.Webhooks[0].Filter.EventTypes[0] != FactoryWebhookEventTypeWorkStateChange || *source.Webhooks[0].DeliveryPolicy.MaxAttempts != 3 {
+		t.Fatalf("clone mutated source webhook declaration: source=%#v clone=%#v", source.Webhooks, clone.Webhooks)
+	}
+}
+
+func TestResolveFactoryWebhookDeliveryPolicyAppliesDefaults(t *testing.T) {
+	effective, err := ResolveFactoryWebhookDeliveryPolicy(nil)
+	if err != nil {
+		t.Fatalf("ResolveFactoryWebhookDeliveryPolicy: %v", err)
+	}
+	if effective.RequestTimeout != DefaultFactoryWebhookRequestTimeout ||
+		effective.MaxAttempts != DefaultFactoryWebhookMaxAttempts ||
+		effective.InitialBackoff != DefaultFactoryWebhookInitialBackoff ||
+		effective.BackoffMultiplier != DefaultFactoryWebhookBackoffMultiplier ||
+		effective.MaxBackoff != DefaultFactoryWebhookMaxBackoff {
+		t.Fatalf("effective defaults = %#v", effective)
+	}
+}
+
+func stringPointer(value string) *string  { return &value }
+func intPointer(value int) *int           { return &value }
+func floatPointer(value float64) *float64 { return &value }
