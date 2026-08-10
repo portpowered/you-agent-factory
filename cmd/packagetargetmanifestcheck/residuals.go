@@ -18,7 +18,7 @@ func nonServiceFamilySet() map[string]struct{} {
 // mapResidualPackage maps approved non-service family packages and any remaining
 // production residuals that are not committed owners or the Edges exception.
 // Unknown residuals are queued for deletion with a named successor so discovering
-// them does not reopen or extend the top-level 13-owner tree.
+// them does not reopen or extend the committed product-owner tree.
 func mapResidualPackage(packagePath string) (PackageMapping, bool) {
 	packagePath = strings.TrimSpace(packagePath)
 	if packagePath == "" {

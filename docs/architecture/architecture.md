@@ -18,13 +18,21 @@ The primary abstractions the backend works off of are:
 - chat sessions
 - worker sessions
 - events
+- providers
+- provider sessions
 
 ### interactions
-- A factory is a place where workers do work in workstations.
-- Factories are defined in a factory definition.
-- A factory is run inside of a factory session.
-- A factory session takes care of handling of wiring up the workers, work, automations and event recorder with the factory.
-- A worker can use models to run.
+- A Factory is a place where Workers do Work in Workstations.
+- Factories are defined in a Factory Definition.
+- A Factory runs inside a Factory Session.
+- Factory Sessions open and control the injected Factory Runtime assembly and
+  record canonical Factory history through Recordings.
+- Chat Sessions own the ACP conversation and control context; the Events service
+  carries source-native session observations, while Recordings owns canonical
+  Factory history.
+- Worker Sessions supervise Worker attempts and publish their observations to
+  Events. Workers consume Providers and Models through their public contracts.
+- Automations observe hosted sources and admit scheduled Work through Work.
 
 ## package-structured
 see ./packaged-structure.md for more details on how package structures is supposed to work.
@@ -78,7 +86,7 @@ The services are meant to be deep, providing a simple abstraction that users of 
 
 ```mermaid
 flowchart LR
-    api[transports like API/CI/MCP]
+    api[transports like API/CLI/MCP/ACP]
     factorySessions[Factory Sessions Service]
     chatSessions[Chat Sessions Service]
     runtime[Factory Runtime Service]
@@ -145,15 +153,17 @@ roots must not be recreated.
 | Process root and command handoff | `cmd/factory` and target `pkg/root` | Keep `cmd/factory` thin; construct one reusable process and execute customer input without predicting which service command will be selected. |
 | Dependency construction and bundle assembly | target `pkg/wire` | Use the single `InjectBundle` entrypoint and one canonical provider set for production and functional external-edge injection. Construct one complete inert process graph; CLI selection activates an operation over injected roles and never calls a child injector or hidden full-graph builder. |
 | Initializer lifecycle | `pkg/initializer` | Start, stop, cancel, join, and unwind already-constructed inert handles without constructing product services, transports, or Factory Session runtime state. |
-| Transport boundaries | target `pkg/transports` | Own HTTP, CLI, MCP, generated transport contracts and clients, and boundary mapping. Translate into injected application/domain services; do not own domain policy or canonical runtime state. |
-| Factory Session state and lifecycle | `pkg/services/factory_sessions` | Own the control plane operations of factory sessions. Define the session, handle requests for pause/resume/enumeration/control/delete. Submits messages and requests downstreams to create resources. Responsible for system consistency. Does not own the services. |
-| Factory runtime | `pkg/services/factory_runtime` | Expose transport-neutral orchestration contracts through the Factory Runtime service root; keep source resolution, validation, preview preparation, runtime execution, and checkpoint implementation private to Factory Runtime. |
+| Transport boundaries | target `pkg/transports` | Own HTTP, CLI, MCP, ACP, generated transport contracts and clients, and boundary mapping. Translate into injected application/domain services; do not own domain policy or canonical runtime state. |
+| ACP transport | `pkg/transports/acp` | Own ACP protocol negotiation, envelopes, session transport, response bridging, and transport mapping. Consume Chat Sessions, Events, Worker Sessions, and Factory Sessions contracts without owning Factory state. |
+| Boundary mapping | `pkg/transports/mapping` | Own representation conversion at public boundaries. Translate protocol payloads into service contracts without owning canonical policy or state. |
+| Factory Session state and lifecycle | `pkg/services/factory_sessions` | Own live and durable Factory Session state and control-plane operations, including runtime opening, invocation, response streams, pause/resume/enumeration/control/delete, and persisted execution behavior. It coordinates peer services without owning them. |
+| Factory runtime | `pkg/services/factory_runtime` | Expose transport-neutral Factory orchestration contracts through the Factory Runtime service root; keep source resolution, validation, preview preparation, runtime execution, and checkpoint implementation private to Factory Runtime. Implementation-specific runtime primitives remain behind this customer-facing Factory boundary. |
 | Factory event ledger, replay, artifacts, and projections | `pkg/services/recordings` | Own canonical event history, replay policy, durable execution artifacts, and read-model projections. |
-| Workers and workstations | `pkg/services/workers` | Own worker and workstation execution, runner selection, prompt and output shaping, worktrees, mock-worker behavior, and invocation-time worker capability policy. Consume provider and model capabilities through their public service contracts. |
-| Providers | `pkg/services/providers` | Own provider identity, catalog, configuration, lifecycle, ACP integration, and provider execution. Provider adapters and registries remain Providers-owned rather than Workers-owned. |
+| Workers and workstations | `pkg/services/workers` | Own request-scoped worker and workstation execution, runner selection, prompt and output shaping, worktrees, mock-worker behavior, and worker capability policy. Consume Providers and Models through their public service contracts; provider inference/execution and hosted polling remain outside Workers. |
+| Providers | `pkg/services/providers` | Own provider identity, catalog, configuration, lifecycle, provider protocol and selection, session identity, adapter choice, provider inference, provider execution policy, and one normalized execution attempt. Workers retains request-scoped scheduling and retry policy while consuming the Providers contract. |
 | Models and managed runtimes | `pkg/services/models` | Public behavior and Factory Session binding are operations on the root `models.Service`; implementation packages for runtime lifecycle, host supervision, assets, and catalog behavior live under `pkg/services/models/internal`, and `pkg/services/models/wire` is the only exported construction boundary. Wire injects the Models service directly—Factory Sessions does not own a Models constructor or opener. Models never call Workers; Workers consumes the public Models service when invocation needs a model. |
-| Work domain | `pkg/services/work` | Own canonical Work, Work Request, content, dispatch identity, relations, payload lineage, query/selection, graph, pure invocation input and return policy, and materialization. Cron/time-work orchestration belongs to `pkg/services/automations`. Exclude Factory Session orchestration, worker/provider execution, Petri token state, and generic platform clocks. |
-| Automations | `pkg/services/automations` | Own cron, filesystem watcher, script poller, hosted-source, reconciliation, and invocation scheduling behavior that observes or admits Work. |
+| Work domain | `pkg/services/work` | Own canonical Work, Work Request, content, dispatch identity, relations, payload lineage, query/selection, graph, pure invocation input and return policy, and materialization. Cron/time-work orchestration belongs to `pkg/services/automations`. Exclude Factory Session orchestration, worker/provider execution, internal runtime state, and generic platform clocks. |
+| Automations | `pkg/services/automations` | Own cron, filesystem watcher, script poller, hosted-source observation and polling, reconciliation, and invocation scheduling behavior that observes or admits Work. Hosted polling remains outside Workers. |
 | Provider Sessions | `pkg/services/provider_sessions` | Own provider-session discovery and provider transcript/session inspection. |
 | Chat Sessions | `pkg/services/chat_sessions` | Own the customer conversation and control context used by ACP: selected targets, ordered turns, target episodes, attachments, and control intents. It sequences source-native observation records onto the Chat Session's Events topic but does not own Factory replay history. |
 | Events | `pkg/services/events` | Own the process-local, in-memory session-scoped stream used for source-native record ordering, source attachment, cursors, retained reads, subscriptions, retention gaps, and backpressure. It is not a durable journal or canonical Factory event ledger. |
@@ -185,7 +195,7 @@ Provider and Model capabilities through their service contracts.
 ### System state of a Factory Session
 
 A Factory Session is the runtime and control context for one Factory
-execution. Factory Sessions resolves the Factory definition, opens the
+execution. The Factory Sessions service resolves the Factory definition, opens the
 injected Factory Runtime assembly, applies supported controls, and records the
 resulting canonical Factory facts through Recordings. Automations admit Work
 through Work's operations; they are not activated by subscribing every service

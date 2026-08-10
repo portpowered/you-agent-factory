@@ -66,6 +66,19 @@ func TestMapPackageMovesProviderPackagesOutOfWorkers(t *testing.T) {
 	}
 }
 
+func TestMapPackageRetainsWorkerSessionsPackages(t *testing.T) {
+	row, err := ownershipinventory.MapPackage("pkg/services/worker_sessions/transports/http")
+	if err != nil {
+		t.Fatalf("MapPackage() error = %v", err)
+	}
+	if row.Destination != "worker_sessions" || row.Disposition != ownershipinventory.DispositionRetain {
+		t.Fatalf("row = %#v, want retain under worker_sessions", row)
+	}
+	if row.DestinationKind != ownershipinventory.DestinationKindOwner {
+		t.Fatalf("destinationKind = %q, want owner", row.DestinationKind)
+	}
+}
+
 func TestMapPackageMovesLegacyServiceImplementationPackages(t *testing.T) {
 	row, err := ownershipinventory.MapPackage("pkg/services/workers/service")
 	if err != nil {
@@ -92,4 +105,3 @@ func TestInventoryArtifactExistsAtCanonicalPath(t *testing.T) {
 		t.Fatalf("ownership inventory artifact missing at %s: %v", ownershipinventory.InventoryRelativePath, err)
 	}
 }
-
