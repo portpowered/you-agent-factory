@@ -1,6 +1,7 @@
 ## Codebase Patterns
 - Canonical Wire should pass one explicit owner-port contract per service owner; aggregate composition helpers belong only in tests and must not cross the production constructor boundary.
 - Functional support may normalize an edge aggregate only at the test composition boundary; production root.BuildProcess must continue to receive the exact owner-port projection.
+- For PR delivery, verify checks against the exact head SHA; if an obsolete branch workflow holds concurrency while the latest head is queued, cancel only the obsolete run before evaluating the latest head.
 - Process-scoped external effects should be adapted or defaulted in canonical Wire providers and captured by closures; operation factories receive selected owner ports and only values or observation fallbacks.
 - Value-only runtime-opening interfaces should retain logger/metrics and transport presentation state behind process-scoped owners keyed by typed IDs; durable requests must not retain protocol handles or callbacks.
 - When a root-process functional test needs live event inspection, invoke through `support.BuildProcess` and `Process.Execute`, use the injected API only for observation, and gate the command-runner edge until observation streams are open.
@@ -1985,4 +1986,20 @@
   - The invocation runtime exposes the session gateway, not the durable wrapper directly; optional event-consumer capabilities must be forwarded through that gateway before the runtime-opening type assertion can select them.
   - A compatibility binding removed from the runtime-opening path can remain behaviorally covered by an inert root-construction validation that preserves the same root identity and does not construct another graph.
   - A failed functional test corpus does not produce the coverage summary; inspect the test failure first and rerun before interpreting package-ratchet status.
+---
+## 2026-08-10 13:15 -07:00 - btrc-p1-root-injection-006 delivery verification
+- What was implemented
+  - Re-ran the authoritative verification workflow on the latest pushed head after the prior timing-sensitive functional assertions; all required jobs completed successfully.
+  - Synchronized the PR description with the current `prd.json` and verified the PR remains open and clean at the exact branch head.
+  - Audited the existing PR conversation and review-thread state; the six blocking findings are addressed in the implementation and no unresolved inline threads or formal reviews remain.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Fresh CI run `31426925023` — all 18 checks pass, including Backend Unit Coverage, Backend Functional Coverage, and Verification Policy.
+  - PR #1857 head `4db104d29` matches the local branch; merge state is `CLEAN`.
+  - PR body matches `prd.json` after normalizing platform line endings; `git status` was clean before this bookkeeping update.
+- **Learnings for future iterations:**
+  - A full functional lane can pass after a prior transient cancellation-observation failure; inspect the actual failing test, make only feature-linked fixes, then let a fresh terminal workflow establish the final coverage result.
+  - When a superseded GitHub Actions run holds branch concurrency, canceling only that stale run lets the latest exact-head workflow become authoritative without evaluating obsolete results.
 ---
