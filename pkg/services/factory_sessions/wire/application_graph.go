@@ -21,6 +21,7 @@ import (
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	invocationwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/invocation/wire"
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	"go.uber.org/zap"
 )
 
 // The aliases in this file are the service-owned construction vocabulary used
@@ -213,6 +214,7 @@ func NewInvocationOperation(
 	modelTimeout factorysessions.ModelInvocationTimeout,
 	artifactRoots factoryruntime.RuntimeArtifactRootResolver,
 	generateSessionID factorysessions.SessionIDGenerator,
+	logger *zap.Logger,
 ) (InvocationOperation, error) {
 	return invocationwire.NewOperation(
 		openRuntime,
@@ -223,6 +225,7 @@ func NewInvocationOperation(
 		modelTimeout,
 		artifactRoots,
 		generateSessionID,
+		logger,
 	)
 }
 

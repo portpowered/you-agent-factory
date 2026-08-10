@@ -253,7 +253,7 @@ func (f *Factory) OpenExecutionRuntime(
 			MetricsDirectory: artifactRoots.Metrics,
 		},
 	}
-	opened, err := f.runtimes.OpenExecutionRuntime(ctx, request, f.logger)
+	opened, err := f.runtimes.OpenExecutionRuntime(ctx, request)
 	if err != nil {
 		return roles.OpenedExecutionRuntime{}, fmt.Errorf("construct runtime-backed execution graph: %w", err)
 	}

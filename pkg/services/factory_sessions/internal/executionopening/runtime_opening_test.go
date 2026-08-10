@@ -62,7 +62,6 @@ type executionRuntimeOpeningStub struct {
 func (stub *executionRuntimeOpeningStub) OpenExecutionRuntime(
 	_ context.Context,
 	request *factorysessions.RuntimeOpeningRequest,
-	_ *zap.Logger,
 ) (roles.OpenedExecutionRuntime, error) {
 	stub.calls++
 	stub.request = request

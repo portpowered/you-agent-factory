@@ -48,7 +48,6 @@ type InvocationTarget struct {
 	OperatorDefaults                 operatorsettings.ResolvedDefaults
 	ExecutionBaseDir                 string
 	HomeDir                          string
-	Logger                           *zap.Logger
 	Verbose                          bool
 	RecordPath                       string
 	ReplayPath                       string
@@ -61,14 +60,6 @@ type InvocationTarget struct {
 	MockWorkersConfig                *workers.MockWorkersConfig
 	SkipPermissionsOverride          *bool
 	SkipRunnerPrerequisiteValidation bool
-	MetricsRecorder                  interface {
-		RecordInvocationMetric(InvocationMetric)
-	}
-	// HostedLiveInvocation routes factory invokes through an already-running
-	// Factory Session runtime host instead of opening an ephemeral invocation
-	// runtime. CLI run --with-server uses this so API work/session reads observe
-	// the same live runtime as the invocation.
-	HostedLiveInvocation *HostedLiveInvocation
 }
 
 // HostedLiveInvocation is the live runtime surface used by hosted CLI invocations.

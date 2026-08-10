@@ -245,7 +245,7 @@ func (s *Service) openActivatedRuntime(
 	s.logger.Info("activating on-demand Factory target runtime",
 		zap.String("factoryTargetId", factoryTargetID))
 
-	opened, err := s.opening.OpenInvocationRuntime(ctx, &config, s.logger, nil)
+	opened, err := s.opening.OpenInvocationRuntime(ctx, &config)
 	if err != nil {
 		s.logger.Error("failed to open on-demand Factory target runtime",
 			zap.String("factoryTargetId", factoryTargetID))

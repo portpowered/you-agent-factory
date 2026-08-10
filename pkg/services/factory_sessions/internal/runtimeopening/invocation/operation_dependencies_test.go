@@ -79,7 +79,7 @@ func TestNewOperation_RequiresModelInvocationBoundaryDependencies(t *testing.T) 
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			_, err := NewOperation(openRuntime, nil, test.workingDir, test.resolver, test.exporter, test.timeout, func(string) factoryruntime.RuntimeArtifactRoots { return factoryruntime.RuntimeArtifactRoots{} }, func() string { return "session-test-id" })
+			_, err := NewOperation(openRuntime, nil, test.workingDir, test.resolver, test.exporter, test.timeout, func(string) factoryruntime.RuntimeArtifactRoots { return factoryruntime.RuntimeArtifactRoots{} }, func() string { return "session-test-id" }, zap.NewNop())
 			if err == nil || !strings.Contains(err.Error(), test.want) {
 				t.Fatalf("NewOperation() error = %v, want %q", err, test.want)
 			}
@@ -107,6 +107,7 @@ func TestInvocationOperationOpensItsNarrowRuntimeView(t *testing.T) {
 			return factoryruntime.RuntimeArtifactRoots{Logs: "logs", Metrics: "metrics"}
 		},
 		func() string { return "session-id" },
+		zap.NewNop(),
 	)
 	if err != nil {
 		t.Fatalf("NewOperation: %v", err)
@@ -146,8 +147,6 @@ type invocationRuntimeOpeningStub struct {
 func (stub *invocationRuntimeOpeningStub) OpenInvocationRuntime(
 	_ context.Context,
 	request *factorysessions.RuntimeOpeningRequest,
-	_ *zap.Logger,
-	_ roles.InvocationMetricsRecorder,
 ) (roles.OpenedInvocationRuntime, error) {
 	stub.calls++
 	stub.request = request

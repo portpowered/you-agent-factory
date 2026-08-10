@@ -434,12 +434,17 @@ func (operation *Operation) runInvocation(ctx context.Context) error {
 		return fmt.Errorf("run factory invocation: operation is required")
 	}
 	target := operation.invocationTarget
+	invocation := operation.invocation
 	if operation.hostedLiveInvocation != nil {
-		target.HostedLiveInvocation = operation.hostedLiveInvocation
+		invocation = &hostedInvocationOperation{
+			delegate: invocation,
+			hosted:   operation.hostedLiveInvocation,
+			logger:   operation.logger,
+		}
 	}
 	return runFactoryInvocation(
 		ctx, operation.cfg, target, *operation.invocationRequest,
-		operation.invocation, operation.presentation,
+		invocation, operation.presentation,
 	)
 }
 

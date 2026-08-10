@@ -48,7 +48,6 @@ type testRuntimeSelections struct {
 	Port                                    int
 	AutoPort                                bool
 	RuntimeHostObserver                     factorysessions.RuntimeHostObserver
-	Logger                                  *zap.Logger
 	Verbose                                 bool
 	RuntimeInstanceID                       string
 	BackendScopeID                          string
@@ -372,7 +371,7 @@ func (o testInvocationOperation) InvokeFactory(
 		return factorysessions.FactoryInvocationOutcome{}, errors.New("construct factory invocation: test operation is required")
 	}
 	cfg := testInvocationRuntimeConfig(target)
-	runner, err := o.open(ctx, cfg, serviceedges.Edges{InvocationMetricsRecorder: target.MetricsRecorder})
+	runner, err := o.open(ctx, cfg, serviceedges.Edges{})
 	if err != nil {
 		return factorysessions.FactoryInvocationOutcome{}, err
 	}
@@ -406,7 +405,7 @@ func testInvocationRuntimeConfig(target factorysessions.InvocationTarget) *testR
 	return &testRuntimeSelections{
 		Dir: target.FactoryDir, RunnerID: target.RunnerID,
 		OperatorDefaults: target.OperatorDefaults, ExecutionBaseDir: target.ExecutionBaseDir,
-		SystemConfigHomeDir: target.HomeDir, Logger: target.Logger, Verbose: target.Verbose,
+		SystemConfigHomeDir: target.HomeDir, Verbose: target.Verbose,
 		RecordPath: target.RecordPath, ReplayPath: target.ReplayPath,
 		RuntimeLogDir: target.RuntimeLogDir, RuntimeLogConfig: logging.RuntimeLogConfig{
 			MaxSize: target.RuntimeLogConfig.MaxSize, MaxBackups: target.RuntimeLogConfig.MaxBackups,

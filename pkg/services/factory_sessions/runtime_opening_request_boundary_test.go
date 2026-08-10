@@ -14,6 +14,11 @@ func TestRuntimeOpeningRequestContainsOnlyImmutableValueSelections(t *testing.T)
 	assertValueOnlyRuntimeRequest(t, reflect.TypeOf(factorysessions.RuntimeOpeningRequest{}), map[reflect.Type]bool{})
 }
 
+func TestInvocationTargetContainsOnlyDetachedValueSelections(t *testing.T) {
+	t.Parallel()
+	assertValueOnlyRuntimeRequest(t, reflect.TypeOf(factorysessions.InvocationTarget{}), map[reflect.Type]bool{})
+}
+
 func assertValueOnlyRuntimeRequest(t *testing.T, typ reflect.Type, visiting map[reflect.Type]bool) {
 	t.Helper()
 	for typ.Kind() == reflect.Pointer || typ.Kind() == reflect.Slice || typ.Kind() == reflect.Array || typ.Kind() == reflect.Map {

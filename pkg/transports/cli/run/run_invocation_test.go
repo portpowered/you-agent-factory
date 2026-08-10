@@ -148,7 +148,7 @@ func TestInvocationTargetCarriesOnlyBoundedRuntimeSelection(t *testing.T) {
 		Worktree:              "feature-login",
 		Port:                  7437,
 		WorkerReasoningEffort: "xhigh",
-	}, zap.NewNop(), nil)
+	}, nil)
 	if target.FactoryDir != "/tmp/factory" {
 		t.Fatalf("FactoryDir = %q, want /tmp/factory", target.FactoryDir)
 	}
@@ -487,7 +487,7 @@ func TestRunFactoryInvocationWritesTerminalRecordAndPreservesCleanupErrorAfterRe
 		JSONOutput:           true, Output: &output,
 	}
 	err := runFactoryInvocation(
-		context.Background(), cfg, invocationTarget(cfg, nil, nil),
+		context.Background(), cfg, invocationTarget(cfg, nil),
 		factoryapi.InvocationRequest{}, operation, testResponsePresentation(),
 	)
 	if err == nil || !errors.Is(err, cleanupErr) {
@@ -529,7 +529,7 @@ func TestRunFactoryInvocationRejectsUndeterminedResultWithNilError(t *testing.T)
 		JSONOutput:           true, Output: &output,
 	}
 	err := runFactoryInvocation(
-		context.Background(), cfg, invocationTarget(cfg, nil, nil),
+		context.Background(), cfg, invocationTarget(cfg, nil),
 		factoryapi.InvocationRequest{}, operation, testResponsePresentation(),
 	)
 	if err == nil {

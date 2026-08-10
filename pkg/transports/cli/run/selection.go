@@ -92,7 +92,7 @@ func (s *selection) Open(
 	if s.directJavaScript.Supports(cfg.FactoryConfigPath) {
 		request := factorysessions.DirectJavaScriptRunRequest{
 			SourcePath: cfg.FactoryConfigPath, MockWorkersEnabled: cfg.MockWorkersEnabled,
-			JSONOutput: cfg.JSONOutput, Output: cfg.Output, Logger: cfg.Logger,
+			JSONOutput: cfg.JSONOutput, Output: cfg.Output,
 		}
 		if intent.APIEnabled {
 			request.Host = &factorysessions.RuntimeHostRequest{

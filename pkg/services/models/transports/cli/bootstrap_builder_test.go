@@ -130,7 +130,7 @@ func (testModelInvocationOperation) InvokeModel(
 		OperatorDefaults:     target.OperatorDefaults,
 		ExecutionBaseDir:     executionBaseDir,
 		RuntimeMode:          interfaces.RuntimeModeService,
-		Logger:               target.Logger,
+		Logger:               zap.NewNop(),
 		Verbose:              target.Verbose,
 		RuntimeLogConfig:     logging.DefaultRuntimeLogConfig(),
 		RuntimeMetricsConfig: platformmetrics.DefaultRuntimeMetricsConfig(),

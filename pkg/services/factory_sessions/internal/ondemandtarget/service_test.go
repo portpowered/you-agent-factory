@@ -33,8 +33,6 @@ type fakeOpener struct {
 func (f *fakeOpener) OpenInvocationRuntime(
 	_ context.Context,
 	request *factorysessions.RuntimeOpeningRequest,
-	_ *zap.Logger,
-	_ roles.InvocationMetricsRecorder,
 ) (roles.OpenedInvocationRuntime, error) {
 	f.calls = append(f.calls, *request)
 	if f.err != nil {
@@ -706,8 +704,6 @@ type sequencedOpener struct {
 func (f *sequencedOpener) OpenInvocationRuntime(
 	_ context.Context,
 	request *factorysessions.RuntimeOpeningRequest,
-	_ *zap.Logger,
-	_ roles.InvocationMetricsRecorder,
 ) (roles.OpenedInvocationRuntime, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

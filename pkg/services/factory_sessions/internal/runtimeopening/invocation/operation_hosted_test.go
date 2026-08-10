@@ -235,13 +235,12 @@ func TestInvokeFactoryRejectsIncompleteHostedLiveInvocation(t *testing.T) {
 	t.Parallel()
 
 	op := &operation{}
-	_, err := op.InvokeFactory(
+	_, err := op.invokeFactoryOnHostedLiveRuntime(
 		context.Background(),
-		roles.InvocationTarget{
-			HostedLiveInvocation: &factorysessions.HostedLiveInvocation{
-				Sessions: newHostedLiveSessionsFake(factorysessions.SessionProjection{}),
-			},
+		&factorysessions.HostedLiveInvocation{
+			Sessions: newHostedLiveSessionsFake(factorysessions.SessionProjection{}),
 		},
+		roles.InvocationTarget{},
 		factorysessions.InvocationRequest{},
 		nil,
 	)
@@ -278,14 +277,13 @@ func TestInvokeFactoryUsesHostedLiveRuntimeForPetriFactory(t *testing.T) {
 	invoker := &hostedInvokerFake{result: wantResult}
 
 	op := &operation{}
-	outcome, err := op.InvokeFactory(
+	outcome, err := op.invokeFactoryOnHostedLiveRuntime(
 		context.Background(),
-		roles.InvocationTarget{
-			HostedLiveInvocation: &factorysessions.HostedLiveInvocation{
-				Sessions: sessions,
-				Invoker:  invoker,
-			},
+		&factorysessions.HostedLiveInvocation{
+			Sessions: sessions,
+			Invoker:  invoker,
 		},
+		roles.InvocationTarget{},
 		factorysessions.InvocationRequest{},
 		nil,
 	)
@@ -358,14 +356,13 @@ func TestInvokeFactoryHostedLiveRuntimePreservesResultWhenTrailingEventReadFails
 	invoker := &hostedInvokerFake{result: wantResult}
 
 	op := &operation{}
-	outcome, err := op.InvokeFactory(
+	outcome, err := op.invokeFactoryOnHostedLiveRuntime(
 		context.Background(),
-		roles.InvocationTarget{
-			HostedLiveInvocation: &factorysessions.HostedLiveInvocation{
-				Sessions: sessions,
-				Invoker:  invoker,
-			},
+		&factorysessions.HostedLiveInvocation{
+			Sessions: sessions,
+			Invoker:  invoker,
 		},
+		roles.InvocationTarget{},
 		factorysessions.InvocationRequest{},
 		func([]factorydefinitions.FactoryEvent) {},
 	)
@@ -399,14 +396,13 @@ func TestInvokeFactoryHostedLiveRuntimePropagatesInvokerError(t *testing.T) {
 	invoker := &hostedInvokerFake{err: invokerErr}
 
 	op := &operation{}
-	_, err := op.InvokeFactory(
+	_, err := op.invokeFactoryOnHostedLiveRuntime(
 		context.Background(),
-		roles.InvocationTarget{
-			HostedLiveInvocation: &factorysessions.HostedLiveInvocation{
-				Sessions: newHostedLiveSessionsFake(petriProjection),
-				Invoker:  invoker,
-			},
+		&factorysessions.HostedLiveInvocation{
+			Sessions: newHostedLiveSessionsFake(petriProjection),
+			Invoker:  invoker,
 		},
+		roles.InvocationTarget{},
 		factorysessions.InvocationRequest{},
 		nil,
 	)

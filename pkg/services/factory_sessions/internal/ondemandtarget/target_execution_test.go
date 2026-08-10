@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -764,7 +763,7 @@ func TestConcurrentCancelAndCloseLeavesNoReplacementRuntime(t *testing.T) {
 	replacementLifecycle := &fakeLifecycle{}
 	var openerMu sync.Mutex
 	openCount := 0
-	opener := &funcOpener{open: func(context.Context, *factorysessions.RuntimeOpeningRequest, *zap.Logger, roles.InvocationMetricsRecorder) (roles.OpenedInvocationRuntime, error) {
+	opener := &funcOpener{open: func(context.Context, *factorysessions.RuntimeOpeningRequest) (roles.OpenedInvocationRuntime, error) {
 		openerMu.Lock()
 		openCount++
 		call := openCount
@@ -1067,7 +1066,7 @@ func TestCloseTearsDownEveryTrackedRuntime(t *testing.T) {
 	firstLifecycle := &fakeLifecycle{}
 	secondLifecycle := &fakeLifecycle{}
 	openCount := 0
-	opener := &funcOpener{open: func(context.Context, *factorysessions.RuntimeOpeningRequest, *zap.Logger, roles.InvocationMetricsRecorder) (roles.OpenedInvocationRuntime, error) {
+	opener := &funcOpener{open: func(context.Context, *factorysessions.RuntimeOpeningRequest) (roles.OpenedInvocationRuntime, error) {
 		openCount++
 		lifecycle := firstLifecycle
 		if openCount == 2 {
@@ -1343,14 +1342,12 @@ func TestServiceViaTargetExecutionCapabilityRejectsUnsupportedTarget(t *testing.
 // to return a distinct opened runtime (fakeOpener always returns the same
 // fixed one).
 type funcOpener struct {
-	open func(context.Context, *factorysessions.RuntimeOpeningRequest, *zap.Logger, roles.InvocationMetricsRecorder) (roles.OpenedInvocationRuntime, error)
+	open func(context.Context, *factorysessions.RuntimeOpeningRequest) (roles.OpenedInvocationRuntime, error)
 }
 
 func (f *funcOpener) OpenInvocationRuntime(
 	ctx context.Context,
 	request *factorysessions.RuntimeOpeningRequest,
-	logger *zap.Logger,
-	metrics roles.InvocationMetricsRecorder,
 ) (roles.OpenedInvocationRuntime, error) {
-	return f.open(ctx, request, logger, metrics)
+	return f.open(ctx, request)
 }

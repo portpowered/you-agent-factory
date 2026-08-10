@@ -4,8 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-
-	"go.uber.org/zap"
 )
 
 // ProviderIdentityResolver resolves one authored provider selection through
@@ -40,7 +38,6 @@ type DirectJavaScriptRunRequest struct {
 	Output              io.Writer
 	Host                *RuntimeHostRequest
 	RuntimeHostObserver RuntimeHostObserver
-	Logger              *zap.Logger
 }
 
 // --- merged from opening_contract.go ---

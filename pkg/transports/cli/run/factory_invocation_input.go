@@ -20,6 +20,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	visualizationcli "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/cli"
+	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/runconfig"
 	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
@@ -182,7 +183,7 @@ func openInvocation(
 	}
 	return &Operation{
 		cfg: cfg, logger: logger, invocationRequest: request,
-		invocationTarget: invocationTarget(cfg, logger, mockWorkersConfig),
+		invocationTarget: invocationTarget(cfg, mockWorkersConfig),
 		invocation:       invocation, presentation: presentation,
 		invocationMode: true, recordPath: recordPath,
 	}, nil
@@ -271,6 +272,191 @@ func wrapInvocationInputError(err error) error {
 		Code:    string(inputErr.Code),
 		Message: inputErr.Message,
 	}
+}
+
+// hostedInvocationOperation keeps the already-opened application runtime at
+// the CLI composition edge. InvocationTarget remains detached configuration;
+// the Factory Sessions invocation operation only receives that value contract
+// and opens ephemeral runtimes for its normal path.
+type hostedInvocationOperation struct {
+	delegate InvocationOperation
+	hosted   *factorysessions.HostedLiveInvocation
+	logger   *zap.Logger
+}
+
+func (operation *hostedInvocationOperation) InvokeModel(
+	ctx context.Context,
+	target factorysessions.InvocationTarget,
+	modelName string,
+	request models.Request,
+) (models.Result, error) {
+	return operation.delegate.InvokeModel(ctx, target, modelName, request)
+}
+
+func (operation *hostedInvocationOperation) ResolveModelInvocationFactoryDir(dir string) (string, error) {
+	return operation.delegate.ResolveModelInvocationFactoryDir(dir)
+}
+
+func (operation *hostedInvocationOperation) ExportModelInvocationArtifact(sourcePath, destinationPath string) error {
+	return operation.delegate.ExportModelInvocationArtifact(sourcePath, destinationPath)
+}
+
+func (operation *hostedInvocationOperation) InvokeFactory(
+	ctx context.Context,
+	target factorysessions.InvocationTarget,
+	request factorysessions.InvocationRequest,
+	consume factorysessions.FactoryEventConsumer,
+) (factorysessions.FactoryInvocationOutcome, error) {
+	if operation == nil || operation.delegate == nil {
+		return factorysessions.FactoryInvocationOutcome{}, errors.New("hosted invocation operation is required")
+	}
+	hosted := operation.hosted
+	if hosted == nil || hosted.Sessions == nil || hosted.Invoker == nil {
+		return factorysessions.FactoryInvocationOutcome{}, errors.New("hosted live invocation runtime is incomplete")
+	}
+	projection, projectionErr := hosted.Sessions.GetFactorySession(ctx, factorysessions.DefaultSessionID)
+	if projectionErr == nil && interfaces.IsJavaScriptOrchestratorFactory(projection.Context.FactoryCfg) {
+		return operation.delegate.InvokeFactory(ctx, target, request, consume)
+	}
+	liveEvents, err := startHostedInvocationFactoryEvents(ctx, hosted.Sessions, consume)
+	if err != nil {
+		return factorysessions.FactoryInvocationOutcome{}, err
+	}
+	invocationResult, invokeErr := hosted.Invoker.InvokeFactorySession(
+		ctx, factorysessions.DefaultSessionID, request,
+	)
+	outcome := factorysessions.FactoryInvocationOutcome{
+		Result: factoryInvocationResultFromSessionInvocation(invocationResult),
+	}
+	if liveEvents == nil {
+		return outcome, invokeErr
+	}
+	postResultErr := liveEvents.finish(ctx, hosted.Sessions, outcome.Result)
+	if postResultErr != nil && outcome.Result.Status != "" {
+		if operation.logger != nil {
+			operation.logger.Warn(
+				"invocation post-result step failed after terminal result was determined",
+				zap.Error(postResultErr),
+			)
+		}
+		return outcome, invokeErr
+	}
+	return outcome, errors.Join(invokeErr, postResultErr)
+}
+
+func factoryInvocationResultFromSessionInvocation(
+	result factorysessions.InvocationResult,
+) interfaces.FactoryInvocationResult {
+	return interfaces.FactoryInvocationResult{
+		RequestID: result.RequestID, TraceID: result.TraceID,
+		Status:        interfaces.InvocationTerminalStatus(result.Status),
+		PrimaryResult: result.PrimaryResult, ErrorCode: result.ErrorCode,
+		Message: result.Message, SessionID: result.SessionID, WorkID: result.WorkID,
+		WorkName: result.WorkName, WorkState: result.WorkState,
+	}
+}
+
+type hostedInvocationFactoryEvents struct {
+	consume factorysessions.FactoryEventConsumer
+	cancel  context.CancelFunc
+	done    chan struct{}
+	seen    map[string]struct{}
+}
+
+func startHostedInvocationFactoryEvents(
+	ctx context.Context,
+	reader factorysessions.Service,
+	consume factorysessions.FactoryEventConsumer,
+) (*hostedInvocationFactoryEvents, error) {
+	if consume == nil {
+		return nil, nil
+	}
+	streamCtx, cancel := context.WithCancel(ctx)
+	stream, err := reader.SubscribeFactoryEventsForSession(
+		streamCtx, factorysessions.DefaultSessionID, nil,
+	)
+	if err != nil {
+		cancel()
+		return nil, fmt.Errorf("subscribe invocation Factory Events: %w", err)
+	}
+	if stream == nil || stream.Events == nil {
+		cancel()
+		return nil, errors.New("subscribe invocation Factory Events: stream is unavailable")
+	}
+	live := &hostedInvocationFactoryEvents{
+		consume: consume, cancel: cancel, done: make(chan struct{}), seen: make(map[string]struct{}),
+	}
+	live.presentUnseen(stream.History)
+	go func() {
+		defer close(live.done)
+		for event := range stream.Events {
+			live.presentUnseen([]interfaces.FactoryEvent{event})
+		}
+	}()
+	return live, nil
+}
+
+func (live *hostedInvocationFactoryEvents) finish(
+	ctx context.Context,
+	reader factorysessions.Service,
+	result interfaces.FactoryInvocationResult,
+) error {
+	live.cancel()
+	<-live.done
+	stream, err := readHostedInvocationFactoryEvents(ctx, reader, result)
+	if err != nil {
+		return err
+	}
+	live.presentUnseen(stream)
+	return nil
+}
+
+func (live *hostedInvocationFactoryEvents) presentUnseen(events []interfaces.FactoryEvent) {
+	unseen := make([]interfaces.FactoryEvent, 0, len(events))
+	for _, event := range events {
+		if _, ok := live.seen[event.Id]; ok {
+			continue
+		}
+		live.seen[event.Id] = struct{}{}
+		unseen = append(unseen, event.Clone())
+	}
+	if len(unseen) > 0 {
+		live.consume(unseen)
+	}
+}
+
+func readHostedInvocationFactoryEvents(
+	ctx context.Context,
+	reader factorysessions.Service,
+	result interfaces.FactoryInvocationResult,
+) ([]interfaces.FactoryEvent, error) {
+	if reader == nil {
+		return nil, errors.New("Factory Session event reader is required")
+	}
+	var (
+		stream *interfaces.FactoryEventStream
+		err    error
+	)
+	if strings.TrimSpace(result.SessionID) != "" && result.SessionID != factorysessions.DefaultSessionID {
+		stream, err = reader.ReadDurableFactorySessionEventStream(
+			ctx, result.SessionID, factorysessions.EventReconnectRequest{},
+		)
+	} else {
+		stream, err = reader.SubscribeFactoryEventsForSession(
+			ctx, factorysessions.DefaultSessionID, nil,
+		)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read invocation Factory Events: %w", err)
+	}
+	if stream == nil {
+		return nil, errors.New("read invocation Factory Events: stream is unavailable")
+	}
+	events := make([]interfaces.FactoryEvent, len(stream.History))
+	for index := range stream.History {
+		events[index] = stream.History[index].Clone()
+	}
+	return events, nil
 }
 
 func runFactoryInvocation(
@@ -377,7 +563,6 @@ func (writer *responseStreamCancelOnWriteError) Write(payload []byte) (int, erro
 
 func invocationTarget(
 	cfg RunConfig,
-	logger *zap.Logger,
 	mockWorkersConfig *workers.MockWorkersConfig,
 ) factorysessions.InvocationTarget {
 	return factorysessions.InvocationTarget{
@@ -389,7 +574,6 @@ func invocationTarget(
 		OperatorDefaults:      cfg.OperatorDefaults,
 		ExecutionBaseDir:      cfg.ExecutionBaseDir,
 		HomeDir:               cfg.HomeDir,
-		Logger:                logger,
 		Verbose:               cfg.Verbose,
 		RecordPath:            cfg.RecordPath,
 		ReplayPath:            cfg.ReplayPath,
@@ -407,7 +591,6 @@ func invocationTarget(
 		WorkflowID:              cfg.Workflow,
 		MockWorkersConfig:       mockWorkersConfig,
 		SkipPermissionsOverride: cfg.InvocationSkipPermissionsOverride,
-		MetricsRecorder:         cfg.InvocationMetricsRecorder,
 	}
 }
 

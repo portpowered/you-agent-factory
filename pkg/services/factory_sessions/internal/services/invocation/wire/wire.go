@@ -14,6 +14,7 @@ import (
 	invocationservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/invocation"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/invocation/internal/service"
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	"go.uber.org/zap"
 )
 
 // NewOperation is the service-owned construction entrypoint for process-scoped
@@ -28,6 +29,7 @@ func NewOperation(
 	modelTimeout factorysessions.ModelInvocationTimeout,
 	artifactRoots factoryruntime.RuntimeArtifactRootResolver,
 	generateSessionID factorysessions.SessionIDGenerator,
+	logger *zap.Logger,
 ) (roles.InvocationOperation, error) {
 	return legacyopening.NewOperation(
 		openRuntime,
@@ -38,6 +40,7 @@ func NewOperation(
 		modelTimeout,
 		artifactRoots,
 		generateSessionID,
+		logger,
 	)
 }
 

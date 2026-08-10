@@ -24,6 +24,7 @@ import (
 
 type operation struct {
 	openRuntime       runtimeopening.InvocationRuntimeOpening
+	logger            *zap.Logger
 	modelsRoot        models.Service
 	workingDirectory  platformfilesystem.WorkingDirectory
 	resolveCurrentDir factorydefinitions.CurrentFactoryDirectoryResolver
@@ -48,6 +49,7 @@ func NewOperation(
 	modelTimeout factorysessions.ModelInvocationTimeout,
 	artifactRoots factoryruntime.RuntimeArtifactRootResolver,
 	generateSessionID factorysessions.SessionIDGenerator,
+	logger *zap.Logger,
 ) (roles.InvocationOperation, error) {
 	if openRuntime == nil {
 		return nil, errors.New("invocation runtime opening factory is required")
@@ -70,8 +72,12 @@ func NewOperation(
 	if generateSessionID == nil {
 		return nil, errors.New("Factory Session ID generator is required")
 	}
+	if logger == nil {
+		return nil, errors.New("invocation logger is required")
+	}
 	return &operation{
 		openRuntime:       openRuntime,
+		logger:            logger,
 		modelsRoot:        modelsRoot,
 		workingDirectory:  workingDirectory,
 		resolveCurrentDir: resolveCurrentDir,
@@ -129,9 +135,6 @@ func (o *operation) InvokeFactory(
 	request factorysessions.InvocationRequest,
 	consume factorysessions.FactoryEventConsumer,
 ) (outcome roles.FactoryInvocationOutcome, resultErr error) {
-	if target.HostedLiveInvocation != nil {
-		return o.invokeFactoryOnHostedLiveRuntime(ctx, target, request, consume)
-	}
 	opened, lifecycle, err := o.open(ctx, target)
 	if err != nil {
 		return outcome, err
@@ -175,11 +178,11 @@ func joinTeardownErrorUnlessResultDetermined(
 
 func (o *operation) invokeFactoryOnHostedLiveRuntime(
 	ctx context.Context,
+	hosted *factorysessions.HostedLiveInvocation,
 	target roles.InvocationTarget,
 	request factorysessions.InvocationRequest,
 	consume factorysessions.FactoryEventConsumer,
 ) (outcome roles.FactoryInvocationOutcome, resultErr error) {
-	hosted := target.HostedLiveInvocation
 	if hosted == nil || hosted.Sessions == nil || hosted.Invoker == nil {
 		return outcome, errors.New("hosted live invocation runtime is incomplete")
 	}
@@ -187,9 +190,7 @@ func (o *operation) invokeFactoryOnHostedLiveRuntime(
 		ctx, factorysessions.DefaultSessionID,
 	)
 	if projectionErr == nil && factorydefinitions.IsJavaScriptOrchestratorFactory(projection.Context.FactoryCfg) {
-		ephemeralTarget := target
-		ephemeralTarget.HostedLiveInvocation = nil
-		return o.invokeFactoryOnEphemeralRuntime(ctx, ephemeralTarget, request, consume)
+		return o.invokeFactoryOnEphemeralRuntime(ctx, target, request, consume)
 	}
 	liveEvents, err := startLiveInvocationFactoryEvents(ctx, hosted.Sessions, consume)
 	if err != nil {
@@ -202,7 +203,7 @@ func (o *operation) invokeFactoryOnHostedLiveRuntime(
 	resultErr = err
 	if liveEvents != nil {
 		resultErr = joinTeardownErrorUnlessResultDetermined(
-			outcome, resultErr, liveEvents.finish(ctx, hosted.Sessions, outcome.Result), target.Logger,
+			outcome, resultErr, liveEvents.finish(ctx, hosted.Sessions, outcome.Result), o.logger,
 		)
 	}
 	return outcome, resultErr
@@ -257,7 +258,7 @@ func (o *operation) invokeFactoryOnOpenedRuntime(
 		if err == nil && consume != nil {
 			events, readErr := readInvocationFactoryEvents(runContext, opened.Sessions, result)
 			if readErr != nil {
-				return outcome, joinTeardownErrorUnlessResultDetermined(outcome, err, readErr, target.Logger)
+				return outcome, joinTeardownErrorUnlessResultDetermined(outcome, err, readErr, o.logger)
 			}
 			delivery.present(events)
 		}
@@ -273,7 +274,7 @@ func (o *operation) invokeFactoryOnOpenedRuntime(
 	)
 	if liveEvents != nil {
 		resultErr = joinTeardownErrorUnlessResultDetermined(
-			outcome, resultErr, liveEvents.finish(runContext, opened.Sessions, outcome.Result), target.Logger,
+			outcome, resultErr, liveEvents.finish(runContext, opened.Sessions, outcome.Result), o.logger,
 		)
 	}
 	return outcome, resultErr
@@ -722,7 +723,7 @@ func (o *operation) open(
 		return roles.OpenedInvocationRuntime{}, nil, errors.New("invocation operation is required")
 	}
 	config := o.runtimeConfig(target)
-	opened, err := o.openRuntime.OpenInvocationRuntime(ctx, &config, target.Logger, target.MetricsRecorder)
+	opened, err := o.openRuntime.OpenInvocationRuntime(ctx, &config)
 	if err != nil {
 		return roles.OpenedInvocationRuntime{}, nil, fmt.Errorf("open invocation runtime: %w", err)
 	}

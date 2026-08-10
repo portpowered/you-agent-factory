@@ -196,6 +196,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	v13 := provideFactoryRuntimeSubmissionRecorder(edges2)
 	v14 := provideFactoryRuntimeDispatchRecorder(edges2)
 	v15 := &wire.FactoryRuntimeOpeningPorts{
+		Logger:                          logger,
 		FactoryWorkflows:                javaScriptWorkflowDefinitions,
 		WorkflowPreview:                 workflowPreviewOperation,
 		WorkersRuntimeExecutorsFactory:  workersRuntimeExecutorsFactory,
@@ -435,7 +436,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	modelInvocationTimeout := provideModelInvocationTimeout()
-	v78, err := provideInvocationOperation(v70, modelsService, workingDirectory, v4, v77, modelInvocationTimeout, runtimeArtifactRootResolver, v33)
+	v78, err := provideInvocationOperation(v70, modelsService, workingDirectory, v4, v77, modelInvocationTimeout, runtimeArtifactRootResolver, v33, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -536,7 +537,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	}
 	v92 := provideResponsePresentation()
 	v93 := provideDirectJavaScriptSyncRunner()
-	directJavaScriptHostAdapter, err := provideDirectJavaScriptHostAdapter(applicationHandler, starter, runnerFactory)
+	directJavaScriptHostAdapter, err := provideDirectJavaScriptHostAdapter(applicationHandler, starter, runnerFactory, logger)
 	if err != nil {
 		return nil, err
 	}

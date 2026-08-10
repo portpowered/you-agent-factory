@@ -286,6 +286,7 @@ func assertFactoryRuntimePortsRetained(t *testing.T, factory *Factory, dependenc
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Runtime assembler", factory.factoryRuntimeAssembler, group.FactoryRuntimeAssembler)
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Runtime clock", factory.resolveClock, group.ResolveClock)
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Runtime selected clock", factory.clock, group.Clock)
+	assertRuntimeOpeningDependencyIdentity(t, "Factory Runtime base logger", factory.baseLogger, group.Logger)
 	assertRuntimeOpeningDependencyIdentity(t, "Factory Runtime logger", factory.newSessionLogger, group.NewSessionLogger)
 }
 
@@ -407,6 +408,7 @@ type runtimeOpeningDependencyOmission struct {
 func runtimeOpeningMemberOmissions() []runtimeOpeningDependencyOmission {
 	return []runtimeOpeningDependencyOmission{
 		{"Provider Sessions service", func(d *runtimeOpeningFixture) { d.ProviderSessions.Service = nil }},
+		{"Factory Runtime logger", func(d *runtimeOpeningFixture) { d.FactoryRuntime.Logger = nil }},
 		{"Factory Runtime JavaScript workflow definitions", func(d *runtimeOpeningFixture) { d.FactoryRuntime.FactoryWorkflows = nil }},
 		{"Factory Runtime workflow preview operation", func(d *runtimeOpeningFixture) { d.FactoryRuntime.WorkflowPreview = nil }},
 		{"Factory Runtime Workers runtime executors factory", func(d *runtimeOpeningFixture) { d.FactoryRuntime.WorkersRuntimeExecutorsFactory = nil }},
@@ -464,6 +466,7 @@ func validRuntimeOpeningOwnerPorts(calls *int) runtimeOpeningFixture {
 			Service: providerSessionsConstructionStub{},
 		},
 		FactoryRuntime: &FactoryRuntimePorts{
+			Logger:                          zap.NewNop(),
 			FactoryWorkflows:                workflowDefinitionsConstructionStub{},
 			WorkflowPreview:                 workflowPreviewConstructionStub{},
 			WorkersRuntimeExecutorsFactory:  inertRuntimeOpeningFunction[factoryruntime.WorkersRuntimeExecutorsFactory](calls),

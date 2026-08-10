@@ -382,8 +382,6 @@ type capturedTurnTargetOpening struct {
 func (o capturedTurnTargetOpening) OpenInvocationRuntime(
 	context.Context,
 	*factorysessions.RuntimeOpeningRequest,
-	*zap.Logger,
-	factorysessionswire.InvocationMetricsRecorder,
 ) (factorysessionswire.OpenedInvocationRuntime, error) {
 	return o.opened, nil
 }

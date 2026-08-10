@@ -43,8 +43,6 @@ type InvocationRuntimeOpening interface {
 	OpenInvocationRuntime(
 		context.Context,
 		*factorysessions.RuntimeOpeningRequest,
-		*zap.Logger,
-		roles.InvocationMetricsRecorder,
 	) (roles.OpenedInvocationRuntime, error)
 }
 
@@ -55,7 +53,6 @@ type ExecutionRuntimeOpening interface {
 	OpenExecutionRuntime(
 		context.Context,
 		*factorysessions.RuntimeOpeningRequest,
-		*zap.Logger,
 	) (roles.OpenedExecutionRuntime, error)
 }
 
@@ -74,6 +71,7 @@ type ProviderSessionsPorts struct {
 
 // FactoryRuntimePorts contains Factory Runtime's opening collaborators.
 type FactoryRuntimePorts struct {
+	Logger                          *zap.Logger
 	FactoryWorkflows                factoryruntime.JavaScriptWorkflowDefinitions
 	WorkflowPreview                 factoryruntime.WorkflowPreviewOperation
 	WorkersRuntimeExecutorsFactory  factoryruntime.WorkersRuntimeExecutorsFactory
@@ -175,9 +173,10 @@ type OperatorSettingsPorts struct {
 }
 
 // Factory is the process-scoped, inert Factory Session opening operation.
-// Wire selects all implementation functions and fixed owner effects once;
-// OpenRuntime supplies only invocation data and operation-scoped observation
-// fallbacks.
+// Wire selects all implementation functions and fixed owner effects once.
+// Invocation and durable-execution openings receive only invocation data;
+// application transport compatibility retains its presentation observation
+// edge until that boundary is migrated.
 type Factory struct {
 	durableExecutionFactory          DurableExecutionFactory
 	workerExecutionFactory           WorkerExecutionFactory
@@ -216,6 +215,7 @@ type Factory struct {
 	captureLoadedFactorySnapshot     factorydefinitions.LoadedFactorySnapshotCapturer
 	resolveClock                     factoryruntime.ClockResolver
 	newSessionLogger                 factoryruntime.SessionLoggerFactory
+	baseLogger                       *zap.Logger
 	adaptWorkerCommandRunner         WorkerCommandRunnerAdapter
 	providerFromCommandRunnerFactory ProviderFromCommandRunnerFactory
 	processRuntimeFactory            roles.ProcessRuntimeFactory
@@ -306,6 +306,7 @@ func NewFactory(
 		captureLoadedFactorySnapshot:     factoryDefinitions.CaptureLoadedFactorySnapshot,
 		resolveClock:                     factoryRuntime.ResolveClock,
 		newSessionLogger:                 factoryRuntime.NewSessionLogger,
+		baseLogger:                       factoryRuntime.Logger,
 		adaptWorkerCommandRunner:         workersPorts.AdaptCommandRunner,
 		providerFromCommandRunnerFactory: workersPorts.ProviderFromCommandRunnerFactory,
 		processRuntimeFactory:            factorySessions.ProcessRuntimeFactory,
@@ -372,6 +373,7 @@ func validateFactoryRuntime(group *FactoryRuntimePorts) error {
 		return err
 	}
 	return validateRuntimeOpeningRequirements("Factory Runtime",
+		runtimeOpeningRequirement{"logger", group.Logger},
 		runtimeOpeningRequirement{"JavaScript workflow definitions", group.FactoryWorkflows},
 		runtimeOpeningRequirement{"workflow preview operation", group.WorkflowPreview},
 		runtimeOpeningRequirement{"Workers runtime executors factory", group.WorkersRuntimeExecutorsFactory},
@@ -613,10 +615,8 @@ func (f *Factory) ModelsRoot() models.Service {
 func (f *Factory) OpenInvocationRuntime(
 	ctx context.Context,
 	request *factorysessions.RuntimeOpeningRequest,
-	logger *zap.Logger,
-	metrics roles.InvocationMetricsRecorder,
 ) (roles.OpenedInvocationRuntime, error) {
-	opened, err := f.openRuntime(ctx, request, logger, nil, metrics)
+	opened, err := f.openRuntime(ctx, request, f.baseLogger, nil, nil)
 	return opened.invocation, err
 }
 
@@ -625,8 +625,7 @@ func (f *Factory) OpenInvocationRuntime(
 func (f *Factory) OpenExecutionRuntime(
 	ctx context.Context,
 	request *factorysessions.RuntimeOpeningRequest,
-	logger *zap.Logger,
 ) (roles.OpenedExecutionRuntime, error) {
-	opened, err := f.openRuntime(ctx, request, logger, nil, nil)
+	opened, err := f.openRuntime(ctx, request, f.baseLogger, nil, nil)
 	return opened.execution, err
 }

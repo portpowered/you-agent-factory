@@ -237,6 +237,7 @@ func provideInvocationOperation(
 	modelTimeout factorysessions.ModelInvocationTimeout,
 	artifactRoots factoryruntime.RuntimeArtifactRootResolver,
 	generateSessionID factorysessions.SessionIDGenerator,
+	logger *zap.Logger,
 ) (factorysessionwire.InvocationOperation, error) {
 	return factorysessionwire.NewInvocationOperation(
 		openRuntime,
@@ -247,6 +248,7 @@ func provideInvocationOperation(
 		modelTimeout,
 		artifactRoots,
 		generateSessionID,
+		logger,
 	)
 }
 

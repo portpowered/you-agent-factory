@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/initializer"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -24,31 +23,7 @@ func TestOpenHostedRuntimeBindsFactorySessionsInvocationCapability(t *testing.T)
 		zap.NewNop(),
 		request,
 		resolvedRunRecordPath{},
-		testInvocationOperation{invokeFactory: func(
-			_ context.Context,
-			target factorysessions.InvocationTarget,
-			_ factorysessions.InvocationRequest,
-			_ factorysessions.FactoryEventConsumer,
-		) (factorysessions.FactoryInvocationOutcome, error) {
-			hosted := target.HostedLiveInvocation
-			if hosted == nil {
-				t.Fatal("hosted live invocation = nil")
-			}
-			if hosted.Sessions != sessions {
-				t.Fatalf("hosted live sessions = %T, want Factory Sessions runtime service", hosted.Sessions)
-			}
-			invoker, ok := hosted.Invoker.(*hostedInvocationCapabilityFake)
-			if !ok || invoker != sessions {
-				t.Fatalf("hosted invoker = %T, want the bound Factory Sessions invocation capability", hosted.Invoker)
-			}
-			return factorysessions.FactoryInvocationOutcome{Result: interfaces.FactoryInvocationResult{
-				Status: interfaces.InvocationTerminalStatusCompleted,
-				PrimaryResult: []work.WorkContentPart{{
-					Type: work.WorkContentPartTypeText,
-					Text: "completed",
-				}},
-			}}, nil
-		}},
+		testInvocationOperation{},
 		nil,
 		nil,
 		nil,
@@ -76,8 +51,31 @@ func TestOpenHostedRuntimeBindsFactorySessionsInvocationCapability(t *testing.T)
 	if err := operation.Run(t.Context()); err != nil {
 		t.Fatalf("Operation.Run() error = %v", err)
 	}
+	if !sessions.invoked {
+		t.Fatal("hosted Factory Sessions invocation was not used")
+	}
 }
 
 type hostedInvocationCapabilityFake struct {
 	factorysessions.Service
+	invoked bool
+}
+
+func (fake *hostedInvocationCapabilityFake) GetFactorySession(context.Context, string) (factorysessions.SessionProjection, error) {
+	return factorysessions.SessionProjection{}, nil
+}
+
+func (fake *hostedInvocationCapabilityFake) InvokeFactorySession(
+	context.Context,
+	string,
+	factorysessions.InvocationRequest,
+) (factorysessions.InvocationResult, error) {
+	fake.invoked = true
+	return factorysessions.InvocationResult{
+		Status: factorysessions.InvocationTerminalStatusCompleted,
+		PrimaryResult: []work.WorkContentPart{{
+			Type: work.WorkContentPartTypeText,
+			Text: "completed",
+		}},
+	}, nil
 }

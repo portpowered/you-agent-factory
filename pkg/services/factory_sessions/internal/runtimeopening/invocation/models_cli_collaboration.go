@@ -77,7 +77,6 @@ func (o *operation) OpenModelsPresentationScope(
 		FactoryDir:       factoryDir,
 		HomeDir:          request.HomeDir,
 		OperatorDefaults: resolvedOperatorDefaultsFromPresentation(request.OperatorDefaults),
-		Logger:           request.Logger,
 		Verbose:          request.Verbose,
 		ModelCacheDir:    request.ModelCacheDir,
 	}

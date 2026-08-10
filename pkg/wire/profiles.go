@@ -887,8 +887,9 @@ func provideDirectJavaScriptHostAdapter(
 	httpHandler *httpapplication.Handler,
 	start platformhttpserver.Starter,
 	newRunner lifecycle.RunnerFactory,
+	logger *zap.Logger,
 ) (factorysessionwire.DirectJavaScriptHostAdapter, error) {
-	if httpHandler == nil || start == nil || newRunner == nil {
+	if httpHandler == nil || start == nil || newRunner == nil || logger == nil {
 		return nil, errors.New("direct JavaScript HTTP handler, starter, and lifecycle runner are required")
 	}
 	return func(
@@ -898,14 +899,14 @@ func provideDirectJavaScriptHostAdapter(
 		if request.Host == nil {
 			return nil, errors.New("direct JavaScript host request is required")
 		}
-		handler, err := httpHandler.BindDurableExecution(execution, request.Logger)
+		handler, err := httpHandler.BindDurableExecution(execution, logger)
 		if err != nil {
 			return nil, err
 		}
 		return newRunner(func(ctx context.Context) error {
 			return start(ctx, platformhttpserver.StartRequest{
 				Handler: handler, Host: request.Host.Host, Port: request.Host.Port,
-				AutoPort: request.Host.AutoPort, Logger: request.Logger,
+				AutoPort: request.Host.AutoPort, Logger: logger,
 				OnBound: func(binding platformhttpserver.Binding) {
 					if request.RuntimeHostObserver != nil {
 						request.RuntimeHostObserver(factorysessions.RuntimeHostBinding{
