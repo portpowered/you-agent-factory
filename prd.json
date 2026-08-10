@@ -79,8 +79,8 @@
         "Tests pass"
       ],
       "priority": 4,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Confirmed the manifest-derived executable boundary preserves exit 0 for a successful finite run, exit 1 for ordinary failures, and exit 130 only for run/server/Worker Sessions stream commands that declare cancellation. Added wrapped-cancellation and canceled-parent/non-cancellation unit coverage, actual built-process run/server interrupt checks, and a built Worker Sessions stream interrupt regression. Aligned stale functional assertions with the story-001 safe CLI_COMMAND_FAILED diagnostic contract. Focused CLI, Worker Sessions, process, server-binding, go vet, pkg-maint, pkg-file-count, and diff checks pass; signal tests run on Unix and are skipped on Windows because child os.Interrupt delivery is unsupported. Dashboard typecheck remains blocked by the pre-existing checkout dependency baseline documented in progress.txt."
     }
   ]
 }

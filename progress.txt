@@ -841,3 +841,32 @@
   - `Process.Execute` proves typed propagation and stdout/stderr ownership; only a built `you` subprocess proves the final non-zero OS exit status.
   - Keep stream output-write errors typed with a safe message while retaining the underlying cause through `Unwrap` for diagnostics and tests.
 ---
+
+## 2026-08-10 07:20 -07:00 - pf-cli-exit-codes-004
+- What was implemented
+  - Expanded the process-boundary cancellation matrix so wrapped cancellations from `you run`, `you server`, and `you worker-sessions stream` retain the manifest-declared exit 130, while an ordinary failure with a canceled parent context and undeclared command cancellation remain exit 1.
+  - Added built-executable run/server interrupt regressions and upgraded the finite success and worker-failure checks to observe the shipped binary's exit status; the existing server-bind and Worker Sessions abort checks complete the 0/non-zero/130 matrix.
+  - Added a built Worker Sessions SSE cancellation regression that preserves the complete frame received before interruption and verifies exit 130 without synthesizing a terminal frame.
+  - Updated process fixtures and assertions to match the already-established story-001 safe `CLI_COMMAND_FAILED` diagnostic contract for unclassified Cobra, initializer, and Work-watch failures.
+- Files changed
+  - `cmd/factory/main_test.go`
+  - `tests/functional/provider_sessions/cli/stream_abort_test.go`
+  - `tests/functional/transport/cli/process/exit_codes_test.go`
+  - `tests/functional/transport/cli/process/fixtures_test.go`
+  - `tests/functional/transport/cli/process/unknown_command_test.go`
+  - `tests/functional/transport/cli/process/watch_abort_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./cmd/factory -run '^TestProcessExitCodePreservesDeclaredLifecycleContract$' -count=1 -v` — passed.
+  - `go test ./tests/functional/transport/cli/process -count=1 -timeout 300s` — passed, including built finite success, worker failure, server cancellation (Unix), and ordinary failure coverage.
+  - `go test ./tests/functional/provider_sessions/cli -count=1 -timeout 300s` — passed; Worker Sessions cancellation test is skipped on Windows and runs on Unix.
+  - `go test ./tests/functional/transport/server_binding -count=1 -timeout 300s` — passed.
+  - `go test ./cmd/factory ./pkg/transports/cli/... ./pkg/services/worker_sessions/transports/cli/... -count=1` — changed packages passed; the command still reports the pre-existing `TestDocsTopicIndexBaseline_MatchesFixture` drift (`packaged-factories` and the current providers description) in `pkg/transports/cli/baseline`.
+  - `go vet ./cmd/factory ./pkg/transports/cli/... ./pkg/services/worker_sessions/transports/cli/...`, `make pkg-maint pkg-file-count`, and `git diff --check` — passed.
+  - Dashboard typecheck remains blocked by the pre-existing checkout dependency baseline (`@types/bun`/deleted `ui/packages/*` sources); no UI files changed.
+- **Learnings for future iterations:**
+  - `root.BuildProcess`/`Process.Execute` returns errors but cannot expose the final OS status; use a built `./cmd/factory` subprocess only for the status assertions and keep ordinary functional behavior on the root process.
+  - The process boundary intentionally replaces unclassified Cobra and stream errors with one safe `CLI_COMMAND_FAILED` diagnostic; functional fixtures must assert the coded safe payload rather than parse underlying error text.
+  - Manifest-derived cancellation selection must ignore positional prompt text and flag values, and must reject exit 130 for commands without a declared `cancel` exit.
+---

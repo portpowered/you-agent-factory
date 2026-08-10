@@ -70,9 +70,18 @@ func TestCLIWorkWatchStreamAbortReturnsNonZeroExit(t *testing.T) {
 	if result.ExitCode == 0 {
 		t.Fatalf("aborted Work watch exit code = %d; want non-zero", result.ExitCode)
 	}
-	if !strings.Contains(result.Stderr, "session-abort") ||
-		!strings.Contains(result.Stderr, "decode canonical Factory Event SSE data") {
-		t.Fatalf("stderr = %q; want session and stream-abort context", result.Stderr)
+	var diagnostic struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(result.Stderr)), &diagnostic); err != nil {
+		t.Fatalf("decode safe Work-watch diagnostic: %v; stderr=%q", err, result.Stderr)
+	}
+	if diagnostic.Code != "CLI_COMMAND_FAILED" || diagnostic.Message != "command failed" {
+		t.Fatalf("Work-watch diagnostic = %#v, want safe CLI_COMMAND_FAILED diagnostic", diagnostic)
+	}
+	if strings.Count(result.Stderr, "CLI_COMMAND_FAILED") != 1 {
+		t.Fatalf("stderr = %q; want exactly one coded diagnostic", result.Stderr)
 	}
 	if strings.Contains(result.Stdout, "stream-abort") {
 		t.Fatalf("stdout contains incomplete abort payload: %q", result.Stdout)

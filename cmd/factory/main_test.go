@@ -94,9 +94,34 @@ func TestProcessExitCodePreservesDeclaredLifecycleContract(t *testing.T) {
 			want: 130,
 		},
 		{
+			name: "wrapped server cancellation normalized by lifecycle",
+			err:  fmt.Errorf("stop server: %w", context.Canceled),
+			args: []string{"you", "--server", "http://localhost:7437", "server"},
+			want: 130,
+		},
+		{
+			name: "wrapped worker session stream cancellation normalized by lifecycle",
+			err:  fmt.Errorf("stop worker session stream: %w", context.Canceled),
+			args: []string{"you", "--server", "http://localhost:7437", "worker-sessions", "stream"},
+			want: 130,
+		},
+		{
 			name:       "other command cancellation",
 			contextErr: context.Canceled,
 			args:       []string{"you", "mcp", "serve"},
+			want:       exitFailure,
+		},
+		{
+			name: "other command wrapped cancellation",
+			err:  fmt.Errorf("stop MCP server: %w", context.Canceled),
+			args: []string{"you", "mcp", "serve"},
+			want: exitFailure,
+		},
+		{
+			name:       "ordinary failure wins over canceled process context",
+			err:        errors.New("server startup failed"),
+			contextErr: context.Canceled,
+			args:       []string{"you", "server"},
 			want:       exitFailure,
 		},
 	}

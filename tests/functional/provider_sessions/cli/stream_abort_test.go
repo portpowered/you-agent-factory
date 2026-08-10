@@ -1,6 +1,7 @@
 package cli_test
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -8,7 +9,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -58,6 +61,96 @@ func TestBuiltWorkerSessionsStreamAbortExitsNonZero(t *testing.T) {
 		t.Fatalf("built Worker Sessions stream exit code = %d, want non-zero", exitErr.ExitCode())
 	}
 	assertWorkerSessionStreamAbortOutput(t, stdout.String(), stderr.String())
+}
+
+func TestBuiltWorkerSessionsStreamCancellationExits130(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("os.Interrupt is not supported for child processes on Windows")
+	}
+
+	streamServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			t.Errorf("stream response writer does not support flushing")
+			return
+		}
+		_, _ = fmt.Fprint(w, "data: {\"delivery\":\"RECORD\",\"workerSessionId\":\"worker-session-cancel\",\"providerSession\":null,\"workIds\":[],\"event\":{\"position\":1,\"sourceType\":\"worker_session\",\"sourceId\":\"worker-session-cancel\",\"sourceSequence\":1,\"sourceEventId\":\"event-1\",\"schemaId\":\"worker_session.started\",\"payload\":{\"state\":\"RUNNING\"}},\"errorCode\":null,\"errorMessage\":null}\n\n")
+		flusher.Flush()
+		<-r.Context().Done()
+	}))
+	defer streamServer.Close()
+
+	ctx, cancel := context.WithTimeout(t.Context(), workerSessionAbortTestTimeout)
+	defer cancel()
+	command := exec.CommandContext(ctx, buildWorkerSessionsCLIBinary(t), workerSessionAbortArgs(streamServer.URL)[1:]...)
+	command.Dir = t.TempDir()
+	command.Env = functionalEnvironment(t.TempDir())
+	stdout, err := command.StdoutPipe()
+	if err != nil {
+		t.Fatalf("open Worker Sessions stdout: %v", err)
+	}
+	var stderr bytes.Buffer
+	command.Stderr = &stderr
+	if err := command.Start(); err != nil {
+		t.Fatalf("start Worker Sessions stream: %v", err)
+	}
+	finished := false
+	defer func() {
+		if !finished {
+			_ = command.Process.Kill()
+			_ = command.Wait()
+		}
+	}()
+
+	frame := make(chan string, 1)
+	scanErr := make(chan error, 1)
+	go func() {
+		scanner := bufio.NewScanner(stdout)
+		if scanner.Scan() {
+			frame <- scanner.Text()
+			return
+		}
+		scanErr <- scanner.Err()
+	}()
+	var retainedFrame string
+	select {
+	case line := <-frame:
+		retainedFrame = line
+		if !strings.Contains(line, `"delivery":"RECORD"`) {
+			t.Fatalf("Worker Sessions cancellation frame = %q, want retained RECORD frame", line)
+		}
+	case err := <-scanErr:
+		t.Fatalf("Worker Sessions stream ended before retained frame: %v; stderr=%q", err, stderr.String())
+	case <-time.After(workerSessionAbortTestTimeout):
+		t.Fatal("timed out waiting for retained Worker Sessions frame")
+	}
+
+	if err := command.Process.Signal(os.Interrupt); err != nil {
+		t.Fatalf("interrupt Worker Sessions stream: %v", err)
+	}
+	waitResult := make(chan error, 1)
+	go func() {
+		waitResult <- command.Wait()
+	}()
+	select {
+	case err := <-waitResult:
+		var exitErr *exec.ExitError
+		if !errors.As(err, &exitErr) || exitErr.ExitCode() != 130 {
+			t.Fatalf("interrupted Worker Sessions stream exit = %v; stderr=%q, want exit code 130", err, stderr.String())
+		}
+	case <-time.After(workerSessionAbortTestTimeout):
+		_ = command.Process.Kill()
+		<-waitResult
+		t.Fatal("interrupted Worker Sessions stream did not exit")
+	}
+	finished = true
+	if strings.TrimSpace(retainedFrame) == "" {
+		t.Fatal("Worker Sessions cancellation did not retain the complete frame")
+	}
+	if strings.Contains(retainedFrame, "TERMINAL") {
+		t.Fatalf("Worker Sessions cancellation synthesized terminal output: %q", retainedFrame)
+	}
 }
 
 const workerSessionAbortTestTimeout = 30 * time.Second
