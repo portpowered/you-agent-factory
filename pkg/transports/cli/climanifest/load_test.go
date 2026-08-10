@@ -3,6 +3,7 @@ package climanifest_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
@@ -47,6 +48,18 @@ func TestLoadProduction_Errors(t *testing.T) {
 		_, err := climanifest.LoadProduction(sourceStore(), path)
 		if err == nil {
 			t.Fatal("LoadProduction() error = nil, want decode failure")
+		}
+	})
+
+	t.Run("duplicate object key", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "commands.json")
+		payload := `{"rootPath":"you","commands":{"you":{"id":"you","placement":"dual","placement":"local-only"}}}`
+		if err := os.WriteFile(path, []byte(payload), 0o644); err != nil {
+			t.Fatalf("write manifest: %v", err)
+		}
+		_, err := climanifest.LoadProduction(sourceStore(), path)
+		if err == nil || !strings.Contains(err.Error(), `duplicate object key "placement"`) {
+			t.Fatalf("LoadProduction() error = %v, want duplicate placement-key failure", err)
 		}
 	})
 

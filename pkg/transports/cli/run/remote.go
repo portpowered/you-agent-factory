@@ -25,6 +25,7 @@ const (
 	// when run was selected without an invocation payload.
 	RemoteInvocationInputRequiredCode = "REMOTE_INVOCATION_INPUT_REQUIRED"
 	defaultRemoteInvocationSessionID  = sessionpath.DefaultFactorySessionID
+	invalidRemoteEndpointLabel        = "<invalid endpoint>"
 )
 
 // RemoteInvocationRequest is the normalized CLI transport request sent to a
@@ -232,7 +233,7 @@ func safeRemoteEndpoint(raw string) string {
 	trimmed := strings.TrimSpace(raw)
 	parsed, err := url.Parse(trimmed)
 	if err != nil {
-		return trimmed
+		return invalidRemoteEndpointLabel
 	}
 	parsed.User = nil
 	return parsed.String()

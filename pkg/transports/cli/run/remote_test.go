@@ -144,78 +144,86 @@ func TestRemoteInvocationFailureDoesNotLeakRequestOrRetryLocally(t *testing.T) {
 }
 
 func TestRemoteInvocationClientRejectsInvalidInputsAndResponses(t *testing.T) {
-	t.Run("context is required", func(t *testing.T) {
-		_, err := remoteInvocationClient{transport: &remoteProtocolStub{}}.InvokeFactory(nil, RemoteInvocationRequest{})
-		if err == nil || !strings.Contains(err.Error(), "context is required") {
-			t.Fatalf("error = %v, want required-context error", err)
-		}
-	})
+	t.Run("context is required", testRemoteInvocationRequiresContext)
+	t.Run("protocol is required", testRemoteInvocationRequiresProtocol)
+	t.Run("endpoint must be valid", testRemoteInvocationRejectsInvalidEndpoint)
+	t.Run("request must be JSON encodable", testRemoteInvocationRejectsUnencodableRequest)
+	t.Run("nil HTTP response is rejected", testRemoteInvocationRejectsMissingResponse)
+	t.Run("non API error status remains actionable", testRemoteInvocationReportsNonAPIError)
+	t.Run("success does not require a response body", testRemoteInvocationAcceptsEmptySuccessBody)
+}
 
-	t.Run("protocol is required", func(t *testing.T) {
-		_, err := remoteInvocationClient{}.InvokeFactory(context.Background(), RemoteInvocationRequest{})
-		if err == nil || !strings.Contains(err.Error(), "CLI HTTP protocol is required") {
-			t.Fatalf("error = %v, want required-protocol error", err)
-		}
-	})
+func testRemoteInvocationRequiresContext(t *testing.T) {
+	_, err := remoteInvocationClient{transport: &remoteProtocolStub{}}.InvokeFactory(nil, RemoteInvocationRequest{})
+	if err == nil || !strings.Contains(err.Error(), "context is required") {
+		t.Fatalf("error = %v, want required-context error", err)
+	}
+}
 
-	t.Run("endpoint must be valid", func(t *testing.T) {
-		stub := &remoteProtocolStub{}
-		_, err := remoteInvocationClient{transport: stub}.InvokeFactory(context.Background(), RemoteInvocationRequest{
-			Server: "http://[::1",
-		})
-		if err == nil || !strings.Contains(err.Error(), "endpoint") {
-			t.Fatalf("error = %v, want invalid-endpoint error", err)
-		}
-		if stub.called {
-			t.Fatal("invalid endpoint called the HTTP protocol")
-		}
-	})
+func testRemoteInvocationRequiresProtocol(t *testing.T) {
+	_, err := remoteInvocationClient{}.InvokeFactory(context.Background(), RemoteInvocationRequest{})
+	if err == nil || !strings.Contains(err.Error(), "CLI HTTP protocol is required") {
+		t.Fatalf("error = %v, want required-protocol error", err)
+	}
+}
 
-	t.Run("request must be JSON encodable", func(t *testing.T) {
-		bad := map[string]any{"function": func() {}}
-		_, err := remoteInvocationClient{transport: &remoteProtocolStub{}}.InvokeFactory(context.Background(), RemoteInvocationRequest{
-			Server:  "http://selected.test",
-			Request: factoryapi.InvocationRequest{Args: &bad},
-		})
-		if err == nil || !strings.Contains(err.Error(), "marshal remote invocation request") {
-			t.Fatalf("error = %v, want marshal error", err)
-		}
+func testRemoteInvocationRejectsInvalidEndpoint(t *testing.T) {
+	stub := &remoteProtocolStub{}
+	_, err := remoteInvocationClient{transport: stub}.InvokeFactory(context.Background(), RemoteInvocationRequest{
+		Server: "http://[::1",
 	})
+	if err == nil || !strings.Contains(err.Error(), "endpoint") {
+		t.Fatalf("error = %v, want invalid-endpoint error", err)
+	}
+	if stub.called {
+		t.Fatal("invalid endpoint called the HTTP protocol")
+	}
+}
 
-	t.Run("nil HTTP response is rejected", func(t *testing.T) {
-		_, err := remoteInvocationClient{transport: &remoteProtocolStub{
-			response: clihttp.Response{},
-		}}.InvokeFactory(context.Background(), RemoteInvocationRequest{Server: "http://selected.test"})
-		if err == nil || !strings.Contains(err.Error(), "HTTP response is unavailable") {
-			t.Fatalf("error = %v, want missing-response error", err)
-		}
+func testRemoteInvocationRejectsUnencodableRequest(t *testing.T) {
+	bad := map[string]any{"function": func() {}}
+	_, err := remoteInvocationClient{transport: &remoteProtocolStub{}}.InvokeFactory(context.Background(), RemoteInvocationRequest{
+		Server:  "http://selected.test",
+		Request: factoryapi.InvocationRequest{Args: &bad},
 	})
+	if err == nil || !strings.Contains(err.Error(), "marshal remote invocation request") {
+		t.Fatalf("error = %v, want marshal error", err)
+	}
+}
 
-	t.Run("non API error status remains actionable", func(t *testing.T) {
-		_, err := remoteInvocationClient{transport: &remoteProtocolStub{
-			response: clihttp.Response{HTTP: &http.Response{
-				StatusCode: http.StatusBadGateway,
-				Body:       io.NopCloser(strings.NewReader("not an API error")),
-			}},
-		}}.InvokeFactory(context.Background(), RemoteInvocationRequest{Server: "http://selected.test"})
-		if err == nil || !strings.Contains(err.Error(), "(502)") {
-			t.Fatalf("error = %v, want HTTP status error", err)
-		}
-	})
+func testRemoteInvocationRejectsMissingResponse(t *testing.T) {
+	_, err := remoteInvocationClient{transport: &remoteProtocolStub{
+		response: clihttp.Response{},
+	}}.InvokeFactory(context.Background(), RemoteInvocationRequest{Server: "http://selected.test"})
+	if err == nil || !strings.Contains(err.Error(), "HTTP response is unavailable") {
+		t.Fatalf("error = %v, want missing-response error", err)
+	}
+}
 
-	t.Run("success does not require a response body", func(t *testing.T) {
-		stub := &remoteProtocolStub{response: clihttp.Response{HTTP: &http.Response{StatusCode: http.StatusOK}}}
-		response, err := remoteInvocationClient{transport: stub}.InvokeFactory(context.Background(), RemoteInvocationRequest{
-			Server:    "https://selected.test",
-			SessionID: " session-beta ",
-		})
-		if err != nil {
-			t.Fatalf("InvokeFactory: %v", err)
-		}
-		if response.Status != "" || !strings.HasSuffix(stub.url, "/factory-sessions/session-beta/invocations") {
-			t.Fatalf("response/url = %#v/%q, want empty response and scoped session URL", response, stub.url)
-		}
+func testRemoteInvocationReportsNonAPIError(t *testing.T) {
+	_, err := remoteInvocationClient{transport: &remoteProtocolStub{
+		response: clihttp.Response{HTTP: &http.Response{
+			StatusCode: http.StatusBadGateway,
+			Body:       io.NopCloser(strings.NewReader("not an API error")),
+		}},
+	}}.InvokeFactory(context.Background(), RemoteInvocationRequest{Server: "http://selected.test"})
+	if err == nil || !strings.Contains(err.Error(), "(502)") {
+		t.Fatalf("error = %v, want HTTP status error", err)
+	}
+}
+
+func testRemoteInvocationAcceptsEmptySuccessBody(t *testing.T) {
+	stub := &remoteProtocolStub{response: clihttp.Response{HTTP: &http.Response{StatusCode: http.StatusOK}}}
+	response, err := remoteInvocationClient{transport: stub}.InvokeFactory(context.Background(), RemoteInvocationRequest{
+		Server:    "https://selected.test",
+		SessionID: " session-beta ",
 	})
+	if err != nil {
+		t.Fatalf("InvokeFactory: %v", err)
+	}
+	if response.Status != "" || !strings.HasSuffix(stub.url, "/factory-sessions/session-beta/invocations") {
+		t.Fatalf("response/url = %#v/%q, want empty response and scoped session URL", response, stub.url)
+	}
 }
 
 func TestRunRemoteInvocationReportsTerminalStatesAndInputErrors(t *testing.T) {
@@ -282,12 +290,14 @@ func TestRunRemoteInvocationReportsTerminalStatesAndInputErrors(t *testing.T) {
 	})
 }
 
-func TestSafeRemoteEndpointRedactsCredentialsAndPreservesInvalidInput(t *testing.T) {
+func TestSafeRemoteEndpointRedactsCredentialsAndFailsClosedForInvalidInput(t *testing.T) {
 	if got := safeRemoteEndpoint("https://user:secret@selected.test/path"); got != "https://selected.test/path" {
 		t.Fatalf("safe endpoint = %q, want credentials removed", got)
 	}
-	if got := safeRemoteEndpoint("http://[::1"); got != "http://[::1" {
-		t.Fatalf("invalid safe endpoint = %q, want original input", got)
+	for _, endpoint := range []string{"http://[::1", "http://user:secret@[::1"} {
+		if got := safeRemoteEndpoint(endpoint); got != invalidRemoteEndpointLabel {
+			t.Fatalf("invalid safe endpoint %q = %q, want fixed redacted label", endpoint, got)
+		}
 	}
 }
 

@@ -233,7 +233,7 @@ func TestRunScopedServerUsesExactListenAddress(t *testing.T) {
 	homeDir := t.TempDir()
 	environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 	stdout, stderr := execute(t, process, environment, workingDirectory, []string{
-		"you", "--server", "http://127.0.0.1:65534", "run", "--factory", workflowPath, "--with-mock-workers", "--with-server",
+		"you", "--server", "http://127.0.0.1:65534", "run", "--factory", workflowPath, "--with-server",
 		"--listen", "127.0.0.1:" + strconv.Itoa(requestedPort),
 	}, "")
 	const wantWarning = "warning: --listen takes precedence over --server for the local listener; use --listen for the listener and reserve --server for the factory API endpoint\n"
@@ -332,7 +332,7 @@ func TestRunScopedServerRejectsUnavailableExactListenAddress(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	err = process.Execute(root.Input{
 		Args: []string{
-			"you", "run", "--factory", workflowPath, "--with-mock-workers", "--with-server",
+			"you", "run", "--factory", workflowPath, "--with-server",
 			"--listen", "127.0.0.1:" + strconv.Itoa(requestedPort),
 		},
 		Env: environment, Context: t.Context(), WorkingDirectory: workingDirectory,

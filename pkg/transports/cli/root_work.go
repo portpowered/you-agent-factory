@@ -19,6 +19,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
 	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 	"github.com/spf13/cobra"
 )
@@ -55,7 +56,6 @@ func newRootCommandWithGeneratedRepresentativeFamily(options CommandFactory) *co
 	if err != nil {
 		panic(fmt.Sprintf("build representative family command: %v", err))
 	}
-
 	factoryConfigInit := productionFactoryConfigInitCommands(diagnostics, options)
 	docsCmd, err := newProductionDocsCommand(diagnostics)
 	if err != nil {
@@ -452,28 +452,33 @@ func executeRunCommand(cmd *cobra.Command, args []string, globals *cliGlobalOpti
 	basePolicy := diagnostics.resolvePolicy(resolvedConfig.SuppressDashboardRendering)
 	err = runFactoryWithOptions(cmd, resolvedConfig, promptArgs, globals, operatorDefaults, basePolicy, rootOptions, false)
 	if err != nil {
-		err = factoryload.MaybeFormatOperatorError(err, resolvedConfig.Dir)
-		err = runcli.MapServerFailure(err)
-		if currentFactorySelected {
-			err = runcli.MapCurrentFactoryFailure(err)
-		}
-		if len(promptArgs) > 0 {
-			err = runcli.MapInvocationFailure(err)
-		}
-		if runcli.WriteIncompleteDrainError(cmd.ErrOrStderr(), err) {
-			return err
-		}
-		if runcli.WriteInvocationError(cmd.ErrOrStderr(), err, globals.json) {
-			return err
-		}
-		errorWriter := resolveEffectiveRunPolicy(cmd, resolvedConfig, basePolicy).HumanTerminalWriter(cmd.ErrOrStderr())
-		var ambiguousInputErr *runcli.AmbiguousInvocationInputError
-		if errors.As(err, &ambiguousInputErr) {
-			errorWriter = cmd.ErrOrStderr()
-		}
-		if errorWriter != nil {
-			_, _ = fmt.Fprintln(errorWriter, err)
-		}
+		return handleRunExecutionError(cmd, resolvedConfig, promptArgs, globals, basePolicy, err, currentFactorySelected)
+	}
+	return err
+}
+
+func handleRunExecutionError(cmd *cobra.Command, resolvedConfig runcli.RunConfig, promptArgs []string, globals *cliGlobalOptions, basePolicy terminalpolicy.Policy, err error, currentFactorySelected bool) error {
+	err = factoryload.MaybeFormatOperatorError(err, resolvedConfig.Dir)
+	err = runcli.MapServerFailure(err)
+	if currentFactorySelected {
+		err = runcli.MapCurrentFactoryFailure(err)
+	}
+	if len(promptArgs) > 0 {
+		err = runcli.MapInvocationFailure(err)
+	}
+	if runcli.WriteIncompleteDrainError(cmd.ErrOrStderr(), err) {
+		return err
+	}
+	if runcli.WriteInvocationError(cmd.ErrOrStderr(), err, globals.json) {
+		return err
+	}
+	errorWriter := resolveEffectiveRunPolicy(cmd, resolvedConfig, basePolicy).HumanTerminalWriter(cmd.ErrOrStderr())
+	var ambiguousInputErr *runcli.AmbiguousInvocationInputError
+	if errors.As(err, &ambiguousInputErr) {
+		errorWriter = cmd.ErrOrStderr()
+	}
+	if errorWriter != nil {
+		_, _ = fmt.Fprintln(errorWriter, err)
 	}
 	return err
 }

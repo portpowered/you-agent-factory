@@ -2571,7 +2571,6 @@
         "multipleBindings": "reject"
       },
       "runnable": true,
-     "placement": "remote-only",
       "placement": "local-only",
       "sideEffects": {
         "you.factory.list.side-effect.filesystem": {
@@ -3161,7 +3160,6 @@
         "multipleBindings": "reject"
       },
       "runnable": true,
-     "placement": "local-only",
       "placement": "remote-only",
       "sideEffects": {
         "you.factory.replace-current.side-effect.network": {
@@ -3959,7 +3957,6 @@
         "multipleBindings": "reject"
       },
       "runnable": true,
-     "placement": "remote-only",
       "placement": "local-only",
       "sideEffects": {
         "you.init.side-effect.filesystem": {
@@ -7700,7 +7697,6 @@
       },
       "visibility": "visible",
       "runnable": true,
-     "placement": "local-only",
       "placement": "remote-only",
       "usage": {
         "line": "move <work-id> <state-name>",
@@ -8355,7 +8351,6 @@
       },
       "visibility": "visible",
       "runnable": true,
-     "placement": "remote-only",
       "placement": "local-only",
       "usage": {
         "line": "docs [topic]",
@@ -9352,7 +9347,6 @@
       },
       "visibility": "visible",
       "runnable": true,
-     "placement": "local-only",
       "placement": "remote-only",
       "usage": {
         "line": "stream",
@@ -10477,7 +10471,6 @@
         }
       },
       "runnable": true,
-     "placement": "remote-only",
       "placement": "local-only",
       "sideEffects": {
         "you.mcp.serve.side-effect.filesystem": {
@@ -11678,7 +11671,6 @@
       },
       "visibility": "visible",
       "runnable": true,
-     "placement": "local-only",
       "placement": "remote-only",
       "usage": {
         "line": "pull <model-name>",
@@ -14213,7 +14205,6 @@
       },
       "visibility": "visible",
       "runnable": true,
-     "placement": "local-only",
       "placement": "remote-only",
       "usage": {
         "line": "batch [path|-|<inline-json>]",
