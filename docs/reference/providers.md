@@ -233,7 +233,7 @@ has:
 | --- | --- |
 | `id`, display name, and aliases | The canonical identity accepted by worker and run configuration. |
 | `availability`, `readiness`, and `prerequisites` | Whether the provider is selectable and which sanitized authentication, executable, configuration, or workspace facts affect readiness. |
-| `models` and `efforts` | Exact supported model IDs and the effort values accepted independently for each model. An empty effort list is explicit: the model has no separate public effort setting, such as AGY's model-encoded selection. |
+| `models` and `efforts` | Exact supported model IDs and the effort values accepted independently for each model. The model list is an exact per-ID inventory, not a family alias; do not synthesize IDs from a family name. An empty effort list is explicit: the model has no separate public effort setting, such as AGY's model-encoded selection. |
 | `modalities` | Directional input/output support, including the transport such as `inline`, `file_path`, or `none`. Unsupported values are explicit. |
 | `tools` | Named tools and whether the provider advertises them as supported. |
 | `knownLimits` | Named behavior, default, or maximum constraints with typed values such as seconds, paths, and flags. |

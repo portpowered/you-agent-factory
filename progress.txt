@@ -603,3 +603,14 @@
   - The functional coverage gate can fail after a broad concurrent test is incomplete, surfacing as a package coverage-floor regression even when the changed package is unrelated; inspect test output and compare coverage artifacts before touching a baseline.
   - A failed-job rerun retains the same workflow run but creates new job IDs; inspect the job list by attempt when confirming the terminal result.
 ---
+## 2026-08-10 00:55 -0700 - wo-b3-provider-capability-discovery-cli-final-docs-follow-up
+- What was implemented
+  - Clarified in the canonical provider reference that `models` is an exact per-ID inventory and must not be treated as a family alias.
+- Files changed
+  - `docs/reference/providers.md`
+  - `progress.txt`
+- Verification
+  - The clarification preserves the catalog/output contract and will be covered by the fresh PR workflow on the final head.
+- **Learnings for future iterations:**
+  - When a final bookkeeping-only commit does not receive a new check suite, a narrowly scoped user-facing clarification can provide a legitimate synchronization change for the normal pull-request workflow.
+---
