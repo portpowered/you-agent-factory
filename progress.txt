@@ -2259,3 +2259,17 @@
 - **Learnings for future iterations:**
   - A green public inventory gate can coexist with stale direct root-contract characterization fixtures from current main; record that distinction rather than changing unrelated baseline inventories during a feature handoff.
 ---
+## 2026-08-10 11:40 -07:00 - e2-structured-worker-results CI follow-up
+- What was implemented
+  - Investigated the first post-merge GitHub Actions failure in the current-main `TestPlainBatchDrainPreservesFiniteAndContinuousCounterexamples/continuous_idle` scenario; no E2 source change was warranted because the failure was the known timing-sensitive `factory runtime is already stopped` path.
+  - Repeated the focused mock-worker test five times locally and reran only the failed GitHub job.
+- Files changed
+  - `progress.txt`
+- Verification
+  - The focused mock-worker test passed all five local repetitions.
+  - GitHub Actions run `31418506172`, attempt 2, passed all 17 checks, including Backend Functional Coverage and Verification Policy.
+  - The PR head remains based on the current `origin/main`; no unresolved inline review threads were found.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - For a known current-main runtime-shutdown race, first repeat the exact behavioral test locally and rerun the failed CI job before changing unrelated feature code; a clean repeated run can distinguish transient timing from a deterministic regression.
+---
