@@ -1790,5 +1790,18 @@
   - Hosted characterization repeated twice — passed.
   - The previously failing `TestFunctionalAPIServer_RuntimeLogDirectoryIsAProcessInput` repeated three times locally — passed.
 - **Learnings for future iterations:**
-  - The prior GitHub functional-coverage failure is reproducible as a transient baseline failure rather than a deterministic source failure; fresh CI after this head is the authoritative check.
+- The prior GitHub functional-coverage failure is reproducible as a transient baseline failure rather than a deterministic source failure; fresh CI after this head is the authoritative check.
+---
+## 2026-08-10 - e2-structured-worker-results CI follow-up
+- What was implemented
+  - Repaired the existing worker-session pause test's completion synchronization so it closes the simulated control-done channel after installing the terminal snapshot instead of continuously feeding an unclosed channel.
+  - This removes the coverage-sensitive deadlock that caused the latest PR backend unit-coverage lane to time out after ten minutes.
+- Files changed
+  - `pkg/services/worker_sessions/internal/service/internal_test.go`
+- Verification
+  - `go test ./pkg/services/worker_sessions/internal/service -run '^TestPause_ControlOutcomesKeepTheLifecycleTruthful$' -count=100 -timeout 120s` — passed.
+  - `go test ./pkg/services/worker_sessions/internal/service -count=1 -timeout 300s` — passed.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - Tests modeling completion signals should close the completion channel once the authoritative state is installed; an unbounded sender can deadlock under coverage scheduling even when focused runs usually pass.
 ---
