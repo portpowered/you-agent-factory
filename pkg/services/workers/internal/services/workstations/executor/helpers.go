@@ -268,72 +268,106 @@ func validateOutputContract(content, contract string) error {
 	}
 }
 
+type structuredClipQAVerdict struct {
+	ActionCompleted   *bool     `json:"action_completed"`
+	SpecDeviations    *[]string `json:"spec_deviations"`
+	TemporalArtifacts *[]string `json:"temporal_artifacts"`
+	AudioContent      *string   `json:"audio_content"`
+	UnexpectedSpeech  *bool     `json:"unexpected_speech"`
+	Verdict           *string   `json:"verdict"`
+	Confidence        *float64  `json:"confidence"`
+}
+
+var structuredClipQAVerdictRequiredFields = []string{
+	"action_completed",
+	"spec_deviations",
+	"temporal_artifacts",
+	"audio_content",
+	"unexpected_speech",
+	"verdict",
+	"confidence",
+}
+
 func validateStructuredClipQAVerdict(content string) error {
 	if failure := structuredOutputFailure(content, outputContractStructuredClipQAVerdictV1); failure != "" {
 		return fmt.Errorf("structured output failure: %s", failure)
 	}
 
+	verdict, err := decodeStructuredClipQAVerdict(content)
+	if err != nil {
+		return err
+	}
+	return validateStructuredClipQAVerdictFields(verdict)
+}
+
+func decodeStructuredClipQAVerdict(content string) (*structuredClipQAVerdict, error) {
 	var object map[string]any
 	if err := json.Unmarshal([]byte(content), &object); err != nil || object == nil {
-		return fmt.Errorf("clip-QA verdict must be a JSON object")
+		return nil, fmt.Errorf("clip-QA verdict must be a JSON object")
 	}
-	for _, key := range []string{
-		"action_completed",
-		"spec_deviations",
-		"temporal_artifacts",
-		"audio_content",
-		"unexpected_speech",
-		"verdict",
-		"confidence",
-	} {
+	for _, key := range structuredClipQAVerdictRequiredFields {
 		if _, ok := object[key]; !ok {
-			return fmt.Errorf("clip-QA verdict is missing required field %q", key)
+			return nil, fmt.Errorf("clip-QA verdict is missing required field %q", key)
 		}
 	}
 
-	var verdict struct {
-		ActionCompleted   *bool     `json:"action_completed"`
-		SpecDeviations    *[]string `json:"spec_deviations"`
-		TemporalArtifacts *[]string `json:"temporal_artifacts"`
-		AudioContent      *string   `json:"audio_content"`
-		UnexpectedSpeech  *bool     `json:"unexpected_speech"`
-		Verdict           *string   `json:"verdict"`
-		Confidence        *float64  `json:"confidence"`
-	}
+	var verdict structuredClipQAVerdict
 	if err := json.Unmarshal([]byte(content), &verdict); err != nil {
-		return fmt.Errorf("clip-QA verdict has invalid field types: %w", err)
+		return nil, fmt.Errorf("clip-QA verdict has invalid field types: %w", err)
 	}
+	return &verdict, nil
+}
+
+func validateStructuredClipQAVerdictFields(verdict *structuredClipQAVerdict) error {
 	if verdict.ActionCompleted == nil || verdict.SpecDeviations == nil ||
 		verdict.TemporalArtifacts == nil || verdict.AudioContent == nil ||
 		verdict.UnexpectedSpeech == nil || verdict.Verdict == nil || verdict.Confidence == nil {
 		return fmt.Errorf("clip-QA verdict contains a null required field")
 	}
-	if math.IsNaN(*verdict.Confidence) || math.IsInf(*verdict.Confidence, 0) ||
-		*verdict.Confidence < 0 || *verdict.Confidence > 1 {
+	if err := validateStructuredClipQAConfidence(*verdict.Confidence); err != nil {
+		return err
+	}
+	return validateStructuredClipQAVerdictSemantics(verdict)
+}
+
+func validateStructuredClipQAConfidence(confidence float64) error {
+	if math.IsNaN(confidence) || math.IsInf(confidence, 0) || confidence < 0 || confidence > 1 {
 		return fmt.Errorf("confidence must be between 0 and 1")
 	}
+	return nil
+}
 
+func validateStructuredClipQAVerdictSemantics(verdict *structuredClipQAVerdict) error {
 	switch *verdict.Verdict {
 	case "pass":
-		if !*verdict.ActionCompleted {
-			return fmt.Errorf("pass requires action_completed=true")
-		}
-		if len(*verdict.SpecDeviations) > 0 {
-			return fmt.Errorf("pass requires spec_deviations to be empty")
-		}
-		if len(*verdict.TemporalArtifacts) > 0 {
-			return fmt.Errorf("pass requires temporal_artifacts to be empty")
-		}
-		if *verdict.UnexpectedSpeech {
-			return fmt.Errorf("pass requires unexpected_speech=false")
-		}
+		return validateStructuredClipQAPass(verdict)
 	case "reroll":
-		if *verdict.ActionCompleted && len(*verdict.SpecDeviations) == 0 &&
-			len(*verdict.TemporalArtifacts) == 0 && !*verdict.UnexpectedSpeech {
-			return fmt.Errorf("reroll requires an observed failure reason")
-		}
+		return validateStructuredClipQAReroll(verdict)
 	default:
 		return fmt.Errorf("verdict must be pass or reroll")
+	}
+}
+
+func validateStructuredClipQAPass(verdict *structuredClipQAVerdict) error {
+	if !*verdict.ActionCompleted {
+		return fmt.Errorf("pass requires action_completed=true")
+	}
+	if len(*verdict.SpecDeviations) > 0 {
+		return fmt.Errorf("pass requires spec_deviations to be empty")
+	}
+	if len(*verdict.TemporalArtifacts) > 0 {
+		return fmt.Errorf("pass requires temporal_artifacts to be empty")
+	}
+	if *verdict.UnexpectedSpeech {
+		return fmt.Errorf("pass requires unexpected_speech=false")
+	}
+	return nil
+}
+
+func validateStructuredClipQAReroll(verdict *structuredClipQAVerdict) error {
+	if *verdict.ActionCompleted && len(*verdict.SpecDeviations) == 0 &&
+		len(*verdict.TemporalArtifacts) == 0 && !*verdict.UnexpectedSpeech {
+		return fmt.Errorf("reroll requires an observed failure reason")
 	}
 	return nil
 }

@@ -112,7 +112,7 @@ workstations:
             "audio_content": { "type": "string", "enum": ["speech", "music", "noise", "silence", "mixed"] },
             "unexpected_speech": { "type": "boolean" },
             "verdict": { "type": "string", "enum": ["pass", "reroll"] },
-            "confidence": { "type": "number" }
+            "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
           },
           "required": ["action_completed", "spec_deviations", "temporal_artifacts", "audio_content", "unexpected_speech", "verdict", "confidence"]
         }

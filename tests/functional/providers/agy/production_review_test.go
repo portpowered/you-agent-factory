@@ -468,6 +468,7 @@ func runAgyClipQAInvocationWithStdout(
 			t.Fatalf("write AGY media fixture %q: %v", assetPath, err)
 		}
 	}
+	stdout = alignAgyClipQAReplaySchema(t, stdout)
 	result.Stdout = stdout
 
 	runner := testutil.NewProviderCommandRunner(result)
@@ -495,6 +496,64 @@ func runAgyClipQAInvocationWithStdout(
 	response := support.DecodeInvocationResponseJSON(t, inputs.Stdout())
 	events := readAgyRecording(t, recordingPath, "AGY clip-QA")
 	return response, events, runner, assetPath
+}
+
+func alignAgyClipQAReplaySchema(t *testing.T, stdout []byte) []byte {
+	t.Helper()
+	if len(stdout) == 0 {
+		return stdout
+	}
+
+	// The recorded trace predates the bounded confidence contract. Preserve its
+	// real media-review response while aligning only the echoed schema metadata
+	// with the current authored request.
+	lines := strings.Split(strings.TrimSuffix(string(stdout), "\n"), "\n")
+	var output strings.Builder
+	changed := false
+	for _, line := range lines {
+		var event map[string]any
+		if err := json.Unmarshal([]byte(line), &event); err != nil {
+			return stdout
+		}
+		if alignAgyClipQAReplaySchemaParent(event["init"]) || alignAgyClipQAReplaySchemaParent(event["result"]) {
+			changed = true
+		}
+		encoded, err := json.Marshal(event)
+		if err != nil {
+			t.Fatalf("marshal AGY clip-QA replay event: %v", err)
+		}
+		output.Write(encoded)
+		output.WriteByte('\n')
+	}
+	if !changed {
+		return stdout
+	}
+	return []byte(output.String())
+}
+
+func alignAgyClipQAReplaySchemaParent(value any) bool {
+	parent, ok := value.(map[string]any)
+	if !ok {
+		return false
+	}
+	schema, ok := parent["json_schema"].(map[string]any)
+	if !ok {
+		return false
+	}
+	properties, ok := schema["properties"].(map[string]any)
+	if !ok {
+		return false
+	}
+	if _, ok := properties["action_completed"]; !ok {
+		return false
+	}
+	confidence, ok := properties["confidence"].(map[string]any)
+	if !ok {
+		return false
+	}
+	confidence["minimum"] = float64(0)
+	confidence["maximum"] = float64(1)
+	return true
 }
 
 func readAgyColdWatchRecording(t *testing.T, path string) []factoryapi.FactoryEvent {
@@ -662,6 +721,15 @@ func assertAgyClipQACommand(
 	} {
 		if _, ok := properties[field]; !ok {
 			t.Fatalf("provider JSON schema missing required property %q: %#v", field, properties)
+		}
+	}
+	confidence, ok := properties["confidence"].(map[string]any)
+	if !ok {
+		t.Fatalf("provider JSON schema confidence = %#v, want bounded number schema", properties["confidence"])
+	}
+	for key, want := range map[string]float64{"minimum": 0, "maximum": 1} {
+		if got, ok := confidence[key].(float64); !ok || got != want {
+			t.Fatalf("provider JSON schema confidence[%q] = %#v, want %v", key, confidence[key], want)
 		}
 	}
 }

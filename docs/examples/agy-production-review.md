@@ -89,7 +89,7 @@ if ($LASTEXITCODE -ne 0) {
   return
 }
 
-$recommendationMatch = [regex]::Match($report, '(?im)^\s*(?:#{1,6}\s*)?(?:5\.\s*)?Overall recommendation:\s*\**(pass|reroll)\**\s*$')
+$recommendationMatch = [regex]::Match($report, '(?im)^[ \t]*##[ \t]+Overall recommendation[ \t]*\r?\n(?:[ \t]*\r?\n)*[ \t]*Recommendation:[ \t]*(?:\*\*)?(pass|reroll)(?:\*\*)?[ \t]*\r?$')
 if (-not $recommendationMatch.Success) {
   Write-Output 'failed: cold-watch report has no valid recommendation'
   return

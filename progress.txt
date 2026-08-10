@@ -10,7 +10,7 @@
 - Run-level `--quiet` cannot be combined with structured `--json` or `--output`; verify output-mode combinations against the live CLI before documenting them.
 - For direct named packaged Factory invocations, bind inputs in authored workstation bodies with `${parameter}` interpolation; `.Inputs` payload can be empty even when the named CLI argument is present.
 - Multi-input packaged Factories must give required parameters non-ambiguous invocation bindings; the ACP reachability guard requires each required parameter to expose a text-carrying route, while authored validation rejects routing stdin to multiple parameters.
-- AGY structured-output replays require the provider's echoed `json_schema` to be JSON-equivalent to the authored request; reuse the recorded schema exactly when proving a historical trace offline.
+- AGY structured-output replays require the provider's echoed `json_schema` to be JSON-equivalent to the authored request; keep historical fixture envelopes synchronized with the authored schema while preserving their recorded output evidence.
 - A schema-valid structured QA `reroll` is an accepted inspection verdict; provider refusal, malformed output, and schema mismatch must fail before verdict interpretation, while provider failures may consume the bounded default retry budget.
 - Packaged Factory additions that change the public catalog require synchronized authored/generated sources, catalog counts, the canonical reference topic, and CLI docs smoke markers; refresh generated output only through `make packaged-factory-catalog-generate`.
 - Verify documented named-Factory commands against isolated live `you run --named ... --help`; role-pinned provider/model defaults should be documented as fixed policy when no override flags are exposed.
@@ -729,4 +729,35 @@
   - `make verify-fast` — attempted but stopped at dashboard typecheck because the pre-existing checkout lacks `@types/bun` and all `ui/packages/*` workspace sources; `make ui-deps` cannot resolve those missing workspaces. Earlier complete-checkout verification for this PR head passed `verify-fast`, and no UI files are part of this follow-up.
 - **Learnings for future iterations:**
   - Treat generated named-Factory help as the source of truth when documenting positional and named bindings; inspect both the authored binding and live help before marking a docs story complete.
+---
+
+## 2026-08-10 00:24 -07:00 - wo-b2-agy-production-review-roles review follow-up
+- What was implemented
+  - Addressed the latest blocking PR feedback by encoding `confidence` `minimum: 0` and `maximum: 1` in the authored clip-QA schema and regenerating the packaged catalog artifacts.
+  - Refactored structured clip-QA validation into focused decoding, shape, confidence, pass, and reroll helpers; consolidated the contract tests into the existing workstation test file so `pkg-file-count` remains within the 15-file limit.
+  - Updated both production-composition PowerShell parsers to consume the actual `## Overall recommendation` plus `Recommendation: pass|reroll` contract, including CRLF-safe matching; the parser was behaviorally checked for pass, reroll, and missing-recommendation cases.
+  - Kept the historical AGY clip-QA response/media evidence while synchronizing only its echoed schema metadata in the offline replay harness, and asserted the bounded confidence fields on the provider command.
+- Files changed
+  - `docs/examples/agy-production-review.md`
+  - `docs/reference/packaged-factories.md`
+  - `packages/packaged-factories/factories/agy-clip-qa/factory.yaml`
+  - `packages/packaged-factories/generated/factories/agy-clip-qa/factory.yaml`
+  - `packages/packaged-factories/generated/factories/agy-clip-qa/factory.json`
+  - `packages/packaged-factories/generated/manifest.json`
+  - `pkg/services/workers/internal/services/workstations/executor/helpers.go`
+  - `pkg/services/workers/internal/services/workstations/executor/response_contract_test.go` (consolidated into `workstation_executor_test.go`)
+  - `pkg/services/workers/internal/services/workstations/executor/workstation_executor_test.go`
+  - `tests/functional/providers/agy/production_review_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/workers/internal/services/workstations/executor -count=1` — passed.
+  - `go test ./tests/functional/providers/agy -run '^TestAgyProductionReviewRolesThroughRootBuildProcess$' -count=1 -v -timeout 900s` — passed.
+  - `make pkg-maint`, `make pkg-file-count`, `make packaged-factory-catalog-check`, and `make docs-reference-smoke` — passed.
+  - `git diff --check` — passed.
+  - `make verify-fast` — blocked at the pre-existing dashboard typecheck baseline: missing `@types/bun`, TypeScript 6 `baseUrl` deprecation errors, and deleted `ui/packages/*` workspace sources; no UI files are part of this follow-up.
+- **Learnings for future iterations:**
+  - Documentation parsers for Markdown output must match the report’s structural contract and tolerate the platform’s CRLF line endings; a single-line `Overall recommendation:` pattern is not equivalent to the emitted H2-plus-body form.
+  - AGY structured-output replays enforce exact echoed-schema equivalence, so a contract schema change requires the historical replay envelope to be synchronized without changing its recorded response evidence.
+  - When a backend package is at the 15-file limit, consolidate focused behavioral tests into an existing responsibility-aligned file before adding another package-local test file.
 ---

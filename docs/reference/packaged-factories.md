@@ -1334,7 +1334,7 @@ the PowerShell invocation safe for paths with spaces:
 $completedCut = (Resolve-Path '.\assembled\completed-cut.mp4').Path
 $report = you run --named @you/agy-cold-watch --cut-path $completedCut --output primary --no-record
 if ($LASTEXITCODE -ne 0) { throw "cold-watch execution failed with exit code $LASTEXITCODE" }
-$recommendationMatch = [regex]::Match($report, '(?im)^\s*(?:#{1,6}\s*)?(?:5\.\s*)?Overall recommendation:\s*\**(pass|reroll)\**\s*$')
+$recommendationMatch = [regex]::Match($report, '(?im)^[ \t]*##[ \t]+Overall recommendation[ \t]*\r?\n(?:[ \t]*\r?\n)*[ \t]*Recommendation:[ \t]*(?:\*\*)?(pass|reroll)(?:\*\*)?[ \t]*\r?$')
 if (-not $recommendationMatch.Success) { throw 'cold-watch report has no valid overall recommendation' }
 switch ($recommendationMatch.Groups[1].Value.ToLowerInvariant()) {
   'pass'   { Write-Output 'COLD_WATCH_PASS'; break }
