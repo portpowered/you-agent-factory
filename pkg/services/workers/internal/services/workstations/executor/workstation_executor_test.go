@@ -414,6 +414,22 @@ func TestExpectedArtifactVerification_DistinguishesDuplicateNamesAndUnrenderable
 	}
 }
 
+func TestExpectedArtifactRendering_FallsBackToRecordedProjectForInputProject(t *testing.T) {
+	t.Parallel()
+
+	got, err := renderExpectedArtifactPattern(
+		"{{ (index .Inputs 0).Project }}/{{ (index .Inputs 0).Payload }}.txt",
+		[]workerexecution.Token{{Color: workerexecution.Color{Payload: []byte("payload-7")}}},
+		&work.ExpectedArtifactTemplateContext{Project: "project-7"},
+	)
+	if err != nil {
+		t.Fatalf("renderExpectedArtifactPattern() error = %v", err)
+	}
+	if got != "project-7/payload-7.txt" {
+		t.Fatalf("rendered input project = %q, want project-7/payload-7.txt", got)
+	}
+}
+
 func TestWorkstationExecutor_VerifiesRecordedProjectAndSessionContext(t *testing.T) {
 	t.Parallel()
 	workspace := t.TempDir()

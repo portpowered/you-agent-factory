@@ -319,17 +319,24 @@ func renderExpectedArtifactPattern(
 	}
 	return work.RenderExpectedArtifactPattern(
 		pattern,
-		expectedArtifactInputs(tokens),
+		expectedArtifactInputs(tokens, templateContext.Project),
 		templateContext,
 	)
 }
 
-func expectedArtifactInputs(tokens []workerexecution.Token) []work.ExpectedArtifactInput {
+func expectedArtifactInputs(tokens []workerexecution.Token, inputProject string) []work.ExpectedArtifactInput {
 	if len(tokens) == 0 {
 		return nil
 	}
+	inputProject = workerexecution.ResolveProjectID(inputProject)
 	inputs := make([]work.ExpectedArtifactInput, 0, len(tokens))
 	for _, token := range tokens {
+		project := strings.TrimSpace(token.Color.Tags[workerexecution.ProjectTagKey])
+		if project == "" {
+			project = inputProject
+		} else {
+			project = workerexecution.ResolveProjectID(project)
+		}
 		inputs = append(inputs, work.ExpectedArtifactInput{
 			Name:       token.Color.Name,
 			WorkID:     token.Color.WorkID,
@@ -337,7 +344,7 @@ func expectedArtifactInputs(tokens []workerexecution.Token) []work.ExpectedArtif
 			DataType:   string(token.Color.DataType),
 			TraceID:    token.Color.TraceID,
 			ParentID:   token.Color.ParentID,
-			Project:    token.Color.Tags[workerexecution.ProjectTagKey],
+			Project:    project,
 			Tags:       work.CloneTags(token.Color.Tags),
 			Payload:    string(token.Color.Payload),
 		})

@@ -2117,6 +2117,7 @@ export interface components {
       dataType?: string;
       traceId?: string;
       parentId?: string;
+      /** @description Per-input project value resolved from the input project tag, dispatch context, or the default project. */
       project?: string;
       tags?: components["schemas"]["StringMap"];
       /** @description The dispatch-time textual payload value. It is retained only in the artifact template context and is not added to the normal Work read. */

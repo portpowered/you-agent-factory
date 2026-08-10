@@ -265,8 +265,12 @@ func (d *DispatcherSubsystem) expectedArtifactContext(
 	if d.wfCtx != nil && strings.TrimSpace(d.wfCtx.SessionID) != "" {
 		sessionID = strings.TrimSpace(d.wfCtx.SessionID)
 	}
+	inputProject := workers.DefaultProjectID
+	if d.wfCtx != nil {
+		inputProject = workers.ResolveProjectID(d.wfCtx.ProjectID)
+	}
 	return &work.ExpectedArtifactTemplateContext{
-		Inputs:    expectedArtifactTemplateInputs(inputTokens),
+		Inputs:    expectedArtifactTemplateInputs(inputTokens, inputProject),
 		Project:   workers.ResolveProjectID(project),
 		SessionID: sessionID,
 	}
@@ -274,12 +278,20 @@ func (d *DispatcherSubsystem) expectedArtifactContext(
 
 func expectedArtifactTemplateInputs(
 	inputTokens []factorytoken.Token,
+	inputProject string,
 ) []work.ExpectedArtifactInput {
 	if len(inputTokens) == 0 {
 		return nil
 	}
+	inputProject = workers.ResolveProjectID(inputProject)
 	inputs := make([]work.ExpectedArtifactInput, 0, len(inputTokens))
 	for _, token := range inputTokens {
+		project := strings.TrimSpace(token.Color.Tags[workers.ProjectTagKey])
+		if project == "" {
+			project = inputProject
+		} else {
+			project = workers.ResolveProjectID(project)
+		}
 		inputs = append(inputs, work.ExpectedArtifactInput{
 			Name:       token.Color.Name,
 			WorkID:     token.Color.WorkID,
@@ -287,7 +299,7 @@ func expectedArtifactTemplateInputs(
 			DataType:   string(token.Color.DataType),
 			TraceID:    token.Color.TraceID,
 			ParentID:   token.Color.ParentID,
-			Project:    token.Color.Tags[workers.ProjectTagKey],
+			Project:    project,
 			Tags:       work.CloneTags(token.Color.Tags),
 			Payload:    string(token.Color.Payload),
 		})

@@ -345,7 +345,7 @@ func TestDispatcher_RecordsStableExpectedArtifactTemplateContext(t *testing.T) {
 	}
 	got := result.Dispatches[0].Dispatch.ExpectedArtifactContext
 	if got.Project != "project-7" || got.SessionID != "session-9" || len(got.Inputs) != 1 ||
-		got.Inputs[0].WorkID != "work-1" || got.Inputs[0].Payload != "payload-1" {
+		got.Inputs[0].WorkID != "work-1" || got.Inputs[0].Project != "project-7" || got.Inputs[0].Payload != "payload-1" {
 		t.Fatalf("expected artifact context = %#v, want project/session context", got)
 	}
 }

@@ -1481,7 +1481,9 @@ type ExpectedArtifactTemplateInput struct {
 	ParentId *string `json:"parentId,omitempty"`
 
 	// Payload The dispatch-time textual payload value. It is retained only in the artifact template context and is not added to the normal Work read.
-	Payload    *string    `json:"payload,omitempty"`
+	Payload *string `json:"payload,omitempty"`
+
+	// Project Per-input project value resolved from the input project tag, dispatch context, or the default project.
 	Project    *string    `json:"project,omitempty"`
 	Tags       *StringMap `json:"tags,omitempty"`
 	TraceId    *string    `json:"traceId,omitempty"`

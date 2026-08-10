@@ -4564,6 +4564,7 @@ components:
           type: string
         project:
           type: string
+          description: Per-input project value resolved from the input project tag, dispatch context, or the default project.
         tags:
           $ref: '#/components/schemas/StringMap'
         payload:

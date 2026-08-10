@@ -602,6 +602,7 @@
           "type": "string"
         },
         "project": {
+          "description": "Per-input project value resolved from the input project tag, dispatch context, or the default project.",
           "type": "string"
         },
         "tags": {
