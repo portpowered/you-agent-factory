@@ -1320,21 +1320,9 @@ func TestPause_ControlOutcomesKeepTheLifecycleTruthful(t *testing.T) {
 		supervision.mu.Unlock()
 
 		observedWait := make(chan struct{})
-		stopRelease := make(chan struct{})
 		go func() {
-			select {
-			case wait <- struct{}{}:
-				close(observedWait)
-			case <-stopRelease:
-				return
-			}
-			for {
-				select {
-				case wait <- struct{}{}:
-				case <-stopRelease:
-					return
-				}
-			}
+			wait <- struct{}{}
+			close(observedWait)
 		}()
 
 		resultCh := make(chan workersessions.ControlResult, 1)
@@ -1354,7 +1342,7 @@ func TestPause_ControlOutcomesKeepTheLifecycleTruthful(t *testing.T) {
 		session.State = workersessions.StateCanceled
 		r.sessions["worker-1"] = session
 		r.mu.Unlock()
-		close(stopRelease)
+		close(wait)
 
 		result := <-resultCh
 		if err := <-errCh; err != nil || result.Outcome != workersessions.ControlOutcomeNoop || result.Session.State != workersessions.StateCanceled {
