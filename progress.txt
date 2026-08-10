@@ -34,6 +34,8 @@
 - When a public owner contract intentionally adds an interface to a package with a deletion-only structure baseline, update that package's exact interface-count target in the same change and rerun `make pkg-structure`.
 - When broad functional coverage reports a cancellation-observation failure, rerun the failed lane and isolate the named test before changing an unrelated feature; parallel-suite failures can move between existing durability/restart tests while isolated runs pass.
 - Process-scoped external-effect owners should expose an `Open(valueRequest)` operation that returns a close-once private scope; the shared owner stays non-closable and retains ambient clock, ID, path, and filesystem effects.
+- Root-process reuse proofs can rotate only the injected API transport starter between sequential `Process.Execute` calls; keeping all other edges on the same process makes distinct runtime IDs and public behavior observable without rebuilding the root.
+- The default session transport alias is `factorysessions.DefaultSessionID` (`~default`), while response-event envelopes expose the generated durable session resource ID; tests should route with the alias and assert each envelope against the fetched session identity.
 
 ## 2026-08-09 13:12 - wo-d1-packaged-factories-docs-001
 - What was implemented
@@ -1004,4 +1006,26 @@
 - **Learnings for future iterations:**
   - Keep shared observability owners non-closable and put all file creation, collision reservation, and close-once behavior in the returned operation-private scope; this preserves sibling sessions when one scope fails or closes.
   - Split behavioral tests by scope type when they combine setup, lifecycle, and record assertions so the package maintainability gate remains green without suppressions.
+---
+
+## 2026-08-10 09:24 -07:00 - btrc-p1-root-injection-006
+- What was implemented
+  - Added an end-to-end root-process functional proof that constructs one process with instrumented session/runtime/response-ID edges, provider runner, API starter, and explicit log/metrics roots, then asserts all remain inert during construction.
+  - Rotated only the injected API starter across two sequential `Process.Execute` calls on that same process and verified distinct session IDs, stream generations, runtime IDs, and observability scopes while the exact provider runner instance handled both invocations.
+  - Exercised successful and provider-failure Factory Session invocations through public HTTP APIs, asserting isolated terminal results, session-scoped Response Events, canonical `DISPATCH_REQUEST` before `DISPATCH_RESPONSE` ordering, and exact runner cardinality.
+  - Updated the P1 owner-contract deletion register to distinguish live story 001-005 replacements from deferred P2-P6 seams, and marked Story 006 complete in `prd.json`.
+- Files changed
+  - `tests/functional/sessions/root_composition/process_reuse_inert_test.go`
+  - `docs/internal/packaged-service-structure/btrc-p1-owner-contracts.md`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/sessions/root_composition -count=1 -timeout 600s` — passed.
+  - Focused `go test -race` for the new reusable-process proof — passed.
+  - `go vet ./pkg/root ./pkg/wire ./tests/functional/sessions/root_composition` — passed.
+  - `make verify-fast` — passed: dashboard typecheck, MCP contract boundary, 355 Vitest files / 2,970 tests, 191 Bun tests, and the short Go suite.
+  - `make pkg-maint pkg-file-count pkg-structure wire-smoke` and `git diff --check` — passed; Wire generation produced no additional diff.
+- **Learnings for future iterations:**
+  - A continuous server can host multiple Factory Sessions while retaining one runtime instance; prove per-execution runtime identity by reusing the process and rotating only the transport starter between sequential executions.
+  - Provider-native Response Events describe provider activity, so a failed invocation may legitimately end its provider stream with `RUN/COMPLETED`; assert invocation failure and canonical dispatch failure separately from response-stream terminal activity.
 ---

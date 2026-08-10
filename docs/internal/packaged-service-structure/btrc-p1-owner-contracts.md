@@ -1,13 +1,29 @@
 # BTRC P1 owner-contract register
 
-This register records the dependency classification for the first five BTRC P1
+This register records the dependency classification for all six BTRC P1
 cutovers. It is intentionally limited to the Factory Sessions runtime-opening
 boundary changed by stories `btrc-p1-root-injection-001` and
 `btrc-p1-root-injection-002`, plus the shared Factory Sessions root cutover in
 `btrc-p1-root-injection-003`, and the value-only opening cutover in
 `btrc-p1-root-injection-004`, and the private observability-scope ownership
-cutover in `btrc-p1-root-injection-005`; later P1 stories extend the register
-when they move additional operation contracts or private owner state.
+cutover in `btrc-p1-root-injection-005`, plus the end-to-end process proof in
+`btrc-p1-root-injection-006`.
+
+## P1 deletion register
+
+The following rows record only seams replaced by this packet. A retained
+compatibility method is called out explicitly rather than being reported as a
+deletion. No compatibility factory, second injector, or runtime composition
+path was added.
+
+| Row | P1 status | Evidence |
+| --- | --- | --- |
+| Aggregate `RuntimeOpeningDependencies` constructor seam | Removed in story 001 | Factory Sessions runtime-opening owner contracts and construction tests use separate ports. |
+| Aggregate runtime-opening external-effects bag | Removed in story 002 | Canonical Wire projects fixed owner ports; runtime opening accepts values and opaque IDs. |
+| Active Factory Sessions child-assembly/`ForRuntime` construction path | Removed from the active path in story 003 | Runtime opening retains the canonical root capability; the inert compatibility method remains for unmigrated callers and is not claimed deleted. |
+| Behavioral collaborators carried by operation requests | Removed in story 004 | Direct JavaScript and MCP stdio requests are value-only; presentation values are boundary-local. |
+| Per-operation logger and metrics sink factories | Removed in story 005 | Runtime Log/Metrics Owners open private close-once scopes from destination values and IDs. |
+| Remaining service-specific legacy seams assigned to P2-P6 | Deferred | Not changed or claimed complete by P1. |
 
 ## Build-time owner ports
 
@@ -104,4 +120,9 @@ cleanup. The root functional support test
 through `root.BuildProcess` and `Process.Execute` and observes the injected
 provider override through public Work. `pkg/wire/wire_gen.go` is regenerated
 from canonical `pkg/wire/wire.go`; no second injector or compatibility factory
-is introduced.
+is introduced. The end-to-end root-composition test
+`tests/functional/sessions/root_composition/process_reuse_inert_test.go`
+constructs once, observes no injected edge or observability activity, then
+executes the same process twice through separate public server lifetimes and
+asserts distinct session/runtime identities, isolated success/failure results,
+canonical dispatch ordering, response streams, and exact runner cardinality.
