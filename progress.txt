@@ -29,6 +29,7 @@
 - A schema-valid structured QA `reroll` is an accepted inspection verdict; provider refusal, malformed output, and schema mismatch must fail before verdict interpretation, while provider failures may consume the bounded default retry budget.
 - Packaged Factory additions that change the public catalog require synchronized authored/generated sources, catalog counts, the canonical reference topic, and CLI docs smoke markers; refresh generated output only through `make packaged-factory-catalog-generate`.
 - Verify documented named-Factory commands against isolated live `you run --named ... --help`; role-pinned provider/model defaults should be documented as fixed policy when no override flags are exposed.
+- When `gh pr edit` is blocked by a missing `read:project` scope, the repository-scoped `gh api --method PATCH repos/<owner>/<repo>/pulls/<number> --field body=...` fallback can update the PR body; byte-compare it with the source PRD afterward.
 
 - Worker Session finite streams can use the injected Events `Read` contract with the first retained head as a snapshot boundary; replay-only paths must not call `Subscribe`.
 - Authored OpenAPI and CLI contracts generate their Go, TypeScript, published metadata, and family-manifest consumers; update the source contract first, then run the repository generators and drift checks.
@@ -1684,4 +1685,18 @@
   - No PR conversation comments, formal reviews, or unresolved inline threads are present.
 - **Learnings for future iterations:**
   - When current-main itself fails the same required functional lane, preserve the scoped move-only change and leave the PR on the continue path until the base coverage regression is repaired or the repository lane is green.
+---
+## [2026-08-10 16:21 -07:00] - thr-split-acp-stdio-tests-003 PR handoff audit
+- What was implemented
+  - Audited existing PR #1861 against the latest branch: all three PRD stories remain `passes: true`, the branch is synchronized with `origin`, and the thread-aware review audit found no conversation comments, reviews, or unresolved inline threads.
+  - Replaced the PR description through the repository-scoped `gh api` fallback so it is exactly the contents of `prd.json`; no production or test source changed.
+- Files changed
+  - `progress.txt`
+- Verification
+  - PR body comparison — byte-identical with `prd.json` at 9,931 bytes.
+  - Current PR checks — all selected lanes passed except Backend Functional Coverage and its dependent Verification Policy; the failing lane exits on the known `origin/main` coverage regression at base `e8c0a248ae1ba354ccc2fc022fa674feefe52f85`.
+  - `python .../fetch_comments.py` — zero conversation comments, reviews, and unresolved inline threads.
+  - Worktree status and `git diff --check` — clean before this progress append; no source changes were introduced.
+- **Learnings for future iterations:**
+  - PR metadata can be corrected without a source commit, but the handoff is not complete while a required check remains red; keep the PR on the continue path until current-main coverage is green or explicitly repaired by its owning change.
 ---
