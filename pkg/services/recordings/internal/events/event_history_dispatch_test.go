@@ -38,6 +38,20 @@ func assertJSONObject(t *testing.T, object map[string]any, field string) map[str
 	return value
 }
 
+func assertExpectedArtifactContext(t *testing.T, context *work.ExpectedArtifactTemplateContext) {
+	t.Helper()
+	if context == nil || context.Project != "project-7" || context.SessionID != "session-9" {
+		t.Fatalf("canonical expected artifact context = %#v", context)
+	}
+}
+
+func assertGeneratedExpectedArtifactContext(t *testing.T, context *factoryapi.ExpectedArtifactTemplateContext) {
+	t.Helper()
+	if context == nil || stringValueForEventHistoryTest(context.Project) != "project-7" || stringValueForEventHistoryTest(context.SessionId) != "session-9" {
+		t.Fatalf("generated expected artifact context = %#v", context)
+	}
+}
+
 func TestFactoryEventHistory_RecordWorkstationRequest_UsesContextForRequestIdentity(t *testing.T) {
 	eventTime := time.Date(2026, 4, 22, 16, 0, 0, 0, time.UTC)
 	history := newTestFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
@@ -73,9 +87,7 @@ func TestFactoryEventHistory_RecordWorkstationRequest_UsesContextForRequestIdent
 	if canonicalPayload.Metadata == nil || stringValueForEventHistoryTest(canonicalPayload.Metadata.ReplayKey) != "replay-1" {
 		t.Fatalf("canonical metadata = %#v, want replay-1", canonicalPayload.Metadata)
 	}
-	if canonicalPayload.ExpectedArtifactContext == nil || canonicalPayload.ExpectedArtifactContext.Project != "project-7" || canonicalPayload.ExpectedArtifactContext.SessionID != "session-9" {
-		t.Fatalf("canonical expected artifact context = %#v", canonicalPayload.ExpectedArtifactContext)
-	}
+	assertExpectedArtifactContext(t, canonicalPayload.ExpectedArtifactContext)
 
 	events := generatedHistoryEvents(t, history)
 	if len(events) != 1 {
@@ -98,9 +110,7 @@ func TestFactoryEventHistory_RecordWorkstationRequest_UsesContextForRequestIdent
 	if stringValueForEventHistoryTest(payload.Metadata.ReplayKey) != "replay-1" {
 		t.Fatalf("metadata replayKey = %q, want replay-1", stringValueForEventHistoryTest(payload.Metadata.ReplayKey))
 	}
-	if payload.ExpectedArtifactContext == nil || stringValueForEventHistoryTest(payload.ExpectedArtifactContext.Project) != "project-7" || stringValueForEventHistoryTest(payload.ExpectedArtifactContext.SessionId) != "session-9" {
-		t.Fatalf("generated expected artifact context = %#v", payload.ExpectedArtifactContext)
-	}
+	assertGeneratedExpectedArtifactContext(t, payload.ExpectedArtifactContext)
 }
 
 func TestFactoryEventHistory_RecordWorkstationRequest_NormalizesEventTimeToUTC(t *testing.T) {
