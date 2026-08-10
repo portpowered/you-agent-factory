@@ -2569,6 +2569,10 @@
       "minimum": 75.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/webhooks",
+      "minimum": 61.42
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/work",
       "minimum": 61.06
     },

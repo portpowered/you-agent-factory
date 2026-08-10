@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -19,6 +20,7 @@ import (
 	"time"
 
 	"github.com/jonboulle/clockwork"
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -220,6 +222,41 @@ func testFunctionalWebhookRetryExhaustion(t *testing.T) {
 	}
 	if bytes.Contains(recordLine, []byte(functionalWebhookSecret)) || bytes.Contains(recordLine, []byte("receiver response must not be retained")) {
 		t.Fatalf("dead-letter retained secret or receiver response: %s", recordLine)
+	}
+	assertFunctionalDurableAppenderFailurePaths(t)
+}
+
+func assertFunctionalDurableAppenderFailurePaths(t *testing.T) {
+	t.Helper()
+	local := platformfilesystem.Local{}
+	if err := local.AppendDurable(" ", []byte("ignored")); err == nil {
+		t.Fatal("AppendDurable(blank path) succeeded, want validation error")
+	}
+
+	blockedParent := filepath.Join(t.TempDir(), "parent-file")
+	if err := os.WriteFile(blockedParent, []byte("not a directory"), 0o600); err != nil {
+		t.Fatalf("write blocked parent: %v", err)
+	}
+	if err := local.AppendDurable(filepath.Join(blockedParent, "child.jsonl"), []byte("ignored")); err == nil {
+		t.Fatal("AppendDurable(blocked parent) succeeded, want directory error")
+	}
+
+	directoryTarget := filepath.Join(t.TempDir(), "directory-target")
+	if err := os.MkdirAll(directoryTarget, 0o700); err != nil {
+		t.Fatalf("create directory target: %v", err)
+	}
+	if err := local.AppendDurable(directoryTarget, []byte("ignored")); err == nil {
+		t.Fatal("AppendDurable(directory target) succeeded, want open error")
+	}
+
+	if runtime.GOOS != "linux" {
+		return
+	}
+	if err := local.AppendDurable("/dev/full", []byte("ignored")); err == nil {
+		t.Fatal("AppendDurable(/dev/full) succeeded, want write error")
+	}
+	if err := local.AppendDurable(os.DevNull, []byte("ignored")); err == nil {
+		t.Fatal("AppendDurable(/dev/null) succeeded, want sync error")
 	}
 }
 
