@@ -459,3 +459,19 @@
   - After replacing a worked example, audit nearby family-level explanatory prose as well as the entry itself; stale summary text can reintroduce a resolved correctness contradiction.
   - Documentation-only review fixes still require a fresh pushed head and terminal CI before the PR can be reported ready.
 ---
+
+## 2026-08-09 19:47 -07:00 - wo-d1-packaged-factories-docs-ci-follow-up
+- What was implemented
+  - Investigated the fresh-head Backend Functional Coverage failure, which was the unrelated `TestAPIResponseEventSSEStreamsRetainedThenLiveEvents` assertion observing zero retained response events.
+  - Ran the exact test 20 times locally with no failures, then reran only the failed GitHub Actions job; the rerun passed Backend Functional Coverage and Verification Policy.
+  - Left unrelated event-stream source unchanged and retained the documentation fix as the only product change.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/events/response_events -run '^TestAPIResponseEventSSEStreamsRetainedThenLiveEvents$' -count=20 -v -timeout 900s` — passed all 20 runs.
+  - `gh run rerun 31350145939 --failed --repo portpowered/you-agent-factory` — attempt 2 passed the failed lane.
+  - Backend Functional Coverage and Verification Policy passed on the rerun; all other required checks for the prior head were already passing.
+- **Learnings for future iterations:**
+  - A full functional-coverage failure in an unchanged response-events package can be a timing flake; reproduce the exact assertion locally before making unrelated code changes.
+  - Rerunning only the failed job can clear the flake, but a subsequent progress-only commit still needs its own complete CI run before delivery is current.
+---
