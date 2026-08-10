@@ -17,7 +17,9 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
@@ -157,6 +159,194 @@ type workerSessionReplayFixture struct {
 	factoryDir   string
 	env          []string
 	baseURL      string
+}
+
+// TestWSRFT001OpeningRecordPrecedesProviderOutput exercises the customer
+// Worker Session stream against the production root-built process and asserts
+// the retained history order directly. The provider command runner replays the
+// sanitized Codex fixture; no Mock Worker or timing sleep participates in the
+// observation.
+//
+// WSR-FT-001: opening-first, provider-before-output, terminal-last.
+// golden: tests/functional/internal/support/testdata/provider-sessions/codex/success/manifest.json
+func TestWSRFT001OpeningRecordPrecedesProviderOutput(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	fixture := newWorkerSessionReplayFixture(t, ctx)
+	workID := submitWork(t, ctx, fixture.process, fixture.env, fixture.factoryDir, fixture.baseURL, "wsr-ft-001")
+	waitForWorkerSession(t, ctx, fixture.process, fixture.env, fixture.factoryDir, fixture.baseURL, workID)
+	support.WaitForSessionTerminalStatus(t, fixture.baseURL, factorysessions.DefaultSessionID, 30*time.Second)
+	frames := replayWorkerSessionFrames(t, ctx, fixture)
+	assertWSRWorkerSessionHistory(t, frames, workID, "COMPLETED")
+	fixture.stop(t)
+}
+
+// TestWSRFT002LiveAndReplayCorrelationRemainStable compares the public live
+// Worker Session observation with the replay-only stream. The opening's exact
+// timestamp and identity must survive both projections, while the stream's
+// provider-native records remain after the opening lifecycle record.
+//
+// WSR-FT-002: live/replay correlation and exact opening timestamp.
+func TestWSRFT002LiveAndReplayCorrelationRemainStable(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	fixture := newWorkerSessionReplayFixture(t, ctx)
+	workID := submitWork(t, ctx, fixture.process, fixture.env, fixture.factoryDir, fixture.baseURL, "wsr-ft-002")
+	waitForWorkerSession(t, ctx, fixture.process, fixture.env, fixture.factoryDir, fixture.baseURL, workID)
+	support.WaitForSessionTerminalStatus(t, fixture.baseURL, factorysessions.DefaultSessionID, 30*time.Second)
+	live := support.ListDefaultSessionWorkerSessions(t, fixture.baseURL, workID)
+	if len(live.Sessions) != 1 {
+		t.Fatalf("live Worker Session observations = %#v, want exactly one", live)
+	}
+	frames := replayWorkerSessionFrames(t, ctx, fixture)
+	assertWSRLiveReplayCorrelation(t, live.Sessions[0], frames, workID)
+	fixture.stop(t)
+}
+
+func replayWorkerSessionFrames(
+	t *testing.T,
+	ctx context.Context,
+	fixture workerSessionReplayFixture,
+) []factoryapi.WorkerSessionEvent {
+	t.Helper()
+	inputs := executeCLI(t, ctx, fixture.process, fixture.env, fixture.factoryDir,
+		"--server", fixture.baseURL, "worker-sessions", "stream",
+		"--provider", "codex", "--kind", "session_id", "--id", workerSessionsCodexSuccessID,
+		"--replay-only", "--output", "json",
+	)
+	var frames []factoryapi.WorkerSessionEvent
+	for index, line := range nonEmptyLines(inputs.Stdout()) {
+		var frame factoryapi.WorkerSessionEvent
+		if err := json.Unmarshal([]byte(line), &frame); err != nil {
+			t.Fatalf("decode WSR replay frame %d: %v\nline:%s", index+1, err, line)
+		}
+		if frame.Event.Position == 0 || frame.WorkerSessionId == "" {
+			continue
+		}
+		frames = append(frames, frame)
+	}
+	if len(frames) == 0 {
+		t.Fatalf("replay stream contained no Worker Session records:\n%s", inputs.Stdout())
+	}
+	return frames
+}
+
+func assertWSRWorkerSessionHistory(
+	t *testing.T,
+	frames []factoryapi.WorkerSessionEvent,
+	workID string,
+	wantTerminal string,
+) {
+	t.Helper()
+	if frames[0].Event.Position != 1 {
+		t.Fatalf("first Worker Session position = %d, want 1", frames[0].Event.Position)
+	}
+	if frames[0].Event.SourceType != "worker_session_lifecycle" {
+		t.Fatalf("first Worker Session source type = %q, want worker_session_lifecycle", frames[0].Event.SourceType)
+	}
+	if got := stringValue(frames[0].Event.Payload, "kind"); got != "SESSION" || stringValue(frames[0].Event.Payload, "phase") != "STARTED" {
+		t.Fatalf("first Worker Session payload = %#v, want SESSION/STARTED", frames[0].Event.Payload)
+	}
+	providerOutputSeen := false
+	providerBindingSeen := false
+	providerBindingIndex := -1
+	firstProviderOutput := -1
+	terminalSeen := false
+	for index, frame := range frames {
+		if frame.WorkerSessionId != frames[0].WorkerSessionId || !containsString(frame.WorkIds, workID) {
+			t.Fatalf("frame[%d] correlation = %#v, want worker %s and Work %s", index, frame, frames[0].WorkerSessionId, workID)
+		}
+		if index > 0 && frame.Event.Position <= frames[index-1].Event.Position {
+			t.Fatalf("Worker Session positions are not increasing: frame[%d]=%d previous=%d", index, frame.Event.Position, frames[index-1].Event.Position)
+		}
+		if frame.Event.SourceType == "worker_session_lifecycle" &&
+			stringValue(frame.Event.Payload, "phase") == "UPDATED" &&
+			providerValue(frame.Event.Payload) == "codex" {
+			providerBindingSeen = true
+			if providerBindingIndex == -1 {
+				providerBindingIndex = index
+			}
+		}
+		if frame.Event.SourceType != "worker_session_lifecycle" {
+			providerOutputSeen = true
+			if firstProviderOutput == -1 {
+				firstProviderOutput = index
+			}
+		}
+		if frame.Event.SourceType == "worker_session_lifecycle" &&
+			(stringValue(frame.Event.Payload, "phase") == "COMPLETED" ||
+				stringValue(frame.Event.Payload, "phase") == "FAILED" ||
+				stringValue(frame.Event.Payload, "phase") == "CANCELED") {
+			if terminalSeen {
+				t.Fatalf("Worker Session history has multiple terminal lifecycle records: %#v", frames)
+			}
+			terminalSeen = true
+			if stringValue(frame.Event.Payload, "status") != wantTerminal {
+				t.Fatalf("terminal Worker Session status = %q, want %q; payload=%#v", stringValue(frame.Event.Payload, "status"), wantTerminal, frame.Event.Payload)
+			}
+			if index != len(frames)-1 {
+				t.Fatalf("terminal lifecycle record at frame %d, want final frame %d", index, len(frames)-1)
+			}
+		}
+	}
+	if !providerOutputSeen {
+		t.Fatalf("Worker Session history has no provider-authored records: %#v", frames)
+	}
+	if !providerBindingSeen || firstProviderOutput == -1 || providerBindingIndex >= firstProviderOutput {
+		t.Fatalf("Worker Session history did not bind codex before provider output: %#v", frames)
+	}
+	if !terminalSeen {
+		t.Fatalf("Worker Session history has no terminal lifecycle record: %#v", frames)
+	}
+}
+
+func assertWSRLiveReplayCorrelation(
+	t *testing.T,
+	live factoryapi.WorkerSessionObservation,
+	frames []factoryapi.WorkerSessionEvent,
+	workID string,
+) {
+	t.Helper()
+	assertWSRWorkerSessionHistory(t, frames, workID, "COMPLETED")
+	if live.WorkerSessionId != frames[0].WorkerSessionId || live.State != factoryapi.WorkerSessionObservationStateCompleted {
+		t.Fatalf("live Worker Session = %#v, replay opening = %#v", live, frames[0])
+	}
+	if live.StartedAt == nil {
+		t.Fatal("live Worker Session omitted startedAt")
+	}
+	startedAt := stringValue(frames[0].Event.Payload, "startedAt")
+	if startedAt == "" {
+		t.Fatalf("replay opening omitted startedAt: %#v", frames[0].Event.Payload)
+	}
+	parsed, err := time.Parse(time.RFC3339Nano, startedAt)
+	if err != nil {
+		t.Fatalf("parse replay opening startedAt %q: %v", startedAt, err)
+	}
+	if !parsed.Equal(*live.StartedAt) {
+		t.Fatalf("live startedAt = %s, replay startedAt = %s; live=%#v opening=%#v", live.StartedAt.Format(time.RFC3339Nano), parsed.Format(time.RFC3339Nano), live, frames[0].Event.Payload)
+	}
+	if live.AttemptId != stringValue(frames[0].Event.Payload, "attemptId") {
+		t.Fatalf("live attemptId = %q, replay attemptId = %q", live.AttemptId, stringValue(frames[0].Event.Payload, "attemptId"))
+	}
+}
+
+func stringValue(payload map[string]interface{}, key string) string {
+	if value, ok := payload[key].(string); ok {
+		return value
+	}
+	if nested, ok := payload["payload"].(map[string]interface{}); ok {
+		value, _ := nested[key].(string)
+		return value
+	}
+	return ""
+}
+
+func providerValue(payload map[string]interface{}) string {
+	provenance, _ := payload["provenance"].(map[string]interface{})
+	provider, _ := provenance["provider"].(string)
+	return provider
 }
 
 func newWorkerSessionReplayFixture(t *testing.T, ctx context.Context) workerSessionReplayFixture {
