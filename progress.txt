@@ -2456,3 +2456,16 @@
 - **Learnings for future iterations:**
   - Removing runtime callback state must preserve ordinary replay projection semantics; keep runtime projections value-derived and let the owner bridge deduplicate complete event snapshots rather than restoring append-only state solely for presentation.
 ---
+
+## 2026-08-10 15:13 -07:00 - btrc-p1-root-injection-004/006 current-main merge follow-up
+- What was implemented
+  - Merged current `origin/main` after PR #1859 landed its CLI test splits, retained the active P1 PRD, and reconciled the split invocation tests to the value-and-ID contract.
+- Files changed
+  - Current-main CLI test split files and merge metadata; `progress.txt`.
+- Verification
+  - `make verify-fast` — passed (dashboard typecheck, MCP contract, UI suites, and short Go suite).
+  - `make pkg-file-count`, `make backend-size`, `make pkg-structure`, and `make pkg-maint` — passed.
+  - Focused Go tests for CLI run, CLI, Wire, Factory Sessions Wire, and runtime-opening invocation — passed.
+- **Learnings for future iterations:**
+  - When current main mechanically splits a test file touched by an active branch, accept the split or deletion and port only the behavioral contract edits into the new focused files before rerunning package gates.
+---
