@@ -2021,3 +2021,21 @@
 - **Learnings for future iterations:**
   - For a broad coverage failure, isolate the first failing observable test and repeat it locally before changing feature code; a clean repetition plus a successful failed-job rerun is stronger evidence of a transient race than a speculative fix.
 ---
+
+## 2026-08-10 12:40 -07:00 - dwro-s1-remote-placement-flags final PR CI follow-up
+- What was implemented
+  - Investigated the first failed Backend Functional Coverage run and isolated the only failing assertion to the unchanged ACP boundary test `TestYouRunReturnsUnsupportedFilesystemAndTerminalRPCsAtTheACPBoundary`; no placement-related source or test path failed.
+  - Repeated the exact test locally five times successfully and reran only the failed GitHub jobs without changing product code.
+  - Confirmed the PR description is synchronized from `prd.json`; all four PRD stories remain marked `passes: true`.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Focused ACP functional test — passed 5/5 locally.
+  - PR #1852 rerun `31423838201` on head `63065f4ed9fb7ea2772048effde9f98a61bb9665` — all 18 checks passed, including Backend Functional Coverage, pinned ACP evidence, and Verification Policy.
+  - PR body — exact content match with `prd.json`.
+  - PR merge state — `CLEAN` and `MERGEABLE`; local and remote branch heads match; no inline review comments or formal reviews remain.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - When broad functional coverage fails in an unchanged concurrency-sensitive test, isolate and repeat the exact test before changing feature code; a clean repetition plus a failed-job rerun can establish a transient suite failure.
+  - When comparing multiline GitHub CLI output in PowerShell, join captured output lines before comparing it with a file; array `.Length` reports line count rather than character count.
+---
