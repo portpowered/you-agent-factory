@@ -2667,3 +2667,20 @@
 - **Learnings for future iterations:**
   - When the default branch advances during review, resolve the task PRD as the active branch’s source of truth while preserving both histories in the append-only progress log.
 ---
+
+## 2026-08-10 14:53 -07:00 - wsr-001-opening-record final review-state verification
+- What was implemented
+  - Re-audited PR #1849 with the thread-aware GitHub review workflow after the package-boundary follow-up; the historical blocking findings are covered by the current branch commits, with no unresolved inline threads or formal reviews remaining.
+  - Confirmed the current branch remains synchronized with `origin/main` at `6e01bee68`, has a clean merge tree, and retains the intentional 175-entry package-boundary migration baseline without the previously reported new violation.
+  - Confirmed the pushed PR head, exact `prd.json` PR description, all three `passes:true` stories, and terminal-success required checks are aligned.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Thread-aware PR audit — 5 historical conversation comments, 0 formal reviews, and 0 inline review threads; PR #1849 is open, non-draft, mergeable, and all required checks are successful.
+  - PRD/body equality and JSON validation — passed.
+  - `git diff --check` and `git merge-tree --write-tree origin/main HEAD` — passed.
+  - `go run ./cmd/pkgboundarycheck -root .` — reports only the known 175-entry baseline recorded on current main.
+- **Learnings for future iterations:**
+  - A remaining service-internal constructor can be an intentional baseline entry; compare the checker’s total against current main and inspect the changed call sites before treating any matching `rg` result as a new violation.
+  - After a review-fix commit, verify both the branch’s remote SHA and the PR body/check state so bookkeeping does not leave the handoff stale.
+---
