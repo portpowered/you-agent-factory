@@ -4493,6 +4493,38 @@ components:
           type: string
           minLength: 1
           description: Customer-safe, actionable explanation of the failure.
+    ExpectedArtifactVerification:
+      type: object
+      additionalProperties: false
+      description: Stable terminal verification summary emitted when a successful worker does not satisfy its effective expected artifact declarations.
+      required:
+        - code
+        - entries
+      properties:
+        code:
+          $ref: '#/components/schemas/WorkFailureType'
+        entries:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/ExpectedArtifactVerificationEntry'
+    ExpectedArtifactVerificationEntry:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - pattern
+        - reason
+      properties:
+        name:
+          type: string
+          minLength: 1
+        pattern:
+          type: string
+          minLength: 1
+          description: Workspace-relative rendered artifact pattern; host paths are never emitted.
+        reason:
+          $ref: '#/components/schemas/ExpectedArtifactVerificationReason'
     FactoryArtifact:
       type: object
       additionalProperties: false
@@ -7615,6 +7647,8 @@ components:
           type: string
         selectedClassificationLabel:
           type: string
+        artifactVerification:
+          $ref: '#/components/schemas/ExpectedArtifactVerification'
         failureDetail:
           $ref: '#/components/schemas/FailureDetail'
         providerFailure:
@@ -7804,6 +7838,7 @@ components:
         - WorkFailureTypeMisconfigured
         - WorkFailureTypeMissingExecutable
         - WorkFailureTypeCommandLineTooLong
+        - WorkFailureTypeExpectedArtifactsUnsatisfied
       enum:
         - auth_failure
         - permanent_bad_request
@@ -7814,6 +7849,7 @@ components:
         - misconfigured
         - missing_executable
         - command_line_too_long
+        - EXPECTED_ARTIFACTS_UNSATISFIED
       x-enum-descriptions:
         - Authentication or authorization failed and operator action is required.
         - The request is invalid in a non-retryable way and should be fixed before retrying.
@@ -7824,6 +7860,16 @@ components:
         - The worker or runtime was misconfigured and requires operator intervention.
         - The configured provider executable could not be found.
         - The provider command exceeded the operating system command-line size limit.
+        - A successful worker did not satisfy its expected artifact declarations.
+    ExpectedArtifactVerificationReason:
+      type: string
+      description: Stable reason that an expected artifact declaration was not satisfied.
+      x-enum-varnames:
+        - ExpectedArtifactVerificationReasonMissing
+        - ExpectedArtifactVerificationReasonEmpty
+      enum:
+        - MISSING
+        - EMPTY
     ProviderFailureMetadata:
       type: object
       additionalProperties: false

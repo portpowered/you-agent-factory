@@ -91,6 +91,12 @@ const (
 	ErrorResponseCodeWORKERSESSIONTRANSCRIPTUNAVAILABLE           ErrorResponseCode = "WORKER_SESSION_TRANSCRIPT_UNAVAILABLE"
 )
 
+// Defines values for ExpectedArtifactVerificationReason.
+const (
+	ExpectedArtifactVerificationReasonEmpty   ExpectedArtifactVerificationReason = "EMPTY"
+	ExpectedArtifactVerificationReasonMissing ExpectedArtifactVerificationReason = "MISSING"
+)
+
 // Defines values for FactoryArtifactAuditMode.
 const (
 	FactoryArtifactAuditModeFULL     FactoryArtifactAuditMode = "FULL"
@@ -978,15 +984,16 @@ const (
 
 // Defines values for WorkFailureType.
 const (
-	WorkFailureTypeAuthFailure         WorkFailureType = "auth_failure"
-	WorkFailureTypeCommandLineTooLong  WorkFailureType = "command_line_too_long"
-	WorkFailureTypeInternalServerError WorkFailureType = "internal_server_error"
-	WorkFailureTypeMisconfigured       WorkFailureType = "misconfigured"
-	WorkFailureTypeMissingExecutable   WorkFailureType = "missing_executable"
-	WorkFailureTypePermanentBadRequest WorkFailureType = "permanent_bad_request"
-	WorkFailureTypeThrottled           WorkFailureType = "throttled"
-	WorkFailureTypeTimeout             WorkFailureType = "timeout"
-	WorkFailureTypeUnknown             WorkFailureType = "unknown"
+	WorkFailureTypeAuthFailure                  WorkFailureType = "auth_failure"
+	WorkFailureTypeCommandLineTooLong           WorkFailureType = "command_line_too_long"
+	WorkFailureTypeExpectedArtifactsUnsatisfied WorkFailureType = "EXPECTED_ARTIFACTS_UNSATISFIED"
+	WorkFailureTypeInternalServerError          WorkFailureType = "internal_server_error"
+	WorkFailureTypeMisconfigured                WorkFailureType = "misconfigured"
+	WorkFailureTypeMissingExecutable            WorkFailureType = "missing_executable"
+	WorkFailureTypePermanentBadRequest          WorkFailureType = "permanent_bad_request"
+	WorkFailureTypeThrottled                    WorkFailureType = "throttled"
+	WorkFailureTypeTimeout                      WorkFailureType = "timeout"
+	WorkFailureTypeUnknown                      WorkFailureType = "unknown"
 )
 
 // Defines values for WorkOutcome.
@@ -1368,7 +1375,9 @@ type DispatchRequestEventPayload struct {
 
 // DispatchResponseEventPayload Customer-visible dispatch completion event. Output work is represented with the same Work schema used by request submission rather than token or marking-mutation internals. FactoryEvent.context owns dispatch, trace, and work identity; workstation and worker topology must be derived from the matching dispatch-request event plus the initial structure. Provider-attempt session and safe diagnostic facts stay on inference response events instead of being copied onto dispatch completion payloads.
 type DispatchResponseEventPayload struct {
-	CompletionId *string `json:"completionId,omitempty"`
+	// ArtifactVerification Stable terminal verification summary emitted when a successful worker does not satisfy its effective expected artifact declarations.
+	ArtifactVerification *ExpectedArtifactVerification `json:"artifactVerification,omitempty"`
+	CompletionId         *string                       `json:"completionId,omitempty"`
 
 	// CurrentChainingTraceId Deprecated compatibility copy of the dispatch chaining-trace identifier; prefer FactoryEvent.context.currentChainingTraceId.
 	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
@@ -1442,6 +1451,27 @@ type ExpectedArtifact struct {
 	// Pattern Workspace-relative literal path or glob template to verify.
 	Pattern string `json:"pattern"`
 }
+
+// ExpectedArtifactVerification Stable terminal verification summary emitted when a successful worker does not satisfy its effective expected artifact declarations.
+type ExpectedArtifactVerification struct {
+	// Code Stable machine-readable failure type used to classify failed work across providers and runtimes.
+	Code    WorkFailureType                     `json:"code"`
+	Entries []ExpectedArtifactVerificationEntry `json:"entries"`
+}
+
+// ExpectedArtifactVerificationEntry defines model for ExpectedArtifactVerificationEntry.
+type ExpectedArtifactVerificationEntry struct {
+	Name string `json:"name"`
+
+	// Pattern Workspace-relative rendered artifact pattern; host paths are never emitted.
+	Pattern string `json:"pattern"`
+
+	// Reason Stable reason that an expected artifact declaration was not satisfied.
+	Reason ExpectedArtifactVerificationReason `json:"reason"`
+}
+
+// ExpectedArtifactVerificationReason Stable reason that an expected artifact declaration was not satisfied.
+type ExpectedArtifactVerificationReason string
 
 // Factory Top-level factory.json contract. Declare the work types, resources, portability resources, workers, and workstations that make up one authored factory here. Guarded loop breakers should be authored as guarded LOGICAL_MOVE workstations using VISIT_COUNT guards instead of a top-level exhaustion-rules field.
 type Factory struct {

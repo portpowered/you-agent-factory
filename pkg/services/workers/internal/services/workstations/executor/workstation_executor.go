@@ -68,6 +68,7 @@ type WorkstationExecutor struct {
 	RunWorktree             string
 	RunReasoningEffort      string
 	FileSystem              platformfilesystem.ReadFileInspector
+	ArtifactFileSystem      platformfilesystem.GlobInspector
 	Now                     func() time.Time
 }
 
@@ -228,12 +229,12 @@ func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, disp
 		return result, err
 	}
 	if workstationDef.Type == factorydefinitions.WorkstationTypeClassify {
-		return normalizeClassifierWorkResult(
+		result = normalizeClassifierWorkResult(
 			result,
 			workerDef.Type == factorydefinitions.WorkerTypeScript,
-		), nil
+		)
 	}
-	return result, nil
+	return we.verifyExpectedArtifacts(request, workstationDef, result), nil
 }
 
 func (we *WorkstationExecutor) resolveInvocationProvider(

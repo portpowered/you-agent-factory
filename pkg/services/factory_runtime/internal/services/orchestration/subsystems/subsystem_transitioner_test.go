@@ -431,6 +431,44 @@ func TestResolveWorkResult_MissingRuntimeConfigPreservesOriginalOutcome(t *testi
 	}
 }
 
+func TestTransitioner_ExpectedArtifactFailureUsesFailureDestination(t *testing.T) {
+	now := time.Date(2026, time.August, 10, 12, 0, 0, 0, time.UTC)
+	net := workerBatchTestNet()
+	transitioner := NewTransitioner(net, nil, func() time.Time { return now }, testTokenTransformer(net), nil, nil, nil, testWorkPropagationPolicy())
+	snapshot := workerBatchSnapshot("worker output")
+	snapshot.Results[0] = workerexecution.WorkResult{
+		DispatchID:   "dispatch-1",
+		TransitionID: "t1",
+		Outcome:      workerexecution.OutcomeFailed,
+		Output:       "worker output",
+		Error:        "EXPECTED_ARTIFACTS_UNSATISFIED: report=report.json (MISSING)",
+		ArtifactVerification: &workerexecution.ExpectedArtifactVerification{
+			Code: workerexecution.WorkFailureTypeExpectedArtifactsUnsatisfied,
+			Entries: []workerexecution.ExpectedArtifactVerificationEntry{{
+				Name: "report", Pattern: "report.json", Reason: workerexecution.ExpectedArtifactVerificationReasonMissing,
+			}},
+		},
+		FailureMetadata: &workerexecution.WorkFailureMetadata{
+			Family: workerexecution.WorkFailureFamilyTerminal,
+			Type:   workerexecution.WorkFailureTypeExpectedArtifactsUnsatisfied,
+		},
+	}
+
+	result, err := transitioner.Execute(context.Background(), snapshot)
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+	if result == nil || len(result.Mutations) != 1 || result.Mutations[0].NewToken == nil {
+		t.Fatalf("transitioner result = %#v, want one failure mutation", result)
+	}
+	if result.Mutations[0].ToPlace != "task:failed" {
+		t.Fatalf("failure mutation destination = %q, want task:failed", result.Mutations[0].ToPlace)
+	}
+	if len(result.CompletedDispatches) != 1 || result.CompletedDispatches[0].Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("completed dispatches = %#v, want failed terminal completion", result.CompletedDispatches)
+	}
+}
+
 func TestTransitioner_WorkerGeneratedBatchPreservesAuthoredWorkData(t *testing.T) {
 	now := time.Date(2026, time.June, 20, 12, 0, 0, 0, time.UTC)
 	net := workerBatchTestNet()

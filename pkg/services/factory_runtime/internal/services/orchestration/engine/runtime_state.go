@@ -91,6 +91,7 @@ func deepCopyCompletedDispatch(d interfaces.CompletedDispatch) interfaces.Comple
 func deepCopyWorkResult(result workerexecution.WorkResult) workerexecution.WorkResult {
 	cp := result
 	cp.ProviderSession = workerexecution.CloneProviderSessionMetadata(result.ProviderSession)
+	cp.ArtifactVerification = workerexecution.CloneExpectedArtifactVerification(result.ArtifactVerification)
 	return cp
 }
 

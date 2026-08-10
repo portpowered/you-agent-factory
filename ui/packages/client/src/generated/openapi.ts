@@ -2087,6 +2087,17 @@ export interface components {
       /** @description Customer-safe, actionable explanation of the failure. */
       message: string;
     };
+    /** @description Stable terminal verification summary emitted when a successful worker does not satisfy its effective expected artifact declarations. */
+    ExpectedArtifactVerification: {
+      code: components["schemas"]["WorkFailureType"];
+      entries: components["schemas"]["ExpectedArtifactVerificationEntry"][];
+    };
+    ExpectedArtifactVerificationEntry: {
+      name: string;
+      /** @description Workspace-relative rendered artifact pattern; host paths are never emitted. */
+      pattern: string;
+      reason: components["schemas"]["ExpectedArtifactVerificationReason"];
+    };
     FactoryArtifact: {
       /** @description Stable artifact identifier referenced by session projections. */
       id: string;
@@ -3649,6 +3660,7 @@ export interface components {
       error?: string;
       feedback?: string;
       selectedClassificationLabel?: string;
+      artifactVerification?: components["schemas"]["ExpectedArtifactVerification"];
       failureDetail?: components["schemas"]["FailureDetail"];
       providerFailure?: components["schemas"]["ProviderFailureMetadata"];
       metrics?: components["schemas"]["WorkMetrics"];
@@ -3722,6 +3734,11 @@ export interface components {
      * @enum {string}
      */
     WorkFailureType: WorkFailureType;
+    /**
+     * @description Stable reason that an expected artifact declaration was not satisfied.
+     * @enum {string}
+     */
+    ExpectedArtifactVerificationReason: ExpectedArtifactVerificationReason;
     ProviderFailureMetadata: {
       family?: components["schemas"]["WorkFailureFamily"];
       type?: components["schemas"]["WorkFailureType"];
@@ -8297,9 +8314,17 @@ export const WorkFailureType = {
   WorkFailureTypeMissingExecutable: "missing_executable",
   // The provider command exceeded the operating system command-line size limit.
   WorkFailureTypeCommandLineTooLong: "command_line_too_long",
+  // A successful worker did not satisfy its expected artifact declarations.
+  WorkFailureTypeExpectedArtifactsUnsatisfied: "EXPECTED_ARTIFACTS_UNSATISFIED",
 } as const;
 export type WorkFailureType =
   (typeof WorkFailureType)[keyof typeof WorkFailureType];
+export const ExpectedArtifactVerificationReason = {
+  ExpectedArtifactVerificationReasonMissing: "MISSING",
+  ExpectedArtifactVerificationReasonEmpty: "EMPTY",
+} as const;
+export type ExpectedArtifactVerificationReason =
+  (typeof ExpectedArtifactVerificationReason)[keyof typeof ExpectedArtifactVerificationReason];
 export const SafeAgentRunDiagnosticExecutionBehavior = {
   // Agent-loop execution through AGENT_RUN workstations.
   agent_run: "agent_run",

@@ -1993,6 +1993,10 @@ components:
       $ref: './components/schemas/data-models/FactoryDispatchWarning.yaml'
     FailureDetail:
       $ref: './components/schemas/data-models/FailureDetail.yaml'
+    ExpectedArtifactVerification:
+      $ref: './components/schemas/data-models/ExpectedArtifactVerification.yaml'
+    ExpectedArtifactVerificationEntry:
+      $ref: './components/schemas/data-models/ExpectedArtifactVerificationEntry.yaml'
     FactoryArtifact:
       $ref: './components/schemas/data-models/FactoryArtifact.yaml'
     FactoryArtifactRef:
@@ -2273,6 +2277,8 @@ components:
       $ref: './components/schemas/events/WorkFailureFamily.yaml'
     WorkFailureType:
       $ref: './components/schemas/events/WorkFailureType.yaml'
+    ExpectedArtifactVerificationReason:
+      $ref: './components/schemas/events/ExpectedArtifactVerificationReason.yaml'
     ProviderFailureMetadata:
       $ref: './components/schemas/events/ProviderFailureMetadata.yaml'
     ProviderSessionMetadata:

@@ -6,10 +6,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	pathpkg "path"
+	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
+	"text/template"
 	"time"
 
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -725,4 +730,286 @@ func promptSourceFailureResult(
 			Duration: duration,
 		},
 	}
+}
+
+const (
+	unsafeArtifactPatternReport       = "<invalid>"
+	unrenderableArtifactPatternReport = "<unrenderable>"
+)
+
+func (we *WorkstationExecutor) verifyExpectedArtifacts(
+	request workerexecution.WorkstationExecutionRequest,
+	workstation *interfaces.FactoryWorkstationConfig,
+	result workerexecution.WorkResult,
+) workerexecution.WorkResult {
+	if result.Outcome != workerexecution.OutcomeAccepted {
+		return result
+	}
+	inputTokens := executionRequestInputTokens(request)
+	declarations := we.expectedArtifactDeclarations(inputTokens, workstation)
+	if len(declarations) == 0 {
+		return result
+	}
+	entries := verifyExpectedArtifactDeclarations(
+		request.WorkingDirectory,
+		inputTokens,
+		expectedArtifactContext(request),
+		declarations,
+		we.expectedArtifactFileSystem(),
+	)
+	if len(entries) == 0 {
+		return result
+	}
+	verification := &workerexecution.ExpectedArtifactVerification{
+		Code:    workerexecution.WorkFailureTypeExpectedArtifactsUnsatisfied,
+		Entries: entries,
+	}
+	result.Outcome = workerexecution.OutcomeFailed
+	result.ArtifactVerification = verification
+	result.FailureMetadata = &workerexecution.WorkFailureMetadata{
+		Family: workerexecution.WorkFailureFamilyTerminal,
+		Type:   verification.Code,
+	}
+	result.Error = expectedArtifactVerificationError(verification)
+	return result
+}
+
+func (we *WorkstationExecutor) expectedArtifactDeclarations(
+	tokens []workerexecution.Token,
+	workstation *interfaces.FactoryWorkstationConfig,
+) []interfaces.ExpectedArtifactConfig {
+	if workstation == nil {
+		return nil
+	}
+	var declarations []interfaces.ExpectedArtifactConfig
+	if we != nil && we.RuntimeConfig != nil {
+		if factory := we.RuntimeConfig.FactoryConfig(); factory != nil {
+			seenWorkTypes := make(map[string]struct{})
+			for _, token := range tokens {
+				if token.Color.DataType == workerexecution.DataTypeResource {
+					continue
+				}
+				workTypeID := strings.TrimSpace(token.Color.WorkTypeID)
+				if workTypeID == "" {
+					continue
+				}
+				if _, seen := seenWorkTypes[workTypeID]; seen {
+					continue
+				}
+				seenWorkTypes[workTypeID] = struct{}{}
+				for _, workType := range factory.WorkTypes {
+					if workType.ID == workTypeID || workType.Name == workTypeID {
+						declarations = append(declarations, workType.ExpectedArtifacts...)
+						break
+					}
+				}
+			}
+		}
+	}
+	declarations = append(declarations, workstation.ExpectedArtifacts...)
+	return interfaces.NormalizeExpectedArtifactConfigs(declarations)
+}
+
+func (we *WorkstationExecutor) expectedArtifactFileSystem() platformfilesystem.GlobInspector {
+	if we == nil {
+		return nil
+	}
+	if we.ArtifactFileSystem != nil {
+		return we.ArtifactFileSystem
+	}
+	inspector, _ := we.FileSystem.(platformfilesystem.GlobInspector)
+	return inspector
+}
+
+func verifyExpectedArtifactDeclarations(
+	workspace string,
+	tokens []workerexecution.Token,
+	context *workerexecution.Context,
+	declarations []interfaces.ExpectedArtifactConfig,
+	fileSystem platformfilesystem.GlobInspector,
+) []workerexecution.ExpectedArtifactVerificationEntry {
+	workspace = strings.TrimSpace(workspace)
+	entries := make([]workerexecution.ExpectedArtifactVerificationEntry, 0, len(declarations))
+	for _, declaration := range declarations {
+		pattern, renderErr := renderExpectedArtifactPattern(declaration.Pattern, tokens, context)
+		if renderErr != nil {
+			entries = append(entries, expectedArtifactFailureEntry(
+				declaration.Name,
+				unrenderableArtifactPatternReport,
+				workerexecution.ExpectedArtifactVerificationReasonMissing,
+			))
+			continue
+		}
+		pattern, safe := safeExpectedArtifactPattern(pattern)
+		if !safe {
+			entries = append(entries, expectedArtifactFailureEntry(
+				declaration.Name,
+				unsafeArtifactPatternReport,
+				workerexecution.ExpectedArtifactVerificationReasonMissing,
+			))
+			continue
+		}
+		reason, satisfied := expectedArtifactStatus(
+			workspace,
+			pattern,
+			declaration.NonEmpty,
+			fileSystem,
+		)
+		if !satisfied {
+			entries = append(entries, expectedArtifactFailureEntry(declaration.Name, pattern, reason))
+		}
+	}
+	return entries
+}
+
+func expectedArtifactContext(request workerexecution.WorkstationExecutionRequest) *workerexecution.Context {
+	workDirectory := strings.TrimSpace(request.WorkingDirectory)
+	if workDirectory == "" && filepath.IsAbs(request.Worktree) {
+		workDirectory = filepath.Clean(request.Worktree)
+	}
+	return &workerexecution.Context{
+		ProjectID:     request.ProjectID,
+		SessionID:     request.FactorySessionID,
+		WorkDirectory: workDirectory,
+		EnvVars:       cloneEnvVars(request.EnvVars),
+	}
+}
+
+func expectedArtifactFailureEntry(
+	name string,
+	pattern string,
+	reason workerexecution.ExpectedArtifactVerificationReason,
+) workerexecution.ExpectedArtifactVerificationEntry {
+	return workerexecution.ExpectedArtifactVerificationEntry{
+		Name:    strings.TrimSpace(name),
+		Pattern: pattern,
+		Reason:  reason,
+	}
+}
+
+func renderExpectedArtifactPattern(
+	pattern string,
+	tokens []workerexecution.Token,
+	context *workerexecution.Context,
+) (string, error) {
+	parsed, err := template.New("expected_artifact").Option("missingkey=error").Parse(pattern)
+	if err != nil {
+		return "", err
+	}
+	data := workerprompting.BuildPromptData(tokens, context)
+	var rendered bytes.Buffer
+	if err := parsed.Execute(&rendered, data); err != nil {
+		return "", err
+	}
+	return rendered.String(), nil
+}
+
+func safeExpectedArtifactPattern(value string) (string, bool) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return "", false
+	}
+	portable := strings.ReplaceAll(trimmed, `\`, "/")
+	if pathpkg.IsAbs(portable) || strings.HasPrefix(portable, "/") {
+		return "", false
+	}
+	if len(portable) >= 2 && portable[1] == ':' && isASCIIAlpha(portable[0]) {
+		return "", false
+	}
+	for _, segment := range strings.Split(portable, "/") {
+		if segment == ".." {
+			return "", false
+		}
+	}
+	if _, err := pathpkg.Match(portable, ""); err != nil {
+		return "", false
+	}
+	return portable, true
+}
+
+func expectedArtifactStatus(
+	workspace string,
+	pattern string,
+	nonEmpty bool,
+	fileSystem platformfilesystem.GlobInspector,
+) (workerexecution.ExpectedArtifactVerificationReason, bool) {
+	if fileSystem == nil || workspace == "" {
+		return workerexecution.ExpectedArtifactVerificationReasonMissing, false
+	}
+	if !strings.ContainsAny(pattern, "*?[") {
+		return expectedArtifactLiteralStatus(workspace, pattern, nonEmpty, fileSystem)
+	}
+	return expectedArtifactGlobStatus(workspace, pattern, nonEmpty, fileSystem)
+}
+
+func expectedArtifactLiteralStatus(
+	workspace string,
+	pattern string,
+	nonEmpty bool,
+	fileSystem platformfilesystem.GlobInspector,
+) (workerexecution.ExpectedArtifactVerificationReason, bool) {
+	info, err := fileSystem.Stat(filepath.Join(workspace, filepath.FromSlash(pattern)))
+	if err != nil || info == nil || !info.Mode().IsRegular() {
+		return workerexecution.ExpectedArtifactVerificationReasonMissing, false
+	}
+	if nonEmpty && info.Size() == 0 {
+		return workerexecution.ExpectedArtifactVerificationReasonEmpty, false
+	}
+	return "", true
+}
+
+func expectedArtifactGlobStatus(
+	workspace string,
+	pattern string,
+	nonEmpty bool,
+	fileSystem platformfilesystem.GlobInspector,
+) (workerexecution.ExpectedArtifactVerificationReason, bool) {
+	matches, err := fileSystem.Glob(filepath.Join(workspace, filepath.FromSlash(pattern)))
+	if err != nil {
+		return workerexecution.ExpectedArtifactVerificationReasonMissing, false
+	}
+	sort.Strings(matches)
+	regularFiles := 0
+	for _, match := range matches {
+		if !pathWithinWorkspace(workspace, match) {
+			continue
+		}
+		info, statErr := fileSystem.Stat(match)
+		if statErr != nil || info == nil || !info.Mode().IsRegular() {
+			continue
+		}
+		regularFiles++
+		if nonEmpty && info.Size() == 0 {
+			return workerexecution.ExpectedArtifactVerificationReasonEmpty, false
+		}
+	}
+	if regularFiles == 0 {
+		return workerexecution.ExpectedArtifactVerificationReasonMissing, false
+	}
+	return "", true
+}
+
+func pathWithinWorkspace(workspace, candidate string) bool {
+	relative, err := filepath.Rel(workspace, candidate)
+	if err != nil || filepath.IsAbs(relative) {
+		return false
+	}
+	return relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
+}
+
+func expectedArtifactVerificationError(
+	verification *workerexecution.ExpectedArtifactVerification,
+) string {
+	if verification == nil || len(verification.Entries) == 0 {
+		return string(workerexecution.WorkFailureTypeExpectedArtifactsUnsatisfied)
+	}
+	details := make([]string, 0, len(verification.Entries))
+	for _, entry := range verification.Entries {
+		details = append(details, fmt.Sprintf("%s=%s (%s)", entry.Name, entry.Pattern, entry.Reason))
+	}
+	return fmt.Sprintf("%s: %s", verification.Code, strings.Join(details, "; "))
+}
+
+func isASCIIAlpha(value byte) bool {
+	return (value >= 'a' && value <= 'z') || (value >= 'A' && value <= 'Z')
 }

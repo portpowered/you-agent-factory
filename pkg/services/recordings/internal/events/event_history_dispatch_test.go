@@ -8,6 +8,7 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/projections"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -261,6 +262,77 @@ func TestFactoryEventHistory_RecordWorkstationResponse_FailedResultIncludesFailu
 	providerFailure := assertJSONObject(t, payloadObject, "providerFailure")
 	assertJSONField(t, providerFailure, "family", "throttle")
 	assertJSONField(t, providerFailure, "type", "throttled")
+}
+
+func TestFactoryEventHistory_RecordWorkstationResponse_PersistsExpectedArtifactVerification(t *testing.T) {
+	eventTime := time.Date(2026, 8, 10, 9, 30, 0, 0, time.UTC)
+	history := newTestFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return eventTime })
+	result := workerexecution.WorkResult{
+		DispatchID:   "dispatch-artifact-failed",
+		TransitionID: "build",
+		Outcome:      workerexecution.OutcomeFailed,
+		Output:       "worker output retained",
+		Error:        "EXPECTED_ARTIFACTS_UNSATISFIED: report=reports/*.json (EMPTY)",
+		ArtifactVerification: &workerexecution.ExpectedArtifactVerification{
+			Code: workerexecution.WorkFailureTypeExpectedArtifactsUnsatisfied,
+			Entries: []workerexecution.ExpectedArtifactVerificationEntry{{
+				Name:    "report",
+				Pattern: "reports/*.json",
+				Reason:  workerexecution.ExpectedArtifactVerificationReasonEmpty,
+			}},
+		},
+		FailureMetadata: &workerexecution.WorkFailureMetadata{
+			Family: workerexecution.WorkFailureFamilyTerminal,
+			Type:   workerexecution.WorkFailureTypeExpectedArtifactsUnsatisfied,
+		},
+	}
+	history.RecordWorkstationResponse(4, result, interfaces.CompletedDispatch{
+		DispatchID:      result.DispatchID,
+		TransitionID:    result.TransitionID,
+		WorkstationName: "Build",
+		Outcome:         workerexecution.OutcomeFailed,
+		Reason:          result.Error,
+		EndTime:         eventTime,
+		Duration:        time.Second,
+	})
+
+	events := history.CanonicalEvents()
+	if len(events) != 1 {
+		t.Fatalf("canonical event count = %d, want 1", len(events))
+	}
+	var canonicalPayload workerexecution.DispatchResponseEventPayload
+	if err := events[0].DecodePayload(&canonicalPayload); err != nil {
+		t.Fatalf("decode canonical dispatch response: %v", err)
+	}
+	if canonicalPayload.ArtifactVerification == nil || len(canonicalPayload.ArtifactVerification.Entries) != 1 {
+		t.Fatalf("canonical verification = %#v, want one entry", canonicalPayload.ArtifactVerification)
+	}
+	if canonicalPayload.ArtifactVerification.Code != workerexecution.WorkFailureTypeExpectedArtifactsUnsatisfied {
+		t.Fatalf("canonical verification code = %q", canonicalPayload.ArtifactVerification.Code)
+	}
+	if canonicalPayload.FailureDetail == nil || canonicalPayload.FailureDetail.Reason != workerexecution.WorkFailureTypeExpectedArtifactsUnsatisfied {
+		t.Fatalf("canonical failure detail = %#v, want expected-artifact code", canonicalPayload.FailureDetail)
+	}
+	generated := generatedHistoryEvents(t, history)
+	publicPayload, err := generated[0].Payload.AsDispatchResponseEventPayload()
+	if err != nil {
+		t.Fatalf("decode generated dispatch response: %v", err)
+	}
+	if publicPayload.ArtifactVerification == nil || len(publicPayload.ArtifactVerification.Entries) != 1 {
+		t.Fatalf("generated verification = %#v, want one entry", publicPayload.ArtifactVerification)
+	}
+
+	world, err := projections.ReconstructCanonicalFactoryWorldState(events, 4)
+	if err != nil {
+		t.Fatalf("reconstruct world state: %v", err)
+	}
+	if len(world.CompletedDispatches) != 1 || world.CompletedDispatches[0].Result.ArtifactVerification == nil {
+		t.Fatalf("world completion = %#v, want persisted verification", world.CompletedDispatches)
+	}
+	entry := world.CompletedDispatches[0].Result.ArtifactVerification.Entries[0]
+	if entry.Name != "report" || entry.Pattern != "reports/*.json" || entry.Reason != workerexecution.ExpectedArtifactVerificationReasonEmpty {
+		t.Fatalf("world verification entry = %#v", entry)
+	}
 }
 
 func TestFactoryEventHistory_RecordWorkstationResponse_UsesUTCFallbackAndDurationMillisForMissingEndTime(t *testing.T) {

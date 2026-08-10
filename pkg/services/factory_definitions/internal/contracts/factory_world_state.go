@@ -260,11 +260,12 @@ type FactoryWorldAgentRunResponse struct {
 // FactoryWorldFailureDetail associates failed terminal work with the dispatch
 // completion that produced the failure.
 type FactoryWorldFailureDetail struct {
-	DispatchID      string                         `json:"dispatch_id"`
-	TransitionID    string                         `json:"transition_id"`
-	WorkstationName string                         `json:"workstation_name,omitempty"`
-	WorkItem        work.FactoryWorkItem           `json:"work_item"`
-	FailureDetail   *workerexecution.FailureDetail `json:"failureDetail,omitempty"`
+	DispatchID           string                                        `json:"dispatch_id"`
+	TransitionID         string                                        `json:"transition_id"`
+	WorkstationName      string                                        `json:"workstation_name,omitempty"`
+	WorkItem             work.FactoryWorkItem                          `json:"work_item"`
+	FailureDetail        *workerexecution.FailureDetail                `json:"failureDetail,omitempty"`
+	ArtifactVerification *workerexecution.ExpectedArtifactVerification `json:"artifact_verification,omitempty"`
 }
 
 const (

@@ -448,6 +448,9 @@
       "additionalProperties": false,
       "description": "Customer-visible dispatch completion event. Output work is represented with the same Work schema used by request submission rather than token or marking-mutation internals. FactoryEvent.context owns dispatch, trace, and work identity; workstation and worker topology must be derived from the matching dispatch-request event plus the initial structure. Provider-attempt session and safe diagnostic facts stay on inference response events instead of being copied onto dispatch completion payloads.",
       "properties": {
+        "artifactVerification": {
+          "$ref": "#/$defs/ExpectedArtifactVerification"
+        },
         "completionId": {
           "type": "string"
         },
@@ -555,6 +558,58 @@
         "pattern"
       ],
       "type": "object"
+    },
+    "ExpectedArtifactVerification": {
+      "additionalProperties": false,
+      "description": "Stable terminal verification summary emitted when a successful worker does not satisfy its effective expected artifact declarations.",
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/WorkFailureType"
+        },
+        "entries": {
+          "items": {
+            "$ref": "#/$defs/ExpectedArtifactVerificationEntry"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "code",
+        "entries"
+      ],
+      "type": "object"
+    },
+    "ExpectedArtifactVerificationEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "pattern": {
+          "description": "Workspace-relative rendered artifact pattern; host paths are never emitted.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "reason": {
+          "$ref": "#/$defs/ExpectedArtifactVerificationReason"
+        }
+      },
+      "required": [
+        "name",
+        "pattern",
+        "reason"
+      ],
+      "type": "object"
+    },
+    "ExpectedArtifactVerificationReason": {
+      "description": "Stable reason that an expected artifact declaration was not satisfied.",
+      "enum": [
+        "MISSING",
+        "EMPTY"
+      ],
+      "type": "string"
     },
     "Factory": {
       "additionalProperties": false,
@@ -4740,7 +4795,8 @@
         "unknown",
         "misconfigured",
         "missing_executable",
-        "command_line_too_long"
+        "command_line_too_long",
+        "EXPECTED_ARTIFACTS_UNSATISFIED"
       ],
       "type": "string"
     },
