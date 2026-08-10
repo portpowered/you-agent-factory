@@ -928,3 +928,26 @@
   - A public Worker Session history contract must expose the stable Worker ID directly; requiring a Provider Session transcript projection makes valid provider-neutral histories appear unavailable.
   - Conformance is stronger when the same public history drain validates both no-reference and session-bearing providers, including source idempotency and terminal replay rather than only final response payloads.
 ---
+## 2026-08-10 10:06 -0700 - wsr-001-opening-record final verification
+- What was implemented
+  - Kept the new conformance assertions within the repository backend-size and maintainability limits by moving focused observation edge helpers alongside the existing internal service coverage and splitting the Antigravity history assertion at its behavioral boundary.
+  - Updated existing Worker Sessions service doubles for the expanded observation contract so the full repository short suite continues to compile and run.
+- Files changed
+  - `pkg/services/worker_sessions/internal/service/internal_test.go`
+  - `pkg/services/worker_sessions/internal/service/invoke_observation_test.go`
+  - `tests/functional/workers/inference/opening_record_test.go`
+  - `pkg/services/factory_runtime/internal/build_test.go`
+  - `pkg/services/factory_runtime/internal/services/orchestration/runtime/factory_runtime_test_helpers_test.go`
+  - `pkg/services/factory_runtime/internal/services/orchestration/runtime/dispatch_worker_sessions_idempotency_test.go`
+  - `pkg/services/factory_runtime/internal/services/orchestration/runtime/dispatch_worker_sessions_terminal_semantics_test.go`
+  - `progress.txt`
+- Verification
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` — passed.
+  - `make verify-fast` — passed dashboard typecheck, MCP contract checks, 355 Vitest files / 2,970 tests, 191 Bun tests, and the short Go suite.
+  - `make api-smoke` — passed OpenAPI validation, generation/drift checks, contract alignment, and provider parity smoke.
+  - Focused Worker Sessions, WSR, Claude/Codex, and Cursor/ACP tests — passed.
+  - `git diff --check` — passed; worktree clean before publish.
+- **Learnings for future iterations:**
+  - The repository’s parallel short-suite lane can expose an intermittent 300-second Worker Sessions timeout even when the package passes in isolation; rerunning the complete lane after isolating the named package establishes whether it is a concurrency flake.
+  - Public interface additions require updating manually implemented service doubles across Runtime tests; embedding an existing root interface does not help doubles that implement methods explicitly.
+---
