@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -107,11 +108,11 @@ func (service *service) List(cfg ListConfig) error {
 		prepared.Options.NextToken != "",
 	)
 
-	var result factoryapi.ListWorkResponse
+	var responsePayload json.RawMessage
 	response, err := cfg.HTTP.GetJSON(
 		cfg.Context,
 		endpoint.String(),
-		&result,
+		&responsePayload,
 	)
 	if err != nil {
 		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "work list response endpointPath=%s error=unreachable durationMillis=%d", endpoint.Path, response.Duration.Milliseconds())
@@ -127,6 +128,11 @@ func (service *service) List(cfg ListConfig) error {
 		}
 		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "work list response endpointPath=%s status=%d durationMillis=%d", endpoint.Path, resp.StatusCode, response.Duration.Milliseconds())
 		return fmt.Errorf("list work failed (%d)", resp.StatusCode)
+	}
+	result, err := decodeListWorkResponse(responsePayload)
+	if err != nil {
+		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "work list response endpointPath=%s status=%d durationMillis=%d error=decode", endpoint.Path, resp.StatusCode, response.Duration.Milliseconds())
+		return fmt.Errorf("decode work list response: %w", err)
 	}
 	clidiag.Printf(
 		cfg.Diagnostics,
@@ -224,25 +230,88 @@ func renderListResult(output io.Writer, result factoryapi.ListWorkResponse) erro
 		return err
 	}
 
-	if _, err := fmt.Fprintln(output, "WORK ID\tNAME\tWORK TYPE\tSTATE NAME\tSTATE TYPE\tRELATIONS"); err != nil {
+	if _, err := fmt.Fprintln(output, "WORK ID\tNAME\tWORK TYPE\tSTATE NAME\tSTATE TYPE\tSTRUCTURED RESULT\tRELATIONS"); err != nil {
 		return err
 	}
 	for _, work := range result.Results {
 		stateName, stateType := workStateColumns(work.State)
+		structuredResult, err := formatStructuredResult(work.StructuredResult, work.StructuredResult != nil)
+		if err != nil {
+			return fmt.Errorf("format structured result for Work %q: %w", stringValue(work.WorkId), err)
+		}
 		if _, err := fmt.Fprintf(
 			output,
-			"%s\t%s\t%s\t%s\t%s\t%s\n",
+			"%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 			stringValue(work.WorkId),
 			work.Name,
 			stringValue(work.WorkTypeName),
 			stateName,
 			stateType,
+			structuredResult,
 			formatWorkRelations(work.Relations),
 		); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func decodeListWorkResponse(data []byte) (factoryapi.ListWorkResponse, error) {
+	var result factoryapi.ListWorkResponse
+	if err := json.Unmarshal(data, &result); err != nil {
+		return factoryapi.ListWorkResponse{}, err
+	}
+
+	var envelope struct {
+		Results []json.RawMessage `json:"results"`
+	}
+	if err := json.Unmarshal(data, &envelope); err != nil {
+		return factoryapi.ListWorkResponse{}, err
+	}
+	if len(envelope.Results) != len(result.Results) {
+		return factoryapi.ListWorkResponse{}, fmt.Errorf("results length %d does not match decoded work count %d", len(envelope.Results), len(result.Results))
+	}
+	for index, rawWork := range envelope.Results {
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal(rawWork, &fields); err != nil {
+			return factoryapi.ListWorkResponse{}, fmt.Errorf("results[%d]: %w", index, err)
+		}
+		structuredResult, ok := fields["structuredResult"]
+		if ok && bytes.Equal(bytes.TrimSpace(structuredResult), []byte("null")) {
+			// The generated API type uses interface{} and otherwise collapses
+			// explicit JSON null into the same nil value as an omitted field.
+			result.Results[index].StructuredResult = json.RawMessage("null")
+		}
+	}
+	return result, nil
+}
+
+func formatStructuredResult(value any, present bool) (string, error) {
+	data, err := structuredResultJSON(value, present)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+func structuredResultJSON(value any, present bool) ([]byte, error) {
+	if !present {
+		return nil, nil
+	}
+	if value == nil {
+		return []byte("null"), nil
+	}
+	if marker, ok := value.(string); ok && marker == watchStructuredResultNullMarker {
+		return []byte("null"), nil
+	}
+	if raw, ok := value.(json.RawMessage); ok {
+		var compact bytes.Buffer
+		if err := json.Compact(&compact, raw); err != nil {
+			return nil, err
+		}
+		return compact.Bytes(), nil
+	}
+	return json.Marshal(value)
 }
 
 func workStateColumns(state *factoryapi.WorkState) (string, string) {

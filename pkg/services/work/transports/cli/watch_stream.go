@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -350,10 +351,106 @@ func readWatchSSEEvent(reader *bufio.Reader) (factoryapi.FactoryEvent, error) {
 
 func decodeWatchSSEEvent(data []string) (factoryapi.FactoryEvent, error) {
 	var event factoryapi.FactoryEvent
-	if err := json.Unmarshal([]byte(strings.Join(data, "\n")), &event); err != nil {
+	payload := []byte(strings.Join(data, "\n"))
+	if err := json.Unmarshal(payload, &event); err != nil {
+		return factoryapi.FactoryEvent{}, &watchMalformedEventError{err: err}
+	}
+	if err := restoreWatchStructuredResultNulls(payload, &event); err != nil {
 		return factoryapi.FactoryEvent{}, &watchMalformedEventError{err: err}
 	}
 	return event, nil
+}
+
+func restoreWatchStructuredResultNulls(data []byte, event *factoryapi.FactoryEvent) error {
+	if event == nil {
+		return nil
+	}
+	var envelope struct {
+		Payload json.RawMessage `json:"payload"`
+	}
+	if err := json.Unmarshal(data, &envelope); err != nil {
+		return err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(envelope.Payload, &fields); err != nil {
+		return err
+	}
+	resultIsNull := rawJSONFieldIsNull(fields, "structuredResult")
+	changed := resultIsNull
+	switch event.Type {
+	case factoryapi.FactoryEventTypeWorkRequest:
+		payload, err := event.Payload.AsWorkRequestEventPayload()
+		if err != nil {
+			return err
+		}
+		if payload.Works != nil {
+			workChanged, err := restoreWatchWorkResultNulls(fields["works"], payload.Works)
+			if err != nil {
+				return err
+			}
+			changed = workChanged
+		}
+		if !changed {
+			return nil
+		}
+		return event.Payload.FromWorkRequestEventPayload(payload)
+	case factoryapi.FactoryEventTypeDispatchResponse:
+		payload, err := event.Payload.AsDispatchResponseEventPayload()
+		if err != nil {
+			return err
+		}
+		if resultIsNull {
+			payload.StructuredResult = watchStructuredResultNullMarker
+		}
+		if payload.OutputWork != nil {
+			workChanged, err := restoreWatchWorkResultNulls(fields["outputWork"], payload.OutputWork)
+			if err != nil {
+				return err
+			}
+			changed = changed || workChanged
+		}
+		if !changed {
+			return nil
+		}
+		return event.Payload.FromDispatchResponseEventPayload(payload)
+	default:
+		return nil
+	}
+}
+
+func restoreWatchWorkResultNulls(data json.RawMessage, works *[]factoryapi.Work) (bool, error) {
+	if len(data) == 0 || works == nil {
+		return false, nil
+	}
+	var rawWorks []json.RawMessage
+	if err := json.Unmarshal(data, &rawWorks); err != nil {
+		return false, err
+	}
+	if len(rawWorks) != len(*works) {
+		return false, fmt.Errorf("structuredResult work count %d does not match decoded work count %d", len(rawWorks), len(*works))
+	}
+	changed := false
+	for index, rawWork := range rawWorks {
+		if !rawJSONFieldIsNullInObject(rawWork, "structuredResult") {
+			continue
+		}
+		(*works)[index].StructuredResult = watchStructuredResultNullMarker
+		changed = true
+	}
+	return changed, nil
+}
+
+func rawJSONFieldIsNull(fields map[string]json.RawMessage, name string) bool {
+	value, ok := fields[name]
+	return ok && bytes.Equal(bytes.TrimSpace(value), []byte("null"))
+}
+
+func rawJSONFieldIsNullInObject(data json.RawMessage, name string) bool {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return false
+	}
+	return rawJSONFieldIsNull(fields, name)
 }
 
 const (

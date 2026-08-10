@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -74,11 +75,11 @@ func (service *service) Show(cfg ShowConfig) error {
 		cfg.WorkID,
 	)
 
-	var work factoryapi.Work
+	var responsePayload json.RawMessage
 	response, err := cfg.HTTP.GetJSON(
 		cfg.Context,
 		endpoint.String(),
-		&work,
+		&responsePayload,
 	)
 	if err != nil {
 		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "work show response endpointPath=%s error=unreachable durationMillis=%d", endpoint.Path, response.Duration.Milliseconds())
@@ -101,6 +102,11 @@ func (service *service) Show(cfg ShowConfig) error {
 		}
 		return fmt.Errorf("get work failed (%d)", resp.StatusCode)
 	}
+	work, err := decodeWorkResponse(responsePayload)
+	if err != nil {
+		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "work show response endpointPath=%s status=%d durationMillis=%d error=decode", endpoint.Path, resp.StatusCode, response.Duration.Milliseconds())
+		return fmt.Errorf("decode work response: %w", err)
+	}
 	clidiag.Printf(
 		cfg.Diagnostics,
 		cfg.Verbose,
@@ -115,6 +121,22 @@ func (service *service) Show(cfg ShowConfig) error {
 		return encoder.Encode(work)
 	}
 	return renderShowResult(cfg.Output, work)
+}
+
+func decodeWorkResponse(data []byte) (factoryapi.Work, error) {
+	var work factoryapi.Work
+	if err := json.Unmarshal(data, &work); err != nil {
+		return factoryapi.Work{}, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return factoryapi.Work{}, err
+	}
+	structuredResult, ok := fields["structuredResult"]
+	if ok && bytes.Equal(bytes.TrimSpace(structuredResult), []byte("null")) {
+		work.StructuredResult = json.RawMessage("null")
+	}
+	return work, nil
 }
 
 func showEndpoint(cfg ShowConfig) (url.URL, error) {

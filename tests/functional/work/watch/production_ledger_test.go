@@ -58,6 +58,28 @@ func TestWorkWatchRecordedProductionRetryLedger(t *testing.T) {
 		assertProductionFiniteLines(t, lines)
 	})
 
+	t.Run("finite exposes a replayed structured result on its first transition", func(t *testing.T) {
+		events := productionLedgerEventsWithStructuredResult(t, fixture.Events)
+		stream := newProductionLedgerStream(t, events)
+		process := support.BuildProcess(t, serviceedges.Edges{})
+		support.CleanupProcess(t, process)
+		stdout := newLedgerOutput()
+		stderr := newLedgerOutput()
+		inputs := productionLedgerWatchInput(t, stream.URL(), false, stdout, stderr)
+		command := support.StartProcessCommand(t, process, inputs)
+
+		waitForLedgerCommand(t, command, stdout, stderr)
+		lines := decodeWatchLines(t, stdout.String())
+		assertProductionFiniteLines(t, lines)
+		var result map[string]any
+		if err := json.Unmarshal(lines[0].StructuredResult, &result); err != nil {
+			t.Fatalf("decode replayed structuredResult: %v (%s)", err, lines[0].StructuredResult)
+		}
+		if result["decision"] != "accept" || result["attempt"] != float64(1) {
+			t.Fatalf("replayed structuredResult = %#v, want decision=accept attempt=1", result)
+		}
+	})
+
 	t.Run("follow remains attached and consumes later transitions", func(t *testing.T) {
 		stream := newProductionLedgerStream(t, fixture.Events)
 		process := support.BuildProcess(t, serviceedges.Edges{})
@@ -139,6 +161,42 @@ func productionLedgerEventIndex(t *testing.T, events []factoryapi.FactoryEvent, 
 	}
 	t.Fatalf("production ledger has no %q event", eventType)
 	return -1
+}
+
+func productionLedgerEventsWithStructuredResult(t *testing.T, events []factoryapi.FactoryEvent) []factoryapi.FactoryEvent {
+	t.Helper()
+	cloned := append([]factoryapi.FactoryEvent(nil), events...)
+	found := false
+	for index, event := range cloned {
+		if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
+			continue
+		}
+		payload, err := event.Payload.AsDispatchResponseEventPayload()
+		if err != nil || payload.OutputWork == nil || payload.Outcome == factoryapi.WorkOutcomeFailed || payload.Outcome == factoryapi.WorkOutcomeRejected {
+			continue
+		}
+		outputs := append([]factoryapi.Work(nil), (*payload.OutputWork)...)
+		for outputIndex, output := range outputs {
+			if ledgerString(output.WorkId) != productionLedgerWorkID {
+				continue
+			}
+			outputs[outputIndex].StructuredResult = map[string]any{
+				"attempt":  float64(1),
+				"decision": "accept",
+			}
+			payload.OutputWork = &outputs
+			if err := event.Payload.FromDispatchResponseEventPayload(payload); err != nil {
+				t.Fatalf("encode structured result into replay event %q: %v", event.Id, err)
+			}
+			cloned[index] = event
+			found = true
+		}
+	}
+	if found {
+		return cloned
+	}
+	t.Fatalf("production ledger has no dispatch response output for %q", productionLedgerWorkID)
+	return nil
 }
 
 type productionLedgerFixture struct {
