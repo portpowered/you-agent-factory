@@ -105,6 +105,53 @@ func TestSubmitFamilyExecutesThroughRootBuiltProcess(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("unary JSON payload", func(t *testing.T) {
+		payloadPath := filepath.Join(t.TempDir(), "request.json")
+		if err := os.WriteFile(payloadPath, []byte(`{"title":"Review JSON"}`), 0o600); err != nil {
+			t.Fatalf("write unary JSON payload: %v", err)
+		}
+		var method, path string
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			method, path = r.Method, r.URL.Path
+			_, _ = io.Copy(io.Discard, r.Body)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusCreated)
+			_, _ = io.WriteString(w, `{
+				"accepted": true,
+				"requestId": "functional-json-request",
+				"traceId": "functional-json-trace",
+				"workId": "functional-json-work",
+				"name": "json-review",
+				"workTypeName": "task"
+			}`)
+		}))
+		t.Cleanup(server.Close)
+
+		var stdout bytes.Buffer
+		if err := process.Execute(functionalInput(
+			t,
+			[]string{
+				"you", "--server", server.URL, "--json",
+				"submit", "--name", "json-review", "--work-type-name", "task",
+				"--payload", payloadPath,
+			},
+			&stdout,
+		)); err != nil {
+			t.Fatalf("Process.Execute(unary JSON submit) error = %v", err)
+		}
+		if method != http.MethodPost || path != "/factory-sessions/~default/work" {
+			t.Fatalf("unary JSON request = %s %s", method, path)
+		}
+		for _, marker := range []string{
+			`"name":"json-review"`,
+			`"workTypeName":"task"`,
+		} {
+			if !strings.Contains(stdout.String(), marker) {
+				t.Fatalf("unary JSON output omitted %q: %q", marker, stdout.String())
+			}
+		}
+	})
 }
 
 // TestSubmitFamilyEnqueuesWorkBeforeDownstreamStructuredOutputFailure proves live
