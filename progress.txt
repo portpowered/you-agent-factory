@@ -1066,5 +1066,19 @@
 - **Learnings for future iterations:**
   - Static authored provider manifests describe maximum/publication facts only; production catalog projections must never imply current installation, authentication, or executable readiness without a probe.
   - Keep static and live readiness vocabularies distinguishable at the public Providers boundary: `unverified`/`required` describe no probe, while `ready`/`unavailable` and `satisfied`/`missing` describe probe outcomes.
-  - Exact model IDs should be asserted at the manifest, projection, JSON, human, and root-process boundaries when docs or execution harnesses name a model.
+- Exact model IDs should be asserted at the manifest, projection, JSON, human, and root-process boundaries when docs or execution harnesses name a model.
+---
+## 2026-08-10 04:24 -0700 - wo-b3-provider-capability-discovery-cli-ci-retry
+- What was implemented
+  - Audited the fresh PR workflow for commit `330e7d8e1`; the first attempt failed only in the untouched JavaScript durability test `TestJavaScriptDurabilityDoesNotPersistSnapshotsByDefault` because the provider inference did not observe the canceled workflow context.
+  - Confirmed the failure was outside the provider-discovery file set and reran only the failed GitHub jobs with `gh run rerun 31382404004 --failed --repo portpowered/you-agent-factory`.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Retry Backend Functional Coverage job `93436868087` — passed.
+  - Retry Verification Policy job `93438049879` — passed.
+  - All 18 required PR checks are green on commit `330e7d8e1`.
+- **Learnings for future iterations:**
+  - When a broad functional lane fails in an untouched timing-sensitive test, extract the exact failing test and message from the job log before changing feature code; a clean targeted retry is the appropriate recovery when the failure is nondeterministic and unrelated.
+  - A failed dependent policy job should be evaluated only after the failed lane is rerun and terminal; the policy check can pass on the same workflow attempt once the selected lane succeeds.
 ---
