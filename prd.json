@@ -34,7 +34,7 @@
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Opening SESSION/STARTED now carries the injected-clock timestamp, stable Worker/Factory/recording/dispatch/turn/Work/attempt correlations, explicit provider/model/capability selections, and exact continuation metadata when supplied. Unknown optionals remain omitted. Runtime dispatch planning and JavaScript invocation both preserve the new request facts, and focused live/replay plus omission tests pass."
+      "notes": "Opening SESSION/STARTED now carries the injected-clock timestamp, stable Worker/Factory/recording/dispatch/turn/Work/attempt correlations, explicit provider/model/capability selections, and exact continuation metadata when supplied. Unknown optionals remain omitted. Runtime dispatch planning and JavaScript invocation both preserve the new request facts, and focused live/replay plus omission tests pass. WSR-FT-002 now verifies the exact opening timestamp across the public observation and replay stream."
     },
     {
       "id": "wsr-001-opening-record-002",
@@ -52,7 +52,7 @@
       ],
       "priority": 2,
       "passes": true,
-      "notes": "Worker Sessions now stamps opening and terminal drafts with synthesized notification/lifecycle-only provenance and carries the resolved provider on the opening when known. The provider-output bridge resolves attempt dispatches to stable Worker Session topics, publishes canonical drafts through the same Events path, and emits one SESSION/UPDATED provider binding when provider identity is first learned after opening. Focused publisher and real in-memory Events tests prove pre-opening rejection, opening/binding/output/terminal ordering, exactly-once binding, terminal-last history, and one downstream forwarding; Worker Sessions tests, factory-runtime tests, race tests, and vet pass."
+      "notes": "Worker Sessions now stamps opening and terminal drafts with synthesized notification/lifecycle-only provenance and carries the resolved provider on the opening when known. The provider-output bridge resolves attempt dispatches to stable Worker Session topics, publishes canonical drafts through the same Events path, and emits one SESSION/UPDATED provider binding when provider identity is first learned after opening. Contradictory provider fragments are rejected before publication and forwarding. WSR-FT-001 proves the customer-visible opening/binding/output/terminal order. Focused publisher and real in-memory Events tests prove pre-opening rejection, opening/binding/output/terminal ordering, exactly-once binding, terminal-last history, and one downstream forwarding; Worker Sessions tests, factory-runtime tests, race tests, and vet pass."
     },
     {
       "id": "wsr-001-opening-record-003",
@@ -70,7 +70,7 @@
       ],
       "priority": 3,
       "passes": true,
-      "notes": "Provider-independent provenance is now carried explicitly on Worker progress and response-stream events, separate from optional Provider Session references; no reference is synthesized. Real Events ordering coverage proves opening/binding/output/terminal history, legal normalized Kind/Phase pairs, native normalized fidelity, source-event idempotency, and terminal behavior for no-session output. Production provider conformance and root.BuildProcess/Process.Execute sanitized fixture lanes cover Claude tool lifecycle, Codex streaming, Cursor/ACP session-bearing, and Agy final-only behavior. Focused tests, race tests, targeted vet, dashboard typecheck, MCP/UI checks, and functional fixtures pass; the only broad verify-fast issue is the pre-existing generated-schema staging mismatch in the workers interface package."
+      "notes": "Provider-independent provenance is now carried explicitly on Worker progress and response-stream events, separate from optional Provider Session references; no reference is synthesized. Real Events ordering coverage proves opening/binding/output/terminal history, legal normalized Kind/Phase pairs, native normalized fidelity, source-event idempotency, and terminal behavior for no-session output. Named WSR-FT-003 uses root.BuildProcess/Process.Execute with the sanitized Antigravity fixture to prove final output without a fabricated Provider Session reference or streaming delta; existing production conformance lanes cover Claude tool lifecycle, Codex streaming, Cursor/ACP session-bearing, and Agy final-only behavior. Focused tests, race tests, targeted vet, dashboard typecheck, MCP/UI checks, generated-interface regeneration, and functional fixtures pass."
     }
   ]
 }

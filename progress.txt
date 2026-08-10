@@ -1,4 +1,6 @@
 ## Codebase Patterns
+- When a historical Worker Session projection is merged with the live Worker Sessions service, preserve the live canonical opening timestamp; dispatch-request time is only a fallback and can precede the authoritative opening.
+- Customer-boundary Worker Session evidence should parse the nested lifecycle payload, assert SESSION/UPDATED provider binding before provider records, and compare replay timestamps to the public observation rather than relying on fixed delays.
 - Provider-authored Worker progress must carry explicit provider identity independently from optional Provider Session references; never infer a resumable reference from that identity.
 - Repository-wide `pkg-boundary` traversals must prune through one root-relative, slash-normalized policy before parsing entries; adding a new `WalkDir` requires using that same decision.
 - Treat disposable artifact/worktree paths as exact repository roots, not directory-name substrings, so tracked production packages with nested artifact-like names remain visible to the gate.
@@ -399,4 +401,32 @@
 - **Learnings for future iterations:**
   - Functional assertions that cover several provider-specific facts should be split by behavior area so maintainability limits do not force weaker runtime coverage.
   - A top-level review blocker can be resolved with a focused test-only change when the requested behavior is already correct; preserve the existing observable assertions while reducing helper scope.
+---
+## 2026-08-10 07:10 -0700 - wsr-001-opening-record
+- What was implemented
+  - Resolved the blocking provider-attribution review feedback: canonical provider identity now rejects contradictory provider fragments and suppresses mismatched provider output; provider binding and dispatch-to-Worker lookup are operations on the canonical Worker Sessions service contract.
+  - Refactored Worker Sessions publication and lifecycle tests to stay within backend size/maintainability limits, removed the obsolete service-root interface baseline entry, and preserved unknown optional opening metadata as omitted.
+  - Corrected the runtime recorded-observation merge to retain the live Worker opening `startedAt`, so the public observation and Worker Session replay expose the same authoritative timestamp.
+  - Added named customer-boundary functional scenarios WSR-FT-001, WSR-FT-002, and WSR-FT-003 using `root.BuildProcess`, `Process.Execute`, production registrations, sanitized Codex/Antigravity fixtures, and deterministic public terminal/replay synchronization. Existing Claude streaming and Cursor/ACP suites remain the provider conformance coverage for those variants.
+  - Regenerated published API/package/UI interface artifacts with `make interfaces-all`.
+- Files changed
+  - `pkg/services/worker_sessions/`
+  - `pkg/services/factory_runtime/internal/services/orchestration/runtime/`
+  - `tests/functional/provider_sessions/cli/worker_sessions_cli_test.go`
+  - `tests/functional/workers/inference/opening_record_test.go`
+  - `packages/api/generated/`
+  - `ui/packages/client/src/generated/`
+  - `docs/internal/baselines/package-structure-baseline.json`
+  - `progress.txt`
+  - `prd.json`
+- Verification
+  - `make interfaces-all` — passed.
+  - `make backend-size pkg-maint pkg-structure pkg-file-count` — passed.
+  - `make test` — passed.
+  - Focused WSR-FT-001/002/003 and timestamp-merge tests — passed.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - Worker Session replay frames carry the lifecycle draft envelope plus a nested `payload` map; terminal status and opening timestamp must be read from that nested payload.
+  - Provider resolution can legitimately follow the opening, so functional ordering should require a synthesized SESSION/UPDATED binding before the first provider-authored frame.
+  - The generated package manifest and OpenAPI/UI artifacts can drift even when the authored REST contract is unchanged; run `make interfaces-all` after merging current main before diagnosing interface failures.
 ---
