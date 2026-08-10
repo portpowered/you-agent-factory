@@ -33,6 +33,13 @@ func TestLoadProduction_ProductionManifest(t *testing.T) {
 }
 
 func TestLoadProduction_Errors(t *testing.T) {
+	t.Run("requires source store", func(t *testing.T) {
+		_, err := climanifest.LoadProduction(nil, climanifest.ProductionManifestPath)
+		if err == nil || !strings.Contains(err.Error(), "source store is required") {
+			t.Fatalf("LoadProduction() error = %v, want required-store failure", err)
+		}
+	})
+
 	t.Run("missing file", func(t *testing.T) {
 		_, err := climanifest.LoadProduction(sourceStore(), filepath.Join(t.TempDir(), "missing.json"))
 		if err == nil {
@@ -84,6 +91,17 @@ func TestLoadProduction_Errors(t *testing.T) {
 			t.Fatal("LoadProduction() error = nil, want commands failure")
 		}
 	})
+}
+
+func TestLoadCompatibility_ProductionPayload(t *testing.T) {
+	path := testutil.MustRepoPath(t, climanifest.ProductionManifestPath)
+	manifest, err := climanifest.LoadCompatibility(sourceStore(), path)
+	if err != nil {
+		t.Fatalf("LoadCompatibility() error = %v", err)
+	}
+	if manifest.RootPath != "you" {
+		t.Fatalf("RootPath = %q, want you", manifest.RootPath)
+	}
 }
 
 func TestManifest_CommandByID_Missing(t *testing.T) {
