@@ -479,19 +479,40 @@ func projectKnownLimits(providerID string, values []publishedKnownLimit) ([]prov
 func validateKnownLimitValue(providerID, name string, kind providers.KnownLimitKind, value publishedKnownLimit) error {
 	switch kind {
 	case providers.KnownLimitMaximum:
-		if value.Maximum == nil || *value.Maximum <= 0 || value.Default != nil || strings.TrimSpace(value.Value) != "" {
-			return fmt.Errorf("provider %q known limit %q: maximum record is incomplete or invalid", providerID, name)
+		if err := validateMaximumKnownLimitValue(value); err != nil {
+			return fmt.Errorf("provider %q known limit %q: %w", providerID, name, err)
 		}
 	case providers.KnownLimitDefault:
-		if value.Default == nil || *value.Default <= 0 || value.Maximum != nil || strings.TrimSpace(value.Value) != "" {
-			return fmt.Errorf("provider %q known limit %q: default record is incomplete or invalid", providerID, name)
+		if err := validateDefaultKnownLimitValue(value); err != nil {
+			return fmt.Errorf("provider %q known limit %q: %w", providerID, name, err)
 		}
 	case providers.KnownLimitBehavior:
-		if strings.TrimSpace(value.Value) == "" || value.Maximum != nil || value.Default != nil {
-			return fmt.Errorf("provider %q known limit %q: behavior record is incomplete or invalid", providerID, name)
+		if err := validateBehaviorKnownLimitValue(value); err != nil {
+			return fmt.Errorf("provider %q known limit %q: %w", providerID, name, err)
 		}
 	default:
 		return fmt.Errorf("provider %q known limit %q: unknown kind %q", providerID, name, kind)
+	}
+	return nil
+}
+
+func validateMaximumKnownLimitValue(value publishedKnownLimit) error {
+	if value.Maximum == nil || *value.Maximum <= 0 || value.Default != nil || strings.TrimSpace(value.Value) != "" {
+		return fmt.Errorf("maximum record is incomplete or invalid")
+	}
+	return nil
+}
+
+func validateDefaultKnownLimitValue(value publishedKnownLimit) error {
+	if value.Default == nil || *value.Default <= 0 || value.Maximum != nil || strings.TrimSpace(value.Value) != "" {
+		return fmt.Errorf("default record is incomplete or invalid")
+	}
+	return nil
+}
+
+func validateBehaviorKnownLimitValue(value publishedKnownLimit) error {
+	if strings.TrimSpace(value.Value) == "" || value.Maximum != nil || value.Default != nil {
+		return fmt.Errorf("behavior record is incomplete or invalid")
 	}
 	return nil
 }

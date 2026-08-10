@@ -3,6 +3,7 @@ package service_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"slices"
 	"strings"
@@ -127,41 +128,13 @@ func TestListProvidersReturnsDetachedValues(t *testing.T) {
 	if len(first.Providers) == 0 {
 		t.Fatal("first ListProviders() returned no providers")
 	}
-
-	first.Providers[0].DisplayName = "mutated"
-	if len(first.Providers[0].Aliases) > 0 {
-		first.Providers[0].Aliases[0] = "mutated"
-	}
-	first.Providers[0].Models[0].ID = "mutated-model"
-	first.Providers[0].Models[0].Efforts[0] = "mutated-effort"
-	if first.Providers[0].KnownLimits[1].Default != nil {
-		*first.Providers[0].KnownLimits[1].Default = 999
-	}
-	if len(first.Providers[0].Capabilities) > 0 {
-		first.Providers[0].Capabilities[0] = providers.CapabilityUsage
-	}
+	mutateProviderForDetachTest(&first.Providers[0])
 
 	second, err := service.ListProviders(context.Background(), providers.ListProvidersRequest{})
 	if err != nil {
 		t.Fatalf("second ListProviders() = %v", err)
 	}
-	if second.Providers[0].DisplayName == "mutated" {
-		t.Fatalf("second list display name = %q, want detached copy", second.Providers[0].DisplayName)
-	}
-	if len(second.Providers[0].Aliases) > 0 && second.Providers[0].Aliases[0] == "mutated" {
-		t.Fatal("second list aliases share mutation from first result")
-	}
-	if len(second.Providers[0].Capabilities) > 0 &&
-		second.Providers[0].Capabilities[0] == providers.CapabilityUsage &&
-		first.Providers[0].Capabilities[0] == providers.CapabilityUsage {
-		t.Fatal("second list capabilities share mutation from first result")
-	}
-	if second.Providers[0].Models[0].ID == "mutated-model" || second.Providers[0].Models[0].Efforts[0] == "mutated-effort" {
-		t.Fatal("second list model facts share mutation from first result")
-	}
-	if second.Providers[0].KnownLimits[1].Default == nil || *second.Providers[0].KnownLimits[1].Default != 300 {
-		t.Fatal("second list limit facts share mutation from first result")
-	}
+	assertDetachedProvider(t, first.Providers[0], second.Providers[0])
 }
 
 func TestListProvidersProjectsIdentityMetadataAndCapabilities(t *testing.T) {
@@ -177,15 +150,57 @@ func TestListProvidersProjectsIdentityMetadataAndCapabilities(t *testing.T) {
 		t.Fatalf("ListProviders() = %v", err)
 	}
 
-	codex := indexProviders(list.Providers)[providers.IDCodex]
-	if codex.DisplayName != "Codex" {
-		t.Fatalf("codex display name = %q, want Codex", codex.DisplayName)
+	indexed := indexProviders(list.Providers)
+	assertCodexCatalogFacts(t, indexed[providers.IDCodex])
+	assertAntigravityCatalogFacts(t, indexed[providers.IDAntigravity])
+
+	if _, ok := indexed[providers.IDCursor]; ok {
+		t.Fatal("native cursor must not be present in the selectable provider catalog")
 	}
-	if codex.Availability != providers.AvailabilitySelectable {
-		t.Fatalf("codex availability = %q, want selectable", codex.Availability)
+}
+
+func mutateProviderForDetachTest(provider *providers.Descriptor) {
+	provider.DisplayName = "mutated"
+	if len(provider.Aliases) > 0 {
+		provider.Aliases[0] = "mutated"
 	}
-	if codex.Readiness != providers.ReadinessReady {
-		t.Fatalf("codex readiness = %q, want ready", codex.Readiness)
+	provider.Models[0].ID = "mutated-model"
+	provider.Models[0].Efforts[0] = "mutated-effort"
+	if provider.KnownLimits[1].Default != nil {
+		*provider.KnownLimits[1].Default = 999
+	}
+	if len(provider.Capabilities) > 0 {
+		provider.Capabilities[0] = providers.CapabilityUsage
+	}
+}
+
+func assertDetachedProvider(t *testing.T, first, second providers.Descriptor) {
+	t.Helper()
+	if second.DisplayName == "mutated" {
+		t.Fatalf("second list display name = %q, want detached copy", second.DisplayName)
+	}
+	if len(second.Aliases) > 0 {
+		if second.Aliases[0] == "mutated" {
+			t.Fatal("second list aliases share mutation from first result")
+		}
+	}
+	if len(second.Capabilities) > 0 {
+		if second.Capabilities[0] == providers.CapabilityUsage && first.Capabilities[0] == providers.CapabilityUsage {
+			t.Fatal("second list capabilities share mutation from first result")
+		}
+	}
+	if second.Models[0].ID == "mutated-model" || second.Models[0].Efforts[0] == "mutated-effort" {
+		t.Fatal("second list model facts share mutation from first result")
+	}
+	if second.KnownLimits[1].Default == nil || *second.KnownLimits[1].Default != 300 {
+		t.Fatal("second list limit facts share mutation from first result")
+	}
+}
+
+func assertCodexCatalogFacts(t *testing.T, codex providers.Descriptor) {
+	t.Helper()
+	if codex.DisplayName != "Codex" || codex.Availability != providers.AvailabilitySelectable || codex.Readiness != providers.ReadinessReady {
+		t.Fatalf("codex identity = %#v, want Codex/selectable/ready", codex)
 	}
 	if !slices.Contains(codex.Capabilities, providers.CapabilityPromptSubmission) {
 		t.Fatalf("codex capabilities = %#v, want prompt_submission", codex.Capabilities)
@@ -193,38 +208,44 @@ func TestListProvidersProjectsIdentityMetadataAndCapabilities(t *testing.T) {
 	if codex.TechnicalSupportLevel != providers.TechnicalSupportProduction || codex.ImplementationAvailability != providers.ImplementationBundled {
 		t.Fatalf("codex publication posture = %q/%q, want production/bundled", codex.TechnicalSupportLevel, codex.ImplementationAvailability)
 	}
-	if len(codex.Models) != 1 || codex.Models[0].ID != "gpt-5.6" {
-		t.Fatalf("codex models = %#v, want gpt-5.6", codex.Models)
+	if len(codex.Models) != 1 {
+		t.Fatalf("codex models = %#v, want one gpt-5.6 model", codex.Models)
+		return
 	}
-	if !slices.Equal(codex.Models[0].Efforts, []providers.ReasoningEffort{"minimal", "low", "medium", "high", "xhigh", "max"}) {
-		t.Fatalf("codex efforts = %v, want canonical order", codex.Models[0].Efforts)
+	model := codex.Models[0]
+	if model.ID != "gpt-5.6" {
+		t.Fatalf("codex model = %q, want gpt-5.6", model.ID)
 	}
-	if modality := findProviderModality(codex.Models[0].Modalities, providers.ModalityDirectionInput, providers.ModalityAudio); modality == nil || modality.Support != providers.ModalityUnsupported || modality.Transport != providers.ModalityTransportNone {
-		t.Fatalf("codex audio input = %#v, want explicitly unsupported/none", modality)
+	if !slices.Equal(model.Efforts, []providers.ReasoningEffort{"minimal", "low", "medium", "high", "xhigh", "max"}) {
+		t.Fatalf("codex efforts = %v, want canonical order", model.Efforts)
 	}
-	if modality := findProviderModality(codex.Models[0].Modalities, providers.ModalityDirectionInput, providers.ModalityVideo); modality == nil || modality.Support != providers.ModalityUnsupported || modality.Transport != providers.ModalityTransportNone {
-		t.Fatalf("codex video input = %#v, want explicitly unsupported/none", modality)
-	}
+	assertProviderModality(t, "codex audio input", model, providers.ModalityAudio, providers.ModalityUnsupported, providers.ModalityTransportNone)
+	assertProviderModality(t, "codex video input", model, providers.ModalityVideo, providers.ModalityUnsupported, providers.ModalityTransportNone)
 	if len(codex.KnownLimits) != 1 || codex.KnownLimits[0].Maximum == nil || *codex.KnownLimits[0].Maximum != 5 {
 		t.Fatalf("codex known limits = %#v, want referenced image-path maximum 5", codex.KnownLimits)
 	}
+}
 
-	agy := indexProviders(list.Providers)[providers.IDAntigravity]
-	if len(agy.Models) != 11 || len(agy.Models[0].Efforts) != 3 {
-		t.Fatalf("AGY models/efforts = %d/%v, want 11 models and three efforts", len(agy.Models), agy.Models[0].Efforts)
+func assertAntigravityCatalogFacts(t *testing.T, agy providers.Descriptor) {
+	t.Helper()
+	if len(agy.Models) != 11 {
+		t.Fatalf("AGY models = %d, want 11", len(agy.Models))
+		return
 	}
-	if !slices.Equal(agy.Models[0].Efforts, []providers.ReasoningEffort{"low", "medium", "high"}) {
+	if len(agy.Models[0].Efforts) != 3 || !slices.Equal(agy.Models[0].Efforts, []providers.ReasoningEffort{"low", "medium", "high"}) {
 		t.Fatalf("AGY efforts = %v, want low, medium, high", agy.Models[0].Efforts)
 	}
 	for _, kind := range []providers.ModalityKind{providers.ModalityAudio, providers.ModalityVideo} {
-		modality := findProviderModality(agy.Models[0].Modalities, providers.ModalityDirectionInput, kind)
-		if modality == nil || modality.Support != providers.ModalitySupported || modality.Transport != providers.ModalityTransportFilePath {
-			t.Fatalf("AGY %s input = %#v, want supported/file_path", kind, modality)
-		}
+		assertProviderModality(t, fmt.Sprintf("AGY %s input", kind), agy.Models[0], kind, providers.ModalitySupported, providers.ModalityTransportFilePath)
 	}
 	if len(agy.KnownLimits) != 2 || agy.KnownLimits[0].Name != "add_dir_workspace" || agy.KnownLimits[1].Name != "print_timeout" {
 		t.Fatalf("AGY known limits = %#v, want stable name order", agy.KnownLimits)
 	}
+	assertAntigravityPrerequisites(t, agy)
+}
+
+func assertAntigravityPrerequisites(t *testing.T, agy providers.Descriptor) {
+	t.Helper()
 	prerequisiteKinds := make(map[providers.PrerequisiteKind]bool, len(agy.Prerequisites))
 	for _, prerequisite := range agy.Prerequisites {
 		prerequisiteKinds[prerequisite.Kind] = true
@@ -234,9 +255,13 @@ func TestListProvidersProjectsIdentityMetadataAndCapabilities(t *testing.T) {
 			t.Fatalf("AGY prerequisites = %#v, missing %q", agy.Prerequisites, kind)
 		}
 	}
+}
 
-	if _, ok := indexProviders(list.Providers)[providers.IDCursor]; ok {
-		t.Fatal("native cursor must not be present in the selectable provider catalog")
+func assertProviderModality(t *testing.T, label string, model providers.ModelDescriptor, kind providers.ModalityKind, support providers.ModalitySupport, transport providers.ModalityTransport) {
+	t.Helper()
+	modality := findProviderModality(model.Modalities, providers.ModalityDirectionInput, kind)
+	if modality == nil || modality.Support != support || modality.Transport != transport {
+		t.Fatalf("%s = %#v, want %s/%s", label, modality, support, transport)
 	}
 }
 
