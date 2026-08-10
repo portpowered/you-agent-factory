@@ -65,10 +65,22 @@ func (s *countingWorkerSessionsService) GetObservation(
 	return s.inner.GetObservation(ctx, req)
 }
 
+func (s *countingWorkerSessionsService) GetObservationByWorkerSessionID(
+	ctx context.Context, req workersessions.GetObservationByWorkerSessionIDRequest,
+) (workersessions.Observation, error) {
+	return s.inner.GetObservationByWorkerSessionID(ctx, req)
+}
+
 func (s *countingWorkerSessionsService) StreamObservations(
 	ctx context.Context, req workersessions.StreamObservationsRequest,
 ) (workersessions.ObservationSubscription, error) {
 	return s.inner.StreamObservations(ctx, req)
+}
+
+func (s *countingWorkerSessionsService) StreamObservationsByWorkerSessionID(
+	ctx context.Context, req workersessions.StreamObservationsByWorkerSessionIDRequest,
+) (workersessions.ObservationSubscription, error) {
+	return s.inner.StreamObservationsByWorkerSessionID(ctx, req)
 }
 
 func (s *countingWorkerSessionsService) ReadTranscript(

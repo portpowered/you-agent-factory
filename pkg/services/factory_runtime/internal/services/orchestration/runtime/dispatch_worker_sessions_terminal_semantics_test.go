@@ -178,8 +178,20 @@ func (s *preHandoffFailedWorkerSessionsService) GetObservation(
 	return workersessions.Observation{}, nil
 }
 
+func (s *preHandoffFailedWorkerSessionsService) GetObservationByWorkerSessionID(
+	context.Context, workersessions.GetObservationByWorkerSessionIDRequest,
+) (workersessions.Observation, error) {
+	return workersessions.Observation{}, nil
+}
+
 func (s *preHandoffFailedWorkerSessionsService) StreamObservations(
 	context.Context, workersessions.StreamObservationsRequest,
+) (workersessions.ObservationSubscription, error) {
+	return workersessions.ObservationSubscription{}, nil
+}
+
+func (s *preHandoffFailedWorkerSessionsService) StreamObservationsByWorkerSessionID(
+	context.Context, workersessions.StreamObservationsByWorkerSessionIDRequest,
 ) (workersessions.ObservationSubscription, error) {
 	return workersessions.ObservationSubscription{}, nil
 }
