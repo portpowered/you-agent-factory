@@ -1180,3 +1180,20 @@
 - **Learnings for future iterations:**
   - When a moving base changes an unrelated task PRD, resolve the bookkeeping conflict by keeping the branch’s task PRD and merging append-only progress entries; retain the base’s source changes and rerun both affected-package and feature-slice tests.
 ---
+## 2026-08-10 05:47 -0700 - wo-b3-provider-capability-discovery-cli-003
+- What was implemented
+  - Addressed the current blocking PR feedback by splitting the 88-line `assertJSONFacts` functional helper into focused JSON decoding, common inventory, Codex, Antigravity, and Claude behavioral assertions.
+  - Preserved the existing runtime assertions for deterministic provider ordering, truthful unprobed readiness/prerequisite state, exact model IDs, unsupported modalities, typed limits, and zero provider command-runner calls.
+- Files changed
+  - `tests/functional/providers/discovery/discovery_test.go`
+  - `progress.txt`
+  - `prd.json` was verified unchanged because all stories remain `passes:true`; the review-only maintainability follow-up does not alter acceptance state.
+- Verification
+  - `go test ./tests/functional/providers/discovery/... -run '^TestProvidersListThroughRootBuildProcess$' -count=1 -timeout 120s` — passed.
+  - `go test ./tests/functional/providers/discovery/... -count=1 -timeout 120s` — passed.
+  - `go vet ./tests/functional/providers/discovery/...` — passed.
+  - `git diff --check` — passed; every helper is below the 80-line review limit.
+- **Learnings for future iterations:**
+  - Functional assertions that cover several provider-specific facts should be split by behavior area so maintainability limits do not force weaker runtime coverage.
+  - A top-level review blocker can be resolved with a focused test-only change when the requested behavior is already correct; preserve the existing observable assertions while reducing helper scope.
+---
