@@ -1371,3 +1371,20 @@
 - **Learnings for future iterations:**
   - A completed PR handoff still needs a thread-aware review audit and an exact PRD/body/head comparison; green checks alone do not prove that review state and task metadata are synchronized.
 ---
+## 2026-08-10 12:05 -07:00 - pf-stale-scope-diagnostic current-main synchronization
+- What was implemented
+  - Merged the current `origin/main` head `947152348` into the task branch after the open PR's recorded base had advanced, preserving the task-scoped `prd.json` and append-only progress history.
+  - Confirmed both PRD stories remain complete; no additional story implementation was needed in this iteration.
+- Files changed
+  - Current-main merge (unrelated artifact-registry changes)
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/factory_definitions/internal/services/distribution/packagedinstallation -count=1 -timeout 180s` — passed.
+  - `go test ./tests/functional/transport/cli/process -run '^TestCLISuccessorAfterHardKillReportsPreRuntimeStagingContention$' -count=1 -v -timeout 300s` — passed.
+  - `make test` — passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` — passed.
+  - `make pkg-boundary` reports 175 findings on both the merged head and isolated current `origin/main`; no new boundary finding was introduced by this task.
+  - `prd.json` parses with both stories `passes:true`; the thread-aware PR audit reports 0 reviews and 0 inline review threads.
+- **Learnings for future iterations:**
+  - Run repository-wide scanners from the explicitly intended checkout when comparing worktree baselines; a nested temporary worktree can otherwise be scanned as repository content.
+---
