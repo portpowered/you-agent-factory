@@ -1585,3 +1585,18 @@
 - **Learnings for future iterations:**
   - Before changing scoped product code for a failing broad functional lane, compare the exact test package with current main and reproduce on a clean main checkout; this distinguishes branch regressions from existing platform or timing flakes.
 ---
+
+## 2026-08-10 16:26 -07:00 - btrc-p1-root-injection-006 final handoff audit
+- What was implemented
+  - Rechecked the completed P1 PRD and existing PR #1857; all six stories remain marked `passes:true`, and no additional story implementation was needed in this iteration.
+  - Confirmed the branch contains the current `origin/main`, the normalized PR body matches `prd.json`, and the thread-aware review audit has no unresolved threads or formal reviews.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `prd.json` parses successfully with all six story passes set to true.
+  - `git diff --check` — passed.
+  - Current PR head is `1143ccd53`; `origin/main` `e8c0a248` is an ancestor.
+  - PR #1857 is open and mergeable; its latest Classify Verification check is pending for terminal CI.
+- **Learnings for future iterations:**
+  - Final handoff requires checking both review-thread state and the latest head’s terminal CI; a clean body/head audit is not sufficient while a required check is still pending.
+---
