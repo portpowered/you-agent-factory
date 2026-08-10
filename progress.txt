@@ -131,3 +131,16 @@
   - An open PR with addressed feedback still needs its latest remote check state rechecked before reporting delivery; at this point the required CI run was still in progress.
   - When the PRD is already fully passed and no new code is required, preserve the completed `prd.json` story state and record verification/review evidence in the append-only progress log.
 ---
+
+## 2026-08-09 17:00 -07:00 - wo-c1-ext-stream-replay-only-ci-follow-up
+- What was implemented
+  - Rechecked PR #1840 at the synchronized head: all four PRD stories remain `passes:true`, the worktree is clean, and thread-aware review state has zero unresolved inline threads or formal reviews.
+  - Inspected the terminal Backend Functional Coverage failure from the GitHub Actions diagnostic artifact. The only failing test was the unrelated `TestAgyConductorSuccessThroughRootBuildProcess`, which observed zero terminal result messages; no Worker Sessions replay test or changed file was implicated.
+  - Reran only the failed Backend Functional Coverage job on the same commit; the rerun is still in progress. Backend Unit Coverage and all other completed required checks are passing.
+- Files changed
+  - `progress.txt`
+- **Learnings for future iterations:**
+  - Functional coverage diagnostics are in the `functional-test-diagnostics` artifact; `command.log` exposes the first actual failing test even when the job's final artifact guard reports only a missing evidence file.
+  - Do not change replay-only code for an unrelated provider-functional flake; rerun the isolated failed job and wait for a reproducible feature-linked failure first.
+  - The PR remains open and mergeable with no unresolved review threads, but the required verification policy cannot be green until the Backend Functional Coverage rerun reaches a terminal result.
+---
