@@ -218,15 +218,20 @@ func declaresWorkersRequestScopedProviderContract(
 		return false
 	}
 	signature, ok := method.Type.(*ast.FuncType)
-	if !ok || fieldCount(signature.Params) != 2 || fieldCount(signature.Results) != 2 {
+	if !ok {
 		return false
 	}
-	if !isStandardContextType(signature.Params.List[0].Type, imports) ||
-		!isLocalNamedType(signature.Params.List[1].Type, "ProviderInferenceRequest") {
+	parameters := fieldTypes(signature.Params)
+	results := fieldTypes(signature.Results)
+	if len(parameters) != 2 || len(results) != 2 {
 		return false
 	}
-	return isLocalNamedType(signature.Results.List[0].Type, "InferenceResponse") &&
-		isErrorType(signature.Results.List[1].Type)
+	if !isStandardContextType(parameters[0], imports) ||
+		!isLocalNamedType(parameters[1], "ProviderInferenceRequest") {
+		return false
+	}
+	return isLocalNamedType(results[0], "InferenceResponse") &&
+		isErrorType(results[1])
 }
 
 func isLocalNamedType(expression ast.Expr, name string) bool {
@@ -350,13 +355,15 @@ func typeExpressionRedefinesProviderEffect(expression ast.Expr, imports map[stri
 }
 
 func isProviderEffectMethodSignature(signature *ast.FuncType, imports map[string]string) bool {
-	if fieldCount(signature.Params) != 2 || fieldCount(signature.Results) != 2 {
+	parameters := fieldTypes(signature.Params)
+	results := fieldTypes(signature.Results)
+	if len(parameters) != 2 || len(results) != 2 {
 		return false
 	}
-	if !isStandardContextType(signature.Params.List[0].Type, imports) {
+	if !isStandardContextType(parameters[0], imports) {
 		return false
 	}
-	errorResult, ok := signature.Results.List[len(signature.Results.List)-1].Type.(*ast.Ident)
+	errorResult, ok := results[len(results)-1].(*ast.Ident)
 	return ok && errorResult.Name == "error"
 }
 
@@ -377,19 +384,21 @@ func isStandardContextType(expression ast.Expr, imports map[string]string) bool 
 	}
 }
 
-func fieldCount(fields *ast.FieldList) int {
+func fieldTypes(fields *ast.FieldList) []ast.Expr {
 	if fields == nil {
-		return 0
+		return nil
 	}
-	count := 0
+	types := make([]ast.Expr, 0, len(fields.List))
 	for _, field := range fields.List {
-		if len(field.Names) == 0 {
-			count++
-			continue
+		fieldCount := len(field.Names)
+		if fieldCount == 0 {
+			fieldCount = 1
 		}
-		count += len(field.Names)
+		for range fieldCount {
+			types = append(types, field.Type)
+		}
 	}
-	return count
+	return types
 }
 
 func redefinesProvidersLeafEffectContract(typed *ast.TypeSpec, imports map[string]string) bool {

@@ -56,6 +56,41 @@ type InferenceResponse struct{}
 	}
 }
 
+func TestRunRejectsGroupedWorkersRequestScopedProviderPortWithoutPanic(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeGoSourceFile(t, repoRoot, "pkg/services/workers/provider_port.go", `package workers
+
+import "context"
+
+// Deliberate fixture: grouped parameter names are valid Go syntax, but this
+// declaration does not match the reviewed request-scoped compatibility port.
+type Provider interface {
+	Infer(ctx, req context.Context) (InferenceResponse, error)
+}
+
+type InferenceResponse struct{}
+`)
+
+	stderr := &bytes.Buffer{}
+	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)
+	if err == nil {
+		t.Fatal("run() error = nil, want grouped Workers provider compatibility port rejected")
+	}
+	got := stderr.String()
+	for _, want := range []string{
+		"prohibited durable provider-effect ownership",
+		"pkg/services/workers",
+		"Provider",
+		"canonical owner: " + providersLeafEffectContractPackage,
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("run() stderr = %q, want substring %q", got, want)
+		}
+	}
+}
+
 func TestRunRejectsExpandedWorkersRequestScopedProviderPort(t *testing.T) {
 	t.Parallel()
 
