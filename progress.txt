@@ -2143,3 +2143,17 @@
 - **Learnings for future iterations:**
   - A broad functional-coverage failure in an untouched package should be isolated and repeated before changing the task; a clean repeated characterization supports rerunning the failed CI lane while preserving the move-only diff.
 ---
+
+## [2026-08-10 16:43 -07:00] - thr-split-fake-service-runtime-tests final coverage-ratchet rerun
+- What was implemented
+  - Investigated the second post-push Backend Functional Coverage failure and confirmed it was an unrelated `pkg/transports/cli` package-coverage measurement of 72.818% against the existing 72.98% minimum; no split source or assertion changed.
+  - Reran the failed GitHub jobs on the unchanged head and preserved the existing coverage baseline.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Rerun Backend Functional Coverage — passed in 5m23s.
+  - Rerun Verification Policy — passed.
+  - All required checks on PR #1862 are terminal and successful.
+- **Learnings for future iterations:**
+  - A small package-coverage-ratchet delta on an unchanged broad suite can be run-to-run variance; rerun the lane before modifying a baseline or unrelated code.
+---
