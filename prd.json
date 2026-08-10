@@ -1,39 +1,179 @@
 {
-  "project": "Plain Batch Honest-Drain Semantics",
-  "branchName": "pf-plain-batch-drain",
-  "description": "Make finite plain batch runs without --with-server terminate non-zero with the existing explicit incomplete-drain diagnostic when worker activity drains while Work remains stranded in PROCESSING, instead of hanging forever. Prove the correction through the public CLI process with a deterministic mock worker that never completes while preserving terminal-batch success and continuous-mode liveness.",
+  "project": "BTRC P0 — Characterize Runtime Opening and Record Ownership",
+  "branchName": "btrc-p0-characterization",
+  "description": "Implement BTRC packet P0 by publishing a complete ownership matrix for the 44 runtime-opening behavioral dependencies, deferred factories, external effects, and late binders, and by adding deterministic characterization of current Factory Event order and terminal results across every required runtime-opening mode without changing production behavior.",
   "context": {
-    "customerAsk": "Apply the drained-but-incomplete semantics delivered by merged WO-A7 to plain batch mode. Without --with-server, a batch whose mock worker leaves Work in PROCESSING and never completes must exit non-zero with an explicit stranded-work error instead of hanging forever.",
-    "problem": "Finite hosted runs already distinguish completion from a drained runtime that still owns non-terminal Work, but the equivalent plain batch path can wait indefinitely after worker activity stops making progress. Operators and automation receive neither a terminal process result nor an actionable failure and cannot distinguish stranded Work from active processing.",
-    "solution": "Use the existing Factory Runtime termination classification and IncompleteDrainError as the single finite-run contract, make plain batch lifecycle coordination re-evaluate termination when dispatch activity drains, preserve the typed failure through Factory Sessions, and reuse the existing CLI incomplete-drain presenter. Verify the observable result with root.BuildProcess and Process.Execute using a deterministic never-completing mock worker, plus empty, terminal, and continuous counterexamples."
+    "customerAsk": "Inventory and classify the current runtime-opening dependencies, deferred factories, external-effect fields, and late binders; publish the ownership matrix under docs/internal/packaged-service-structure/ as work proceeds for the parallel P1 lane; and characterize current event order and terminal results for successful and failed batch, hosted/service, replay, one-shot, ACP target, direct JavaScript, and standalone runs, including cancellation and partial failure. Make no production behavior changes.",
+    "problem": "Factory Session opening currently performs a secondary construction pass around 44 grouped behavioral dependencies plus external-effect bags, deferred service factories, and late binding. Ownership and cleanup destinations are unclear, and current event ordering, terminal results, isolation, and failure behavior are not consistently frozen across all entry modes, creating migration risk for parallel composition packets.",
+    "solution": "Publish a living, reconciled ownership matrix that gives every in-scope item exactly one classification and target owner or deletion, then add focused deterministic behavior tests with literal canonical Factory Event sequences and complete terminal outcomes for success and failure in each required mode. Use existing owner and root.BuildProcess/Process.Execute boundaries with injected edge fakes, preserve current production code and contracts, and keep the matrix available to P1 while both lanes proceed in parallel.",
+    "originalDocuments": [
+      "C:/Users/andre/work/portos/infinite-you/docs/internal/packaged-service-structure/build-time-runtime-composition-plan.md (packet P0)",
+      "C:/Users/andre/work/portos/infinite-you/docs/temp/scale-program-rules.md"
+    ]
   },
   "acceptanceCriteria": [
-    "A finite plain you run --work invocation without --with-server, --with-site, or --continuously returns instead of hanging when dispatch activity is drained and one or more Work items remain non-terminal, including Work stranded in PROCESSING by a worker that never returns a completion result.",
-    "The drained plain batch returns a non-zero process result, emits the existing human diagnostic 'Error: factory session drained with N non-terminal work items; run is incomplete' on stderr with the authoritative count, and emits no success or completion output that could misrepresent the run.",
-    "Empty finite plain batches and finite plain batches whose Work is fully terminal still return success, while --continuously runs remain live while idle or in-flight until explicit cancellation and do not report a finite incomplete drain.",
-    "The behavior reuses the Factory Runtime incomplete-termination state and typed error across plain and hosted paths; Factory Sessions and CLI transport propagate and present that state without a second termination policy, hidden mutable state, process-global coordination, or unrelated lifecycle cleanup.",
-    "Quality gates pass: Typecheck passes; Tests pass; the focused runtime, Factory Session, CLI, and plain-batch functional tests pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
-    "The implementation and review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared-file churn are resolved against current main, and the PR is actually merged; opened, green, approved, or ready-to-merge is not complete."
+    "The published ownership matrix enumerates all 44 grouped runtime-opening behavioral dependencies, all deferred factories, every ExternalEffects field, and every late binder, and assigns each row exactly one classification and one target owner or explicit deletion.",
+    "Representative successful and failed batch, hosted/service, replay, one-shot invocation, ACP target, direct JavaScript, and standalone fixture scenarios assert literal canonical Factory Event order and complete terminal results or typed failures.",
+    "Characterization proves current concurrent-session isolation, cancellation, partial-opening failure, cleanup observation, and prevention of duplicate terminal publication.",
+    "Production behavior, public contracts, generated API artifacts, event emission, and runtime composition remain unchanged, with no broad unrelated cleanup or meta-test enforcement added.",
+    "Behavioral evidence uses deterministic owner/process boundaries and injected edge fakes rather than live services, source/topology inventories, sleeps, or self-derived expected traces.",
+    "Typecheck and focused tests pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
+    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared-file churn are reconciled against current main, and the PR is actually merged."
   ],
   "userStories": [
     {
-      "id": "pf-plain-batch-drain-001",
-      "title": "Terminate stranded finite plain batches honestly",
-      "description": "As an operator running a finite batch without a server, I want the command to fail explicitly when worker activity drains while Work remains in processing so automation does not hang or mistake the run for success.",
+      "id": "btrc-p0-characterization-001",
+      "title": "Publish the complete ownership matrix",
+      "description": "As a maintainer working in a parallel composition lane, I want one authoritative map of every runtime-opening input and binding so that I can move each behavior to the correct owner without inventing another construction path.",
       "acceptanceCriteria": [
-        "Given a finite plain batch and a deterministic mock worker that accepts a dispatch, leaves the associated Work in PROCESSING, and never publishes a completion result, Process.Execute reaches a terminal result without requiring operator cancellation.",
-        "The terminal error matches the existing Factory Runtime incomplete-drain contract, carries the authoritative number of non-terminal Work items, and crosses the Factory Session boundary without being converted to success or a generic unrelated failure.",
-        "The CLI invocation returns non-zero, writes exactly one actionable incomplete-drain diagnostic to stderr containing the non-terminal Work count, and writes no success or completion message to stdout.",
-        "The same functional cell proves an empty finite plain batch and a fully terminal finite plain batch still succeed, and a continuous run does not apply finite-drain failure semantics before cancellation.",
-        "Focused lower-layer tests prove that a drained dispatch signal triggers a termination re-evaluation and that incomplete classification is based on the canonical runtime snapshot rather than a CLI timer or duplicated Work-state scan.",
-        "The functional regression constructs the application through root.BuildProcess, executes through Process.Execute, replaces external effects only through edges.Edges, uses the repository-owned mock-worker feature cell for the never-completing worker, and uses deterministic lifecycle signals; any bounded timeout exists only as a test-failure guard against the original hang and is justified in code.",
-        "No hosted-mode behavior, public API contract, generated artifact, continuous scheduling policy, or unrelated runtime structure changes beyond what is required for plain finite-run parity.",
-        "Typecheck passes",
-        "Tests pass"
+        "A matrix under docs/internal/packaged-service-structure/ lists all 44 grouped dependency fields, all deferred factory roles, all invocation-local external-effect fields, and all current late attachment, completion, and binding operations.",
+        "Each row records a stable item name, current role, exactly one classification (build-time dependency, operation value, private owner state, or delete), exactly one target owner or explicit deletion, lifecycle/cleanup responsibility where applicable, and the downstream retirement packet.",
+        "Documented totals and source-to-row reconciliation make omissions and duplicate rows reviewer-visible without adding a production or test-time filesystem inventory checker.",
+        "The matrix is published before all characterization is complete and remains reconciled with authoritative current main for P1 and other parallel consumers.",
+        "No destination introduces a generic factory, locator, callback injector, compatibility graph, service-valued operation bag, or exposed private owner state.",
+        "The current root-built runtime behavior remains observable through the characterization suite: its literal Factory Event and terminal-result assertions pass against the ownership inputs documented by this matrix.",
+        "Typecheck passes"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Implemented Runtime termination-drain wake re-evaluation and verified typed incomplete-drain propagation, exact plain CLI diagnostics, finite empty/terminal success, and continuous idle liveness through root-built functional tests."
+      "notes": "Published docs/internal/packaged-service-structure/runtime-opening-ownership-matrix.md. It reconciles all 44 grouped dependency fields, 15 ExternalEffects fields, 38 deferred construction/callback roles, and 13 late completion/attachment/binding operations with one classification, one target owner or deletion, lifecycle/cleanup responsibility, retirement packet, and reviewer-visible source totals. The batch, hosted, replay, one-shot, ACP, direct JavaScript, standalone, cancellation, partial-opening, and isolation characterization stories provide the behavioral evidence that the current root-built runtime remains unchanged while this matrix is used by P1. No production or inventory-checker code changed."
+    },
+    {
+      "id": "btrc-p0-characterization-002",
+      "title": "Characterize batch execution outcomes",
+      "description": "As a maintainer replacing runtime opening, I want the existing batch success and failure traces frozen so that later composition changes preserve the ordering and aggregate terminal result customers observe.",
+      "acceptanceCriteria": [
+        "A deterministic representative multi-work batch records the exact canonical Factory Event type order from acceptance through dispatch and terminal session publication, including child-work and session terminal ordering.",
+        "The successful batch asserts the complete terminal status/result projection, work counts, and stable correlation/session identities currently returned.",
+        "A failed or partially failed batch asserts exact event order, per-work terminal outcomes, aggregate terminal status/result, and typed failure classification without stranded non-terminal work.",
+        "The scenarios use root.BuildProcess and Process.Execute with deterministic edge replacements and no live provider, network, or timeout-padded synchronization.",
+        "Focused batch characterization tests pass",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": "Added tests/functional/factory/batch/batch_characterization_test.go. Root-built Process.Execute runs a two-work parent/child batch through a capacity-one resource fixture and the existing ProviderCommandRunner edge; tests assert the literal 20-event success/partial-failure order, request/relation and work counts, stable ~default session and dispatch-to-Worker-Session identities, terminal per-work states, typed permanent_bad_request classification, no stranded work, and the current SUCCEEDED/FINAL aggregate session projection. Repeated focused runs pass without sleeps, network, or live providers."
+    },
+    {
+      "id": "btrc-p0-characterization-003",
+      "title": "Characterize hosted and service outcomes",
+      "description": "As an operator of hosted Factory Sessions, I want current hosted source and service-run outcomes captured so that activating sources or handling a hosted failure remains compatible after ownership moves.",
+      "acceptanceCriteria": [
+        "A deterministic hosted/service success asserts the literal canonical Factory Event sequence from hosted submission through terminal Work/dispatch completion and the complete caller-visible service result. Because continuous Petri service mode intentionally keeps its live Factory Session IDLE rather than publishing a finite session result, the characterization explicitly asserts that the live result route is typed NOT_FOUND and reconciles the dispatch response plus terminal Work/progress projection as the service result.",
+        "A representative hosted source, secret, HTTP, or execution failure asserts its literal emitted event sequence, typed terminal failure/result, and whether dispatch was attempted under current behavior.",
+        "Failure evidence proves current hosted-source cleanup/stop observation and no activity leakage into an independent second session.",
+        "Hosted effects are replaced only through the existing process edge boundary with deterministic clock, HTTP, and secret fakes.",
+        "Focused hosted/service characterization tests pass",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": "Added tests/functional/workstations/poller/hosted_characterization_test.go. Root-composed service-mode tests inject deterministic hosted clock, Linear HTTP, secret, and provider command edges and assert literal startup-to-dispatch event order for successful hosted ingress and provider execution failure, typed ACCEPTED/FAILED dispatch payloads, terminal Work projections, IDLE service progress, exactly one provider attempt, and no duplicate terminal Work. A blocked HTTP source test asserts the four-event startup-only prefix, no submission or dispatch, observed request-context cancellation on stop, and an independent second service session with isolated work identity. Success and failure explicitly reconcile continuous Petri service behavior by asserting the live /result route returns typed NOT_FOUND while dispatch plus terminal Work/progress is the complete caller-visible result. No production behavior or public/generated contract changed."
+    },
+    {
+      "id": "btrc-p0-characterization-004",
+      "title": "Characterize replay outcomes",
+      "description": "As a customer replaying a recording, I want replay event order and terminal results frozen so that later construction changes do not mutate history or rerun external effects.",
+      "acceptanceCriteria": [
+        "A successful representative replay asserts the exact canonical Factory Event order and terminal result reconstructed from a fixed recording, including stable sequence/cursor behavior.",
+        "A malformed, incompatible, or failed recorded run asserts the exact replay events emitted before failure and the complete typed terminal error/result.",
+        "Replay success and failure prove that worker, provider, hosted-source, and script execution effects are not invoked.",
+        "Expected replay order comes from deterministic recording fixtures and is not derived from the projection under test.",
+        "Focused replay characterization tests pass",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": "Added replay characterization in pkg/services/recordings/internal/replay/runtime_decoder_test.go against the checked-in inference-events.replay.json fixture. The tests assert the literal seven-event RUN_REQUEST → WORK_REQUEST → DISPATCH_REQUEST → INFERENCE_REQUEST → INFERENCE_RESPONSE → DISPATCH_RESPONSE → RUN_RESPONSE order, IDs, sequences 0..6, ticks, reconstructed submission/dispatch/provider output, delivery tick, and ACCEPTED terminal result. A mutated failed recording asserts the same terminal prefix, FAILED/permanent_bad_request result and typed ProviderError, while an observed transition mismatch asserts typed dispatch divergence. Existing root BuildProcess replay tests continue to prove valid inspection and malformed-order rejection do not invoke provider, script, session, or host effects. The characterization was consolidated into the existing decoder test file to preserve package file-count and maintainability gates; no production behavior or public/generated contract changed."
+    },
+    {
+      "id": "btrc-p0-characterization-005",
+      "title": "Characterize one-shot invocation outcomes",
+      "description": "As a CLI or API customer invoking a Factory once, I want current success and failure results and events captured so that the later root cutover does not change invocation semantics.",
+      "acceptanceCriteria": [
+        "A deterministic successful one-shot invocation asserts the literal canonical Factory Event sequence and complete returned terminal result, including current identity and output projection behavior.",
+        "A representative validation, provider, or execution failure asserts the literal event prefix/terminal sequence, typed failure, exit/service outcome, and absence of duplicate execution.",
+        "Ordinary invocation characterization uses root.BuildProcess and Process.Execute; transport evidence is used only where customer-visible terminal mapping is the behavior under test.",
+        "External effects are replaced through edges.Edges, preferring command-runner recordings over an in-process provider substitute.",
+        "Focused one-shot invocation characterization tests pass",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 5,
+      "passes": true,
+      "notes": "Added tests/functional/factory/invocation/characterization_test.go. Root-built Process.Execute runs deterministic one-work factories through an injected Codex-shaped ProviderCommandRunner and a recorded response-stream invocation. Tests assert the literal 14-event success/provider-failure order, request/trace/work/dispatch/session correlation, complete primary-result projection, terminal SUCCEEDED/FINAL session publication, typed failed dispatch metadata, failed InvocationResponse/runtime error, exactly one provider attempt, and exactly one invocation_result. Repeated focused and race runs pass; no production behavior or public/generated contract changed."
+    },
+    {
+      "id": "btrc-p0-characterization-006",
+      "title": "Characterize ACP target outcomes",
+      "description": "As an ACP client, I want target execution success and failure behavior frozen so that later runtime ownership work preserves the ACP-facing event and result contract.",
+      "acceptanceCriteria": [
+        "A deterministic ACP target success asserts the exact canonical Factory Event sequence, recorded provider/session correlation, and complete target terminal result.",
+        "A representative ACP startup, protocol, or worker failure asserts the exact emitted event sequence, bounded typed failure detail, retry classification when present, and terminal target/session outcome.",
+        "Success and failure prove one terminal outcome per dispatch and no duplicate canonical terminal publication from provider-native terminal observations.",
+        "Tests use an offline deterministic ACP command/protocol edge without a live provider or sleep-based coordination.",
+        "Focused ACP target characterization tests pass",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 6,
+      "passes": true,
+      "notes": "Added tests/functional/providers/acp/btrc_p0_characterization_test.go. Offline ACP helper-process success and JSON-RPC protocol failure run through root-composed Process.Execute and assert the literal ten-event RUN_REQUEST through DISPATCH_RESPONSE order, contiguous event sequences, request/dispatch/Worker Session correlation, cursor-acp/acp-session-functional-1 provider correlation, one canonical dispatch terminal payload, bounded typed failure detail, provider terminal response mapping, and complete IDLE session/Work projections. The deterministic command/protocol edge uses no live provider or sleeps; no production behavior or public/generated contract changed."
+    },
+    {
+      "id": "btrc-p0-characterization-007",
+      "title": "Characterize direct JavaScript outcomes",
+      "description": "As a maintainer of direct JavaScript execution, I want its current event and terminal behavior frozen so that it can later enter through Factory Sessions without semantic drift.",
+      "acceptanceCriteria": [
+        "A fixed direct JavaScript workflow success asserts exact canonical event order for activation, child dispatch progress, result application, and terminal completion plus the complete terminal result.",
+        "A deterministic workflow-load, policy, child-dispatch, or script failure asserts its exact canonical event sequence and typed terminal failure/result.",
+        "The scenarios prove current child-dispatch correlation and one terminal result per child and execution without live provider or watcher timing.",
+        "Characterization stays at the current direct execution owner boundary and does not prematurely perform the Sessions cutover.",
+        "Focused direct JavaScript characterization tests pass",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 7,
+      "passes": true,
+      "notes": "Added TestBTRCP0DirectJavaScriptSuccessCharacterization and TestBTRCP0DirectJavaScriptChildFailureCharacterization to the current javascript/runtime owner boundary. The tests freeze literal phase and child-dispatch record order through terminal OnResult publication, assert stable dispatch/artifact/provider correlation and the complete projected child result, and assert typed script failure, unknown child FailureDetail, exact failed trace, no result callback, and no primary projection. Repeated focused/full package tests and vet pass; the built-in fake child executor provides deterministic evidence with no live provider, watcher, sleep, or Sessions cutover, and production behavior/contracts remain unchanged."
+    },
+    {
+      "id": "btrc-p0-characterization-008",
+      "title": "Characterize standalone fixture outcomes",
+      "description": "As a maintainer using standalone fixtures, I want their current success and failure behavior captured so that future execution-opening removal retains deterministic fixture semantics.",
+      "acceptanceCriteria": [
+        "A standalone fixture success asserts the literal canonical Factory Event order, stable fixture/session identity, and complete terminal result.",
+        "A representative invalid fixture or execution failure asserts the literal event prefix/terminal sequence, typed error/result, and absence of lingering live execution state.",
+        "Repeated runs with isolated stores retain independent events and results, and reading one run cannot return another run's fixture state.",
+        "Tests exercise the current standalone boundary with deterministic temporary or in-memory resources and make no production behavior change.",
+        "Focused standalone fixture characterization tests pass",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 8,
+      "passes": true,
+      "notes": "Added tests/functional/sessions/standalone/fixture_characterization_test.go. Root-built Process.Execute drives the fixture-backed standalone MCP boundary and asserts literal SESSION_STARTED → SESSION_RESULT_UPDATED → SESSION_COMPLETED order, stable fixture/session identities, complete success artifacts/result, missing-source FAILED/UNAVAILABLE output with typed failure on the terminal session projection, no dispatch leakage, and two temporary catalog variants whose events/results cannot cross isolated stores. No production behavior or public/generated contract changed."
+    },
+    {
+      "id": "btrc-p0-characterization-009",
+      "title": "Characterize cancellation, partial failure, and isolation",
+      "description": "As a maintainer changing lifecycle composition, I want current cancellation and partial-opening failure outcomes captured across independent sessions so that later cleanup ownership changes can be compared against a stable baseline.",
+      "acceptanceCriteria": [
+        "A deterministically blocked run is cancelled and asserts the exact canonical event sequence, terminal cancellation result/error, and current response-stream completion behavior.",
+        "A representative late opening/acquisition failure records observable earlier-resource stops, unattempted later effects, initiating and cleanup errors when applicable, and exact current terminal events/results.",
+        "Repeated close/cancel observation does not publish a second terminal event or repeat externally observable cleanup beyond current behavior.",
+        "Two concurrent sessions prove that cancelling or failing one does not change the other's ordered events, result, active work, or cleanup outcome.",
+        "Deterministic edge blocking replaces sleeps, and focused race/repeat evidence passes where supported.",
+        "Focused cancellation, partial-failure, and session-isolation characterization tests pass",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 9,
+      "passes": true,
+      "notes": "Added tests/functional/factory/invocation/btrc_p0_cancellation_characterization_test.go, pkg/services/factory_sessions/internal/runtimeopening/models_bind_test.go, and pkg/services/factory_sessions/internal/ondemandtarget/target_execution_test.go. The root-built one-shot cancellation test uses an injected blocking command edge and freezes the exact 13-event cancellation artifact (including both currently observed adjacent MODEL_RESPONSE/FACTORY_STATE_RESPONSE order variants), typed CANCELED/INVOCATION_CANCELED response and process error, one terminal response-stream record, one provider attempt, and idempotent repeated Stop. Runtime-opening characterization records models → worker → late Automations failure → reverse worker/models cleanup, no Factory Runtime assembly call, and joined initiating/cleanup errors with exactly-once cleanup. Concurrent target characterization proves one canceled target is replaced under its opaque identity while a second blocked target completes unchanged, with per-target result/session/request identities, isolated cleanup, and idempotent repeated cancel/close. Focused repeat and race tests pass; no production behavior or public/generated contract changed."
     }
   ]
 }

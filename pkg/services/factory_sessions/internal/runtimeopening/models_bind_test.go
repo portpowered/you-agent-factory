@@ -464,15 +464,21 @@ func TestOpenRuntimeClosesModelsScopeExactlyOnceAfterLaterStepFails(t *testing.T
 	}
 }
 
-func TestOpenRuntimeRollsBackAcquiredWorkerBeforeModelsScope(t *testing.T) {
+// TestBTRCP0RuntimeOpeningPartialFailureCharacterization freezes the late
+// Automations acquisition failure boundary: already-acquired worker and
+// Models resources unwind in reverse order, cleanup errors remain joined with
+// the initiating error, and no later runtime assembly effect is attempted.
+func TestBTRCP0RuntimeOpeningPartialFailureCharacterization(t *testing.T) {
 	t.Parallel()
 
 	var events []string
 	modelRoot := &recordingModelsService{events: &events}
 	workerCloseErr := errors.New("worker runtime cleanup failed")
 	worker := &openingCoordinatorWorker{events: &events, closeErr: workerCloseErr}
+	assembler := &openingCoordinatorRuntimeAssembler{events: &events}
 	factory := newOpeningCoordinatorFactory(t, modelRoot)
 	factory.workerExecutionFactory = worker.openWorkerExecution
+	factory.factoryRuntimeAssembler = assembler
 	factory.automationFactory = func(
 		*zap.Logger,
 		factoryruntime.Clock,
@@ -509,6 +515,9 @@ func TestOpenRuntimeRollsBackAcquiredWorkerBeforeModelsScope(t *testing.T) {
 		"models-close",
 	}) {
 		t.Fatalf("opening events = %v, want reverse cleanup of acquired resources only", events)
+	}
+	if slices.Contains(events, "runtime-assembly") {
+		t.Fatal("Factory Runtime assembly ran after the Automations opening failure")
 	}
 	if worker.closed != 1 {
 		t.Fatalf("worker Close calls = %d, want exactly 1", worker.closed)
@@ -552,6 +561,78 @@ type openingCoordinatorWorker struct {
 	events   *[]string
 	closeErr error
 	closed   int
+}
+
+type openingCoordinatorRuntimeAssembler struct {
+	events *[]string
+}
+
+func (assembler *openingCoordinatorRuntimeAssembler) Assemble(
+	context.Context,
+	string,
+	string,
+	bool,
+	string,
+	string,
+	string,
+	factorydefinitions.WorkstationLoader,
+	factoryruntime.LoadedFactoryLoader,
+	workers.Provider,
+	workers.CommandRunner,
+	workers.CommandRunner,
+	*workers.MockWorkersConfig,
+	factorydefinitions.RuntimeMode,
+	factoryruntime.Scheduler,
+	map[string]workers.WorkerExecutor,
+	func(string, workers.WorkerExecutor) workers.WorkerExecutor,
+	bool,
+	recordings.SubmissionRecorder,
+	recordings.DispatchRecorder,
+	string,
+	factoryruntime.RuntimeLogStorageConfig,
+	factoryruntime.RuntimeFileLoggingPolicy,
+	factoryruntime.RuntimeMetricsPolicy,
+	string,
+	factoryruntime.RuntimeMetricsStorageConfig,
+	time.Duration,
+	string,
+	string,
+	bool,
+	bool,
+	*bool,
+	factoryruntime.Clock,
+	*zap.Logger,
+	workers.RuntimeService,
+	workers.SessionBuildFactory,
+	factoryruntime.ProviderInvocationExecutorFactory,
+	factoryruntime.WorkersRuntimeExecutorsFactory,
+	factoryruntime.WorkersMockCommandRunnerFactory,
+	func(string) workers.ProgressPublisher,
+	func(string) func(string),
+	factoryruntime.PetriMutationRecorder,
+	factoryruntime.WorldStateProjector,
+	factoryruntime.RuntimeLedgerFactory,
+	recordings.RuntimeRecorderFactory,
+	factorydefinitions.InitialFactorySnapshotFactory,
+	string,
+	string,
+	string,
+	factorydefinitions.MutableLoadedFactorySource,
+	string,
+	*factorydefinitions.ReplayArtifact,
+	recordings.ReplayExecutionFactory,
+	automations.Service,
+	bool,
+) (
+	factoryruntime.ReplacementBuilder,
+	factoryruntime.HostedInstance,
+	factoryruntime.SessionBuildSpec,
+	factoryruntime.Lifecycle,
+	factoryruntime.Sidecars,
+	error,
+) {
+	*assembler.events = append(*assembler.events, "runtime-assembly")
+	return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, nil
 }
 
 func (worker *openingCoordinatorWorker) openWorkerExecution(

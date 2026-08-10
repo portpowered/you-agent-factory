@@ -385,6 +385,240 @@ func TestInvokeAndCancelIsolationBetweenMultipleStartedTargets(t *testing.T) {
 	}
 }
 
+// TestBTRCP0ConcurrentTargetCancellationIsolationCharacterization freezes the
+// concurrent target boundary: canceling one active target publishes exactly
+// one canceled result and replaces only that target's runtime while a second
+// target continues its blocked invocation to completion. Repeated cancel and
+// close controls must not replay terminal work or cleanup effects.
+func TestBTRCP0ConcurrentTargetCancellationIsolationCharacterization(t *testing.T) {
+	fixture := newBTRCConcurrentTargetFixture(t)
+	first, second := fixture.startTargets(t)
+	firstDone, secondDone := fixture.invokeTargets(t, first.SessionID, second.SessionID)
+	waitBTRCTargetStarted(t, "first", fixture.firstStarted)
+	waitBTRCTargetStarted(t, "second", fixture.secondStarted)
+
+	canceled, err := fixture.svc.Cancel(t.Context(), first.SessionID, factorysessions.ControlRequest{RequestID: "cancel-first"})
+	if err != nil {
+		t.Fatalf("Cancel(first) error = %v", err)
+	}
+	if canceled.SessionID != first.SessionID || canceled.Outcome != factorysessions.LifecycleControlOutcomeAccepted || canceled.Status != factorysessions.LifecycleStatusRunning {
+		t.Fatalf("Cancel(first) result = %+v, want ACCEPTED/RUNNING for first target", canceled)
+	}
+	fixture.assertSecondStillActive(t, secondDone)
+
+	repeatedCancel, err := fixture.svc.Cancel(t.Context(), first.SessionID, factorysessions.ControlRequest{RequestID: "cancel-first"})
+	if err != nil {
+		t.Fatalf("repeated Cancel(first) error = %v", err)
+	}
+	if repeatedCancel.SessionID != first.SessionID || repeatedCancel.Outcome != factorysessions.LifecycleControlOutcomeNoOp {
+		t.Fatalf("repeated Cancel(first) result = %+v, want a no-op on the replacement runtime", repeatedCancel)
+	}
+	fixture.assertReplacementStillActive(t)
+
+	close(fixture.secondRelease)
+	firstOutcome, secondOutcome := awaitBTRCTargetInvocations(t, firstDone, secondDone)
+	fixture.assertInvocationOutcomes(t, first, second, firstOutcome, secondOutcome)
+	fixture.assertCanceledCleanup(t)
+	fixture.closeTargets(t, first.SessionID, second.SessionID)
+	fixture.assertFinalCleanup(t)
+	if len(fixture.firstSessions.invokeCalls) != 1 || len(fixture.secondSessions.invokeCalls) != 1 || len(fixture.replacementSessions.invokeCalls) != 0 {
+		t.Fatalf("target invocation calls = first:%v second:%v replacement:%v, want one/original one/none", fixture.firstSessions.invokeCalls, fixture.secondSessions.invokeCalls, fixture.replacementSessions.invokeCalls)
+	}
+	if len(fixture.opener.calls) != 3 {
+		t.Fatalf("OpenInvocationRuntime calls = %d, want first, second, and first replacement only", len(fixture.opener.calls))
+	}
+}
+
+type btrcTargetInvocationOutcome struct {
+	result factorysessions.InvocationResult
+	err    error
+}
+
+type btrcConcurrentTargetFixture struct {
+	svc                        *Service
+	opener                     *sequencedOpener
+	firstSessions              *fakeSessions
+	secondSessions             *fakeSessions
+	replacementSessions        *fakeSessions
+	firstLifecycle             *fakeLifecycle
+	secondLifecycle            *fakeLifecycle
+	replacementLifecycle       *fakeLifecycle
+	firstStarted               chan struct{}
+	secondStarted              chan struct{}
+	secondRelease              chan struct{}
+	firstRequestID             string
+	secondRequestID            string
+	firstArtifactsClosed       int
+	secondArtifactsClosed      int
+	replacementArtifactsClosed int
+}
+
+func newBTRCConcurrentTargetFixture(t *testing.T) *btrcConcurrentTargetFixture {
+	t.Helper()
+	fixture := &btrcConcurrentTargetFixture{
+		firstStarted:         make(chan struct{}),
+		secondStarted:        make(chan struct{}),
+		secondRelease:        make(chan struct{}),
+		firstRequestID:       "invoke-first",
+		secondRequestID:      "invoke-second",
+		firstLifecycle:       &fakeLifecycle{},
+		secondLifecycle:      &fakeLifecycle{},
+		replacementLifecycle: &fakeLifecycle{},
+	}
+	fixture.firstSessions = &fakeSessions{invoke: func(ctx context.Context, _ string, _ factorysessions.InvocationRequest) (factorysessions.InvocationResult, error) {
+		close(fixture.firstStarted)
+		<-ctx.Done()
+		return factorysessions.InvocationResult{}, ctx.Err()
+	}}
+	fixture.secondSessions = &fakeSessions{invoke: func(ctx context.Context, _ string, request factorysessions.InvocationRequest) (factorysessions.InvocationResult, error) {
+		close(fixture.secondStarted)
+		select {
+		case <-fixture.secondRelease:
+			result := factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusCompleted}
+			if request.RequestID != nil {
+				result.RequestID = *request.RequestID
+			}
+			return result, nil
+		case <-ctx.Done():
+			return factorysessions.InvocationResult{}, ctx.Err()
+		}
+	}}
+	fixture.replacementSessions = &fakeSessions{invokeResult: factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusCompleted}}
+	fixture.opener = &sequencedOpener{results: []openResult{
+		{opened: roles.OpenedInvocationRuntime{
+			Sessions: fixture.firstSessions, Lifecycle: fixture.firstLifecycle,
+			CloseArtifacts: func() error { fixture.firstArtifactsClosed++; return nil },
+		}},
+		{opened: roles.OpenedInvocationRuntime{
+			Sessions: fixture.secondSessions, Lifecycle: fixture.secondLifecycle,
+			CloseArtifacts: func() error { fixture.secondArtifactsClosed++; return nil },
+		}},
+		{opened: roles.OpenedInvocationRuntime{
+			Sessions: fixture.replacementSessions, Lifecycle: fixture.replacementLifecycle,
+			CloseArtifacts: func() error { fixture.replacementArtifactsClosed++; return nil },
+		}},
+	}}
+	fixture.svc = newTestService(t, fixture.opener, func(context.Context, string, string) (factorysessions.RuntimeOpeningRequest, error) {
+		return factorysessions.RuntimeOpeningRequest{}, nil
+	}, sequentialIDs("wrapper"))
+	return fixture
+}
+
+func (fixture *btrcConcurrentTargetFixture) startTargets(t *testing.T) (factorysessions.AsyncStartResult, factorysessions.AsyncStartResult) {
+	t.Helper()
+	first, err := fixture.svc.StartAsync(t.Context(), factorysessions.StartRequest{Source: factorysessions.Source{FactoryID: "@you/first"}})
+	if err != nil {
+		t.Fatalf("StartAsync(first) error = %v", err)
+	}
+	second, err := fixture.svc.StartAsync(t.Context(), factorysessions.StartRequest{Source: factorysessions.Source{FactoryID: "@you/second"}})
+	if err != nil {
+		t.Fatalf("StartAsync(second) error = %v", err)
+	}
+	return first, second
+}
+
+func (fixture *btrcConcurrentTargetFixture) invokeTargets(t *testing.T, firstID, secondID string) (<-chan btrcTargetInvocationOutcome, <-chan btrcTargetInvocationOutcome) {
+	t.Helper()
+	firstDone := make(chan btrcTargetInvocationOutcome, 1)
+	secondDone := make(chan btrcTargetInvocationOutcome, 1)
+	go func() {
+		result, err := fixture.svc.InvokeFactorySession(t.Context(), firstID, factorysessions.InvocationRequest{RequestID: &fixture.firstRequestID})
+		firstDone <- btrcTargetInvocationOutcome{result: result, err: err}
+	}()
+	go func() {
+		result, err := fixture.svc.InvokeFactorySession(t.Context(), secondID, factorysessions.InvocationRequest{RequestID: &fixture.secondRequestID})
+		secondDone <- btrcTargetInvocationOutcome{result: result, err: err}
+	}()
+	return firstDone, secondDone
+}
+
+func waitBTRCTargetStarted(t *testing.T, name string, signal <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-signal:
+	case <-time.After(5 * time.Second):
+		t.Fatalf("timed out waiting for %s target invocation", name)
+	}
+}
+
+func (fixture *btrcConcurrentTargetFixture) assertSecondStillActive(t *testing.T, secondDone <-chan btrcTargetInvocationOutcome) {
+	t.Helper()
+	select {
+	case outcome := <-secondDone:
+		t.Fatalf("second target terminalized during first cancellation = %+v, want it still blocked", outcome)
+	default:
+	}
+	if fixture.secondLifecycle.stopCalls != 0 || len(fixture.secondSessions.closeCalls) != 0 || fixture.secondArtifactsClosed != 0 {
+		t.Fatalf("second target cleanup during first cancellation = lifecycle:%d session:%d artifacts:%d, want all zero", fixture.secondLifecycle.stopCalls, len(fixture.secondSessions.closeCalls), fixture.secondArtifactsClosed)
+	}
+}
+
+func (fixture *btrcConcurrentTargetFixture) assertReplacementStillActive(t *testing.T) {
+	t.Helper()
+	if fixture.replacementLifecycle.stopCalls != 0 || fixture.replacementArtifactsClosed != 0 {
+		t.Fatalf("replacement cleanup after repeated cancel = lifecycle:%d artifacts:%d, want all zero", fixture.replacementLifecycle.stopCalls, fixture.replacementArtifactsClosed)
+	}
+}
+
+func awaitBTRCTargetInvocations(t *testing.T, firstDone, secondDone <-chan btrcTargetInvocationOutcome) (btrcTargetInvocationOutcome, btrcTargetInvocationOutcome) {
+	t.Helper()
+	var first, second btrcTargetInvocationOutcome
+	select {
+	case first = <-firstDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for canceled first target result")
+	}
+	select {
+	case second = <-secondDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for completed second target result")
+	}
+	return first, second
+}
+
+func (fixture *btrcConcurrentTargetFixture) assertInvocationOutcomes(t *testing.T, first, second factorysessions.AsyncStartResult, firstOutcome, secondOutcome btrcTargetInvocationOutcome) {
+	t.Helper()
+	if firstOutcome.err != nil || firstOutcome.result.Status != factorysessions.InvocationTerminalStatusCanceled || firstOutcome.result.ErrorCode != string(factorysessions.InvocationErrorCodeCanceled) || firstOutcome.result.RequestID != fixture.firstRequestID || firstOutcome.result.SessionID != first.SessionID {
+		t.Fatalf("first invocation outcome = (%+v, %v), want one canceled result scoped to first", firstOutcome.result, firstOutcome.err)
+	}
+	if secondOutcome.err != nil || secondOutcome.result.Status != factorysessions.InvocationTerminalStatusCompleted || secondOutcome.result.RequestID != fixture.secondRequestID || secondOutcome.result.SessionID != second.SessionID {
+		t.Fatalf("second invocation outcome = (%+v, %v), want one completed result scoped to second", secondOutcome.result, secondOutcome.err)
+	}
+}
+
+func (fixture *btrcConcurrentTargetFixture) assertCanceledCleanup(t *testing.T) {
+	t.Helper()
+	if fixture.firstLifecycle.stopCalls != 1 || fixture.firstArtifactsClosed != 1 || len(fixture.firstSessions.closeCalls) != 1 {
+		t.Fatalf("first canceled runtime cleanup = lifecycle:%d session:%d artifacts:%d, want exactly one each", fixture.firstLifecycle.stopCalls, len(fixture.firstSessions.closeCalls), fixture.firstArtifactsClosed)
+	}
+}
+
+func (fixture *btrcConcurrentTargetFixture) closeTargets(t *testing.T, firstID, secondID string) {
+	t.Helper()
+	if err := fixture.svc.CloseFactorySession(t.Context(), firstID); err != nil {
+		t.Fatalf("CloseFactorySession(first) error = %v", err)
+	}
+	if err := fixture.svc.CloseFactorySession(t.Context(), firstID); err != nil {
+		t.Fatalf("repeated CloseFactorySession(first) error = %v", err)
+	}
+	if err := fixture.svc.CloseFactorySession(t.Context(), secondID); err != nil {
+		t.Fatalf("CloseFactorySession(second) error = %v", err)
+	}
+	if err := fixture.svc.CloseFactorySession(t.Context(), secondID); err != nil {
+		t.Fatalf("repeated CloseFactorySession(second) error = %v", err)
+	}
+}
+
+func (fixture *btrcConcurrentTargetFixture) assertFinalCleanup(t *testing.T) {
+	t.Helper()
+	if fixture.replacementLifecycle.stopCalls != 1 || fixture.replacementArtifactsClosed != 1 || len(fixture.replacementSessions.closeCalls) != 1 {
+		t.Fatalf("replacement runtime cleanup = lifecycle:%d session:%d artifacts:%d, want exactly one each", fixture.replacementLifecycle.stopCalls, len(fixture.replacementSessions.closeCalls), fixture.replacementArtifactsClosed)
+	}
+	if fixture.secondLifecycle.stopCalls != 1 || fixture.secondArtifactsClosed != 1 || len(fixture.secondSessions.closeCalls) != 1 {
+		t.Fatalf("second runtime cleanup = lifecycle:%d session:%d artifacts:%d, want exactly one each", fixture.secondLifecycle.stopCalls, len(fixture.secondSessions.closeCalls), fixture.secondArtifactsClosed)
+	}
+}
+
 // TestCloseFactorySessionTearsDownAndEvicts proves a close call tears down
 // the cached runtime and evicts it, so a later call against the same
 // identity reports ErrSessionNotFound instead of reusing a torn-down runtime.
