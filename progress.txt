@@ -409,3 +409,20 @@
   - The checkout's default `origin` remote tracks `portpowered/infinite-you`, while PR #1841 is hosted in `portpowered/you-agent-factory`; compare and push against the PR's head repository when checking mergeability.
   - A clean local merge against an older cached base is insufficient when GitHub reports `CONFLICTING`; fetch the actual current base, preserve both append-only progress logs, and rerun the gates on the merge commit.
 ---
+
+## 2026-08-09 18:51 -07:00 - wo-d1-packaged-factories-docs-delivery-ci-follow-up
+- What was implemented
+  - Investigated the initial CI failure in the ACP functional lane; it was an isolated session-load failure, not a documentation or packaged-factory source regression.
+  - Re-ran the exact failing ACP test locally ten times successfully, then re-ran the failed GitHub Actions jobs. The rerun passed the functional lane and produced the required real-ACP evidence artifact.
+  - Confirmed the PR remains reconciled with current `main`, clean, mergeable, and synchronized to the latest pushed commit.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/providers/acp -run '^TestFactoryRunRetriesACPProviderByResumingExactSession$' -count=10 -v -timeout 300s` — passed.
+  - `gh run rerun 31347454534 --failed` — rerun completed successfully.
+  - All required PR checks, including Backend Functional Coverage and Verification Policy, are passing.
+  - No remaining `passes:false` entries in `prd.json`; no unresolved inline review threads or formal reviews.
+- **Learnings for future iterations:**
+  - Provider/ACP functional lanes can expose isolated session-load flakes; verify the exact failing test locally, rerun only failed CI jobs, and require the expected evidence artifact before treating the rerun as green.
+  - A delivery-only CI follow-up should record the evidence in the append-only progress log without changing unrelated source or completed PRD story state.
+---
