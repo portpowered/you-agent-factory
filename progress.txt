@@ -26,6 +26,7 @@
 - Replay completeness must be derived from a terminal lifecycle record inside the captured Events range, not from a separately synchronized terminal session state.
 - When a package has a strict file-count baseline, put a small refactor in an existing focused file before adding a new helper file or changing the baseline.
 - When broad functional coverage reports a cancellation-observation failure, rerun the failed lane and isolate the named test before changing an unrelated feature; parallel-suite failures can move between existing durability/restart tests while isolated runs pass.
+- Package-target discovery is the stable-sorted set of directories containing non-test Go sources; adding a durable service owner requires updating the checker vocabulary and its live top-level inventory before regenerating the manifest.
 
 ## 2026-08-09 13:12 - wo-d1-packaged-factories-docs-001
 - What was implemented
@@ -760,4 +761,29 @@
   - Documentation parsers for Markdown output must match the report’s structural contract and tolerate the platform’s CRLF line endings; a single-line `Overall recommendation:` pattern is not equivalent to the emitted H2-plus-body form.
   - AGY structured-output replays enforce exact echoed-schema equivalence, so a contract schema change requires the historical replay envelope to be synchronized without changing its recorded response evidence.
   - When a backend package is at the 15-file limit, consolidate focused behavioral tests into an existing responsibility-aligned file before adding another package-local test file.
+---
+
+## 2026-08-10 04:33 -07:00 - sac-s0-1-ownership-inventories-001
+- What was implemented
+  - Regenerated `docs/internal/packaged-service-structure/package-target-manifest.json` from the live production tree, increasing the exact inventory from 528 to 545 packages and preserving every existing package mapping.
+  - Added the 17 newly discovered platform, Chat Sessions, Events, Factory Sessions, Providers, Worker Sessions, ACP, CLI, and mapping packages with reviewed retain destinations.
+  - Added Worker Sessions to the package-target checker’s closed product-owner vocabulary, reconciled the live Chat Sessions/Events top-level inventories, and added a direct Worker Sessions mapping assertion.
+- Files changed
+  - `cmd/packagetargetmanifestcheck/manifest.go`
+  - `cmd/packagetargetmanifestcheck/manifest_test.go`
+  - `cmd/packagetargetmanifestcheck/owner_top_level.go`
+  - `cmd/packagetargetmanifestcheck/owners_test.go`
+  - `cmd/packagetargetmanifestcheck/residuals.go`
+  - `cmd/packagetargetmanifestcheck/residuals_test.go`
+  - `docs/internal/packaged-service-structure/package-target-manifest.json`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `make package-target-manifest-check` — passed with 545 inventory rows and 545 package rows.
+  - Focused package-target inventory, vocabulary, owner mapping, top-level, and coverage tests — passed.
+  - `git diff --check` — passed.
+  - `make ownership-inventory-check` — remains red on the next story’s stale ownership baseline: the 16 new package rows and 10 live cross-owner edges are not yet in `ownership-inventory.json`; no ownership classification changes were made in this story.
+- **Learnings for future iterations:**
+  - The package-target manifest and ownership inventory are separate ledgers: package-target regeneration can be green while ownership verification still reports missing package rows and edges until story 002 refreshes its reviewed classifications.
+  - Worker Sessions is an implemented durable service owner, so its package family must be retained under `worker_sessions`; treating it as an unknown residual would incorrectly queue live code for deletion.
 ---
