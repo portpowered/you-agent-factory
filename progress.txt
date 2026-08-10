@@ -2234,6 +2234,22 @@
 - **Learnings for future iterations:**
   - Acceptance criteria for repository-enforcement work should explicitly identify the project-level nature of the evidence and state the intentionally unchanged customer-facing behavior; keep the PRD valid JSON so automated consumers do not depend on permissive parsers.
 ---
+## 2026-08-10 11:08 -07:00 - pf-cli-exit-codes merged-head verification follow-up
+- What was implemented
+  - Re-ran the CLI-exit-code regressions and repository gates after merging current `main`; no unrelated inventory drift was folded into the feature.
+  - Confirmed the broad package-target test mismatch is the known current-main inventory drift for `kind_phase_validation.go` and `lifecycle_capability.go`, while the executable manifest and ownership gates remain green.
+- Files changed
+  - `progress.txt`
+- Verification
+  - CLI diagnostics, process boundary, Worker Sessions stream, server-bind, and functional CLI tests passed.
+  - `go vet` for the changed CLI/root/Worker Sessions and current-main checker packages passed.
+  - `make package-target-manifest-check` and `make ownership-inventory-check` passed.
+  - The direct `cmd/packagetargetmanifestcheck` package test still reports the pre-existing Workers/Recordings inventory drift; no changed CLI file is implicated.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure` passed.
+  - `pkg-boundary` reports 175 violations on both the merged head and a detached `origin/main` worktree; the command remains non-zero for the intentional baseline.
+- **Learnings for future iterations:**
+  - When a repository-enforcement package test exposes current-main inventory drift but its public Make gate passes, record the distinction and avoid changing unrelated inventories in a feature PR.
+---
 ## 2026-08-10 11:04 -07:00 - pf-cli-exit-codes current-main conflict follow-up
 - What was implemented
   - Fetched the live PR base `main` at `cba6b45f9` after the cached base metadata lagged, then merged the ownership-inventory changes into the CLI-exit-codes branch.
