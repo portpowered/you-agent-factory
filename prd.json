@@ -32,7 +32,7 @@
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Implemented the CLI-owned process-boundary diagnostic policy. Authored invocation errors remain typed and preserve stable codes; unclassified failures become safe CLI_COMMAND_FAILED fallbacks without terminal-output parsing; command-owned structured renderers are marked to prevent duplicates; Worker Sessions JSON error payloads route to stderr under the central policy; and root.BuildProcess/Process.Execute coverage proves typed propagation, safe diagnostics, and stdout isolation. Focused tests, root/CLI/service tests, go vet, pkg-maint, and pkg-file-count pass. The broad package command is otherwise clean except the pre-existing docs-topic fixture drift."
+      "notes": "Implemented the CLI-owned process-boundary diagnostic policy. Authored invocation errors remain typed and preserve stable codes; unclassified failures become safe CLI_COMMAND_FAILED fallbacks without terminal-output parsing; command-owned structured renderers are marked to prevent duplicates; Worker Sessions JSON error payloads route to stderr under the central policy; and root.BuildProcess/Process.Execute coverage proves typed propagation, safe diagnostics, and stdout isolation. Focused tests, root/CLI/service tests, go vet, pkg-maint, and pkg-file-count pass. The broad package command is otherwise clean except the pre-existing docs-topic fixture drift. Review follow-up keeps nil caller contexts nil instead of creating an implicit context in the transport package, restoring the pkg-boundary count to the exact base baseline."
     },
     {
       "id": "pf-cli-exit-codes-002",

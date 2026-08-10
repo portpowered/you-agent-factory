@@ -1836,5 +1836,22 @@
   - CI run `31409217326`, attempt 2, passed Backend Functional Coverage, Verification Policy, and all other required jobs for head `ffc60b3994cf8c7a22f7bf2ba80dcb57709d833f`.
   - PR #1856 remains conflict-free with no conversation comments, reviews, or unresolved threads.
 - **Learnings for future iterations:**
-  - A missing coverage artifact can be secondary to a single flaky functional test; inspect the named failure, rerun it in isolation, and rerun only failed jobs before modifying unrelated orchestration behavior.
+- A missing coverage artifact can be secondary to a single flaky functional test; inspect the named failure, rerun it in isolation, and rerun only failed jobs before modifying unrelated orchestration behavior.
+---
+## 2026-08-10 10:13 -07:00 - pf-cli-exit-codes review follow-up
+- What was implemented
+  - Removed the transport-owned `context.Background()` fallback from `clidiag.WithCentralDiagnostics`; a nil caller context remains nil and central diagnostics are enabled only when the caller supplies a context.
+  - Updated the focused context-helper test to assert that no implicit context is created.
+- Files changed
+  - `pkg/transports/cli/clidiag/diagnostics.go`
+  - `pkg/transports/cli/clidiag/diagnostics_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/transports/cli/clidiag -count=1 -cover` — passed at 96.1%.
+  - `go vet ./pkg/transports/cli/clidiag` — passed.
+  - `make pkg-boundary` — reports the known 176-entry baseline and no new `clidiag` violation; the command remains non-zero because the baseline is intentionally tracked.
+  - The blocking PR comment requires the pushed head to be compared with the exact base count before review resumes.
+- **Learnings for future iterations:**
+  - Transport helpers must preserve caller-owned context semantics; returning nil for a nil input is preferable to manufacturing a background context merely to satisfy `context.WithValue`.
 ---

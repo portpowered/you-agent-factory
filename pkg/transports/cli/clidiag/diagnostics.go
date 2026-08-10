@@ -102,7 +102,7 @@ type centralDiagnosticsContextKey struct{}
 // value and retain their historical handler-local presentation behavior.
 func WithCentralDiagnostics(ctx context.Context, enabled bool) context.Context {
 	if ctx == nil {
-		ctx = context.Background()
+		return nil
 	}
 	return context.WithValue(ctx, centralDiagnosticsContextKey{}, enabled)
 }

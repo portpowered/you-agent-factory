@@ -141,8 +141,8 @@ func TestDiagnosticContextAndPresentationHelpers(t *testing.T) {
 	if CentralDiagnosticsEnabled(nil) {
 		t.Fatal("nil context unexpectedly enabled central diagnostics")
 	}
-	if !CentralDiagnosticsEnabled(WithCentralDiagnostics(nil, true)) {
-		t.Fatal("WithCentralDiagnostics(nil, true) did not enable central diagnostics")
+	if WithCentralDiagnostics(nil, true) != nil {
+		t.Fatal("WithCentralDiagnostics(nil, true) created an implicit context")
 	}
 	if CentralDiagnosticsEnabled(WithCentralDiagnostics(context.Background(), false)) {
 		t.Fatal("WithCentralDiagnostics(false) unexpectedly enabled central diagnostics")
