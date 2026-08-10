@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- For mechanical test splits, capture the exact go test inventory, repeatable coverage command/output, and one-to-one behavior/helper placement map in a review artifact before moving tests.
 - Treat repository-enforcement inventories and architecture guards as project-enabling PRD criteria when they have no runtime, API, CLI, UI, or emitted-event behavior; source scans support enforcement but are not customer-behavior evidence.
 - AST scanners must expand grouped Go field declarations before indexing parameter or result types; a field-count helper can exceed the AST field-list length and panic on valid source.
 - Asynchronous service characterizations should wait on observed edge/context signals rather than arbitrary `time.After` ceilings; the test context remains the failure escape hatch.
@@ -123,7 +124,6 @@
 - **Learnings for future iterations:**
   - Keep the root count aligned with the canonical fifteen-entry catalog, but continue placing detailed Factory guidance in `docs/reference/packaged-factories.md`.
 ---
-
 ## 2026-08-09 13:20 - wo-d1-packaged-factories-docs-001 lint follow-up
 - What was implemented
   - No source change; checked the broad repository lint tier against the completed story.
@@ -1949,4 +1949,34 @@
   - `git diff --check` — passed.
 - **Learnings for future iterations:**
   - Acceptance criteria for repository-enforcement work should explicitly identify the project-level nature of the evidence and state the intentionally unchanged customer-facing behavior; keep the PRD valid JSON so automated consumers do not depend on permissive parsers.
+---
+## [2026-08-10 13:40 -07:00] - thr-split-fake-service-runtime-tests-001
+- What was implemented
+  - Captured the unmodified Factory Sessions execution baseline before any test-file moves.
+  - Recorded the complete `go test -list '.*' ./pkg/services/factory_sessions/internal/execution/...` output, a repeatable `go test -covermode=atomic` package-coverage result, and a behavior-based placement map for all 120 top-level tests from the two oversized source files.
+  - Recorded one planned package-local owner for shared fixture and test-helper functions so later move-only slices do not duplicate helpers.
+- Files changed
+  - `docs/internal/development/plans/factory-sessions-execution-test-split-baseline.md`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/factory_sessions/internal/execution/...` — passed.
+  - `go test -covermode=atomic ./pkg/services/factory_sessions/internal/execution/...` — passed; coverage was 79.6% (execution), 80.0% (fixtures), 83.1% (recordingreplay), and 89.8% (runtimepersist).
+  - Placement-map validation — passed; 120 declarations mapped exactly once.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - The root execution package and its three test subpackages can be compared with one coverage command; retain `-covermode=atomic` and the exact `...` package scope after every mechanical move.
+  - The two target files contain 120 top-level tests; destination grouping must merge fake-service and JavaScript-runtime seams without duplicating shared helpers.
+---
+## [2026-08-10 13:47 -07:00] - thr-split-fake-service-runtime-tests-001 verification follow-up
+- What was implemented
+  - Completed the repository UI dependency setup needed to run the documented typecheck; no tracked dependency files changed.
+- Files changed
+  - No additional source files.
+- Verification
+  - `make ui-deps` — passed with the pinned Bun workspace lockfile.
+  - `make typecheck` — passed.
+  - `git diff --check` — passed after removing an extra artifact EOF blank line.
+- **Learnings for future iterations:**
+  - A fresh worktree may have an incomplete `ui/node_modules`; run `make ui-deps` before treating missing `@types/bun` from `make typecheck` as a source failure.
 ---
