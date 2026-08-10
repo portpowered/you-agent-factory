@@ -327,7 +327,7 @@
     },
     {
       "packagePath": "pkg/transports/cli/climanifestcobra",
-      "fileCount": 17,
+      "fileCount": 18,
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this package into focused sub-packages and remove this entry."
     },

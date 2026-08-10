@@ -133,7 +133,7 @@ func selectValue() { _ = work.ListOptions{WorkTypeName: "story"} }
 	}
 }
 
-func TestRunIgnoresFactoryWorktreeCheckouts(t *testing.T) {
+func TestRunIgnoresRepositoryPolicyNonSourceRoots(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := t.TempDir()
@@ -141,18 +141,68 @@ func TestRunIgnoresFactoryWorktreeCheckouts(t *testing.T) {
 		".worktrees",
 		"worktrees",
 		filepath.Join(".claude", "worktrees"),
+		filepath.Join(".artifacts", "bootstrap", "worktrees"),
+		filepath.Join(".artifacts", "generated", "transient-worktrees"),
+		filepath.Join(".artifacts", "bootstrap", "generated", "worktrees"),
+		".git",
+		"node_modules",
+		"testdata",
+		"vendor",
 	} {
-		writeGoSourceFile(t, repoRoot, filepath.Join(worktreeRoot, "task-a", "pkg", "transports", "http", "staging.go"), `package http
+		writeGoSourceFile(
+			t,
+			repoRoot,
+			filepath.Join(worktreeRoot, "task-a", "tests", "functional", "stale_test.go"),
+			fmt.Sprintf(`package functional
 
-import runtime "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/shared/moved"
+import _ %q
 
-func build() { runtime.New() }
-`)
+func stale( {
+`, applicationGraphImportPath),
+		)
 	}
 
 	stderr := &bytes.Buffer{}
 	if err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr); err != nil {
-		t.Fatalf("run() error = %v, want factory worktree checkouts ignored; stderr=%q", err, stderr.String())
+		t.Fatalf("run() error = %v, want repository-policy roots ignored; stderr=%q", err, stderr.String())
+	}
+	if got := stderr.String(); got != "" {
+		t.Fatalf("run() stderr = %q, want no findings from ignored repository-policy roots", got)
+	}
+}
+
+func TestRunRejectsProductionPkgViolationInsideArtifactLikeSubtrees(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	productionFiles := []string{
+		filepath.Join("pkg", "services", "factory_runtime", "internal", "services", "orchestration", ".artifacts", "production.go"),
+		filepath.Join("pkg", "services", "factory_runtime", "internal", "services", "orchestration", ".claude", "worktrees", "production.go"),
+		filepath.Join("pkg", "services", "factory_runtime", "internal", "services", "orchestration", "worktrees", "production.go"),
+	}
+	for _, filePath := range productionFiles {
+		writeGoImportFile(t, repoRoot, filePath, "production", applicationGraphImportPath)
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, stdout, stderr)
+	if err == nil {
+		t.Fatal("run() error = nil, want production pkg import violation rejected")
+	}
+	if got := stdout.String(); got != "" {
+		t.Fatalf("run() stdout = %q, want no success output", got)
+	}
+	for _, filePath := range productionFiles {
+		filePath = filepath.ToSlash(filePath)
+		packagePath := filepath.ToSlash(filepath.Dir(filePath))
+		want := fmt.Sprintf("prohibited application composition import: %s (%s)", packagePath, filePath)
+		if got := stderr.String(); !strings.Contains(got, want) {
+			t.Fatalf("run() stderr = %q, want production diagnostic %q", got, want)
+		}
+	}
+	if got := err.Error(); got != "[agent-factory:pkg-boundary] found 3 package-boundary violation(s)" {
+		t.Fatalf("run() error = %q, want one violation per production fixture", got)
 	}
 }
 
@@ -1493,6 +1543,43 @@ func TestMakePkgBoundaryTargetFailsForDomainApplicationGraphImport(t *testing.T)
 	got := string(output)
 	for _, want := range []string{
 		"prohibited application composition import: pkg/services/work/query (pkg/services/work/query/composition.go)",
+		"pkg/wire is the outward application composition root",
+		"inject the collaborator through pkg/root or pkg/initializer",
+		"[agent-factory:pkg-boundary] found 1 package-boundary violation(s)",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("make pkg-boundary output = %q, want substring %q", got, want)
+		}
+	}
+}
+
+func TestMakePkgBoundaryTargetRejectsProductionPkgImportInsideArtifactLikeSubtree(t *testing.T) {
+	repoRoot := filepath.Clean(filepath.Join("..", ".."))
+	fixtureRoot := t.TempDir()
+	filePath := filepath.Join(
+		"pkg",
+		"services",
+		"factory_runtime",
+		"internal",
+		"services",
+		"orchestration",
+		".artifacts",
+		"production.go",
+	)
+	writeGoImportFile(t, fixtureRoot, filePath, "production", applicationGraphImportPath)
+
+	cmd := exec.Command("make", "pkg-boundary", "PACKAGE_BOUNDARY_ROOT="+fixtureRoot)
+	cmd.Dir = repoRoot
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("make pkg-boundary succeeded, want production pkg import failure; output:\n%s", output)
+	}
+
+	filePath = filepath.ToSlash(filePath)
+	packagePath := filepath.ToSlash(filepath.Dir(filePath))
+	got := string(output)
+	for _, want := range []string{
+		"prohibited application composition import: " + packagePath + " (" + filePath + ")",
 		"pkg/wire is the outward application composition root",
 		"inject the collaborator through pkg/root or pkg/initializer",
 		"[agent-factory:pkg-boundary] found 1 package-boundary violation(s)",

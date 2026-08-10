@@ -113,8 +113,12 @@ func applyReviewedEvidence(scenario *Scenario) {
 	switch scenario.StableID {
 	case "cli/you.docs":
 		markCovered(scenario, LaneShort, "tests/release/release_smoke_test.go::TestGoInstallSmoke_InstallsCmdFactoryBinaryIntoCleanGOBIN", InterfaceCLI)
+	case "cli/you.providers.list":
+		markCovered(scenario, LaneShort, "tests/functional/providers/discovery/discovery_test.go::TestProvidersListThroughRootBuildProcess", InterfaceCLI)
 	case "cli/you.run":
 		markCovered(scenario, LaneShort, "tests/functional/transport/cli/commands/run_wiring_test.go::TestCLIRunFactoryByPath", InterfaceCLI)
+	case "cli/you.serve.acp":
+		markCovered(scenario, LaneShort, "tests/functional/transport/acp/stdio/cli_serve_acp_prompt_test.go::TestServeACP_RootBuildProcessCompletesOneFactoryPrompt", InterfaceCLI)
 	case "cli/you.submit.batch":
 		scenario.Status = StatusCovered
 		scenario.Lane = LaneLong

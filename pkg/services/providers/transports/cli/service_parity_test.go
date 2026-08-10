@@ -194,9 +194,15 @@ func TestConstructedService_ListHonorsContextCancellation(t *testing.T) {
 		},
 	}
 	service := constructedProvidersCLIService(t, root)
-	err := service.List(providerscli.ListConfig{Context: ctx, Output: io.Discard})
+	var diagnostics bytes.Buffer
+	err := service.List(providerscli.ListConfig{
+		Context: ctx, Output: io.Discard, Diagnostics: &diagnostics, Verbose: true,
+	})
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("List() error = %v, want context.Canceled", err)
+	}
+	if !strings.Contains(diagnostics.String(), "stage=cancellation") {
+		t.Fatalf("cancellation diagnostics missing safe stage: %s", diagnostics.String())
 	}
 }
 
