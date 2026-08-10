@@ -43,6 +43,7 @@
   - The live catalog contains fifteen `@you/*` entries plus any local Factory names, and its directory column is operator-specific; use exact Factory names for portable documentation.
   - The current help contract explicitly prints Factory-defined request binding and role-specific flags, including the phrase that omitted provider/model values use operator defaults.
 ---
+
 ## 2026-08-09 13:16 - wo-d1-packaged-factories-docs-001 verification follow-up
 - What was implemented
   - Installed the repository-pinned UI dependencies that were missing from the checkout so the broad verification tier could run.
@@ -391,4 +392,20 @@
 - **Learnings for future iterations:**
   - For a cross-repository PR, verify the head OID and check state in the PR's actual repository rather than relying on the local branch's default remote association.
   - When all stories and review feedback are complete, preserve `prd.json` and append delivery evidence to the progress log instead of creating unrelated source changes.
+---
+
+## 2026-08-09 18:33 -07:00 - wo-d1-packaged-factories-docs-delivery
+- What was implemented
+  - Fetched the current `main` from the PR repository (`40512cfa1`) and merged it into the documentation branch.
+  - Reconciled shared `docs/README.md`, `prd.json`, and append-only `progress.txt` conflicts while preserving the packaged-factory PRD and the mainline Worker Sessions history.
+  - Kept all six WO-D1 stories marked `passes:true` and retained the current PR description contract.
+- Files changed
+  - Current-main merge result, `docs/README.md`, `prd.json`, `progress.txt`, and the mainline files included by the merge.
+- Verification
+  - `make docs-reference-smoke` — passed.
+  - `make verify-fast` — passed: dashboard typecheck, MCP contract boundary, 355 UI files / 2,970 tests, 191 Bun unit checks, and the short Go suite.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - The checkout's default `origin` remote tracks `portpowered/infinite-you`, while PR #1841 is hosted in `portpowered/you-agent-factory`; compare and push against the PR's head repository when checking mergeability.
+  - A clean local merge against an older cached base is insufficient when GitHub reports `CONFLICTING`; fetch the actual current base, preserve both append-only progress logs, and rerun the gates on the merge commit.
 ---
