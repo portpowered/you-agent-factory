@@ -55,6 +55,13 @@
           "value": "--add-dir"
         },
         {
+          "description": "AGY selects effort through the exact model ID; the public Providers execution path rejects a separate reasoning effort.",
+          "kind": "behavior",
+          "name": "effort_selection",
+          "unit": "model_id",
+          "value": "model_id"
+        },
+        {
           "default": 300,
           "description": "AGY sends --print-timeout and uses a five-minute default when no positive timeout is requested.",
           "kind": "default",
@@ -86,11 +93,7 @@
       },
       "models": [
         {
-          "efforts": [
-            "low",
-            "medium",
-            "high"
-          ],
+          "efforts": [],
           "id": "claude-opus-4-6-thinking",
           "modalities": [
             {
@@ -144,11 +147,7 @@
           ]
         },
         {
-          "efforts": [
-            "low",
-            "medium",
-            "high"
-          ],
+          "efforts": [],
           "id": "claude-sonnet-4-6",
           "modalities": [
             {
@@ -202,11 +201,7 @@
           ]
         },
         {
-          "efforts": [
-            "low",
-            "medium",
-            "high"
-          ],
+          "efforts": [],
           "id": "gemini-3.1-pro-high",
           "modalities": [
             {
@@ -260,11 +255,7 @@
           ]
         },
         {
-          "efforts": [
-            "low",
-            "medium",
-            "high"
-          ],
+          "efforts": [],
           "id": "gemini-3.1-pro-low",
           "modalities": [
             {
@@ -318,11 +309,7 @@
           ]
         },
         {
-          "efforts": [
-            "low",
-            "medium",
-            "high"
-          ],
+          "efforts": [],
           "id": "gemini-3.5-flash-high",
           "modalities": [
             {
@@ -376,11 +363,7 @@
           ]
         },
         {
-          "efforts": [
-            "low",
-            "medium",
-            "high"
-          ],
+          "efforts": [],
           "id": "gemini-3.5-flash-low",
           "modalities": [
             {
@@ -434,11 +417,7 @@
           ]
         },
         {
-          "efforts": [
-            "low",
-            "medium",
-            "high"
-          ],
+          "efforts": [],
           "id": "gemini-3.5-flash-medium",
           "modalities": [
             {
@@ -492,11 +471,7 @@
           ]
         },
         {
-          "efforts": [
-            "low",
-            "medium",
-            "high"
-          ],
+          "efforts": [],
           "id": "gemini-3.6-flash-high",
           "modalities": [
             {
@@ -550,11 +525,7 @@
           ]
         },
         {
-          "efforts": [
-            "low",
-            "medium",
-            "high"
-          ],
+          "efforts": [],
           "id": "gemini-3.6-flash-low",
           "modalities": [
             {
@@ -608,11 +579,7 @@
           ]
         },
         {
-          "efforts": [
-            "low",
-            "medium",
-            "high"
-          ],
+          "efforts": [],
           "id": "gemini-3.6-flash-medium",
           "modalities": [
             {
@@ -666,11 +633,7 @@
           ]
         },
         {
-          "efforts": [
-            "low",
-            "medium",
-            "high"
-          ],
+          "efforts": [],
           "id": "gpt-oss-120b-medium",
           "modalities": [
             {
@@ -1032,6 +995,189 @@
             "max"
           ],
           "id": "gpt-5.6",
+          "modalities": [
+            {
+              "direction": "input",
+              "modality": "audio",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "input",
+              "modality": "image",
+              "support": "supported",
+              "transport": "file_path"
+            },
+            {
+              "direction": "input",
+              "modality": "text",
+              "support": "supported",
+              "transport": "inline"
+            },
+            {
+              "direction": "input",
+              "modality": "video",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "modality": "audio",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "modality": "image",
+              "support": "supported",
+              "transport": "file_path"
+            },
+            {
+              "direction": "output",
+              "modality": "text",
+              "support": "supported",
+              "transport": "inline"
+            },
+            {
+              "direction": "output",
+              "modality": "video",
+              "support": "unsupported",
+              "transport": "none"
+            }
+          ]
+        },
+        {
+          "efforts": [
+            "minimal",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "id": "gpt-5.6-luna",
+          "modalities": [
+            {
+              "direction": "input",
+              "modality": "audio",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "input",
+              "modality": "image",
+              "support": "supported",
+              "transport": "file_path"
+            },
+            {
+              "direction": "input",
+              "modality": "text",
+              "support": "supported",
+              "transport": "inline"
+            },
+            {
+              "direction": "input",
+              "modality": "video",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "modality": "audio",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "modality": "image",
+              "support": "supported",
+              "transport": "file_path"
+            },
+            {
+              "direction": "output",
+              "modality": "text",
+              "support": "supported",
+              "transport": "inline"
+            },
+            {
+              "direction": "output",
+              "modality": "video",
+              "support": "unsupported",
+              "transport": "none"
+            }
+          ]
+        },
+        {
+          "efforts": [
+            "minimal",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "id": "gpt-5.6-sol",
+          "modalities": [
+            {
+              "direction": "input",
+              "modality": "audio",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "input",
+              "modality": "image",
+              "support": "supported",
+              "transport": "file_path"
+            },
+            {
+              "direction": "input",
+              "modality": "text",
+              "support": "supported",
+              "transport": "inline"
+            },
+            {
+              "direction": "input",
+              "modality": "video",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "modality": "audio",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "modality": "image",
+              "support": "supported",
+              "transport": "file_path"
+            },
+            {
+              "direction": "output",
+              "modality": "text",
+              "support": "supported",
+              "transport": "inline"
+            },
+            {
+              "direction": "output",
+              "modality": "video",
+              "support": "unsupported",
+              "transport": "none"
+            }
+          ]
+        },
+        {
+          "efforts": [
+            "minimal",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "id": "gpt-5.6-terra",
           "modalities": [
             {
               "direction": "input",

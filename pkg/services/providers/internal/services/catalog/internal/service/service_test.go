@@ -165,9 +165,11 @@ func mutateProviderForDetachTest(provider *providers.Descriptor) {
 		provider.Aliases[0] = "mutated"
 	}
 	provider.Models[0].ID = "mutated-model"
-	provider.Models[0].Efforts[0] = "mutated-effort"
-	if provider.KnownLimits[1].Default != nil {
-		*provider.KnownLimits[1].Default = 999
+	provider.Models[0].Efforts = append(provider.Models[0].Efforts, "mutated-effort")
+	for index := range provider.KnownLimits {
+		if provider.KnownLimits[index].Default != nil {
+			*provider.KnownLimits[index].Default = 999
+		}
 	}
 	if len(provider.Capabilities) > 0 {
 		provider.Capabilities[0] = providers.CapabilityUsage
@@ -189,11 +191,13 @@ func assertDetachedProvider(t *testing.T, first, second providers.Descriptor) {
 			t.Fatal("second list capabilities share mutation from first result")
 		}
 	}
-	if second.Models[0].ID == "mutated-model" || second.Models[0].Efforts[0] == "mutated-effort" {
+	if second.Models[0].ID == "mutated-model" || slices.Contains(second.Models[0].Efforts, "mutated-effort") {
 		t.Fatal("second list model facts share mutation from first result")
 	}
-	if second.KnownLimits[1].Default == nil || *second.KnownLimits[1].Default != 300 {
-		t.Fatal("second list limit facts share mutation from first result")
+	for _, limit := range second.KnownLimits {
+		if limit.Default != nil && *limit.Default != 300 {
+			t.Fatal("second list limit facts share mutation from first result")
+		}
 	}
 }
 
@@ -208,19 +212,21 @@ func assertCodexCatalogFacts(t *testing.T, codex providers.Descriptor) {
 	if codex.TechnicalSupportLevel != providers.TechnicalSupportProduction || codex.ImplementationAvailability != providers.ImplementationBundled {
 		t.Fatalf("codex publication posture = %q/%q, want production/bundled", codex.TechnicalSupportLevel, codex.ImplementationAvailability)
 	}
-	if len(codex.Models) != 1 {
-		t.Fatalf("codex models = %#v, want one gpt-5.6 model", codex.Models)
+	wantModels := []string{"gpt-5.6", "gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra"}
+	if len(codex.Models) != len(wantModels) {
+		t.Fatalf("codex models = %#v, want exact IDs %v", codex.Models, wantModels)
 		return
 	}
-	model := codex.Models[0]
-	if model.ID != "gpt-5.6" {
-		t.Fatalf("codex model = %q, want gpt-5.6", model.ID)
+	for index, model := range codex.Models {
+		if model.ID != wantModels[index] {
+			t.Fatalf("codex model[%d] = %q, want %q", index, model.ID, wantModels[index])
+		}
+		if !slices.Equal(model.Efforts, []providers.ReasoningEffort{"minimal", "low", "medium", "high", "xhigh", "max"}) {
+			t.Fatalf("codex %s efforts = %v, want canonical order", model.ID, model.Efforts)
+		}
+		assertProviderModality(t, "codex audio input", model, providers.ModalityAudio, providers.ModalityUnsupported, providers.ModalityTransportNone)
+		assertProviderModality(t, "codex video input", model, providers.ModalityVideo, providers.ModalityUnsupported, providers.ModalityTransportNone)
 	}
-	if !slices.Equal(model.Efforts, []providers.ReasoningEffort{"minimal", "low", "medium", "high", "xhigh", "max"}) {
-		t.Fatalf("codex efforts = %v, want canonical order", model.Efforts)
-	}
-	assertProviderModality(t, "codex audio input", model, providers.ModalityAudio, providers.ModalityUnsupported, providers.ModalityTransportNone)
-	assertProviderModality(t, "codex video input", model, providers.ModalityVideo, providers.ModalityUnsupported, providers.ModalityTransportNone)
 	if len(codex.KnownLimits) != 1 || codex.KnownLimits[0].Maximum == nil || *codex.KnownLimits[0].Maximum != 5 {
 		t.Fatalf("codex known limits = %#v, want referenced image-path maximum 5", codex.KnownLimits)
 	}
@@ -232,13 +238,15 @@ func assertAntigravityCatalogFacts(t *testing.T, agy providers.Descriptor) {
 		t.Fatalf("AGY models = %d, want 11", len(agy.Models))
 		return
 	}
-	if len(agy.Models[0].Efforts) != 3 || !slices.Equal(agy.Models[0].Efforts, []providers.ReasoningEffort{"low", "medium", "high"}) {
-		t.Fatalf("AGY efforts = %v, want low, medium, high", agy.Models[0].Efforts)
+	for _, model := range agy.Models {
+		if len(model.Efforts) != 0 {
+			t.Fatalf("AGY %s efforts = %v, want explicit empty model-encoded effort list", model.ID, model.Efforts)
+		}
 	}
 	for _, kind := range []providers.ModalityKind{providers.ModalityAudio, providers.ModalityVideo} {
 		assertProviderModality(t, fmt.Sprintf("AGY %s input", kind), agy.Models[0], kind, providers.ModalitySupported, providers.ModalityTransportFilePath)
 	}
-	if len(agy.KnownLimits) != 2 || agy.KnownLimits[0].Name != "add_dir_workspace" || agy.KnownLimits[1].Name != "print_timeout" {
+	if len(agy.KnownLimits) != 3 || agy.KnownLimits[0].Name != "add_dir_workspace" || agy.KnownLimits[1].Name != "effort_selection" || agy.KnownLimits[2].Name != "print_timeout" {
 		t.Fatalf("AGY known limits = %#v, want stable name order", agy.KnownLimits)
 	}
 	assertAntigravityPrerequisites(t, agy)

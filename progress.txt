@@ -557,3 +557,34 @@
   - For a cross-repository PR whose local branch is associated with a different default remote, pass the PR head repository explicitly to `gh` and the thread-aware review fetch instead of relying on branch auto-discovery.
   - When all stories, checks, and review threads are complete, preserve `prd.json` and append the delivery evidence to `progress.txt`; no source churn is needed.
 ---
+## 2026-08-10 00:17 -0700 - wo-b3-provider-capability-discovery-cli-review-follow-up
+- What was implemented
+  - Addressed the blocking PR conversation feedback on provider capability truthfulness. The authored Codex manifest now publishes the exact `gpt-5.6`, `gpt-5.6-luna`, `gpt-5.6-sol`, and `gpt-5.6-terra` model IDs with shared effort and modality facts.
+  - Changed AGY discovery to publish explicit empty per-model effort arrays because AGY effort is encoded in exact model IDs and the canonical Providers execution path rejects a separate `ReasoningEffort`; added the named `effort_selection` limit alongside `--add-dir` and `print_timeout`.
+  - Added a behavioral root-service regression that lists the catalog and executes every advertised AGY model/effort combination through the canonical execution policy, so a future rejected advertised effort fails at runtime rather than only through a source/inventory assertion.
+  - Updated human/JSON functional and CLI output assertions, catalog clone/order tests, provider reference guidance, PRD notes, and regenerated the published provider catalog/package metadata from authored manifests.
+- Files changed
+  - `packages/model-providers/providers/codex/provider.yaml`
+  - `packages/model-providers/providers/antigravity/provider.yaml`
+  - `packages/model-providers/generated/catalog.json`
+  - `packages/model-providers/metadata/manifest.json`
+  - `packages/model-providers/catalog_test.go`
+  - `pkg/services/providers/internal/service/service_test.go`
+  - `pkg/services/providers/internal/services/catalog/internal/service/service_test.go`
+  - `pkg/services/providers/transports/cli/list_capability_output_test.go`
+  - `tests/functional/providers/discovery/discovery_test.go`
+  - `docs/reference/providers.md`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `make provider-catalog-generate` and `make model-provider-package-generate` — passed.
+  - `make provider-catalog-check` and `make model-provider-package-check` — passed.
+  - Focused provider/catalog/CLI/functional Go tests — passed.
+  - `go test ./tests/functional/providers/discovery/... -run '^TestProvidersListThroughRootBuildProcess$' -count=1` — passed.
+  - `make docs-reference-smoke`, `make typecheck`, `make test`, `make vet`, `make backend-size`, `make pkg-maint`, `make pkg-file-count`, and `make pkg-structure` — passed.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - An empty capability list can be an intentional public contract, not missing metadata; pair it with a named constraint when a provider encodes the choice in another exact identifier.
+  - Provider model inventories must enumerate exact IDs used by configured Factories; a family label such as `gpt-5.6` is not a substitute for accepted tier IDs.
+  - Catalog/execution consistency regressions should invoke the public service operation with catalog-derived values and an injected adapter, allowing policy drift to fail behaviorally without live provider calls.
+---

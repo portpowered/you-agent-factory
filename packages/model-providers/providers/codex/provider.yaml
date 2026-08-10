@@ -49,14 +49,14 @@ discovery:
       description: Execution requires a writable workspace selected by the factory.
 models:
   - id: gpt-5.6
-    efforts:
+    efforts: &codexEfforts
       - minimal
       - low
       - medium
       - high
       - xhigh
       - max
-    modalities:
+    modalities: &codexModalities
       - direction: input
         modality: audio
         support: unsupported
@@ -89,6 +89,15 @@ models:
         modality: video
         support: unsupported
         transport: none
+  - id: gpt-5.6-luna
+    efforts: *codexEfforts
+    modalities: *codexModalities
+  - id: gpt-5.6-sol
+    efforts: *codexEfforts
+    modalities: *codexModalities
+  - id: gpt-5.6-terra
+    efforts: *codexEfforts
+    modalities: *codexModalities
 tools:
   - name: filesystem
     support: supported

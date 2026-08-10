@@ -60,13 +60,14 @@ func completeCapabilityRoot() providers.Service {
 		ImplementationAvailability: providers.ImplementationBundled,
 		Prerequisites:              []providers.Prerequisite{{Kind: providers.PrerequisiteExecutable, Name: "agy", Status: providers.PrerequisiteSatisfied, Description: "The AGY executable is required."}},
 		Models: []providers.ModelDescriptor{{
-			ID: "claude-opus-4-6-thinking", Efforts: []providers.ReasoningEffort{"medium", "low"}, Modalities: []providers.Modality{
+			ID: "claude-opus-4-6-thinking", Efforts: []providers.ReasoningEffort{}, Modalities: []providers.Modality{
 				{Direction: providers.ModalityDirectionInput, Kind: providers.ModalityVideo, Support: providers.ModalitySupported, Transport: providers.ModalityTransportFilePath},
 				{Direction: providers.ModalityDirectionInput, Kind: providers.ModalityAudio, Support: providers.ModalitySupported, Transport: providers.ModalityTransportFilePath},
 			}}},
 		KnownLimits: []providers.KnownLimit{
 			{Name: "print_timeout", Kind: providers.KnownLimitDefault, Unit: "seconds", Description: "AGY uses a five-minute default.", Default: &defaultTimeout},
 			{Name: "add_dir_workspace", Kind: providers.KnownLimitBehavior, Unit: "flag", Description: "AGY extends the workspace.", Value: "--add-dir"},
+			{Name: "effort_selection", Kind: providers.KnownLimitBehavior, Unit: "model_id", Description: "AGY selects effort through the exact model ID.", Value: "model_id"},
 		},
 	}
 	return &recordingProvidersRoot{listResult: providers.ListProvidersResult{Providers: []providers.Descriptor{codex, agy}}}
@@ -76,8 +77,8 @@ func assertCompleteHumanOutput(t *testing.T, output string) {
 	t.Helper()
 	for _, want := range []string{
 		"Technical support:\tproduction", "Implementation:\tbundled", "Models:", "Efforts:\tlow, high", "Input modalities:",
-		"audio: unsupported (transport: none)", "video: unsupported (transport: none)", "video: supported (transport: file_path)",
-		"Known limits:", "referenced_image_paths [maximum, paths] maximum=5", "add_dir_workspace [behavior, flag] value=--add-dir", "print_timeout [default, seconds] default=300",
+		"audio: unsupported (transport: none)", "video: unsupported (transport: none)", "video: supported (transport: file_path)", "Efforts:\tnone",
+		"Known limits:", "referenced_image_paths [maximum, paths] maximum=5", "add_dir_workspace [behavior, flag] value=--add-dir", "effort_selection [behavior, model_id] value=model_id", "print_timeout [default, seconds] default=300",
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("human output missing %q:\n%s", want, output)
@@ -119,8 +120,8 @@ func assertAGYModelFacts(t *testing.T, models []listModelJSON) {
 		t.Fatalf("AGY models = %#v", models)
 	}
 	model := models[0]
-	if len(model.Efforts) != 2 || model.Efforts[0] != "low" || model.Efforts[1] != "medium" {
-		t.Fatalf("AGY effort order = %#v", model.Efforts)
+	if len(model.Efforts) != 0 {
+		t.Fatalf("AGY efforts = %#v, want explicit empty model-encoded effort list", model.Efforts)
 	}
 	if len(model.Modalities) != 2 {
 		t.Fatalf("AGY modalities = %#v", model.Modalities)
@@ -132,14 +133,17 @@ func assertAGYModelFacts(t *testing.T, models []listModelJSON) {
 
 func assertAGYLimitFacts(t *testing.T, limits []listKnownLimitJSON) {
 	t.Helper()
-	if len(limits) != 2 {
+	if len(limits) != 3 {
 		t.Fatalf("AGY limits = %#v", limits)
 	}
 	if limits[0].Name != "add_dir_workspace" || limits[0].Value != "--add-dir" {
 		t.Fatalf("AGY workspace limit = %#v", limits[0])
 	}
-	if limits[1].Name != "print_timeout" || limits[1].Default == nil || *limits[1].Default != 300 {
-		t.Fatalf("AGY timeout limit = %#v", limits[1])
+	if limits[1].Name != "effort_selection" || limits[1].Value != "model_id" {
+		t.Fatalf("AGY effort-selection limit = %#v", limits[1])
+	}
+	if limits[2].Name != "print_timeout" || limits[2].Default == nil || *limits[2].Default != 300 {
+		t.Fatalf("AGY timeout limit = %#v", limits[2])
 	}
 }
 

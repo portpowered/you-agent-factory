@@ -82,17 +82,25 @@ func TestCatalogPublishesCanonicalCapabilityFacts(t *testing.T) {
 		t.Fatal("codex is missing from the catalog")
 	}
 	codexModels := derefSlice(codex.Models)
-	if len(codexModels) != 1 || codexModels[0].Id != "gpt-5.6" {
-		t.Fatalf("codex models = %#v, want only gpt-5.6", codexModels)
+	wantCodexModels := []string{"gpt-5.6", "gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra"}
+	if len(codexModels) != len(wantCodexModels) {
+		t.Fatalf("codex models = %#v, want exact IDs %v", codexModels, wantCodexModels)
 	}
-	if got := effortStrings(codexModels[0].Efforts); !wantStringSlice(got, []string{"minimal", "low", "medium", "high", "xhigh", "max"}) {
-		t.Fatalf("codex efforts = %v, want minimal through max; comparison = %t", got, wantStringSlice(got, []string{"minimal", "low", "medium", "high", "xhigh", "max"}))
+	for index, model := range codexModels {
+		if model.Id != wantCodexModels[index] {
+			t.Fatalf("codex model[%d] = %q, want %q", index, model.Id, wantCodexModels[index])
+		}
+		if got := effortStrings(model.Efforts); !wantStringSlice(got, []string{"minimal", "low", "medium", "high", "xhigh", "max"}) {
+			t.Fatalf("codex %s efforts = %v, want minimal through max", model.Id, got)
+		}
 	}
-	if modality := findModality(codexModels[0].Modalities, "input", "audio"); modality == nil || modality.Support != generated.ProviderModalitySupportUnsupported || modality.Transport != generated.None {
-		t.Fatalf("codex audio input = %#v, want explicitly unsupported/none", modality)
-	}
-	if modality := findModality(codexModels[0].Modalities, "input", "video"); modality == nil || modality.Support != generated.ProviderModalitySupportUnsupported || modality.Transport != generated.None {
-		t.Fatalf("codex video input = %#v, want explicitly unsupported/none", modality)
+	for _, model := range codexModels {
+		if modality := findModality(model.Modalities, "input", "audio"); modality == nil || modality.Support != generated.ProviderModalitySupportUnsupported || modality.Transport != generated.None {
+			t.Fatalf("codex %s audio input = %#v, want explicitly unsupported/none", model.Id, modality)
+		}
+		if modality := findModality(model.Modalities, "input", "video"); modality == nil || modality.Support != generated.ProviderModalitySupportUnsupported || modality.Transport != generated.None {
+			t.Fatalf("codex %s video input = %#v, want explicitly unsupported/none", model.Id, modality)
+		}
 	}
 	codexLimits := derefSlice(codex.KnownLimits)
 	if len(codexLimits) != 1 || codexLimits[0].Name != "referenced_image_paths" || codexLimits[0].Maximum == nil || *codexLimits[0].Maximum != 5 {
@@ -104,8 +112,10 @@ func TestCatalogPublishesCanonicalCapabilityFacts(t *testing.T) {
 		t.Fatal("antigravity is missing from the catalog")
 	}
 	agyModels := derefSlice(agy.Models)
-	if got := effortStrings(agyModels[0].Efforts); !wantStringSlice(got, []string{"low", "medium", "high"}) {
-		t.Fatalf("AGY efforts = %v, want low, medium, high", got)
+	for _, model := range agyModels {
+		if got := effortStrings(model.Efforts); len(got) != 0 {
+			t.Fatalf("AGY %s efforts = %v, want explicit empty model-encoded effort list", model.Id, got)
+		}
 	}
 	if modality := findModality(agyModels[0].Modalities, "input", "audio"); modality == nil || modality.Support != generated.ProviderModalitySupportSupported || modality.Transport != generated.FilePath {
 		t.Fatalf("AGY audio input = %#v, want supported/file_path", modality)
@@ -114,7 +124,7 @@ func TestCatalogPublishesCanonicalCapabilityFacts(t *testing.T) {
 		t.Fatalf("AGY video input = %#v, want supported/file_path", modality)
 	}
 	agyLimits := derefSlice(agy.KnownLimits)
-	if len(agyLimits) != 2 || agyLimits[0].Name != "add_dir_workspace" || agyLimits[1].Name != "print_timeout" {
+	if len(agyLimits) != 3 || agyLimits[0].Name != "add_dir_workspace" || agyLimits[1].Name != "effort_selection" || agyLimits[2].Name != "print_timeout" {
 		t.Fatalf("AGY known limits = %#v, want stable name order", agyLimits)
 	}
 }
@@ -187,10 +197,12 @@ func TestPublishedValuesAreDetachedAcrossCallers(t *testing.T) {
 	firstCatalog.Providers[0].Aliases = append(firstCatalog.Providers[0].Aliases, "mutated")
 	firstModels := derefSlice(firstCatalog.Providers[0].Models)
 	firstModels[0].Id = "mutated-model"
-	firstModels[0].Efforts[0] = "mutated-effort"
+	firstModels[0].Efforts = append(firstModels[0].Efforts, "mutated-effort")
 	firstLimits := derefSlice(firstCatalog.Providers[0].KnownLimits)
-	if firstLimits[1].Default != nil {
-		*firstLimits[1].Default = 999
+	for index := range firstLimits {
+		if firstLimits[index].Default != nil {
+			*firstLimits[index].Default = 999
+		}
 	}
 
 	thirdCatalog, err := modelproviders.Catalog()
@@ -204,11 +216,22 @@ func TestPublishedValuesAreDetachedAcrossCallers(t *testing.T) {
 		t.Fatal("mutating parsed aliases affected a later caller")
 	}
 	thirdModels := derefSlice(thirdCatalog.Providers[0].Models)
-	if thirdModels[0].Id == "mutated-model" || thirdModels[0].Efforts[0] == "mutated-effort" {
+	if thirdModels[0].Id == "mutated-model" || containsEffort(thirdModels[0].Efforts, "mutated-effort") {
 		t.Fatal("mutating parsed model facts affected a later caller")
 	}
 	thirdLimits := derefSlice(thirdCatalog.Providers[0].KnownLimits)
-	if thirdLimits[1].Default == nil || *thirdLimits[1].Default != 300 {
-		t.Fatal("mutating parsed limit facts affected a later caller")
+	for _, limit := range thirdLimits {
+		if limit.Default != nil && *limit.Default != 300 {
+			t.Fatal("mutating parsed limit facts affected a later caller")
+		}
 	}
+}
+
+func containsEffort(values []generated.ProviderEffort, want string) bool {
+	for _, value := range values {
+		if string(value) == want {
+			return true
+		}
+	}
+	return false
 }

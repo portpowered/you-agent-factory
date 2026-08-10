@@ -92,14 +92,18 @@ func assertHumanFacts(t *testing.T, output string) {
 	}
 	for _, want := range []string{
 		"gpt-5.6",
+		"gpt-5.6-luna",
+		"gpt-5.6-sol",
+		"gpt-5.6-terra",
 		"audio: unsupported (transport: none)",
 		"video: unsupported (transport: none)",
 		"referenced_image_paths [maximum, paths] maximum=5",
 		"claude-opus-4-6-thinking",
-		"Efforts:\tlow, medium, high",
+		"Efforts:\tnone",
 		"audio: supported (transport: file_path)",
 		"video: supported (transport: file_path)",
 		"add_dir_workspace [behavior, flag] value=--add-dir",
+		"effort_selection [behavior, model_id] value=model_id",
 		"print_timeout [default, seconds] default=300",
 	} {
 		if !strings.Contains(output, want) {
@@ -172,12 +176,14 @@ func assertJSONFacts(t *testing.T, output string) {
 	}
 
 	codex := byID["codex"]
-	gpt := findModel(codex.Models, "gpt-5.6")
-	if gpt == nil {
-		t.Fatal("Codex is missing gpt-5.6")
+	for _, modelID := range []string{"gpt-5.6", "gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra"} {
+		gpt := findModel(codex.Models, modelID)
+		if gpt == nil {
+			t.Fatalf("Codex is missing %s", modelID)
+		}
+		assertModality(t, gpt.Modalities, "input", "audio", "unsupported", "none")
+		assertModality(t, gpt.Modalities, "input", "video", "unsupported", "none")
 	}
-	assertModality(t, gpt.Modalities, "input", "audio", "unsupported", "none")
-	assertModality(t, gpt.Modalities, "input", "video", "unsupported", "none")
 	imageLimit := findLimit(codex.KnownLimits, "referenced_image_paths")
 	if imageLimit == nil || imageLimit.Maximum == nil || *imageLimit.Maximum != 5 {
 		t.Fatalf("Codex image-path limit = %#v, want maximum 5", imageLimit)
@@ -185,13 +191,16 @@ func assertJSONFacts(t *testing.T, output string) {
 
 	antigravity := byID["antigravity"]
 	agyModel := findModel(antigravity.Models, "claude-opus-4-6-thinking")
-	if agyModel == nil || !sameStrings(agyModel.Efforts, []string{"low", "medium", "high"}) {
-		t.Fatalf("AGY model/efforts = %#v, want claude-opus-4-6-thinking with low, medium, high", agyModel)
+	if agyModel == nil || len(agyModel.Efforts) != 0 {
+		t.Fatalf("AGY model/efforts = %#v, want claude-opus-4-6-thinking with explicit empty efforts", agyModel)
 	}
 	assertModality(t, agyModel.Modalities, "input", "audio", "supported", "file_path")
 	assertModality(t, agyModel.Modalities, "input", "video", "supported", "file_path")
 	if limit := findLimit(antigravity.KnownLimits, "add_dir_workspace"); limit == nil || limit.Value != "--add-dir" {
 		t.Fatalf("AGY workspace limit = %#v, want --add-dir", limit)
+	}
+	if limit := findLimit(antigravity.KnownLimits, "effort_selection"); limit == nil || limit.Value != "model_id" {
+		t.Fatalf("AGY effort-selection limit = %#v, want model_id", limit)
 	}
 	if limit := findLimit(antigravity.KnownLimits, "print_timeout"); limit == nil || limit.Default == nil || *limit.Default != 300 {
 		t.Fatalf("AGY timeout limit = %#v, want default 300", limit)
@@ -227,16 +236,4 @@ func assertModality(t *testing.T, modalities []modalityOutput, direction, modali
 		}
 	}
 	t.Fatalf("missing %s/%s modality", direction, modality)
-}
-
-func sameStrings(got, want []string) bool {
-	if len(got) != len(want) {
-		return false
-	}
-	for index := range want {
-		if got[index] != want[index] {
-			return false
-		}
-	}
-	return true
 }

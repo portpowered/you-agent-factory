@@ -49,10 +49,7 @@ discovery:
       description: Execution requires a writable workspace supplied through --add-dir.
 models:
   - id: claude-opus-4-6-thinking
-    efforts: &agyEfforts
-      - low
-      - medium
-      - high
+    efforts: &agyEfforts []
     modalities: &agyModalities
       - direction: input
         modality: audio
@@ -129,6 +126,11 @@ knownLimits:
     unit: flag
     description: AGY extends the accessible workspace with the --add-dir flag.
     value: --add-dir
+  - name: effort_selection
+    kind: behavior
+    unit: model_id
+    description: AGY selects effort through the exact model ID; the public Providers execution path rejects a separate reasoning effort.
+    value: model_id
   - name: print_timeout
     kind: default
     unit: seconds

@@ -233,21 +233,25 @@ has:
 | --- | --- |
 | `id`, display name, and aliases | The canonical identity accepted by worker and run configuration. |
 | `availability`, `readiness`, and `prerequisites` | Whether the provider is selectable and which sanitized authentication, executable, configuration, or workspace facts affect readiness. |
-| `models` and `efforts` | Supported model IDs and the effort values accepted for each model. |
+| `models` and `efforts` | Exact supported model IDs and the effort values accepted independently for each model. An empty effort list is explicit: the model has no separate public effort setting, such as AGY's model-encoded selection. |
 | `modalities` | Directional input/output support, including the transport such as `inline`, `file_path`, or `none`. Unsupported values are explicit. |
 | `tools` | Named tools and whether the provider advertises them as supported. |
 | `knownLimits` | Named behavior, default, or maximum constraints with typed values such as seconds, paths, and flags. |
 
 The current first-party entries make several preflight constraints explicit:
 
-- Codex `gpt-5.6` supports text and image input but marks audio and video
-  understanding as unsupported. Image generation accepts at most five
+- Codex publishes the exact IDs `gpt-5.6`, `gpt-5.6-luna`, `gpt-5.6-sol`, and
+  `gpt-5.6-terra`. Each supports text and image input but marks audio and
+  video understanding as unsupported. Image generation accepts at most five
   `referenced_image_paths`.
 - `antigravity` is the AGY provider. Its catalog includes
   `claude-opus-4-6-thinking`, `claude-sonnet-4-6`, the Gemini 3.1/3.5/3.6
-  variants, and `gpt-oss-120b-medium`, with `low`, `medium`, and `high`
-  efforts. Audio and video inputs use `file_path` transport. Its named limits
-  expose workspace extension through `--add-dir` and a five-minute default
+  variants, and `gpt-oss-120b-medium`. Its models publish an explicit empty
+  `efforts` list because AGY selects effort through exact model IDs where the
+  ID carries a `-low`, `-medium`, or `-high` suffix; the public Providers
+  execution path rejects a separate reasoning effort. Audio and video inputs
+  use `file_path` transport. Its named limits expose that model-ID selection,
+  workspace extension through `--add-dir`, and a five-minute default
   `print_timeout` (300 seconds).
 - Claude and any configured ACP identity use the same field shape. Empty model,
   tool, or limit arrays are reported explicitly, so missing metadata is not
