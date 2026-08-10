@@ -412,6 +412,9 @@
           "description": "Deprecated compatibility copy of the dispatch chaining-trace identifier; prefer FactoryEvent.context.currentChainingTraceId.",
           "type": "string"
         },
+        "expectedArtifactContext": {
+          "$ref": "#/$defs/ExpectedArtifactTemplateContext"
+        },
         "inputs": {
           "items": {
             "$ref": "#/$defs/DispatchConsumedWorkRef"
@@ -535,7 +538,7 @@
     },
     "ExpectedArtifact": {
       "additionalProperties": false,
-      "description": "One expected output declaration relative to the dispatch workspace. Pattern is a workspace-relative literal path or glob and may use the dispatch template fields, such as (index .Inputs 0).Name, inside a Go template action.",
+      "description": "One expected output declaration relative to the dispatch workspace. Pattern is a workspace-relative literal path or glob and may use the replay-safe dispatch template fields `.Inputs`, `.Context.Project`, and `.Context.SessionID` inside a Go template action. Host paths, environment variables, and Factory documentation are not supported.",
       "properties": {
         "name": {
           "description": "Customer-visible name for this expected output declaration.",
@@ -557,6 +560,21 @@
         "name",
         "pattern"
       ],
+      "type": "object"
+    },
+    "ExpectedArtifactTemplateContext": {
+      "additionalProperties": false,
+      "description": "Stable, non-host context used when rendering expected-artifact patterns. Filesystem paths, environment variables, and Factory documentation are not part of this replayable vocabulary.",
+      "properties": {
+        "project": {
+          "description": "Stable project identifier for the dispatch.",
+          "type": "string"
+        },
+        "sessionId": {
+          "description": "Stable Factory Session identifier for the dispatch.",
+          "type": "string"
+        }
+      },
       "type": "object"
     },
     "ExpectedArtifactVerification": {
@@ -583,6 +601,11 @@
     "ExpectedArtifactVerificationEntry": {
       "additionalProperties": false,
       "properties": {
+        "declarationIndex": {
+          "description": "One-based position in the normalized expected-artifact declaration list.",
+          "minimum": 1,
+          "type": "integer"
+        },
         "name": {
           "minLength": 1,
           "type": "string"

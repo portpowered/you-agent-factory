@@ -1452,7 +1452,7 @@ type ErrorTarget struct {
 	Kind string `json:"kind"`
 }
 
-// ExpectedArtifact One expected output declaration relative to the dispatch workspace. Pattern is a workspace-relative literal path or glob and may use the dispatch template fields, such as (index .Inputs 0).Name, inside a Go template action.
+// ExpectedArtifact One expected output declaration relative to the dispatch workspace. Pattern is a workspace-relative literal path or glob and may use the replay-safe dispatch template fields `.Inputs`, `.Context.Project`, and `.Context.SessionID` inside a Go template action. Host paths, environment variables, and Factory documentation are not supported.
 type ExpectedArtifact struct {
 	// Name Customer-visible name for this expected output declaration.
 	Name string `json:"name"`

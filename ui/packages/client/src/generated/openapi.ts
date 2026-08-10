@@ -2093,10 +2093,19 @@ export interface components {
       entries: components["schemas"]["ExpectedArtifactVerificationEntry"][];
     };
     ExpectedArtifactVerificationEntry: {
+      /** @description One-based position in the normalized expected-artifact declaration list. */
+      declarationIndex?: number;
       name: string;
       /** @description Workspace-relative rendered artifact pattern; host paths are never emitted. */
       pattern: string;
       reason: components["schemas"]["ExpectedArtifactVerificationReason"];
+    };
+    /** @description Stable, non-host context used when rendering expected-artifact patterns. Filesystem paths, environment variables, and Factory documentation are not part of this replayable vocabulary. */
+    ExpectedArtifactTemplateContext: {
+      /** @description Stable project identifier for the dispatch. */
+      project?: string;
+      /** @description Stable Factory Session identifier for the dispatch. */
+      sessionId?: string;
     };
     /** @description One effective expected artifact declaration projected on a Work item. Pattern is the rendered workspace-relative literal path or glob, never a host path. */
     WorkExpectedArtifact: {
@@ -3502,6 +3511,7 @@ export interface components {
       inputs: components["schemas"]["DispatchConsumedWorkRef"][];
       resources?: components["schemas"]["Resource"][];
       metadata?: components["schemas"]["DispatchRequestEventMetadata"];
+      expectedArtifactContext?: components["schemas"]["ExpectedArtifactTemplateContext"];
     };
     /** @description Canonical association between one Factory dispatch and the Worker Session allocated to execute it. Dispatch identity remains authoritative in FactoryEvent.context.dispatchId and is not repeated in this payload. */
     DispatchWorkerSessionAssociationEventPayload: {
@@ -4750,6 +4760,12 @@ export interface components {
       maximumExecutionCapabilities: components["schemas"]["ProviderExecutionCapabilities"];
       maximumResponseFidelityCapabilities: components["schemas"]["ProviderResponseFidelityCapabilities"];
       discovery: components["schemas"]["ProviderDiscoveryPrerequisites"];
+      /** @description Named provider models and their complete capability facts in canonical model-ID order. */
+      models?: components["schemas"]["ProviderModel"][];
+      /** @description Named provider tool facts in canonical tool-name order. */
+      tools?: components["schemas"]["ProviderTool"][];
+      /** @description Named provider constraints and bounded behavior facts in canonical name order. */
+      knownLimits?: components["schemas"]["ProviderKnownLimit"][];
       deprecation?: components["schemas"]["ProviderDeprecation"];
     };
     /**
@@ -4826,12 +4842,107 @@ export interface components {
       endpointKinds: components["schemas"]["ProviderDiscoveryEndpointKind"][];
       /** @description Required configuration-key names only; configuration and environment values are forbidden. */
       configurationKeys: string[];
+      /** @description Sanitized executable, authentication, workspace, or configuration requirements. */
+      prerequisites?: components["schemas"]["ProviderDiscoveryPrerequisite"][];
+    };
+    /** @description Sanitized prerequisite guidance that never carries a secret or machine-local value. */
+    ProviderDiscoveryPrerequisite: {
+      /**
+       * @description Sanitized prerequisite category.
+       * @enum {string}
+       */
+      kind: ProviderDiscoveryPrerequisiteKind;
+      /** @description Stable prerequisite name, never a secret value. */
+      name: string;
+      /** @description Bounded setup guidance without environment values or paths. */
+      description: string;
     };
     /**
      * @description Static endpoint transport kind that may be checked without credentials.
      * @enum {string}
      */
     ProviderDiscoveryEndpointKind: ProviderDiscoveryEndpointKind;
+    /**
+     * @description Provider-supported reasoning effort setting for one model.
+     * @enum {string}
+     */
+    ProviderEffort: ProviderEffort;
+    /** @description Capability facts for one named model exposed by a provider. */
+    ProviderModel: {
+      /** @description Exact model identifier accepted by the provider adapter. */
+      id: string;
+      /** @description Reasoning effort values accepted independently by this model. */
+      efforts: components["schemas"]["ProviderEffort"][];
+      /** @description Complete directional modality facts, including unsupported values. */
+      modalities: components["schemas"]["ProviderModality"][];
+    };
+    /** @description One explicit supported or unsupported directional modality fact. */
+    ProviderModality: {
+      direction: components["schemas"]["ProviderModalityDirection"];
+      modality: components["schemas"]["ProviderModalityKind"];
+      support: components["schemas"]["ProviderModalitySupport"];
+      transport: components["schemas"]["ProviderModalityTransport"];
+    };
+    /**
+     * @description Direction in which a provider model accepts or emits a modality.
+     * @enum {string}
+     */
+    ProviderModalityDirection: ProviderModalityDirection;
+    /**
+     * @description Media or content modality understood by a provider model.
+     * @enum {string}
+     */
+    ProviderModalityKind: ProviderModalityKind;
+    /**
+     * @description Whether the provider model supports the modality in this direction.
+     * @enum {string}
+     */
+    ProviderModalitySupport: ProviderModalitySupport;
+    /**
+     * @description How a supported modality is supplied or returned.
+     * @enum {string}
+     */
+    ProviderModalityTransport: ProviderModalityTransport;
+    /** @description One named provider tool fact used for execution planning. */
+    ProviderTool: {
+      /** @description Stable provider-neutral tool name. */
+      name: string;
+      support: components["schemas"]["ProviderToolSupport"];
+      /** @description Bounded explanation of the tool fact. */
+      description: string;
+    };
+    /**
+     * @description Whether the provider exposes a named tool through its integration.
+     * @enum {string}
+     */
+    ProviderToolSupport: ProviderToolSupport;
+    /** @description Named bounded provider constraint or documented behavior. */
+    ProviderKnownLimit: {
+      /** @description Stable machine-readable limit name. */
+      name: string;
+      kind: components["schemas"]["ProviderKnownLimitKind"];
+      /** @description Unit or flag domain for the value. */
+      unit: string;
+      /** @description Bounded operator-facing explanation of the limit. */
+      description: string;
+      /**
+       * Format: int64
+       * @description Positive numeric maximum when kind is maximum.
+       */
+      maximum?: number;
+      /**
+       * Format: int64
+       * @description Positive numeric default when kind is default.
+       */
+      default?: number;
+      /** @description Bounded non-numeric behavior value when kind is behavior. */
+      value?: string;
+    };
+    /**
+     * @description Meaning of the value recorded by one named provider limit fact.
+     * @enum {string}
+     */
+    ProviderKnownLimitKind: ProviderKnownLimitKind;
     /** @description Coherent metadata for a deprecated provider entry. Presence of this object means the provider is deprecated. replacementProviderId, when present, must name a different canonical provider in the same catalog; it cannot identify the deprecated provider itself. */
     ProviderDeprecation: {
       /**
@@ -5550,7 +5661,7 @@ export interface components {
      * @enum {string}
      */
     WorkTypeHandlingBehavior: WorkTypeHandlingBehavior;
-    /** @description One expected output declaration relative to the dispatch workspace. Pattern is a workspace-relative literal path or glob and may use the dispatch template fields, such as (index .Inputs 0).Name, inside a Go template action. */
+    /** @description One expected output declaration relative to the dispatch workspace. Pattern is a workspace-relative literal path or glob and may use the replay-safe dispatch template fields `.Inputs`, `.Context.Project`, and `.Context.SessionID` inside a Go template action. Host paths, environment variables, and Factory documentation are not supported. */
     ExpectedArtifact: {
       /** @description Customer-visible name for this expected output declaration. */
       name: string;
@@ -8640,6 +8751,14 @@ export const ProviderDocumentationLinkKind = {
 } as const;
 export type ProviderDocumentationLinkKind =
   (typeof ProviderDocumentationLinkKind)[keyof typeof ProviderDocumentationLinkKind];
+export const ProviderDiscoveryPrerequisiteKind = {
+  executable: "executable",
+  authentication: "authentication",
+  workspace: "workspace",
+  configuration: "configuration",
+} as const;
+export type ProviderDiscoveryPrerequisiteKind =
+  (typeof ProviderDiscoveryPrerequisiteKind)[keyof typeof ProviderDiscoveryPrerequisiteKind];
 export const ProviderDiscoveryEndpointKind = {
   local_http: "local-http",
   remote_http: "remote-http",
@@ -8648,6 +8767,56 @@ export const ProviderDiscoveryEndpointKind = {
 } as const;
 export type ProviderDiscoveryEndpointKind =
   (typeof ProviderDiscoveryEndpointKind)[keyof typeof ProviderDiscoveryEndpointKind];
+export const ProviderEffort = {
+  minimal: "minimal",
+  low: "low",
+  medium: "medium",
+  high: "high",
+  xhigh: "xhigh",
+  max: "max",
+} as const;
+export type ProviderEffort =
+  (typeof ProviderEffort)[keyof typeof ProviderEffort];
+export const ProviderModalityDirection = {
+  input: "input",
+  output: "output",
+} as const;
+export type ProviderModalityDirection =
+  (typeof ProviderModalityDirection)[keyof typeof ProviderModalityDirection];
+export const ProviderModalityKind = {
+  text: "text",
+  image: "image",
+  audio: "audio",
+  video: "video",
+} as const;
+export type ProviderModalityKind =
+  (typeof ProviderModalityKind)[keyof typeof ProviderModalityKind];
+export const ProviderModalitySupport = {
+  supported: "supported",
+  unsupported: "unsupported",
+} as const;
+export type ProviderModalitySupport =
+  (typeof ProviderModalitySupport)[keyof typeof ProviderModalitySupport];
+export const ProviderModalityTransport = {
+  inline: "inline",
+  file_path: "file_path",
+  none: "none",
+} as const;
+export type ProviderModalityTransport =
+  (typeof ProviderModalityTransport)[keyof typeof ProviderModalityTransport];
+export const ProviderToolSupport = {
+  supported: "supported",
+  unsupported: "unsupported",
+} as const;
+export type ProviderToolSupport =
+  (typeof ProviderToolSupport)[keyof typeof ProviderToolSupport];
+export const ProviderKnownLimitKind = {
+  maximum: "maximum",
+  default: "default",
+  behavior: "behavior",
+} as const;
+export type ProviderKnownLimitKind =
+  (typeof ProviderKnownLimitKind)[keyof typeof ProviderKnownLimitKind];
 export const WorkerModelLocality = {
   LOCAL: "LOCAL",
   CLOUD: "CLOUD",
