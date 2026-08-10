@@ -1605,7 +1605,7 @@ func TestMakeLintPathFailsForUnapprovedRootPackageFamily(t *testing.T) {
 
 	got := string(output)
 	for _, want := range []string{
-		"go run ./cmd/lintcheck -cache-dir",
+		"lintcheck",
 		"-package \"./cmd/pkgboundarycheck\" -- -root \"" + fixtureRoot + "\"",
 		"[agent-factory:pkg-boundary] unapproved root package family: pkg/experimental",
 		"outside the approved package-family allowlist",

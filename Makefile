@@ -93,10 +93,13 @@ LINT_CHECKER_CACHE_DIR ?= .cache/lint-checkers
 # Set LINT_CHECKER_FALLBACK=1 to use the original go run path for one proof.
 LINT_CHECKER_FALLBACK ?= 0
 LINT_CHECKER_DRIVER_PACKAGE := ./cmd/lintcheck
+LINT_CHECKER_DRIVER ?=
+LINT_LANE_PACKAGE := ./cmd/lintlane
+LINT_JOBS ?= 4
 LINT_TARGETS ?= ui-lint ui-deadcode vet backend-size pkg-maint pkg-file-count pkg-boundary pkg-structure package-target-manifest-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-check provider-catalog-check model-provider-package-check durable-runtime-construction-check logging-boundary-check compatibility-alias-check retired-surface-check ownership-inventory-check deadcode
 
 define run_lint_checker
-$(GO) run $(LINT_CHECKER_DRIVER_PACKAGE) -cache-dir "$(LINT_CHECKER_CACHE_DIR)" -go "$(GO)" $(if $(filter 1 true yes,$(LINT_CHECKER_FALLBACK)),-fallback,) -package "$(1)" -- $(2)
+$(if $(LINT_CHECKER_DRIVER),"$(LINT_CHECKER_DRIVER)",$(GO) run $(LINT_CHECKER_DRIVER_PACKAGE)) -cache-dir "$(LINT_CHECKER_CACHE_DIR)" -go "$(GO)" $(if $(filter 1 true yes,$(LINT_CHECKER_FALLBACK)),-fallback,) -package "$(1)" -- $(2)
 endef
 
 define run_verification_step
@@ -595,7 +598,7 @@ artifact-contract-closeout:
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/workers/script -run "TestWorkerPublicContractSmoke_" -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 lint:
-	$(MAKE) $(LINT_TARGETS)
+	$(GO) run $(LINT_LANE_PACKAGE) -make "$(MAKE)" -jobs "$(LINT_JOBS)" -go "$(GO)" -cache-dir "$(LINT_CHECKER_CACHE_DIR)" $(if $(LINT_CHECKER_DRIVER),-checker-driver "$(LINT_CHECKER_DRIVER)",-checker-package "$(LINT_CHECKER_DRIVER_PACKAGE)") -- $(LINT_TARGETS)
 
 backend-size:
 	$(call run_lint_checker,./cmd/backendsizecheck,-root "$(BACKEND_SIZE_ROOT)")
