@@ -54,8 +54,8 @@
         "Tests pass"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented the Providers-owned list renderer with a stable human summary/details layout and a JSON envelope covering publication posture, availability/readiness, prerequisites, models, efforts, directional modalities, tools, known limits, and capabilities. Nested provider/model/modality/effort/tool/prerequisite/limit ordering is canonicalized from detached descriptors; empty arrays and unsupported modality records remain explicit. Output is buffered so writer failures return errors before success diagnostics, and verbose failure diagnostics expose only a safe stage/type. Focused Providers CLI tests, all Providers package tests, affected CLI transport tests, go vet, backend-size, pkg-file-count, CLI manifest, and docs reference checks pass. The repository-wide make test target still reports the unrelated existing stale packages/api generated-artifact failure in TestMockWorkersSchema_StaleStagingDetectedByContractCheck."
     },
     {
       "id": "wo-b3-provider-capability-discovery-cli-003",
