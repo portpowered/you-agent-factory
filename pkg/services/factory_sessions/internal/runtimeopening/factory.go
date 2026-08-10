@@ -59,34 +59,21 @@ type ExecutionRuntimeOpening interface {
 	) (roles.OpenedExecutionRuntime, error)
 }
 
-// Dependencies is the Factory Sessions-owned construction input for the one
-// process-scoped runtime-opening factory. Groups are construction vocabulary:
-// they select fixed collaborators once in canonical Wire composition and do
-// not expose a runtime service locator or an alternate opening path.
-//
-// Validation walks groups and members in the declaration order below. That
-// stable order keeps incomplete composition failures deterministic and inert.
-type Dependencies struct {
-	ProviderSessions   *ProviderSessionsDependencies
-	FactoryRuntime     *FactoryRuntimeDependencies
-	FactoryDefinitions *FactoryDefinitionsDependencies
-	FactorySessions    *FactorySessionsDependencies
-	Work               *WorkDependencies
-	Automations        *AutomationsDependencies
-	Models             *ModelsDependencies
-	Recordings         *RecordingsDependencies
-	Workers            *WorkersDependencies
-	OperatorSettings   *OperatorSettingsDependencies
-}
+// The owner-port contracts below are the Factory Sessions-owned construction
+// vocabulary for the one process-scoped runtime-opening factory. Each
+// contract names one owner and contains only the fixed collaborators selected
+// for that owner by canonical Wire composition. Runtime opening receives the
+// contracts as separate constructor arguments; there is no aggregate
+// dependency bag or secondary graph for an operation to consult.
 
-// ProviderSessionsDependencies contains the Provider Sessions-owned runtime
+// ProviderSessionsPorts contains the Provider Sessions-owned runtime
 // collaborators.
-type ProviderSessionsDependencies struct {
+type ProviderSessionsPorts struct {
 	Service providersessions.Service
 }
 
-// FactoryRuntimeDependencies contains Factory Runtime's opening collaborators.
-type FactoryRuntimeDependencies struct {
+// FactoryRuntimePorts contains Factory Runtime's opening collaborators.
+type FactoryRuntimePorts struct {
 	FactoryWorkflows                factoryruntime.JavaScriptWorkflowDefinitions
 	WorkflowPreview                 factoryruntime.WorkflowPreviewOperation
 	WorkersRuntimeExecutorsFactory  factoryruntime.WorkersRuntimeExecutorsFactory
@@ -97,9 +84,9 @@ type FactoryRuntimeDependencies struct {
 	NewSessionLogger                factoryruntime.SessionLoggerFactory
 }
 
-// FactoryDefinitionsDependencies contains Factory Definitions-owned opening
+// FactoryDefinitionsPorts contains Factory Definitions-owned opening
 // collaborators.
-type FactoryDefinitionsDependencies struct {
+type FactoryDefinitionsPorts struct {
 	Validator                     factorydefinitions.Validator
 	NamedPaths                    factorydefinitions.NamedPathResolver
 	Factory                       FactoryDefinitionsFactory
@@ -110,9 +97,8 @@ type FactoryDefinitionsDependencies struct {
 	CaptureLoadedFactorySnapshot  factorydefinitions.LoadedFactorySnapshotCapturer
 }
 
-// FactorySessionsDependencies contains Factory Sessions-owned opening
-// collaborators.
-type FactorySessionsDependencies struct {
+// FactorySessionsPorts contains Factory Sessions-owned opening collaborators.
+type FactorySessionsPorts struct {
 	Service                        factorysessions.Service
 	DurableExecutionFactory        DurableExecutionFactory
 	FactorySessionExecutionFactory FactorySessionExecutionFactory
@@ -124,25 +110,25 @@ type FactorySessionsDependencies struct {
 	ProviderIdentities             factorysessions.ProviderIdentityResolver
 }
 
-// WorkDependencies contains Work-owned opening collaborators.
-type WorkDependencies struct {
+// WorkPorts contains Work-owned opening collaborators.
+type WorkPorts struct {
 	Factory             WorkFactory
 	ContentMaterializer work.ContentMaterializer
 }
 
-// AutomationsDependencies contains Automations-owned opening collaborators.
-type AutomationsDependencies struct {
+// AutomationsPorts contains Automations-owned opening collaborators.
+type AutomationsPorts struct {
 	Factory              AutomationFactory
 	HostedSourcesFactory AutomationHostedSourcesFactory
 }
 
-// ModelsDependencies contains the Models root used while opening a session.
-type ModelsDependencies struct {
+// ModelsPorts contains the Models root used while opening a session.
+type ModelsPorts struct {
 	Service models.Service
 }
 
-// RecordingsDependencies contains Recordings-owned opening collaborators.
-type RecordingsDependencies struct {
+// RecordingsPorts contains Recordings-owned opening collaborators.
+type RecordingsPorts struct {
 	ProjectionFactory      RecordingsProjectionFactory
 	LifecycleFactory       RecordingLifecycleFactory
 	RuntimeLedgerFactory   RuntimeLedgerFactory
@@ -152,8 +138,8 @@ type RecordingsDependencies struct {
 	ReplayInputs           recordings.ReplayInputLoader
 }
 
-// WorkersDependencies contains Workers-owned opening collaborators.
-type WorkersDependencies struct {
+// WorkersPorts contains Workers-owned opening collaborators.
+type WorkersPorts struct {
 	ExecutionFactory                 WorkerExecutionFactory
 	RuntimeFactory                   WorkersRuntimeFactory
 	LocalRuntimeHooksFactory         WorkersLocalRuntimeHooksFactory
@@ -161,9 +147,9 @@ type WorkersDependencies struct {
 	ProviderFromCommandRunnerFactory ProviderFromCommandRunnerFactory
 }
 
-// OperatorSettingsDependencies contains the Operator Settings capability used
+// OperatorSettingsPorts contains the Operator Settings capability used
 // to establish the session backend scope.
-type OperatorSettingsDependencies struct {
+type OperatorSettingsPorts struct {
 	EnsureBackendScope operatorsettings.BackendScopeEnsurer
 }
 
@@ -223,48 +209,59 @@ var (
 	_ ExecutionRuntimeOpening   = (*Factory)(nil)
 )
 
-func NewFactory(dependencies Dependencies) (*Factory, error) {
-	if err := dependencies.validate(); err != nil {
+func NewFactory(
+	providerSessions *ProviderSessionsPorts,
+	factoryRuntime *FactoryRuntimePorts,
+	factoryDefinitions *FactoryDefinitionsPorts,
+	factorySessions *FactorySessionsPorts,
+	workPorts *WorkPorts,
+	automations *AutomationsPorts,
+	modelsPorts *ModelsPorts,
+	recordingsPorts *RecordingsPorts,
+	workersPorts *WorkersPorts,
+	operatorSettings *OperatorSettingsPorts,
+) (*Factory, error) {
+	if err := validateOwnerPorts(
+		providerSessions,
+		factoryRuntime,
+		factoryDefinitions,
+		factorySessions,
+		workPorts,
+		automations,
+		modelsPorts,
+		recordingsPorts,
+		workersPorts,
+		operatorSettings,
+	); err != nil {
 		return nil, err
 	}
 
-	providerSessions := dependencies.ProviderSessions
-	factoryRuntime := dependencies.FactoryRuntime
-	factoryDefinitions := dependencies.FactoryDefinitions
-	factorySessions := dependencies.FactorySessions
-	workDependencies := dependencies.Work
-	automations := dependencies.Automations
-	modelsDependencies := dependencies.Models
-	recordingsDependencies := dependencies.Recordings
-	workersDependencies := dependencies.Workers
-	operatorSettings := dependencies.OperatorSettings
-
 	return &Factory{
 		durableExecutionFactory:          factorySessions.DurableExecutionFactory,
-		workerExecutionFactory:           workersDependencies.ExecutionFactory,
-		modelService:                     modelsDependencies.Service,
-		workFactory:                      workDependencies.Factory,
+		workerExecutionFactory:           workersPorts.ExecutionFactory,
+		modelService:                     modelsPorts.Service,
+		workFactory:                      workPorts.Factory,
 		automationFactory:                automations.Factory,
 		factorySessionsService:           factorySessions.Service,
 		factorySessionExecutionFactory:   factorySessions.FactorySessionExecutionFactory,
-		recordingsProjectionFactory:      recordingsDependencies.ProjectionFactory,
-		recordingLifecycleFactory:        recordingsDependencies.LifecycleFactory,
-		runtimeLedgerFactory:             recordingsDependencies.RuntimeLedgerFactory,
-		runtimeRecorderFactory:           recordingsDependencies.RuntimeRecorderFactory,
-		replayClockFactory:               recordingsDependencies.ReplayClockFactory,
-		replayExecutionFactory:           recordingsDependencies.ReplayExecutionFactory,
-		workersRuntimeFactory:            workersDependencies.RuntimeFactory,
+		recordingsProjectionFactory:      recordingsPorts.ProjectionFactory,
+		recordingLifecycleFactory:        recordingsPorts.LifecycleFactory,
+		runtimeLedgerFactory:             recordingsPorts.RuntimeLedgerFactory,
+		runtimeRecorderFactory:           recordingsPorts.RuntimeRecorderFactory,
+		replayClockFactory:               recordingsPorts.ReplayClockFactory,
+		replayExecutionFactory:           recordingsPorts.ReplayExecutionFactory,
+		workersRuntimeFactory:            workersPorts.RuntimeFactory,
 		workersRuntimeExecutorsFactory:   factoryRuntime.WorkersRuntimeExecutorsFactory,
 		providerInvocationFactory:        factoryRuntime.ProviderInvocationFactory,
 		workersMockCommandRunnerFactory:  factoryRuntime.WorkersMockCommandRunnerFactory,
 		automationHostedSourcesFactory:   automations.HostedSourcesFactory,
-		workersLocalRuntimeHooksFactory:  workersDependencies.LocalRuntimeHooksFactory,
+		workersLocalRuntimeHooksFactory:  workersPorts.LocalRuntimeHooksFactory,
 		factoryDefinitionsFactory:        factoryDefinitions.Factory,
 		factoryScaffoldInitializer:       factorySessions.FactoryScaffoldInitializer,
 		editableFactoryValidator:         factorySessions.EditableFactoryValidator,
 		initialFactorySnapshotFactory:    factoryDefinitions.InitialFactorySnapshotFactory,
 		factoryRuntimeAssembler:          factoryRuntime.FactoryRuntimeAssembler,
-		workService:                      work.MaterializationService(workDependencies.ContentMaterializer),
+		workService:                      work.MaterializationService(workPorts.ContentMaterializer),
 		providerSessions:                 providerSessions.Service,
 		factoryDefinitionValidator:       factoryDefinitions.Validator,
 		namedPaths:                       factoryDefinitions.NamedPaths,
@@ -273,12 +270,12 @@ func NewFactory(dependencies Dependencies) (*Factory, error) {
 		loadFactory:                      factoryDefinitions.LoadFactory,
 		newLoadedFactory:                 factoryDefinitions.NewLoadedFactory,
 		decodeReplayConfig:               factoryDefinitions.DecodeReplayConfig,
-		replayInputs:                     recordingsDependencies.ReplayInputs,
+		replayInputs:                     recordingsPorts.ReplayInputs,
 		captureLoadedFactorySnapshot:     factoryDefinitions.CaptureLoadedFactorySnapshot,
 		resolveClock:                     factoryRuntime.ResolveClock,
 		newSessionLogger:                 factoryRuntime.NewSessionLogger,
-		adaptWorkerCommandRunner:         workersDependencies.AdaptCommandRunner,
-		providerFromCommandRunnerFactory: workersDependencies.ProviderFromCommandRunnerFactory,
+		adaptWorkerCommandRunner:         workersPorts.AdaptCommandRunner,
+		providerFromCommandRunnerFactory: workersPorts.ProviderFromCommandRunnerFactory,
 		processRuntimeFactory:            factorySessions.ProcessRuntimeFactory,
 		ensureOperatorBackendScope:       operatorSettings.EnsureBackendScope,
 		generateRuntimeInstanceID:        factorySessions.GenerateRuntimeInstanceID,
@@ -287,18 +284,32 @@ func NewFactory(dependencies Dependencies) (*Factory, error) {
 	}, nil
 }
 
-func (dependencies Dependencies) validate() error {
+// validateOwnerPorts checks the fixed owner contracts in declaration order.
+// It deliberately performs no collaborator calls, so an incomplete process
+// graph fails before any operation-scoped work can begin.
+func validateOwnerPorts(
+	providerSessions *ProviderSessionsPorts,
+	factoryRuntime *FactoryRuntimePorts,
+	factoryDefinitions *FactoryDefinitionsPorts,
+	factorySessions *FactorySessionsPorts,
+	workPorts *WorkPorts,
+	automations *AutomationsPorts,
+	modelsPorts *ModelsPorts,
+	recordingsPorts *RecordingsPorts,
+	workersPorts *WorkersPorts,
+	operatorSettings *OperatorSettingsPorts,
+) error {
 	for _, validate := range []func() error{
-		dependencies.validateProviderSessions,
-		dependencies.validateFactoryRuntime,
-		dependencies.validateFactoryDefinitions,
-		dependencies.validateFactorySessions,
-		dependencies.validateWork,
-		dependencies.validateAutomations,
-		dependencies.validateModels,
-		dependencies.validateRecordings,
-		dependencies.validateWorkers,
-		dependencies.validateOperatorSettings,
+		func() error { return validateProviderSessions(providerSessions) },
+		func() error { return validateFactoryRuntime(factoryRuntime) },
+		func() error { return validateFactoryDefinitions(factoryDefinitions) },
+		func() error { return validateFactorySessions(factorySessions) },
+		func() error { return validateWork(workPorts) },
+		func() error { return validateAutomations(automations) },
+		func() error { return validateModels(modelsPorts) },
+		func() error { return validateRecordings(recordingsPorts) },
+		func() error { return validateWorkers(workersPorts) },
+		func() error { return validateOperatorSettings(operatorSettings) },
 	} {
 		if err := validate(); err != nil {
 			return err
@@ -307,9 +318,8 @@ func (dependencies Dependencies) validate() error {
 	return nil
 }
 
-func (dependencies Dependencies) validateProviderSessions() error {
-	group := dependencies.ProviderSessions
-	if err := requireRuntimeOpeningGroup("Provider Sessions", group); err != nil {
+func validateProviderSessions(group *ProviderSessionsPorts) error {
+	if err := requireRuntimeOpeningPorts("Provider Sessions", group); err != nil {
 		return err
 	}
 	return validateRuntimeOpeningRequirements("Provider Sessions",
@@ -317,9 +327,8 @@ func (dependencies Dependencies) validateProviderSessions() error {
 	)
 }
 
-func (dependencies Dependencies) validateFactoryRuntime() error {
-	group := dependencies.FactoryRuntime
-	if err := requireRuntimeOpeningGroup("Factory Runtime", group); err != nil {
+func validateFactoryRuntime(group *FactoryRuntimePorts) error {
+	if err := requireRuntimeOpeningPorts("Factory Runtime", group); err != nil {
 		return err
 	}
 	return validateRuntimeOpeningRequirements("Factory Runtime",
@@ -334,9 +343,8 @@ func (dependencies Dependencies) validateFactoryRuntime() error {
 	)
 }
 
-func (dependencies Dependencies) validateFactoryDefinitions() error {
-	group := dependencies.FactoryDefinitions
-	if err := requireRuntimeOpeningGroup("Factory Definitions", group); err != nil {
+func validateFactoryDefinitions(group *FactoryDefinitionsPorts) error {
+	if err := requireRuntimeOpeningPorts("Factory Definitions", group); err != nil {
 		return err
 	}
 	return validateRuntimeOpeningRequirements("Factory Definitions",
@@ -351,9 +359,8 @@ func (dependencies Dependencies) validateFactoryDefinitions() error {
 	)
 }
 
-func (dependencies Dependencies) validateFactorySessions() error {
-	group := dependencies.FactorySessions
-	if err := requireRuntimeOpeningGroup("Factory Sessions", group); err != nil {
+func validateFactorySessions(group *FactorySessionsPorts) error {
+	if err := requireRuntimeOpeningPorts("Factory Sessions", group); err != nil {
 		return err
 	}
 	return validateRuntimeOpeningRequirements("Factory Sessions",
@@ -369,9 +376,8 @@ func (dependencies Dependencies) validateFactorySessions() error {
 	)
 }
 
-func (dependencies Dependencies) validateWork() error {
-	group := dependencies.Work
-	if err := requireRuntimeOpeningGroup("Work", group); err != nil {
+func validateWork(group *WorkPorts) error {
+	if err := requireRuntimeOpeningPorts("Work", group); err != nil {
 		return err
 	}
 	return validateRuntimeOpeningRequirements("Work",
@@ -380,9 +386,8 @@ func (dependencies Dependencies) validateWork() error {
 	)
 }
 
-func (dependencies Dependencies) validateAutomations() error {
-	group := dependencies.Automations
-	if err := requireRuntimeOpeningGroup("Automations", group); err != nil {
+func validateAutomations(group *AutomationsPorts) error {
+	if err := requireRuntimeOpeningPorts("Automations", group); err != nil {
 		return err
 	}
 	return validateRuntimeOpeningRequirements("Automations",
@@ -391,9 +396,8 @@ func (dependencies Dependencies) validateAutomations() error {
 	)
 }
 
-func (dependencies Dependencies) validateModels() error {
-	group := dependencies.Models
-	if err := requireRuntimeOpeningGroup("Models", group); err != nil {
+func validateModels(group *ModelsPorts) error {
+	if err := requireRuntimeOpeningPorts("Models", group); err != nil {
 		return err
 	}
 	return validateRuntimeOpeningRequirements("Models",
@@ -401,9 +405,8 @@ func (dependencies Dependencies) validateModels() error {
 	)
 }
 
-func (dependencies Dependencies) validateRecordings() error {
-	group := dependencies.Recordings
-	if err := requireRuntimeOpeningGroup("Recordings", group); err != nil {
+func validateRecordings(group *RecordingsPorts) error {
+	if err := requireRuntimeOpeningPorts("Recordings", group); err != nil {
 		return err
 	}
 	return validateRuntimeOpeningRequirements("Recordings",
@@ -417,9 +420,8 @@ func (dependencies Dependencies) validateRecordings() error {
 	)
 }
 
-func (dependencies Dependencies) validateWorkers() error {
-	group := dependencies.Workers
-	if err := requireRuntimeOpeningGroup("Workers", group); err != nil {
+func validateWorkers(group *WorkersPorts) error {
+	if err := requireRuntimeOpeningPorts("Workers", group); err != nil {
 		return err
 	}
 	return validateRuntimeOpeningRequirements("Workers",
@@ -431,9 +433,8 @@ func (dependencies Dependencies) validateWorkers() error {
 	)
 }
 
-func (dependencies Dependencies) validateOperatorSettings() error {
-	group := dependencies.OperatorSettings
-	if err := requireRuntimeOpeningGroup("Operator Settings", group); err != nil {
+func validateOperatorSettings(group *OperatorSettingsPorts) error {
+	if err := requireRuntimeOpeningPorts("Operator Settings", group); err != nil {
 		return err
 	}
 	return validateRuntimeOpeningRequirements("Operator Settings",
@@ -446,9 +447,9 @@ type runtimeOpeningRequirement struct {
 	value  any
 }
 
-func requireRuntimeOpeningGroup(owner string, group any) error {
-	if missingRuntimeOpeningDependency(group) {
-		return fmt.Errorf("Factory Sessions runtime-opening %s group is required", owner)
+func requireRuntimeOpeningPorts(owner string, ports any) error {
+	if missingRuntimeOpeningDependency(ports) {
+		return fmt.Errorf("Factory Sessions runtime-opening %s owner ports are required", owner)
 	}
 	return nil
 }

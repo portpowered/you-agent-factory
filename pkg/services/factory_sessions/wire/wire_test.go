@@ -75,11 +75,22 @@ func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 func TestNewRuntimeOpeningRejectsIncompleteGroupsAtCompositionBoundary(t *testing.T) {
 	t.Parallel()
 
-	factory, err := NewRuntimeOpening(RuntimeOpeningDependencies{})
+	factory, err := NewRuntimeOpening(
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+	)
 	if factory != nil {
 		t.Fatalf("NewRuntimeOpening() = %#v, want nil factory", factory)
 	}
-	if got, want := err.Error(), "Factory Sessions runtime-opening Provider Sessions group is required"; got != want {
+	if got, want := err.Error(), "Factory Sessions runtime-opening Provider Sessions owner ports are required"; got != want {
 		t.Fatalf("NewRuntimeOpening() error = %q, want %q", got, want)
 	}
 }

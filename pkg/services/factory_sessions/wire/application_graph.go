@@ -89,44 +89,43 @@ type (
 	ProcessLifecycleFactory = processlifecycle.Factory
 	RuntimeHostService      = runtimehosting.Service
 
-	RuntimeOpeningExternalEffects                = runtimeopening.ExternalEffects
-	RuntimeOpeningDependencies                   = runtimeopening.Dependencies
-	ApplicationRuntimeOpening                    = runtimeopening.ApplicationRuntimeOpening
-	InvocationRuntimeOpening                     = runtimeopening.InvocationRuntimeOpening
-	ExecutionRuntimeOpening                      = runtimeopening.ExecutionRuntimeOpening
-	ProviderSessionsRuntimeOpeningDependencies   = runtimeopening.ProviderSessionsDependencies
-	FactoryRuntimeOpeningDependencies            = runtimeopening.FactoryRuntimeDependencies
-	FactoryDefinitionsRuntimeOpeningDependencies = runtimeopening.FactoryDefinitionsDependencies
-	FactorySessionsRuntimeOpeningDependencies    = runtimeopening.FactorySessionsDependencies
-	WorkRuntimeOpeningDependencies               = runtimeopening.WorkDependencies
-	AutomationsRuntimeOpeningDependencies        = runtimeopening.AutomationsDependencies
-	ModelsRuntimeOpeningDependencies             = runtimeopening.ModelsDependencies
-	RecordingsRuntimeOpeningDependencies         = runtimeopening.RecordingsDependencies
-	WorkersRuntimeOpeningDependencies            = runtimeopening.WorkersDependencies
-	OperatorSettingsRuntimeOpeningDependencies   = runtimeopening.OperatorSettingsDependencies
-	WorkFactory                                  = runtimeopening.WorkFactory
-	AutomationFactory                            = runtimeopening.AutomationFactory
-	FactorySessionExecutionFactory               = runtimeopening.FactorySessionExecutionFactory
-	ConductorInvocationWithProgressFactory       = runtimeopening.ConductorInvocationWithProgressFactory
-	RecordingsProjectionFactory                  = runtimeopening.RecordingsProjectionFactory
-	RecordingLifecycleFactory                    = runtimeopening.RecordingLifecycleFactory
-	RuntimeLedgerFactory                         = runtimeopening.RuntimeLedgerFactory
-	ReplayClockFactory                           = runtimeopening.ReplayClockFactory
-	WorkersRuntimeFactory                        = runtimeopening.WorkersRuntimeFactory
-	AutomationHostedSourcesFactory               = runtimeopening.AutomationHostedSourcesFactory
-	WorkersLocalRuntimeHooksFactory              = runtimeopening.WorkersLocalRuntimeHooksFactory
-	FactoryDefinitionsFactory                    = runtimeopening.FactoryDefinitionsFactory
-	DurableExecutionFactory                      = runtimeopening.DurableExecutionFactory
-	DurableExecution                             = runtimeopening.DurableExecution
-	WorkerExecutionFactory                       = runtimeopening.WorkerExecutionFactory
-	WorkerCommandRunnerAdapter                   = runtimeopening.WorkerCommandRunnerAdapter
-	ProviderFromCommandRunnerFactory             = runtimeopening.ProviderFromCommandRunnerFactory
-	FactoryRuntimeAssembler                      = runtimeopening.FactoryRuntimeAssembler
-	RuntimeOpening                               = runtimeopening.Factory
-	RuntimeRoot                                  = runtimeopening.RuntimeRoot
-	ModelPullMetricsRecorder                     = factorysessioncontracts.ModelPullMetricsRecorder
-	InvocationArtifactFileSystem                 = factorysessioncontracts.InvocationArtifactFileSystem
-	InvocationArtifactExporter                   = factorysessioncontracts.InvocationArtifactExporter
+	RuntimeOpeningExternalEffects          = runtimeopening.ExternalEffects
+	ApplicationRuntimeOpening              = runtimeopening.ApplicationRuntimeOpening
+	InvocationRuntimeOpening               = runtimeopening.InvocationRuntimeOpening
+	ExecutionRuntimeOpening                = runtimeopening.ExecutionRuntimeOpening
+	ProviderSessionsRuntimeOpeningPorts    = runtimeopening.ProviderSessionsPorts
+	FactoryRuntimeOpeningPorts             = runtimeopening.FactoryRuntimePorts
+	FactoryDefinitionsRuntimeOpeningPorts  = runtimeopening.FactoryDefinitionsPorts
+	FactorySessionsRuntimeOpeningPorts     = runtimeopening.FactorySessionsPorts
+	WorkRuntimeOpeningPorts                = runtimeopening.WorkPorts
+	AutomationsRuntimeOpeningPorts         = runtimeopening.AutomationsPorts
+	ModelsRuntimeOpeningPorts              = runtimeopening.ModelsPorts
+	RecordingsRuntimeOpeningPorts          = runtimeopening.RecordingsPorts
+	WorkersRuntimeOpeningPorts             = runtimeopening.WorkersPorts
+	OperatorSettingsRuntimeOpeningPorts    = runtimeopening.OperatorSettingsPorts
+	WorkFactory                            = runtimeopening.WorkFactory
+	AutomationFactory                      = runtimeopening.AutomationFactory
+	FactorySessionExecutionFactory         = runtimeopening.FactorySessionExecutionFactory
+	ConductorInvocationWithProgressFactory = runtimeopening.ConductorInvocationWithProgressFactory
+	RecordingsProjectionFactory            = runtimeopening.RecordingsProjectionFactory
+	RecordingLifecycleFactory              = runtimeopening.RecordingLifecycleFactory
+	RuntimeLedgerFactory                   = runtimeopening.RuntimeLedgerFactory
+	ReplayClockFactory                     = runtimeopening.ReplayClockFactory
+	WorkersRuntimeFactory                  = runtimeopening.WorkersRuntimeFactory
+	AutomationHostedSourcesFactory         = runtimeopening.AutomationHostedSourcesFactory
+	WorkersLocalRuntimeHooksFactory        = runtimeopening.WorkersLocalRuntimeHooksFactory
+	FactoryDefinitionsFactory              = runtimeopening.FactoryDefinitionsFactory
+	DurableExecutionFactory                = runtimeopening.DurableExecutionFactory
+	DurableExecution                       = runtimeopening.DurableExecution
+	WorkerExecutionFactory                 = runtimeopening.WorkerExecutionFactory
+	WorkerCommandRunnerAdapter             = runtimeopening.WorkerCommandRunnerAdapter
+	ProviderFromCommandRunnerFactory       = runtimeopening.ProviderFromCommandRunnerFactory
+	FactoryRuntimeAssembler                = runtimeopening.FactoryRuntimeAssembler
+	RuntimeOpening                         = runtimeopening.Factory
+	RuntimeRoot                            = runtimeopening.RuntimeRoot
+	ModelPullMetricsRecorder               = factorysessioncontracts.ModelPullMetricsRecorder
+	InvocationArtifactFileSystem           = factorysessioncontracts.InvocationArtifactFileSystem
+	InvocationArtifactExporter             = factorysessioncontracts.InvocationArtifactExporter
 
 	StandaloneSessionExecutionFactory   = executionopening.StandaloneSessionExecutionFactory
 	WorkerInvocationFactory             = executionopening.WorkerInvocationFactory
@@ -147,8 +146,30 @@ var (
 	NewExecutionOpeningFactory = executionopening.NewFactory
 )
 
-func NewRuntimeOpening(deps RuntimeOpeningDependencies) (*RuntimeOpening, error) {
-	return runtimeopening.NewFactory(deps)
+func NewRuntimeOpening(
+	providerSessions *ProviderSessionsRuntimeOpeningPorts,
+	factoryRuntime *FactoryRuntimeOpeningPorts,
+	factoryDefinitions *FactoryDefinitionsRuntimeOpeningPorts,
+	factorySessions *FactorySessionsRuntimeOpeningPorts,
+	workPorts *WorkRuntimeOpeningPorts,
+	automations *AutomationsRuntimeOpeningPorts,
+	modelsPorts *ModelsRuntimeOpeningPorts,
+	recordingsPorts *RecordingsRuntimeOpeningPorts,
+	workersPorts *WorkersRuntimeOpeningPorts,
+	operatorSettings *OperatorSettingsRuntimeOpeningPorts,
+) (*RuntimeOpening, error) {
+	return runtimeopening.NewFactory(
+		providerSessions,
+		factoryRuntime,
+		factoryDefinitions,
+		factorySessions,
+		workPorts,
+		automations,
+		modelsPorts,
+		recordingsPorts,
+		workersPorts,
+		operatorSettings,
+	)
 }
 
 func NewLifecyclePlanOperation() LifecyclePlanOperation {
