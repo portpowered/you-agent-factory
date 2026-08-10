@@ -2425,3 +2425,18 @@
 - **Learnings for future iterations:**
   - Keep repeated CI flake evidence scoped to the named test and package; a successful isolated rerun is sufficient to validate recovery when the feature diff is untouched.
 ---
+## 2026-08-10 14:45 -07:00 - thr-worktree-build-cache-002 current-main sync follow-up
+- What was implemented
+  - Merged the live PR base `origin/main` at `6e01bee689bbddbffbd920632f07e6b09586cf5c` into the build-cache branch after GitHub reported PR #1860 as conflicting.
+  - Preserved the build-cache `prd.json` and retained both the task progress history and incoming current-main progress history without dropping entries.
+- Files changed
+  - Merge commit `9ce3aa14d`; the PR diff against live `origin/main` remains limited to `Makefile`, `prd.json`, and `progress.txt`.
+- Verification
+  - Resolved conflict markers and validated `prd.json` as standard JSON with both stories still `passes:true`.
+  - `make -n build`, `make -n install`, `make -n GO_BUILD_FLAGS=-a install`, and `make -n verify-build` — passed; only the explicit control emits `-a`.
+  - Merged-head cache-enabled and forced build artifacts had identical SHA-256 hashes and identical `--version` output.
+  - `make test`, `make typecheck`, `make backend-size`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, and `make vet` — passed.
+  - `git diff --check` — passed; temporary merged verification artifacts were removed.
+- **Learnings for future iterations:**
+  - A PR can report `CONFLICTING` immediately after creation when the repository base advances; fetch the PR repository's live base, preserve task-scoped PRD content, merge append-only progress tails, and rerun the local gates before pushing the new head.
+---
