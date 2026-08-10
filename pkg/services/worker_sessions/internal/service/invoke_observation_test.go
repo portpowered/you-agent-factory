@@ -308,77 +308,20 @@ func TestInvokeObservationProjectionAndTranscriptOutcomes(t *testing.T) {
 	if err != nil || got.WorkerSessionID != "worker-1" || got.Transcript != workersessions.TranscriptAvailabilityAvailable {
 		t.Fatalf("GetObservation() = %#v, %v", got, err)
 	}
-	gotByWorker, err := registry.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "worker-1"})
-	if err != nil || gotByWorker.WorkerSessionID != "worker-1" || gotByWorker.ProviderSessionAvailable != got.ProviderSessionAvailable {
-		t.Fatalf("GetObservationByWorkerSessionID() = %#v, %v", gotByWorker, err)
-	}
+	assertWorkerObservationLookups(t, registry, got, canceled)
 	if _, err := registry.GetObservation(context.Background(), workersessions.GetObservationRequest{ProviderSession: providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "missing"}}); !errors.Is(err, workersessions.ErrObservationSessionNotFound) {
 		t.Fatalf("GetObservation(missing) error = %v", err)
-	}
-	if _, err := registry.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "missing"}); !errors.Is(err, workersessions.ErrObservationSessionNotFound) {
-		t.Fatalf("GetObservationByWorkerSessionID(missing) error = %v", err)
 	}
 	if _, err := registry.GetObservation(canceled, workersessions.GetObservationRequest{ProviderSession: ref}); !errors.Is(err, workersessions.ErrObservationCanceled) {
 		t.Fatalf("GetObservation(canceled) error = %v", err)
 	}
-	if _, err := registry.GetObservationByWorkerSessionID(canceled, workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "worker-1"}); !errors.Is(err, workersessions.ErrObservationCanceled) {
-		t.Fatalf("GetObservationByWorkerSessionID(canceled) error = %v", err)
-	}
-	if _, err := registry.projectObservation(canceled, "worker-1"); !errors.Is(err, workersessions.ErrObservationCanceled) {
-		t.Fatalf("projectObservation(canceled) error = %v", err)
-	}
-	if _, err := registry.projectObservation(context.Background(), "missing"); !errors.Is(err, workersessions.ErrObservationSessionNotFound) {
-		t.Fatalf("projectObservation(missing) error = %v", err)
-	}
+	assertObservationProjectionEdges(t, registry, canceled)
 	noStarted := observationMetadata()
 	noStarted.startedAt = time.Time{}
 	projected := baseObservation("worker-1", observationSession("worker-1", workersessions.StateRunning), noStarted)
 	applyObservationTiming(&projected, observationSession("worker-1", workersessions.StateRunning), noStarted, registry.clock)
 	if projected.StartedAt != nil {
 		t.Fatalf("applyObservationTiming(zero start) = %#v, want no timing", projected)
-	}
-}
-
-func TestInvokeObservationProjectionUnavailableOutcomes(t *testing.T) {
-	ref := observationProviderRef()
-	registry := newObservationRegistry(observationProjectorFake{}, nil)
-	registry.sessions["worker-1"] = observationSession("worker-1", workersessions.StateRunning)
-	registry.observations["worker-1"] = observationMetadata()
-	noProvider := newObservationRegistry(nil, nil)
-	noProvider.sessions["worker-1"] = observationSession("worker-1", workersessions.StateRunning)
-	noProvider.observations["worker-1"] = observationMetadata()
-	if _, err := noProvider.GetObservation(context.Background(), workersessions.GetObservationRequest{ProviderSession: ref}); !errors.Is(err, workersessions.ErrObservationProjectionUnavailable) {
-		t.Fatalf("GetObservation(without provider service) error = %v", err)
-	}
-	noReference := newObservationRegistry(nil, nil)
-	noReference.sessions["worker-no-reference"] = workersessions.Session{ID: "worker-no-reference", State: workersessions.StateCompleted}
-	noReference.observations["worker-no-reference"] = observationMetadata()
-	gotNoReference, err := noReference.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "worker-no-reference"})
-	if err != nil || gotNoReference.ProviderSessionAvailable || gotNoReference.WorkerSessionID != "worker-no-reference" {
-		t.Fatalf("GetObservationByWorkerSessionID(no reference) = %#v, %v", gotNoReference, err)
-	}
-	gotIdentity, err := noProvider.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "worker-1"})
-	if err != nil || !gotIdentity.ProviderSessionAvailable || gotIdentity.ProviderSession.ID != ref.ID {
-		t.Fatalf("GetObservationByWorkerSessionID(provider reference without projector) = %#v, %v", gotIdentity, err)
-	}
-	canceledProvider := newObservationRegistry(observationProjectorFake{err: context.Canceled}, nil)
-	canceledProvider.sessions["worker-1"] = observationSession("worker-1", workersessions.StateRunning)
-	canceledProvider.observations["worker-1"] = observationMetadata()
-	if _, err := canceledProvider.GetObservation(context.Background(), workersessions.GetObservationRequest{ProviderSession: ref}); !errors.Is(err, workersessions.ErrObservationCanceled) {
-		t.Fatalf("GetObservation(provider canceled) error = %v", err)
-	}
-	projectionFailure := newObservationRegistry(observationProjectorFake{err: errors.New("projection failed")}, nil)
-	projectionFailure.sessions["worker-1"] = observationSession("worker-1", workersessions.StateRunning)
-	projectionFailure.observations["worker-1"] = observationMetadata()
-	if _, err := projectionFailure.ListObservations(context.Background(), workersessions.ListObservationsRequest{WorkID: "work-1"}); !errors.Is(err, workersessions.ErrObservationProjectionUnavailable) {
-		t.Fatalf("ListObservations(projection failure) error = %v", err)
-	}
-	if _, _, ok := registry.loadObservationState("missing"); ok {
-		t.Fatal("loadObservationState(missing) = ok, want false")
-	}
-	registry.sessions["no-metadata"] = observationSession("no-metadata", workersessions.StateRunning)
-	if _, _, ok := registry.loadObservationState("no-metadata"); ok {
-		t.Fatal("loadObservationState(missing metadata) = ok, want false")
 	}
 }
 

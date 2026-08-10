@@ -176,6 +176,12 @@ func assertAgyWorkerSessionHistory(t *testing.T, events []factoryapi.WorkerSessi
 	if workerSessionID == "" || len(opening.WorkIds) == 0 || opening.WorkIds[0] == "" {
 		t.Fatalf("Antigravity Worker Session opening correlation = %#v, want Worker Session and Work identities", opening)
 	}
+	assertAgyWorkerSessionRecords(t, records, opening)
+}
+
+func assertAgyWorkerSessionRecords(t *testing.T, records []factoryapi.WorkerSessionEvent, opening factoryapi.WorkerSessionEvent) {
+	t.Helper()
+	workerSessionID := opening.WorkerSessionId
 	providerBindingIndex := -1
 	firstProviderOutputIndex := -1
 	terminalIndex := -1
