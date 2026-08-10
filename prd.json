@@ -64,8 +64,8 @@
         "Tests pass"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "The only JavaScript durability siblings in tests/functional/orchestration/javascript/durability are TestJavaScriptInterruptedSessionResumesWithoutRepeatingCompletedChildren, TestJavaScriptResumeRestoresCheckpointAndFinalResult, and TestJavaScriptDurabilityDoesNotPersistSnapshotsByDefault; they share the confirmed RUNNING-before-provider-entry race and now use the common injected provider entry, cancellation, and completion signals while preserving their original public lifecycle, dispatch, checkpoint, result, and no-persistence assertions. No sibling with a different mechanism was changed. Twenty separate fresh commands equivalent to `go test ./tests/functional/orchestration/javascript/durability -count=1 -v -timeout 900s` passed; retained output records RUN 1/20 through RUN 20/20 as PASS. `go test -race ./tests/functional/orchestration/javascript/durability -count=1 -v -timeout 900s` passed all three scenarios without a race report. Focused package coverage, `go vet ./tests/functional/orchestration/javascript/durability`, `make typecheck`, `git diff --check`, and PRD validation passed. No sleeps, retry loops, timeout padding, relaxed assertions, product durability changes, or unrelated JavaScript orchestration changes were added."
     }
   ]
 }
