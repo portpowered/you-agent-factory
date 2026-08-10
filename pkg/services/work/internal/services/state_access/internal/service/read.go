@@ -190,6 +190,7 @@ func detachReadModel(item work.ReadModel) work.ReadModel {
 	item.StructuredResultPresent = jsonvalue.Present(item.StructuredResult, item.StructuredResultPresent)
 	item.Tags = work.CloneTags(item.Tags)
 	item.Relations = append([]work.ReadRelation(nil), item.Relations...)
+	item.ExpectedArtifacts = append([]work.ExpectedArtifactReadModel(nil), item.ExpectedArtifacts...)
 	if item.State != nil {
 		state := *item.State
 		item.State = &state

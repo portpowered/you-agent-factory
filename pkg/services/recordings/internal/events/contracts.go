@@ -5,6 +5,7 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
 // RuntimeLedgerFactory constructs session-scoped canonical ledgers.
@@ -31,3 +32,9 @@ func NewRuntimeLedger(
 
 var _ recordings.RuntimeEventLedger = (*FactoryEventHistory)(nil)
 var _ recordings.WorkerEventRecorder = (*FactoryEventHistory)(nil)
+
+func cloneExpectedArtifactTemplateContext(
+	context *work.ExpectedArtifactTemplateContext,
+) *work.ExpectedArtifactTemplateContext {
+	return context.Clone()
+}

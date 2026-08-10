@@ -16,6 +16,14 @@ func TestWorkstationResult_RoundTripsDetachedExecutionFields(t *testing.T) {
 		Output:                      "partial",
 		Feedback:                    "needs revision",
 		SelectedClassificationLabel: "blocked",
+		ArtifactVerification: &workers.ExpectedArtifactVerification{
+			Code: workers.WorkFailureTypeExpectedArtifactsUnsatisfied,
+			Entries: []workers.ExpectedArtifactVerificationEntry{{
+				Name:    "report",
+				Pattern: "reports/*.json",
+				Reason:  workers.ExpectedArtifactVerificationReasonEmpty,
+			}},
+		},
 		FailureDetail: &workers.FailureDetail{
 			Reason:  workers.WorkFailureTypeThrottled,
 			Message: "provider unavailable",

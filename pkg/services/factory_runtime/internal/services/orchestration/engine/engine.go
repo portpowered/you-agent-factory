@@ -186,16 +186,17 @@ func (e *FactoryEngine) retireCompletedDispatches(results []workerexecution.Work
 			if !hasCompletedRecord {
 				now := e.clock.Now()
 				completedDispatch = interfaces.CompletedDispatch{
-					DispatchID:      entry.DispatchID,
-					TransitionID:    entry.TransitionID,
-					WorkstationName: entry.WorkstationName,
-					Outcome:         r.Outcome,
-					Reason:          completedDispatchReasonFromResult(r),
-					ProviderSession: workerexecution.CloneProviderSessionMetadata(r.ProviderSession),
-					StartTime:       entry.StartTime,
-					EndTime:         now,
-					Duration:        now.Sub(entry.StartTime),
-					ConsumedTokens:  entry.ConsumedTokens,
+					DispatchID:           entry.DispatchID,
+					TransitionID:         entry.TransitionID,
+					WorkstationName:      entry.WorkstationName,
+					Outcome:              r.Outcome,
+					Reason:               completedDispatchReasonFromResult(r),
+					ArtifactVerification: r.ArtifactVerification.Clone(),
+					ProviderSession:      workerexecution.CloneProviderSessionMetadata(r.ProviderSession),
+					StartTime:            entry.StartTime,
+					EndTime:              now,
+					Duration:             now.Sub(entry.StartTime),
+					ConsumedTokens:       entry.ConsumedTokens,
 				}
 			}
 			e.runtimeState.DispatchHistory = append(e.runtimeState.DispatchHistory, completedDispatch)
@@ -718,12 +719,13 @@ func (e *FactoryEngine) forwardDispatchRecord(ctx context.Context, rec interface
 	rec.Dispatch.Execution.DispatchCreatedTick = e.runtimeState.TickCount
 	rec.Dispatch.Execution.CurrentTick = e.runtimeState.TickCount
 	e.runtimeState.Dispatches[rec.Dispatch.DispatchID] = &interfaces.DispatchEntry{
-		DispatchID:      rec.Dispatch.DispatchID,
-		TransitionID:    rec.Dispatch.TransitionID,
-		WorkstationName: rec.Dispatch.WorkstationName,
-		StartTime:       now,
-		ConsumedTokens:  workers.WorkDispatchInputTokens(rec.Dispatch),
-		HeldMutations:   rec.Mutations,
+		DispatchID:              rec.Dispatch.DispatchID,
+		TransitionID:            rec.Dispatch.TransitionID,
+		WorkstationName:         rec.Dispatch.WorkstationName,
+		ExpectedArtifactContext: cloneExpectedArtifactTemplateContext(rec.Dispatch.ExpectedArtifactContext),
+		StartTime:               now,
+		ConsumedTokens:          workers.WorkDispatchInputTokens(rec.Dispatch),
+		HeldMutations:           rec.Mutations,
 	}
 	e.runtimeState.InFlightCount++
 	if e.recordDispatch != nil {

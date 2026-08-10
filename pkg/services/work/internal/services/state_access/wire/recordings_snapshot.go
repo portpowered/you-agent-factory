@@ -2,12 +2,14 @@ package wire
 
 import (
 	"encoding/json"
+	"sort"
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func readSnapshotFromWorldState(view recordings.WorldStateView) (work.ReadSnapshot, error) {
@@ -62,6 +64,7 @@ func readModelFromWorkItem(
 		StructuredResult:         jsonvalue.Clone(item.StructuredResult),
 		StructuredResultPresent:  jsonvalue.Present(item.StructuredResult, item.StructuredResultPresent),
 		Tags:                     work.CloneTags(item.Tags),
+		ExpectedArtifacts:        expectedArtifactsFromWorldItem(item, state),
 	}
 	read.State = workStateFromItem(item, state, inFlight)
 	for _, relation := range state.RelationsByWorkID[item.ID] {
@@ -142,4 +145,255 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func expectedArtifactsFromWorldItem(
+	item work.FactoryWorkItem,
+	state interfaces.FactoryWorldState,
+) []work.ExpectedArtifactReadModel {
+	workTypeDeclarations := worldWorkTypeArtifactDeclarations(state.Topology, item.WorkTypeID)
+	workstationDeclarations, inputs, observation, templateContext, workstationFound := worldDispatchArtifactFacts(item, state)
+	if !workstationFound {
+		workstationDeclarations = worldCandidateWorkstationArtifactDeclarations(item, state.Topology)
+		inputs = []work.ExpectedArtifactInput{worldExpectedArtifactInput(item)}
+	}
+	return work.ExpectedArtifactReadModelProjector{}.Project(
+		workTypeDeclarations,
+		workstationDeclarations,
+		inputs,
+		observation,
+		worldExpectedArtifactTemplateContext(templateContext)...,
+	)
+}
+
+func worldWorkTypeArtifactDeclarations(
+	topology interfaces.InitialStructurePayload,
+	workTypeID string,
+) []work.ExpectedArtifactDeclaration {
+	for _, workType := range topology.WorkTypes {
+		if workType.ID == workTypeID || workType.Name == workTypeID {
+			return append([]work.ExpectedArtifactDeclaration(nil), workType.ExpectedArtifacts...)
+		}
+	}
+	return nil
+}
+
+func worldCandidateWorkstationArtifactDeclarations(
+	item work.FactoryWorkItem,
+	topology interfaces.InitialStructurePayload,
+) []work.ExpectedArtifactDeclaration {
+	placeID := strings.TrimSpace(item.PlaceID)
+	if placeID == "" && item.WorkTypeID != "" && item.State != "" {
+		placeID = item.WorkTypeID + ":" + item.State
+	}
+	var declarations []work.ExpectedArtifactDeclaration
+	for _, workstation := range topology.Workstations {
+		if placeID == "" || containsString(workstation.InputPlaceIDs, placeID) {
+			declarations = append(declarations, workstation.ExpectedArtifacts...)
+		}
+	}
+	return declarations
+}
+
+type worldArtifactDispatchFacts struct {
+	workstationName string
+	transitionID    string
+	inputs          []work.FactoryWorkItem
+	observation     work.ExpectedArtifactObservation
+	templateContext *work.ExpectedArtifactTemplateContext
+}
+
+func worldDispatchArtifactFacts(
+	item work.FactoryWorkItem,
+	state interfaces.FactoryWorldState,
+) ([]work.ExpectedArtifactDeclaration, []work.ExpectedArtifactInput, work.ExpectedArtifactObservation, *work.ExpectedArtifactTemplateContext, bool) {
+	if dispatch, ok := latestWorldActiveArtifactDispatch(item, state.ActiveDispatches); ok {
+		return worldWorkstationArtifactDeclarations(state.Topology, dispatch.transitionID, dispatch.workstationName),
+			worldExpectedArtifactInputs(dispatch.inputs, item), dispatch.observation, dispatch.templateContext, true
+	}
+	if dispatch, ok := latestWorldCompletedArtifactDispatch(item, state.CompletedDispatches); ok {
+		return worldWorkstationArtifactDeclarations(state.Topology, dispatch.transitionID, dispatch.workstationName),
+			worldExpectedArtifactInputs(dispatch.inputs, item), dispatch.observation, dispatch.templateContext, true
+	}
+	if dispatch, ok := latestWorldCompletedArtifactDispatch(item, state.FailedDispatches); ok {
+		return worldWorkstationArtifactDeclarations(state.Topology, dispatch.transitionID, dispatch.workstationName),
+			worldExpectedArtifactInputs(dispatch.inputs, item), dispatch.observation, dispatch.templateContext, true
+	}
+	if detail, ok := state.FailureDetailsByWorkID[item.ID]; ok && detail.ArtifactVerification != nil {
+		return worldWorkstationArtifactDeclarations(state.Topology, detail.TransitionID, detail.WorkstationName),
+			[]work.ExpectedArtifactInput{worldExpectedArtifactInput(detail.WorkItem)},
+			worldArtifactObservation(detail.ArtifactVerification), cloneExpectedArtifactTemplateContext(detail.ExpectedArtifactContext), true
+	}
+	return nil, nil, work.ExpectedArtifactObservation{}, nil, false
+}
+
+func latestWorldActiveArtifactDispatch(
+	item work.FactoryWorkItem,
+	dispatches map[string]interfaces.FactoryWorldDispatch,
+) (worldArtifactDispatchFacts, bool) {
+	ids := make([]string, 0, len(dispatches))
+	for id := range dispatches {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		dispatch := dispatches[id]
+		if !worldDispatchContainsWork(dispatch.WorkItemIDs, dispatch.Inputs, nil, nil, item.ID) {
+			continue
+		}
+		return worldArtifactDispatchFacts{
+			workstationName: dispatch.Workstation.Name,
+			transitionID:    dispatch.TransitionID,
+			inputs:          worldWorkstationInputs(dispatch.Inputs),
+			templateContext: cloneExpectedArtifactTemplateContext(dispatch.ExpectedArtifactContext),
+		}, true
+	}
+	return worldArtifactDispatchFacts{}, false
+}
+
+func latestWorldCompletedArtifactDispatch(
+	item work.FactoryWorkItem,
+	dispatches []interfaces.FactoryWorldDispatchCompletion,
+) (worldArtifactDispatchFacts, bool) {
+	for index := len(dispatches) - 1; index >= 0; index-- {
+		dispatch := dispatches[index]
+		if !worldDispatchContainsWork(dispatch.WorkItemIDs, dispatch.ConsumedInputs, dispatch.InputWorkItems, dispatch.OutputWorkItems, item.ID) {
+			continue
+		}
+		return worldArtifactDispatchFacts{
+			workstationName: dispatch.Workstation.Name,
+			transitionID:    dispatch.TransitionID,
+			inputs:          append([]work.FactoryWorkItem(nil), dispatch.InputWorkItems...),
+			observation:     worldArtifactObservationFromResult(dispatch.Result),
+			templateContext: cloneExpectedArtifactTemplateContext(dispatch.ExpectedArtifactContext),
+		}, true
+	}
+	return worldArtifactDispatchFacts{}, false
+}
+
+func cloneExpectedArtifactTemplateContext(
+	context *work.ExpectedArtifactTemplateContext,
+) *work.ExpectedArtifactTemplateContext {
+	return context.Clone()
+}
+
+func worldDispatchContainsWork(
+	workItemIDs []string,
+	inputs []interfaces.WorkstationInput,
+	inputWorkItems []work.FactoryWorkItem,
+	outputWorkItems []work.FactoryWorkItem,
+	workID string,
+) bool {
+	if containsString(workItemIDs, workID) {
+		return true
+	}
+	for _, input := range inputs {
+		if input.WorkItem != nil && input.WorkItem.ID == workID {
+			return true
+		}
+	}
+	for _, workItem := range inputWorkItems {
+		if workItem.ID == workID {
+			return true
+		}
+	}
+	for _, workItem := range outputWorkItems {
+		if workItem.ID == workID {
+			return true
+		}
+	}
+	return false
+}
+
+func worldWorkstationArtifactDeclarations(
+	topology interfaces.InitialStructurePayload,
+	transitionID string,
+	workstationName string,
+) []work.ExpectedArtifactDeclaration {
+	for _, workstation := range topology.Workstations {
+		if workstation.ID == transitionID || workstation.Name == transitionID || workstation.Name == workstationName {
+			return append([]work.ExpectedArtifactDeclaration(nil), workstation.ExpectedArtifacts...)
+		}
+	}
+	return nil
+}
+
+func worldWorkstationInputs(inputs []interfaces.WorkstationInput) []work.FactoryWorkItem {
+	items := make([]work.FactoryWorkItem, 0, len(inputs))
+	for _, input := range inputs {
+		if input.WorkItem != nil {
+			items = append(items, *input.WorkItem)
+		}
+	}
+	return items
+}
+
+func worldExpectedArtifactInputs(items []work.FactoryWorkItem, fallback work.FactoryWorkItem) []work.ExpectedArtifactInput {
+	if len(items) == 0 {
+		items = []work.FactoryWorkItem{fallback}
+	}
+	inputs := make([]work.ExpectedArtifactInput, 0, len(items))
+	for _, item := range items {
+		inputs = append(inputs, worldExpectedArtifactInput(item))
+	}
+	return inputs
+}
+
+func worldExpectedArtifactInput(item work.FactoryWorkItem) work.ExpectedArtifactInput {
+	return work.ExpectedArtifactInput{
+		Name:       firstNonEmpty(item.DisplayName, item.ID),
+		WorkID:     item.ID,
+		WorkTypeID: item.WorkTypeID,
+		DataType:   "work",
+		TraceID:    item.TraceID,
+		ParentID:   item.ParentID,
+		Project:    item.Tags["project"],
+		Tags:       work.CloneTags(item.Tags),
+	}
+}
+
+func worldArtifactObservation(
+	verification *workerexecution.ExpectedArtifactVerification,
+) work.ExpectedArtifactObservation {
+	if verification == nil {
+		return work.ExpectedArtifactObservation{}
+	}
+	observation := work.ExpectedArtifactObservation{Verified: true}
+	for _, entry := range verification.Entries {
+		observation.Entries = append(observation.Entries, work.ExpectedArtifactVerificationEntry{
+			DeclarationIndex: entry.DeclarationIndex,
+			Name:             entry.Name, Pattern: entry.Pattern, Reason: work.ExpectedArtifactVerificationReason(entry.Reason),
+		})
+	}
+	return observation
+}
+
+func worldExpectedArtifactTemplateContext(
+	context *work.ExpectedArtifactTemplateContext,
+) []work.ExpectedArtifactTemplateContext {
+	if context == nil {
+		return nil
+	}
+	return []work.ExpectedArtifactTemplateContext{*context}
+}
+
+func worldArtifactObservationFromResult(
+	result workerexecution.WorkstationResult,
+) work.ExpectedArtifactObservation {
+	if result.ArtifactVerification != nil {
+		return worldArtifactObservation(result.ArtifactVerification)
+	}
+	if result.Outcome == string(workerexecution.OutcomeAccepted) {
+		return work.ExpectedArtifactObservation{Verified: true}
+	}
+	return work.ExpectedArtifactObservation{}
+}
+
+func containsString(values []string, wanted string) bool {
+	for _, value := range values {
+		if value == wanted {
+			return true
+		}
+	}
+	return false
 }

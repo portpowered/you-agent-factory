@@ -2081,6 +2081,59 @@ export interface components {
       /** @description Customer-safe, actionable explanation of the failure. */
       message: string;
     };
+    /** @description Stable terminal verification summary emitted when a successful worker does not satisfy its effective expected artifact declarations. */
+    ExpectedArtifactVerification: {
+      code: components["schemas"]["WorkFailureType"];
+      entries: components["schemas"]["ExpectedArtifactVerificationEntry"][];
+    };
+    ExpectedArtifactVerificationEntry: {
+      /** @description One-based position in the normalized expected-artifact declaration list. */
+      declarationIndex?: number;
+      name: string;
+      /** @description Workspace-relative rendered artifact pattern; host paths are never emitted. */
+      pattern: string;
+      reason: components["schemas"]["ExpectedArtifactVerificationReason"];
+    };
+    /** @description Stable, non-host context used when rendering expected-artifact patterns. Filesystem paths, environment variables, and Factory documentation are not part of this replayable vocabulary. */
+    ExpectedArtifactTemplateContext: {
+      /** @description Exact replay-safe input values captured when the dispatch was created. Artifact templates expose these values through `.Inputs`; prompt-only relations, content, retry history, and host context are not included. */
+      inputs?: components["schemas"]["ExpectedArtifactTemplateInput"][];
+      /** @description Stable project identifier for the dispatch. */
+      project?: string;
+      /** @description Stable Factory Session identifier for the dispatch. */
+      sessionId?: string;
+    };
+    /** @description Stable replay-safe input value available to an expected-artifact template. This is intentionally smaller than the workstation prompt input surface so completion verification and historical Work reads can use the same values. */
+    ExpectedArtifactTemplateInput: {
+      name?: string;
+      workId?: string;
+      workTypeId?: string;
+      dataType?: string;
+      traceId?: string;
+      parentId?: string;
+      /** @description Per-input project value resolved from the input project tag, dispatch context, or the default project. */
+      project?: string;
+      tags?: components["schemas"]["StringMap"];
+      /** @description The dispatch-time textual payload value. It is retained only in the artifact template context and is not added to the normal Work read. */
+      payload?: string;
+    };
+    /** @description One effective expected artifact declaration projected on a Work item. Pattern is the rendered workspace-relative literal path or glob, never a host path. */
+    WorkExpectedArtifact: {
+      /** @description Customer-visible declaration name. */
+      name: string;
+      /** @description Safe rendered path or glob relative to the dispatch workspace. */
+      pattern: string;
+      /** @description Whether every matching regular file must contain at least one byte. */
+      nonEmpty: boolean;
+      verification: components["schemas"]["WorkExpectedArtifactVerification"];
+      /** @description Why this declaration failed, when verification is FAILED. */
+      reason?: components["schemas"]["ExpectedArtifactVerificationReason"];
+    };
+    /**
+     * @description Latest recorded verification state for one expected artifact declaration on a Work item.
+     * @enum {string}
+     */
+    WorkExpectedArtifactVerification: WorkExpectedArtifactVerification;
     FactoryArtifact: {
       /** @description Stable artifact identifier referenced by session projections. */
       id: string;
@@ -3468,6 +3521,7 @@ export interface components {
       inputs: components["schemas"]["DispatchConsumedWorkRef"][];
       resources?: components["schemas"]["Resource"][];
       metadata?: components["schemas"]["DispatchRequestEventMetadata"];
+      expectedArtifactContext?: components["schemas"]["ExpectedArtifactTemplateContext"];
     };
     /** @description Canonical association between one Factory dispatch and the Worker Session allocated to execute it. Dispatch identity remains authoritative in FactoryEvent.context.dispatchId and is not repeated in this payload. */
     DispatchWorkerSessionAssociationEventPayload: {
@@ -3645,6 +3699,7 @@ export interface components {
       error?: string;
       feedback?: string;
       selectedClassificationLabel?: string;
+      artifactVerification?: components["schemas"]["ExpectedArtifactVerification"];
       failureDetail?: components["schemas"]["FailureDetail"];
       providerFailure?: components["schemas"]["ProviderFailureMetadata"];
       metrics?: components["schemas"]["WorkMetrics"];
@@ -3718,6 +3773,11 @@ export interface components {
      * @enum {string}
      */
     WorkFailureType: WorkFailureType;
+    /**
+     * @description Stable reason that an expected artifact declaration was not satisfied.
+     * @enum {string}
+     */
+    ExpectedArtifactVerificationReason: ExpectedArtifactVerificationReason;
     ProviderFailureMetadata: {
       family?: components["schemas"]["WorkFailureFamily"];
       type?: components["schemas"]["WorkFailureType"];
@@ -4562,6 +4622,8 @@ export interface components {
       states: components["schemas"]["WorkState"][];
       /** @description Optional CLI routing markers for this work type. Factories used with you run --factory must declare handlingBehavior DEFAULT on exactly one work type. */
       handlingBehavior?: components["schemas"]["WorkTypeHandlingBehavior"][];
+      /** @description Expected output declarations inherited by workstations handling this work type. */
+      expectedArtifacts?: components["schemas"]["ExpectedArtifact"][];
     };
     /** @description A lifecycle state that a work item can occupy inside one work type. */
     WorkState: {
@@ -4992,6 +5054,8 @@ export interface components {
       onRejection?: components["schemas"]["WorkstationIO"][];
       /** @description Optional destination emitted when the workstation fails permanently. */
       onFailure?: components["schemas"]["WorkstationIO"][];
+      /** @description Expected output declarations added by this workstation to its applicable work type contract. */
+      expectedArtifacts?: components["schemas"]["ExpectedArtifact"][];
       /** @description Resource capacity this workstation consumes while one dispatch is in flight. */
       resources?: components["schemas"]["ResourceRequirement"][];
       /** @description Copy supported referenced script files into the expanded workstation layout when config expand runs. */
@@ -5483,6 +5547,8 @@ export interface components {
       tags?: components["schemas"]["StringMap"];
       /** @description Current outbound relationships attached to this listed source work item when returned by read APIs. */
       relations?: components["schemas"]["Relation"][];
+      /** @description Effective expected artifact declarations and their latest recorded verification state. */
+      expectedArtifacts?: components["schemas"]["WorkExpectedArtifact"][];
       /** @description Canonical stopped-state summary for existing work inspection reads when this work item explains paused, blocked, needs-human, or interrupted automation. */
       stopSummary?: components["schemas"]["FactoryStopSummary"];
     };
@@ -5609,6 +5675,18 @@ export interface components {
      * @enum {string}
      */
     WorkTypeHandlingBehavior: WorkTypeHandlingBehavior;
+    /** @description One expected output declaration relative to the dispatch workspace. Pattern is a workspace-relative literal path or glob and may use the replay-safe dispatch template fields `.Inputs` (the replay-safe fields are documented by `ExpectedArtifactTemplateInput`), `.Context.Project`, and `.Context.SessionID` inside a Go template action. Prompt-only fields, host paths, environment variables, and Factory documentation are not supported. */
+    ExpectedArtifact: {
+      /** @description Customer-visible name for this expected output declaration. */
+      name: string;
+      /** @description Workspace-relative literal path or glob template to verify. */
+      pattern: string;
+      /**
+       * @description Require every regular file matched by the pattern to be non-empty.
+       * @default false
+       */
+      nonEmpty: boolean;
+    };
     /** @description Two-dimensional authored graph layout coordinate. */
     FactoryLayoutPoint: {
       /** @description Horizontal graph layout coordinate in authored canvas space. */
@@ -7942,6 +8020,13 @@ export const FactoryDispatchJavaScriptTaskKind = {
 } as const;
 export type FactoryDispatchJavaScriptTaskKind =
   (typeof FactoryDispatchJavaScriptTaskKind)[keyof typeof FactoryDispatchJavaScriptTaskKind];
+export const WorkExpectedArtifactVerification = {
+  WorkExpectedArtifactVerificationPending: "PENDING",
+  WorkExpectedArtifactVerificationSatisfied: "SATISFIED",
+  WorkExpectedArtifactVerificationFailed: "FAILED",
+} as const;
+export type WorkExpectedArtifactVerification =
+  (typeof WorkExpectedArtifactVerification)[keyof typeof WorkExpectedArtifactVerification];
 export const FactoryArtifactKind = {
   // Final session result artifact.
   FactoryArtifactKindFINALRESULT: "FINAL_RESULT",
@@ -8383,9 +8468,17 @@ export const WorkFailureType = {
   // The worker response was malformed JSON or did not satisfy the workstation output schema.
   WorkFailureTypeStructuredOutputSchemaViolation:
     "structured_output_schema_violation",
+  // A successful worker did not satisfy its expected artifact declarations.
+  WorkFailureTypeExpectedArtifactsUnsatisfied: "EXPECTED_ARTIFACTS_UNSATISFIED",
 } as const;
 export type WorkFailureType =
   (typeof WorkFailureType)[keyof typeof WorkFailureType];
+export const ExpectedArtifactVerificationReason = {
+  ExpectedArtifactVerificationReasonMissing: "MISSING",
+  ExpectedArtifactVerificationReasonEmpty: "EMPTY",
+} as const;
+export type ExpectedArtifactVerificationReason =
+  (typeof ExpectedArtifactVerificationReason)[keyof typeof ExpectedArtifactVerificationReason];
 export const SafeAgentRunDiagnosticExecutionBehavior = {
   // Agent-loop execution through AGENT_RUN workstations.
   agent_run: "agent_run",

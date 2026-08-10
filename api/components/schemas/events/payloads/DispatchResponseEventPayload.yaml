@@ -38,6 +38,8 @@ properties:
     type: string
   selectedClassificationLabel:
     type: string
+  artifactVerification:
+    $ref: '../../data-models/ExpectedArtifactVerification.yaml'
   failureDetail:
     $ref: '../../data-models/FailureDetail.yaml'
   providerFailure:

@@ -294,6 +294,7 @@ func (t *TransitionerSubsystem) buildCompletedDispatch(
 		Outcome:                     resolved.outcome,
 		SelectedClassificationLabel: resolved.selectedClassificationLabel,
 		Reason:                      completedDispatchReason(resolved),
+		ArtifactVerification:        result.ArtifactVerification.Clone(),
 		FailureMetadata:             failureMetadata,
 		ProviderSession:             workerexecution.CloneProviderSessionMetadata(result.ProviderSession),
 		EndTime:                     endTime,
@@ -310,9 +311,16 @@ func (t *TransitionerSubsystem) buildCompletedDispatch(
 	}
 
 	completed.WorkstationName = dispatchEntry.WorkstationName
+	completed.ExpectedArtifactContext = cloneExpectedArtifactTemplateContext(dispatchEntry.ExpectedArtifactContext)
 	completed.StartTime = dispatchEntry.StartTime
 	completed.Duration = completed.EndTime.Sub(dispatchEntry.StartTime)
 	return completed
+}
+
+func cloneExpectedArtifactTemplateContext(
+	context *work.ExpectedArtifactTemplateContext,
+) *work.ExpectedArtifactTemplateContext {
+	return context.Clone()
 }
 
 func completedDispatchReason(result resolvedWorkResult) string {

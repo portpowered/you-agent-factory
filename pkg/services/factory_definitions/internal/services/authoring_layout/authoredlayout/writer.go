@@ -462,9 +462,10 @@ func workstationForExpansion(
 ) (factorydefinitions.FactoryWorkstationConfig, string) {
 	if !workstationHasRuntimeFields(workstation) {
 		definition := factorydefinitions.FactoryWorkstationConfig{
-			Type:           factorydefinitions.WorkstationTypeModel,
-			WorkerTypeName: workstation.WorkerTypeName,
-			StopWords:      append([]string(nil), workstation.StopWords...),
+			Type:              factorydefinitions.WorkstationTypeModel,
+			WorkerTypeName:    workstation.WorkerTypeName,
+			StopWords:         append([]string(nil), workstation.StopWords...),
+			ExpectedArtifacts: append([]factorydefinitions.ExpectedArtifactConfig(nil), workstation.ExpectedArtifacts...),
 		}
 		if workstation.WorkerTypeName == "" {
 			definition.Type = factorydefinitions.WorkstationTypeLogical
@@ -502,11 +503,15 @@ func workstationHasRuntimeFields(
 		workstation.PromptTemplate != "" ||
 		workstation.WorkingDirectory != "" ||
 		workstation.Worktree != "" ||
-		len(workstation.Env) > 0
+		workstationHasExpectedArtifactOrEnvironment(workstation)
 }
 
 func workstationHasOutputContract(workstation factorydefinitions.FactoryWorkstationConfig) bool {
 	return workstation.OutputSchema != "" || workstation.OutputContract != ""
+}
+
+func workstationHasExpectedArtifactOrEnvironment(workstation factorydefinitions.FactoryWorkstationConfig) bool {
+	return len(workstation.ExpectedArtifacts) > 0 || len(workstation.Env) > 0
 }
 
 func (w *Writer) pruneStaleRuntimeDirs(

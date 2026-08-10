@@ -124,6 +124,7 @@ type FactoryWorldDispatch struct {
 	CurrentChainingTraceID   string                                `json:"current_chaining_trace_id,omitempty"`
 	PreviousChainingTraceIDs []string                              `json:"previous_chaining_trace_ids,omitempty"`
 	TraceIDs                 []string                              `json:"trace_ids,omitempty"`
+	ExpectedArtifactContext  *work.ExpectedArtifactTemplateContext `json:"expected_artifact_context,omitempty"`
 }
 
 // FactoryWorldDispatchCompletion describes a finished dispatch reconstructed
@@ -147,6 +148,7 @@ type FactoryWorldDispatchCompletion struct {
 	CurrentChainingTraceID   string                                   `json:"current_chaining_trace_id,omitempty"`
 	PreviousChainingTraceIDs []string                                 `json:"previous_chaining_trace_ids,omitempty"`
 	TraceIDs                 []string                                 `json:"trace_ids,omitempty"`
+	ExpectedArtifactContext  *work.ExpectedArtifactTemplateContext    `json:"expected_artifact_context,omitempty"`
 	ProviderSession          *workerexecution.ProviderSessionMetadata `json:"provider_session,omitempty"`
 	Diagnostics              *workerdiagnostics.SafeWorkDiagnostics   `json:"diagnostics,omitempty"`
 	TerminalWork             *FactoryTerminalWork                     `json:"terminal_work,omitempty"`
@@ -260,11 +262,13 @@ type FactoryWorldAgentRunResponse struct {
 // FactoryWorldFailureDetail associates failed terminal work with the dispatch
 // completion that produced the failure.
 type FactoryWorldFailureDetail struct {
-	DispatchID      string                         `json:"dispatch_id"`
-	TransitionID    string                         `json:"transition_id"`
-	WorkstationName string                         `json:"workstation_name,omitempty"`
-	WorkItem        work.FactoryWorkItem           `json:"work_item"`
-	FailureDetail   *workerexecution.FailureDetail `json:"failureDetail,omitempty"`
+	DispatchID              string                                        `json:"dispatch_id"`
+	TransitionID            string                                        `json:"transition_id"`
+	WorkstationName         string                                        `json:"workstation_name,omitempty"`
+	ExpectedArtifactContext *work.ExpectedArtifactTemplateContext         `json:"expected_artifact_context,omitempty"`
+	WorkItem                work.FactoryWorkItem                          `json:"work_item"`
+	FailureDetail           *workerexecution.FailureDetail                `json:"failureDetail,omitempty"`
+	ArtifactVerification    *workerexecution.ExpectedArtifactVerification `json:"artifact_verification,omitempty"`
 }
 
 const (

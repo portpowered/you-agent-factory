@@ -24,6 +24,8 @@ const (
 	CodeWorkstationMissingRejectionRoute                         = "factory.workstation.missingRejectionRoute"
 	CodeWorkstationInvalidOutputSchema                           = "factory.workstation.invalidOutputSchema"
 	CodeWorkstationConflictingOutputs                            = "factory.workstation.conflictingWorkStateOutputs"
+	CodeWorkTypeInvalidExpectedArtifact                          = "factory.workType.invalidExpectedArtifact"
+	CodeWorkstationInvalidExpectedArtifact                       = "factory.workstation.invalidExpectedArtifact"
 	CodeWorkTypeMissingCompletionState                           = "factory.workType.missingCompletionState"
 	CodeWorkTypeMissingFailureState                              = "factory.workType.missingFailureState"
 	CodeWorkStateMissingTerminalPath                             = "factory.workState.missingTerminalCompletionPath"

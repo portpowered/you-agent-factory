@@ -29,6 +29,17 @@ func TestContainsStopToken_CompleteMarkerMustBeFinalNonEmptyLine(t *testing.T) {
 	}
 }
 
+func TestFailureDecisionFromMetadata_ExpectedArtifactsIsTerminal(t *testing.T) {
+	t.Parallel()
+	decision := FailureDecisionFromMetadata(&WorkFailureMetadata{
+		Family: WorkFailureFamilyTerminal,
+		Type:   WorkFailureTypeExpectedArtifactsUnsatisfied,
+	})
+	if !decision.Terminal || decision.Retryable || decision.TriggersThrottlePause {
+		t.Fatalf("decision = %#v, want terminal non-retryable artifact failure", decision)
+	}
+}
+
 func TestContainsStopToken_LegacyTokensRetainSubstringSemantics(t *testing.T) {
 	t.Parallel()
 	if !ContainsStopToken("Work done. COMPLETE", "COMPLETE") {

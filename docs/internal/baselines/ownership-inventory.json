@@ -2042,6 +2042,14 @@
       "evidence": "pkg/services/work/transports/cli -> pkg/transports/cli/clihttp"
     },
     {
+      "fromOwner": "work",
+      "toOwner": "workers",
+      "class": "command",
+      "bidirectional": true,
+      "unresolved": true,
+      "evidence": "pkg/services/work/internal/services/state_access/wire -> pkg/services/workers"
+    },
+    {
       "fromOwner": "worker_sessions",
       "toOwner": "events",
       "class": "command",
@@ -2133,6 +2141,8 @@
       "fromOwner": "workers",
       "toOwner": "work",
       "class": "command",
+      "bidirectional": true,
+      "unresolved": true,
       "evidence": "pkg/services/workers -> pkg/services/work"
     }
   ],

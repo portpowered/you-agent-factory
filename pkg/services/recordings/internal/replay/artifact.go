@@ -86,8 +86,15 @@ func validHistoricalFailureDetail(value any) (map[string]any, bool) {
 }
 
 func normalizedHistoricalFailureReason(value string) string {
-	normalized := strings.ToLower(strings.TrimSpace(value))
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "EXPECTED_ARTIFACTS_UNSATISFIED" {
+		return trimmed
+	}
+	normalized := strings.ToLower(trimmed)
 	normalized = strings.NewReplacer("-", "_", " ", "_").Replace(normalized)
+	if normalized == "expected_artifacts_unsatisfied" {
+		return "EXPECTED_ARTIFACTS_UNSATISFIED"
+	}
 	if isCanonicalFailureReason(normalized) {
 		return normalized
 	}
@@ -102,7 +109,8 @@ func isCanonicalFailureReason(reason string) bool {
 		"internal_server_error",
 		"throttled",
 		"timeout",
-		"unknown":
+		"unknown",
+		"EXPECTED_ARTIFACTS_UNSATISFIED":
 		return true
 	default:
 		return false

@@ -252,6 +252,11 @@ func renderListResult(output io.Writer, result factoryapi.ListWorkResponse) erro
 		); err != nil {
 			return err
 		}
+		if work.ExpectedArtifacts != nil && len(*work.ExpectedArtifacts) > 0 {
+			if _, err := fmt.Fprintf(output, "  Artifacts: %s\n", formatExpectedArtifactSummary(*work.ExpectedArtifacts)); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }
@@ -309,6 +314,18 @@ func structuredResultJSON(value any, present bool) ([]byte, error) {
 		return compact.Bytes(), nil
 	}
 	return json.Marshal(value)
+}
+
+func formatExpectedArtifactSummary(artifacts []factoryapi.WorkExpectedArtifact) string {
+	parts := make([]string, 0, len(artifacts))
+	for _, artifact := range artifacts {
+		status := string(artifact.Verification)
+		if artifact.Verification == factoryapi.WorkExpectedArtifactVerificationFailed && artifact.Reason != nil {
+			status += ": " + string(*artifact.Reason)
+		}
+		parts = append(parts, fmt.Sprintf("%s=%s [%s]", artifact.Name, artifact.Pattern, status))
+	}
+	return strings.Join(parts, "; ")
 }
 
 func workStateColumns(state *factoryapi.WorkState) (string, string) {

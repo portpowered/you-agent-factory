@@ -11,9 +11,8 @@ import (
 // selected-tick dispatch completion record.
 func CloneFactoryWorldDispatchCompletion(completion FactoryWorldDispatchCompletion) FactoryWorldDispatchCompletion {
 	clone := completion
-	clone.Result.StructuredResult = jsonvalue.Clone(completion.Result.StructuredResult)
-	clone.Result.StructuredResultPresent = jsonvalue.Present(completion.Result.StructuredResult, completion.Result.StructuredResultPresent)
-	clone.Result.FailureMetadata = workerexecution.CloneWorkFailureMetadata(completion.Result.FailureMetadata)
+	clone.ExpectedArtifactContext = cloneExpectedArtifactTemplateContext(completion.ExpectedArtifactContext)
+	clone.Result = workerexecution.CloneWorkstationResult(completion.Result)
 	clone.WorkItemIDs = cloneStringSlice(completion.WorkItemIDs)
 	clone.ConsumedInputs = cloneWorkstationInputs(completion.ConsumedInputs)
 	clone.InputWorkItems = cloneFactoryWorkItems(completion.InputWorkItems)
@@ -24,6 +23,12 @@ func CloneFactoryWorldDispatchCompletion(completion FactoryWorldDispatchCompleti
 	clone.Diagnostics = workerdiagnostics.CloneSafeWorkDiagnostics(completion.Diagnostics)
 	clone.TerminalWork = cloneFactoryTerminalWork(completion.TerminalWork)
 	return clone
+}
+
+func cloneExpectedArtifactTemplateContext(
+	context *work.ExpectedArtifactTemplateContext,
+) *work.ExpectedArtifactTemplateContext {
+	return context.Clone()
 }
 
 // CloneFactoryWorldProviderSessionRecord returns a detached copy of one

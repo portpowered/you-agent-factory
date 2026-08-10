@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state/validation"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
 // Mapper converts an authored Factory definition into the internal Petri
@@ -141,10 +142,11 @@ func combinedTransitionResourceUsage(cfg *interfaces.FactoryConfig, ws interface
 
 func (cm *Mapper) newTransition(ws interfaces.FactoryWorkstationConfig) *petri.Transition {
 	return &petri.Transition{
-		ID:         ws.Name,
-		Name:       ws.Name,
-		Type:       petri.TransitionNormal,
-		WorkerType: ws.WorkerTypeName,
+		ID:                ws.Name,
+		Name:              ws.Name,
+		Type:              petri.TransitionNormal,
+		WorkerType:        ws.WorkerTypeName,
+		ExpectedArtifacts: expectedArtifactDeclarations(ws.ExpectedArtifacts),
 	}
 }
 
@@ -602,9 +604,10 @@ func (cm *Mapper) convertToWorkTypes(cfg *interfaces.FactoryConfig) map[string]*
 			}
 		}
 		workTypes[wt.Name] = &state.WorkType{
-			ID:     wt.Name,
-			Name:   wt.Name,
-			States: states,
+			ID:                wt.Name,
+			Name:              wt.Name,
+			States:            states,
+			ExpectedArtifacts: expectedArtifactDeclarations(wt.ExpectedArtifacts),
 		}
 	}
 	if hasCronWorkstation(cfg) {
@@ -617,6 +620,21 @@ func (cm *Mapper) convertToWorkTypes(cfg *interfaces.FactoryConfig) map[string]*
 		}
 	}
 	return workTypes
+}
+
+func expectedArtifactDeclarations(
+	declarations []interfaces.ExpectedArtifactConfig,
+) []work.ExpectedArtifactDeclaration {
+	if len(declarations) == 0 {
+		return nil
+	}
+	result := make([]work.ExpectedArtifactDeclaration, 0, len(declarations))
+	for _, declaration := range declarations {
+		result = append(result, work.ExpectedArtifactDeclaration{
+			Name: declaration.Name, Pattern: declaration.Pattern, NonEmpty: declaration.NonEmpty,
+		})
+	}
+	return result
 }
 
 // convertToResources builds ResourceDef definitions from config for the Net.

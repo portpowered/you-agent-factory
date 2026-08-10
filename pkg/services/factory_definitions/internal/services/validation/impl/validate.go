@@ -17,7 +17,9 @@ func ValidateStructural(cfg *factorydefinitions.FactoryConfig) Result {
 	if cfg == nil {
 		return Result{}
 	}
-	result := Result{Targets: OrchestratorTargets(cfg)}
+	result := Result{
+		Targets: append(OrchestratorTargets(cfg), ExpectedArtifactTargets(cfg)...),
+	}
 	if !IsPetriOrchestratorValidationScope(cfg) {
 		return result
 	}
@@ -54,6 +56,44 @@ func workstationOutputSchemaTargets(cfg *factorydefinitions.FactoryConfig) []Tar
 				Subject:  Subject{Type: SubjectTypeWorkstation, ID: workstation.Name, Location: SubjectLocationDefinition},
 				Path:     fmt.Sprintf("%s.workstations[%d](%s).outputSchema", validationRoot, index, workstation.Name),
 			})
+		}
+	}
+	return targets
+}
+
+// ExpectedArtifactTargets validates declaration-local contract syntax before a
+// Factory can be persisted or activated. Rendering against real work inputs is
+// intentionally deferred to runtime because those values are not definition
+// data and must be checked again for workspace containment there.
+func ExpectedArtifactTargets(cfg *factorydefinitions.FactoryConfig) []Target {
+	if cfg == nil {
+		return nil
+	}
+	var targets []Target
+	for index, workType := range cfg.WorkTypes {
+		for artifactIndex, declaration := range workType.ExpectedArtifacts {
+			if err := factorydefinitions.ValidateExpectedArtifactConfig(declaration, 1); err != nil {
+				targets = append(targets, Target{
+					Code:     CodeWorkTypeInvalidExpectedArtifact,
+					Severity: SeverityError,
+					Message:  fmt.Sprintf("work type %q expected artifact %q is invalid: %v", workType.Name, declaration.Name, err),
+					Subject:  Subject{Type: SubjectTypeWorkType, ID: workType.Name, Location: SubjectLocationDefinition},
+					Path:     fmt.Sprintf("%s.workTypes[%d](%s).expectedArtifacts[%d]", validationRoot, index, workType.Name, artifactIndex),
+				})
+			}
+		}
+	}
+	for index, workstation := range cfg.Workstations {
+		for artifactIndex, declaration := range workstation.ExpectedArtifacts {
+			if err := factorydefinitions.ValidateExpectedArtifactConfig(declaration, len(workstation.Inputs)); err != nil {
+				targets = append(targets, Target{
+					Code:     CodeWorkstationInvalidExpectedArtifact,
+					Severity: SeverityError,
+					Message:  fmt.Sprintf("workstation %q expected artifact %q is invalid: %v", workstation.Name, declaration.Name, err),
+					Subject:  Subject{Type: SubjectTypeWorkstation, ID: workstation.Name, Location: SubjectLocationDefinition},
+					Path:     fmt.Sprintf("%s.workstations[%d](%s).expectedArtifacts[%d]", validationRoot, index, workstation.Name, artifactIndex),
+				})
+			}
 		}
 	}
 	return targets

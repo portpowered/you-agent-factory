@@ -196,6 +196,54 @@ func TestConstructedService_VisualizeSuccessPath(t *testing.T) {
 	}
 }
 
+func TestConstructedService_ListRendersArtifactStatesAndPreservesJSONShape(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(factoryapi.ListWorkResponse{
+			Results: []factoryapi.Work{{
+				Name: "Review PRD", WorkId: stringPtr("work-1"), WorkTypeName: stringPtr("story"),
+				ExpectedArtifacts: &[]factoryapi.WorkExpectedArtifact{
+					{Name: "report", Pattern: "reports/review.json", Verification: factoryapi.WorkExpectedArtifactVerificationPending},
+					{Name: "manifest", Pattern: "reports/manifest.json", NonEmpty: true, Verification: factoryapi.WorkExpectedArtifactVerificationSatisfied},
+					{Name: "empty", Pattern: "reports/empty.json", Verification: factoryapi.WorkExpectedArtifactVerificationFailed, Reason: expectedArtifactReasonPtr(factoryapi.ExpectedArtifactVerificationReasonEmpty)},
+				},
+			}},
+		})
+	}))
+	defer server.Close()
+
+	service := constructedWorkCLIService(t, testListRequestPreparation{}, nil)
+	var human bytes.Buffer
+	if err := service.List(workcli.ListConfig{Context: context.Background(), Server: server.URL, Output: &human, HTTP: testHTTPProtocol(t)}); err != nil {
+		t.Fatalf("human List: %v", err)
+	}
+	if !strings.Contains(human.String(), "Artifacts: report=reports/review.json [PENDING]; manifest=reports/manifest.json [SATISFIED]; empty=reports/empty.json [FAILED: EMPTY]") {
+		t.Fatalf("human output = %q, want concise artifact states", human.String())
+	}
+	if strings.Contains(human.String(), server.URL) || strings.Contains(human.String(), "\\") {
+		t.Fatalf("human output exposed a host path: %q", human.String())
+	}
+
+	var encoded bytes.Buffer
+	if err := service.List(workcli.ListConfig{Context: context.Background(), Server: server.URL, JSON: true, Output: &encoded, HTTP: testHTTPProtocol(t)}); err != nil {
+		t.Fatalf("JSON List: %v", err)
+	}
+	var response factoryapi.ListWorkResponse
+	if err := json.Unmarshal(encoded.Bytes(), &response); err != nil {
+		t.Fatalf("decode JSON output: %v", err)
+	}
+	if len(response.Results) != 1 || response.Results[0].ExpectedArtifacts == nil ||
+		len(*response.Results[0].ExpectedArtifacts) != 3 {
+		t.Fatalf("JSON response = %#v, want API-shaped artifact projection", response)
+	}
+}
+
+func expectedArtifactReasonPtr(reason factoryapi.ExpectedArtifactVerificationReason) *factoryapi.ExpectedArtifactVerificationReason {
+	return &reason
+}
+
 func stringPtr(value string) *string {
 	return &value
 }

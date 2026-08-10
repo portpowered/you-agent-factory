@@ -19,6 +19,7 @@ func cloneWorkResult(result workers.WorkResult) workers.WorkResult {
 	result.RecordedOutputWork = cloneFactoryWorkItems(result.RecordedOutputWork)
 	result.StructuredResult = jsonvalue.Clone(result.StructuredResult)
 	result.StructuredResultPresent = jsonvalue.Present(result.StructuredResult, result.StructuredResultPresent)
+	result.ArtifactVerification = result.ArtifactVerification.Clone()
 	result.FailureMetadata = workers.CloneWorkFailureMetadata(result.FailureMetadata)
 	result.ProviderSession = workers.CloneProviderSessionMetadata(result.ProviderSession)
 	result.Diagnostics = workers.CloneWorkDiagnostics(result.Diagnostics)

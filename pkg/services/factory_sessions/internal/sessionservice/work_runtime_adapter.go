@@ -63,16 +63,34 @@ func (a workRuntimeAdapter) ReadWorkSnapshot(ctx context.Context) (work.ReadSnap
 	result := work.ReadSnapshot{Items: make([]work.ReadModel, 0, len(materialized.Tokens))}
 	for _, token := range materialized.Tokens {
 		_, inFlight := materialized.InFlightOnlyByID[token.ID]
-		item := runtimeWorkItem(token, snapshot.Topology, inFlight, names)
+		item := runtimeWorkItem(token, snapshot.Topology, inFlight, names, runtimeReadFacts{
+			dispatches: snapshot.Dispatches, dispatchHistory: snapshot.DispatchHistory, results: snapshot.Results,
+		})
 		item.StopSummary = runtimeWorkStopSummary(sessionprojection.ProjectWorkStopSummary(a.sessionID, snapshot, token, sessionSummary))
 		result.Items = append(result.Items, item)
 	}
 	return result, nil
 }
 
-func runtimeWorkItem(token *workers.Token, net *factoryruntime.Net, inFlight bool, names map[string]string) work.ReadModel {
+type runtimeReadFacts struct {
+	dispatches      map[string]*factoryruntime.DispatchEntry
+	dispatchHistory []factoryruntime.CompletedDispatch
+	results         []workers.WorkResult
+}
+
+func runtimeWorkItem(
+	token *workers.Token,
+	net *factoryruntime.Net,
+	inFlight bool,
+	names map[string]string,
+	facts ...runtimeReadFacts,
+) work.ReadModel {
+	var readFacts runtimeReadFacts
+	if len(facts) > 0 {
+		readFacts = facts[0]
+	}
 	name := runtimeFirstNonEmpty(token.Color.Name, token.Color.WorkID, token.ID)
-	item := work.ReadModel{CursorID: token.ID, Name: name, WorkID: token.Color.WorkID, WorkTypeName: token.Color.WorkTypeID, State: runtimeWorkState(token, net, inFlight), ChainingTraceDepth: token.Color.ChainingTraceDepth, CurrentChainingTraceID: runtimeFirstNonEmpty(token.Color.CurrentChainingTraceID, token.Color.TraceID), PreviousChainingTraceIDs: append([]string(nil), token.Color.PreviousChainingTraceIDs...), TraceID: token.Color.TraceID, Content: work.CloneWorkContentParts(token.Color.Content), StructuredResult: jsonvalue.Clone(token.Color.StructuredResult), StructuredResultPresent: jsonvalue.Present(token.Color.StructuredResult, token.Color.StructuredResultPresent), Tags: work.CloneTags(token.Color.Tags)}
+	item := work.ReadModel{CursorID: token.ID, Name: name, WorkID: token.Color.WorkID, WorkTypeName: token.Color.WorkTypeID, State: runtimeWorkState(token, net, inFlight), ChainingTraceDepth: token.Color.ChainingTraceDepth, CurrentChainingTraceID: runtimeFirstNonEmpty(token.Color.CurrentChainingTraceID, token.Color.TraceID), PreviousChainingTraceIDs: append([]string(nil), token.Color.PreviousChainingTraceIDs...), TraceID: token.Color.TraceID, Content: work.CloneWorkContentParts(token.Color.Content), StructuredResult: jsonvalue.Clone(token.Color.StructuredResult), StructuredResultPresent: jsonvalue.Present(token.Color.StructuredResult, token.Color.StructuredResultPresent), Tags: work.CloneTags(token.Color.Tags), ExpectedArtifacts: (factoryruntime.WorkArtifactProjection{}).Project(factoryruntime.WorkArtifactProjectionInput{Token: token, Topology: net, Dispatches: readFacts.dispatches, DispatchHistory: readFacts.dispatchHistory, Results: readFacts.results})}
 	for _, relation := range token.Color.Relations {
 		item.Relations = append(item.Relations, work.ReadRelation{Type: relation.Type, SourceWorkName: name, TargetWorkName: runtimeFirstNonEmpty(names[relation.TargetWorkID], relation.TargetWorkID), TargetWorkID: relation.TargetWorkID, RequiredState: relation.RequiredState})
 	}

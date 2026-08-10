@@ -139,14 +139,50 @@ func TestWorkReadModelToAPI_EncodesDetachedReadModel(t *testing.T) {
 			TargetWorkID:   "work-draft",
 			RequiredState:  "complete",
 		}},
+		ExpectedArtifacts: []work.ExpectedArtifactReadModel{{
+			Name: "report", Pattern: "reports/review.json", NonEmpty: true,
+			Verification: work.ExpectedArtifactVerificationSatisfied,
+		}},
 	})
-	if got.Name != "Review PRD" ||
-		got.WorkId == nil || *got.WorkId != "work-prd-1" ||
-		got.ChainingTraceDepth == nil || *got.ChainingTraceDepth != 4 ||
-		got.Content == nil || len(*got.Content) != 1 ||
-		got.Tags == nil || (*got.Tags)["owner"] != "docs" ||
-		got.Relations == nil || len(*got.Relations) != 1 {
-		t.Fatalf("Work = %#v, want encoded detached read model", got)
+	assertDetachedWorkFields(t, got)
+	assertDetachedWorkCollections(t, got)
+	assertExpectedArtifactAPI(t, got)
+}
+
+func assertDetachedWorkFields(t *testing.T, got factoryapi.Work) {
+	t.Helper()
+	if got.Name != "Review PRD" {
+		t.Fatalf("Work name = %q, want Review PRD", got.Name)
+	}
+	if got.WorkId == nil || *got.WorkId != "work-prd-1" {
+		t.Fatalf("Work ID = %#v, want work-prd-1", got.WorkId)
+	}
+	if got.ChainingTraceDepth == nil || *got.ChainingTraceDepth != 4 {
+		t.Fatalf("trace depth = %#v, want 4", got.ChainingTraceDepth)
+	}
+}
+
+func assertDetachedWorkCollections(t *testing.T, got factoryapi.Work) {
+	t.Helper()
+	if got.Content == nil || len(*got.Content) != 1 {
+		t.Fatalf("content = %#v, want one item", got.Content)
+	}
+	if got.Tags == nil || (*got.Tags)["owner"] != "docs" {
+		t.Fatalf("tags = %#v, want owner=docs", got.Tags)
+	}
+	if got.Relations == nil || len(*got.Relations) != 1 {
+		t.Fatalf("relations = %#v, want one item", got.Relations)
+	}
+}
+
+func assertExpectedArtifactAPI(t *testing.T, got factoryapi.Work) {
+	t.Helper()
+	if got.ExpectedArtifacts == nil || len(*got.ExpectedArtifacts) != 1 {
+		t.Fatalf("expected artifacts = %#v, want one item", got.ExpectedArtifacts)
+	}
+	artifact := (*got.ExpectedArtifacts)[0]
+	if artifact.Pattern != "reports/review.json" || artifact.Verification != factoryapi.WorkExpectedArtifactVerificationSatisfied {
+		t.Fatalf("expected artifact = %#v, want encoded artifact projection", artifact)
 	}
 }
 
@@ -243,7 +279,7 @@ func TestWorkReadModelToAPI_OmitsEmptyOptionalCollections(t *testing.T) {
 	if err := json.Unmarshal(raw, &fields); err != nil {
 		t.Fatal(err)
 	}
-	for _, field := range []string{"content", "tags", "relations", "previousChainingTraceIds", "stopSummary"} {
+	for _, field := range []string{"content", "tags", "relations", "expectedArtifacts", "previousChainingTraceIds", "stopSummary"} {
 		if _, present := fields[field]; present {
 			t.Fatalf("optional field %q unexpectedly present: %s", field, string(raw))
 		}

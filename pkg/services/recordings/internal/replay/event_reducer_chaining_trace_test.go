@@ -270,6 +270,55 @@ func TestReplayDispatchFromEvent_PreservesConsumedInputChainingLineage(t *testin
 	}
 }
 
+func TestReplayDispatchFromEvent_PreservesExpectedArtifactTemplateContext(t *testing.T) {
+	payload := factoryapi.DispatchRequestEventPayload{
+		TransitionId: "publish",
+		Inputs:       []factoryapi.DispatchConsumedWorkRef{{WorkId: "work-generated"}},
+		ExpectedArtifactContext: &factoryapi.ExpectedArtifactTemplateContext{
+			Inputs: &[]factoryapi.ExpectedArtifactTemplateInput{{
+				Name:    stringPtrIfNotEmpty("input-7"),
+				Project: stringPtrIfNotEmpty("input-project-7"),
+				Payload: stringPtrIfNotEmpty("payload-7"),
+			}},
+			Project:   stringPtrIfNotEmpty("project-7"),
+			SessionId: stringPtrIfNotEmpty("session-9"),
+		},
+	}
+	var union factoryapi.FactoryEvent_Payload
+	if err := union.FromDispatchRequestEventPayload(payload); err != nil {
+		t.Fatalf("encode dispatch payload: %v", err)
+	}
+	replayed, err := replayDispatchFromGeneratedEvent(t, factoryapi.Factory{}, factoryapi.FactoryEvent{
+		Id:            "factory-event/dispatch-created/dispatch-context",
+		SchemaVersion: factoryapi.AgentFactoryEventV1,
+		Type:          factoryapi.FactoryEventTypeDispatchRequest,
+		Context: factoryapi.FactoryEventContext{
+			EventTime:  time.Date(2026, 4, 22, 19, 9, 0, 0, time.UTC),
+			Tick:       8,
+			DispatchId: stringPtrIfNotEmpty("dispatch-context"),
+			WorkIds:    slicePtr([]string{"work-generated"}),
+		},
+		Payload: union,
+	}, map[string]work.Work{
+		"work-generated": {WorkID: "work-generated", Name: "generated", WorkTypeID: "task"},
+	})
+	if err != nil {
+		t.Fatalf("replayDispatchFromEvent: %v", err)
+	}
+	if replayed.dispatch.ExpectedArtifactContext == nil ||
+		replayed.dispatch.ExpectedArtifactContext.Project != "project-7" ||
+		replayed.dispatch.ExpectedArtifactContext.SessionID != "session-9" {
+		t.Fatalf("replayed expected artifact context = %#v", replayed.dispatch.ExpectedArtifactContext)
+	}
+	if replayed.dispatch.ExpectedArtifactContext == nil ||
+		len(replayed.dispatch.ExpectedArtifactContext.Inputs) != 1 ||
+		replayed.dispatch.ExpectedArtifactContext.Inputs[0].Name != "input-7" ||
+		replayed.dispatch.ExpectedArtifactContext.Inputs[0].Project != "input-project-7" ||
+		replayed.dispatch.ExpectedArtifactContext.Inputs[0].Payload != "payload-7" {
+		t.Fatalf("replayed expected artifact inputs = %#v", replayed.dispatch.ExpectedArtifactContext)
+	}
+}
+
 func TestReplayDispatchFromEvent_PrefersContextChainingLineageOverPayloadCompatibilityCopy(t *testing.T) {
 	payload := factoryapi.DispatchRequestEventPayload{
 		TransitionId:             "merge",

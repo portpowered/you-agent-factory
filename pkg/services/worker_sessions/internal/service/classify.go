@@ -260,6 +260,7 @@ var knownFailureTypes = map[workers.WorkFailureType]bool{
 	workers.WorkFailureTypeCommandLineTooLong:              true,
 	workers.WorkFailureTypeMissingExecutable:               true,
 	workers.WorkFailureTypeStructuredOutputSchemaViolation: true,
+	workers.WorkFailureTypeExpectedArtifactsUnsatisfied:    true,
 }
 
 // safeDetail derives the public FailureCause.Detail for kind exclusively
