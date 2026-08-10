@@ -114,6 +114,7 @@ func (h *FactoryEventHistory) RecordSessionStarted(input SessionLifecycleStartIn
 	}
 	h.hasSessionStarted = true
 	h.sessionStartedAt = interfaces.CanonicalEventTime(eventTime)
+	h.sessionID = strings.TrimSpace(input.SessionID)
 	h.mu.Unlock()
 
 	eventTime = interfaces.CanonicalEventTime(eventTime)
@@ -377,6 +378,27 @@ func (h *FactoryEventHistory) allocateSessionLifecycleSequence() int {
 	current := h.nextSessionSequence
 	h.nextSessionSequence++
 	return current
+}
+
+// sessionScopedContext attaches the active Factory Session identity and its
+// delivery sequence to runtime events emitted after SESSION_STARTED. The
+// Recordings subscription uses both fields to retain a session-scoped stream
+// and to detect gaps without confusing the process-global event sequence with
+// the session-local sequence.
+func (h *FactoryEventHistory) sessionScopedContext(context interfaces.FactoryEventContext) interfaces.FactoryEventContext {
+	if h == nil {
+		return context
+	}
+	h.mu.RLock()
+	sessionID := h.sessionID
+	h.mu.RUnlock()
+	if sessionID == "" {
+		return context
+	}
+	context.SessionID = stringPtr(sessionID)
+	sequence := h.allocateSessionLifecycleSequence()
+	context.SessionSequence = &sequence
+	return context
 }
 
 func sessionLifecycleDigestJSON(raw json.RawMessage) string {

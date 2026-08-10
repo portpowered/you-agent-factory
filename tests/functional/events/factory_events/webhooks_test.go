@@ -21,9 +21,11 @@ import (
 
 	"github.com/jonboulle/clockwork"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/webhooks"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -38,6 +40,7 @@ const functionalWebhookSecret = "functional-webhook-secret"
 // delaying the Work terminal event.
 func TestFactoryWebhooksRunThroughRootProcess(t *testing.T) {
 	t.Run("transition filtering and signature", testFunctionalWebhookTransition)
+	t.Run("failed dispatch filtering and signature", testFunctionalWebhookDispatchFailure)
 	t.Run("retry then success", testFunctionalWebhookRetrySuccess)
 	t.Run("retry exhaustion writes one redacted dead letter", testFunctionalWebhookRetryExhaustion)
 }
@@ -134,6 +137,32 @@ func testFunctionalWebhookRetrySuccess(t *testing.T) {
 	attemptsMu.Unlock()
 	if gotAttempts != 2 {
 		t.Fatalf("retry attempts for event %q = %d, want 2", first.eventID, gotAttempts)
+	}
+}
+
+func testFunctionalWebhookDispatchFailure(t *testing.T) {
+	receiver := newFunctionalWebhookReceiver(t, func(request functionalWebhookRequest) functionalWebhookResponse {
+		return functionalWebhookResponse{status: http.StatusOK}
+	})
+	resolver := newFunctionalWebhookSecretResolver()
+	dir := scaffoldWebhookDispatchFailureFactory(t, []map[string]any{
+		functionalWebhook("failed-dispatch", true, receiver.URL()+"/failed-dispatch", "secrets/failed-dispatch", []string{"DISPATCH_RESPONSE"}, []string{"FAILED"}),
+	})
+	runner := &functionalWebhookFailureCommandRunner{activated: resolver.activated}
+	server := startWebhookFunctionalServer(t, dir, serviceedges.Edges{
+		FactoryWebhookSecretResolver: resolver.resolve,
+		ProviderCommandRunner:        runner,
+	})
+	resolver.waitForCount(t, 1, 5*time.Second)
+	stream := support.OpenFactoryEventStreamAt(t, support.DefaultSessionEventsURL(server.URL()))
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	support.CleanupProcess(t, process)
+	submitFunctionalWebhookWork(t, process, server.URL(), "dispatch-failure")
+	failedDispatch := waitForDispatchResponseEvent(t, stream, 15*time.Second)
+	request := receiver.waitForEvent(t, failedDispatch.Id, 5*time.Second)
+	assertSignedCanonicalWebhook(t, request, failedDispatch, functionalWebhookSecret)
+	if request.path != "/failed-dispatch" {
+		t.Fatalf("failed dispatch webhook path = %q, want /failed-dispatch", request.path)
 	}
 }
 
@@ -369,13 +398,18 @@ func (receiver *functionalWebhookReceiver) requestsSnapshot() []functionalWebhoo
 }
 
 type functionalWebhookSecretResolver struct {
-	mu       sync.Mutex
-	resolved []string
-	ready    chan struct{}
+	mu            sync.Mutex
+	resolved      []string
+	ready         chan struct{}
+	activated     chan struct{}
+	activatedOnce sync.Once
 }
 
 func newFunctionalWebhookSecretResolver() *functionalWebhookSecretResolver {
-	return &functionalWebhookSecretResolver{ready: make(chan struct{}, 16)}
+	return &functionalWebhookSecretResolver{
+		ready:     make(chan struct{}, 16),
+		activated: make(chan struct{}),
+	}
 }
 
 func (resolver *functionalWebhookSecretResolver) resolve(
@@ -383,11 +417,31 @@ func (resolver *functionalWebhookSecretResolver) resolve(
 	_ factorydefinitions.LoadedFactorySource,
 	ref string,
 ) (string, error) {
+	resolver.activatedOnce.Do(func() { close(resolver.activated) })
 	resolver.mu.Lock()
 	resolver.resolved = append(resolver.resolved, ref)
 	resolver.mu.Unlock()
 	resolver.ready <- struct{}{}
 	return functionalWebhookSecret, nil
+}
+
+type functionalWebhookFailureCommandRunner struct {
+	activated <-chan struct{}
+}
+
+func (runner *functionalWebhookFailureCommandRunner) Run(
+	ctx context.Context,
+	_ platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
+	select {
+	case <-runner.activated:
+		return platformprocess.CommandResult{
+			ExitCode: 7,
+			Stderr:   []byte("functional provider failure"),
+		}, nil
+	case <-ctx.Done():
+		return platformprocess.CommandResult{}, ctx.Err()
+	}
 }
 
 func (resolver *functionalWebhookSecretResolver) waitForCount(t *testing.T, count int, timeout time.Duration) {
@@ -501,6 +555,34 @@ func scaffoldWebhookFactory(t *testing.T, webhooksConfig []map[string]any) strin
 	})
 }
 
+func scaffoldWebhookDispatchFailureFactory(t *testing.T, webhooksConfig []map[string]any) string {
+	t.Helper()
+	dir := support.ScaffoldFactory(t, map[string]any{
+		"name": "functional-webhook-dispatch-failure",
+		"workTypes": []any{map[string]any{
+			"name":             "task",
+			"handlingBehavior": []string{"DEFAULT"},
+			"states": []any{
+				map[string]any{"name": "init", "type": "INITIAL"},
+				map[string]any{"name": "complete", "type": "TERMINAL"},
+				map[string]any{"name": "failed", "type": "FAILED"},
+			},
+		}},
+		"workers": []any{map[string]any{"name": "worker-a"}},
+		"workstations": []any{map[string]any{
+			"name":      "process",
+			"type":      "MODEL_WORKSTATION",
+			"worker":    "worker-a",
+			"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
+			"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
+			"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
+		}},
+		"webhooks": webhooksConfig,
+	})
+	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
+	return dir
+}
+
 func functionalWebhook(name string, enabled bool, url, secretRef string, eventTypes, dispatchStatuses []string) map[string]any {
 	config := map[string]any{
 		"name":             name,
@@ -551,6 +633,36 @@ func waitForTerminalWorkEvent(
 		}
 		payload, err := event.Payload.AsWorkStateChangeEventPayload()
 		if err != nil || payload.WorkId != workID || !strings.EqualFold(payload.ToState, "complete") {
+			continue
+		}
+		return event
+	}
+}
+
+func waitForDispatchResponseEvent(
+	t *testing.T,
+	stream *support.FactoryEventStream,
+	timeout time.Duration,
+) factoryapi.FactoryEvent {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for {
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			t.Fatal("timed out waiting for failed DISPATCH_RESPONSE Factory Event")
+		}
+		event, ok := stream.TryNextEvent(remaining)
+		if !ok {
+			t.Fatal("Factory Event stream closed before failed DISPATCH_RESPONSE")
+		}
+		if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
+			continue
+		}
+		payload, err := event.Payload.AsDispatchResponseEventPayload()
+		if err != nil {
+			t.Fatalf("decode DISPATCH_RESPONSE event %q: %v", event.Id, err)
+		}
+		if string(payload.Outcome) != "FAILED" {
 			continue
 		}
 		return event

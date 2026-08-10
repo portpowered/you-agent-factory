@@ -95,6 +95,7 @@ type FactoryEventHistory struct {
 	sessionStartedAt    time.Time
 	hasSessionStarted   bool
 	hasSessionCompleted bool
+	sessionID           string
 	nextSessionSequence int
 }
 
@@ -379,7 +380,7 @@ func (h *FactoryEventHistory) RecordWorkRequest(tick int, record work.WorkReques
 	h.appendEvent(domainFactoryEvent(
 		interfaces.FactoryEventTypeWorkRequest,
 		fmt.Sprintf("%s/%s", eventIDWorkRequestPrefix, record.RequestID),
-		context,
+		h.sessionScopedContext(context),
 		work.WorkRequestEventPayload{
 			Type:          record.Type,
 			Works:         requestEventWorks(record.WorkItems),
@@ -408,13 +409,13 @@ func (h *FactoryEventHistory) RecordRelationshipChange(tick int, requestID strin
 	h.appendEvent(domainFactoryEvent(
 		interfaces.FactoryEventTypeRelationshipChangeRequest,
 		fmt.Sprintf("%s/%s/%d", eventIDRelationshipPrefix, requestID, index),
-		interfaces.FactoryEventContext{
+		h.sessionScopedContext(interfaces.FactoryEventContext{
 			Tick:      tick,
 			EventTime: eventTime,
 			RequestID: stringPtrIfNotEmpty(requestID),
 			TraceIDs:  stringSlicePtr(work.CanonicalChainingTraceIDs([]string{traceID, relation.TraceID})),
 			WorkIDs:   stringSlicePtr(uniqueStrings([]string{relation.SourceWorkID, relation.TargetWorkID})),
-		},
+		}),
 		work.RelationshipChangeRequestEventPayload{Relation: eventRelation(relation)},
 	))
 }
@@ -431,7 +432,7 @@ func (h *FactoryEventHistory) RecordWorkstationRequest(tick int, record interfac
 	h.appendEvent(domainFactoryEvent(
 		interfaces.FactoryEventTypeDispatchRequest,
 		fmt.Sprintf("%s/%s", eventIDDispatchCreatedPrefix, dispatchID),
-		interfaces.FactoryEventContext{
+		h.sessionScopedContext(interfaces.FactoryEventContext{
 			Tick:                     tick,
 			EventTime:                eventTime,
 			DispatchID:               stringPtr(dispatchID),
@@ -440,7 +441,7 @@ func (h *FactoryEventHistory) RecordWorkstationRequest(tick int, record interfac
 			WorkIDs:                  stringSlicePtr(workIDsFromTokens(inputTokens)),
 			CurrentChainingTraceID:   stringPtrIfNotEmpty(record.Dispatch.CurrentChainingTraceID),
 			PreviousChainingTraceIDs: stringSlicePtr(record.Dispatch.PreviousChainingTraceIDs),
-		},
+		}),
 		interfaces.DispatchRequestEventPayload{
 			TransitionID:             record.Dispatch.TransitionID,
 			ExpectedArtifactContext:  cloneExpectedArtifactTemplateContext(record.Dispatch.ExpectedArtifactContext),
@@ -465,12 +466,12 @@ func (h *FactoryEventHistory) RecordDispatchWorkerSessionAssociation(tick int, d
 	h.appendEvent(domainFactoryEvent(
 		interfaces.FactoryEventTypeDispatchWorkerSessionAssoc,
 		fmt.Sprintf("%s/%s", eventIDDispatchWorkerSessionAssocPrefix, dispatchID),
-		interfaces.FactoryEventContext{
+		h.sessionScopedContext(interfaces.FactoryEventContext{
 			Tick:       tick,
 			EventTime:  eventTime,
 			DispatchID: stringPtr(dispatchID),
 			RequestID:  stringPtrIfNotEmpty(requestID),
-		},
+		}),
 		interfaces.DispatchWorkerSessionAssociationEventPayload{
 			WorkerSessionID: workerSessionID,
 		},
@@ -491,7 +492,7 @@ func (h *FactoryEventHistory) RecordWorkstationResponse(tick int, result workers
 	h.appendEvent(domainFactoryEvent(
 		interfaces.FactoryEventTypeDispatchResponse,
 		fmt.Sprintf("%s/%s", eventIDDispatchCompletedPrefix, result.DispatchID),
-		interfaces.FactoryEventContext{
+		h.sessionScopedContext(interfaces.FactoryEventContext{
 			Tick:                     tick,
 			EventTime:                eventTime,
 			DispatchID:               stringPtr(result.DispatchID),
@@ -499,7 +500,7 @@ func (h *FactoryEventHistory) RecordWorkstationResponse(tick int, result workers
 			WorkIDs:                  stringSlicePtr(workIDsFromTokens(completed.ConsumedTokens)),
 			CurrentChainingTraceID:   stringPtrIfNotEmpty(workers.CurrentChainingTraceID(completed.ConsumedTokens, interfaces.SystemTimeWorkTypeID)),
 			PreviousChainingTraceIDs: stringSlicePtr(workers.PreviousChainingTraceIDs(completed.ConsumedTokens)),
-		},
+		}),
 		workers.DispatchResponseEventPayload{
 			TransitionID:                result.TransitionID,
 			CurrentChainingTraceID:      stringPtrIfNotEmpty(workers.CurrentChainingTraceID(completed.ConsumedTokens, interfaces.SystemTimeWorkTypeID)),
@@ -534,14 +535,14 @@ func (h *FactoryEventHistory) RecordModelEvent(event workers.ModelEvent) {
 	h.appendEvent(domainFactoryEvent(
 		eventType,
 		event.ID,
-		interfaces.FactoryEventContext{
+		h.sessionScopedContext(interfaces.FactoryEventContext{
 			Tick:       event.Tick,
 			EventTime:  interfaces.CanonicalEventTime(event.EventTime),
 			DispatchID: stringPtrIfNotEmpty(event.DispatchID),
 			RequestID:  stringPtrIfNotEmpty(event.RequestID),
 			TraceIDs:   stringSlicePtr(event.TraceIDs),
 			WorkIDs:    stringSlicePtr(event.WorkIDs),
-		},
+		}),
 		payload,
 	))
 }
@@ -573,14 +574,14 @@ func (h *FactoryEventHistory) RecordScriptEvent(event workers.ScriptEvent) {
 	h.appendEvent(domainFactoryEvent(
 		eventType,
 		event.ID,
-		interfaces.FactoryEventContext{
+		h.sessionScopedContext(interfaces.FactoryEventContext{
 			Tick:       event.Tick,
 			EventTime:  interfaces.CanonicalEventTime(event.EventTime),
 			DispatchID: stringPtrIfNotEmpty(event.DispatchID),
 			RequestID:  stringPtrIfNotEmpty(event.RequestID),
 			TraceIDs:   stringSlicePtr(event.TraceIDs),
 			WorkIDs:    stringSlicePtr(event.WorkIDs),
-		},
+		}),
 		payload,
 	))
 }
@@ -608,10 +609,10 @@ func (h *FactoryEventHistory) RecordAgentRunEvent(event workers.AgentRunResponse
 	h.appendEvent(domainFactoryEvent(
 		interfaces.FactoryEventTypeAgentRunResponse,
 		event.ID,
-		interfaces.FactoryEventContext{
+		h.sessionScopedContext(interfaces.FactoryEventContext{
 			EventTime:  interfaces.CanonicalEventTime(event.EventTime),
 			DispatchID: stringPtr(event.DispatchID),
-		},
+		}),
 		event.Payload,
 	))
 }
