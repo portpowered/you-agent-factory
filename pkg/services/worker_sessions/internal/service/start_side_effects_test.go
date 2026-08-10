@@ -139,6 +139,42 @@ func TestStart_OpeningRecordPublicationFailure_TerminalizesFailedWithoutCallingW
 	}
 }
 
+// TestStart_OpeningAppendFailure_DoesNotCreateTerminalOnlyHistory proves that
+// a failed opening append cannot be followed by a successful terminal append:
+// the resulting topic must remain empty rather than exposing SESSION/FAILED at
+// position 1 without the authoritative SESSION/STARTED record.
+func TestStart_OpeningAppendFailure_DoesNotCreateTerminalOnlyHistory(t *testing.T) {
+	appender := &failOnNthAppendEventsAppender{Service: newEventsAppender(), n: 1}
+	execution := succeedingExecution()
+	registry, err := newService(executionBoundary{execution: execution}, appender, nil)
+	if err != nil {
+		t.Fatalf("service.New() error = %v, want nil", err)
+	}
+
+	result, err := registry.InvokeSession(context.Background(), validStartRequest("worker-1", "dispatch-1"))
+	if err != nil {
+		t.Fatalf("Start() error = %v, want nil", err)
+	}
+	if result.Session.State != workersessions.StateFailed {
+		t.Fatalf("Start() state = %q, want FAILED", result.Session.State)
+	}
+	if got := execution.callCount(); got != 0 {
+		t.Fatalf("Start() called Workers %d times, want 0 after opening append failure", got)
+	}
+
+	read, err := appender.Read(context.Background(), events.ReadRequest{
+		Topic: workersessions.Topic("worker-1"),
+		From:  events.Cursor{Topic: workersessions.Topic("worker-1")},
+		Limit: 10,
+	})
+	if err != nil {
+		t.Fatalf("Read() error = %v, want nil", err)
+	}
+	if read.Outcome != events.ReadOutcomeAtHead || len(read.Records) != 0 {
+		t.Fatalf("Read() = %+v, want an empty topic at head after opening failure", read)
+	}
+}
+
 // TestStart_InvalidRequest_CreatesNoTopicRecord extends the existing
 // pre-effect rejection coverage: an invalid Start request must not publish
 // any Events record, not just skip the Workers call.

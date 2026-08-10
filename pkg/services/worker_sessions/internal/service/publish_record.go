@@ -503,8 +503,14 @@ func (r *registry) publishTerminalRecord(ctx context.Context, id, attemptID stri
 	}
 
 	pub := r.publicationFor(id)
+	if pub == nil {
+		return workersessions.ErrSessionNotFound
+	}
 	pub.mu.Lock()
 	defer pub.mu.Unlock()
+	if !pub.open {
+		return workersessions.ErrPublicationNotOpen
+	}
 	pub.open = false
 	draft.Provenance = lifecycleProvenance(pub.provider)
 
