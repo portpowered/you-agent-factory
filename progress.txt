@@ -1866,3 +1866,18 @@
 - **Learnings for future iterations:**
   - Compare the server's live base SHA with the local remote-tracking ref before treating a PR as conflict-free; stale base metadata can hide a conflict in shared `prd.json` and `progress.txt`.
 ---
+## 2026-08-10 09:45 -07:00 - sac-s0-1-ownership-inventories CI retry follow-up
+- What was implemented
+  - Investigated the first latest-head CI failure and confirmed that Backend Functional Coverage failed in unchanged timing-sensitive tests: two restart/history cancellation observations and the CLI writer-failure cancellation race.
+  - Reran the exact restart and CLI writer tests locally 10 times each; all passed. The first failed-job retry moved to the known JavaScript concurrency observation, which passed five consecutive focused repetitions after one intermittent failure in a 20-run stress sample.
+  - Reran only the failed GitHub jobs; the latest-head run completed successfully.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Focused restart tests — passed 10 repetitions.
+  - Focused CLI writer-failure test — passed 10 repetitions.
+  - Focused JavaScript parallel-dispatch test — passed five consecutive repetitions after the isolated stress flake.
+  - GitHub Actions run `31407831161` — all 18 checks passed, including Backend Functional Coverage and Verification Policy, on head `5ed5afbcf`.
+- **Learnings for future iterations:**
+  - For broad functional-coverage failures, inspect the first assertion; unchanged cancellation/concurrency observations can move between tests across retries. Repeat the exact test and rerun failed jobs before changing unrelated runtime code.
+---
