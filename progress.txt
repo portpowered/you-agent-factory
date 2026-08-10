@@ -563,3 +563,20 @@
   - API-owned defensive transport assertions belong in the owning transport package; functional coverage should reserve `root.BuildProcess` for customer-visible composition and behavior.
   - A constructor-validation test that only needs a narrow port should use a local stub, even when a real in-memory peer service is convenient elsewhere in the same package.
 ---
+## 2026-08-10 13:58 -07:00 - wsr-001-opening-record functional coverage follow-up
+- What was implemented
+  - Added a root-built direct JavaScript server test that sends a real public Worker Session-ID events request through the handler supplied by the process edge, then verifies the intentionally partial durable composition returns structured `500 INTERNAL_ERROR` with the internal-server error family.
+  - Kept the defensive owner-unavailable assertion out of the normal functional server's direct transport construction while restoring meaningful coverage for the root HTTP transport's unavailable Worker Sessions branch.
+  - Updated the WSR-003 PRD note to document both the owning transport test and the root-built direct-JavaScript exception.
+- Files changed
+  - `tests/functional/transport/run_scoped_server/run_scoped_server_test.go`
+  - `prd.json`
+- Verification
+  - Focused and full `tests/functional/transport/run_scoped_server` tests — passed.
+  - `make functional-boundary-check` — passed.
+  - Local `make test-functional-coverage` — exceeded the 20-minute command allowance without returning a result; its coverage process was terminated after the timeout, so GitHub Actions remains authoritative for the package-floor check.
+  - `git diff --check` — passed before bookkeeping; code commit `79f0c6ef3` is pushed to PR #1849.
+- **Learnings for future iterations:**
+  - Direct JavaScript hosting is a legitimate root-built HTTP composition with durable Factory Sessions but no live Worker Sessions owner; public route assertions there can cover composition-specific defensive behavior without importing or constructing the top-level transport in a functional test.
+  - Aggregate functional coverage can exceed the local execution budget on this Windows worktree; retain focused behavioral evidence and use the terminal GitHub coverage artifact for the final package-floor result.
+---
