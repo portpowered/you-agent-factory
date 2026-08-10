@@ -102,8 +102,8 @@
         "Tests pass"
       ],
       "priority": 5,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added tests/functional/cli/one_shot/characterization_test.go. Root-built Process.Execute runs deterministic one-work factories through an injected Codex-shaped ProviderCommandRunner and a recorded response-stream invocation. Tests assert the literal 14-event success/provider-failure order, request/trace/work/dispatch/session correlation, complete primary-result projection, terminal SUCCEEDED/FINAL session publication, typed failed dispatch metadata, failed InvocationResponse/runtime error, exactly one provider attempt, and exactly one invocation_result. Repeated focused and race runs pass; no production behavior or public/generated contract changed."
     },
     {
       "id": "btrc-p0-characterization-006",

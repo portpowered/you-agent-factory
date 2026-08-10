@@ -31,6 +31,7 @@
 - Replay characterization should assert literal IDs, event kinds, sequences, and ticks from a checked-in recording before asserting reducer or delivery results; use replay side-effect substitutes to verify recorded terminal outcomes without invoking live effects.
 - When a package has a strict file-count baseline, put a small refactor in an existing focused file before adding a new helper file or changing the baseline.
 - When broad functional coverage reports a cancellation-observation failure, rerun the failed lane and isolate the named test before changing an unrelated feature; parallel-suite failures can move between existing durability/restart tests while isolated runs pass.
+- For one-shot invocation characterization, pair a recorded artifact with `--output response-stream`: the artifact freezes canonical Factory Event order while the stream independently proves one terminal `invocation_result` and caller-visible mapping.
 
 ## 2026-08-09 13:12 - wo-d1-packaged-factories-docs-001
 - What was implemented
@@ -840,4 +841,25 @@
 - **Learnings for future iterations:**
   - The checked-in legacy inference fixture is a useful stable event-order source for reducer/delivery characterization even though its historical metadata is not a valid full current-root runtime input; full root replay should use a recording produced by the current runtime harness.
   - Portable historical replay rejects malformed order before live runtime construction, so its observable failure contract is a typed `ReplayInputError` with zero live effect calls; legacy runtime replay reports incompatible dispatches as typed `DivergenceError`.
+---
+## 2026-08-10 06:08 -07:00 - btrc-p0-characterization-005
+- What was implemented
+  - Added deterministic one-shot success and provider-failure characterization at the root `BuildProcess`/`Process.Execute` boundary in `tests/functional/cli/one_shot/characterization_test.go`.
+  - Froze the literal 14-event `RUN_REQUEST` through `SESSION_COMPLETED` order from a recorded response, including request, trace, work, dispatch, Worker Session, and `~default` session identities.
+  - Asserted the complete successful primary-result projection, terminal `SUCCEEDED`/`FINAL` session result, failed dispatch `unknown`/terminal typed metadata, failed `INVOCATION_RUNTIME_FAILURE` response, one provider command, and one terminal `invocation_result`.
+  - Marked story `btrc-p0-characterization-005` as passed in `prd.json`; no production behavior or public/generated contract changed.
+- Files changed
+  - tests/functional/cli/one_shot/characterization_test.go
+  - prd.json
+  - progress.txt
+- Verification
+  - `go test ./tests/functional/cli/one_shot -count=5 -v -timeout 300s` — passed.
+  - `go test ./tests/functional/cli/one_shot -race -count=1 -timeout 300s` — passed.
+  - `go vet ./tests/functional/cli/one_shot` — passed.
+  - `go test ./tests/functional/cli/... -count=1 -timeout 600s` — the new one-shot, output, input-contract, MCP-resume, root-discovery, and session-resume packages passed; unchanged `tests/functional/cli/named_invocation` has four pre-existing failures around unknown `--mode` compatibility input and unresolved `${executorProvider}` provider selection.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - The one-shot invocation requires the provider-shaped output to contain the authored `COMPLETE` stop token; the current primary-result projection retains that marker in the returned text.
+  - A failed one-shot dispatch currently returns a typed failed `InvocationResponse` and process error while the aggregate canonical session terminal event still projects `SUCCEEDED`/`FINAL` once the single work is terminal; preserve both surfaces in future characterization.
+  - `--output response-stream` emits canonical Factory Event records followed by one `invocation_result`, making duplicate terminal publication observable without a live server or timing helper.
 ---
