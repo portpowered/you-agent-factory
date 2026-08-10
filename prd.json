@@ -1,75 +1,178 @@
 {
-  "project": "WO-B2 — Reusable AGY Production Review Roles",
-  "branchName": "wo-b2-agy-production-review-roles",
-  "description": "Ship two first-party packaged AGY review roles: a context-free cold-watch reviewer for completed cuts and a deterministic clip-QA gate for rendered clips. Both roles pass media paths unchanged through the existing ANTIGRAVITY provider, define exact success and failure contracts, remain offline in ordinary CI, and include operator guidance for production composition.",
+  "project": "BTRC P0 — Characterize Runtime Opening and Record Ownership",
+  "branchName": "btrc-p0-characterization",
+  "description": "Implement BTRC packet P0 by publishing a complete ownership matrix for the 44 runtime-opening behavioral dependencies, deferred factories, external effects, and late binders, and by adding deterministic characterization of current Factory Event order and terminal results across every required runtime-opening mode without changing production behavior.",
   "context": {
-    "customerAsk": "Deliver WO-B2 as one coherent reusable role slice: a cold-watch final reviewer that receives only a completed-cut path and reports what happens plus temporal and audio defects, and a clip-QA gate that receives a clip path and shot specification and returns a deterministic structured pass-or-reroll verdict. Reuse the existing ANTIGRAVITY provider and real recorded AGY traces, keep normal CI offline, pass file paths directly for AGY to parse, and document exact input, output, failure, and missing-file behavior.",
-    "problem": "WO-B1 and merged PR #1826 provide AGY execution and real video/audio traces, but the repository does not ship reusable production role definitions. Factory authors must invent prompts, schemas, workspace rules, and refusal handling, which creates hidden context and false-success risk because AGY can exit zero and report SUCCESS while declining a missing file.",
-    "solution": "Add independently invocable @you/agy-cold-watch and @you/agy-clip-qa authored Factories to the first-party packaged catalog, generate their distribution artifacts through the existing generator, document and exemplify their production composition, and prove their successful and missing-file behavior through root.BuildProcess, Process.Execute, ProviderCommandRunner, and the real recorded AGY traces without live CI calls or wrapper media transformation."
+    "customerAsk": "Inventory and classify the current runtime-opening dependencies, deferred factories, external-effect fields, and late binders; publish the ownership matrix under docs/internal/packaged-service-structure/ as work proceeds for the parallel P1 lane; and characterize current event order and terminal results for successful and failed batch, hosted/service, replay, one-shot, ACP target, direct JavaScript, and standalone runs, including cancellation and partial failure. Make no production behavior changes.",
+    "problem": "Factory Session opening currently performs a secondary construction pass around 44 grouped behavioral dependencies plus external-effect bags, deferred service factories, and late binding. Ownership and cleanup destinations are unclear, and current event ordering, terminal results, isolation, and failure behavior are not consistently frozen across all entry modes, creating migration risk for parallel composition packets.",
+    "solution": "Publish a living, reconciled ownership matrix that gives every in-scope item exactly one classification and target owner or deletion, then add focused deterministic behavior tests with literal canonical Factory Event sequences and complete terminal outcomes for success and failure in each required mode. Use existing owner and root.BuildProcess/Process.Execute boundaries with injected edge fakes, preserve current production code and contracts, and keep the matrix available to P1 while both lanes proceed in parallel.",
+    "originalDocuments": [
+      "C:/Users/andre/work/portos/infinite-you/docs/internal/packaged-service-structure/build-time-runtime-composition-plan.md (packet P0)",
+      "C:/Users/andre/work/portos/infinite-you/docs/temp/scale-program-rules.md"
+    ]
   },
   "acceptanceCriteria": [
-    "The first-party catalog ships independently invocable @you/agy-cold-watch and @you/agy-clip-qa Factories with discoverable descriptions, examples, exact invocation signatures, explicit primary results, and canonical generated catalog artifacts derived from authored sources rather than hand-edited generated files.",
-    "Cold watch accepts only a completed-cut path as creative input and returns the documented observation report covering chronological events, temporal or transient defects, audio content and defects, observed speech, and a pass or reroll recommendation; it neither receives nor seeks creative-brief, shot-specification, intended-beat, or prior-verdict context.",
-    "Clip QA accepts a clip path and shot specification and returns a schema-valid object containing action_completed, spec_deviations, temporal_artifacts, audio_content, unexpected_speech, verdict, and confidence; verdict is exactly pass or reroll, and a missing, invalid, or incomplete result cannot become successful Work.",
-    "Both roles preserve the media path in prompt text and use the existing ANTIGRAVITY Provider and mandatory --add-dir-compatible workspace path without decoding, uploading, copying, probing, frame-stripping, extracting audio from, or otherwise transforming media; missing, unreadable, or inaccessible media fails Work with an actionable non-empty diagnostic and is not a pass or reroll.",
-    "Focused offline functional coverage constructs through root.BuildProcess, executes through Process.Execute, replaces only edges.Edges.ProviderCommandRunner, replays the real AGY video, audio, clip-QA, and missing-file recordings, and proves the selected Factory, provider command, returned content, Factory Events, and terminal Work outcome.",
-    "Quality gates pass: go test ./tests/functional/providers/agy -run '^TestAgyProductionReviewRolesThroughRootBuildProcess$' -count=1, make packaged-factory-catalog-check, make docs-reference-smoke, and make verify-fast pass; Typecheck passes; Tests pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
-    "The implementation and review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared or generated-file churn are resolved, and the PR is actually merged; opened, green, approved, or ready-to-merge is not complete."
+    "The published ownership matrix enumerates all 44 grouped runtime-opening behavioral dependencies, all deferred factories, every ExternalEffects field, and every late binder, and assigns each row exactly one classification and one target owner or explicit deletion.",
+    "Representative successful and failed batch, hosted/service, replay, one-shot invocation, ACP target, direct JavaScript, and standalone fixture scenarios assert literal canonical Factory Event order and complete terminal results or typed failures.",
+    "Characterization proves current concurrent-session isolation, cancellation, partial-opening failure, cleanup observation, and prevention of duplicate terminal publication.",
+    "Production behavior, public contracts, generated API artifacts, event emission, and runtime composition remain unchanged, with no broad unrelated cleanup or meta-test enforcement added.",
+    "Behavioral evidence uses deterministic owner/process boundaries and injected edge fakes rather than live services, source/topology inventories, sleeps, or self-derived expected traces.",
+    "Typecheck and focused tests pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
+    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared-file churn are reconciled against current main, and the PR is actually merged."
   ],
   "userStories": [
     {
-      "id": "wo-b2-agy-production-review-roles-001",
-      "title": "Ship the context-free cold-watch reviewer",
-      "description": "As a production operator, I want an independent reviewer to watch the completed cut without creative-brief context so I can learn what the artifact actually communicates and catch motion or soundtrack defects that upstream authors may have normalized.",
+      "id": "btrc-p0-characterization-001",
+      "title": "Publish the complete ownership matrix",
+      "description": "As a maintainer working in a parallel composition lane, I want one authoritative map of every runtime-opening input and binding so that I can move each behavior to the correct owner without inventing another construction path.",
       "acceptanceCriteria": [
-        "@you/agy-cold-watch is independently invocable with one required cutPath input bound to a clearly named CLI argument; provider model, effort, and timeout may use documented safe defaults or explicit role overrides, but there is no brief, shot-specification, expected-action, or prior-verdict input.",
-        "The effective reviewer instruction treats cutPath as the only creative context, watches the whole file including audio, does not inspect nearby briefs or manifests for intended meaning, and does not infer correctness from filenames or upstream status.",
-        "Successful primary output follows one documented report contract with a chronological description of what happens, timestamped temporal or transient defects, audio content and timestamped audio defects, observed speech, and an overall pass or reroll recommendation; empty sections are explicit rather than omitted.",
-        "The cut path is forwarded unchanged in the AGY prompt and execution uses the existing workspace --add-dir; no wrapper media decoding, upload, copy, probing, frame extraction, or audio extraction occurs.",
-        "An absent, unreadable, unsupported, or workspace-inaccessible cut does not produce a review recommendation: Work reaches the failed path with a non-empty actionable explanation, including when replayed AGY exits zero and reports provider status SUCCESS while refusing the file.",
-        "The cold-watch functional subtest replays the real video and audio recordings and asserts facts from both picture and soundtrack through root.BuildProcess, Process.Execute, and ProviderCommandRunner without a live AGY call.",
-        "Typecheck passes",
-        "Tests pass"
+        "A matrix under docs/internal/packaged-service-structure/ lists all 44 grouped dependency fields, all deferred factory roles, all invocation-local external-effect fields, and all current late attachment, completion, and binding operations.",
+        "Each row records a stable item name, current role, exactly one classification (build-time dependency, operation value, private owner state, or delete), exactly one target owner or explicit deletion, lifecycle/cleanup responsibility where applicable, and the downstream retirement packet.",
+        "Documented totals and source-to-row reconciliation make omissions and duplicate rows reviewer-visible without adding a production or test-time filesystem inventory checker.",
+        "The matrix is published before all characterization is complete and remains reconciled with authoritative current main for P1 and other parallel consumers.",
+        "No destination introduces a generic factory, locator, callback injector, compatibility graph, service-valued operation bag, or exposed private owner state.",
+        "Typecheck passes"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Implemented @you/agy-cold-watch with a single cutPath input, context-free AGY prompt, and a runtime markdown-observation-report/v1 postcondition requiring inspection status, chronology, timestamped defect/audio sections, observed speech, and exactly one pass-or-reroll recommendation. A complete report is accepted through root.BuildProcess, while both existing real incomplete video/audio traces and the exit-zero missing-file refusal fail Work without a primary recommendation; path and provider evidence remain observable. Focused story, factory-definition, mapping, API-contract, catalog, and docs checks pass."
+      "notes": "Published docs/internal/packaged-service-structure/runtime-opening-ownership-matrix.md. It reconciles all 44 grouped dependency fields, 15 ExternalEffects fields, 38 deferred construction/callback roles, and 13 late completion/attachment/binding operations with one classification, one target owner or deletion, lifecycle/cleanup responsibility, retirement packet, and reviewer-visible source totals. No production or inventory-checker code changed."
     },
     {
-      "id": "wo-b2-agy-production-review-roles-002",
-      "title": "Ship the deterministic clip-QA gate",
-      "description": "As a shot pipeline author, I want a clip reviewed against its shot specification with a stable pass-or-reroll result so downstream routing can act on the verdict without parsing free-form prose.",
+      "id": "btrc-p0-characterization-002",
+      "title": "Characterize batch execution outcomes",
+      "description": "As a maintainer replacing runtime opening, I want the existing batch success and failure traces frozen so that later composition changes preserve the ordering and aggregate terminal result customers observe.",
       "acceptanceCriteria": [
-        "@you/agy-clip-qa is independently invocable with exactly two required creative inputs, clipPath and shotSpecification, bound to discoverable named CLI arguments and preserved without hidden brief or prior-verdict context.",
-        "The role watches the complete clip and evaluates whether the specified action finishes, deviations from the supplied specification, transient and temporal artifacts across time, audio content, and unexpected speech.",
-        "The primary result validates against the recorded B2 schema: action_completed is boolean; spec_deviations and temporal_artifacts are string arrays; audio_content is speech, music, noise, silence, or mixed; unexpected_speech is boolean; verdict is pass or reroll; confidence is from 0 through 1; every field is required.",
-        "pass means the action completes and no specification deviation, reroll-worthy temporal artifact, or disallowed speech is observed; otherwise the role returns reroll and records each reason in the applicable arrays rather than hiding it in prose.",
-        "Missing or inaccessible media, provider or process failure, malformed output, or schema-invalid output fails Work with an actionable diagnostic and never becomes a production reroll, because reroll is reserved for a successfully inspected but unacceptable clip.",
-        "The clip-QA functional subtest replays agy-trace-clipqa-schema.stream.jsonl and the recorded missing-file trace through the public process boundary, asserts the real pass result and audio or no-speech evidence, and proves missing-file refusal reaches failed Work without live AGY.",
+        "A deterministic representative multi-work batch records the exact canonical Factory Event type order from acceptance through dispatch and terminal session publication, including child-work and session terminal ordering.",
+        "The successful batch asserts the complete terminal status/result projection, work counts, and stable correlation/session identities currently returned.",
+        "A failed or partially failed batch asserts exact event order, per-work terminal outcomes, aggregate terminal status/result, and typed failure classification without stranded non-terminal work.",
+        "The scenarios use root.BuildProcess and Process.Execute with deterministic edge replacements and no live provider, network, or timeout-padded synchronization.",
+        "Focused batch characterization tests pass",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 2,
-      "passes": true,
-      "notes": "Implemented the explicit structured-clip-qa/v1 runtime contract for confidence bounds, required fields, pass invariants, and meaningful inspected rerolls. Structured failure detection now checks status/outcome/success markers before allowing a reroll and rejects unscoped structured rerolls; root.BuildProcess coverage proves pass, accepted reroll, out-of-range/inconsistent results, mixed provider status, schema failure, provider failure, and missing-file failure. The review follow-up also encodes confidence minimum/maximum in the authored and generated provider schema, asserts those bounds in the AGY command, and keeps the validator below the package maintainability threshold. Executor, focused AGY functional, and packaged catalog checks pass."
+      "passes": false,
+      "notes": ""
     },
     {
-      "id": "wo-b2-agy-production-review-roles-003",
-      "title": "Document and verify production composition",
-      "description": "As a Factory author, I want a worked, validated example of the two roles and their failure boundaries so I can place them in a production pipeline without hidden media handling or ambiguous routing.",
+      "id": "btrc-p0-characterization-003",
+      "title": "Characterize hosted and service outcomes",
+      "description": "As an operator of hosted Factory Sessions, I want current hosted source and service-run outcomes captured so that activating sources or handling a hosted failure remains compatible after ownership moves.",
       "acceptanceCriteria": [
-        "The packaged-factories reference catalog documents both roles, their purpose, invocation inputs, result shape, default AGY model and timeout policy, workspace-relative and absolute-path expectations, and representative PowerShell-safe invocations whose flags agree with generated help.",
-        "A repository-owned worked example shows clip QA after clip creation and cold watch after mechanical checks assemble the completed cut; it routes pass, reroll, and failed execution distinctly and states that cold watch receives no creative brief even when upstream stages have one.",
-        "The example and operator documentation state that paths must identify readable files within the directory exposed to AGY by the existing --add-dir execution, that the wrapper never transforms media, and that a missing or inaccessible path is an execution failure rather than a review verdict.",
-        "you factory config validate accepts each authored role and example; you run --named @you/agy-cold-watch --help and you run --named @you/agy-clip-qa --help expose the documented inputs; generated catalog files are refreshed only with make packaged-factory-catalog-generate.",
-        "The documentation names go test ./tests/functional/providers/agy -run '^TestAgyProductionReviewRolesThroughRootBuildProcess$' -count=1 as the independently runnable fully offline end-to-end command; any live AGY smoke remains the existing operator-gated B1 smoke and is not duplicated or enabled in ordinary CI.",
-        "Behavioral validation exercises loading, invocation, successful result, schema rejection, provider failure, and missing-file outcomes through public runtime behavior; it does not scan source trees, assert command, route, or catalog inventories, or inspect generated bundle internals as a substitute for those outcomes.",
+        "A deterministic hosted/service success asserts the literal canonical Factory Event sequence from hosted submission through terminal session result and the complete caller-visible result.",
+        "A representative hosted source, secret, HTTP, or execution failure asserts its literal emitted event sequence, typed terminal failure/result, and whether dispatch was attempted under current behavior.",
+        "Failure evidence proves current hosted-source cleanup/stop observation and no activity leakage into an independent second session.",
+        "Hosted effects are replaced only through the existing process edge boundary with deterministic clock, HTTP, and secret fakes.",
+        "Focused hosted/service characterization tests pass",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 3,
-      "passes": true,
-      "notes": "Documented both roles in the packaged-factory reference catalog with exact live-help signatures, pinned ANTIGRAVITY/gemini-3.6-flash-high/8m policy, report schemas, path and failure boundaries, and PowerShell-safe invocations. Added the repository-owned AGY production composition example with distinct pass/reroll/failed routing and the offline root-process command; updated catalog-count/docs smoke coverage. Corrected cold-watch documentation to match live help: required cutPath is available positionally and through --cut-path, and corrected both documented PowerShell parsers to consume the two-line H2 recommendation contract. Authored/generated catalog checks, factory validation, focused root-process coverage, package gates, packaged catalog/source checks, readme-check, and docs-reference smoke pass."
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "btrc-p0-characterization-004",
+      "title": "Characterize replay outcomes",
+      "description": "As a customer replaying a recording, I want replay event order and terminal results frozen so that later construction changes do not mutate history or rerun external effects.",
+      "acceptanceCriteria": [
+        "A successful representative replay asserts the exact canonical Factory Event order and terminal result reconstructed from a fixed recording, including stable sequence/cursor behavior.",
+        "A malformed, incompatible, or failed recorded run asserts the exact replay events emitted before failure and the complete typed terminal error/result.",
+        "Replay success and failure prove that worker, provider, hosted-source, and script execution effects are not invoked.",
+        "Expected replay order comes from deterministic recording fixtures and is not derived from the projection under test.",
+        "Focused replay characterization tests pass",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "btrc-p0-characterization-005",
+      "title": "Characterize one-shot invocation outcomes",
+      "description": "As a CLI or API customer invoking a Factory once, I want current success and failure results and events captured so that the later root cutover does not change invocation semantics.",
+      "acceptanceCriteria": [
+        "A deterministic successful one-shot invocation asserts the literal canonical Factory Event sequence and complete returned terminal result, including current identity and output projection behavior.",
+        "A representative validation, provider, or execution failure asserts the literal event prefix/terminal sequence, typed failure, exit/service outcome, and absence of duplicate execution.",
+        "Ordinary invocation characterization uses root.BuildProcess and Process.Execute; transport evidence is used only where customer-visible terminal mapping is the behavior under test.",
+        "External effects are replaced through edges.Edges, preferring command-runner recordings over an in-process provider substitute.",
+        "Focused one-shot invocation characterization tests pass",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "btrc-p0-characterization-006",
+      "title": "Characterize ACP target outcomes",
+      "description": "As an ACP client, I want target execution success and failure behavior frozen so that later runtime ownership work preserves the ACP-facing event and result contract.",
+      "acceptanceCriteria": [
+        "A deterministic ACP target success asserts the exact canonical Factory Event sequence, recorded provider/session correlation, and complete target terminal result.",
+        "A representative ACP startup, protocol, or worker failure asserts the exact emitted event sequence, bounded typed failure detail, retry classification when present, and terminal target/session outcome.",
+        "Success and failure prove one terminal outcome per dispatch and no duplicate canonical terminal publication from provider-native terminal observations.",
+        "Tests use an offline deterministic ACP command/protocol edge without a live provider or sleep-based coordination.",
+        "Focused ACP target characterization tests pass",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "btrc-p0-characterization-007",
+      "title": "Characterize direct JavaScript outcomes",
+      "description": "As a maintainer of direct JavaScript execution, I want its current event and terminal behavior frozen so that it can later enter through Factory Sessions without semantic drift.",
+      "acceptanceCriteria": [
+        "A fixed direct JavaScript workflow success asserts exact canonical event order for activation, child dispatch progress, result application, and terminal completion plus the complete terminal result.",
+        "A deterministic workflow-load, policy, child-dispatch, or script failure asserts its exact canonical event sequence and typed terminal failure/result.",
+        "The scenarios prove current child-dispatch correlation and one terminal result per child and execution without live provider or watcher timing.",
+        "Characterization stays at the current direct execution owner boundary and does not prematurely perform the Sessions cutover.",
+        "Focused direct JavaScript characterization tests pass",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "btrc-p0-characterization-008",
+      "title": "Characterize standalone fixture outcomes",
+      "description": "As a maintainer using standalone fixtures, I want their current success and failure behavior captured so that future execution-opening removal retains deterministic fixture semantics.",
+      "acceptanceCriteria": [
+        "A standalone fixture success asserts the literal canonical Factory Event order, stable fixture/session identity, and complete terminal result.",
+        "A representative invalid fixture or execution failure asserts the literal event prefix/terminal sequence, typed error/result, and absence of lingering live execution state.",
+        "Repeated runs with isolated stores retain independent events and results, and reading one run cannot return another run's fixture state.",
+        "Tests exercise the current standalone boundary with deterministic temporary or in-memory resources and make no production behavior change.",
+        "Focused standalone fixture characterization tests pass",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "btrc-p0-characterization-009",
+      "title": "Characterize cancellation, partial failure, and isolation",
+      "description": "As a maintainer changing lifecycle composition, I want current cancellation and partial-opening failure outcomes captured across independent sessions so that later cleanup ownership changes can be compared against a stable baseline.",
+      "acceptanceCriteria": [
+        "A deterministically blocked run is cancelled and asserts the exact canonical event sequence, terminal cancellation result/error, and current response-stream completion behavior.",
+        "A representative late opening/acquisition failure records observable earlier-resource stops, unattempted later effects, initiating and cleanup errors when applicable, and exact current terminal events/results.",
+        "Repeated close/cancel observation does not publish a second terminal event or repeat externally observable cleanup beyond current behavior.",
+        "Two concurrent sessions prove that cancelling or failing one does not change the other's ordered events, result, active work, or cleanup outcome.",
+        "Deterministic edge blocking replaces sleeps, and focused race/repeat evidence passes where supported.",
+        "Focused cancellation, partial-failure, and session-isolation characterization tests pass",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": ""
     }
   ]
 }

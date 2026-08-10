@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- Runtime-opening ownership inventories should source grouped fields from runtimeopening.Dependencies, invocation-local values from ExternalEffects, and late seams from the opener; keep the reconciliation reviewer-visible in documentation instead of adding source-inventory tests.
 - Canonical packaged CLI docs live under `docs/reference/`; adding a topic also requires its authored file in `docs/reference/embed.go` and a registry entry in `pkg/transports/cli/docs/docs.go`.
 - The `you run --named <factory> --help` output is the authoritative invocation contract; omitted role provider/model values resolve through operator defaults.
 - Documentation for model-backed workflows should describe observable result shape and status/artifact evidence rather than byte-stable generated prose.
@@ -760,4 +761,23 @@
   - Documentation parsers for Markdown output must match the report’s structural contract and tolerate the platform’s CRLF line endings; a single-line `Overall recommendation:` pattern is not equivalent to the emitted H2-plus-body form.
   - AGY structured-output replays enforce exact echoed-schema equivalence, so a contract schema change requires the historical replay envelope to be synchronized without changing its recorded response evidence.
   - When a backend package is at the 15-file limit, consolidate focused behavioral tests into an existing responsibility-aligned file before adding another package-local test file.
+---
+## 2026-08-10 04:42 -07:00 - btrc-p0-characterization-001
+- What was implemented
+  - Published docs/internal/packaged-service-structure/runtime-opening-ownership-matrix.md as the authoritative P0 ownership map.
+  - Reconciled the ten grouped dependency structs to 44 D rows, ExternalEffects to 15 E rows, deferred construction/callback roles to 38 F rows, and late completion/attachment/binding operations to 13 L rows.
+  - Classified every row exactly once, assigned one destination owner or explicit deletion, documented lifecycle/cleanup responsibility, and linked the downstream retirement packet.
+  - Marked story btrc-p0-characterization-001 as passed in prd.json; no production code or inventory-checker test was added.
+- Files changed
+  - docs/internal/packaged-service-structure/runtime-opening-ownership-matrix.md
+  - prd.json
+  - progress.txt
+- Verification
+  - git diff --check — passed.
+  - go test ./pkg/services/factory_sessions/internal/runtimeopening ./pkg/services/factory_sessions/wire ./pkg/services/factory_sessions/internal/applicationopening -count=1 — passed.
+  - Row totals and source sections were reviewed directly against factory.go, factories.go, open.go, and the adjacent Wire/application binding surfaces.
+- **Learnings for future iterations:**
+  - The canonical grouped dependency count is ten Dependencies structs totaling 44 fields; the flattened private opener fields are projections and should not be counted again.
+  - ExternalEffects is the narrow invocation-local projection selected in pkg/wire/runtime_inputs.go; future characterization rows should distinguish these operation values from process-scoped construction inputs.
+  - Workers.LocalRuntimeHooksFactory is composed and validated but not invoked by the current opener, so it is an explicit deletion row rather than a destination-owned capability.
 ---
