@@ -130,7 +130,7 @@ func TestAcceptedCLIContract_ProductionManifestDeclaresNoProvidersCommands(t *te
 	}
 }
 
-func TestAcceptedCLIContract_ListPreservesAcceptedHumanAndJSONOutput(t *testing.T) {
+func TestCLIContract_ListReportsCanonicalFactsInHumanAndJSONOutput(t *testing.T) {
 	t.Parallel()
 
 	root := representativeCatalogRoot()
@@ -146,7 +146,29 @@ func TestAcceptedCLIContract_ListPreservesAcceptedHumanAndJSONOutput(t *testing.
 	wantHuman := strings.Join([]string{
 		"ID\tDISPLAY NAME\tAVAILABILITY\tREADINESS\tALIASES",
 		"codex\tCodex\tselectable\tready\topenai-codex",
+		"  Technical support:\tnone",
+		"  Implementation:\tnone",
+		"  Capabilities:\tnative_streaming, prompt_submission",
+		"  Prerequisites:",
+		"    - none",
+		"  Models:",
+		"    - none",
+		"  Tools:",
+		"    - none",
+		"  Known limits:",
+		"    - none",
 		"cursor\tCursor\tsupported-but-unavailable\tunavailable\tnone",
+		"  Technical support:\tnone",
+		"  Implementation:\tnone",
+		"  Capabilities:\tprompt_submission",
+		"  Prerequisites:",
+		"    - configuration/executable: missing — cursor-agent must be installed",
+		"  Models:",
+		"    - none",
+		"  Tools:",
+		"    - none",
+		"  Known limits:",
+		"    - none",
 		"",
 	}, "\n")
 	if human.String() != wantHuman {
