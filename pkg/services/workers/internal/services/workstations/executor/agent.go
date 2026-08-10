@@ -401,7 +401,7 @@ func (ae *AgentExecutor) workResultForInferenceResponse(request workerexecution.
 				Metrics:         metrics,
 			}, nil
 		}
-		if verdictFailure := structuredOutputFailure(resp.Content); verdictFailure != "" {
+		if verdictFailure := structuredOutputFailure(resp.Content, request.OutputContract); verdictFailure != "" {
 			return workerexecution.WorkResult{
 				DispatchID:      request.Dispatch.DispatchID,
 				TransitionID:    request.Dispatch.TransitionID,

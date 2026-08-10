@@ -132,6 +132,9 @@ func InterpolateWorkstationConfig(workstation factorydefinitions.FactoryWorkstat
 	if next.OutputSchema, err = interpolateInvocationField(next.OutputSchema, args, "workstation.outputSchema", false, readFile); err != nil {
 		return factorydefinitions.FactoryWorkstationConfig{}, err
 	}
+	if next.OutputContract, err = interpolateInvocationField(next.OutputContract, args, "workstation.outputContract", false, readFile); err != nil {
+		return factorydefinitions.FactoryWorkstationConfig{}, err
+	}
 	if next.Timeout, err = interpolateInvocationField(next.Timeout, args, "workstation.timeout", false, readFile); err != nil {
 		return factorydefinitions.FactoryWorkstationConfig{}, err
 	}

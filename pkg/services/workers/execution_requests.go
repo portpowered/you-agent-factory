@@ -125,6 +125,7 @@ type WorkstationExecutionRequest struct {
 	SystemPrompt             string                          `json:"system_prompt,omitempty"`
 	UserMessage              string                          `json:"user_message,omitempty"`
 	OutputSchema             string                          `json:"output_schema,omitempty"`
+	OutputContract           string                          `json:"output_contract,omitempty"`
 	EnvVars                  map[string]string               `json:"env_vars,omitempty"`
 	ProcessEnvironment       []string                        `json:"-"`
 	Worktree                 string                          `json:"worktree,omitempty"`

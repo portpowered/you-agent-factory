@@ -659,6 +659,7 @@ func (we *WorkstationExecutor) buildWorkstationExecutionRequest(dispatch work.Wo
 		SystemPrompt:             workerDef.Body,
 		UserMessage:              rendered,
 		OutputSchema:             workstationDef.OutputSchema,
+		OutputContract:           workstationDef.OutputContract,
 		EnvVars:                  cloneEnvVars(requestContext.EnvVars),
 		ProcessEnvironment:       processEnvironment(we.ProcessEnvironment),
 		Worktree:                 requestContext.Worktree,
@@ -741,6 +742,13 @@ func (we *WorkstationExecutor) executeInnerWorker(ctx context.Context, request w
 			Error:        "executor failed: " + err.Error(),
 			Metrics:      workerexecution.WorkMetrics{Duration: we.Now().Sub(start)},
 		}, nil
+	}
+	if result.Outcome == workerexecution.OutcomeAccepted && request.OutputContract != "" {
+		if contractErr := validateOutputContract(result.Output, request.OutputContract); contractErr != nil {
+			result.Outcome = workerexecution.OutcomeFailed
+			result.Error = "output contract failed: " + contractErr.Error()
+			result.FailureMetadata = structuredOutputFailureMetadata()
+		}
 	}
 
 	logger.Info("workstation: executor result",

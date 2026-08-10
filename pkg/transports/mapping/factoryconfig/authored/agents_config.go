@@ -299,6 +299,7 @@ type workstationFrontmatter struct {
 	Runner           string                              `yaml:"runner,omitempty"`
 	PromptFile       string                              `yaml:"promptFile,omitempty"`
 	OutputSchema     string                              `yaml:"outputSchema,omitempty"`
+	OutputContract   string                              `yaml:"outputContract,omitempty"`
 	Limits           workstationLimitsFrontmatter        `yaml:"limits,omitempty"`
 	Cron             *cronFrontmatter                    `yaml:"cron,omitempty"`
 	Inputs           []ioFrontmatter                     `yaml:"inputs,omitempty"`
@@ -357,14 +358,15 @@ func workstationFrontmatterForExpansion(def factorydefinitions.FactoryWorkstatio
 		behavior = factorydefinitions.WorkstationKind(publicFactoryWorkstationKindFromInternal(def.Kind))
 	}
 	rendered := workstationFrontmatter{
-		ID:           def.ID,
-		Name:         def.Name,
-		Kind:         behavior,
-		Type:         def.Type,
-		Worker:       def.WorkerTypeName,
-		Runner:       def.Runner,
-		PromptFile:   def.PromptFile,
-		OutputSchema: def.OutputSchema,
+		ID:             def.ID,
+		Name:           def.Name,
+		Kind:           behavior,
+		Type:           def.Type,
+		Worker:         def.WorkerTypeName,
+		Runner:         def.Runner,
+		PromptFile:     def.PromptFile,
+		OutputSchema:   def.OutputSchema,
+		OutputContract: def.OutputContract,
 		Limits: workstationLimitsFrontmatter{
 			MaxRetries: def.Limits.MaxRetries, MaxExecutionTime: def.Limits.MaxExecutionTime,
 			MaxGeneratedWorkItems:               def.Limits.MaxGeneratedWorkItems,

@@ -8,9 +8,16 @@
 - JavaScript packaged Factories that parse planner or judge output need protocol-valid provider-command evidence; the CLI `--with-mock-workers` path returns generic text for those child calls, so use focused provider-runner assertions plus a provider-free schema-bound CLI smoke and document the distinction.
 - Workstation prompt templates receive `PromptData`; access a bound work identifier through `(index .Inputs N).WorkID` rather than a root `.WorkID` field.
 - Run-level `--quiet` cannot be combined with structured `--json` or `--output`; verify output-mode combinations against the live CLI before documenting them.
+- For direct named packaged Factory invocations, bind inputs in authored workstation bodies with `${parameter}` interpolation; `.Inputs` payload can be empty even when the named CLI argument is present.
+- Multi-input packaged Factories must give required parameters non-ambiguous invocation bindings; the ACP reachability guard requires each required parameter to expose a text-carrying route, while authored validation rejects routing stdin to multiple parameters.
+- AGY structured-output replays require the provider's echoed `json_schema` to be JSON-equivalent to the authored request; keep historical fixture envelopes synchronized with the authored schema while preserving their recorded output evidence.
+- A schema-valid structured QA `reroll` is an accepted inspection verdict; provider refusal, malformed output, and schema mismatch must fail before verdict interpretation, while provider failures may consume the bounded default retry budget.
+- Packaged Factory additions that change the public catalog require synchronized authored/generated sources, catalog counts, the canonical reference topic, and CLI docs smoke markers; refresh generated output only through `make packaged-factory-catalog-generate`.
+- Verify documented named-Factory commands against isolated live `you run --named ... --help`; role-pinned provider/model defaults should be documented as fixed policy when no override flags are exposed.
 
 - Worker Session finite streams can use the injected Events `Read` contract with the first retained head as a snapshot boundary; replay-only paths must not call `Subscribe`.
 - Authored OpenAPI and CLI contracts generate their Go, TypeScript, published metadata, and family-manifest consumers; update the source contract first, then run the repository generators and drift checks.
+- Provider-neutral output contracts belong on the workstation definition and are enforced after a successful worker response; provider process success or transport parsing alone must not satisfy a semantic report contract.
 - Stream transport dispatch stays below the package maintainability threshold by delegating lifecycle-specific frame handling to focused helpers.
 - Deterministic Worker Session lifecycle tests can combine the controlled workstation boundary with the real in-memory Events service to verify retained replay ordering without sleeps or cancellation.
 - Detached Cobra command families should project local-only flag relationships without eagerly merging parent persistent flags; otherwise the detached storage can shadow the production root flag when the family is attached.
@@ -42,7 +49,6 @@
   - The existing Markdown page was present but not embedded or registered, so `you docs packaged-factories` was previously rejected; keep the source file, embed list, registry, indexes, and user-visible smoke expectations synchronized.
   - The live catalog contains fifteen `@you/*` entries plus any local Factory names, and its directory column is operator-specific; use exact Factory names for portable documentation.
   - The current help contract explicitly prints Factory-defined request binding and role-specific flags, including the phrase that omitted provider/model values use operator defaults.
----
 
 ## 2026-08-09 13:16 - wo-d1-packaged-factories-docs-001 verification follow-up
 - What was implemented
@@ -489,5 +495,269 @@
   - All other required checks for the progress head passed on the original run.
 - **Learnings for future iterations:**
   - When full functional coverage rotates between unrelated unchanged tests while each focused test is stable, treat the lane as parallel-suite timing instability and preserve the feature scope.
-  - A progress-only delivery commit must receive a fresh full-head CI result; a green failed-job rerun for an earlier attempt does not transfer to a later head.
+- A progress-only delivery commit must receive a fresh full-head CI result; a green failed-job rerun for an earlier attempt does not transfer to a later head.
+---
+## 2026-08-09 21:32 -07:00 - wo-b2-agy-production-review-roles-001
+- What was implemented
+  - Added the independently invocable `@you/agy-cold-watch` packaged Factory with one required `cutPath` input, explicit Markdown primary result, strict unknown-argument rejection, and an AGY reviewer prompt that treats the completed cut as its only creative context.
+  - Defined the cold-watch report contract for chronology, temporal/transient defects, audio, observed speech, and pass-or-reroll recommendation; missing-file refusals are routed to failed Work even when the replayed AGY provider reports exit-zero SUCCESS.
+  - Added root-built offline functional coverage for both real video/audio traces and the missing-file trace, asserting the unchanged path in the AGY prompt and `--add-dir`, provider command settings, returned observations, and recorded Factory Events.
+  - Regenerated the packaged catalog and updated published catalog expectations for the new sixteenth first-party Factory.
+- Files changed
+  - `packages/packaged-factories/factories/agy-cold-watch/factory.yaml`
+  - `packages/packaged-factories/generated/factories/agy-cold-watch/factory.yaml`
+  - `packages/packaged-factories/generated/factories/agy-cold-watch/factory.json`
+  - `packages/packaged-factories/generated/manifest.json`
+  - `tests/functional/providers/agy/production_review_test.go`
+  - `tests/functional/factory/packaged/catalog/discovery_test.go`
+  - `pkg/wire/factory_definition_packaged_installation_test.go`
+  - `pkg/wire/packaged_factory_catalog_consumption_test.go`
+  - `prd.json`
+- Verification
+  - `go run ./cmd/factory --json factory config validate packages/packaged-factories/factories/agy-cold-watch` — passed.
+  - `go test ./tests/functional/providers/agy -run '^TestAgyProductionReviewRolesThroughRootBuildProcess$' -count=1` — passed.
+  - `go test ./tests/functional/factory/packaged/catalog -count=1` — passed.
+  - `go test ./pkg/wire -run 'TestProvidePackagedFactoryDefinitions_LoadsDetachedGeneratedCatalog|TestPackagedFactoryCatalogConsumption_ListResolveInstallUsesPublishedCatalog' -count=1` — passed.
+  - `make packaged-factory-catalog-check` and `make packaged-factory-source-check` — passed.
+  - `make ui-deps` restored locked dependencies and `make typecheck` — passed.
+  - `make verify-fast` initially stopped at missing UI dependencies; after restoring them, the broad `make test` lane reached the existing five-minute `TestPause_ControlOutcomesKeepTheLifecycleTruthful` worker-session timeout. The focused story and affected catalog tests remain green.
+- **Learnings for future iterations:**
+  - The generated catalog is sorted by public Factory name, so adding a packaged Factory also requires updating the detached-catalog and wire-consumption behavioral expectations.
+  - AGY provider `SUCCESS` is only process status; a refusal must be rejected by the role contract so it cannot resolve an invocation primary result.
+---
+
+## 2026-08-09 21:48 -07:00 - wo-b2-agy-production-review-roles-002
+- What was implemented
+  - Added the independently invocable `@you/agy-clip-qa` packaged Factory with exactly two required creative inputs, `clipPath` and `shotSpecification`, strict named-argument rejection, direct AGY workspace path/spec forwarding, ANTIGRAVITY defaults, and the recorded B2 seven-field structured verdict schema.
+  - Preserved the distinction between a successful inspected `pass`/`reroll` verdict and execution failure by accepting schema-valid rerolls while rejecting provider refusals, malformed output, and schema mismatches before verdict interpretation.
+  - Added root-built offline functional coverage that replays the real clip-QA pass trace and missing-file trace and also proves schema-invalid and provider-exit failures reach failed Work with Factory Events and actionable public diagnostics.
+  - Regenerated the canonical catalog and updated the published catalog behavior expectations for the seventeenth first-party Factory.
+- Files changed
+  - `packages/packaged-factories/factories/agy-clip-qa/factory.yaml`
+  - `packages/packaged-factories/generated/factories/agy-clip-qa/factory.yaml`
+  - `packages/packaged-factories/generated/factories/agy-clip-qa/factory.json`
+  - `packages/packaged-factories/generated/manifest.json`
+  - `pkg/services/workers/internal/services/workstations/executor/helpers.go`
+  - `pkg/services/workers/internal/services/workstations/executor/agent_inference_test.go`
+  - `pkg/wire/factory_definition_packaged_installation_test.go`
+  - `pkg/wire/packaged_factory_catalog_consumption_test.go`
+  - `tests/functional/factory/packaged/catalog/discovery_test.go`
+  - `tests/functional/providers/agy/production_review_test.go`
+  - `prd.json`
+- Verification
+  - `go run ./cmd/factory --json factory config validate packages/packaged-factories/factories/agy-clip-qa` — passed.
+  - `go test ./tests/functional/providers/agy -run '^TestAgyProductionReviewRolesThroughRootBuildProcess$' -count=1` — passed.
+  - `go test ./pkg/services/workers/internal/services/workstations/executor -count=1` — passed.
+  - `go test ./tests/functional/factory/packaged/catalog -count=1` — passed.
+  - `go test ./pkg/wire -run 'TestProvidePackagedFactoryDefinitions_LoadsDetachedGeneratedCatalog|TestPackagedFactoryCatalogConsumption_ListResolveInstallUsesPublishedCatalog' -count=1` — passed.
+  - `make packaged-factory-source-check`, `make packaged-factory-catalog-check`, and `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - The AGY adapter compares the echoed structured schema, so historical structured traces can only replay against a JSON-equivalent authored schema; stricter constraints need a newly recorded trace or a separate runtime contract.
+  - The generic provider retry policy can issue three attempts for schema/provider failures; failure assertions should prove terminal routing and diagnostics without assuming one command call.
+  - The next story should document the optional positional/stdin reachability bindings alongside the named flags so the public help and operator examples explain both invocation paths.
+---
+
+## 2026-08-09 21:52 -07:00 - wo-b2-agy-production-review-roles-002 verification follow-up
+- What was implemented
+  - No additional product change; rechecked the committed clip-QA story through the broad fast verification tier and live generated invocation help.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `make verify-fast` — passed dashboard typecheck, MCP contract boundary, 355 UI files / 2,970 tests, 191 Bun checks, and the short Go suite.
+  - `go run ./cmd/factory run --named @you/agy-clip-qa --help` with isolated `HOME` and `USERPROFILE` — passed and exposed `--clip-path`, `--shot-specification`, positional clip-path, and stdin shot-specification bindings.
+  - The worktree was clean before this append-only verification entry; story 003 remains the only PRD story with `passes:false`.
+- **Learnings for future iterations:**
+  - A generated named-Factory help smoke is useful evidence that authored external names and binding fallbacks survived materialization; keep it alongside the behavioral root-process test when documenting the role.
+---
+
+## 2026-08-09 22:06 -07:00 - wo-b2-agy-production-review-roles-003
+- What was implemented
+  - Documented @you/agy-clip-qa and @you/agy-cold-watch in the canonical packaged-factory guide with exact live-help signatures, required inputs, pinned ANTIGRAVITY/gemini-3.6-flash-high/8m policy, result contracts, workspace path rules, failure boundaries, and PowerShell-safe invocations.
+  - Added docs/examples/agy-production-review.md showing clip QA after clip creation, mechanical checks before assembly, cold watch after completed-cut assembly, and distinct pass, reroll, and failed routes; linked it from docs/examples/README.md.
+  - Corrected the authored cold-watch cutPath parameter to required and regenerated its YAML, JSON, and manifest artifacts with make packaged-factory-catalog-generate.
+  - Updated customer-facing catalog counts, authoring-guide entries, and the CLI docs smoke contract; split the AGY functional test into focused helpers so the backend-size gate remains green.
+- Files changed
+  - README.md
+  - docs/examples/README.md
+  - docs/examples/agy-production-review.md
+  - docs/reference/authoring-factories.md
+  - docs/reference/packaged-factories.md
+  - packages/packaged-factories/factories/agy-cold-watch/factory.yaml
+  - packages/packaged-factories/generated/factories/agy-cold-watch/factory.yaml
+  - packages/packaged-factories/generated/factories/agy-cold-watch/factory.json
+  - packages/packaged-factories/generated/manifest.json
+  - tests/functional/providers/agy/production_review_test.go
+  - tests/functional/smoke/cli_docs_smoke_test.go
+  - prd.json
+  - progress.txt
+- Verification
+  - go test ./tests/functional/providers/agy -run '^TestAgyProductionReviewRolesThroughRootBuildProcess$' -count=1 — passed all cold-watch video/audio, missing-file, clip-QA pass, schema-invalid, provider-failure, and missing-file subcases.
+  - go run ./cmd/factory --json factory config validate packages/packaged-factories/factories/agy-cold-watch and .../agy-clip-qa — both passed.
+  - Isolated live help showed required --cut-path for cold watch and required positional/--clip-path plus --shot-specification for clip QA.
+  - make packaged-factory-catalog-check, make packaged-factory-source-check, make docs-reference-smoke, make readme-check, make verify-fast, and make pkg-structure — passed.
+  - make lint passed UI lint/dead-code, go vet, backend-size, pkg-maint, and pkg-file-count checks, but stops at the unchanged current-main pkg-boundary migration baseline; no listed baseline violation touches this story's files. No live AGY smoke was enabled.
+- **Learnings for future iterations:**
+  - The live help contract catches authored requiredness drift that static role prose can hide; verify required parameters after catalog generation.
+  - The backend-size checker enforces a 100-line function limit, so large functional scenario tables should delegate each observable route to focused test helpers.
+  - A generated catalog can be current while operator docs are stale; keep catalog counts, reference entries, help evidence, and repository-owned examples synchronized.
+---
+
+## 2026-08-09 22:16 -07:00 - wo-b2-agy-production-review-roles-003 CI follow-up
+- What was implemented
+  - Updated the repository-owned packaged-factory consumer contract to expect the expanded 17-Factory catalog and its 37 verified invocation specifiers.
+- Files changed
+  - `scripts/packaged-factories-package-consumer.test.mjs`
+  - `progress.txt`
+- Verification
+  - `make packaged-factory-package-verify` — passed catalog freshness and all 38 package-script subtests (37 passed, 1 platform-expected symlink skip).
+- **Learnings for future iterations:**
+  - Adding public packaged Factories also expands the candidate consumer's manifest-derived invocation inventory; update its exact-count assertions in the same change and run the package verification target locally.
+---
+
+## 2026-08-09 22:24 -07:00 - wo-b2-agy-production-review-roles-003 CI follow-up
+- What was implemented
+  - Added a positional `cutPath` binding to @you/agy-cold-watch so the required file input remains reachable from ACP's single-text-prompt contract while preserving the named `--cut-path` CLI route.
+  - Regenerated the cold-watch YAML/JSON and packaged-factory manifest artifacts.
+- Files changed
+  - `packages/packaged-factories/factories/agy-cold-watch/factory.yaml`
+  - `packages/packaged-factories/generated/factories/agy-cold-watch/factory.yaml`
+  - `packages/packaged-factories/generated/factories/agy-cold-watch/factory.json`
+  - `packages/packaged-factories/generated/manifest.json`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/factory/packaged/catalog -run '^TestEveryPackagedFactoryIsInvocableFromASingleTextPrompt$' -count=1` — passed.
+  - `go test ./tests/functional/providers/agy -run '^TestAgyProductionReviewRolesThroughRootBuildProcess$' -count=1` — passed.
+  - `make packaged-factory-catalog-check` and `make packaged-factory-package-verify` — passed; all 38 package-script subtests passed except the expected Windows symlink-creation skip.
+- **Learnings for future iterations:**
+- Required named file arguments still need a positional or STDIN binding when the packaged Factory participates in ACP single-text-prompt invocability; named CLI help alone does not satisfy that contract.
+---
+
+## 2026-08-09 23:18 -07:00 - wo-b2-agy-production-review-roles-001 review follow-up
+- What was implemented
+  - Addressed the blocking cold-watch review finding by adding the provider-neutral `markdown-observation-report/v1` workstation contract. A successful response now requires explicit inspection status, exact chronology/defect/audio/speech/recommendation sections, timestamps for observed timelines, named audio content, and exactly one `Recommendation: pass` or `Recommendation: reroll` line; the old `stopToken: speech` substring acceptance is gone.
+  - Put the contract on the authored public Workstation schema and synchronized the OpenAPI bundle, Go/TypeScript clients, packaged contract artifacts, authored/generated cold-watch Factory, and runtime interpolation/layout/merge paths.
+  - Extended root.BuildProcess/Process.Execute coverage with a complete report acceptance case, real video and ground-truth traces that retain picture/audio evidence but fail as incomplete reports, and the exit-zero missing-file refusal that fails without a recommendation.
+- Files changed
+  - `api/components/schemas/data-models/Workstation.yaml`
+  - `api/openapi.yaml`
+  - `contracts/config/factory.schema.json`
+  - `packages/api/generated/manifest.json`
+  - `packages/api/generated/openapi/openapi.yaml`
+  - `packages/api/generated/schemas/factory.schema.json`
+  - `packages/api/generated/schemas/factory-event.schema.json`
+  - `packages/api/generated/schemas/factory-recording.schema.json`
+  - `packages/packaged-factories/factories/agy-cold-watch/factory.yaml`
+  - `packages/packaged-factories/generated/factories/agy-cold-watch/factory.yaml`
+  - `packages/packaged-factories/generated/factories/agy-cold-watch/factory.json`
+  - `packages/packaged-factories/generated/manifest.json`
+  - `packages/packaged-factories/schemas/factory.schema.json`
+  - `packages/packaged-factories/schemas/factory.schema.yaml`
+  - `pkg/services/factory_definitions/internal/contracts/factory_config.go`
+  - `pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout/writer.go`
+  - `pkg/services/factory_definitions/internal/services/compilation/loading/loader.go`
+  - `pkg/services/factory_definitions/internal/services/compilation/runtimeconfig/merge.go`
+  - `pkg/services/factory_definitions/internal/services/invocation_policy/invocationinterpolation/service.go`
+  - `pkg/services/workers/execution_requests.go`
+  - `pkg/services/workers/internal/services/workstations/executor/helpers.go`
+  - `pkg/services/workers/internal/services/workstations/executor/workstation_executor.go`
+  - `pkg/services/workers/internal/services/workstations/executor/response_contract_test.go`
+  - `pkg/transports/http/client/client.gen.go`
+  - `pkg/transports/http/generated/server.gen.go`
+  - `pkg/transports/mapping/factoryconfig/authored/agents_config.go`
+  - `pkg/transports/mapping/factoryconfig/factory_config_mapping.go`
+  - `pkg/transports/mapping/factoryconfig/factory_config_mapping_internal.go`
+  - `tests/functional/providers/agy/production_review_test.go`
+  - `ui/src/api/generated/openapi.ts`
+- Verification
+  - `go test ./tests/functional/providers/agy -run '^TestAgyProductionReviewRolesThroughRootBuildProcess$' -count=1 -v -timeout 900s` — passed complete-contract acceptance, both incomplete real-trace rejections, missing-file refusal, and existing clip-QA cases.
+  - `go test ./pkg/services/workers/internal/services/workstations/executor -run 'TestValidateMarkdownObservationReport|TestWorkstationExecutor_ModelWorkstationUsesCanonicalWorkstationRuntimeFields' -count=1` — passed.
+  - `go test ./pkg/services/factory_definitions/... -count=1` — passed.
+  - `go test ./pkg/transports/mapping/factoryconfig/... -count=1` — passed.
+  - `go test ./pkg/transports/http/... ./tests/functional/transport/http/server -count=1` — passed.
+  - `go run ./cmd/factory --json factory config validate packages/packaged-factories/factories/agy-cold-watch` — passed.
+  - `make packaged-factory-source-check`, `make packaged-factory-catalog-check`, `make contracts-generate`, `make contracts-check`, and `make docs-reference-smoke` — passed.
+  - `make ui-deps` remains blocked by the pre-existing checkout state where multiple `ui/packages/*` directories are deleted; generated UI OpenAPI was refreshed with the repository's pinned openapi-typescript/Biome versions through the standalone generator path.
+- **Learnings for future iterations:**
+  - A Markdown contract needs a post-worker validation hook; AGY stream success and a stop-token substring are insufficient evidence of a complete review.
+  - Keep provider-neutral workstation contract fields flowing through the authored API schema, mapping, layout expansion, invocation interpolation, runtime merge, and generated consumer artifacts together.
+  - Existing “real” recordings can be valuable negative fixtures when their prose predates a stricter production contract; pair them with a minimal complete provider envelope so the acceptance path is also observable.
+---
+
+## 2026-08-09 23:36 -07:00 - wo-b2-agy-production-review-roles-002 review follow-up
+- What was implemented
+  - Added the explicit `structured-clip-qa/v1` workstation contract for `@you/agy-clip-qa`, enforcing all required fields, finite confidence in `[0,1]`, pass invariants, and meaningful inspected rerolls at the shared runtime boundary used by `AGENT_RUN`.
+  - Changed structured-output failure detection to inspect `status`, `outcome`, and `success` failure markers before accepting a reroll, reject unscoped structured rerolls, and preserve valid clip-QA rerolls.
+  - Added executor and root-built offline functional coverage for out-of-range confidence, inconsistent pass objects, empty-reason rerolls, mixed provider/status failures, an accepted reroll, and the existing recorded pass/missing-file/schema/provider failures.
+  - Regenerated the clip-QA authored distribution artifact and manifest through `make packaged-factory-catalog-generate`; marked story 002 complete in `prd.json`.
+- Files changed
+  - `packages/packaged-factories/factories/agy-clip-qa/factory.yaml`
+  - `packages/packaged-factories/generated/factories/agy-clip-qa/factory.yaml`
+  - `packages/packaged-factories/generated/factories/agy-clip-qa/factory.json`
+  - `packages/packaged-factories/generated/manifest.json`
+  - `pkg/services/workers/internal/services/workstations/executor/agent.go`
+  - `pkg/services/workers/internal/services/workstations/executor/agent_inference_test.go`
+  - `pkg/services/workers/internal/services/workstations/executor/agent_test.go`
+  - `pkg/services/workers/internal/services/workstations/executor/helpers.go`
+  - `pkg/services/workers/internal/services/workstations/executor/response_contract_test.go`
+  - `tests/functional/providers/agy/production_review_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/workers/internal/services/workstations/executor/... -count=1` — passed.
+  - `go test ./tests/functional/providers/agy -run '^TestAgyProductionReviewRolesThroughRootBuildProcess$' -count=1 -v -timeout 300s` — passed, including accepted reroll and all semantic/mixed-failure rejection cases.
+  - `make packaged-factory-catalog-check` — passed.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - `AGENT_RUN` workstations bypass the model-only `AgentExecutor`; provider-neutral output contracts must be enforced at the shared `WorkstationExecutor` boundary so both agent-run and inference paths receive the same semantic validation.
+  - A structured reroll is only a successful inspection verdict when its explicit contract is present; check provider/status failure markers before interpreting domain-level reroll fields.
+  - Recorded AGY traces can be reused for synthetic semantic variants by changing only the terminal structured output while preserving the echoed provider schema and stream envelope.
+---
+
+## 2026-08-10 00:05 -07:00 - wo-b2-agy-production-review-roles-003 review follow-up
+- What was implemented
+  - Corrected the cold-watch reference signature to document the required `<cut-path>` positional binding and its equivalent `--cut-path` named binding, matching the generated authored catalog and live CLI help.
+  - Marked the final production-composition story complete after confirming the catalog, worked example, failure boundaries, validation guidance, and offline behavioral coverage are synchronized.
+- Files changed
+  - `docs/reference/packaged-factories.md`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go run ./cmd/factory run --named @you/agy-cold-watch --help` — passed; exposed `positional 1 <cut-path> | --cut-path <file-path>`.
+  - `go run ./cmd/factory run --named @you/agy-clip-qa --help` — passed; exposed the documented positional/`--clip-path` and `--shot-specification` inputs.
+  - `go test ./tests/functional/providers/agy -run '^TestAgyProductionReviewRolesThroughRootBuildProcess$' -count=1` — passed.
+  - `make packaged-factory-catalog-check` and `make docs-reference-smoke` — passed.
+  - `make verify-fast` — attempted but stopped at dashboard typecheck because the pre-existing checkout lacks `@types/bun` and all `ui/packages/*` workspace sources; `make ui-deps` cannot resolve those missing workspaces. Earlier complete-checkout verification for this PR head passed `verify-fast`, and no UI files are part of this follow-up.
+- **Learnings for future iterations:**
+  - Treat generated named-Factory help as the source of truth when documenting positional and named bindings; inspect both the authored binding and live help before marking a docs story complete.
+---
+
+## 2026-08-10 00:24 -07:00 - wo-b2-agy-production-review-roles review follow-up
+- What was implemented
+  - Addressed the latest blocking PR feedback by encoding `confidence` `minimum: 0` and `maximum: 1` in the authored clip-QA schema and regenerating the packaged catalog artifacts.
+  - Refactored structured clip-QA validation into focused decoding, shape, confidence, pass, and reroll helpers; consolidated the contract tests into the existing workstation test file so `pkg-file-count` remains within the 15-file limit.
+  - Updated both production-composition PowerShell parsers to consume the actual `## Overall recommendation` plus `Recommendation: pass|reroll` contract, including CRLF-safe matching; the parser was behaviorally checked for pass, reroll, and missing-recommendation cases.
+  - Kept the historical AGY clip-QA response/media evidence while synchronizing only its echoed schema metadata in the offline replay harness, and asserted the bounded confidence fields on the provider command.
+- Files changed
+  - `docs/examples/agy-production-review.md`
+  - `docs/reference/packaged-factories.md`
+  - `packages/packaged-factories/factories/agy-clip-qa/factory.yaml`
+  - `packages/packaged-factories/generated/factories/agy-clip-qa/factory.yaml`
+  - `packages/packaged-factories/generated/factories/agy-clip-qa/factory.json`
+  - `packages/packaged-factories/generated/manifest.json`
+  - `pkg/services/workers/internal/services/workstations/executor/helpers.go`
+  - `pkg/services/workers/internal/services/workstations/executor/response_contract_test.go` (consolidated into `workstation_executor_test.go`)
+  - `pkg/services/workers/internal/services/workstations/executor/workstation_executor_test.go`
+  - `tests/functional/providers/agy/production_review_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/workers/internal/services/workstations/executor -count=1` — passed.
+  - `go test ./tests/functional/providers/agy -run '^TestAgyProductionReviewRolesThroughRootBuildProcess$' -count=1 -v -timeout 900s` — passed.
+  - `make pkg-maint`, `make pkg-file-count`, `make packaged-factory-catalog-check`, and `make docs-reference-smoke` — passed.
+  - `git diff --check` — passed.
+  - `make verify-fast` — blocked at the pre-existing dashboard typecheck baseline: missing `@types/bun`, TypeScript 6 `baseUrl` deprecation errors, and deleted `ui/packages/*` workspace sources; no UI files are part of this follow-up.
+- **Learnings for future iterations:**
+  - Documentation parsers for Markdown output must match the report’s structural contract and tolerate the platform’s CRLF line endings; a single-line `Overall recommendation:` pattern is not equivalent to the emitted H2-plus-body form.
+  - AGY structured-output replays enforce exact echoed-schema equivalence, so a contract schema change requires the historical replay envelope to be synchronized without changing its recorded response evidence.
+  - When a backend package is at the 15-file limit, consolidate focused behavioral tests into an existing responsibility-aligned file before adding another package-local test file.
 ---

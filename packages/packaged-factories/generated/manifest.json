@@ -3,6 +3,65 @@
   "factorySchema": "https://schemas.portpowered.com/you/config/factory.schema.json",
   "factories": [
     {
+      "name": "@you/agy-clip-qa",
+      "project": "builtin-agy-clip-qa",
+      "slug": "agy-clip-qa",
+      "json": {
+        "locator": "generated/factories/agy-clip-qa/factory.json",
+        "sha256": "0363c83a8124e5001c6e518c0aca2bc14febf382f8634206e1ad6378a1f0cc14"
+      },
+      "yaml": {
+        "locator": "generated/factories/agy-clip-qa/factory.yaml",
+        "sha256": "34fe5583263f84ad1a1e59693b83db788895938cb17573986a33787554eeeace"
+      },
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Deterministically gates a rendered clip against its shot specification with ANTIGRAVITY and returns a schema-validated pass-or-reroll verdict."
+      },
+      "examples": [
+        {
+          "name": "gate-rendered-clip",
+          "description": {
+            "type": "LOCALIZABLE_ASSET",
+            "value": "Check a rendered clip against its shot specification and return a deterministic verdict."
+          },
+          "args": {
+            "clipPath": ".\\clip.mp4",
+            "shotSpecification": "A silver-haired woman points at a bright star; no speech is audible."
+          }
+        }
+      ]
+    },
+    {
+      "name": "@you/agy-cold-watch",
+      "project": "builtin-agy-cold-watch",
+      "slug": "agy-cold-watch",
+      "json": {
+        "locator": "generated/factories/agy-cold-watch/factory.json",
+        "sha256": "70b6fd94488c6214f052783d3845850479666d4884181b009e03a2c920f6edad"
+      },
+      "yaml": {
+        "locator": "generated/factories/agy-cold-watch/factory.yaml",
+        "sha256": "4c99a01a5e744942c57bef7a74c805c7ef239ed524036c7884a6eb247bf721f8"
+      },
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Reviews a completed cut from first principles with ANTIGRAVITY, covering chronology, temporal defects, audio, observed speech, and a pass-or-reroll recommendation."
+      },
+      "examples": [
+        {
+          "name": "review-completed-cut",
+          "description": {
+            "type": "LOCALIZABLE_ASSET",
+            "value": "Cold-watch a completed cut and report what the artifact actually communicates."
+          },
+          "args": {
+            "cutPath": ".\\completed-cut.mp4"
+          }
+        }
+      ]
+    },
+    {
       "name": "@you/classify",
       "project": "builtin-classify",
       "slug": "classify",
