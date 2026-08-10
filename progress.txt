@@ -28,6 +28,7 @@
 - When broad functional coverage reports a cancellation-observation failure, rerun the failed lane and isolate the named test before changing an unrelated feature; parallel-suite failures can move between existing durability/restart tests while isolated runs pass.
 - Package-target discovery is the stable-sorted set of directories containing non-test Go sources; adding a durable service owner requires updating the checker vocabulary and its live top-level inventory before regenerating the manifest.
 - Boundary check compatibility bridges should be exact package/type exceptions with request-scoped rationale; broad service-prefix allowlists can hide new durable ownership claims.
+- Compatibility guard exceptions must match the reviewed method/field shape as well as the package and type name; name-only exemptions can hide ownership-expanding contract growth.
 - When an ownership burn-down ledger is corrected, regenerate it as an explicit empty array and reject retired rows so stale debt cannot silently return.
 
 ## 2026-08-09 13:12 - wo-d1-packaged-factories-docs-001
@@ -900,5 +901,24 @@
   - `git diff --check` — passed.
 - **Learnings for future iterations:**
   - Root-relative ignore policies need paired positive fixtures under production `pkg`; testing ignored paths alone cannot prove that nested artifact/worktree-like directories remain visible.
-  - Existing `make pkg-boundary` subprocess tests provide a stable way to verify the public checker entry path against temporary repository fixtures.
+- Existing `make pkg-boundary` subprocess tests provide a stable way to verify the public checker entry path against temporary repository fixtures.
+---
+
+## 2026-08-10 06:11 -07:00 - sac-s0-1-ownership-inventories review follow-up
+- What was implemented
+  - Constrained the Workers-root `Provider` package-boundary exception to the exact reviewed request-scoped compatibility contract: one `Infer(context.Context, ProviderInferenceRequest) (InferenceResponse, error)` method.
+  - Added a focused regression proving that adding a provider catalog method to that root type is rejected, and updated the allow fixture to use the production contract shape rather than a generic string signature.
+  - Reshaped story `sac-s0-1-ownership-inventories-004` from a behavioral user story into an explicit `project-enabling` PRD criterion because canonical architecture guidance changes no runtime, public API, CLI, UI, or emitted-event behavior.
+- Files changed
+  - `cmd/pkgboundarycheck/provider_effect_ownership.go`
+  - `cmd/pkgboundarycheck/provider_effect_ownership_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./cmd/pkgboundarycheck -run 'ProviderEffect|WorkersRequestScoped|WorkersProvider' -count=1 -v` — passed.
+  - `prd.json` parses successfully with PowerShell JSON validation.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - A compatibility exception should be narrow enough to reject additions to the reviewed contract, not merely recognize its historical type name.
+  - Documentation-only alignment belongs in explicit enabling/project criteria when it has no observable product behavior; keep behavioral user stories reserved for runtime, API, CLI, UI, or emitted-event outcomes.
 ---

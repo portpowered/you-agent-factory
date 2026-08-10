@@ -13,6 +13,7 @@
     "Every live production package appears exactly once with a durable owner or the explicit Process Edges exception, including Worker Sessions, Events, Chat Sessions, ACP, Factory Sessions, Providers, platform, and mapping packages.",
     "Inventory regeneration does not silently reclassify a bidirectional edge as acceptable; every unresolved bidirectional edge remains visible until its owning convergence story lands.",
     "The eight affected guards and documentation entries assign provider inference to Providers and hosted polling to Automations, and the service-owner tables in AGENTS.md, architecture.md, and packaged-structure.md state the same durable ownership model.",
+    "Enabling/project-level documentation criterion: the canonical service-owner guidance is reconciled with the reviewed inventories; this documentation-only alignment intentionally changes no runtime, public API, CLI, UI, or emitted-event behavior.",
     "Typecheck and relevant focused tests pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
     "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts are resolved against current main, and the PR is actually merged."
   ],
@@ -58,7 +59,7 @@
       "acceptanceCriteria": [
         "All eight affected guard and documentation entries are reviewed and corrected: provider inference is assigned to Providers, hosted polling is assigned to Automations, and Workers retains only its request-scoped execution responsibilities.",
         "Ownership rationale distinguishes Workers deciding when to execute a worker attempt from Providers owning provider protocol, selection, session, adapter, and execution behavior, and from Automations owning hosted-source observation and polling.",
-        "Focused guard tests reject a new production assignment of provider inference or hosted polling to Workers while accepting the reviewed Providers and Automations ownership paths.",
+        "Focused guard tests reject a new production assignment of provider inference or hosted polling to Workers, reject an expanded Workers-root Provider compatibility port, and accept only the exact reviewed request-scoped contract plus the reviewed Providers and Automations ownership paths.",
         "No runtime behavior, public API contract, or unrelated Workers migration is changed by this correction.",
         "Tests pass",
         "Typecheck passes"
@@ -66,9 +67,12 @@
       "priority": 3,
     "passes": true,
     "notes": "Corrected the package-boundary owner metadata for Providers execution/adapters and rewrote the provider-effect diagnostics to distinguish Providers-owned protocol, selection, session, adapter, and one-attempt execution from the Workers request-scoped compatibility port. Added focused tests that allow the reviewed Providers leaf and Workers compatibility bridge while rejecting a new provider-effect owner under Workers; the existing hosted-ownership tests reject polling/reconciliation assigned to Workers and accept Automation Hosted Sources. Burned down all eight stale misplaced-guard inventory entries, made retired entries fail validation, and expanded Providers/Workers rationale cards with present-tense ownership. No runtime behavior, public API shape, or unrelated migration changed. make ownership-inventory-check, make package-target-manifest-check, focused boundary/inventory tests, go test compilation checks, and git diff --check pass. The full internal ownership package and ownership-boundary make target retain the pre-existing Workers/Recordings root-contract and two unrelated baseline violations documented in progress.txt."
-    },
+    }
+  ],
+  "enablingCriteria": [
     {
       "id": "sac-s0-1-ownership-inventories-004",
+      "type": "project-enabling",
       "title": "Reconcile canonical service-owner documentation",
       "description": "As a contributor, I want the canonical service-owner tables to agree with the reviewed inventories so that repository guidance leads changes to the correct package and contract boundary.",
       "acceptanceCriteria": [
@@ -82,7 +86,7 @@
       ],
       "priority": 4,
       "passes": true,
-      "notes": "Reconciled the three canonical ownership summaries with the implemented package graph. AGENTS.md now names Chat Sessions, Events, Worker Sessions, ACP, mapping, platform, Providers-owned provider inference/execution policy, Automations-owned hosted polling, and Workers request-scoped execution. architecture.md and packaged-structure.md use the same present-tense service-owner model, explicitly distinguish Events source-native delivery from the Recordings canonical Factory Event ledger, and keep internal runtime implementation details behind the customer-facing Factory boundary. make ownership-inventory-check, make package-target-manifest-check, focused ownership-check tests, and git diff --check pass; no runtime, API, or unrelated migration changes were made."
+      "notes": "Reconciled the three canonical ownership summaries with the implemented package graph. AGENTS.md now names Chat Sessions, Events, Worker Sessions, ACP, mapping, platform, Providers-owned provider inference/execution policy, Automations-owned hosted polling, and Workers request-scoped execution. architecture.md and packaged-structure.md use the same present-tense service-owner model, explicitly distinguish Events source-native delivery from the Recordings canonical Factory Event ledger, and keep internal runtime implementation details behind the customer-facing Factory boundary. This remains an enabling documentation criterion with no runtime, API, CLI, UI, or emitted-event behavior change. make ownership-inventory-check, make package-target-manifest-check, focused ownership-check tests, and git diff --check pass."
     }
   ]
 }
