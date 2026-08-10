@@ -50,8 +50,8 @@
         "Tests pass"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented session-scoped canonical Recordings subscriptions for enabled endpoints, activation cursors, exact Factory Event envelope POSTs, injected secret/HTTP/clock effects, v1 HMAC signing headers, request timeouts, bounded response-body consumption, independent endpoint workers, disabled-endpoint no-op behavior, missing-secret isolation, and runtime cleanup ownership. Added local HTTP receiver, signature, filter, disabled, missing-secret, and response-bound tests."
     },
     {
       "id": "e3-event-webhooks-003",

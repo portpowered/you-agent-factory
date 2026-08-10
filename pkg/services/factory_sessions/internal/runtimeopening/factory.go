@@ -14,6 +14,7 @@ import (
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/webhooks"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
@@ -75,6 +76,7 @@ type Dependencies struct {
 	Automations        *AutomationsDependencies
 	Models             *ModelsDependencies
 	Recordings         *RecordingsDependencies
+	Webhooks           *WebhooksDependencies
 	Workers            *WorkersDependencies
 	OperatorSettings   *OperatorSettingsDependencies
 }
@@ -144,12 +146,18 @@ type ModelsDependencies struct {
 // RecordingsDependencies contains Recordings-owned opening collaborators.
 type RecordingsDependencies struct {
 	ProjectionFactory      RecordingsProjectionFactory
+	ServiceFactory         RecordingsServiceFactory
 	LifecycleFactory       RecordingLifecycleFactory
 	RuntimeLedgerFactory   RuntimeLedgerFactory
 	RuntimeRecorderFactory recordings.RuntimeRecorderFactory
 	ReplayClockFactory     ReplayClockFactory
 	ReplayExecutionFactory recordings.ReplayExecutionFactory
 	ReplayInputs           recordings.ReplayInputLoader
+}
+
+// WebhooksDependencies contains the session-scoped outbound delivery root.
+type WebhooksDependencies struct {
+	Service webhooks.Service
 }
 
 // WorkersDependencies contains Workers-owned opening collaborators.
@@ -179,7 +187,9 @@ type Factory struct {
 	factorySessionsService           factorysessions.Service
 	factorySessionExecutionFactory   FactorySessionExecutionFactory
 	recordingsProjectionFactory      RecordingsProjectionFactory
+	recordingsServiceFactory         RecordingsServiceFactory
 	recordingLifecycleFactory        RecordingLifecycleFactory
+	webhooksService                  webhooks.Service
 	runtimeLedgerFactory             RuntimeLedgerFactory
 	runtimeRecorderFactory           recordings.RuntimeRecorderFactory
 	replayClockFactory               ReplayClockFactory
@@ -236,6 +246,7 @@ func NewFactory(dependencies Dependencies) (*Factory, error) {
 	automations := dependencies.Automations
 	modelsDependencies := dependencies.Models
 	recordingsDependencies := dependencies.Recordings
+	webhooksDependencies := dependencies.Webhooks
 	workersDependencies := dependencies.Workers
 	operatorSettings := dependencies.OperatorSettings
 
@@ -248,7 +259,9 @@ func NewFactory(dependencies Dependencies) (*Factory, error) {
 		factorySessionsService:           factorySessions.Service,
 		factorySessionExecutionFactory:   factorySessions.FactorySessionExecutionFactory,
 		recordingsProjectionFactory:      recordingsDependencies.ProjectionFactory,
+		recordingsServiceFactory:         recordingsDependencies.ServiceFactory,
 		recordingLifecycleFactory:        recordingsDependencies.LifecycleFactory,
+		webhooksService:                  webhooksDependencies.Service,
 		runtimeLedgerFactory:             recordingsDependencies.RuntimeLedgerFactory,
 		runtimeRecorderFactory:           recordingsDependencies.RuntimeRecorderFactory,
 		replayClockFactory:               recordingsDependencies.ReplayClockFactory,
@@ -297,6 +310,7 @@ func (dependencies Dependencies) validate() error {
 		dependencies.validateAutomations,
 		dependencies.validateModels,
 		dependencies.validateRecordings,
+		dependencies.validateWebhooks,
 		dependencies.validateWorkers,
 		dependencies.validateOperatorSettings,
 	} {
@@ -417,6 +431,16 @@ func (dependencies Dependencies) validateRecordings() error {
 	)
 }
 
+func (dependencies Dependencies) validateWebhooks() error {
+	group := dependencies.Webhooks
+	if err := requireRuntimeOpeningGroup("Webhooks", group); err != nil {
+		return err
+	}
+	return validateRuntimeOpeningRequirements("Webhooks",
+		runtimeOpeningRequirement{"service", group.Service},
+	)
+}
+
 func (dependencies Dependencies) validateWorkers() error {
 	group := dependencies.Workers
 	if err := requireRuntimeOpeningGroup("Workers", group); err != nil {
@@ -491,6 +515,7 @@ func (f *Factory) openRuntime(
 		f.factorySessionsService,
 		f.factorySessionExecutionFactory,
 		f.recordingsProjectionFactory,
+		f.recordingsServiceFactory,
 		f.recordingLifecycleFactory,
 		f.runtimeLedgerFactory,
 		f.runtimeRecorderFactory,
@@ -518,6 +543,7 @@ func (f *Factory) openRuntime(
 		f.decodeReplayConfig,
 		f.replayInputs,
 		f.captureLoadedFactorySnapshot,
+		f.webhooksService,
 		f.resolveClock,
 		f.newSessionLogger,
 		f.adaptWorkerCommandRunner,
