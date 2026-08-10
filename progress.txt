@@ -1714,3 +1714,16 @@
 - **Learnings for future iterations:**
   - Once the latest head is green and review threads are empty, `gh pr ready` is the final state transition needed to hand a draft PR to reviewers.
 ---
+## [2026-08-10 16:58 -07:00] - thr-split-acp-stdio-tests-003 final coverage blocker
+- What was implemented
+  - Investigated the latest-head Backend Functional Coverage failure and confirmed it is the same unrelated `pkg/transports/cli` coverage-floor regression on attempts 2 and 3: actual 72.8180% versus the 72.98% manifest minimum.
+  - Retried only the failed backend job; the retry remained red, so no unrelated CLI baseline or production-code change was introduced.
+- Files changed
+  - `progress.txt`
+- Verification
+  - The prior final-head run `31442041604` passed all 18 jobs, while the current final-head run `31442775623` reproduced only the CLI functional coverage-floor failure; all other jobs passed.
+  - The PR remains open, ready for review, and has no conversation comments, formal reviews, or unresolved inline threads.
+  - All three PRD stories remain `passes: true`; the PR body remains byte-identical to `prd.json`.
+- **Learnings for future iterations:**
+  - A repeated coverage-floor result on an unchanged source head should be recorded as a CI/base blocker; do not lower a package minimum or add unrelated tests merely to make a scoped PR green.
+---
