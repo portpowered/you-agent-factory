@@ -48,6 +48,9 @@ func scanInitializerBehavior(repoRoot string) ([]initializerBehaviorFinding, err
 		if walkErr != nil {
 			return walkErr
 		}
+		if shouldSkipRepositoryWalkDirectory(repoRoot, path, entry) {
+			return filepath.SkipDir
+		}
 		if entry.IsDir() || filepath.Ext(entry.Name()) != ".go" || strings.HasSuffix(entry.Name(), "_test.go") {
 			return nil
 		}

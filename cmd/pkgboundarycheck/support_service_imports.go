@@ -72,13 +72,10 @@ func scanSupportRootServiceSubpackageImports(
 		if walkErr != nil {
 			return walkErr
 		}
+		if shouldSkipRepositoryWalkDirectory(repoRoot, path, entry) {
+			return filepath.SkipDir
+		}
 		if entry.IsDir() {
-			switch entry.Name() {
-			case ".git", "node_modules", "testdata", "vendor":
-				if path != supportRoot {
-					return filepath.SkipDir
-				}
-			}
 			return nil
 		}
 		if filepath.Ext(entry.Name()) != ".go" || strings.HasSuffix(entry.Name(), "_test.go") {

@@ -193,6 +193,9 @@ func scanTransportBehavior(repoRoot string) ([]transportBehaviorFinding, error) 
 		if walkErr != nil {
 			return walkErr
 		}
+		if shouldSkipRepositoryWalkDirectory(repoRoot, path, entry) {
+			return filepath.SkipDir
+		}
 		if entry.IsDir() {
 			return nil
 		}

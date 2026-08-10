@@ -133,7 +133,7 @@ func selectValue() { _ = work.ListOptions{WorkTypeName: "story"} }
 	}
 }
 
-func TestRunIgnoresFactoryWorktreeCheckouts(t *testing.T) {
+func TestRunIgnoresRepositoryPolicyNonSourceRoots(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := t.TempDir()
@@ -141,18 +141,33 @@ func TestRunIgnoresFactoryWorktreeCheckouts(t *testing.T) {
 		".worktrees",
 		"worktrees",
 		filepath.Join(".claude", "worktrees"),
+		filepath.Join(".artifacts", "bootstrap", "worktrees"),
+		filepath.Join(".artifacts", "generated", "transient-worktrees"),
+		filepath.Join(".artifacts", "bootstrap", "generated", "worktrees"),
+		".git",
+		"node_modules",
+		"testdata",
+		"vendor",
 	} {
-		writeGoSourceFile(t, repoRoot, filepath.Join(worktreeRoot, "task-a", "pkg", "transports", "http", "staging.go"), `package http
+		writeGoSourceFile(
+			t,
+			repoRoot,
+			filepath.Join(worktreeRoot, "task-a", "tests", "functional", "stale_test.go"),
+			fmt.Sprintf(`package functional
 
-import runtime "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/shared/moved"
+import _ %q
 
-func build() { runtime.New() }
-`)
+func stale( {
+`, applicationGraphImportPath),
+		)
 	}
 
 	stderr := &bytes.Buffer{}
 	if err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr); err != nil {
-		t.Fatalf("run() error = %v, want factory worktree checkouts ignored; stderr=%q", err, stderr.String())
+		t.Fatalf("run() error = %v, want repository-policy roots ignored; stderr=%q", err, stderr.String())
+	}
+	if got := stderr.String(); got != "" {
+		t.Fatalf("run() stderr = %q, want no findings from ignored repository-policy roots", got)
 	}
 }
 
