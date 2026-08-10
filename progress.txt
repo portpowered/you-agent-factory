@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- Treat repository-enforcement inventories and architecture guards as project-enabling PRD criteria when they have no runtime, API, CLI, UI, or emitted-event behavior; source scans support enforcement but are not customer-behavior evidence.
 - AST scanners must expand grouped Go field declarations before indexing parameter or result types; a field-count helper can exceed the AST field-list length and panic on valid source.
 - Asynchronous service characterizations should wait on observed edge/context signals rather than arbitrary `time.After` ceilings; the test context remains the failure escape hatch.
 - Continuous Petri service sessions intentionally remain `IDLE` after terminal Work; characterize the dispatch and Work/progress projection as the caller-visible result and assert the live-result route's typed unavailability instead of inventing a finite session result.
@@ -1931,4 +1932,21 @@
   - Repository inventory and architecture-guard checks are valid enforcement evidence, but they do not satisfy a customer-behavior acceptance gate; model genuinely non-behavioral work as explicit project-enabling criteria.
   - The broad `go test ./cmd/packagetargetmanifestcheck` package also exercises current-main Workers/Recordings root-file inventories and currently reports unrelated baseline drift (`kind_phase_validation.go` and `lifecycle_capability.go`); the public package-target Make gate and focused manifest tests remain green.
   - Story 002 still needs the same acceptance-shape follow-up in a separate iteration; do not combine it with this story's bookkeeping change.
+---
+## 2026-08-10 10:34 -07:00 - sac-s0-1-ownership-inventories-002 review follow-up
+- What was implemented
+  - Reclassified `sac-s0-1-ownership-inventories-002` from a behavioral user story to an explicit `project-enabling` criterion in `prd.json`, because the ownership inventory and reciprocal-edge validation are repository-enforcement and maintainer tooling rather than customer runtime, API, CLI, UI, or emitted-event behavior.
+  - Preserved the completed package, cross-owner classification, present-tense rationale, and unresolved-bidirectional-edge acceptance evidence, and added an explicit no-runtime/API/CLI/UI/event-behavior criterion.
+  - Corrected the existing trailing comma so `prd.json` is valid standard JSON.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `make ownership-inventory-check` — passed.
+  - `make package-target-manifest-check` — passed (545 inventory rows / 545 package rows).
+  - `go test ./cmd/ownershipinventorycheck -count=1` — passed.
+  - PRD validation reports valid JSON, four unique passing enabling criteria, and no behavioral user stories.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - Acceptance criteria for repository-enforcement work should explicitly identify the project-level nature of the evidence and state the intentionally unchanged customer-facing behavior; keep the PRD valid JSON so automated consumers do not depend on permissive parsers.
 ---

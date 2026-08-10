@@ -17,26 +17,7 @@
     "Typecheck and relevant focused tests pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
     "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts are resolved against current main, and the PR is actually merged."
   ],
-  "userStories": [
-    {
-      "id": "sac-s0-1-ownership-inventories-002",
-      "title": "Complete and classify the ownership inventory",
-      "description": "As an architecture reviewer, I want every production package and cross-owner dependency to have a reviewed owner and relationship classification so that dependency direction and remaining convergence debt are explicit.",
-      "acceptanceCriteria": [
-        "The ownership inventory covers every production package from the regenerated package-target manifest and reports no missing or duplicate ownership row.",
-        "Every live cross-owner dependency is reviewed and classified as command, query, event, construction, lifecycle, protocol composition, or external effect, with a rationale consistent with the owning service contract.",
-        "Worker Sessions, Events, Chat Sessions, ACP, Factory Sessions, Providers, platform, and mapping packages and their live cross-owner edges are included.",
-        "Chat Sessions and Events rationale describes their implemented ownership and behavior in the present tense rather than as future work.",
-        "Regeneration preserves every unresolved bidirectional edge as visible debt and a focused regression test proves that such an edge cannot be silently reclassified as acceptable.",
-        "make ownership-inventory-check passes and reports no missing production package or edge.",
-        "Tests pass",
-        "Typecheck passes"
-      ],
-      "priority": 2,
-      "passes": true,
-      "notes": "Regenerated the ownership inventory from the live package graph (576 existing-scope package rows) and added the 16 package-target paths introduced by story 001, including Worker Sessions, Events, Chat Sessions, ACP, Factory Sessions, Providers, platform, and mapping paths. Added Worker Sessions to the closed owner vocabulary, top-level inventory, and rationale cards; rewrote Chat Sessions and Events rationale in the present tense. Cross-owner discovery now records 155 classified edges, marks all 50 directed entries in reciprocal pairs as unresolved bidirectional debt, and rejects a valid interaction class when those debt markers are removed. make ownership-inventory-check, focused ownership tests, package-target-manifest-check, and git diff --check pass. The full internal ownership package still reports pre-existing Workers/Recordings root-contract baseline drift unrelated to this story."
-    },
-  ],
+  "userStories": [],
   "enablingCriteria": [
     {
       "id": "sac-s0-1-ownership-inventories-001",
@@ -55,6 +36,26 @@
       "priority": 1,
       "passes": true,
       "notes": "Regenerated the package-target manifest from the live production Go tree (545 packages) and retained the 17 newly discovered paths under platform, Chat Sessions, Events, Factory Sessions, Providers, Worker Sessions, ACP, CLI, and mapping destinations. Added Worker Sessions to the closed package-target owner vocabulary and reconciled the live Chat Sessions/Events/Worker Sessions top-level inventories. Existing package mappings and deletion conditions were preserved. make package-target-manifest-check, focused package-target mapping/coverage tests, and git diff --check pass. This is repository-enforcement and maintainer tooling work with no runtime, public API, CLI, UI, or emitted-event behavior change."
+    },
+    {
+      "id": "sac-s0-1-ownership-inventories-002",
+      "type": "project-enabling",
+      "title": "Complete and classify the ownership inventory",
+      "description": "The ownership inventory is repository-enforcement and maintainer tooling that records a reviewed owner and relationship classification for every production package and cross-owner dependency, so dependency direction and remaining convergence debt are explicit without changing product behavior.",
+      "acceptanceCriteria": [
+        "The ownership inventory covers every production package from the regenerated package-target manifest and reports no missing or duplicate ownership row.",
+        "Every live cross-owner dependency is reviewed and classified as command, query, event, construction, lifecycle, protocol composition, or external effect, with a rationale consistent with the owning service contract.",
+        "Worker Sessions, Events, Chat Sessions, ACP, Factory Sessions, Providers, platform, and mapping packages and their live cross-owner edges are included.",
+        "Chat Sessions and Events rationale describes their implemented ownership and behavior in the present tense rather than as future work.",
+        "Regeneration preserves every unresolved bidirectional edge as visible debt and a focused regression test proves that such an edge cannot be silently reclassified as acceptable.",
+        "make ownership-inventory-check passes and reports no missing production package or edge.",
+        "This project-enabling inventory alignment intentionally changes no runtime, public API, CLI, UI, or emitted-event behavior.",
+        "Tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": "Regenerated the ownership inventory from the live package graph (576 existing-scope package rows) and added the 16 package-target paths introduced by story 001, including Worker Sessions, Events, Chat Sessions, ACP, Factory Sessions, Providers, platform, and mapping paths. Added Worker Sessions to the closed owner vocabulary, top-level inventory, and rationale cards; rewrote Chat Sessions and Events rationale in the present tense. Cross-owner discovery now records 155 classified edges, marks all 50 directed entries in reciprocal pairs as unresolved bidirectional debt, and rejects a valid interaction class when those debt markers are removed. make ownership-inventory-check, focused ownership tests, package-target-manifest-check, and git diff --check pass. The full internal ownership package still reports pre-existing Workers/Recordings root-contract baseline drift unrelated to this story."
     },
     {
       "id": "sac-s0-1-ownership-inventories-004",
