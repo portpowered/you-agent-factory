@@ -226,6 +226,18 @@ func (s *preHandoffFailedWorkerSessionsService) ObserveProviderSession(
 	return workersessions.ProviderSessionAssociationResult{}, nil
 }
 
+func (s *preHandoffFailedWorkerSessionsService) EnsureProviderBinding(
+	context.Context, workersessions.ProviderBindingRequest,
+) (workersessions.ProviderBindingResult, error) {
+	return workersessions.ProviderBindingResult{}, nil
+}
+
+func (s *preHandoffFailedWorkerSessionsService) WorkerSessionIDForDispatch(
+	_ context.Context, dispatchID string,
+) (string, error) {
+	return dispatchID, nil
+}
+
 func (s *preHandoffFailedWorkerSessionsService) Pause(context.Context, workersessions.ControlRequest) (workersessions.ControlResult, error) {
 	return workersessions.ControlResult{}, nil
 }

@@ -104,6 +104,18 @@ func (s *countingWorkerSessionsService) ObserveProviderSession(
 	return s.inner.ObserveProviderSession(ctx, req)
 }
 
+func (s *countingWorkerSessionsService) EnsureProviderBinding(
+	ctx context.Context, req workersessions.ProviderBindingRequest,
+) (workersessions.ProviderBindingResult, error) {
+	return s.inner.EnsureProviderBinding(ctx, req)
+}
+
+func (s *countingWorkerSessionsService) WorkerSessionIDForDispatch(
+	ctx context.Context, dispatchID string,
+) (string, error) {
+	return s.inner.WorkerSessionIDForDispatch(ctx, dispatchID)
+}
+
 func (s *countingWorkerSessionsService) Pause(ctx context.Context, req workersessions.ControlRequest) (workersessions.ControlResult, error) {
 	return s.inner.Pause(ctx, req)
 }

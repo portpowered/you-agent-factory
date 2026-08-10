@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -32,14 +33,7 @@ type ProviderSessionObservationPublisher struct {
 	// two Workers' sequences and reject valid records.
 	records   sync.Mutex
 	sequences map[string]uint64
-	logger    Logger
-}
-
-// Logger is the bounded operator-visible reporting surface this publisher
-// needs. It is declared here rather than imported so the package keeps its
-// existing dependency set.
-type Logger interface {
-	Warn(msg string, args ...any)
+	logger    logging.Logger
 }
 
 // NewProviderSessionObservationPublisher creates an unbound progress bridge.
@@ -74,73 +68,80 @@ func (p *ProviderSessionObservationPublisher) Publish(fragment workers.ProgressF
 	if p == nil {
 		return
 	}
-	p.mu.RLock()
-	observer, next := p.observer, p.next
-	p.mu.RUnlock()
-
-	metadata := workers.CloneProviderSessionMetadata(fragment.ProviderSessionRef)
-	reference := workers.CloneProviderSessionReference(fragment.ProviderSessionReference)
-	if reference != nil && metadata != nil &&
-		(reference.Provider.String() != metadata.Provider || reference.Kind != metadata.Kind || reference.ID != metadata.ID) {
-		// The public response metadata must agree with the exact typed source
-		// reference. Forwarding a mismatch could display another provider
-		// session under this Worker Session even though association succeeded.
+	observer, next := p.dependencies()
+	if !providerFragmentAgrees(fragment) || !p.associateProviderSession(observer, fragment) {
 		return
-	}
-	if provider := strings.TrimSpace(fragment.Provider); provider != "" {
-		if reference != nil && strings.TrimSpace(reference.Provider.String()) != "" &&
-			!strings.EqualFold(provider, strings.TrimSpace(reference.Provider.String())) {
-			return
-		}
-		if metadata != nil && strings.TrimSpace(metadata.Provider) != "" &&
-			!strings.EqualFold(provider, strings.TrimSpace(metadata.Provider)) {
-			return
-		}
-	}
-	// Metadata without a source reference is a response projection rather than
-	// a trusted provider-native SessionRef. In particular, it can be
-	// compatibility data derived from a request's configured SessionID. It
-	// therefore remains non-resumable, but must still be forwarded so existing
-	// terminal and failure response streams remain observable.
-	if reference != nil {
-		if observer == nil {
-			return
-		}
-		_, err := observer.ObserveProviderSession(context.Background(), ProviderSessionObservationRequest{
-			DispatchID: fragment.DispatchID,
-			Reference:  reference.Clone(),
-		})
-		if err != nil {
-			return
-		}
 	}
 	if fragment.Kind == workers.ProviderSessionObservedFragmentKind {
 		return
 	}
-
-	// A Worker is a tool call, and everything a Worker produces is content
-	// inside that tool call. Worker-authored observations are therefore
-	// committed to that Worker's own topic, where the Chat Session sequences
-	// them as children of its opening record rather than as its own top-level
-	// output.
-	//
-	// They also continue downstream. The Factory Session response-event stream
-	// is what the CLI's NDJSON contract, the dashboard, and the HTTP SSE feed
-	// read; suppressing Worker output here would leave every one of those
-	// surfaces with nothing to show. The Chat Session is the consumer that must
-	// not see it twice, and it declines the duplicate itself -- see
-	// responsebridge's carriedByWorkerSession -- because it is the only
-	// consumer that also reads the Worker topic.
-	if draft, ok := canonicalDraftFromFragment(fragment); ok {
-		if !p.publishCanonicalWorkerRecord(observer, fragment, draft) {
-			return
-		}
-	} else if isWorkerAuthoredFragment(fragment) {
-		p.publishWorkerRecord(observer, fragment)
+	if !p.publishWorkerObservation(observer, fragment) {
+		return
 	}
 	if next != nil {
 		next(fragment)
 	}
+}
+
+func (p *ProviderSessionObservationPublisher) dependencies() (Service, workers.ProgressPublisher) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.observer, p.next
+}
+
+func providerFragmentAgrees(fragment workers.ProgressFragment) bool {
+	metadata := workers.CloneProviderSessionMetadata(fragment.ProviderSessionRef)
+	reference := workers.CloneProviderSessionReference(fragment.ProviderSessionReference)
+	if reference != nil && metadata != nil &&
+		(!sameProviderIdentity(reference.Provider.String(), metadata.Provider) ||
+			reference.Kind != metadata.Kind || reference.ID != metadata.ID) {
+		return false
+	}
+	provider := strings.TrimSpace(fragment.Provider)
+	if provider != "" && reference != nil && strings.TrimSpace(reference.Provider.String()) != "" &&
+		!sameProviderIdentity(provider, reference.Provider.String()) {
+		return false
+	}
+	return provider == "" || metadata == nil || strings.TrimSpace(metadata.Provider) == "" ||
+		sameProviderIdentity(provider, metadata.Provider)
+}
+
+func sameProviderIdentity(left, right string) bool {
+	return strings.EqualFold(
+		workers.CanonicalProviderSessionProvider(left),
+		workers.CanonicalProviderSessionProvider(right),
+	)
+}
+
+func (p *ProviderSessionObservationPublisher) associateProviderSession(
+	observer Service,
+	fragment workers.ProgressFragment,
+) bool {
+	reference := workers.CloneProviderSessionReference(fragment.ProviderSessionReference)
+	if reference == nil {
+		return true
+	}
+	if observer == nil {
+		return false
+	}
+	_, err := observer.ObserveProviderSession(context.Background(), ProviderSessionObservationRequest{
+		DispatchID: fragment.DispatchID,
+		Reference:  reference.Clone(),
+	})
+	return err == nil
+}
+
+func (p *ProviderSessionObservationPublisher) publishWorkerObservation(
+	observer Service,
+	fragment workers.ProgressFragment,
+) bool {
+	if draft, ok := canonicalDraftFromFragment(fragment); ok {
+		return p.publishCanonicalWorkerRecord(observer, fragment, draft)
+	}
+	if !isWorkerAuthoredFragment(fragment) {
+		return true
+	}
+	return p.publishWorkerRecord(observer, fragment)
 }
 
 // isWorkerAuthoredFragment reports whether a fragment carries output the
@@ -203,16 +204,16 @@ func providerIdentityAgrees(fragment workers.ProgressFragment, draft workers.Dra
 		return true
 	}
 	if explicit := strings.TrimSpace(fragment.Provider); explicit != "" &&
-		!strings.EqualFold(provider, explicit) {
+		!sameProviderIdentity(provider, explicit) {
 		return false
 	}
 	if reference := fragment.ProviderSessionReference; reference != nil &&
 		strings.TrimSpace(reference.Provider.String()) != "" &&
-		!strings.EqualFold(provider, strings.TrimSpace(reference.Provider.String())) {
+		!sameProviderIdentity(provider, reference.Provider.String()) {
 		return false
 	}
 	if metadata := fragment.ProviderSessionRef; metadata != nil && strings.TrimSpace(metadata.Provider) != "" &&
-		!strings.EqualFold(provider, strings.TrimSpace(metadata.Provider)) {
+		!sameProviderIdentity(provider, metadata.Provider) {
 		return false
 	}
 	return true
@@ -222,18 +223,11 @@ func ensureProviderBinding(
 	observer Service,
 	req ProviderBindingRequest,
 ) (ProviderBindingResult, error) {
-	binding, ok := observer.(ProviderBindingService)
-	if !ok {
-		return ProviderBindingResult{}, ErrProviderBindingAttemptMismatch
-	}
-	return binding.EnsureProviderBinding(context.Background(), req)
+	return observer.EnsureProviderBinding(context.Background(), req)
 }
 
 func resolveWorkerSessionID(observer Service, dispatchID string) (string, error) {
-	if resolver, ok := observer.(WorkerSessionDispatchResolver); ok {
-		return resolver.WorkerSessionIDForDispatch(context.Background(), dispatchID)
-	}
-	return strings.TrimSpace(dispatchID), nil
+	return observer.WorkerSessionIDForDispatch(context.Background(), dispatchID)
 }
 
 func (p *ProviderSessionObservationPublisher) publishCanonicalWorkerRecord(
@@ -263,8 +257,7 @@ func (p *ProviderSessionObservationPublisher) publishCanonicalWorkerRecord(
 	} else {
 		sessionID = resolved
 	}
-	p.publishWorkerDraft(observer, sessionID, draft)
-	return true
+	return p.publishWorkerDraft(observer, sessionID, draft) == nil
 }
 
 // publishWorkerRecord commits one Worker-authored observation to that Worker
@@ -282,14 +275,14 @@ func (p *ProviderSessionObservationPublisher) publishCanonicalWorkerRecord(
 func (p *ProviderSessionObservationPublisher) publishWorkerRecord(
 	observer Service,
 	fragment workers.ProgressFragment,
-) {
+) bool {
 	sessionID := strings.TrimSpace(fragment.DispatchID)
 	if observer == nil || sessionID == "" {
-		return
+		return true
 	}
 	draft, ok := draftFromProgressFragment(fragment)
 	if !ok {
-		return
+		return true
 	}
 	if provider := providerIdentityForFragment(fragment, &draft); provider != "" {
 		binding, err := ensureProviderBinding(observer, ProviderBindingRequest{
@@ -298,27 +291,30 @@ func (p *ProviderSessionObservationPublisher) publishWorkerRecord(
 		})
 		if err != nil {
 			p.reportRejectedRecord(sessionID, draft, err)
-			return
+			return !errors.Is(err, ErrProviderBindingConflict)
 		}
 		if binding.WorkerSessionID != "" {
 			sessionID = binding.WorkerSessionID
 		}
 	} else if resolved, err := resolveWorkerSessionID(observer, sessionID); err != nil {
 		p.reportRejectedRecord(sessionID, draft, err)
-		return
+		return true
 	} else {
 		sessionID = resolved
 	}
-	p.publishWorkerDraft(observer, sessionID, draft)
+	if err := p.publishWorkerDraft(observer, sessionID, draft); err != nil {
+		return !errors.Is(err, ErrProviderBindingConflict)
+	}
+	return true
 }
 
 func (p *ProviderSessionObservationPublisher) publishWorkerDraft(
 	observer Service,
 	sessionID string,
 	draft workers.Draft,
-) {
+) error {
 	if observer == nil || strings.TrimSpace(sessionID) == "" {
-		return
+		return nil
 	}
 	p.records.Lock()
 	defer p.records.Unlock()
@@ -339,7 +335,9 @@ func (p *ProviderSessionObservationPublisher) publishWorkerDraft(
 	})
 	if err != nil {
 		p.reportRejectedRecord(sessionID, draft, err)
+		return err
 	}
+	return nil
 }
 
 // WorkerObservationSourceType and WorkerObservationSchemaID identify Worker
@@ -389,7 +387,7 @@ func rejectedRecordOutcome(err error) string {
 // a Worker observation cannot be committed. A nil logger leaves reporting off
 // rather than failing construction, matching this type's existing
 // never-fail-the-dispatch contract.
-func (p *ProviderSessionObservationPublisher) WithLogger(logger Logger) *ProviderSessionObservationPublisher {
+func (p *ProviderSessionObservationPublisher) WithLogger(logger logging.Logger) *ProviderSessionObservationPublisher {
 	if p == nil {
 		return p
 	}

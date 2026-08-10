@@ -127,6 +127,59 @@ func TestPublishRecord_AppendsValidatedDetachedSourceNativeDraftsInOrder(t *test
 	}
 }
 
+// TestPublishRecord_RejectsProviderContradictingOpening proves both provider
+// publication entry points preserve the opening identity: a direct binding
+// attempt and a provider-authored output naming provider B are rejected after
+// the opening already established provider A, and neither creates history.
+func TestPublishRecord_RejectsProviderContradictingOpening(t *testing.T) {
+	eventsSvc := newEventsAppender()
+	var svc workersessions.Service
+	var bindingErr, publishErr error
+	execution := &fakeExecution{
+		dispatch: func(ctx context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+			_, bindingErr = svc.EnsureProviderBinding(ctx, workersessions.ProviderBindingRequest{
+				DispatchID: req.Execution.Dispatch.DispatchID,
+				Provider:   "claude",
+			})
+			draft := messageDraft("provider B must not enter provider A history")
+			draft.DispatchID = req.Execution.Dispatch.DispatchID
+			draft.Provenance.Provider = "claude"
+			_, publishErr = svc.PublishRecord(ctx, validPublishRecordRequest("worker-1", 1, draft))
+			return workers.WorkstationDispatchResult{
+				DispatchID: req.Execution.Dispatch.DispatchID,
+				Result: workers.WorkResult{
+					DispatchID: req.Execution.Dispatch.DispatchID,
+					Outcome:    workers.OutcomeAccepted,
+				},
+			}, nil
+		},
+	}
+	var err error
+	svc, err = newService(executionBoundary{execution: execution}, eventsSvc, nil)
+	if err != nil {
+		t.Fatalf("service.New() error = %v, want nil", err)
+	}
+	request := validStartRequest("worker-1", "dispatch-1")
+	request.Execution.Execution.RunnerID = workers.RunnerIDCodex
+	if _, err := svc.InvokeSession(context.Background(), request); err != nil {
+		t.Fatalf("InvokeSession() error = %v, want nil", err)
+	}
+	if !errors.Is(bindingErr, workersessions.ErrProviderBindingConflict) {
+		t.Fatalf("EnsureProviderBinding() error = %v, want ErrProviderBindingConflict", bindingErr)
+	}
+	if !errors.Is(publishErr, workersessions.ErrProviderBindingConflict) {
+		t.Fatalf("PublishRecord() error = %v, want ErrProviderBindingConflict", publishErr)
+	}
+
+	committed := readAllDrafts(t, eventsSvc, workersessions.Topic("worker-1"))
+	if len(committed) != 2 {
+		t.Fatalf("committed record count = %d, want opening plus terminal only", len(committed))
+	}
+	if committed[0].Provenance.Provider != workers.RunnerIDCodex || committed[1].Provenance.Provider != workers.RunnerIDCodex {
+		t.Fatalf("lifecycle providers = %q/%q, want codex/codex", committed[0].Provenance.Provider, committed[1].Provenance.Provider)
+	}
+}
+
 // TestPublishRecord_InvalidDraft_ReturnsErrorAndCommitsNoRecord proves that a
 // draft violating the existing Workers Kind/Phase/payload rules is rejected
 // explicitly and appends nothing, before any session or publication-window

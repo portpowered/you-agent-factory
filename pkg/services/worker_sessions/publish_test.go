@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -267,6 +268,13 @@ func (s *workerRecordSpy) EnsureProviderBinding(
 	}, nil
 }
 
+func (s *workerRecordSpy) WorkerSessionIDForDispatch(
+	_ context.Context,
+	dispatchID string,
+) (string, error) {
+	return dispatchID, nil
+}
+
 // TestPublish_CanonicalDraftBindsBeforeWorkerOutput proves canonical provider
 // drafts use the Worker Sessions-owned binding capability before the draft is
 // committed and still reach the downstream response publisher exactly once.
@@ -511,7 +519,17 @@ func (s *rejectingWorkerRecordSpy) PublishRecord(
 	return workersessions.PublishRecordResult{}, s.err
 }
 
-type recordingLogger struct{ messages []string }
+func (s *rejectingWorkerRecordSpy) WorkerSessionIDForDispatch(
+	_ context.Context,
+	dispatchID string,
+) (string, error) {
+	return dispatchID, nil
+}
+
+type recordingLogger struct {
+	logging.NoopLogger
+	messages []string
+}
 
 func (l *recordingLogger) Warn(msg string, args ...any) {
 	entry := msg

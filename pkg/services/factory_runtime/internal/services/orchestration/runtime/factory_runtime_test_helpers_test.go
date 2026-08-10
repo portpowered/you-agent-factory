@@ -201,6 +201,14 @@ func (s *fakeWorkerSessionsService) ObserveProviderSession(context.Context, work
 	return workersessions.ProviderSessionAssociationResult{}, nil
 }
 
+func (s *fakeWorkerSessionsService) EnsureProviderBinding(context.Context, workersessions.ProviderBindingRequest) (workersessions.ProviderBindingResult, error) {
+	return workersessions.ProviderBindingResult{}, nil
+}
+
+func (s *fakeWorkerSessionsService) WorkerSessionIDForDispatch(_ context.Context, dispatchID string) (string, error) {
+	return dispatchID, nil
+}
+
 func (s *fakeWorkerSessionsService) Pause(context.Context, workersessions.ControlRequest) (workersessions.ControlResult, error) {
 	return workersessions.ControlResult{}, nil
 }

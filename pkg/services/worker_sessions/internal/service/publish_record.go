@@ -107,20 +107,8 @@ func (r *registry) PublishRecord(ctx context.Context, req workersessions.Publish
 		r.logger.Info("worker session publish record rejected", "sessionID", req.SessionID, "outcome", "publication_not_open")
 		return workersessions.PublishRecordResult{}, workersessions.ErrPublicationNotOpen
 	}
-	if provider := strings.TrimSpace(req.Draft.Provenance.Provider); provider != "" && pub.provider == "" {
-		dispatchID := strings.TrimSpace(req.Draft.DispatchID)
-		if dispatchID == "" {
-			return workersessions.PublishRecordResult{}, workersessions.ErrInvalidProviderBinding
-		}
-		r.mu.RLock()
-		ownerID, exists := r.dispatchOwners[dispatchID]
-		r.mu.RUnlock()
-		if !exists || ownerID != req.SessionID {
-			return workersessions.PublishRecordResult{}, workersessions.ErrProviderBindingAttemptMismatch
-		}
-		if _, err := r.publishProviderBindingLocked(ctx, req.SessionID, dispatchID, provider, pub); err != nil {
-			return workersessions.PublishRecordResult{}, err
-		}
+	if err := r.ensurePublishRecordProvider(ctx, req, pub); err != nil {
+		return workersessions.PublishRecordResult{}, err
 	}
 
 	key := sourceKey{sourceType: req.SourceType, sourceID: req.SourceID}
@@ -174,6 +162,43 @@ func publishOutcomeLabel(outcome workersessions.PublishOutcome) string {
 	}
 }
 
+func sameProviderIdentity(left, right string) bool {
+	return strings.EqualFold(
+		workers.CanonicalProviderSessionProvider(left),
+		workers.CanonicalProviderSessionProvider(right),
+	)
+}
+
+func (r *registry) ensurePublishRecordProvider(
+	ctx context.Context,
+	req workersessions.PublishRecordRequest,
+	pub *publication,
+) error {
+	provider := strings.TrimSpace(req.Draft.Provenance.Provider)
+	if provider == "" {
+		return nil
+	}
+	if pub.provider != "" {
+		if !sameProviderIdentity(pub.provider, provider) {
+			return workersessions.ErrProviderBindingConflict
+		}
+		return nil
+	}
+
+	dispatchID := strings.TrimSpace(req.Draft.DispatchID)
+	if dispatchID == "" {
+		return workersessions.ErrInvalidProviderBinding
+	}
+	r.mu.RLock()
+	ownerID, exists := r.dispatchOwners[dispatchID]
+	r.mu.RUnlock()
+	if !exists || ownerID != req.SessionID {
+		return workersessions.ErrProviderBindingAttemptMismatch
+	}
+	_, err := r.publishProviderBindingLocked(ctx, req.SessionID, dispatchID, provider, pub)
+	return err
+}
+
 // EnsureProviderBinding publishes the first provider-bound lifecycle record
 // for the dispatch when the opening record did not already resolve a
 // provider. The publication lock is the same lock used by source-native
@@ -200,7 +225,7 @@ func (r *registry) EnsureProviderBinding(
 	if pub == nil {
 		return workersessions.ProviderBindingResult{}, workersessions.ErrSessionNotFound
 	}
-	provider := strings.TrimSpace(req.Provider)
+	provider := workers.CanonicalProviderSessionProvider(req.Provider)
 	pub.mu.Lock()
 	defer pub.mu.Unlock()
 	return r.publishProviderBindingLocked(ctx, ownerID, strings.TrimSpace(req.DispatchID), provider, pub)
@@ -213,11 +238,15 @@ func (r *registry) publishProviderBindingLocked(
 	provider string,
 	pub *publication,
 ) (workersessions.ProviderBindingResult, error) {
+	provider = workers.CanonicalProviderSessionProvider(provider)
 	if !pub.open {
 		r.logger.Info("worker session provider binding rejected", "sessionID", ownerID, "attemptID", dispatchID, "outcome", "publication_not_open")
 		return workersessions.ProviderBindingResult{}, workersessions.ErrPublicationNotOpen
 	}
 	if pub.provider != "" {
+		if !sameProviderIdentity(pub.provider, provider) {
+			return workersessions.ProviderBindingResult{}, workersessions.ErrProviderBindingConflict
+		}
 		return workersessions.ProviderBindingResult{
 			WorkerSessionID: ownerID,
 			DispatchID:      dispatchID,
@@ -337,7 +366,7 @@ func lifecycleProvenance(provider string) workers.Provenance {
 		Delivery:        workers.DeliverySynthesized,
 		Fidelity:        workers.FidelityLifecycleOnly,
 		NativeEventType: string(lifecycleSourceType),
-		Provider:        strings.TrimSpace(provider),
+		Provider:        workers.CanonicalProviderSessionProvider(provider),
 		Representation:  workers.RepresentationNotification,
 	}
 }
@@ -384,7 +413,7 @@ func (r *registry) publishOpeningRecord(ctx context.Context, id, attemptID strin
 		return err
 	}
 	pub.open = true
-	pub.provider = strings.TrimSpace(provider)
+	pub.provider = workers.CanonicalProviderSessionProvider(provider)
 	pub.turnID = strings.TrimSpace(payload.TurnID)
 	pub.lastSequence = make(map[sourceKey]events.SourceSequence)
 	pub.accepted = make(map[events.AppendIdentity]struct{})

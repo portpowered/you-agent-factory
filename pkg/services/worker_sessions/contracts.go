@@ -105,6 +105,16 @@ type Service interface {
 	// Provider Session reference.
 	ObserveProviderSession(context.Context, ProviderSessionObservationRequest) (ProviderSessionAssociationResult, error)
 
+	// EnsureProviderBinding records the first provider identity learned from a
+	// supervised dispatch before its provider-native output is published. A
+	// later, different provider identity is rejected and never replaces the
+	// opening or existing binding.
+	EnsureProviderBinding(context.Context, ProviderBindingRequest) (ProviderBindingResult, error)
+
+	// WorkerSessionIDForDispatch resolves a supervised dispatch attempt to its
+	// stable Worker Session identity for source-native publication.
+	WorkerSessionIDForDispatch(context.Context, string) (string, error)
+
 	// PublishRecord validates req, then appends req.Draft, detached, as a
 	// source-native Worker record onto Topic(req.SessionID) using req's
 	// complete Events idempotency identity. PublishRecord only accepts a
@@ -143,21 +153,6 @@ type Service interface {
 	// Terminate is Cancel with join semantics: a successful result is returned
 	// only after the associated dispatch callback has completed.
 	Terminate(ctx context.Context, req ControlRequest) (ControlResult, error)
-}
-
-// ProviderBindingService is the optional Worker Sessions publication-boundary
-// capability used by the provider-output bridge. Keeping it separate from
-// Service preserves the existing test and integration seams that only need
-// observation, control, or ordinary source-record publication.
-type ProviderBindingService interface {
-	EnsureProviderBinding(context.Context, ProviderBindingRequest) (ProviderBindingResult, error)
-}
-
-// WorkerSessionDispatchResolver is the optional dispatch-to-session lookup
-// capability used when a Workers fragment names an attempt dispatch rather
-// than the stable Worker Session identity.
-type WorkerSessionDispatchResolver interface {
-	WorkerSessionIDForDispatch(context.Context, string) (string, error)
 }
 
 // ReserveRequest asks Service to reserve one new Worker Session identity.
@@ -486,6 +481,9 @@ var (
 	// ErrProviderBindingAttemptMismatch reports a provider identity observed
 	// for a dispatch Worker Sessions does not currently supervise.
 	ErrProviderBindingAttemptMismatch = errors.New("worker session: provider binding attempt mismatch")
+	// ErrProviderBindingConflict reports a provider identity that contradicts
+	// the provider already established by the opening or an earlier binding.
+	ErrProviderBindingConflict = errors.New("worker session: provider binding conflict")
 	// ErrInvalidProviderSessionAssociation reports a malformed Worker Sessions
 	// association correlation. Invalid provider, kind, or opaque Provider
 	// Session identity retains the more specific Providers-owned typed error.

@@ -317,6 +317,14 @@ func (s *stubWorkerSessionsService) ObserveProviderSession(context.Context, work
 	return workersessions.ProviderSessionAssociationResult{}, nil
 }
 
+func (s *stubWorkerSessionsService) EnsureProviderBinding(context.Context, workersessions.ProviderBindingRequest) (workersessions.ProviderBindingResult, error) {
+	return workersessions.ProviderBindingResult{}, nil
+}
+
+func (s *stubWorkerSessionsService) WorkerSessionIDForDispatch(_ context.Context, dispatchID string) (string, error) {
+	return dispatchID, nil
+}
+
 func (s *stubWorkerSessionsService) Pause(context.Context, workersessions.ControlRequest) (workersessions.ControlResult, error) {
 	return workersessions.ControlResult{}, nil
 }
