@@ -9,6 +9,9 @@
 - Workstation prompt templates receive `PromptData`; access a bound work identifier through `(index .Inputs N).WorkID` rather than a root `.WorkID` field.
 - Run-level `--quiet` cannot be combined with structured `--json` or `--output`; verify output-mode combinations against the live CLI before documenting them.
 - For direct named packaged Factory invocations, bind inputs in authored workstation bodies with `${parameter}` interpolation; `.Inputs` payload can be empty even when the named CLI argument is present.
+- Multi-input packaged Factories must give required parameters non-ambiguous invocation bindings; the ACP reachability guard requires each required parameter to expose a text-carrying route, while authored validation rejects routing stdin to multiple parameters.
+- AGY structured-output replays require the provider's echoed `json_schema` to be JSON-equivalent to the authored request; reuse the recorded schema exactly when proving a historical trace offline.
+- A schema-valid structured QA `reroll` is an accepted inspection verdict; provider refusal, malformed output, and schema mismatch must fail before verdict interpretation, while provider failures may consume the bounded default retry budget.
 
 - Worker Session finite streams can use the injected Events `Read` contract with the first retained head as a snapshot boundary; replay-only paths must not call `Subscribe`.
 - Authored OpenAPI and CLI contracts generate their Go, TypeScript, published metadata, and family-manifest consumers; update the source contract first, then run the repository generators and drift checks.
@@ -518,4 +521,35 @@
 - **Learnings for future iterations:**
   - The generated catalog is sorted by public Factory name, so adding a packaged Factory also requires updating the detached-catalog and wire-consumption behavioral expectations.
   - AGY provider `SUCCESS` is only process status; a refusal must be rejected by the role contract so it cannot resolve an invocation primary result.
+---
+
+## 2026-08-09 21:48 -07:00 - wo-b2-agy-production-review-roles-002
+- What was implemented
+  - Added the independently invocable `@you/agy-clip-qa` packaged Factory with exactly two required creative inputs, `clipPath` and `shotSpecification`, strict named-argument rejection, direct AGY workspace path/spec forwarding, ANTIGRAVITY defaults, and the recorded B2 seven-field structured verdict schema.
+  - Preserved the distinction between a successful inspected `pass`/`reroll` verdict and execution failure by accepting schema-valid rerolls while rejecting provider refusals, malformed output, and schema mismatches before verdict interpretation.
+  - Added root-built offline functional coverage that replays the real clip-QA pass trace and missing-file trace and also proves schema-invalid and provider-exit failures reach failed Work with Factory Events and actionable public diagnostics.
+  - Regenerated the canonical catalog and updated the published catalog behavior expectations for the seventeenth first-party Factory.
+- Files changed
+  - `packages/packaged-factories/factories/agy-clip-qa/factory.yaml`
+  - `packages/packaged-factories/generated/factories/agy-clip-qa/factory.yaml`
+  - `packages/packaged-factories/generated/factories/agy-clip-qa/factory.json`
+  - `packages/packaged-factories/generated/manifest.json`
+  - `pkg/services/workers/internal/services/workstations/executor/helpers.go`
+  - `pkg/services/workers/internal/services/workstations/executor/agent_inference_test.go`
+  - `pkg/wire/factory_definition_packaged_installation_test.go`
+  - `pkg/wire/packaged_factory_catalog_consumption_test.go`
+  - `tests/functional/factory/packaged/catalog/discovery_test.go`
+  - `tests/functional/providers/agy/production_review_test.go`
+  - `prd.json`
+- Verification
+  - `go run ./cmd/factory --json factory config validate packages/packaged-factories/factories/agy-clip-qa` — passed.
+  - `go test ./tests/functional/providers/agy -run '^TestAgyProductionReviewRolesThroughRootBuildProcess$' -count=1` — passed.
+  - `go test ./pkg/services/workers/internal/services/workstations/executor -count=1` — passed.
+  - `go test ./tests/functional/factory/packaged/catalog -count=1` — passed.
+  - `go test ./pkg/wire -run 'TestProvidePackagedFactoryDefinitions_LoadsDetachedGeneratedCatalog|TestPackagedFactoryCatalogConsumption_ListResolveInstallUsesPublishedCatalog' -count=1` — passed.
+  - `make packaged-factory-source-check`, `make packaged-factory-catalog-check`, and `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - The AGY adapter compares the echoed structured schema, so historical structured traces can only replay against a JSON-equivalent authored schema; stricter constraints need a newly recorded trace or a separate runtime contract.
+  - The generic provider retry policy can issue three attempts for schema/provider failures; failure assertions should prove terminal routing and diagnostics without assuming one command call.
+  - The next story should document the optional positional/stdin reachability bindings alongside the named flags so the public help and operator examples explain both invocation paths.
 ---
