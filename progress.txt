@@ -2287,3 +2287,20 @@
 - **Learnings for future iterations:**
   - Runtime file-log assertions can race startup even when the runtime behavior is correct; reproduce the exact test and rerun the failed CI lane before modifying unrelated logging or structured-result code.
 ---
+## 2026-08-10 12:09 -07:00 - e2-structured-worker-results current-main synchronization
+- What was implemented
+  - Merged the latest `origin/main` at `947152348` into the E2 branch after the PR base advanced again, preserving the E2 PRD/progress history and combining structured-result contracts with current-main expected-artifact contracts.
+  - Regenerated the bundled OpenAPI, Go HTTP clients/server, UI clients, packaged API contracts, and ownership freeze from the resolved authored sources.
+- Files changed
+  - Current-main artifact-registry source, contract, test, documentation, and generated files retained by the merge.
+  - `api/components/schemas/events/WorkFailureType.yaml` and the shared runtime/read/event contracts were resolved to retain both failure vocabularies and both result channels.
+  - `docs/internal/baselines/ownership-inventory.json`
+  - `progress.txt`
+- Verification
+  - E2 structured-result prompt/watch, executor/prompting, Work CLI, and event projection tests — passed.
+  - Current-main expected-artifact projection and mock-worker tests — passed.
+  - `make package-target-manifest-check`, `make ownership-inventory-check`, `make vet`, `make typecheck`, and `make test` — passed.
+  - `git diff --check` — passed; the merge commit is `841398a6f`.
+- **Learnings for future iterations:**
+  - When main advances with an adjacent result-channel feature, resolve shared contracts additively and regenerate every public interface; then freeze ownership inventories from the merged tree before running repository gates.
+---
