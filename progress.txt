@@ -1,4 +1,6 @@
 ## Codebase Patterns
+- Repository-wide `pkg-boundary` traversals must prune through one root-relative, slash-normalized policy before parsing entries; adding a new `WalkDir` requires using that same decision.
+- Treat disposable artifact/worktree paths as exact repository roots, not directory-name substrings, so tracked production packages with nested artifact-like names remain visible to the gate.
 - Canonical packaged CLI docs live under `docs/reference/`; adding a topic also requires its authored file in `docs/reference/embed.go` and a registry entry in `pkg/transports/cli/docs/docs.go`.
 - The `you run --named <factory> --help` output is the authoritative invocation contract; omitted role provider/model values resolve through operator defaults.
 - Documentation for model-backed workflows should describe observable result shape and status/artifact evidence rather than byte-stable generated prose.
@@ -64,6 +66,35 @@
   - After `bun install --frozen-lockfile` in `ui/`, `make verify-fast` passed: dashboard typecheck, MCP contract boundary, 355 UI files / 2,970 tests, and the short Go suite.
 - **Learnings for future iterations:**
 - This checkout may have `ui/node_modules` without all lockfile dependencies; run the pinned Bun install before treating a typecheck failure as a source regression.
+---
+
+## 2026-08-10 04:32 -07:00 - sac-s0-2-pkg-boundary-ignores-001
+- What was implemented
+  - Centralized repository-root-relative pruning for `.artifacts`, `.artifacts/bootstrap/worktrees`, generated transient worktrees, and the supported root worktree locations.
+  - Applied the same skip decision before parsing in every `pkg-boundary` production traversal, including secondary service, transport, provider, edge, test-behavior, Petri, and production-default scans.
+  - Preserved the existing Git metadata, dependency/vendor, node-module, and testdata exclusions without matching artifact-like or worktree-like names inside tracked production packages.
+  - Expanded the normal `run` regression to use malformed stale `pkg/wire` imports beneath artifact/bootstrap/generated transient layouts and existing ignored roots, proving those files are pruned before parsing.
+- Files changed
+  - `cmd/pkgboundarycheck/main.go`
+  - `cmd/pkgboundarycheck/main_test.go`
+  - `cmd/pkgboundarycheck/constructed_service_edges.go`
+  - `cmd/pkgboundarycheck/functional_process_edges.go`
+  - `cmd/pkgboundarycheck/initializer_behavior.go`
+  - `cmd/pkgboundarycheck/provider_effect_ownership.go`
+  - `cmd/pkgboundarycheck/production_defaults.go`
+  - `cmd/pkgboundarycheck/support_service_imports.go`
+  - `cmd/pkgboundarycheck/transport_behavior.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./cmd/pkgboundarycheck -run '^TestRunIgnoresRepositoryPolicyNonSourceRoots$' -count=1` — passed.
+  - `go test ./cmd/pkgboundarycheck -count=1` — passed.
+  - `make pkg-boundary` — reaches the checker and reports only the unchanged 176-violation baseline on current `main`; no new violation was introduced by this story.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - The checker has many independent `WalkDir` callbacks; updating only the primary repository scan leaves secondary scanners able to rediscover ignored files.
+  - A malformed ignored fixture is useful behavioral evidence for prune-before-parse: a valid stale import alone may not exercise every parser path.
+  - The next story should add the paired production `pkg` failure fixture and verify the `make pkg-boundary` subprocess path while keeping nested artifact-like directory names visible.
 ---
 
 ## 2026-08-09 13:17 - wo-d1-packaged-factories-docs-001 documentation routing follow-up
@@ -1116,4 +1147,20 @@
 - **Learnings for future iterations:**
   - A progress-only commit can expose unrelated resource and timing flakiness; inspect the exact failing test and compare changed paths before editing feature code, then rerun only failed jobs when the isolated evidence supports it.
   - Record both the primary failure and any missing downstream artifact so CI diagnosis does not mistake the upload symptom for the test cause.
+
+## 2026-08-10 04:38 -07:00 - sac-s0-2-pkg-boundary-ignores-002
+- What was implemented
+  - Added a paired normal checker regression using the same prohibited `pkg/wire` import as the ignored-root fixture under production `pkg` paths containing nested `.artifacts`, `.claude/worktrees`, and `worktrees` directories.
+  - Added a `make pkg-boundary` entry-path regression proving the nested `.artifacts` production package is still reported with the application-composition diagnostic and non-zero result.
+  - Marked story 002 complete in `prd.json`.
+- Files changed
+  - `cmd/pkgboundarycheck/main_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./cmd/pkgboundarycheck -run 'TestRunRejectsProductionPkgViolationInsideArtifactLikeSubtrees|TestMakePkgBoundaryTargetRejectsProductionPkgImportInsideArtifactLikeSubtree' -count=1 -v` — passed.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - Root-relative ignore policies need paired positive fixtures under production `pkg`; testing ignored paths alone cannot prove that nested artifact/worktree-like directories remain visible.
+  - Existing `make pkg-boundary` subprocess tests provide a stable way to verify the public checker entry path against temporary repository fixtures.
 ---
