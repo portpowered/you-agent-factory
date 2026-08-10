@@ -164,6 +164,9 @@ func assertExplicitRuntimeTelemetryArtifacts(t *testing.T, rollingConfig logging
 	if err := metricsWriter.Close(); err != nil {
 		t.Fatalf("close runtime metrics: %v", err)
 	}
+	if err := metricsWriter.Close(); err != nil {
+		t.Fatalf("close runtime metrics a second time: %v", err)
+	}
 	if err := logSink.Close(); err != nil {
 		t.Fatalf("close runtime log: %v", err)
 	}

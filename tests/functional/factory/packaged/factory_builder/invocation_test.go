@@ -464,6 +464,7 @@ func assertInstalledJavaScriptFactoryRuns(
 	t.Helper()
 	run := support.FakeInputs(t.Context(), []string{
 		"you", "--json", "run", "--factory", filepath.Join(installedPath, factorydefinitions.FactoryConfigFile), "--no-record",
+		"--output", "response-stream",
 		"--provider", "CODEX", "--model", "gpt-5",
 		"--briefs", "Analyze the release plan and identify important risks.",
 	})

@@ -26,7 +26,10 @@ type Process interface {
 // command entrypoint.
 func BuildProcess(t testing.TB, edges serviceedges.Edges) Process {
 	t.Helper()
-	process, err := root.BuildProcess(context.Background(), edges)
+	// Keep the aggregate overlay in test composition so functional fixtures
+	// exercise every external-effect replacement path while production callers
+	// continue to pass the exact owner ports through root.BuildProcess.
+	process, err := root.BuildProcess(context.Background(), serviceedges.Merge(serviceedges.Edges{}, edges))
 	if err != nil {
 		t.Fatalf("BuildProcess() error = %v", err)
 	}
