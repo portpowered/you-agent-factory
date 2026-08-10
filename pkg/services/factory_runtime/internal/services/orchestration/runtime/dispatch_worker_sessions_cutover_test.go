@@ -765,6 +765,25 @@ func TestRecordedObservationTimingBranches(t *testing.T) {
 	}
 }
 
+func TestMergeRecordedObservationsUsesCanonicalWorkerStartTimestamp(t *testing.T) {
+	recordedStarted := time.Date(2026, 8, 10, 12, 0, 0, 100, time.UTC)
+	authoritativeStarted := recordedStarted.Add(500 * time.Microsecond)
+
+	merged := mergeRecordedObservations(
+		[]workersessions.Observation{{
+			WorkerSessionID: "worker-1",
+			StartedAt:       &recordedStarted,
+		}},
+		[]workersessions.Observation{{
+			WorkerSessionID: "worker-1",
+			StartedAt:       &authoritativeStarted,
+		}},
+	)
+	if len(merged) != 1 || merged[0].StartedAt == nil || !merged[0].StartedAt.Equal(authoritativeStarted) {
+		t.Fatalf("merged Worker Session startedAt = %#v, want canonical opening %s", merged, authoritativeStarted.Format(time.RFC3339Nano))
+	}
+}
+
 func TestRecordedDispatchFactsBranches(t *testing.T) {
 	base, events := recordedDispatchFactTestEvents(t)
 	associations, requests := recordedDispatchFacts(events)
