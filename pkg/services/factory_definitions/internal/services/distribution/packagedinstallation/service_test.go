@@ -388,6 +388,94 @@ func (fileSystem *racingPackagedInstallationFileSystem) Mkdir(path string, mode 
 	return fileSystem.Local.Mkdir(path, mode)
 }
 
+type scriptedOwnerProbe struct {
+	record     ownerRecord
+	currentErr error
+	liveness   ownerLiveness
+}
+
+func (probe *scriptedOwnerProbe) Current() (ownerRecord, error) {
+	return probe.record, probe.currentErr
+}
+
+func (probe *scriptedOwnerProbe) Classify(ownerRecord) ownerLiveness {
+	return probe.liveness
+}
+
+type failingPackagedInstallationFileSystem struct {
+	platformfilesystem.Local
+	statPath         string
+	statErr          error
+	readDirErr       error
+	mkdirAllErr      error
+	mkdirErr         error
+	removeErr        error
+	readFileErr      error
+	readFileData     []byte
+	overrideReadFile bool
+	writeFileErr     error
+	renameErr        error
+}
+
+func (fileSystem *failingPackagedInstallationFileSystem) Stat(path string) (fs.FileInfo, error) {
+	if fileSystem.statPath == path && fileSystem.statErr != nil {
+		return nil, fileSystem.statErr
+	}
+	return fileSystem.Local.Stat(path)
+}
+
+func (fileSystem *failingPackagedInstallationFileSystem) ReadDir(path string) ([]fs.DirEntry, error) {
+	if fileSystem.readDirErr != nil {
+		return nil, fileSystem.readDirErr
+	}
+	return fileSystem.Local.ReadDir(path)
+}
+
+func (fileSystem *failingPackagedInstallationFileSystem) Mkdir(path string, mode fs.FileMode) error {
+	if fileSystem.mkdirErr != nil {
+		return fileSystem.mkdirErr
+	}
+	return fileSystem.Local.Mkdir(path, mode)
+}
+
+func (fileSystem *failingPackagedInstallationFileSystem) MkdirAll(path string, mode fs.FileMode) error {
+	if fileSystem.mkdirAllErr != nil {
+		return fileSystem.mkdirAllErr
+	}
+	return fileSystem.Local.MkdirAll(path, mode)
+}
+
+func (fileSystem *failingPackagedInstallationFileSystem) RemoveAll(path string) error {
+	if fileSystem.removeErr != nil {
+		return fileSystem.removeErr
+	}
+	return fileSystem.Local.RemoveAll(path)
+}
+
+func (fileSystem *failingPackagedInstallationFileSystem) ReadFile(path string) ([]byte, error) {
+	if fileSystem.readFileErr != nil {
+		return nil, fileSystem.readFileErr
+	}
+	if fileSystem.overrideReadFile {
+		return append([]byte(nil), fileSystem.readFileData...), nil
+	}
+	return fileSystem.Local.ReadFile(path)
+}
+
+func (fileSystem *failingPackagedInstallationFileSystem) WriteFile(path string, data []byte, mode fs.FileMode) error {
+	if fileSystem.writeFileErr != nil {
+		return fileSystem.writeFileErr
+	}
+	return fileSystem.Local.WriteFile(path, data, mode)
+}
+
+func (fileSystem *failingPackagedInstallationFileSystem) Rename(oldPath, newPath string) error {
+	if fileSystem.renameErr != nil {
+		return fileSystem.renameErr
+	}
+	return fileSystem.Local.Rename(oldPath, newPath)
+}
+
 func TestInstallPackagedFactory_MaterializesPortableEditableFormats(t *testing.T) {
 	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
 	if err != nil {

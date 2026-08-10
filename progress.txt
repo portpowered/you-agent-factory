@@ -995,3 +995,19 @@
   - Publish ownership metadata through a temp file plus rename, and treat a missing final record while the directory remains as indeterminate rather than guessing whether the writer is live.
   - PID liveness is evidence, not identity: active PIDs must never authorize deletion, and diagnostics should say `owner_identity=unverified` so operators verify the process before clearing the exact path.
 ---
+
+## 2026-08-10 08:02 -07:00 - pf-stale-scope-diagnostic-002 coverage follow-up
+- What was implemented
+  - Added observable installation tests for ownership acquisition failures, pre-existing stage owner classifications, inspection failures, and compare-before-release errors so the new bounded contention paths retain the package coverage floor.
+- Files changed
+  - `pkg/services/factory_definitions/internal/services/distribution/packagedinstallation/owner_contention_test.go`
+  - `pkg/services/factory_definitions/internal/services/distribution/packagedinstallation/service_test.go`
+  - `progress.txt`
+- Verification
+  - Focused owner/contention tests with `-race` repeated 20 times — passed.
+  - Packaged installation coverage — passed at 83.5% locally against the 81.11% package minimum.
+  - `go test ./pkg/services/factory_definitions/... -run '^$'` — passed.
+  - `go vet` focused changed packages, `make pkg-maint`, `make pkg-file-count`, and `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - Per-package coverage gates count newly introduced error branches, so each ownership failure mode needs an observable test rather than relying only on the happy-path concurrency tests.
+---
