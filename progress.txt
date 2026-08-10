@@ -1598,3 +1598,12 @@
 - **Learnings for future iterations:**
   - The prior GitHub functional-coverage failure is reproducible as a transient baseline failure rather than a deterministic source failure; fresh CI after this head is the authoritative check.
 ---
+
+## 2026-08-10 06:27 -07:00 - e1-artifact-registry-003 verification follow-up
+- What was implemented
+  - No additional product changes; completed the clean post-commit verification for the Work listing projection.
+- Files changed
+  - `progress.txt`
+- **Learnings for future iterations:**
+  - `make verify-fast` is the useful final gate for this read/API story: it covers generated dashboard typecheck, MCP boundary alignment, UI unit suites, and the short Go suite after the API artifacts are committed.
+---
