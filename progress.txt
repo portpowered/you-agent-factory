@@ -74,6 +74,7 @@
 - **Learnings for future iterations:**
 - This checkout may have `ui/node_modules` without all lockfile dependencies; run the pinned Bun install before treating a typecheck failure as a source regression.
 ---
+
 ## 2026-08-10 04:32 -07:00 - sac-s0-2-pkg-boundary-ignores-001
 - What was implemented
   - Centralized repository-root-relative pruning for `.artifacts`, `.artifacts/bootstrap/worktrees`, generated transient worktrees, and the supported root worktree locations.
@@ -1463,4 +1464,20 @@
 - **Learnings for future iterations:**
   - Repository-wide functional CI runs can expose nondeterministic cancellation/shutdown races under parallel load; diagnose the exact package artifact before changing unrelated production code.
   - A required CI check remains a PR follow-up even when all story acceptance criteria and focused verification pass.
+---
+
+## 2026-08-10 08:39 -07:00 - dwro-s1-remote-placement-flags-004 CI coverage follow-up
+- What was implemented
+  - Addressed the latest Backend Functional Coverage failure by adding functional evidence for exact `--listen` precedence over legacy `--server` and for selected-server remote dispatch with normalized request content and zero local listener starts.
+  - Preserved the existing functional coverage baseline; the new scenarios cover 10 statements that were zero in the uploaded `pkg/transports/cli` profile, above the seven-statement shortfall.
+- Files changed
+  - `tests/functional/transport/run_scoped_server/run_scoped_server_test.go`
+  - `progress.txt`
+- Verification
+  - Focused exact-listener and remote-dispatch tests — passed.
+  - Full `go test ./tests/functional/transport/run_scoped_server -count=1 -timeout 240s` — passed.
+  - `git diff --check` — passed; commit `2c0bee85e` contains the focused coverage fix. A new CI run is required after pushing this commit.
+- **Learnings for future iterations:**
+  - The functional coverage floor for `pkg/transports/cli` includes root transport statements reached only through `root.BuildProcess` scenarios; package-local tests do not restore that functional threshold.
+  - Compare the CI `coverage.out` block counts with a focused functional profile to select observable scenarios that cover the missing statements without lowering a package baseline.
 ---
