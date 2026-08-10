@@ -67,7 +67,7 @@
       ],
       "priority": 3,
       "passes": true,
-      "notes": "Added terminal structured_output_schema_violation classification for malformed/schema-invalid output, safe validation diagnostics, onFailure routing, generated public enum/mappings, replay/session projection coverage, and root-built functional coverage proving no success-stage dispatch."
+      "notes": "Added terminal structured_output_schema_violation classification for malformed/schema-invalid output, safe validation diagnostics, onFailure routing, generated public enum/mappings, replay/session projection coverage, and root-built functional coverage proving no success-stage dispatch. Review follow-up now builds bounded instance/schema/keyword diagnostics without rejected values or host paths, with scalar pattern coverage at focused and functional boundaries; the pkg-boundary count is restored to the main baseline."
     },
     {
       "id": "e2-structured-worker-results-004",
@@ -84,8 +84,8 @@
         "Tests pass"
       ],
       "priority": 4,
-      "passes": true,
-      "notes": "Implemented native Work list/show JSON preservation, deterministic human list rendering, replay-safe Work watch result handoff and omission semantics, focused CLI/contract/replay coverage, public documentation, generated CLI/package projections, and intentional baseline refreshes."
+      "passes": false,
+      "notes": "Initial implementation is present, but blocking PR review found that the watch null sentinel collides with a customer-valid scalar string. The next iteration must replace that sentinel with collision-free presence handling and add behavioral coverage proving the exact string and explicit null remain distinct."
     }
   ]
 }

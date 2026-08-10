@@ -55,9 +55,9 @@ func TestPromptRenderer_RendersDetachedStructuredResultObjectAndArray(t *testing
 			map[string]any{"name": "second item"},
 		},
 	}
-	tokens := []factoryruntime.RuntimeToken{{
+	tokens := []workers.Token{{
 		ID: "tok-structured",
-		Color: factoryruntime.RuntimeTokenColor{
+		Color: workers.Color{
 			WorkID:                  "work-structured",
 			StructuredResult:        structured,
 			StructuredResultPresent: true,
@@ -90,9 +90,9 @@ func TestPromptRenderer_RendersDetachedStructuredResultObjectAndArray(t *testing
 
 func TestPromptRenderer_MissingStructuredResultFailsWithDiagnostic(t *testing.T) {
 	renderer := &DefaultPromptRenderer{}
-	tokens := []factoryruntime.RuntimeToken{{
+	tokens := []workers.Token{{
 		ID: "tok-missing-structured",
-		Color: factoryruntime.RuntimeTokenColor{
+		Color: workers.Color{
 			WorkID:  "work-missing-structured",
 			Payload: []byte("raw payload fallback must not happen"),
 		},

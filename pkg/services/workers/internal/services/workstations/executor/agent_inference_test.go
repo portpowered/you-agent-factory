@@ -344,17 +344,23 @@ func TestAgentExecutorClassifiesStructuredOutputSchemaViolations(t *testing.T) {
 	const rejectedMarker = "do-not-leak-this-rejected-value"
 	tests := []struct {
 		name              string
+		schema            string
 		response          string
 		validationSummary string
 	}{
-		{name: "malformed_json", response: `{"verdict":`},
-		{name: "schema_mismatch", response: `{"wrong":"` + rejectedMarker + `"}`, validationSummary: "verdict"},
+		{name: "malformed_json", schema: schema, response: `{"verdict":`},
+		{
+			name:              "schema_mismatch_pattern",
+			schema:            `{"type":"string","pattern":"^ok$"}`,
+			response:          `"` + rejectedMarker + `"`,
+			validationSummary: "pattern",
+		},
 	}
 
 	for _, test := range tests {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
-			assertAgentExecutorStructuredSchemaViolation(t, schema, rejectedMarker, test.name, test.response, test.validationSummary)
+			assertAgentExecutorStructuredSchemaViolation(t, test.schema, rejectedMarker, test.name, test.response, test.validationSummary)
 		})
 	}
 }
@@ -413,8 +419,29 @@ func assertAgentExecutorStructuredSchemaDiagnostic(t *testing.T, diagnostic, rej
 	if validationSummary != "" && !strings.Contains(diagnostic, validationSummary) {
 		t.Fatalf("error = %q, want validation summary containing %q", diagnostic, validationSummary)
 	}
+	if validationSummary == "pattern" {
+		for _, want := range []string{"instance $", "schema output schema#/pattern", `keyword "pattern"`} {
+			if !strings.Contains(diagnostic, want) {
+				t.Fatalf("error = %q, want actionable schema location %q", diagnostic, want)
+			}
+		}
+	}
 	if strings.Contains(diagnostic, rejectedMarker) {
 		t.Fatalf("error = %q, want rejected response value excluded from diagnostic", diagnostic)
+	}
+}
+
+func TestStructuredOutputValidationSummaryIsBounded(t *testing.T) {
+	response := `"` + strings.Repeat("rejected-value-", 512) + `"`
+	_, err := parseOutputAgainstSchema(response, []byte(`{"type":"string","pattern":"^ok$"}`))
+	if err == nil {
+		t.Fatal("parseOutputAgainstSchema() error = nil, want pattern validation failure")
+	}
+	if len(err.Error()) > structuredOutputValidationDetailLimit+128 {
+		t.Fatalf("validation error length = %d, want bounded diagnostic: %q", len(err.Error()), err)
+	}
+	if strings.Contains(err.Error(), "rejected-value-") {
+		t.Fatalf("validation error = %q, want rejected response content omitted", err)
 	}
 }
 

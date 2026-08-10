@@ -73,10 +73,15 @@ func TestStructuredOutputSchemaViolationRoutesFailureWithoutDownstreamDispatch(t
 	const rejectedMarker = "do-not-leak-this-rejected-value"
 	for _, test := range []struct {
 		name     string
+		schema   string
 		response string
 	}{
-		{name: "malformed_json", response: `{"summary":`},
-		{name: "schema_mismatch", response: `{"wrong":"` + rejectedMarker + `"}`},
+		{name: "malformed_json", schema: structuredPromptSchema, response: `{"summary":`},
+		{
+			name:     "schema_mismatch_pattern",
+			schema:   `{"type":"string","pattern":"^ok$"}`,
+			response: `"` + rejectedMarker + `"`,
+		},
 	} {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
@@ -84,7 +89,7 @@ func TestStructuredOutputSchemaViolationRoutesFailureWithoutDownstreamDispatch(t
 			support.WriteAgentConfig(t, dir, "processor", structuredPromptWorkerConfig())
 			support.WriteWorkstationConfig(t, dir, "produce", structuredPromptWorkstationConfig(
 				"Produce the structured handoff.",
-				structuredPromptSchema,
+				test.schema,
 			))
 			support.WriteWorkstationConfig(t, dir, "consume", structuredPromptWorkstationConfig(
 				`Title={{ (index .Inputs 0).StructuredResult.summary.title }}`,

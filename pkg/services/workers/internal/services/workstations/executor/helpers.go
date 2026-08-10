@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"regexp"
@@ -19,6 +20,7 @@ import (
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 	workerprompting "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/prompting"
 	"github.com/santhosh-tekuri/jsonschema/v6"
+	jsonschemakind "github.com/santhosh-tekuri/jsonschema/v6/kind"
 )
 
 type CommandRunner = workerexecution.CommandRunner
@@ -181,9 +183,142 @@ func parseOutputAgainstSchema(content string, schemaPayload []byte) (any, error)
 		return nil, fmt.Errorf("response is not valid JSON: %w", err)
 	}
 	if err := validate(document); err != nil {
-		return nil, fmt.Errorf("response does not satisfy output schema: %w", err)
+		return nil, fmt.Errorf("response does not satisfy output schema: %s", structuredOutputValidationSummary(err))
 	}
 	return document, nil
+}
+
+const (
+	structuredOutputValidationDetailLimit = 512
+	structuredOutputValidationCauseLimit  = 3
+)
+
+// structuredOutputValidationSummary deliberately builds the diagnostic from
+// jsonschema's locations and keyword metadata instead of Error(). Several
+// JSON Schema keywords include the rejected value in their localized error
+// text, which must never cross the worker failure boundary.
+func structuredOutputValidationSummary(err error) string {
+	if err == nil {
+		return "schema validation failed"
+	}
+
+	var validationErr *jsonschema.ValidationError
+	if !errors.As(err, &validationErr) || validationErr == nil {
+		return boundedStructuredOutputDiagnostic("schema validation failed")
+	}
+
+	details := make([]string, 0, structuredOutputValidationCauseLimit)
+	appendStructuredOutputValidationDetails(validationErr, &details)
+	if len(details) == 0 {
+		return "schema validation failed"
+	}
+	return boundedStructuredOutputDiagnostic(strings.Join(details, "; "))
+}
+
+func appendStructuredOutputValidationDetails(err *jsonschema.ValidationError, details *[]string) {
+	if err == nil || len(*details) >= structuredOutputValidationCauseLimit {
+		return
+	}
+	if len(err.Causes) > 0 {
+		for _, cause := range err.Causes {
+			appendStructuredOutputValidationDetails(cause, details)
+			if len(*details) >= structuredOutputValidationCauseLimit {
+				return
+			}
+		}
+		return
+	}
+
+	*details = append(*details, fmt.Sprintf(
+		"instance %s; schema %s; keyword %q: %s",
+		structuredOutputInstanceLocation(err.InstanceLocation),
+		structuredOutputSchemaLocation(err),
+		structuredOutputKeyword(err.ErrorKind),
+		structuredOutputValidationReason(err.ErrorKind),
+	))
+}
+
+func structuredOutputInstanceLocation(location []string) string {
+	if len(location) == 0 {
+		return "$"
+	}
+	return structuredOutputJSONPointer(location)
+}
+
+func structuredOutputSchemaLocation(err *jsonschema.ValidationError) string {
+	const location = "output schema"
+	keywordPath := structuredOutputKeywordPath(err.ErrorKind)
+	if len(keywordPath) > 0 {
+		return location + "#" + structuredOutputJSONPointer(keywordPath)
+	}
+	return location
+}
+
+func structuredOutputKeyword(errorKind jsonschema.ErrorKind) string {
+	path := structuredOutputKeywordPath(errorKind)
+	if len(path) == 0 {
+		return "schema"
+	}
+	return strings.Join(path, ".")
+}
+
+func structuredOutputKeywordPath(errorKind jsonschema.ErrorKind) []string {
+	if errorKind == nil {
+		return nil
+	}
+	return errorKind.KeywordPath()
+}
+
+func structuredOutputJSONPointer(parts []string) string {
+	var builder strings.Builder
+	for _, part := range parts {
+		builder.WriteByte('/')
+		builder.WriteString(strings.ReplaceAll(strings.ReplaceAll(part, "~", "~0"), "/", "~1"))
+	}
+	return builder.String()
+}
+
+func structuredOutputValidationReason(errorKind jsonschema.ErrorKind) string {
+	keywordPath := structuredOutputKeywordPath(errorKind)
+	if len(keywordPath) == 0 {
+		return "schema validation failed"
+	}
+	keyword := keywordPath[len(keywordPath)-1]
+	switch keyword {
+	case "required":
+		if required, ok := errorKind.(*jsonschemakind.Required); ok && len(required.Missing) > 0 {
+			missing := make([]string, 0, len(required.Missing))
+			for _, name := range required.Missing {
+				missing = append(missing, fmt.Sprintf("%q", name))
+			}
+			return "missing required property " + strings.Join(missing, ", ")
+		}
+		return "missing required property"
+	case "pattern":
+		return "string does not match the required pattern"
+	case "format":
+		return "value does not match the required format"
+	case "type":
+		if typeError, ok := errorKind.(*jsonschemakind.Type); ok {
+			return fmt.Sprintf("value has type %q; expected %s", typeError.Got, strings.Join(typeError.Want, " or "))
+		}
+		return "value has an invalid JSON type"
+	default:
+		return fmt.Sprintf("validation failed for JSON Schema keyword %q", keyword)
+	}
+}
+
+func boundedStructuredOutputDiagnostic(message string) string {
+	message = strings.TrimSpace(message)
+	if message == "" {
+		return "schema validation failed"
+	}
+	const suffix = "..."
+	runes := []rune(message)
+	if len(runes) <= structuredOutputValidationDetailLimit {
+		return message
+	}
+	return string(runes[:structuredOutputValidationDetailLimit-len([]rune(suffix))]) + suffix
 }
 
 // compileOutputSchema validates workstation configuration without attempting

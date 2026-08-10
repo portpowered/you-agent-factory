@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- JSON Schema worker diagnostics must use `ErrorKind.KeywordPath()` and typed schema metadata; localized `ValidationError.Error()` text can leak rejected values and compiler-expanded host paths.
 - Optional native JSON channels use an explicit presence bit plus custom JSON at durable boundaries to distinguish omitted values from JSON null; clone map/slice trees at projection and transport ownership boundaries.
 - Generated `interface{}` transport types collapse explicit JSON null during ordinary decoding; inspect raw HTTP/SSE JSON at the transport boundary and carry an internal normalized marker until final rendering.
 - When synchronizing a task branch with current main, preserve the active branch's task-scoped `prd.json` and merge unrelated main history into `progress.txt`; validate the resulting PRD before staging.
@@ -102,7 +103,6 @@
   - The checker has many independent `WalkDir` callbacks; updating only the primary repository scan leaves secondary scanners able to rediscover ignored files.
   - A malformed ignored fixture is useful behavioral evidence for prune-before-parse: a valid stale import alone may not exercise every parser path.
   - The next story should add the paired production `pkg` failure fixture and verify the `make pkg-boundary` subprocess path while keeping nested artifact-like directory names visible.
----
 
 ## 2026-08-09 13:17 - wo-d1-packaged-factories-docs-001 documentation routing follow-up
 - What was implemented
@@ -1804,4 +1804,28 @@
   - `git diff --check` — passed.
 - **Learnings for future iterations:**
   - Tests modeling completion signals should close the completion channel once the authoritative state is installed; an unbounded sender can deadlock under coverage scheduling even when focused runs usually pass.
+---
+## 2026-08-10 10:19 -07:00 - e2-structured-worker-results-003 review follow-up
+- What was implemented
+  - Replaced raw JSON Schema validation-error formatting with a bounded, customer-safe summary built from stable instance, output-schema, and keyword locations; required-property, type, pattern, and format diagnostics avoid value-bearing library text and host paths.
+  - Added focused scalar/pattern coverage proving rejected worker content is absent, the diagnostic remains actionable, and long diagnostics are bounded; extended the root-built functional failure-routing scenario with the same pattern case.
+  - Constructed only the new prompt test fixtures with Workers-owned token contracts, restoring the exact existing Petri public-surface baseline without refreshing debt.
+- Files changed
+  - `pkg/services/workers/internal/services/workstations/executor/helpers.go`
+  - `pkg/services/workers/internal/services/workstations/executor/agent_inference_test.go`
+  - `pkg/services/workers/internal/services/workstations/prompting/prompt_test.go`
+  - `tests/functional/workstations/execution/structured_result_prompt_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Focused executor and prompting tests — passed.
+  - Full affected executor/prompting packages — passed.
+  - Root-built functional schema-violation routing test with malformed and pattern-invalid responses — passed.
+  - Targeted `go vet` — passed.
+  - `backend-size`, `pkg-maint`, `pkg-file-count`, and `pkg-structure` — passed.
+  - `pkg-boundary` reports the known 176-violation main baseline and no new findings; `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - `jsonschema.ValidationError.Error()` and localized keyword messages can include rejected values; use `ErrorKind.KeywordPath()` and typed schema metadata, never `%w` or localized text, when crossing the worker failure boundary.
+  - The jsonschema compiler expands resource IDs to absolute file URLs and may append a fragment, so customer diagnostics should use a stable authored label such as `output schema#/pattern`.
+  - The remaining review blocker is story 004’s watch null sentinel collision; keep that fix isolated to the next story iteration.
 ---
