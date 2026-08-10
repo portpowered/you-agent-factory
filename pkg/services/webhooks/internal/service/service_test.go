@@ -24,6 +24,25 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/webhooks"
 )
 
+func TestServiceRejectsMissingConstructionDependencies(t *testing.T) {
+	if got := NewWithDeadLetterAppender(nil, testSecretResolver, platformclock.Real{}, nil, logging.NoopLogger{}); got != nil {
+		t.Fatal("NewWithDeadLetterAppender(nil client) returned a service, want nil")
+	}
+
+	var service *Service
+	if _, err := service.Start(context.Background(), webhooks.StartRequest{}); err == nil {
+		t.Fatal("nil Service.Start() succeeded, want validation error")
+	}
+
+	subscription, err := New(http.DefaultClient, testSecretResolver, platformclock.Real{}, logging.NoopLogger{}).Start(nil, webhooks.StartRequest{})
+	if err != nil {
+		t.Fatalf("Start(nil parent, no endpoints) error = %v", err)
+	}
+	if err := subscription(context.Background()); err != nil {
+		t.Fatalf("Close() after no-endpoint start: %v", err)
+	}
+}
+
 func TestServiceDeliversCanonicalWorkEventWithSignedBody(t *testing.T) {
 	root := newRecordingRootStub()
 	secret := "test-signing-secret"
