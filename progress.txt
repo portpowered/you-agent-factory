@@ -1449,3 +1449,18 @@
 - **Learnings for future iterations:**
   - Use `root.BuildProcess` functional cases for placement metadata and listener parsing; these tests cover the production CLI packages that unit-only tests do not affect.
 ---
+
+## 2026-08-10 08:10 -07:00 - dwro-s1-remote-placement-flags-004 CI follow-up
+- What was implemented
+  - Inspected the latest PR CI run and reran the failed backend functional lane three times after the implementation and coverage changes were pushed.
+  - Confirmed the placement-related tests and coverage paths were not among the failures; the full matrix instead exposed unrelated timing-sensitive cancellation and shutdown races in existing functional packages.
+- Files changed
+  - `progress.txt`
+- Verification
+  - CI run `31399810089` retained green results for frontend, browser, unit coverage, API/package, docs, providers, local inference, and integration lanes.
+  - Functional rerun failures varied between `orchestration/javascript/durability`, `sessions/restart`, `cli/mcp_resume`, and `workers/mock`; failures reported cancellation observation or `factory runtime is already stopped`, with no remote-placement assertion failures.
+  - Local focused placement, listener, CLI, and full short Go verification had already passed on `9fa903e83`.
+- **Learnings for future iterations:**
+  - Repository-wide functional CI runs can expose nondeterministic cancellation/shutdown races under parallel load; diagnose the exact package artifact before changing unrelated production code.
+  - A required CI check remains a PR follow-up even when all story acceptance criteria and focused verification pass.
+---
