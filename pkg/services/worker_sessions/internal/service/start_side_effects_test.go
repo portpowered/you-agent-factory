@@ -745,6 +745,87 @@ func TestStart_TerminalRecordFollowsPublishedWorkerOutput(t *testing.T) {
 	}
 }
 
+// TestStart_NoProviderSessionReferenceStillRetainsProviderIndependentHistory
+// drives a no-session provider observation through the real in-memory Events
+// path. Worker Sessions must establish provider identity before the output,
+// preserve the output's normalized provenance, and still close the topic with
+// a legal terminal lifecycle record without synthesizing a session reference.
+func TestStart_NoProviderSessionReferenceStillRetainsProviderIndependentHistory(t *testing.T) {
+	eventsSvc := newEventsAppender()
+	var svc workersessions.Service
+	var forwarded []workers.ProgressFragment
+	publisher := workersessions.NewProviderSessionObservationPublisher(func(fragment workers.ProgressFragment) {
+		forwarded = append(forwarded, fragment)
+	})
+	execution := &fakeExecution{
+		dispatch: func(_ context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+			publisher.Publish(workers.ProgressFragment{
+				DispatchID: req.Execution.Dispatch.DispatchID,
+				Kind:       workers.ProgressFragmentKind,
+				Type:       "message.completed",
+				Payload:    "final-only output",
+				Provider:   "antigravity",
+				Metadata:   map[string]string{"item_id": "message-1"},
+			})
+			return workers.WorkstationDispatchResult{
+				DispatchID: req.Execution.Dispatch.DispatchID,
+				Result: workers.WorkResult{
+					DispatchID: req.Execution.Dispatch.DispatchID,
+					Outcome:    workers.OutcomeAccepted,
+				},
+			}, nil
+		},
+	}
+	var err error
+	svc, err = newService(executionBoundary{execution: execution}, eventsSvc, nil)
+	if err != nil {
+		t.Fatalf("service.New() error = %v, want nil", err)
+	}
+	publisher.Bind(svc)
+
+	if _, err := svc.InvokeSession(context.Background(), validStartRequest("worker-no-session", "dispatch-no-session")); err != nil {
+		t.Fatalf("InvokeSession() error = %v, want nil", err)
+	}
+	read, err := eventsSvc.Read(context.Background(), events.ReadRequest{
+		Topic: workersessions.Topic("worker-no-session"),
+		From:  events.Cursor{Topic: workersessions.Topic("worker-no-session")},
+		Limit: 10,
+	})
+	if err != nil {
+		t.Fatalf("Events.Read() error = %v", err)
+	}
+	if len(read.Records) != 4 || len(forwarded) != 1 {
+		t.Fatalf("records=%d forwarded=%d, want opening/binding/output/terminal and one downstream output", len(read.Records), len(forwarded))
+	}
+
+	opening := decodeDraft(t, read.Records[0])
+	binding := decodeDraft(t, read.Records[1])
+	output := decodeDraft(t, read.Records[2])
+	terminal := decodeDraft(t, read.Records[3])
+	if opening.Kind != workers.KindSession || opening.Phase != workers.PhaseStarted {
+		t.Fatalf("opening = %#v, want SESSION/STARTED at position 1", opening)
+	}
+	if binding.Kind != workers.KindSession || binding.Phase != workers.PhaseUpdated || binding.Provenance.Provider != "antigravity" {
+		t.Fatalf("binding = %#v, want antigravity SESSION/UPDATED before output", binding)
+	}
+	if output.Kind != workers.KindMessage || output.Phase != workers.PhaseCompleted || output.Provenance.Provider != "antigravity" {
+		t.Fatalf("output = %#v, want antigravity MESSAGE/COMPLETED", output)
+	}
+	if terminal.Kind != workers.KindSession || terminal.Phase != workers.PhaseCompleted || terminal.Provenance.Provider != "antigravity" {
+		t.Fatalf("terminal = %#v, want antigravity SESSION/COMPLETED last", terminal)
+	}
+	if output.Provenance.Fidelity != workers.FidelityNormalized || output.Provenance.Delivery != workers.DeliveryNativeStream {
+		t.Fatalf("output provenance = %#v, want normalized native-stream fidelity", output.Provenance)
+	}
+	if forwarded[0].ProviderSessionReference != nil || forwarded[0].ProviderSessionRef != nil {
+		t.Fatalf("forwarded output = %#v, want no synthesized Provider Session reference", forwarded[0])
+	}
+	if read.Records[2].SourceType != workersessions.WorkerObservationSourceType ||
+		read.Records[2].SourceSequence != 1 || read.Records[2].SourceEventID != "worker-no-session/1" {
+		t.Fatalf("output source identity = %q/%q/%d/%q, want worker observation worker-no-session/1", read.Records[2].SourceType, read.Records[2].SourceID, read.Records[2].SourceSequence, read.Records[2].SourceEventID)
+	}
+}
+
 // TestStart_CanonicalProviderOutputBindsBeforePublication proves the
 // provider-native canonical path obeys the same opening barrier as translated
 // progress: when the opening has no provider identity, Worker Sessions emits

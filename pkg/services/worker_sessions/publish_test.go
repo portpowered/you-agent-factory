@@ -296,6 +296,41 @@ func TestPublish_CanonicalDraftBindsBeforeWorkerOutput(t *testing.T) {
 	}
 }
 
+// TestPublish_NoProviderSessionReferenceStillBindsAndPreservesProvenance
+// proves provider identity is sufficient to attribute a raw provider output
+// even when the provider has no resumable native session reference to share.
+func TestPublish_NoProviderSessionReferenceStillBindsAndPreservesProvenance(t *testing.T) {
+	spy := &workerRecordSpy{}
+	var forwarded []workers.ProgressFragment
+	publisher := workersessions.NewProviderSessionObservationPublisher(func(fragment workers.ProgressFragment) {
+		forwarded = append(forwarded, fragment)
+	})
+	publisher.Bind(spy)
+	publisher.Publish(workers.ProgressFragment{
+		DispatchID: "worker-1",
+		Kind:       workers.ProgressFragmentKind,
+		Type:       "message.completed",
+		Payload:    "final-only output",
+		Provider:   "antigravity",
+		Metadata:   map[string]string{"item_id": "message-1"},
+	})
+
+	if len(spy.bindings) != 1 || spy.bindings[0].Provider != "antigravity" {
+		t.Fatalf("provider bindings = %#v, want one antigravity binding", spy.bindings)
+	}
+	if len(spy.published) != 1 {
+		t.Fatalf("published records = %#v, want one output record", spy.published)
+	}
+	output := spy.published[0].Draft
+	if output.Provenance.Provider != "antigravity" || output.Kind != workers.KindMessage || output.Phase != workers.PhaseCompleted {
+		t.Fatalf("output draft = %#v, want antigravity MESSAGE/COMPLETED provenance", output)
+	}
+	if len(forwarded) != 1 || forwarded[0].Provider != "antigravity" ||
+		forwarded[0].ProviderSessionReference != nil || forwarded[0].ProviderSessionRef != nil {
+		t.Fatalf("forwarded output = %#v, want provider identity without a synthesized session", forwarded)
+	}
+}
+
 // TestPublish_CommitsWorkerOutputAsValidRecordsAndStillForwards pins both
 // halves of the routing.
 //

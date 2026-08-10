@@ -87,6 +87,16 @@ func (p *ProviderSessionObservationPublisher) Publish(fragment workers.ProgressF
 		// session under this Worker Session even though association succeeded.
 		return
 	}
+	if provider := strings.TrimSpace(fragment.Provider); provider != "" {
+		if reference != nil && strings.TrimSpace(reference.Provider.String()) != "" &&
+			!strings.EqualFold(provider, strings.TrimSpace(reference.Provider.String())) {
+			return
+		}
+		if metadata != nil && strings.TrimSpace(metadata.Provider) != "" &&
+			!strings.EqualFold(provider, strings.TrimSpace(metadata.Provider)) {
+			return
+		}
+	}
 	// Metadata without a source reference is a response projection rather than
 	// a trusted provider-native SessionRef. In particular, it can be
 	// compatibility data derived from a request's configured SessionID. It
@@ -173,6 +183,9 @@ func providerIdentityForFragment(fragment workers.ProgressFragment, draft *worke
 			return provider
 		}
 	}
+	if provider := strings.TrimSpace(fragment.Provider); provider != "" {
+		return provider
+	}
 	if reference := fragment.ProviderSessionReference; reference != nil {
 		if provider := strings.TrimSpace(reference.Provider.String()); provider != "" {
 			return provider
@@ -188,6 +201,10 @@ func providerIdentityAgrees(fragment workers.ProgressFragment, draft workers.Dra
 	provider := strings.TrimSpace(draft.Provenance.Provider)
 	if provider == "" {
 		return true
+	}
+	if explicit := strings.TrimSpace(fragment.Provider); explicit != "" &&
+		!strings.EqualFold(provider, explicit) {
+		return false
 	}
 	if reference := fragment.ProviderSessionReference; reference != nil &&
 		strings.TrimSpace(reference.Provider.String()) != "" &&
