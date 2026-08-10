@@ -65,6 +65,7 @@
   - After `bun install --frozen-lockfile` in `ui/`, `make verify-fast` passed: dashboard typecheck, MCP contract boundary, 355 UI files / 2,970 tests, and the short Go suite.
 - **Learnings for future iterations:**
 - This checkout may have `ui/node_modules` without all lockfile dependencies; run the pinned Bun install before treating a typecheck failure as a source regression.
+---
 ## 2026-08-10 04:32 -07:00 - sac-s0-2-pkg-boundary-ignores-001
 - What was implemented
   - Centralized repository-root-relative pruning for `.artifacts`, `.artifacts/bootstrap/worktrees`, generated transient worktrees, and the supported root worktree locations.
