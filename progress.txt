@@ -1829,3 +1829,24 @@
   - Functional listener cases that do not execute workers should omit mock-worker flags; worker/mock ownership remains isolated to the worker-focused functional package.
   - When a package file-count baseline is deletion-only, place semantically adjacent tests in an existing owner file rather than adding a new package file.
 ---
+
+## 2026-08-10 11:12 -07:00 - dwro-s1-remote-placement-flags-004 CI coverage follow-up
+- What was implemented
+  - Investigated the current PR head's Backend Unit Coverage and Backend Functional Coverage failures. Both were caused by the new duplicate-key scanner adding uncovered statements to `pkg/transports/cli/climanifest`, not by a behavior failure.
+  - Moved the reusable strict JSON decoder into the existing policy-free `pkg/platform/generatedartifacts` package, kept the manifest loader as the public enforcement boundary, and added malformed/trailing/nested duplicate-key coverage.
+  - Added loader coverage for required source-store and compatibility loading paths so the existing CLI manifest package floor remains satisfied.
+- Files changed
+  - `pkg/platform/generatedartifacts/json.go`
+  - `pkg/platform/generatedartifacts/json_test.go`
+  - `pkg/transports/cli/climanifest/load.go`
+  - `pkg/transports/cli/climanifest/load_test.go`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/platform/generatedartifacts -covermode=count ...` — 88.9% package coverage, above the 85.71% unit floor.
+  - `go test ./pkg/transports/cli/climanifest -covermode=count ...` — 88.5529% package coverage, above the 88.55% unit floor.
+  - `make verify-fast`, `make pkg-maint`, `make pkg-file-count`, and `go test ./pkg/transports/cli/... -count=1` — passed.
+  - The local full coverage command is unavailable on this Windows checkout because its generated Go invocation exceeds the Windows command-line length; the pushed Linux CI run is required to confirm both independent coverage lanes.
+- **Learnings for future iterations:**
+  - When a package-local coverage floor is tight, place generic enforcement logic in an existing package with an appropriate coverage exception/floor and cover it there; keep the feature package responsible only for invoking the policy.
+  - A green focused unit suite is not enough for CI coverage: inspect the exact package totals and uncovered statement profile from the failing Actions artifact before changing a baseline.
+---
