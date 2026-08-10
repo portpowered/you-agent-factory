@@ -1470,3 +1470,16 @@
 - **Learnings for future iterations:**
   - Do not treat an `ok` line from a command that returns nonzero as a clean verification; retain the distinction between test output and process-level command status when concurrent build work is present.
 ---
+
+## 2026-08-10 14:11 -07:00 - pf-stale-scope-diagnostic PR feedback follow-up
+- What was implemented
+  - Updated PR #1853 to head `dd27e1d0f` after pushing the current-main merge and the append-only merged-head verification record.
+  - Regenerated the PR description from the active `prd.json` and posted review follow-up comment `5246087033` with the Story 001 evidence and the remaining Story 002 atomic-reclamation work.
+- Files changed
+  - `progress.txt`
+- Verification
+  - The PR base is `6e01bee68`, matching the synchronized local `origin/main`; the PR is mergeable but blocked while checks rerun.
+  - The latest blocking conversation finding about the Story 001 observe-then-suspend race is explicitly addressed. The Story 002 compare-and-reclaim race remains unresolved by design for the next one-story iteration.
+- **Learnings for future iterations:**
+  - A review follow-up should state exactly which finding the current head resolves and explicitly preserve any remaining blocking story work; green historical CI cannot be presented as merged-head evidence while new checks are pending.
+---
