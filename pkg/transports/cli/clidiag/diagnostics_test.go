@@ -2,6 +2,7 @@ package clidiag
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -70,5 +71,145 @@ func TestNormalizePreservesAuthoredCodedError(t *testing.T) {
 	}
 	if !writer.DiagnosticRendered() {
 		t.Fatal("WriteFailure did not mark diagnostic writer")
+	}
+}
+
+type testInvocationCodedError struct {
+	code    string
+	message string
+}
+
+func (err testInvocationCodedError) Error() string { return "invocation: " + err.code }
+
+func (err testInvocationCodedError) InvocationErrorCode() string { return err.code }
+
+func (err testInvocationCodedError) InvocationErrorMessage() string { return err.message }
+
+func TestFailureAndDiagnosticWriterCoverNilAndDefaultEdges(t *testing.T) {
+	t.Parallel()
+
+	var nilFailure *Failure
+	if nilFailure.Error() != "" || nilFailure.Unwrap() != nil {
+		t.Fatalf("nil Failure methods = (%q, %v), want empty/nil", nilFailure.Error(), nilFailure.Unwrap())
+	}
+	if nilFailure.CLIErrorCode() != DefaultFailureCode || nilFailure.CLIErrorMessage() != defaultFailureMessage {
+		t.Fatalf("nil Failure diagnostic fields = (%q, %q), want defaults", nilFailure.CLIErrorCode(), nilFailure.CLIErrorMessage())
+	}
+
+	cause := errors.New("private cause")
+	failure := &Failure{Cause: cause}
+	if got := failure.Error(); got != DefaultFailureCode+": "+defaultFailureMessage+": private cause" {
+		t.Fatalf("default Failure error = %q", got)
+	}
+	if !errors.Is(failure, cause) {
+		t.Fatal("default Failure did not unwrap its cause")
+	}
+
+	var output bytes.Buffer
+	writer := NewDiagnosticWriter(&output)
+	if n, err := writer.Write([]byte("prefix")); err != nil || n != len("prefix") || output.String() != "prefix" {
+		t.Fatalf("DiagnosticWriter.Write = (%d, %v), output=%q", n, err, output.String())
+	}
+	if DiagnosticRendered(writer) {
+		t.Fatal("new DiagnosticWriter unexpectedly marked rendered")
+	}
+	MarkDiagnosticRendered(writer)
+	if !writer.DiagnosticRendered() || !DiagnosticRendered(writer) {
+		t.Fatal("DiagnosticWriter marker was not visible through the writer helpers")
+	}
+	MarkDiagnosticRendered(&output)
+	if DiagnosticRendered(&output) {
+		t.Fatal("plain writer unexpectedly exposed a diagnostic marker")
+	}
+
+	var nilWriter *DiagnosticWriter
+	if n, err := nilWriter.Write([]byte("ignored")); err != nil || n != len("ignored") {
+		t.Fatalf("nil DiagnosticWriter.Write = (%d, %v), want all bytes/nil", n, err)
+	}
+	if n, err := NewDiagnosticWriter(nil).Write([]byte("ignored")); err != nil || n != len("ignored") {
+		t.Fatalf("nil-output DiagnosticWriter.Write = (%d, %v), want all bytes/nil", n, err)
+	}
+}
+
+func TestDiagnosticContextAndPresentationHelpers(t *testing.T) {
+	t.Parallel()
+
+	if CentralDiagnosticsEnabled(nil) {
+		t.Fatal("nil context unexpectedly enabled central diagnostics")
+	}
+	if !CentralDiagnosticsEnabled(WithCentralDiagnostics(nil, true)) {
+		t.Fatal("WithCentralDiagnostics(nil, true) did not enable central diagnostics")
+	}
+	if CentralDiagnosticsEnabled(WithCentralDiagnostics(context.Background(), false)) {
+		t.Fatal("WithCentralDiagnostics(false) unexpectedly enabled central diagnostics")
+	}
+
+	var output bytes.Buffer
+	Printf(&output, false, "hidden")
+	Printf(&output, true, "visible %s", "diagnostic")
+	Printf(nil, true, "discarded")
+	if output.String() != "visible diagnostic\n" {
+		t.Fatalf("Printf output = %q", output.String())
+	}
+
+	for _, test := range []struct {
+		input string
+		want  string
+	}{
+		{input: "", want: DefaultSessionID},
+		{input: "session-1", want: "session-1"},
+	} {
+		if got := SessionLabel(test.input); got != test.want {
+			t.Fatalf("SessionLabel(%q) = %q, want %q", test.input, got, test.want)
+		}
+	}
+	for _, test := range []struct {
+		input string
+		want  string
+	}{
+		{input: "factory.json", want: "json"},
+		{input: "factory.MARKDOWN", want: "markdown"},
+		{input: "factory.txt", want: "file"},
+	} {
+		if got := PayloadType(test.input); got != test.want {
+			t.Fatalf("PayloadType(%q) = %q, want %q", test.input, got, test.want)
+		}
+	}
+}
+
+func TestNormalizeAndWriteFailureCoverInvocationAndInvalidContracts(t *testing.T) {
+	t.Parallel()
+
+	if Normalize(nil) != nil {
+		t.Fatal("Normalize(nil) returned a failure")
+	}
+
+	authored := testInvocationCodedError{code: "INVOCATION_REJECTED", message: "safe invocation rejection"}
+	if got := Normalize(authored); !errors.Is(got, authored) {
+		t.Fatalf("Normalize(authored invocation) = %T, want original error", got)
+	}
+	var output bytes.Buffer
+	if !WriteFailure(&output, authored) {
+		t.Fatal("WriteFailure did not recognize an authored invocation error")
+	}
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal(output.Bytes(), &response); err != nil {
+		t.Fatalf("decode authored invocation diagnostic: %v", err)
+	}
+	if response.Code != factoryapi.ErrorResponseCode("INVOCATION_REJECTED") || response.Message != "safe invocation rejection" {
+		t.Fatalf("authored invocation response = %#v", response)
+	}
+
+	invalid := testInvocationCodedError{message: "ignored"}
+	normalized := Normalize(invalid)
+	var failure *Failure
+	if !errors.As(normalized, &failure) || failure.Code != DefaultFailureCode {
+		t.Fatalf("invalid authored code normalized to %T (%v), want safe Failure", normalized, normalized)
+	}
+	if WriteFailure(nil, normalized) != true {
+		t.Fatal("WriteFailure(nil, normalized) = false, want true")
+	}
+	if WriteFailure(&output, errors.New("untyped")) {
+		t.Fatal("WriteFailure recognized an untyped error")
 	}
 }

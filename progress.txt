@@ -1468,5 +1468,25 @@
   - `git diff --check` — passed.
 - **Learnings for future iterations:**
   - Functional tests at the executable boundary must assert the sanitized serialized diagnostic; the returned error may still retain its cause for in-process `errors.Is` checks, but process stderr intentionally does not expose it.
-  - Cancellation diagnostics are an intentional observable exception to the JSON fallback: a directly canceled root command can emit exactly `Error: context canceled` while preserving the cancellation error for exit-status selection.
+- Cancellation diagnostics are an intentional observable exception to the JSON fallback: a directly canceled root command can emit exactly `Error: context canceled` while preserving the cancellation error for exit-status selection.
+---
+## 2026-08-10 08:18 -0700 - pf-cli-exit-codes coverage and stream-test follow-up
+- What was implemented
+  - Added focused unit coverage for `clidiag` nil/default edges, context markers, invocation-coded errors, safe fallback normalization, writer behavior, and presentation helpers; the package now exceeds its tracked unit coverage floor.
+  - Added focused coverage for `SubmissionHTTPError` safe CLI fields so the submit package remains above its tracked unit coverage floor after the diagnostic changes.
+  - Made the built Worker Sessions abort fixture flush its complete SSE frame before closing and increased only its test timeout bound to avoid coverage-lane scheduling flakiness.
+- Files changed
+  - `pkg/transports/cli/clidiag/diagnostics_test.go`
+  - `pkg/transports/cli/submit/submit_transport_test.go`
+  - `tests/functional/provider_sessions/cli/stream_abort_test.go`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/transports/cli/clidiag -count=1 -cover` — passed at 96.1%.
+  - `go test ./pkg/transports/cli/submit -count=1 -cover` — passed at 88.0%.
+  - `go test ./tests/functional/provider_sessions/cli -run '^TestBuiltWorkerSessionsStreamAbortExitsNonZero$' -count=5 -timeout 360s -v` — passed.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - When a coverage lane runs built-process SSE tests in parallel with broad instrumentation, flush the fixture frame explicitly before returning so the client observes the intended complete-frame-then-EOF sequence.
+  - Coverage-floor regressions from new boundary policy code are best repaired with unit tests for nil/default and marker branches, not by lowering the existing manifest minimum.
+  - A browser integration timeout in an unchanged UI surface should be rerun and recorded as an environmental/current-main flake before changing frontend code.
 ---

@@ -153,13 +153,19 @@ func TestBuiltWorkerSessionsStreamCancellationExits130(t *testing.T) {
 	}
 }
 
-const workerSessionAbortTestTimeout = 30 * time.Second
+const workerSessionAbortTestTimeout = 60 * time.Second
 
 func newAbortedWorkerSessionStreamServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			t.Errorf("aborted stream response writer does not support flushing")
+			return
+		}
 		_, _ = fmt.Fprint(w, "data: {\"delivery\":\"RECORD\",\"workerSessionId\":\"worker-session-abort\",\"providerSession\":null,\"workIds\":[],\"event\":{\"position\":1,\"sourceType\":\"worker_session\",\"sourceId\":\"worker-session-abort\",\"sourceSequence\":1,\"sourceEventId\":\"event-1\",\"schemaId\":\"worker_session.started\",\"payload\":{\"state\":\"RUNNING\"}},\"errorCode\":null,\"errorMessage\":null}\n\n")
+		flusher.Flush()
 	}))
 }
 
