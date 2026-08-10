@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- Git's `.git/config.lock` has no trustworthy owner or PID evidence; after a bounded retry, report the exact lock with `owner_liveness=indeterminate` and require verification before removing only that file—never auto-delete it.
 - Canonical packaged CLI docs live under `docs/reference/`; adding a topic also requires its authored file in `docs/reference/embed.go` and a registry entry in `pkg/transports/cli/docs/docs.go`.
 - The `you run --named <factory> --help` output is the authoritative invocation contract; omitted role provider/model values resolve through operator defaults.
 - Documentation for model-backed workflows should describe observable result shape and status/artifact evidence rather than byte-stable generated prose.
@@ -793,4 +794,30 @@
   - `go test ./tests/functional/transport/cli/process -run '^TestCLISuccessorAfterHardKillReachesRuntime$' -count=1 -v` — passed; successor reached dashboard readiness and reused the predecessor scope.
 - **Learnings for future iterations:**
   - Killing at the earliest observable durable startup checkpoint still leaves no serialization candidate, so a future reproduction must exercise a different startup effect or the actual worker/worktree path rather than adding a backend-scope lease.
+---
+
+## 2026-08-10 05:25 -07:00 - pf-stale-scope-diagnostic-001 Git-lock owner follow-up
+- What was implemented
+  - Made Full Flow's packaged task-worktree setup distinguish persistent Git config-lock contention from other Git failures after its existing bounded retry window.
+  - Added a real child-process hard-kill test that observes the lock owner's explicit `acquired` marker, kills it, preserves the orphan-unknown `.git/config.lock`, and verifies the successor setup exits promptly with the exact resource path, `owner_liveness=indeterminate`, and safe verify/remove/retry instructions.
+  - Regenerated the packaged Full Flow YAML/JSON artifacts and manifest through the catalog generator.
+- Files changed
+  - `packages/packaged-factories/factories/full-flow/scripts/setup-task-worktree.py`
+  - `packages/packaged-factories/generated/factories/full-flow/factory.json`
+  - `packages/packaged-factories/generated/factories/full-flow/factory.yaml`
+  - `packages/packaged-factories/generated/manifest.json`
+  - `tests/factory/scripts/test_full_flow_setup_task_worktree.py`
+  - `progress.txt`
+  - `prd.json`
+- Verification
+  - `python tests/factory/scripts/test_full_flow_setup_task_worktree.py` — passed, 5 tests.
+  - `make packaged-factory-catalog-check` — passed.
+  - `make packaged-factory-source-check` — passed.
+  - `go test ./tests/functional/factory/packaged/full_flow -count=1 -timeout 300s` — passed.
+  - `go test ./tests/functional/transport/cli/process -run '^TestCLISuccessorAfterHardKillReachesRuntime$' -count=1 -timeout 300s` — passed.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - The Full Flow task-worktree script is the first concrete owner path found that names a cross-process serialization resource, `.git/config.lock`; its lock file carries no safe owner identity, so bounded non-reclaim is the only conservative behavior until liveness evidence exists.
+  - Packaged supporting scripts are embedded in generated Full Flow artifacts; source edits require `make packaged-factory-catalog-generate` before catalog checks.
+  - This resource is currently acquired during task-worktree setup after the application starts, not yet at the pre-runtime startup boundary in the real `you` regression; keep Story 001 incomplete until that lifecycle relationship is proven.
 ---

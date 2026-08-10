@@ -2,8 +2,12 @@
 """Regression tests for the packaged full-flow worktree setup boundary."""
 
 import json
+import queue
 import subprocess
 import tempfile
+import sys
+import threading
+import time
 import unittest
 from pathlib import Path
 
@@ -111,6 +115,68 @@ class FullFlowWorktreeSetupTest(unittest.TestCase):
                 (self.repository / ".claude" / "worktrees" / task / ".git").exists()
             )
         self.assertEqual(git(self.repository, "config", "--get", "core.longpaths"), "true")
+
+    def test_hard_killed_lock_owner_returns_bounded_actionable_failure(self):
+        first = self.run_script("task-a")
+        self.assertEqual(first.returncode, 0, first.stderr)
+
+        lock_path = self.repository / ".git" / "config.lock"
+        owner_code = (
+            "from pathlib import Path\n"
+            "import sys\n"
+            "lock = Path(sys.argv[1])\n"
+            "with lock.open('w', encoding='utf-8') as handle:\n"
+            "    handle.write('owned-by-test\\n')\n"
+            "    handle.flush()\n"
+            "    print('acquired', flush=True)\n"
+            "    sys.stdin.read(1)\n"
+        )
+        owner = subprocess.Popen(
+            [sys.executable, "-c", owner_code, str(lock_path)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        acquired = queue.Queue(maxsize=1)
+
+        def read_acquisition():
+            acquired.put(owner.stdout.readline())
+
+        reader = threading.Thread(target=read_acquisition, daemon=True)
+        reader.start()
+        try:
+            try:
+                acquisition_line = acquired.get(timeout=30)
+            except queue.Empty:
+                self.fail("timed out observing hard-kill lock owner acquisition")
+            self.assertEqual(acquisition_line.strip(), "acquired")
+            started = time.monotonic()
+            owner.kill()
+            owner.wait(timeout=30)
+
+            result = self.run_script("task-a")
+            elapsed = time.monotonic() - started
+        finally:
+            if owner.poll() is None:
+                owner.kill()
+                owner.wait(timeout=30)
+            for stream in (owner.stdin, owner.stdout, owner.stderr):
+                if stream is not None:
+                    stream.close()
+            reader.join(timeout=5)
+
+        self.assertFalse(reader.is_alive())
+
+        self.assertEqual(result.returncode, 1)
+        self.assertLess(elapsed, 5)
+        self.assertTrue(lock_path.exists())
+        self.assertIn("git config serialization contention", result.stderr)
+        self.assertIn(f"resource={lock_path}", result.stderr)
+        self.assertIn("owner_liveness=indeterminate", result.stderr)
+        self.assertIn("verify no Git or task-worktree setup process", result.stderr)
+        self.assertIn(f"remove only {lock_path}", result.stderr)
+        self.assertIn("retry", result.stderr)
 
 
 if __name__ == "__main__":
