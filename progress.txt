@@ -83,6 +83,7 @@
 - This checkout may have `ui/node_modules` without all lockfile dependencies; run the pinned Bun install before treating a typecheck failure as a source regression.
 ---
 
+
 ## 2026-08-10 04:32 -07:00 - sac-s0-2-pkg-boundary-ignores-001
 - What was implemented
   - Centralized repository-root-relative pruning for `.artifacts`, `.artifacts/bootstrap/worktrees`, generated transient worktrees, and the supported root worktree locations.
@@ -1794,4 +1795,37 @@
   - `git diff --check` passed; a new PR check run is required for the merged head.
 - **Learnings for future iterations:**
   - When a task branch is behind main, keep the task-scoped PRD authoritative and merge main's progress entries and unrelated changes so PR description parity and append-only history remain intact.
+---
+
+## 2026-08-10 10:51 -07:00 - dwro-s1-remote-placement-flags-004 review follow-up
+- What was implemented
+  - Removed duplicate `placement` keys from the authored CLI manifest and regenerated the published CLI artifacts and manifest hash metadata.
+  - Added strict duplicate-JSON-key rejection at CLI manifest load time, including a regression test for duplicate `placement` keys.
+  - Made malformed remote endpoint diagnostics fail closed with a fixed redacted label, including a credential-bearing malformed-endpoint regression test.
+  - Refactored run error handling and remote invalid-input tests to satisfy maintainability limits, consolidated placement tests into the existing CLI run test owner to preserve package file-count baselines, removed mock workers from worker-free listener scenarios, and removed marker-only docs assertions.
+- Files changed
+  - `contracts/cli/commands.json`
+  - `packages/api/generated/cli/commands.json`
+  - `packages/api/generated/manifest.json`
+  - `pkg/transports/cli/climanifest/load.go`
+  - `pkg/transports/cli/climanifest/load_test.go`
+  - `pkg/transports/cli/root_run_test.go`
+  - `pkg/transports/cli/root_work.go`
+  - `pkg/transports/cli/run/remote.go`
+  - `pkg/transports/cli/run/remote_test.go`
+  - `tests/functional/smoke/cli_docs_smoke_test.go`
+  - `tests/functional/transport/run_scoped_server/run_scoped_server_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `make verify-fast` — passed on rerun; dashboard typecheck, MCP contract boundary, 355 Vitest files / 2,970 tests plus 191 Bun tests, and short Go suite passed.
+  - `make contracts-validate`, `make cli-manifest-check`, `make backend-size`, `make pkg-structure`, `make pkg-maint`, `make pkg-file-count`, and `make vet` — passed.
+  - `make docs-reference-smoke` — passed.
+  - `go test ./pkg/transports/cli/... -count=1 -timeout 300s` — passed.
+  - `go test ./tests/functional/transport/run_scoped_server -count=1 -timeout 300s` — passed.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - Strict duplicate-key validation belongs at the manifest load boundary; authored and published contract artifacts must both be regenerated after source changes.
+  - Functional listener cases that do not execute workers should omit mock-worker flags; worker/mock ownership remains isolated to the worker-focused functional package.
+  - When a package file-count baseline is deletion-only, place semantically adjacent tests in an existing owner file rather than adding a new package file.
 ---
