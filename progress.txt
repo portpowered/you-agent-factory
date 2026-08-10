@@ -529,3 +529,17 @@
   - Current functional-boundary checks require `support.BuildProcess` plus exact `serviceedges.Edges` replacements for provider functional composition; direct `pkg/root` imports are rejected even when the test injects all external effects.
   - Coverage manifests enforce per-package floors, so added catalog/CLI branches need observable behavioral tests; lowering the checked-in floor would hide the regression.
 ---
+## 2026-08-09 23:37 -0700 - wo-b3-provider-capability-discovery-cli-ci-rerun
+- What was implemented
+  - Investigated the fresh-head functional coverage failure in the unchanged packaged-loop lane; the exact `TestPackagedLoopUsesInvocationDurationAndSkipsOverlap` test passed through 20 local repetitions, so no unrelated production fix was introduced.
+  - Reran the failed GitHub Actions job and retained the provider discovery implementation and coverage fixes as the only source changes.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/factory/packaged/loop -run '^TestPackagedLoopUsesInvocationDurationAndSkipsOverlap$' -count=20 -v -timeout 900s` — passed all 20 runs.
+  - `gh run rerun 31361833511 --failed --repo portpowered/you-agent-factory` — attempt 2 passed Backend Functional Coverage and Verification Policy.
+  - All 18 required PR checks are terminal and passing on head `24a966c18`; PR #1843 is mergeable with no comments or formal reviews.
+- **Learnings for future iterations:**
+  - A single timeout in the unchanged packaged-loop functional lane should be reproduced in isolation before changing feature code; a stable local repetition supports rerunning the failed CI job instead.
+  - When the rerun has no new source changes, record the exact test and terminal check state in the append-only progress log so the PR handoff remains auditable.
+---
