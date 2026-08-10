@@ -93,6 +93,7 @@
   - The live catalog contains fifteen `@you/*` entries plus any local Factory names, and its directory column is operator-specific; use exact Factory names for portable documentation.
   - The current help contract explicitly prints Factory-defined request binding and role-specific flags, including the phrase that omitted provider/model values use operator defaults.
 ---
+
 ## 2026-08-09 13:16 - wo-d1-packaged-factories-docs-001 verification follow-up
 - What was implemented
   - Installed the repository-pinned UI dependencies that were missing from the checkout so the broad verification tier could run.
@@ -350,3 +351,28 @@
   - When a new behavioral test crosses a ratcheted size or complexity gate, move only the focused fixture/assertion into an existing owner test module and extract helpers; do not weaken the gate or add an exemption.
 ---
 
+## 2026-08-10 16:21 -07:00 - thr-lint-speed-003
+- What was implemented
+  - Added quiet-by-default package-boundary presentation using a classified finding comparison against a selected Git base tree (`PACKAGE_BOUNDARY_BASE_REF`, defaulting to `origin/main` with local ref fallbacks). Existing scanner rules, exact deletion-only baseline matchers, stale-entry failures, and blocking semantics remain authoritative.
+  - Added `--all` diagnostics and Make wiring through `PACKAGE_BOUNDARY_ALL=1`; recorded matcher findings and baseline summaries are available for diagnosis while default output contains only current unrecorded findings and actionable failure context.
+  - Added streamed Git-tree extraction with safe temporary cleanup, exact finding fingerprints, fail-open behavior when a base cannot be materialized, and preservation of exact recorded findings for the complete diagnostic view.
+  - Added behavioral coverage for recorded-only quiet success, mixed recorded/new failures, same-file new findings, exact baseline diagnostics under `--all`, and aggregate `make lint` attribution.
+- Files changed
+  - `Makefile`
+  - `cmd/pkgboundarycheck/main.go`
+  - `cmd/pkgboundarycheck/recorded_baseline.go`
+  - `cmd/pkgboundarycheck/recorded_baseline_test.go`
+  - `cmd/pkgboundarycheck/converged_boundaries_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./cmd/pkgboundarycheck -count=1` — passed on the pre- and post-merge trees.
+  - `go vet ./cmd/pkgboundarycheck` and `make vet` — passed.
+  - `make backend-size`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, and `make typecheck` — passed.
+  - Focused aggregate fixture invokes `make lint LINT_TARGETS=pkg-boundary` in quiet and `PACKAGE_BOUNDARY_ALL=1` modes; both preserve the new-finding failure and target attribution, with `--all` adding recorded diagnostics.
+  - The broad `make test` attempt exceeded its five-minute local limit while several shared-workspace unit lanes contended; no changed-package assertion failed, and the full package suite passed independently.
+- **Learnings for future iterations:**
+  - Compare classified finding fingerprints with an explicitly materialized base tree when a delivery policy is “no new violations relative to main”; file-change heuristics can hide a new rule violation added to an already-touched file.
+  - Keep exact rule-baseline matches as a separate retained diagnostic set so `--all` can expose them without duplicating or changing the matcher.
+  - On Windows, consume a Git archive to completion or capture it before extraction; an early pipe reader exit can leave the Git child blocked on inherited stdout.
+---
