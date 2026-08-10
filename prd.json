@@ -121,8 +121,8 @@
         "Tests pass"
       ],
       "priority": 6,
-      "passes": false,
-      "notes": "The reusable root-process behavior proof exists and its focused functional assertions pass, but Story 006 remains incomplete on the review path. `make backend-size` reports the functional test at 121 lines versus the 100-line limit, and the review also requires replacing its ordinary raw HTTP/polling flow with the mandated public process/CLI seam or documenting a narrow parity exception and deterministic synchronization rationale. The branch still needs a rebase/merge with current origin/main and terminal CI."
+      "passes": true,
+      "notes": "Completed the review follow-up for the reusable root-process proof. Both representative success and provider-failure invocations now enter through the public `you --json run` CLI on one root.BuildProcess/Process.Execute instance; the injected API server is observation-only for public session and Factory Event streams. An explicit ProviderCommandRunner gate makes stream setup deterministic, raw invocation POSTs and status polling are gone, and the scenario is split below the backend-size limit. The current-main rebase is complete, Wire output is regenerated, and focused functional/race, make verify-fast, backend-size, pkg-maint, pkg-file-count, pkg-structure, wire-smoke, vet, and diff checks pass. Final delivery still depends on the fresh pushed head's terminal GitHub CI and review-state audit."
     }
   ]
 }
