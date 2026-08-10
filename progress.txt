@@ -1565,3 +1565,16 @@
 - **Learnings for future iterations:**
   - The final delivery audit must include the post-merge head's terminal policy check, PR body parity, and thread-aware review state in addition to focused local gates.
 ---
+## 2026-08-10 08:59 -07:00 - sac-s0-1-ownership-inventories CI retry follow-up
+- What was implemented
+  - Investigated the failed final-head Backend Functional Coverage attempt and confirmed that the failures were timing-sensitive cancellation observations in unchanged functional tests; no SAC source change was warranted.
+  - Reran the exact failing tests locally (10 repetitions for the initial two failures and 20 repetitions for the retry failure), then reran the failed GitHub job until the backend lane and dependent Verification Policy passed.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Local repeated JavaScript durability, work-recovery, and MCP resume tests passed.
+  - GitHub Actions run `31404264251`, attempt 3 — all 18 checks passed, including Backend Functional Coverage and Verification Policy, on head `c0c4aafd8`.
+  - The coverage warning and missing evidence artifact occurred only after the first failing test assertions; the successful retry produced the required artifacts.
+- **Learnings for future iterations:**
+  - In the functional coverage lane, inspect the first `--- FAIL` assertion before treating downstream coverage warnings or missing-artifact uploads as root causes; cancellation-observation failures can move between related tests across retries.
+---
