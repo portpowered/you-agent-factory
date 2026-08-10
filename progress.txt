@@ -1949,3 +1949,18 @@
   - Hosted CLI invocation has two event sources: a live subscription for prompt-time output and a final history read for durable reconciliation; tests should assert ordered IDs and duplicate suppression across both.
   - The GitHub functional lane can fail independently of package coverage when the pinned real-ACPX test skips before emitting its required artifact; distinguish that workflow prerequisite from changed-code failures before changing production behavior.
 ---
+## 2026-08-10 12:35 -07:00 - btrc-p1-root-injection-006 edge coverage follow-up
+- What was implemented
+  - Added behavioral `edges.Merge` coverage for hosted endpoint, model asset URL, and model host-platform replacements that the cumulative owner-migration coverage run no longer exercised through downstream package tests.
+  - Kept the coverage manifest unchanged; the direct `pkg/services/edges` package now reports 71.8% coverage against its 71.65% floor.
+- Files changed
+  - `pkg/services/edges/definition_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/edges -count=1 -cover` — passed at 71.8%.
+  - `go vet ./pkg/services/edges`, `make backend-size`, and `git diff --check` — passed.
+  - The published CI run's unit lane still reflects the pre-fix head; it must be rerun after this commit. Functional coverage remains in progress on that prior head.
+- **Learnings for future iterations:**
+  - Package ratchets are computed from the merged coverage profile, so a root-boundary migration can remove downstream execution evidence from an unchanged edge aggregator; restore that evidence with a small observable `Merge` test instead of changing the manifest.
+---

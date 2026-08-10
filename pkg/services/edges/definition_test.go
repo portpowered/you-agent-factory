@@ -438,6 +438,36 @@ func TestMergeWithEmptyReplacementsPreservesProductionDefaults(t *testing.T) {
 	}
 }
 
+func TestMergeAppliesAssetAndHostedEndpointReplacements(t *testing.T) {
+	t.Parallel()
+
+	merged := Merge(
+		Edges{HostedLinearEndpoint: "https://default.example"},
+		Edges{
+			HostedLinearEndpoint: "https://replacement.example",
+			ModelAssetEndpoints: models.RuntimeAssetEndpoints{
+				BaseURL:    "https://assets.example",
+				APIBaseURL: "https://api-assets.example",
+			},
+			ModelAssetHostPlatform: models.AssetHostPlatform{
+				OperatingSystem: "replacement-os",
+			},
+		},
+	)
+	if merged.HostedLinearEndpoint != "https://replacement.example" {
+		t.Fatalf("HostedLinearEndpoint = %q, want replacement", merged.HostedLinearEndpoint)
+	}
+	if merged.ModelAssetEndpoints.BaseURL != "https://assets.example" {
+		t.Fatalf("ModelAssetEndpoints.BaseURL = %q, want replacement", merged.ModelAssetEndpoints.BaseURL)
+	}
+	if merged.ModelAssetEndpoints.APIBaseURL != "https://api-assets.example" {
+		t.Fatalf("ModelAssetEndpoints.APIBaseURL = %q, want replacement", merged.ModelAssetEndpoints.APIBaseURL)
+	}
+	if merged.ModelAssetHostPlatform.OperatingSystem != "replacement-os" {
+		t.Fatalf("ModelAssetHostPlatform.OperatingSystem = %q, want replacement", merged.ModelAssetHostPlatform.OperatingSystem)
+	}
+}
+
 func TestMergeReplacesAndPreservesRecordingArtifactReadEffect(t *testing.T) {
 	t.Parallel()
 
