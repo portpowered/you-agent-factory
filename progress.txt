@@ -2227,3 +2227,20 @@
 - **Learnings for future iterations:**
   - When merging a newer default branch into a task branch, resolve shared bookkeeping by preserving the active task PRD exactly and retaining both branches' append-only progress entries; validate the PRD before staging.
 ---
+## 2026-08-10 11:20 -07:00 - e2-structured-worker-results inventory reconciliation
+- What was implemented
+  - Regenerated the current-main package-target manifest and ownership freeze after the merge exposed the E2 production package `pkg/platform/jsonvalue` as missing from both inventories.
+  - Kept the inventory change limited to the required platform package row and the deterministic ownership evidence/edge updates; no structured-result runtime behavior changed.
+- Files changed
+  - `docs/internal/packaged-service-structure/package-target-manifest.json`
+  - `docs/internal/baselines/ownership-inventory.json`
+- Verification
+  - `make package-target-manifest-check` — passed with 546 inventory/package rows.
+  - `make ownership-inventory-check` — passed.
+  - `make backend-size`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, `make vet`, `make typecheck`, and `make test` — passed.
+  - `go test ./cmd/ownershipinventorycheck -count=1` — passed.
+  - `go test ./cmd/packagetargetmanifestcheck -count=1` still reports the documented current-main Workers/Recordings root-contract inventory drift (`kind_phase_validation.go` and `lifecycle_capability.go`); the public package-target gate is green and no new E2 failure is reported.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - When a task branch adds a production package before current-main inventories catch up, regenerate both the package-target manifest and ownership freeze; validating only the public package-target gate will not update the ownership completeness ledger.
+---
