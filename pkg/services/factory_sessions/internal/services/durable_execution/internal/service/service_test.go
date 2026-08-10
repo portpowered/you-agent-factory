@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 )
@@ -62,7 +62,7 @@ func TestServiceDelegatesDurableExecutionContract(t *testing.T) {
 	if !service.IsNonLiveReplay() {
 		t.Fatal("IsNonLiveReplay = false, want forwarded replay capability")
 	}
-	if err := service.RecordPetriTokenMutations(started.SessionID, []factorydefinitions.TokenMutationRecord{{}}); err != nil {
+	if err := service.RecordPetriTokenMutations(started.SessionID, []interfaces.TokenMutationRecord{{}}); err != nil {
 		t.Fatalf("RecordPetriTokenMutations: %v", err)
 	}
 	if stub.calls != 6 {
@@ -103,7 +103,7 @@ func (s *executionStub) ReadEvents(context.Context, string, factorysessions.Even
 
 func (s *executionStub) IsNonLiveReplay() bool { return s.replay }
 
-func (s *executionStub) RecordPetriTokenMutations(string, []factorydefinitions.TokenMutationRecord) error {
+func (s *executionStub) RecordPetriTokenMutations(string, []interfaces.TokenMutationRecord) error {
 	s.calls++
 	return nil
 }
@@ -119,6 +119,70 @@ func TestRecordPetriTokenMutationsRejectsUnsupportedExecution(t *testing.T) {
 	if err == nil || errors.Is(err, factorysessions.ErrExecutionServiceNotConfigured) {
 		t.Fatalf("RecordPetriTokenMutations error = %v, want unsupported-capability error", err)
 	}
+}
+
+func TestStartSyncWithEventConsumerForwardsOptionalCapability(t *testing.T) {
+	var nilService *Service
+	if _, err := nilService.StartSyncWithEventConsumer(context.Background(), factorysessions.StartRequest{}, nil); !errors.Is(err, factorysessions.ErrRuntimeNotAvailable) {
+		t.Fatalf("nil StartSyncWithEventConsumer error = %v", err)
+	}
+
+	base := &executionStub{}
+	eventAware := &eventConsumerExecutionStub{executionStub: base}
+	service, err := New(eventAware)
+	if err != nil {
+		t.Fatalf("New(event-aware): %v", err)
+	}
+	consumer := factorysessions.FactoryEventConsumer(func([]interfaces.FactoryEvent) {})
+	started, err := service.StartSyncWithEventConsumer(
+		context.Background(), factorysessions.StartRequest{RequestID: "event-aware"}, consumer,
+	)
+	if err != nil || started.SessionID != "event-aware-session" || !eventAware.consumed {
+		t.Fatalf("event-aware start = (%#v, %v), consumed = %t", started, err, eventAware.consumed)
+	}
+
+	fallback := &syncFallbackExecutionStub{executionStub: &executionStub{}}
+	service, err = New(fallback)
+	if err != nil {
+		t.Fatalf("New(fallback): %v", err)
+	}
+	started, err = service.StartSyncWithEventConsumer(
+		context.Background(), factorysessions.StartRequest{RequestID: "fallback"}, nil,
+	)
+	if err != nil || started.SessionID != "fallback-session" || fallback.syncCalls != 1 {
+		t.Fatalf("fallback start = (%#v, %v), sync calls = %d", started, err, fallback.syncCalls)
+	}
+}
+
+type eventConsumerExecutionStub struct {
+	*executionStub
+	consumed bool
+}
+
+func (s *eventConsumerExecutionStub) StartSyncWithEventConsumer(
+	context.Context,
+	factorysessions.StartRequest,
+	factorysessions.FactoryEventConsumer,
+) (factorysessions.SyncStartResult, error) {
+	s.consumed = true
+	return factorysessions.SyncStartResult{
+		AsyncStartResult: factorysessions.AsyncStartResult{SessionID: "event-aware-session"},
+	}, nil
+}
+
+type syncFallbackExecutionStub struct {
+	*executionStub
+	syncCalls int
+}
+
+func (s *syncFallbackExecutionStub) StartSync(
+	context.Context,
+	factorysessions.StartRequest,
+) (factorysessions.SyncStartResult, error) {
+	s.syncCalls++
+	return factorysessions.SyncStartResult{
+		AsyncStartResult: factorysessions.AsyncStartResult{SessionID: "fallback-session"},
+	}, nil
 }
 
 type executionWithoutMutation struct {

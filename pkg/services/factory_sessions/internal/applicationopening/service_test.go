@@ -281,3 +281,233 @@ func TestOpenApplicationPublishesHistoricalReplayThroughOwner(t *testing.T) {
 		t.Fatalf("published inspection = %#v", published)
 	}
 }
+
+func TestOpenApplicationRejectsNilServiceAndStopsAtOpeningFailures(t *testing.T) {
+	var nilService *Service
+	if _, err := nilService.OpenApplication(context.Background(), roles.ApplicationOpeningRequest{}); err == nil {
+		t.Fatal("nil service OpenApplication error = nil")
+	}
+
+	resolveErr := errors.New("resolve failed")
+	openErr := errors.New("open failed")
+	for _, testCase := range []struct {
+		name       string
+		resolveErr error
+		openErr    error
+	}{
+		{name: "resolve", resolveErr: resolveErr},
+		{name: "open", openErr: openErr},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			opened := 0
+			service, err := New(
+				func(context.Context, *factorysessions.RuntimeOpeningRequest) (RuntimeInputs, error) {
+					if testCase.resolveErr != nil {
+						return RuntimeInputs{}, testCase.resolveErr
+					}
+					return RuntimeInputs{Request: &factorysessions.RuntimeOpeningRequest{}}, nil
+				},
+				runtimeOpenerFunc(func(context.Context, *factorysessions.RuntimeOpeningRequest) (roles.OpenedApplicationRuntime, error) {
+					opened++
+					return roles.OpenedApplicationRuntime{}, testCase.openErr
+				}),
+				func(roles.OpenedApplicationRuntime, factoryvisualization.Sink) (factorysessions.BoundProcessComponents, error) {
+					t.Fatal("application adapter ran after opening failure")
+					return factorysessions.BoundProcessComponents{}, nil
+				},
+				func(roles.LifecyclePlanRequest) (lifecycle.Plan, error) {
+					t.Fatal("lifecycle planner ran after opening failure")
+					return lifecycle.Plan{}, nil
+				},
+			)
+			if err != nil {
+				t.Fatalf("New(): %v", err)
+			}
+			_, err = service.OpenApplication(context.Background(), roles.ApplicationOpeningRequest{
+				Runtime: &factorysessions.RuntimeOpeningRequest{},
+			})
+			want := testCase.resolveErr
+			if want == nil {
+				want = testCase.openErr
+			}
+			if !errors.Is(err, want) || opened != boolToInt(testCase.resolveErr == nil) {
+				t.Fatalf("OpenApplication() error = %v, opened = %d, want %v and %d", err, opened, want, boolToInt(testCase.resolveErr == nil))
+			}
+		})
+	}
+}
+
+func TestOpenApplicationAllowsNilResolvedRequest(t *testing.T) {
+	openedNilRequest := false
+	service, err := New(
+		func(context.Context, *factorysessions.RuntimeOpeningRequest) (RuntimeInputs, error) {
+			return RuntimeInputs{}, nil
+		},
+		runtimeOpenerFunc(func(_ context.Context, request *factorysessions.RuntimeOpeningRequest) (roles.OpenedApplicationRuntime, error) {
+			openedNilRequest = request == nil
+			return roles.OpenedApplicationRuntime{}, nil
+		}),
+		func(roles.OpenedApplicationRuntime, factoryvisualization.Sink) (factorysessions.BoundProcessComponents, error) {
+			return factorysessions.BoundProcessComponents{}, nil
+		},
+		func(roles.LifecyclePlanRequest) (lifecycle.Plan, error) { return lifecycle.Plan{}, nil },
+	)
+	if err != nil {
+		t.Fatalf("New(): %v", err)
+	}
+	if _, err := service.OpenApplication(context.Background(), roles.ApplicationOpeningRequest{
+		Runtime: &factorysessions.RuntimeOpeningRequest{},
+	}); err != nil {
+		t.Fatalf("OpenApplication(): %v", err)
+	}
+	if !openedNilRequest {
+		t.Fatal("runtime opener received a non-nil request after resolver returned no request")
+	}
+}
+
+func TestOpenApplicationBindsLivePresentationAndRejectsInvalidVisualization(t *testing.T) {
+	sink := &markerSink{}
+	owner := &applicationOpeningOwnerStub{}
+	boundHTTP := false
+	scopeID, err := owner.RegisterApplication(factorysessions.ApplicationOpeningScope{
+		VisualizationSink: sink,
+		RuntimeHTTPServicesBound: func(got roles.RuntimeHTTPServices) {
+			boundHTTP = got == (roles.RuntimeHTTPServices{})
+		},
+		Completion: func(context.Context) error { return nil },
+	})
+	if err != nil {
+		t.Fatalf("RegisterApplication(): %v", err)
+	}
+	var adaptedSink factoryvisualization.Sink
+	service, err := New(
+		func(context.Context, *factorysessions.RuntimeOpeningRequest) (RuntimeInputs, error) {
+			return RuntimeInputs{Request: &factorysessions.RuntimeOpeningRequest{}}, nil
+		},
+		runtimeOpenerFunc(func(context.Context, *factorysessions.RuntimeOpeningRequest) (roles.OpenedApplicationRuntime, error) {
+			return roles.OpenedApplicationRuntime{HTTP: roles.RuntimeHTTPServices{}}, nil
+		}),
+		func(_ roles.OpenedApplicationRuntime, got factoryvisualization.Sink) (factorysessions.BoundProcessComponents, error) {
+			adaptedSink = got
+			return factorysessions.BoundProcessComponents{}, nil
+		},
+		func(request roles.LifecyclePlanRequest) (lifecycle.Plan, error) {
+			if request.Completion == nil {
+				t.Fatal("live lifecycle plan omitted owner completion")
+			}
+			return lifecycle.Plan{}, nil
+		}, owner,
+	)
+	if err != nil {
+		t.Fatalf("New(): %v", err)
+	}
+	if _, err := service.OpenApplication(context.Background(), roles.ApplicationOpeningRequest{
+		Runtime: &factorysessions.RuntimeOpeningRequest{}, ScopeID: scopeID,
+	}); err != nil {
+		t.Fatalf("OpenApplication() live: %v", err)
+	}
+	if adaptedSink != sink || !boundHTTP {
+		t.Fatalf("live presentation = sink:%v http:%v, want injected values", adaptedSink == sink, boundHTTP)
+	}
+
+	closed := 0
+	invalidOwner := &applicationOpeningOwnerStub{}
+	invalidID, err := invalidOwner.RegisterApplication(factorysessions.ApplicationOpeningScope{VisualizationSink: struct{}{}})
+	if err != nil {
+		t.Fatalf("RegisterApplication(invalid): %v", err)
+	}
+	invalidService, err := New(
+		func(context.Context, *factorysessions.RuntimeOpeningRequest) (RuntimeInputs, error) {
+			return RuntimeInputs{Request: &factorysessions.RuntimeOpeningRequest{}}, nil
+		},
+		runtimeOpenerFunc(func(context.Context, *factorysessions.RuntimeOpeningRequest) (roles.OpenedApplicationRuntime, error) {
+			return roles.OpenedApplicationRuntime{Resources: roles.RuntimeResources{Close: func() error {
+				closed++
+				return errors.New("invalid visualization close")
+			}}}, nil
+		}),
+		func(roles.OpenedApplicationRuntime, factoryvisualization.Sink) (factorysessions.BoundProcessComponents, error) {
+			t.Fatal("adapter ran for invalid visualization sink")
+			return factorysessions.BoundProcessComponents{}, nil
+		},
+		func(roles.LifecyclePlanRequest) (lifecycle.Plan, error) { return lifecycle.Plan{}, nil }, invalidOwner,
+	)
+	if err != nil {
+		t.Fatalf("New(invalid): %v", err)
+	}
+	_, err = invalidService.OpenApplication(context.Background(), roles.ApplicationOpeningRequest{
+		Runtime: &factorysessions.RuntimeOpeningRequest{}, ScopeID: invalidID,
+	})
+	if err == nil || !strings.Contains(err.Error(), "invalid type") || closed != 1 {
+		t.Fatalf("invalid visualization error = %v, close count = %d", err, closed)
+	}
+}
+
+func TestOpenApplicationClosesHistoricalReplayWhenPlanningFails(t *testing.T) {
+	planErr := errors.New("historical plan failed")
+	closeErr := errors.New("historical close failed")
+	closed := 0
+	service, err := New(
+		func(context.Context, *factorysessions.RuntimeOpeningRequest) (RuntimeInputs, error) {
+			return RuntimeInputs{Request: &factorysessions.RuntimeOpeningRequest{}}, nil
+		},
+		runtimeOpenerFunc(func(context.Context, *factorysessions.RuntimeOpeningRequest) (roles.OpenedApplicationRuntime, error) {
+			return roles.OpenedApplicationRuntime{
+				HistoricalReplay: &factorysessions.HistoricalReplayInspection{},
+				Resources:        roles.RuntimeResources{Close: func() error { closed++; return closeErr }},
+			}, nil
+		}),
+		func(roles.OpenedApplicationRuntime, factoryvisualization.Sink) (factorysessions.BoundProcessComponents, error) {
+			t.Fatal("live adapter ran for historical replay")
+			return factorysessions.BoundProcessComponents{}, nil
+		},
+		func(roles.LifecyclePlanRequest) (lifecycle.Plan, error) { return lifecycle.Plan{}, planErr },
+	)
+	if err != nil {
+		t.Fatalf("New(): %v", err)
+	}
+	_, err = service.OpenApplication(context.Background(), roles.ApplicationOpeningRequest{
+		Runtime: &factorysessions.RuntimeOpeningRequest{},
+	})
+	if !errors.Is(err, planErr) || !errors.Is(err, closeErr) || closed != 1 {
+		t.Fatalf("historical error = %v, close count = %d", err, closed)
+	}
+}
+
+func TestOpenApplicationRejectsScopeWithoutOwner(t *testing.T) {
+	service, err := New(
+		func(context.Context, *factorysessions.RuntimeOpeningRequest) (RuntimeInputs, error) {
+			return RuntimeInputs{Request: &factorysessions.RuntimeOpeningRequest{}}, nil
+		},
+		runtimeOpenerFunc(func(context.Context, *factorysessions.RuntimeOpeningRequest) (roles.OpenedApplicationRuntime, error) {
+			return roles.OpenedApplicationRuntime{}, nil
+		}),
+		func(roles.OpenedApplicationRuntime, factoryvisualization.Sink) (factorysessions.BoundProcessComponents, error) {
+			return factorysessions.BoundProcessComponents{}, nil
+		},
+		func(roles.LifecyclePlanRequest) (lifecycle.Plan, error) { return lifecycle.Plan{}, nil },
+	)
+	if err != nil {
+		t.Fatalf("New(): %v", err)
+	}
+	_, err = service.OpenApplication(context.Background(), roles.ApplicationOpeningRequest{
+		Runtime: &factorysessions.RuntimeOpeningRequest{}, ScopeID: "unregistered",
+	})
+	if err == nil || !strings.Contains(err.Error(), "presentation scope") {
+		t.Fatalf("scope lookup error = %v, want unavailable owner scope", err)
+	}
+}
+
+func TestCloseOpenedRuntimeWithoutClosePreservesCause(t *testing.T) {
+	cause := errors.New("opening failed")
+	if err := closeOpenedRuntime(roles.OpenedApplicationRuntime{}, cause); !errors.Is(err, cause) {
+		t.Fatalf("closeOpenedRuntime() = %v, want original cause", err)
+	}
+}
+
+func boolToInt(value bool) int {
+	if value {
+		return 1
+	}
+	return 0
+}

@@ -1912,3 +1912,24 @@
   - `--quiet` cannot be combined with `--json`, and positional CLI invocation requires `--factory` or `--named` even when `--dir` is supplied.
   - Direct CLI provider failures may publish synthesized `ERROR/FAILED` response events; assert invocation and canonical dispatch failure independently from provider-native stream shape.
 ---
+## 2026-08-10 11:35 -07:00 - btrc-p1-root-injection-006 coverage follow-up
+- What was implemented
+  - Rebased the branch again onto the newer `origin/main` ownership-inventory merge (`cba6b45f9`) after it advanced during CI.
+  - Added focused behavioral coverage for application-opening resolver/open failures, value-only owner-scope binding, invalid visualization cleanup, historical-replay cleanup, nil resolved requests, and close behavior without resources.
+  - Added durable execution coverage for the optional event-consumer forwarding path and fallback to ordinary sync start, plus direct-CLI presentation-scope cleanup/error paths and conflicting run-intent validation.
+  - Kept all package coverage baselines unchanged; the base branch's contemporaneous functional ratchet failure was recorded as separate low-margin baseline noise.
+- Files changed
+  - `pkg/services/factory_sessions/internal/applicationopening/service_test.go`
+  - `pkg/services/factory_sessions/internal/services/durable_execution/internal/service/service_test.go`
+  - `pkg/transports/cli/run/selection_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Affected application-opening, durable-execution, and CLI run package tests — passed.
+  - Application-opening package profile — 98.4% locally.
+  - `make backend-size`, `go vet` on affected packages, and `git diff --check` — passed.
+  - Fresh PR CI on the prior head passed every completed non-coverage lane; unit/functional coverage exposed the changed-package ratchet gaps and the base branch independently showed a different functional ratchet gap.
+- **Learnings for future iterations:**
+  - Coverage ratchets are package- and lane-specific: changing an operation boundary requires behavioral tests for both success and typed cleanup/error branches, while unrelated low-margin packages can fail a parallel functional run independently.
+  - When `go test -coverprofile` is invoked from PowerShell, keep the profile path literal and clean up the generated file explicitly; native argument expansion can otherwise leave a file named `$coveragePath`.
+---
