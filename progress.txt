@@ -2250,6 +2250,19 @@
 - **Learnings for future iterations:**
   - When a repository-enforcement package test exposes current-main inventory drift but its public Make gate passes, record the distinction and avoid changing unrelated inventories in a feature PR.
 ---
+## 2026-08-10 11:30 -07:00 - pf-cli-exit-codes merged-head CI follow-up
+- What was implemented
+  - Investigated the fresh-head CI failure without changing product code: attempt 1 contained two known cancellation-observation flakes, and attempt 2 rotated to the unrelated packaged-loop scheduling timeout.
+  - Reran the exact named tests locally 10 times each; all repetitions passed. Reran only failed GitHub jobs until the functional lane and verification policy reached a terminal pass.
+- Files changed
+  - `progress.txt`
+- Verification
+  - CI run `31417595679`, attempt 3, passed Backend Functional Coverage, Backend Unit Coverage, Verification Policy, and every other required job for head `2609d11ed`.
+  - The failed attempt diagnostics named only unchanged tests outside the CLI-exit diff; no source fix was warranted.
+  - `git diff --check` passed; all four PRD stories remain `passes:true`.
+- **Learnings for future iterations:**
+  - Instrumented functional coverage can rotate among existing cancellation and scheduling flakes across retries; inspect the first named assertion, repeat it locally, and rerun only failed jobs before altering unrelated runtime behavior.
+---
 ## 2026-08-10 11:04 -07:00 - pf-cli-exit-codes current-main conflict follow-up
 - What was implemented
   - Fetched the live PR base `main` at `cba6b45f9` after the cached base metadata lagged, then merged the ownership-inventory changes into the CLI-exit-codes branch.
