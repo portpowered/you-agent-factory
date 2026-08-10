@@ -2128,3 +2128,18 @@
 - **Learnings for future iterations:**
   - A completed split can be handed off without source changes when the PRD, PR body, head/base SHAs, review-thread state, and required checks are independently synchronized and verified.
 ---
+
+## [2026-08-10 16:27 -07:00] - thr-split-fake-service-runtime-tests final CI rerun
+- What was implemented
+  - Investigated the post-handoff Backend Functional Coverage failure and confirmed it was the unrelated `TestFactorySessionHistoryIsNotPersistedByDefault` cancellation-observation flake in `tests/functional/sessions/restart`.
+  - Made no production or test-code changes; reran the failed GitHub jobs on the unchanged split head after the isolated test passed ten consecutive local runs.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Isolated `go test ./tests/functional/sessions/restart -run '^TestFactorySessionHistoryIsNotPersistedByDefault$' -count=10 -v -timeout 300s` — passed all ten runs.
+  - Rerun Backend Functional Coverage — passed in 4m58s.
+  - Rerun Verification Policy — passed.
+  - All required checks on PR #1862 are terminal and successful.
+- **Learnings for future iterations:**
+  - A broad functional-coverage failure in an untouched package should be isolated and repeated before changing the task; a clean repeated characterization supports rerunning the failed CI lane while preserving the move-only diff.
+---
