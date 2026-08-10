@@ -1481,10 +1481,10 @@ func TestProviderBindingAndDispatchLookupEdgesAreObservable(t *testing.T) {
 		t.Fatalf("WorkerSessionIDForDispatch(known) = %q, %v, want worker-1", got, err)
 	}
 
-	if _, err := New(unusedExecution{t: t}, newEventsAppenderForInternalTest(t), nil, nil, unavailableProviderSessions{}); !errors.Is(err, ErrMissingClock) {
+	if _, err := New(unusedExecution{t: t}, newEventsAppenderForInternalTest(), nil, nil, unavailableProviderSessions{}); !errors.Is(err, ErrMissingClock) {
 		t.Fatalf("New(missing clock) error = %v, want ErrMissingClock", err)
 	}
-	if _, err := New(unusedExecution{t: t}, newEventsAppenderForInternalTest(t), nil, platformclock.Real{}, nil); !errors.Is(err, ErrMissingProviderSessions) {
+	if _, err := New(unusedExecution{t: t}, newEventsAppenderForInternalTest(), nil, platformclock.Real{}, nil); !errors.Is(err, ErrMissingProviderSessions) {
 		t.Fatalf("New(missing provider sessions) error = %v, want ErrMissingProviderSessions", err)
 	}
 
@@ -1500,13 +1500,14 @@ func TestProviderBindingAndDispatchLookupEdgesAreObservable(t *testing.T) {
 	}
 }
 
-func newEventsAppenderForInternalTest(t *testing.T) events.Service {
-	t.Helper()
-	service, err := eventswire.NewService(logging.NoopLogger{})
-	if err != nil {
-		t.Fatalf("eventswire.NewService() error = %v", err)
-	}
-	return service
+type internalTestEventsAppender struct{}
+
+func (internalTestEventsAppender) Append(context.Context, events.AppendRequest) (events.AppendResult, error) {
+	return events.AppendResult{}, nil
+}
+
+func newEventsAppenderForInternalTest() EventsAppender {
+	return internalTestEventsAppender{}
 }
 
 func TestProviderBindingPublicationEdgesPreserveAttributionAndOrdering(t *testing.T) {

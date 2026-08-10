@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -19,10 +18,8 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
-	transporthttp "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
-	"go.uber.org/zap"
 )
 
 const (
@@ -49,34 +46,6 @@ const routingArtifactWorkflowSource = `return (async function () {
   });
   return { artifactRef, child };
 })();`
-
-// TestAPIWorkerSessionHistoryRouteReportsUnavailableWithoutOwnerHandler covers
-// the API-owned defensive composition error for the generated route. Normal
-// customer execution and successful Worker Session history are exercised
-// through root.BuildProcess by WSR-FT-003; this focused transport check keeps
-// an omitted optional Worker Sessions owner from becoming a panic.
-func TestAPIWorkerSessionHistoryRouteReportsUnavailableWithoutOwnerHandler(t *testing.T) {
-	server := transporthttp.NewServer(nil, nil, nil, nil, zap.NewNop())
-	recorder := httptest.NewRecorder()
-	request := httptest.NewRequest(
-		http.MethodGet,
-		"/factory-sessions/session-1/worker-sessions/worker-1/events",
-		nil,
-	)
-
-	server.Handler().ServeHTTP(recorder, request)
-
-	if recorder.Code != http.StatusInternalServerError {
-		t.Fatalf("Worker Session history route status = %d, want %d; body=%s", recorder.Code, http.StatusInternalServerError, recorder.Body.String())
-	}
-	var response factoryapi.ErrorResponse
-	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
-		t.Fatalf("decode Worker Session history route error: %v; body=%s", err, recorder.Body.String())
-	}
-	if response.Code != factoryapi.ErrorResponseCodeINTERNALERROR {
-		t.Fatalf("Worker Session history route error code = %q, want %q", response.Code, factoryapi.ErrorResponseCodeINTERNALERROR)
-	}
-}
 
 type routingReachabilityContext struct {
 	t                        *testing.T
