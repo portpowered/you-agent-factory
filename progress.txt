@@ -600,3 +600,15 @@
   - The backend-size checker enforces a 100-line function limit, so large functional scenario tables should delegate each observable route to focused test helpers.
   - A generated catalog can be current while operator docs are stale; keep catalog counts, reference entries, help evidence, and repository-owned examples synchronized.
 ---
+
+## 2026-08-09 22:16 -07:00 - wo-b2-agy-production-review-roles-003 CI follow-up
+- What was implemented
+  - Updated the repository-owned packaged-factory consumer contract to expect the expanded 17-Factory catalog and its 37 verified invocation specifiers.
+- Files changed
+  - `scripts/packaged-factories-package-consumer.test.mjs`
+  - `progress.txt`
+- Verification
+  - `make packaged-factory-package-verify` — passed catalog freshness and all 38 package-script subtests (37 passed, 1 platform-expected symlink skip).
+- **Learnings for future iterations:**
+  - Adding public packaged Factories also expands the candidate consumer's manifest-derived invocation inventory; update its exact-count assertions in the same change and run the package verification target locally.
+---
