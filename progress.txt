@@ -17,6 +17,7 @@
 - Canonical Wire should pass one explicit owner-port contract per service owner; aggregate composition helpers belong only in tests and must not cross the production constructor boundary.
 - Process-scoped external effects should be adapted or defaulted in canonical Wire providers and captured by closures; operation factories receive the selected owner ports and only values or observation fallbacks.
 - Value-only runtime-opening interfaces should use owner-retained logger/metrics ports; keep remaining transport presentation callbacks in a separate explicit boundary, never durable request state, until their result/stream migration is ready.
+- Transport-facing operation contracts should keep protocol handles and callbacks in explicitly named presentation values; durable request values stay separate so CLI/Wire adapters can preserve output and readiness behavior without exposing collaborators in request state.
 - Regenerate `pkg/wire/wire_gen.go` through `make wire-smoke` after changing a Wire provider signature so drift and focused composition tests run together.
 - When a public service root also owns a private runtime capability, construct the capability once in Wire, narrow the same root once at composition time, and pass that retained role to operations; keep per-operation gateways/state private and never replace the shared root slot during concurrent completion.
 
@@ -943,7 +944,38 @@
   - `git diff --check` — passed.
   - Combined `make verify-fast` exceeded the command wrapper budget while unrelated long-running verification processes shared the checkout; its constituent steps passed independently.
   - Commit `a4bf60016` contains the code and owner-contract documentation cutover.
+ - **Learnings for future iterations:**
+   - Keep durable opening requests limited to runtime values and pass transport presentation capabilities as a distinct argument; this preserves readiness and hosted binding without making callbacks part of request state.
+   - The remaining Story 004 boundary is direct JavaScript/stdio output and host observation, which should move through the response-stream or transport-local adapter rather than back into the durable request.
+ ---
+
+## 2026-08-10 08:13 -07:00 - btrc-p1-root-injection-004
+- What was implemented
+  - Completed the remaining Story 004 direct-execution boundary cutover by removing output writers, HTTP host selections, and runtime-host observers from `DirectJavaScriptRunRequest` and placing them in `DirectJavaScriptRunPresentation`.
+  - Removed stdin/stdout handles from `StdioOpeningRequest` and passed them through `StdioOpeningPresentation` at the MCP transport adapter boundary.
+  - Updated Factory Sessions owner contracts, direct JavaScript readiness/cleanup handling, CLI selection, canonical Wire adapters, and behavioral test fakes without changing terminal output, lifecycle cleanup, or readiness gating.
+  - Updated the P1 owner-contract register and marked Story 004 complete in `prd.json`.
+- Files changed
+  - `pkg/services/factory_sessions/execution_opening_contract.go`
+  - `pkg/services/factory_sessions/internal/executionopening/direct_javascript.go`
+  - `pkg/services/factory_sessions/internal/executionopening/direct_javascript_test.go`
+  - `pkg/services/factory_sessions/internal/executionopening/stdio.go`
+  - `pkg/services/factory_sessions/internal/executionopening/stdio_test.go`
+  - `pkg/services/factory_sessions/internal/roles/contracts.go`
+  - `pkg/transports/cli/run/selection.go`
+  - `pkg/transports/cli/run/selection_test.go`
+  - `pkg/wire/profiles.go`
+  - `pkg/wire/runtime_inputs_test.go`
+  - `docs/internal/packaged-service-structure/btrc-p1-owner-contracts.md`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/factory_sessions/... ./pkg/transports/cli/run ./pkg/wire/... ./pkg/root/... -count=1 -timeout 600s` — passed.
+  - `make wire-smoke`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, and `git diff --check` — passed.
+  - `make test`, `make typecheck`, and `make mcp-contract-check` — passed.
+  - `make verify-fast` — passed: dashboard typecheck, MCP boundary, 355 Vitest files / 2,970 tests, 191 Bun tests, and the short Go suite.
+  - Commit `a14ca7811` contains the implementation and owner-contract documentation; Wire generation produced no additional diff.
 - **Learnings for future iterations:**
-  - Keep durable opening requests limited to runtime values and pass transport presentation capabilities as a distinct argument; this preserves readiness and hosted binding without making callbacks part of request state.
-  - The remaining Story 004 boundary is direct JavaScript/stdio output and host observation, which should move through the response-stream or transport-local adapter rather than back into the durable request.
+  - Keep durable opening requests value-only and pass output, readiness, lifecycle completion, and historical presentation through explicitly named transport boundaries; this preserves protocol behavior without making request state retain handles or callbacks.
+  - When a presentation boundary is split, update both the internal owner role and every transport adapter/test fake; generated Wire output may remain unchanged when only handwritten function signatures move behind existing providers.
 ---
