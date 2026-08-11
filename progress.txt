@@ -7006,3 +7006,19 @@
 - **Learnings for future iterations:**
   - Record both the first transient parallel failure and the complete retry so a green fast-tier claim is backed by a terminal command result.
 ---
+## 2026-08-10 21:58 -07:00 - btrc-p1-root-injection-006 CI baseline characterization
+- What was implemented
+  - Made no product change; characterized the latest CI Backend Functional Coverage failures against the merged current-main P1 head.
+  - Audited CI run `31459190668` and its failed-job rerun. All other required CI lanes passed; Backend Functional Coverage failed on the server-binding diagnostic assertion, and the rerun additionally reported restart cancellation and successor staging-contention tests.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/sessions/restart -run '^TestFactorySessionHistoryIsNotPersistedByDefault$' -count=1 -v -timeout 120s` passed.
+  - `go test ./tests/functional/transport/cli/process -run '^TestCLISuccessorAfterHardKillReportsPreRuntimeStagingContention$' -count=1 -v -timeout 120s` passed.
+  - `go test ./tests/functional/transport/server_binding -run '^TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput$' -count=1 -v -timeout 120s` reproduced the CI failure: the unchanged runtime-hosting path emits the expected deprecation warning, an additional structured `API server error`, and `SERVER_BIND_FAILED` while the test still expects the legacy two-line shape.
+  - `git diff --name-only origin/main...HEAD` is empty for all three failing functional packages and `pkg/services/factory_sessions/internal/runtimehosting`; the P1 implementation diff remains confined to `pkg/transports/cli/run` plus bookkeeping/current-main synchronization.
+  - The PR thread audit remains at zero unresolved review threads and zero formal reviews; the PR is open with all six stories still marked `passes:true`.
+- **Learnings for future iterations:**
+  - When a CI failure is outside the implementation diff, rerun the exact test locally and record whether it reproduces before changing production behavior; isolated passes and a deterministic untouched baseline failure should remain a CI follow-up rather than an unrelated fix.
+---
