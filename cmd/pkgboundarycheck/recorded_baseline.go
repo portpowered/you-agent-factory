@@ -23,54 +23,63 @@ type recordedBoundaryBaseline struct {
 	findingFingerprints map[string]struct{}
 }
 
-func loadRecordedBoundaryBaseline(cfg config, policy boundaryPolicy) recordedBoundaryBaseline {
+func loadRecordedBoundaryBaseline(cfg config, policy boundaryPolicy) (recordedBoundaryBaseline, error) {
+	requestedBaseRef := strings.TrimSpace(cfg.baseRef)
+	if requestedBaseRef == "" {
+		requestedBaseRef = strings.TrimSpace(os.Getenv(packageBoundaryBaseRefEnvironment))
+	}
 	repoRoot, err := filepath.Abs(cfg.root)
 	if err != nil {
-		return recordedBoundaryBaseline{}
+		return recordedBoundaryBaseline{}, nil
 	}
 	if _, ok := runGit(repoRoot, "rev-parse", "--show-toplevel"); !ok {
-		return recordedBoundaryBaseline{}
+		if requestedBaseRef != "" {
+			return recordedBoundaryBaseline{}, fmt.Errorf("package-boundary base ref %q could not be resolved: root is not a Git repository", requestedBaseRef)
+		}
+		return recordedBoundaryBaseline{}, nil
 	}
 
-	baseRef := strings.TrimSpace(cfg.baseRef)
-	if baseRef == "" {
-		baseRef = strings.TrimSpace(os.Getenv(packageBoundaryBaseRefEnvironment))
-	}
-	candidates := []string{baseRef, "origin/main", "upstream/main", "main"}
-	selectedRef := ""
-	for _, candidate := range candidates {
-		if candidate == "" {
-			continue
-		}
-		if _, ok := runGit(repoRoot, "rev-parse", "--verify", candidate+"^{commit}"); ok {
-			selectedRef = candidate
-			break
-		}
+	selectedRef, err := selectRecordedBoundaryBaseRef(repoRoot, requestedBaseRef)
+	if err != nil {
+		return recordedBoundaryBaseline{}, err
 	}
 	if selectedRef == "" {
-		if _, ok := runGit(repoRoot, "rev-parse", "--verify", "HEAD^{commit}"); !ok {
-			return recordedBoundaryBaseline{}
-		}
-		selectedRef = "HEAD"
+		return recordedBoundaryBaseline{}, nil
 	}
 
 	baseRoot, err := extractGitTree(repoRoot, selectedRef)
 	if err != nil {
 		// Fail open for presentation: if the base cannot be materialized, keep
 		// every current finding visible rather than treating it as recorded.
-		return recordedBoundaryBaseline{}
+		return recordedBoundaryBaseline{}, nil
 	}
 	defer os.RemoveAll(baseRoot)
 
 	baseResult, err := scanRepo(config{root: baseRoot, packageRoot: cfg.packageRoot}, policy)
 	if err != nil {
-		return recordedBoundaryBaseline{}
+		return recordedBoundaryBaseline{}, nil
 	}
 	return recordedBoundaryBaseline{
 		available:           true,
 		baseRef:             selectedRef,
 		findingFingerprints: boundaryFindingFingerprints(baseResult),
+	}, nil
+}
+
+func selectRecordedBoundaryBaseRef(repoRoot, requestedBaseRef string) (string, error) {
+	if requestedBaseRef != "" {
+		if _, ok := runGit(repoRoot, "rev-parse", "--verify", requestedBaseRef+"^{commit}"); !ok {
+			return "", fmt.Errorf("package-boundary base ref %q could not be resolved", requestedBaseRef)
+		}
+		return requestedBaseRef, nil
 	}
+
+	for _, candidate := range []string{"origin/main", "upstream/main", "main"} {
+		if _, ok := runGit(repoRoot, "rev-parse", "--verify", candidate+"^{commit}"); ok {
+			return candidate, nil
+		}
+	}
+	return "", nil
 }
 
 func runGit(repoRoot string, args ...string) ([]byte, bool) {

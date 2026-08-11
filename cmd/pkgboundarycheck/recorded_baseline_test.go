@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -107,6 +108,41 @@ import (
 	}
 }
 
+func TestProcessWithoutTrustedBaseKeepsCommittedFindingBlocking(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeGoImportFile(t, repoRoot, "pkg/services/work/committed.go", "work", repositoryImportPrefix+"pkg/transports/http")
+	commitRecordedBoundaryFixture(t, repoRoot)
+
+	output, err := runPackageBoundaryProcess(t, repoRoot)
+	if err == nil {
+		t.Fatalf("package-boundary process succeeded without a trusted base; output:\n%s", output)
+	}
+	for _, want := range []string{
+		"committed.go",
+		"prohibited domain transport import",
+		"[agent-factory:pkg-boundary] found 1 package-boundary violation(s)",
+	} {
+		if !strings.Contains(string(output), want) {
+			t.Fatalf("package-boundary output = %q, want %q", output, want)
+		}
+	}
+}
+
+func TestRunRejectsInvalidExplicitBaseRef(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeGoImportFile(t, repoRoot, "pkg/services/work/committed.go", "work", repositoryImportPrefix+"pkg/transports/http")
+	commitRecordedBoundaryFixture(t, repoRoot)
+
+	err := run(config{root: repoRoot, packageRoot: defaultScanRoot, baseRef: "missing-base-ref"}, &bytes.Buffer{}, &bytes.Buffer{})
+	if err == nil || err.Error() != `package-boundary base ref "missing-base-ref" could not be resolved` {
+		t.Fatalf("run() error = %v, want invalid explicit base-ref error", err)
+	}
+}
+
 func TestMakeLintPathKeepsQuietBaselineAndAllDiagnosticsOptIn(t *testing.T) {
 	repoRoot := filepath.Clean(filepath.Join("..", ".."))
 	fixtureRoot := t.TempDir()
@@ -162,4 +198,14 @@ func runMakeLintBoundaryFixture(t *testing.T, repoRoot, fixtureRoot, allSetting 
 		t.Fatalf("make lint %s succeeded, want new boundary failure; output:\n%s", allSetting, output)
 	}
 	return string(output)
+}
+
+func runPackageBoundaryProcess(t *testing.T, fixtureRoot string, args ...string) ([]byte, error) {
+	t.Helper()
+	repoRoot := filepath.Clean(filepath.Join("..", ".."))
+	commandArgs := append([]string{"run", "./cmd/pkgboundarycheck", "-root", fixtureRoot}, args...)
+	command := exec.Command("go", commandArgs...)
+	command.Dir = repoRoot
+	command.Env = append(os.Environ(), packageBoundaryBaseRefEnvironment+"=")
+	return command.CombinedOutput()
 }

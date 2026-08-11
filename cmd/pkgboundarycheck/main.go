@@ -633,7 +633,11 @@ func runWithPolicy(cfg config, policy boundaryPolicy, stdout io.Writer, stderr i
 	if err != nil {
 		return err
 	}
-	visibleFindings, _ := filterRecordedScanResult(findings, loadRecordedBoundaryBaseline(cfg, policy))
+	baseline, err := loadRecordedBoundaryBaseline(cfg, policy)
+	if err != nil {
+		return err
+	}
+	visibleFindings, _ := filterRecordedScanResult(findings, baseline)
 	blockingViolationCount := countBlockingViolations(visibleFindings)
 	if blockingViolationCount == 0 {
 		if cfg.all {
