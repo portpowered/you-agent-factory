@@ -26,8 +26,13 @@ type observationService interface {
 	StreamObservationsByWorkerSessionID(context.Context, workersessions.StreamObservationsByWorkerSessionIDRequest) (workersessions.ObservationSubscription, error)
 }
 
+type startService interface {
+	Start(context.Context, workersessions.StartRequest) (workersessions.StartResult, error)
+}
+
 type Adapter struct {
 	observations observationService
+	starter      startService
 	work         work.Service
 }
 
@@ -201,6 +206,43 @@ func NewAdapter(
 		return nil
 	}
 	return &Adapter{observations: observations, work: workRoot}
+}
+
+// NewAdapterWithStart binds the Worker Sessions start capability in addition
+// to the observation and Work read capabilities retained by NewAdapter.
+func NewAdapterWithStart(
+	starter startService,
+	observations observationService,
+	workRoot work.Service,
+) *Adapter {
+	if starter == nil || observations == nil || workRoot == nil {
+		return nil
+	}
+	return &Adapter{starter: starter, observations: observations, work: workRoot}
+}
+
+// StartWorkerSession maps one typed HTTP request to the Worker Sessions-owned
+// asynchronous start operation. The service returns only at its admission
+// barrier; terminal execution is deliberately not awaited here.
+func (a *Adapter) StartWorkerSession(
+	ctx context.Context,
+	request factoryapi.WorkerSessionStartRequest,
+) (factoryapi.WorkerSessionStartResponse, error) {
+	if a == nil || a.starter == nil {
+		return factoryapi.WorkerSessionStartResponse{}, errors.New("Worker Sessions start service is unavailable")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	start, err := WorkerSessionStartRequestFromAPI(request)
+	if err != nil {
+		return factoryapi.WorkerSessionStartResponse{}, err
+	}
+	result, err := a.starter.Start(ctx, start)
+	if err != nil {
+		return factoryapi.WorkerSessionStartResponse{}, err
+	}
+	return WorkerSessionStartResponseToAPI(start.RequestID, result), nil
 }
 
 // ListWorkerSessions verifies Work existence and returns every authoritative

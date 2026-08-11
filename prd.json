@@ -1,88 +1,115 @@
 {
-  "project": "CLI BAD_REQUEST Classification and Honest Run Progress",
-  "branchName": "cli-error-classification-and-run-output",
-  "description": "Make you run classify customer invocation-argument mistakes as BAD_REQUEST failures and provide truthful non-JSON progress showing accepted work, dependency edges, active workers, and workstation/work details while preserving clean machine-readable modes.",
-  "reviewFollowUp": "Follow-up review correction: changed invalid-input functional scenarios use the injected ProviderCommandRunner edge without --with-mock-workers, so zero provider calls remain authoritative.",
+  "project": "DWRO S2 — Server-Owned Direct Worker Starts",
+  "branchName": "dwro-s2-server-owned-start",
+  "description": "Implement DWRO S2 so POST /worker-sessions returns 202 only after Worker Sessions has reserved identity, made the session event topic observable, and received Workers admission; admitted execution survives request or client disconnect under the server lifecycle, caller request IDs prevent duplicates, and synchronous InvokeSession remains compatible over the shared supervision implementation.",
   "context": {
-    "customerAsk": "Correct invocation-argument failures across the CLI surface so typos are reported as client errors, and add truthful you run progress showing active workers, accepted work and dependency edges, and workstation details with more useful color differentiation.",
-    "problem": "Unknown or invalid Factory invocation arguments can be rendered as INTERNAL_SERVER_ERROR, causing operators and agents to misdiagnose their own input. Human run output also hides generated work details, dependency edges, active worker state, and workstation/work associations, and its colors do not distinguish concurrent workers well.",
-    "solution": "Classify customer-correctable invocation parse and validation failures at the CLI boundary as BAD_REQUEST while preserving stable codes and exit 1. Extend the human Factory Event projection with deterministic work/dependency and worker/workstation progress, gate animation and color through terminal policy, and regenerate the authored CLI manifest contract after rebasing."
+    "customerAsk": "Deliver DWRO story S2: a Worker Sessions-owned asynchronous start operation, POST /worker-sessions returning 202 only after identity reservation, event-topic readiness, and Workers admission; execution owned by the server lifecycle rather than request cancellation; idempotency keys; and preservation of synchronous InvokeSession over the shared implementation.",
+    "problem": "The existing synchronous InvokeSession boundary cannot honestly acknowledge remote asynchronous work: transport cancellation can be confused with execution lifetime, acknowledgment can precede observability or admission, and client retries can create duplicate Worker/provider side effects.",
+    "solution": "Add one Worker Sessions-owned, race-safe asynchronous start state machine that reserves identity, commits the opening event, crosses Workers admission, supervises admitted work in the server lifecycle, and deduplicates by required caller requestId. Expose it through typed POST /worker-sessions and have synchronous InvokeSession use the same implementation while waiting for terminal completion."
   },
   "acceptanceCriteria": [
-    "Unknown and invalid invocation arguments across you run render one standard stderr error response with family BAD_REQUEST, retain the specific invocation error code, never claim INTERNAL_SERVER_ERROR, and exit with code 1.",
-    "A recorded non-JSON run rendering lists accepted work items with identifiers/descriptions and renders every available DEPENDS_ON edge in an unambiguous direction.",
-    "A recorded concurrent run rendering shows one status line per active worker and names each workstation together with associated work IDs when those IDs are present in canonical events.",
-    "Quiet, redirected/non-interactive, JSON, and NDJSON modes remain valid: no animation or ANSI bytes enter structured output, quiet suppresses progress, and redirected human output is deterministic.",
-    "contracts/cli/commands.json describes the resulting you run errors and output behavior; make cli-manifest-generate is run after rebasing, generated CLI manifests are never hand-merged, and every intentional golden diff is explained in the PR.",
-    "no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green; typecheck, focused CLI tests, CLI contract checks, and affected functional/golden tests pass.",
-    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared-file changes are reconciled against current main, and the PR is actually merged."
+    "POST /worker-sessions accepts a valid resolved direct Worker request with a required requestId and returns 202 Accepted with the stable Worker Session identity only after reservation, the opening session record is readable/subscribable on Topic(sessionID), and Workers admission has succeeded.",
+    "An accepted execution is scoped to the running server/process lifecycle, not the HTTP request context: closing or canceling the submitting connection does not cancel or duplicate it, and its progress and terminal outcome remain observable through Worker Session reads/events.",
+    "Same-key retries, including concurrent retries, return the same Worker Session acceptance and cause exactly one Workers/provider execution; reuse of the key for a different normalized start request returns a stable conflict with no second side effect.",
+    "Validation, identity conflict, opening-event failure, and admission failure return a non-202 response with a stable safe classification; no response claims acceptance before all acceptance barriers have committed, and every reserved failure is left in an observable deterministic state rather than orphaned.",
+    "Server shutdown cancels or drains admitted direct Workers according to the existing lifecycle contract, waits for supervision callbacks and terminal publication, and leaves no Worker Session goroutine, event attachment, dispatch, or provider process running after shutdown completes.",
+    "Existing synchronous InvokeSession callers retain their terminal result, retry, event ordering, control-race, and error behavior while using the shared server-owned start/supervision implementation; authored and generated API contracts remain aligned.",
+    "Typecheck, lint, and tests satisfy the required quality gates: Typecheck passes, Tests pass, no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
+    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared or generated-file churn are resolved against current main, and the PR is actually merged."
   ],
   "userStories": [
     {
-      "id": "cli-error-classification-and-run-output-001",
-      "title": "Classify invocation mistakes as client errors",
-      "description": "As a CLI user, I want invalid invocation arguments identified as my request error so that I can correct the command instead of investigating a false server failure.",
+      "id": "dwro-s2-server-owned-start-001",
+      "title": "Admit an asynchronous Worker Session at an honest readiness barrier",
+      "description": "As a remote operator, I want a direct Worker start to be acknowledged only when its identity, event stream, and execution are ready so I can safely observe or control the accepted session.",
       "acceptanceCriteria": [
-        "An unknown Factory invocation flag produces one stderr error response with its specific INVOCATION_ARGUMENT_* code and family BAD_REQUEST, not INTERNAL_SERVER_ERROR.",
-        "Missing values, positional overflow, invalid values, and other invocation parse/validation failures that represent customer input use the BAD_REQUEST family; genuine runtime failures retain their existing non-client classification.",
-        "These usage failures exit with code 1 in normal and quiet modes and do not start worker execution or other runtime side effects.",
-        "Focused CLI and process-boundary regression tests cover the reported unknown-argument reproduction and representative validation paths using the post-PR-#1859 test layout.",
-        "The authored you run error contract records the invocation client-error behavior and generated artifacts are refreshed with make cli-manifest-generate rather than edited manually.",
+        "Worker Sessions exposes one asynchronous start operation for an already-resolved Workers execution and owns validation, identity reservation, lifecycle transitions, opening and terminal event publication, supervision, and acceptance without selecting provider or runner policy.",
+        "A successful start result is released only after the stable identity is reserved, the opening SESSION/STARTED record has committed to Topic(sessionID) and is retained-read/subscription ready, and the Workers boundary has invoked its admission callback.",
+        "The start result provides the stable Worker Session identity/snapshot for later reads and controls, while completion continues asynchronously through the existing exactly-once terminal path.",
+        "Invalid input has no registry, Events, or Workers side effects; opening publication or pre-admission dispatch failure never reports acceptance and leaves any reserved identity in the documented deterministic terminal state.",
+        "Cancel or terminate racing before admission cannot produce successful acceptance, start unknown work, or publish multiple terminal outcomes; post-admission controls use the explicit Workers cancellation boundary.",
+        "Structured logs distinguish rejected, reserved, event-ready, admitted, and terminal outcomes with safe identifiers and no sensitive execution content.",
+        "Focused deterministic package tests prove barrier ordering, failure handling, and control races without arbitrary sleeps.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Implemented typed invocation-argument missing-value and static-flag parse errors, preserving existing stable ArgumentError codes and BAD_REQUEST classification. Added process-boundary coverage for the reported --planer-model typo in normal and quiet modes, dynamic/static missing values, positional overflow, and invalid JSON validation; all assert one stderr ErrorResponse, empty stdout, and zero provider calls. Updated authored CLI errors and regenerated family/published manifests with make cli-manifest-generate and make contracts-generate. Verification: focused Work/CLI packages, focused functional parameter/output tests, make cli-manifest-check, make typecheck, and git diff --check passed. The broad make test command reached its six-minute command timeout without emitting a test failure; no source failure was reported."
+      "notes": "Implemented Worker Sessions Start with retained/live Events readiness, server-owned supervision, admission-gated return, deterministic pre-admission terminal handling, safe outcome logs, and focused barrier/failure/control-race tests. Added deterministic lifecycle-fallback, readiness-reader, and pre-admission classification coverage after hosted verification identified the package floor regression; the internal service now clears its 98.72% unit coverage floor."
     },
     {
-      "id": "cli-error-classification-and-run-output-002",
-      "title": "List accepted work and dependency edges",
-      "description": "As an operator watching a run, I want to see the work admitted by a generated batch and how items depend on one another so that I understand the execution plan behind the count.",
+      "id": "dwro-s2-server-owned-start-002",
+      "title": "Deduplicate direct Worker starts by request identity",
+      "description": "As an automation author, I want retried start requests to resolve to the original Worker Session so network uncertainty cannot run the Worker twice.",
       "acceptanceCriteria": [
-        "A multi-item work-accepted event renders the accepted count followed by one stable, readable entry for every canonical work item, including its ID/name and available task description without exposing private provider payloads.",
-        "Every canonical DEPENDS_ON relationship in the accepted batch is rendered once with an unambiguous source-to-prerequisite direction; independent items do not gain fabricated edges.",
-        "Single-item and empty or partially populated payloads remain readable and do not panic; absent optional descriptions or relations are omitted cleanly.",
-        "A deterministic recorded/golden rendering proves the item listing and dependency graph for a representative generated batch.",
+        "Every asynchronous start requires a non-empty caller requestId, and Worker Sessions atomically indexes it to the normalized immutable start tuple and stable Worker Session identity before execution admission.",
+        "Repeating the same requestId and normalized tuple before admission, after admission, or after terminal completion returns the original acceptance/session outcome without another opening event, Workers dispatch, provider invocation, or terminal transition.",
+        "Concurrent identical submissions converge on one reservation and one admitted execution, with every successful caller observing the same Worker Session identity.",
+        "Reusing requestId for a different normalized tuple returns a typed safe idempotency conflict and performs no new downstream side effect.",
+        "Validation failure does not consume the key; a reserved request that deterministically fails before admission replays that failure rather than starting replacement work.",
+        "Idempotency is owned by Worker Sessions and compares detached canonical request values rather than transport-owned or caller-mutable state.",
+        "Focused repeat, concurrent, and race-enabled tests prove replay, conflict, failure replay, and exactly one Workers/provider side effect.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 2,
       "passes": true,
-      "notes": "Extended the human accepted-work renderer to use singular labels for one-item payloads, preserve readable fallbacks for partially populated work items, and omit malformed relation records rather than presenting ambiguous edges. Added exact renderer coverage for a deterministic four-item batch with IDs, names, an available JSON payload that is not exposed, a name-based DEPENDS_ON edge, an independent item, and a single-item relation payload. Verification: go test ./pkg/services/factory_visualization/... -count=1, go test ./tests/functional/cli/factory_run/output -count=1, make typecheck, and git diff --check passed."
+      "notes": "Implemented a required StartRequest.RequestID and Worker Sessions-owned atomic replay registry keyed by a detached normalized start tuple. Same-key submissions, concurrent retries, post-terminal retries, and deterministic pre-admission failures return the original outcome without duplicate opening/terminal events or Workers dispatch; tuple conflicts return ErrStartRequestIDConflict, while invalid requests do not consume keys. Added focused replay/conflict/failure/concurrency tests and updated Factory Runtime contract doubles. Verification: focused Worker Sessions tests, focused race test, affected Factory Runtime tests, full make test, make backend-size pkg-maint pkg-file-count pkg-structure, and go vet ./... pass; repository make typecheck remains environment-blocked by missing UI Bun type definitions."
     },
     {
-      "id": "cli-error-classification-and-run-output-003",
-      "title": "Show active workers and workstation work details",
-      "description": "As an operator watching concurrent execution, I want one current state line per active worker and work-aware workstation transitions so that I can tell what is running and what completed.",
+      "id": "dwro-s2-server-owned-start-003",
+      "title": "Expose accepted starts through POST /worker-sessions",
+      "description": "As a remote client, I want a typed HTTP start endpoint with precise acceptance and failure responses so I can submit a direct Worker without holding the connection for completion.",
       "acceptanceCriteria": [
-        "Each concurrent active worker or dispatch has a distinct progress line that identifies its current state and remains associated with the same worker until a terminal outcome.",
-        "Workstation queued, started, completed, failed, and interrupted output names the workstation and includes canonical work IDs consumed or completed when the event provides them.",
-        "Terminal worker outcomes stop or replace the corresponding active indication without leaving stale workers displayed, including interleaved concurrent event sequences.",
-        "A deterministic recorded/golden run proves multiple simultaneous workers and their workstation/work associations without depending on timing sleeps.",
+        "The authored OpenAPI contract defines POST /worker-sessions with a typed request containing required requestId, stable Worker Session identity, resolved execution input, and bounded retry input, plus a typed accepted response identifying the Worker Session and its observation/event resources or equivalent identifiers.",
+        "The handler maps the request once, calls only Worker Sessions start, returns 202 only after the reservation/event-readiness/admission barrier, and does not wait for terminal Worker output.",
+        "Malformed or invalid input maps to 400, idempotency or incompatible existing-session reuse maps to 409, and event-readiness or admission unavailability maps to a stable non-202 server response with safe actionable errors.",
+        "Same-key accepted HTTP replays return the same Worker Session identity and never duplicate execution while the original is pending, running, or terminal.",
+        "Existing Worker Session read, detail, transcript, event-stream, and control routes can address the returned identity without an accepted-but-not-observable timing window.",
+        "Bundled OpenAPI, generated Go server/client contracts, generated TypeScript clients, handwritten mapping, and HTTP contract behavior are regenerated and aligned.",
+        "make generate-api and make api-smoke pass",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 3,
       "passes": true,
-      "notes": "Extended the human Factory Event renderer and TTY progress projection to correlate dispatches with Worker Session IDs, workstation names, and canonical Work IDs across queued, started, active, completed, failed, and interrupted lifecycle events. Terminal outcomes remove the corresponding active state, including interleaved concurrent dispatches; queued Work IDs are retained when a later request payload is sparse. Added exact renderer coverage for three interleaved workers and TTY cleanup/correlation, plus functional lifecycle compatibility coverage. Verification: go test ./pkg/services/factory_visualization/transports/cli -count=1, go test -race ./pkg/services/factory_visualization/transports/cli -count=1, go test ./pkg/services/factory_visualization/... -count=1, go test ./tests/functional/cli/factory_run/output -count=1, make typecheck, make backend-size pkg-maint pkg-file-count pkg-structure vet, and git diff --check passed. Commit 303be54cf."
+      "notes": "Implemented typed POST /worker-sessions across authored, bundled, packaged, generated Go, generated TypeScript, mapping, and HTTP layers. The handler strictly decodes and maps once, delegates only to Worker Sessions Start, and returns 202 after the service admission barrier with the stable Worker Session ID and deterministic Events topic. Stable 400/409/503 classifications cover malformed input, request/session conflicts, opening/event readiness failures, and admission failures; Worker Sessions replay semantics provide same-key HTTP deduplication. Verification: make generate-api, make interfaces-all, make api-smoke, make test, backend/package quality gates, and go vet ./... pass. Repository make typecheck remains blocked by pre-existing UI test-helper assertion typings unrelated to this story."
     },
     {
-      "id": "cli-error-classification-and-run-output-004",
-      "title": "Respect terminal policy while improving progress distinction",
-      "description": "As a CLI user, I want rich progress in an interactive terminal and clean deterministic output everywhere else so that the same command works for humans, logs, and automation.",
+      "id": "dwro-s2-server-owned-start-004",
+      "title": "Keep admitted Workers alive across disconnect and join them on shutdown",
+      "description": "As an operator, I want an admitted direct Worker to outlive the submitting connection but remain bounded by server shutdown so remote work is reliable without leaking execution.",
       "acceptanceCriteria": [
-        "In an eligible interactive non-JSON run, each active worker advances through the approved spinner frames and simultaneous workers receive visibly distinguishable colors from a varied, deterministic palette.",
-        "Progress rendering uses the existing terminal-policy decision for capabilities and channels; worker progress is sent to stderr and does not overwrite or contaminate the primary result on stdout.",
-        "Redirected or non-interactive human output uses stable status lines without cursor-control sequences, animation artifacts, or ANSI escapes, and --quiet suppresses progress.",
-        "JSON and NDJSON output remain parseable record-for-record and contain no spinner frames, ANSI escapes, or human-only workstation prose.",
-        "Existing unchanged CLI goldens remain unchanged; intentionally changed run goldens and CLI manifest artifacts are regenerated after the final rebase and each diff is explained in the PR.",
+        "Execution and terminal publication use a server/process lifecycle scope owned by canonical initialization/composition; the HTTP request context bounds transport work and admission waiting but is not the cancellation authority for admitted execution.",
+        "Closing or canceling the submitting connection after admission does not call Workers cancel, cancel the provider context, close the publication window, or change eventual terminal classification.",
+        "After disconnect, an independent client can observe the same session identity, one opening record, admitted progress, and exactly one terminal outcome.",
+        "Server shutdown rejects new starts, signals active asynchronous executions through existing supervision/control boundaries, waits for callbacks and terminal publication, and leaves no leaked goroutine, event attachment, dispatch, or provider process.",
+        "A disconnect before 202 delivery cannot create unsupervised or duplicate execution; same-requestId replay reveals the authoritative accepted or failed outcome.",
+        "Functional process-boundary tests use deterministic provider/admission signals to prove disconnect survival and joined shutdown, and repeat plus race evidence proves bounded concurrency without arbitrary sleeps.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 4,
       "passes": true,
-      "notes": "Wired the stderr progress channel through the explicit terminal policy, preserving interactive response-stream progress for ordinary one-shot invocations while suppressing quiet-mode progress. Added deterministic collision-resolved worker colors over the varied ANSI palette, moved active-worker association out of the stdout response stream, and added stable ANSI-free status lines for redirected/non-interactive stderr. Documented the spinner/color/channel behavior in the packaged run guide and added root policy, renderer, concurrent-color, non-TTY, and process-boundary regression coverage. Verification after the final base synchronization: focused CLI and functional output tests, make test, make typecheck, make backend-size, make pkg-maint, make pkg-file-count, make pkg-structure, make vet, make cli-manifest-check, make docs-reference-smoke, and git diff --check passed; one unrelated ACP cancellation test was flaky in the broad package sweep and passed on targeted rerun. Review follow-up reconciled live main and converted the changed CLI output functional scenarios to injected edges.Edges.ProviderCommandRunner with shaped Codex responses; unrelated Mock Workers feature tests remain unchanged. Review follow-up: merged origin/main at 1b871e3a8, expanded the authored you run manifest copy and regenerated published/family artifacts, migrated split-batch dispatch colors, and added a 12-worker capacity/cleanup regression. Focused and race tests plus static gates pass; repository-wide vet reached the host timeout under concurrent verification without emitting a source failure."
+        "notes": "Completed server-owned async lifecycle ownership and shutdown joining. Worker Sessions now creates a process-scoped lifecycle context, keeps accepted execution and terminal publication independent of the submitting request, bounds the caller/admission wait without closing the authoritative request replay, and records a driver completion barrier. Its structural Stop capability rejects new asynchronous starts, terminates only server-owned asynchronous supervisors through the existing Workers cancellation boundary, waits terminal callbacks/publication and driver completion, and preserves same-key replay after shutdown. Factory Runtime invokes this capability before dispatch-planner and Workers pool shutdown; synchronous InvokeSession supervision remains under its existing runtime control path. Added deterministic disconnect-before/after-acceptance, replay, terminal-event, shutdown-join, runtime shutdown-order, and root-built functional HTTP boundary assertions; the functional disconnect proof now uses an unread raw HTTP connection, an injected gated Codex ProviderCommandRunner, and an independent public Worker Session event stream, with only documented signal-timeout ceilings and no sleep-based synchronization. Verification: make test, make typecheck, focused functional `tests/functional/workers/transports/http` tests (including race), affected Factory Runtime tests, go vet, make ui-lint, backend-size, pkg-maint, pkg-file-count, pkg-structure, and git diff --check passed."
+    },
+    {
+      "id": "dwro-s2-server-owned-start-005",
+      "title": "Preserve synchronous InvokeSession over shared supervision",
+      "description": "As an existing orchestrator, I want InvokeSession to keep its synchronous contract while sharing the new start implementation so direct and orchestrated Workers cannot drift in lifecycle behavior.",
+      "acceptanceCriteria": [
+        "InvokeSession uses the same validation, reservation, opening-event, Workers admission, retry, control-race, terminal classification, and terminal-publication implementation as asynchronous start and then waits for terminal completion.",
+        "Existing callers that omit asynchronous idempotency input retain established session-ID conflict rules and do not construct transport-specific values.",
+        "Equivalent synchronous and asynchronous executions produce matching state transitions, attempt counts, Workers result handling, provider association, and source-native event order; only caller return timing differs.",
+        "Synchronous caller cancellation retains documented current InvokeSession behavior and cannot redefine the server-owned lifecycle of asynchronous API starts.",
+        "Existing Factory Runtime, JavaScript workflow, Worker control, observation, retry, and event-order regression behavior remains passing without a parallel legacy execution path.",
+        "Focused compatibility tests compare success, retryable failure, pre-admission failure, cancel/terminate races, and terminal publication across both entry points.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 5,
+      "passes": true,
+      "notes": "Refactored synchronous InvokeSession and asynchronous Start to use one Worker Sessions preparation path for reservation, STARTING transition, observation capture, opening publication, supervision registration, retry budget, admission callback, control races, terminal classification, and terminal publication. InvokeSession retains its request-ID-free session conflict rules and synchronous terminal return behavior; Start retains the server-owned readiness barrier and returns at admission. Added deterministic compatibility tests proving synchronous terminal waiting versus asynchronous admission return and matching pre-admission failure classification/event history. Verification: full Worker Sessions package tests, focused race suite, affected Factory Runtime and HTTP transport suites, go vet on affected packages, make typecheck, make ui-lint, make backend-size, make pkg-maint, make pkg-file-count, make pkg-structure, and git diff --check pass. The aggregate make lint command was separately bounded at five minutes while unrelated concurrent unit-lane processes were active; its focused lint/static targets and affected vet checks pass."
     }
   ]
 }

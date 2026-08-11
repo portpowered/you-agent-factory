@@ -1,0 +1,39 @@
+type: object
+additionalProperties: false
+required:
+  - dispatchId
+  - workstationName
+properties:
+  dispatchId:
+    type: string
+    minLength: 1
+    description: Stable Workers dispatch or attempt identity.
+  transitionId:
+    type: string
+  workerType:
+    type: string
+  workstationName:
+    type: string
+    minLength: 1
+  projectId:
+    type: string
+  expectedArtifactContext:
+    type: object
+    additionalProperties: true
+  currentChainingTraceId:
+    type: string
+  previousChainingTraceIds:
+    type: array
+    items:
+      type: string
+  execution:
+    $ref: './WorkerSessionExecutionMetadata.yaml'
+  inputTokens:
+    type: array
+    items: {}
+  inputBindings:
+    type: object
+    additionalProperties:
+      type: array
+      items:
+        type: string
