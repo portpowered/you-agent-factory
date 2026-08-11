@@ -87,7 +87,15 @@ func TestRunWritesNamedLaneOutputs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"run_frontend=true", "run_backend=true", "run_ui_backend_integration=true", "run_docs_reference=false"} {
+	for _, want := range []string{
+		"run_frontend=true",
+		"frontend_command=make frontend-verification",
+		"run_backend=true",
+		"backend_command=make backend-verification",
+		"run_ui_backend_integration=true",
+		"ui_backend_integration_command=make ui-backend-integration",
+		"run_docs_reference=false",
+	} {
 		if !strings.Contains(string(contents), want) {
 			t.Errorf("output does not contain %q", want)
 		}

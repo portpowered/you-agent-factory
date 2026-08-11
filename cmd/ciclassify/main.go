@@ -235,9 +235,9 @@ func newLanePlans() map[string]lanePlan {
 	return map[string]lanePlan{
 		laneDocsReference:            {Name: laneDocsReference, Command: "make docs-reference-smoke"},
 		laneReadme:                   {Name: laneReadme, Command: "make readme-check"},
-		laneFrontend:                 {Name: laneFrontend, Command: "make typecheck ui-lint test-ui-coverage test-ui-browser-integration"},
-		laneBackend:                  {Name: laneBackend, Command: "make build test-backend-verification"},
-		laneUIBackendIntegration:     {Name: laneUIBackendIntegration, Command: "make ui-durable-session-real-backend-integration-test"},
+		laneFrontend:                 {Name: laneFrontend, Command: "make frontend-verification"},
+		laneBackend:                  {Name: laneBackend, Command: "make backend-verification"},
+		laneUIBackendIntegration:     {Name: laneUIBackendIntegration, Command: "make ui-backend-integration"},
 		laneAPIPackage:               {Name: laneAPIPackage, Command: "make api-package-verify"},
 		lanePackagedFactoriesPackage: {Name: lanePackagedFactoriesPackage, Command: "make packaged-factory-package-verify"},
 		laneModelProvidersPackage:    {Name: laneModelProvidersPackage, Command: "make model-provider-package-verify"},

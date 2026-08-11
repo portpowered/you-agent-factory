@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- Focused verification lanes should compose existing user-facing Make targets with `$(MAKE)` so dry-run expansion stays auditable and broader verification targets remain unchanged.
 - For final PR handoff, compare the PR body byte-for-byte with `prd.json` and use the thread-aware GraphQL review audit because flat PR comments do not expose inline-thread resolution state.
 - OS-boundary functional tests may poll an isolated durable filesystem checkpoint only when the child exposes no parent-process event or injected edge; document that reason at each polling helper and keep the bound as a failure guard.
 - Git Worktree preparation treats a retained Git `*.lock` as indeterminate ownership: retry within a named bound, preserve the resource, and return its exact path with verify/remove/retry guidance.
@@ -3994,4 +3995,29 @@
   - `git diff --cached --check` passed before the merge commit.
 - **Learnings for future iterations:**
   - A clean merge against a stale remote-tracking base is not sufficient; compare the live hosting ref, fetch it, and resolve shared PRD/progress files again before pushing the replacement head.
+---
+
+## 2026-08-10 19:25 -07:00 - ci-additive-classifier-001
+- What was implemented
+  - Added explicit root `frontend-verification`, `backend-verification`, and `ui-backend-integration` Make targets for direct classifier-lane reruns.
+  - Composed the frontend lane from typecheck, lint, component/unit coverage, browser, Storybook, and public UI-package checks without backend verification.
+  - Composed the backend lane from backend build plus the existing unit and functional coverage checks.
+  - Kept UI-backend integration narrow to the real-backend durable-session browser suite, with no Storybook-only checks.
+  - Updated classifier-emitted core lane commands to use the new direct targets and marked story 001 complete in `prd.json`.
+- Files changed
+  - `Makefile`
+  - `cmd/ciclassify/main.go`
+  - `cmd/ciclassify/main_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `make -n frontend-verification`, `make -n backend-verification`, and `make -n ui-backend-integration` show the expected owned command scopes.
+  - `go test ./cmd/ciclassify -count=1` passed.
+  - `make typecheck` passed after installing the declared UI dependencies with `make ui-deps`.
+  - `make ui-lint` passed.
+  - `make test` passed.
+  - `git diff --check` passed.
+- **Learnings for future iterations:**
+  - Focused Make lanes should compose existing user-facing targets with `$(MAKE)` so their dry-run expansion remains auditable and broad verification targets do not need to change.
+  - The real-backend browser proof already has a dedicated `ui-durable-session-real-backend-integration-test` target; use that seam for the focused UI-backend lane instead of the broader UI integration or Storybook targets.
 ---
