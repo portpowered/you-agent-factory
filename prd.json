@@ -2,6 +2,7 @@
   "project": "CLI BAD_REQUEST Classification and Honest Run Progress",
   "branchName": "cli-error-classification-and-run-output",
   "description": "Make you run classify customer invocation-argument mistakes as BAD_REQUEST failures and provide truthful non-JSON progress showing accepted work, dependency edges, active workers, and workstation/work details while preserving clean machine-readable modes.",
+  "reviewFollowUp": "Follow-up review correction: changed invalid-input functional scenarios use the injected ProviderCommandRunner edge without --with-mock-workers, so zero provider calls remain authoritative.",
   "context": {
     "customerAsk": "Correct invocation-argument failures across the CLI surface so typos are reported as client errors, and add truthful you run progress showing active workers, accepted work and dependency edges, and workstation details with more useful color differentiation.",
     "problem": "Unknown or invalid Factory invocation arguments can be rendered as INTERNAL_SERVER_ERROR, causing operators and agents to misdiagnose their own input. Human run output also hides generated work details, dependency edges, active worker state, and workstation/work associations, and its colors do not distinguish concurrent workers well.",
