@@ -5,6 +5,7 @@
 - CLI lifecycle adapters should render both local service results and remote HTTP responses through the shared Factory Session boundary mapper so placement changes preserve structured fields and outcome classifications.
 - Remote CLI execution adapters should map prepared normalized input into the canonical durable start request, derive deterministic request identities from the request tuple, and never forward compatibility content or `~default`.
 - Remote durable run adapters must wait on the canonical result projection before writing terminal output; map lifecycle/result status through the shared invocation envelope, and keep transport or malformed-response errors separate from domain classifications.
+- Remote response streams must resume the canonical Factory Event lane with both event identity and session sequence, then render through the shared FactoryEventRenderer; durable result reads decide terminal classification only after the event stream is drained.
 - For final PR handoff, compare the PR body byte-for-byte with `prd.json` and use the thread-aware GraphQL review audit because flat PR comments do not expose inline-thread resolution state.
 - OS-boundary functional tests may poll an isolated durable filesystem checkpoint only when the child exposes no parent-process event or injected edge; document that reason at each polling helper and keep the bound as a failure guard.
 - Git Worktree preparation treats a retained Git `*.lock` as indeterminate ownership: retry within a named bound, preserve the resource, and return its exact path with verify/remove/retry guidance.
@@ -10145,4 +10146,51 @@
   - The next verification pass must address the latest blocking review findings on the merged head before publication.
 - **Learnings for future iterations:**
   - Fetch and merge the live base before review-fix work; shared PRD/progress conflicts should retain the active task contract and append-only history while accepting unrelated mainline source changes.
+---
+
+## [2026-08-11 09:15 -07:00] - dwro-s7-placement-grammar review feedback implementation
+- What was implemented
+  - Replaced remote response-stream final-only behavior with the canonical Factory Session Factory Events SSE lane, cursoring reconnects by event ID and session sequence, presenting events through the shared FactoryEventRenderer, and reading the durable result only for authoritative terminal classification.
+  - Moved retry timing into the Factory Sessions CLI transport helper and removed the CLI run-layer timer; removed the SessionResolvedServices compatibility field/fallback so local and remote placement dependencies are explicit.
+  - Corrected authored CLI/reference examples that advertised unsupported `you run --wait` and run-level `--follow`, regenerated the published CLI metadata, and added executable root Process.Execute help assertions.
+  - Reworked remote lifecycle functional evidence to use a real root.BuildProcess/Process.Execute server and client: the client observes canonical admission, disconnects, inspects the returned server-owned session through the public API, and verifies request-id replay and conflict behavior against that same server.
+- Files changed
+  - `pkg/transports/cli/run/remote_events.go`
+  - `pkg/transports/cli/run/remote_response_stream.go`
+  - `pkg/transports/cli/run/invocation_error.go`
+  - `pkg/services/factory_sessions/transports/cli/poll.go`
+  - `pkg/transports/cli/commandregistry/representative_handlers.go`
+  - `pkg/transports/cli/root.go`, `pkg/transports/cli/root_workflow.go`, `pkg/wire/wire_gen.go`
+  - `contracts/cli/commands.json`, `docs/reference/sessions.md`, generated CLI metadata
+  - focused CLI and functional lifecycle/help tests
+  - `prd.json`, `progress.txt`
+- Verification
+  - `go test ./tests/functional/workers/transports/cli/run/help ./tests/functional/workers/transports/cli/run/lifecycle -count=1 -timeout 300s` — passed.
+  - `go test ./pkg/transports/cli/run ./pkg/transports/cli/commandregistry ./pkg/transports/cli/climanifestcobra ./pkg/transports/cli -count=1 -timeout 300s` — passed.
+  - `git diff --check` — passed.
+  - `make pkg-boundary` — still reports only the two pre-existing `origin/main` violations in ACP/chat-session test construction; this change introduced no new boundary violation.
+- **Learnings for future iterations:**
+  - A remote response stream is a replayable canonical-event projection, not a second result protocol: persist the last event cursor before reconnecting, drain retained events before writing the terminal invocation record, and keep the final result read separate from event rendering.
+  - Root-built functional coverage can prove submitting-client disconnect and public session inspection without a fabricated HTTP responder when the server is synchronized on a canonical admission event rather than a sleep.
+---
+
+## [2026-08-11 09:55 -07:00] - dwro-s7-placement-grammar repository gate follow-up
+- What was implemented
+  - Folded the focused remote-event implementation and tests into existing run package owners to preserve the strict package file-count baseline; refreshed the intentional CLI command-identity baseline after the authored help text changed.
+  - Split the functional lifecycle scenario and placement-missing-service assertion to keep file-size, function-size, and cyclomatic-complexity gates within their checked-in limits.
+- Files changed
+  - `pkg/transports/cli/run/run.go`
+  - `pkg/transports/cli/run/invocation_observability.go`
+  - `pkg/transports/cli/run/run_response_stream_renderer_test.go`
+  - `pkg/transports/cli/commandregistry/representative_handlers_test.go`
+  - `tests/functional/workers/transports/cli/run/lifecycle/remote_lifecycle_test.go`
+  - `contracts/testdata/baseline/cli-commands.json`
+- Verification
+  - `make test` — passed.
+  - `make cli-manifest-check`, `make contracts-check`, `make docs-reference-smoke`, `make backend-size`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, and `make vet` — passed.
+  - `make pkg-boundary` remains limited to the two pre-existing `chat_sessions/wire` imports in `pkg/transports/acp/internal/stdio/session_prompt_test.go`; no new violation was introduced.
+  - `go test ./pkg/services/factory_sessions/... ./pkg/wire/... ./pkg/transports/cli/... ./tests/functional/workers/transports/cli/run/... -count=1 -timeout 600s` — passed after the intentional CLI baseline refresh.
+- **Learnings for future iterations:**
+  - CLI documentation changes can alter the production command-identity snapshot even when command paths are unchanged; run the identity baseline test whenever generated help text changes.
+  - Strict package file-count baselines favor extending an existing focused owner over adding another same-package production/test file; keep the resulting owner below the file-size gate.
 ---

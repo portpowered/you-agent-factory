@@ -33,7 +33,7 @@
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Implemented the dual-placement CLI contract and generated family/published metadata for run plus pause, resume, cancel, and terminate. The session registry now selects an injected local Factory Sessions adapter by default and the exact HTTP adapter/server when --remote is resolved. Added both flag-position and exactly-one-adapter dispatch coverage, refreshed command/input/help baselines, and validated CLI, wire, contract, functional-scenario, and docs checks."
+      "notes": "Implemented the dual-placement CLI contract and generated family/published metadata for run plus pause, resume, cancel, and terminate. The session registry now receives explicit LocalSessions and RemoteSessions dependencies and selects only the resolved placement adapter; missing placement dependencies fail instead of falling back. Added both flag-position and exactly-one-adapter dispatch coverage, refreshed command/input/help baselines, and validated CLI, wire, contract, functional-scenario, and docs checks."
     },
     {
       "id": "dwro-s7-placement-grammar-002",
@@ -52,7 +52,7 @@
       ],
       "priority": 2,
       "passes": true,
-      "notes": "Remote run now maps normalized target, arguments, authored policy, wait options, and caller-or-derived stable request identity into POST /factory-sessions/async at exactly the selected server. The response returns the canonical server-owned session identity and lifecycle status; the path never invokes ~default or initializes a local runtime, rejects compatibility-only input, and preserves actionable no-fallback errors. Added root BuildProcess/Process.Execute functional coverage, durable HTTP contract coverage, exact endpoint assertions, request identity/policy/wait mapping tests, malformed-response and transport-failure tests, and verified package maintainability, structure, file-count, vet, CLI, and lifecycle gates."
+      "notes": "Remote run now maps normalized target, arguments, authored policy, wait options, and caller-or-derived stable request identity into POST /factory-sessions/async at exactly the selected server. The response returns the canonical server-owned session identity and lifecycle status; the path never invokes ~default or initializes a local runtime, rejects compatibility-only input, and preserves actionable no-fallback errors. The focused functional scenario now uses a real root.BuildProcess/Process.Execute server and client, proves admission survives client disconnect, inspects the returned session through the public API, and verifies request-id replay/conflict behavior. Added durable HTTP contract coverage, exact endpoint assertions, request identity/policy/wait mapping tests, malformed-response and transport-failure tests, and verified package maintainability, structure, file-count, vet, CLI, and lifecycle gates."
     },
     {
       "id": "dwro-s7-placement-grammar-003",
@@ -70,7 +70,7 @@
       ],
       "priority": 3,
       "passes": true,
-      "notes": "Implemented remote durable result polling through GET /factory-sessions/{session_id}/results and projected authoritative session/result facts through the shared invocation result and output boundary. Remote success now preserves primary result, request/session identity, JSON, primary-result, human response-stream, and NDJSON terminal behavior; canonical failed, blocked, needs-human, paused, interrupted, timed-out, canceled, unresolved, and runtime-failure states map to stable invocation classifications. Transport and malformed-result failures remain typed and endpoint-safe without payload leakage or local fallback. Added observable polling, output, failure-matrix, transport/malformed, root Process.Execute, and functional selected-server coverage."
+      "notes": "Implemented remote durable result polling through GET /factory-sessions/{session_id}/results and projected authoritative session/result facts through the shared invocation result and output boundary. Response-stream mode now consumes the canonical GET /factory-sessions/{session_id}/events SSE lane with event-id/session-sequence cursors, bounded reconnects, and the shared FactoryEventRenderer; it never synthesizes a final-only event stream. Remote success now preserves primary result, request/session identity, JSON, primary-result, human response-stream, and NDJSON terminal behavior; canonical failed, blocked, needs-human, paused, interrupted, timed-out, canceled, unresolved, and runtime-failure states map to stable invocation classifications. Transport and malformed-result failures remain typed and endpoint-safe without payload leakage or local fallback. Added observable polling, canonical event-stream ordering/reconnect, output, failure-matrix, transport/malformed, root Process.Execute, and functional selected-server coverage."
     },
     {
       "id": "dwro-s7-placement-grammar-004",
