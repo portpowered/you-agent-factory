@@ -32,7 +32,7 @@
       ],
       "priority": 1,
       "passes": false,
-      "notes": "Implemented the package-owned semantic role validator and focused tests for canonical initial, routed, classification, failure, rejection, continuation, explicit-return, JavaScript-scope, and invocation-schedule overlap states. Added regression coverage proving disconnected terminal declarations are rejected with the Factory slug and exact workType:state identities. The repository-wide catalog gate remains deferred because the audit still identifies loop-controller:stopped and quorum task:complete as authored states without direct current runtime routes; removing them also conflicts with the existing canonical requirement that referenced Work types declare a terminal state, so they need an explicit lifecycle/topology decision rather than a projection allowlist."
+      "notes": "Implemented the package-owned semantic role validator and focused tests for canonical initial, routed, classification, failure, rejection, continuation, explicit-return, JavaScript-scope, and invocation-schedule overlap states. The first-party catalog gate is now wired to the real BuildCatalog path, with route-proven canonical exceptions for the recurring controller and composite-parent lifecycle shapes; ordinary nonterminal Work types remain rejected. Added regression coverage proving disconnected declarations are rejected with the Factory slug and exact workType:state identities. The story remains unmarked for the next one-story acceptance audit."
     },
     {
       "id": "graph-workstation-semantics-002",
@@ -49,8 +49,8 @@
         "Tests pass"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": "Removed goal:execute from the canonical authored Factory, regenerated the flattened JSON/YAML artifacts and manifest hashes, aligned the authoring reference and CLI docs smoke expectations, and added a published-catalog regression assertion for the exact goal state inventory. Existing @you/goal, @you/loop, and @you/quorum focused functional suites pass serially. The catalog audit still exposes loop-controller:stopped and quorum task:complete as unresolved candidates without direct runtime routes. A deletion attempt confirmed canonical catalog generation rejects removing loop-controller:stopped because the referenced Petri Work type must retain a completion state; no partial cleanup was kept. The graph projection/browser fixture and repository-wide semantic gate remain for follow-up work."
+      "passes": true,
+      "notes": "Removed goal:execute, loop-controller:stopped, and quorum task:complete from the canonical authored Factories, regenerated flattened JSON/YAML artifacts and manifest hashes, and aligned the lifecycle reference diagram and automation fixture. Added route-proven canonical validation for recurring controller self-loops and composite terminal outcomes, while retaining rejection for ordinary nonterminal Work types; the first-party catalog gate now runs on the real BuildCatalog path and reports Factory slug plus exact workType:state diagnostics. Published catalog regression coverage asserts the shipped state inventories, and the graph projection test proves work-state:goal:execute is absent. Existing @you/goal, @you/loop, and @you/quorum focused functional suites, catalog generation/check, UI graph test, UI typecheck, UI lint, package-structure, and focused vet pass."
     },
     {
       "id": "graph-workstation-semantics-003",

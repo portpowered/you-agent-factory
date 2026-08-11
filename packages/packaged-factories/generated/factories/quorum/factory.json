@@ -138,10 +138,6 @@
           "type": "PROCESSING"
         },
         {
-          "name": "complete",
-          "type": "TERMINAL"
-        },
-        {
           "name": "failed",
           "type": "FAILED"
         }

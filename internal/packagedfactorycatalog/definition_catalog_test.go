@@ -100,37 +100,52 @@ func TestLoadPublishedDefinitionCatalogReturnsExactDetachedGeneratedDefinitions(
 	}
 }
 
-func TestPublishedGoalDefinitionContainsOnlyShippedWorkStates(t *testing.T) {
+func TestPublishedDefinitionsContainOnlyShippedWorkStates(t *testing.T) {
 	t.Parallel()
 
 	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
 	if err != nil {
 		t.Fatalf("LoadPublishedDefinitionCatalog: %v", err)
 	}
-	definition, ok := catalog.Lookup("@you/goal")
-	if !ok {
-		t.Fatal("Lookup(@you/goal) did not find a definition")
+	checks := []struct {
+		factoryName string
+		workType    string
+		wantStates  []string
+	}{
+		{factoryName: "@you/goal", workType: "goal", wantStates: []string{"init", "complete", "blocked", "failed"}},
+		{factoryName: "@you/loop", workType: "loop-controller", wantStates: []string{"active", "failed"}},
+		{factoryName: "@you/quorum", workType: "task", wantStates: []string{"init", "quorum-context", "failed"}},
 	}
-	factory, err := factorymapping.NewFactoryConfigMapper().Expand(definition.JSON)
-	if err != nil {
-		t.Fatalf("decode published @you/goal: %v", err)
-	}
+	mapper := factorymapping.NewFactoryConfigMapper()
+	for _, check := range checks {
+		definition, ok := catalog.Lookup(check.factoryName)
+		if !ok {
+			t.Fatalf("Lookup(%s) did not find a definition", check.factoryName)
+		}
+		factory, err := mapper.Expand(definition.JSON)
+		if err != nil {
+			t.Fatalf("decode published %s: %v", check.factoryName, err)
+		}
 
-	for _, workType := range factory.WorkTypes {
-		if workType.Name != "goal" {
-			continue
+		found := false
+		for _, workType := range factory.WorkTypes {
+			if workType.Name != check.workType {
+				continue
+			}
+			found = true
+			got := make([]string, 0, len(workType.States))
+			for _, state := range workType.States {
+				got = append(got, state.Name)
+			}
+			if !reflect.DeepEqual(got, check.wantStates) {
+				t.Fatalf("published %s %s states = %v, want %v", check.factoryName, check.workType, got, check.wantStates)
+			}
+			break
 		}
-		got := make([]string, 0, len(workType.States))
-		for _, state := range workType.States {
-			got = append(got, state.Name)
+		if !found {
+			t.Fatalf("published %s does not declare the %s Work type", check.factoryName, check.workType)
 		}
-		want := []string{"init", "complete", "blocked", "failed"}
-		if !reflect.DeepEqual(got, want) {
-			t.Fatalf("published @you/goal work states = %v, want %v", got, want)
-		}
-		return
 	}
-	t.Fatal("published @you/goal does not declare the goal Work type")
 }
 
 func TestLoadDefinitionCatalogRejectsManifestAndSchemaFailuresWithoutPartialCatalog(t *testing.T) {

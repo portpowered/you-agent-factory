@@ -403,7 +403,7 @@ func missingWorkTypeOutcomeStateTargets(cfg *factorydefinitions.FactoryConfig) [
 				hasFailure = true
 			}
 		}
-		if !hasCompletion {
+		if !hasCompletion && !workTypeHasImplementedNonTerminalLifecycle(cfg, workType.Name) {
 			targets = append(targets, Target{
 				Code:     CodeWorkTypeMissingCompletionState,
 				Severity: SeverityError,
@@ -429,6 +429,75 @@ func missingWorkTypeOutcomeStateTargets(cfg *factorydefinitions.FactoryConfig) [
 		}
 	}
 	return targets
+}
+
+// workTypeHasImplementedNonTerminalLifecycle recognizes the two explicit
+// topology shapes whose successful outcome is not a terminal state on the
+// current Work type. A recurring controller remains active until its Factory
+// Session lifecycle unregisters the schedule, while a composite parent hands
+// its successful outcome to a terminal Work item owned by another Work type.
+// Both shapes are observable from authored routes; this is not a name-based
+// exemption for an otherwise disconnected state.
+func workTypeHasImplementedNonTerminalLifecycle(
+	cfg *factorydefinitions.FactoryConfig,
+	workTypeName string,
+) bool {
+	return hasRecurringControllerRoute(cfg, workTypeName) ||
+		hasCompositeTerminalOutcome(cfg, workTypeName)
+}
+
+func hasRecurringControllerRoute(cfg *factorydefinitions.FactoryConfig, workTypeName string) bool {
+	for _, workstation := range cfg.Workstations {
+		if workstation.Kind != factorydefinitions.WorkstationKindCron || workstation.Cron == nil {
+			continue
+		}
+		for _, input := range workstation.Inputs {
+			if input.WorkTypeName != workTypeName {
+				continue
+			}
+			for _, output := range workstation.Outputs {
+				if output.WorkTypeName == input.WorkTypeName && output.StateName == input.StateName {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+func hasCompositeTerminalOutcome(cfg *factorydefinitions.FactoryConfig, workTypeName string) bool {
+	terminalStates := terminalStateSet(cfg)
+	for _, workstation := range cfg.Workstations {
+		if !workstationConsumesWorkType(workstation.Inputs, workTypeName) {
+			continue
+		}
+		for _, route := range compositeSuccessRoutes(workstation) {
+			if route.WorkTypeName == workTypeName {
+				continue
+			}
+			if terminalStates[placeKey(route.WorkTypeName, route.StateName)] {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func workstationConsumesWorkType(inputs []factorydefinitions.IOConfig, workTypeName string) bool {
+	for _, input := range inputs {
+		if input.WorkTypeName == workTypeName {
+			return true
+		}
+	}
+	return false
+}
+
+func compositeSuccessRoutes(workstation factorydefinitions.FactoryWorkstationConfig) []factorydefinitions.IOConfig {
+	routes := append([]factorydefinitions.IOConfig(nil), workstation.Outputs...)
+	for _, classification := range workstation.ClassificationRoutes {
+		routes = append(routes, classification.Outputs...)
+	}
+	return routes
 }
 
 func missingTerminalCompletionPathTargets(cfg *factorydefinitions.FactoryConfig) []Target {

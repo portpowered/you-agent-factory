@@ -516,8 +516,8 @@ loop-controller:active
   -> wait for next trigger
 
 session stop/cancel
-  -> unregister schedule
-  -> loop-controller:stopped
+  -> unregister schedule; the controller Work remains session-scoped and
+     does not emit a speculative terminal Work state
 ```
 
 The same request payload is supplied on every execution. Individual failures

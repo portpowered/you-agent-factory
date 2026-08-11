@@ -123,10 +123,6 @@
           "type": "INITIAL"
         },
         {
-          "name": "stopped",
-          "type": "TERMINAL"
-        },
-        {
           "name": "failed",
           "type": "FAILED"
         }

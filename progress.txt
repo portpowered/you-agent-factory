@@ -4152,3 +4152,35 @@
   - Catalog semantic reachability cannot be solved by deleting an unused terminal declaration in isolation; the general validator runs first and requires a real completion path for referenced Work types.
   - Keep `loop-controller:stopped` and `quorum:task:complete` as explicit lifecycle/topology decisions until direct runtime behavior or a narrow, tested validator contract exists; do not add projection-only exceptions.
 ---
+
+## [2026-08-11 01:03 -07:00] - graph-workstation-semantics-002
+- What was implemented
+  - Removed `loop-controller:stopped` and `quorum:task:complete` from the canonical first-party Factory definitions, regenerated their flattened artifacts and manifest hashes, and kept the earlier `goal:execute` cleanup intact.
+  - Added route-proven canonical validation for recurring controller self-loops and composite terminal outcomes, while continuing to reject ordinary nonterminal Work types without a completion role.
+  - Enabled the first-party semantic role validator on the real `BuildCatalog` path and added a synthetic catalog regression proving the Factory slug and exact `workType:state` diagnostic; synthetic generator fixtures and JavaScript/customer-authored scope remain unaffected.
+  - Added exact published state-inventory regression coverage, a graph projection test proving `work-state:goal:execute` is absent, and aligned the lifecycle diagram and automation fixture with the shipped topology.
+- Files changed
+  - `docs/internal/development/plans/packaged-factory-families.md`
+  - `internal/packagedfactorycatalog/catalog.go`
+  - `internal/packagedfactorycatalog/definition_catalog_test.go`
+  - `internal/packagedfactorycatalog/inventory_test.go`
+  - `packages/packaged-factories/factories/loop/factory.yaml`
+  - `packages/packaged-factories/factories/quorum/factory.yaml`
+  - `packages/packaged-factories/generated/factories/loop/`
+  - `packages/packaged-factories/generated/factories/quorum/`
+  - `packages/packaged-factories/generated/manifest.json`
+  - `pkg/services/automations/internal/invocation_schedule_test.go`
+  - `pkg/services/factory_definitions/internal/services/validation/impl/validate_structural.go`
+  - `pkg/services/factory_definitions/internal/services/validation/impl/topology_validator_test.go`
+  - `ui/src/features/workflow-activity/lib/current-activity-factory-graph-layout.test.ts`
+  - `prd.json`
+- Verification
+  - `make packaged-factory-catalog-generate` and `make packaged-factory-catalog-check` — passed.
+  - Catalog, canonical-validator, automation, and packaged loop/quorum functional tests — passed.
+  - Focused UI graph test, UI typecheck, UI lint, package-structure, focused Go vet, and `git diff --check` — passed.
+  - Full `make vet` was bounded at 360 seconds while unrelated repository-wide Go verification was already running in the shared worktree; the focused vet lane passed.
+- **Learnings for future iterations:**
+  - Enforce publication-only semantic rules at `BuildCatalog`, not `Discover` or `GenerateArtifacts`, because unit fixtures intentionally use canonical but not first-party-complete topology.
+  - A Work type may omit a terminal state only when route topology proves a recurring self-loop or a composite terminal outcome; ordinary nonterminal loops remain rejected.
+  - Removing speculative states requires a coordinated canonical-validator decision before regeneration; regenerate published manifest hashes from authored sources.
+---
