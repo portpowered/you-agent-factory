@@ -9,6 +9,24 @@
     "originalDocument": "C:/Users/andre/work/portos/infinite-you/docs/internal/packaged-service-structure/build-time-runtime-composition-plan.md",
     "mandatoryRules": "C:/Users/andre/work/portos/infinite-you/docs/temp/scale-program-rules.md"
   },
+  "deliveryAudit": {
+    "pullRequest": 1857,
+    "head": "8b7eedb5bdf5f628a3b00e674084bf7a773ce673",
+    "base": "85619c087089e3ed6a04edad8b794de62785ee30",
+    "reviewThreads": 0,
+    "unresolvedReviewThreads": 0,
+    "formalReviews": 0,
+    "latestWorkflow": {
+      "run": 31468200791,
+      "result": "failed",
+      "rerunResult": "failed",
+      "taskScopedFailures": [],
+      "baselineFailures": [
+        "tests/functional/transport/server_binding: TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput",
+        "tests/functional/transport/cli/output: TestCLIJSONFailureRemainsValidJSON"
+      ]
+    }
+  },
   "acceptanceCriteria": [
     "root.BuildProcess and canonical Wire select each migrated service root and external-effect implementation once, inject exact owner ports, and provide the same instances to every consuming session path.",
     "Two sequential or concurrent Factory Session starts use the same injected service-root and edge instances while retaining distinct session/runtime identities, logging/metrics scopes, results, and lifecycle state.",

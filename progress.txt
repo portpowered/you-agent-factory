@@ -9355,3 +9355,20 @@
 - **Learnings for future iterations:**
   - A failed-job rerun can separate transient functional failures from the stable baseline assertion; record the rerun's surviving test and exact diagnostic before deciding whether a source change is in scope.
 ---
+## 2026-08-11 00:29:32 -07:00 - btrc-p1-root-injection-006 current-head CI rerun audit
+- What was implemented
+  - Audited PR #1857 with the thread-aware GitHub GraphQL workflow: the PR is open with zero review threads, zero unresolved threads, and zero formal reviews.
+  - Reran the failed jobs for CI run `31468200791` on head `8b7eedb5bdf5f628a3b00e674084bf7a773ce673` after the initial Backend Functional Coverage failure.
+  - Confirmed the P1 root-process scenario and injected-runner coverage pass, while the rerun reproduces the unchanged server-binding assertion and also reports the unrelated `TestCLIJSONFailureRemainsValidJSON` failure.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `git fetch origin main` — `HEAD` is based directly on `origin/main` `85619c087089e3ed6a04edad8b794de62785ee30`; no merge conflict or working-tree change exists.
+  - `gh run rerun 31468200791 --failed` — rerun completed with Backend Functional Coverage failing; all other required lanes passed.
+  - The P1 diff is empty for `tests/functional/transport/server_binding` and `tests/functional/transport/cli/output`; no task-scoped source change is justified by the baseline failures.
+  - `TestRootBuildProcessIsInertAndReusableAcrossFactorySessions` and `TestRootBuildProcessRoutesProviderAndScriptWorkThroughInjectedRunnerInstances` passed in the failed lane.
+- **Learnings for future iterations:**
+  - A terminal CI rerun can expose an additional unchanged functional baseline failure; compare each failing package against `origin/main` before changing P1 code.
+  - Keep the PRD delivery audit aligned with the exact tested head and base; a progress-only bookkeeping commit will require a fresh CI run before the PR can be considered ready.
+---
