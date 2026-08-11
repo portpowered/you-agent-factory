@@ -625,7 +625,7 @@ func (b *blockingProvider) Infer(ctx context.Context, req workers.ProviderInfere
 // legitimately in-flight turn still completes normally afterward with no
 // stranded busy state left behind. This is the functional-level counterpart
 // to the unit-level busy-admission coverage in
-// pkg/transports/acp/internal/stdio/session_prompt_test.go, driven against
+// pkg/transports/acp/internal/stdio/session_prompt_admission_test.go, driven against
 // the real Chat Sessions Store and the real on-demand Factory Sessions
 // activation instead of fakes.
 func TestACPPromptDelegationConcurrentPromptRejectsAsBusyWithNoFactoryDispatch(t *testing.T) {

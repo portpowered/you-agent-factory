@@ -1,141 +1,72 @@
 {
-  "project": "Dashboard Regression Fixture and Trust Quick Wins",
-  "branchName": "dashboard-fixture-and-quick-wins",
-  "description": "Establish a deterministic dashboard regression fixture and use it to remove duplicated outcomes-chart treatment, keep Submit Work feedback full-width and scoped to the exact Factory Session, reconcile session lists without a phantom ~default tab, and separate truthful Open Factory and New Factory journeys. This foundation lane makes basic operator workflows trustworthy and gives later dashboard work a stable behavioral baseline without absorbing the broader dashboard program.",
+  "project": "Split Oversized ACP Stdio Tests into Focused Behavioral Suites",
+  "branchName": "thr-split-acp-stdio-tests",
+  "description": "Mechanically split the 3,518-line session_prompt_test.go and 1,667-line prompt_stream_test.go into focused behavioral files with one shared fixture file, preserving the exact test inventory, assertions, runtime outcomes, and coverage so the queued BTRC P5B cutover can work against a readable package.",
   "context": {
-    "customerAsk": "Implement Story 0 plus the chart deduplication, submit-width/session-scoping, session-list reconciliation, and Open/New Factory quick wins from the dashboard UX probe plan. Prove every changed behavior with component and integration tests against the deterministic fixture, make the phantom ~default session impossible in that scenario, keep the Factory Sessions transport edit minimal, follow the parallel-lane rebase protocol, and deliver through actual merge.",
-    "problem": "The dashboard's happy-path fixtures do not reproduce alias-plus-UUID identity, stale list responses, chart remounts, two-session submission races, or misleading Open/New actions. Operators can therefore see a phantom ~default tab, stale or duplicated presentation, clipped feedback, cross-session drafts/results, or validation that appears to have opened or created a Factory, despite the underlying runtime remaining correct.",
-    "solution": "Create one CI-safe identity-keyed fixture that deterministically drives the existing typed dashboard boundaries through the assigned races and async states. Use it to prove a single chart presentation, session-scoped full-width submission feedback, authoritative canonical session-list reconciliation, and distinct non-mutating-validation/explicit-confirmation Open and New Factory flows. Keep Factory Sessions as canonical identity owner, query/session state in existing typed UI owners, and chart/tab rendering as disposable projections.",
-    "originalDocument": "C:/Users/andre/work/portos/infinite-you/docs/internal/development/plans/dashboard-ux-probe-and-fix.md",
-    "evidence": "C:/Users/andre/work/portos/infinite-you/docs/internal/development/plans/dashboard-ux-30-probe-results.md",
-    "mandatoryRules": "C:/Users/andre/work/portos/infinite-you/docs/temp/scale-program-rules.md",
-    "reviewFollowUp": {
-      "baseCommit": "b99c8b942b4a684491cede70cae7f0ebf920da8c",
-      "resolved": [
-        "Rebased the seven dashboard commits onto the fetched current main at 3521f0b0a and resolved the shared PRD/progress conflicts while preserving the dashboard task record.",
-        "Replaced exact Storybook command and registration-inventory assertions with behavioral runner coverage for readiness, completion, failure propagation, and server cleanup.",
-        "Replaced the dashboard fixture API test's race-prone immediate response resolution with an explicit waitUntilPending readiness signal.",
-        "Unioned the complete append-only progress history from current main with the dashboard task history before the replacement push.",
-        "Removed the process-global Bun module mock from the session-factory discovery test and replaced it with a queued typed-fetch boundary; canonical default-session discovery now resolves the authoritative isDefault row after selector-only rows are filtered.",
-        "Updated the existing browser integration journeys to use the renamed Open Factory dialog and the explicit Open selected target confirmation required by the non-mutating Open flow.",
-        "Isolated the untouched TestJavaScriptParallelDispatchesChildrenConcurrently functional-coverage flake, confirmed ten local repetitions pass, and reran the failed Backend Functional Coverage plus Verification Policy jobs successfully on the same head.",
-        "Rechecked the stale pre-fix blocking conversation comments against the current head 1023eefe6; the branch is cleanly based on main 3521f0b0a, the thread-aware audit has no unresolved inline threads, and the latest hosted run is terminal-green.",
-        "Rebased the task branch onto the newer current main b99c8b942, retained the dashboard PRD as authoritative, and rebuilt progress.txt as the complete current-main history plus all dashboard-only entries."
-      ],
-      "qualityEvidence": [
-        "make test and make vet pass on the rebased head.",
-        "backend-size, pkg-maint, pkg-file-count, and pkg-structure pass on both the rebased head and the exact detached origin/main baseline.",
-        "bun run typecheck and bun run lint pass on the rebased head; the exact detached origin/main UI lint baseline also passes with only its existing allowlisted advisories.",
-        "The full Bun unit coverage lane passes: 196 tests across 36 files with lcov instrumentation; the dashboard fixture no longer times out when the unit files share one coverage process.",
-        "The pre-current-main-sync replacement head was based on live main 3521f0b0a; focused browser integration for the two affected dashboard/import files passes all 3 tests, and post-fix typecheck, UI lint, make test, make vet, backend-size, pkg-maint, pkg-file-count, pkg-structure, and git diff checks pass.",
-        "Hosted run 31494337558 is terminal-green after the retry: Backend Functional Coverage and the dependent Verification Policy gate pass, and all 18 PR checks are successful.",
-        "Hosted run 31496150336 for head 1023eefe6 is terminal-green: all 18 PR checks pass, including Frontend, Frontend Browser, Backend Functional Coverage, and Verification Policy; the PR is mergeable and has no unresolved inline review threads."
-      ]
-    }
+    "customerAsk": "Land a move-only split of the 3,518-line session_prompt_test.go and 1,667-line prompt_stream_test.go before BTRC P5B releases, deriving cohesive behavior groups from the real tests, consolidating shared fixtures into one helper file, and rebasing under the contention protocol if ACP stdio ownership changes.",
+    "problem": "Prompt admission, dispatch, terminal-state, cancellation, attachment, delivery, stream-gap, retry, and live-drain scenarios are mixed in two oversized files, causing unnecessary context burn, slow comprehension, and error-prone edits for ACP transport maintainers.",
+    "solution": "Move existing tests without semantic changes into package-local suites organized around prompt command/admission, prompt dispatch/terminal lifecycle, cancellation/connection failures, stream attachment/delivery, and stream gap/error/live-drain behavior; share cross-suite fixtures through one test-helper file and prove equivalence with before/after inventory, coverage, and focused package-test evidence."
   },
   "acceptanceCriteria": [
-    "One deterministic, identity-keyed, CI-safe fixture reproduces alias-plus-UUID discovery, stale list refreshes, chart remount/resize, two-session submission races, and Open/New success and failure outcomes without sleeps as its primary synchronization mechanism or production-only test seams.",
-    "The fixture scenario renders each real Factory Session exactly once by canonical ID; ~default remains a selector and never appears as a second session, and successful list refreshes remove or remap stale rows and selection deterministically.",
-    "Each outcomes widget renders one chart presentation with one Y-axis title/grid treatment through loading, empty, error, success, resize, and remount behavior, with an accessible non-color-only description of the displayed values.",
-    "Submit Work drafts, pending mutations, and results never cross canonical Factory Session boundaries; feedback uses the available card width and every completion path has one localized, programmatically associated success or error state.",
-    "Open Factory and New Factory are distinct actions: validation is non-mutating, Open targets an existing Factory, New previews the exact target before confirmation, and cancel/failure cannot claim that a Factory started or was created.",
-    "Quality gate: Typecheck, focused Go/UI tests, direct browser verification, and relevant CI frontend jobs pass; there are no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
-    "Delivery continues through the implementation/review loop until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared-file changes are resolved under the contention protocol, and the PR is actually merged."
+    "Normalized output from go test ./pkg/transports/acp/internal/stdio -list '.*' is identical before and after the split, with the zero diff shown in the PR.",
+    "Existing prompt, dispatch, terminal-state, cancellation, attachment, stream-delivery, gap, retry, and live-drain tests retain their names, setup semantics, assertions, and observable outcomes, and focused package tests pass.",
+    "Before/after ACP stdio package coverage numbers are recorded in the PR and are unchanged using the same command and baseline revision.",
+    "Tests are grouped by cohesive behavior, fixtures shared across groups live in one test-helper file, no resulting Go test file exceeds approximately 1,200 lines, and the diff is dominated by moves.",
+    "No production code, public contract, generated artifact, assertion semantics, test inventory, or unrelated cleanup changes are included.",
+    "Typecheck and tests pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
+    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts are resolved against current main, and the PR is merged."
   ],
   "userStories": [
     {
-      "id": "dashboard-fixture-and-quick-wins-001",
-      "title": "Establish the deterministic dashboard regression fixture",
-      "description": "As a dashboard maintainer, I want one repeatable fixture for the assigned trust failures so every quick win and later compatible dashboard lane can prove behavior against the same canonical identities and races.",
+      "id": "thr-split-acp-stdio-tests-001",
+      "title": "Isolate Prompt Command and Admission Behavior",
+      "description": "As an ACP transport maintainer, I want prompt command parsing and prompt admission scenarios in focused suites so I can understand request validation and admission behavior without loading dispatch and cancellation cases.",
       "acceptanceCriteria": [
-        "The fixture represents at least two canonical Factory Sessions; a ~default selector resolving to one session UUID; initial, stale, and refreshed session lists; chart loading/empty/error/success data; session-specific submit drafts and delayed outcomes; and Open/New validation, cancel, success, and failure outcomes.",
-        "Fixture records and expected rows use immutable session and result identities rather than display labels, array position, wall-clock timing, or incidental rendered text as identity.",
-        "Component and browser scenarios can advance list refreshes, session changes, mutation completions, and chart states by deterministic controls or observable promises; sleeps and timeout padding are not the primary synchronization mechanism.",
-        "The fixture reuses existing typed API, query, session-store, and component boundaries and adds no production-only test hook, second event/replay implementation, live network dependency, or filesystem topology assertion.",
-        "The focused fixture scenario is stable in repeated local runs and CI and provides the shared setup used by Stories 002–005.",
-        "Typecheck passes",
+        "Existing factory-command parsing, target-change, malformed or invalid prompt, identity, version, busy, duplicate-delivery, and connection-isolation tests remain discoverable under their exact test names and produce the same results.",
+        "Moved tests retain their existing setup and assertions, and setup shared by more than one behavioral suite is consolidated into the single package test-helper file without changing fixture behavior.",
+        "The partial split is move-dominated and does not change ACP production code or public contracts.",
+        "Focused ACP stdio package tests pass.",
         "Tests pass",
-        "Verify the fixture-driven dashboard scenario in a real browser at one mobile viewport and one desktop viewport"
+        "Typecheck passes"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Implemented the shared deterministic dashboard regression fixture and controller under ui/src/components/dashboard/fixtures, covering canonical Factory Session identity, ~default resolution, stale/refreshed out-of-order lists, chart states and remount widths, session-scoped delayed submissions, and Open/New outcomes. Added typed API/session-provider component coverage, a Storybook interaction scenario, and mobile/desktop browser viewport coverage. Verified with TypeScript, Bun unit tests, the focused Vitest component test, biome/lint and test-lane guards, Storybook build, the focused Canonical Storybook interaction filter, and the dashboard viewport browser check. Stories 002–005 were completed in follow-up iterations."
+      "notes": "Moved the 22 prompt command/admission tests into session_prompt_admission_test.go with their original names, setup, assertions, and outcomes. Consolidated all package-shared ACP stdio fakes and fixtures in session_test_helpers_test.go, including the cross-suite streaming fixtures. No production code or public contract changed. Against current origin/main 635a43870, normalized go test -p 1 -vet=off ./pkg/transports/acp/internal/stdio -list '.*' -count=1 remained identical at 222 tests before and after with SHA-256 da83686cb68f0988570ca0ea0f429eabf40beb2bb47dba967874a33d46481bf1; coverage remained 94.3% of statements; focused tests, race tests, package compile/typecheck, and the ACP package-boundary comparison passed. The aggregate package-boundary run reports only the two unchanged ownership findings also present on current main."
     },
     {
-      "id": "dashboard-fixture-and-quick-wins-002",
-      "title": "Render one outcomes chart treatment",
-      "description": "As an operator, I want each outcomes widget to show one coherent visualization so duplicated chart or axis treatment cannot make the displayed results look inflated or broken.",
+      "id": "thr-split-acp-stdio-tests-002",
+      "title": "Isolate Prompt Dispatch, Terminal Lifecycle, and Cancellation Behavior",
+      "description": "As an ACP transport maintainer, I want prompt execution and control-flow scenarios separated by behavior so I can reason about first and later-turn dispatch, response terminalization, and cancellation races independently.",
       "acceptanceCriteria": [
-        "For every Story 0 chart state, one outcomes widget renders exactly one chart visualization, one Y-axis title, and one grid/axis treatment; refresh, remount, responsive resize, and Strict Mode-style rerendering do not duplicate them.",
-        "Loading shows an explicit loading state, known-empty data shows an explicit empty state without a misleading plot, failures show an actionable localized error state, and valid data shows the single chart.",
-        "The visible chart values have an accessible textual description or data view, and series are distinguishable without relying on color alone.",
-        "The chart remains contained by and fills the available widget width at the Story 0 mobile and desktop viewports without horizontal page overflow.",
-        "Focused component and integration regressions use the Story 0 fixture and fail if a second chart, Y-axis title, or grid treatment appears.",
-        "Typecheck passes",
+        "Existing first-turn start and bind, later-turn invocation, notification and response mapping, retry and recovery, transition-failure, and terminal-outcome tests remain discoverable under their exact names and produce the same results.",
+        "Existing cancellation routing, committed-intent, completion and supersession race, repeated identity, malformed or unknown request, retryability, and asynchronous connection-failure tests remain discoverable under their exact names and produce the same results.",
+        "Prompt lifecycle and cancellation suites use the same package-local shared fixtures without duplicating or altering fixture semantics.",
+        "Every resulting prompt-related Go test file is approximately 1,200 lines or fewer, and the diff remains dominated by moves.",
+        "Focused ACP stdio package tests pass.",
         "Tests pass",
-        "Verify the chart directly in a real browser at mobile and desktop widths, including a resize or remount transition"
+        "Typecheck passes"
       ],
       "priority": 2,
       "passes": true,
-      "notes": "Removed the duplicate CartesianGrid and duplicate Recharts Y-axis title, keeping one dashed grid treatment and one overlay-owned Y-axis title. Added a localized aria-describedby data description that follows visible series, preserving dashed line patterns and legend labels for non-color distinction. Added Story 0 fixture-backed Strict Mode/remount/state component coverage, localized message coverage, Storybook one-treatment assertions, and the Playwright Storybook browser gate at 320px and 1280px with a live resize. TypeScript, UI lint, focused Bun/Vitest component tests, Storybook build, and the direct browser gate pass. The exact WorkChart Storybook file still reports its pre-existing Constrained Width legend-height ratio failure (5/6 stories pass); the new direct browser check passes that story at both viewports, so the unrelated harness assertion is recorded rather than changing sizing policy."
+      "notes": "Moved prompt dispatch tests into session_prompt_dispatch_test.go, recovery tests into session_load_test.go, terminal tests into session_prompt_test.go, and cancellation/connection-failure tests into session_prompt_cancellation_test.go; session creation/configuration tests share session_new_test.go. The single session_test_helpers_test.go now owns newChatSessionsStore, sequentialIDGenerator, fixedClock, and the complete deterministic real Chat Sessions constructor, so every recovery and cross-suite active-control setup enters through one helper. The exact constructor and test-import edges are recorded in docs/internal/baselines/service-construction-baseline.json and docs/internal/baselines/test-service-import-baseline.json as deletion-only migration debt; no source-position directives or alternate constructor path remain. No production code, public contract, generated artifact, or assertion semantics changed. Against current origin/main 635a43870, normalized inventory remained 222/222 with zero diff and SHA-256 da83686cb68f0988570ca0ea0f429eabf40beb2bb47dba967874a33d46481bf1; coverage remained 94.3%. Focused tests, race tests, vet, backend-size, pkg-maint, pkg-file-count, pkg-structure, typecheck, and the ACP package-boundary comparison passed; the aggregate package-boundary run reports only the two unchanged ownership findings also present on current main. All resulting Go files are at or below the approximately 1,200-line limit."
     },
     {
-      "id": "dashboard-fixture-and-quick-wins-003",
-      "title": "Keep Submit Work full-width and session-scoped",
-      "description": "As an operator working across Factory Sessions, I want my draft and submission result to stay with the exact destination and use the available card width so I cannot accidentally submit to or annotate another session.",
+      "id": "thr-split-acp-stdio-tests-003",
+      "title": "Isolate Streaming, Attachment, Gap, and Live-Drain Behavior",
+      "description": "As an ACP transport maintainer, I want stream delivery scenarios grouped by responsibility so I can inspect attachment lifecycle, ordered delivery, and stream recovery or failure behavior without reading one monolithic suite.",
       "acceptanceCriteria": [
-        "Draft values, validation, pending state, and completion feedback are keyed to the exact canonical Factory Session selected when the operation is composed or submitted; switching from fixture session A to B never copies A's draft into B or submits A's content to B.",
-        "A late success or failure from session A cannot replace, annotate, or announce session B's composer state, and returning to A shows only the state intentionally retained for A.",
-        "Every submit path exposes the visible canonical destination before confirmation and renders exactly one localized, programmatically associated loading, success, or error state for its owning session.",
-        "The submission status/receipt region uses the full available widget width, wraps long localized content, and introduces no horizontal page overflow at the Story 0 mobile and desktop viewports.",
-        "Controls, labels, validation messages, and focus behavior remain semantic and keyboard operable during validation, submission, session switching, success, and retryable failure.",
-        "Focused component and integration regressions use the Story 0 two-session delayed-completion scenario.",
-        "Typecheck passes",
+        "Existing attachment cache, resume, detach, reconnect, concurrency, seeded-message, fallback, ordering, independent-delivery, and notifier-retry tests retain their exact names, assertions, and outcomes.",
+        "Existing retention-gap, invalid-cursor, acknowledgment conflict and retry, malformed projection, cancellation, subscription or read or version failure, and live-drain tests retain their exact names, assertions, and outcomes.",
+        "Stream suites reuse the single package test-helper file where fixtures are shared, and fixture extraction introduces no alternate execution path or state.",
+        "Every resulting stream-related Go test file is approximately 1,200 lines or fewer, and the diff remains dominated by moves.",
+        "The before and after test-list inventory has a zero diff, and before and after coverage numbers are unchanged and recorded for review.",
+        "Focused ACP stdio package tests pass.",
         "Tests pass",
-        "Verify the A-to-B draft and late-completion journey directly in a real browser at mobile and desktop widths"
+        "Typecheck passes"
       ],
       "priority": 3,
       "passes": true,
-      "notes": "Keyed rich and simple Submit Work drafts, pending states, receipts, file staging, and late completion guards by the exact canonical Factory Session ID. Added visible canonical destinations, localized programmatic success/error/loading associations, full-width wrapping feedback, and an explicit accessible form name. Added fixture-backed A-to-B delayed success/failure component regressions, a passive Storybook fixture harness with deterministic completion controls, and a Playwright browser gate at 390px and 1440px that checks draft isolation, late-result isolation, canonical destinations, full-width feedback, and page overflow. TypeScript, focused Biome/lint and boundary checks, focused Vitest composer/status tests, the native Bun SubmitWorkCard suite, Storybook build, Storybook CI scheduling test, and the direct mobile/desktop browser gate pass. Stories 004 and 005 were completed in follow-up iterations."
-    },
-    {
-      "id": "dashboard-fixture-and-quick-wins-004",
-      "title": "Reconcile Factory Session lists to canonical identity",
-      "description": "As an operator, I want refreshed Factory Session tabs to represent the backend's current canonical sessions exactly once so aliases and stale responses cannot create phantom or obsolete choices.",
-      "acceptanceCriteria": [
-        "When live and durable listing inputs refer to the same canonical session, the Factory Sessions listing boundary returns one canonical row with the resolved session ID; ~default is accepted only as a selector and is not returned or rendered as an additional durable session identity.",
-        "After a successful fixture refresh, the latest authoritative session list replaces stale membership: removed sessions disappear, newly available sessions appear once, and the selected alias or obsolete row remaps to its resolved canonical session or an explicit no-session state.",
-        "A slower response for an older list request cannot overwrite a newer successful reconciliation or recreate a removed or phantom tab.",
-        "Initial loading, no-session, retained-data refresh, refresh failure, and successful reconciliation have explicit UI treatment; a failure does not silently present retained rows as freshly confirmed and exposes a keyboard-operable retry.",
-        "Tabs use truthful navigation or tab/panel semantics, stable unique accessible names, visible focus, keyboard ordering, and responsive overflow without pointing controls at an empty panel.",
-        "Focused Go transport tests and UI component/integration tests use the Story 0 alias-plus-UUID and out-of-order refresh scenarios and prove that no ~default phantom session is reproducible.",
-        "Typecheck passes",
-        "Tests pass",
-        "Verify canonical tab rendering, stale-row removal, retry, and keyboard navigation directly in a real browser at mobile and desktop widths"
-      ],
-      "priority": 4,
-      "passes": true,
-      "notes": "Reconciled Factory Session list identity at the Go mapping boundary and the typed UI API boundary: selector-only ~default rows are removed, duplicate rows collapse by canonical ID, and canonical UUID summaries remain authoritative. Added store reconciliation for membership, tab order, paused state, selected-session fallback, and resolved default selection; refresh requests use query cancellation signals and retained-data failures render a localized retry state without hiding existing tabs. Extended the deterministic fixture/controller, component regressions, canonical Storybook story, and mobile/desktop Playwright gate with stale-row removal, keyboard Home/End ordering, refresh failure/retry, responsive overflow, and alias-plus-UUID coverage. Verified with TypeScript, focused Bun unit/component suites, focused Go mapping/HTTP suites, UI lint and boundary/test-lane guards, rebuilt Storybook, focused Storybook interaction (canonical story passed; 2 unrelated stories skipped), direct browser verification at 390x844 and 1440x900, and git diff --check. Story 005 was completed in the follow-up iteration."
-    },
-    {
-      "id": "dashboard-fixture-and-quick-wins-005",
-      "title": "Separate Open Factory and New Factory journeys",
-      "description": "As an operator, I want distinct Open and New Factory actions so I know whether I am selecting an existing Factory or creating a new target before anything starts.",
-      "acceptanceCriteria": [
-        "Open Factory and New Factory are separately named, discoverable actions with distinct dialogs or modes; Open selects an existing target, while New collects and previews the exact normalized target that will be created.",
-        "Validation and preview are non-mutating and never report that a Factory was opened, created, or started; only explicit final confirmation invokes the matching operation once.",
-        "Cancel, dialog dismissal, validation failure, missing or broken Open target, and create failure leave session membership unchanged, restore focus to the invoking control, and show no false success state.",
-        "Each journey exposes explicit loading, empty, error, and success treatment where applicable, with localized copy, semantic labels and errors, visible focus, complete keyboard operation, and non-color-only status.",
-        "Successful Open or New completion invalidates and reconciles the canonical session list from Story 004, selects the resulting canonical session once, and does not add a ~default tab.",
-        "Dialogs and action controls remain usable without page overflow at the Story 0 mobile and desktop viewports.",
-        "Focused component and integration regressions use the Story 0 Open/New outcomes and canonical session-list reconciliation.",
-        "Typecheck passes",
-        "Tests pass",
-        "Verify Open, New preview and confirmation, cancel and focus restoration, and a failure path directly in a real browser at mobile and desktop widths"
-      ],
-      "priority": 5,
-      "passes": true,
-      "notes": "Separated the shared Open Factory and New Factory actions into localized, accessible journeys. Open validation now selects an existing target only after explicit confirmation; New validation remains non-mutating and previews the normalized target before explicit creation. Added controlled failure, missing-target, broken-target, cancel, dismissal, focus restoration, and success paths with canonical list invalidation/reconciliation, one-time selection, no ~default tab, and semantic status/error treatment. Extended the immutable dashboard regression fixture, canonical reconciliation component suite, isolated session-tab coverage, Storybook fixture story, CI schedule, and a direct Playwright browser gate at 390x844 and 1440x900. Typecheck, full UI lint and structural guards, focused Bun/Vitest tests, Storybook build, the Storybook scheduling test, browser verification, and git diff --check pass."
+      "notes": "Moved stream attachment/child/wire cases into prompt_stream_attachment_test.go, delivery/response-bridge cases into prompt_stream_delivery_test.go, and history/gap/live-drain cases into prompt_stream_gap_test.go. All cross-suite fixtures, including fakeEventsService, newStreamingTestServer, notificationItemID, and seedRetentionGap, now live only in session_test_helpers_test.go; no production code, public contract, generated artifact, or alternate execution path changed. The ACP stdio package remains at the exact 22-file main baseline, with moved exemptions registered at their new owners. Against current origin/main 635a43870, normalized test inventory was 222/222 with zero diff and SHA-256 da83686cb68f0988570ca0ea0f429eabf40beb2bb47dba967874a33d46481bf1 on both sides; coverage was 94.3% before and after. Focused tests, race, vet, backend-size, pkg-maint, pkg-file-count, pkg-structure, typecheck, current-main boundary comparison, and git diff --check passed."
     }
   ]
 }
