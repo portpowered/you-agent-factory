@@ -10505,3 +10505,16 @@
 - **Learnings for future iterations:**
   - Fetch the hosting base immediately before handoff, preserve the active task PRD, union append-only progress, and compute generated manifest hashes from the merged artifacts rather than choosing one parent hash.
 ---
+## [2026-08-10 23:31 -07:00] - js-skip-permissions-parity rebased-head verification follow-up
+- What was implemented
+  - Completed post-rebase generation and verification on `c7f96adf5` over `origin/main` `b68e4bf95`; no additional product changes were needed.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `make contracts-generate`, `make generate-api`, and `make interfaces-all` produced no drift.
+  - Focused JavaScript Runtime, Factory Sessions, recordings/replay, transport, API contract, Providers, root/wire, and provider functional suites passed.
+  - `make typecheck`, `make mcp-contract-check`, `make ui-test` (355 Vitest files / 2,970 tests and 191 Bun tests), `make contracts-validate`, `make contracts-check`, `make docs-reference-smoke`, `make provider-catalog-check`, `make backend-size`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, and `git diff --check` passed.
+  - The aggregate `make verify-fast` and direct short-Go unit-lane wrappers exceeded their bounded local timeouts without emitting a test failure because unrelated concurrent Codex jobs were saturating the host; their timed-out process trees were verified and stopped only for this invocation. The pre-rebase `verify-fast` and `vet` results remain recorded in the story entry, and no source failure was observed on the rebased focused surface.
+- **Learnings for future iterations:**
+  - On a shared Windows host, run the attributable verification lanes serially and distinguish wrapper timeouts caused by concurrent worktrees from actual test failures before changing source.
+---
