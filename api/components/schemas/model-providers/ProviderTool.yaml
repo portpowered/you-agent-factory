@@ -5,6 +5,27 @@ required:
   - name
   - support
   - description
+oneOf:
+  - type: object
+    required:
+      - condition
+    properties:
+      support:
+        type: string
+        enum:
+          - conditional
+      condition:
+        type: string
+        minLength: 1
+        maxLength: 512
+  - type: object
+    properties:
+      support:
+        type: string
+        enum:
+          - supported
+          - unsupported
+          - unknown
 properties:
   name:
     type: string
@@ -19,3 +40,32 @@ properties:
     minLength: 1
     maxLength: 256
     description: Bounded explanation of the tool fact.
+  condition:
+    type: string
+    minLength: 1
+    maxLength: 512
+    description: Bounded operator-visible condition required when tool support is conditional.
+  evidenceRefs:
+    type: array
+    minItems: 1
+    maxItems: 16
+    uniqueItems: true
+    description: Stable IDs of evidence records qualifying this tool fact.
+    items:
+      type: string
+      minLength: 1
+      maxLength: 128
+      pattern: '^[a-z][a-z0-9._-]*$'
+  availability:
+    $ref: './ProviderToolAvailability.yaml'
+  defaultEnabled:
+    type: boolean
+    nullable: true
+    description: Whether the tool is enabled by default; null means the default is unknown or operator-defined.
+  outputModalities:
+    type: array
+    maxItems: 16
+    uniqueItems: true
+    description: Tool-produced modalities, kept separate from direct model output modalities.
+    items:
+      $ref: './ProviderToolOutputModality.yaml'
