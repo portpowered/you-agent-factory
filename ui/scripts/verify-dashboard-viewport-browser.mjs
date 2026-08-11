@@ -3,6 +3,7 @@ import { chromium } from "playwright";
 const storybookURL =
   process.env.AGENT_FACTORY_STORYBOOK_URL ?? "http://127.0.0.1:6008";
 const stories = [
+  "you-agent-factory-workflow-dashboard-regression-fixture--canonical-session-scenario",
   "you-agent-factory-workflow-dashboard--dashboard-improvements-smoke",
   "you-agent-factory-workflow-dashboard--dashboard-responsive-empty",
   "you-agent-factory-workflow-dashboard--dashboard-responsive-error",

@@ -1,74 +1,118 @@
 {
-  "project": "Customer Writing Standard and Terminology Register",
-  "branchName": "prose-standard-and-terms",
-  "description": "Implement the documentation-only foundation from Story 1 of the Customer Prose Standard and Enforcement Plan: publish an indexed normative customer technical-writing standard, a versioned and parseable YAML product terminology register, and a manual language-review checklist. The project gives authors and reviewers one contract for labels, procedures, descriptions, product terms, protected technical text, examples, exceptions, and ASD-STE100-aligned conformance language, without implementing prosecheck or rewriting the existing corpus.",
+  "project": "Dashboard Regression Fixture and Trust Quick Wins",
+  "branchName": "dashboard-fixture-and-quick-wins",
+  "description": "Establish a deterministic dashboard regression fixture and use it to remove duplicated outcomes-chart treatment, keep Submit Work feedback full-width and scoped to the exact Factory Session, reconcile session lists without a phantom ~default tab, and separate truthful Open Factory and New Factory journeys. This foundation lane makes basic operator workflows trustworthy and gives later dashboard work a stable behavioral baseline without absorbing the broader dashboard program.",
   "context": {
-    "customerAsk": "Implement Story 1 of docs/internal/development/plans/customer-prose-standard-and-enforcement.md exactly within the documentation-only lane: add the normative customer technical-writing standard under docs/internal/standards/writing/, add the YAML terminology register, index the standard from docs/internal/standards/STANDARDS.md, and provide the required manual review checklist.",
-    "problem": "Five downstream prose and documentation plans are blocked because authors and reviewers have no normative repository writing contract, no structured product terminology register, and no explicit boundary between deterministic checks and human language review. Product vocabulary, technical-literal protection, exceptions, and conformance claims can therefore vary by reviewer or prior chat context.",
-    "solution": "Publish one repository-specific writing profile defining content classes, protected technical text, deterministic and human-review boundaries, suppression policy, ASD-STE100-aligned conformance limits, examples, and a manual checklist. Publish a versioned YAML register with canonical terms, definitions, approved forms, discouraged alternatives, examples, valid surfaces, and ownership references. Connect the artifacts through the standards index and cross-links so downstream checker and migration work can consume one authoritative contract."
+    "customerAsk": "Implement Story 0 plus the chart deduplication, submit-width/session-scoping, session-list reconciliation, and Open/New Factory quick wins from the dashboard UX probe plan. Prove every changed behavior with component and integration tests against the deterministic fixture, make the phantom ~default session impossible in that scenario, keep the Factory Sessions transport edit minimal, follow the parallel-lane rebase protocol, and deliver through actual merge.",
+    "problem": "The dashboard's happy-path fixtures do not reproduce alias-plus-UUID identity, stale list responses, chart remounts, two-session submission races, or misleading Open/New actions. Operators can therefore see a phantom ~default tab, stale or duplicated presentation, clipped feedback, cross-session drafts/results, or validation that appears to have opened or created a Factory, despite the underlying runtime remaining correct.",
+    "solution": "Create one CI-safe identity-keyed fixture that deterministically drives the existing typed dashboard boundaries through the assigned races and async states. Use it to prove a single chart presentation, session-scoped full-width submission feedback, authoritative canonical session-list reconciliation, and distinct non-mutating-validation/explicit-confirmation Open and New Factory flows. Keep Factory Sessions as canonical identity owner, query/session state in existing typed UI owners, and chart/tab rendering as disposable projections.",
+    "originalDocument": "C:/Users/andre/work/portos/infinite-you/docs/internal/development/plans/dashboard-ux-probe-and-fix.md",
+    "evidence": "C:/Users/andre/work/portos/infinite-you/docs/internal/development/plans/dashboard-ux-30-probe-results.md",
+    "mandatoryRules": "C:/Users/andre/work/portos/infinite-you/docs/temp/scale-program-rules.md"
   },
   "acceptanceCriteria": [
-    "An author can use the normative standard to determine how to write a label, procedure, description, command or code example, product term, and justified exception without relying on chat history or reviewer preference.",
-    "The standard defines required content classes, protected machine and technical text, deterministic automated-rule boundaries, human-review rules, suppression policy, repository-specific good and bad examples, and the approved ASD-STE100 conformance claim.",
-    "The versioned terminology register parses as YAML using the documented schema, covers all required initial public nouns plus customer-visible relationship and lifecycle names, and limits internal Petri-net terms to explicitly internal or implementation-focused contexts.",
-    "Architecture and data-model owners confirm the terminology definitions and owning references, with blocking terminology feedback resolved before merge.",
-    "Authors and reviewers can discover the standard, terminology register, and manual checklist from the standards index; Markdown renders legibly and document links resolve to the intended repository sources.",
-    "Typecheck and applicable docs-only tests pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
-    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared-file changes are resolved against current main, and the PR is actually merged."
+    "One deterministic, identity-keyed, CI-safe fixture reproduces alias-plus-UUID discovery, stale list refreshes, chart remount/resize, two-session submission races, and Open/New success and failure outcomes without sleeps as its primary synchronization mechanism or production-only test seams.",
+    "The fixture scenario renders each real Factory Session exactly once by canonical ID; ~default remains a selector and never appears as a second session, and successful list refreshes remove or remap stale rows and selection deterministically.",
+    "Each outcomes widget renders one chart presentation with one Y-axis title/grid treatment through loading, empty, error, success, resize, and remount behavior, with an accessible non-color-only description of the displayed values.",
+    "Submit Work drafts, pending mutations, and results never cross canonical Factory Session boundaries; feedback uses the available card width and every completion path has one localized, programmatically associated success or error state.",
+    "Open Factory and New Factory are distinct actions: validation is non-mutating, Open targets an existing Factory, New previews the exact target before confirmation, and cancel/failure cannot claim that a Factory started or was created.",
+    "Quality gate: Typecheck, focused Go/UI tests, direct browser verification, and relevant CI frontend jobs pass; there are no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
+    "Delivery continues through the implementation/review loop until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared-file changes are resolved under the contention protocol, and the PR is actually merged."
   ],
   "userStories": [
     {
-      "id": "prose-standard-and-terms-001",
-      "title": "Authors can apply one normative writing contract",
-      "description": "As an author, I want one repository writing standard for customer-facing prose so I can write clear labels, instructions, explanations, examples, and exceptions without depending on reviewer preference.",
+      "id": "dashboard-fixture-and-quick-wins-001",
+      "title": "Establish the deterministic dashboard regression fixture",
+      "description": "As a dashboard maintainer, I want one repeatable fixture for the assigned trust failures so every quick win and later compatible dashboard lane can prove behavior against the same canonical identities and races.",
       "acceptanceCriteria": [
-        "The standard separately defines labels, procedural prose, descriptive prose, machine and technical text, and technical terms, including when each class applies.",
-        "Procedural rules require no more than 20 words per sentence, one instruction per sentence unless actions must occur simultaneously, an imperative verb, necessary conditions before the instruction, an observable expected result, and an ordered or vertical list when sequence matters.",
-        "Descriptive rules require no more than 25 words per sentence, gradual introduction of information, one topic per paragraph, no more than six sentences per paragraph, preferred active voice, and stable key words or phrases for related information.",
-        "Protected-text guidance covers code fences, inline code, commands and shell operators, JSON and YAML contract examples, API methods and routes, paths, URLs, package paths, identifiers, schema, event, status and error-code literals, model and provider names, quoted external output, and generated artifacts; safely identifiable natural-language comments remain reviewable.",
-        "The standard distinguishes blocking deterministic rules, advisory rules, and human-review rules using the governing plan's rule sets, and defines bounded rule-specific suppressions with reasons while rejecting suppressions for ordinary readability debt.",
-        "The standard says the repository profile is aligned with ASD-STE100, does not redistribute its controlled dictionary, does not claim checker certification or full ASD-STE100 conformance, and names the documented review, training, and dictionary conditions required before a stronger claim.",
-        "Repository-specific paired good and bad examples cover at least a command description, procedure, explanation, product term, protected technical example, and valid or invalid exception.",
-        "Typecheck passes"
+        "The fixture represents at least two canonical Factory Sessions; a ~default selector resolving to one session UUID; initial, stale, and refreshed session lists; chart loading/empty/error/success data; session-specific submit drafts and delayed outcomes; and Open/New validation, cancel, success, and failure outcomes.",
+        "Fixture records and expected rows use immutable session and result identities rather than display labels, array position, wall-clock timing, or incidental rendered text as identity.",
+        "Component and browser scenarios can advance list refreshes, session changes, mutation completions, and chart states by deterministic controls or observable promises; sleeps and timeout padding are not the primary synchronization mechanism.",
+        "The fixture reuses existing typed API, query, session-store, and component boundaries and adds no production-only test hook, second event/replay implementation, live network dependency, or filesystem topology assertion.",
+        "The focused fixture scenario is stable in repeated local runs and CI and provides the shared setup used by Stories 002–005.",
+        "Typecheck passes",
+        "Tests pass",
+        "Verify the fixture-driven dashboard scenario in a real browser at one mobile viewport and one desktop viewport"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Implemented the normative customer technical-writing standard at docs/internal/standards/writing/customer-technical-writing-standard.md. It defines labels, procedures, descriptions, machine and technical text, technical terms, the protected-literal boundary, the complete governing blocking and advisory rule sets, human review rules, bounded rule-specific exceptions, ASD-STE100-aligned claim limits, paired repository examples, and the manual review checklist. The review follow-up removed the nonexistent FACTORY_SESSION_OPENED example, verified SESSION_STARTED against api/components/schemas/events/FactoryEventType.yaml, and uses B-PROC-20 only for a genuine simultaneous-action constraint; exact protected literals are not B-LITERAL findings. The latest clarification says to align a stale documentation copy to a correct owning contract, escalate an incorrect contract to its owner, and treats suppression, baseline, and parse lifecycle rules as future-checker blocking rules in this documentation-only story. `git diff --check` passed, and make typecheck passed after the pinned UI dependencies were restored. No UI or runtime files changed in this story."
+      "notes": "Implemented the shared deterministic dashboard regression fixture and controller under ui/src/components/dashboard/fixtures, covering canonical Factory Session identity, ~default resolution, stale/refreshed out-of-order lists, chart states and remount widths, session-scoped delayed submissions, and Open/New outcomes. Added typed API/session-provider component coverage, a Storybook interaction scenario, and mobile/desktop browser viewport coverage. Verified with TypeScript, Bun unit tests, the focused Vitest component test, biome/lint and test-lane guards, Storybook build, the focused Canonical Storybook interaction filter, and the dashboard viewport browser check. Stories 002–005 remain intentionally open for later iterations."
     },
     {
-      "id": "prose-standard-and-terms-002",
-      "title": "Maintainers can consume the product terminology register as structured data",
-      "description": "As an author or future tooling maintainer, I want a versioned, parseable product terminology register so public nouns stay consistent and internal implementation vocabulary does not leak into customer prose.",
+      "id": "dashboard-fixture-and-quick-wins-002",
+      "title": "Render one outcomes chart treatment",
+      "description": "As an operator, I want each outcomes widget to show one coherent visualization so duplicated chart or axis treatment cannot make the displayed results look inflated or broken.",
       "acceptanceCriteria": [
-        "The YAML document has a top-level integer version set to 1 and a top-level terms sequence; every term record uses the same documented field schema.",
-        "Each term record contains non-empty canonical, definition, category, approvedForms, discouragedAlternatives, example, surfaces, and owner fields. approvedForms explicitly represents applicable plural or verb forms, and each discouraged alternative records its text, whether it is discouraged or prohibited, and the approved replacement.",
-        "category values are limited to product-term, technical-noun, technical-verb, acronym, command, or protected-literal; surfaces is a non-empty sequence that states where the term is valid; owner points to the architecture or contract source that owns the meaning.",
-        "The register covers at least Factory, Factory Session, Current Factory, Work, Work Request, Worker, Worker Session, Workstation, Provider, Provider Session, Model, Recording, Factory Event, and the customer-visible relationship and lifecycle names defined by the current data model and public contracts.",
-        "CPN, place, transition, marking, and token are registered as internal terms whose surfaces permit use only in explicitly internal or implementation-focused material.",
-        "Definitions and capitalization agree with docs/architecture/data-model.md and the owning public contracts; architecture and data-model owners record approval or resolve blocking corrections in the PR.",
-        "A standard YAML parser loads the complete register without errors, and a reviewer can identify each required field without relying on comments or implicit conventions.",
-        "Typecheck passes"
+        "For every Story 0 chart state, one outcomes widget renders exactly one chart visualization, one Y-axis title, and one grid/axis treatment; refresh, remount, responsive resize, and Strict Mode-style rerendering do not duplicate them.",
+        "Loading shows an explicit loading state, known-empty data shows an explicit empty state without a misleading plot, failures show an actionable localized error state, and valid data shows the single chart.",
+        "The visible chart values have an accessible textual description or data view, and series are distinguishable without relying on color alone.",
+        "The chart remains contained by and fills the available widget width at the Story 0 mobile and desktop viewports without horizontal page overflow.",
+        "Focused component and integration regressions use the Story 0 fixture and fail if a second chart, Y-axis title, or grid treatment appears.",
+        "Typecheck passes",
+        "Tests pass",
+        "Verify the chart directly in a real browser at mobile and desktop widths, including a resize or remount transition"
       ],
       "priority": 2,
-      "passes": true,
-      "notes": "Added docs/internal/standards/writing/customer-technical-terms.yaml with version: 1, an explicit term-record schema, and 58 consistently shaped records. The register covers the required public nouns, customer-visible relationship names and protected literals, durable and live lifecycle names, and CPN/place/transition/marking/token with internal-only surfaces. Every owner reference resolves to an existing architecture or public-contract source. PyYAML loaded the complete register successfully, verified the required fields, allowed categories, alternative-record shape, and internal-term surface restrictions; `git diff --check` passed before the implementation commit. The review follow-up rechecked definitions and owner references against the current data model and public schemas; owner confirmation is recorded in the PR conversation. It replaces the five self-replacing internal alternatives with distinct expansions and documents the replacement invariants. The source-scanning test added during review was removed to keep this documentation-only story within scope. The latest terminology correction keeps one exact `FactoryResponseEvent` record and documents `Parent-Child` as child-set membership for parent-aware fan-in. `make typecheck` passed after dependencies were restored. No UI or runtime files changed in this story."
+      "passes": false,
+      "notes": ""
     },
     {
-      "id": "prose-standard-and-terms-003",
-      "title": "Reviewers can discover and apply the complete prose review contract",
-      "description": "As a reviewer, I want the writing standard, terminology register, and manual checklist connected through the standards index so I can evaluate prose consistently and direct authors to one authoritative source.",
+      "id": "dashboard-fixture-and-quick-wins-003",
+      "title": "Keep Submit Work full-width and session-scoped",
+      "description": "As an operator working across Factory Sessions, I want my draft and submission result to stay with the exact destination and use the available card width so I cannot accidentally submit to or annotate another session.",
       "acceptanceCriteria": [
-        "docs/internal/standards/STANDARDS.md lists the customer technical-writing standard as the normative entry point and identifies when authors and reviewers must use it.",
-        "The standard links to the terminology register, architecture data model, and official ASD-STE100 references used by the governing plan; the terminology register's ownership references identify the intended repository sources.",
-        "The manual checklist requires reviewers to confirm approved vocabulary and meaning, one subject or instruction per sentence, justified passive voice, logical single-topic paragraphs, preserved technical and contract meaning, examples matching shipped CLI and public schemas, and precise warnings, destructive instructions, and failure recovery.",
-        "The checklist makes clear which findings can be automated and which require language or subject-matter judgment, and it does not describe the future checker as already implemented.",
-        "The standard, examples, checklist, and index render as readable Markdown, and following their repository links reaches the intended standard, register, data-model, or external reference.",
-        "No code, prosecheck implementation, prose baseline, CI enforcement, generated artifact, CLI manifest change, or customer-corpus rewrite is included in this story.",
-        "Typecheck passes"
+        "Draft values, validation, pending state, and completion feedback are keyed to the exact canonical Factory Session selected when the operation is composed or submitted; switching from fixture session A to B never copies A's draft into B or submits A's content to B.",
+        "A late success or failure from session A cannot replace, annotate, or announce session B's composer state, and returning to A shows only the state intentionally retained for A.",
+        "Every submit path exposes the visible canonical destination before confirmation and renders exactly one localized, programmatically associated loading, success, or error state for its owning session.",
+        "The submission status/receipt region uses the full available widget width, wraps long localized content, and introduces no horizontal page overflow at the Story 0 mobile and desktop viewports.",
+        "Controls, labels, validation messages, and focus behavior remain semantic and keyboard operable during validation, submission, session switching, success, and retryable failure.",
+        "Focused component and integration regressions use the Story 0 two-session delayed-completion scenario.",
+        "Typecheck passes",
+        "Tests pass",
+        "Verify the A-to-B draft and late-completion journey directly in a real browser at mobile and desktop widths"
       ],
       "priority": 3,
-      "passes": true,
-      "notes": "Connected the normative writing standard, versioned terminology register, and embedded manual review checklist from docs/internal/standards/STANDARDS.md. The standard now links directly to the register, architecture data model, the FactoryEventType contract, and official ASD-STE100 references; the checklist explicitly covers vocabulary and meaning, one subject or instruction per sentence, justified passive voice, single-topic paragraphs, technical and contract meaning, shipped CLI/public-schema examples, warnings, destructive instructions, failure recovery, exceptions, and the deterministic-versus-human review boundary. No checker, baseline, CI enforcement, generated artifact, CLI manifest change, or customer-corpus rewrite was added. The branch was synchronized with current main, ownership-inventory-check passed, and make typecheck passed after dependencies were restored."
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "dashboard-fixture-and-quick-wins-004",
+      "title": "Reconcile Factory Session lists to canonical identity",
+      "description": "As an operator, I want refreshed Factory Session tabs to represent the backend's current canonical sessions exactly once so aliases and stale responses cannot create phantom or obsolete choices.",
+      "acceptanceCriteria": [
+        "When live and durable listing inputs refer to the same canonical session, the Factory Sessions listing boundary returns one canonical row with the resolved session ID; ~default is accepted only as a selector and is not returned or rendered as an additional durable session identity.",
+        "After a successful fixture refresh, the latest authoritative session list replaces stale membership: removed sessions disappear, newly available sessions appear once, and the selected alias or obsolete row remaps to its resolved canonical session or an explicit no-session state.",
+        "A slower response for an older list request cannot overwrite a newer successful reconciliation or recreate a removed or phantom tab.",
+        "Initial loading, no-session, retained-data refresh, refresh failure, and successful reconciliation have explicit UI treatment; a failure does not silently present retained rows as freshly confirmed and exposes a keyboard-operable retry.",
+        "Tabs use truthful navigation or tab/panel semantics, stable unique accessible names, visible focus, keyboard ordering, and responsive overflow without pointing controls at an empty panel.",
+        "Focused Go transport tests and UI component/integration tests use the Story 0 alias-plus-UUID and out-of-order refresh scenarios and prove that no ~default phantom session is reproducible.",
+        "Typecheck passes",
+        "Tests pass",
+        "Verify canonical tab rendering, stale-row removal, retry, and keyboard navigation directly in a real browser at mobile and desktop widths"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "dashboard-fixture-and-quick-wins-005",
+      "title": "Separate Open Factory and New Factory journeys",
+      "description": "As an operator, I want distinct Open and New Factory actions so I know whether I am selecting an existing Factory or creating a new target before anything starts.",
+      "acceptanceCriteria": [
+        "Open Factory and New Factory are separately named, discoverable actions with distinct dialogs or modes; Open selects an existing target, while New collects and previews the exact normalized target that will be created.",
+        "Validation and preview are non-mutating and never report that a Factory was opened, created, or started; only explicit final confirmation invokes the matching operation once.",
+        "Cancel, dialog dismissal, validation failure, missing or broken Open target, and create failure leave session membership unchanged, restore focus to the invoking control, and show no false success state.",
+        "Each journey exposes explicit loading, empty, error, and success treatment where applicable, with localized copy, semantic labels and errors, visible focus, complete keyboard operation, and non-color-only status.",
+        "Successful Open or New completion invalidates and reconciles the canonical session list from Story 004, selects the resulting canonical session once, and does not add a ~default tab.",
+        "Dialogs and action controls remain usable without page overflow at the Story 0 mobile and desktop viewports.",
+        "Focused component and integration regressions use the Story 0 Open/New outcomes and canonical session-list reconciliation.",
+        "Typecheck passes",
+        "Tests pass",
+        "Verify Open, New preview and confirmation, cancel and focus restoration, and a failure path directly in a real browser at mobile and desktop widths"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
     }
   ]
 }
