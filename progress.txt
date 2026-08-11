@@ -8010,3 +8010,17 @@
   - Documentation-only acceptance criteria can justify parser review evidence, but a test that only reads and validates source-file shape is a prohibited meta test unless a real enforcement consumer makes that behavior user-visible.
   - Resolve a moving-base conflict before final review handoff, then rerun validation on the replacement head rather than relying on checks from the old base.
 ---
+
+## 2026-08-10 23:16 -07:00 - prose-standard-and-terms final CI follow-up
+- What was implemented
+  - Recorded the replacement-head CI result after the out-of-scope terminology meta-test removal and current-main synchronization.
+  - Isolated the first Backend Unit Coverage failure to a 0.2742 percentage-point fluctuation in `pkg/services/chat_sessions/internal/responsebridge`; the exact current-main commit `ecd1d2487` passed its own Backend Unit Coverage job.
+  - Reran only the failed Backend Unit Coverage job `93693324933`, which passed in 5m08s, and the dependent Verification Policy job `93694199719`, which passed.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Replacement CI run `31463651328` has all required lanes terminal and successful after the targeted rerun, including Backend Unit Coverage, Backend Functional Coverage, Verification Policy, and every docs, frontend, API/package, packaged-factory, model-provider, UI-integration, and local-inference lane.
+  - The branch head remains `4a8bd201d`, the base is `ecd1d2487`, and the PR body matches `prd.json` byte-for-byte.
+- **Learnings for future iterations:**
+  - When a hosted coverage ratchet misses its package minimum by a small amount, compare the exact base commit, inspect the named package, and rerun only the failed coverage and dependent policy jobs before changing baselines or product code.
+---
