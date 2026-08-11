@@ -11620,3 +11620,18 @@
 - **Learnings for future iterations:**
   - Treat a published head, its hosted run, thread-aware review state, mergeability, and PR-body parity as one handoff tuple; refresh all of them whenever metadata advances the branch.
 ---
+## [2026-08-11 12:41:49 -07:00] - thr-deflake-cli-process-package final current-head handoff
+- What was implemented
+  - Rechecked the existing PR #1884 instead of opening a duplicate; all three PRD stories remain marked `passes:true`, and no story source changes were needed.
+  - Advanced `prd.json`'s live handoff audit from the superseded metadata head to the actual current branch head `4d22c1aed` and its terminal hosted run.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Local, remote, and PR heads match `4d22c1aed43794078774b8a410a3df618a77e0e1`; the base remains `origin/main` `05db67124f6abc32b149f326533f126db2d78aa4`.
+  - Hosted CI run `31527825278` is terminal-success across all 18 required checks, including Backend Functional Coverage, Backend Unit Coverage, and Verification Policy.
+  - The UTF-8 thread-aware audit found 7 top-level conversation comments, 0 submitted reviews, 0 inline review threads, and 0 unresolved threads; the blocking comments target superseded heads.
+  - PR #1884 is open, non-draft, and `MERGEABLE` / `CLEAN`; the PR body matched `prd.json` before this metadata commit.
+- **Learnings for future iterations:**
+  - After a metadata-only head advance, push first, update the PR body from the committed `prd.json`, and rerun the head/check/thread/mergeability/body parity tuple before final handoff.
+---
