@@ -9774,3 +9774,26 @@
   - The published CLI copy is refreshed by `make contracts-generate` after the authored contract changes; `make cli-manifest-generate` refreshes the family/runtime projections and the smoke check catches published drift.
   - When broad Go verification is run concurrently across worktrees on Windows, isolate the exact timed-out process tree before retrying a gate so other task verification remains undisturbed.
 ---
+## [2026-08-11 03:12:06 -07:00] - dwro-s7-placement-grammar-004
+- What was implemented
+  - Merged current `origin/main` at `dd87fd04d` while preserving the active S7 PRD and the append-only progress history.
+  - Refreshed the CLI help and command-identity baselines through the repository-supported baseline writers.
+  - Updated server-backed lifecycle fixtures to opt into explicit `--remote`, and converted the selected-server run fixture from the retired compatibility invocation route to the canonical durable async start plus result projection.
+- Files changed
+  - `contracts/testdata/baseline/cli-commands.json`
+  - `pkg/transports/cli/baseline/testdata/run_help.txt`
+  - `tests/functional/transport/cli/commands/session_wiring_test.go`
+  - `tests/functional/transport/cli/parameters/positional_values_test.go`
+  - `tests/functional/transport/run_scoped_server/run_scoped_server_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/factory_sessions/... -count=1 -timeout 600s` — passed.
+  - `go test ./pkg/transports/cli/baseline ./pkg/transports/cli/commandidentity ./pkg/transports/cli/cliinputs -count=1 -timeout 600s` — passed.
+  - Explicit-remote lifecycle parameter coverage passed; the focused session-control test passed three consecutive runs; the selected-server durable-run test passed.
+  - The combined CLI functional package lane encountered unrelated shared packaged-factory/API-server startup contention; the S7 control test is stable when isolated and the failures occurred before those other test bodies began.
+- **Learnings for future iterations:**
+  - Placement-aware lifecycle tests that intentionally exercise an HTTP server must include root `--remote`; `--server` alone now leaves the command on the injected local adapter.
+  - Remote run fixtures must enter through `POST /factory-sessions/async` and poll the returned durable session result; compatibility `POST /factory-sessions/~default/invocations` is intentionally rejected for remote placement.
+  - On this Windows host, broad functional tests can contend on packaged-factory staging ownership and time out before API readiness; characterize the named S7 test in isolation before changing runtime behavior.
+---
