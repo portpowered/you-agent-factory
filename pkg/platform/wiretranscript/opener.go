@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"time"
 
+	platformrollingfile "github.com/portpowered/infinite-you/pkg/platform/rollingfile"
 	platformartifact "github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
-	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 const (
@@ -128,7 +128,7 @@ func (opener *Opener) Open(request OpeningRequest) (*Sink, error) {
 	}
 
 	config := normalizeConfig(request.Config)
-	rolling := &lumberjack.Logger{
+	rolling := &platformrollingfile.Writer{
 		Filename:   path,
 		MaxSize:    config.MaxSizeMB,
 		MaxBackups: config.MaxBackups,
