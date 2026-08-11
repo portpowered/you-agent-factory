@@ -6,6 +6,7 @@ return (async function () {
     first = await agent.run({
       prompt: "step-one",
       label: "step-one",
+      modelProvider: "CODEX",
     });
     workflow.checkpoint({
       label: "after-step-one",
@@ -15,6 +16,7 @@ return (async function () {
   const second = await agent.run({
     prompt: "step-two",
     label: "step-two",
+    modelProvider: "CODEX",
   });
   return {
     label: meta.name,
