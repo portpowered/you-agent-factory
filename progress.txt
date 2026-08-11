@@ -10741,3 +10741,19 @@
   - Batch `Process.Execute` can return nil for a terminal Work failure; use the root-built functional observer and public dispatch response when the contract is emitted as runtime state rather than a process error.
   - `Edges.Merge` must clone both default and replacement slices when a construction seam contains nested capability facts; cloning only defaults leaves replacement mutations visible in the merged graph.
 ---
+## [2026-08-11 05:43:10 -07:00] - js-skip-permissions-parity-004 final rebased-head verification
+- What was implemented
+  - Rebased the replacement branch onto live `origin/main` `3521f0b0a2f313b22e2c79edcf90339a01b3bce7`, regenerated the content-addressed contract manifest from the merged OpenAPI artifact, and preserved the append-only progress history.
+  - No further product changes were needed; the real registered incapable Codex route and zero-command-edge assertion remain the review follow-up implementation.
+- Files changed
+  - `packages/api/generated/manifest.json`
+  - `progress.txt`
+- Verification
+  - Focused providers/catalog/edges/root functional suite — passed.
+  - `make test` on the exact rebased head — passed.
+  - `make typecheck`, `make contracts-check`, `make provider-catalog-check`, `make backend-size`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, and `make vet` — passed.
+  - `make lint` passed all task-relevant checks, but reported three unrelated current-main baseline violations in `pkg-boundary`, `packaged-factory-consumption-check`, and `deadcode`; none are in this branch's diff.
+  - `origin/main` is an ancestor of `HEAD`; no conflict markers or whitespace errors remain.
+- **Learnings for future iterations:**
+  - After a moving-base rebase, regenerate content-addressed manifests from the merged artifact instead of selecting one side's hash; distinguish current-main baseline debt from violations introduced by the task diff before changing unrelated ownership or dead-code policy.
+---
