@@ -9769,6 +9769,32 @@
 - **Learnings for future iterations:**
   - The published CLI copy is refreshed by `make contracts-generate` after the authored contract changes; `make cli-manifest-generate` refreshes the family/runtime projections and the smoke check catches published drift.
   - When broad Go verification is run concurrently across worktrees on Windows, isolate the exact timed-out process tree before retrying a gate so other task verification remains undisturbed.
+## [2026-08-10 21:19 -07:00] - js-skip-permissions-parity-002 verification follow-up
+- What was implemented
+  - No additional production behavior; completed the broader verification pass for the child-scoped precedence story.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/factory_runtime/... ./pkg/services/factory_sessions/internal/execution/... -count=1` — passed.
+  - `make typecheck` — passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` — passed.
+  - `git diff --check` and `prd.json` parsing — passed; stories 001 and 002 are marked `passes:true`, while 003 and 004 remain pending.
+- **Learnings for future iterations:**
+  - The story-specific policy change stays within the existing package/file/maintainability gates, so later capability and recording stories should preserve the same focused package ownership.
+---
+
+## [2026-08-10 21:19 -07:00] - js-skip-permissions-parity-002 verification follow-up
+- What was implemented
+  - No additional production behavior; completed the broader verification pass for the child-scoped precedence story.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/factory_runtime/... ./pkg/services/factory_sessions/internal/execution/... -count=1` — passed.
+  - `make typecheck` — passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` — passed.
+  - `git diff --check` and `prd.json` parsing — passed; stories 001 and 002 are marked `passes:true`, while 003 and 004 remain pending.
+- **Learnings for future iterations:**
+  - The story-specific policy change stays within the existing package/file/maintainability gates, so later capability and recording stories should preserve the same focused package ownership.
 ---
 ## [2026-08-11 02:07:36 -07:00] - thr-split-acp-stdio-tests current-main synchronization follow-up
 ## [2026-08-11 02:07:05 -07:00] - prose-standard-and-terms-003 current-main synchronization follow-up
