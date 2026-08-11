@@ -1,5 +1,6 @@
 ## Codebase Patterns
 - For final PR handoff, compare the PR body byte-for-byte with `prd.json` and use the thread-aware GraphQL review audit because flat PR comments do not expose inline-thread resolution state.
+- Native Bun UI unit owners use the `.bun.unit.test.ts` suffix and `bun:test`; the shared `bunVi` adapter is the compatibility seam for global stubs/spies while the lane contract excludes those owners from Vitest.
 - OS-boundary functional tests may poll an isolated durable filesystem checkpoint only when the child exposes no parent-process event or injected edge; document that reason at each polling helper and keep the bound as a failure guard.
 - Git Worktree preparation treats a retained Git `*.lock` as indeterminate ownership: retry within a named bound, preserve the resource, and return its exact path with verify/remove/retry guidance.
 - Git's `.git/config.lock` has no trustworthy owner or PID evidence; after a bounded retry, report the exact lock with `owner_liveness=indeterminate` and require verification before removing only that file—never auto-delete it.
@@ -3994,4 +3995,21 @@
   - `git diff --cached --check` passed before the merge commit.
 - **Learnings for future iterations:**
   - A clean merge against a stale remote-tracking base is not sufficient; compare the live hosting ref, fetch it, and resolve shared PRD/progress files again before pushing the replacement head.
+---
+
+## 2026-08-10 19:28 -07:00 - bun-compat-batch-migration-001
+- What was implemented
+  - Completed the API-01 cohort handoff using the five existing native Bun owners on current `main`: bundled-file preservation, layout preservation, lifecycle controls, generated session-factory OpenAPI types, and import discovery.
+  - Confirmed the retired Vitest `.test.ts` paths are absent and no product behavior, generated artifact, coverage membership, or browser-test ownership changed.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `bun test src/api/factory-definition/preserve-bundled-files.bun.unit.test.ts src/api/factory-definition/preserve-layout.bun.unit.test.ts src/api/factory-sessions/lifecycle-controls.bun.unit.test.ts src/api/generated/openapi.session-factory.bun.unit.test.ts src/api/session-factory/import-activation.discover.bun.unit.test.ts` — 5 files / 17 tests passed, 35 expect calls.
+  - Dashboard-unit Vitest selection of all five migrated paths and all five retired paths — `No test files found` in each selection, confirming zero Vitest execution.
+  - `bun run check:test-lanes` — passed.
+  - `bun run typecheck` — passed.
+- **Learnings for future iterations:**
+  - A cohort already merged to current `main` still needs direct focused Bun execution, retired-path absence, Vitest exclusion, lane-contract, and typecheck evidence before its batch PRD story can be marked complete.
+  - A fresh worktree may contain only Bun’s temporary UI install directory; `bun install --frozen-lockfile` restores the pinned Vitest and TypeScript tools without tracked dependency changes.
 ---

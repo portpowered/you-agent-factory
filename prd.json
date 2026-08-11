@@ -1,95 +1,159 @@
 {
-  "project": "DWRO S1 — Explicit Remote Placement and Listener Selection",
-  "branchName": "dwro-s1-remote-placement-flags",
-  "description": "Implement story S1 of Direct Worker and Remote Operations by adding persistent root --remote and authored command placement capabilities, dispatching one normalized request through either the local service or exactly the selected --server endpoint without fallback, introducing --listen for local binds with a warned legacy compatibility path, and rejecting documented conflicts with run --with-server and run --with-site.",
+  "project": "Migrate the 33 Global-Stub/Spy UI Tests to Bun and Reprofile",
+  "branchName": "bun-compat-batch-migration",
+  "description": "Migrate the 33 frozen global-stub/spy-only UI test files from Vitest compatibility execution to the existing native Bun sublane, preserve all 176 source-level named cases and 183 executable cases exactly, eliminate Vitest fallback for those files, and report matched before/after lane wall times without changing product behavior or test taxonomy.",
   "context": {
-    "customerAsk": "Implement DWRO story S1: persistent root --remote, authored command placement capabilities, endpoint-only --server, new --listen for local listener binds, no silent local fallback, and documented conflicts with run --with-server and run --with-site.",
-    "problem": "The CLI has no explicit execution-placement input and its authored manifest cannot state whether a command is local-only, remote-only, or dual-placement. The global --server flag also selects both HTTP client endpoints and local listener binds, so customers and scripts cannot unambiguously distinguish calling an existing server from hosting one, and unsupported remote requests lack one centralized no-fallback rule.",
-    "solution": "Add persistent root --remote, a resolved local/remote placement value, and per-command placement capabilities to the authored CLI contract. Normalize command inputs once and select exactly one injected local-service or HTTP-client adapter, rejecting unsupported or failed remote placement without fallback. Make --server the remote endpoint selector, add --listen to listener-owning commands, preserve explicit legacy --server binding with a deprecation warning when --listen is absent, give --listen precedence, and enforce documented usage conflicts before side effects."
+    "customerAsk": "Migrate the 33 global-stub/spy-only Vitest files listed by the UI latency handoff through the existing ui/src/testing/bun compatibility seam, preserve every describe/it contract and exact cohort case count, and report matched before/after lane wall times in the PR.",
+    "problem": "The UI unit lanes still pay roughly 35 seconds of Vitest compatibility-process overhead for 33 tests whose global stub, spy, and restore requirements are already supported by the shared Bun seam, slowing correctness feedback and retaining unnecessary dual-runner ownership.",
+    "solution": "Move the eight frozen cohorts incrementally to exclusive Bun execution beside their existing owners, prove exact behavioral and executable-count parity after every cohort, confirm zero Vitest selection, then run lane and frontend gates and publish reproducible focused and aggregate before/after timing evidence."
   },
   "acceptanceCriteria": [
-    "The authored CLI manifest defines persistent root --remote, a resolved local/remote placement value, and local-only, remote-only, or dual-placement capabilities for affected commands; executable help and parsing match that contract.",
-    "A representative dual-placement operation produces the same normalized request locally without --remote and sends that request to exactly the --server <uri> HTTP endpoint with --remote, with equivalent domain intent across adapters.",
-    "Unsupported remote placement, an invalid or unavailable selected server, and remote transport failure return stable actionable errors and never invoke the local product operation, start a listener, or silently select another endpoint.",
-    "you server --listen, you run --with-server --listen, and you run --with-site --listen bind the requested local address; when --listen is absent, legacy listener use of an explicitly supplied --server remains functional for the compatibility window and warns, while explicit --listen takes precedence.",
-    "--remote with run --with-server or run --with-site is rejected as a documented stable usage conflict before listener, browser, Factory, or remote-operation side effects begin; reference docs and examples use the new placement vocabulary.",
-    "Quality gates pass with direct CLI and manifest, package, functional, help and reference, and compatibility evidence as applicable; Typecheck passes, Tests pass, and there are no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
-    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared or generated-file churn are resolved against current main, and the PR is actually merged."
+    "All eight frozen cohorts run under Bun with exact executable totals: API 01 5 files / 17 cases, API 02 3 / 20, dashboard components 01 4 / 11, current-factory-definition 01 7 / 46, current-factory-definition 02 5 / 41, current-selection 04 1 / 5, current-selection 06 4 / 9, and current-selection 08 4 / 34.",
+    "The migration preserves all 176 source-level named cases and 183 executable cases after parameter expansion without deleting, weakening, duplicating, or replacing behavioral assertions merely to satisfy Bun.",
+    "Every migrated test executes exactly once in the Bun sublane and zero times in Vitest; no renamed original, compatibility fallback, or duplicate runner membership remains for the 33 files.",
+    "Production UI behavior, public contracts, generated API artifacts, coverage membership, and browser-test ownership remain unchanged; unavoidable semantic edits are isolated, justified, and directly tested.",
+    "Matched before/after wall times and the aggregate affected lane delta are recorded in the PR with commands, host/runtime context, pass counts, and scoped conclusions, and the existing UI lane check script and CI frontend jobs pass.",
+    "Typecheck, focused cohort tests, standard UI unit/component gates, and relevant frontend verification pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
+    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts are resolved, shared or move-only files are reconciled against current main, and the PR is actually merged."
   ],
   "userStories": [
     {
-      "id": "dwro-s1-remote-placement-flags-001",
-      "title": "Declare explicit placement in the authored CLI contract",
-      "description": "As a CLI user and command implementer, I want root placement and each command's supported placements to be explicit so help, validation, and dispatch share one authoritative contract.",
+      "id": "bun-compat-batch-migration-001",
+      "title": "Migrate API preservation and lifecycle contracts",
+      "description": "As a UI maintainer, I want the API 01 cohort to execute under Bun so factory preservation, session lifecycle, typed contract, and import-discovery behavior remains protected without Vitest worker overhead.",
       "acceptanceCriteria": [
-        "The authored CLI manifest exposes a visible persistent root --remote boolean whose documented meaning is to execute a supported operation through a running You server; it does not imply async, follow, continuous, or listener behavior.",
-        "The executable parser resolves the root input to explicit local placement by default and remote placement when --remote appears before or after the command path, consistent with other persistent flags.",
-        "A command can authoritatively declare local-only, remote-only, or dual-placement capability, and manifest validation rejects a runnable command whose placement declaration is missing or invalid where the placement contract applies.",
-        "Existing HTTP-only commands retain their historical remote-default compatibility for this window, accept explicit --remote, and do not gain a local implementation merely to satisfy the new vocabulary.",
-        "Root and representative command help show the placement meaning and supported usage without describing --remote as a waiting or server-start option.",
-        "Focused contract and parser tests prove manifest validation, persistent flag inheritance, before and after command parsing, default placement, and explicit remote placement through observable CLI inputs and help.",
-        "Typecheck passes",
-        "Tests pass"
+        "The five API 01 tests execute under Bun with exactly 17 passing cases matching bun-unit-api-01-baseline.md.",
+        "Bundled-file and layout preservation, lifecycle controls, generated session-factory types, and import discovery retain their baseline success, empty, conflict, and error behaviors.",
+        "The five migrated contracts execute zero times under Vitest and have no fallback copies.",
+        "Tests pass",
+        "Typecheck passes"
       ],
       "priority": 1,
       "passes": true,
+      "notes": "Verified against the frozen API-01 baseline on current main: the five leased contracts are the exclusive *.bun.unit.test.ts owners (17 named/executable cases), with the retired Vitest paths absent. Focused `bun test` passed 17/17 with 35 expect calls; dashboard-unit Vitest selection of both migrated and retired paths returned `No test files found`; `bun run check:test-lanes` and `bun run typecheck` passed. No product behavior, generated API artifact, or browser ownership changed."
+    },
+    {
+      "id": "bun-compat-batch-migration-002",
+      "title": "Migrate API routing and prompt-template contracts",
+      "description": "As a UI maintainer, I want the API 02 cohort to execute under Bun so session routing, session scope, and prompt-template request/error behavior remains protected with lower startup cost.",
+      "acceptanceCriteria": [
+        "The three API 02 tests execute under Bun with exactly 20 passing cases matching bun-unit-api-02-baseline.md.",
+        "Default and selected session routing, pause-state scoping, typed prompt-template requests, and network/response error outcomes retain their baseline behavior.",
+        "The three migrated contracts execute zero times under Vitest and have no fallback copies.",
+        "Tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": false,
       "notes": ""
     },
     {
-      "id": "dwro-s1-remote-placement-flags-002",
-      "title": "Dispatch normalized operations without placement fallback",
-      "description": "As a customer, I want the same operation to run locally by default or on exactly my selected server with --remote so placement is predictable and cannot silently change during failure.",
+      "id": "bun-compat-batch-migration-003",
+      "title": "Migrate dashboard fixture and typography contracts",
+      "description": "As a UI maintainer, I want the dashboard components 01 cohort to execute under Bun so fixture composition and shared typography contracts stay protected without Vitest compatibility workers.",
       "acceptanceCriteria": [
-        "At least one representative supported dual-placement command normalizes customer inputs once before dispatch, calls its already-injected local service adapter without --remote, and calls its HTTP client adapter with --remote.",
-        "Behavioral parity coverage proves the local and remote adapters receive contract-equivalent normalized request values for the same customer input, allowing only transport metadata differences.",
-        "you --remote --server <uri> <dual-placement-command> sends the operation to exactly <uri> and does not invoke the local product operation, start or probe a local listener, or substitute the default endpoint.",
-        "A local-only command invoked with --remote exits with a stable actionable usage error that identifies the unsupported placement before command side effects occur.",
-        "Invalid endpoint configuration, connection refusal, timeout, and other remote transport failures remain remote failures and do not retry through the local adapter; diagnostics identify the selected endpoint without leaking credentials or sensitive request content.",
-        "Placement selection remains a CLI transport concern: domain services receive normalized operation requests and do not inspect CLI placement flags or discover alternate dependencies.",
-        "Focused package and public CLI behavioral tests cover local dispatch, exact remote dispatch, unsupported placement, and failed remote transport with zero local fallback.",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 2,
-      "passes": true,
-      "notes": "Implemented dual-placement `you run` dispatch through one normalized invocation request and an injected local or exact-URI HTTP adapter, with stable unsupported-placement and no-fallback remote errors. Refreshed authored and published CLI contract artifacts and added focused package/public CLI behavioral coverage. Verified with `make contracts-validate`, `make cli-manifest-check`, `go test ./pkg/transports/cli/run ./pkg/transports/cli ./pkg/wire ./pkg/services/workers/internal/interface -count=1`, and `make test`. Review follow-up makes invalid remote endpoint labels fail closed for parse-success/base-invalid opaque and unsupported-scheme inputs, with credential-redaction regression coverage."
-    },
-    {
-      "id": "dwro-s1-remote-placement-flags-003",
-      "title": "Bind local servers with --listen and preserve legacy scripts",
-      "description": "As an operator, I want local listener addresses selected with --listen so --server can mean a remote endpoint while my existing listener scripts have a safe migration window.",
-      "acceptanceCriteria": [
-        "you server --listen <address>, you run --with-server --listen <address>, and you run --with-site --listen <address> bind the requested valid local address and report existing stable bind failures for invalid, non-local, or unavailable addresses.",
-        "Listener-owning commands use the existing default local bind when neither an explicit --listen nor an explicit legacy bind value is supplied.",
-        "During the compatibility window, an explicitly supplied legacy --server <local-uri> continues to select the listener bind only when --listen is absent and emits one actionable deprecation warning on stderr directing the user to --listen.",
-        "When both inputs are supplied to a listener-owning command, explicit --listen determines the bind address; --server does not override it, and compatibility diagnostics accurately explain any retained endpoint role.",
-        "Ordinary local commands and ordinary you run do not start a listener merely because --listen or the default server endpoint exists; invalid flag placement is rejected before runtime side effects.",
-        "CLI manifest relationships, help, and examples describe --listen as the local bind input and --server as the selected You server URI, including the legacy migration behavior.",
-        "Focused listener lifecycle tests use observable readiness and bind behavior and prove requested binding, precedence, warning, bind failure, and joined shutdown without arbitrary sleeps.",
-        "Typecheck passes",
-        "Tests pass"
+        "The four dashboard component tests execute under Bun with exactly 11 passing cases matching bun-unit-components-01-baseline.md.",
+        "Fixture exports, immutable overlay composition, session outcome snapshots, multimodal work projection, canonical topology wiring, and typography-role mappings retain their baseline behavior.",
+        "The four migrated contracts execute zero times under Vitest and have no fallback copies.",
+        "Tests pass",
+        "Typecheck passes"
       ],
       "priority": 3,
-      "passes": true,
-      "notes": "Implemented exact local listener selection through --listen for you server and server-enabled you run/you run --with-site flows, with loopback-only validation, explicit precedence over --server, one-time legacy local --server warnings, and preserved automatic legacy allocation. Ordinary runs reject misplaced --listen before the run handler, and listener lifecycle coverage proves exact readiness, unavailable-port errors, and shutdown. Refreshed authored/generated CLI contracts, command/help baselines, and reference guidance. Verified with make contracts-validate, make cli-manifest-check, make docs-reference-smoke, make test, go test ./pkg/transports/cli/... -count=1, focused CLI tests, full run-scoped-server functional tests, backend-size, pkg-maint, pkg-file-count, vet, and git diff --check; aggregate make lint is blocked by the pre-existing missing UI knip binary, and the backend-only continuation reaches existing package-boundary baseline violations; neither reports new violations."
+      "passes": false,
+      "notes": ""
     },
     {
-      "id": "dwro-s1-remote-placement-flags-004",
-      "title": "Reject remote and local-hosting conflicts and publish migration guidance",
-      "description": "As a customer, I want contradictory placement modes rejected with clear guidance so the CLI never both calls a remote server and hosts the same run locally.",
+      "id": "bun-compat-batch-migration-004",
+      "title": "Migrate current-factory definition validation contracts",
+      "description": "As a UI maintainer, I want the first current-factory-definition cohort to execute under Bun so runner selection, taxonomy, document editing, guards, durations, and cron validation retain exact behavior with lower runner overhead.",
       "acceptanceCriteria": [
-        "you --remote run --with-server and you --remote run --with-site each exit with the same stable usage classification and actionable conflict message, regardless of persistent-flag position.",
-        "Conflict validation occurs before Factory execution, HTTP dispatch, listener startup, browser launch, recording, or other run-owned side effects.",
-        "Authored CLI relationships, executable help, and packaged reference docs state that --remote selects a running server, --server selects its URI, and --listen selects a local bind; they document both run-mode conflicts and the legacy bind migration.",
-        "New customer-facing examples use you --remote --server <uri> for supported remote operations and --listen <address> for local server or server-enabled run binding; they do not present legacy --server listener syntax as the preferred form.",
-        "Behavioral CLI tests prove both conflicts, stable exit and error output, zero side effects, and help and reference guidance rather than relying on source or route inventories.",
-        "Documentation reference smoke checks pass",
-        "Typecheck passes",
-        "Tests pass"
+        "The seven tests execute under Bun with exactly 46 passing executable cases matching bun-unit-features-current-factory-definition-01-baseline.md.",
+        "All 39 source-level named cases remain, and cron descriptor parameterization still expands to all seven descriptor cases for the 46-case executable total.",
+        "Runner/default selection, legacy taxonomy compatibility, document edits, guard projection, Go-duration parsing, and cron success/failure behavior retain their baseline outcomes.",
+        "The seven migrated contracts execute zero times under Vitest and have no fallback copies.",
+        "Tests pass",
+        "Typecheck passes"
       ],
       "priority": 4,
-      "passes": true,
-      "notes": "Implemented stable REMOTE_LOCAL_HOSTING_CONFLICT validation before system initialization and again after custom run parsing, covering --remote before or after run with both --with-server and --with-site; behavioral tests prove no local, remote, browser, listener, or Factory side effects. Added authored conflict relationships, structured BAD_REQUEST output, executable help/examples, legacy --server migration guidance, and packaged reference documentation; regenerated published contracts and CLI baselines. Addressed review feedback by removing duplicate placement keys from authored/generated manifests, making manifest loading reject duplicate JSON object keys, redacting malformed credential-bearing endpoint diagnostics, keeping maintainability and package-file-count ratchets green, using worker-free listener functional cases, and removing marker-only docs assertions. Moved the generic strict decoder into the policy-free generated-artifact platform package and added loader/decoder coverage so the CLI manifest unit and functional floors remain intact. Verified with focused CLI tests, the full short Go suite, make verify-fast, make cli-manifest-check, make contracts-validate, make docs-reference-smoke, make pkg-maint, make pkg-file-count, backend-size, pkg-structure, vet, full run-scoped-server functional tests, and git diff --check."
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "bun-compat-batch-migration-005",
+      "title": "Migrate workstation definition contracts",
+      "description": "As a UI maintainer, I want the second current-factory-definition cohort to execute under Bun so workstation route, assignment, editable projection, model-invoke, and type-conversion rules retain their exact behavior.",
+      "acceptanceCriteria": [
+        "The five tests execute under Bun with exactly 41 passing cases matching bun-unit-features-current-factory-definition-02-baseline.md.",
+        "Progress/failure routing, worker assignment, editable resolution, model-invoke binding validation, and workstation type conversion retain their baseline positive and negative outcomes.",
+        "The five migrated contracts execute zero times under Vitest and have no fallback copies.",
+        "Tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "bun-compat-batch-migration-006",
+      "title": "Migrate current-selection request projection contracts",
+      "description": "As a UI maintainer, I want the current-selection 04 cohort to execute under Bun so request ordering, filtering, selection, and projection behavior remains protected without Vitest overhead.",
+      "acceptanceCriteria": [
+        "The request-helper test executes under Bun with exactly five passing cases matching bun-unit-features-current-selection-04-baseline.md.",
+        "Explicit-map and runtime-snapshot projection, provider-session filtering, request ordering, dispatch-attempt merging, and work-item ownership retain their baseline behavior.",
+        "The migrated contract executes zero times under Vitest and has no fallback copy.",
+        "Tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "bun-compat-batch-migration-007",
+      "title": "Migrate selected-work relationship contracts",
+      "description": "As a UI maintainer, I want the current-selection 06 cohort to execute under Bun so selected-work graph and relation projections retain complete, empty, error, and repeated-edge behavior.",
+      "acceptanceCriteria": [
+        "The four relationship tests execute under Bun with exactly nine passing cases matching bun-unit-features-current-selection-06-baseline.md.",
+        "Connected, empty, error, direct-relation, fallback-relation, and repeated DEPENDS_ON outcomes retain their baseline behavior.",
+        "The four migrated contracts execute zero times under Vitest and have no fallback copies.",
+        "Tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "bun-compat-batch-migration-008",
+      "title": "Migrate workstation-selection contracts",
+      "description": "As a UI maintainer, I want the current-selection 08 cohort to execute under Bun so workstation summary, editing, cron-draft, and overwrite-warning behavior remains protected without Vitest overhead.",
+      "acceptanceCriteria": [
+        "The four workstation-selection tests execute under Bun with exactly 34 passing cases matching bun-unit-features-current-selection-08-baseline.md.",
+        "Summary loading/unavailable/localized outcomes, session-draft mutations and no-ops, cron transitions, and overwrite detection/labels retain their baseline behavior.",
+        "The four migrated contracts execute zero times under Vitest and have no fallback copies.",
+        "Tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "bun-compat-batch-migration-009",
+      "title": "Verify exclusive lane ownership and report latency",
+      "description": "As a contributor waiting on UI feedback, I want the completed batch measured and validated so the speedup is credible and no correctness coverage was lost or duplicated.",
+      "acceptanceCriteria": [
+        "One batch audit reconciles all eight cohort results to 33 Bun files, 176 source-level named cases, and 183 passing executable cases, with zero migrated files selected by Vitest.",
+        "The existing UI lane check script passes and confirms intended unit ownership through the Bun execution sublane; no new inventory-scanning or topology meta-test is added.",
+        "Matched warm before/after measurements use the frozen baseline commands or directly comparable equivalents, and the PR reports focused cohort and aggregate affected-lane wall times, runtime/host context, file/case counts, and measured deltas.",
+        "Standard UI unit/component verification and required frontend CI jobs pass without changing coverage membership or browser ownership.",
+        "No NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
+        "Tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": ""
     }
   ]
 }
