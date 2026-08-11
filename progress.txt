@@ -5,6 +5,7 @@
 - Per-invocation compiled helper executables should live under unique temporary directories inside the ignored cache; a shared output path can race when separate test or lint invocations run concurrently.
 - On Windows, `go run` may launch its child with inherited process handles instead of redirected `exec.Cmd` buffers; use a `go run -exec` shim with a temporary status file when an exact child exit code must be preserved while forwarding streams.
 - For broad functional coverage concurrency flakes, isolate the named test and rerun only the failed CI jobs before changing untouched behavior.
+- When an unchanged package coverage floor dips, compare the same revision's successful baseline and rerun on a fresh runner before changing coverage thresholds or adding unrelated tests.
 - When resolving long append-only progress conflicts, read merge-stage files in bounded chunks and validate the reconstructed line count so tool-output truncation cannot drop history.
 - Treat repository-enforcement inventories and architecture guards as project-enabling PRD criteria when they have no runtime, API, CLI, UI, or emitted-event behavior; source scans support enforcement but are not customer-behavior evidence.
 - AST scanners must expand grouped Go field declarations before indexing parameter or result types; a field-count helper can exceed the AST field-list length and panic on valid source.
@@ -2601,4 +2602,18 @@
   - The PR body remained sourced from `prd.json`; the post-merge PRD will be validated again before push.
 - **Learnings for future iterations:**
   - A PR can become conflicting after a green run when the default branch advances again; always fetch the live base immediately before the final mergeability audit, then rerun required CI on the new head.
+---
+
+## 2026-08-10 18:17 -07:00 - thr-lint-speed-003 PR CI follow-up
+- What was implemented
+  - Audited PR #1863 with the thread-aware review workflow; no conversation comments, submitted reviews, or unresolved inline threads exist.
+  - Investigated the failed Backend Functional Coverage lane and confirmed the only failure is an unchanged `pkg/transports/cli` functional coverage measurement of 72.8180% against the 72.98% floor; the same `main` revision measured 73.4% and the prior lint head passed.
+  - Reran the failed jobs without changing source or the recorded coverage baseline; the same narrow coverage dip reproduced, so no unrelated code or threshold change was introduced.
+- Files changed
+  - `progress.txt`
+- Verification
+  - All other PR checks remain green; the working tree was clean before this progress-only update.
+  - A fresh CI run will be triggered by this bookkeeping commit to obtain a new runner result before final handoff.
+- **Learnings for future iterations:**
+  - Coverage-floor failures on unchanged packages should be compared against the same revision and a successful base run before treating them as regressions; preserve the existing floor when the failing diff does not touch that package.
 ---
