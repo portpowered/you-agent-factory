@@ -769,6 +769,9 @@ func TestRunCommand_FactoryPromptCarriesInvocationText(t *testing.T) {
 	if gotText := *got.InvocationPositionalText; gotText != "Fix the lint issues" {
 		t.Fatalf("invocation positional text = %q, want joined prompt text", gotText)
 	}
+	if got.ProgressOutput == nil {
+		t.Fatal("expected ordinary text invocation to retain the stderr progress channel")
+	}
 }
 
 func TestRunCommand_FactoryStdinPromptCarriesInvocationText(t *testing.T) {
