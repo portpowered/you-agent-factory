@@ -8571,3 +8571,20 @@
   - Recheck the remote base immediately before final PR handoff because `main` can advance after a successful CI run and make the PR dirty again.
   - For generated merge conflicts, keep the latest base artifact and rerun the owning generator/gate; keep task metadata on the active branch so progress remains append-only.
 ---
+## 2026-08-11 05:19 -07:00 - e3-event-webhooks-004 CI follow-up
+- What was implemented
+  - Diagnosed final-head CI run `31489746968`: the latest-main merge left `packages/api/generated/manifest.json` stale against the merged OpenAPI and schema artifacts.
+  - Regenerated the committed API package manifest through the canonical contract generator; no authored API or Webhooks source changed.
+- Files changed
+  - `packages/api/generated/manifest.json`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `make api-smoke` — passed, including OpenAPI generation/drift, HTTP contract tests, and provider parity.
+  - `make api-package-verify` — passed all 49 package checks.
+  - Focused reruns of the CI failures — schema staging, CLI staging contention, Agy golden success, and contract staging — all passed locally.
+  - The latest-main CI failure was isolated to the stale generated manifest and nondeterministic current-main tests; replacement-head CI is pending after this correction.
+- **Learnings for future iterations:**
+  - A merge conflict in one generated package manifest can hide digest drift in other generated artifacts; run the owning generator after merging canonical API sources and before pushing.
+  - Rerun an exact failed test locally after regeneration before changing product code; all four observed runtime failures passed without source changes.
+---
