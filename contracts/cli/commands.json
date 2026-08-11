@@ -5184,6 +5184,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "you.session.resource",
+        "sourceHash": "32a3adc052058290a3f3c59e619727246d3730ee5f936cb323489c96d403a009",
         "visibility": "public"
       },
       "id": "you.session.resource",
@@ -5280,6 +5281,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "you.session.resource.set",
+        "sourceHash": "a8149e84f5e06b44ecd3213acb6cc9c46acc8d8a773b0d36a57c430c51b4a4e5",
         "visibility": "public"
       },
       "errors": {
@@ -5325,6 +5327,7 @@
       "flags": {
         "you.session.resource.set.flag.debug": {
           "aliases": [],
+          "binding": "",
           "changedDefault": false,
           "completion": "none",
           "default": "false",
@@ -5343,6 +5346,7 @@
         },
         "you.session.resource.set.flag.expected-revision": {
           "aliases": [],
+          "binding": "",
           "changedDefault": false,
           "completion": "none",
           "default": "0",
@@ -5361,6 +5365,7 @@
         },
         "you.session.resource.set.flag.json": {
           "aliases": [],
+          "binding": "",
           "changedDefault": false,
           "completion": "none",
           "default": "false",
@@ -5379,6 +5384,7 @@
         },
         "you.session.resource.set.flag.reason": {
           "aliases": [],
+          "binding": "",
           "changedDefault": false,
           "completion": "none",
           "default": "",
@@ -5397,6 +5403,7 @@
         },
         "you.session.resource.set.flag.server": {
           "aliases": [],
+          "binding": "",
           "changedDefault": false,
           "completion": "none",
           "default": "http://localhost:7437",
@@ -5415,6 +5422,7 @@
         },
         "you.session.resource.set.flag.verbose": {
           "aliases": [],
+          "binding": "",
           "changedDefault": false,
           "completion": "none",
           "default": "false",
@@ -5433,6 +5441,7 @@
         },
         "you.session.resource.set.flag.request-id": {
           "aliases": [],
+          "binding": "",
           "changedDefault": false,
           "completion": "none",
           "default": "",
