@@ -8264,3 +8264,23 @@
 - **Learnings for future iterations:**
   - Treat the exact pushed head as the review artifact and synchronize PRD evidence, PR description, CI, current base, and thread state together after the final bookkeeping commit.
 ---
+
+## 2026-08-10 22:54 -07:00 - e3-event-webhooks-004 current-main rebase verification
+- What was implemented
+  - Rebased the webhook branch onto live `origin/main` `ecd1d248731c9108dbbc4dafe2f28c4120043346` after GitHub reported PR #1850 dirty, preserving the webhook PRD and append-only task progress while excluding unrelated main-branch task-log entries.
+  - Replayed the final webhook handoff metadata and kept all four stories marked `passes:true`; no additional product implementation was required.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+  - Rebased webhook implementation and generated artifacts from the existing feature commits
+- Verification
+  - `go test ./pkg/services/webhooks/... -count=1` — passed.
+  - `go test -race ./pkg/services/webhooks/internal/service -count=1` — passed.
+  - `go test ./tests/functional/events/factory_events -run '^TestFactoryWebhooksRunThroughRootProcess$' -count=1 -timeout 300s` — passed.
+  - `make contracts-check backend-size pkg-file-count pkg-maint pkg-structure functional-boundary-check vet wire-smoke` — passed.
+  - `make test` and `make typecheck` — passed.
+  - `git diff --check` and generated wire drift checks — passed.
+- **Learnings for future iterations:**
+  - A feature branch can become dirty after a green run when `main` advances through another merge; fetch the hosting branch before final handoff and rebase the complete feature history.
+  - Shared task metadata files are branch-scoped in this workflow; retain the active task's append-only history when resolving `prd.json`/`progress.txt` against another task's main-branch metadata.
+---
