@@ -184,14 +184,6 @@ func TestRunDuplicateKeyUsesDocumentedPrecedence(t *testing.T) {
 func TestRunMalformedKeyValueFailsWithoutDispatch(t *testing.T) {
 	factoryDir := scaffoldNamedKeyValueInvocationFactory(t)
 	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
-	mockWorkersPath := support.WriteMockWorkersConfig(t, &workers.MockWorkersConfig{
-		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
-		MockWorkers: []workers.MockWorkerConfig{{
-			WorkerName:      "processor",
-			WorkstationName: "process",
-			RunType:         workers.MockWorkerRunTypeAccept,
-		}},
-	})
 
 	tests := []struct {
 		name           string
@@ -236,7 +228,6 @@ func TestRunMalformedKeyValueFailsWithoutDispatch(t *testing.T) {
 				"you", "run",
 				"--factory", factoryPath,
 				"--no-record",
-				"--with-mock-workers", mockWorkersPath,
 			}
 			inputs := support.FakeInputs(t.Context(), append(base, test.invocationArgs...))
 			inputs.WorkingDirectory = t.TempDir()

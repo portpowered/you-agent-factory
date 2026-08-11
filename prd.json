@@ -1,75 +1,88 @@
 {
-  "project": "Fast, Parallel, Quiet-by-Default Lint",
-  "branchName": "thr-lint-speed",
-  "description": "Make make lint substantially faster and easier for delivery agents to interpret by reusing safely compiled Go checker executables, running independent targets concurrently with clear failure attribution, and hiding package-boundary findings already recognized by the merged baseline policy unless --all is requested, without weakening any lint rule or changing PR #1844 ignore semantics.",
+  "project": "CLI BAD_REQUEST Classification and Honest Run Progress",
+  "branchName": "cli-error-classification-and-run-output",
+  "description": "Make you run classify customer invocation-argument mistakes as BAD_REQUEST failures and provide truthful non-JSON progress showing accepted work, dependency edges, active workers, and workstation/work details while preserving clean machine-readable modes.",
+  "reviewFollowUp": "Follow-up review correction: changed invalid-input functional scenarios use the injected ProviderCommandRunner edge without --with-mock-workers, so zero provider calls remain authoritative.",
   "context": {
-    "customerAsk": "Reduce the wall time and output volume of make lint without weakening any gate: run independent lint targets concurrently, avoid repeated Go checker compilation costs, preserve target-specific failure attribution and standalone behavior, and hide the approximately 172 recorded package-boundary migration violations unless --all is requested.",
-    "problem": "Delivery agents repeatedly prove that branches add no new lint violations relative to main, but the current lint lane runs independent gates sequentially, pays go run startup and compilation costs for each custom checker, and floods normal output with recorded package-boundary debt. This makes delivery slower and obscures the violations an agent is actually responsible for.",
-    "solution": "Provide one cross-platform lint execution path that prepares reusable gitignored checker executables, schedules independent targets with bounded concurrency, captures and labels target results, and fails if any requested target fails. Filter package-boundary presentation through the already-merged baseline classification so default output shows only unrecorded findings while --all exposes complete diagnostics without changing classification or exit behavior."
+    "customerAsk": "Correct invocation-argument failures across the CLI surface so typos are reported as client errors, and add truthful you run progress showing active workers, accepted work and dependency edges, and workstation details with more useful color differentiation.",
+    "problem": "Unknown or invalid Factory invocation arguments can be rendered as INTERNAL_SERVER_ERROR, causing operators and agents to misdiagnose their own input. Human run output also hides generated work details, dependency edges, active worker state, and workstation/work associations, and its colors do not distinguish concurrent workers well.",
+    "solution": "Classify customer-correctable invocation parse and validation failures at the CLI boundary as BAD_REQUEST while preserving stable codes and exit 1. Extend the human Factory Event projection with deterministic work/dependency and worker/workstation progress, gate animation and color through terminal policy, and regenerate the authored CLI manifest contract after rebasing."
   },
   "acceptanceCriteria": [
-    "make lint runs the requested independent lint targets with bounded concurrency, waits for their terminal results, and exits non-zero if any requested target fails.",
-    "Custom Go checker targets use reusable compiled executables from a gitignored cache on the normal lint path; changed checker inputs cannot silently reuse stale behavior, and the supported fallback path preserves the checker's arguments, output, and exit status.",
-    "Concurrent execution produces target-delimited output and a final result that names each failed target, while successful gates and existing LINT_TARGETS and root-variable overrides remain usable.",
-    "On an unchanged tree, package-boundary default output omits every finding already recognized by the merged recorded-baseline/ignore rules; a deliberately introduced unrecorded boundary violation is printed and makes both the standalone gate and aggregate lint lane fail.",
-    "pkgboundarycheck --all displays the complete diagnostic output, including recorded debt, but does not alter classification, ignore matching, blocking counts, or exit status; no PR #1844 ignore-rule semantic is reimplemented or changed.",
-    "The PR records same-machine, same-environment before-and-after timings for documented main and branch revisions across at least three unchanged-tree runs and their medians, with the optimized median at least 30% lower, and records the command/output from a scratch new-boundary-violation proof.",
-    "Quality gates pass: typecheck and tests pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
-    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared-file or inventory churn are resolved against current origin/main, and the PR is actually merged."
+    "Unknown and invalid invocation arguments across you run render one standard stderr error response with family BAD_REQUEST, retain the specific invocation error code, never claim INTERNAL_SERVER_ERROR, and exit with code 1.",
+    "A recorded non-JSON run rendering lists accepted work items with identifiers/descriptions and renders every available DEPENDS_ON edge in an unambiguous direction.",
+    "A recorded concurrent run rendering shows one status line per active worker and names each workstation together with associated work IDs when those IDs are present in canonical events.",
+    "Quiet, redirected/non-interactive, JSON, and NDJSON modes remain valid: no animation or ANSI bytes enter structured output, quiet suppresses progress, and redirected human output is deterministic.",
+    "contracts/cli/commands.json describes the resulting you run errors and output behavior; make cli-manifest-generate is run after rebasing, generated CLI manifests are never hand-merged, and every intentional golden diff is explained in the PR.",
+    "no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green; typecheck, focused CLI tests, CLI contract checks, and affected functional/golden tests pass.",
+    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared-file changes are reconciled against current main, and the PR is actually merged."
   ],
   "userStories": [
     {
-      "id": "thr-lint-speed-001",
-      "title": "Reuse compiled checker executables",
-      "description": "As a delivery agent, I want lint checks to reuse safely prepared checker executables so repeated lint proof does not pay a separate go run compilation cost for every custom Go checker.",
+      "id": "cli-error-classification-and-run-output-001",
+      "title": "Classify invocation mistakes as client errors",
+      "description": "As a CLI user, I want invalid invocation arguments identified as my request error so that I can correct the command instead of investigating a false server failure.",
       "acceptanceCriteria": [
-        "The normal lint path prepares custom Go checker executables in a gitignored cache and invokes those executables with the same arguments and environment values as their existing checker targets.",
-        "Repeating an unchanged checker target reuses valid compiled output, while changing relevant Go build inputs causes the executed checker behavior to be rebuilt rather than silently using a stale executable.",
-        "Direct invocation of an affected lint sub-target remains supported and produces the same pass/fail result and checker diagnostics as before.",
-        "An explicit supported fallback path uses go run with equivalent arguments and exit propagation; a genuine compile failure remains visible and cannot be converted into a passing check.",
-        "Focused process-level tests prove executable reuse, stale-input invalidation, argument forwarding, fallback behavior, and non-zero checker exit propagation without asserting a hard-coded command inventory.",
+        "An unknown Factory invocation flag produces one stderr error response with its specific INVOCATION_ARGUMENT_* code and family BAD_REQUEST, not INTERNAL_SERVER_ERROR.",
+        "Missing values, positional overflow, invalid values, and other invocation parse/validation failures that represent customer input use the BAD_REQUEST family; genuine runtime failures retain their existing non-client classification.",
+        "These usage failures exit with code 1 in normal and quiet modes and do not start worker execution or other runtime side effects.",
+        "Focused CLI and process-boundary regression tests cover the reported unknown-argument reproduction and representative validation paths using the post-PR-#1859 test layout.",
+        "The authored you run error contract records the invocation client-error behavior and generated artifacts are refreshed with make cli-manifest-generate rather than edited manually.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Added the cross-platform cmd/lintcheck process driver and routed every Go checker used by lint, including the nested ownership checker, through its reusable executable cache. The cache key includes the checker transitive Go build inputs, module files, compiler/build environment, and target package; compiled output is published atomically under the gitignored .cache/lint-checkers path. Direct lint sub-targets retain their arguments and inherited environment. LINT_CHECKER_FALLBACK=1 uses the original go run path with a -exec status shim so Windows preserves checker streams and exact exit codes; compiler failures remain non-zero and visible. Focused process tests cover unchanged reuse, transitive-input invalidation, argument/environment forwarding, fallback output and exit propagation, and compile failure visibility. Focused checker tests, go vet ./cmd/lintcheck, make backend-size, make pkg-file-count, make pkg-maint, and make typecheck pass. make pkg-boundary still reports the pre-existing boundary debt assigned to story thr-lint-speed-003."
+      "notes": "Implemented typed invocation-argument missing-value and static-flag parse errors, preserving existing stable ArgumentError codes and BAD_REQUEST classification. Added process-boundary coverage for the reported --planer-model typo in normal and quiet modes, dynamic/static missing values, positional overflow, and invalid JSON validation; all assert one stderr ErrorResponse, empty stdout, and zero provider calls. Updated authored CLI errors and regenerated family/published manifests with make cli-manifest-generate and make contracts-generate. Verification: focused Work/CLI packages, focused functional parameter/output tests, make cli-manifest-check, make typecheck, and git diff --check passed. The broad make test command reached its six-minute command timeout without emitting a test failure; no source failure was reported."
     },
     {
-      "id": "thr-lint-speed-002",
-      "title": "Run independent lint targets concurrently with clear attribution",
-      "description": "As a delivery agent, I want independent lint targets to run concurrently and report target-scoped outcomes so lint completes sooner without hiding which gate needs action.",
+      "id": "cli-error-classification-and-run-output-002",
+      "title": "List accepted work and dependency edges",
+      "description": "As an operator watching a run, I want to see the work admitted by a generated batch and how items depend on one another so that I understand the execution plan behind the count.",
       "acceptanceCriteria": [
-        "make lint schedules requested independent targets with bounded concurrency greater than one by default, supports an explicit positive job limit, and never exceeds that limit.",
-        "The driver waits for every started target to reach a terminal state and returns non-zero when one or more targets fail; its final summary names every failed target and provides an actionable standalone rerun name.",
-        "Output from concurrent targets is delimited by target so diagnostics cannot be mistaken for another gate's output, and a successful run ends with an unambiguous success result.",
-        "LINT_TARGETS selection, checker root overrides, platform-appropriate executable handling, and non-Go gates such as UI lint, scripts, and vet retain their established observable behavior.",
-        "Deterministic tests with controllable commands prove actual overlap, job-limit enforcement, mixed success/failure aggregation, output attribution, and argument/environment forwarding; tests do not depend on wall-clock speed thresholds.",
-        "The PR reports at least three same-machine unchanged-tree runs for main and the optimized branch, includes raw and median wall times, and shows at least a 30% reduction in the optimized median.",
+        "A multi-item work-accepted event renders the accepted count followed by one stable, readable entry for every canonical work item, including its ID/name and available task description without exposing private provider payloads.",
+        "Every canonical DEPENDS_ON relationship in the accepted batch is rendered once with an unambiguous source-to-prerequisite direction; independent items do not gain fabricated edges.",
+        "Single-item and empty or partially populated payloads remain readable and do not panic; absent optional descriptions or relations are omitted cleanly.",
+        "A deterministic recorded/golden rendering proves the item listing and dependency graph for a representative generated batch.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 2,
       "passes": true,
-      "notes": "Added cmd/lintlane as the cross-platform bounded worker-pool driver used by make lint. LINT_JOBS defaults to 4 and accepts any explicit positive limit; every started target runs to terminal completion, captures stdout/stderr independently, emits target-delimited output in requested order, and reports every failed target with a standalone make rerun. LINT_TARGETS and command-line root overrides continue through child Make invocations, non-Go targets retain their recipes, Windows child Make runs use an available native Git sh.exe when present to avoid concurrent cmd.exe temporary-batch contention, and each target gets an isolated temporary environment for platform process artifacts. Aggregate lint compiles cmd/lintcheck once per lane into a unique temporary executable under the gitignored checker cache, while direct checker targets and LINT_CHECKER_FALLBACK=1 remain supported. Deterministic tests cover actual overlap, job-limit enforcement, terminal waiting, mixed failure aggregation, target attribution, success output, argument/environment forwarding, positive job validation, and target selection. Benchmark on main revision 947152348 versus optimized commit c931a4013 used equal-work commands make -k lint and make lint LINT_JOBS=4 with the default target set: valid main runs were 173.292s, 184.979s, and 163.251s (median 173.292s, exit 2 for the existing pkg-boundary, packaged-factory-consumption-check, ownership-inventory-check, and deadcode debt); optimized runs were 150.522s, 85.924s, and 87.756s (median 87.756s, exit 2 with the same four named failures), a 49.4% median reduction. One host-terminated baseline attempt (282.178s, exit -1) was excluded from the three-run median. go test -race ./cmd/lintlane, make test, make typecheck, focused lint gates, and aggregate fallback verification pass."
+      "notes": "Extended the human accepted-work renderer to use singular labels for one-item payloads, preserve readable fallbacks for partially populated work items, and omit malformed relation records rather than presenting ambiguous edges. Added exact renderer coverage for a deterministic four-item batch with IDs, names, an available JSON payload that is not exposed, a name-based DEPENDS_ON edge, an independent item, and a single-item relation payload. Verification: go test ./pkg/services/factory_visualization/... -count=1, go test ./tests/functional/cli/factory_run/output -count=1, make typecheck, and git diff --check passed."
     },
     {
-      "id": "thr-lint-speed-003",
-      "title": "Hide recorded package-boundary debt by default",
-      "description": "As a delivery agent, I want normal package-boundary output to show only unrecorded violations so I can immediately distinguish branch regressions from accepted migration debt.",
+      "id": "cli-error-classification-and-run-output-003",
+      "title": "Show active workers and workstation work details",
+      "description": "As an operator watching concurrent execution, I want one current state line per active worker and work-aware workstation transitions so that I can tell what is running and what completed.",
       "acceptanceCriteria": [
-        "Default package-boundary output does not print individual findings or debt-count summaries for violations already recognized by the PR #1844 recorded-baseline/ignore policy.",
-        "A fixture containing recorded debt and one unrecorded violation prints only the unrecorded violation by default, identifies its rule and affected package/import context, and exits non-zero.",
-        "A fixture containing only recorded debt produces a quiet passing/default result consistent with the existing ignore policy and does not list the recorded findings.",
-        "--all prints the recorded and unrecorded diagnostic sets in stable, target-readable form while preserving exactly the same blocking classification and exit status as default mode.",
-        "The aggregate make lint path uses quiet mode by default, still catches a deliberately introduced new boundary violation, names pkg-boundary as failed, and supports an intentional all-diagnostics invocation.",
-        "Focused behavioral tests cover quiet clean output, mixed recorded/new findings, --all, and unchanged exit semantics using the already-merged baseline matcher rather than a second ignore implementation.",
-      "Typecheck passes",
-      "Tests pass"
+        "Each concurrent active worker or dispatch has a distinct progress line that identifies its current state and remains associated with the same worker until a terminal outcome.",
+        "Workstation queued, started, completed, failed, and interrupted output names the workstation and includes canonical work IDs consumed or completed when the event provides them.",
+        "Terminal worker outcomes stop or replace the corresponding active indication without leaving stale workers displayed, including interleaved concurrent event sequences.",
+        "A deterministic recorded/golden run proves multiple simultaneous workers and their workstation/work associations without depending on timing sleeps.",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 3,
       "passes": true,
-      "notes": "Implemented quiet package-boundary presentation without changing scanner rules or existing exact baseline matchers. The checker compares classified finding fingerprints with a selected Git base tree (PACKAGE_BOUNDARY_BASE_REF or origin/main), hides only findings already present there by default, preserves stale baseline entries as blocking, and fails open if the base cannot be materialized. It no longer falls back to HEAD: when no trustworthy origin/main, upstream/main, or local main ref exists, every current finding remains visible and blocking; an explicitly invalid -base-ref or PACKAGE_BOUNDARY_BASE_REF returns a clear non-zero error. Exact matcher-approved findings are retained for --all, which emits recorded findings and summaries while using the same visible blocking count and exit status. Make exposes PACKAGE_BOUNDARY_ALL=1 and PACKAGE_BOUNDARY_BASE_REF for intentional diagnostics. Behavioral fixtures cover recorded-only quiet success, mixed recorded/new failure, a new finding added to an already-recorded file, exact matcher diagnostics under --all, aggregate make lint attribution, a committed violation with only HEAD available, and an invalid explicit base. Scratch proof command: go run ./cmd/pkgboundarycheck -root <scratch-root>; terminal result exited 1 and printed the committed.go prohibited domain transport diagnostic, the active generated-code exception summary, and [agent-factory:pkg-boundary] found 1 package-boundary violation(s), followed by exit status 1. After live origin/main synchronization, removed the two obsolete empty migration-baseline files for durable_provider_test.go; the package-boundary scanner now passes, while the aggregate target still reports the two unchanged ownership-boundary findings present in the live base. Focused checker tests, full make test, go vet, make typecheck, backend-size, pkg-maint, pkg-file-count, pkg-structure, and the merged-tree maintenance gates pass. Review follow-up: split the baseline filter into focused package, service, and runtime helpers so each Go function remains below the repository's 80-line review threshold without changing classification or --all output; restored progress.txt to the current origin/main version and retained task evidence here."
+      "notes": "Extended the human Factory Event renderer and TTY progress projection to correlate dispatches with Worker Session IDs, workstation names, and canonical Work IDs across queued, started, active, completed, failed, and interrupted lifecycle events. Terminal outcomes remove the corresponding active state, including interleaved concurrent dispatches; queued Work IDs are retained when a later request payload is sparse. Added exact renderer coverage for three interleaved workers and TTY cleanup/correlation, plus functional lifecycle compatibility coverage. Verification: go test ./pkg/services/factory_visualization/transports/cli -count=1, go test -race ./pkg/services/factory_visualization/transports/cli -count=1, go test ./pkg/services/factory_visualization/... -count=1, go test ./tests/functional/cli/factory_run/output -count=1, make typecheck, make backend-size pkg-maint pkg-file-count pkg-structure vet, and git diff --check passed. Commit 303be54cf."
+    },
+    {
+      "id": "cli-error-classification-and-run-output-004",
+      "title": "Respect terminal policy while improving progress distinction",
+      "description": "As a CLI user, I want rich progress in an interactive terminal and clean deterministic output everywhere else so that the same command works for humans, logs, and automation.",
+      "acceptanceCriteria": [
+        "In an eligible interactive non-JSON run, each active worker advances through the approved spinner frames and simultaneous workers receive visibly distinguishable colors from a varied, deterministic palette.",
+        "Progress rendering uses the existing terminal-policy decision for capabilities and channels; worker progress is sent to stderr and does not overwrite or contaminate the primary result on stdout.",
+        "Redirected or non-interactive human output uses stable status lines without cursor-control sequences, animation artifacts, or ANSI escapes, and --quiet suppresses progress.",
+        "JSON and NDJSON output remain parseable record-for-record and contain no spinner frames, ANSI escapes, or human-only workstation prose.",
+        "Existing unchanged CLI goldens remain unchanged; intentionally changed run goldens and CLI manifest artifacts are regenerated after the final rebase and each diff is explained in the PR.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": "Wired the stderr progress channel through the explicit terminal policy, preserving interactive response-stream progress for ordinary one-shot invocations while suppressing quiet-mode progress. Added deterministic collision-resolved worker colors over the varied ANSI palette, moved active-worker association out of the stdout response stream, and added stable ANSI-free status lines for redirected/non-interactive stderr. Documented the spinner/color/channel behavior in the packaged run guide and added root policy, renderer, concurrent-color, non-TTY, and process-boundary regression coverage. Verification after the final base synchronization: focused CLI and functional output tests, make test, make typecheck, make backend-size, make pkg-maint, make pkg-file-count, make pkg-structure, make vet, make cli-manifest-check, make docs-reference-smoke, and git diff --check passed; one unrelated ACP cancellation test was flaky in the broad package sweep and passed on targeted rerun. Review follow-up reconciled live main and converted the changed CLI output functional scenarios to injected edges.Edges.ProviderCommandRunner with shaped Codex responses; unrelated Mock Workers feature tests remain unchanged. Review follow-up: merged origin/main at 1b871e3a8, expanded the authored you run manifest copy and regenerated published/family artifacts, migrated split-batch dispatch colors, and added a 12-worker capacity/cleanup regression. Focused and race tests plus static gates pass; repository-wide vet reached the host timeout under concurrent verification without emitting a source failure."
     }
   ]
 }

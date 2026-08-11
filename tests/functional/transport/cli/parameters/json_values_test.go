@@ -79,14 +79,6 @@ func TestCLIInvalidJSONParameterNamesTheParameter(t *testing.T) {
 
 	factoryDir := scaffoldJSONInvocationFactory(t)
 	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
-	mockWorkersPath := support.WriteMockWorkersConfig(t, &workers.MockWorkersConfig{
-		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
-		MockWorkers: []workers.MockWorkerConfig{{
-			WorkerName:      "processor",
-			WorkstationName: "process",
-			RunType:         workers.MockWorkerRunTypeAccept,
-		}},
-	})
 
 	support.UpdateFactoryConfig(t, factoryDir, func(cfg map[string]any) {
 		signature, ok := cfg["invocationSignature"].(map[string]any)
@@ -119,7 +111,6 @@ func TestCLIInvalidJSONParameterNamesTheParameter(t *testing.T) {
 		"you", "run",
 		"--factory", factoryPath,
 		"--no-record",
-		"--with-mock-workers", mockWorkersPath,
 		"invoke marker",
 		"--metadata=" + invalidMetadataValue,
 		"--items=" + validItemsValue,
