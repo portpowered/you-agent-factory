@@ -69,8 +69,8 @@
         "Tests pass"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented remote durable result polling through GET /factory-sessions/{session_id}/results and projected authoritative session/result facts through the shared invocation result and output boundary. Remote success now preserves primary result, request/session identity, JSON, primary-result, human response-stream, and NDJSON terminal behavior; canonical failed, blocked, needs-human, paused, interrupted, timed-out, canceled, unresolved, and runtime-failure states map to stable invocation classifications. Transport and malformed-result failures remain typed and endpoint-safe without payload leakage or local fallback. Added observable polling, output, failure-matrix, transport/malformed, root Process.Execute, and functional selected-server coverage."
     },
     {
       "id": "dwro-s7-placement-grammar-004",

@@ -1,5 +1,6 @@
 ## Codebase Patterns
 - Remote CLI execution adapters should map prepared normalized input into the canonical durable start request, derive deterministic request identities from the request tuple, and never forward compatibility content or `~default`.
+- Remote durable run adapters must wait on the canonical result projection before writing terminal output; map lifecycle/result status through the shared invocation envelope, and keep transport or malformed-response errors separate from domain classifications.
 - For final PR handoff, compare the PR body byte-for-byte with `prd.json` and use the thread-aware GraphQL review audit because flat PR comments do not expose inline-thread resolution state.
 - OS-boundary functional tests may poll an isolated durable filesystem checkpoint only when the child exposes no parent-process event or injected edge; document that reason at each polling helper and keep the bound as a failure guard.
 - Git Worktree preparation treats a retained Git `*.lock` as indeterminate ownership: retry within a named bound, preserve the resource, and return its exact path with verify/remove/retry guidance.
@@ -4073,4 +4074,29 @@
 - **Learnings for future iterations:**
   - The durable start endpoint currently responds with HTTP 200 in the server transport even though the public contract also permits 202; the CLI adapter accepts both while requiring the canonical response identity and status.
   - Remote run request identity must be derived after source, arguments, policy, and wait normalization so equivalent retries deduplicate without including the caller-supplied request ID in the digest.
+---
+
+## 2026-08-11 00:45 -07:00 - dwro-s7-placement-grammar-003
+- What was implemented
+  - Added the remote durable result read through `GET /factory-sessions/{session_id}/results?mode=final` and polled `NOT_READY`/`PARTIAL`/retryable `UNAVAILABLE` projections until an authoritative terminal result or typed retrieval failure was available.
+  - Projected canonical session lifecycle and result facts into the shared invocation result envelope, preserving request/session identity, primary content, stable success/failure status, and the public blocked, needs-human, paused, interrupted, timed-out, canceled, unresolved, and runtime-failure classifications.
+  - Reused local invocation output behavior for primary-result and JSON modes and added equivalent human response-stream and JSON/NDJSON terminal records; terminal output is written only after the canonical result read classifies the outcome.
+  - Kept transport and malformed-result failures distinct, endpoint-safe, and free of credentials or customer payloads, with no local fallback or synthesized success.
+- Files changed
+  - `pkg/transports/cli/run/invocation_error.go`
+  - `pkg/transports/cli/run/factory_invocation_input.go`
+  - `pkg/transports/cli/run/run_invocation_output_test.go`
+  - `tests/functional/workers/transports/cli/run/lifecycle/lifecycle_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/transports/cli/... -count=1` passed.
+  - `go test ./tests/functional/workers/transports/cli/run/... -count=1` passed.
+  - `go vet ./pkg/transports/cli/run ./pkg/transports/cli` passed.
+  - `make test` passed through the repository short Go unit lane.
+  - `go run ./cmd/pkgmaintcheck -root .`, `go run ./cmd/pkgfilecountcheck -root .`, and `go run ./cmd/pkgstructurecheck -root .` passed.
+- **Learnings for future iterations:**
+  - The package file-count baseline is deletion-only, so new result responsibilities must be placed in existing responsibility-aligned files unless an existing file is retired; maintainability checks enforce both the 1,000-line file limit and per-function complexity.
+  - Durable result projections expose safe failure/availability messages and lifecycle/result statuses but do not always carry local Work context or TraceID; preserve those fields only when the canonical contract supplies them rather than inventing metadata.
+  - The JSON response-stream contract is a discriminated `invocation_result` NDJSON record, while plain `--json` remains the bare `InvocationResponse`; remote output must preserve that distinction.
 ---
