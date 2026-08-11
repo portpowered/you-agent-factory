@@ -4179,3 +4179,24 @@
 - **Learnings for future iterations:**
   - A clean merge against a stale remote-tracking base is not sufficient; compare the live hosting ref, fetch it, and resolve shared PRD/progress files again before pushing the replacement head.
 ---
+
+## 2026-08-10 19:41 -07:00 - btrc-p1-root-injection-006 current-main synchronization
+- What was implemented
+  - Merged current `origin/main` `aac04248d95de7f5412d58f194e7ae03858a3b39` into the P1 branch; the merge was clean and added only current-main documentation-plan files outside the P1 implementation.
+  - Audited PR #1857 with the thread-aware GraphQL workflow: zero unresolved inline threads, zero formal reviews, and no new actionable feedback beyond the already addressed conversation history.
+  - Updated the Story 006 PRD note with the merged-head evidence; all six P1 stories remain marked `passes:true`.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+  - Current-main documentation-plan files carried into the synchronization merge.
+- Verification
+  - `make verify-fast` — passed: dashboard typecheck, MCP contract boundary, 191 Bun tests, 355 Vitest files/2,970 tests, and the short Go suite.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` — passed.
+  - `make wire-smoke` — passed; generated Wire is stable with no drift.
+  - `go test ./pkg/root ./pkg/wire ./pkg/services/factory_sessions/... ./pkg/services/factory_runtime/... ./pkg/transports/cli/run -count=1 -timeout 300s` — passed when rerun independently; the initial parallel run's session-package vet error was not reproducible.
+  - `go test ./tests/functional/sessions/root_composition -run '^TestRootBuildProcessIsInertAndReusableAcrossFactorySessions$' -count=1 -v -timeout 300s` — passed on retry after the initial parallel API-server startup timeout.
+  - `git diff --check` — passed; `origin/main` is an ancestor of the merged head.
+- **Learnings for future iterations:**
+  - On Windows, isolate long Go package and process-boundary checks before changing code: concurrent runs can cause transient vet or API-server startup failures that clear on serial retry.
+  - After a clean current-main merge, rerun generated-artifact and ratcheted gates, then update the P1 PRD note so the PR body remains evidence-aligned.
+---
