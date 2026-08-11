@@ -21,8 +21,8 @@ import (
 // race with, but in their own file: one Worker Session's attempts are a single
 // concern, and reading them next to Pause/Resume/Cancel obscures both.
 
-// InvokeSession supervises one resolved execution through the injected
-// workstation pool boundary, for every orchestrator. The boundary is the sole
+// InvokeSession supervises one resolved execution through the same preparation
+// and attempt driver used by asynchronous Start. The boundary is the sole
 // mechanism that starts, cancels, and reports an attempt; the result callback
 // remains authoritative for terminal Workers output, so control cannot
 // fabricate a Factory Runtime result.
@@ -39,42 +39,21 @@ func (r *registry) InvokeSession(ctx context.Context, req workersessions.InvokeS
 		return workersessions.InvokeSessionResult{}, err
 	}
 
-	r.reserveIfAbsent(req.ID)
-	r.logger.Info("worker session start accepted", "sessionID", req.ID, "attemptID", attemptID, "outcome", "reserved", "state", string(workersessions.StateReserved))
-	if _, err := r.transitionToStarting(req.ID); err != nil {
-		if terminal, ok := r.preAdmissionControlTerminal(req.ID, attemptID); ok {
+	prepared, err := r.prepareInvocation(ctx, req, invocationPreparationOptions{})
+	if err != nil {
+		return workersessions.InvokeSessionResult{}, err
+	}
+	if prepared.terminal {
+		if prepared.preAdmission {
 			return workersessions.InvokeSessionResult{
-				Session:     terminal,
+				Session:     prepared.session,
 				Dispatch:    canceledBeforeAdmissionResult(req.Execution),
 				DispatchErr: workers.ErrWorkstationDispatchCanceled,
 			}, nil
 		}
-		r.logger.Info("worker session start rejected", "sessionID", req.ID, "attemptID", attemptID, "outcome", "not_startable")
-		return workersessions.InvokeSessionResult{}, err
+		return workersessions.InvokeSessionResult{Session: prepared.session}, nil
 	}
-	startedAt := r.ensureObservation(
-		req.ID,
-		attemptID,
-		req.Execution.Execution.Dispatch.Execution.RequestID,
-		req.Execution.Execution.Dispatch.Execution.WorkIDs,
-	)
-
-	if err := r.publishOpeningRecord(
-		ctx,
-		req.ID,
-		attemptID,
-		openingSessionPayload(req.ID, attemptID, startedAt, req.Execution.Execution),
-		providerIdentityForExecution(req.Execution.Execution),
-	); err != nil {
-		terminal := failedTerminal(workersessions.FailureCauseEventPublicationFailure, safeDetail(workersessions.FailureCauseEventPublicationFailure, nil))
-		final, committed := r.commitTerminal(req.ID, workersessions.StateFailed, terminal)
-		if committed {
-			r.logTerminal(req.ID, attemptID, final)
-			r.publishTerminalRecordOrLog(ctx, req.ID, attemptID, workersessions.StateFailed, *final.Result)
-		}
-		return workersessions.InvokeSessionResult{Session: final}, nil
-	}
-	return r.driveInvocation(ctx, req, attemptID)
+	return r.driveRegisteredInvocation(ctx, req, prepared.supervision)
 }
 
 // driveInvocation begins boundary supervision only after the opening Worker
@@ -95,6 +74,11 @@ func (r *registry) driveInvocation(ctx context.Context, req workersessions.Invok
 		}
 		return workersessions.InvokeSessionResult{Session: final}, nil
 	}
+	return r.driveRegisteredInvocation(ctx, req, supervision)
+}
+
+func (r *registry) driveRegisteredInvocation(ctx context.Context, req workersessions.InvokeSessionRequest, supervision *supervision) (workersessions.InvokeSessionResult, error) {
+	defer supervision.signalDriverDone()
 	supervision.mu.Lock()
 	supervision.retryBudget = req.Retry.Attempts()
 	supervision.mu.Unlock()

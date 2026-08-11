@@ -70,6 +70,16 @@ func NewServer(
 	return srv
 }
 
+// StartWorkerSession forwards the global asynchronous start operation to the
+// Worker Sessions owner handler.
+func (s *Server) StartWorkerSession(w http.ResponseWriter, r *http.Request) {
+	if s.workerSessionsHTTP == nil {
+		s.writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
+		return
+	}
+	s.workerSessionsHTTP.StartWorkerSession(w, r)
+}
+
 // ListWorkerSessionsBySessionId forwards the generated operation to the
 // Worker Sessions owner handler.
 func (s *Server) ListWorkerSessionsBySessionId(
