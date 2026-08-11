@@ -2,6 +2,7 @@
 - Do not junction a temporary worktree's `node_modules` to a sibling worktree; Windows worktree cleanup can follow workspace links into tracked package files. Use isolated dependencies and remove the temporary worktree without cross-worktree links.
 - Normative customer-prose policy belongs under `docs/internal/standards/writing`; use `docs/architecture/data-model.md` and public contracts for product meaning, and keep exact machine/technical literals separate from reviewable natural-language prose.
 - The canonical product vocabulary source is `docs/internal/standards/writing/customer-technical-terms.yaml`; keep every record on one explicit schema and point its owner to the architecture or public-contract source of meaning.
+- When a public contract defines an exact identifier spelling, keep one register record for that identifier; relationship examples must also follow the owning contract's source/target semantics.
 - Documentation-only stories should validate authored structured data as review evidence and leave source-scanning or meta-test enforcement to a real consumer; source shape alone is not observable customer behavior.
 - When a documentation standard mirrors a governing plan, enumerate the plan's rule sets at the policy boundary and label future checker lifecycle rules as not manually applicable until their consumer exists.
 - JSON Schema worker diagnostics must use `ErrorKind.KeywordPath()` and typed schema metadata; localized `ValidationError.Error()` text can leak rejected values and compiler-expanded host paths.
@@ -115,8 +116,6 @@
   - `git merge-tree --write-tree origin/main HEAD` and `git diff --check` — passed with `origin/main` at `aac04248d`.
 - **Learnings for future iterations:**
   - When a broad functional lane fails on different timing-sensitive tests across retries, inspect the exact failed test and rerun only the failed jobs before widening an unrelated feature diff; the repository already records this as the preferred flake-handling pattern.
----
-
 - Terminal lifecycle publication must require the opening record's committed publication window; a failed opening must never be followed by a terminal append that becomes topic position 1.
 
 - Root-built direct-JavaScript functional probes that do not invoke a worker can run without `--with-mock-workers`; keep Mock Workers usage inside the feature-owning test cells.
@@ -9038,4 +9037,20 @@
   - The pushed branch and local worktree are clean at the audited head.
 - **Learnings for future iterations:**
   - Treat final handoff as one exact-head bundle: fetch the live base, verify ancestry and mergeability, wait for replacement-head CI, audit thread state, and compare the PR body to `prd.json` before reporting review readiness.
+---
+## [2026-08-11 04:19:49 -07:00] - prose-standard-and-terms-002 latest terminology-contract feedback
+- What was implemented
+  - Removed the duplicate spaced `Factory Response Event` product-term record so the register has one canonical `FactoryResponseEvent` record matching the architecture data model and response-event schema.
+  - Updated the protected-literal replacement and definition to reference the exact registered `FactoryResponseEvent` term.
+  - Replaced the unsupported `Parent-Child` lifecycle-ownership example with the contract-backed child-set and parent-aware fan-in behavior; the other relationship examples were checked against `RelationType.yaml` and the relationship reference.
+- Files changed
+  - `docs/internal/standards/writing/customer-technical-terms.yaml`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - PyYAML loaded version 1 and all 58 term records; required fields, allowed categories, registered replacements, unique `FactoryResponseEvent` spelling, and the revised Parent-Child example validated.
+  - `git diff --check` passed, and the focused correction was committed as `0d2c5f4c0`.
+- **Learnings for future iterations:**
+  - When deleting a duplicate vocabulary record, revalidate every replacement reference so no remaining record points to the removed canonical form.
+  - Public relationship examples should state the observable contract effect, not infer ownership or lifecycle behavior from a relationship name.
 ---
