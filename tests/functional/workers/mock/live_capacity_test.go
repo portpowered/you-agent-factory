@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -21,18 +23,25 @@ import (
 )
 
 const (
-	liveCapacityResourceID       = "reviewers"
-	liveCapacityResourceName     = "Reviewers"
-	liveCapacityWorkType         = "review-task"
-	liveCapacityWorker           = "capacity-worker"
-	liveCapacityWorkstation      = "review"
-	liveCapacityInitialWorkName  = "held-review"
-	liveCapacityQueuedWorkName   = "queued-review"
-	liveCapacitySecondQueuedName = "second-queued-review"
-	liveCapacityRaiseRequestID   = "capacity-raise-functional"
-	liveCapacityBarrierCommand   = "functional-capacity-barrier"
-	liveCapacityBarrierOutput    = "capacity barrier completed"
-	liveCapacityTestTimeout      = 20 * time.Second
+	liveCapacityResourceID         = "reviewers"
+	liveCapacityResourceName       = "Reviewers"
+	liveCapacityWorkType           = "review-task"
+	liveCapacityWorker             = "capacity-worker"
+	liveCapacityWorkstation        = "review"
+	liveCapacityInitialWorkName    = "held-review"
+	liveCapacityQueuedWorkName     = "queued-review"
+	liveCapacitySecondQueuedName   = "second-queued-review"
+	liveCapacityRaiseRequestID     = "capacity-raise-functional"
+	liveCapacityBarrierCommand     = "functional-capacity-barrier"
+	liveCapacityBarrierOutput      = "capacity barrier completed"
+	liveCapacityTestTimeout        = 20 * time.Second
+	liveCapacityJavaScriptWorkflow = `return (async function () {
+  const results = await parallel([
+        { prompt: "javascript capacity child one", label: "javascript-child-one", preset: "capacity-worker", resourceId: "reviewers" },
+        { prompt: "javascript capacity child two", label: "javascript-child-two", preset: "capacity-worker", resourceId: "reviewers" },
+  ]);
+  return { results };
+})();`
 )
 
 // TestLiveResourceCapacityIncreaseAdmitsWaitingMockDispatch proves the public
@@ -309,6 +318,194 @@ func TestLiveResourceCapacityRecordingReplayAndCursor(t *testing.T) {
 	}
 }
 
+// TestJavaScriptLiveResourceCapacityIncreaseWakesWaitingChildren proves the
+// shared resource gate at the public JavaScript Factory Session boundary. One
+// child is held at the injected mock-worker command edge, the second child
+// waits on reviewers capacity one, and a live increase admits it in the same
+// durable session with exactly two completed child dispatches.
+func TestJavaScriptLiveResourceCapacityIncreaseWakesWaitingChildren(t *testing.T) {
+	provider := newLiveCapacityJavaScriptProvider()
+	dir := scaffoldLiveCapacityFactory(t, 1)
+	support.WriteAgentConfig(t, dir, liveCapacityWorker, "---\n"+
+		"type: MODEL_WORKER\n"+
+		"---\n"+
+		"Use the capacity worker for JavaScript children.\n")
+	homeDir := writeLiveCapacityJavaScriptGlobalConfig(t)
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		Env: append(os.Environ(),
+			"HOME="+homeDir,
+			"USERPROFILE="+homeDir,
+		),
+		Edges: serviceedges.Edges{ProviderOverride: provider},
+	})
+	t.Cleanup(func() { server.Stop(t) })
+
+	started := startLiveCapacityJavaScriptWorkflow(t, server.URL(), liveCapacityJavaScriptWorkflow)
+	if started.SessionId == "" {
+		t.Fatal("JavaScript capacity workflow has no durable session ID")
+	}
+	provider.waitForCall(t, 1)
+	before := readLiveCapacityDurableSession(t, server.URL(), started.SessionId)
+
+	capacity := setLiveCapacityREST(t, server.URL(), started.SessionId, liveCapacityResourceID, 2, 0, "javascript-capacity-raise")
+	if capacity.Outcome != factoryapi.FactorySessionResourceCapacityOutcome("APPLIED") ||
+		capacity.SessionId != started.SessionId || capacity.PreviousCapacity != 1 ||
+		capacity.EffectiveCapacity != 2 || capacity.InUseCount != 1 || capacity.AvailableCount != 1 ||
+		capacity.Revision != 1 {
+		t.Fatalf("JavaScript capacity response = %#v, want applied reviewers 1->2 in same session", capacity)
+	}
+	provider.waitForCall(t, 2)
+	afterRaise := readLiveCapacityDurableSession(t, server.URL(), started.SessionId)
+	if afterRaise.SessionId != before.SessionId {
+		t.Fatalf("JavaScript Factory Session id changed from %q to %q after live raise", before.SessionId, afterRaise.SessionId)
+	}
+
+	close(provider.releaseBlocked)
+	waitForLiveCapacityDurableSessionTerminal(t, server.URL(), started.SessionId, liveCapacityTestTimeout)
+	if provider.callCount() != 2 || provider.peakActive() != 2 {
+		t.Fatalf("JavaScript provider calls=%d peakActive=%d, want exactly two calls with two concurrent effects", provider.callCount(), provider.peakActive())
+	}
+	dispatches := support.GetJSON[factoryapi.ListFactorySessionDispatchesResponse](
+		t,
+		strings.TrimSuffix(server.URL(), "/")+"/factory-sessions/"+started.SessionId+"/dispatches",
+	)
+	if len(dispatches.Dispatches) != 2 {
+		t.Fatalf("JavaScript dispatch count = %d, want two resource-bound children", len(dispatches.Dispatches))
+	}
+	seenIDs := make(map[string]struct{}, len(dispatches.Dispatches))
+	seenLabels := make(map[string]struct{}, len(dispatches.Dispatches))
+	for _, dispatch := range dispatches.Dispatches {
+		if dispatch.Status != factoryapi.FactoryDispatchStatusCOMPLETED || dispatch.Javascript == nil {
+			t.Fatalf("JavaScript dispatch = %#v, want completed JavaScript projection", dispatch)
+		}
+		if _, duplicate := seenIDs[dispatch.Id]; duplicate || dispatch.Id == "" {
+			t.Fatalf("JavaScript dispatch IDs contain duplicate or empty ID: %q", dispatch.Id)
+		}
+		seenIDs[dispatch.Id] = struct{}{}
+		if dispatch.Label == nil || *dispatch.Label == "" {
+			t.Fatalf("JavaScript dispatch %q has no public child label", dispatch.Id)
+		}
+		seenLabels[*dispatch.Label] = struct{}{}
+	}
+	for _, label := range []string{"javascript-child-one", "javascript-child-two"} {
+		if _, ok := seenLabels[label]; !ok {
+			t.Fatalf("JavaScript dispatch labels = %#v, missing %q", seenLabels, label)
+		}
+	}
+}
+
+func startLiveCapacityJavaScriptWorkflow(
+	t *testing.T,
+	serverURL, workflowSource string,
+) factoryapi.FactorySessionExecutionResponse {
+	t.Helper()
+	dialect := "you-workflow-v1"
+	inlineSource := factoryapi.FactoryOrchestratorJavaScriptInlineSource{
+		Encoding: factoryapi.FactoryOrchestratorJavaScriptInlineSourceEncodingUtf8,
+		Inline:   workflowSource,
+	}
+	payload, err := json.Marshal(factoryapi.FactorySessionExecutionRequest{
+		RequestId: "javascript-live-capacity-workflow",
+		Source: factoryapi.FactorySessionExecutionSource{
+			Kind: factoryapi.FactorySessionExecutionSourceKindInlineWorkflow,
+			InlineWorkflow: &factoryapi.FactorySessionExecutionInlineWorkflow{
+				Dialect:      &dialect,
+				InlineSource: inlineSource,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal JavaScript capacity workflow: %v", err)
+	}
+	endpoint := strings.TrimSuffix(serverURL, "/") + "/factory-sessions/async"
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, endpoint, bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("build JavaScript capacity workflow request: %v", err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("start JavaScript capacity workflow: %v", err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatalf("read JavaScript capacity workflow response: %v", err)
+	}
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("start JavaScript capacity workflow status = %d, want 200\n%s", response.StatusCode, body)
+	}
+	var started factoryapi.FactorySessionExecutionResponse
+	if err := json.Unmarshal(body, &started); err != nil {
+		t.Fatalf("decode JavaScript capacity workflow response: %v\n%s", err, body)
+	}
+	return started
+}
+
+func readLiveCapacityDurableSession(
+	t *testing.T,
+	serverURL, sessionID string,
+) factoryapi.FactorySessionDurableReadModel {
+	t.Helper()
+	response := support.GetJSON[factoryapi.FactorySessionGetResponse](
+		t,
+		strings.TrimSuffix(serverURL, "/")+"/factory-sessions/"+sessionID,
+	)
+	session, err := response.AsFactorySessionDurableReadModel()
+	if err != nil {
+		t.Fatalf("decode JavaScript durable Factory Session: %v", err)
+	}
+	return session
+}
+
+func waitForLiveCapacityDurableSessionTerminal(
+	t *testing.T,
+	serverURL, sessionID string,
+	timeout time.Duration,
+) factoryapi.FactorySessionDurableReadModel {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), timeout)
+	defer cancel()
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		session := readLiveCapacityDurableSession(t, serverURL, sessionID)
+		switch session.Status {
+		case factoryapi.FactorySessionDurableLifecycleStatusSucceeded,
+			factoryapi.FactorySessionDurableLifecycleStatusFailed,
+			factoryapi.FactorySessionDurableLifecycleStatusCanceled,
+			factoryapi.FactorySessionDurableLifecycleStatusTimedOut,
+			factoryapi.FactorySessionDurableLifecycleStatusInterrupted,
+			factoryapi.FactorySessionDurableLifecycleStatusTerminated:
+			return session
+		}
+		select {
+		case <-ticker.C:
+		case <-ctx.Done():
+			t.Fatalf("timed out waiting for durable Factory Session %q to become terminal: last status %q", sessionID, session.Status)
+		}
+	}
+}
+
+func writeLiveCapacityJavaScriptGlobalConfig(t *testing.T) string {
+	t.Helper()
+	homeDir := t.TempDir()
+	configDir := filepath.Join(homeDir, ".you-agent-factory")
+	if err := os.MkdirAll(configDir, 0o700); err != nil {
+		t.Fatalf("create JavaScript capacity global config directory: %v", err)
+	}
+	config := []byte(`{
+  "defaults": {"workerModelProvider": "codex", "workerModel": "mock-capacity-model"},
+  "workerPresets": [{"id": "capacity-worker", "modelProvider": "codex", "model": "mock-capacity-model"}]
+}`)
+	if err := os.WriteFile(filepath.Join(configDir, "config.json"), config, 0o600); err != nil {
+		t.Fatalf("write JavaScript capacity global config: %v", err)
+	}
+	return homeDir
+}
+
 func findLiveCapacityEvent(
 	t *testing.T,
 	events []factoryapi.FactoryEvent,
@@ -540,6 +737,81 @@ func scaffoldLiveCapacityFactory(t *testing.T, capacity int) string {
 	return dir
 }
 
+type liveCapacityJavaScriptProvider struct {
+	mu             sync.Mutex
+	calls          int
+	active         int
+	peak           int
+	started        chan int
+	releaseBlocked chan struct{}
+}
+
+func newLiveCapacityJavaScriptProvider() *liveCapacityJavaScriptProvider {
+	return &liveCapacityJavaScriptProvider{
+		started:        make(chan int, 8),
+		releaseBlocked: make(chan struct{}),
+	}
+}
+
+func (p *liveCapacityJavaScriptProvider) Infer(ctx context.Context, request workers.ProviderInferenceRequest) (workers.InferenceResponse, error) {
+	p.mu.Lock()
+	p.calls++
+	call := p.calls
+	p.active++
+	if p.active > p.peak {
+		p.peak = p.active
+	}
+	p.mu.Unlock()
+	p.started <- call
+	defer func() {
+		p.mu.Lock()
+		p.active--
+		p.mu.Unlock()
+	}()
+	if call <= 2 {
+		select {
+		case <-p.releaseBlocked:
+		case <-ctx.Done():
+			return workers.InferenceResponse{}, ctx.Err()
+		}
+	}
+	label := "javascript-child-one"
+	if strings.Contains(request.UserMessage, "two") {
+		label = "javascript-child-two"
+	}
+	return workers.InferenceResponse{
+		Content: fmt.Sprintf(`{"text":"live capacity complete","label":%q}`, label),
+	}, nil
+}
+
+func (p *liveCapacityJavaScriptProvider) waitForCall(t *testing.T, want int) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), liveCapacityTestTimeout)
+	defer cancel()
+	for {
+		select {
+		case call := <-p.started:
+			if call >= want {
+				return
+			}
+		case <-ctx.Done():
+			t.Fatalf("timed out waiting for JavaScript provider call %d", want)
+		}
+	}
+}
+
+func (p *liveCapacityJavaScriptProvider) callCount() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.calls
+}
+
+func (p *liveCapacityJavaScriptProvider) peakActive() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.peak
+}
+
 type liveCapacityBarrierRunner struct {
 	mu             sync.Mutex
 	calls          int
@@ -554,6 +826,12 @@ func newLiveCapacityBarrierRunner(blockedCalls int) *liveCapacityBarrierRunner {
 		started:        make(chan int, 16),
 		releaseBlocked: make(chan struct{}),
 	}
+}
+
+func (r *liveCapacityBarrierRunner) callCount() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.calls
 }
 
 func (r *liveCapacityBarrierRunner) Run(ctx context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
