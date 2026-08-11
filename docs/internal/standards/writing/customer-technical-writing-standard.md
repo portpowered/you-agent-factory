@@ -350,16 +350,26 @@ The bad example changes both the route and its resource shape. A writer must
 verify the route against the public contract rather than normalize it as
 ordinary prose.
 
-### Valid exception
+### Valid exception and protected literal
 
-**Good:** Keep `FACTORY_SESSION_OPENED` unchanged because it is a protected
-event literal emitted by the recording contract. Record the `B-LITERAL`
-exception with its contract owner.
+**Good:** Keep the shipped `SESSION_STARTED` literal exact in a recording
+example. The value is defined by the
+[FactoryEventType contract](../../../../api/components/schemas/events/FactoryEventType.yaml).
+If the associated procedure must perform simultaneous cleanup, record the
+applicable `B-PROC-20` exception with its owner and review point.
 
-**Bad:** Ignore the sentence limit because the author prefers this wording.
+```json
+{"type":"SESSION_STARTED"}
+```
 
-The first example identifies a protected literal, a rule, and an owner. The
-second example is ordinary readability debt and is not a valid exception.
+**Bad:** Record a `B-LITERAL` exception because `SESSION_STARTED` uses the
+contract's capitalization, or ignore the sentence limit because the author
+prefers longer wording.
+
+The good example preserves a verified protected literal and uses an exception
+only for a real simultaneous-action constraint. An exact protected literal is
+not a `B-LITERAL` finding; a documentation and contract mismatch must be
+fixed or approved by its owner.
 
 ## Manual review checklist
 
