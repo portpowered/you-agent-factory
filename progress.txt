@@ -9945,3 +9945,16 @@
 - **Learnings for future iterations:**
   - When main advances with another task's PRD, retain the active task's complete PRD but union every incoming append-only progress entry and reusable pattern before pushing the replacement head.
 ---
+## [2026-08-11 07:18:00 -07:00] - thr-functional-lane-speed-004 merged-head focused verification
+- What was implemented
+  - Completed the task-specific verification on merge commit `3106e9f7e`; no functional-lane source changes were needed after reconciling current main.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/internal/support ./cmd/functionallane ./cmd/gocoveragecheck -count=1 -timeout 300s` passed after rerunning `cmd/gocoveragecheck` with a clean temporary parent; the default workstation temp root contains an unrelated ancestor `go.mod` that invalidates its external-root negative test.
+  - `go test ./tests/functional/sessions/execution ./tests/functional/work/relationships ./tests/functional/work/submission -short -count=1 -timeout 600s` passed for all three touched packages.
+  - `make typecheck backend-size pkg-maint pkg-file-count pkg-structure vet` passed.
+  - Hosted replacement-head CI and the final thread/mergeability audit remain pending.
+- **Learnings for future iterations:**
+  - The `cmd/gocoveragecheck` external-root test assumes no `go.mod` in any temp ancestor; isolate `TEMP` outside a contaminated temp root when characterizing that workstation-only failure rather than changing the production root search.
+---
