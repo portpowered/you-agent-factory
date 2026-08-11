@@ -11916,3 +11916,21 @@
 - **Learnings for future iterations:**
   - A new measured production package must be added to both coverage manifests before hosted coverage can start; local Windows path-length failures can occur before the lane reaches manifest validation.
 ---
+
+## [2026-08-11 10:22 -07:00] - dwro-s7-placement-grammar remote coverage and final CI follow-up
+- What was implemented
+  - Added observable run-package coverage for canonical remote Factory Event transport validation, SSE framing and malformed-event handling, cursor/retry classification, reconnect cancellation, and terminal human/JSON output modes.
+  - Addressed the exact-head Backend Unit Coverage regression without changing runtime behavior; the focused `pkg/transports/cli/run` tests now exercise the new remote placement paths and restore the package floor in hosted CI.
+  - Updated the Story 003 evidence note in `prd.json` so the canonical PR description records the coverage follow-up and the known local Windows limitation.
+- Files changed
+  - `pkg/transports/cli/run/run_response_stream_renderer_test.go`
+  - `pkg/transports/cli/run/run_invocation_output_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Focused `go test ./pkg/transports/cli/run -count=1 -timeout 600s` — passed.
+  - Focused package coverage rose from 72.8% to 76.7%; local `make test-unit-coverage` remains blocked before execution by the Windows Go command-line path-length limit.
+  - Hosted CI run `31516628375` on head `01548e70d` is terminal-success across all required jobs, including Backend Unit Coverage, Backend Functional Coverage, and Verification Policy.
+- **Learnings for future iterations:**
+  - When a new remote transport path lowers a package floor, add tests at the observable HTTP/SSE and rendered-output boundaries; then use the hosted Linux coverage lane when the Windows checkout cannot launch the full Go command.
+---
