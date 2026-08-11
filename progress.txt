@@ -4064,3 +4064,21 @@
 - **Learnings for future iterations:**
   - A cohort already migrated in branch ancestry still needs direct focused Bun execution, exact source/expanded-case reconciliation, retired-path absence, both Vitest exclusion selections, lane-contract, and typecheck evidence before its batch story can be marked complete.
 ---
+
+## 2026-08-10 19:58 -07:00 - bun-compat-batch-migration-005
+- What was implemented
+  - Verified the current-factory-definition-02 workstation-helper cohort already present in branch ancestry: progress/failure outcome routes, worker assignment, editable workstation resolution, model-invoke bindings, and workstation type conversion execute exclusively in the native Bun unit lane.
+  - Preserved all 41 frozen source-level named and executable cases; no legacy Vitest owner or fallback copy remains.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Focused `bun test` — 5 files / 41 tests passed, 76 expect calls.
+  - Pinned `vitest.exe` `dashboard-unit` selection of all five migrated `.bun.unit.test.ts` paths — `No test files found` with captured exit code 1.
+  - Pinned `vitest.exe` selection of all five retired `.test.ts` paths — `No test files found` with captured exit code 1; all legacy paths are absent.
+  - `bun run check:test-lanes` — passed.
+  - `bun run typecheck` — passed.
+- **Learnings for future iterations:**
+  - When a cohort’s source migration is already in branch ancestry, complete the story with direct focused execution, exact baseline reconciliation, both Vitest exclusion selections, lane-contract, and typecheck evidence rather than creating duplicate owners.
+  - The workstation-helper cohort has no parameterized cases, so its source-level and executable totals must remain identical at 41.
+---
