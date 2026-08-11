@@ -15,9 +15,73 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
+	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+type orderedWorkerSessionsLifecycle struct {
+	workersessions.Service
+	order *[]string
+}
+
+func (s *orderedWorkerSessionsLifecycle) Stop(context.Context) error {
+	*s.order = append(*s.order, "worker-sessions")
+	return nil
+}
+
+type orderedRuntimeBoundary struct {
+	order *[]string
+}
+
+func (b *orderedRuntimeBoundary) Start(context.Context) error { return nil }
+
+func (b *orderedRuntimeBoundary) Publish(
+	context.Context,
+	workerexecution.WorkstationDispatchRequest,
+	workerexecution.WorkstationDispatchAcceptFunc,
+) error {
+	return nil
+}
+
+func (b *orderedRuntimeBoundary) PublishWithAdmission(
+	context.Context,
+	workerexecution.WorkstationDispatchRequest,
+	workerexecution.WorkstationDispatchAdmissionFunc,
+	workerexecution.WorkstationDispatchAcceptFunc,
+) error {
+	return nil
+}
+
+func (*orderedRuntimeBoundary) Cancel(context.Context, workerexecution.WorkstationDispatchCancelRequest) (workerexecution.WorkstationDispatchCancelResult, error) {
+	return workerexecution.WorkstationDispatchCancelResult{}, nil
+}
+
+func (b *orderedRuntimeBoundary) Stop(context.Context) error {
+	*b.order = append(*b.order, "workers")
+	return nil
+}
+
+func TestFactoryRuntimeShutdownStopsWorkerSessionsBeforeWorkers(t *testing.T) {
+	order := make([]string, 0, 2)
+	f := &factoryImpl{
+		cfg: &runtimeConfig{
+			workerSessions: &orderedWorkerSessionsLifecycle{
+				Service: &fakeWorkerSessionsService{},
+				order:   &order,
+			},
+		},
+		workers: &orderedRuntimeBoundary{order: &order},
+	}
+
+	if err := f.stopDispatchRuntimeLocked(context.Background(), dispatchplanning.RuntimeStopReasonCancelled); err != nil {
+		t.Fatalf("stopDispatchRuntimeLocked() error = %v, want nil", err)
+	}
+	if got, want := strings.Join(order, ","), "worker-sessions,workers"; got != want {
+		t.Fatalf("shutdown order = %q, want %q", got, want)
+	}
+}
 
 // pkgmaintcheck:ignore-cyclomatic-complexity this subscription contract test keeps replay ordering and live-stream assertions together at the runtime seam.
 func TestFactoryEventHistory_SubscribeReplaysHistoryThenStreamsLiveEvents(t *testing.T) {
