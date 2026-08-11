@@ -3763,3 +3763,23 @@
   - A passing repeated test does not disprove a race when the state machine has a provable read/election gap; preserve both the probabilistic outcome and the lock-level interleaving before choosing the fix.
   - Keep the one-process assertion strict and fix the shared runtime-host election in story 002; do not add sleeps, retries, or relaxed process-count checks.
 ---
+## [2026-08-10 19:24 -07:00] - thr-deflake-model-host-concurrent-reuse-002
+- What was implemented
+  - Fixed the Models runtime-host production race by moving the ready/loading/failed observation and absent-to-loading election into one mutex-protected transition in `supervisedRuntime.ensureReady`.
+  - Loading followers now capture the elected attempt's completion channel and await its terminal result; the elected caller alone launches, supervises, and publishes the process, preserving the strict one-process invariant.
+  - Added a test-only `BeforeLoadElection` seam and a channel/WaitGroup barrier that brings all eight `EnsureModelHost` callers to the diagnosed election boundary before release. The regression asserts every caller receives a ready/loaded host and exactly one launcher start, with no sleeps or retries.
+- Files changed
+  - `pkg/services/models/internal/services/runtime_host/internal/service/supervisor.go`
+  - `pkg/services/models/internal/services/runtime_host/internal/service/export_test.go`
+  - `pkg/services/models/internal/services/runtime_host/internal/service/service_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/models/internal/services/runtime_host/internal/service -count=1 -v` — passed.
+  - `go test -race ./pkg/services/models/internal/services/runtime_host/internal/service -run '^TestEnsureModelHostConcurrentReuseSharesOneSupervisedProcess$' -count=50` — passed all 50 repetitions with no race report or extra start.
+  - `go test -race ./pkg/services/models/internal/services/runtime_host/internal/service -count=1` — passed.
+  - `go vet ./pkg/services/models/internal/services/runtime_host/internal/service`, `make typecheck`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, and `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - Put the single-flight decision and loading publication in the same lock-protected switch; a separate absence precheck creates a stale observation that can overwrite `loadDone` and process ownership.
+  - A test-only barrier immediately before the atomic election can force all callers to contend at the diagnosed boundary while keeping production free of sleeps, retries, and timing-dependent coordination.
+---

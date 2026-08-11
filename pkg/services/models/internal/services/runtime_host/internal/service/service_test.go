@@ -228,27 +228,73 @@ func TestEnsureModelHostConcurrentReuseSharesOneSupervisedProcess(t *testing.T) 
 			return newFakeManagedProcess(healthServer.URL, nil)
 		},
 	}
-	service := newTestRuntimeHostWithScopesAndClock(t, scopes, launcher, realHostClock{})
 
 	const workers = 8
+	var arrivals sync.WaitGroup
+	arrivals.Add(workers)
+	allArrived := make(chan struct{})
+	go func() {
+		arrivals.Wait()
+		close(allArrived)
+	}()
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	releaseCallers := func() {
+		releaseOnce.Do(func() { close(release) })
+	}
+	t.Cleanup(releaseCallers)
+	service := internalservice.NewWithSupervisorTestConfig(
+		scopes,
+		mustAssetsService(t, scopes),
+		launcher,
+		http.DefaultClient,
+		realHostClock{},
+		nil,
+		nil,
+		internalservice.SupervisorTestConfig{
+			BeforeLoadElection: func() {
+				arrivals.Done()
+				<-release
+			},
+		},
+	)
+
 	var wg sync.WaitGroup
+	resultCh := make(chan models.EnsureModelHostResult, workers)
 	errCh := make(chan error, workers)
 	for worker := 0; worker < workers; worker++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, err := service.EnsureModelHost(context.Background(), models.EnsureModelHostRequest{
+			result, err := service.EnsureModelHost(context.Background(), models.EnsureModelHostRequest{
 				Scope: ref,
 				Name:  "OMNIVOICE_Q4_K_M",
 			})
+			resultCh <- result
 			errCh <- err
 		}()
 	}
+	// This is a failure guard for a broken election barrier, not readiness
+	// synchronization; callers are released only after all have arrived.
+	select {
+	case <-allArrived:
+	case <-time.After(5 * time.Second):
+		releaseCallers()
+		t.Fatal("concurrent callers did not reach the load election boundary")
+	}
+	releaseCallers()
 	wg.Wait()
 	close(errCh)
+	close(resultCh)
 	for err := range errCh {
 		if err != nil {
 			t.Fatalf("EnsureModelHost: %v", err)
+		}
+	}
+	for result := range resultCh {
+		if result.Host.ReadinessState != models.ReadinessStateReady ||
+			result.Host.LifecycleState != models.LifecycleStateLoaded {
+			t.Fatalf("ensure result host = %#v, want ready/loaded shared host", result.Host)
 		}
 	}
 	if launcher.startCount() != 1 {

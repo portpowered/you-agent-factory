@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -33,7 +32,8 @@ type supervisorSettings struct {
 		cacheInspection,
 		*models.RuntimeWorker,
 	) (modelseffects.HostProcessStartSpec, error)
-	Diagnostics hostDiagnostics
+	Diagnostics        hostDiagnostics
+	beforeLoadElection func()
 }
 
 type healthChecker interface {
@@ -120,19 +120,22 @@ func (r *supervisedRuntime) ensureReady(
 		return cancelHostError(err)
 	}
 
-	if err := r.awaitExistingLoad(ctx); err != nil {
-		if errors.Is(err, errReadyAlready) {
-			return nil
-		}
-		return err
+	// Tests use this gate to bring concurrent callers to the election boundary
+	// together. Production construction leaves it nil.
+	if r.cfg.beforeLoadElection != nil {
+		r.cfg.beforeLoadElection()
 	}
 
 	r.mu.Lock()
-	if r.state == supervisedStateReady {
+	switch r.state {
+	case supervisedStateReady:
 		r.mu.Unlock()
 		return nil
-	}
-	if r.state == supervisedStateFailed {
+	case supervisedStateLoading:
+		loadDone := r.loadDone
+		r.mu.Unlock()
+		return r.waitForLoad(ctx, loadDone)
+	case supervisedStateFailed:
 		err := r.failureOutcomeLocked()
 		r.mu.Unlock()
 		return err
@@ -187,28 +190,6 @@ func (r *supervisedRuntime) ensureReady(
 			return r.markFailed(identity, hostFailureClassCancelled, cancelHostError(ctx.Err()))
 		case <-timer.C():
 		}
-	}
-}
-
-var errReadyAlready = errors.New("model host runtime already ready")
-
-func (r *supervisedRuntime) awaitExistingLoad(ctx context.Context) error {
-	r.mu.Lock()
-	switch r.state {
-	case supervisedStateReady:
-		r.mu.Unlock()
-		return errReadyAlready
-	case supervisedStateLoading:
-		loadDone := r.loadDone
-		r.mu.Unlock()
-		return r.waitForLoad(ctx, loadDone)
-	case supervisedStateFailed:
-		err := r.failureOutcomeLocked()
-		r.mu.Unlock()
-		return err
-	default:
-		r.mu.Unlock()
-		return nil
 	}
 }
 
