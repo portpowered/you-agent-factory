@@ -5,6 +5,7 @@
 - Keep dashboard regression data in an immutable identity-keyed catalog and put controlled promises, generation ordering, and async outcomes in a separate fixture controller so component and Storybook tests exercise existing typed boundaries without production-only seams.
 - For Recharts dashboard surfaces, keep one canonical grid and axis-title owner, attach localized value-level descriptions with `aria-describedby`, and assert the counts after Strict Mode/remount and direct viewport-resize transitions.
 - Stories added to the dashboard Storybook viewport registry are covered at the repository's mobile and desktop widths; use a case-matched Vitest `-t` filter to isolate a story when the broader interaction project contains unrelated failures.
+- Keep passive Storybook fixture controls stable while the browser harness resolves controlled promises; direct DOM activation can avoid Radix outside-pointer dismissal when the harness must remain visible over an open dialog.
 - OS-boundary functional tests may poll an isolated durable filesystem checkpoint only when the child exposes no parent-process event or injected edge; document that reason at each polling helper and keep the bound as a failure guard.
 - Git Worktree preparation treats a retained Git `*.lock` as indeterminate ownership: retry within a named bound, preserve the resource, and return its exact path with verify/remove/retry guidance.
 - Git's `.git/config.lock` has no trustworthy owner or PID evidence; after a bounded retry, report the exact lock with `owner_liveness=indeterminate` and require verification before removing only that file—never auto-delete it.
@@ -4137,4 +4138,28 @@
 - **Learnings for future iterations:**
   - API-backed Storybook fixtures must return canonical UUID rows for durable sessions; alias-only mocks now correctly represent an empty canonical list and should be reserved for selector-resolution tests that bypass the typed list API.
   - A focused Storybook story-file filter is the reliable interaction evidence when the broader Storybook project has unrelated browser stories and startup overhead; the direct Playwright lane remains the responsive regression gate.
+---
+## [2026-08-11 02:52 -07:00] - dashboard-fixture-and-quick-wins-005
+- What was implemented
+  - Replaced the ambiguous single session action with separately named Open Factory and New Factory controls, distinct localized dialog journeys, accessible loading/error/success states, and focus restoration to the invoking action.
+  - Kept validation and New preview non-mutating; Open now requires explicit target confirmation, while New previews the normalized `/factory` target and requires explicit creation confirmation.
+  - Added existing-target and broken-target guards, cancel/dismissal/failure coverage, canonical list invalidation and reconciliation after success, deterministic resulting-session selection, and protection against reintroducing a `~default` tab.
+  - Extended the shared fixture/controller, isolated and reconciliation component coverage, Storybook fixture story, Storybook CI schedule, and direct mobile/desktop browser verifier for the complete Open/New journeys.
+- Files changed
+  - `prd.json`, `progress.txt`
+  - `ui/package.json`, `ui/scripts/button-usage-allowlist.mjs`, `ui/scripts/run-storybook-ci.mjs`, `ui/scripts/run-storybook-ci.test.mjs`, `ui/scripts/verify-dashboard-open-new-factory-browser.mjs`
+  - `ui/src/components/dashboard/fixtures/dashboard-regression.ts`
+  - `ui/src/features/header/components/dashboard-session-tab.tsx`, `dashboard-session-tabs-open-dialog.tsx`, `dashboard-session-tabs.tsx`, `components/stories/dashboard-session-tabs-open-new-factory.stories.tsx`
+  - `ui/src/features/header/components/dashboard-session-tabs.isolated.bun.component.test.tsx`, `dashboard-session-tabs.launch-target-selection.test.tsx`, `dashboard-session-tabs.reconciliation.bun.component.test.tsx`, `dashboard-session-tabs.stories.tsx`
+  - `ui/src/features/header/hooks/use-dashboard-session-tabs-state.ts`, `ui/src/features/header/lib/dashboard-session-tabs-utils.ts`, `ui/src/features/header/messages/header-controls.ts`, `ui/src/features/header/messages/factory-journeys.ts`
+- Verification
+  - `bun run typecheck` passed.
+  - `bun run lint` passed, including localized-copy, semantic-color, feature-boundary, folder-count, test-lane, package-boundary, button-usage, and form-control guards.
+  - Focused Bun component suites passed: 22 isolated session-tab tests with 178 expectations and 5 reconciliation tests with 45 expectations. Focused Vitest target-selection, fixture, and Storybook scheduling suites passed.
+  - `bun run build-storybook` passed, and `bun run storybook:dashboard-open-new-factory-check` passed at 390x844 and 1440x900.
+  - `git diff --check` passed and all five PRD user stories are now marked `passes: true`.
+- **Learnings for future iterations:**
+  - When a shared Button replaces a raw action in a semantic exception file, update the narrow raw-button fingerprint allowlist so it describes only the remaining tab semantics.
+  - Keep journey-specific locale catalogs separate from broad header controls to stay below the feature's file-size guard while preserving one resolved public message type.
+  - Storybook fixture operation matchers use request payload identity, so paths for overlapping validation outcomes must remain unique; otherwise a broken-target scenario can resolve the earlier matching operation.
 ---
