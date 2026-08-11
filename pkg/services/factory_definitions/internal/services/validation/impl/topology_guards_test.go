@@ -1300,6 +1300,97 @@ func TestWebhookTargetsAcceptsCanonicalFilterAndDeliveryPolicy(t *testing.T) {
 	}
 }
 
+func TestWebhookTargetsRejectsDispatchFiltersWithNoCompatibleStatus(t *testing.T) {
+	tests := []struct {
+		name       string
+		eventTypes []string
+		statuses   []string
+	}{
+		{
+			name:       "response cannot select interrupted",
+			eventTypes: []string{factorydefinitions.FactoryWebhookEventTypeDispatchResponse},
+			statuses:   []string{factorydefinitions.FactoryWebhookDispatchStatusInterrupted},
+		},
+		{
+			name:       "interrupted cannot select failed",
+			eventTypes: []string{factorydefinitions.FactoryWebhookEventTypeDispatchInterrupted},
+			statuses:   []string{factorydefinitions.FactoryWebhookDispatchStatusFailed},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cfg := testBaseConfig()
+			cfg.Webhooks = []factorydefinitions.FactoryWebhookConfig{{
+				Name:             "monitor",
+				URL:              "https://hooks.example.test/factory",
+				SigningSecretRef: "secrets/factory-monitor",
+				Filter: factorydefinitions.FactoryWebhookFilterConfig{
+					EventTypes:       test.eventTypes,
+					DispatchStatuses: test.statuses,
+				},
+			}}
+
+			findings := WebhookTargets(cfg)
+			assertWebhookTargetMatch(
+				t,
+				findings,
+				CodeWebhookDispatchStatusIncompatible,
+				"factory.webhooks[0](monitor).filter.dispatchStatuses",
+				"no status compatible with the configured dispatch event types",
+			)
+		})
+	}
+}
+
+func TestWebhookTargetsAcceptsMixedDispatchFilterStatusCombinations(t *testing.T) {
+	tests := []struct {
+		name       string
+		eventTypes []string
+		statuses   []string
+	}{
+		{
+			name: "failed response and interrupted dispatch",
+			eventTypes: []string{
+				factorydefinitions.FactoryWebhookEventTypeDispatchResponse,
+				factorydefinitions.FactoryWebhookEventTypeDispatchInterrupted,
+			},
+			statuses: []string{
+				factorydefinitions.FactoryWebhookDispatchStatusFailed,
+				factorydefinitions.FactoryWebhookDispatchStatusInterrupted,
+			},
+		},
+		{
+			name: "failed response among mixed work and dispatch events",
+			eventTypes: []string{
+				factorydefinitions.FactoryWebhookEventTypeWorkStateChange,
+				factorydefinitions.FactoryWebhookEventTypeDispatchResponse,
+			},
+			statuses: []string{factorydefinitions.FactoryWebhookDispatchStatusFailed},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cfg := testBaseConfig()
+			cfg.Webhooks = []factorydefinitions.FactoryWebhookConfig{{
+				Name:             "monitor",
+				URL:              "https://hooks.example.test/factory",
+				SigningSecretRef: "secrets/factory-monitor",
+				Filter: factorydefinitions.FactoryWebhookFilterConfig{
+					EventTypes:       test.eventTypes,
+					DispatchStatuses: test.statuses,
+				},
+			}}
+
+			findings := WebhookTargets(cfg)
+			if len(findings) != 0 {
+				t.Fatalf("findings = %#v, want none", findings)
+			}
+		})
+	}
+}
+
 func TestWebhookTargetsRejectsInvalidFieldsWithEndpointPaths(t *testing.T) {
 	cfg := testBaseConfig()
 	cfg.Webhooks = []factorydefinitions.FactoryWebhookConfig{

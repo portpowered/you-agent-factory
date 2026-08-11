@@ -234,8 +234,38 @@ func webhookFilterTargets(filter factorydefinitions.FactoryWebhookFilterConfig, 
 			"webhook filter.dispatchStatuses requires at least one dispatch event type",
 			subjectID,
 		))
+	} else if len(filter.DispatchStatuses) > 0 && !webhookDispatchFilterHasCompatibleStatus(filter.EventTypes, filter.DispatchStatuses) {
+		targets = append(targets, webhookTarget(
+			CodeWebhookDispatchStatusIncompatible,
+			basePath+".filter.dispatchStatuses",
+			"webhook filter.dispatchStatuses has no status compatible with the configured dispatch event types",
+			subjectID,
+		))
 	}
 	return targets
+}
+
+func webhookDispatchFilterHasCompatibleStatus(eventTypes, statuses []string) bool {
+	for _, eventType := range eventTypes {
+		for _, status := range statuses {
+			if webhookDispatchStatusCompatible(eventType, status) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func webhookDispatchStatusCompatible(eventType, status string) bool {
+	switch eventType {
+	case factorydefinitions.FactoryWebhookEventTypeDispatchResponse,
+		factorydefinitions.FactoryWebhookEventTypeDispatchReconciled:
+		return status == factorydefinitions.FactoryWebhookDispatchStatusFailed
+	case factorydefinitions.FactoryWebhookEventTypeDispatchInterrupted:
+		return status == factorydefinitions.FactoryWebhookDispatchStatusInterrupted
+	default:
+		return false
+	}
 }
 
 func isSupportedWebhookEventType(value string) bool {
