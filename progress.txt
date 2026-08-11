@@ -4024,3 +4024,15 @@
   - Dynamic Factory arguments are parsed by Work after run-level flags are removed; a value-taking argument must reject a following `--flag` token before normalization so it cannot accidentally start runtime execution.
   - `make cli-manifest-generate` refreshes the generated Go family metadata; changes to the published `packages/api/generated/cli/commands.json` projection also require `make contracts-generate` before `make cli-manifest-check` will pass.
 ---
+## 2026-08-10 20:00 -07:00 - cli-error-classification-and-run-output-001 verification follow-up
+- What was implemented
+  - Restored the locked UI dependency needed by the repository typecheck and verified the frontend typecheck after the story changes.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `make typecheck` passed.
+  - The broad `make test` command reached its six-minute command timeout without emitting a test failure; the focused backend and functional CLI suites remained green.
+- **Learnings for future iterations:**
+  - On this shared Windows host, broad test runs can be delayed by concurrent test trees; use the focused package and process-boundary suites for fast feedback, then record any uncompleted broad-gate result explicitly.
+---

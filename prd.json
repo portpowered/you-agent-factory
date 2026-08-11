@@ -32,7 +32,7 @@
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Implemented typed invocation-argument missing-value and static-flag parse errors, preserving existing stable ArgumentError codes and BAD_REQUEST classification. Added process-boundary coverage for the reported --planer-model typo in normal and quiet modes, dynamic/static missing values, positional overflow, and invalid JSON validation; all assert one stderr ErrorResponse, empty stdout, and zero provider calls. Updated authored CLI errors and regenerated family/published manifests with make cli-manifest-generate and make contracts-generate. Verification: focused Work/CLI packages, focused functional parameter/output tests, make cli-manifest-check, and git diff --check passed."
+      "notes": "Implemented typed invocation-argument missing-value and static-flag parse errors, preserving existing stable ArgumentError codes and BAD_REQUEST classification. Added process-boundary coverage for the reported --planer-model typo in normal and quiet modes, dynamic/static missing values, positional overflow, and invalid JSON validation; all assert one stderr ErrorResponse, empty stdout, and zero provider calls. Updated authored CLI errors and regenerated family/published manifests with make cli-manifest-generate and make contracts-generate. Verification: focused Work/CLI packages, focused functional parameter/output tests, make cli-manifest-check, make typecheck, and git diff --check passed. The broad make test command reached its six-minute command timeout without emitting a test failure; no source failure was reported."
     },
     {
       "id": "cli-error-classification-and-run-output-002",
