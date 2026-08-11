@@ -187,12 +187,12 @@ function buildReplayLines(factoryDefinition) {
 
 async function openReviewSessionTab(page) {
   await page
-    .getByRole("button", { name: "Open another session" })
+    .getByRole("button", { name: "Open Factory" })
     .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
-  await page.getByRole("button", { name: "Open another session" }).click();
+  await page.getByRole("button", { name: "Open Factory" }).click();
 
   const dialog = page.getByRole("dialog", {
-    name: "Factory Session",
+    name: "Open Factory",
   });
   await dialog.waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
   await dialog.getByLabel("Factory folder").fill("/workspace/project");
@@ -201,6 +201,7 @@ async function openReviewSessionTab(page) {
     .getByRole("button", { name: "Review factory" })
     .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
   await dialog.getByRole("button", { name: "Review factory" }).click();
+  await dialog.getByRole("button", { name: "Open selected target" }).click();
   await dialog.waitFor({
     state: "hidden",
     timeout: uiInteractionTimeoutMs,

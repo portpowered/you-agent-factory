@@ -166,6 +166,9 @@ describe("DashboardSessionTabs launch target selection", () => {
     expectStandardListTargetRow(betaTargetButton, { selected: false });
 
     fireEvent.click(betaTargetButton);
+    fireEvent.click(
+      screen.getByRole("button", { name: messages.openSessionTargetLabel }),
+    );
 
     await waitFor(() => {
       expect(openFactorySession.mock.calls[1]?.[0]).toEqual({
