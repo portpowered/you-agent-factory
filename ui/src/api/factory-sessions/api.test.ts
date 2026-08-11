@@ -32,7 +32,7 @@ describe("factory sessions API", () => {
             {
               factoryDir: "/workspace/project/alpha",
               folderPath: "/workspace/project",
-              id: "~default",
+              id: "019e0000-0000-7000-8000-000000000042",
               isDefault: true,
               project: "alpha",
               runtime: {
@@ -59,7 +59,7 @@ describe("factory sessions API", () => {
       {
         factoryDir: "/workspace/project/alpha",
         folderPath: "/workspace/project",
-        id: "~default",
+        id: "019e0000-0000-7000-8000-000000000042",
         isDefault: true,
         project: "alpha",
         runtime: {

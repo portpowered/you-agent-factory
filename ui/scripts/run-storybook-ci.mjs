@@ -356,6 +356,22 @@ export async function runStorybookCI({
       runCommand(["run", "storybook:dashboard-viewport-check"]),
       serverExit,
     ]);
+    await Promise.race([
+      runCommand(["run", "storybook:dashboard-session-reconciliation-check"]),
+      serverExit,
+    ]);
+    await Promise.race([
+      runCommand(["run", "storybook:dashboard-open-new-factory-check"]),
+      serverExit,
+    ]);
+    await Promise.race([
+      runCommand(["run", "storybook:work-chart-check"]),
+      serverExit,
+    ]);
+    await Promise.race([
+      runCommand(["run", "storybook:submit-work-session-check"]),
+      serverExit,
+    ]);
     if (includeInteractionSuite) {
       await Promise.race([
         runCommand(["run", "storybook:choose-file-check"]),
