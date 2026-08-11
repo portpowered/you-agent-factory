@@ -88,9 +88,18 @@ def restore_stashed_changes(repo_path, stash_ref, scope_label):
             details = (fallback_result.stderr or fallback_result.stdout).strip()
             if not details:
                 details = (apply_result.stderr or apply_result.stdout).strip()
+            # A failed apply leaves a half-applied, possibly conflicted tree.
+            # Unmerged index entries make every later `git stash push` fail,
+            # which wedges all future workspace setups until a human cleans
+            # the root checkout. Reset back to a clean tree; the stash entry
+            # still holds the full residue. `git clean` honors .gitignore, so
+            # ignored operator files (docs/temp, tasks/todo) are untouched.
+            run_git("reset", "--hard", "HEAD", cwd=repo_path, check=False)
+            run_git("clean", "-fd", cwd=repo_path, check=False)
             raise RuntimeError(
                 f"{scope_label} sync succeeded, but restoring stashed changes failed; "
-                f"{stash_ref} was preserved: {details}"
+                f"the working tree was reset to clean and {stash_ref} was "
+                f"preserved with the unrestored changes: {details}"
             )
 
     drop_result = run_git("stash", "drop", stash_ref, cwd=repo_path, check=False)
