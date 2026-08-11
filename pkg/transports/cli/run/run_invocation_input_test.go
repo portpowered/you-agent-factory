@@ -7,9 +7,11 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
+	"io"
 	"reflect"
 	"strings"
 	"testing"
@@ -374,4 +376,242 @@ func (r *capturingInvocationMetricsRecorder) assertContainsMetricNames(t *testin
 			t.Fatalf("metrics = %#v, want to include %q", r.metrics, name)
 		}
 	}
+}
+
+func TestRemoteInvocationClientResultValidation(t *testing.T) {
+	_, err := remoteInvocationClient{transport: &remoteProtocolStub{}}.GetFactorySessionResult(nil, RemoteInvocationResultRequest{})
+	if err == nil || !strings.Contains(err.Error(), "context is required") {
+		t.Fatalf("nil context error = %v, want required-context result error", err)
+	}
+
+	_, err = remoteInvocationClient{}.GetFactorySessionResult(context.Background(), RemoteInvocationResultRequest{})
+	if err == nil || !strings.Contains(err.Error(), "CLI HTTP protocol is required") {
+		t.Fatalf("nil protocol error = %v, want required-protocol result error", err)
+	}
+
+	stub := &remoteProtocolStub{}
+	_, err = remoteInvocationClient{transport: stub}.GetFactorySessionResult(context.Background(), RemoteInvocationResultRequest{Server: "https://selected.test"})
+	if err == nil || !strings.Contains(err.Error(), RemoteDurableResponseInvalidCode) || stub.called {
+		t.Fatalf("missing result identity error = %v/called=%t, want response error without HTTP", err, stub.called)
+	}
+
+	stub = &remoteProtocolStub{}
+	_, err = remoteInvocationClient{transport: stub}.GetFactorySessionResult(context.Background(), RemoteInvocationResultRequest{
+		Server: "http://[::1", SessionID: "dur-sess-invalid-endpoint",
+	})
+	if err == nil || !strings.Contains(err.Error(), RemoteDurableResultCode) || stub.called {
+		t.Fatalf("invalid result endpoint error = %v/called=%t, want result error without HTTP", err, stub.called)
+	}
+}
+
+func TestRemoteInvocationClientResultWithoutHTTPResponse(t *testing.T) {
+	_, err := remoteInvocationClient{transport: &remoteProtocolStub{response: clihttp.Response{}}}.GetFactorySessionResult(
+		context.Background(), RemoteInvocationResultRequest{Server: "https://selected.test", SessionID: "dur-sess-result"},
+	)
+	if err == nil || !strings.Contains(err.Error(), "HTTP response is unavailable") {
+		t.Fatalf("error = %v, want missing result response", err)
+	}
+}
+
+func TestRemoteInvocationClientTransportErrors(t *testing.T) {
+	_, err := remoteInvocationClient{transport: &remoteProtocolStub{err: errors.New("dial failed")}}.StartFactorySession(
+		context.Background(), RemoteInvocationRequest{Server: "https://selected.test"},
+	)
+	assertInvocationErrorCode(t, err, RemoteDurableStartCode, "dial failed")
+
+	_, err = remoteInvocationClient{transport: &remoteProtocolStub{err: errors.New("result dial failed")}}.GetFactorySessionResult(
+		context.Background(), RemoteInvocationResultRequest{Server: "https://selected.test", SessionID: "dur-sess-result"},
+	)
+	assertInvocationErrorCode(t, err, RemoteDurableResultCode, "result dial failed")
+}
+
+func assertInvocationErrorCode(t *testing.T, err error, code, detail string) {
+	t.Helper()
+	var invocationErr *InvocationError
+	if !errors.As(err, &invocationErr) || invocationErr.Code != code || !strings.Contains(err.Error(), detail) {
+		t.Fatalf("error = %v, want %s with %s", err, code, detail)
+	}
+}
+
+func TestRemoteDurableReasonClassificationCoversControlReasons(t *testing.T) {
+	for _, test := range []struct {
+		reason string
+		code   string
+		status interfaces.InvocationTerminalStatus
+	}{
+		{reason: "NEEDS_HUMAN", code: "INVOCATION_NEEDS_HUMAN", status: interfaces.InvocationTerminalStatusFailed},
+		{reason: "approval_required", code: "INVOCATION_NEEDS_HUMAN", status: interfaces.InvocationTerminalStatusFailed},
+		{reason: "PAUSED_BY_OPERATOR", code: "INVOCATION_PAUSED", status: interfaces.InvocationTerminalStatusFailed},
+		{reason: "TIMEOUT", code: "INVOCATION_TIMED_OUT", status: interfaces.InvocationTerminalStatusTimedOut},
+		{reason: "CANCELLED", code: "INVOCATION_CANCELED", status: interfaces.InvocationTerminalStatusCanceled},
+		{reason: "TERMINATED", code: "INVOCATION_INTERRUPTED", status: interfaces.InvocationTerminalStatusFailed},
+	} {
+		t.Run(test.reason, func(t *testing.T) {
+			status, code, _, ok := remoteDurableReasonClassification(test.reason)
+			if !ok || code != test.code || status != test.status {
+				t.Fatalf("classification = (%s, %q, %t), want (%s, %q, true)", status, code, ok, test.status, test.code)
+			}
+		})
+	}
+	if _, _, _, ok := remoteDurableReasonClassification("UNKNOWN"); ok {
+		t.Fatal("unknown durable reason classified as terminal")
+	}
+}
+
+func TestRemoteDurableSourceVariants(t *testing.T) {
+	workflow := "review-workflow"
+	got, _, err := remoteDurableSourceFromRunConfig(RunConfig{Workflow: workflow})
+	if err != nil || got.Kind != factoryapi.FactorySessionExecutionSourceKindWorkflowName || got.WorkflowName == nil || *got.WorkflowName != workflow {
+		t.Fatalf("workflow source = %#v/%v, want workflow name", got, err)
+	}
+
+	workflowFile := "workflow.mjs"
+	got, _, err = remoteDurableSourceFromRunConfig(RunConfig{FactoryConfigPath: workflowFile})
+	if err != nil || got.Kind != factoryapi.FactorySessionExecutionSourceKindWorkflowFile || got.WorkflowFile == nil || *got.WorkflowFile != workflowFile {
+		t.Fatalf("workflow file source = %#v/%v, want workflow file", got, err)
+	}
+}
+
+func TestRemoteDurableSourceRejectsUnrepresentableTargets(t *testing.T) {
+	_, _, err := remoteDurableSourceFromRunConfig(RunConfig{})
+	if err == nil || !strings.Contains(err.Error(), RemoteDurableRequestInvalidCode) {
+		t.Fatalf("missing target error = %v, want %s", err, RemoteDurableRequestInvalidCode)
+	}
+
+	_, _, err = remoteDurableSourceFromRunConfig(RunConfig{
+		NamedFactoryName: "@you/research",
+		Dir:              "factory",
+		LoadFactoryConfigFile: func(string) (*interfaces.FactoryConfig, error) {
+			return nil, errors.New("config unavailable")
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), RemoteDurableRequestInvalidCode) || !strings.Contains(err.Error(), "config unavailable") {
+		t.Fatalf("named policy load error = %v, want stable remote request error", err)
+	}
+
+	_, _, err = remoteDurableSourceFromRunConfig(RunConfig{FactoryConfigPath: "factory.json"})
+	if err == nil || !strings.Contains(err.Error(), "config loader") {
+		t.Fatalf("missing inline loader error = %v, want config loader diagnostic", err)
+	}
+}
+
+func TestRemoteInvocationWaitAndOutputModesPreserveTerminalBoundary(t *testing.T) {
+	newOperation := func(result factoryapi.FactorySessionResult) remoteInvocationResultOperationFunc {
+		return remoteInvocationResultOperationFunc{result: func(context.Context, RemoteInvocationResultRequest) (factoryapi.FactorySessionResult, error) {
+			return result, nil
+		}}
+	}
+	baseConfig := func(output io.Writer) RunConfig {
+		return RunConfig{
+			Dir:                     "factory",
+			NamedFactoryName:        "@you/research",
+			PreparedInvocationInput: preparedRemoteArguments("boundary input"),
+			Output:                  output,
+		}
+	}
+
+	statusSucceeded := factoryapi.FactorySessionDurableLifecycleStatusSucceeded
+	output, err := runRemoteInvocationWithOperation(t, baseConfig(io.Discard), newOperation(factoryapi.FactorySessionResult{
+		SessionId:     "other-session",
+		ResultStatus:  factoryapi.FactorySessionResultStatusFinal,
+		SessionStatus: &statusSucceeded,
+	}))
+	if err == nil || !strings.Contains(err.Error(), RemoteDurableResponseInvalidCode) || output != "" {
+		t.Fatalf("identity mismatch = %v/output=%q, want stable response error and no output", err, output)
+	}
+
+	output, err = runRemoteInvocationWithOperation(t, baseConfig(io.Discard), newOperation(factoryapi.FactorySessionResult{
+		SessionId:     "dur-sess-boundary",
+		ResultStatus:  factoryapi.FactorySessionResultStatusNotReady,
+		SessionStatus: &statusSucceeded,
+	}))
+	if err == nil || !strings.Contains(err.Error(), "INVOCATION_PRIMARY_RESULT_UNRESOLVED") || output != "" {
+		t.Fatalf("non-terminal result = %v/output=%q, want unresolved-result error and no output", err, output)
+	}
+
+	statusFailed := factoryapi.FactorySessionDurableLifecycleStatusFailed
+	var streamOutput bytes.Buffer
+	streamConfig := baseConfig(&streamOutput)
+	streamConfig.JSONOutput = true
+	streamConfig.InvocationOutputMode = InvocationOutputResponseStream
+	output, err = runRemoteInvocationWithOperation(t, streamConfig, newOperation(factoryapi.FactorySessionResult{
+		SessionId:     "dur-sess-boundary",
+		ResultStatus:  factoryapi.FactorySessionResultStatusFailedWithPartial,
+		SessionStatus: &statusFailed,
+		FailureDetail: &factoryapi.FailureDetail{Message: "remote terminal failure"},
+	}))
+	if err == nil || !strings.Contains(err.Error(), "INVOCATION_RUNTIME_FAILURE") || output == "" || !strings.Contains(output, `"recordType":"invocation_result"`) {
+		t.Fatalf("JSON response stream = %v/output=%q, want terminal record and failure", err, output)
+	}
+
+	var humanOutput bytes.Buffer
+	humanConfig := baseConfig(&humanOutput)
+	humanConfig.InvocationOutputMode = InvocationOutputResponseStream
+	output, err = runRemoteInvocationWithOperation(t, humanConfig, newOperation(factoryapi.FactorySessionResult{
+		SessionId:     "dur-sess-boundary",
+		ResultStatus:  factoryapi.FactorySessionResultStatusFailedWithPartial,
+		SessionStatus: &statusFailed,
+		FailureDetail: &factoryapi.FailureDetail{Message: "remote terminal failure"},
+	}))
+	if err == nil || !strings.Contains(err.Error(), "INVOCATION_RUNTIME_FAILURE") || output != humanOutput.String() || !strings.Contains(output, "--- invocation outcome ---") {
+		t.Fatalf("human response stream = %v/output=%q, want human terminal outcome", err, output)
+	}
+}
+
+func TestRemoteInvocationWaitCancellationIsClassified(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	op := remoteInvocationResultOperationFunc{result: func(context.Context, RemoteInvocationResultRequest) (factoryapi.FactorySessionResult, error) {
+		cancel()
+		running := factoryapi.FactorySessionDurableLifecycleStatusRunning
+		retryable := true
+		return factoryapi.FactorySessionResult{
+			SessionId:     "dur-sess-boundary",
+			ResultStatus:  factoryapi.FactorySessionResultStatusNotReady,
+			SessionStatus: &running,
+			Availability:  &factoryapi.FactorySessionResultAvailabilityDetail{Retryable: &retryable},
+		}, nil
+	}}
+	output, err := runRemoteInvocationWithContext(t, ctx, RunConfig{
+		Dir:                     "factory",
+		NamedFactoryName:        "@you/research",
+		PreparedInvocationInput: preparedRemoteArguments("cancel wait"),
+		Output:                  io.Discard,
+	}, op)
+	if err == nil || !strings.Contains(err.Error(), RemoteDurableResultCode) || !errors.Is(err, context.Canceled) || output != "" {
+		t.Fatalf("canceled wait = %v/output=%q, want durable result cancellation and no output", err, output)
+	}
+}
+
+type remoteInvocationResultOperationFunc struct {
+	result func(context.Context, RemoteInvocationResultRequest) (factoryapi.FactorySessionResult, error)
+}
+
+func (fn remoteInvocationResultOperationFunc) StartFactorySession(context.Context, RemoteInvocationRequest) (factoryapi.FactorySessionExecutionResponse, error) {
+	return factoryapi.FactorySessionExecutionResponse{
+		SessionId: "dur-sess-boundary",
+		Status:    factoryapi.FactorySessionDurableLifecycleStatusQueued,
+	}, nil
+}
+
+func (fn remoteInvocationResultOperationFunc) GetFactorySessionResult(ctx context.Context, request RemoteInvocationResultRequest) (factoryapi.FactorySessionResult, error) {
+	return fn.result(ctx, request)
+}
+
+func runRemoteInvocationWithOperation(t *testing.T, cfg RunConfig, operation remoteInvocationResultOperationFunc) (string, error) {
+	t.Helper()
+	err := RunRemoteInvocation(context.Background(), cfg, "http://selected.test", operation)
+	if output, ok := cfg.Output.(*bytes.Buffer); ok {
+		return output.String(), err
+	}
+	return "", err
+}
+
+func runRemoteInvocationWithContext(t *testing.T, ctx context.Context, cfg RunConfig, operation remoteInvocationResultOperationFunc) (string, error) {
+	t.Helper()
+	err := RunRemoteInvocation(ctx, cfg, "http://selected.test", operation)
+	if output, ok := cfg.Output.(*bytes.Buffer); ok {
+		return output.String(), err
+	}
+	return "", err
 }

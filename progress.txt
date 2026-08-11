@@ -9634,3 +9634,35 @@
   - CLI documentation `sourceHash` values follow the source-owned CLI metadata convention; when adding commands, populate the authored hash before running the package generators so canonical and published manifests remain valid.
   - Keep the active task PRD authoritative when merging a moving main branch, and preserve both branch histories when resolving append-only progress logs.
 ---
+## [2026-08-11 02:34:00 -07:00] - dwro-s7-placement-grammar-004 CI coverage follow-up
+- What was implemented
+  - Added observable CLI registry coverage for local-default, explicit remote, compatibility fallback, exact session identity, all four lifecycle controls, and missing-placement-service diagnostics.
+  - Added remote durable-run boundary coverage for transport failures, result validation, control-reason classifications, source variants, cancellation, and human/JSON response-stream output.
+  - Characterized the CI functional failure `TestCLIFailureWritesDiagnosticToStderr` locally five consecutive times; it passed without a product change, indicating a transient CI runtime race rather than a deterministic regression.
+- Files changed
+  - `pkg/transports/cli/commandregistry/representative_handlers_test.go`
+  - `pkg/transports/cli/run/run_invocation_output_test.go`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/transports/cli/commandregistry -count=1` passed.
+  - `go test ./pkg/transports/cli/run -count=1 -timeout 5m` passed.
+  - Broader CLI coverage reproduction passed at 89.5% for `commandregistry` (floor 89.37%) and 80.6% for `run` (floor 80.25%).
+  - `go test ./tests/functional/transport/cli/process -run '^TestCLIFailureWritesDiagnosticToStderr$' -count=5 -timeout 10m` passed.
+- **Learnings for future iterations:**
+  - The repository's package coverage floor is measured across the wider package test lane, not only the package's direct tests; reproduce it with `-coverpkg=<package> ./pkg/transports/cli/...` when the full Windows coverage command exceeds the command-line limit.
+  - A single functional coverage failure in an untouched boundary test should be characterized repeatedly before changing the public error contract; this failure was not reproducible locally.
+---
+## [2026-08-11 02:49:00 -07:00] - dwro-s7-placement-grammar-004 CI coverage test-layout correction
+- What was implemented
+  - Relocated the remote durable-run coverage additions into the existing `pkg/transports/cli/run/run_invocation_input_test.go` so the package file-count baseline remains unchanged while all maintainability limits remain satisfied.
+- Files changed
+  - `pkg/transports/cli/run/run_invocation_input_test.go`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/transports/cli/run -count=1 -timeout 5m` passed.
+  - `go run ./cmd/pkgmaintcheck -root .` passed.
+  - `make pkg-file-count` passed.
+  - `make vet pkg-structure cli-manifest-check contracts-check` passed.
+- **Learnings for future iterations:**
+  - New tests in a tightly budgeted package should reuse an existing test file when package file-count baselines are strict; keep the resulting file below the 1,000-line maintainability limit by splitting behavior into focused functions.
+---
