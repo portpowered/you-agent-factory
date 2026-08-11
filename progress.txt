@@ -3923,8 +3923,8 @@
   - `prd.json` parses with all four stories marked `passes:true`; merge conflict markers are absent.
 - **Learnings for future iterations:**
   - Deletion-only package baselines are ratchets, not capacity budgets; keep them at the exact current-main count and consolidate small additions into an existing focused owner.
- - During a moving-base merge, keep the active task PRD authoritative and preserve both branches' append-only progress entries before validating the replacement head.
- ---
+  - During a moving-base merge, keep the active task PRD authoritative and preserve both branches' append-only progress entries before validating the replacement head.
+---
 
 ## 2026-08-10 18:37 -07:00 - dwro-s1-remote-placement-flags-002 review follow-up
 - What was implemented
@@ -3978,4 +3978,20 @@
 - **Learnings for future iterations:**
   - Treat the package file-count baseline as a deletion-only ratchet even when a split is mechanically correct; use existing responsibility-aligned test owners and verify both the 1,000-line maintainability gate and the broader 1,200-line task cap.
   - When review identifies whitespace drift in a move-only split, compare the named declarations directly against the unmodified source and restore the exact text before rerunning inventory and coverage.
+---
+
+## 2026-08-10 18:42 -07:00 - dwro-s1-remote-placement-flags current-main synchronization follow-up
+- What was implemented
+  - Fetched the live `origin/main` head `0b9771fe8` after the PR base advanced beyond the previously synchronized `e6797fd5`.
+  - Merged the current base, preserved the S1-owned `prd.json`, and retained both branches' append-only progress history while resolving the shared bookkeeping conflicts.
+- Files changed
+  - Current-main merge files.
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `prd.json` parses with all four S1 stories marked `passes:true`.
+  - `progress.txt` and `prd.json` contain no merge conflict markers; the merge index is resolved.
+  - `git diff --cached --check` passed before the merge commit.
+- **Learnings for future iterations:**
+  - A clean merge against a stale remote-tracking base is not sufficient; compare the live hosting ref, fetch it, and resolve shared PRD/progress files again before pushing the replacement head.
 ---
