@@ -13,9 +13,13 @@ schema:
       plural: String or null.
       verb: String or null.
     discouragedAlternatives:
-      text: Non-empty alternative spelling or phrase.
+      text: Non-empty alternative spelling or phrase that is genuinely interchangeable with the term on the listed surface.
       status: Either discouraged or prohibited.
-      replacement: Approved canonical term or exact protected literal.
+      replacement: A different canonical term, approved form, or exact protected literal registered in terms.
+    replacementRules:
+      - text and replacement must not be identical.
+      - replacement must be a canonical value or non-null approved form in this register.
+      - Do not use a public term as an alternative for an internal implementation term merely to describe a different concept; restrict each term with its surfaces instead.
     example: Non-empty customer-facing usage example.
     surfaces: Non-empty list of surfaces where the term is valid.
     owner: Repository path, contract, or architecture source that owns the meaning.
@@ -1057,12 +1061,9 @@ terms:
       plural: CPNs
       verb: null
     discouragedAlternatives:
-      - text: Factory
-        status: prohibited
-        replacement: Factory
-      - text: public workflow model
-        status: prohibited
-        replacement: Factory
+      - text: colored Petri net
+        status: discouraged
+        replacement: CPN
     example: Use `CPN` only in an explicitly internal explanation of the runtime implementation.
     surfaces:
       - Explicitly internal architecture material
@@ -1077,12 +1078,9 @@ terms:
       plural: places
       verb: place
     discouragedAlternatives:
-      - text: Work State
-        status: prohibited
-        replacement: Work State
-      - text: customer state
-        status: prohibited
-        replacement: Work State
+      - text: Petri-net place
+        status: discouraged
+        replacement: place
     example: Use `place` only in an explicitly internal explanation of Petri-net topology.
     surfaces:
       - Explicitly internal architecture material
@@ -1097,12 +1095,9 @@ terms:
       plural: transitions
       verb: transition
     discouragedAlternatives:
-      - text: Workstation
-        status: prohibited
-        replacement: Workstation
-      - text: customer step
-        status: prohibited
-        replacement: Workstation
+      - text: Petri-net transition
+        status: discouraged
+        replacement: transition
     example: Use `transition` only in an explicitly internal explanation of runtime execution.
     surfaces:
       - Explicitly internal architecture material
@@ -1117,12 +1112,9 @@ terms:
       plural: markings
       verb: mark
     discouragedAlternatives:
-      - text: Work list
-        status: prohibited
-        replacement: Work list
-      - text: current Work
-        status: prohibited
-        replacement: Work
+      - text: Petri-net marking
+        status: discouraged
+        replacement: marking
     example: Use `marking` only in an explicitly internal explanation of runtime state.
     surfaces:
       - Explicitly internal architecture material
@@ -1137,12 +1129,9 @@ terms:
       plural: tokens
       verb: tokenize
     discouragedAlternatives:
-      - text: Work
-        status: prohibited
-        replacement: Work
-      - text: task
-        status: prohibited
-        replacement: Work
+      - text: Petri-net token
+        status: discouraged
+        replacement: token
     example: Use `token` only in an explicitly internal explanation of runtime state or implementation diagnostics.
     surfaces:
       - Explicitly internal architecture material
