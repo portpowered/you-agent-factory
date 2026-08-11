@@ -23,17 +23,19 @@ import (
 )
 
 const (
-	InvocationErrorCodeFailed       = factoryruntimecli.InvocationErrorCodeFailed
-	InvocationErrorCodeCancelled    = factoryruntimecli.InvocationErrorCodeCancelled
-	InvocationErrorCodeTimeout      = factoryruntimecli.InvocationErrorCodeTimeout
-	CurrentFactoryNotFoundCode      = factoryruntimecli.CurrentFactoryNotFoundCode
-	CurrentFactoryInvalidCode       = factoryruntimecli.CurrentFactoryInvalidCode
-	InvocationOutputConflictCode    = factoryruntimecli.InvocationOutputConflictCode
-	InvocationOutputUnsupportedCode = factoryruntimecli.InvocationOutputUnsupportedCode
-	RemoteLocalHostingConflictCode  = factoryruntimecli.RemoteLocalHostingConflictCode
-	ServerBindFailedCode            = factoryruntimecli.ServerBindFailedCode
-	InvocationOutputPrimaryResult   = factoryruntimecli.InvocationOutputPrimaryResult
-	InvocationOutputResponseStream  = factoryruntimecli.InvocationOutputResponseStream
+	InvocationErrorCodeFailed          = factoryruntimecli.InvocationErrorCodeFailed
+	InvocationErrorCodeCancelled       = factoryruntimecli.InvocationErrorCodeCancelled
+	InvocationErrorCodeTimeout         = factoryruntimecli.InvocationErrorCodeTimeout
+	InvocationArgumentMissingValueCode = factoryruntimecli.InvocationArgumentMissingValueCode
+	InvocationArgumentInvalidValueCode = factoryruntimecli.InvocationArgumentInvalidValueCode
+	CurrentFactoryNotFoundCode         = factoryruntimecli.CurrentFactoryNotFoundCode
+	CurrentFactoryInvalidCode          = factoryruntimecli.CurrentFactoryInvalidCode
+	InvocationOutputConflictCode       = factoryruntimecli.InvocationOutputConflictCode
+	InvocationOutputUnsupportedCode    = factoryruntimecli.InvocationOutputUnsupportedCode
+	RemoteLocalHostingConflictCode     = factoryruntimecli.RemoteLocalHostingConflictCode
+	ServerBindFailedCode               = factoryruntimecli.ServerBindFailedCode
+	InvocationOutputPrimaryResult      = factoryruntimecli.InvocationOutputPrimaryResult
+	InvocationOutputResponseStream     = factoryruntimecli.InvocationOutputResponseStream
 )
 
 type InvocationError = factoryruntimecli.InvocationError

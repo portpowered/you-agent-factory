@@ -305,6 +305,23 @@ func TestResolveSignatureFactoryInvocationInput_RejectsMissingNamedValue(t *test
 	if err == nil || !strings.Contains(err.Error(), "requires a value") {
 		t.Fatalf("error = %v, want missing value", err)
 	}
+	var argumentErr *ArgumentError
+	if !errors.As(err, &argumentErr) || argumentErr.Code != ArgumentErrorCodeMissingValue {
+		t.Fatalf("error = %v, want %s", err, ArgumentErrorCodeMissingValue)
+	}
+}
+
+func TestResolveSignatureFactoryInvocationInput_RejectsNamedValueBeforeNextFlag(t *testing.T) {
+	_, err := prepareInvocationInput(t, InvocationInputPreparationRequest{
+		Arguments: []string{"draft", "--mode", "--other", "value"}, Signature: signatureFactoryInvocationConfig(),
+	})
+	if err == nil || !strings.Contains(err.Error(), "factory argument --mode requires a value") {
+		t.Fatalf("error = %v, want missing value before next flag", err)
+	}
+	var argumentErr *ArgumentError
+	if !errors.As(err, &argumentErr) || argumentErr.Code != ArgumentErrorCodeMissingValue {
+		t.Fatalf("error = %v, want %s", err, ArgumentErrorCodeMissingValue)
+	}
 }
 
 func TestNormalizeLegacyInvocationExampleRejectsUnstructuredInputs(t *testing.T) {

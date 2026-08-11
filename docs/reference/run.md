@@ -379,11 +379,18 @@ you run --named team-review "Review the release notes"
 ```
 
 Human lifecycle lines summarize Work acceptance, Factory Session start and
-completion, workstation queue/start/outcome, inference start/outcome,
-JavaScript phase and checkpoint changes, and final-output availability. They
-retain canonical event order without printing provider tokens, deltas,
-tool-call chunks, or provider-session chunks. Redirecting stdout preserves this
-human presentation; terminal detection does not silently select another format.
+completion, workstation queue/start/outcome, Worker Session association and
+active-worker status, inference start/outcome, JavaScript phase and checkpoint
+changes, and final-output availability. Workstation lines include the canonical
+dispatch and Work IDs when the events provide them. They retain canonical event
+order without printing provider tokens, deltas, tool-call chunks, or
+provider-session chunks. Redirecting stdout preserves this human presentation;
+terminal detection does not silently select another format. When the resolved
+terminal policy and stderr TTY both permit interactive progress, active workers
+also receive transient stderr-only spinner lines with stable, distinct colors.
+Quiet, structured, or non-interactive output omits cursor controls and ANSI
+sequences; progress never overwrites or contaminates the primary result on
+stdout.
 
 ### NDJSON automation mode
 
