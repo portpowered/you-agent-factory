@@ -988,16 +988,17 @@ const (
 
 // Defines values for WorkFailureType.
 const (
-	WorkFailureTypeAuthFailure                  WorkFailureType = "auth_failure"
-	WorkFailureTypeCommandLineTooLong           WorkFailureType = "command_line_too_long"
-	WorkFailureTypeExpectedArtifactsUnsatisfied WorkFailureType = "EXPECTED_ARTIFACTS_UNSATISFIED"
-	WorkFailureTypeInternalServerError          WorkFailureType = "internal_server_error"
-	WorkFailureTypeMisconfigured                WorkFailureType = "misconfigured"
-	WorkFailureTypeMissingExecutable            WorkFailureType = "missing_executable"
-	WorkFailureTypePermanentBadRequest          WorkFailureType = "permanent_bad_request"
-	WorkFailureTypeThrottled                    WorkFailureType = "throttled"
-	WorkFailureTypeTimeout                      WorkFailureType = "timeout"
-	WorkFailureTypeUnknown                      WorkFailureType = "unknown"
+	WorkFailureTypeAuthFailure                     WorkFailureType = "auth_failure"
+	WorkFailureTypeCommandLineTooLong              WorkFailureType = "command_line_too_long"
+	WorkFailureTypeExpectedArtifactsUnsatisfied    WorkFailureType = "EXPECTED_ARTIFACTS_UNSATISFIED"
+	WorkFailureTypeInternalServerError             WorkFailureType = "internal_server_error"
+	WorkFailureTypeMisconfigured                   WorkFailureType = "misconfigured"
+	WorkFailureTypeMissingExecutable               WorkFailureType = "missing_executable"
+	WorkFailureTypePermanentBadRequest             WorkFailureType = "permanent_bad_request"
+	WorkFailureTypeStructuredOutputSchemaViolation WorkFailureType = "structured_output_schema_violation"
+	WorkFailureTypeThrottled                       WorkFailureType = "throttled"
+	WorkFailureTypeTimeout                         WorkFailureType = "timeout"
+	WorkFailureTypeUnknown                         WorkFailureType = "unknown"
 )
 
 // Defines values for WorkOutcome.
@@ -1412,7 +1413,10 @@ type DispatchResponseEventPayload struct {
 	PreviousChainingTraceIds    *[]string                `json:"previousChainingTraceIds,omitempty"`
 	ProviderFailure             *ProviderFailureMetadata `json:"providerFailure,omitempty"`
 	SelectedClassificationLabel *string                  `json:"selectedClassificationLabel,omitempty"`
-	TransitionId                string                   `json:"transitionId"`
+
+	// StructuredResult Optional native JSON value produced when the workstation outputSchema validates the worker response. JSON null is distinct from an omitted value.
+	StructuredResult interface{} `json:"structuredResult,omitempty"`
+	TransitionId     string      `json:"transitionId"`
 }
 
 // DispatchWorkerSessionAssociationEventPayload Canonical association between one Factory dispatch and the Worker Session allocated to execute it. Dispatch identity remains authoritative in FactoryEvent.context.dispatchId and is not repeated in this payload.
@@ -6507,7 +6511,10 @@ type Work struct {
 	// State A lifecycle state that a work item can occupy inside one work type.
 	State       *WorkState          `json:"state,omitempty"`
 	StopSummary *FactoryStopSummary `json:"stopSummary,omitempty"`
-	Tags        *StringMap          `json:"tags,omitempty"`
+
+	// StructuredResult Optional JSON value produced by a workstation whose outputSchema validated the worker response. JSON null is distinct from an omitted value.
+	StructuredResult interface{} `json:"structuredResult,omitempty"`
+	Tags             *StringMap  `json:"tags,omitempty"`
 
 	// TraceId Legacy trace identifier retained for compatibility; prefer currentChainingTraceId.
 	TraceId *string `json:"traceId,omitempty"`

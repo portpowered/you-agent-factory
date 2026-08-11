@@ -48,7 +48,7 @@
       ],
       "priority": 2,
       "passes": true,
-      "notes": "Extended the human Factory Event projection to render singular accepted-work payloads, preserve readable fallbacks for partially populated work items, and omit malformed dependency records rather than emitting misleading edges. Added exact renderer coverage for a deterministic four-item batch with IDs, names, an available JSON payload that is not exposed, a name-based DEPENDS_ON edge, an independent item, and a single-item relation payload. Verification: go test ./pkg/services/factory_visualization/... -count=1, go test ./tests/functional/cli/factory_run/output -count=1, make typecheck, and git diff --check passed."
+      "notes": "Extended the human accepted-work renderer to use singular labels for one-item payloads, preserve readable fallbacks for partially populated work items, and omit malformed relation records rather than presenting ambiguous edges. Added exact renderer coverage for a deterministic four-item batch with IDs, names, an available JSON payload that is not exposed, a name-based DEPENDS_ON edge, an independent item, and a single-item relation payload. Verification: go test ./pkg/services/factory_visualization/... -count=1, go test ./tests/functional/cli/factory_run/output -count=1, make typecheck, and git diff --check passed."
     },
     {
       "id": "cli-error-classification-and-run-output-003",
@@ -64,7 +64,7 @@
       ],
       "priority": 3,
       "passes": true,
-      "notes": "Extended the human Factory Event renderer and TTY progress projection to correlate dispatches with Worker Session IDs, workstation names, and canonical Work IDs across queued, started, active, completed, failed, and interrupted lifecycle events. Terminal outcomes remove the corresponding active state, including interleaved concurrent dispatches; queued Work IDs are retained when a later request payload is sparse. Added exact deterministic renderer coverage for three interleaved workers and TTY cleanup/correlation, plus functional lifecycle compatibility coverage. Verification: go test ./pkg/services/factory_visualization/transports/cli -count=1, go test -race ./pkg/services/factory_visualization/transports/cli -count=1, go test ./pkg/services/factory_visualization/... -count=1, go test ./tests/functional/cli/factory_run/output -count=1, make typecheck, make backend-size pkg-maint pkg-file-count pkg-structure vet, and git diff --check passed. Commit 303be54cf."
+      "notes": "Extended the human Factory Event renderer and TTY progress projection to correlate dispatches with Worker Session IDs, workstation names, and canonical Work IDs across queued, started, active, completed, failed, and interrupted lifecycle events. Terminal outcomes remove the corresponding active state, including interleaved concurrent dispatches; queued Work IDs are retained when a later request payload is sparse. Added exact renderer coverage for three interleaved workers and TTY cleanup/correlation, plus functional lifecycle compatibility coverage. Verification: go test ./pkg/services/factory_visualization/transports/cli -count=1, go test -race ./pkg/services/factory_visualization/transports/cli -count=1, go test ./pkg/services/factory_visualization/... -count=1, go test ./tests/functional/cli/factory_run/output -count=1, make typecheck, make backend-size pkg-maint pkg-file-count pkg-structure vet, and git diff --check passed. Commit 303be54cf."
     },
     {
       "id": "cli-error-classification-and-run-output-004",
@@ -80,8 +80,8 @@
         "Tests pass"
       ],
       "priority": 4,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Wired the stderr progress channel through the explicit terminal policy, preserving interactive response-stream progress for ordinary one-shot invocations while suppressing quiet-mode progress. Added deterministic collision-resolved worker colors over the varied ANSI palette and documented the spinner/color/channel behavior in the packaged run guide. Added root policy, renderer, and concurrent-color regression coverage. Verification before base synchronization: focused CLI and functional output tests, make typecheck, make backend-size, make pkg-maint, make pkg-file-count, make pkg-structure, make vet, make cli-manifest-check, make docs-reference-smoke, and git diff --check passed."
     }
   ]
 }

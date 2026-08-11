@@ -46,6 +46,76 @@ func TestPromptRenderer_BasicInterpolation(t *testing.T) {
 	}
 }
 
+func TestPromptRenderer_RendersDetachedStructuredResultObjectAndArray(t *testing.T) {
+	renderer := &DefaultPromptRenderer{}
+	structured := map[string]any{
+		"summary": map[string]any{"title": "upstream title"},
+		"items": []any{
+			map[string]any{"name": "first item"},
+			map[string]any{"name": "second item"},
+		},
+	}
+	tokens := []workers.Token{{
+		ID: "tok-structured",
+		Color: workers.Color{
+			WorkID:                  "work-structured",
+			StructuredResult:        structured,
+			StructuredResultPresent: true,
+			Payload:                 []byte("raw output that must not be used"),
+		},
+	}}
+
+	result, err := renderer.Render(
+		`{{ (index .Inputs 0).StructuredResult.summary.title }} / {{ (index (index (index .Inputs 0).StructuredResult "items") 1).name }}`,
+		tokens,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("structured prompt render: %v", err)
+	}
+	if result != "upstream title / second item" {
+		t.Fatalf("structured prompt = %q, want nested object and array values", result)
+	}
+
+	data := BuildPromptData(tokens, nil)
+	dataStructured, ok := data.Inputs[0].StructuredResult.(map[string]any)
+	if !ok {
+		t.Fatalf("prompt structured result type = %T, want map[string]any", data.Inputs[0].StructuredResult)
+	}
+	dataStructured["summary"].(map[string]any)["title"] = "mutated by template data consumer"
+	if structured["summary"].(map[string]any)["title"] != "upstream title" {
+		t.Fatal("prompt structured result shares mutable object state with the runtime token")
+	}
+}
+
+func TestPromptRenderer_MissingStructuredResultFailsWithDiagnostic(t *testing.T) {
+	renderer := &DefaultPromptRenderer{}
+	tokens := []workers.Token{{
+		ID: "tok-missing-structured",
+		Color: workers.Color{
+			WorkID:  "work-missing-structured",
+			Payload: []byte("raw payload fallback must not happen"),
+		},
+	}}
+
+	for _, tmpl := range []string{
+		`{{ (index .Inputs 0).StructuredResult }}`,
+		`{{ (index .Inputs 0).StructuredResult.summary.title }}`,
+	} {
+		_, err := renderer.Render(tmpl, tokens, nil)
+		if err == nil {
+			t.Fatalf("Render(%q) error = nil, want missing structured-result diagnostic", tmpl)
+		}
+		message := strings.ToLower(err.Error())
+		if !strings.Contains(message, "structured result") || !strings.Contains(message, "input 0") {
+			t.Fatalf("Render(%q) error = %q, want input-specific structured-result diagnostic", tmpl, err)
+		}
+		if strings.Contains(message, "raw payload") {
+			t.Fatalf("Render(%q) error leaked or used raw payload fallback: %q", tmpl, err)
+		}
+	}
+}
+
 func TestPromptData_ExposesOnlyCanonicalTemplateRoots(t *testing.T) {
 	dataType := reflect.TypeOf(PromptData{})
 	fields := make([]string, 0, dataType.NumField())

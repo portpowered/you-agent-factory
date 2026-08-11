@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	"github.com/portpowered/infinite-you/pkg/services/work/internal/invocationreturnpolicy"
 )
 
@@ -367,6 +368,8 @@ func workItemToInternal(item FactoryWorkItem) invocationreturnpolicy.WorkItem {
 		Content:                  contentPartsToInternal(item.Content),
 		ParentID:                 item.ParentID,
 		PlaceID:                  item.PlaceID,
+		StructuredResult:         jsonvalue.Clone(item.StructuredResult),
+		StructuredResultPresent:  jsonvalue.Present(item.StructuredResult, item.StructuredResultPresent),
 		Tags:                     cloneStringMap(item.Tags),
 	}
 }

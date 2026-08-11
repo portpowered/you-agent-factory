@@ -107,6 +107,8 @@ type WorkItem struct {
 	Content                  []ContentPart
 	ParentID                 string
 	PlaceID                  string
+	StructuredResult         any
+	StructuredResultPresent  bool
 	Tags                     map[string]string
 }
 

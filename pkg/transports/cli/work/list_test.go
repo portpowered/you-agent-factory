@@ -62,7 +62,7 @@ func TestList_SendsStateFilters(t *testing.T) {
 	if gotPath != "/factory-sessions/~default/work" {
 		t.Fatalf("path = %q, want /factory-sessions/~default/work", gotPath)
 	}
-	if got := out.String(); got != "WORK ID\tNAME\tWORK TYPE\tSTATE NAME\tSTATE TYPE\tRELATIONS\nwork-1\tReview PRD\tstory\treview\tPROCESSING\tnone\n" {
+	if got := out.String(); got != "WORK ID\tNAME\tWORK TYPE\tSTATE NAME\tSTATE TYPE\tSTRUCTURED RESULT\tRELATIONS\nwork-1\tReview PRD\tstory\treview\tPROCESSING\t\tnone\n" {
 		t.Fatalf("output = %q", got)
 	}
 }
@@ -236,8 +236,8 @@ func TestList_HumanOutputShowsOneWorkItemIdentityAndState(t *testing.T) {
 		t.Fatalf("List: %v", err)
 	}
 
-	want := "WORK ID\tNAME\tWORK TYPE\tSTATE NAME\tSTATE TYPE\tRELATIONS\n" +
-		"work-1\tReview PRD\tstory\treview\tPROCESSING\tnone\n"
+	want := "WORK ID\tNAME\tWORK TYPE\tSTATE NAME\tSTATE TYPE\tSTRUCTURED RESULT\tRELATIONS\n" +
+		"work-1\tReview PRD\tstory\treview\tPROCESSING\t\tnone\n"
 	if got := out.String(); got != want {
 		t.Fatalf("output = %q, want %q", got, want)
 	}
@@ -270,8 +270,8 @@ func TestList_HumanOutputLeavesWorkTypeEmptyWhenAbsent(t *testing.T) {
 		t.Fatalf("List: %v", err)
 	}
 
-	want := "WORK ID\tNAME\tWORK TYPE\tSTATE NAME\tSTATE TYPE\tRELATIONS\n" +
-		"work-legacy\tLegacy work\t\tinit\tINITIAL\tnone\n"
+	want := "WORK ID\tNAME\tWORK TYPE\tSTATE NAME\tSTATE TYPE\tSTRUCTURED RESULT\tRELATIONS\n" +
+		"work-legacy\tLegacy work\t\tinit\tINITIAL\t\tnone\n"
 	if got := out.String(); got != want {
 		t.Fatalf("output = %q, want %q", got, want)
 	}
@@ -316,9 +316,9 @@ func TestList_HumanOutputShowsManyWorkItems(t *testing.T) {
 		t.Fatalf("List: %v", err)
 	}
 
-	want := "WORK ID\tNAME\tWORK TYPE\tSTATE NAME\tSTATE TYPE\tRELATIONS\n" +
-		"work-1\tPlan feature\tstory\tinit\tINITIAL\tnone\n" +
-		"work-2\tReview PRD\tstory\treview\tPROCESSING\tnone\n"
+	want := "WORK ID\tNAME\tWORK TYPE\tSTATE NAME\tSTATE TYPE\tSTRUCTURED RESULT\tRELATIONS\n" +
+		"work-1\tPlan feature\tstory\tinit\tINITIAL\t\tnone\n" +
+		"work-2\tReview PRD\tstory\treview\tPROCESSING\t\tnone\n"
 	if got := out.String(); got != want {
 		t.Fatalf("output = %q, want %q", got, want)
 	}
@@ -364,9 +364,9 @@ func TestList_HumanOutputOmitsRuntimeResourcesWhenMixedResponseContainsOnlyVisib
 	}
 
 	got := out.String()
-	want := "WORK ID\tNAME\tWORK TYPE\tSTATE NAME\tSTATE TYPE\tRELATIONS\n" +
-		"work-1\tPlan feature\tstory\tinit\tINITIAL\tnone\n" +
-		"work-2\tReview PRD\tstory\treview\tPROCESSING\tnone\n"
+	want := "WORK ID\tNAME\tWORK TYPE\tSTATE NAME\tSTATE TYPE\tSTRUCTURED RESULT\tRELATIONS\n" +
+		"work-1\tPlan feature\tstory\tinit\tINITIAL\t\tnone\n" +
+		"work-2\tReview PRD\tstory\treview\tPROCESSING\t\tnone\n"
 	if got != want {
 		t.Fatalf("output = %q, want %q", got, want)
 	}
@@ -411,8 +411,8 @@ func TestList_HumanOutputShowsRelationSummaryForOneRelation(t *testing.T) {
 		t.Fatalf("List: %v", err)
 	}
 
-	want := "WORK ID\tNAME\tWORK TYPE\tSTATE NAME\tSTATE TYPE\tRELATIONS\n" +
-		"work-1\tReview PRD\tstory\treview\tPROCESSING\tDEPENDS_ON: Draft PRD [work-draft] (requires complete)\n"
+	want := "WORK ID\tNAME\tWORK TYPE\tSTATE NAME\tSTATE TYPE\tSTRUCTURED RESULT\tRELATIONS\n" +
+		"work-1\tReview PRD\tstory\treview\tPROCESSING\t\tDEPENDS_ON: Draft PRD [work-draft] (requires complete)\n"
 	if got := out.String(); got != want {
 		t.Fatalf("output = %q, want %q", got, want)
 	}
@@ -468,8 +468,8 @@ func TestList_HumanOutputShowsDeterministicSummaryForMultipleRelations(t *testin
 		t.Fatalf("List: %v", err)
 	}
 
-	want := "WORK ID\tNAME\tWORK TYPE\tSTATE NAME\tSTATE TYPE\tRELATIONS\n" +
-		"work-3\tPublish Release\tstory\tblocked\tFAILED\tDEPENDS_ON: Review PRD [work-review] (requires reviewed); PARENT_CHILD: Epic Release [work-epic]; SPAWNED_BY: Release Train [work-parent]\n"
+	want := "WORK ID\tNAME\tWORK TYPE\tSTATE NAME\tSTATE TYPE\tSTRUCTURED RESULT\tRELATIONS\n" +
+		"work-3\tPublish Release\tstory\tblocked\tFAILED\t\tDEPENDS_ON: Review PRD [work-review] (requires reviewed); PARENT_CHILD: Epic Release [work-epic]; SPAWNED_BY: Release Train [work-parent]\n"
 	if got := out.String(); got != want {
 		t.Fatalf("output = %q, want %q", got, want)
 	}
