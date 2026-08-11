@@ -9832,3 +9832,17 @@
   - `--server` remains the endpoint selector for session inspection, but lifecycle mutation fixtures must opt into `--remote` explicitly under the placement grammar.
   - When CI reports several unrelated functional failures, extract the exact `Action:fail` records first; the first batch here shared the same stale control-routing assumption.
 ---
+## [2026-08-11 04:39:57 -07:00] - dwro-s7-placement-grammar-007
+- What was implemented
+  - Addressed the remaining `commandregistry` functional-coverage regression reported by CI run `31484975573` by extending the observable CLI session wiring scenario to exercise remote `cancel` and `terminate` not-found responses.
+- Files changed
+  - `tests/functional/transport/cli/commands/session_wiring_test.go`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/transport/cli/commands -run '^TestCLISessionMissingIDReturnsNotFound$' -count=1 -timeout 300s` — passed.
+  - A focused coverage run for `./tests/functional/transport/cli/commands` measured the commandregistry package at 33.6% and completed successfully.
+  - The full `make test-functional-coverage` attempt reached the local tool's 20-minute execution ceiling while Windows functional binaries were still running; it did not provide a definitive local pass/fail result.
+- **Learnings for future iterations:**
+  - The functional package minimum is sensitive to small command-handler additions; pair every new runnable lifecycle branch with an observable functional invocation, even when unit placement tests already cover the branch.
+  - Quote dotted Go import-path flags in PowerShell; unquoted `-coverpkg=github.com/...` was parsed incorrectly on this host.
+---
