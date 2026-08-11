@@ -10748,3 +10748,21 @@
   - Keep retry evidence tied to the exact pushed head and classify the failure by package diff membership before changing source; repeated success in all P1 paths does not justify altering an untouched baseline assertion.
   - Updating the audit after a metadata push creates a new CI head; synchronize the PR body again and treat the new run as the next delivery gate.
 ---
+## [2026-08-11 06:28:18 -07:00] - btrc-p1-root-injection-006 current-head CI retry and PR handoff audit
+- What was implemented
+  - Audited workflow `31494428890` on head `8ffd1575da35d9b7f73cc735ae1275d08fe7487e`; all six P1 stories remain marked `passes:true`.
+  - Reran only the failed Backend Functional Coverage job. The retry reproduced exactly the same untouched server-binding assertion and no P1-scoped failure appeared.
+  - Refreshed the delivery audit to the current tested head and workflow; the thread-aware review audit remains clear.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Workflow `31494428890`, attempt 2 — every lane passed except Backend Functional Coverage and its dependent Verification Policy.
+  - The only functional failure is `TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput` in untouched `tests/functional/transport/server_binding`; the structured API-server diagnostic still precedes `SERVER_BIND_FAILED` while the unchanged test expects the legacy warning followed by one diagnostic line.
+  - `git diff --name-only origin/main...HEAD -- tests/functional/transport/server_binding` — empty.
+  - Thread-aware GraphQL review audit — zero review threads, zero unresolved review threads, and zero formal reviews.
+  - All six PRD stories parse as `passes:true`.
+- **Learnings for future iterations:**
+  - When a failed-job retry reproduces the same deterministic assertion in an untouched package, preserve the exact run/head evidence and do not change unrelated baseline behavior.
+  - Keep the PR body synchronized with the authoritative `prd.json` after each delivery-audit update; a metadata-only handoff commit may trigger another CI run, which must be audited separately.
+---
