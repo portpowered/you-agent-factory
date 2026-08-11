@@ -9011,3 +9011,17 @@
 - **Learnings for future iterations:**
   - A green hosted run is not final evidence while `origin/main` moves; fetch and compare the live base again immediately before declaring review readiness, even after the PR becomes mergeable.
 ---
+## [2026-08-11 03:36:15 -07:00] - prose-standard-and-terms-003 latest-main lint comparison
+- What was implemented
+  - Completed the exact-base audit against `origin/main` `dd87fd04db20d755f9b44c369aa79b8c3e600f5f` after the latest synchronization merge `ca0b5ea7e`.
+  - Confirmed that no documentation or terminology source changes are needed for the lint-lane mainline update.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Direct checks on exact `origin/main` and the replacement tree agree: `pkg-boundary` passes its package scan while `ownership-boundary` reports the same two existing findings in `pkg/initializer/application/process.go` and `pkg/services/edges/definition.go`; packaged-factory consumption fails on the same migration-ledger import; deadcode reports baseline 350 versus current 546; ownership inventory passes.
+  - The replacement merge's sequential `make typecheck`, `make docs-reference-smoke`, `make ownership-inventory-check`, `make backend-size`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, and `make vet` gates pass.
+  - The exact-base audit worktree was removed without cross-worktree links; the active worktree remains clean and retains all three passing prose stories.
+  - Replacement-head hosted CI and final PR state must be rerun after pushing `ca0b5ea7e`.
+- **Learnings for future iterations:**
+  - When aggregate lint is host-bound, compare the individual owning checkers directly on the exact base and replacement tree; this preserves rule-level no-new evidence without mistaking process timeout for a source regression.
+---
