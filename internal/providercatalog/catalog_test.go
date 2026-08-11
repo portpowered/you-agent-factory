@@ -81,6 +81,19 @@ func TestBuildRejectsInvalidAuthoredManifestValues(t *testing.T) {
 	}
 }
 
+func TestBuildRejectsACPProviderWithoutRuntimeDefinition(t *testing.T) {
+	source := repositoryFixture(t)
+	codex := string(source["packages/model-providers/providers/codex/provider.yaml"].Data)
+	codex = strings.Replace(codex, "id: codex", "id: cursor-acp", 1)
+	codex = strings.Replace(codex, "kind: native_cli", "kind: acp\n  acpSupport:\n    support: unknown", 1)
+	source["packages/model-providers/providers/cursor-acp/provider.yaml"] = &fstest.MapFile{Data: []byte(codex), Mode: 0o644}
+
+	_, err := Build(source)
+	if err == nil || !strings.Contains(err.Error(), "requires harness.yaml") {
+		t.Fatalf("Build() error = %v, want missing ACP runtime definition", err)
+	}
+}
+
 func TestValidateCatalogSemanticsRejectsIdentityCollisions(t *testing.T) {
 	tests := []struct {
 		name      string
