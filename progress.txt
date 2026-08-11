@@ -20,6 +20,7 @@
 - Terminal lifecycle publication must require the opening record's committed publication window; a failed opening must never be followed by a terminal append that becomes topic position 1.
 - Root-built direct-JavaScript functional probes that do not invoke a worker can run without `--with-mock-workers`; keep Mock Workers usage inside the feature-owning test cells.
 - Cancellation-sensitive functional fixtures must signal provider-edge entry before issuing an interrupt; a published RUNNING status can precede provider handoff and otherwise makes context-cancellation assertions race.
+- Functional HTTP disconnect evidence should keep the request unread on a raw connection, gate a real provider command runner, and observe terminal state through an independent public SSE client; canceling a context after a completed response is not a disconnect proof.
 - When a Windows coverage wrapper times out, inspect its exact process tree and terminate only that invocation's descendants; preserve concurrent test processes.
 - When splitting oversized same-package tests into focused files, remove stale file/maintainability exemptions and update the package file-count baseline for the intentional net increase; keep shared fixtures in one package-local helper file.
 - Public CLI manifest additions require regenerating family metadata and the published CLI contract, then updating command input/help/tree baselines.
@@ -8808,4 +8809,23 @@
   - The full Windows `make test-unit-coverage` wrapper remains environment-blocked by the expanded Go command line (`go.exe: The filename or extension is too long`); the hosted failure itself was the package-floor regression, and the targeted package now clears that floor.
 - **Learnings for future iterations:**
   - Hosted coverage logs emit an exact package-floor diagnostic; use it to target branch tests and independently verify the affected package before rerunning the broader lane.
+---
+## [2026-08-11 04:02:49 -07:00] - dwro-s2-server-owned-start-004 PR feedback follow-up
+- What was implemented
+  - Replaced the Story 004 functional fixture's prohibited Mock Workers setup with the real model-worker configuration and an injected, gated Codex `ProviderCommandRunner` that emits sanitized provider-native JSONL.
+  - Reworked the disconnect proof to write the POST request over a raw TCP connection, wait for deterministic provider-edge entry, close the unread submitting connection before reading its response, and verify the accepted execution through an independent public Worker Session SSE stream.
+  - Added assertions for one `STARTED` lifecycle record, one `COMPLETED` lifecycle terminal record, same-key 202 replay, and exactly one provider command call; documented the bounded signal ceilings as failure diagnostics rather than synchronization polling.
+- Files changed
+  - `tests/functional/workers/transports/http/worker_sessions_lifecycle_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/workers/transports/http -count=1 -timeout 600s` — passed.
+  - `go test -race ./tests/functional/workers/transports/http -run '^TestWorkerSessionHTTP(DisconnectKeepsAdmittedWorkerAlive|ShutdownJoinsAdmittedWorker)$' -count=1 -timeout 600s` — passed.
+  - `go test ./pkg/services/worker_sessions/... -count=1 -timeout 600s` — passed.
+  - `go test ./pkg/services/factory_runtime/... -count=1 -timeout 600s` — passed.
+  - `go test ./pkg/services/worker_sessions/transports/http -count=1 -timeout 600s` and `git diff --check` — passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure`, affected-package `go vet`, `make typecheck`, and `make ui-lint` — passed. Repository `make test` was attempted but exceeded the 650-second Windows command ceiling with no failure output while many other worktree verification processes were running; the targeted suites above were terminal-green.
+- **Learnings for future iterations:**
+  - A true HTTP disconnect test must close an unread transport connection while the provider is held at a deterministic edge; a context cancellation after `http.Client.Do` returns only tests normal request completion.
 ---
