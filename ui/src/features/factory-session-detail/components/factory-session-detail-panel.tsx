@@ -1,17 +1,25 @@
 // biome-ignore-all lint/style/noExcessiveLinesPerFile: factory session detail panel composes runtime, drilldown, lifecycle, and replay sections.
 
 import { useQueryClient } from "@tanstack/react-query";
+import {
+  Button,
+  Heading,
+  Label,
+  Text,
+} from "@you-agent-factory/components/primitives";
 import { WidgetDetailCopy } from "@you-agent-factory/components/recipes";
 import type { ReactNode } from "react";
 import { useId, useState } from "react";
 import { isDurableJavaScriptSession } from "../../../api/factory-sessions/normalize-durable-inspection";
 import type { components } from "../../../api/generated/openapi";
 import { FactoryOrchestratorKind } from "../../../api/generated/openapi";
-import { Button, Heading, Label, Text } from "@you-agent-factory/components/primitives";
 import { AlertPanel } from "../../../components/ui/alert-panel";
 import { DashboardStatusPill } from "../../../components/ui/dashboard-status-pill";
 import { ExpandablePanelTrigger } from "../../../components/ui/expandable-panel-trigger";
-import { useFactorySessionDetail } from "../hooks/use-factory-session-detail";
+import {
+  type FactorySessionDetailViewState,
+  useFactorySessionDetail,
+} from "../hooks/use-factory-session-detail";
 import {
   FACTORY_SESSION_DISPATCH_DETAIL_QUERY_KEY,
   useFactorySessionDispatchDetail,
@@ -34,20 +42,63 @@ type FactoryArtifact = components["schemas"]["FactoryArtifact"];
 type FactoryDispatch = components["schemas"]["FactoryDispatch"];
 
 export interface FactorySessionDetailPanelProps {
+  detailState?: FactorySessionDetailViewState;
   locale?: string;
   sessionID: string | null;
 }
 
 export function FactorySessionDetailPanel({
+  detailState,
   locale,
   sessionID,
 }: FactorySessionDetailPanelProps) {
-  const messages = getFactorySessionDetailMessages(locale);
-  const detailState = useFactorySessionDetail(sessionID);
-
   if (sessionID === null || sessionID.trim() === "") {
     return null;
   }
+
+  if (detailState !== undefined) {
+    return (
+      <FactorySessionDetailPanelContent
+        detailState={detailState}
+        locale={locale}
+        sessionID={sessionID}
+      />
+    );
+  }
+
+  return (
+    <FactorySessionDetailPanelWithQuery locale={locale} sessionID={sessionID} />
+  );
+}
+
+function FactorySessionDetailPanelWithQuery({
+  locale,
+  sessionID,
+}: {
+  locale?: string;
+  sessionID: string;
+}) {
+  const detailState = useFactorySessionDetail(sessionID);
+
+  return (
+    <FactorySessionDetailPanelContent
+      detailState={detailState}
+      locale={locale}
+      sessionID={sessionID}
+    />
+  );
+}
+
+function FactorySessionDetailPanelContent({
+  detailState,
+  locale,
+  sessionID,
+}: {
+  detailState: FactorySessionDetailViewState;
+  locale?: string;
+  sessionID: string;
+}) {
+  const messages = getFactorySessionDetailMessages(locale);
 
   return (
     <section
