@@ -12,7 +12,7 @@
   "deliveryAudit": {
     "pullRequest": 1857,
     "head": "ed2eb2c462a68b9323d76e99eace07edfbc4adf0",
-    "base": "012e98e0fbd1b6fcac106d90b1f3d335b8a3dce6",
+    "base": "3521f0b0a2f313b22e2c79edcf90339a01b3bce7",
     "reviewThreads": 0,
     "unresolvedReviewThreads": 0,
     "formalReviews": 0,
@@ -148,7 +148,7 @@
       ],
       "priority": 6,
       "passes": true,
-      "notes": "Completed the review follow-up for the reusable root-process proof and the final value-only invocation cutover. Both representative success and provider-failure invocations enter through the public `you --json run` CLI on one root.BuildProcess/Process.Execute instance; the injected API server is observation-only for public session and Factory Event streams. The current audited head is `ed2eb2c462a68b9323d76e99eace07edfbc4adf0`, based on synchronized origin/main `012e98e0fbd1b6fcac106d90b1f3d335b8a3dce6`; workflow `31488350059` reached terminal failure after its failed-job retry, with every lane passing except the unchanged server-binding assertion. P1 root-reuse, AGY, workers/mock, and workers/inference focused coverage passed locally and the P1 root-reuse test passed in the hosted retry; the server-binding mismatch reproduces locally and its package is absent from the P1 diff. The thread-aware audit has zero unresolved review threads and zero formal reviews. All six P1 stories remain marked `passes:true`; the remaining follow-up is baseline CI policy and final PR handoff."
+      "notes": "Completed the review follow-up for the reusable root-process proof and the final value-only invocation cutover. Both representative success and provider-failure invocations enter through the public `you --json run` CLI on one root.BuildProcess/Process.Execute instance; the injected API server is observation-only for public session and Factory Event streams. The current audit is being reconciled against live origin/main `3521f0b0a2f313b22e2c79edcf90339a01b3bce7`; the latest completed workflow `31488350059` on implementation head `ed2eb2c462a68b9323d76e99eace07edfbc4adf0` reached terminal failure after its failed-job retry, with every lane passing except the unchanged server-binding assertion. P1 root-reuse, AGY, workers/mock, and workers/inference focused coverage passed locally and the P1 root-reuse test passed in the hosted retry; the server-binding mismatch reproduces locally and its package is absent from the P1 diff. The thread-aware audit has zero unresolved review threads and zero formal reviews. All six P1 stories remain marked `passes:true`; the remaining follow-up is baseline CI policy and final PR handoff."
     }
   ]
 }

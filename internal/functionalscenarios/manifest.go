@@ -148,6 +148,8 @@ func applyReviewedEvidence(scenario *Scenario) {
 		markCovered(scenario, LaneLong, "tests/functional/sessions/execution/results_dispatches_test.go::TestAPIResultAndResultsExposeTerminalInvocationData", InterfaceREST)
 	case "rest/invokeFactorySessionBySessionId":
 		markCovered(scenario, LaneLong, "tests/functional/sessions/execution/results_dispatches_test.go::TestAPIResultAndResultsExposeTerminalInvocationData", InterfaceREST)
+	case "rest/startWorkerSession":
+		markCovered(scenario, LaneLong, "tests/functional/workers/transports/http/worker_sessions_lifecycle_test.go::TestWorkerSessionHTTPDisconnectKeepsAdmittedWorkerAlive", InterfaceREST)
 	case "rest/streamWorkerSessionEventsByWorkerSessionId":
 		markCovered(scenario, LaneLong, "tests/functional/workers/inference/opening_record_test.go::TestWSRFT003ProviderNeutralLifecycleWorksWithoutProviderSession", InterfaceREST)
 	case "rest/getEventsBySessionId":
