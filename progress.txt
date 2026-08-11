@@ -1,6 +1,7 @@
 ## Codebase Patterns
 - When reconciling a task branch against a moving mainline, keep the active task's PRD and follow-up metadata authoritative while accepting unrelated source changes from main; validate the merged JSON and preserve the append-only progress history.
 - Bun unit tests that use `mock.module` must restore the module mock after each test; the full Bun coverage process shares a module registry across files.
+- Prefer real typed API/fetch boundaries in shared Bun unit coverage; even a restored module-scoped mock can race with imports in another test file, so avoid process-global `mock.module` fixtures when a queued response boundary is available.
 - Fixture-backed async tests should expose an explicit pending/ready promise for controlled requests; do not rely on a coincidental microtask turn or a sleep before resolving them.
 - For orchestration runner tests, assert readiness, completion, failure propagation, and cleanup outcomes instead of freezing an exact command or registration inventory.
 - For no-new lint evidence, run the same gates in a disposable worktree at the exact current-main commit and compare baseline and task-head results before interpreting branch output.
@@ -9176,4 +9177,26 @@
   - The exact hosted Frontend Coverage job had reproduced the leak as a 5-second dashboard test timeout; a fresh hosted run is required after this fix.
 - **Learnings for future iterations:**
   - Bun's unit coverage lane runs multiple files in one process, so module mocks are process-scoped even when each test file is logically independent; always clean up module mocks at the owning test boundary.
+---
+## [2026-08-11 06:02 -07:00] - dashboard-fixture-and-quick-wins-ci-follow-up
+- What was implemented
+  - Replaced the session-factory discovery Bun test's process-global `mock.module` with a queued `fetch` boundary against the real typed Factory Sessions API, eliminating the shared coverage-process race.
+  - Made default-selector discovery resolve the canonical `isDefault` session row after selector-only `~default` rows are removed by list normalization.
+  - Updated the two existing browser integration journeys for the renamed `Open Factory` dialog and explicit `Open selected target` confirmation.
+- Files changed
+  - `ui/src/api/session-factory/import-activation.ts`
+  - `ui/src/api/session-factory/import-activation.discover.bun.unit.test.ts`
+  - `ui/integration/dashboard-session-tabs.integration.test.mjs`
+  - `ui/integration/factory-import-second-session.integration.test.mjs`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `bun run typecheck` passed.
+  - Full Bun unit lane passed: 196 tests across 36 files; the lcov coverage variant also passed with 196 tests.
+  - `bun run lint` passed.
+  - Focused browser integration for both affected files passed: 2 test files, 3 tests.
+  - `make test`, `make vet`, `make backend-size`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, and `git diff --check` passed.
+- **Learnings for future iterations:**
+  - Updating a visible action label is not enough for browser coverage: integration scenarios must follow the complete semantic journey, including renamed dialog titles and newly explicit confirmation controls.
+  - Canonical session-list normalization requires selector resolution to consult the row's `isDefault` marker when callers still use the `~default` selector.
 ---

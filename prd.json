@@ -16,14 +16,15 @@
         "Replaced exact Storybook command and registration-inventory assertions with behavioral runner coverage for readiness, completion, failure propagation, and server cleanup.",
         "Replaced the dashboard fixture API test's race-prone immediate response resolution with an explicit waitUntilPending readiness signal.",
         "Unioned the complete append-only progress history from current main with the dashboard task history before the replacement push.",
-        "Restored the Bun module mock used by the session-factory discovery test after each test so it cannot replace the typed Factory Sessions API in later coverage files."
+        "Removed the process-global Bun module mock from the session-factory discovery test and replaced it with a queued typed-fetch boundary; canonical default-session discovery now resolves the authoritative isDefault row after selector-only rows are filtered.",
+        "Updated the existing browser integration journeys to use the renamed Open Factory dialog and the explicit Open selected target confirmation required by the non-mutating Open flow."
       ],
       "qualityEvidence": [
         "make test and make vet pass on the rebased head.",
         "backend-size, pkg-maint, pkg-file-count, and pkg-structure pass on both the rebased head and the exact detached origin/main baseline.",
         "bun run typecheck and bun run lint pass on the rebased head; the exact detached origin/main UI lint baseline also passes with only its existing allowlisted advisories.",
-        "The affected dashboard fixture passes directly under Bun coverage instrumentation; the broad local UI coverage wrapper exceeded its 15-minute local bound and was not counted as passing.",
-        "The replacement head is based on live main 3521f0b0a; post-rebase focused Bun tests (including coverage instrumentation), typecheck, UI lint, focused Go transport/HTTP tests, and git diff checks pass."
+        "The full Bun unit coverage lane passes: 196 tests across 36 files with lcov instrumentation; the dashboard fixture no longer times out when the unit files share one coverage process.",
+        "The replacement head remains based on live main 3521f0b0a; focused browser integration for the two affected dashboard/import files passes all 3 tests, and post-fix typecheck, UI lint, make test, make vet, backend-size, pkg-maint, pkg-file-count, pkg-structure, and git diff checks pass."
       ]
     }
   },
