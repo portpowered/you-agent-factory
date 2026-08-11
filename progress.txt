@@ -11519,3 +11519,16 @@
   - On Windows, run the thread-aware GitHub audit with UTF-8 mode when Unicode conversation text causes the helper's default cp1252 subprocess reader to fail; the first partial parse must not be treated as a completed audit.
   - A docs-only handoff update should refresh the exact comment count, source-head evidence, and hosted run in `prd.json` while preserving all story `passes:true` values.
 ---
+## [2026-08-11 11:01:59 -07:00] - thr-deflake-cli-process-package live PR handoff audit
+- What was implemented
+  - Rechecked the existing PR #1884 against its live head instead of opening a duplicate; all prior blocking rolling-file and append-only-history findings remain addressed on the current branch.
+  - Refreshed `prd.json` with the current PR head and hosted verification run, preserving all three `passes:true` stories.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - UTF-8 thread-aware `fetch_comments.py` audit found 7 top-level conversation comments, 0 reviews, 0 inline review threads, and 0 unresolved threads.
+  - PR #1884 is open, non-draft, `MERGEABLE` / `CLEAN`; local, remote, and PR heads are `908fbbffe2f494d25e09de7e38aa235b2437854e`, all 18 hosted checks are terminal-success in run `31518914951`, and the PR body matches `prd.json`.
+- **Learnings for future iterations:**
+  - Treat the current PR head, hosted run, mergeability, and thread-aware conversation state as one final handoff tuple; a prior green audit becomes stale when a metadata commit advances the head.
+---
