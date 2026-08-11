@@ -11039,3 +11039,20 @@
   - Compression must establish mode/ownership and cleanup as one target lifecycle; an exclusive target plus deferred removal prevents both overwrite and partial-artifact leakage.
   - For append-only progress reconciliation, use a unique EOF context rather than a generic `---` separator when applying a bulk append, then compare the restored mainline prefix line-by-line before committing.
 ---
+## [2026-08-11 09:11:17 -07:00] - thr-deflake-cli-process-package replacement-head verification
+- What was implemented
+  - Reconciled the review-fix branch with `upstream/main` at `690ca9ab0ac2c1a8c8aa461ff4c7354ca3fa03e0`; the conflict-resolved merge is `b34643c10`.
+  - Preserved the task-owned `prd.json` and the complete append-only `progress.txt` history while retaining the incoming mainline ACP test split and other unrelated mainline changes.
+  - Updated the review follow-up metadata with the current base, merge commit, local verification, and remaining hosted-PR work.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+  - current-main files included by the merge commit
+- Verification
+  - `make test` — passed on the replacement head.
+  - `make verify-fast` — passed dashboard typecheck, MCP contract checks, 355 Vitest files/2,964 tests, 196 Bun tests, and the short Go suite.
+  - The focused rolling-file tests, race/vet/cross-compilation checks, structural gates, and `git diff --check` remain passing; the known mainline lint findings are unchanged.
+- **Learnings for future iterations:**
+  - After a conflict-resolving merge, rerun the repository-level fast tier even when the task-owned source files are unchanged; mainline test reorganizations can affect the replacement head.
+  - Keep review metadata explicit about the exact base and merge commit so hosted verification can be tied to the PR head rather than an earlier local result.
+---
