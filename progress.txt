@@ -4282,3 +4282,18 @@
 - **Learnings for future iterations:**
   - Main can advance again while documenting CI follow-up; fetch and merge the live base immediately before the final push, including when the previous post-merge run was already green.
 ---
+
+## [2026-08-10 19:28 -07:00] - thr-split-acp-stdio-tests final current-main handoff synchronization
+- What was implemented
+  - Fetched live `origin/main` at `aac04248d95de7f5412d58f194e7ae03858a3b39` after the final audit found the PR base had advanced again.
+  - Merged the documentation-only current-main changes cleanly, keeping the ACP task PRD and append-only progress history intact.
+- Files changed
+  - Current-main internal development plan documents.
+  - `progress.txt`
+- Verification
+  - The merge completed without conflicts; the ACP PRD remains valid with all three stories `passes:true`.
+  - No review comments, formal reviews, or unresolved inline threads exist on PR #1861.
+  - The prior synchronized head `103a76bde` had all 18 CI checks passing; this merge commit is queued for the final replacement-head CI run.
+- **Learnings for future iterations:**
+  - Even a documentation-only main advancement must be included before handoff when the PR base has moved; recheck CI on the exact pushed head afterward.
+---
