@@ -339,7 +339,7 @@ func formatHumanWorkAccepted(event interfaces.FactoryEvent) string {
 	if !ok || len(payload.Works) == 0 {
 		return withHumanLifecycleSubject("work accepted", firstFactoryEventWorkID(event))
 	}
-	if len(payload.Works) > 1 {
+	if len(payload.Works) > 1 || len(payload.Relations) > 0 {
 		return formatHumanAcceptedWorkBatch(payload)
 	}
 	subject := payload.Works[0].Name
@@ -353,11 +353,18 @@ func formatHumanWorkAccepted(event interfaces.FactoryEvent) string {
 }
 
 func formatHumanAcceptedWorkBatch(payload work.WorkRequestEventPayload) string {
-	lines := []string{fmt.Sprintf("work accepted: %d items", len(payload.Works))}
+	itemLabel := "items"
+	if len(payload.Works) == 1 {
+		itemLabel = "item"
+	}
+	lines := []string{fmt.Sprintf("work accepted: %d %s", len(payload.Works), itemLabel)}
 	for _, item := range payload.Works {
 		identity := boundedHumanProgressPayload(item.WorkID)
 		if identity == "" {
 			identity = boundedHumanProgressPayload(item.Name)
+		}
+		if identity == "" {
+			identity = "(unnamed work)"
 		}
 		name := boundedHumanProgressPayload(item.Name)
 		task := workContentSummary(item.Content)
@@ -371,6 +378,9 @@ func formatHumanAcceptedWorkBatch(payload work.WorkRequestEventPayload) string {
 		lines = append(lines, boundedHumanProgressPayload(line))
 	}
 	for _, relation := range payload.Relations {
+		if strings.TrimSpace(string(relation.Type)) == "" {
+			continue
+		}
 		source := boundedHumanProgressPayload(relation.SourceWorkName)
 		if source == "" {
 			continue

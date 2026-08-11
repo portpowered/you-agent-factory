@@ -244,6 +244,83 @@ func TestHumanFactoryEventRenderer_PresentsBatchWorkAndDispatchWorkIDs(t *testin
 	}
 }
 
+func TestFormatHumanWorkAccepted_PresentsPartialBatchWithoutFabricatedEdges(t *testing.T) {
+	t.Parallel()
+
+	payload, err := json.Marshal(work.WorkRequestEventPayload{
+		Works: []work.WorkRequestEventWork{
+			{WorkID: "work-1", Name: "first"},
+			{WorkID: "work-2", Name: "second", Content: []work.WorkContentPart{{
+				Type: work.WorkContentPartTypeJSON,
+				JSON: json.RawMessage(`{"private":"provider payload"}`),
+			}}},
+			{Name: "independent"},
+			{},
+		},
+		Relations: []work.WorkRequestEventRelation{
+			{Type: work.WorkRelationDependsOn, SourceWorkName: "second", TargetWorkName: "first"},
+			{Type: work.WorkRelationDependsOn, TargetWorkName: "independent"},
+			{SourceWorkName: "independent", TargetWorkName: "first"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal partial batch payload: %v", err)
+	}
+
+	got := renderHumanWorkAcceptedEvent(t, payload)
+	want := "[0] work accepted: 4 items\n" +
+		"- work-1 (first)\n" +
+		"- work-2 (second)\n" +
+		"- independent\n" +
+		"- (unnamed work)\n" +
+		"- second depends on -> first"
+	if got != want {
+		t.Fatalf("partial batch output = %q, want %q", got, want)
+	}
+	if strings.Contains(got, "private") || strings.Contains(got, "independent depends") {
+		t.Fatalf("partial batch output = %q, contains private payload or fabricated edge", got)
+	}
+}
+
+func TestFormatHumanWorkAccepted_PresentsSingleItemRelationPayload(t *testing.T) {
+	t.Parallel()
+
+	payload, err := json.Marshal(work.WorkRequestEventPayload{
+		Works: []work.WorkRequestEventWork{{WorkID: "work-1", Name: "only"}},
+		Relations: []work.WorkRequestEventRelation{{
+			Type: work.WorkRelationDependsOn, SourceWorkName: "only", TargetWorkID: "work-0",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("marshal single-item payload: %v", err)
+	}
+
+	got := renderHumanWorkAcceptedEvent(t, payload)
+	want := "[0] work accepted: 1 item\n- work-1 (only)\n- only depends on -> work-0"
+	if got != want {
+		t.Fatalf("single-item output = %q, want %q", got, want)
+	}
+}
+
+func renderHumanWorkAcceptedEvent(t *testing.T, payload []byte) string {
+	t.Helper()
+
+	service := visualizationcli.New(nil, factoryvisualizationwire.NewResponsePresentation())
+	var output bytes.Buffer
+	renderer, err := service.OpenFactoryEventRenderer(visualizationcli.FactoryEventRendererConfig{
+		Output: &output, InvocationOutputMode: visualizationcli.InvocationOutputResponseStream,
+	})
+	if err != nil {
+		t.Fatalf("open renderer: %v", err)
+	}
+	renderer.PresentFactoryEvents([]interfaces.FactoryEvent{{
+		Type:    interfaces.FactoryEventTypeWorkRequest,
+		Payload: payload,
+	}})
+	renderer.StopProgressRendering()
+	return strings.TrimSpace(output.String())
+}
+
 func TestHumanFactoryEventRenderer_TTYProgressUsesInjectedTicksAndStops(t *testing.T) {
 	t.Parallel()
 
