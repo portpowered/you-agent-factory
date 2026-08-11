@@ -213,9 +213,23 @@ type backup struct {
 }
 
 func (w *Writer) cleanBackups() error {
-	entries, err := os.ReadDir(filepath.Dir(w.Filename))
+	backups, err := w.readBackups()
 	if err != nil {
 		return err
+	}
+	remove := w.retentionRemovals(backups)
+	firstErr := removeBackups(remove)
+	compressionErr := w.compressBackups(backups, remove)
+	if firstErr == nil {
+		firstErr = compressionErr
+	}
+	return firstErr
+}
+
+func (w *Writer) readBackups() ([]backup, error) {
+	entries, err := os.ReadDir(filepath.Dir(w.Filename))
+	if err != nil {
+		return nil, err
 	}
 	backups := make([]backup, 0, len(entries))
 	for _, entry := range entries {
@@ -234,41 +248,68 @@ func (w *Writer) cleanBackups() error {
 	sort.SliceStable(backups, func(i, j int) bool {
 		return backups[i].timestamp.After(backups[j].timestamp)
 	})
+	return backups, nil
+}
 
+func (w *Writer) retentionRemovals(backups []backup) map[string]struct{} {
 	remove := make(map[string]struct{})
 	if w.MaxBackups > 0 {
-		preserved := make(map[string]struct{})
-		for _, file := range backups {
-			preserved[file.baseName] = struct{}{}
-			if len(preserved) > w.MaxBackups {
-				remove[file.path] = struct{}{}
-			}
-		}
+		w.markExcessBackups(backups, remove)
 	}
 	if w.MaxAge > 0 {
-		cutoff := time.Now().Add(-time.Duration(w.MaxAge) * 24 * time.Hour)
-		for _, file := range backups {
-			if file.timestamp.Before(cutoff) {
-				remove[file.path] = struct{}{}
-			}
+		w.markExpiredBackups(backups, remove)
+	}
+	return remove
+}
+
+func (w *Writer) markExcessBackups(backups []backup, remove map[string]struct{}) {
+	preserved := make(map[string]struct{})
+	for _, file := range backups {
+		preserved[file.baseName] = struct{}{}
+		if len(preserved) > w.MaxBackups {
+			remove[file.path] = struct{}{}
 		}
 	}
+}
 
+func (w *Writer) markExpiredBackups(backups []backup, remove map[string]struct{}) {
+	cutoff := time.Now().Add(-time.Duration(w.MaxAge) * 24 * time.Hour)
+	for _, file := range backups {
+		if file.timestamp.Before(cutoff) {
+			remove[file.path] = struct{}{}
+		}
+	}
+}
+
+func removeBackups(remove map[string]struct{}) error {
 	var firstErr error
 	for path := range remove {
-		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) && firstErr == nil {
-			firstErr = err
+		if err := os.Remove(path); err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			if firstErr == nil {
+				firstErr = err
+			}
 		}
 	}
-	if w.Compress {
-		for _, file := range backups {
-			if filepath.Ext(file.name) == compressSuffix {
-				continue
-			}
-			if _, removed := remove[file.path]; removed {
-				continue
-			}
-			if err := compress(file.path, file.path+compressSuffix); err != nil && firstErr == nil {
+	return firstErr
+}
+
+func (w *Writer) compressBackups(backups []backup, remove map[string]struct{}) error {
+	if !w.Compress {
+		return nil
+	}
+	var firstErr error
+	for _, file := range backups {
+		if filepath.Ext(file.name) == compressSuffix {
+			continue
+		}
+		if _, removed := remove[file.path]; removed {
+			continue
+		}
+		if err := compress(file.path, file.path+compressSuffix); err != nil {
+			if firstErr == nil {
 				firstErr = err
 			}
 		}
