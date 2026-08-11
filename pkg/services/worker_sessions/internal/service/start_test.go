@@ -165,6 +165,44 @@ func assertTerminalDelivery(t *testing.T, subscription events.Subscription) {
 	}
 }
 
+func assertSessionRecords(t *testing.T, eventsSvc events.Service, id string) {
+	t.Helper()
+	read, err := eventsSvc.Read(context.Background(), events.ReadRequest{
+		Topic: workersessions.Topic(id),
+		From:  events.Cursor{Topic: workersessions.Topic(id)},
+		Limit: 10,
+	})
+	if err != nil {
+		t.Fatalf("session records for %q read error = %v", id, err)
+	}
+	if len(read.Records) != 2 {
+		t.Fatalf("session records for %q = %+v, want one opening and one terminal", id, read.Records)
+	}
+}
+
+func assertAcceptedStart(t *testing.T, outcome asyncStartOutcome) {
+	t.Helper()
+	if outcome.err != nil {
+		t.Fatalf("Start() error = %v, want accepted", outcome.err)
+	}
+	if outcome.result.Session.State != workersessions.StateRunning {
+		t.Fatalf("Start() session = %+v, want RUNNING", outcome.result.Session)
+	}
+}
+
+func assertStartReplay(t *testing.T, got workersessions.StartResult, gotErr error, want workersessions.StartResult) {
+	t.Helper()
+	if gotErr != nil {
+		t.Fatalf("same-key replay error = %v, want nil", gotErr)
+	}
+	if got.Session.ID != want.Session.ID {
+		t.Fatalf("same-key replay session ID = %q, want %q", got.Session.ID, want.Session.ID)
+	}
+	if got.Session.State != want.Session.State {
+		t.Fatalf("same-key replay state = %q, want %q", got.Session.State, want.Session.State)
+	}
+}
+
 func TestStart_ReturnsAfterEventReadyAndWorkersAdmission(t *testing.T) {
 	eventsSvc := newEventsAppender()
 	started := make(chan struct{})
@@ -219,6 +257,206 @@ func TestStart_ReturnsAfterEventReadyAndWorkersAdmission(t *testing.T) {
 	}
 	if final.State != workersessions.StateCompleted {
 		t.Fatalf("final session state = %q, want COMPLETED", final.State)
+	}
+}
+
+func TestStart_AdmittedExecutionOutlivesSubmittingContext(t *testing.T) {
+	eventsSvc := newEventsAppender()
+	dispatchStarted := make(chan struct{})
+	releaseDispatch := make(chan struct{})
+	var dispatchOnce sync.Once
+	executionContext := make(chan context.Context, 1)
+	execution := &fakeExecution{
+		dispatch: func(ctx context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+			executionContext <- ctx
+			dispatchOnce.Do(func() { close(dispatchStarted) })
+			<-releaseDispatch
+			return workers.WorkstationDispatchResult{
+				DispatchID:      req.Execution.Dispatch.DispatchID,
+				TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeCompleted,
+				Result: workers.WorkResult{
+					DispatchID: req.Execution.Dispatch.DispatchID,
+					Outcome:    workers.OutcomeAccepted,
+				},
+			}, nil
+		},
+	}
+	registry, err := newService(executionBoundary{execution: execution}, eventsSvc, nil)
+	if err != nil {
+		t.Fatalf("service.New() error = %v, want nil", err)
+	}
+	lifecycle := registry.(interface{ Stop(context.Context) error })
+	defer func() { _ = lifecycle.Stop(context.Background()) }()
+
+	submittingContext, cancelSubmitting := context.WithCancel(context.Background())
+	defer cancelSubmitting()
+	outcomes := make(chan asyncStartOutcome, 1)
+	go func() {
+		result, startErr := registry.Start(submittingContext, validAsyncStartRequest("worker-disconnect", "dispatch-disconnect"))
+		outcomes <- asyncStartOutcome{result: result, err: startErr}
+	}()
+	waitForStartSignal(t, dispatchStarted, "admitted Workers execution did not begin")
+	outcome := waitForAsyncStart(t, outcomes)
+	if outcome.err != nil || outcome.result.Session.State != workersessions.StateRunning {
+		t.Fatalf("Start() = %+v, %v, want accepted RUNNING session", outcome.result.Session, outcome.err)
+	}
+	workerContext := <-executionContext
+
+	cancelSubmitting()
+	if workerContext.Err() != nil {
+		t.Fatalf("admitted Workers context error after submitting disconnect = %v, want nil", workerContext.Err())
+	}
+	if got := len(execution.cancellationRequests()); got != 0 {
+		t.Fatalf("Workers cancellation calls after submitting disconnect = %d, want 0", got)
+	}
+
+	terminalSubscription := subscribeForTerminal(t, eventsSvc, workersessions.Topic("worker-disconnect"))
+	close(releaseDispatch)
+	assertTerminalDelivery(t, terminalSubscription)
+	read, err := eventsSvc.Read(context.Background(), events.ReadRequest{
+		Topic: workersessions.Topic("worker-disconnect"),
+		From:  events.Cursor{Topic: workersessions.Topic("worker-disconnect")},
+		Limit: 10,
+	})
+	if err != nil || len(read.Records) != 2 {
+		t.Fatalf("session records after disconnect = %+v, %v, want one opening and one terminal", read, err)
+	}
+	final, err := registry.Get(context.Background(), workersessions.GetRequest{ID: "worker-disconnect"})
+	if err != nil || final.State != workersessions.StateCompleted {
+		t.Fatalf("session after disconnect = %+v, %v, want COMPLETED", final, err)
+	}
+}
+
+func TestStart_DisconnectBeforeAcceptanceLeavesReplayAuthoritative(t *testing.T) {
+	eventsSvc := newEventsAppender()
+	admissionStarted := make(chan struct{})
+	releaseAdmission := make(chan struct{})
+	var releaseOnce sync.Once
+	execution := &fakeExecution{
+		admissionStarted: admissionStarted,
+		releaseAdmission: releaseAdmission,
+		dispatch: func(_ context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+			return workers.WorkstationDispatchResult{
+				DispatchID:      req.Execution.Dispatch.DispatchID,
+				TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeCompleted,
+				Result: workers.WorkResult{
+					DispatchID: req.Execution.Dispatch.DispatchID,
+					Outcome:    workers.OutcomeAccepted,
+				},
+			}, nil
+		},
+	}
+	registry, err := newService(executionBoundary{execution: execution}, eventsSvc, nil)
+	if err != nil {
+		t.Fatalf("service.New() error = %v, want nil", err)
+	}
+	lifecycle := registry.(interface{ Stop(context.Context) error })
+	defer func() {
+		releaseOnce.Do(func() { close(releaseAdmission) })
+		_ = lifecycle.Stop(context.Background())
+	}()
+
+	request := validAsyncStartRequest("worker-before-202", "dispatch-before-202")
+	submittingContext, cancelSubmitting := context.WithCancel(context.Background())
+	outcomes := make(chan asyncStartOutcome, 1)
+	go func() {
+		result, startErr := registry.Start(submittingContext, request)
+		outcomes <- asyncStartOutcome{result: result, err: startErr}
+	}()
+	waitForStartSignal(t, admissionStarted, "Start did not reach the admission wait")
+	cancelSubmitting()
+	outcome := waitForAsyncStart(t, outcomes)
+	if !errors.Is(outcome.err, context.Canceled) {
+		t.Fatalf("Start() after pre-acceptance disconnect error = %v, want context.Canceled", outcome.err)
+	}
+
+	terminalSubscription := subscribeForTerminal(t, eventsSvc, workersessions.Topic(request.ID))
+	releaseOnce.Do(func() { close(releaseAdmission) })
+	replay, replayErr := registry.Start(context.Background(), request)
+	if replayErr != nil {
+		t.Fatalf("same-key replay after pre-acceptance disconnect error = %v, want authoritative acceptance", replayErr)
+	}
+	if replay.Session.ID != request.ID || replay.Session.State == workersessions.StateReserved {
+		t.Fatalf("same-key replay after pre-acceptance disconnect = %+v, want admitted session %q", replay.Session, request.ID)
+	}
+	if got := execution.callCount(); got != 1 {
+		t.Fatalf("Workers dispatch count after pre-acceptance disconnect = %d, want 1", got)
+	}
+	assertTerminalDelivery(t, terminalSubscription)
+	assertSessionRecords(t, eventsSvc, request.ID)
+}
+
+func TestWorkerSessionsLifecycleStop_RejectsNewStartsAndJoinsAsyncTerminal(t *testing.T) {
+	eventsSvc := newEventsAppender()
+	dispatchStarted := make(chan struct{})
+	releaseDispatch := make(chan struct{})
+	var dispatchOnce sync.Once
+	var releaseOnce sync.Once
+	cancelCalled := make(chan struct{})
+	execution := &fakeExecution{
+		dispatch: func(_ context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+			dispatchOnce.Do(func() { close(dispatchStarted) })
+			<-releaseDispatch
+			return workers.WorkstationDispatchResult{
+				DispatchID:      req.Execution.Dispatch.DispatchID,
+				TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeCanceled,
+				Result: workers.WorkResult{
+					DispatchID: req.Execution.Dispatch.DispatchID,
+					Outcome:    workers.OutcomeFailed,
+					Error:      workers.ErrWorkstationDispatchCanceled.Error(),
+				},
+			}, workers.ErrWorkstationDispatchCanceled
+		},
+		cancel: func(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
+			close(cancelCalled)
+			releaseOnce.Do(func() { close(releaseDispatch) })
+			return workers.WorkstationDispatchCancelResult{
+				Outcome: workers.WorkstationDispatchCancelOutcomeCanceled,
+			}, nil
+		},
+	}
+	registry, err := newService(executionBoundary{execution: execution}, eventsSvc, nil)
+	if err != nil {
+		t.Fatalf("service.New() error = %v, want nil", err)
+	}
+	lifecycle := registry.(interface{ Stop(context.Context) error })
+	defer func() { _ = lifecycle.Stop(context.Background()) }()
+	request := validAsyncStartRequest("worker-shutdown", "dispatch-shutdown")
+	outcomes := make(chan asyncStartOutcome, 1)
+	go func() {
+		result, startErr := registry.Start(context.Background(), request)
+		outcomes <- asyncStartOutcome{result: result, err: startErr}
+	}()
+	waitForStartSignal(t, dispatchStarted, "shutdown test did not reach Workers admission")
+	accepted := waitForAsyncStart(t, outcomes)
+	assertAcceptedStart(t, accepted)
+
+	terminalSubscription := subscribeForTerminal(t, eventsSvc, workersessions.Topic(request.ID))
+	if err := lifecycle.Stop(context.Background()); err != nil {
+		t.Fatalf("Lifecycle.Stop() error = %v, want nil", err)
+	}
+	select {
+	case <-cancelCalled:
+	default:
+		t.Fatal("Lifecycle.Stop() returned before signaling Workers cancellation")
+	}
+	assertTerminalDelivery(t, terminalSubscription)
+	final, err := registry.Get(context.Background(), workersessions.GetRequest{ID: request.ID})
+	if err != nil {
+		t.Fatalf("session after Lifecycle.Stop() read error = %v", err)
+	}
+	if final.State != workersessions.StateTerminated {
+		t.Fatalf("session after Lifecycle.Stop() = %+v, want TERMINATED", final)
+	}
+	assertSessionRecords(t, eventsSvc, request.ID)
+
+	if _, err := registry.Start(context.Background(), validAsyncStartRequest("worker-after-shutdown", "dispatch-after-shutdown")); !errors.Is(err, workersessions.ErrStartServerStopping) {
+		t.Fatalf("new Start() after Lifecycle.Stop() error = %v, want ErrStartServerStopping", err)
+	}
+	replay, err := registry.Start(context.Background(), request)
+	assertStartReplay(t, replay, err, accepted.result)
+	if got := execution.callCount(); got != 1 {
+		t.Fatalf("Workers dispatch count after Lifecycle.Stop() = %d, want 1", got)
 	}
 }
 

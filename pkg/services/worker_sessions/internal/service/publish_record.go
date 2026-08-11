@@ -3,13 +3,179 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"sort"
 	"sync"
 
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+type asyncStartCompletion struct {
+	result workersessions.StartResult
+	err    error
+}
+
+// startNotAcceptedError keeps the public Start error classification stable
+// without exposing an adapter's raw failure text to callers that only need to
+// know that the admission barrier was not reached.
+type startNotAcceptedError struct {
+	cause error
+}
+
+func (e *startNotAcceptedError) Error() string {
+	return workersessions.ErrStartNotAccepted.Error()
+}
+
+func (e *startNotAcceptedError) Unwrap() error {
+	if e.cause == nil {
+		return workersessions.ErrStartNotAccepted
+	}
+	return errors.Join(workersessions.ErrStartNotAccepted, e.cause)
+}
+
+func startNotAccepted(cause error) error {
+	return &startNotAcceptedError{cause: cause}
+}
+
+func (r *registry) serverOwnedContext() context.Context {
+	r.mu.RLock()
+	ctx := r.lifecycleCtx
+	r.mu.RUnlock()
+	if ctx == nil {
+		return context.Background()
+	}
+	return ctx
+}
+
+func awaitStartReplay(ctx context.Context, replay *startReplay) (workersessions.StartResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	select {
+	case <-replay.done:
+		return cloneStartResult(replay.result), replay.err
+	case <-ctx.Done():
+		select {
+		case <-replay.done:
+			return cloneStartResult(replay.result), replay.err
+		default:
+		}
+		return workersessions.StartResult{}, ctx.Err()
+	}
+}
+
+func startReservationOutcome(err error) string {
+	if errors.Is(err, workersessions.ErrStartRequestIDConflict) {
+		return "idempotency_conflict"
+	}
+	if errors.Is(err, workersessions.ErrStartServerStopping) {
+		return "server_stopping"
+	}
+	return "not_startable"
+}
+
+func (r *registry) finishStart() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.activeStarts == 0 {
+		return
+	}
+	r.activeStarts--
+	if r.activeStarts == 0 && r.startsDone != nil {
+		close(r.startsDone)
+	}
+}
+
+func (r *registry) isStopping() bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.stopping
+}
+
+func (r *registry) supervisionContext(supervision *supervision) context.Context {
+	if supervision == nil {
+		return context.Background()
+	}
+	supervision.mu.Lock()
+	serverOwned := supervision.serverOwned
+	supervision.mu.Unlock()
+	if serverOwned {
+		return r.serverOwnedContext()
+	}
+	return context.Background()
+}
+
+// Stop is the Worker Sessions-owned process lifecycle boundary. It closes
+// asynchronous admission first, then routes every already-registered
+// supervision through the existing Terminate/control path. The lifecycle
+// context remains usable until those paths have committed their terminal
+// records, so shutdown cannot turn a joined execution into an unobservable
+// terminal state.
+func (r *registry) Stop(ctx context.Context) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	r.stopOnce.Do(func() {
+		r.stopErr = r.stopOwned(ctx)
+		close(r.stopDone)
+	})
+	<-r.stopDone
+	return r.stopErr
+}
+
+func (r *registry) stopOwned(ctx context.Context) error {
+	r.mu.Lock()
+	r.stopping = true
+	startDone := r.startsDone
+	ids := make([]string, 0, len(r.supervisions))
+	for id, supervision := range r.supervisions {
+		if supervision.serverOwned {
+			ids = append(ids, id)
+		}
+	}
+	lifecycleCancel := r.lifecycleCancel
+	r.mu.Unlock()
+	sort.Strings(ids)
+
+	var stopErr error
+	for _, id := range ids {
+		if _, err := r.terminateForShutdown(ctx, id); err != nil {
+			stopErr = errors.Join(stopErr, err)
+		}
+		if err := r.waitForSupervisionDriver(ctx, id); err != nil {
+			stopErr = errors.Join(stopErr, err)
+		}
+	}
+	if startDone != nil {
+		select {
+		case <-startDone:
+		case <-ctx.Done():
+			stopErr = errors.Join(stopErr, ctx.Err())
+		}
+	}
+	if lifecycleCancel != nil {
+		lifecycleCancel()
+	}
+	return stopErr
+}
+
+func (r *registry) waitForSupervisionDriver(ctx context.Context, id string) error {
+	r.mu.RLock()
+	supervision := r.supervisions[id]
+	r.mu.RUnlock()
+	if supervision == nil || supervision.driverDone == nil {
+		return nil
+	}
+	select {
+	case <-supervision.driverDone:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
 
 // sourceKey narrows the four-part Events idempotency identity down to the
 // (SourceType, SourceID) pair PublishRecord tracks ordering against: every

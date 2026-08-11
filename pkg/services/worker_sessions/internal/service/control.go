@@ -49,11 +49,6 @@ func startTupleFor(req workersessions.StartRequest) startTuple {
 	}
 }
 
-func awaitStartReplay(replay *startReplay) (workersessions.StartResult, error) {
-	<-replay.done
-	return cloneStartResult(replay.result), replay.err
-}
-
 func (r *registry) finishStartReplay(replay *startReplay, result workersessions.StartResult, err error) {
 	replay.result = cloneStartResult(result)
 	replay.err = err
@@ -63,13 +58,6 @@ func (r *registry) finishStartReplay(replay *startReplay, result workersessions.
 func cloneStartResult(result workersessions.StartResult) workersessions.StartResult {
 	result.Session = cloneSession(result.Session)
 	return result
-}
-
-func startReservationOutcome(err error) string {
-	if errors.Is(err, workersessions.ErrStartRequestIDConflict) {
-		return "idempotency_conflict"
-	}
-	return "not_startable"
 }
 
 func startReplayOutcome(err error) string {
@@ -115,14 +103,16 @@ type supervision struct {
 	retryPending bool
 	attemptDone  chan struct{}
 
-	published     chan struct{}
-	publishedOnce sync.Once
-	paused        chan struct{}
-	pausedOnce    sync.Once
-	admitted      chan struct{}
-	admittedOnce  sync.Once
-	done          chan struct{}
-	doneOnce      sync.Once
+	published      chan struct{}
+	publishedOnce  sync.Once
+	paused         chan struct{}
+	pausedOnce     sync.Once
+	admitted       chan struct{}
+	admittedOnce   sync.Once
+	done           chan struct{}
+	doneOnce       sync.Once
+	driverDone     chan struct{}
+	driverDoneOnce sync.Once
 }
 
 type cancellationAttemptKind uint8
@@ -154,6 +144,7 @@ func newSupervision(dispatchID, turnID string, executions ...workers.Workstation
 		paused:      make(chan struct{}),
 		admitted:    make(chan struct{}),
 		done:        make(chan struct{}),
+		driverDone:  make(chan struct{}),
 	}
 }
 
@@ -209,6 +200,10 @@ func (s *supervision) signalAdmitted()  { s.admittedOnce.Do(func() { close(s.adm
 func (s *supervision) signalDone() {
 	s.finishAttempt()
 	s.doneOnce.Do(func() { close(s.done) })
+}
+
+func (s *supervision) signalDriverDone() {
+	s.driverDoneOnce.Do(func() { close(s.driverDone) })
 }
 
 func (s *supervision) beginCancellation(action workersessions.ControlAction) cancellationAttempt {
@@ -320,12 +315,31 @@ func (r *registry) registerSupervision(
 	id, dispatchID, turnID string,
 	executions ...workers.WorkstationDispatchRequest,
 ) (*supervision, bool) {
+	return r.registerSupervisionOwned(false, id, dispatchID, turnID, executions...)
+}
+
+func (r *registry) registerServerOwnedSupervision(
+	id, dispatchID, turnID string,
+	executions ...workers.WorkstationDispatchRequest,
+) (*supervision, bool) {
+	return r.registerSupervisionOwned(true, id, dispatchID, turnID, executions...)
+}
+
+func (r *registry) registerSupervisionOwned(
+	serverOwned bool,
+	id, dispatchID, turnID string,
+	executions ...workers.WorkstationDispatchRequest,
+) (*supervision, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.stopping {
+		return nil, false
+	}
 	if session, exists := r.sessions[id]; !exists || session.State != workersessions.StateStarting {
 		return nil, false
 	}
 	supervision := newSupervision(dispatchID, turnID, executions...)
+	supervision.serverOwned = serverOwned
 	r.supervisions[id] = supervision
 	r.dispatchOwners[dispatchID] = id
 	return supervision, true
@@ -364,6 +378,7 @@ func (r *registry) completeSupervision(id string, supervision *supervision, resu
 	action := supervision.requestedAction
 	continuing := supervision.continuing
 	dispatchID := supervision.dispatchID
+	serverOwned := supervision.serverOwned
 	supervision.mu.Unlock()
 	if continuing && !r.continuationResultMatchesAssociation(id, result) {
 		result = invalidContinuationResult(result)
@@ -408,7 +423,11 @@ func (r *registry) completeSupervision(id string, supervision *supervision, resu
 	final, committed := r.commitTerminal(id, state, terminal)
 	if committed {
 		r.logTerminal(id, dispatchID, final)
-		r.publishTerminalRecordOrLog(context.Background(), id, dispatchID, state, *final.Result)
+		terminalContext := context.Background()
+		if serverOwned {
+			terminalContext = r.serverOwnedContext()
+		}
+		r.publishTerminalRecordOrLog(terminalContext, id, dispatchID, state, *final.Result)
 	}
 	supervision.finishAttempt()
 	supervision.signalDone()
@@ -773,15 +792,19 @@ func (r *registry) unsupportedControl(_ context.Context, req workersessions.Cont
 }
 
 func (r *registry) Cancel(ctx context.Context, req workersessions.ControlRequest) (workersessions.ControlResult, error) {
-	return r.cancelControl(ctx, req, workersessions.ControlActionCancel)
+	return r.cancelControl(ctx, req, workersessions.ControlActionCancel, true)
 }
 
 func (r *registry) Terminate(ctx context.Context, req workersessions.ControlRequest) (workersessions.ControlResult, error) {
-	return r.cancelControl(ctx, req, workersessions.ControlActionTerminate)
+	return r.cancelControl(ctx, req, workersessions.ControlActionTerminate, true)
+}
+
+func (r *registry) terminateForShutdown(ctx context.Context, id string) (workersessions.ControlResult, error) {
+	return r.cancelControl(ctx, workersessions.ControlRequest{ID: id}, workersessions.ControlActionTerminate, false)
 }
 
 // pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
-func (r *registry) cancelControl(ctx context.Context, req workersessions.ControlRequest, action workersessions.ControlAction) (workersessions.ControlResult, error) {
+func (r *registry) cancelControl(ctx context.Context, req workersessions.ControlRequest, action workersessions.ControlAction, detachContext bool) (workersessions.ControlResult, error) {
 	if err := req.Validate(); err != nil {
 		return workersessions.ControlResult{Action: action, Outcome: workersessions.ControlOutcomeFailed}, err
 	}
@@ -819,7 +842,11 @@ func (r *registry) cancelControl(ctx context.Context, req workersessions.Control
 		wait := attempt.wait
 		dispatchID := attempt.dispatchID
 
-		cancelResult, cancelErr := r.boundary.Cancel(context.WithoutCancel(ctx), workers.WorkstationDispatchCancelRequest{DispatchID: dispatchID})
+		boundaryContext := ctx
+		if detachContext {
+			boundaryContext = context.WithoutCancel(ctx)
+		}
+		cancelResult, cancelErr := r.boundary.Cancel(boundaryContext, workers.WorkstationDispatchCancelRequest{DispatchID: dispatchID})
 		alreadyTerminal := supervision.finishCancellation(action, wait, cancelResult, cancelErr, sessionIsTerminal(r, req.ID))
 
 		// Terminate promises to return only after the authoritative dispatch
@@ -867,7 +894,7 @@ func (r *registry) terminalizePausedControl(id string, action workersessions.Con
 	final, committed := r.commitControlTerminal(id, state)
 	if committed {
 		r.logTerminal(id, supervision.dispatchID, final)
-		r.publishTerminalRecordOrLog(context.Background(), id, supervision.dispatchID, state, workersessions.TerminalResult{})
+		r.publishTerminalRecordOrLog(r.supervisionContext(supervision), id, supervision.dispatchID, state, workersessions.TerminalResult{})
 		supervision.signalDone()
 	}
 	return r.controlApplied(id, action, final, supervision)

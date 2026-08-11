@@ -92,8 +92,11 @@ type Service interface {
 	// Workers execution under server-owned supervision. It returns only after
 	// the session has reached the Workers admission callback, so a nil error is
 	// an honest acceptance barrier rather than a promise that execution has
-	// completed. The server-owned attempt continues after the caller's context
-	// is canceled; Cancel and Terminate are the explicit control paths for an
+	// completed. The caller context can end the admission wait without ending
+	// the reserved operation: the request ID replay remains pending until the
+	// server-owned attempt records its authoritative accepted or failed result.
+	// Once admitted, the attempt continues after the caller's context is
+	// canceled; Cancel and Terminate are the explicit control paths for an
 	// admitted execution.
 	Start(ctx context.Context, req StartRequest) (StartResult, error)
 
@@ -522,6 +525,9 @@ var (
 	// ErrStartAdmissionFailed reports a Workers boundary failure before the
 	// admission callback became observable.
 	ErrStartAdmissionFailed = errors.New("worker session: admission failed")
+	// ErrStartServerStopping reports an asynchronous start rejected because
+	// the owning server/process lifecycle is stopping or has stopped.
+	ErrStartServerStopping = errors.New("worker session: server is stopping")
 	// ErrPublicationNotOpen reports PublishRecord called for a session whose
 	// publication window is not open: the session was only ever reserved,
 	// its opening record has not yet committed, or its terminal record has

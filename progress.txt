@@ -1,6 +1,13 @@
 ## Codebase Patterns
+- When a package is constrained to one named root service interface, keep a
+  peer lifecycle hook structural and optional; let composition detect the
+  narrow method without widening every test double or alternate adapter.
+- Shutdown should close new async admission before closing the Workers pool,
+  route admitted server-owned work through its existing cancellation boundary,
+  and join both terminal publication and the supervision driver's final tail.
 - For final PR handoff, compare the PR body byte-for-byte with `prd.json` and use the thread-aware GraphQL review audit because flat PR comments do not expose inline-thread resolution state.
 - Worker Session async idempotency should claim the caller key and stable session identity in one lock transaction before publication or dispatch, then replay a detached tuple and stored outcome.
+- Root-built functional Worker tests can make mock script execution deterministic by injecting the same gated command runner into both provider and script command edges; the mock-worker mode may route a model-backed workstation through either edge.
 - OS-boundary functional tests may poll an isolated durable filesystem checkpoint only when the child exposes no parent-process event or injected edge; document that reason at each polling helper and keep the bound as a failure guard.
 - Git Worktree preparation treats a retained Git `*.lock` as indeterminate ownership: retry within a named bound, preserve the resource, and return its exact path with verify/remove/retry guidance.
 - Git's `.git/config.lock` has no trustworthy owner or PID evidence; after a bounded retry, report the exact lock with `owner_liveness=indeterminate` and require verification before removing only that file—never auto-delete it.
@@ -4071,4 +4078,55 @@
 - **Learnings for future iterations:**
   - Add `x-enum-varnames` to new OpenAPI enums when their values overlap existing generated enum constants; otherwise code generation can rename unrelated public identifiers.
   - Keep typed transport schemas aligned with the Workers request shape, but preserve Worker Sessions ownership of admission, idempotency, and stable failure classification in the service boundary.
+---
+## [2026-08-11 00:45 -07:00] - dwro-s2-server-owned-start-004
+- What was implemented
+  - Replaced request-derived asynchronous execution lifetime with a Worker Sessions-owned process lifecycle context and made the caller context cancel only the admission wait; a canceled caller leaves the request-ID replay authoritative until the server-owned attempt accepts or fails.
+  - Added a server-owned supervisor driver completion barrier, shutdown admission gate, idempotent lifecycle stop, and explicit shutdown termination through the existing Workers cancellation boundary. Terminal publication remains live until callbacks and driver tails have joined, then the lifecycle context is canceled.
+  - Wired Factory Runtime shutdown to stop server-owned asynchronous Worker Sessions before the dispatch planner and Workers pool, while leaving synchronous InvokeSession supervisors on their existing control path. Added stable HTTP handling for caller cancellation and server-stopping rejection.
+  - Added deterministic disconnect-before/after-admission, replay, exact terminal-event, shutdown-join, and runtime shutdown-order assertions.
+- Files changed
+  - `pkg/services/worker_sessions/internal/service/service.go`, `publish_record.go`, `control.go`, and `invoke_session.go`
+  - `pkg/services/worker_sessions/contracts.go`, `doc.go`, and HTTP handler tests/mapping
+  - `pkg/services/factory_runtime/internal/services/orchestration/runtime/worker_pool.go` and `factory_modes_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `make test` passed.
+  - `make typecheck` passed.
+  - `go test -race ./pkg/services/worker_sessions/...` passed.
+  - Affected Factory Runtime tests, `go vet ./pkg/services/worker_sessions/... ./pkg/services/factory_runtime/...`, `make backend-size pkg-maint pkg-file-count pkg-structure`, and `git diff --check` passed.
+- **Learnings for future iterations:**
+  - Keep optional lifecycle capabilities structural when the service root is constrained to one named interface; composition can type-assert the narrow `Stop(context.Context) error` method without widening every fake.
+  - A canceled admission waiter must not finalize the request replay; let a detached owner finish the state machine so a retry sees the authoritative accepted or failed result.
+  - Runtime shutdown must target only server-owned asynchronous supervisors; synchronous InvokeSession work is still joined by its existing Factory Runtime/Workers control path.
+---
+## [2026-08-11 01:25 -07:00] - dwro-s2-server-owned-start-004
+- What was implemented
+  - Added root-built functional HTTP coverage for an admitted direct Worker surviving cancellation of the submitting request and for server shutdown canceling and joining the admitted Worker.
+  - The process-boundary tests use a deterministic injected command gate, assert same-requestId replay does not duplicate the Worker command, and verify shutdown reaches the command context without arbitrary sleeps.
+- Files changed
+  - `tests/functional/workers/transports/http/worker_sessions_lifecycle_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/runtime_api -run 'TestWorkerSessionHTTP(DisconnectKeepsAdmittedWorkerAlive|ShutdownJoinsAdmittedWorker)$' -count=1 -v` passed.
+  - `git diff --check` passed.
+- **Learnings for future iterations:**
+  - The root functional harness routes mock model-worker script execution through either the provider or script command edge depending on the assembled worker; inject a deterministic runner into both when the test needs to observe the actual process boundary.
+---
+## [2026-08-11 02:05 -07:00] - dwro-s2-server-owned-start-004
+- What was implemented
+  - Moved the process-boundary Worker Session regression from the deprecated `runtime_api` test owner to `tests/functional/workers/transports/http`, the durable Worker/HTTP domain required by the package-structure gate.
+- Files changed
+  - `tests/functional/workers/transports/http/worker_sessions_lifecycle_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/workers/transports/http -run 'TestWorkerSessionHTTP(DisconnectKeepsAdmittedWorkerAlive|ShutdownJoinsAdmittedWorker)$' -count=1 -v` passed.
+  - The same focused tests passed under `go test -race`.
+  - `go vet ./pkg/services/worker_sessions/... ./pkg/services/factory_runtime/... ./tests/functional/workers/transports/http` passed.
+  - `make typecheck`, `make ui-lint`, `make backend-size pkg-maint pkg-file-count pkg-structure`, and `git diff --check` passed.
+- **Learnings for future iterations:**
+  - New functional scenarios must live under `tests/functional/<durable-domain>/<subsection>/...`; the package-structure checker rejects new files under the historical `runtime_api` aggregate even when their assertions are valid.
 ---

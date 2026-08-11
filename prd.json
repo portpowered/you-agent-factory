@@ -90,8 +90,8 @@
         "Tests pass"
       ],
       "priority": 4,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Completed server-owned async lifecycle ownership and shutdown joining. Worker Sessions now creates a process-scoped lifecycle context, keeps accepted execution and terminal publication independent of the submitting request, bounds the caller/admission wait without closing the authoritative request replay, and records a driver completion barrier. Its structural Stop capability rejects new asynchronous starts, terminates only server-owned asynchronous supervisors through the existing Workers cancellation boundary, waits terminal callbacks/publication and driver completion, and preserves same-key replay after shutdown. Factory Runtime invokes this capability before dispatch-planner and Workers pool shutdown; synchronous InvokeSession supervision remains under its existing runtime control path. Added deterministic disconnect-before/after-acceptance, replay, terminal-event, shutdown-join, runtime shutdown-order, and root-built functional HTTP boundary assertions; the functional tests use an injected gated Worker command runner and no arbitrary sleeps. Verification: make test, make typecheck, focused functional `tests/functional/workers/transports/http` tests (including race), affected Factory Runtime tests, go vet, make ui-lint, backend-size, pkg-maint, pkg-file-count, pkg-structure, and git diff --check passed."
     },
     {
       "id": "dwro-s2-server-owned-start-005",

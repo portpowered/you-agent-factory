@@ -471,6 +471,8 @@ func (h *Handler) writeMappedError(w http.ResponseWriter, err error) {
 
 func (h *Handler) writeMappedStartError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+		return
 	case errors.Is(err, workersessions.ErrInvalidStartRequestID),
 		errors.Is(err, workersessions.ErrInvalidSessionID),
 		errors.Is(err, workersessions.ErrInvalidExecutionRequest),
@@ -484,7 +486,9 @@ func (h *Handler) writeMappedStartError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusServiceUnavailable, "Worker Session event topic is unavailable", string(factoryapi.ErrorResponseCodeWORKERSESSIONEVENTTOPICUNAVAILABLE))
 	case errors.Is(err, workersessions.ErrStartOpeningPublication):
 		writeError(w, http.StatusServiceUnavailable, "Worker Session opening event is unavailable", string(factoryapi.ErrorResponseCodeWORKERSESSIONSTARTOPENINGFAILED))
-	case errors.Is(err, workersessions.ErrStartAdmissionFailed), errors.Is(err, workersessions.ErrStartNotAccepted):
+	case errors.Is(err, workersessions.ErrStartAdmissionFailed),
+		errors.Is(err, workersessions.ErrStartNotAccepted),
+		errors.Is(err, workersessions.ErrStartServerStopping):
 		writeError(w, http.StatusServiceUnavailable, "Workers could not admit the Worker Session", string(factoryapi.ErrorResponseCodeWORKERSESSIONADMISSIONFAILED))
 	default:
 		writeError(w, http.StatusInternalServerError, "failed to start Worker Session", "INTERNAL_ERROR")

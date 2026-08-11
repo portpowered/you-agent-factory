@@ -17,7 +17,11 @@
 // Start returns only after retained replay, live subscription, and the Workers
 // admission callback are all observable; its server-owned attempt then
 // completes asynchronously through the same exactly-once terminal path as
-// InvokeSession. PublishRecord lets a caller append validated source-native
+// InvokeSession. Its optional Stop(context.Context) capability is the
+// canonical Factory Runtime shutdown hook: it rejects new asynchronous
+// starts, routes admitted cancellation through Workers, and joins terminal
+// publication.
+// PublishRecord lets a caller append validated source-native
 // Worker observations onto that same topic using the complete Events
 // idempotency identity, but only while the session's publication window is
 // open (after its opening record, before its terminal record starts

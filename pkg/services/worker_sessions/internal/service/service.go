@@ -80,6 +80,20 @@ type registry struct {
 	providerSessions providersessions.Service
 	clock            platformclock.Source
 	logger           logging.Logger
+
+	// lifecycleCtx is owned by the process composition boundary. Request
+	// contexts are never used as the lifetime of an admitted Start. Stop
+	// keeps this context alive until active callbacks have published their
+	// terminal records, then cancels it to release any remaining lifecycle
+	// work.
+	lifecycleCtx    context.Context
+	lifecycleCancel context.CancelFunc
+	stopping        bool
+	activeStarts    int
+	startsDone      chan struct{}
+	stopOnce        sync.Once
+	stopDone        chan struct{}
+	stopErr         error
 }
 
 // Compile-time proof that production registry seals the W1+W2 root contract
@@ -111,6 +125,9 @@ func New(
 	if providerSessions == nil {
 		return nil, ErrMissingProviderSessions
 	}
+	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
+	startsDone := make(chan struct{})
+	close(startsDone)
 	registry := &registry{
 		sessions:         make(map[string]workersessions.Session),
 		publications:     make(map[string]*publication),
@@ -123,6 +140,10 @@ func New(
 		clock:            clock,
 		providerSessions: providerSessions,
 		logger:           logging.EnsureLogger(logger),
+		lifecycleCtx:     lifecycleCtx,
+		lifecycleCancel:  lifecycleCancel,
+		startsDone:       startsDone,
+		stopDone:         make(chan struct{}),
 	}
 	if reader, ok := eventsAppender.(EventsReader); ok {
 		registry.eventReader = reader
@@ -133,41 +154,16 @@ func New(
 	return registry, nil
 }
 
-// startNotAcceptedError keeps the public Start error classification stable
-// without exposing an adapter's raw failure text to callers that only need to
-// know that the admission barrier was not reached.
-type startNotAcceptedError struct {
-	cause error
-}
-
-func (e *startNotAcceptedError) Error() string {
-	return workersessions.ErrStartNotAccepted.Error()
-}
-
-func (e *startNotAcceptedError) Unwrap() error {
-	if e.cause == nil {
-		return workersessions.ErrStartNotAccepted
-	}
-	return errors.Join(workersessions.ErrStartNotAccepted, e.cause)
-}
-
-func startNotAccepted(cause error) error {
-	return &startNotAcceptedError{cause: cause}
-}
-
-func serverOwnedContext(ctx context.Context) context.Context {
-	if ctx == nil {
-		return context.Background()
-	}
-	return context.WithoutCancel(ctx)
-}
-
 // Start establishes or replays one Worker Session and returns at the exact
 // Workers admission barrier. The request ID is claimed together with the
 // stable session identity before any opening event or Workers handoff. The
 // owner drives the state machine once; concurrent and later replays wait for
 // and return the owner's stored acceptance or pre-admission failure.
 func (r *registry) Start(ctx context.Context, req workersessions.StartRequest) (workersessions.StartResult, error) {
+	callerCtx := ctx
+	if callerCtx == nil {
+		callerCtx = context.Background()
+	}
 	attemptID := req.Execution.Execution.Dispatch.DispatchID
 	if err := req.Validate(); err != nil {
 		r.logger.Info("worker session start rejected", "sessionID", req.ID, "attemptID", attemptID, "outcome", "invalid")
@@ -180,14 +176,30 @@ func (r *registry) Start(ctx context.Context, req workersessions.StartRequest) (
 		return workersessions.StartResult{}, err
 	}
 	if !owner {
-		result, replayErr := awaitStartReplay(replay)
+		result, replayErr := awaitStartReplay(callerCtx, replay)
 		r.logger.Info("worker session start replay", "sessionID", replay.sessionID, "attemptID", attemptID, "requestID", req.RequestID, "outcome", startReplayOutcome(replayErr))
 		return result, replayErr
 	}
 
-	result, startErr := r.startReserved(ctx, req)
-	r.finishStartReplay(replay, result, startErr)
-	return result, startErr
+	outcomes := make(chan asyncStartCompletion, 1)
+	go func() {
+		result, startErr := r.startReserved(callerCtx, req)
+		r.finishStartReplay(replay, result, startErr)
+		r.finishStart()
+		outcomes <- asyncStartCompletion{result: result, err: startErr}
+	}()
+	select {
+	case outcome := <-outcomes:
+		return outcome.result, outcome.err
+	case <-callerCtx.Done():
+		select {
+		case outcome := <-outcomes:
+			return outcome.result, outcome.err
+		default:
+		}
+		r.logger.Info("worker session start wait canceled", "sessionID", req.ID, "attemptID", attemptID, "requestID", req.RequestID, "outcome", "caller_canceled")
+		return workersessions.StartResult{}, callerCtx.Err()
+	}
 }
 
 // reserveStart atomically claims the caller request ID and stable session
@@ -207,6 +219,9 @@ func (r *registry) reserveStart(req workersessions.StartRequest) (*startReplay, 
 		}
 		return existing, false, nil
 	}
+	if r.stopping {
+		return nil, false, workersessions.ErrStartServerStopping
+	}
 	if _, exists := r.sessions[req.ID]; exists {
 		return nil, false, workersessions.ErrSessionNotStartable
 	}
@@ -216,6 +231,14 @@ func (r *registry) reserveStart(req workersessions.StartRequest) (*startReplay, 
 		sessionID: req.ID,
 		done:      make(chan struct{}),
 	}
+	if r.startsDone == nil {
+		r.startsDone = make(chan struct{})
+		close(r.startsDone)
+	}
+	if r.activeStarts == 0 {
+		r.startsDone = make(chan struct{})
+	}
+	r.activeStarts++
 	r.sessions[req.ID] = workersessions.Session{ID: req.ID, State: workersessions.StateReserved}
 	r.publications[req.ID] = &publication{}
 	r.startReplays[req.RequestID] = replay
@@ -227,7 +250,7 @@ func (r *registry) reserveStart(req workersessions.StartRequest) (*startReplay, 
 // atomically installed the request replay and RESERVED session records.
 func (r *registry) startReserved(ctx context.Context, req workersessions.StartRequest) (workersessions.StartResult, error) {
 	attemptID := req.Execution.Execution.Dispatch.DispatchID
-	serverCtx := serverOwnedContext(ctx)
+	serverCtx := r.serverOwnedContext()
 	if _, err := r.transitionToStarting(req.ID); err != nil {
 		if terminal, ok := r.preAdmissionControlTerminal(req.ID, attemptID); ok {
 			r.publishTerminalSnapshot(serverCtx, req.ID, attemptID, terminal)
@@ -249,16 +272,21 @@ func (r *registry) startReserved(ctx context.Context, req workersessions.StartRe
 	if err := r.ensureOpeningTopicReady(serverCtx, req.ID); err != nil {
 		return r.rejectStartBeforeAdmission(serverCtx, req.ID, attemptID, errors.Join(workersessions.ErrStartOpeningPublication, workersessions.ErrEventTopicUnavailable))
 	}
+	if r.isStopping() {
+		return r.rejectStartBeforeAdmission(serverCtx, req.ID, attemptID, workersessions.ErrStartServerStopping)
+	}
 	r.logger.Info("worker session start", "sessionID", req.ID, "attemptID", attemptID, "requestID", req.RequestID, "outcome", "event_ready", "state", string(workersessions.StateStarting))
 
-	supervision, canStart := r.registerSupervision(req.ID, attemptID, req.Execution.Execution.Dispatch.Execution.RequestID, req.Execution)
+	supervision, canStart := r.registerServerOwnedSupervision(req.ID, attemptID, req.Execution.Execution.Dispatch.Execution.RequestID, req.Execution)
 	if !canStart {
 		final, _ := r.Get(context.Background(), workersessions.GetRequest{ID: req.ID})
+		if r.isStopping() && !final.Terminal() {
+			return r.rejectStartBeforeAdmission(serverCtx, req.ID, attemptID, workersessions.ErrStartServerStopping)
+		}
 		r.publishTerminalSnapshot(serverCtx, req.ID, attemptID, final)
 		return workersessions.StartResult{Session: final}, startNotAccepted(workersessions.ErrStartAdmissionFailed)
 	}
 	supervision.mu.Lock()
-	supervision.serverOwned = true
 	supervision.retryBudget = req.Retry.Attempts()
 	supervision.mu.Unlock()
 	invokeReq := workersessions.InvokeSessionRequest{

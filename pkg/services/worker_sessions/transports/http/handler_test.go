@@ -646,6 +646,7 @@ func TestStartWorkerSessionMapsStableServiceFailures(t *testing.T) {
 		{name: "identity conflict", err: workersessions.ErrSessionNotStartable, code: factoryapi.ErrorResponseCodeWORKERSESSIONNOTSTARTABLE, want: http.StatusConflict},
 		{name: "event unavailable", err: workersessions.ErrEventTopicUnavailable, code: factoryapi.ErrorResponseCodeWORKERSESSIONEVENTTOPICUNAVAILABLE, want: http.StatusServiceUnavailable},
 		{name: "admission unavailable", err: workersessions.ErrStartAdmissionFailed, code: factoryapi.ErrorResponseCodeWORKERSESSIONADMISSIONFAILED, want: http.StatusServiceUnavailable},
+		{name: "server stopping", err: workersessions.ErrStartServerStopping, code: factoryapi.ErrorResponseCodeWORKERSESSIONADMISSIONFAILED, want: http.StatusServiceUnavailable},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			service := &fakeObservationService{startErr: testCase.err}
