@@ -203,7 +203,7 @@
           }
         },
         "examples": [
-          "{ \"prompt\": \"Summarize findings\", \"label\": \"summarize\" }"
+          "{ \"prompt\": \"Summarize findings\", \"label\": \"summarize\", \"skipPermissions\": true }"
         ],
         "visibility": "public",
         "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
@@ -229,6 +229,9 @@
           },
           "reasoningEffort": {
             "type": "string"
+          },
+          "skipPermissions": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -533,6 +536,11 @@
           "condition": "unsupported-reasoning-effort",
           "type": "TypeError",
           "message": "agent.run() has unsupported effective reasoningEffort"
+        },
+        {
+          "condition": "non-boolean-skip-permissions",
+          "type": "TypeError",
+          "message": "agent.run() requires \"skipPermissions\" to be a boolean"
         }
       ],
       "documentation": {
@@ -545,11 +553,11 @@
           },
           "description": {
             "id": "javascript.agent.run.description",
-            "canonicalEnglish": "Dispatches one child agent run from a closed spec object with a required prompt and optional model or preset fields. Returns a promise that resolves to the child result object after policy checks and child_dispatch emission."
+            "canonicalEnglish": "Dispatches one child agent run from a closed spec object with a required prompt and optional model, preset, or child-scoped permission-bypass fields. skipPermissions is honored only by providers that advertise the capability; unsupported routes fail before dispatch side effects. Returns a promise that resolves to the child result object after policy checks and child_dispatch emission."
           }
         },
         "examples": [
-          "await agent.run({ prompt: \"Summarize findings\", label: \"summarize\", preset: \"operator\" })"
+          "await agent.run({ prompt: \"Summarize findings\", label: \"summarize\", preset: \"operator\", skipPermissions: true })"
         ],
         "visibility": "public",
         "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"

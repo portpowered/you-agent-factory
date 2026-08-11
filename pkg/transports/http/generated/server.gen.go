@@ -1456,6 +1456,9 @@ type DispatchQueuedEventPayload struct {
 
 	// SchemaDigest Stable digest of the output schema when applicable.
 	SchemaDigest *string `json:"schemaDigest,omitempty"`
+
+	// SkipPermissions Whether this child requested the selected provider's permission-bypass behavior.
+	SkipPermissions *bool `json:"skipPermissions,omitempty"`
 }
 
 // DispatchReconciledEventPayload Dispatch reconciliation recorded on the canonical factory event stream. Dispatch identity lives in FactoryEvent.context.
@@ -1869,6 +1872,9 @@ type FactoryDispatch struct {
 type FactoryDispatchJavaScriptProjection struct {
 	// ExecutionMode Durable child execution mode recorded for the JavaScript workflow task when available.
 	ExecutionMode *string `json:"executionMode,omitempty"`
+
+	// SkipPermissions Whether this child requested the selected provider's permission-bypass behavior.
+	SkipPermissions *bool `json:"skipPermissions,omitempty"`
 
 	// TaskKind JavaScript workflow task kind for one child dispatch.
 	TaskKind FactoryDispatchJavaScriptTaskKind `json:"taskKind"`

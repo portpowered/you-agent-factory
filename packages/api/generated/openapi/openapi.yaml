@@ -4727,6 +4727,9 @@ components:
         executionMode:
           type: string
           description: Durable child execution mode recorded for the JavaScript workflow task when available.
+        skipPermissions:
+          type: boolean
+          description: Whether this child requested the selected provider's permission-bypass behavior.
     FactoryDispatchUsage:
       type: object
       additionalProperties: false
@@ -5312,6 +5315,9 @@ components:
         provider:
           type: string
           description: Selected provider identifier when applicable.
+        skipPermissions:
+          type: boolean
+          description: Whether this child requested the selected provider's permission-bypass behavior.
         parentDispatchId:
           type: string
           description: Parent dispatch identifier when this dispatch was spawned from another dispatch.

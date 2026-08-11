@@ -33,6 +33,9 @@ properties:
   provider:
     type: string
     description: Selected provider identifier when applicable.
+  skipPermissions:
+    type: boolean
+    description: Whether this child requested the selected provider's permission-bypass behavior.
   parentDispatchId:
     type: string
     description: Parent dispatch identifier when this dispatch was spawned from another dispatch.

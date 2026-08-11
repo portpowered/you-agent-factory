@@ -346,6 +346,7 @@ func agentRunRecord() CallBehaviorRecord {
 					idProperty("modelProvider", false, "string"),
 					idProperty("model", false, "string"),
 					idProperty("reasoningEffort", false, "string"),
+					idProperty("skipPermissions", false, "boolean"),
 				},
 			},
 		},
@@ -394,6 +395,11 @@ func agentRunRecord() CallBehaviorRecord {
 				Condition: "unsupported-reasoning-effort",
 				Type:      "TypeError",
 				Message:   "agent.run() has unsupported effective reasoningEffort",
+			},
+			{
+				Condition: "non-boolean-skip-permissions",
+				Type:      "TypeError",
+				Message:   `agent.run() requires "skipPermissions" to be a boolean`,
 			},
 		},
 	}

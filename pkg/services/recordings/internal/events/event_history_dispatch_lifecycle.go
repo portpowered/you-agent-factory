@@ -112,6 +112,21 @@ type DispatchQueuedInput struct {
 	SchemaDigest        string
 	InputArtifactIDs    []string
 	InputWorkIDs        []string
+	SkipPermissions     bool
+}
+
+func isJavaScriptDispatch(kind interfaces.FactoryDispatchKind) bool {
+	switch kind {
+	case interfaces.FactoryDispatchKindJavaScriptAgent,
+		interfaces.FactoryDispatchKindJavaScriptScript,
+		interfaces.FactoryDispatchKindJavaScriptSynthesize,
+		interfaces.FactoryDispatchKindJavaScriptSystem,
+		interfaces.FactoryDispatchKindJavaScriptTool,
+		interfaces.FactoryDispatchKindJavaScriptVerify:
+		return true
+	default:
+		return false
+	}
 }
 
 // DispatchInterruptedInput carries replay-safe facts for DISPATCH_INTERRUPTED.
@@ -216,6 +231,10 @@ func (h *FactoryEventHistory) RecordDispatchQueued(input DispatchQueuedInput, ev
 	}
 	if schemaDigest := strings.TrimSpace(input.SchemaDigest); schemaDigest != "" {
 		payload.SchemaDigest = &schemaDigest
+	}
+	if isJavaScriptDispatch(input.DispatchKind) {
+		skipPermissions := input.SkipPermissions
+		payload.SkipPermissions = &skipPermissions
 	}
 	if len(input.InputArtifactIDs) > 0 {
 		artifactIDs := append([]string(nil), input.InputArtifactIDs...)

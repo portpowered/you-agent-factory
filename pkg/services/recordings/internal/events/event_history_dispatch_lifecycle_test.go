@@ -71,6 +71,7 @@ func recordDispatchLifecycleSequence(
 		PromptDigest:     "sha256:prompt",
 		SchemaDigest:     "sha256:schema",
 		InputWorkIDs:     []string{"work-1"},
+		SkipPermissions:  true,
 	}, queuedAt)
 	history.RecordDispatchInterrupted(DispatchInterruptedInput{
 		SessionID:        "session-js",
@@ -136,9 +137,21 @@ func recordDispatchLifecycleSequence(
 
 func assertDispatchLifecycleOptionalMetadata(t *testing.T, events []factoryapi.FactoryEvent) {
 	t.Helper()
+	assertQueuedOptionalMetadata(t, events[0])
 	assertInterruptedOptionalMetadata(t, events[1])
 	assertReconciledOptionalMetadata(t, events[2])
 	assertArtifactOptionalMetadata(t, events[3])
+}
+
+func assertQueuedOptionalMetadata(t *testing.T, event factoryapi.FactoryEvent) {
+	t.Helper()
+	queued, err := event.Payload.AsDispatchQueuedEventPayload()
+	if err != nil {
+		t.Fatalf("decode queued payload: %v", err)
+	}
+	if queued.SkipPermissions == nil || !*queued.SkipPermissions {
+		t.Fatalf("queued skipPermissions = %#v, want true", queued.SkipPermissions)
+	}
 }
 
 func assertInterruptedOptionalMetadata(t *testing.T, event factoryapi.FactoryEvent) {
@@ -204,6 +217,9 @@ func assertDispatchLifecycleWorldState(
 	}
 	if dispatch.PromptDigest != "sha256:prompt" || dispatch.Label != "summarize findings" {
 		t.Fatalf("dispatch metadata = %#v, want prompt digest and label preserved", dispatch)
+	}
+	if dispatch.JavaScript == nil || !dispatch.JavaScript.SkipPermissions {
+		t.Fatalf("javascript dispatch = %#v, want skipPermissions=true", dispatch.JavaScript)
 	}
 	if len(worldState.Artifacts) != 1 || worldState.Artifacts[0].ID != "artifact-result-1" {
 		t.Fatalf("artifacts = %#v, want artifact-result-1", worldState.Artifacts)
