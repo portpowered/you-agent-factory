@@ -196,11 +196,16 @@ func (se *ScriptExecutor) Execute(
 	if se == nil || se.registry == nil {
 		return workers.WorkResult{}, errors.New("script executor runner registry is required")
 	}
+	if request.OutputSchema != "" {
+		if err := validateOutputSchema([]byte(request.OutputSchema)); err != nil {
+			return outputSchemaConfigurationFailure(request, err), nil
+		}
+	}
 	result, executionErr := se.registry.Execute(ctx, runners.ExecuteRequest{
 		Identity: runners.ScriptIdentity,
 		Attempt:  scriptRunnerRequest(request),
 	})
-	return scriptWorkResult(request.Dispatch.DispatchID, request.Dispatch.TransitionID, result, executionErr), nil
+	return attachStructuredResult(request, scriptWorkResult(request.Dispatch.DispatchID, request.Dispatch.TransitionID, result, executionErr)), nil
 }
 
 // ExecuteWithWorker runs a dispatch with its invocation-interpolated Script

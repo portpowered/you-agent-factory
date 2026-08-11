@@ -53,8 +53,8 @@ func TestList_SendsTerminalFilterAndCountsBeforePagination(t *testing.T) {
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
-	want := "Total: 3\nWORK ID\tNAME\tWORK TYPE\tSTATE NAME\tSTATE TYPE\tRELATIONS\n" +
-		"work-failed\tFailed work\tstory\tfailed\tFAILED\tnone\n"
+	want := "Total: 3\nWORK ID\tNAME\tWORK TYPE\tSTATE NAME\tSTATE TYPE\tSTRUCTURED RESULT\tRELATIONS\n" +
+		"work-failed\tFailed work\tstory\tfailed\tFAILED\t\tnone\n"
 	if got := output.String(); got != want {
 		t.Fatalf("human output = %q, want %q", got, want)
 	}

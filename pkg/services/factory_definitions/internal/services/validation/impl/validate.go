@@ -1,10 +1,12 @@
 package impl
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
 const validationRoot = "factory"
@@ -28,9 +30,35 @@ func ValidateStructural(cfg *factorydefinitions.FactoryConfig) Result {
 	targets = append(targets, unsupportedSameNameAllChildrenCompleteJoinArityTargets(cfg)...)
 	targets = append(targets, conflictingWorkstationOutputTargets(cfg)...)
 	targets = append(targets, missingOutcomeRouteTargets(cfg)...)
+	targets = append(targets, workstationOutputSchemaTargets(cfg)...)
 	targets = append(targets, ManagedRuntimeDependencyTargets(cfg)...)
 	result.Targets = append(result.Targets, targets...)
 	return result
+}
+
+func workstationOutputSchemaTargets(cfg *factorydefinitions.FactoryConfig) []Target {
+	if cfg == nil {
+		return nil
+	}
+	var targets []Target
+	for index, workstation := range cfg.Workstations {
+		schema := strings.TrimSpace(workstation.OutputSchema)
+		if schema == "" || invocationParameterInterpolation(cfg.InvocationSignature, schema) || isLegacyOutputSchemaReference(schema) {
+			continue
+		}
+		if err := validateWorkstationOutputSchema(schema); err == nil {
+			continue
+		} else {
+			targets = append(targets, Target{
+				Code:     CodeWorkstationInvalidOutputSchema,
+				Severity: SeverityError,
+				Message:  fmt.Sprintf("workstation outputSchema is invalid JSON Schema: %v", err),
+				Subject:  Subject{Type: SubjectTypeWorkstation, ID: workstation.Name, Location: SubjectLocationDefinition},
+				Path:     fmt.Sprintf("%s.workstations[%d](%s).outputSchema", validationRoot, index, workstation.Name),
+			})
+		}
+	}
+	return targets
 }
 
 // ExpectedArtifactTargets validates declaration-local contract syntax before a
@@ -44,9 +72,7 @@ func ExpectedArtifactTargets(cfg *factorydefinitions.FactoryConfig) []Target {
 	var targets []Target
 	for index, workType := range cfg.WorkTypes {
 		for artifactIndex, declaration := range workType.ExpectedArtifacts {
-			if err := factorydefinitions.ValidateExpectedArtifactConfig(declaration, 1); err == nil {
-				continue
-			} else {
+			if err := factorydefinitions.ValidateExpectedArtifactConfig(declaration, 1); err != nil {
 				targets = append(targets, Target{
 					Code:     CodeWorkTypeInvalidExpectedArtifact,
 					Severity: SeverityError,
@@ -59,9 +85,7 @@ func ExpectedArtifactTargets(cfg *factorydefinitions.FactoryConfig) []Target {
 	}
 	for index, workstation := range cfg.Workstations {
 		for artifactIndex, declaration := range workstation.ExpectedArtifacts {
-			if err := factorydefinitions.ValidateExpectedArtifactConfig(declaration, len(workstation.Inputs)); err == nil {
-				continue
-			} else {
+			if err := factorydefinitions.ValidateExpectedArtifactConfig(declaration, len(workstation.Inputs)); err != nil {
 				targets = append(targets, Target{
 					Code:     CodeWorkstationInvalidExpectedArtifact,
 					Severity: SeverityError,
@@ -73,6 +97,27 @@ func ExpectedArtifactTargets(cfg *factorydefinitions.FactoryConfig) []Target {
 		}
 	}
 	return targets
+}
+
+func isLegacyOutputSchemaReference(value string) bool {
+	return strings.HasSuffix(strings.ToLower(value), ".json")
+}
+
+func validateWorkstationOutputSchema(value string) error {
+	document, err := jsonschema.UnmarshalJSON(bytes.NewReader([]byte(value)))
+	if err != nil {
+		return fmt.Errorf("malformed JSON: %w", err)
+	}
+	compiler := jsonschema.NewCompiler()
+	compiler.DefaultDraft(jsonschema.Draft2020)
+	const schemaID = "workstation-output-schema.json"
+	if err := compiler.AddResource(schemaID, document); err != nil {
+		return fmt.Errorf("cannot load schema: %w", err)
+	}
+	if _, err := compiler.Compile(schemaID); err != nil {
+		return fmt.Errorf("cannot compile schema: %w", err)
+	}
+	return nil
 }
 
 // Validate runs structural factory validation for a complete factory definition and

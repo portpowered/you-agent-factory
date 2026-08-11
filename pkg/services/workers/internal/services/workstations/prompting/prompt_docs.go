@@ -171,8 +171,13 @@ func buildPromptValidationData(inputCount int, docPaths []string) PromptData {
 				Type: work.WorkContentPartTypeText,
 				Text: "content",
 			}},
-			PreviousOutput:    "previous-output",
-			RejectionFeedback: "rejection-feedback",
+			StructuredResult: map[string]any{
+				"summary": map[string]any{"title": "structured-result"},
+				"items":   []any{map[string]any{"name": "item"}},
+			},
+			structuredResultPresent: true,
+			PreviousOutput:          "previous-output",
+			RejectionFeedback:       "rejection-feedback",
 			History: PromptHistory{
 				LastError:    "last-error",
 				FailureCount: 1,

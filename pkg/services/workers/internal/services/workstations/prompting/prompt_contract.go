@@ -231,6 +231,12 @@ func inputDirectVariableReferences(inputIndex int) []PromptTemplateVariableRefer
 		},
 		{
 			Category:    PromptTemplateVariableCategoryInput,
+			Description: fmt.Sprintf("Optional native JSON result produced by a schema-validated upstream workstation for input %d. Access nested object fields with dot notation or index and arrays with index or range; using it fails when the result is absent.", inputIndex),
+			Example:     fmt.Sprintf("{{ (index .Inputs %d).StructuredResult.summary }}", inputIndex),
+			Path:        fmt.Sprintf(".Inputs[%d].StructuredResult", inputIndex),
+		},
+		{
+			Category:    PromptTemplateVariableCategoryInput,
 			Description: fmt.Sprintf("Structured content parts for input %d.", inputIndex),
 			Example:     fmt.Sprintf("{{ (index .Inputs %d).Content }}", inputIndex),
 			Path:        fmt.Sprintf(".Inputs[%d].Content", inputIndex),
@@ -341,6 +347,7 @@ const (
 	promptValidationValueRoot
 	promptValidationValueInputsSlice
 	promptValidationValueToken
+	promptValidationValueStructuredResult
 	promptValidationValueHistory
 	promptValidationValueContext
 	promptValidationValueTagsMap
@@ -354,8 +361,10 @@ const (
 )
 
 type promptValidationValue struct {
-	displayPath string
-	kind        promptValidationValueKind
+	displayPath     string
+	kind            promptValidationValueKind
+	inputIndex      int
+	inputIndexKnown bool
 }
 
 type promptValidationScope struct {
@@ -374,10 +383,12 @@ func (s *promptValidationScope) lookup(name string) (promptValidationValue, bool
 }
 
 type promptTemplateValidator struct {
-	diagnostics []PromptTemplateDiagnostic
-	docPaths    map[string]struct{}
-	inputCount  int
-	seen        map[string]struct{}
+	diagnostics                  []PromptTemplateDiagnostic
+	structuredResultDiagnostics  []PromptTemplateDiagnostic
+	structuredResultAvailability []bool
+	docPaths                     map[string]struct{}
+	inputCount                   int
+	seen                         map[string]struct{}
 }
 
 func (v *promptTemplateValidator) addRuntimeExecutionDiagnostic(parsed *template.Template, tmpl string, docPaths []string) {
@@ -491,7 +502,12 @@ func (v *promptTemplateValidator) resolveIndexCommand(cmd *parse.CommandNode, sc
 				current = promptValidationValue{kind: promptValidationValueUnknown, displayPath: path}
 				continue
 			}
-			current = promptValidationValue{kind: promptValidationValueToken, displayPath: path}
+			current = promptValidationValue{
+				kind:            promptValidationValueToken,
+				displayPath:     path,
+				inputIndex:      index,
+				inputIndexKnown: true,
+			}
 		case promptValidationValueTagsMap:
 			current = promptValidationValue{kind: promptValidationValueScalar, displayPath: current.displayPath}
 		case promptValidationValueEnvMap:
@@ -519,6 +535,13 @@ func (v *promptTemplateValidator) resolveIndexCommand(cmd *parse.CommandNode, sc
 			current = promptValidationValue{kind: promptValidationValueScalar, displayPath: path}
 		case promptValidationValueRelationsSlice:
 			current = promptValidationValue{kind: promptValidationValueRelation, displayPath: current.displayPath + "[*]"}
+		case promptValidationValueStructuredResult:
+			current = promptValidationValue{
+				kind:            promptValidationValueStructuredResult,
+				displayPath:     current.displayPath + "[*]",
+				inputIndex:      current.inputIndex,
+				inputIndexKnown: current.inputIndexKnown,
+			}
 		default:
 			current = promptValidationValue{kind: promptValidationValueUnknown, displayPath: current.displayPath}
 		}
@@ -600,7 +623,16 @@ func (v *promptTemplateValidator) resolveNextFieldValue(
 	case promptValidationValueRoot:
 		return v.resolveRootField(field, nextPath, pos)
 	case promptValidationValueToken:
-		return v.resolveNamedField(field, nextPath, pos, "input token", resolveTokenField)
+		return v.resolveNamedField(field, nextPath, pos, "input token", func(field, path string) promptValidationValue {
+			return v.resolveTokenField(current, field, path)
+		})
+	case promptValidationValueStructuredResult:
+		return promptValidationValue{
+			kind:            promptValidationValueStructuredResult,
+			displayPath:     nextPath,
+			inputIndex:      current.inputIndex,
+			inputIndexKnown: current.inputIndexKnown,
+		}, true
 	case promptValidationValueHistory:
 		return v.resolveNamedField(field, nextPath, pos, "prompt history", resolveHistoryField)
 	case promptValidationValueContext:
@@ -722,25 +754,15 @@ func rangeElementValue(sequence promptValidationValue) promptValidationValue {
 		return promptValidationValue{kind: promptValidationValueToken, displayPath: ".Inputs[*]"}
 	case promptValidationValueRelationsSlice:
 		return promptValidationValue{kind: promptValidationValueRelation, displayPath: ".Relations[*]"}
+	case promptValidationValueStructuredResult:
+		return promptValidationValue{
+			kind:            promptValidationValueStructuredResult,
+			displayPath:     sequence.displayPath + "[*]",
+			inputIndex:      sequence.inputIndex,
+			inputIndexKnown: sequence.inputIndexKnown,
+		}
 	default:
 		return promptValidationValue{kind: promptValidationValueUnknown, displayPath: sequence.displayPath}
-	}
-}
-
-func resolveTokenField(field, path string) promptValidationValue {
-	switch field {
-	case "Name", "WorkID", "WorkTypeID", "DataType", "TraceID", "ParentID", "Project", "Payload", "PreviousOutput", "RejectionFeedback":
-		return promptValidationValue{kind: promptValidationValueScalar, displayPath: path}
-	case "Tags":
-		return promptValidationValue{kind: promptValidationValueTagsMap, displayPath: path}
-	case "Relations":
-		return promptValidationValue{kind: promptValidationValueRelationsSlice, displayPath: path}
-	case "Content":
-		return promptValidationValue{kind: promptValidationValueContent, displayPath: path}
-	case "History":
-		return promptValidationValue{kind: promptValidationValueHistory, displayPath: path}
-	default:
-		return promptValidationValue{kind: promptValidationValueUnknown, displayPath: path}
 	}
 }
 
