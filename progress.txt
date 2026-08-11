@@ -2736,3 +2736,17 @@
 - **Learnings for future iterations:**
   - A repeated coverage-floor result on an unchanged source head should be recorded as a CI/base blocker; do not lower a package minimum or add unrelated tests merely to make a scoped PR green.
 ---
+## [2026-08-10 17:11 -07:00] - thr-split-acp-stdio-tests-003 post-rebase CI blocker
+- What was implemented
+  - Rebased the PR branch by merging the live `origin/main` head `acbd13fcc960926c6118d2e3167426a71345ace6`, resolved only the shared task bookkeeping conflicts, and preserved the ACP PRD plus both append-only progress histories.
+  - Rechecked the required CI on merged head `00c00a511`; Backend Functional Coverage reproduced the same unrelated CLI coverage-floor regression, so no CLI baseline relaxation or unrelated production/test change was made.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+  - Current-main synchronization files from the merge: `tests/fixtures/javascript_runtime/resumable-two-step-fake-children.workflow.js` and `tests/functional/orchestration/javascript/durability/resume_test.go`
+- Verification
+  - GitHub Actions run `31444646791`: Backend Unit Coverage, all frontend/API/package/integration lanes, and long local inference passed; Backend Functional Coverage failed only at `pkg/transports/cli` actual 72.8180% versus minimum 72.98%, with dependent Verification Policy failing.
+  - Current PR state is mergeable without conflicts; all three ACP PRD stories remain `passes: true`, the PR body remains byte-identical to `prd.json`, and the thread-aware review audit remains empty.
+- **Learnings for future iterations:**
+  - Resolve stale-base conflicts in task-owned bookkeeping files by keeping the active task PRD authoritative and unioning both append-only progress histories; then rerun CI on the merge commit before claiming review readiness.
+---
