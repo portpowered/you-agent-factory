@@ -245,7 +245,10 @@ func waitForScannerCompletion(t testing.TB, scanErr <-chan error, role string, t
 	defer timer.Stop()
 	select {
 	case err := <-scanErr:
-		if err != nil {
+		// exec.Cmd.Wait closes a StdoutPipe after the child exits. Depending on
+		// scheduling, the scanner can observe that terminal close as fs.ErrClosed
+		// instead of EOF after an intentional cancellation.
+		if err != nil && !errors.Is(err, os.ErrClosed) {
 			t.Fatalf("%s stdout scanner failed: %v", role, err)
 		}
 	case <-timer.C:

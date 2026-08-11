@@ -11462,3 +11462,17 @@
 - **Learnings for future iterations:**
   - Record the exact replacement merge commit in the PRD only after rerunning the full fast tier and structural gates on that commit; earlier evidence can become stale when main moves again.
 ---
+## [2026-08-11 09:48:14 -07:00] - thr-deflake-cli-process-package hosted cancellation scanner fix
+- What was implemented
+  - Addressed the hosted functional failure in `TestBuiltCLIDeclaredCancellationExitCodes/continuous_run`: after intentional child reaping, `exec.Cmd.Wait` can close a `StdoutPipe` before the scanner observes EOF, returning `os.ErrClosed` (`read |0: file already closed`).
+  - Updated the shared cancellation scanner completion helper to accept that terminal close while continuing to fail on unexpected scanner errors or non-terminal timeout; no production CLI behavior changed.
+- Files changed
+  - `tests/functional/transport/cli/process/fixtures_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Local focused cancellation/interrupt repetitions, `go vet ./tests/functional/transport/cli/process`, gofmt, and `git diff --check` passed on Windows/amd64 (the OS-signal cases are skipped on Windows).
+  - Hosted run `31513338011` identified the exact scanner failure above and a separate known `TestWithServerDrainCannotReportSuccessWhileWorkIsNonTerminal/server` listener-start race; the scanner fix is pending hosted rerun.
+- **Learnings for future iterations:**
+  - When a process test owns a `StdoutPipe`, intentional `Wait`-driven teardown may report `fs.ErrClosed` instead of EOF; classify that only after the child has been deliberately reaped, not as a general observation retry.
+---
