@@ -11555,3 +11555,23 @@
   - Public identifier spellings from the owning architecture or contract source take precedence over natural-language variants when a terminology register defines one canonical record.
   - Relationship examples should describe observable contract effects, such as membership or fan-in, instead of inferring lifecycle ownership from relationship names.
 ---
+## [2026-08-11 07:09:06 -07:00] - btrc-p1-root-injection-006 current-main reconciliation
+- What was implemented
+  - Fetched live `origin/main` at `b99c8b942b4a684491cede70cae7f0ebf920da8c` after the base advanced during the P1 CI handoff.
+  - Merged the current mainline into the P1 branch as `30f78409d9e4bd14faf5350b6a302b8a3ff713c8`; the source-side changes are the incoming prose-standard documentation and terminology register, while shared `prd.json` and `progress.txt` conflicts were resolved by retaining the P1 PRD and unioning both append-only histories.
+  - Reset the delivery audit to the reconciled head and marked the replacement-head workflow as pending until GitHub creates it.
+- Files changed
+  - `docs/internal/standards/STANDARDS.md`
+  - `docs/internal/standards/writing/customer-technical-terms.yaml`
+  - `docs/internal/standards/writing/customer-technical-writing-standard.md`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Conflict-marker scan — clean for `prd.json` and `progress.txt`.
+  - `prd.json` parses with all six P1 stories marked `passes:true`.
+  - `git diff --check` — passed.
+  - `git merge-base --is-ancestor origin/main HEAD` — passed after merge commit `30f78409d`.
+- **Learnings for future iterations:**
+  - Fetch the live base immediately before merging and pushing; a cached PR base can lag the branch that GitHub currently evaluates, producing a false-looking dirty merge state.
+  - Shared bookkeeping conflicts should retain the active task PRD and both append-only progress histories; incoming source/documentation changes remain staged in the merge.
+---
