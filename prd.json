@@ -11,20 +11,20 @@
   },
   "deliveryAudit": {
     "pullRequest": 1857,
-    "head": "36847a09c79f602f21ce134e8ba779dc2c6cffab",
-    "base": "9d65593006bbbc9bc95420fdd55db6a4bd5f1770",
+    "head": "8d989747412a07450c9bb457b93f1ec7909c8c8f",
+    "base": "05db67124f6abc32b149f326533f126db2d78aa4",
     "reviewThreads": 0,
     "unresolvedReviewThreads": 0,
     "formalReviews": 0,
     "latestWorkflow": {
-      "run": 31521400194,
-      "testedHead": "076be75b955dc9e6ea575ae5d6d467355fa95206",
+      "run": 31523734454,
+      "testedHead": "25b2e1408c81cae27d6b9c06dacad35d682184f8",
       "result": "terminal_failure_untouched_baseline",
       "functionalResult": "failure",
       "unitResult": "success",
       "verificationPolicy": "failure",
-      "currentHeadCheckRuns": "terminal_failure",
-      "rerunResult": "The initial workflow and its failed-job retry passed every lane except Backend Functional Coverage and Verification Policy. Both functional attempts failed the same untouched TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput in tests/functional/transport/server_binding; the pinned real-ACP artifact was consequently absent. No P1 diff touches the failing package, and the branch was then synchronized with current origin/main 9d65593006bbbc9bc95420fdd55db6a4bd5f1770 before the next hosted run.",
+      "currentHeadCheckRuns": "pre_sync_terminal_failure",
+      "rerunResult": "The workflow on the pre-sync published head passed every lane except Backend Functional Coverage and Verification Policy. The functional lane failed only the untouched TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput in tests/functional/transport/server_binding; the pinned real-ACP artifact was consequently absent. No P1 diff touches the failing package. Current origin/main 05db67124f6abc32b149f326533f126db2d78aa4 was then merged locally as 8d989747412a; fresh hosted verification for that synchronized head is pending.",
       "taskScopedFailures": [],
       "baselineFailures": [
         {
@@ -150,7 +150,7 @@
       ],
       "priority": 6,
       "passes": true,
-      "notes": "Completed the review follow-up for the reusable root-process proof and the final value-only invocation cutover. Both representative success and provider-failure invocations enter through the public `you --json run` CLI on one root.BuildProcess/Process.Execute instance; the injected API server is observation-only for public session and Factory Event streams. On published head `076be75b955dc9e6ea575ae5d6d467355fa95206`, workflow `31521400194` and its failed-job retry passed every lane except the unchanged server-binding functional baseline and dependent Verification Policy. Both attempts reported `TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput` in untouched `tests/functional/transport/server_binding`; the P1 diff is empty for that package, the workflow, and the artifact path. Current `origin/main` `9d65593006bbbc9bc95420fdd55db6a4bd5f1770` was merged as `36847a09c79f602f21ce134e8ba779dc2c6cffab`, and synchronized local verification passes. The thread-aware audit has zero unresolved review threads and zero formal reviews. All six P1 stories remain marked `passes:true`; fresh hosted verification is required for the synchronized head."
+      "notes": "Completed the review follow-up for the reusable root-process proof and the final value-only invocation cutover. Both representative success and provider-failure invocations enter through the public `you --json run` CLI on one root.BuildProcess/Process.Execute instance; the injected API server is observation-only for public session and Factory Event streams. On published head `076be75b955dc9e6ea575ae5d6d467355fa95206`, workflow `31521400194` and its failed-job retry passed every lane except the unchanged server-binding functional baseline and dependent Verification Policy. Both attempts reported `TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput` in untouched `tests/functional/transport/server_binding`; the P1 diff is empty for that package, the workflow, and the artifact path. Current `origin/main` `9d65593006bbbc9bc95420fdd55db6a4bd5f1770` was merged as `36847a09c79f602f21ce134e8ba779dc2c6cffab`, and synchronized local verification passes. The thread-aware audit has zero unresolved review threads and zero formal reviews. The latest local synchronization merged `origin/main` `05db67124f6abc32b149f326533f126db2d78aa4` as `8d989747412a`; `make verify-fast`, `backend-size`, `pkg-maint`, `pkg-file-count`, `pkg-structure`, and `vet` pass, while the two ownership-boundary findings are unchanged mainline baseline entries. All six P1 stories remain marked `passes:true`; fresh hosted verification is required for the synchronized head."
     }
   ]
 }
