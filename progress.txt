@@ -2688,3 +2688,20 @@
 - **Learnings for future iterations:**
   - When a broad functional lane reports different failures on retries, compare changed package paths and run each named test directly before changing production behavior; preserve a reproducible baseline failure as explicit PR follow-up.
 ---
+
+## 2026-08-10 18:03 -07:00 - btrc-p1-root-injection-006 CI rerun follow-up
+- What was implemented
+  - Audited PR #1857 after the previous handoff and confirmed the thread-aware GraphQL review audit still has no unresolved inline threads or formal reviews.
+  - Reran only the failed CI jobs for workflow `31447052930`; no production change was justified because the rerun isolated the remaining failure to the unchanged server-binding baseline.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/orchestration/javascript/composition -run '^TestJavaScriptParallelDispatchesChildrenConcurrently$' -count=1 -v -timeout 120s` — passed.
+  - `go test ./tests/functional/providers/acp -run '^TestFactoryRunRoutesExecutorProviderThroughACPAdapter$' -count=1 -v -timeout 120s` — passed.
+  - `go test ./tests/functional/transport/server_binding -run '^TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput$' -count=1 -v -timeout 120s` — reproduced the extra `API server error` diagnostic line; the branch has no diff in that test package or its runtime-hosting implementation.
+  - Failed-job rerun `31447052930` — all other lanes passed; Backend Functional Coverage and the dependent Verification Policy remain red only because of the server-binding assertion.
+  - `prd.json` parses with all six P1 stories marked `passes:true`.
+- **Learnings for future iterations:**
+  - A retry that clears transient named tests but reproduces a current-base assertion should be recorded as a baseline blocker rather than widening a completed story into unrelated production or test changes.
+---
