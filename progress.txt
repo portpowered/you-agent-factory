@@ -9522,3 +9522,20 @@
   - A terminal CI rerun can expose an additional unchanged functional baseline failure; compare each failing package against `origin/main` before changing P1 code.
   - Keep the PRD delivery audit aligned with the exact tested head and base; a progress-only bookkeeping commit will require a fresh CI run before the PR can be considered ready.
 ---
+## 2026-08-11 00:35:21 -07:00 - btrc-p1-root-injection-006 current-main synchronization
+- What was implemented
+  - Merged live `origin/main` `3a0b571b234f70d68908e36669100d0ac9f66a9f` into the P1 branch after the bookkeeping push became conflicting.
+  - Preserved the active P1 `prd.json` as authoritative and retained the append-only progress history; the conflict set contained only shared bookkeeping files, while current-main product/generated changes were carried by the merge.
+- Files changed
+  - Current-main implementation and generated files from the merge.
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `git ls-files -u` — no unmerged entries remain.
+  - `prd.json` parses with the BTRC P1 project and all six stories marked `passes:true`.
+  - Conflict-marker scan and `git diff --check` pass.
+  - The merged branch is based directly on current `origin/main`; a fresh CI run is required for the new merge head.
+- **Learnings for future iterations:**
+  - Refresh `origin/main` immediately before publishing a replacement head; shared PRD/progress files may conflict even when implementation ownership is unchanged.
+  - Resolve a task PRD by retaining the active task’s story evidence and merge unrelated current-main history into the append-only progress log.
+---
