@@ -81,6 +81,66 @@ func TestNewServiceComposesCatalogAndExecutionWithSharedCatalogAuthority(t *test
 	}
 }
 
+func TestPackagedACPIdentitiesAndLegacyAliasesResolveToTheirCanonicalIDs(t *testing.T) {
+	t.Parallel()
+
+	root, err := NewService()
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	tests := []struct {
+		canonical string
+		aliases   []string
+	}{
+		{canonical: "pi-acp"},
+		{canonical: "openclaw-acp"},
+		{canonical: "gemini-acp"},
+		{canonical: "cursor-acp"},
+		{canonical: "copilot-acp"},
+		{canonical: "droid-acp", aliases: []string{"factory-droid", "factorydroid"}},
+		{canonical: "fast-agent-acp"},
+		{canonical: "grok-build-acp"},
+		{canonical: "iflow-acp"},
+		{canonical: "kilocode-acp"},
+		{canonical: "kimi-acp"},
+		{canonical: "kiro-acp"},
+		{canonical: "mux-acp"},
+		{canonical: "opencode-acp"},
+		{canonical: "pool-acp"},
+		{canonical: "qoder-acp"},
+		{canonical: "qwen-acp"},
+		{canonical: "reasonix-acp"},
+		{canonical: "trae-acp"},
+		{canonical: "zeroclaw-acp"},
+	}
+	for _, test := range tests {
+		t.Run(test.canonical, func(t *testing.T) {
+			canonical, err := root.GetProvider(context.Background(), providers.GetProviderRequest{ID: providers.ID(test.canonical)})
+			if err != nil {
+				t.Fatalf("GetProvider(%q) error = %v", test.canonical, err)
+			}
+			if canonical.Provider.ID.String() != test.canonical {
+				t.Fatalf("GetProvider(%q) ID = %q", test.canonical, canonical.Provider.ID)
+			}
+			if canonical.Provider.Readiness != providers.ReadinessUnverified {
+				t.Fatalf("GetProvider(%q) readiness = %q, want unverified", test.canonical, canonical.Provider.Readiness)
+			}
+			if len(canonical.Provider.Capabilities) != 1 || canonical.Provider.Capabilities[0] != providers.CapabilityPromptSubmission {
+				t.Fatalf("GetProvider(%q) capabilities = %v, want prompt_submission only", test.canonical, canonical.Provider.Capabilities)
+			}
+			for _, alias := range test.aliases {
+				resolved, err := root.GetProvider(context.Background(), providers.GetProviderRequest{ID: providers.ID(alias)})
+				if err != nil {
+					t.Fatalf("GetProvider(%q) error = %v", alias, err)
+				}
+				if resolved.Provider.ID.String() != test.canonical {
+					t.Fatalf("GetProvider(%q) ID = %q, want %q", alias, resolved.Provider.ID, test.canonical)
+				}
+			}
+		})
+	}
+}
+
 func TestNewServiceBuildsUsableRoot(t *testing.T) {
 	root, err := NewService()
 	if err != nil {

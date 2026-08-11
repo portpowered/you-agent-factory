@@ -1,0 +1,10 @@
+implementation:
+  kind: acp_agent
+  profile: openclaw-acp
+launch:
+  posture: installed_executable
+  transport: stdio
+  command: openclaw
+  arguments:
+    - acp
+

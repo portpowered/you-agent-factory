@@ -42,9 +42,12 @@ func TestBuildProducesDeterministicValidatedSortedArtifacts(t *testing.T) {
 	for _, value := range providers {
 		ids = append(ids, value.(map[string]any)["id"].(string))
 	}
-	want := "antigravity, claude, codex"
+	want := "antigravity, claude, codex, copilot-acp, cursor-acp, droid-acp, fast-agent-acp, gemini-acp, grok-build-acp, iflow-acp, kilocode-acp, kimi-acp, kiro-acp, mux-acp, openclaw-acp, opencode-acp, pi-acp, pool-acp, qoder-acp, qwen-acp, reasonix-acp, trae-acp, zeroclaw-acp"
 	if got := strings.Join(ids, ", "); got != want {
 		t.Fatalf("provider order = %s, want %s", got, want)
+	}
+	if !bytes.Equal(first.Files[RuntimeCatalogPath], second.Files[RuntimeCatalogPath]) {
+		t.Fatalf("%s changed across identical generation passes", RuntimeCatalogPath)
 	}
 	assertSchemaIdentifier(t, first.Files[ManifestSchemaPath], ManifestSchemaID)
 	assertSchemaIdentifier(t, first.Files[CatalogSchemaPath], CatalogSchemaID)
@@ -87,6 +90,7 @@ func TestBuildRejectsACPProviderWithoutRuntimeDefinition(t *testing.T) {
 	codex = strings.Replace(codex, "id: codex", "id: cursor-acp", 1)
 	codex = strings.Replace(codex, "kind: native_cli", "kind: acp\n  acpSupport:\n    support: unknown", 1)
 	source["packages/model-providers/providers/cursor-acp/provider.yaml"] = &fstest.MapFile{Data: []byte(codex), Mode: 0o644}
+	delete(source, "packages/model-providers/providers/cursor-acp/harness.yaml")
 
 	_, err := Build(source)
 	if err == nil || !strings.Contains(err.Error(), "requires harness.yaml") {
@@ -239,7 +243,7 @@ func repositoryFixture(t *testing.T) fstest.MapFS {
 	t.Helper()
 	root := repositoryRoot(t)
 	paths := []string{openAPIPath}
-	matches, err := filepath.Glob(filepath.Join(root, authoredProvidersDir, "*", "provider.yaml"))
+	matches, err := filepath.Glob(filepath.Join(root, authoredProvidersDir, "*", "*.yaml"))
 	if err != nil {
 		t.Fatalf("glob provider manifests: %v", err)
 	}

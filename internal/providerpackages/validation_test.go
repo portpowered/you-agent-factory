@@ -23,6 +23,16 @@ func TestValidateAcceptsSelectableAndCatalogOnlyACPPackages(t *testing.T) {
 	}
 }
 
+func TestValidateRejectsRegisteredRuntimeProfileWithoutPackageOwner(t *testing.T) {
+	_, err := Validate(packageFixture(), []RuntimeProfile{
+		{ID: "cursor-acp"},
+		{ID: "missing-profile"},
+	})
+	if err == nil || !strings.Contains(err.Error(), `registered runtime profile "missing-profile" has no owning provider package`) {
+		t.Fatalf("Validate() error = %v, want missing profile owner", err)
+	}
+}
+
 func TestValidateRejectsFailClosedACPPackageShapes(t *testing.T) {
 	tests := []struct {
 		name    string

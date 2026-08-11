@@ -1,0 +1,7 @@
+{
+  "protocol": "acp",
+  "protocolVersion": "1",
+  "provider": "kiro-acp",
+  "fixture": "initialize-conformance"
+}
+

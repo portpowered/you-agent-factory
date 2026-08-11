@@ -23,6 +23,7 @@ func Validate(source fs.FS, profiles []RuntimeProfile) ([]Package, error) {
 	profileIDs := indexProfiles(profiles)
 	packages := make([]Package, 0, len(entries))
 	identities := make(map[string]string)
+	profileOwners := make(map[string]string)
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
@@ -34,7 +35,19 @@ func Validate(source fs.FS, profiles []RuntimeProfile) ([]Package, error) {
 		if err := indexIdentity(provider, identities); err != nil {
 			return nil, err
 		}
+		if provider.Selectable() && provider.Harness != nil && provider.Harness.Implementation != nil {
+			profile := strings.TrimSpace(provider.Harness.Implementation.Profile)
+			if owner, exists := profileOwners[profile]; exists {
+				return nil, fmt.Errorf("provider package runtime profile collision: %q is owned by %q and %q", profile, owner, provider.Directory)
+			}
+			profileOwners[profile] = provider.Directory
+		}
 		packages = append(packages, provider)
+	}
+	for profile := range profileIDs {
+		if _, owned := profileOwners[profile]; !owned {
+			return nil, fmt.Errorf("registered runtime profile %q has no owning provider package", profile)
+		}
 	}
 	sort.Slice(packages, func(i, j int) bool { return packages[i].ID < packages[j].ID })
 	return packages, nil

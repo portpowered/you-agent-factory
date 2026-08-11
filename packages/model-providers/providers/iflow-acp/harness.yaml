@@ -1,0 +1,10 @@
+implementation:
+  kind: acp_agent
+  profile: iflow-acp
+launch:
+  posture: installed_executable
+  transport: stdio
+  command: iflow
+  arguments:
+    - --experimental-acp
+

@@ -1,0 +1,7 @@
+{
+  "protocol": "acp",
+  "protocolVersion": "1",
+  "provider": "kimi-acp",
+  "fixture": "initialize-conformance"
+}
+

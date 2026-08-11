@@ -16,10 +16,18 @@ type catalogDocument struct {
 }
 
 type catalogACPIntegration struct {
-	Name      string   `json:"name"`
-	Aliases   []string `json:"aliases,omitempty"`
-	Transport string   `json:"transport"`
-	Command   string   `json:"command"`
+	Name           string                `json:"name"`
+	Aliases        []string              `json:"aliases,omitempty"`
+	Transport      string                `json:"transport"`
+	Command        string                `json:"command"`
+	Arguments      []string              `json:"arguments,omitempty"`
+	Posture        string                `json:"posture"`
+	Implementation runtimeImplementation `json:"implementation"`
+}
+
+type runtimeImplementation struct {
+	Kind    string `json:"kind"`
+	Profile string `json:"profile"`
 }
 
 type Service struct {
@@ -47,8 +55,15 @@ func New(document []byte) (builtins.Service, error) {
 		if strings.ToLower(strings.TrimSpace(entry.Transport)) != "stdio" {
 			return nil, fmt.Errorf("packaged ACP integration %q has unsupported transport %q", name, entry.Transport)
 		}
-		if argv, err := shellwords.Parse(strings.TrimSpace(entry.Command)); err != nil || len(argv) == 0 {
+		argv, err := shellwords.Parse(strings.TrimSpace(entry.Command))
+		if err != nil || len(argv) == 0 {
 			return nil, fmt.Errorf("packaged ACP integration %q has invalid command", name)
+		}
+		if strings.TrimSpace(entry.Posture) == "" || strings.TrimSpace(entry.Implementation.Kind) == "" || strings.TrimSpace(entry.Implementation.Profile) == "" {
+			return nil, fmt.Errorf("packaged ACP integration %q has incomplete runtime binding", name)
+		}
+		if len(entry.Arguments) != 0 && !sameStrings(argv[1:], entry.Arguments) {
+			return nil, fmt.Errorf("packaged ACP integration %q command arguments drift from its runtime projection", name)
 		}
 		aliases := make([]string, 0, len(entry.Aliases))
 		for _, rawAlias := range entry.Aliases {
@@ -67,6 +82,18 @@ func New(document []byte) (builtins.Service, error) {
 		})
 	}
 	return &Service{integrations: integrations}, nil
+}
+
+func sameStrings(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
 }
 
 func (service *Service) ACPIntegrations() []providers.ACPIntegration {

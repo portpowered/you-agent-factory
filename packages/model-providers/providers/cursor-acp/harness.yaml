@@ -1,0 +1,10 @@
+implementation:
+  kind: acp_agent
+  profile: cursor-acp
+launch:
+  posture: installed_executable
+  transport: stdio
+  command: cursor-agent
+  arguments:
+    - acp
+

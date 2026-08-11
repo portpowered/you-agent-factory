@@ -65,8 +65,8 @@ func TestRootDelegatesListAndGetToCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListProviders() = %v", err)
 	}
-	if len(list.Providers) != 3 {
-		t.Fatalf("len(Providers) = %d, want 3", len(list.Providers))
+	if len(list.Providers) != 23 {
+		t.Fatalf("len(Providers) = %d, want 23", len(list.Providers))
 	}
 
 	got, err := root.GetProvider(context.Background(), providers.GetProviderRequest{ID: providers.IDCodex})

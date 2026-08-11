@@ -1,0 +1,11 @@
+implementation:
+  kind: acp_agent
+  profile: trae-acp
+launch:
+  posture: installed_executable
+  transport: stdio
+  command: traecli
+  arguments:
+    - acp
+    - serve
+

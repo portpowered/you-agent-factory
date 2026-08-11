@@ -13,6 +13,7 @@ import (
 	"context"
 	"fmt"
 
+	modelproviders "github.com/portpowered/infinite-you/packages/model-providers"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -261,9 +262,9 @@ func NewService(options ...Option) (providers.Service, error) {
 		return nil, err
 	}
 	acp := effectiveACPIntegrations(packaged.ACPIntegrations(), config.acpIntegrations)
-	descriptors := make([]providers.Descriptor, 0, len(acp))
-	for _, integration := range acp {
-		descriptors = append(descriptors, acpDescriptor(integration))
+	descriptors, err := packagedACPDescriptors(acp)
+	if err != nil {
+		return nil, err
 	}
 	for _, registration := range config.registrations {
 		descriptors = append(descriptors, registrationDescriptor(registration.Manifest))
@@ -289,6 +290,25 @@ func NewService(options ...Option) (providers.Service, error) {
 		config.logger,
 		config.registrations...,
 	)
+}
+
+func packagedACPDescriptors(integrations []providers.ACPIntegration) ([]providers.Descriptor, error) {
+	catalog, err := modelproviders.Catalog()
+	if err != nil {
+		return nil, fmt.Errorf("load packaged provider catalog for ACP descriptors: %w", err)
+	}
+	published := make(map[string]struct{}, len(catalog.Providers))
+	for _, manifest := range catalog.Providers {
+		published[manifest.Id] = struct{}{}
+	}
+	descriptors := make([]providers.Descriptor, 0, len(integrations))
+	for _, integration := range integrations {
+		if _, exists := published[integration.Name.String()]; exists {
+			continue
+		}
+		descriptors = append(descriptors, acpDescriptor(integration))
+	}
+	return descriptors, nil
 }
 
 // PackagedACPIntegrations returns the detached data-backed ACP defaults used by
@@ -505,7 +525,7 @@ func effectiveACPIntegrations(packaged, configured []providers.ACPIntegration) [
 }
 
 func acpDescriptor(integration providers.ACPIntegration) providers.Descriptor {
-	return providers.Descriptor{ID: integration.Name, Aliases: append([]string(nil), integration.Aliases...), DisplayName: integration.Name.String(), Availability: providers.AvailabilitySelectable, Readiness: providers.ReadinessReady, Capabilities: []providers.Capability{providers.CapabilityPromptSubmission, providers.CapabilityImageInput, providers.CapabilitySessionResume, providers.CapabilityPermissionBypass, providers.CapabilityNativeStreaming, providers.CapabilityMessageDeltas, providers.CapabilityReasoningSummaries, providers.CapabilityToolLifecycle, providers.CapabilityFileChanges, providers.CapabilityPlans, providers.CapabilityUsage}}
+	return providers.Descriptor{ID: integration.Name, Aliases: append([]string(nil), integration.Aliases...), DisplayName: integration.Name.String(), Availability: providers.AvailabilitySelectable, Readiness: providers.ReadinessUnverified, Capabilities: []providers.Capability{providers.CapabilityPromptSubmission, providers.CapabilitySessionResume}}
 }
 
 // NewFactory returns an inert constructor used for operator-configured ACP catalogs.

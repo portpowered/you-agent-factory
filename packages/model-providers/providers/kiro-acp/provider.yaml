@@ -1,0 +1,103 @@
+id: kiro-acp
+aliases: []
+displayName:
+  type: LOCALIZABLE_ASSET
+  value: Kiro ACP
+description:
+  type: LOCALIZABLE_ASSET
+  value: Kiro ACP is a package-owned ACP stdio integration.
+documentation:
+  - kind: reference
+    url: https://github.com/agentclientprotocol/registry
+technicalSupportLevel: experimental
+implementationAvailability: externally-supplied
+maximumExecutionCapabilities:
+  promptSubmission: true
+  imageInput: false
+  sessionResume: false
+  structuredOutput: false
+  toolExecution: false
+  workingDirectory: false
+  worktree: false
+maximumResponseFidelityCapabilities:
+  nativeStreaming: false
+  messageDeltas: false
+  messageSnapshots: false
+  reasoningSummaries: false
+  toolLifecycle: false
+  toolOutputDeltas: false
+  fileChanges: false
+  plans: false
+  usage: false
+  stableItemIds: false
+  providerReconnect: false
+discovery:
+  executableNames: [kiro-cli-chat]
+  endpointKinds: [stdio]
+  configurationKeys: []
+  prerequisites:
+    - kind: executable
+      name: kiro-cli-chat
+      description: Install the Kiro ACP launch executable before execution.
+    - kind: authentication
+      name: account-authentication
+      description: Authenticate the Kiro ACP account before execution.
+    - kind: workspace
+      name: writable-workspace
+      description: Select a writable workspace before execution.
+harness:
+  kind: acp
+  acpSupport:
+    support: supported
+    protocolVersion: "1"
+    resourceDelivery: unknown
+    evidenceRefs: [kiro-acp-protocol]
+modelCatalogPosture: unknown
+harnessRoutes:
+  - direction: input
+    modality: audio
+    support: unknown
+    transport: none
+  - direction: input
+    modality: image
+    support: unknown
+    transport: none
+  - direction: input
+    modality: text
+    support: supported
+    transport: inline
+    evidenceRefs: [kiro-acp-protocol]
+  - direction: input
+    modality: video
+    support: unknown
+    transport: none
+  - direction: output
+    modality: audio
+    support: unknown
+    transport: none
+  - direction: output
+    modality: image
+    support: unknown
+    transport: none
+  - direction: output
+    modality: text
+    support: supported
+    transport: inline
+    evidenceRefs: [kiro-acp-protocol]
+  - direction: output
+    modality: video
+    support: unknown
+    transport: none
+evidence:
+  - id: kiro-acp-protocol
+    kind: conformance_fixture
+    verifiedOn: "2026-08-11"
+    factRefs:
+      - model_catalog
+      - harness/acp
+      - harness/input/text
+      - harness/output/text
+models: []
+tools: []
+knownLimits: []
+

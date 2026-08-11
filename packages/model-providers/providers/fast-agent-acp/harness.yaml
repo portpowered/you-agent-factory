@@ -1,0 +1,11 @@
+implementation:
+  kind: acp_agent
+  profile: fast-agent-acp
+launch:
+  posture: package_runner
+  transport: stdio
+  command: uvx
+  arguments:
+    - fast-agent-mcp
+    - acp
+

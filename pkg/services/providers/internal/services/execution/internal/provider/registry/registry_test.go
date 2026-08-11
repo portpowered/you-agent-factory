@@ -39,8 +39,8 @@ func TestNewJoinsSupportedCatalogManifestsWithoutProviderSideEffects(t *testing.
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
-	if len(registry.manifests) != 3 || len(registry.integrations) != 3 {
-		t.Fatalf("joined counts = (%d manifests, %d integrations), want (3, 3)", len(registry.manifests), len(registry.integrations))
+	if len(registry.manifests) != 23 || len(registry.integrations) != 23 {
+		t.Fatalf("joined counts = (%d manifests, %d integrations), want (23, 23)", len(registry.manifests), len(registry.integrations))
 	}
 }
 
@@ -56,9 +56,17 @@ func TestBuiltInRegistrationsBuildAllSelectableBundledProviders(t *testing.T) {
 		t.Fatalf("New(BuiltInRegistrations()) error = %v", err)
 	}
 
-	want := []string{"antigravity", "claude", "codex"}
-	if got := entryIdentities(registry.Entries()); !reflect.DeepEqual(got, want) {
-		t.Fatalf("built-in manifest identities = %v, want %v", got, want)
+	wantEntries := []string{
+		"antigravity", "claude", "codex", "copilot-acp", "cursor-acp", "droid-acp",
+		"fast-agent-acp", "gemini-acp", "grok-build-acp", "iflow-acp", "kilocode-acp",
+		"kimi-acp", "kiro-acp", "mux-acp", "openclaw-acp", "opencode-acp", "pi-acp",
+		"pool-acp", "qoder-acp", "qwen-acp", "reasonix-acp", "trae-acp", "zeroclaw-acp",
+	}
+	if got := entryIdentities(registry.Entries()); !reflect.DeepEqual(got, wantEntries) {
+		t.Fatalf("catalog manifest identities = %v, want %v", got, wantEntries)
+	}
+	if got := registry.RunnerIdentities(); !reflect.DeepEqual(got, []string{"antigravity", "claude", "codex"}) {
+		t.Fatalf("built-in runner identities = %v, want native providers", got)
 	}
 	if _, err := registry.Lookup("cursor"); err == nil {
 		t.Fatal("Lookup(cursor) error = nil, want retired native provider to be unknown")

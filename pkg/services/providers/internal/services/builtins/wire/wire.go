@@ -2,15 +2,11 @@
 package wire
 
 import (
-	_ "embed"
-
+	modelproviders "github.com/portpowered/infinite-you/packages/model-providers"
 	builtins "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/builtins"
 	builtinsservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/builtins/internal/service"
 )
 
-//go:embed catalog.json
-var packagedCatalog []byte
-
 func NewService() (builtins.Service, error) {
-	return builtinsservice.New(packagedCatalog)
+	return builtinsservice.New(modelproviders.RuntimeACPJSON())
 }

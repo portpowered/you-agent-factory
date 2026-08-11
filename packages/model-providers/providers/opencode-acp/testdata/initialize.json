@@ -1,0 +1,7 @@
+{
+  "protocol": "acp",
+  "protocolVersion": "1",
+  "provider": "opencode-acp",
+  "fixture": "initialize-conformance"
+}
+

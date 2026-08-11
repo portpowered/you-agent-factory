@@ -1,0 +1,10 @@
+implementation:
+  kind: acp_agent
+  profile: gemini-acp
+launch:
+  posture: installed_executable
+  transport: stdio
+  command: gemini
+  arguments:
+    - --acp
+
