@@ -4,6 +4,7 @@
 - Authoritative coverage runners should pass `-count=1` alongside instrumentation so coverage and timing artifacts always describe a real test execution rather than a cached developer result.
 - For targeted performance evidence, `gocoveragecheck -packages ... -total-only -timing-output ...` preserves the authoritative fresh instrumentation and timing schema while isolating measured packages from an independently failing full-lane package.
 - For reproducible Go-lane evidence, pair `go clean -testcache` with an unchanged cold run and immediate warm run; use an isolated focused `gocoveragecheck` package set when parallel full-lane variance obscures representative package deltas.
+- Makefile contract tests that override `GO` must ignore parse-time `$(shell $(GO) env ...)` probes and record only the target command being asserted.
 - Functional provider-edge fakes must mirror the current provider command contract: stage command Args as the prompt and emit the provider-native success envelope; stdin-only Codex fixtures can become stale when the edge contract evolves.
 - For final PR handoff, compare the PR body byte-for-byte with `prd.json` and use the thread-aware GraphQL review audit because flat PR comments do not expose inline-thread resolution state.
 - OS-boundary functional tests may poll an isolated durable filesystem checkpoint only when the child exposes no parent-process event or injected edge; document that reason at each polling helper and keep the bound as a failure guard.
@@ -3863,4 +3864,19 @@
   - `git diff --cached --check`, PRD JSON parsing, conflict-marker scan, and unmerged-index scan — passed during merge resolution.
 - **Learnings for future iterations:**
   - A moving main branch can change both runtime tests and shared task metadata while long timing runs are in flight; merge the freshly fetched base before the final quality pass and rerun the authoritative functional lane on that merged head.
+---
+## 2026-08-10 19:22 -07:00 - thr-functional-lane-speed-004 CI follow-up
+- What was implemented
+  - Diagnosed PR #1865's first CI run: the functional coverage lane failed because the Linux-only lane-contract test recorded Make's parse-time `GO env GOPATH` probes as if they were the target invocation; the ACP unit-coverage failure was a single reproducible-once provider-session test flake.
+  - Updated the fake Go executable to record and fail only for the actual `run` invocation, preserving the assertion on the public Make target while making the test portable to the POSIX CI shell.
+- Files changed
+  - `tests/functional/observability/verification/verify_tier_contract_test.go`
+  - `progress.txt`
+- Verification
+  - Linux/WSL Go 1.25.0: `TestFunctionalLaneTargetsSeparateCachedAndFreshModes` passed.
+  - Linux/WSL Go 1.25.0: `TestACPExecuteObservesProviderSessionWhileAttemptIsLive` passed 10/10 with `-count=10`.
+  - Focused Windows Go tests for `cmd/gocoveragecheck` passed; the POSIX contract package is correctly excluded on Windows.
+  - Commit `dc004820d` pushed to PR #1865; GitHub has not yet associated a new CI run with the synchronized head, so terminal PR-check follow-up remains open.
+- **Learnings for future iterations:**
+  - A full instrumented Go lane can reveal Linux-only contract tests skipped by the Windows developer suite; run POSIX-tagged functional tests under Linux/WSL when their behavior depends on GNU Make or `sh`.
 ---
