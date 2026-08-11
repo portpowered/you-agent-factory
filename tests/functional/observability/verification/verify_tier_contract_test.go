@@ -19,9 +19,11 @@ import (
 // Go's cache mode versus explicit execution.
 func TestFunctionalLaneTargetsSeparateCachedAndFreshModes(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
-	fakeGo := writeExecutableScript(t, "fake-go-functional-lane", `#!/bin/sh
-printf '%s\n' "$*" >> "$FUNCTIONAL_LANE_ARGS"
-if [ "${FUNCTIONAL_LANE_FAIL:-0}" = "1" ]; then
+fakeGo := writeExecutableScript(t, "fake-go-functional-lane", `#!/bin/sh
+if [ "$1" = "run" ]; then
+  printf '%s\n' "$*" >> "$FUNCTIONAL_LANE_ARGS"
+fi
+if [ "$1" = "run" ] && [ "${FUNCTIONAL_LANE_FAIL:-0}" = "1" ]; then
   printf '%s\n' '--- FAIL: TestRepresentativeFunctionalFailure'
   exit 23
 fi
