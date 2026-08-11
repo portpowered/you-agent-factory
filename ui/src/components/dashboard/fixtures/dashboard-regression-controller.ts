@@ -72,6 +72,9 @@ export interface DashboardRegressionFixtureController {
     readonly request: (
       requestID: DashboardRegressionSessionListID,
     ) => Promise<FactorySessionSummary[]>;
+    readonly waitUntilPending: (
+      requestID: DashboardRegressionSessionListID,
+    ) => Promise<void>;
     readonly resolve: (requestID: DashboardRegressionSessionListID) => void;
     readonly reject: (
       requestID: DashboardRegressionSessionListID,
@@ -300,6 +303,10 @@ export function createDashboardRegressionFixture(): DashboardRegressionFixtureCo
     DashboardRegressionSessionListID,
     ControlledPromise<FactorySessionSummary[]>
   >();
+  const pendingSessionListWaiters = new Map<
+    DashboardRegressionSessionListID,
+    Set<() => void>
+  >();
   const pendingSubmissions = new Map<
     DashboardRegressionSubmitScenarioID,
     ControlledPromise<DashboardRegressionSubmitOutcome>
@@ -357,7 +364,25 @@ export function createDashboardRegressionFixture(): DashboardRegressionFixtureCo
     }
     const controlled = createControlledPromise<FactorySessionSummary[]>();
     pendingSessionLists.set(requestID, controlled);
+    const waiters = pendingSessionListWaiters.get(requestID);
+    pendingSessionListWaiters.delete(requestID);
+    waiters?.forEach((resolve) => resolve());
     return controlled.promise;
+  }
+
+  function waitUntilSessionListPending(
+    requestID: DashboardRegressionSessionListID,
+  ): Promise<void> {
+    if (pendingSessionLists.has(requestID)) {
+      return Promise.resolve();
+    }
+
+    return new Promise<void>((resolve) => {
+      const waiters =
+        pendingSessionListWaiters.get(requestID) ?? new Set<() => void>();
+      waiters.add(() => resolve());
+      pendingSessionListWaiters.set(requestID, waiters);
+    });
   }
 
   function resolveSessionList(
@@ -494,6 +519,7 @@ export function createDashboardRegressionFixture(): DashboardRegressionFixtureCo
         queuedFetchListIDs.push(requestID);
       },
       request: requestSessionList,
+      waitUntilPending: waitUntilSessionListPending,
       resolve: resolveSessionList,
       reject: rejectSessionList,
     },

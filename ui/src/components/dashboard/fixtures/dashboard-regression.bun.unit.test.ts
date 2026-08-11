@@ -131,6 +131,7 @@ describe("dashboard regression fixture", () => {
   it("can drive the typed Factory Sessions API without a live network", async () => {
     const fixture = createDashboardRegressionFixture();
     const list = listFactorySessions({ fetch: fixture.fetch });
+    await fixture.sessionLists.waitUntilPending("initial");
     fixture.sessionLists.resolve("initial");
     await expect(list).resolves.toEqual(
       dashboardRegressionSessionLists.initial,
