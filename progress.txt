@@ -1,5 +1,7 @@
 ## Codebase Patterns
 - OS-boundary functional scenarios should allocate a fresh `builtcliacceptance.Session` for each concurrent case so HOME, work/runtime-log roots, ports, Factory fixtures, and mock-worker artifacts cannot cross-contaminate.
+- Windows process-package stress measurements should give the command a fresh task-owned `TEMP`, `TMP`, and `GOTMPDIR`; this isolates test-owned filesystem cleanup from unrelated repository jobs while preserving the shared-host timeout as separate evidence.
+- Package-level real-CLI tests repeated with `-count=N` should build one immutable executable in `TestMain` and remove that exact temporary directory after the suite; this prevents nested build fan-out from becoming part of lifecycle evidence.
 - For process-package stress evidence, retain exact command, per-run timing, and terminal failure output; concurrent repository-wide Go jobs can hold build/cache or Windows filesystem resources long enough to mimic a lifecycle failure.
 - `go test -count=N` still exercises the package's internal `t.Parallel` scheduling on every repetition; focused race repetitions are useful diagnosis but do not substitute for the exact aggregate race command.
 - For cross-process Windows checkpoints, wait for atomically published metadata to be readable before suspension, then verify the exact resource survives the suspend gap; treat a sharing violation during publication as an incomplete checkpoint, not as a failed assertion retry.
@@ -167,6 +169,31 @@
   - `make readme-check` — passed.
 - **Learnings for future iterations:**
   - Keep the root count aligned with the canonical fifteen-entry catalog, but continue placing detailed Factory guidance in `docs/reference/packaged-factories.md`.
+---
+
+## [2026-08-11 05:11 -07:00] - thr-deflake-cli-process-package-003
+- What was implemented
+  - Added one reusable built CLI executable per process-package test run so `-count=N` repetitions do not rebuild the command for every scenario.
+  - Made Windows and non-Windows hard-kill controls idempotent, retained the child’s staging lease through suspension, and closed termination/suspension handles after deterministic process reaping.
+  - Completed the final stress, JSON-regression, separate-run, and warm-cache evidence with task-owned temporary filesystem roots; story 003 is now marked `passes:true` in `prd.json`.
+- Files changed
+  - `tests/functional/transport/cli/process/built_cli_test.go`
+  - `tests/functional/transport/cli/process/hard_kill_successor_process_nonwindows_test.go`
+  - `tests/functional/transport/cli/process/hard_kill_successor_process_windows_test.go`
+  - `tests/functional/transport/cli/process/hard_kill_successor_test.go`
+  - `tests/functional/transport/cli/process/watch_abort_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Exact race aggregate `go test -race ./tests/functional/transport/cli/process -count=20 -timeout 30m` — passed 20/20 in 1,559.548s test time.
+  - Isolated-temp normal aggregate `go test ./tests/functional/transport/cli/process -count=20 -timeout 30m` — passed 20/20 in 877.866s test time after the shared-temp attempt timed out at 20m under unrelated repository-wide Go filesystem contention.
+  - Twenty separately timed exact `-count=1` invocations — passed 20/20; wall samples were 59.16, 41.96, 79.80, 61.69, 69.50, 91.39, 72.14, 78.24, 50.49, 61.51, 66.79, 84.29, 86.94, 96.71, 138.80, 125.53, 125.26, 91.85, 73.12, and 78.86 seconds.
+  - Merged-main `TestCLIJSONFailureRemainsValidJSON` — passed 20/20 in 270.771s test time / 324.1s wall time.
+  - Isolated five-run warm-cache sample — passed all five at 47.82, 73.97, 40.45, 42.14, and 35.74 seconds; median 42.14s versus the 45.211s pre-change median and 49.732s allowed threshold.
+  - Focused hard-kill regression passed 3/3 normally and 10/10 under race; `make typecheck`, focused `go vet`, gofmt, and `git diff --check` passed; no test-owned process or listener remained.
+- **Learnings for future iterations:**
+  - A Windows stress timeout in shared `%TEMP%` can be secondary filesystem pressure from unrelated jobs; rerun with task-owned `TEMP`, `TMP`, and `GOTMPDIR` before changing lifecycle assertions, while retaining the original timeout dump.
+  - Reusing a single immutable CLI binary per package repetition preserves the real process boundary while avoiding nested build/cache contention that distorts throughput evidence.
 ---
 
 ## 2026-08-09 13:20 - wo-d1-packaged-factories-docs-001 lint follow-up
@@ -3823,4 +3850,19 @@
   - A passing normal aggregate and focused race scenario do not clear a failed full race aggregate; rerun the exact command on a quiescent host before marking the story complete.
   - Inspect active process ancestry when a Windows stress lane times out: a test can be waiting in `os.Rename` or an internal `go build` while the apparent `os/exec.watchCtx` goroutines are deadline fallout.
   - Keep performance samples separate from build/cache-contended runs; report both the dedicated sample and any stable tail rather than silently selecting the faster subset.
+---
+
+## [2026-08-11 05:13 -07:00] - thr-deflake-cli-process-package final handoff preparation
+- What was implemented
+  - Confirmed the final process-package implementation and metadata state; no unfinished story work remains and all three PRD stories are marked `passes:true`.
+  - Preserved the exact causal timeline, isolated lifecycle design, sustained stress evidence, JSON regression evidence, and warm-cache comparison in `prd.json` for the PR description.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `prd.json` contains the final story-003 evidence: the required aggregate race run passed 20/20, the isolated normal aggregate passed 20/20, twenty separate `-count=1` runs passed, the merged-main JSON regression passed 20/20, and the post-change warm-cache median was 42.14s versus the 45.211s pre-change median and 49.732s threshold.
+  - `gh auth status` passed; no existing remote branch or pull request was found for `thr-deflake-cli-process-package`.
+  - The worktree contains only the intended PRD/progress metadata changes pending commit and publication.
+- **Learnings for future iterations:**
+  - When a completed stress story has both an earlier failed/contended sample and a later isolated passing sample, retain both and identify the isolated sample as the acceptance evidence instead of deleting the diagnostic failure.
 ---
