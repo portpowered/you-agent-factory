@@ -1,5 +1,6 @@
 ## Codebase Patterns
 - Provider OpenAPI changes that feed the published model-provider package require `make interfaces-all`, `make provider-catalog-generate`, and `make model-provider-package-generate`; `api-smoke` checks generated REST artifacts against the committed tree, so commit generated output before relying on that smoke result.
+- Provider evidence dates authored in YAML must be quoted ISO strings because yaml.v3 otherwise decodes calendar-looking values as `time.Time` before semantic validation.
 - For final PR handoff, compare the PR body byte-for-byte with `prd.json` and use the thread-aware GraphQL review audit because flat PR comments do not expose inline-thread resolution state.
 - OS-boundary functional tests may poll an isolated durable filesystem checkpoint only when the child exposes no parent-process event or injected edge; document that reason at each polling helper and keep the bound as a failure guard.
 - Git Worktree preparation treats a retained Git `*.lock` as indeterminate ownership: retry within a named bound, preserve the resource, and return its exact path with verify/remove/retry guidance.
@@ -4016,4 +4017,29 @@
 - **Learnings for future iterations:**
   - Expanded capability metadata must activate strict evidence validation without breaking the pre-migration manifests; the next story should add evidence to all three native manifests before turning that migration lane green.
   - One-of conditional requirements need both authored schema requirements and generator support for parent properties so published TypeScript types retain the required condition field.
+---
+## [2026-08-10 21:23 -07:00] - provider-capability-contract-002
+- What was implemented
+  - Migrated the antigravity, claude, and codex authored manifests to the new native capability vocabulary with native_cli harness metadata, exact model-catalog posture, complete directional harness routes, evidence-qualified model facts, and tool availability/output metadata.
+  - Preserved existing provider identity, aliases, model IDs, efforts, limits, discovery prerequisites, execution capabilities, response-fidelity capabilities, and established discovery projection behavior.
+  - Corrected Codex direct image output to unsupported/none and represented AGY image generation as supported tool-mediated output; unknown AGY output routes remain explicit rather than inferred.
+  - Added golden generated-catalog assertions for all four support states, evidence-reference closure, tool availability/default enablement, and direct versus tool-mediated image output.
+- Files changed
+  - `packages/model-providers/providers/antigravity/provider.yaml`
+  - `packages/model-providers/providers/claude/provider.yaml`
+  - `packages/model-providers/providers/codex/provider.yaml`
+  - `packages/model-providers/generated/catalog.json`
+  - `packages/model-providers/metadata/manifest.json`
+  - `packages/model-providers/catalog_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./internal/providercatalog ./packages/model-providers ./pkg/services/providers/... -count=1` — passed.
+  - `go run ./cmd/providercatalogcheck -root .` — passed.
+  - `make model-provider-package-check` and `make typecheck` — passed.
+  - `git diff --check` — passed.
+  - Implementation commit: `cd33d4205` (`feat(providers): publish native capability manifests`).
+- **Learnings for future iterations:**
+  - The existing provider projection accepts the established supported/unsupported tool states; keep additive conditional and unknown route facts in the published manifest without changing that projection boundary until the dedicated discovery-parity story updates its public contract.
+  - Quote ISO evidence dates in authored YAML so yaml.v3 keeps them as strings for calendar-date validation.
 ---

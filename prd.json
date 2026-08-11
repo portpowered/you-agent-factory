@@ -50,8 +50,8 @@
         "Tests pass"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Migrated antigravity, claude, and codex to the additive capability contract with native_cli harness posture, exact model-catalog posture, complete eight-route harness matrices, evidence-qualified model modality facts, and qualified tool availability/output facts. Preserved canonical IDs, aliases, exact model IDs, effort values, known limits, discovery prerequisites, maximum execution capabilities, and maximum response-fidelity capabilities. Corrected Codex direct image output to explicitly unsupported while retaining image input support; AGY image generation is represented as tool-mediated output and unknown AGY output routes remain explicit. Added generated-catalog golden coverage for all four support states, availability/default enablement, direct/tool-mediated separation, and evidence-reference closure. Regenerated the published catalog and package metadata. Verification: go test ./internal/providercatalog ./packages/model-providers ./pkg/services/providers/... -count=1, go run ./cmd/providercatalogcheck -root ., make model-provider-package-check, and git diff --check pass. Story 003 remains for the next iteration."
     },
     {
       "id": "provider-capability-contract-003",
