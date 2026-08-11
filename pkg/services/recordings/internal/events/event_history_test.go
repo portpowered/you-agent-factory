@@ -623,6 +623,49 @@ func TestFactoryEventHistory_RecordDispatchCompletion_PreservesSelectedClassific
 	}
 }
 
+func TestFactoryEventHistory_RecordDispatchCompletion_PreservesStructuredSchemaViolationClassification(t *testing.T) {
+	history := newTestFactoryEventHistory(
+		eventHistoryProjectionNet(),
+		func() time.Time { return time.Unix(0, 0).UTC() })
+
+	result := workerexecution.WorkResult{
+		DispatchID:   "dispatch-schema-violation",
+		TransitionID: "t-review",
+		Outcome:      workerexecution.OutcomeFailed,
+		Output:       `{"wrong":"do-not-leak-this-rejected-value"}`,
+		Error:        "structured output schema violation: required property verdict is missing",
+		FailureMetadata: &workerexecution.WorkFailureMetadata{
+			Family: workerexecution.WorkFailureFamilyTerminal,
+			Type:   workerexecution.WorkFailureTypeStructuredOutputSchemaViolation,
+		},
+	}
+	history.RecordWorkstationResponse(3, result, interfaces.CompletedDispatch{
+		DispatchID:   result.DispatchID,
+		TransitionID: result.TransitionID,
+		Outcome:      result.Outcome,
+		ConsumedTokens: []workerexecution.Token{{
+			ID:    "token-1",
+			Color: workerexecution.Color{WorkID: "work-1", WorkTypeID: "task", TraceID: "trace-1"},
+		}},
+	})
+
+	events := generatedHistoryEvents(t, history)
+	if len(events) != 1 {
+		t.Fatalf("event count = %d, want 1", len(events))
+	}
+	payload, err := events[0].Payload.AsDispatchResponseEventPayload()
+	if err != nil {
+		t.Fatalf("dispatch response payload: %v", err)
+	}
+	if payload.FailureDetail == nil || payload.FailureDetail.Reason != factoryapi.WorkFailureTypeStructuredOutputSchemaViolation {
+		t.Fatalf("failure detail = %#v, want structured schema violation", payload.FailureDetail)
+	}
+	if payload.ProviderFailure == nil || payload.ProviderFailure.Type == nil ||
+		*payload.ProviderFailure.Type != factoryapi.WorkFailureTypeStructuredOutputSchemaViolation {
+		t.Fatalf("provider failure = %#v, want structured schema violation", payload.ProviderFailure)
+	}
+}
+
 func TestFactoryEventHistory_RecordDispatchCompletion_PreservesOutputWorkStateFromTokenPlace(t *testing.T) {
 	history := newTestFactoryEventHistory(
 		eventHistoryProjectionNet(),

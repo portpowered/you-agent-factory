@@ -408,4 +408,3 @@ to the customer-writing standard and validate its public commands and inputs.
 
 - Run prose checks and the surface-owned README, package, schema, example, or
   functional verification.
-

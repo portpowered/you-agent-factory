@@ -65,6 +65,10 @@
       "minimum": 77.50
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/jsonvalue",
+      "minimum": 67.34
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/platform/logging",
       "minimum": 69.67
     },
