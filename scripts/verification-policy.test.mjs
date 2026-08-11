@@ -1,0 +1,186 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import {
+	evaluateVerificationPolicy,
+	renderVerificationSummary,
+} from "./verification-policy.mjs";
+
+const laneNames = [
+	"Docs Reference",
+	"README",
+	"Frontend",
+	"Backend",
+	"UI Backend Integration",
+	"API Package",
+	"Packaged Factories Package",
+	"Model Providers Package",
+	"Local Inference",
+];
+
+function lane(name, selected = false, result = selected ? "success" : "skipped", options = {}) {
+	return {
+		name,
+		selected: String(selected),
+		reason: options.reason ?? (selected ? "Selected by the classifier." : "Not selected."),
+		packageLane: options.packageLane ?? false,
+		checks: options.checks ?? [{ name, result }],
+	};
+}
+
+function policy(overrides = {}) {
+	return {
+		classificationResult: "success",
+		classification: "documentation-reference",
+		classificationReason: "Selected the union of verification lanes owned by the changed paths.",
+		areas: "documentation-reference",
+		packageWorkflowResult: "success",
+		lanes: laneNames.map((name) => lane(name)),
+		...overrides,
+	};
+}
+
+test("minimal selected verification passes and unselected lanes may be skipped", () => {
+	const result = evaluateVerificationPolicy(
+		policy({
+			lanes: [
+				lane("Docs Reference", true, "success", {
+					reason: "Documentation reference paths select this lane.",
+				}),
+				...laneNames.slice(1).map((name) => lane(name)),
+			],
+		}),
+	);
+
+	assert.deepEqual(result, { ok: true, failures: [] });
+});
+
+test("a selected lane that is skipped, missing, or failed fails closed", () => {
+	for (const result of ["skipped", "", "failure"]) {
+		const evaluation = evaluateVerificationPolicy(
+			policy({
+				lanes: [
+					lane("Docs Reference", true, result),
+					...laneNames.slice(1).map((name) => lane(name)),
+				],
+			}),
+		);
+
+		assert.equal(evaluation.ok, false, `result ${result || "missing"} must fail`);
+		assert.match(evaluation.failures[0], /Docs Reference was selected/);
+	}
+});
+
+test("classifier failure fails policy even when every product lane succeeds", () => {
+	const evaluation = evaluateVerificationPolicy(
+		policy({ classificationResult: "failure" }),
+	);
+
+	assert.equal(evaluation.ok, false);
+	assert.match(evaluation.failures[0], /Classification did not complete successfully/);
+});
+
+test("reusable package failure and missing selected candidate fail policy", () => {
+	const evaluation = evaluateVerificationPolicy(
+		policy({
+			packageWorkflowResult: "failure",
+			lanes: [
+				...laneNames.slice(0, 5).map((name) => lane(name)),
+				lane("API Package", true, "success", {
+					packageLane: true,
+					checks: [
+						{ name: "verification", result: "success", allowMissingWhenNotRequired: true },
+						{
+							name: "candidate",
+							result: "",
+							required: true,
+							allowMissingWhenNotRequired: true,
+						},
+					],
+				}),
+				lane("Packaged Factories Package"),
+				lane("Model Providers Package"),
+				lane("Local Inference"),
+			],
+		}),
+	);
+
+	assert.equal(evaluation.ok, false);
+	assert.ok(evaluation.failures.some((failure) => /Development Package/.test(failure)));
+	assert.ok(evaluation.failures.some((failure) => /API Package \/ candidate/.test(failure)));
+});
+
+test("unselected package outputs may be absent, but an unexpected unselected result fails", () => {
+	const packageChecks = [
+		{
+			name: "verification",
+			result: "",
+			allowMissingWhenNotRequired: true,
+		},
+		{
+			name: "candidate",
+			result: "",
+			required: false,
+			allowMissingWhenNotRequired: true,
+		},
+	];
+	const passing = evaluateVerificationPolicy(
+		policy({
+			lanes: [
+				...laneNames.slice(0, 5).map((name) => lane(name)),
+				lane("API Package", false, "", {
+					packageLane: true,
+					checks: packageChecks,
+				}),
+				lane("Packaged Factories Package"),
+				lane("Model Providers Package"),
+				lane("Local Inference"),
+			],
+		}),
+	);
+	assert.equal(passing.ok, true);
+
+	const unexpected = evaluateVerificationPolicy(
+		policy({
+			lanes: [
+				lane("Docs Reference", false, "success"),
+				...laneNames.slice(1).map((name) => lane(name)),
+			],
+		}),
+	);
+	assert.equal(unexpected.ok, false);
+	assert.match(unexpected.failures[0], /not selected but returned success/);
+});
+
+test("summary records touched areas, each decision, reason, and terminal result", () => {
+	const input = policy({
+		areas: "documentation-reference+frontend",
+		lanes: [
+			lane("Docs Reference", true, "success", {
+				reason: "docs/reference paths select the documentation lane.",
+			}),
+			...laneNames.slice(1).map((name) => lane(name)),
+		],
+	});
+	const evaluation = evaluateVerificationPolicy(input);
+	const summary = renderVerificationSummary({ ...input, evaluation });
+
+	assert.match(summary, /Areas touched: `documentation-reference\+frontend`/);
+	assert.match(summary, /\| Docs Reference \| `run` \| Docs Reference: success \| docs\/reference paths select/);
+	assert.match(summary, /\| README \| `skip` \| README: skipped \|/);
+	assert.match(summary, /Verification Policy passed/);
+});
+
+test("summary falls back to the classifier's global reason for a selected lane", () => {
+	const input = policy({
+		classificationReason: "Unknown paths require conservative full verification.",
+		lanes: [
+			lane("Docs Reference", true, "success", { reason: "" }),
+			...laneNames.slice(1).map((name) => lane(name)),
+		],
+	});
+	const evaluation = evaluateVerificationPolicy(input);
+	const summary = renderVerificationSummary({ ...input, evaluation });
+
+	assert.match(summary, /\| Docs Reference \| `run` \| Docs Reference: success \| Unknown paths require/);
+});

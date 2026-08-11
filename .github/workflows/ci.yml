@@ -28,6 +28,7 @@ jobs:
     outputs:
       classification: ${{ steps.classify.outputs.classification || 'full' }}
       areas: ${{ steps.classify.outputs.areas || 'ci-tooling' }}
+      reason: ${{ steps.classify.outputs.reason || 'Conservative full verification.' }}
       run_docs_reference: ${{ steps.classify.outputs.run_docs_reference != 'false' }}
       run_readme: ${{ steps.classify.outputs.run_readme != 'false' }}
       run_frontend: ${{ steps.classify.outputs.run_frontend != 'false' }}
@@ -37,15 +38,15 @@ jobs:
       run_packaged_factories_package: ${{ steps.classify.outputs.run_packaged_factories_package != 'false' }}
       run_model_providers_package: ${{ steps.classify.outputs.run_model_providers_package != 'false' }}
       run_local_inference: ${{ steps.classify.outputs.run_local_inference != 'false' }}
-      docs_reference_reason: ${{ steps.classify.outputs.docs_reference_reason || 'Conservative full verification.' }}
-      readme_reason: ${{ steps.classify.outputs.readme_reason || 'Conservative full verification.' }}
-      frontend_reason: ${{ steps.classify.outputs.frontend_reason || 'Conservative full verification.' }}
-      backend_reason: ${{ steps.classify.outputs.backend_reason || 'Conservative full verification.' }}
-      ui_backend_integration_reason: ${{ steps.classify.outputs.ui_backend_integration_reason || 'Conservative full verification.' }}
-      api_package_reason: ${{ steps.classify.outputs.api_package_reason || 'Conservative full verification.' }}
-      packaged_factories_package_reason: ${{ steps.classify.outputs.packaged_factories_package_reason || 'Conservative full verification.' }}
-      model_providers_package_reason: ${{ steps.classify.outputs.model_providers_package_reason || 'Conservative full verification.' }}
-      local_inference_reason: ${{ steps.classify.outputs.local_inference_reason || 'Conservative full verification.' }}
+      docs_reference_reason: ${{ steps.classify.outputs.docs_reference_reason || steps.classify.outputs.reason || 'Conservative full verification.' }}
+      readme_reason: ${{ steps.classify.outputs.readme_reason || steps.classify.outputs.reason || 'Conservative full verification.' }}
+      frontend_reason: ${{ steps.classify.outputs.frontend_reason || steps.classify.outputs.reason || 'Conservative full verification.' }}
+      backend_reason: ${{ steps.classify.outputs.backend_reason || steps.classify.outputs.reason || 'Conservative full verification.' }}
+      ui_backend_integration_reason: ${{ steps.classify.outputs.ui_backend_integration_reason || steps.classify.outputs.reason || 'Conservative full verification.' }}
+      api_package_reason: ${{ steps.classify.outputs.api_package_reason || steps.classify.outputs.reason || 'Conservative full verification.' }}
+      packaged_factories_package_reason: ${{ steps.classify.outputs.packaged_factories_package_reason || steps.classify.outputs.reason || 'Conservative full verification.' }}
+      model_providers_package_reason: ${{ steps.classify.outputs.model_providers_package_reason || steps.classify.outputs.reason || 'Conservative full verification.' }}
+      local_inference_reason: ${{ steps.classify.outputs.local_inference_reason || steps.classify.outputs.reason || 'Conservative full verification.' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -294,8 +295,10 @@ jobs:
     steps:
       - name: Verify selected lanes
         env:
+          CLASSIFICATION_RESULT: ${{ needs.classify.result }}
           CLASSIFICATION: ${{ needs.classify.outputs.classification }}
           AREAS: ${{ needs.classify.outputs.areas }}
+          CLASSIFICATION_REASON: ${{ needs.classify.outputs.reason }}
           RUN_DOCS: ${{ needs.classify.outputs.run_docs_reference }}
           RUN_README: ${{ needs.classify.outputs.run_readme }}
           RUN_FRONTEND: ${{ needs.classify.outputs.run_frontend }}
@@ -314,36 +317,22 @@ jobs:
           PACKAGED_REASON: ${{ needs.classify.outputs.packaged_factories_package_reason }}
           PROVIDERS_REASON: ${{ needs.classify.outputs.model_providers_package_reason }}
           INFERENCE_REASON: ${{ needs.classify.outputs.local_inference_reason }}
-          RESULTS: >-
-            docs=${{ needs.docs-reference.result }} readme=${{ needs.readme.result }} frontend=${{ needs.frontend.result }} frontend_component=${{ needs.frontend-component.result }} frontend_coverage=${{ needs.ui-coverage.result }} frontend_browser=${{ needs.frontend-browser.result }} frontend_storybook=${{ needs.frontend-storybook.result }} backend=${{ needs.backend-coverage.result }} ui_backend=${{ needs.ui-backend-integration.result }} package_workflow=${{ needs.development-package.result }} api=${{ needs.development-package.outputs.api_package_result }} packaged=${{ needs.development-package.outputs.packaged_factories_package_result }} providers=${{ needs.development-package.outputs.model_providers_package_result }} api_candidate=${{ needs.development-package.outputs.api_candidate_result }} packaged_candidate=${{ needs.development-package.outputs.packaged_factories_candidate_result }} inference=${{ needs.local-inference.result }}
+          RUN_CANDIDATES: ${{ github.event_name == 'pull_request' }}
+          DOCS_RESULT: ${{ needs.docs-reference.result }}
+          README_RESULT: ${{ needs.readme.result }}
+          FRONTEND_RESULT: ${{ needs.frontend.result }}
+          FRONTEND_COMPONENT_RESULT: ${{ needs.frontend-component.result }}
+          FRONTEND_COVERAGE_RESULT: ${{ needs.ui-coverage.result }}
+          FRONTEND_BROWSER_RESULT: ${{ needs.frontend-browser.result }}
+          FRONTEND_STORYBOOK_RESULT: ${{ needs.frontend-storybook.result }}
+          BACKEND_RESULT: ${{ needs.backend-coverage.result }}
+          UI_BACKEND_RESULT: ${{ needs.ui-backend-integration.result }}
+          PACKAGE_WORKFLOW_RESULT: ${{ needs.development-package.result }}
+          API_RESULT: ${{ needs.development-package.outputs.api_package_result }}
+          API_CANDIDATE_RESULT: ${{ needs.development-package.outputs.api_candidate_result }}
+          PACKAGED_RESULT: ${{ needs.development-package.outputs.packaged_factories_package_result }}
+          PACKAGED_CANDIDATE_RESULT: ${{ needs.development-package.outputs.packaged_factories_candidate_result }}
+          PROVIDERS_RESULT: ${{ needs.development-package.outputs.model_providers_package_result }}
+          INFERENCE_RESULT: ${{ needs.local-inference.result }}
         shell: bash
-        run: |
-          set -euo pipefail
-          echo "## Verification policy" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Classification: \`$CLASSIFICATION\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Areas: \`$AREAS\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Results: \`$RESULTS\`" >> "$GITHUB_STEP_SUMMARY"
-          echo >> "$GITHUB_STEP_SUMMARY"
-          echo "### Lane decisions" >> "$GITHUB_STEP_SUMMARY"
-          for lane in \
-            "Docs Reference|$RUN_DOCS|${{ needs.docs-reference.result }}|$DOCS_REASON" \
-            "README|$RUN_README|${{ needs.readme.result }}|$README_REASON" \
-            "Frontend|$RUN_FRONTEND|${{ needs.frontend.result }}|$FRONTEND_REASON" \
-            "Frontend Component|$RUN_FRONTEND|${{ needs.frontend-component.result }}|$FRONTEND_REASON" \
-            "Frontend Coverage|$RUN_FRONTEND|${{ needs.ui-coverage.result }}|$FRONTEND_REASON" \
-            "Frontend Browser|$RUN_FRONTEND|${{ needs.frontend-browser.result }}|$FRONTEND_REASON" \
-            "Frontend Storybook|$RUN_FRONTEND|${{ needs.frontend-storybook.result }}|$FRONTEND_REASON" \
-            "Backend Coverage|$RUN_BACKEND|${{ needs.backend-coverage.result }}|$BACKEND_REASON" \
-            "UI Backend Integration|$RUN_UI_BACKEND|${{ needs.ui-backend-integration.result }}|$UI_BACKEND_REASON" \
-            "API Contract And Package|$RUN_API|${{ needs.development-package.outputs.api_package_result }}|$API_REASON" \
-            "Packaged Factories Package|$RUN_PACKAGED|${{ needs.development-package.outputs.packaged_factories_package_result }}|$PACKAGED_REASON" \
-            "Model Providers Package|$RUN_PROVIDERS|${{ needs.development-package.outputs.model_providers_package_result }}|$PROVIDERS_REASON" \
-            "Local Inference|$RUN_INFERENCE|${{ needs.local-inference.result }}|$INFERENCE_REASON"; do
-            IFS='|' read -r name selected result reason <<< "$lane"
-            decision=skip
-            [[ "$selected" == "true" ]] && decision=run
-            echo "- \`$name\`: \`$decision\` (result: \`$result\`) - $reason" >> "$GITHUB_STEP_SUMMARY"
-          done
-          if [[ "$RESULTS" == *"failure"* || "$RESULTS" == *"cancelled"* ]]; then
-            exit 1
-          fi
+        run: node scripts/verification-policy.mjs

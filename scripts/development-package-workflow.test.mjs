@@ -181,14 +181,27 @@ test("main CI passes classifier decisions and package failures to Verification P
 
 	const policy = ci.jobs["verification-policy"];
 	assert.ok(policy.needs.includes("development-package"));
-	assert.match(
-		policy.steps[0].env.RESULTS,
-		/package_workflow=\$\{\{ needs\.development-package\.result \}\}/,
-	);
-	assert.match(
-		policy.steps[0].env.RESULTS,
-		/api_candidate=\$\{\{ needs\.development-package\.outputs\.api_candidate_result \}\}/,
-	);
+	assert.equal(policy.if, "always()");
+	assert.match(policy.steps[0].run, /verification-policy\.mjs/);
+	assert.match(policy.steps[0].env.CLASSIFICATION_RESULT, /needs\.classify\.result/);
+	assert.match(policy.steps[0].env.CLASSIFICATION_REASON, /needs\.classify\.outputs\.reason/);
+	for (const name of [
+		"docs_reference_reason",
+		"readme_reason",
+		"frontend_reason",
+		"backend_reason",
+		"ui_backend_integration_reason",
+		"api_package_reason",
+		"packaged_factories_package_reason",
+		"model_providers_package_reason",
+		"local_inference_reason",
+	]) {
+		assert.match(ci.jobs.classify.outputs[name], /steps\.classify\.outputs\.reason/);
+	}
+	assert.match(policy.steps[0].env.PACKAGE_WORKFLOW_RESULT, /needs\.development-package\.result/);
+	assert.match(policy.steps[0].env.API_CANDIDATE_RESULT, /needs\.development-package\.outputs\.api_candidate_result/);
+	assert.match(policy.steps[0].env.PACKAGED_CANDIDATE_RESULT, /needs\.development-package\.outputs\.packaged_factories_candidate_result/);
+	assert.match(policy.steps[0].env.INFERENCE_RESULT, /needs\.local-inference\.result/);
 	assert.equal(
 		workflow.on.workflow_call.outputs.api_package_result.value,
 		"${{ jobs.verify_api_package.outputs.result }}",
