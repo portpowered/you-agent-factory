@@ -10518,3 +10518,18 @@
 - **Learnings for future iterations:**
   - On a shared Windows host, run the attributable verification lanes serially and distinguish wrapper timeouts caused by concurrent worktrees from actual test failures before changing source.
 ---
+## [2026-08-10 23:39 -07:00] - js-skip-permissions-parity latest-main rebase and functional retry
+- What was implemented
+  - Rebased again onto live `origin/main` `ecd1d2487` after a final fetch found main had advanced beyond `b68e4bf95`.
+  - Preserved the JavaScript task PRD, unioned the current-main and task append-only progress histories, and carried the generated contract artifacts forward without source conflicts.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Rebase completed with no unresolved files or conflict markers; all four stories remain `passes:true`.
+  - `make interfaces-all` produced no drift; generated manifest hashes match the merged OpenAPI and event/recording schema artifacts.
+  - The final focused package run passed through Runtime, Factory Sessions, recordings/replay, API contracts, Providers, root/wire, and edges. The first provider functional attempt hit the shared process API-server startup timeout; the exact test rerun serially passed both capable and incapable cases in 11.1s.
+  - `git diff --check` passed.
+- **Learnings for future iterations:**
+  - A successful latest-base rebase can still precede a transient process-server startup failure; isolate and rerun the named functional test before classifying the rebased source as broken.
+---
