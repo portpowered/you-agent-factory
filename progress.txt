@@ -4045,3 +4045,20 @@
 - **Learnings for future iterations:**
   - When the live base already contains a fix for a recorded production incident, preserve the exact historical pre-fix revision for red evidence and state explicitly that current main is post-fix; do not mislabel a historical failure as a current-main failure.
 ---
+
+## 2026-08-10 19:56 -07:00 - pp-merge-context-bug-002
+- What was implemented
+  - Completed the delivery story against the fan-in correction already present on the synchronized main implementation; no duplicate production change was introduced.
+  - Confirmed the lower-layer invariant: scheduler decisions retain all observed child input token IDs in deterministic order, the dispatcher forwards those tokens to the merger Work dispatch, and only the consumed parent token produces a consume mutation.
+  - Updated `prd.json` to mark `pp-merge-context-bug-002` passed with the exact lower-layer, functional, failure-gating, and root-cause evidence.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/factory_runtime/internal/services/orchestration/scheduler ./pkg/services/factory_runtime/internal/services/orchestration/subsystems/... -count=1 -timeout 300s` — passed, including FIFO, priority, and dispatcher observed-input tests.
+  - `go test ./tests/functional/factory/packaged/plan_parallel -run '^TestPackagedPlanParallelMergerReceivesEveryUniqueCompletedChildResult$' -count=10 -v -timeout 600s` — passed all ten N=10 runs.
+  - `go test ./tests/functional/factory/packaged/plan_parallel -count=1 -v -timeout 600s` — full packaged plan-parallel suite passed.
+  - `go test ./pkg/services/factory_sessions/internal/execution/... -count=1 -timeout 600s` — all Factory Sessions execution packages passed.
+- **Learnings for future iterations:**
+  - When the owning production correction is already on main, use the existing lower-layer tests plus an observable end-to-end regression to complete the story without duplicating a fix or widening the fan-in surface.
+---

@@ -50,8 +50,8 @@
         "Tests pass"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Delivered by the current fan-in correction already present on the synchronized main implementation: scheduler decisions retain deterministic InputTokens for every matched binding while ConsumeTokens remains parent-only; the dispatcher forwards all input tokens to the Work dispatch and emits consume mutations only for the parent; the packaged merge-plan-results workstation renders Payload, PreviousOutput, or Content for every Factory input. Focused lower-layer proof remains green in TestFIFOScheduler_IncludesObservedBindingsWithoutConsumingThem, TestWorkInQueueScheduler_IncludesObservedBindingsWithoutConsumingThem, and TestDispatcher_ForwardsObservedInputsWithoutConsumingThem. The N=10 root.BuildProcess/Process.Execute regression passed 10 repeated runs and the full packaged plan-parallel suite; it proves exact-once original request and unique completed result content, generated Work association, deterministic ordering, planner-payload exclusion, and one merger dispatch. Existing all-children completion and failed-child behavior remain covered by the packaged suite and current Factory Sessions execution suites. The PR description records the historical pre-fix red result at fb7805bd8, current green result, and the two owning root causes from pp-merge-context-bug-001."
     }
   ]
 }
