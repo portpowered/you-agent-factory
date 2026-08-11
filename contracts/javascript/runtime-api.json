@@ -553,7 +553,7 @@
           },
           "description": {
             "id": "javascript.agent.run.description",
-            "canonicalEnglish": "Dispatches one child agent run from a closed spec object with a required prompt and optional model, preset, or child-scoped permission-bypass fields. skipPermissions is honored only by providers that advertise the capability; unsupported routes fail before dispatch side effects. Returns a promise that resolves to the child result object after policy checks and child_dispatch emission."
+            "canonicalEnglish": "Dispatches one child agent run from a closed spec object with a required prompt and optional model, preset, or child-scoped permission-bypass fields. skipPermissions is honored only by providers that advertise the capability; unsupported routes fail before provider execution side effects. Returns a promise that resolves to the child result object after policy checks and child_dispatch emission."
           }
         },
         "examples": [
