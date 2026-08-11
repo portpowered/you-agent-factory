@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- When reconciling a task branch against a moving mainline, keep the active task's PRD and follow-up metadata authoritative while accepting unrelated source changes from main; validate the merged JSON and preserve the append-only progress history.
 - When a dispatch identity is upgraded to a Worker Session ID in a later event batch, migrate its progress color alias instead of allocating a second color; terminal cleanup must remove the canonical identity.
 - Treat a full functional-coverage failure in an untouched fixture as a characterization problem first: repeat the exact test locally, then rerun only the failed coverage and dependent-policy jobs if it passes.
 - When a backend-size violation names a long test function, split each failure mode into a focused test and share only request/setup plumbing so every observable assertion remains intact.
@@ -8620,4 +8621,27 @@
   - `git diff --check` — passed.
 - **Learnings for future iterations:**
   - Functional validation scenarios that assert absence of provider side effects must not configure Mock Workers; inject the exact provider command-runner edge and assert its observations instead.
+---
+## [2026-08-11 02:56:56 -07:00] - cli-error-classification-and-run-output review follow-up
+- What was implemented
+  - Reconciled PR #1879 with live `origin/main` at `dd87fd04db20d755f9b44c369aa79b8c3e600f5f` after the blocking review comment reported a real merge conflict.
+  - Preserved this task's authoritative `prd.json`, including the `reviewFollowUp` note, while accepting the incoming mainline lint-tooling and functional-test changes; `progress.txt` merged cleanly.
+  - Confirmed that the merge did not change authored CLI contract inputs, so generated CLI artifacts were not hand-merged or regenerated unnecessarily.
+- Files changed
+  - Current-main lint checker/lane and maintenance-gate files carried by the synchronization merge.
+  - `tests/functional/transport/cli/parameters/json_values_test.go`
+  - `tests/functional/transport/cli/parameters/key_value_test.go`
+  - `tests/functional/transport/cli/parameters/positional_values_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/transport/cli/parameters -count=1 -timeout 600s` — passed.
+  - `go test ./pkg/services/factory_visualization/... -count=1 -timeout 600s` — passed.
+  - `go test ./tests/functional/cli/factory_run/output ./tests/functional/transport/cli/output ./tests/functional/transport/run_scoped_server -count=1 -timeout 600s` — passed.
+  - `make typecheck` and `make cli-manifest-check` — passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` — passed.
+  - PRD all-pass, merge-marker, and `git diff --check` audits — passed.
+- **Learnings for future iterations:**
+  - A shared PRD conflict can contain a different task's metadata after main advances; resolve it by retaining the active branch's complete PRD and follow-up note, then verify story flags and JSON before committing.
+  - A fresh replacement head needs new hosted CI even when the pre-conflict head was green; local focused gates establish the merge result while GitHub validates the pushed ancestry.
 ---
