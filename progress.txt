@@ -8656,3 +8656,19 @@
   - A rerun of only failed jobs is appropriate when the failed test is outside the task diff and repeated local execution passes; changing feature code would add unrelated risk.
   - The PR description must be synchronized from the updated `prd.json` after recording the final CI head.
 ---
+
+## 2026-08-11 06:39 -07:00 - e3-event-webhooks-004 final PR follow-up rerun
+- What was implemented
+  - Investigated the fresh audit-head Backend Functional Coverage failure, which was an unrelated current-main race in `TestWithServerDrainCannotReportSuccessWhileWorkIsNonTerminal`.
+  - Ran that exact functional test twice locally; both executions passed without changing Webhooks code.
+  - Reran only the failed GitHub Actions jobs and updated the delivery audit to the terminal green result for the pushed audit head.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - CI run `31495695413` attempt 2 passed all 18 required checks for exact head `6b07cde025f9ed447711fc29093fa130f4ccfdc7` against base `3521f0b0a2f313b22e2c79edcf90339a01b3bce7`.
+  - Backend Functional Coverage, Backend Unit Coverage, and Verification Policy are terminal-success; the PR remains open, non-draft, clean, mergeable, and ready for review.
+- **Learnings for future iterations:**
+  - Full functional coverage contains unrelated timing-sensitive cells; inspect the named failing test and rerun it locally before attributing a failure to the task diff.
+  - Keep the final delivery audit tied to the last pushed head whose required checks are terminal-success, then resynchronize the PR body after the audit update.
+---
