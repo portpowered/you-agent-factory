@@ -8250,3 +8250,17 @@
   - Fetch the live base immediately before final verification; a passing PR can become conflicting when main advances during CI.
   - Generated manifest conflicts should be resolved by rerunning `make contracts-generate`, then rechecking contract drift.
 ---
+
+## 2026-08-10 22:04 -07:00 - e3-event-webhooks-004 terminal exact-head audit
+- What was implemented
+  - Recorded the terminal audit for the rebased webhook implementation and synchronized the PRD's delivery evidence with the pushed head.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - All 18 required checks pass in CI run `31460102709` for head `264aa2000`.
+  - PR #1850 is open, non-draft, and currently `MERGEABLE`; its base is `origin/main` `7dbeb472a`.
+  - The PR body matches committed `prd.json` exactly, all four stories are `passes:true`, and the thread-aware audit reports no unresolved inline threads or formal review requests. The historical blocking comment is addressed by the current implementation and follow-up.
+- **Learnings for future iterations:**
+  - Treat the exact pushed head as the review artifact and synchronize PRD evidence, PR description, CI, current base, and thread state together after the final bookkeeping commit.
+---
