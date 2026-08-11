@@ -11476,3 +11476,16 @@
 - **Learnings for future iterations:**
   - When a process test owns a `StdoutPipe`, intentional `Wait`-driven teardown may report `fs.ErrClosed` instead of EOF; classify that only after the child has been deliberately reaped, not as a general observation retry.
 ---
+## [2026-08-11 09:57:53 -07:00] - thr-deflake-cli-process-package hosted rerun verification
+- What was implemented
+  - Completed the hosted replacement run after the cancellation scanner fix and confirmed the current source, merge, and metadata state are ready for final review audit.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Hosted run `31514380692` is terminal-success across all 18 required checks, including Backend Functional Coverage, Backend Unit Coverage, and Verification Policy.
+  - The rerun passed the previously failing `TestBuiltCLIDeclaredCancellationExitCodes/continuous_run` lane; no new task-specific failure was reported.
+  - The PR is clean and mergeable against `origin/main` `650b70168`; the final thread-aware conversation audit is the remaining handoff step.
+- **Learnings for future iterations:**
+  - When a hosted functional run reveals a test-only process-pipe race, record both the exact first-run failure and the terminal rerun evidence so review can distinguish a corrected flake from an unverified retry.
+---
