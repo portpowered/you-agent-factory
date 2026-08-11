@@ -1923,6 +1923,14 @@
       "minimum": 69.39
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/worker_capture/internal/service",
+      "minimum": 78.04
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/worker_capture/wire",
+      "minimum": 0.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli",
       "minimum": 97.10
     },

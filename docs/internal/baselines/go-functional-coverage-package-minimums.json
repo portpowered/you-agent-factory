@@ -2505,6 +2505,14 @@
       "minimum": 13.41
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/worker_capture/internal/service",
+      "minimum": 47.31
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/worker_capture/wire",
+      "minimum": 100.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli",
       "exception": {
         "kind": "measurement",
