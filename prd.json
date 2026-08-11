@@ -1,95 +1,87 @@
 {
-  "project": "DWRO S1 — Explicit Remote Placement and Listener Selection",
-  "branchName": "dwro-s1-remote-placement-flags",
-  "description": "Implement story S1 of Direct Worker and Remote Operations by adding persistent root --remote and authored command placement capabilities, dispatching one normalized request through either the local service or exactly the selected --server endpoint without fallback, introducing --listen for local binds with a warned legacy compatibility path, and rejecting documented conflicts with run --with-server and run --with-site.",
+  "project": "CLI BAD_REQUEST Classification and Honest Run Progress",
+  "branchName": "cli-error-classification-and-run-output",
+  "description": "Make you run classify customer invocation-argument mistakes as BAD_REQUEST failures and provide truthful non-JSON progress showing accepted work, dependency edges, active workers, and workstation/work details while preserving clean machine-readable modes.",
   "context": {
-    "customerAsk": "Implement DWRO story S1: persistent root --remote, authored command placement capabilities, endpoint-only --server, new --listen for local listener binds, no silent local fallback, and documented conflicts with run --with-server and run --with-site.",
-    "problem": "The CLI has no explicit execution-placement input and its authored manifest cannot state whether a command is local-only, remote-only, or dual-placement. The global --server flag also selects both HTTP client endpoints and local listener binds, so customers and scripts cannot unambiguously distinguish calling an existing server from hosting one, and unsupported remote requests lack one centralized no-fallback rule.",
-    "solution": "Add persistent root --remote, a resolved local/remote placement value, and per-command placement capabilities to the authored CLI contract. Normalize command inputs once and select exactly one injected local-service or HTTP-client adapter, rejecting unsupported or failed remote placement without fallback. Make --server the remote endpoint selector, add --listen to listener-owning commands, preserve explicit legacy --server binding with a deprecation warning when --listen is absent, give --listen precedence, and enforce documented usage conflicts before side effects."
+    "customerAsk": "Correct invocation-argument failures across the CLI surface so typos are reported as client errors, and add truthful you run progress showing active workers, accepted work and dependency edges, and workstation details with more useful color differentiation.",
+    "problem": "Unknown or invalid Factory invocation arguments can be rendered as INTERNAL_SERVER_ERROR, causing operators and agents to misdiagnose their own input. Human run output also hides generated work details, dependency edges, active worker state, and workstation/work associations, and its colors do not distinguish concurrent workers well.",
+    "solution": "Classify customer-correctable invocation parse and validation failures at the CLI boundary as BAD_REQUEST while preserving stable codes and exit 1. Extend the human Factory Event projection with deterministic work/dependency and worker/workstation progress, gate animation and color through terminal policy, and regenerate the authored CLI manifest contract after rebasing."
   },
   "acceptanceCriteria": [
-    "The authored CLI manifest defines persistent root --remote, a resolved local/remote placement value, and local-only, remote-only, or dual-placement capabilities for affected commands; executable help and parsing match that contract.",
-    "A representative dual-placement operation produces the same normalized request locally without --remote and sends that request to exactly the --server <uri> HTTP endpoint with --remote, with equivalent domain intent across adapters.",
-    "Unsupported remote placement, an invalid or unavailable selected server, and remote transport failure return stable actionable errors and never invoke the local product operation, start a listener, or silently select another endpoint.",
-    "you server --listen, you run --with-server --listen, and you run --with-site --listen bind the requested local address; when --listen is absent, legacy listener use of an explicitly supplied --server remains functional for the compatibility window and warns, while explicit --listen takes precedence.",
-    "--remote with run --with-server or run --with-site is rejected as a documented stable usage conflict before listener, browser, Factory, or remote-operation side effects begin; reference docs and examples use the new placement vocabulary.",
-    "Quality gates pass with direct CLI and manifest, package, functional, help and reference, and compatibility evidence as applicable; Typecheck passes, Tests pass, and there are no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
-    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared or generated-file churn are resolved against current main, and the PR is actually merged."
+    "Unknown and invalid invocation arguments across you run render one standard stderr error response with family BAD_REQUEST, retain the specific invocation error code, never claim INTERNAL_SERVER_ERROR, and exit with code 1.",
+    "A recorded non-JSON run rendering lists accepted work items with identifiers/descriptions and renders every available DEPENDS_ON edge in an unambiguous direction.",
+    "A recorded concurrent run rendering shows one status line per active worker and names each workstation together with associated work IDs when those IDs are present in canonical events.",
+    "Quiet, redirected/non-interactive, JSON, and NDJSON modes remain valid: no animation or ANSI bytes enter structured output, quiet suppresses progress, and redirected human output is deterministic.",
+    "contracts/cli/commands.json describes the resulting you run errors and output behavior; make cli-manifest-generate is run after rebasing, generated CLI manifests are never hand-merged, and every intentional golden diff is explained in the PR.",
+    "no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green; typecheck, focused CLI tests, CLI contract checks, and affected functional/golden tests pass.",
+    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared-file changes are reconciled against current main, and the PR is actually merged."
   ],
   "userStories": [
     {
-      "id": "dwro-s1-remote-placement-flags-001",
-      "title": "Declare explicit placement in the authored CLI contract",
-      "description": "As a CLI user and command implementer, I want root placement and each command's supported placements to be explicit so help, validation, and dispatch share one authoritative contract.",
+      "id": "cli-error-classification-and-run-output-001",
+      "title": "Classify invocation mistakes as client errors",
+      "description": "As a CLI user, I want invalid invocation arguments identified as my request error so that I can correct the command instead of investigating a false server failure.",
       "acceptanceCriteria": [
-        "The authored CLI manifest exposes a visible persistent root --remote boolean whose documented meaning is to execute a supported operation through a running You server; it does not imply async, follow, continuous, or listener behavior.",
-        "The executable parser resolves the root input to explicit local placement by default and remote placement when --remote appears before or after the command path, consistent with other persistent flags.",
-        "A command can authoritatively declare local-only, remote-only, or dual-placement capability, and manifest validation rejects a runnable command whose placement declaration is missing or invalid where the placement contract applies.",
-        "Existing HTTP-only commands retain their historical remote-default compatibility for this window, accept explicit --remote, and do not gain a local implementation merely to satisfy the new vocabulary.",
-        "Root and representative command help show the placement meaning and supported usage without describing --remote as a waiting or server-start option.",
-        "Focused contract and parser tests prove manifest validation, persistent flag inheritance, before and after command parsing, default placement, and explicit remote placement through observable CLI inputs and help.",
+        "An unknown Factory invocation flag produces one stderr error response with its specific INVOCATION_ARGUMENT_* code and family BAD_REQUEST, not INTERNAL_SERVER_ERROR.",
+        "Missing values, positional overflow, invalid values, and other invocation parse/validation failures that represent customer input use the BAD_REQUEST family; genuine runtime failures retain their existing non-client classification.",
+        "These usage failures exit with code 1 in normal and quiet modes and do not start worker execution or other runtime side effects.",
+        "Focused CLI and process-boundary regression tests cover the reported unknown-argument reproduction and representative validation paths using the post-PR-#1859 test layout.",
+        "The authored you run error contract records the invocation client-error behavior and generated artifacts are refreshed with make cli-manifest-generate rather than edited manually.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 1,
       "passes": true,
-      "notes": ""
+      "notes": "Implemented typed invocation-argument missing-value and static-flag parse errors, preserving existing stable ArgumentError codes and BAD_REQUEST classification. Added process-boundary coverage for the reported --planer-model typo in normal and quiet modes, dynamic/static missing values, positional overflow, and invalid JSON validation; all assert one stderr ErrorResponse, empty stdout, and zero provider calls. Updated authored CLI errors and regenerated family/published manifests with make cli-manifest-generate and make contracts-generate. Verification: focused Work/CLI packages, focused functional parameter/output tests, make cli-manifest-check, and git diff --check passed."
     },
     {
-      "id": "dwro-s1-remote-placement-flags-002",
-      "title": "Dispatch normalized operations without placement fallback",
-      "description": "As a customer, I want the same operation to run locally by default or on exactly my selected server with --remote so placement is predictable and cannot silently change during failure.",
+      "id": "cli-error-classification-and-run-output-002",
+      "title": "List accepted work and dependency edges",
+      "description": "As an operator watching a run, I want to see the work admitted by a generated batch and how items depend on one another so that I understand the execution plan behind the count.",
       "acceptanceCriteria": [
-        "At least one representative supported dual-placement command normalizes customer inputs once before dispatch, calls its already-injected local service adapter without --remote, and calls its HTTP client adapter with --remote.",
-        "Behavioral parity coverage proves the local and remote adapters receive contract-equivalent normalized request values for the same customer input, allowing only transport metadata differences.",
-        "you --remote --server <uri> <dual-placement-command> sends the operation to exactly <uri> and does not invoke the local product operation, start or probe a local listener, or substitute the default endpoint.",
-        "A local-only command invoked with --remote exits with a stable actionable usage error that identifies the unsupported placement before command side effects occur.",
-        "Invalid endpoint configuration, connection refusal, timeout, and other remote transport failures remain remote failures and do not retry through the local adapter; diagnostics identify the selected endpoint without leaking credentials or sensitive request content.",
-        "Placement selection remains a CLI transport concern: domain services receive normalized operation requests and do not inspect CLI placement flags or discover alternate dependencies.",
-        "Focused package and public CLI behavioral tests cover local dispatch, exact remote dispatch, unsupported placement, and failed remote transport with zero local fallback.",
+        "A multi-item work-accepted event renders the accepted count followed by one stable, readable entry for every canonical work item, including its ID/name and available task description without exposing private provider payloads.",
+        "Every canonical DEPENDS_ON relationship in the accepted batch is rendered once with an unambiguous source-to-prerequisite direction; independent items do not gain fabricated edges.",
+        "Single-item and empty or partially populated payloads remain readable and do not panic; absent optional descriptions or relations are omitted cleanly.",
+        "A deterministic recorded/golden rendering proves the item listing and dependency graph for a representative generated batch.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 2,
-      "passes": true,
-      "notes": "Implemented dual-placement `you run` dispatch through one normalized invocation request and an injected local or exact-URI HTTP adapter, with stable unsupported-placement and no-fallback remote errors. Refreshed authored and published CLI contract artifacts and added focused package/public CLI behavioral coverage. Verified with `make contracts-validate`, `make cli-manifest-check`, `go test ./pkg/transports/cli/run ./pkg/transports/cli ./pkg/wire ./pkg/services/workers/internal/interface -count=1`, and `make test`. Review follow-up makes invalid remote endpoint labels fail closed for parse-success/base-invalid opaque and unsupported-scheme inputs, with credential-redaction regression coverage."
+      "passes": false,
+      "notes": ""
     },
     {
-      "id": "dwro-s1-remote-placement-flags-003",
-      "title": "Bind local servers with --listen and preserve legacy scripts",
-      "description": "As an operator, I want local listener addresses selected with --listen so --server can mean a remote endpoint while my existing listener scripts have a safe migration window.",
+      "id": "cli-error-classification-and-run-output-003",
+      "title": "Show active workers and workstation work details",
+      "description": "As an operator watching concurrent execution, I want one current state line per active worker and work-aware workstation transitions so that I can tell what is running and what completed.",
       "acceptanceCriteria": [
-        "you server --listen <address>, you run --with-server --listen <address>, and you run --with-site --listen <address> bind the requested valid local address and report existing stable bind failures for invalid, non-local, or unavailable addresses.",
-        "Listener-owning commands use the existing default local bind when neither an explicit --listen nor an explicit legacy bind value is supplied.",
-        "During the compatibility window, an explicitly supplied legacy --server <local-uri> continues to select the listener bind only when --listen is absent and emits one actionable deprecation warning on stderr directing the user to --listen.",
-        "When both inputs are supplied to a listener-owning command, explicit --listen determines the bind address; --server does not override it, and compatibility diagnostics accurately explain any retained endpoint role.",
-        "Ordinary local commands and ordinary you run do not start a listener merely because --listen or the default server endpoint exists; invalid flag placement is rejected before runtime side effects.",
-        "CLI manifest relationships, help, and examples describe --listen as the local bind input and --server as the selected You server URI, including the legacy migration behavior.",
-        "Focused listener lifecycle tests use observable readiness and bind behavior and prove requested binding, precedence, warning, bind failure, and joined shutdown without arbitrary sleeps.",
+        "Each concurrent active worker or dispatch has a distinct progress line that identifies its current state and remains associated with the same worker until a terminal outcome.",
+        "Workstation queued, started, completed, failed, and interrupted output names the workstation and includes canonical work IDs consumed or completed when the event provides them.",
+        "Terminal worker outcomes stop or replace the corresponding active indication without leaving stale workers displayed, including interleaved concurrent event sequences.",
+        "A deterministic recorded/golden run proves multiple simultaneous workers and their workstation/work associations without depending on timing sleeps.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 3,
-      "passes": true,
-      "notes": "Implemented exact local listener selection through --listen for you server and server-enabled you run/you run --with-site flows, with loopback-only validation, explicit precedence over --server, one-time legacy local --server warnings, and preserved automatic legacy allocation. Ordinary runs reject misplaced --listen before the run handler, and listener lifecycle coverage proves exact readiness, unavailable-port errors, and shutdown. Refreshed authored/generated CLI contracts, command/help baselines, and reference guidance. Verified with make contracts-validate, make cli-manifest-check, make docs-reference-smoke, make test, go test ./pkg/transports/cli/... -count=1, focused CLI tests, full run-scoped-server functional tests, backend-size, pkg-maint, pkg-file-count, vet, and git diff --check; aggregate make lint is blocked by the pre-existing missing UI knip binary, and the backend-only continuation reaches existing package-boundary baseline violations; neither reports new violations."
+      "passes": false,
+      "notes": ""
     },
     {
-      "id": "dwro-s1-remote-placement-flags-004",
-      "title": "Reject remote and local-hosting conflicts and publish migration guidance",
-      "description": "As a customer, I want contradictory placement modes rejected with clear guidance so the CLI never both calls a remote server and hosts the same run locally.",
+      "id": "cli-error-classification-and-run-output-004",
+      "title": "Respect terminal policy while improving progress distinction",
+      "description": "As a CLI user, I want rich progress in an interactive terminal and clean deterministic output everywhere else so that the same command works for humans, logs, and automation.",
       "acceptanceCriteria": [
-        "you --remote run --with-server and you --remote run --with-site each exit with the same stable usage classification and actionable conflict message, regardless of persistent-flag position.",
-        "Conflict validation occurs before Factory execution, HTTP dispatch, listener startup, browser launch, recording, or other run-owned side effects.",
-        "Authored CLI relationships, executable help, and packaged reference docs state that --remote selects a running server, --server selects its URI, and --listen selects a local bind; they document both run-mode conflicts and the legacy bind migration.",
-        "New customer-facing examples use you --remote --server <uri> for supported remote operations and --listen <address> for local server or server-enabled run binding; they do not present legacy --server listener syntax as the preferred form.",
-        "Behavioral CLI tests prove both conflicts, stable exit and error output, zero side effects, and help and reference guidance rather than relying on source or route inventories.",
-        "Documentation reference smoke checks pass",
+        "In an eligible interactive non-JSON run, each active worker advances through the approved spinner frames and simultaneous workers receive visibly distinguishable colors from a varied, deterministic palette.",
+        "Progress rendering uses the existing terminal-policy decision for capabilities and channels; worker progress is sent to stderr and does not overwrite or contaminate the primary result on stdout.",
+        "Redirected or non-interactive human output uses stable status lines without cursor-control sequences, animation artifacts, or ANSI escapes, and --quiet suppresses progress.",
+        "JSON and NDJSON output remain parseable record-for-record and contain no spinner frames, ANSI escapes, or human-only workstation prose.",
+        "Existing unchanged CLI goldens remain unchanged; intentionally changed run goldens and CLI manifest artifacts are regenerated after the final rebase and each diff is explained in the PR.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 4,
-      "passes": true,
-      "notes": "Implemented stable REMOTE_LOCAL_HOSTING_CONFLICT validation before system initialization and again after custom run parsing, covering --remote before or after run with both --with-server and --with-site; behavioral tests prove no local, remote, browser, listener, or Factory side effects. Added authored conflict relationships, structured BAD_REQUEST output, executable help/examples, legacy --server migration guidance, and packaged reference documentation; regenerated published contracts and CLI baselines. Addressed review feedback by removing duplicate placement keys from authored/generated manifests, making manifest loading reject duplicate JSON object keys, redacting malformed credential-bearing endpoint diagnostics, keeping maintainability and package-file-count ratchets green, using worker-free listener functional cases, and removing marker-only docs assertions. Moved the generic strict decoder into the policy-free generated-artifact platform package and added loader/decoder coverage so the CLI manifest unit and functional floors remain intact. Verified with focused CLI tests, the full short Go suite, make verify-fast, make cli-manifest-check, make contracts-validate, make docs-reference-smoke, make pkg-maint, make pkg-file-count, backend-size, pkg-structure, vet, full run-scoped-server functional tests, and git diff --check."
+      "passes": false,
+      "notes": ""
     }
   ]
 }

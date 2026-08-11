@@ -130,7 +130,6 @@
 - **Learnings for future iterations:**
 - This checkout may have `ui/node_modules` without all lockfile dependencies; run the pinned Bun install before treating a typecheck failure as a source regression.
 ---
-
 ## 2026-08-10 04:32 -07:00 - sac-s0-2-pkg-boundary-ignores-001
 - What was implemented
   - Centralized repository-root-relative pruning for `.artifacts`, `.artifacts/bootstrap/worktrees`, generated transient worktrees, and the supported root worktree locations.
@@ -3994,4 +3993,34 @@
   - `git diff --cached --check` passed before the merge commit.
 - **Learnings for future iterations:**
   - A clean merge against a stale remote-tracking base is not sufficient; compare the live hosting ref, fetch it, and resolve shared PRD/progress files again before pushing the replacement head.
+---
+## 2026-08-10 19:41 -07:00 - cli-error-classification-and-run-output-001
+- What was implemented
+  - Classified dynamic Factory invocation missing values and static run-flag parse failures with stable `INVOCATION_ARGUMENT_*` errors, including the case where one dynamic flag is followed by another and must not consume it as a value.
+  - Added process-boundary regression coverage for the reported `--planer-model` typo in normal and quiet modes, dynamic/static missing values, positional overflow, and invalid JSON values; usage failures emit one stderr `ErrorResponse`, leave stdout empty, and make zero provider calls.
+  - Added the invocation argument error entries to the authored CLI contract and regenerated the CLI family and published contract artifacts.
+- Files changed
+  - `contracts/cli/commands.json`
+  - `packages/api/generated/cli/commands.json`
+  - `packages/api/generated/manifest.json`
+  - `pkg/services/factory_runtime/transports/cli/invocation_error.go`
+  - `pkg/services/work/internal/invocationreturnpolicy/arguments.go`
+  - `pkg/services/work/internal/invocationreturnpolicy/preparation.go`
+  - `pkg/services/work/internal/invocationreturnpolicy/preparation_test.go`
+  - `pkg/services/work/invocation_return_policy_contract.go`
+  - `pkg/transports/cli/generated/family_manifests_gen.go`
+  - `pkg/transports/cli/root_submit_batch.go`
+  - `pkg/transports/cli/run/invocation_error.go`
+  - `tests/functional/transport/cli/output/json_result_test.go`
+  - `tests/functional/transport/cli/parameters/json_values_test.go`
+  - `tests/functional/transport/cli/parameters/key_value_test.go`
+  - `tests/functional/transport/cli/parameters/positional_values_test.go`
+  - `prd.json`
+- Verification
+  - `go test ./pkg/services/work/internal/invocationreturnpolicy ./pkg/services/work ./pkg/services/factory_runtime/transports/cli ./pkg/transports/cli/run ./pkg/transports/cli` passed.
+  - Focused functional CLI output/parameter tests passed.
+  - `make cli-manifest-check` and `git diff --check` passed.
+- **Learnings for future iterations:**
+  - Dynamic Factory arguments are parsed by Work after run-level flags are removed; a value-taking argument must reject a following `--flag` token before normalization so it cannot accidentally start runtime execution.
+  - `make cli-manifest-generate` refreshes the generated Go family metadata; changes to the published `packages/api/generated/cli/commands.json` projection also require `make contracts-generate` before `make cli-manifest-check` will pass.
 ---
