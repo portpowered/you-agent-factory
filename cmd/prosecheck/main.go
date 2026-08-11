@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -28,9 +29,8 @@ func main() {
 	}
 }
 
-// run is the executable boundary for the core story. It accepts explicit
-// already-classified text files; Markdown and CLI-manifest structural
-// extraction are intentionally added by their later stories.
+// run is the executable boundary. Markdown files are structurally extracted;
+// other files retain the explicit content-class behavior used by the core.
 func run(args []string, stdout, stderr io.Writer) error {
 	cfg, err := parseConfig(args, stderr)
 	if err != nil {
@@ -50,10 +50,20 @@ func run(args []string, stdout, stderr io.Writer) error {
 	}
 
 	spans := make([]Span, 0, len(cfg.inputs))
+	var adapterFindings []Finding
 	for _, input := range cfg.inputs {
 		data, readErr := os.ReadFile(input)
 		if readErr != nil {
 			return fmt.Errorf("read prose input %s: %w", input, readErr)
+		}
+		if isMarkdownInput(input) {
+			markdownSpans, parseErr := ExtractMarkdownSpans(input, data)
+			if parseErr != nil {
+				adapterFindings = append(adapterFindings, markdownParseFinding(input, data, parseErr.Error()))
+				continue
+			}
+			spans = append(spans, markdownSpans...)
+			continue
 		}
 		spans = append(spans, Span{
 			SourcePath:  input,
@@ -65,15 +75,21 @@ func run(args []string, stdout, stderr io.Writer) error {
 		})
 	}
 
-	findings := Analyze(spans, policy)
+	findings := append(adapterFindings, Analyze(spans, policy)...)
+	findings = SortFindings(findings)
 	if len(findings) == 0 {
-		_, err = fmt.Fprintf(stdout, "prosecheck passed (%d input(s))\n", len(spans))
+		_, err = fmt.Fprintf(stdout, "prosecheck passed (%d input(s))\n", len(cfg.inputs))
 		return err
 	}
 	if err = RenderFindings(stderr, findings); err != nil {
 		return fmt.Errorf("render findings: %w", err)
 	}
 	return fmt.Errorf("prosecheck found %d blocking finding(s)", len(findings))
+}
+
+func isMarkdownInput(path string) bool {
+	extension := strings.ToLower(filepath.Ext(path))
+	return extension == ".md" || extension == ".markdown"
 }
 
 func parseConfig(args []string, stderr io.Writer) (config, error) {

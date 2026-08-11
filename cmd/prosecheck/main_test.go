@@ -290,6 +290,160 @@ func TestLexicalProtectedRangesProtectInlineCodeAndURLs(t *testing.T) {
 	}
 }
 
+func TestExtractMarkdownSpansCoversSupportedStructures(t *testing.T) {
+	content := strings.Join([]string{
+		"# Guide",
+		"",
+		"The description explains the current state.",
+		"",
+		"1. Run the command and inspect the result.",
+		"- A descriptive list item.",
+		"",
+		"> [!NOTE]",
+		"> The note explains the current state.",
+		"",
+		"!!! warning",
+		"",
+		"   The warning explains the recovery path.",
+		"",
+		"| Name | Description |",
+		"| --- | --- |",
+		"| Factory | A saved definition. |",
+		"",
+		"<!-- The comment explains the current state. -->",
+		"",
+		"```sh",
+		"# Start the local server before sending the request.",
+		"you server --listen 127.0.0.1:7437",
+		"```",
+	}, "\n")
+
+	spans, err := ExtractMarkdownSpans("docs/guide.md", []byte(content))
+	if err != nil {
+		t.Fatalf("ExtractMarkdownSpans() error = %v", err)
+	}
+	if len(spans) != 12 {
+		t.Fatalf("ExtractMarkdownSpans() returned %d spans: %#v", len(spans), spans)
+	}
+	want := []struct {
+		text  string
+		class ContentClass
+		line  int
+		col   int
+	}{
+		{"Guide", ContentClassLabel, 1, 3},
+		{"The description explains the current state.", ContentClassDescriptive, 3, 1},
+		{"Run the command and inspect the result.", ContentClassProcedural, 5, 4},
+		{"A descriptive list item.", ContentClassDescriptive, 6, 3},
+		{"The note explains the current state.", ContentClassDescriptive, 9, 3},
+		{"The warning explains the recovery path.", ContentClassDescriptive, 13, 4},
+		{"Name", ContentClassLabel, 15, 3},
+		{"Description", ContentClassLabel, 15, 10},
+		{"Factory", ContentClassDescriptive, 17, 3},
+		{"A saved definition.", ContentClassDescriptive, 17, 13},
+		{"The comment explains the current state.", ContentClassDescriptive, 19, 6},
+		{"Start the local server before sending the request.", ContentClassProcedural, 22, 3},
+	}
+	for index, expected := range want {
+		if spans[index].Text != expected.text || spans[index].Class != expected.class || spans[index].StartLine != expected.line || spans[index].StartColumn != expected.col {
+			t.Fatalf("span %d = %#v, want text=%q class=%s at %d:%d", index, spans[index], expected.text, expected.class, expected.line, expected.col)
+		}
+	}
+}
+
+func TestMarkdownAdmonitionVariantsExtractNaturalContent(t *testing.T) {
+	content := strings.Join([]string{
+		"> [!NOTE] A note explains the current state.",
+		"",
+		":::warning",
+		"A warning explains the recovery path.",
+		":::",
+	}, "\n")
+	spans, err := ExtractMarkdownSpans("docs/admonitions.md", []byte(content))
+	if err != nil {
+		t.Fatalf("ExtractMarkdownSpans() error = %v", err)
+	}
+	if len(spans) != 2 || spans[0].Text != "A note explains the current state." || spans[1].Text != "A warning explains the recovery path." {
+		t.Fatalf("admonition spans = %#v, want both natural-language bodies", spans)
+	}
+}
+
+func TestAnalyzeMarkdownProtectsTechnicalTextAndReportsNaturalProse(t *testing.T) {
+	policy := loadRepositoryPolicy(t)
+	content := strings.Join([]string{
+		"Keep `CPN; don't` and `POST /factory-sessions/sync` exact.",
+		"The service doesn't stop; now.",
+		"",
+		"```sh",
+		"# Start the local server before sending the request.",
+		"you server --listen 127.0.0.1:7437",
+		"```",
+	}, "\n")
+	findings := AnalyzeMarkdown("docs/guide.md", []byte(content), policy)
+	if len(findings) != 2 {
+		t.Fatalf("AnalyzeMarkdown() returned %d findings: %#v", len(findings), findings)
+	}
+	if findings[0].RuleID != RuleContraction || findings[0].StartLine != 2 || findings[0].Excerpt != "doesn't" {
+		t.Fatalf("first Markdown finding = %#v, want contraction on line 2", findings[0])
+	}
+	if findings[1].RuleID != RuleSemicolon || findings[1].StartLine != 2 || findings[1].Excerpt != ";" {
+		t.Fatalf("second Markdown finding = %#v, want semicolon on line 2", findings[1])
+	}
+	for _, finding := range findings {
+		assertStableFingerprint(t, finding)
+	}
+}
+
+func TestMarkdownLinkDestinationProtectionKeepsLabelNatural(t *testing.T) {
+	policy := loadRepositoryPolicy(t)
+	findings := AnalyzeMarkdown("docs/links.md", []byte("the [factory](./factory.json) starts."), policy)
+	if len(findings) != 1 || findings[0].RuleID != RuleTermCase || findings[0].Excerpt != "factory" || findings[0].StartColumn != 6 {
+		t.Fatalf("link findings = %#v, want visible label term-case at column 6", findings)
+	}
+}
+
+func TestAnalyzeMarkdownBlocksOnUnsafeDocumentsAndNormalizesLineEndings(t *testing.T) {
+	policy := loadRepositoryPolicy(t)
+	broken := AnalyzeMarkdown("docs/broken.md", []byte("```sh\n# comment\n"), policy)
+	if len(broken) != 1 || broken[0].RuleID != RuleParse || broken[0].SourcePath != "docs/broken.md" || !strings.Contains(broken[0].Excerpt, "unclosed") {
+		t.Fatalf("unclosed Markdown fence findings = %#v, want one file-scoped B-PARSE finding", broken)
+	}
+	invalid := AnalyzeMarkdown("docs/invalid.md", []byte{0xff, '\n'}, policy)
+	if len(invalid) != 1 || invalid[0].RuleID != RuleParse || invalid[0].SourcePath != "docs/invalid.md" {
+		t.Fatalf("invalid UTF-8 findings = %#v, want one file-scoped B-PARSE finding", invalid)
+	}
+	for name, source := range map[string]string{
+		"inline code": "Keep `an unclosed literal in prose.",
+		"table":       "| Name | Description |\n| --- |",
+	} {
+		findings := AnalyzeMarkdown("docs/"+name+".md", []byte(source), policy)
+		if len(findings) != 1 || findings[0].RuleID != RuleParse {
+			t.Fatalf("%s parse findings = %#v, want one B-PARSE finding", name, findings)
+		}
+	}
+
+	unix := AnalyzeMarkdown("docs/guide.md", []byte("# Guide\n\nThe service doesn't stop.\n"), policy)
+	windows := AnalyzeMarkdown("docs/guide.md", []byte("# Guide\r\n\r\nThe service doesn't stop.\r\n"), policy)
+	if !reflect.DeepEqual(unix, windows) {
+		t.Fatalf("line endings changed Markdown findings:\nunix=%#v\nwindows=%#v", unix, windows)
+	}
+}
+
+func TestMarkdownMetadataProvidesExplicitClassificationAndBoundedSuppression(t *testing.T) {
+	policy := loadRepositoryPolicy(t)
+	content := strings.Join([]string{
+		"<!-- prosecheck:class procedural -->",
+		"Run the command and inspect the result before you continue with the next required operation for this workflow today very carefully now.",
+		"",
+		"<!-- prosecheck:ignore B-SEMICOLON reason=\"contract wording\" owner=\"Docs\" review=\"2026-12-31\" -->",
+		"One; two.",
+	}, "\n")
+	findings := AnalyzeMarkdown("docs/metadata.md", []byte(content), policy)
+	if len(findings) != 1 || findings[0].RuleID != RuleProceduralSentenceLength || findings[0].ContentClass != ContentClassProcedural || findings[0].StartLine != 2 {
+		t.Fatalf("metadata findings = %#v, want one procedural-length finding on line 2", findings)
+	}
+}
+
 func TestRunReadsExplicitInputsAndKeepsOutputStable(t *testing.T) {
 	root := t.TempDir()
 	standardPath, termsPath := repositoryPolicyPaths(t)
@@ -318,6 +472,23 @@ func TestRunReadsExplicitInputsAndKeepsOutputStable(t *testing.T) {
 	}
 	if stdout.Len() != 0 || !strings.Contains(stderr.String(), "[B-SEMICOLON]") {
 		t.Fatalf("run(invalid) output = stdout %q stderr %q", stdout.String(), stderr.String())
+	}
+}
+
+func TestRunDispatchesMarkdownInputs(t *testing.T) {
+	root := t.TempDir()
+	standardPath, termsPath := repositoryPolicyPaths(t)
+	path := filepath.Join(root, "guide.md")
+	if err := os.WriteFile(path, []byte("# Guide\r\n\r\nThe service doesn't stop.\r\n"), 0o600); err != nil {
+		t.Fatalf("write Markdown input: %v", err)
+	}
+	var stdout, stderr bytes.Buffer
+	err := run([]string{"-standard", standardPath, "-terms", termsPath, path}, &stdout, &stderr)
+	if err == nil || !strings.Contains(err.Error(), "found 1 blocking finding") {
+		t.Fatalf("run(Markdown) error = %v, want blocking finding error", err)
+	}
+	if stdout.Len() != 0 || !strings.Contains(stderr.String(), ":3:13 [B-CONTRACTION]") {
+		t.Fatalf("run(Markdown) output = stdout %q stderr %q", stdout.String(), stderr.String())
 	}
 }
 
