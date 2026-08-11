@@ -846,7 +846,7 @@ func TestNewRunServerFamilyComponentsRegistersLocalFlags(t *testing.T) {
 		"runtime-log-max-age-days", "runtime-log-compress", "runtime-metrics-dir",
 		"runtime-metrics-max-size-mb", "runtime-metrics-max-backups",
 		"runtime-metrics-max-age-days", "runtime-metrics-compress", "with-mock-workers",
-		"with-server", "with-site", "quiet", "output", "skip-permissions", "port",
+		"with-server", "with-site", "quiet", "output", "skip-permissions", "port", "listen",
 		"provider", "model", "worktree", "to-file",
 	} {
 		if components.Run.Flags().Lookup(flagName) == nil {
@@ -921,6 +921,7 @@ func testRunServerBindings() RunServerFlagBindings {
 		"you.run.flag.worktree", "you.run.flag.to-file",
 		"you.run.flag.runtime-log-dir", "you.run.flag.runtime-metrics-dir",
 		"you.run.flag.with-mock-workers", "you.run.flag.output",
+		"you.run.flag.listen", "you.server.flag.listen",
 	} {
 		targets[inputID] = testScalarTarget("")
 	}
