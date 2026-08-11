@@ -11761,3 +11761,18 @@
 - **Learnings for future iterations:**
   - A completed PR with no new actionable feedback needs only an append-only exact-head audit, PRD/PR-body synchronization, and a fresh hosted-status check; avoid reopening already-reviewed implementation work.
 ---
+## 2026-08-11 11:05 -07:00 - js-skip-permissions-parity-004 functional coverage retry
+- What was implemented
+  - Investigated the replacement-head Backend Functional Coverage failure without changing product or test code; the named event-stream and workers/mock tests are outside this PR’s diff and reproduced as timing/install contention rather than a JavaScript bypass regression.
+  - Reran only the failed Backend Functional Coverage job and its dependent Verification Policy job after both exact subtests passed in local characterization.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/events/response_events -run '^TestFactoryResponseEventSequenceSurvivesSessionRuntimeReplacement$' -count=10 -v -timeout 600s` — passed 10/10.
+  - The workers/mock characterization passed 9/10; its single failure was unrelated packaged-factory staging/install contention, while the hosted failure’s post-shutdown assertion did not recur. The test file is untouched by this PR.
+  - Hosted Backend Functional Coverage retry job `93886025400` passed, including pinned real ACP evidence; dependent Verification Policy job `93887535105` passed.
+  - All other jobs in workflow run `31522233204` remained successful; `git diff --check` and the all-pass PRD validation remain clean.
+- **Learnings for future iterations:**
+  - Broad functional coverage can fail in multiple untouched fixtures during one contended run; characterize each named subtest, distinguish product assertions from setup/install contention, and rerun only the failed coverage/policy jobs when the focused evidence is green.
+---
