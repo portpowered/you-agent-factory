@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- Do not junction a temporary worktree's `node_modules` to a sibling worktree; Windows worktree cleanup can follow workspace links into tracked package files. Use isolated dependencies and remove the temporary worktree without cross-worktree links.
 - Normative customer-prose policy belongs under `docs/internal/standards/writing`; use `docs/architecture/data-model.md` and public contracts for product meaning, and keep exact machine/technical literals separate from reviewable natural-language prose.
 - The canonical product vocabulary source is `docs/internal/standards/writing/customer-technical-terms.yaml`; keep every record on one explicit schema and point its owner to the architecture or public-contract source of meaning.
 - Documentation-only stories should validate authored structured data as review evidence and leave source-scanning or meta-test enforcement to a real consumer; source shape alone is not observable customer behavior.
@@ -8980,4 +8981,19 @@
   - The replacement-head documentation, typecheck, ratchet, lint-comparison, and hosted-CI checks remain to be run after this bookkeeping update.
 - **Learnings for future iterations:**
   - Resolve moving-base conflicts by keeping the active task PRD authoritative and unioning append-only progress histories; validate the index, markers, and parsed PRD before starting replacement-head gates.
+---
+## [2026-08-11 02:31:48 -07:00] - prose-standard-and-terms-003 final current-main audit
+- What was implemented
+  - Completed the replacement-head audit after synchronizing with `origin/main` at `0e7df069f80518287a7905558a525ac196b11bc0`; no additional prose or terminology changes were required.
+  - Recorded the exact head-versus-base lint comparison and post-merge verification evidence for PR #1869.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `make typecheck`, `make docs-reference-smoke`, `make ownership-inventory-check`, `make backend-size`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, and `make vet` passed sequentially.
+  - `make -k lint` on replacement head `7a52a0e6b` and exact current `origin/main` both exited with the same known baseline findings: 175 `pkg-boundary` violations, the existing packaged-factory consumption violation, deadcode baseline 350 versus current 546, and passing ownership inventory.
+  - `git merge-base --is-ancestor origin/main HEAD`, `git merge-tree --write-tree origin/main HEAD`, conflict-marker scan, `git diff --check`, and the parsed PRD/YAML validation all pass; all three stories remain `passes:true` and the worktree is clean.
+  - The temporary exact-base audit worktree was removed after comparison; the branch's tracked UI package files were verified restored from `HEAD` after Windows workspace-link cleanup.
+  - Replacement-head hosted CI and final PR conversation audit remain pending after the push.
+- **Learnings for future iterations:**
+  - A no-new-lint claim is strongest when the identical lint target is run on the exact fetched base and replacement head, with baseline counts compared rather than treating aggregate baseline failures as task regressions.
 ---
