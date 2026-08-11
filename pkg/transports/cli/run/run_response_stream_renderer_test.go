@@ -785,3 +785,79 @@ func TestInvocationFactoryEventRenderer_ColorsOnlyTTYHumanOutput(t *testing.T) {
 		t.Fatalf("TTY colors changed human content:\ntty=%q\nredirected=%q", outputs[0], outputs[1])
 	}
 }
+
+// These fixtures are shared by the remote invocation input and response-stream
+// tests so the protocol seam has one observable test double.
+type remoteProtocolStub struct {
+	response clihttp.Response
+	err      error
+	called   bool
+	url      string
+}
+
+func (stub *remoteProtocolStub) Execute(request *http.Request) (clihttp.Response, error) {
+	stub.called = true
+	if request != nil && request.URL != nil {
+		stub.url = request.URL.String()
+	}
+	return stub.response, stub.err
+}
+
+func (stub *remoteProtocolStub) GetJSON(context.Context, string, any) (clihttp.Response, error) {
+	return stub.response, stub.err
+}
+
+func (stub *remoteProtocolStub) PostJSON(_ context.Context, url string, _ io.Reader, _ any) (clihttp.Response, error) {
+	stub.called = true
+	stub.url = url
+	return stub.response, stub.err
+}
+
+func (stub *remoteProtocolStub) PostJSONCreated(context.Context, string, io.Reader, any) (clihttp.Response, error) {
+	return stub.response, stub.err
+}
+
+func (stub *remoteProtocolStub) PutJSON(context.Context, string, io.Reader, any) (clihttp.Response, error) {
+	return stub.response, stub.err
+}
+
+func (stub *remoteProtocolStub) PutJSONCreated(context.Context, string, io.Reader, any) (clihttp.Response, error) {
+	return stub.response, stub.err
+}
+
+func preparedRemoteArguments(prompt string) *work.PreparedInvocationInput {
+	return &work.PreparedInvocationInput{
+		NormalizedArguments: &work.NormalizedArguments{
+			Arguments: map[string]work.NormalizedArgument{
+				"prompt": {Values: []string{prompt}},
+			},
+		},
+	}
+}
+
+func remoteTextContent(t *testing.T, text string) *factoryapi.WorkContent {
+	t.Helper()
+	var part factoryapi.WorkContentPart
+	if err := part.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
+		Type: factoryapi.WorkContentPartTypeText,
+		Text: text,
+	}); err != nil {
+		t.Fatalf("build remote text content: %v", err)
+	}
+	content := factoryapi.WorkContent{part}
+	return &content
+}
+
+func boolPtr(value bool) *bool {
+	return &value
+}
+
+func durableLifecycleStatusPtr(value factoryapi.FactorySessionDurableLifecycleStatus) *factoryapi.FactorySessionDurableLifecycleStatus {
+	return &value
+}
+
+type remoteInvocationOperationFunc func(context.Context, RemoteInvocationRequest) (factoryapi.FactorySessionExecutionResponse, error)
+
+func (fn remoteInvocationOperationFunc) StartFactorySession(ctx context.Context, request RemoteInvocationRequest) (factoryapi.FactorySessionExecutionResponse, error) {
+	return fn(ctx, request)
+}
