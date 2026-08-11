@@ -86,11 +86,15 @@ func TestRunScopedServerAndSiteOwnNamedAndFileInvocationLifecycles(t *testing.T)
 			stdout, stderr := execute(
 				t, process, environment, workingDirectory, args, test.stdin,
 			)
-			if stderr != "" ||
-				!strings.Contains(stdout, "[0] factory started") ||
+			if !strings.Contains(stdout, "[0] factory started") ||
 				!strings.Contains(stdout, "--- primary result ---") ||
 				!strings.HasSuffix(stdout, wantInvocationResponse) {
 				t.Fatalf("invocation stdout=%q stderr=%q", stdout, stderr)
+			}
+			if !strings.Contains(stderr, "dispatch ") ||
+				!strings.Contains(stderr, "active at "+goalWorkstationName) ||
+				!strings.Contains(stderr, "worker ") {
+				t.Fatalf("invocation progress stderr=%q", stderr)
 			}
 			if listenerStarts.Load() != 1 || listenerStops.Load() != 1 {
 				t.Fatalf(
