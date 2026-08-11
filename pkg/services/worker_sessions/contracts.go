@@ -83,7 +83,10 @@ type Service interface {
 	// the terminal outcome commits, InvokeSession also appends one terminal
 	// KindSession record (PhaseCompleted or PhaseFailed) to Topic(req.ID); a
 	// failure publishing that record is logged and never changes the
-	// returned, already-committed Session.
+	// returned, already-committed Session. Its reservation, opening
+	// publication, admission callback, retry, control-race, terminal
+	// classification, and terminal publication use the same supervision
+	// implementation as Start; only the caller-facing wait point differs.
 	//
 	// InvokeSession is the one operation every orchestrator uses to run a
 	// Worker. It carries no executor: req.Execution.WorkstationName selects an
@@ -96,6 +99,19 @@ type Service interface {
 	// retried under this same session identity and the same open publication
 	// window, so one Worker remains one Worker on the wire across its attempts.
 	InvokeSession(ctx context.Context, req InvokeSessionRequest) (InvokeSessionResult, error)
+
+	// Start validates req, reserves the Worker Session identity, commits and
+	// verifies its opening Events record, and starts the already-resolved
+	// Workers execution under server-owned supervision. It returns only after
+	// the session has reached the Workers admission callback, so a nil error is
+	// an honest acceptance barrier rather than a promise that execution has
+	// completed. The caller context can end the admission wait without ending
+	// the reserved operation: the request ID replay remains pending until the
+	// server-owned attempt records its authoritative accepted or failed result.
+	// Once admitted, the attempt continues after the caller's context is
+	// canceled; Cancel and Terminate are the explicit control paths for an
+	// admitted execution.
+	Start(ctx context.Context, req StartRequest) (StartResult, error)
 
 	// AssociateProviderSession records the exact Providers-owned SessionRef
 	// observed by one currently supervised Worker Session attempt. The caller
@@ -256,6 +272,42 @@ type InvokeSessionRequest struct {
 	// zero value is exactly one attempt, so a caller that says nothing about
 	// retry gets the single-attempt behavior Petri dispatch has always had.
 	Retry RetryPolicy
+}
+
+// StartRequest is the asynchronous form of InvokeSessionRequest. The
+// execution must already be resolved by Workers; Worker Sessions only owns
+// identity, lifecycle, Events visibility, supervision, and the caller's
+// idempotency key. RequestID is required for Start and is intentionally not a
+// field on InvokeSessionRequest: synchronous callers retain their existing
+// session-ID conflict behavior without constructing an asynchronous transport
+// value.
+type StartRequest struct {
+	RequestID string
+	ID        string
+	Execution workers.WorkstationDispatchRequest
+	Retry     RetryPolicy
+}
+
+// Validate reports whether req carries the required caller request identity
+// and a minimally well-formed resolved Workers execution. It is pure and does
+// not reserve the request ID or mutate any caller-owned value.
+func (req StartRequest) Validate() error {
+	if strings.TrimSpace(req.RequestID) == "" {
+		return ErrInvalidStartRequestID
+	}
+	return (InvokeSessionRequest{
+		ID:        req.ID,
+		Execution: req.Execution,
+		Retry:     req.Retry,
+	}).Validate()
+}
+
+// StartResult is the detached Worker Session snapshot returned after Workers
+// admission. The snapshot may already be terminal when a Workers boundary
+// admits and completes an execution in one callback turn; completion itself
+// is never made synchronous by Start.
+type StartResult struct {
+	Session Session
 }
 
 // RetryPolicy bounds the attempts one InvokeSession call may make.
@@ -471,11 +523,34 @@ var (
 	// ErrInvalidExecutionRequest reports a Start request whose resolved
 	// Workers execution request is missing required identity fields.
 	ErrInvalidExecutionRequest = errors.New("worker session: invalid execution request")
+	// ErrInvalidStartRequestID reports an asynchronous Start request without a
+	// non-empty caller-owned idempotency key. InvokeSession does not require
+	// this value.
+	ErrInvalidStartRequestID = errors.New("worker session: start request id is required")
+	// ErrStartRequestIDConflict reports reuse of an asynchronous Start request
+	// ID with a different normalized immutable start tuple.
+	ErrStartRequestIDConflict = errors.New("worker session: start request id conflict")
 	// ErrSessionNotStartable reports Start called for an identity that is
 	// already registered outside StateReserved (already starting, running,
 	// paused, or terminal). No Workers call is made and the existing session
 	// is left unchanged.
 	ErrSessionNotStartable = errors.New("worker session: not startable")
+	// ErrStartNotAccepted reports that Start established the identity and
+	// lifecycle facts but did not reach the Workers admission callback.
+	ErrStartNotAccepted = errors.New("worker session: start not accepted")
+	// ErrStartOpeningPublication reports that Start could not commit or verify
+	// the opening Worker Session Events record before handing off to Workers.
+	ErrStartOpeningPublication = errors.New("worker session: opening publication failed")
+	// ErrEventTopicUnavailable reports that the opening record was not
+	// readable and subscribable through the Events contract required by Start's
+	// readiness barrier.
+	ErrEventTopicUnavailable = errors.New("worker session: event topic unavailable")
+	// ErrStartAdmissionFailed reports a Workers boundary failure before the
+	// admission callback became observable.
+	ErrStartAdmissionFailed = errors.New("worker session: admission failed")
+	// ErrStartServerStopping reports an asynchronous start rejected because
+	// the owning server/process lifecycle is stopping or has stopped.
+	ErrStartServerStopping = errors.New("worker session: server is stopping")
 	// ErrPublicationNotOpen reports PublishRecord called for a session whose
 	// publication window is not open: the session was only ever reserved,
 	// its opening record has not yet committed, or its terminal record has

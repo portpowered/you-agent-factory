@@ -1,0 +1,11 @@
+type: object
+additionalProperties: false
+properties:
+  maxAttempts:
+    type: integer
+    minimum: 0
+    maximum: 16
+    default: 0
+    description: >-
+      Total provider attempts, where zero and one both mean one attempt.
+      Values above 16 are rejected at the HTTP boundary.

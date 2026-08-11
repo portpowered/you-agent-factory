@@ -9,9 +9,10 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-func validStartRequestForContractTest() workersessions.InvokeSessionRequest {
-	return workersessions.InvokeSessionRequest{
-		ID: "worker-1",
+func validStartRequestForContractTest() workersessions.StartRequest {
+	return workersessions.StartRequest{
+		RequestID: "request-1",
+		ID:        "worker-1",
 		Execution: workers.WorkstationDispatchRequest{
 			WorkstationName: "review",
 			Execution: workers.WorkstationExecutionRequest{
@@ -32,6 +33,14 @@ func TestStartRequest_Validate_RejectsEmptySessionID(t *testing.T) {
 	req.ID = "   "
 	if err := req.Validate(); !errors.Is(err, workersessions.ErrInvalidSessionID) {
 		t.Errorf("Validate() = %v, want ErrInvalidSessionID", err)
+	}
+}
+
+func TestStartRequest_Validate_RejectsMissingRequestID(t *testing.T) {
+	req := validStartRequestForContractTest()
+	req.RequestID = " \t"
+	if err := req.Validate(); !errors.Is(err, workersessions.ErrInvalidStartRequestID) {
+		t.Fatalf("Validate() = %v, want ErrInvalidStartRequestID", err)
 	}
 }
 

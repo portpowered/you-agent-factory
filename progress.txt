@@ -5,10 +5,20 @@
 - Cross-host graph semantics should enter React Flow nodes as a disposable package projection and render through the shared workstation node; host-specific activity metadata must remain decoration, not classification.
 - Normalize trimmed blank durable identifiers to absent before authored-versus-runtime joins; only non-empty IDs select identity, otherwise use the documented legacy-name fallback.
 - First-party packaged Factory semantic checks should consume parsed canonical definitions inside `internal/packagedfactorycatalog`; keep customer-authored and JavaScript Factory validation unchanged.
-- Keep packaged-installation validation on an optional catalog-owned preparation hook; ordinary named-Factory persistence stays strict while only exact first-party identities may filter named lifecycle-bridge targets.
+- Keep packaged installation on an explicit catalog-owned `PackagedFactoryPersistence` capability; ordinary named-Factory persistence stays strict while only exact first-party identities may filter named lifecycle-bridge targets.
 - A lifecycle-only Work state is valid only through a named production bridge that matches the runtime contract and has direct behavioral test evidence; do not use comment-only allowlists.
 - When a catalog audit finds a lifecycle state that the current runtime does not emit, leave it as explicit follow-up work rather than relaxing validation with a guessed bridge; source comments and stale diagrams are not behavioral evidence.
 - When reconciling a task branch against a moving mainline, keep the active task's PRD and follow-up metadata authoritative while accepting unrelated source changes from main; validate the merged JSON and preserve the append-only progress history.
+- Keep synchronous and asynchronous entry points on one domain-owned
+  preparation/supervision path; parameterize lifecycle ownership and caller
+  wait semantics instead of duplicating reservation, opening, and admission
+  logic.
+- When a package is constrained to one named root service interface, keep a
+  peer lifecycle hook structural and optional; let composition detect the
+  narrow method without widening every test double or alternate adapter.
+- Shutdown should close new async admission before closing the Workers pool,
+  route admitted server-owned work through its existing cancellation boundary,
+  and join both terminal publication and the supervision driver's final tail.
 - When a dispatch identity is upgraded to a Worker Session ID in a later event batch, migrate its progress color alias instead of allocating a second color; terminal cleanup must remove the canonical identity.
 - Treat a full functional-coverage failure in an untouched fixture as a characterization problem first: repeat the exact test locally, then rerun only the failed coverage and dependent-policy jobs if it passes.
 - When a backend-size violation names a long test function, split each failure mode into a focused test and share only request/setup plumbing so every observable assertion remains intact.
@@ -20,12 +30,14 @@
 - Terminal lifecycle publication must require the opening record's committed publication window; a failed opening must never be followed by a terminal append that becomes topic position 1.
 - Root-built direct-JavaScript functional probes that do not invoke a worker can run without `--with-mock-workers`; keep Mock Workers usage inside the feature-owning test cells.
 - Cancellation-sensitive functional fixtures must signal provider-edge entry before issuing an interrupt; a published RUNNING status can precede provider handoff and otherwise makes context-cancellation assertions race.
+- Functional HTTP disconnect evidence should keep the request unread on a raw connection, gate a real provider command runner, and observe terminal state through an independent public SSE client; canceling a context after a completed response is not a disconnect proof.
 - When a Windows coverage wrapper times out, inspect its exact process tree and terminate only that invocation's descendants; preserve concurrent test processes.
 - When splitting oversized same-package tests into focused files, remove stale file/maintainability exemptions and update the package file-count baseline for the intentional net increase; keep shared fixtures in one package-local helper file.
 - Public CLI manifest additions require regenerating family metadata and the published CLI contract, then updating command input/help/tree baselines.
 - Reviewed functional CLI coverage requires a sorted scenario declaration, an evidence-registry entry, a manifest mapping, and one literal `functionalevidence.Covers` marker.
 - Package-target discovery is the stable-sorted set of directories containing non-test Go sources; adding a durable service owner requires updating the checker vocabulary and its live top-level inventory before regenerating the manifest.
 - Boundary check compatibility bridges should be exact package/type exceptions with request-scoped rationale; broad service-prefix allowlists can hide new durable ownership claims.
+- When hosted Go coverage reports a per-package floor regression, use its exact package diagnostic to target deterministic branch tests and verify the package floor independently before rerunning the broader lane.
 - Compatibility guard exceptions must match the reviewed method/field shape as well as the package and type name; name-only exemptions can hide ownership-expanding contract growth.
 - When an ownership burn-down ledger is corrected, regenerate it as an explicit empty array and reject retired rows so stale debt cannot silently return.
 - JSON Schema worker diagnostics must use `ErrorKind.KeywordPath()` and typed schema metadata; localized `ValidationError.Error()` text can leak rejected values and compiler-expanded host paths.
@@ -33,6 +45,8 @@
 - Optional native JSON channels use an explicit presence bit plus custom JSON at durable boundaries to distinguish omitted values from JSON null; clone map/slice trees at projection and transport ownership boundaries.
 - Generated `interface{}` transport types collapse explicit JSON null during ordinary decoding; inspect raw HTTP/SSE JSON at the transport boundary and carry an internal normalized marker until final rendering.
 - For final PR handoff, compare the PR body byte-for-byte with `prd.json` and use the thread-aware GraphQL review audit because flat PR comments do not expose inline-thread resolution state.
+- Worker Session async idempotency should claim the caller key and stable session identity in one lock transaction before publication or dispatch, then replay a detached tuple and stored outcome.
+- Root-built functional Worker tests can make mock script execution deterministic by injecting the same gated command runner into both provider and script command edges; the mock-worker mode may route a model-backed workstation through either edge.
 - OS-boundary functional tests may poll an isolated durable filesystem checkpoint only when the child exposes no parent-process event or injected edge; document that reason at each polling helper and keep the bound as a failure guard.
 - Git Worktree preparation treats a retained Git `*.lock` as indeterminate ownership: retry within a named bound, preserve the resource, and return its exact path with verify/remove/retry guidance.
 - Git's `.git/config.lock` has no trustworthy owner or PID evidence; after a bounded retry, report the exact lock with `owner_liveness=indeterminate` and require verification before removing only that file—never auto-delete it.
@@ -56,6 +70,7 @@
 - Treat repository-enforcement inventories and architecture guards as project-enabling PRD criteria when they have no runtime, API, CLI, UI, or emitted-event behavior; source scans support enforcement but are not customer-behavior evidence.
 - AST scanners must expand grouped Go field declarations before indexing parameter or result types; a field-count helper can exceed the AST field-list length and panic on valid source.
 - Asynchronous service characterizations should wait on observed edge/context signals rather than arbitrary `time.After` ceilings; the test context remains the failure escape hatch.
+- Server-owned async acceptance needs a distinct admission signal from publication and terminal completion; record pre-admission control intent before releasing that signal so a racing cancel cannot be acknowledged as accepted.
 - Continuous Petri service sessions intentionally remain `IDLE` after terminal Work; characterize the dispatch and Work/progress projection as the caller-visible result and assert the live-result route's typed unavailability instead of inventing a finite session result.
 - Use an authored capacity-one resource in a deterministic fixture to serialize multi-work dispatches when exact Factory Event order must be characterized; this avoids sleeps and preserves the real dispatch/resource boundary.
 - Correlate batch history from both sources: request/relationship and dispatch identity live in Factory Event context, while terminal per-work state is carried by dispatch-response outputWork.
@@ -7216,6 +7231,151 @@
 ## [2026-08-10 20:06 -07:00] - graph-workstation-semantics-002 verification follow-up
 - What was implemented
   - Recorded the final typecheck attempt and its environment prerequisite failure in the task bookkeeping.
+
+## 2026-08-10 22:27 -07:00 - dwro-s2-server-owned-start-001
+- What was implemented
+  - Added the Worker Sessions `Start` operation for already-resolved Workers executions.
+  - Gated successful return on the opening SESSION/STARTED record being retained-readable and subscribable, followed by the Workers admission callback.
+  - Reused the existing retry, control, provider-association, and exactly-once terminal supervision path; asynchronous attempts run under a detached server-owned context while synchronous `InvokeSession` remains unchanged at its caller-facing boundary.
+  - Recorded pre-admission cancellation intent so a racing Cancel cannot be acknowledged as accepted, and added stable start/readiness/admission error classifications plus safe structured outcome logs.
+- Files changed
+  - `pkg/services/worker_sessions/contracts.go`
+  - `pkg/services/worker_sessions/doc.go`
+  - `pkg/services/worker_sessions/internal/service/service.go`
+  - `pkg/services/worker_sessions/internal/service/control.go`
+  - `pkg/services/worker_sessions/internal/service/invoke_session.go`
+  - `pkg/services/worker_sessions/internal/service/start_test.go`
+  - `pkg/services/worker_sessions/internal/service/start_side_effects_test.go`
+  - `pkg/services/worker_sessions/internal/service/fakes_test.go`
+  - Factory Runtime test service doubles updated for the expanded Worker Sessions contract.
+  - `prd.json`
+- Verification
+  - `go test ./pkg/services/worker_sessions/... -count=1` passed.
+  - `go test -race ./pkg/services/worker_sessions/... -count=1` passed before the final test relocation; focused race tests passed after relocation.
+  - Affected Factory Runtime package tests and compile-only coverage passed; `go vet` passed.
+  - `make backend-size` and `make pkg-maint` passed after keeping touched files within repository limits; `make pkg-file-count` passed.
+  - `make lint` remains blocked by the environment's missing `knip` binary in the UI deadcode target; the repository-wide package-boundary target reports pre-existing baseline violations unrelated to this change.
+- **Learnings for future iterations:**
+  - Keep the async start acceptance signal distinct from publication and terminal completion, and reserve the admission signal for starts with no queued pre-admission control.
+  - The Worker Sessions package is already at its file-count budget; move focused implementation or tests into existing responsibility-aligned files and rerun backend-size/pkg-maint after additions.
+---
+## [2026-08-10 23:06 -07:00] - dwro-s2-server-owned-start-002
+- What was implemented
+  - Made asynchronous `StartRequest` distinct from synchronous `InvokeSessionRequest` and required a non-empty caller `RequestID`.
+  - Added an atomic Worker Sessions replay registry that stores a detached normalized start tuple and original acceptance/failure outcome before any opening publication or Workers admission.
+  - Same-key identical starts now converge before, during, and after execution; tuple conflicts return a typed idempotency error; invalid requests do not consume keys; deterministic pre-admission failures replay without replacement work.
+  - Added deterministic replay, conflict, failure-replay, and concurrent-submission tests, plus the Factory Runtime test-double conversions required by the distinct contract.
+- Files changed
+  - `pkg/services/worker_sessions/contracts.go`
+  - `pkg/services/worker_sessions/internal/service/control.go`
+  - `pkg/services/worker_sessions/internal/service/service.go`
+  - `pkg/services/worker_sessions/internal/service/fakes_test.go`
+  - `pkg/services/worker_sessions/internal/service/start_test.go`
+  - `pkg/services/worker_sessions/start_test.go`
+  - Factory Runtime test doubles under `pkg/services/factory_runtime/`
+  - `prd.json`
+- Verification
+  - `go test ./pkg/services/worker_sessions/... -count=1` passed.
+  - `go test -race ./pkg/services/worker_sessions/internal/service -count=1` passed.
+  - Affected Factory Runtime tests, full `make test`, `make backend-size`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, and `go vet ./...` passed.
+  - `make typecheck` remains environment-blocked by missing UI Bun type definitions; no UI files changed.
+- **Learnings for future iterations:**
+  - Keep idempotency replay state in the Worker Sessions owner and compare cloned canonical values; reserve the caller key and session identity in one mutex transaction before downstream effects.
+  - When a strict package file budget prevents a focused helper file, place small lifecycle-coordination helpers in an existing responsibility-aligned owner and rerun both backend-size and package-file-count gates.
+---
+## 2026-08-10 23:54 -07:00 - dwro-s2-server-owned-start-003
+- What was implemented
+  - Exposed the Worker Sessions asynchronous start contract through typed `POST /worker-sessions`.
+  - Added authored request/response/retry/resolved-execution OpenAPI schemas, stable conflict/unavailable responses, and safe error codes; regenerated the bundled OpenAPI, Go server/client contracts, and TypeScript client.
+  - Added one strict HTTP decode-and-map boundary that delegates only to Worker Sessions `Start`, returns `202 Accepted` after the reservation, Events readiness, and Workers admission barrier, and returns the stable Worker Session identity plus deterministic Events topic without waiting for terminal output.
+  - Added stable 400/409/503 mapping for malformed input, bounded retry violations, idempotency/session conflicts, opening/event readiness failures, and admission failures. Same-key replay and duplicate suppression remain owned by the Worker Sessions service.
+- Files changed
+  - `api/openapi-main.yaml` and authored Worker Session start schemas/responses under `api/components/`.
+  - `api/openapi.yaml`, `packages/api/generated/manifest.json`, `packages/api/generated/openapi/openapi.yaml`, `pkg/transports/http/generated/server.gen.go`, `pkg/transports/http/client/client.gen.go`, `ui/src/api/generated/openapi.ts`, and `ui/packages/client/src/generated/openapi.ts`.
+  - `pkg/services/worker_sessions/transports/http/adapter.go`, `mapping.go`, `handler.go`, and `handler_test.go`.
+  - `pkg/transports/http/server.go` and `pkg/transports/http/application/handler.go`.
+  - `prd.json`.
+- Verification
+  - `make generate-api` passed.
+  - `make interfaces-all` passed, including packaged API and UI client artifacts.
+  - `make api-smoke` passed, including generated-artifact drift, HTTP contract alignment, and provider parity.
+  - `make test` passed the full short unit lane after the packaged contract artifacts were regenerated; `TestMockWorkersSchema_StaleStagingDetectedByContractCheck` now passes with the complete generated artifact set.
+  - Affected Worker Sessions, HTTP, contract, mapping, and CLI Go tests passed; focused `go vet` passed.
+  - `git diff --check` passed. Repository `make typecheck` remains blocked by pre-existing UI test-helper assertion typings; a full unscoped Go test run exceeded the local five-minute command budget, while all affected suites passed.
+- **Learnings for future iterations:**
+  - Add `x-enum-varnames` to new OpenAPI enums when their values overlap existing generated enum constants; otherwise code generation can rename unrelated public identifiers.
+  - Keep typed transport schemas aligned with the Workers request shape, but preserve Worker Sessions ownership of admission, idempotency, and stable failure classification in the service boundary.
+---
+## [2026-08-11 00:45 -07:00] - dwro-s2-server-owned-start-004
+- What was implemented
+  - Replaced request-derived asynchronous execution lifetime with a Worker Sessions-owned process lifecycle context and made the caller context cancel only the admission wait; a canceled caller leaves the request-ID replay authoritative until the server-owned attempt accepts or fails.
+  - Added a server-owned supervisor driver completion barrier, shutdown admission gate, idempotent lifecycle stop, and explicit shutdown termination through the existing Workers cancellation boundary. Terminal publication remains live until callbacks and driver tails have joined, then the lifecycle context is canceled.
+  - Wired Factory Runtime shutdown to stop server-owned asynchronous Worker Sessions before the dispatch planner and Workers pool, while leaving synchronous InvokeSession supervisors on their existing control path. Added stable HTTP handling for caller cancellation and server-stopping rejection.
+  - Added deterministic disconnect-before/after-admission, replay, exact terminal-event, shutdown-join, and runtime shutdown-order assertions.
+- Files changed
+  - `pkg/services/worker_sessions/internal/service/service.go`, `publish_record.go`, `control.go`, and `invoke_session.go`
+  - `pkg/services/worker_sessions/contracts.go`, `doc.go`, and HTTP handler tests/mapping
+  - `pkg/services/factory_runtime/internal/services/orchestration/runtime/worker_pool.go` and `factory_modes_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `make test` passed.
+  - `make typecheck` passed.
+  - `go test -race ./pkg/services/worker_sessions/...` passed.
+  - Affected Factory Runtime tests, `go vet ./pkg/services/worker_sessions/... ./pkg/services/factory_runtime/...`, `make backend-size pkg-maint pkg-file-count pkg-structure`, and `git diff --check` passed.
+- **Learnings for future iterations:**
+  - Keep optional lifecycle capabilities structural when the service root is constrained to one named interface; composition can type-assert the narrow `Stop(context.Context) error` method without widening every fake.
+  - A canceled admission waiter must not finalize the request replay; let a detached owner finish the state machine so a retry sees the authoritative accepted or failed result.
+  - Runtime shutdown must target only server-owned asynchronous supervisors; synchronous InvokeSession work is still joined by its existing Factory Runtime/Workers control path.
+---
+## [2026-08-11 01:25 -07:00] - dwro-s2-server-owned-start-004
+- What was implemented
+  - Added root-built functional HTTP coverage for an admitted direct Worker surviving cancellation of the submitting request and for server shutdown canceling and joining the admitted Worker.
+  - The process-boundary tests use a deterministic injected command gate, assert same-requestId replay does not duplicate the Worker command, and verify shutdown reaches the command context without arbitrary sleeps.
+- Files changed
+  - `tests/functional/workers/transports/http/worker_sessions_lifecycle_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/runtime_api -run 'TestWorkerSessionHTTP(DisconnectKeepsAdmittedWorkerAlive|ShutdownJoinsAdmittedWorker)$' -count=1 -v` passed.
+  - `git diff --check` passed.
+- **Learnings for future iterations:**
+  - The root functional harness routes mock model-worker script execution through either the provider or script command edge depending on the assembled worker; inject a deterministic runner into both when the test needs to observe the actual process boundary.
+---
+## [2026-08-11 02:05 -07:00] - dwro-s2-server-owned-start-004
+- What was implemented
+  - Moved the process-boundary Worker Session regression from the deprecated `runtime_api` test owner to `tests/functional/workers/transports/http`, the durable Worker/HTTP domain required by the package-structure gate.
+- Files changed
+  - `tests/functional/workers/transports/http/worker_sessions_lifecycle_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/workers/transports/http -run 'TestWorkerSessionHTTP(DisconnectKeepsAdmittedWorkerAlive|ShutdownJoinsAdmittedWorker)$' -count=1 -v` passed.
+  - The same focused tests passed under `go test -race`.
+  - `go vet ./pkg/services/worker_sessions/... ./pkg/services/factory_runtime/... ./tests/functional/workers/transports/http` passed.
+  - `make typecheck`, `make ui-lint`, `make backend-size pkg-maint pkg-file-count pkg-structure`, and `git diff --check` passed.
+- **Learnings for future iterations:**
+  - New functional scenarios must live under `tests/functional/<durable-domain>/<subsection>/...`; the package-structure checker rejects new files under the historical `runtime_api` aggregate even when their assertions are valid.
+---
+## [2026-08-11 01:45 -07:00] - dwro-s2-server-owned-start-005
+- What was implemented
+  - Consolidated synchronous `InvokeSession` and asynchronous `Start` onto one Worker Sessions preparation path covering reservation, STARTING transition, observation capture, opening publication, supervision registration, retry budget, admission callback, control races, terminal classification, and terminal publication.
+  - Preserved synchronous callers' request-ID-free session conflict rules and terminal return behavior while keeping asynchronous Starts server-owned and admission-gated.
+  - Added deterministic compatibility tests proving synchronous terminal waiting versus asynchronous admission return and matching pre-admission failure classification and event history.
+- Files changed
+  - `pkg/services/worker_sessions/contracts.go`
+  - `pkg/services/worker_sessions/internal/service/invoke_session.go`
+  - `pkg/services/worker_sessions/internal/service/publish_record.go`
+  - `pkg/services/worker_sessions/internal/service/service.go`
+  - `pkg/services/worker_sessions/internal/service/start_test.go`
+- Verification
+  - `go test ./pkg/services/worker_sessions/... -count=1` passed.
+  - `go test -race ./pkg/services/worker_sessions/internal/service -count=1` passed.
+  - Affected Factory Runtime and HTTP transport suites, affected `go vet`, `make typecheck`, `make ui-lint`, `make backend-size`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, and `git diff --check` passed.
+  - The aggregate `make lint` command was bounded at five minutes while unrelated concurrent unit-lane processes were active; focused lint/static targets and affected vet checks passed.
+- **Learnings for future iterations:**
+  - Shared lifecycle behavior should be factored below the public entry points, with mode options limited to lifecycle ownership, readiness verification, and caller-facing wait/error semantics.
+  - Keep the Worker Sessions package at its 15-file limit by placing small lifecycle coordination beside the existing publication/lifecycle implementation rather than adding another package file.
 ## 2026-08-10 19:41 -07:00 - cli-error-classification-and-run-output-001
 - What was implemented
   - Classified dynamic Factory invocation missing values and static run-flag parse failures with stable `INVOCATION_ARGUMENT_*` errors, including the case where one dynamic flag is followed by another and must not consume it as a value.
@@ -8926,6 +9086,71 @@
 - **Learnings for future iterations:**
   - Fit-to-view can stop at React Flow's default `minZoom` before all authored nodes fit on touch-sized replay surfaces; tune the package-owned surface rather than reconstructing topology or weakening the browser assertion.
 ## [2026-08-11 02:11:21 -07:00] - cli-error-classification-and-run-output review follow-up
+## [2026-08-11 02:21 -07:00] - dwro-s2-server-owned-start-005 CI follow-up
+- What was implemented
+  - Reproduced the hosted API candidate failure on PR #1880: `packages/api/generated/manifest.json` still carried the pre-merge OpenAPI hash after the final current-main synchronization.
+  - Regenerated the approved contract artifacts so `generated.openapi.openapi` records the hash of the merged `packages/api/generated/openapi/openapi.yaml`.
+- Files changed
+  - `packages/api/generated/manifest.json`
+  - `progress.txt`
+- Verification
+  - `make contracts-generate` passed and updated only the stale OpenAPI manifest hashes.
+  - The original hosted failure was `manifest artifact hash mismatch: generated.openapi.openapi`; the replacement head will rerun the API candidate and dependent checks.
+- **Learnings for future iterations:**
+  - After a current-main merge that touches generated OpenAPI artifacts, run `make contracts-generate` in addition to `make generate-api`; the API package consumer verifies manifest hashes against the generated artifact bytes.
+---
+## [2026-08-11 02:32:32 -07:00] - dwro-s2-server-owned-start-005 contract-manifest follow-up
+- What was implemented
+  - Added the new `rest/startWorkerSession` operation to the reviewed functional-scenario projection and bound it to the existing HTTP lifecycle test that observes admission, disconnect survival, idempotent replay, and single execution.
+  - Added the matching runtime evidence declaration so the contract drift gate can verify the customer-boundary test directly.
+- Files changed
+  - `contracts/functional-scenarios.json`
+  - `contracts/functional-scenario-evidence.json`
+  - `internal/functionalscenarios/manifest.go`
+  - `tests/functional/workers/transports/http/worker_sessions_lifecycle_test.go`
+- Verification
+  - Focused HTTP functional tests passed.
+  - `go run ./cmd/functionalscenarioproject -check contracts/functional-scenarios.json` passed with 118 reviewed scenarios current.
+  - `make contracts-check` passed.
+  - Affected Worker Sessions and Factory Runtime package tests passed.
+- **Learnings for future iterations:**
+  - New OpenAPI operations must receive both a reviewed manifest mapping and a direct `functionalevidence.Covers` declaration in a qualifying functional test; `make contracts-check` enforces both sides.
+---
+## [2026-08-11 03:24:19 -07:00] - dwro-s2-server-owned-start-005 hosted coverage follow-up
+- What was implemented
+  - Diagnosed PR #1880's Backend Unit Coverage failure: `pkg/services/worker_sessions/internal/service` was at 96.8156% against its 98.72% checked-in floor.
+  - Added focused deterministic internal tests for lifecycle fallbacks, readiness-reader failures, pre-admission classification, and observation edge branches; kept all five PRD stories marked `passes:true`.
+- Files changed
+  - `pkg/services/worker_sessions/internal/service/internal_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Focused Worker Sessions internal-service coverage is 98.8%; Worker Sessions package tests and race tests pass.
+  - `go vet ./pkg/services/worker_sessions/...`, `make backend-size`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, and `git diff --check` pass.
+  - The full Windows `make test-unit-coverage` wrapper remains environment-blocked by the expanded Go command line (`go.exe: The filename or extension is too long`); the hosted failure itself was the package-floor regression, and the targeted package now clears that floor.
+- **Learnings for future iterations:**
+  - Hosted coverage logs emit an exact package-floor diagnostic; use it to target branch tests and independently verify the affected package before rerunning the broader lane.
+---
+## [2026-08-11 04:02:49 -07:00] - dwro-s2-server-owned-start-004 PR feedback follow-up
+- What was implemented
+  - Replaced the Story 004 functional fixture's prohibited Mock Workers setup with the real model-worker configuration and an injected, gated Codex `ProviderCommandRunner` that emits sanitized provider-native JSONL.
+  - Reworked the disconnect proof to write the POST request over a raw TCP connection, wait for deterministic provider-edge entry, close the unread submitting connection before reading its response, and verify the accepted execution through an independent public Worker Session SSE stream.
+  - Added assertions for one `STARTED` lifecycle record, one `COMPLETED` lifecycle terminal record, same-key 202 replay, and exactly one provider command call; documented the bounded signal ceilings as failure diagnostics rather than synchronization polling.
+- Files changed
+  - `tests/functional/workers/transports/http/worker_sessions_lifecycle_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/workers/transports/http -count=1 -timeout 600s` — passed.
+  - `go test -race ./tests/functional/workers/transports/http -run '^TestWorkerSessionHTTP(DisconnectKeepsAdmittedWorkerAlive|ShutdownJoinsAdmittedWorker)$' -count=1 -timeout 600s` — passed.
+  - `go test ./pkg/services/worker_sessions/... -count=1 -timeout 600s` — passed.
+  - `go test ./pkg/services/factory_runtime/... -count=1 -timeout 600s` — passed.
+  - `go test ./pkg/services/worker_sessions/transports/http -count=1 -timeout 600s` and `git diff --check` — passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure`, affected-package `go vet`, `make typecheck`, and `make ui-lint` — passed. Repository `make test` was attempted but exceeded the 650-second Windows command ceiling with no failure output while many other worktree verification processes were running; the targeted suites above were terminal-green.
+- **Learnings for future iterations:**
+  - A true HTTP disconnect test must close an unread transport connection while the provider is held at a deterministic edge; a context cancellation after `http.Client.Do` returns only tests normal request completion.
+---
+## [2026-08-11 02:11:21 -07:00] - cli-error-classification-and-run-output review follow-up (mainline history)
 - What was implemented
   - Addressed the post-merge blocking review comment by removing `--with-mock-workers` from the three changed invalid-input functional scenarios: invalid JSON, malformed key=value, and positional overflow.
   - Kept each scenario on the canonical `root.BuildProcess` / `Process.Execute` path with an injected `edges.Edges.ProviderCommandRunner`, making the zero-provider-call assertions authoritative for the BAD_REQUEST boundary.
@@ -8941,11 +9166,10 @@
 - **Learnings for future iterations:**
   - Functional validation scenarios that assert absence of provider side effects must not configure Mock Workers; inject the exact provider command-runner edge and assert its observations instead.
 ---
-## [2026-08-11 02:56:56 -07:00] - cli-error-classification-and-run-output review follow-up
+## [2026-08-11 02:56:56 -07:00] - cli-error-classification-and-run-output reconciliation (mainline history)
 - What was implemented
-  - Reconciled PR #1879 with live `origin/main` at `dd87fd04db20d755f9b44c369aa79b8c3e600f5f` after the blocking review comment reported a real merge conflict.
-  - Preserved this task's authoritative `prd.json`, including the `reviewFollowUp` note, while accepting the incoming mainline lint-tooling and functional-test changes; `progress.txt` merged cleanly.
-  - Confirmed that the merge did not change authored CLI contract inputs, so generated CLI artifacts were not hand-merged or regenerated unnecessarily.
+  - Reconciled PR #1879 with live `origin/main` after the blocking review comment reported a real merge conflict.
+  - Preserved that task's authoritative `prd.json`, accepted incoming mainline lint-tooling and functional-test changes, and confirmed that generated CLI artifacts did not require hand-merging or unnecessary regeneration.
 - Files changed
   - Current-main lint checker/lane and maintenance-gate files carried by the synchronization merge.
   - `tests/functional/transport/cli/parameters/json_values_test.go`
@@ -8954,45 +9178,60 @@
   - `prd.json`
   - `progress.txt`
 - Verification
-  - `go test ./tests/functional/transport/cli/parameters -count=1 -timeout 600s` — passed.
-  - `go test ./pkg/services/factory_visualization/... -count=1 -timeout 600s` — passed.
-  - `go test ./tests/functional/cli/factory_run/output ./tests/functional/transport/cli/output ./tests/functional/transport/run_scoped_server -count=1 -timeout 600s` — passed.
-  - `make typecheck` and `make cli-manifest-check` — passed.
-  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` — passed.
-  - PRD all-pass, merge-marker, and `git diff --check` audits — passed.
+  - Focused CLI parameter, factory visualization, and functional output suites passed.
+  - `make typecheck`, `make cli-manifest-check`, `make backend-size pkg-maint pkg-file-count pkg-structure vet`, PRD all-pass, merge-marker, and `git diff --check` audits passed.
 - **Learnings for future iterations:**
   - A shared PRD conflict can contain a different task's metadata after main advances; resolve it by retaining the active branch's complete PRD and follow-up note, then verify story flags and JSON before committing.
   - A fresh replacement head needs new hosted CI even when the pre-conflict head was green; local focused gates establish the merge result while GitHub validates the pushed ancestry.
 ---
-## [2026-08-11 03:16:31 -07:00] - cli-error-classification-and-run-output hosted CI follow-up
+## [2026-08-11 03:16:31 -07:00] - cli-error-classification-and-run-output hosted CI follow-up (mainline history)
 - What was implemented
-  - Investigated the replacement-head Backend Functional Coverage failure and identified the untouched `tests/functional/workers/mock` scenario `TestPlainBatchDrainPreservesFiniteAndContinuousCounterexamples/continuous_idle`; the failure was a post-shutdown timing/ordering characterization, not a file in this PR's diff.
-  - Repeated the exact failing test locally ten times with no failures and reran only the failed hosted backend job; the dependent Verification Policy rerun then passed without changing product or test code.
+  - Investigated a replacement-head Backend Functional Coverage failure in an untouched `tests/functional/workers/mock` scenario; repeated the exact test locally and reran the failed hosted lane without changing unrelated product code.
 - Files changed
   - `progress.txt`
 - Verification
-  - `go test ./tests/functional/workers/mock -run '^TestPlainBatchDrainPreservesFiniteAndContinuousCounterexamples/continuous_idle$' -count=10 -v -timeout 600s` — passed all ten repetitions.
-  - Hosted run `31480072598` replacement Backend Functional Coverage job `93745975060` — passed.
-  - Hosted Verification Policy job `93747061691` — passed.
-  - All other replacement-head checks remained passing; the PR head remains `f259db6c4a91814b57d427d1bf889c76835d93a4`.
+  - The named test passed ten local repetitions; the hosted Backend Functional Coverage and dependent Verification Policy reruns passed.
 - **Learnings for future iterations:**
   - When hosted functional coverage names an untouched fixture, repeat that exact test locally before widening the diff; a clean characterization supports rerunning the failed lane and dependent policy job without unrelated fixes.
 ---
-## [2026-08-11 03:28:29 -07:00] - cli-error-classification-and-run-output final PR handoff audit
+## [2026-08-11 03:28:29 -07:00] - cli-error-classification-and-run-output final PR handoff audit (mainline history)
 - What was implemented
-  - Audited PR #1879 after the four implementation stories reached `passes:true`.
-  - Confirmed the historical blocking feedback is addressed: the branch contains current `origin/main`, the PR is mergeable and clean, and the replacement-head checks are terminal and passing.
-  - Confirmed the PR body matches the current `prd.json` byte-for-byte and the thread-aware review audit reports zero inline review threads and zero unresolved threads.
+  - Audited PR #1879 after its stories reached `passes:true`, confirming current-main ancestry, mergeability, terminal passing checks, synchronized PR body, and zero inline review threads.
 - Files changed
   - `progress.txt`
 - Verification
-  - PRD parses with all four stories marked `passes:true`; no conflict markers remain.
-  - `origin/main` is an ancestor of `HEAD`.
-  - PR #1879 is open, non-draft, `MERGEABLE`/`CLEAN`, with all 18 reported checks passing on the reconciled head.
-  - `gh pr checks 1879`, the thread-aware `fetch_comments.py` audit, the PR-body comparison, and `git status` all passed.
+  - The PRD parsed with all stories passing, no conflict markers remained, and the replacement-head checks and thread-aware review audit were green.
 - **Learnings for future iterations:**
-  - Treat a prior blocking comment as addressed only after its requested base synchronization is present, the PR is cleanly mergeable, and the replacement-head checks are terminal-success.
-  - Keep the PR body byte-for-byte synchronized with `prd.json` when the PR description is defined by the task contract.
+  - Treat a prior blocking comment as addressed only after its requested base synchronization is present, the PR is cleanly mergeable, and replacement-head checks are terminal-success; keep the PR body byte-for-byte synchronized with `prd.json` when required by the task contract.
+---
+## [2026-08-11 04:20:59 -07:00] - dwro-s2-server-owned-start latest-main reconciliation
+- What was implemented
+  - Merged live `origin/main` at `012e98e0fbd1b6fcac106d90b1f3d335b8a3dce6` after PR #1880 reported a moving-base conflict.
+  - Preserved this task's authoritative five-story `prd.json`, unioned the incoming append-only progress history and reusable reconciliation pattern, and retained the incoming CLI parameter test changes from main.
+- Files changed
+  - `tests/functional/transport/cli/parameters/json_values_test.go`
+  - `tests/functional/transport/cli/parameters/key_value_test.go`
+  - `tests/functional/transport/cli/parameters/positional_values_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `prd.json` parses with all five stories marked `passes:true`; `progress.txt` and `prd.json` contain no merge markers.
+  - The live base is now included in the branch ancestry; focused Story 004 and affected package gates must be rerun on this merged head before the replacement push.
+- **Learnings for future iterations:**
+  - Resolve moving-base conflicts by keeping the active task PRD authoritative, unioning complete append-only progress histories, and rerunning the task-specific gates on the exact merged ancestry.
+---
+## [2026-08-11 04:23:37 -07:00] - dwro-s2-server-owned-start merged-head verification
+- What was implemented
+  - Revalidated the Story 004 disconnect/shutdown evidence and affected runtime packages after merging current `origin/main`; no additional product changes were needed.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/workers/transports/http -count=1 -timeout 600s` — passed.
+  - `go test -race ./tests/functional/workers/transports/http -run '^TestWorkerSessionHTTP(DisconnectKeepsAdmittedWorkerAlive|ShutdownJoinsAdmittedWorker)$' -count=1 -timeout 600s` — passed.
+  - `go test ./pkg/services/worker_sessions/... -count=1 -timeout 600s`, `go test ./pkg/services/factory_runtime/... -count=1 -timeout 600s`, and `go test ./tests/functional/transport/cli/parameters -count=1 -timeout 600s` — passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure`, affected-package `go vet`, `make typecheck`, and `git diff --check origin/main...HEAD` — passed.
+- **Learnings for future iterations:**
+  - After a moving-base merge, rerun the boundary functional and race evidence on the exact merged ancestry before pushing; prior-head green results do not prove the replacement head.
 ---
 ## [2026-08-11 04:32:41 -07:00] - graph-workstation-semantics hosted CI and final handoff
 - What was implemented
@@ -9055,4 +9294,19 @@
 - **Learnings for future iterations:**
   - New root-facing contracts should be declared in the internal contracts package and exposed through aliases when the package-structure gate reserves the service root for its singular public service interface.
   - Run ratcheted gates after test-file moves and contract-placement fixes; passing focused tests alone does not prove file-count or root-structure compliance.
+---
+## [2026-08-11 05:45:42 -07:00] - graph-workstation-semantics latest-main reconciliation
+- What was implemented
+  - Merged live `origin/main` at `3521f0b0a2f313b22e2c79edcf90339a01b3bce7` into the branch after the PR reported a moving-base conflict.
+  - Preserved this task's authoritative four-story `prd.json`, retained both sides of the append-only progress history, and accepted the incoming Worker Sessions API/runtime/generated-artifact changes from main.
+- Files changed
+  - Current-main Worker Sessions API, runtime, transport, functional-test, and generated contract files carried by the synchronization merge.
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `prd.json` parses with all four stories marked `passes:true`.
+  - `prd.json` and `progress.txt` contain no merge conflict markers; staged merge output passes `git diff --cached --check`.
+  - The merged source remains pending the task-specific post-merge gates before the replacement PR head is pushed.
+- **Learnings for future iterations:**
+  - Resolve shared metadata conflicts by keeping the active task PRD authoritative and preserving both append-only progress branches; source conflicts from a moving base should be accepted when they are outside the task's ownership.
 ---
