@@ -235,6 +235,63 @@ func (h *Handler) StreamWorkerSessionEventsBySessionId(
 	h.writeWorkerSessionStream(w, r, flusher, observation, subscription, replayOnly)
 }
 
+// StreamWorkerSessionEventsByWorkerSessionId writes a provider-neutral
+// retained/live stream addressed by the canonical Worker Session identity.
+// This remains usable when the provider emitted no native session reference.
+func (h *Handler) StreamWorkerSessionEventsByWorkerSessionId(
+	w http.ResponseWriter,
+	r *http.Request,
+	sessionID factoryapi.SessionID,
+	workerSessionID factoryapi.WorkerSessionID,
+	params factoryapi.StreamWorkerSessionEventsByWorkerSessionIdParams,
+) {
+	flusher, ok := h.prepareWorkerSessionIDStreamRequest(w, r, sessionID, workerSessionID)
+	if !ok {
+		return
+	}
+
+	replayOnly := params.ReplayOnly != nil && *params.ReplayOnly
+	observation, subscription, err := h.adapter.StreamWorkerSessionEventsByWorkerSessionID(
+		r.Context(), string(sessionID), string(workerSessionID), replayOnly,
+	)
+	if err != nil {
+		h.writeMappedStreamError(w, err)
+		return
+	}
+	defer subscription.Close()
+	h.writeWorkerSessionStream(w, r, flusher, observation, subscription, replayOnly)
+}
+
+func (h *Handler) prepareWorkerSessionIDStreamRequest(
+	w http.ResponseWriter,
+	r *http.Request,
+	sessionID factoryapi.SessionID,
+	workerSessionID factoryapi.WorkerSessionID,
+) (http.Flusher, bool) {
+	if h == nil || h.adapter == nil {
+		writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
+		return nil, false
+	}
+	if strings.TrimSpace(string(sessionID)) == "" {
+		writeError(w, http.StatusBadRequest, "session id is required", "BAD_REQUEST")
+		return nil, false
+	}
+	if strings.TrimSpace(string(workerSessionID)) == "" {
+		writeError(w, http.StatusBadRequest, "worker session id is required", "BAD_REQUEST")
+		return nil, false
+	}
+	if r == nil {
+		writeError(w, http.StatusBadRequest, "request is required", "BAD_REQUEST")
+		return nil, false
+	}
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeError(w, http.StatusInternalServerError, "Worker Session streaming is unavailable", "WORKER_SESSION_STREAM_UNAVAILABLE")
+		return nil, false
+	}
+	return flusher, true
+}
+
 func (h *Handler) prepareStreamRequest(
 	w http.ResponseWriter,
 	r *http.Request,

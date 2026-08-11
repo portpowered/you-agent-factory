@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func observationTestProviderSession() providers.SessionRef {
@@ -49,9 +50,14 @@ func TestObservationRequests_ValidateIdentityAndBounds(t *testing.T) {
 		{"list blank", (ListObservationsRequest{WorkID: "  "}).Validate(), ErrInvalidObservationWorkID},
 		{"get valid", (GetObservationRequest{ProviderSession: valid}).Validate(), nil},
 		{"get invalid", (GetObservationRequest{}).Validate(), ErrInvalidObservationIdentity},
+		{"get by Worker Session valid", (GetObservationByWorkerSessionIDRequest{WorkerSessionID: "worker-1"}).Validate(), nil},
+		{"get by Worker Session invalid", (GetObservationByWorkerSessionIDRequest{}).Validate(), ErrInvalidSessionID},
 		{"stream valid zero limit", (StreamObservationsRequest{ProviderSession: valid}).Validate(), nil},
 		{"stream invalid identity", (StreamObservationsRequest{Limit: 1}).Validate(), ErrInvalidObservationIdentity},
 		{"stream negative limit", (StreamObservationsRequest{ProviderSession: valid, Limit: -1}).Validate(), ErrInvalidObservationStreamLimit},
+		{"stream by Worker Session valid", (StreamObservationsByWorkerSessionIDRequest{WorkerSessionID: "worker-1"}).Validate(), nil},
+		{"stream by Worker Session invalid", (StreamObservationsByWorkerSessionIDRequest{}).Validate(), ErrInvalidSessionID},
+		{"stream by Worker Session negative limit", (StreamObservationsByWorkerSessionIDRequest{WorkerSessionID: "worker-1", Limit: -1}).Validate(), ErrInvalidObservationStreamLimit},
 		{"read valid", (ReadTranscriptRequest{ProviderSession: valid}).Validate(), nil},
 		{"read invalid", (ReadTranscriptRequest{}).Validate(), ErrInvalidObservationIdentity},
 	}
@@ -127,6 +133,345 @@ func TestObservation_ValidateLifecycleTimingAndFailure(t *testing.T) {
 				t.Fatalf("Validate() = %v, want %v", err, test.want)
 			}
 		})
+	}
+}
+
+type publisherServiceSpy struct {
+	Service
+	ensureResult ProviderBindingResult
+	ensureErr    error
+	resolvedID   string
+	resolveErr   error
+	publishErr   error
+}
+
+func publisherTestDraft() workers.Draft {
+	return workers.Draft{
+		Kind:    workers.KindMessage,
+		Phase:   workers.PhaseCompleted,
+		Payload: []byte(`{"role":"assistant","contentBlocks":[{"kind":"TEXT","text":"test"}]}`),
+	}
+}
+
+func (s *publisherServiceSpy) EnsureProviderBinding(
+	context.Context,
+	ProviderBindingRequest,
+) (ProviderBindingResult, error) {
+	return s.ensureResult, s.ensureErr
+}
+
+func (s *publisherServiceSpy) WorkerSessionIDForDispatch(context.Context, string) (string, error) {
+	return s.resolvedID, s.resolveErr
+}
+
+func (s *publisherServiceSpy) PublishRecord(context.Context, PublishRecordRequest) (PublishRecordResult, error) {
+	return PublishRecordResult{}, s.publishErr
+}
+
+func TestPublisher_IdentityAndCanonicalDraftEdges(t *testing.T) {
+	reference := &providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "session-1"}
+	metadata := &workers.ProviderSessionMetadata{Provider: "codex", Kind: providers.SessionIDKind, ID: "session-1"}
+	assertProviderFragmentIdentity(t, reference, metadata)
+	assertCanonicalDraftIdentity(t)
+	assertProviderIdentityResolution(t, reference, metadata)
+	assertProgressProvenance(t)
+}
+
+func assertProviderFragmentIdentity(t *testing.T, reference *providers.SessionRef, metadata *workers.ProviderSessionMetadata) {
+	t.Helper()
+	if !providerFragmentAgrees(workers.ProgressFragment{}) {
+		t.Fatal("empty provider fragment should agree")
+	}
+	if providerFragmentAgrees(workers.ProgressFragment{
+		Provider:                 "codex",
+		ProviderSessionReference: reference,
+		ProviderSessionRef:       &workers.ProviderSessionMetadata{Provider: "claude", Kind: providers.SessionIDKind, ID: "session-1"},
+	}) {
+		t.Fatal("provider/reference metadata mismatch should be rejected")
+	}
+	if providerFragmentAgrees(workers.ProgressFragment{
+		Provider:                 "codex",
+		ProviderSessionReference: reference,
+		ProviderSessionRef:       &workers.ProviderSessionMetadata{Provider: "codex", Kind: providers.SessionIDKind, ID: "other"},
+	}) {
+		t.Fatal("reference/metadata identity mismatch should be rejected")
+	}
+	if providerFragmentAgrees(workers.ProgressFragment{Provider: "claude", ProviderSessionReference: reference}) {
+		t.Fatal("explicit provider/reference mismatch should be rejected")
+	}
+	if providerFragmentAgrees(workers.ProgressFragment{Provider: "claude", ProviderSessionRef: metadata}) {
+		t.Fatal("explicit provider/metadata mismatch should be rejected")
+	}
+	if !providerFragmentAgrees(workers.ProgressFragment{Provider: "CoDeX", ProviderSessionRef: metadata}) {
+		t.Fatal("provider identity comparison should be case-insensitive")
+	}
+}
+
+func assertCanonicalDraftIdentity(t *testing.T) {
+	t.Helper()
+	draft := publisherTestDraft()
+	fragment := workers.ProgressFragment{DispatchID: "dispatch-1"}
+	cases := []struct {
+		name      string
+		canonical any
+		want      bool
+		wantID    string
+	}{
+		{name: "value", canonical: draft, want: true, wantID: "dispatch-1"},
+		{name: "pointer", canonical: &draft, want: true, wantID: "dispatch-1"},
+		{name: "nil pointer", canonical: (*workers.Draft)(nil)},
+		{name: "unsupported type", canonical: "not a draft"},
+		{name: "empty kind", canonical: workers.Draft{}},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			got, ok := canonicalDraftFromFragment(workers.ProgressFragment{
+				DispatchID:     fragment.DispatchID,
+				CanonicalDraft: test.canonical,
+			})
+			if ok != test.want {
+				t.Fatalf("canonicalDraftFromFragment() ok = %v, want %v", ok, test.want)
+			}
+			if test.want && got.DispatchID != test.wantID {
+				t.Fatalf("canonical draft DispatchID = %q, want %q", got.DispatchID, test.wantID)
+			}
+		})
+	}
+}
+
+func assertProviderIdentityResolution(t *testing.T, reference *providers.SessionRef, metadata *workers.ProviderSessionMetadata) {
+	t.Helper()
+	if got := providerIdentityForFragment(workers.ProgressFragment{Provider: "claude"}, &workers.Draft{
+		Provenance: workers.Provenance{Provider: "codex"},
+	}); got != "codex" {
+		t.Fatalf("draft provider = %q, want codex", got)
+	}
+	if got := providerIdentityForFragment(workers.ProgressFragment{Provider: "claude"}, &workers.Draft{
+		Provenance: workers.Provenance{Provider: "agent-run"},
+	}); got != "claude" {
+		t.Fatalf("synthetic draft provider fallback = %q, want claude", got)
+	}
+	if got := providerIdentityForFragment(workers.ProgressFragment{ProviderSessionReference: reference}, nil); got != "codex" {
+		t.Fatalf("reference provider = %q, want codex", got)
+	}
+	if got := providerIdentityForFragment(workers.ProgressFragment{ProviderSessionRef: metadata}, nil); got != "codex" {
+		t.Fatalf("metadata provider = %q, want codex", got)
+	}
+	if got := providerIdentityForFragment(workers.ProgressFragment{}, nil); got != "" {
+		t.Fatalf("empty provider identity = %q, want empty", got)
+	}
+
+	if !providerIdentityAgrees(workers.ProgressFragment{}, workers.Draft{}) {
+		t.Fatal("draft without provider should agree")
+	}
+	if !providerIdentityAgrees(workers.ProgressFragment{Provider: "claude"}, workers.Draft{
+		Provenance: workers.Provenance{Provider: "agent-run"},
+	}) {
+		t.Fatal("synthetic Worker provider should not conflict with provider output")
+	}
+	if providerIdentityAgrees(workers.ProgressFragment{Provider: "claude"}, workers.Draft{
+		Provenance: workers.Provenance{Provider: "codex"},
+	}) {
+		t.Fatal("explicit provider mismatch should be rejected")
+	}
+	if providerIdentityAgrees(workers.ProgressFragment{ProviderSessionReference: &providers.SessionRef{Provider: providers.IDClaude}}, workers.Draft{
+		Provenance: workers.Provenance{Provider: "codex"},
+	}) {
+		t.Fatal("reference provider mismatch should be rejected")
+	}
+	if providerIdentityAgrees(workers.ProgressFragment{ProviderSessionRef: &workers.ProviderSessionMetadata{Provider: "claude"}}, workers.Draft{
+		Provenance: workers.Provenance{Provider: "codex"},
+	}) {
+		t.Fatal("metadata provider mismatch should be rejected")
+	}
+	if !providerIdentityAgrees(workers.ProgressFragment{Provider: "CoDeX", ProviderSessionRef: metadata}, workers.Draft{
+		Provenance: workers.Provenance{Provider: "codex"},
+	}) {
+		t.Fatal("matching provider identities should agree")
+	}
+}
+
+func assertProgressProvenance(t *testing.T) {
+	t.Helper()
+	if got := progressDraftProvenance(workers.ProgressFragment{Type: "message.delta"}); got.Provider != "" {
+		t.Fatalf("providerless provenance provider = %q, want empty", got.Provider)
+	}
+	if got := progressDraftProvenance(workers.ProgressFragment{
+		Provider: "codex",
+		Metadata: map[string]string{"native_type": "message.delta"},
+	}); got.NativeEventType != "message.delta" {
+		t.Fatalf("metadata native event type = %q, want message.delta", got.NativeEventType)
+	}
+}
+
+func TestPublisher_CanonicalPublicationErrorPolicy(t *testing.T) {
+	draft := publisherTestDraft()
+	draft.DispatchID = "dispatch-1"
+	fragment := workers.ProgressFragment{DispatchID: "dispatch-1"}
+	publisher := NewProviderSessionObservationPublisher(nil)
+
+	if publisher.publishCanonicalWorkerRecord(nil, fragment, draft) {
+		t.Fatal("nil observer should reject canonical publication")
+	}
+	if publisher.publishCanonicalWorkerRecord(&publisherServiceSpy{}, workers.ProgressFragment{}, draft) {
+		t.Fatal("blank dispatch should reject canonical publication")
+	}
+	contradictory := draft
+	contradictory.Provenance.Provider = "codex"
+	if publisher.publishCanonicalWorkerRecord(&publisherServiceSpy{}, workers.ProgressFragment{DispatchID: "dispatch-1", Provider: "claude"}, contradictory) {
+		t.Fatal("contradictory canonical provider should be rejected")
+	}
+
+	for _, test := range []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{name: "binding ordinary error forwards", err: errors.New("binding failed"), want: true},
+		{name: "binding conflict suppresses", err: ErrProviderBindingConflict, want: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			providerDraft := draft
+			providerDraft.Provenance.Provider = "codex"
+			spy := &publisherServiceSpy{ensureErr: test.err}
+			if got := publisher.publishCanonicalWorkerRecord(spy, fragment, providerDraft); got != test.want {
+				t.Fatalf("canonical binding result = %v, want %v", got, test.want)
+			}
+		})
+	}
+
+	for _, test := range []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{name: "resolve ordinary error forwards", err: errors.New("resolve failed"), want: true},
+		{name: "resolve conflict suppresses", err: ErrProviderBindingConflict, want: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			spy := &publisherServiceSpy{resolveErr: test.err}
+			if got := publisher.publishCanonicalWorkerRecord(spy, fragment, draft); got != test.want {
+				t.Fatalf("canonical resolve result = %v, want %v", got, test.want)
+			}
+		})
+	}
+
+	for _, test := range []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{name: "publish ordinary error forwards", err: errors.New("publish failed"), want: true},
+		{name: "publish conflict suppresses", err: ErrProviderBindingConflict, want: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			spy := &publisherServiceSpy{resolvedID: "worker-1", publishErr: test.err}
+			if got := publisher.publishCanonicalWorkerRecord(spy, fragment, draft); got != test.want {
+				t.Fatalf("canonical publish result = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
+func TestPublisher_WorkerPublicationErrorPolicy(t *testing.T) {
+	publisher := NewProviderSessionObservationPublisher(nil)
+	if !publisher.publishWorkerRecord(nil, workers.ProgressFragment{DispatchID: "dispatch-1"}) {
+		t.Fatal("nil observer should not fail a worker publication")
+	}
+	if !publisher.publishWorkerRecord(&publisherServiceSpy{}, workers.ProgressFragment{DispatchID: "dispatch-1", Type: "unknown"}) {
+		t.Fatal("unrecognized worker fragment should be ignored")
+	}
+
+	base := workers.ProgressFragment{
+		DispatchID: "dispatch-1",
+		Kind:       workers.ProgressFragmentKind,
+		Type:       "message.delta",
+		Payload:    "hello",
+	}
+	for _, test := range []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{name: "binding ordinary error forwards", err: errors.New("binding failed"), want: true},
+		{name: "binding conflict suppresses", err: ErrProviderBindingConflict, want: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			fragment := base
+			fragment.Provider = "codex"
+			spy := &publisherServiceSpy{ensureErr: test.err}
+			if got := publisher.publishWorkerRecord(spy, fragment); got != test.want {
+				t.Fatalf("worker binding result = %v, want %v", got, test.want)
+			}
+		})
+	}
+
+	for _, test := range []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{name: "resolve ordinary error forwards", err: errors.New("resolve failed"), want: true},
+		{name: "resolve conflict forwards", err: ErrProviderBindingConflict, want: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			spy := &publisherServiceSpy{resolveErr: test.err}
+			if got := publisher.publishWorkerRecord(spy, base); got != test.want {
+				t.Fatalf("worker resolve result = %v, want %v", got, test.want)
+			}
+		})
+	}
+
+	for _, test := range []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{name: "publish ordinary error forwards", err: errors.New("publish failed"), want: true},
+		{name: "publish conflict suppresses", err: ErrProviderBindingConflict, want: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			spy := &publisherServiceSpy{resolvedID: "worker-1", publishErr: test.err}
+			if got := publisher.publishWorkerRecord(spy, base); got != test.want {
+				t.Fatalf("worker publish result = %v, want %v", got, test.want)
+			}
+		})
+	}
+
+	if err := (ProviderBindingRequest{}).Validate(); !errors.Is(err, ErrInvalidProviderBinding) {
+		t.Fatalf("empty provider binding validation = %v, want ErrInvalidProviderBinding", err)
+	}
+	if err := (ProviderBindingRequest{DispatchID: "dispatch-1", Provider: "codex"}).Validate(); err != nil {
+		t.Fatalf("valid provider binding validation = %v, want nil", err)
+	}
+
+	if publisher.publishWorkerDraft(nil, "worker-1", publisherTestDraft()) != nil {
+		t.Fatal("nil observer should skip worker draft publication")
+	}
+	if publisher.publishWorkerDraft(&publisherServiceSpy{}, " ", publisherTestDraft()) != nil {
+		t.Fatal("blank session should skip worker draft publication")
+	}
+}
+
+func TestPublisher_DoesNotForwardInternalProviderObservation(t *testing.T) {
+	forwarded := 0
+	publisher := NewProviderSessionObservationPublisher(func(workers.ProgressFragment) { forwarded++ })
+	publisher.Publish(workers.ProgressFragment{Kind: workers.ProviderSessionObservedFragmentKind})
+	if forwarded != 0 {
+		t.Fatalf("forwarded internal provider observation count = %d, want 0", forwarded)
+	}
+}
+
+func TestPublisher_SuppressesConflictingCanonicalOutput(t *testing.T) {
+	forwarded := 0
+	publisher := NewProviderSessionObservationPublisher(func(workers.ProgressFragment) { forwarded++ })
+	publisher.Bind(&publisherServiceSpy{ensureErr: ErrProviderBindingConflict})
+	draft := publisherTestDraft()
+	draft.DispatchID = "dispatch-1"
+	draft.Provenance.Provider = "codex"
+	publisher.Publish(workers.CanonicalDraftFragment("dispatch-1", draft))
+	if forwarded != 0 {
+		t.Fatalf("forwarded conflicting canonical output count = %d, want 0", forwarded)
 	}
 }
 

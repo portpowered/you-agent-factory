@@ -262,8 +262,9 @@ func retryableDispatchResult(result workers.WorkstationDispatchResult) bool {
 }
 
 // observation is the registry-owned timing and Work correlation captured at
-// the Worker Sessions lifecycle boundary. Provider identity is deliberately
-// read from the Session association rather than duplicated here.
+// the Worker Sessions lifecycle boundary. Provider Session association remains
+// its own exact resumability fact; resolved provider identity is carried by
+// the lifecycle record's provenance instead.
 type observation struct {
 	workIDs   []string
 	turnID    string
@@ -272,18 +273,108 @@ type observation struct {
 	endedAt   *time.Time
 }
 
-func (r *registry) ensureObservation(id, attemptID, turnID string, workIDs []string) {
+func (r *registry) ensureObservation(id, attemptID, turnID string, workIDs []string) time.Time {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if _, exists := r.observations[id]; exists {
-		return
+	if current, exists := r.observations[id]; exists {
+		return current.startedAt
 	}
+	startedAt := r.clock.Now()
 	r.observations[id] = &observation{
 		workIDs:   append([]string(nil), workIDs...),
 		turnID:    turnID,
 		attemptID: attemptID,
-		startedAt: r.clock.Now(),
+		startedAt: startedAt,
 	}
+	return startedAt
+}
+
+func openingSessionPayload(
+	id string,
+	attemptID string,
+	startedAt time.Time,
+	request workers.WorkstationExecutionRequest,
+) workers.SessionPayload {
+	dispatch := request.Dispatch
+	payload := workers.SessionPayload{
+		Status:           string(workersessions.StateStarting),
+		StartedAt:        timeValue(startedAt),
+		WorkerSessionID:  id,
+		FactorySessionID: strings.TrimSpace(request.FactorySessionID),
+		RecordingID:      strings.TrimSpace(request.RecordingID),
+		ProjectID:        strings.TrimSpace(request.ProjectID),
+		DispatchID:       attemptID,
+		TransitionID:     strings.TrimSpace(dispatch.TransitionID),
+		WorkstationName:  strings.TrimSpace(dispatch.WorkstationName),
+		TurnID:           strings.TrimSpace(dispatch.Execution.RequestID),
+		TraceID:          strings.TrimSpace(dispatch.Execution.TraceID),
+		ReplayKey:        strings.TrimSpace(dispatch.Execution.ReplayKey),
+		WorkIDs:          append([]string(nil), dispatch.Execution.WorkIDs...),
+		AttemptID:        attemptID,
+		Attempt:          1,
+		AttemptReason:    workers.AttemptReasonInitial,
+		Model:            strings.TrimSpace(request.Model),
+		ReasoningEffort:  strings.TrimSpace(request.ReasoningEffort),
+		Capabilities:     cloneCapabilities(request.Capabilities),
+	}
+	if payload.WorkerType = strings.TrimSpace(request.WorkerType); payload.WorkerType == "" {
+		payload.WorkerType = strings.TrimSpace(dispatch.WorkerType)
+	}
+	if payload.ProjectID == "" {
+		payload.ProjectID = strings.TrimSpace(dispatch.ProjectID)
+	}
+	selection := workers.SessionProviderSelection{
+		RunnerID:         strings.TrimSpace(request.RunnerID),
+		Source:           request.RunnerSelectionSource,
+		ExecutorProvider: strings.TrimSpace(request.ExecutorProvider),
+		ModelProvider:    strings.TrimSpace(request.ModelProvider),
+	}
+	if selection.RunnerID != "" || selection.Source != "" || selection.ExecutorProvider != "" || selection.ModelProvider != "" {
+		payload.ProviderSelection = &selection
+	}
+	if request.ResumeSession != nil {
+		continuation := workers.SessionContinuation{
+			Provider: strings.TrimSpace(string(request.ResumeSession.Provider)),
+			Kind:     strings.TrimSpace(request.ResumeSession.Kind),
+			ID:       strings.TrimSpace(request.ResumeSession.ID),
+		}
+		if continuation.Provider != "" || continuation.Kind != "" || continuation.ID != "" {
+			payload.Continuation = &continuation
+			payload.AttemptReason = workers.AttemptReasonResume
+		}
+	}
+	return payload
+}
+
+// providerIdentityForExecution returns only a provider identity already
+// resolved by the Workers execution request. It deliberately does not choose
+// a default runner: an empty result means the provider can be learned from a
+// later provider-authored record and must then be bound before that output is
+// committed.
+func providerIdentityForExecution(request workers.WorkstationExecutionRequest) string {
+	runner := strings.TrimSpace(request.RunnerID)
+	if runner != "" && !strings.EqualFold(runner, workers.ExecutorProviderACP) && !strings.EqualFold(runner, "SCRIPT_WRAP") {
+		return runner
+	}
+	if identity, err := workers.RunnerIdentityForWorker(request.ExecutorProvider, request.ModelProvider); err == nil && strings.TrimSpace(identity) != "" {
+		return strings.TrimSpace(identity)
+	}
+	if request.ResumeSession != nil {
+		return strings.TrimSpace(string(request.ResumeSession.Provider))
+	}
+	return ""
+}
+
+func timeValue(value time.Time) *time.Time {
+	return &value
+}
+
+func cloneCapabilities(value *workers.Capabilities) *workers.Capabilities {
+	if value == nil {
+		return nil
+	}
+	clone := *value
+	return &clone
 }
 
 func (r *registry) finishObservationLocked(id string, endedAt time.Time) {
@@ -369,7 +460,46 @@ func (r *registry) GetObservation(ctx context.Context, req workersessions.GetObs
 	return projected, nil
 }
 
+func (r *registry) GetObservationByWorkerSessionID(ctx context.Context, req workersessions.GetObservationByWorkerSessionIDRequest) (workersessions.Observation, error) {
+	if err := req.Validate(); err != nil {
+		r.logger.Info("worker session observation get by Worker Session rejected", "outcome", "invalid")
+		return workersessions.Observation{}, err
+	}
+	if err := observationContextError(ctx); err != nil {
+		return workersessions.Observation{}, err
+	}
+	// Worker-ID lookup is the provider-neutral history boundary. It must not
+	// require transcript enrichment from Provider Sessions: a worker can emit
+	// canonical lifecycle/output records without a readable provider transcript.
+	projected, err := r.projectWorkerSessionIdentity(ctx, req.WorkerSessionID)
+	if err != nil {
+		r.logger.Info("worker session observation get by Worker Session", "workerSessionID", req.WorkerSessionID, "outcome", "not_found")
+		return workersessions.Observation{}, err
+	}
+	r.logger.Info("worker session observation get by Worker Session", "workerSessionID", projected.WorkerSessionID, "outcome", "success")
+	return projected, nil
+}
+
 func (r *registry) projectObservation(ctx context.Context, id string) (workersessions.Observation, error) {
+	if err := observationContextError(ctx); err != nil {
+		return workersessions.Observation{}, err
+	}
+	projected, err := r.projectWorkerSessionIdentity(ctx, id)
+	if err != nil {
+		return workersessions.Observation{}, err
+	}
+
+	if !projected.ProviderSessionAvailable {
+		return projected, nil
+	}
+	return r.enrichWithProviderSessionsProjection(ctx, projected)
+}
+
+// projectWorkerSessionIdentity projects the registry-owned Worker Session
+// identity and lifecycle timing without consulting Provider Sessions. The
+// canonical Worker-ID history stream uses this boundary so missing provider
+// transcript storage cannot hide retained Worker Session records.
+func (r *registry) projectWorkerSessionIdentity(ctx context.Context, id string) (workersessions.Observation, error) {
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.Observation{}, err
 	}
@@ -385,11 +515,7 @@ func (r *registry) projectObservation(ctx context.Context, id string) (workerses
 		failure := *session.Result.Cause
 		projected.Failure = &failure
 	}
-
-	if !projected.ProviderSessionAvailable {
-		return projected, nil
-	}
-	return r.enrichWithProviderSessionsProjection(ctx, projected)
+	return projected, nil
 }
 
 // loadObservationState returns detached snapshots of the registered session
@@ -659,7 +785,7 @@ func (s *observationSubscription) Next(ctx context.Context) workersessions.Obser
 	switch delivery.Kind {
 	case events.DeliveryRecord:
 		event := projectObservationEvent(delivery.Record)
-		if delivery.Record.SourceType == lifecycleSourceType && delivery.Record.SourceSequence >= terminalSourceSequence {
+		if isTerminalLifecycleRecord(delivery.Record) {
 			s.closeSource()
 			s.mu.Lock()
 			terminalReplay := s.terminalReplay
@@ -740,21 +866,45 @@ func (r *registry) StreamObservations(ctx context.Context, req workersessions.St
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.ObservationSubscription{}, err
 	}
-	if !req.ReplayOnly && r.eventReader == nil {
-		r.logger.Info("worker session observation stream", "outcome", "source_unavailable")
-		return workersessions.ObservationSubscription{}, workersessions.ErrObservationSourceUnavailable
-	}
-
 	workerSessionID, alreadyTerminal, workerSessionState, err := r.observationStreamSession(req.ProviderSession)
 	if err != nil {
 		return workersessions.ObservationSubscription{}, err
 	}
-	limit := req.Limit
+	return r.streamObservationTopic(ctx, workerSessionID, workerSessionState, alreadyTerminal, req.Limit, req.ReplayOnly)
+}
+
+func (r *registry) StreamObservationsByWorkerSessionID(ctx context.Context, req workersessions.StreamObservationsByWorkerSessionIDRequest) (workersessions.ObservationSubscription, error) {
+	if err := req.Validate(); err != nil {
+		r.logger.Info("worker session observation stream by Worker Session rejected", "outcome", "invalid")
+		return workersessions.ObservationSubscription{}, err
+	}
+	if err := observationContextError(ctx); err != nil {
+		return workersessions.ObservationSubscription{}, err
+	}
+	workerSessionID, alreadyTerminal, workerSessionState, err := r.observationStreamSessionByID(req.WorkerSessionID)
+	if err != nil {
+		return workersessions.ObservationSubscription{}, err
+	}
+	return r.streamObservationTopic(ctx, workerSessionID, workerSessionState, alreadyTerminal, req.Limit, req.ReplayOnly)
+}
+
+func (r *registry) streamObservationTopic(
+	ctx context.Context,
+	workerSessionID string,
+	workerSessionState workersessions.State,
+	alreadyTerminal bool,
+	limit int,
+	replayOnly bool,
+) (workersessions.ObservationSubscription, error) {
+	if !replayOnly && r.eventReader == nil {
+		r.logger.Info("worker session observation stream", "outcome", "source_unavailable")
+		return workersessions.ObservationSubscription{}, workersessions.ErrObservationSourceUnavailable
+	}
 	if limit == 0 {
 		limit = workersessions.DefaultObservationStreamLimit
 	}
 	topic := workersessions.Topic(workerSessionID)
-	if req.ReplayOnly {
+	if replayOnly {
 		return r.replayObservationStream(ctx, topic, workerSessionState, limit)
 	}
 	return r.liveObservationStream(ctx, topic, limit, alreadyTerminal)
@@ -780,6 +930,17 @@ func (r *registry) observationStreamSession(ref providers.SessionRef) (string, b
 		return "", false, workersessions.StateReserved, workersessions.ErrObservationSessionNotFound
 	}
 	return workerSessionID, alreadyTerminal, workerSessionState, nil
+}
+
+func (r *registry) observationStreamSessionByID(id string) (string, bool, workersessions.State, error) {
+	r.mu.RLock()
+	session, exists := r.sessions[id]
+	r.mu.RUnlock()
+	if !exists {
+		r.logger.Info("worker session observation stream by Worker Session", "workerSessionID", id, "outcome", "not_found")
+		return "", false, workersessions.StateReserved, workersessions.ErrObservationSessionNotFound
+	}
+	return id, session.Terminal(), session.State, nil
 }
 
 func (r *registry) replayObservationStream(
@@ -818,153 +979,4 @@ func (r *registry) liveObservationStream(
 	}
 	wrapped := &observationSubscription{source: subscription, terminalReplay: terminalReplay}
 	return workersessions.ObservationSubscription{NextFunc: wrapped.Next, CloseFunc: wrapped.Close}, nil
-}
-
-// ReadTranscript returns the final normalized Provider Sessions transcript for
-// one exact Worker Session association. The lifecycle check happens before the
-// provider projection so an active session has a stable active outcome even
-// when its provider source is not yet readable.
-func (r *registry) ReadTranscript(ctx context.Context, req workersessions.ReadTranscriptRequest) (workersessions.ReadTranscriptResult, error) {
-	if err := req.Validate(); err != nil {
-		r.logger.Info("worker session transcript read rejected", "outcome", "invalid")
-		return workersessions.ReadTranscriptResult{}, err
-	}
-	if err := observationContextError(ctx); err != nil {
-		return workersessions.ReadTranscriptResult{}, err
-	}
-
-	session, metadata, err := r.transcriptSession(req.ProviderSession)
-	if err != nil {
-		r.logger.Info("worker session transcript read", "outcome", "not_found")
-		return workersessions.ReadTranscriptResult{}, err
-	}
-	if !session.State.Terminal() {
-		r.logger.Info("worker session transcript read", "workerSessionID", session.ID, "outcome", "active")
-		return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationTranscriptActive
-	}
-	if session.ProviderSessionAssociation == nil {
-		r.logger.Info("worker session transcript read", "workerSessionID", session.ID, "outcome", "unavailable")
-		return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationTranscriptUnavailable
-	}
-	if r.providerSessions == nil {
-		r.logger.Info("worker session transcript read", "workerSessionID", session.ID, "outcome", "projection_unavailable")
-		return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationTranscriptProjectionUnavailable
-	}
-
-	projected, projectErr := r.providerSessions.Project(providersessions.ProjectRequest{
-		Session: req.ProviderSession.Clone(),
-		Context: ctx,
-	})
-	if projectErr != nil {
-		if errors.Is(projectErr, context.Canceled) || errors.Is(projectErr, providersessions.ErrOperationCanceled) {
-			return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationCanceled
-		}
-		if transcriptSourceUnavailable(projectErr) {
-			return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationTranscriptUnavailable
-		}
-		return workersessions.ReadTranscriptResult{}, fmt.Errorf("%w: %v", workersessions.ErrObservationTranscriptProjectionUnavailable, projectErr)
-	}
-
-	result := workersessions.ReadTranscriptResult{
-		WorkerSessionID: session.ID,
-		ProviderSession: req.ProviderSession.Clone(),
-		WorkIDs:         append([]string(nil), metadata.workIDs...),
-		AttemptID:       metadata.attemptID,
-		State:           session.State,
-		Entries:         transcriptEntries(projected.Detail.Transcript),
-	}
-	if session.ProviderSessionAssociation != nil {
-		result.TurnID = session.ProviderSessionAssociation.TurnID
-		result.AttemptID = session.ProviderSessionAssociation.AttemptID
-	}
-	if err := result.Validate(); err != nil {
-		return workersessions.ReadTranscriptResult{}, fmt.Errorf("validate Worker Session transcript: %w", err)
-	}
-	r.logger.Info("worker session transcript read", "workerSessionID", result.WorkerSessionID, "outcome", "success", "result_count", len(result.Entries))
-	return result, nil
-}
-
-func (r *registry) transcriptSession(ref providers.SessionRef) (workersessions.Session, *observation, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	ids := make([]string, 0, 1)
-	for id, session := range r.sessions {
-		if session.ProviderSessionAssociation != nil && session.ProviderSessionAssociation.Reference == ref {
-			ids = append(ids, id)
-		}
-	}
-	if len(ids) == 0 {
-		return workersessions.Session{}, nil, workersessions.ErrObservationSessionNotFound
-	}
-	sortStrings(ids)
-	session := cloneSession(r.sessions[ids[0]])
-	metadata := cloneObservation(r.observations[ids[0]])
-	if metadata == nil {
-		return workersessions.Session{}, nil, workersessions.ErrObservationSessionNotFound
-	}
-	return session, metadata, nil
-}
-
-func transcriptSourceUnavailable(err error) bool {
-	return errors.Is(err, providersessions.ErrSessionNotFound) ||
-		errors.Is(err, providersessions.ErrAmbiguousSessionFile) ||
-		errors.Is(err, providersessions.ErrSessionSourceNotRegularFile) ||
-		errors.Is(err, providersessions.ErrSessionStorageUnavailable) ||
-		errors.Is(err, providersessions.ErrSessionOutsideRoot)
-}
-
-func transcriptEntries(values []providersessions.TranscriptEntry) []workersessions.TranscriptEntry {
-	entries := make([]workersessions.TranscriptEntry, len(values))
-	for index, value := range values {
-		entries[index] = workersessions.TranscriptEntry{
-			Arguments:        cloneTranscriptString(value.Arguments),
-			CallID:           cloneTranscriptString(value.CallID),
-			Encrypted:        cloneTranscriptBool(value.Encrypted),
-			EncryptedContent: cloneTranscriptString(value.EncryptedContent),
-			LineNumber:       cloneTranscriptInt(value.LineNumber),
-			Name:             cloneTranscriptString(value.Name),
-			Order:            value.Order,
-			Output:           cloneTranscriptString(value.Output),
-			SourceType:       cloneTranscriptString(value.SourceType),
-			Status:           cloneTranscriptString(value.Status),
-			Summary:          cloneTranscriptString(value.Summary),
-			Text:             cloneTranscriptString(value.Text),
-			Timestamp:        cloneTranscriptTime(value.Timestamp),
-			TurnIndex:        cloneTranscriptInt(value.TurnIndex),
-			Type:             workersessions.TranscriptEntryType(value.Type),
-		}
-	}
-	return entries
-}
-
-func cloneTranscriptBool(value *bool) *bool {
-	if value == nil {
-		return nil
-	}
-	clone := *value
-	return &clone
-}
-
-func cloneTranscriptInt(value *int) *int {
-	if value == nil {
-		return nil
-	}
-	clone := *value
-	return &clone
-}
-
-func cloneTranscriptString(value *string) *string {
-	if value == nil {
-		return nil
-	}
-	clone := *value
-	return &clone
-}
-
-func cloneTranscriptTime(value *time.Time) *time.Time {
-	if value == nil {
-		return nil
-	}
-	clone := *value
-	return &clone
 }

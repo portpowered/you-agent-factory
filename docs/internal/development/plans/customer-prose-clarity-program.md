@@ -290,4 +290,3 @@ required, automated and manual review, terminal green CI, resolution of all
 blocking feedback and conflicts, and actual PR merge. Opening a PR, generating
 artifacts, obtaining approval, or reaching green CI without merge is not
 completion.
-

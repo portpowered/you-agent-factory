@@ -21,7 +21,16 @@ func newService(
 	eventsAppender workersessionservice.EventsAppender,
 	logger logging.Logger,
 ) (workersessions.Service, error) {
-	return workersessionservice.New(boundary, eventsAppender, logger, platformclock.Real{}, unavailableProviderSessions{})
+	return newServiceWithClock(boundary, eventsAppender, logger, platformclock.Real{})
+}
+
+func newServiceWithClock(
+	boundary workers.WorkstationPoolBoundary,
+	eventsAppender workersessionservice.EventsAppender,
+	logger logging.Logger,
+	clock platformclock.Source,
+) (workersessions.Service, error) {
+	return workersessionservice.New(boundary, eventsAppender, logger, clock, unavailableProviderSessions{})
 }
 
 type unavailableProviderSessions struct {

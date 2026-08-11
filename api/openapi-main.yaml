@@ -217,6 +217,46 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/worker-sessions/{worker_session_id}/events:
+    get:
+      tags:
+        - Worker Sessions
+      operationId: streamWorkerSessionEventsByWorkerSessionId
+      summary: Stream retained and live Worker Session events by Worker Session identity
+      description: >-
+        Streams the canonical Worker Session Events topic for the stable Worker
+        Session identity returned by the Worker Sessions list operation. This
+        provider-neutral path remains available when the provider did not emit
+        a native Provider Session reference. Retained records are emitted first
+        in aggregate order, followed by live records unless replayOnly is true.
+        In replay-only mode the retained head is captured before delivery, no
+        live follower is registered, and one REPLAY_SUMMARY frame closes the
+        stream after the retained drain.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - $ref: '#/components/parameters/WorkerSessionID'
+        - name: replayOnly
+          in: query
+          required: false
+          description: Drain the retained history through a captured Events head without registering a live follower.
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Retained then live Worker Session event frames, or a finite retained replay ending in REPLAY_SUMMARY.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: Server-Sent Events where each data frame is serialized JSON matching WorkerSessionEvent.
+              x-event-schema: '#/components/schemas/WorkerSessionEvent'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /factory-sessions/{session_id}/worker-sessions/detail:
     get:
       tags:
@@ -1716,6 +1756,8 @@ components:
   parameters:
     SessionID:
       $ref: './components/parameters/SessionID.yaml'
+    WorkerSessionID:
+      $ref: './components/parameters/WorkerSessionID.yaml'
     MaxResults:
       $ref: './components/parameters/MaxResults.yaml'
     NextToken:
@@ -2518,6 +2560,24 @@ components:
       $ref: './components/schemas/model-providers/ProviderCatalog.yaml'
     ProviderManifest:
       $ref: './components/schemas/model-providers/ProviderManifest.yaml'
+    ProviderCapabilitySupport:
+      $ref: './components/schemas/model-providers/ProviderCapabilitySupport.yaml'
+    ProviderCapabilityEvidence:
+      $ref: './components/schemas/model-providers/ProviderCapabilityEvidence.yaml'
+    ProviderCapabilityEvidenceKind:
+      $ref: './components/schemas/model-providers/ProviderCapabilityEvidenceKind.yaml'
+    ProviderModelCatalogPosture:
+      $ref: './components/schemas/model-providers/ProviderModelCatalogPosture.yaml'
+    ProviderHarness:
+      $ref: './components/schemas/model-providers/ProviderHarness.yaml'
+    ProviderHarnessKind:
+      $ref: './components/schemas/model-providers/ProviderHarnessKind.yaml'
+    ProviderACPSupport:
+      $ref: './components/schemas/model-providers/ProviderACPSupport.yaml'
+    ProviderACPResourceDelivery:
+      $ref: './components/schemas/model-providers/ProviderACPResourceDelivery.yaml'
+    ProviderMediaConstraints:
+      $ref: './components/schemas/model-providers/ProviderMediaConstraints.yaml'
     ProviderTechnicalSupportLevel:
       $ref: './components/schemas/model-providers/ProviderTechnicalSupportLevel.yaml'
     ProviderImplementationAvailability:
@@ -2554,6 +2614,10 @@ components:
       $ref: './components/schemas/model-providers/ProviderTool.yaml'
     ProviderToolSupport:
       $ref: './components/schemas/model-providers/ProviderToolSupport.yaml'
+    ProviderToolAvailability:
+      $ref: './components/schemas/model-providers/ProviderToolAvailability.yaml'
+    ProviderToolOutputModality:
+      $ref: './components/schemas/model-providers/ProviderToolOutputModality.yaml'
     ProviderKnownLimit:
       $ref: './components/schemas/model-providers/ProviderKnownLimit.yaml'
     ProviderKnownLimitKind:

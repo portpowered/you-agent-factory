@@ -94,6 +94,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/factory-sessions/{session_id}/worker-sessions/{worker_session_id}/events": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Stream retained and live Worker Session events by Worker Session identity
+     * @description Streams the canonical Worker Session Events topic for the stable Worker Session identity returned by the Worker Sessions list operation. This provider-neutral path remains available when the provider did not emit a native Provider Session reference. Retained records are emitted first in aggregate order, followed by live records unless replayOnly is true. In replay-only mode the retained head is captured before delivery, no live follower is registered, and one REPLAY_SUMMARY frame closes the stream after the retained drain.
+     */
+    get: operations["streamWorkerSessionEventsByWorkerSessionId"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/factory-sessions/{session_id}/worker-sessions/detail": {
     parameters: {
       query?: never;
@@ -3810,6 +3830,8 @@ export interface components {
       previousChainingTraceIds?: string[];
       outcome: components["schemas"]["WorkOutcome"];
       output?: string;
+      /** @description Optional native JSON value produced when the workstation outputSchema validates the worker response. JSON null is distinct from an omitted value. */
+      structuredResult?: unknown;
       error?: string;
       feedback?: string;
       selectedClassificationLabel?: string;
@@ -4214,6 +4236,61 @@ export interface components {
     FactoryResponseEventSessionPayload: {
       /** @description Session lifecycle status when applicable. */
       status?: string;
+      /**
+       * Format: date-time
+       * @description Injected-clock timestamp at which the Worker Session opened.
+       */
+      startedAt?: string;
+      /** @description Stable Worker Session identity for the execution. */
+      workerSessionId?: string;
+      /** @description Authored Worker identity when the invocation supplied one. */
+      workerType?: string;
+      /** @description Factory Session identity when the invocation supplied one. */
+      factorySessionId?: string;
+      /** @description Recording identity when the invocation supplied one. */
+      recordingId?: string;
+      /** @description Project identity when the invocation supplied one. */
+      projectId?: string;
+      /** @description Stable dispatch identity for the execution attempt. */
+      dispatchId?: string;
+      /** @description Runtime transition identity when the dispatch supplied one. */
+      transitionId?: string;
+      /** @description Workstation route used by the canonical invocation. */
+      workstationName?: string;
+      /** @description Turn or request identity when the dispatch supplied one. */
+      turnId?: string;
+      /** @description Work trace identity when the dispatch supplied one. */
+      traceId?: string;
+      /** @description Replay correlation key when the dispatch supplied one. */
+      replayKey?: string;
+      /** @description Work identities carried by the canonical dispatch. */
+      workIds?: string[];
+      /** @description Stable identity of the opening attempt. */
+      attemptId?: string;
+      /** @description One-based attempt number when known. */
+      attempt?: number;
+      /**
+       * @description Bounded reason for the attempt lifecycle.
+       * @enum {string}
+       */
+      attemptReason?: FactoryResponseEventSessionPayloadAttemptReason;
+      /** @description Exact provider continuation identity when supplied. */
+      continuation?: {
+        provider?: string;
+        kind?: string;
+        id?: string;
+      };
+      /** @description Explicit provider and runner selection facts. */
+      providerSelection?: {
+        runnerId?: string;
+        source?: components["schemas"]["RunnerSelectionSource"];
+        executorProvider?: string;
+        modelProvider?: string;
+      };
+      /** @description Explicit model selection when supplied. */
+      model?: string;
+      /** @description Explicit reasoning-effort selection when supplied. */
+      reasoningEffort?: string;
       capabilities?: components["schemas"]["FactoryResponseEventCapabilities"];
     };
     /** @description Run-scoped lifecycle metadata payload. */
@@ -4886,6 +4963,12 @@ export interface components {
       maximumExecutionCapabilities: components["schemas"]["ProviderExecutionCapabilities"];
       maximumResponseFidelityCapabilities: components["schemas"]["ProviderResponseFidelityCapabilities"];
       discovery: components["schemas"]["ProviderDiscoveryPrerequisites"];
+      harness?: components["schemas"]["ProviderHarness"];
+      modelCatalogPosture?: components["schemas"]["ProviderModelCatalogPosture"];
+      /** @description Directional routes implemented by the provider harness, independent of any model catalog claim. */
+      harnessRoutes?: components["schemas"]["ProviderModality"][];
+      /** @description Bounded evidence records used to qualify capability facts in this manifest. */
+      evidence?: components["schemas"]["ProviderCapabilityEvidence"][];
       /** @description Named provider models and their complete capability facts in canonical model-ID order. */
       models?: components["schemas"]["ProviderModel"][];
       /** @description Named provider tool facts in canonical tool-name order. */
@@ -4893,6 +4976,91 @@ export interface components {
       /** @description Named provider constraints and bounded behavior facts in canonical name order. */
       knownLimits?: components["schemas"]["ProviderKnownLimit"][];
       deprecation?: components["schemas"]["ProviderDeprecation"];
+    };
+    /**
+     * @description Evidence state shared by harness, modality, and tool capability facts.
+     * @enum {string}
+     */
+    ProviderCapabilitySupport: ProviderCapabilitySupport;
+    /** @description Bounded evidence record qualifying one or more published capability facts. */
+    ProviderCapabilityEvidence: {
+      /** @description Stable manifest-local evidence identifier. */
+      id: string;
+      kind: components["schemas"]["ProviderCapabilityEvidenceKind"];
+      /**
+       * Format: date
+       * @description UTC calendar date on which the evidence was checked.
+       */
+      verifiedOn: string;
+      /**
+       * Format: uri
+       * @description Optional public HTTPS source for the evidence.
+       */
+      url?: string;
+      /** @description Optional harness version used when the evidence was checked. */
+      harnessVersion?: string;
+      /** @description Optional bounded references to facts qualified by this record. */
+      factRefs?: string[];
+    };
+    /**
+     * @description Source class for evidence supporting a published capability fact.
+     * @enum {string}
+     */
+    ProviderCapabilityEvidenceKind: ProviderCapabilityEvidenceKind;
+    /**
+     * @description How a provider's model identifiers are known to the published catalog.
+     * @enum {string}
+     */
+    ProviderModelCatalogPosture: ProviderModelCatalogPosture;
+    /** @description Provider harness metadata, kept separate from model capability facts. */
+    ProviderHarness: {
+      kind: components["schemas"]["ProviderHarnessKind"];
+      acpSupport?: components["schemas"]["ProviderACPSupport"];
+    };
+    /**
+     * @description Execution harness family represented by a provider manifest.
+     * @enum {string}
+     */
+    ProviderHarnessKind: ProviderHarnessKind;
+    /** @description Typed ACP support metadata for a provider harness. */
+    ProviderACPSupport: {
+      support: components["schemas"]["ProviderCapabilitySupport"];
+      /** @description Bounded operator-visible condition required when ACP support is conditional. */
+      condition?: string;
+      /** @description ACP protocol version known to the manifest author. */
+      protocolVersion?: string;
+      resourceDelivery?: components["schemas"]["ProviderACPResourceDelivery"];
+      /** @description Stable IDs of evidence records qualifying ACP support. */
+      evidenceRefs?: string[];
+    } & (
+      | {
+          /** @enum {string} */
+          support?: ProviderACPSupportOneOf0Support;
+          condition: string;
+        }
+      | {
+          /** @enum {string} */
+          support?: ProviderACPSupportOneOf1Support;
+        }
+    );
+    /**
+     * @description Evidence state for delivering a resource through the ACP harness.
+     * @enum {string}
+     */
+    ProviderACPResourceDelivery: ProviderACPResourceDelivery;
+    /** @description Optional bounded media constraints for one modality route. */
+    ProviderMediaConstraints: {
+      /** @description Accepted or emitted media types, such as image/png or audio/wav. */
+      mediaTypes?: string[];
+      /**
+       * Format: int64
+       * @description Maximum payload size in bytes when documented.
+       */
+      maxBytes?: number;
+      /** @description Maximum media duration in seconds when documented. */
+      maxDurationSeconds?: number;
+      /** @description Maximum number of media items accepted or emitted in one route. */
+      maxItems?: number;
     };
     /**
      * @description Maintainer-verified technical support posture for a provider integration. This value does not describe whether the provider is installed or ready on the current machine.
@@ -5002,13 +5170,28 @@ export interface components {
       /** @description Complete directional modality facts, including unsupported values. */
       modalities: components["schemas"]["ProviderModality"][];
     };
-    /** @description One explicit supported or unsupported directional modality fact. */
+    /** @description One explicit directional modality fact for a harness route or model. */
     ProviderModality: {
       direction: components["schemas"]["ProviderModalityDirection"];
       modality: components["schemas"]["ProviderModalityKind"];
       support: components["schemas"]["ProviderModalitySupport"];
       transport: components["schemas"]["ProviderModalityTransport"];
-    };
+      /** @description Bounded operator-visible condition required when support is conditional. */
+      condition?: string;
+      mediaConstraints?: components["schemas"]["ProviderMediaConstraints"];
+      /** @description Stable IDs of evidence records qualifying this fact. */
+      evidenceRefs?: string[];
+    } & (
+      | {
+          /** @enum {string} */
+          support?: ProviderModalityOneOf0Support;
+          condition: string;
+        }
+      | {
+          /** @enum {string} */
+          support?: ProviderModalityOneOf1Support;
+        }
+    );
     /**
      * @description Direction in which a provider model accepts or emits a modality.
      * @enum {string}
@@ -5020,7 +5203,7 @@ export interface components {
      */
     ProviderModalityKind: ProviderModalityKind;
     /**
-     * @description Whether the provider model supports the modality in this direction.
+     * @description Evidence state for a directional harness or model modality fact.
      * @enum {string}
      */
     ProviderModalitySupport: ProviderModalitySupport;
@@ -5036,12 +5219,57 @@ export interface components {
       support: components["schemas"]["ProviderToolSupport"];
       /** @description Bounded explanation of the tool fact. */
       description: string;
-    };
+      /** @description Bounded operator-visible condition required when tool support is conditional. */
+      condition?: string;
+      /** @description Stable IDs of evidence records qualifying this tool fact. */
+      evidenceRefs?: string[];
+      availability?: components["schemas"]["ProviderToolAvailability"];
+      /** @description Whether the tool is enabled by default; null means the default is unknown or operator-defined. */
+      defaultEnabled?: boolean | null;
+      /** @description Tool-produced modalities, kept separate from direct model output modalities. */
+      outputModalities?: components["schemas"]["ProviderToolOutputModality"][];
+    } & (
+      | {
+          /** @enum {string} */
+          support?: ProviderToolOneOf0Support;
+          condition: string;
+        }
+      | {
+          /** @enum {string} */
+          support?: ProviderToolOneOf1Support;
+        }
+    );
     /**
-     * @description Whether the provider exposes a named tool through its integration.
+     * @description Evidence state for a named provider tool fact.
      * @enum {string}
      */
     ProviderToolSupport: ProviderToolSupport;
+    /**
+     * @description How a named tool becomes available to the provider harness.
+     * @enum {string}
+     */
+    ProviderToolAvailability: ProviderToolAvailability;
+    /** @description A modality produced by a tool, explicitly separate from direct model output. */
+    ProviderToolOutputModality: {
+      modality: components["schemas"]["ProviderModalityKind"];
+      support: components["schemas"]["ProviderCapabilitySupport"];
+      transport: components["schemas"]["ProviderModalityTransport"];
+      /** @description Bounded operator-visible condition required when support is conditional. */
+      condition?: string;
+      mediaConstraints?: components["schemas"]["ProviderMediaConstraints"];
+      /** @description Stable IDs of evidence records qualifying this tool output fact. */
+      evidenceRefs?: string[];
+    } & (
+      | {
+          /** @enum {string} */
+          support?: ProviderToolOutputModalityOneOf0Support;
+          condition: string;
+        }
+      | {
+          /** @enum {string} */
+          support?: ProviderToolOutputModalityOneOf1Support;
+        }
+    );
     /** @description Named bounded provider constraint or documented behavior. */
     ProviderKnownLimit: {
       /** @description Stable machine-readable limit name. */
@@ -5655,6 +5883,8 @@ export interface components {
       content?: components["schemas"]["WorkContent"];
       /** @description Opaque work payload forwarded as raw JSON, or a binary data, or whatever else. */
       payload?: unknown;
+      /** @description Optional JSON value produced by a workstation whose outputSchema validated the worker response. JSON null is distinct from an omitted value. */
+      structuredResult?: unknown;
       /** @description Key-value pairs for storing arbitrary metadata about the work. Both keys and values are strings. */
       tags?: components["schemas"]["StringMap"];
       /** @description Current outbound relationships attached to this listed source work item when returned by read APIs. */
@@ -6252,6 +6482,8 @@ export interface components {
   parameters: {
     /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
     SessionID: string;
+    /** @description Stable Worker Session identity returned by the Worker Sessions list operation. */
+    WorkerSessionID: string;
     /** @description Optional positive page size. Omit to use the default page size; non-positive values fall back to the default after successful integer binding. */
     MaxResults: number;
     /** @description Optional base64-encoded token ID cursor. */
@@ -6462,6 +6694,37 @@ export interface operations {
       path: {
         /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
         session_id: components["parameters"]["SessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Retained then live Worker Session event frames, or a finite retained replay ending in REPLAY_SUMMARY. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "text/event-stream": string;
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  streamWorkerSessionEventsByWorkerSessionId: {
+    parameters: {
+      query?: {
+        /** @description Drain the retained history through a captured Events head without registering a live follower. */
+        replayOnly?: boolean;
+      };
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+        /** @description Stable Worker Session identity returned by the Worker Sessions list operation. */
+        worker_session_id: components["parameters"]["WorkerSessionID"];
       };
       cookie?: never;
     };
@@ -8646,6 +8909,9 @@ export const WorkFailureType = {
   WorkFailureTypeMissingExecutable: "missing_executable",
   // The provider command exceeded the operating system command-line size limit.
   WorkFailureTypeCommandLineTooLong: "command_line_too_long",
+  // The worker response was malformed JSON or did not satisfy the workstation output schema.
+  WorkFailureTypeStructuredOutputSchemaViolation:
+    "structured_output_schema_violation",
   // A successful worker did not satisfy its expected artifact declarations.
   WorkFailureTypeExpectedArtifactsUnsatisfied: "EXPECTED_ARTIFACTS_UNSATISFIED",
 } as const;
@@ -8795,6 +9061,13 @@ export const FactoryResponseEventStructuredOutputContentBlockKind = {
 } as const;
 export type FactoryResponseEventStructuredOutputContentBlockKind =
   (typeof FactoryResponseEventStructuredOutputContentBlockKind)[keyof typeof FactoryResponseEventStructuredOutputContentBlockKind];
+export const FactoryResponseEventSessionPayloadAttemptReason = {
+  INITIAL: "INITIAL",
+  RETRY: "RETRY",
+  RESUME: "RESUME",
+} as const;
+export type FactoryResponseEventSessionPayloadAttemptReason =
+  (typeof FactoryResponseEventSessionPayloadAttemptReason)[keyof typeof FactoryResponseEventSessionPayloadAttemptReason];
 export const FactorySaveMode = {
   // Replace the factory already current in the selected live session.
   FactorySaveModeReplaceCurrent: "REPLACE_CURRENT",
@@ -8924,6 +9197,56 @@ export const ProviderCatalogProviderSchema = {
 } as const;
 export type ProviderCatalogProviderSchema =
   (typeof ProviderCatalogProviderSchema)[keyof typeof ProviderCatalogProviderSchema];
+export const ProviderCapabilitySupport = {
+  supported: "supported",
+  unsupported: "unsupported",
+  conditional: "conditional",
+  unknown: "unknown",
+} as const;
+export type ProviderCapabilitySupport =
+  (typeof ProviderCapabilitySupport)[keyof typeof ProviderCapabilitySupport];
+export const ProviderCapabilityEvidenceKind = {
+  primary_documentation: "primary_documentation",
+  protocol_probe: "protocol_probe",
+  conformance_fixture: "conformance_fixture",
+  maintainer_assertion: "maintainer_assertion",
+} as const;
+export type ProviderCapabilityEvidenceKind =
+  (typeof ProviderCapabilityEvidenceKind)[keyof typeof ProviderCapabilityEvidenceKind];
+export const ProviderModelCatalogPosture = {
+  exact: "exact",
+  runtime_discovered: "runtime_discovered",
+  operator_selected: "operator_selected",
+  unknown: "unknown",
+} as const;
+export type ProviderModelCatalogPosture =
+  (typeof ProviderModelCatalogPosture)[keyof typeof ProviderModelCatalogPosture];
+export const ProviderHarnessKind = {
+  native_cli: "native_cli",
+  acp: "acp",
+} as const;
+export type ProviderHarnessKind =
+  (typeof ProviderHarnessKind)[keyof typeof ProviderHarnessKind];
+export const ProviderACPSupportOneOf0Support = {
+  conditional: "conditional",
+} as const;
+export type ProviderACPSupportOneOf0Support =
+  (typeof ProviderACPSupportOneOf0Support)[keyof typeof ProviderACPSupportOneOf0Support];
+export const ProviderACPSupportOneOf1Support = {
+  supported: "supported",
+  unsupported: "unsupported",
+  unknown: "unknown",
+} as const;
+export type ProviderACPSupportOneOf1Support =
+  (typeof ProviderACPSupportOneOf1Support)[keyof typeof ProviderACPSupportOneOf1Support];
+export const ProviderACPResourceDelivery = {
+  implemented: "implemented",
+  unsupported: "unsupported",
+  conditional: "conditional",
+  unknown: "unknown",
+} as const;
+export type ProviderACPResourceDelivery =
+  (typeof ProviderACPResourceDelivery)[keyof typeof ProviderACPResourceDelivery];
 export const ProviderTechnicalSupportLevel = {
   production: "production",
   experimental: "experimental",
@@ -8972,6 +9295,18 @@ export const ProviderEffort = {
 } as const;
 export type ProviderEffort =
   (typeof ProviderEffort)[keyof typeof ProviderEffort];
+export const ProviderModalityOneOf0Support = {
+  conditional: "conditional",
+} as const;
+export type ProviderModalityOneOf0Support =
+  (typeof ProviderModalityOneOf0Support)[keyof typeof ProviderModalityOneOf0Support];
+export const ProviderModalityOneOf1Support = {
+  supported: "supported",
+  unsupported: "unsupported",
+  unknown: "unknown",
+} as const;
+export type ProviderModalityOneOf1Support =
+  (typeof ProviderModalityOneOf1Support)[keyof typeof ProviderModalityOneOf1Support];
 export const ProviderModalityDirection = {
   input: "input",
   output: "output",
@@ -8989,22 +9324,61 @@ export type ProviderModalityKind =
 export const ProviderModalitySupport = {
   supported: "supported",
   unsupported: "unsupported",
+  conditional: "conditional",
+  unknown: "unknown",
 } as const;
 export type ProviderModalitySupport =
   (typeof ProviderModalitySupport)[keyof typeof ProviderModalitySupport];
 export const ProviderModalityTransport = {
   inline: "inline",
   file_path: "file_path",
+  acp_resource: "acp_resource",
+  tool_mediated: "tool_mediated",
   none: "none",
 } as const;
 export type ProviderModalityTransport =
   (typeof ProviderModalityTransport)[keyof typeof ProviderModalityTransport];
+export const ProviderToolOneOf0Support = {
+  conditional: "conditional",
+} as const;
+export type ProviderToolOneOf0Support =
+  (typeof ProviderToolOneOf0Support)[keyof typeof ProviderToolOneOf0Support];
+export const ProviderToolOneOf1Support = {
+  supported: "supported",
+  unsupported: "unsupported",
+  unknown: "unknown",
+} as const;
+export type ProviderToolOneOf1Support =
+  (typeof ProviderToolOneOf1Support)[keyof typeof ProviderToolOneOf1Support];
 export const ProviderToolSupport = {
   supported: "supported",
   unsupported: "unsupported",
+  conditional: "conditional",
+  unknown: "unknown",
 } as const;
 export type ProviderToolSupport =
   (typeof ProviderToolSupport)[keyof typeof ProviderToolSupport];
+export const ProviderToolAvailability = {
+  built_in: "built_in",
+  optional: "optional",
+  operator_configured: "operator_configured",
+  external: "external",
+  unknown: "unknown",
+} as const;
+export type ProviderToolAvailability =
+  (typeof ProviderToolAvailability)[keyof typeof ProviderToolAvailability];
+export const ProviderToolOutputModalityOneOf0Support = {
+  conditional: "conditional",
+} as const;
+export type ProviderToolOutputModalityOneOf0Support =
+  (typeof ProviderToolOutputModalityOneOf0Support)[keyof typeof ProviderToolOutputModalityOneOf0Support];
+export const ProviderToolOutputModalityOneOf1Support = {
+  supported: "supported",
+  unsupported: "unsupported",
+  unknown: "unknown",
+} as const;
+export type ProviderToolOutputModalityOneOf1Support =
+  (typeof ProviderToolOutputModalityOneOf1Support)[keyof typeof ProviderToolOutputModalityOneOf1Support];
 export const ProviderKnownLimitKind = {
   maximum: "maximum",
   default: "default",

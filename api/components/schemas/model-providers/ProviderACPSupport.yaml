@@ -1,0 +1,53 @@
+type: object
+additionalProperties: false
+description: Typed ACP support metadata for a provider harness.
+required:
+  - support
+oneOf:
+  - type: object
+    required:
+      - condition
+    properties:
+      support:
+        type: string
+        enum:
+          - conditional
+      condition:
+        type: string
+        minLength: 1
+        maxLength: 512
+  - type: object
+    properties:
+      support:
+        type: string
+        enum:
+          - supported
+          - unsupported
+          - unknown
+properties:
+  support:
+    $ref: './ProviderCapabilitySupport.yaml'
+  condition:
+    type: string
+    minLength: 1
+    maxLength: 512
+    description: Bounded operator-visible condition required when ACP support is conditional.
+  protocolVersion:
+    type: string
+    minLength: 1
+    maxLength: 64
+    pattern: '^[A-Za-z0-9][A-Za-z0-9._/-]*$'
+    description: ACP protocol version known to the manifest author.
+  resourceDelivery:
+    $ref: './ProviderACPResourceDelivery.yaml'
+  evidenceRefs:
+    type: array
+    minItems: 1
+    maxItems: 16
+    uniqueItems: true
+    description: Stable IDs of evidence records qualifying ACP support.
+    items:
+      type: string
+      minLength: 1
+      maxLength: 128
+      pattern: '^[a-z][a-z0-9._-]*$'

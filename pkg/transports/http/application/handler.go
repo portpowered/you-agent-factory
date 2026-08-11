@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionshttp "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/http"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
@@ -103,7 +104,19 @@ func (handler *Handler) Bind(opened factorysessions.RuntimeHTTPServices) (http.H
 			opened.Logger,
 		)
 	}
-	server := transporthttp.NewServer(sessionsHandler, workHandler, modelsHandler, handler.providerSessionsHTTP, opened.Logger, workerSessionsHandler)
+	factoryDefinitionsHandler := factorydefinitionshttp.NewHandlerFromRoot(
+		factorydefinitionshttp.RootBinding{Definitions: opened.FactoryDefinitions},
+		opened.Logger,
+	)
+	server := transporthttp.NewServer(
+		sessionsHandler,
+		workHandler,
+		modelsHandler,
+		handler.providerSessionsHTTP,
+		factoryDefinitionsHandler,
+		opened.Logger,
+		workerSessionsHandler,
+	)
 	return server.Handler(), nil
 }
 
@@ -125,5 +138,5 @@ func (handler *Handler) BindDurableExecution(
 		InvocationWorkType: handler.invocationWorkType,
 		SessionRequests:    handler.sessionRequests,
 	}, logger)
-	return transporthttp.NewServer(sessionsHandler, nil, nil, nil, logger).Handler(), nil
+	return transporthttp.NewServer(sessionsHandler, nil, nil, nil, nil, logger).Handler(), nil
 }

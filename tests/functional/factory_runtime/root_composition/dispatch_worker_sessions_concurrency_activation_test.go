@@ -442,7 +442,7 @@ func newInterleavingW4ProviderCommandRunner() *interleavingW4ProviderCommandRunn
 }
 
 func (r *interleavingW4ProviderCommandRunner) Run(ctx context.Context, req platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
-	stage := w4ProviderStage(req.Stdin)
+	stage := w4ProviderStage(req)
 	output := "w4 " + stage + " COMPLETE"
 	r.mu.Lock()
 	if stage == "planner" {
@@ -472,11 +472,11 @@ func (r *interleavingW4ProviderCommandRunner) Run(ctx context.Context, req platf
 		r.planCompletions = append(r.planCompletions, planArrival)
 	}
 	r.mu.Unlock()
-	return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout(output)}, nil
+	return platformprocess.CommandResult{Stdout: w4ProviderStdout(req, output)}, nil
 }
 
-func w4ProviderStage(prompt []byte) string {
-	text := string(prompt)
+func w4ProviderStage(req platformprocess.CommandRequest) string {
+	text := string(req.Stdin) + "\n" + strings.Join(req.Args, "\n")
 	switch {
 	case strings.Contains(text, "Plan workstation"):
 		return "planner"
@@ -487,6 +487,13 @@ func w4ProviderStage(prompt []byte) string {
 	default:
 		return "unexpected provider prompt"
 	}
+}
+
+func w4ProviderStdout(req platformprocess.CommandRequest, output string) []byte {
+	if strings.EqualFold(req.Command, "claude") {
+		return support.ClaudeSuccessStdout(output)
+	}
+	return support.CodexSuccessStdout(output)
 }
 
 func (r *interleavingW4ProviderCommandRunner) completedCalls() map[string]int {

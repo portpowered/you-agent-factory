@@ -51,6 +51,11 @@ type Service interface {
 	// Providers-owned provider/kind/id reference.
 	GetObservation(ctx context.Context, req GetObservationRequest) (Observation, error)
 
+	// GetObservationByWorkerSessionID returns one detached observation by the
+	// canonical Worker Session identity. This identity-only path keeps
+	// provider-neutral histories inspectable when no Provider Session exists.
+	GetObservationByWorkerSessionID(ctx context.Context, req GetObservationByWorkerSessionIDRequest) (Observation, error)
+
 	// ReadTranscript returns the normalized Provider Sessions transcript for one
 	// terminal Worker Session identified by its exact Provider Session reference.
 	ReadTranscript(ctx context.Context, req ReadTranscriptRequest) (ReadTranscriptResult, error)
@@ -59,6 +64,11 @@ type Service interface {
 	// the canonical Worker Session Events topic for the exact Provider Session
 	// reference.
 	StreamObservations(ctx context.Context, req StreamObservationsRequest) (ObservationSubscription, error)
+
+	// StreamObservationsByWorkerSessionID returns a cancellable retained-then-live
+	// stream over the canonical Worker Session Events topic by stable Worker
+	// Session identity, including sessions without a Provider Session reference.
+	StreamObservationsByWorkerSessionID(ctx context.Context, req StreamObservationsByWorkerSessionIDRequest) (ObservationSubscription, error)
 
 	// InvokeSession validates req, then establishes or reuses one stable Worker
 	// Session identity in StateReserved, transitions StateStarting, and hands
@@ -120,6 +130,16 @@ type Service interface {
 	// Callers must invoke this before forwarding output that names the observed
 	// Provider Session reference.
 	ObserveProviderSession(context.Context, ProviderSessionObservationRequest) (ProviderSessionAssociationResult, error)
+
+	// EnsureProviderBinding records the first provider identity learned from a
+	// supervised dispatch before its provider-native output is published. A
+	// later, different provider identity is rejected and never replaces the
+	// opening or existing binding.
+	EnsureProviderBinding(context.Context, ProviderBindingRequest) (ProviderBindingResult, error)
+
+	// WorkerSessionIDForDispatch resolves a supervised dispatch attempt to its
+	// stable Worker Session identity for source-native publication.
+	WorkerSessionIDForDispatch(context.Context, string) (string, error)
 
 	// PublishRecord validates req, then appends req.Draft, detached, as a
 	// source-native Worker record onto Topic(req.SessionID) using req's
@@ -540,6 +560,15 @@ var (
 	// SourceSequence that regresses behind one already accepted for the same
 	// (SourceType, SourceID). No record is committed.
 	ErrOutOfOrderPublication = errors.New("worker session: source sequence is out of order")
+	// ErrInvalidProviderBinding reports a missing dispatch or provider identity
+	// at the provider-output publication boundary.
+	ErrInvalidProviderBinding = errors.New("worker session: invalid provider binding")
+	// ErrProviderBindingAttemptMismatch reports a provider identity observed
+	// for a dispatch Worker Sessions does not currently supervise.
+	ErrProviderBindingAttemptMismatch = errors.New("worker session: provider binding attempt mismatch")
+	// ErrProviderBindingConflict reports a provider identity that contradicts
+	// the provider already established by the opening or an earlier binding.
+	ErrProviderBindingConflict = errors.New("worker session: provider binding conflict")
 	// ErrInvalidProviderSessionAssociation reports a malformed Worker Sessions
 	// association correlation. Invalid provider, kind, or opaque Provider
 	// Session identity retains the more specific Providers-owned typed error.

@@ -9,8 +9,6 @@ import { CustomerFactoryEmulatorDemos } from "./features/factory-emulator/compon
 import { AppNotificationToaster } from "./features/notifications/components/app-notification-toaster";
 import type { PackagedFactoryCopyText } from "./features/packaged-factories/components/packaged-factory-detail";
 import { PackagedFactoryInventory } from "./features/packaged-factories/components/packaged-factory-inventory";
-import { packagedFactoryPublicDataSource } from "./features/packaged-factories/lib/generated/public-package-data";
-import type { PackagedFactoryPublicDataSource } from "./features/packaged-factories/lib/public-contract";
 import { AppLocaleProvider } from "./i18n";
 import { AppColorPaletteProvider } from "./theme";
 
@@ -27,7 +25,6 @@ export interface AppProps {
   locationPathname?: string | null;
   locationSearch?: string | null;
   packagedFactoryCopyText?: PackagedFactoryCopyText;
-  packagedFactorySource?: PackagedFactoryPublicDataSource;
 }
 
 export function App({
@@ -37,7 +34,6 @@ export function App({
   locationPathname,
   locationSearch,
   packagedFactoryCopyText,
-  packagedFactorySource = packagedFactoryPublicDataSource,
 }: AppProps) {
   const pathname = locationPathname ?? window.location.pathname;
   const surface = resolveAppSurface(pathname);
@@ -57,10 +53,7 @@ export function App({
         ) : surface === "packaged-factories" ? (
           <main className="min-h-screen overflow-x-hidden bg-surface p-4 md:p-6">
             <div className="mx-auto min-w-0 max-w-7xl">
-              <PackagedFactoryInventory
-                copyText={packagedFactoryCopyText}
-                source={packagedFactorySource}
-              />
+              <PackagedFactoryInventory copyText={packagedFactoryCopyText} />
             </div>
           </main>
         ) : (

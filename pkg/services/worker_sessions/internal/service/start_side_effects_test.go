@@ -17,17 +17,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-// decodeDraft decodes a committed record's payload as a workers.Draft for
-// Kind/Phase/payload assertions.
-func decodeDraft(t *testing.T, record events.Record) workers.Draft {
-	t.Helper()
-	var draft workers.Draft
-	if err := json.Unmarshal(record.Payload, &draft); err != nil {
-		t.Fatalf("unmarshal record payload as workers.Draft error = %v", err)
-	}
-	return draft
-}
-
 // TestStart_CommitsOpeningRecordBeforeWorkersInvocation proves the W3
 // before-handoff barrier: reading worker-session/<id>/events from its zero
 // cursor, from inside the controlled Workers boundary's own dispatch
@@ -147,6 +136,42 @@ func TestStart_OpeningRecordPublicationFailure_TerminalizesFailedWithoutCallingW
 	}
 	if got := execution.callCount(); got != 0 {
 		t.Fatalf("Start() called Workers %d times, want 0 when opening record publication fails", got)
+	}
+}
+
+// TestStart_OpeningAppendFailure_DoesNotCreateTerminalOnlyHistory proves that
+// a failed opening append cannot be followed by a successful terminal append:
+// the resulting topic must remain empty rather than exposing SESSION/FAILED at
+// position 1 without the authoritative SESSION/STARTED record.
+func TestStart_OpeningAppendFailure_DoesNotCreateTerminalOnlyHistory(t *testing.T) {
+	appender := &failOnNthAppendEventsAppender{Service: newEventsAppender(), n: 1}
+	execution := succeedingExecution()
+	registry, err := newService(executionBoundary{execution: execution}, appender, nil)
+	if err != nil {
+		t.Fatalf("service.New() error = %v, want nil", err)
+	}
+
+	result, err := registry.InvokeSession(context.Background(), validStartRequest("worker-1", "dispatch-1"))
+	if err != nil {
+		t.Fatalf("Start() error = %v, want nil", err)
+	}
+	if result.Session.State != workersessions.StateFailed {
+		t.Fatalf("Start() state = %q, want FAILED", result.Session.State)
+	}
+	if got := execution.callCount(); got != 0 {
+		t.Fatalf("Start() called Workers %d times, want 0 after opening append failure", got)
+	}
+
+	read, err := appender.Read(context.Background(), events.ReadRequest{
+		Topic: workersessions.Topic("worker-1"),
+		From:  events.Cursor{Topic: workersessions.Topic("worker-1")},
+		Limit: 10,
+	})
+	if err != nil {
+		t.Fatalf("Read() error = %v, want nil", err)
+	}
+	if read.Outcome != events.ReadOutcomeAtHead || len(read.Records) != 0 {
+		t.Fatalf("Read() = %+v, want an empty topic at head after opening failure", read)
 	}
 }
 

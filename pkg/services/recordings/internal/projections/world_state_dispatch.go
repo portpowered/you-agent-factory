@@ -3,6 +3,7 @@ package projections
 import (
 	"strings"
 
+	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workdomain "github.com/portpowered/infinite-you/pkg/services/work"
@@ -380,6 +381,8 @@ func (r *factoryWorldReducer) dispatchCompletionFromResponse(
 		Result: interfaces.WorkstationResult{
 			Outcome:                     string(payload.Outcome),
 			Output:                      stringValue(payload.Output),
+			StructuredResult:            jsonvalue.Clone(payload.StructuredResult),
+			StructuredResultPresent:     jsonvalue.Present(payload.StructuredResult, payload.StructuredResultPresent),
 			Error:                       stringValue(payload.Error),
 			Feedback:                    stringValue(payload.Feedback),
 			SelectedClassificationLabel: stringValue(payload.SelectedClassificationLabel),

@@ -65,10 +65,22 @@ func (s *countingWorkerSessionsService) GetObservation(
 	return s.inner.GetObservation(ctx, req)
 }
 
+func (s *countingWorkerSessionsService) GetObservationByWorkerSessionID(
+	ctx context.Context, req workersessions.GetObservationByWorkerSessionIDRequest,
+) (workersessions.Observation, error) {
+	return s.inner.GetObservationByWorkerSessionID(ctx, req)
+}
+
 func (s *countingWorkerSessionsService) StreamObservations(
 	ctx context.Context, req workersessions.StreamObservationsRequest,
 ) (workersessions.ObservationSubscription, error) {
 	return s.inner.StreamObservations(ctx, req)
+}
+
+func (s *countingWorkerSessionsService) StreamObservationsByWorkerSessionID(
+	ctx context.Context, req workersessions.StreamObservationsByWorkerSessionIDRequest,
+) (workersessions.ObservationSubscription, error) {
+	return s.inner.StreamObservationsByWorkerSessionID(ctx, req)
 }
 
 func (s *countingWorkerSessionsService) ReadTranscript(
@@ -111,6 +123,18 @@ func (s *countingWorkerSessionsService) ObserveProviderSession(
 	ctx context.Context, req workersessions.ProviderSessionObservationRequest,
 ) (workersessions.ProviderSessionAssociationResult, error) {
 	return s.inner.ObserveProviderSession(ctx, req)
+}
+
+func (s *countingWorkerSessionsService) EnsureProviderBinding(
+	ctx context.Context, req workersessions.ProviderBindingRequest,
+) (workersessions.ProviderBindingResult, error) {
+	return s.inner.EnsureProviderBinding(ctx, req)
+}
+
+func (s *countingWorkerSessionsService) WorkerSessionIDForDispatch(
+	ctx context.Context, dispatchID string,
+) (string, error) {
+	return s.inner.WorkerSessionIDForDispatch(ctx, dispatchID)
 }
 
 func (s *countingWorkerSessionsService) Pause(ctx context.Context, req workersessions.ControlRequest) (workersessions.ControlResult, error) {

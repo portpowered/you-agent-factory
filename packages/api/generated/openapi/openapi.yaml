@@ -193,6 +193,38 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/worker-sessions/{worker_session_id}/events:
+    get:
+      tags:
+        - Worker Sessions
+      operationId: streamWorkerSessionEventsByWorkerSessionId
+      summary: Stream retained and live Worker Session events by Worker Session identity
+      description: Streams the canonical Worker Session Events topic for the stable Worker Session identity returned by the Worker Sessions list operation. This provider-neutral path remains available when the provider did not emit a native Provider Session reference. Retained records are emitted first in aggregate order, followed by live records unless replayOnly is true. In replay-only mode the retained head is captured before delivery, no live follower is registered, and one REPLAY_SUMMARY frame closes the stream after the retained drain.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - $ref: '#/components/parameters/WorkerSessionID'
+        - name: replayOnly
+          in: query
+          required: false
+          description: Drain the retained history through a captured Events head without registering a live follower.
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Retained then live Worker Session event frames, or a finite retained replay ending in REPLAY_SUMMARY.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: Server-Sent Events where each data frame is serialized JSON matching WorkerSessionEvent.
+              x-event-schema: '#/components/schemas/WorkerSessionEvent'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /factory-sessions/{session_id}/worker-sessions/detail:
     get:
       tags:
@@ -1493,6 +1525,14 @@ components:
       description: Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly.
       schema:
         type: string
+    WorkerSessionID:
+      name: worker_session_id
+      in: path
+      required: true
+      description: Stable Worker Session identity returned by the Worker Sessions list operation.
+      schema:
+        type: string
+        minLength: 1
     MaxResults:
       name: maxResults
       in: query
@@ -7971,6 +8011,8 @@ components:
           $ref: '#/components/schemas/WorkOutcome'
         output:
           type: string
+        structuredResult:
+          description: Optional native JSON value produced when the workstation outputSchema validates the worker response. JSON null is distinct from an omitted value.
         error:
           type: string
         feedback:
@@ -8168,6 +8210,7 @@ components:
         - WorkFailureTypeMisconfigured
         - WorkFailureTypeMissingExecutable
         - WorkFailureTypeCommandLineTooLong
+        - WorkFailureTypeStructuredOutputSchemaViolation
         - WorkFailureTypeExpectedArtifactsUnsatisfied
       enum:
         - auth_failure
@@ -8179,6 +8222,7 @@ components:
         - misconfigured
         - missing_executable
         - command_line_too_long
+        - structured_output_schema_violation
         - EXPECTED_ARTIFACTS_UNSATISFIED
       x-enum-descriptions:
         - Authentication or authorization failed and operator action is required.
@@ -8190,6 +8234,7 @@ components:
         - The worker or runtime was misconfigured and requires operator intervention.
         - The configured provider executable could not be found.
         - The provider command exceeded the operating system command-line size limit.
+        - The worker response was malformed JSON or did not satisfy the workstation output schema.
         - A successful worker did not satisfy its expected artifact declarations.
     ExpectedArtifactVerificationReason:
       type: string
@@ -8858,6 +8903,92 @@ components:
         status:
           type: string
           description: Session lifecycle status when applicable.
+        startedAt:
+          type: string
+          format: date-time
+          description: Injected-clock timestamp at which the Worker Session opened.
+        workerSessionId:
+          type: string
+          description: Stable Worker Session identity for the execution.
+        workerType:
+          type: string
+          description: Authored Worker identity when the invocation supplied one.
+        factorySessionId:
+          type: string
+          description: Factory Session identity when the invocation supplied one.
+        recordingId:
+          type: string
+          description: Recording identity when the invocation supplied one.
+        projectId:
+          type: string
+          description: Project identity when the invocation supplied one.
+        dispatchId:
+          type: string
+          description: Stable dispatch identity for the execution attempt.
+        transitionId:
+          type: string
+          description: Runtime transition identity when the dispatch supplied one.
+        workstationName:
+          type: string
+          description: Workstation route used by the canonical invocation.
+        turnId:
+          type: string
+          description: Turn or request identity when the dispatch supplied one.
+        traceId:
+          type: string
+          description: Work trace identity when the dispatch supplied one.
+        replayKey:
+          type: string
+          description: Replay correlation key when the dispatch supplied one.
+        workIds:
+          type: array
+          items:
+            type: string
+          description: Work identities carried by the canonical dispatch.
+        attemptId:
+          type: string
+          description: Stable identity of the opening attempt.
+        attempt:
+          type: integer
+          minimum: 1
+          description: One-based attempt number when known.
+        attemptReason:
+          type: string
+          enum:
+            - INITIAL
+            - RETRY
+            - RESUME
+          description: Bounded reason for the attempt lifecycle.
+        continuation:
+          type: object
+          additionalProperties: false
+          description: Exact provider continuation identity when supplied.
+          properties:
+            provider:
+              type: string
+            kind:
+              type: string
+            id:
+              type: string
+        providerSelection:
+          type: object
+          additionalProperties: false
+          description: Explicit provider and runner selection facts.
+          properties:
+            runnerId:
+              type: string
+            source:
+              $ref: '#/components/schemas/RunnerSelectionSource'
+            executorProvider:
+              type: string
+            modelProvider:
+              type: string
+        model:
+          type: string
+          description: Explicit model selection when supplied.
+        reasoningEffort:
+          type: string
+          description: Explicit reasoning-effort selection when supplied.
         capabilities:
           $ref: '#/components/schemas/FactoryResponseEventCapabilities'
     FactoryResponseEventRunPayload:
@@ -10004,6 +10135,23 @@ components:
           $ref: '#/components/schemas/ProviderResponseFidelityCapabilities'
         discovery:
           $ref: '#/components/schemas/ProviderDiscoveryPrerequisites'
+        harness:
+          $ref: '#/components/schemas/ProviderHarness'
+        modelCatalogPosture:
+          $ref: '#/components/schemas/ProviderModelCatalogPosture'
+        harnessRoutes:
+          type: array
+          maxItems: 32
+          description: Directional routes implemented by the provider harness, independent of any model catalog claim.
+          items:
+            $ref: '#/components/schemas/ProviderModality'
+        evidence:
+          type: array
+          maxItems: 64
+          uniqueItems: true
+          description: Bounded evidence records used to qualify capability facts in this manifest.
+          items:
+            $ref: '#/components/schemas/ProviderCapabilityEvidence'
         models:
           type: array
           description: Named provider models and their complete capability facts in canonical model-ID order.
@@ -10021,6 +10169,180 @@ components:
             $ref: '#/components/schemas/ProviderKnownLimit'
         deprecation:
           $ref: '#/components/schemas/ProviderDeprecation'
+    ProviderCapabilitySupport:
+      type: string
+      description: Evidence state shared by harness, modality, and tool capability facts.
+      enum:
+        - supported
+        - unsupported
+        - conditional
+        - unknown
+    ProviderCapabilityEvidence:
+      type: object
+      additionalProperties: false
+      description: Bounded evidence record qualifying one or more published capability facts.
+      required:
+        - id
+        - kind
+        - verifiedOn
+      properties:
+        id:
+          type: string
+          minLength: 1
+          maxLength: 128
+          pattern: ^[a-z][a-z0-9._-]*$
+          description: Stable manifest-local evidence identifier.
+        kind:
+          $ref: '#/components/schemas/ProviderCapabilityEvidenceKind'
+        verifiedOn:
+          type: string
+          format: date
+          description: UTC calendar date on which the evidence was checked.
+        url:
+          type: string
+          format: uri
+          minLength: 1
+          maxLength: 2048
+          pattern: ^https://(?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\.)+[A-Za-z]{2,}(?::[0-9]+)?(?:[/?#].*)?$
+          description: Optional public HTTPS source for the evidence.
+        harnessVersion:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: Optional harness version used when the evidence was checked.
+        factRefs:
+          type: array
+          maxItems: 64
+          uniqueItems: true
+          description: Optional bounded references to facts qualified by this record.
+          items:
+            type: string
+            minLength: 1
+            maxLength: 256
+    ProviderCapabilityEvidenceKind:
+      type: string
+      description: Source class for evidence supporting a published capability fact.
+      enum:
+        - primary_documentation
+        - protocol_probe
+        - conformance_fixture
+        - maintainer_assertion
+    ProviderModelCatalogPosture:
+      type: string
+      description: How a provider's model identifiers are known to the published catalog.
+      enum:
+        - exact
+        - runtime_discovered
+        - operator_selected
+        - unknown
+    ProviderHarness:
+      type: object
+      additionalProperties: false
+      description: Provider harness metadata, kept separate from model capability facts.
+      required:
+        - kind
+      properties:
+        kind:
+          $ref: '#/components/schemas/ProviderHarnessKind'
+        acpSupport:
+          $ref: '#/components/schemas/ProviderACPSupport'
+    ProviderHarnessKind:
+      type: string
+      description: Execution harness family represented by a provider manifest.
+      enum:
+        - native_cli
+        - acp
+    ProviderACPSupport:
+      type: object
+      additionalProperties: false
+      description: Typed ACP support metadata for a provider harness.
+      required:
+        - support
+      oneOf:
+        - type: object
+          required:
+            - condition
+          properties:
+            support:
+              type: string
+              enum:
+                - conditional
+            condition:
+              type: string
+              minLength: 1
+              maxLength: 512
+        - type: object
+          properties:
+            support:
+              type: string
+              enum:
+                - supported
+                - unsupported
+                - unknown
+      properties:
+        support:
+          $ref: '#/components/schemas/ProviderCapabilitySupport'
+        condition:
+          type: string
+          minLength: 1
+          maxLength: 512
+          description: Bounded operator-visible condition required when ACP support is conditional.
+        protocolVersion:
+          type: string
+          minLength: 1
+          maxLength: 64
+          pattern: ^[A-Za-z0-9][A-Za-z0-9._/-]*$
+          description: ACP protocol version known to the manifest author.
+        resourceDelivery:
+          $ref: '#/components/schemas/ProviderACPResourceDelivery'
+        evidenceRefs:
+          type: array
+          minItems: 1
+          maxItems: 16
+          uniqueItems: true
+          description: Stable IDs of evidence records qualifying ACP support.
+          items:
+            type: string
+            minLength: 1
+            maxLength: 128
+            pattern: ^[a-z][a-z0-9._-]*$
+    ProviderACPResourceDelivery:
+      type: string
+      description: Evidence state for delivering a resource through the ACP harness.
+      enum:
+        - implemented
+        - unsupported
+        - conditional
+        - unknown
+    ProviderMediaConstraints:
+      type: object
+      additionalProperties: false
+      description: Optional bounded media constraints for one modality route.
+      properties:
+        mediaTypes:
+          type: array
+          minItems: 1
+          maxItems: 32
+          uniqueItems: true
+          description: Accepted or emitted media types, such as image/png or audio/wav.
+          items:
+            type: string
+            minLength: 3
+            maxLength: 128
+            pattern: ^[A-Za-z0-9!#$&^_.+-]+/[A-Za-z0-9!#$&^_.+-]+$
+        maxBytes:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Maximum payload size in bytes when documented.
+        maxDurationSeconds:
+          type: number
+          minimum: 0
+          description: Maximum media duration in seconds when documented.
+        maxItems:
+          type: integer
+          minimum: 1
+          description: Maximum number of media items accepted or emitted in one route.
     ProviderTechnicalSupportLevel:
       type: string
       description: Maintainer-verified technical support posture for a provider integration. This value does not describe whether the provider is installed or ready on the current machine.
@@ -10258,12 +10580,33 @@ components:
     ProviderModality:
       type: object
       additionalProperties: false
-      description: One explicit supported or unsupported directional modality fact.
+      description: One explicit directional modality fact for a harness route or model.
       required:
         - direction
         - modality
         - support
         - transport
+      oneOf:
+        - type: object
+          required:
+            - condition
+          properties:
+            support:
+              type: string
+              enum:
+                - conditional
+            condition:
+              type: string
+              minLength: 1
+              maxLength: 512
+        - type: object
+          properties:
+            support:
+              type: string
+              enum:
+                - supported
+                - unsupported
+                - unknown
       properties:
         direction:
           $ref: '#/components/schemas/ProviderModalityDirection'
@@ -10273,6 +10616,24 @@ components:
           $ref: '#/components/schemas/ProviderModalitySupport'
         transport:
           $ref: '#/components/schemas/ProviderModalityTransport'
+        condition:
+          type: string
+          minLength: 1
+          maxLength: 512
+          description: Bounded operator-visible condition required when support is conditional.
+        mediaConstraints:
+          $ref: '#/components/schemas/ProviderMediaConstraints'
+        evidenceRefs:
+          type: array
+          minItems: 1
+          maxItems: 16
+          uniqueItems: true
+          description: Stable IDs of evidence records qualifying this fact.
+          items:
+            type: string
+            minLength: 1
+            maxLength: 128
+            pattern: ^[a-z][a-z0-9._-]*$
     ProviderModalityDirection:
       type: string
       description: Direction in which a provider model accepts or emits a modality.
@@ -10289,16 +10650,20 @@ components:
         - video
     ProviderModalitySupport:
       type: string
-      description: Whether the provider model supports the modality in this direction.
+      description: Evidence state for a directional harness or model modality fact.
       enum:
         - supported
         - unsupported
+        - conditional
+        - unknown
     ProviderModalityTransport:
       type: string
       description: How a supported modality is supplied or returned.
       enum:
         - inline
         - file_path
+        - acp_resource
+        - tool_mediated
         - none
     ProviderTool:
       type: object
@@ -10308,6 +10673,27 @@ components:
         - name
         - support
         - description
+      oneOf:
+        - type: object
+          required:
+            - condition
+          properties:
+            support:
+              type: string
+              enum:
+                - conditional
+            condition:
+              type: string
+              minLength: 1
+              maxLength: 512
+        - type: object
+          properties:
+            support:
+              type: string
+              enum:
+                - supported
+                - unsupported
+                - unknown
       properties:
         name:
           type: string
@@ -10322,12 +10708,106 @@ components:
           minLength: 1
           maxLength: 256
           description: Bounded explanation of the tool fact.
+        condition:
+          type: string
+          minLength: 1
+          maxLength: 512
+          description: Bounded operator-visible condition required when tool support is conditional.
+        evidenceRefs:
+          type: array
+          minItems: 1
+          maxItems: 16
+          uniqueItems: true
+          description: Stable IDs of evidence records qualifying this tool fact.
+          items:
+            type: string
+            minLength: 1
+            maxLength: 128
+            pattern: ^[a-z][a-z0-9._-]*$
+        availability:
+          $ref: '#/components/schemas/ProviderToolAvailability'
+        defaultEnabled:
+          type: boolean
+          nullable: true
+          description: Whether the tool is enabled by default; null means the default is unknown or operator-defined.
+        outputModalities:
+          type: array
+          maxItems: 16
+          uniqueItems: true
+          description: Tool-produced modalities, kept separate from direct model output modalities.
+          items:
+            $ref: '#/components/schemas/ProviderToolOutputModality'
     ProviderToolSupport:
       type: string
-      description: Whether the provider exposes a named tool through its integration.
+      description: Evidence state for a named provider tool fact.
       enum:
         - supported
         - unsupported
+        - conditional
+        - unknown
+    ProviderToolAvailability:
+      type: string
+      description: How a named tool becomes available to the provider harness.
+      enum:
+        - built_in
+        - optional
+        - operator_configured
+        - external
+        - unknown
+    ProviderToolOutputModality:
+      type: object
+      additionalProperties: false
+      description: A modality produced by a tool, explicitly separate from direct model output.
+      required:
+        - modality
+        - support
+        - transport
+      oneOf:
+        - type: object
+          required:
+            - condition
+          properties:
+            support:
+              type: string
+              enum:
+                - conditional
+            condition:
+              type: string
+              minLength: 1
+              maxLength: 512
+        - type: object
+          properties:
+            support:
+              type: string
+              enum:
+                - supported
+                - unsupported
+                - unknown
+      properties:
+        modality:
+          $ref: '#/components/schemas/ProviderModalityKind'
+        support:
+          $ref: '#/components/schemas/ProviderCapabilitySupport'
+        transport:
+          $ref: '#/components/schemas/ProviderModalityTransport'
+        condition:
+          type: string
+          minLength: 1
+          maxLength: 512
+          description: Bounded operator-visible condition required when support is conditional.
+        mediaConstraints:
+          $ref: '#/components/schemas/ProviderMediaConstraints'
+        evidenceRefs:
+          type: array
+          minItems: 1
+          maxItems: 16
+          uniqueItems: true
+          description: Stable IDs of evidence records qualifying this tool output fact.
+          items:
+            type: string
+            minLength: 1
+            maxLength: 128
+            pattern: ^[a-z][a-z0-9._-]*$
     ProviderKnownLimit:
       type: object
       additionalProperties: false
@@ -11459,6 +11939,8 @@ components:
           description: Optional canonical ordered work content parts for this work item.
         payload:
           description: Opaque work payload forwarded as raw JSON, or a binary data, or whatever else.
+        structuredResult:
+          description: Optional JSON value produced by a workstation whose outputSchema validated the worker response. JSON null is distinct from an omitted value.
         tags:
           $ref: '#/components/schemas/StringMap'
           description: Key-value pairs for storing arbitrary metadata about the work. Both keys and values are strings.

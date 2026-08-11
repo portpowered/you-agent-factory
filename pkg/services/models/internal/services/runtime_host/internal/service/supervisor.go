@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -33,7 +32,8 @@ type supervisorSettings struct {
 		cacheInspection,
 		*models.RuntimeWorker,
 	) (modelseffects.HostProcessStartSpec, error)
-	Diagnostics hostDiagnostics
+	Diagnostics               hostDiagnostics
+	afterLoadStateObservation func()
 }
 
 type healthChecker interface {
@@ -120,21 +120,21 @@ func (r *supervisedRuntime) ensureReady(
 		return cancelHostError(err)
 	}
 
-	if err := r.awaitExistingLoad(ctx); err != nil {
-		if errors.Is(err, errReadyAlready) {
-			return nil
-		}
-		return err
-	}
-
 	r.mu.Lock()
-	if r.state == supervisedStateReady {
+	switch r.state {
+	case supervisedStateReady:
 		r.mu.Unlock()
+		r.notifyAfterLoadStateObservation()
 		return nil
-	}
-	if r.state == supervisedStateFailed {
+	case supervisedStateLoading:
+		loadDone := r.loadDone
+		r.mu.Unlock()
+		r.notifyAfterLoadStateObservation()
+		return r.waitForLoad(ctx, loadDone)
+	case supervisedStateFailed:
 		err := r.failureOutcomeLocked()
 		r.mu.Unlock()
+		r.notifyAfterLoadStateObservation()
 		return err
 	}
 	r.identity = identity
@@ -144,6 +144,7 @@ func (r *supervisedRuntime) ensureReady(
 	r.loadDone = make(chan struct{})
 	loadDone := r.loadDone
 	r.mu.Unlock()
+	r.notifyAfterLoadStateObservation()
 	defer close(loadDone)
 
 	r.cfg.Diagnostics.logLoadStarted(identity)
@@ -190,25 +191,9 @@ func (r *supervisedRuntime) ensureReady(
 	}
 }
 
-var errReadyAlready = errors.New("model host runtime already ready")
-
-func (r *supervisedRuntime) awaitExistingLoad(ctx context.Context) error {
-	r.mu.Lock()
-	switch r.state {
-	case supervisedStateReady:
-		r.mu.Unlock()
-		return errReadyAlready
-	case supervisedStateLoading:
-		loadDone := r.loadDone
-		r.mu.Unlock()
-		return r.waitForLoad(ctx, loadDone)
-	case supervisedStateFailed:
-		err := r.failureOutcomeLocked()
-		r.mu.Unlock()
-		return err
-	default:
-		r.mu.Unlock()
-		return nil
+func (r *supervisedRuntime) notifyAfterLoadStateObservation() {
+	if r.cfg.afterLoadStateObservation != nil {
+		r.cfg.afterLoadStateObservation()
 	}
 }
 

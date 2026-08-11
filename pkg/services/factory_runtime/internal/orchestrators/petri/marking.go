@@ -3,6 +3,7 @@ package petri
 import (
 	"maps"
 
+	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
@@ -209,6 +210,8 @@ func deepCopyToken(t *factorytoken.Token) factorytoken.Token {
 		cp.Color.Payload = make([]byte, len(t.Color.Payload))
 		copy(cp.Color.Payload, t.Color.Payload)
 	}
+	cp.Color.StructuredResult = jsonvalue.Clone(t.Color.StructuredResult)
+	cp.Color.StructuredResultPresent = jsonvalue.Present(t.Color.StructuredResult, t.Color.StructuredResultPresent)
 
 	// Deep copy History
 	if t.History.TotalVisits != nil {
