@@ -9654,3 +9654,17 @@
 - **Learnings for future iterations:**
   - After a moving-base merge, rerun the boundary functional and race evidence on the exact merged ancestry before pushing; prior-head green results do not prove the replacement head.
 ---
+## [2026-08-11 06:20 -07:00] - prose-standard-and-terms-002
+- What was implemented
+  - Completed the latest terminology-review follow-up on the current PR head. The register contains one exact `FactoryResponseEvent` record, and the `Parent-Child` example describes child-set membership and parent-aware fan-in rather than unsupported lifecycle ownership.
+  - Preserved the documentation-only scope; no source-scanning test or runtime implementation was added.
+- Files changed
+  - `progress.txt`
+- Verification
+  - PyYAML loaded version 1 and all 58 term records; the required fields, allowed categories, registered replacements, owner paths, internal-only Petri-term surfaces, exact `FactoryResponseEvent` spelling, and revised `Parent-Child` example passed review validation.
+  - `make typecheck` and `git diff --check` passed.
+  - `origin/main` is an ancestor of the current head, and `git merge-tree --write-tree origin/main HEAD` reported no conflicts.
+- **Learnings for future iterations:**
+  - Public identifier spellings from the owning architecture or contract source take precedence over natural-language variants when a terminology register defines one canonical record.
+  - Relationship examples should describe observable contract effects, such as membership or fan-in, instead of inferring lifecycle ownership from relationship names.
+---
