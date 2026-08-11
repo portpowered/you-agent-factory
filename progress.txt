@@ -11689,3 +11689,18 @@
   - A PR can become dirty after a green run when main advances; check the live remote base immediately before final handoff and preserve append-only progress blocks when rebasing.
   - Rebase bookkeeping must be followed by a fresh hosted run because even unchanged product code has a new reviewed head.
 ---
+## [2026-08-11 09:48:47 -07:00] - js-skip-permissions-parity-004 final PR handoff audit
+- What was implemented
+  - Completed the final review-readiness audit for the existing JavaScript child permission-bypass PR after the latest replacement-head feedback.
+  - Synchronized the GitHub PR description with the canonical `prd.json`, including its trailing newline.
+- Files changed
+  - `progress.txt`
+- Verification
+  - All four PRD stories remain marked `passes:true`.
+  - Thread-aware PR audit reports zero reviews and zero unresolved inline threads; the latest conversation update clears the prior capability, functional-construction, negotiated-capability, contract-wording, rebase, and CI blockers.
+  - PR #1875 is open, points at local `HEAD` `4b7d77a3bbaa33bad39a4a0d24cd9abc7554d0e5`, is `CLEAN`, and all 18 hosted checks are terminal-success.
+  - `origin/main` `650b701689fcbc467fa0e814478460b9c3316629` is an ancestor of `HEAD`; `git diff --check` passes; the PR body now matches `prd.json` byte-for-byte.
+- **Learnings for future iterations:**
+  - GitHub's high-level `gh pr edit` may require the `read:project` scope even for a body-only update; `gh api` against the PR's issue endpoint can apply the canonical body with the existing repository token.
+  - Treat PR-body byte parity, latest-head CI, mergeability, and thread-aware review state as separate final checks; a green PR can still fail handoff on a one-byte description drift.
+---
