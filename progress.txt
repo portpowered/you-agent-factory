@@ -2705,3 +2705,19 @@
 - **Learnings for future iterations:**
   - A retry that clears transient named tests but reproduces a current-base assertion should be recorded as a baseline blocker rather than widening a completed story into unrelated production or test changes.
 ---
+
+## 2026-08-10 18:21 -07:00 - btrc-p1-root-injection-006 CI baseline follow-up
+- What was implemented
+  - Re-audited PR #1857 after all six P1 stories remained marked `passes:true`; no new story implementation or review-thread fix was required.
+  - Inspected the job-specific Backend Functional Coverage log and confirmed the sole failure is the unchanged server-binding diagnostic-line assertion; retried only the failed GitHub Actions jobs with `gh run rerun --failed`.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Thread-aware PR audit: zero unresolved review threads and zero formal review submissions.
+  - `prd.json` parses with all six P1 stories marked `passes:true`; PR body remains sourced from the PRD.
+  - `go test ./tests/functional/transport/server_binding -run '^TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput$' -count=1 -v -timeout 120s` reproduces locally: the test expects one diagnostic line but receives the existing `API server error` JSON plus `SERVER_BIND_FAILED`.
+  - `git diff origin/main...HEAD` has no changes in `tests/functional/transport/server_binding` or `pkg/services/factory_sessions/internal/runtimehosting`.
+  - CI run `31448535411` had every other lane pass; Backend Functional Coverage failed only on the unchanged server-binding test and Verification Policy failed as its dependent aggregate.
+- **Learnings for future iterations:**
+  - Inspect the exact failing job log and compare changed paths before fixing broad functional failures; a reproducible failure in an untouched package is a current-main baseline issue, not evidence for widening a completed story.
+---
