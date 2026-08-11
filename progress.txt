@@ -12009,3 +12009,17 @@
 - **Learnings for future iterations:**
   - Keep the final handoff audit tied to one exact commit across local Git, the PR head, PRD/body parity, current base, hosted checks, and thread state.
 ---
+## [2026-08-11 13:09:44 -07:00] - dwro-s7-placement-grammar replacement-head CI audit
+- What was implemented
+  - No additional story code was required; all four S7 stories remain marked `passes:true` in the authoritative `prd.json`.
+  - The first hosted run for bookkeeping head `342d627b5` failed only in Backend Functional Coverage after the coverage command exited nonzero and the `real-acpx-evidence.json` artifact was absent; the unchanged failed jobs were rerun without a source workaround.
+- Files changed
+  - `progress.txt`
+- Verification
+  - The failed-job rerun is terminal-successful across all 18 hosted checks, including Backend Functional Coverage and Verification Policy.
+  - PR #1878 is open, non-draft, `MERGEABLE`/`CLEAN`, and its head matches local `HEAD` at `342d627b5`.
+  - `origin/main` and the PR base both point to `05db67124`, which is an ancestor of the branch; the PR body matches `prd.json`.
+  - `prd.json` parses with all four stories passing, `git diff --check` passes, and the thread-aware audit reports zero formal reviews and zero inline review threads.
+- **Learnings for future iterations:**
+  - When a coverage job fails after successful functional package output, inspect the artifact/coverage tail and rerun the failed job on the unchanged head before changing product code.
+---
