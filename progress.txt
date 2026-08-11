@@ -10558,3 +10558,16 @@
 - **Learnings for future iterations:**
   - After resolving a task-PRD conflict, compare it with the pre-rebase task commit as well as parsing it; semantic equivalence is insufficient when the PR body must remain byte-identical.
 ---
+## [2026-08-11 00:00:40 -07:00] - js-skip-permissions-parity handoff verification
+- What was implemented
+  - No additional product behavior; completed the final PR handoff audit for the already-complete four-story lane.
+  - Confirmed the existing PR remains the requested `js-skip-permissions-parity` submission and retained the canonical `prd.json` as its description.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Thread-aware GraphQL review audit, connector PR timeline, and review list show no conversation comments, reviews, or unresolved review threads.
+  - PR #1875 is open, non-draft, mergeable, and all reported CI checks are terminal and successful; its head matches this checkout and its base matches `origin/main`.
+  - Hosted PR body matches `prd.json` after newline normalization; all four stories remain `passes:true`; `git diff --check` passed.
+- **Learnings for future iterations:**
+  - An existing open PR with an exact task-PRD body and no actionable feedback needs a tracking-only handoff commit; avoid creating a duplicate PR.
+---
