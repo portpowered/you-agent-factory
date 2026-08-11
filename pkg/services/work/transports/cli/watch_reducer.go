@@ -16,9 +16,11 @@ type watchAcceptedEvent struct {
 }
 
 type watchWorkObservation struct {
-	workTypeName string
-	state        string
-	terminal     bool
+	workTypeName            string
+	state                   string
+	terminal                bool
+	structuredResult        any
+	structuredResultPending bool
 }
 
 // watchReducer projects the canonical Factory stream into Work transitions.
@@ -32,6 +34,11 @@ type watchReducer struct {
 	accepted   map[string]watchAcceptedEvent
 	stateTypes map[string]map[string]factoryapi.WorkStateType
 	cohort     map[string]watchWorkObservation
+	pending    map[string]watchStructuredResult
+}
+
+type watchStructuredResult struct {
+	value any
 }
 
 func newWatchReducer(sessionID string) *watchReducer {
@@ -40,6 +47,7 @@ func newWatchReducer(sessionID string) *watchReducer {
 		accepted:   make(map[string]watchAcceptedEvent),
 		stateTypes: make(map[string]map[string]factoryapi.WorkStateType),
 		cohort:     make(map[string]watchWorkObservation),
+		pending:    make(map[string]watchStructuredResult),
 	}
 }
 
@@ -177,6 +185,8 @@ func (r *watchReducer) applyEvent(event factoryapi.FactoryEvent) (WatchTransitio
 		return WatchTransition{}, false, r.applyFactoryChangeEvent(event)
 	case factoryapi.FactoryEventTypeWorkRequest:
 		return WatchTransition{}, false, r.applyWorkRequestFromEvent(event)
+	case factoryapi.FactoryEventTypeDispatchResponse:
+		return WatchTransition{}, false, r.applyDispatchResponseEvent(event)
 	case factoryapi.FactoryEventTypeWorkStateChange:
 		return r.applyWorkStateChangeFromEvent(event)
 	}
@@ -225,6 +235,69 @@ func (r *watchReducer) applyWorkRequestFromEvent(event factoryapi.FactoryEvent) 
 		return fmt.Errorf("apply Work cohort event %q: %w", event.Id, err)
 	}
 	return nil
+}
+
+func (r *watchReducer) applyDispatchResponseEvent(event factoryapi.FactoryEvent) error {
+	payload, err := event.Payload.AsDispatchResponseEventPayload()
+	if err != nil {
+		if strings.Contains(err.Error(), "unexpected end of JSON input") {
+			// Ordering-policy tests and older ledgers may carry an empty
+			// non-projecting dispatch response payload. It has no result to
+			// hand off, so retain the pre-result watch behavior.
+			return nil
+		}
+		return fmt.Errorf("decode Work result event %q: %w", event.Id, err)
+	}
+	if payload.Outcome == factoryapi.WorkOutcomeFailed || payload.Outcome == factoryapi.WorkOutcomeRejected {
+		r.clearDispatchStructuredResult(event, payload)
+		return nil
+	}
+	if err := restoreDispatchStructuredResultNulls(event, &payload); err != nil {
+		return err
+	}
+	responseResultPresent := payload.StructuredResult != nil
+	outputWorkIDs := make(map[string]struct{})
+	if payload.OutputWork != nil {
+		for _, item := range *payload.OutputWork {
+			workID := stringValue(item.WorkId)
+			if workID == "" {
+				continue
+			}
+			outputWorkIDs[workID] = struct{}{}
+			if item.StructuredResult != nil {
+				r.recordStructuredResult(workID, item.StructuredResult)
+				continue
+			}
+			if responseResultPresent {
+				r.recordStructuredResult(workID, payload.StructuredResult)
+			}
+		}
+	}
+	if !responseResultPresent || len(outputWorkIDs) > 0 {
+		return nil
+	}
+	if event.Context.WorkIds == nil {
+		return nil
+	}
+	for _, workID := range *event.Context.WorkIds {
+		r.recordStructuredResult(workID, payload.StructuredResult)
+	}
+	return nil
+}
+
+func (r *watchReducer) clearDispatchStructuredResult(event factoryapi.FactoryEvent, payload factoryapi.DispatchResponseEventPayload) {
+	if payload.OutputWork != nil && len(*payload.OutputWork) > 0 {
+		for _, item := range *payload.OutputWork {
+			r.clearStructuredResult(stringValue(item.WorkId))
+		}
+		return
+	}
+	if event.Context.WorkIds == nil {
+		return
+	}
+	for _, workID := range *event.Context.WorkIds {
+		r.clearStructuredResult(workID)
+	}
 }
 
 func (r *watchReducer) applyWorkStateChangeFromEvent(event factoryapi.FactoryEvent) (WatchTransition, bool, error) {
@@ -300,6 +373,9 @@ func (r *watchReducer) applyWorkRequest(
 	payload factoryapi.WorkRequestEventPayload,
 ) error {
 	if payload.Works != nil {
+		if err := restoreWorkRequestStructuredResultNulls(event, payload.Works); err != nil {
+			return err
+		}
 		for _, item := range *payload.Works {
 			workID, observation, include, err := r.workRequestObservation(event, item)
 			if err != nil {
@@ -324,6 +400,48 @@ func (r *watchReducer) applyWorkRequest(
 		}
 	}
 	return nil
+}
+
+func restoreWorkRequestStructuredResultNulls(event factoryapi.FactoryEvent, works *[]factoryapi.Work) error {
+	fields, err := watchEventPayloadFields(event)
+	if err != nil {
+		return fmt.Errorf("decode Work request structured result presence: %w", err)
+	}
+	if _, err := restoreWatchWorkResultNulls(fields["works"], works); err != nil {
+		return fmt.Errorf("restore Work request structured result presence: %w", err)
+	}
+	return nil
+}
+
+func restoreDispatchStructuredResultNulls(event factoryapi.FactoryEvent, payload *factoryapi.DispatchResponseEventPayload) error {
+	if payload == nil {
+		return nil
+	}
+	data, err := json.Marshal(event)
+	if err != nil {
+		return fmt.Errorf("encode dispatch structured result presence: %w", err)
+	}
+	fields, err := watchPayloadFields(data)
+	if err != nil {
+		return fmt.Errorf("decode dispatch structured result presence: %w", err)
+	}
+	if rawJSONFieldIsNull(fields, "structuredResult") {
+		payload.StructuredResult = json.RawMessage("null")
+	}
+	if payload.OutputWork != nil {
+		if _, err := restoreWatchWorkResultNulls(fields["outputWork"], payload.OutputWork); err != nil {
+			return fmt.Errorf("restore dispatch output structured result presence: %w", err)
+		}
+	}
+	return nil
+}
+
+func watchEventPayloadFields(event factoryapi.FactoryEvent) (map[string]json.RawMessage, error) {
+	data, err := json.Marshal(event)
+	if err != nil {
+		return nil, err
+	}
+	return watchPayloadFields(data)
 }
 
 func (r *watchReducer) workRequestObservation(
@@ -361,9 +479,11 @@ func (r *watchReducer) workRequestObservation(
 		r.setStateType(workTypeName, item.State.Name, item.State.Type)
 	}
 	return workID, watchWorkObservation{
-		workTypeName: workTypeName,
-		state:        item.State.Name,
-		terminal:     isTerminalWorkState(stateType),
+		workTypeName:            workTypeName,
+		state:                   item.State.Name,
+		terminal:                isTerminalWorkState(stateType),
+		structuredResult:        item.StructuredResult,
+		structuredResultPending: item.StructuredResult != nil,
 	}, true, nil
 }
 
@@ -400,6 +520,7 @@ func (r *watchReducer) applyWorkStateChange(
 	if err := r.recordWork(payload.WorkId, observation); err != nil {
 		return WatchTransition{}, err
 	}
+	observation = r.cohort[payload.WorkId]
 	transition := WatchTransition{
 		SessionID:     r.sessionID,
 		EventID:       event.Id,
@@ -413,6 +534,13 @@ func (r *watchReducer) applyWorkStateChange(
 		Terminal:      observation.terminal,
 		TriggerWorkID: stringValue(payload.TriggerWorkId),
 		Reason:        stringValue(payload.Reason),
+	}
+	if observation.structuredResultPending {
+		transition.StructuredResult = observation.structuredResult
+		transition.StructuredResultPresent = true
+		observation.structuredResult = nil
+		observation.structuredResultPending = false
+		r.cohort[payload.WorkId] = observation
 	}
 	return transition, nil
 }
@@ -430,8 +558,49 @@ func (r *watchReducer) recordWork(workID string, observation watchWorkObservatio
 	if observation.workTypeName == "" {
 		observation.workTypeName = prior.workTypeName
 	}
+	if !observation.structuredResultPending && prior.structuredResultPending {
+		observation.structuredResult = prior.structuredResult
+		observation.structuredResultPending = true
+	}
+	if !observation.structuredResultPending {
+		if result, ok := r.pending[workID]; ok {
+			observation.structuredResult = result.value
+			observation.structuredResultPending = true
+			delete(r.pending, workID)
+		}
+	} else {
+		delete(r.pending, workID)
+	}
 	r.cohort[workID] = observation
 	return nil
+}
+
+func (r *watchReducer) recordStructuredResult(workID string, value any) {
+	if strings.TrimSpace(workID) == "" {
+		return
+	}
+	observation, ok := r.cohort[workID]
+	if !ok {
+		r.pending[workID] = watchStructuredResult{value: value}
+		return
+	}
+	observation.structuredResult = value
+	observation.structuredResultPending = true
+	r.cohort[workID] = observation
+}
+
+func (r *watchReducer) clearStructuredResult(workID string) {
+	if strings.TrimSpace(workID) == "" {
+		return
+	}
+	delete(r.pending, workID)
+	observation, ok := r.cohort[workID]
+	if !ok {
+		return
+	}
+	observation.structuredResult = nil
+	observation.structuredResultPending = false
+	r.cohort[workID] = observation
 }
 
 func (r *watchReducer) setStateType(workTypeName, stateName string, stateType factoryapi.WorkStateType) {

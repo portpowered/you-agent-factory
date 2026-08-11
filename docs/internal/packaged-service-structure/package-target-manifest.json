@@ -56,6 +56,7 @@
     "pkg/platform/httpserver",
     "pkg/platform/inboxgitkeep",
     "pkg/platform/internal/runtimeartifact",
+    "pkg/platform/jsonvalue",
     "pkg/platform/logging",
     "pkg/platform/metrics",
     "pkg/platform/portablefiles",
@@ -656,6 +657,11 @@
     },
     {
       "packagePath": "pkg/platform/internal/runtimeartifact",
+      "disposition": "retain",
+      "destination": "platform"
+    },
+    {
+      "packagePath": "pkg/platform/jsonvalue",
       "disposition": "retain",
       "destination": "platform"
     },

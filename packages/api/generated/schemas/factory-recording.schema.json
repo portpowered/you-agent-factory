@@ -511,6 +511,9 @@
         "selectedClassificationLabel": {
           "type": "string"
         },
+        "structuredResult": {
+          "description": "Optional native JSON value produced when the workstation outputSchema validates the worker response. JSON null is distinct from an omitted value."
+        },
         "transitionId": {
           "type": "string"
         }
@@ -4679,6 +4682,9 @@
         "stopSummary": {
           "$ref": "#/$defs/FactoryStopSummary"
         },
+        "structuredResult": {
+          "description": "Optional JSON value produced by a workstation whose outputSchema validated the worker response. JSON null is distinct from an omitted value."
+        },
         "tags": {
           "$ref": "#/$defs/StringMap"
         },
@@ -4909,6 +4915,7 @@
         "misconfigured",
         "missing_executable",
         "command_line_too_long",
+        "structured_output_schema_violation",
         "EXPECTED_ARTIFACTS_UNSATISFIED"
       ],
       "type": "string"

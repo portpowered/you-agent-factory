@@ -56,6 +56,11 @@ func (e *ProviderInvocationExecutor) Execute(
 			Error:        "provider invocation executor unavailable",
 		}, nil
 	}
+	if request.OutputSchema != "" {
+		if schemaErr := validateOutputSchema([]byte(request.OutputSchema)); schemaErr != nil {
+			return outputSchemaConfigurationFailure(request, schemaErr), nil
+		}
+	}
 
 	result, err := e.invocation.Execute(ctx, workerexecution.InvocationInput{
 		Request: providerInvocationRequest(request),
@@ -69,13 +74,13 @@ func (e *ProviderInvocationExecutor) Execute(
 	// WorkResult holds the wider internal form; there is no widening
 	// conversion because widening would mean re-inventing detail that was
 	// dropped on purpose.
-	return workerexecution.WorkResult{
+	return attachStructuredResult(request, workerexecution.WorkResult{
 		DispatchID:      request.Dispatch.DispatchID,
 		TransitionID:    request.Dispatch.TransitionID,
 		Outcome:         workerexecution.OutcomeAccepted,
 		Output:          result.Response.Content,
 		ProviderSession: workerexecution.CloneProviderSessionMetadata(result.ProviderSession),
-	}, nil
+	}), nil
 }
 
 // providerInvocationRequest maps the execution request onto a provider
