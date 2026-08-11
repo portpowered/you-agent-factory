@@ -10,7 +10,7 @@
     "evidence": "C:/Users/andre/work/portos/infinite-you/docs/internal/development/plans/dashboard-ux-30-probe-results.md",
     "mandatoryRules": "C:/Users/andre/work/portos/infinite-you/docs/temp/scale-program-rules.md",
     "reviewFollowUp": {
-      "baseCommit": "dd87fd04db20d755f9b44c369aa79b8c3e600f5f",
+      "baseCommit": "012e98e0fbd1b6fcac106d90b1f3d335b8a3dce6",
       "resolved": [
         "Rebased the six dashboard commits onto the fetched current main and resolved the shared PRD/progress conflicts while preserving the dashboard task record.",
         "Replaced exact Storybook command and registration-inventory assertions with behavioral runner coverage for readiness, completion, failure propagation, and server cleanup."
