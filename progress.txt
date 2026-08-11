@@ -6765,5 +6765,21 @@
   - The corrected focused regression passed; the temporary historical implementation failed at the strict single-start assertion with `process starts = 8, want 1`.
   - `prd.json` parses with all three task stories marked `passes:true`, conflict markers are absent, and the merged worktree has no unmerged entries.
 - **Learnings for future iterations:**
-  - To prove a single-flight regression against a split read/election implementation, synchronize after the state-read lock is released and before the second election lock; a pre-lock arrival barrier alone does not force the unsafe interleaving.
+- To prove a single-flight regression against a split read/election implementation, synchronize after the state-read lock is released and before the second election lock; a pre-lock arrival barrier alone does not force the unsafe interleaving.
+---
+
+## [2026-08-10 21:08 -07:00] - thr-deflake-model-host-concurrent-reuse-002 review follow-up
+- What was implemented
+  - Completed the blocking review follow-up for the deterministic concurrent-reuse regression. The `AfterLoadStateObservation` seam coordinates all eight callers after they release the runtime-state mutex; the production path has already published `loading` atomically, while the historical split path can be instrumented at the same post-observation/pre-election edge.
+  - Reproduced the former implementation's failure in a detached temporary checkout: the strict launcher assertion reported `process starts = 8, want 1`. The corrected implementation passed the focused race-enabled regression 50 times at `GOMAXPROCS=8`.
+  - Confirmed the branch already contains the current `origin/main` merge at `ee0023397`; `git merge-tree --write-tree HEAD origin/main` completed without conflicts.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `GOMAXPROCS=8 go test -race ./pkg/services/models/internal/services/runtime_host/internal/service -run '^TestEnsureModelHostConcurrentReuseSharesOneSupervisedProcess$' -count=50` — passed all 50 repetitions in 1.457s with no race report, deadlock, failure, or extra process start.
+  - Instrumented historical split implementation — failed deterministically at `service_test.go:305` with `process starts = 8, want 1 shared supervised process`.
+  - `git merge-tree --write-tree HEAD origin/main`, `git diff --check`, and the conflict audit — passed; all three PRD stories remain `passes:true`.
+- **Learnings for future iterations:**
+  - A deterministic regression for a removed synchronization gap should identify the semantic post-observation/pre-election edge and retain a strict externally visible side-effect assertion; a pre-lock arrival barrier does not distinguish the historical implementation.
 ---
