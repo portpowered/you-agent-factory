@@ -2608,3 +2608,20 @@
 - **Learnings for future iterations:**
   - Final handoff requires checking both review-thread state and the latest head’s terminal CI; a clean body/head audit is not sufficient while a required check is still pending.
 ---
+
+## 2026-08-10 17:01 -07:00 - btrc-p1-root-injection-006 current-main and gate follow-up
+- What was implemented
+  - Merged the newly advanced `origin/main` head `acbd13fcc` into the P1 branch, preserving the P1 `prd.json` and reconciling the append-only progress history with the main-side durability follow-up.
+  - Reduced `pkg/wire/profiles.go` below the 1000-line backend-size ratchet by inlining two exact policy checks and removing only redundant private helpers.
+- Files changed
+  - `pkg/wire/profiles.go`
+  - Current-main durability files and merged `progress.txt` history.
+- Verification
+  - `make verify-fast` — passed, including dashboard typecheck, MCP contract, UI unit, and short Go suite.
+  - JavaScript durability functional package — passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` — passed.
+  - `git diff --check` — passed.
+  - Pushed merge head `f03504fc8`; fresh CI is pending for this latest head.
+- **Learnings for future iterations:**
+  - Refresh `origin/main` immediately before final handoff because a newly merged main PR can invalidate an otherwise clean cached base; after synchronization, rerun ratcheted gates because P1-owned files may cross a line-count threshold even when earlier checks were green.
+---
