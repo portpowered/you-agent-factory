@@ -306,6 +306,9 @@ func planCommandTree(manifest climanifest.Manifest, bindings GenericBindings) ([
 	if err := validateManifestHeader(manifest); err != nil {
 		return nil, err
 	}
+	if err := climanifest.ValidatePlacementContract(manifest); err != nil {
+		return nil, fmt.Errorf("validate placement contract: %w", err)
+	}
 	if err := climanifest.ValidateRootContract(manifest); err != nil {
 		return nil, err
 	}
@@ -580,6 +583,13 @@ func projectGenericHandler(cmd *cobra.Command, record climanifest.Command, bindi
 			if err != nil {
 				return fmt.Errorf("dispatch command %q handler %q: %w", record.ID, record.Handler.ID, err)
 			}
+			if record.Placement != "" {
+				placement, err := ResolveCommandPlacement(record, persistentInputs)
+				if err != nil {
+					return fmt.Errorf("dispatch command %q handler %q: %w", record.ID, record.Handler.ID, err)
+				}
+				attachResolvedPlacement(command, placement)
+			}
 			return cobraHandler(command, args, values, persistentInputs)
 		}
 		if resolvedCobraHandler != nil {
@@ -590,6 +600,13 @@ func projectGenericHandler(cmd *cobra.Command, record climanifest.Command, bindi
 			persistentInputs, err := ResolvedPersistentInputs(command)
 			if err != nil {
 				return fmt.Errorf("dispatch command %q handler %q: %w", record.ID, record.Handler.ID, err)
+			}
+			if record.Placement != "" {
+				placement, err := ResolveCommandPlacement(record, persistentInputs)
+				if err != nil {
+					return fmt.Errorf("dispatch command %q handler %q: %w", record.ID, record.Handler.ID, err)
+				}
+				attachResolvedPlacement(command, placement)
 			}
 			return resolvedCobraHandler(command, inputs, persistentInputs)
 		}

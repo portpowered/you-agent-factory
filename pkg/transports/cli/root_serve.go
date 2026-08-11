@@ -34,7 +34,7 @@ func productionServeCommand(options CommandFactory) *cobra.Command {
 // which is already reserved for ACP protocol frames, and --server configures
 // an HTTP API endpoint this command never contacts (it starts no HTTP or
 // dashboard listener).
-var serveACPUnrelatedFlagNames = []string{"json", "server"}
+var serveACPUnrelatedFlagNames = []string{"json", "remote", "server"}
 
 // suppressUnrelatedServeACPFlags hides you serve acp's inherited --json and
 // --server flags from its rendered help and rejects them if explicitly
@@ -57,8 +57,10 @@ func suppressUnrelatedServeACPFlags(serve *cobra.Command) error {
 		return fmt.Errorf("find acp leaf: %w", err)
 	}
 	var jsonShadow bool
+	var remoteShadow bool
 	var serverShadow string
 	acpCmd.Flags().BoolVar(&jsonShadow, "json", false, "")
+	acpCmd.Flags().BoolVar(&remoteShadow, "remote", false, "")
 	acpCmd.Flags().StringVar(&serverShadow, "server", "", "")
 	for _, name := range serveACPUnrelatedFlagNames {
 		if err := acpCmd.Flags().MarkHidden(name); err != nil {

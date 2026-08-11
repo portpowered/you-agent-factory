@@ -93,13 +93,14 @@ func TestServeFamily_VisibleInRootHelpAndDistinctFromWorkersAcpAndMcpServe(t *te
 // you.serve.acp declares no local manifest inputs of its own, so its only
 // visible local flag is Cobra's built-in --help. It inherits the root's
 // you.flag.{debug,verbose} persistent records like every other command
-// family, but --json and --server are deliberately suppressed (see
+// family, but --json, --remote, and --server are deliberately suppressed (see
 // suppressUnrelatedServeACPFlags in root_serve.go): --json would promise
-// structured output on stdout, already reserved for ACP protocol frames, and
-// --server configures an HTTP endpoint this command never contacts. This
+// structured output on stdout, already reserved for ACP protocol frames,
+// --remote selects a running server this command never contacts, and --server
+// configures an HTTP endpoint this command never contacts. This
 // asserts the complete rendered flag surface (local and inherited) instead
 // of only local flags, so an undeclared or unexpected flag -- including a
-// resurfaced --json/--server -- would fail this test too.
+// resurfaced --json/--remote/--server -- would fail this test too.
 // pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestServeACPCommand_HelpRendersManifestExamplesAndNoLocalFlags(t *testing.T) {
 	var stdout bytes.Buffer
@@ -122,7 +123,7 @@ func TestServeACPCommand_HelpRendersManifestExamplesAndNoLocalFlags(t *testing.T
 			t.Fatalf("you serve acp --help missing %q:\n%s", want, got)
 		}
 	}
-	for _, unwanted := range []string{"--json", "--server"} {
+	for _, unwanted := range []string{"--json", "--remote", "--server"} {
 		if strings.Contains(got, unwanted) {
 			t.Fatalf("you serve acp --help must not advertise unrelated flag %q:\n%s", unwanted, got)
 		}
@@ -134,7 +135,7 @@ func TestServeACPCommand_HelpRendersManifestExamplesAndNoLocalFlags(t *testing.T
 	}
 	wantVisibleLocal := map[string]bool{"help": false}
 	acpCmd.LocalFlags().VisitAll(func(flag *pflag.Flag) {
-		if flag.Name == "json" || flag.Name == "server" {
+		if flag.Name == "json" || flag.Name == "remote" || flag.Name == "server" {
 			if !flag.Hidden {
 				t.Fatalf("you serve acp local flag %q must be hidden", flag.Name)
 			}
@@ -168,12 +169,13 @@ func TestServeACPCommand_HelpRendersManifestExamplesAndNoLocalFlags(t *testing.T
 	}
 }
 
-// TestServeACPCommand_RejectsUnrelatedGlobalFlags proves --json and --server
-// are not silently accepted and ignored: passing either fails the invocation
+// TestServeACPCommand_RejectsUnrelatedGlobalFlags proves --json, --remote, and --server
+	// are not silently accepted and ignored: passing any of them fails the invocation
 // with a clear diagnostic before any ACP server is dispatched.
 func TestServeACPCommand_RejectsUnrelatedGlobalFlags(t *testing.T) {
 	for _, args := range [][]string{
 		{"serve", "acp", "--json"},
+		{"serve", "acp", "--remote"},
 		{"serve", "acp", "--server", "http://localhost:9999"},
 	} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {

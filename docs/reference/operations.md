@@ -24,6 +24,7 @@ server-enabled continuous shape:
 
 ```bash
 you run --dir ./factory --with-server --continuously
+you run --dir ./factory --with-server --continuously --listen 127.0.0.1:7437
 ```
 
 `--with-server` keeps the Factory Session API available for submitters and
@@ -31,7 +32,9 @@ inspection commands. `--continuously` keeps the runtime alive while the queue
 is idle. The process ends when it is cancelled normally, so an idle period is
 not presented as a completed pipeline. Add `--with-site` when the same run
 should also serve the dashboard; it follows the same lifetime and finite-drain
-policy described below.
+policy described below. Use `--listen <host:port>` for an exact loopback bind;
+an explicit local `--server` is retained only for legacy scripts and emits a
+deprecation warning.
 
 The continuous shape is the production-oriented default for long-running
 pipelines. Submit initial or later Work through the existing submitted-Work

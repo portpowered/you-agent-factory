@@ -1,6 +1,6 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-08-09
+last-modified: 2026-08-10
 doc-id: agent-factory/guides/run
 ---
 
@@ -31,6 +31,7 @@ sources.
 | Run worker dispatches in an isolated Git checkout | Add `--worktree <name>` |
 | Serve an API only for the run lifetime | Add `--with-server` |
 | Serve the embedded dashboard and open it once | Add `--with-site` |
+| Select an exact local listener | Add `--listen <host:port>` to `--with-server` or `--with-site` |
 | Serve the Current Factory continuously | `you server` |
 
 Run `you run --help` for the complete live flag boundary.
@@ -255,6 +256,7 @@ without opening a browser:
 ```bash
 you run --work ./docs/examples/startup-work.json --with-server
 you run --factory ./workflow.js --with-server
+you run --work ./docs/examples/startup-work.json --with-server --listen 127.0.0.1:7437
 ```
 
 The listener becomes ready before the run begins observable work. When a
@@ -289,16 +291,49 @@ bootstraps a missing Current Factory:
 
 ```bash
 you server
-you --server http://127.0.0.1:7437 server
+you server --listen 127.0.0.1:7437
 ```
 
-For `you server` and server-enabled runs, global `--server` supplies the
-preferred local endpoint. The host must be `localhost` or a loopback IP. The
-listener binds that exact host; it never binds a wildcard address. If the
-preferred port is occupied, binding advances monotonically to the next
-available port through `65535`, and startup output and browser presentation use
-the actual bound URL. Invalid hosts, invalid or exhausted ports, and terminal
-listener failures return `SERVER_BIND_FAILED`.
+Use `--listen <host:port>` when the listener must bind one exact local address.
+The host must be `localhost` or a loopback IP, and the port must be a non-zero
+TCP port. `--listen` takes precedence when both listener controls are present;
+the `--server` value remains the HTTP API/remote endpoint and one migration
+warning is written to stderr. Invalid, unavailable, or exhausted exact binds
+return `SERVER_BIND_FAILED` before the run can proceed.
+
+An explicit local `--server http://localhost:<port>` remains supported for
+legacy scripts when `--listen` is absent. It binds the loopback host and can
+advance monotonically through port `65535` on collisions, but prints one
+actionable deprecation warning directing scripts to `--listen`. `--server` is
+not a local listener selector for ordinary `you run`; ordinary runs remain
+serverless, and `--listen` requires `--with-server` or `--with-site`.
+
+## Remote placement and local hosting
+
+Use `--remote` when the operation should go through an already-running You
+server. Global `--server` selects that server's HTTP API URI; it does not
+choose a local bind for a listener-owning command:
+
+```bash
+you --remote --server <uri> run "Review the release notes"
+```
+
+Remote placement never starts a local runtime, listener, dashboard browser, or
+recording for the `run` command. `--remote` conflicts with `--with-server` and
+`--with-site`, because those flags ask the run to host its own local API or
+dashboard. The conflict returns the stable `REMOTE_LOCAL_HOSTING_CONFLICT`
+bad-request code. Remove `--remote` for local hosting, then use `--listen
+<host:port>` when the local bind must be exact:
+
+```bash
+you run --with-server --listen 127.0.0.1:7437 "Review the release notes"
+you run --with-site --listen 127.0.0.1:7437 "Review the release notes"
+```
+
+An explicit local `--server http://localhost:<port>` remains a warned legacy
+compatibility form. Migrate it to `--listen <host:port>` for `you server` and
+server-enabled local runs; use `--remote --server <uri>` when the endpoint is
+already running.
 
 ## Invocation output
 
