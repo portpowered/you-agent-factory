@@ -10,17 +10,19 @@
     "evidence": "C:/Users/andre/work/portos/infinite-you/docs/internal/development/plans/dashboard-ux-30-probe-results.md",
     "mandatoryRules": "C:/Users/andre/work/portos/infinite-you/docs/temp/scale-program-rules.md",
     "reviewFollowUp": {
-      "baseCommit": "012e98e0fbd1b6fcac106d90b1f3d335b8a3dce6",
+      "baseCommit": "3521f0b0a2f313b22e2c79edcf90339a01b3bce7",
       "resolved": [
-        "Rebased the seven dashboard commits onto the fetched current main and resolved the shared PRD/progress conflicts while preserving the dashboard task record.",
+        "Rebased the seven dashboard commits onto the fetched current main at 3521f0b0a and resolved the shared PRD/progress conflicts while preserving the dashboard task record.",
         "Replaced exact Storybook command and registration-inventory assertions with behavioral runner coverage for readiness, completion, failure propagation, and server cleanup.",
-        "Replaced the dashboard fixture API test's race-prone immediate response resolution with an explicit waitUntilPending readiness signal."
+        "Replaced the dashboard fixture API test's race-prone immediate response resolution with an explicit waitUntilPending readiness signal.",
+        "Unioned the complete append-only progress history from current main with the dashboard task history before the replacement push."
       ],
       "qualityEvidence": [
         "make test and make vet pass on the rebased head.",
         "backend-size, pkg-maint, pkg-file-count, and pkg-structure pass on both the rebased head and the exact detached origin/main baseline.",
         "bun run typecheck and bun run lint pass on the rebased head; the exact detached origin/main UI lint baseline also passes with only its existing allowlisted advisories.",
-        "The affected dashboard fixture passes directly under Bun coverage instrumentation; the broad local UI coverage wrapper exceeded its 15-minute local bound and was not counted as passing."
+        "The affected dashboard fixture passes directly under Bun coverage instrumentation; the broad local UI coverage wrapper exceeded its 15-minute local bound and was not counted as passing.",
+        "The replacement head is based on live main 3521f0b0a; task-specific checks must be rerun on this ancestry before handoff."
       ]
     }
   },
