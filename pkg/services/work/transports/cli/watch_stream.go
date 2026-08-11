@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -350,10 +351,60 @@ func readWatchSSEEvent(reader *bufio.Reader) (factoryapi.FactoryEvent, error) {
 
 func decodeWatchSSEEvent(data []string) (factoryapi.FactoryEvent, error) {
 	var event factoryapi.FactoryEvent
-	if err := json.Unmarshal([]byte(strings.Join(data, "\n")), &event); err != nil {
+	payload := []byte(strings.Join(data, "\n"))
+	if err := json.Unmarshal(payload, &event); err != nil {
 		return factoryapi.FactoryEvent{}, &watchMalformedEventError{err: err}
 	}
 	return event, nil
+}
+
+func watchPayloadFields(data []byte) (map[string]json.RawMessage, error) {
+	var envelope struct {
+		Payload json.RawMessage `json:"payload"`
+	}
+	if err := json.Unmarshal(data, &envelope); err != nil {
+		return nil, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(envelope.Payload, &fields); err != nil {
+		return nil, err
+	}
+	return fields, nil
+}
+
+func restoreWatchWorkResultNulls(data json.RawMessage, works *[]factoryapi.Work) (bool, error) {
+	if len(data) == 0 || works == nil {
+		return false, nil
+	}
+	var rawWorks []json.RawMessage
+	if err := json.Unmarshal(data, &rawWorks); err != nil {
+		return false, err
+	}
+	if len(rawWorks) != len(*works) {
+		return false, fmt.Errorf("structuredResult work count %d does not match decoded work count %d", len(rawWorks), len(*works))
+	}
+	changed := false
+	for index, rawWork := range rawWorks {
+		if !rawJSONFieldIsNullInObject(rawWork, "structuredResult") {
+			continue
+		}
+		(*works)[index].StructuredResult = json.RawMessage("null")
+		changed = true
+	}
+	return changed, nil
+}
+
+func rawJSONFieldIsNull(fields map[string]json.RawMessage, name string) bool {
+	value, ok := fields[name]
+	return ok && bytes.Equal(bytes.TrimSpace(value), []byte("null"))
+}
+
+func rawJSONFieldIsNullInObject(data json.RawMessage, name string) bool {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return false
+	}
+	return rawJSONFieldIsNull(fields, name)
 }
 
 const (
