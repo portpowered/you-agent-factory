@@ -98,6 +98,15 @@ func (s *countingWorkerSessionsService) InvokeSession(
 	return s.inner.InvokeSession(ctx, req)
 }
 
+func (s *countingWorkerSessionsService) Start(
+	ctx context.Context, req workersessions.StartRequest,
+) (workersessions.StartResult, error) {
+	s.mu.Lock()
+	s.startCallsByID[req.ID]++
+	s.mu.Unlock()
+	return s.inner.Start(ctx, req)
+}
+
 func (s *countingWorkerSessionsService) PublishRecord(
 	ctx context.Context, req workersessions.PublishRecordRequest,
 ) (workersessions.PublishRecordResult, error) {

@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"slices"
 	"sort"
 	"strings"
@@ -70,6 +71,7 @@ type registry struct {
 	publications map[string]*publication
 	supervisions map[string]*supervision
 	observations map[string]*observation
+	startReplays map[string]*startReplay
 	// dispatchOwners is the Worker Sessions-owned reverse lookup from the
 	// currently supervised Workers dispatch to its stable session identity.
 	// Provider progress names dispatches, never Worker Sessions, so this map is
@@ -83,6 +85,20 @@ type registry struct {
 	recording        recordings.WorkerSessionRecordingService
 	clock            platformclock.Source
 	logger           logging.Logger
+
+	// lifecycleCtx is owned by the process composition boundary. Request
+	// contexts are never used as the lifetime of an admitted Start. Stop
+	// keeps this context alive until active callbacks have published their
+	// terminal records, then cancels it to release any remaining lifecycle
+	// work.
+	lifecycleCtx    context.Context
+	lifecycleCancel context.CancelFunc
+	stopping        bool
+	activeStarts    int
+	startsDone      chan struct{}
+	stopOnce        sync.Once
+	stopDone        chan struct{}
+	stopErr         error
 }
 
 // Compile-time proof that production registry seals the W1+W2 root contract
@@ -115,11 +131,15 @@ func New(
 	if providerSessions == nil {
 		return nil, ErrMissingProviderSessions
 	}
+	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
+	startsDone := make(chan struct{})
+	close(startsDone)
 	registry := &registry{
 		sessions:         make(map[string]workersessions.Session),
 		publications:     make(map[string]*publication),
 		supervisions:     make(map[string]*supervision),
 		observations:     make(map[string]*observation),
+		startReplays:     make(map[string]*startReplay),
 		dispatchOwners:   make(map[string]string),
 		boundary:         boundary,
 		events:           eventsAppender,
@@ -127,6 +147,10 @@ func New(
 		providerSessions: providerSessions,
 		recording:        recording,
 		logger:           logging.EnsureLogger(logger),
+		lifecycleCtx:     lifecycleCtx,
+		lifecycleCancel:  lifecycleCancel,
+		startsDone:       startsDone,
+		stopDone:         make(chan struct{}),
 	}
 	if reader, ok := eventsAppender.(EventsReader); ok {
 		registry.eventReader = reader
@@ -145,6 +169,98 @@ func (r *registry) startWorkerRecording(ctx context.Context, req workersessions.
 	return r.recording.StartWorkerSessionRecording(ctx, recordings.WorkerSessionRecordingRequest{
 		RecordingID: recordingID, WorkerSessionID: req.ID, Topic: workersessions.Topic(req.ID),
 	})
+}
+
+// Start establishes or replays one Worker Session and returns at the exact
+// Workers admission barrier. The request ID is claimed together with the
+// stable session identity before any opening event or Workers handoff. The
+// owner drives the state machine once; concurrent and later replays wait for
+// and return the owner's stored acceptance or pre-admission failure.
+func (r *registry) Start(ctx context.Context, req workersessions.StartRequest) (workersessions.StartResult, error) {
+	callerCtx := ctx
+	if callerCtx == nil {
+		callerCtx = context.Background()
+	}
+	attemptID := req.Execution.Execution.Dispatch.DispatchID
+	if err := req.Validate(); err != nil {
+		r.logger.Info("worker session start rejected", "sessionID", req.ID, "attemptID", attemptID, "outcome", "invalid")
+		return workersessions.StartResult{}, err
+	}
+	req = normalizeStartRequest(req)
+	replay, owner, err := r.reserveStart(req)
+	if err != nil {
+		r.logger.Info("worker session start rejected", "sessionID", req.ID, "attemptID", attemptID, "requestID", req.RequestID, "outcome", startReservationOutcome(err))
+		return workersessions.StartResult{}, err
+	}
+	if !owner {
+		result, replayErr := awaitStartReplay(callerCtx, replay)
+		r.logger.Info("worker session start replay", "sessionID", replay.sessionID, "attemptID", attemptID, "requestID", req.RequestID, "outcome", startReplayOutcome(replayErr))
+		return result, replayErr
+	}
+
+	outcomes := make(chan asyncStartCompletion, 1)
+	go func() {
+		result, startErr := r.startReserved(callerCtx, req)
+		r.finishStartReplay(replay, result, startErr)
+		r.finishStart()
+		outcomes <- asyncStartCompletion{result: result, err: startErr}
+	}()
+	select {
+	case outcome := <-outcomes:
+		return outcome.result, outcome.err
+	case <-callerCtx.Done():
+		select {
+		case outcome := <-outcomes:
+			return outcome.result, outcome.err
+		default:
+		}
+		r.logger.Info("worker session start wait canceled", "sessionID", req.ID, "attemptID", attemptID, "requestID", req.RequestID, "outcome", "caller_canceled")
+		return workersessions.StartResult{}, callerCtx.Err()
+	}
+}
+
+// reserveStart atomically claims the caller request ID and stable session
+// identity. No downstream effect is possible until this method has installed
+// both registry records and returned ownership to the first caller.
+func (r *registry) reserveStart(req workersessions.StartRequest) (*startReplay, bool, error) {
+	tuple := startTupleFor(req)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.startReplays == nil {
+		r.startReplays = make(map[string]*startReplay)
+	}
+	if existing, ok := r.startReplays[req.RequestID]; ok {
+		if !reflect.DeepEqual(existing.tuple, tuple) {
+			return nil, false, workersessions.ErrStartRequestIDConflict
+		}
+		return existing, false, nil
+	}
+	if r.stopping {
+		return nil, false, workersessions.ErrStartServerStopping
+	}
+	if _, exists := r.sessions[req.ID]; exists {
+		return nil, false, workersessions.ErrSessionNotStartable
+	}
+
+	replay := &startReplay{
+		tuple:     tuple,
+		sessionID: req.ID,
+		done:      make(chan struct{}),
+	}
+	if r.startsDone == nil {
+		r.startsDone = make(chan struct{})
+		close(r.startsDone)
+	}
+	if r.activeStarts == 0 {
+		r.startsDone = make(chan struct{})
+	}
+	r.activeStarts++
+	r.sessions[req.ID] = workersessions.Session{ID: req.ID, State: workersessions.StateReserved}
+	r.publications[req.ID] = &publication{}
+	r.startReplays[req.RequestID] = replay
+	r.logger.Info("worker session start", "sessionID", req.ID, "attemptID", req.Execution.Execution.Dispatch.DispatchID, "requestID", req.RequestID, "outcome", "reserved", "state", string(workersessions.StateReserved))
+	return replay, true, nil
 }
 
 func (r *registry) Reserve(_ context.Context, req workersessions.ReserveRequest) (workersessions.Session, error) {

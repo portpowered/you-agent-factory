@@ -220,6 +220,17 @@ func (s *preHandoffFailedWorkerSessionsService) InvokeSession(
 	}, nil
 }
 
+func (s *preHandoffFailedWorkerSessionsService) Start(
+	ctx context.Context, req workersessions.StartRequest,
+) (workersessions.StartResult, error) {
+	result, err := s.InvokeSession(ctx, workersessions.InvokeSessionRequest{
+		ID:        req.ID,
+		Execution: req.Execution,
+		Retry:     req.Retry,
+	})
+	return workersessions.StartResult{Session: result.Session}, err
+}
+
 func (s *preHandoffFailedWorkerSessionsService) PublishRecord(
 	context.Context, workersessions.PublishRecordRequest,
 ) (workersessions.PublishRecordResult, error) {

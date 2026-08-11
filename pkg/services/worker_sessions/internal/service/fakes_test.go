@@ -49,6 +49,10 @@ type fakeExecution struct {
 	dispatch func(context.Context, workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error)
 	cancel   func(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error)
 
+	admissionStarted chan struct{}
+	releaseAdmission chan struct{}
+	admissionOnce    sync.Once
+
 	mu          sync.Mutex
 	calls       []workers.WorkstationDispatchRequest
 	cancelCalls []workers.WorkstationDispatchCancelRequest
@@ -86,6 +90,10 @@ func (f *fakeExecution) DispatchWorkstationWithAdmission(
 	req workers.WorkstationDispatchRequest,
 	admitted workers.WorkstationDispatchAdmissionFunc,
 ) (workers.WorkstationDispatchResult, error) {
+	if f.admissionStarted != nil {
+		f.admissionOnce.Do(func() { close(f.admissionStarted) })
+		<-f.releaseAdmission
+	}
 	if admitted != nil {
 		admitted()
 	}
@@ -161,6 +169,89 @@ func (b executionBoundary) Stop(ctx context.Context) error {
 	return err
 }
 
+// appendOnlyEvents deliberately exposes no Read or Subscribe method. It
+// proves Start refuses to claim acceptance when the opening append succeeds
+// but the readiness barrier cannot verify the session topic.
+type appendOnlyEvents struct {
+	inner events.Service
+}
+
+func (a appendOnlyEvents) Append(ctx context.Context, req events.AppendRequest) (events.AppendResult, error) {
+	return a.inner.Append(ctx, req)
+}
+
+// gatedEvents pauses the live-subscription half of Start's readiness barrier
+// so a test can issue a control while the session is STARTING but before
+// supervision can hand anything to Workers.
+type gatedEvents struct {
+	events.Service
+	subscribeStarted chan struct{}
+	releaseSubscribe chan struct{}
+	startedOnce      sync.Once
+}
+
+func newGatedEvents(inner events.Service) *gatedEvents {
+	return &gatedEvents{
+		Service:          inner,
+		subscribeStarted: make(chan struct{}),
+		releaseSubscribe: make(chan struct{}),
+	}
+}
+
+func (e *gatedEvents) Subscribe(ctx context.Context, req events.SubscribeRequest) (events.Subscription, error) {
+	e.startedOnce.Do(func() { close(e.subscribeStarted) })
+	select {
+	case <-e.releaseSubscribe:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	return e.Service.Subscribe(ctx, req)
+}
+
+// noAdmissionBoundary reports a terminal dispatch failure without invoking
+// the admission callback. It models a Workers handoff that fails before the
+// cancellable admission point and lets Start prove that it never returns
+// success for that path.
+type noAdmissionBoundary struct {
+	err error
+}
+
+var _ workers.WorkstationPoolBoundary = noAdmissionBoundary{}
+
+func (b noAdmissionBoundary) Start(context.Context) error { return nil }
+
+func (b noAdmissionBoundary) Publish(
+	ctx context.Context,
+	req workers.WorkstationDispatchRequest,
+	accept workers.WorkstationDispatchAcceptFunc,
+) error {
+	return b.PublishWithAdmission(ctx, req, nil, accept)
+}
+
+func (b noAdmissionBoundary) PublishWithAdmission(
+	_ context.Context,
+	req workers.WorkstationDispatchRequest,
+	_ workers.WorkstationDispatchAdmissionFunc,
+	accept workers.WorkstationDispatchAcceptFunc,
+) error {
+	result := workers.WorkstationDispatchResult{
+		DispatchID:      req.Execution.Dispatch.DispatchID,
+		TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeFailed,
+		Result: workers.WorkResult{
+			DispatchID: req.Execution.Dispatch.DispatchID,
+			Outcome:    workers.OutcomeFailed,
+		},
+	}
+	accept(context.Background(), req, result, b.err)
+	return nil
+}
+
+func (b noAdmissionBoundary) Cancel(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
+	return workers.WorkstationDispatchCancelResult{}, nil
+}
+
+func (b noAdmissionBoundary) Stop(context.Context) error { return nil }
+
 // validStartRequest returns a minimally well-formed StartRequest for id,
 // naming attemptID as its resolved attempt (dispatch) identity.
 func validStartRequest(id, attemptID string) workersessions.InvokeSessionRequest {
@@ -175,6 +266,16 @@ func validStartRequest(id, attemptID string) workersessions.InvokeSessionRequest
 				},
 			},
 		},
+	}
+}
+
+func validAsyncStartRequest(id, attemptID string) workersessions.StartRequest {
+	request := validStartRequest(id, attemptID)
+	return workersessions.StartRequest{
+		RequestID: "request-" + id + "-" + attemptID,
+		ID:        request.ID,
+		Execution: request.Execution,
+		Retry:     request.Retry,
 	}
 }
 

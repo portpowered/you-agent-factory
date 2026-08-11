@@ -1,0 +1,68 @@
+type: object
+additionalProperties: false
+required:
+  - workstationName
+  - dispatch
+description: >-
+  Workers-owned resolved execution input. All selection and prompt facts are
+  supplied by the caller or an upstream resolver; Worker Sessions only passes
+  this detached value to the named Workers route.
+properties:
+  workstationName:
+    type: string
+    minLength: 1
+    description: Authored workstation route or the reserved provider-invocation route.
+  dispatch:
+    $ref: './WorkerSessionResolvedDispatch.yaml'
+  workerType:
+    type: string
+  workstationType:
+    type: string
+  runnerId:
+    type: string
+  runnerSelectionSource:
+    type: string
+  executorProvider:
+    type: string
+  projectId:
+    type: string
+  factorySessionId:
+    type: string
+  inputTokens:
+    type: array
+    items: {}
+  modelOperation:
+    type: string
+  modelBindings:
+    type: array
+    items:
+      type: object
+      additionalProperties: true
+  model:
+    type: string
+  modelProvider:
+    type: string
+  reasoningEffort:
+    type: string
+  systemPrompt:
+    type: string
+  userMessage:
+    type: string
+  outputSchema:
+    type: string
+  outputContract:
+    type: string
+  envVars:
+    type: object
+    additionalProperties:
+      type: string
+  worktree:
+    type: string
+  workingDirectory:
+    type: string
+  workingDirectoryAuthored:
+    type: boolean
+  resumeSession:
+    $ref: './WorkerSessionProviderSessionRef.yaml'
+  skipPermissions:
+    type: boolean
