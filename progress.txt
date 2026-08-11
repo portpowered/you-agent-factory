@@ -4077,3 +4077,18 @@
 - **Learnings for future iterations:**
   - Synchronize against the freshly fetched hosting `main` immediately before final gates, then verify the live-base diff so current-main additions do not become accidental task scope.
 ---
+
+## 2026-08-10 20:01 -07:00 - pp-merge-context-bug final verification
+- What was implemented
+  - Completed synchronized-head verification without changing the fan-in implementation or broadening the task diff.
+- Files changed
+  - `prd.json` records the final verification gates for story 002.
+  - `progress.txt` records the terminal local gate results.
+- Verification
+  - `make typecheck` — passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` — passed; backend file/function limits, maintainability, package count/structure, and `go vet ./...` are green.
+  - `make test` — passed; the repository short Go unit suite completed successfully.
+  - The focused lower-layer and packaged plan-parallel suites remain green after the current-main merge, as recorded in the preceding story entry.
+- **Learnings for future iterations:**
+  - Run the repository-wide gates after the final base synchronization; focused evidence from a pre-sync head is useful but not sufficient for PR handoff.
+---
