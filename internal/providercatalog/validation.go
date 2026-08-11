@@ -38,6 +38,9 @@ func validateCatalogSemantics(providers []any) error {
 		if err := validateKnownLimits(manifest); err != nil {
 			return err
 		}
+		if err := validateManifestCapabilityFacts(manifest); err != nil {
+			return err
+		}
 	}
 	return validateDeprecations(manifests, ids)
 }
@@ -128,13 +131,16 @@ func validateModalities(providerID, modelID string, value any) error {
 		if kind != "text" && kind != "image" && kind != "audio" && kind != "video" {
 			return fmt.Errorf("provider %q model %q: unknown modality %q", providerID, modelID, kind)
 		}
-		if support != "supported" && support != "unsupported" {
+		if !isCapabilitySupport(support) {
 			return fmt.Errorf("provider %q model %q: unknown modality support %q", providerID, modelID, support)
 		}
-		if transport != "inline" && transport != "file_path" && transport != "none" {
+		if !isModalityTransport(transport) {
 			return fmt.Errorf("provider %q model %q: unknown modality transport %q", providerID, modelID, transport)
 		}
-		if (support == "unsupported") != (transport == "none") {
+		if err := validateRouteSupport(providerID+" model "+modelID, direction, kind, support, transport, modality["condition"]); err != nil {
+			return err
+		}
+		if (support == "unsupported") != (transport == "none") && support != "unknown" {
 			return fmt.Errorf("provider %q model %q modality %s/%s has inconsistent support and transport", providerID, modelID, direction, kind)
 		}
 		key := direction + "\x00" + kind
@@ -170,7 +176,7 @@ func validateTools(manifest map[string]any) error {
 			return fmt.Errorf("provider %q: duplicate tool %q", providerID, name)
 		}
 		support, _ := tool["support"].(string)
-		if support != "supported" && support != "unsupported" {
+		if !isCapabilitySupport(support) {
 			return fmt.Errorf("provider %q tool %q: unknown support %q", providerID, name, support)
 		}
 		description, _ := tool["description"].(string)

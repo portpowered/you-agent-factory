@@ -47,9 +47,23 @@ func completeCapabilityRoot() providers.Service {
 				{Direction: providers.ModalityDirectionInput, Kind: providers.ModalityText, Support: providers.ModalitySupported, Transport: providers.ModalityTransportInline},
 				{Direction: providers.ModalityDirectionInput, Kind: providers.ModalityAudio, Support: providers.ModalityUnsupported, Transport: providers.ModalityTransportNone},
 			}}},
-		Tools:        []providers.Tool{{Name: "shell", Support: providers.ToolSupported, Description: "Run shell commands."}},
-		KnownLimits:  []providers.KnownLimit{{Name: "referenced_image_paths", Kind: providers.KnownLimitMaximum, Unit: "paths", Description: "Image generation accepts at most five referenced image paths.", Maximum: &maximum}},
-		Capabilities: []providers.Capability{providers.CapabilityStructuredOutput, providers.CapabilityPromptSubmission},
+		Tools:       []providers.Tool{{Name: "shell", Support: providers.ToolSupported, Description: "Run shell commands."}},
+		KnownLimits: []providers.KnownLimit{{Name: "referenced_image_paths", Kind: providers.KnownLimitMaximum, Unit: "paths", Description: "Image generation accepts at most five referenced image paths.", Maximum: &maximum}},
+		Capabilities: []providers.Capability{
+			providers.CapabilityStructuredOutput,
+			providers.CapabilityPromptSubmission,
+			providers.CapabilityImageInput,
+			providers.CapabilitySessionResume,
+			providers.CapabilityNativeStreaming,
+			providers.CapabilityMessageSnapshots,
+			providers.CapabilityReasoningSummaries,
+			providers.CapabilityToolLifecycle,
+			providers.CapabilityToolOutputDeltas,
+			providers.CapabilityFileChanges,
+			providers.CapabilityPlans,
+			providers.CapabilityUsage,
+			providers.CapabilityStableItemIDs,
+		},
 	}
 	agy := providers.Descriptor{
 		ID:                         providers.IDAntigravity,
@@ -58,7 +72,12 @@ func completeCapabilityRoot() providers.Service {
 		Readiness:                  providers.ReadinessReady,
 		TechnicalSupportLevel:      providers.TechnicalSupportExperimental,
 		ImplementationAvailability: providers.ImplementationBundled,
-		Prerequisites:              []providers.Prerequisite{{Kind: providers.PrerequisiteExecutable, Name: "agy", Status: providers.PrerequisiteSatisfied, Description: "The AGY executable is required."}},
+		Capabilities: []providers.Capability{
+			providers.CapabilityPromptSubmission,
+			providers.CapabilitySessionResume,
+			providers.CapabilityMessageSnapshots,
+		},
+		Prerequisites: []providers.Prerequisite{{Kind: providers.PrerequisiteExecutable, Name: "agy", Status: providers.PrerequisiteSatisfied, Description: "The AGY executable is required."}},
 		Models: []providers.ModelDescriptor{{
 			ID: "claude-opus-4-6-thinking", Efforts: []providers.ReasoningEffort{}, Modalities: []providers.Modality{
 				{Direction: providers.ModalityDirectionInput, Kind: providers.ModalityVideo, Support: providers.ModalitySupported, Transport: providers.ModalityTransportFilePath},
@@ -77,6 +96,7 @@ func assertCompleteHumanOutput(t *testing.T, output string) {
 	t.Helper()
 	for _, want := range []string{
 		"Technical support:\tproduction", "Implementation:\tbundled", "Models:", "Efforts:\tlow, high", "Input modalities:",
+		"Capabilities:\tfile_changes, image_input, message_snapshots, native_streaming, plans, prompt_submission, reasoning_summaries, session_resume, stable_item_ids, structured_output, tool_lifecycle, tool_output_deltas, usage",
 		"audio: unsupported (transport: none)", "video: unsupported (transport: none)", "video: supported (transport: file_path)", "Efforts:\tnone",
 		"Known limits:", "referenced_image_paths [maximum, paths] maximum=5", "add_dir_workspace [behavior, flag] value=--add-dir", "effort_selection [behavior, model_id] value=model_id", "print_timeout [default, seconds] default=300",
 	} {
@@ -109,6 +129,9 @@ func assertAGYJSONFacts(t *testing.T, agy listCapabilityProviderJSON) {
 	t.Helper()
 	if agy.TechnicalSupportLevel != "experimental" || agy.ImplementationAvailability != "bundled" {
 		t.Fatalf("AGY publication facts = %#v", agy)
+	}
+	if strings.Join(agy.Capabilities, ",") != "message_snapshots,prompt_submission,session_resume" {
+		t.Fatalf("AGY capabilities = %#v", agy.Capabilities)
 	}
 	assertAGYModelFacts(t, agy.Models)
 	assertAGYLimitFacts(t, agy.KnownLimits)
@@ -149,6 +172,9 @@ func assertAGYLimitFacts(t *testing.T, limits []listKnownLimitJSON) {
 
 func assertCodexJSONFacts(t *testing.T, codex listCapabilityProviderJSON) {
 	t.Helper()
+	if strings.Join(codex.Capabilities, ",") != "file_changes,image_input,message_snapshots,native_streaming,plans,prompt_submission,reasoning_summaries,session_resume,stable_item_ids,structured_output,tool_lifecycle,tool_output_deltas,usage" {
+		t.Fatalf("Codex capabilities = %#v", codex.Capabilities)
+	}
 	if len(codex.Models) != 1 {
 		t.Fatalf("Codex models = %#v", codex.Models)
 	}
