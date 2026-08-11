@@ -7899,3 +7899,19 @@
   - When a CLI output contract moves operator progress to stderr, update broader functional invocation tests to assert the progress channel explicitly instead of retaining an empty-stderr expectation.
   - A missing downstream evidence artifact can be a consequence of an earlier functional assertion failure; inspect the first failing test before treating artifact publication as the root cause.
 ---
+## [2026-08-10 23:16 -07:00] - cli-error-classification-and-run-output PR handoff verification
+- What was implemented
+  - Reproduced the two failing tests from hosted run `31461891506` after the PR’s stderr-output correction; both passed in ten repeated local executions, so no additional product change was justified.
+  - Merged the live `origin/main` head `ecd1d2487` into the branch, regenerated the CLI manifest, and preserved the existing PRD with all four stories marked `passes:true`.
+  - Audited PR #1872 conversation comments, reviews, and inline review threads; none are present or unresolved.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `make cli-manifest-generate` produced no diff.
+  - Focused renderer, CLI functional, typecheck, backend-size, pkg-maint, pkg-file-count, pkg-structure, vet, CLI manifest/contract, functional-scenario, and docs-reference gates passed on the reconciled head.
+  - `TestFunctionalAPIServer_RuntimeLogDirectoryIsAProcessInput` passed 10/10; `TestRunScopedServerAndSiteOwnNamedAndFileInvocationLifecycles` passed 10/10.
+  - The broad `make test` unit lane returned a single `pkg/wire` failure under aggregate parallel execution; the exact `go test ./pkg/wire -short -count=1 -v -timeout 600s` rerun passed, identifying the broad failure as a concurrency/resource-sensitive flake rather than a task regression.
+- **Learnings for future iterations:**
+  - When an aggregate Go test lane reports only one package failure, rerun that package serially with verbose output before changing source; package-level success can distinguish a scheduler/resource flake from a behavioral regression.
+  - For GitHub Actions failures in a multi-job run, fetch the exact failing job log rather than the whole run log so downstream policy failures do not obscure the first failing test.
+---
