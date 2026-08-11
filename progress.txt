@@ -10659,3 +10659,17 @@
 - **Learnings for future iterations:**
   - When rebasing a long task branch onto a moving main, keep the active task PRD authoritative, merge both append-only log histories, deduplicate reusable patterns, and rerun the full backend lane on the resulting head before pushing.
 ---
+## [2026-08-11 02:48:46 -07:00] - js-skip-permissions-parity hosted CI retry follow-up
+- What was implemented
+  - No product changes; investigated two unrelated Backend Functional Coverage flakes on the replacement PR head and reran the failed hosted lane.
+  - Preserved the completed task PRD and the provider capability/functional implementation unchanged.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `TestCLISuccessorAfterHardKillReportsPreRuntimeStagingContention` passed five isolated local repetitions after the first hosted failure.
+  - `TestJavaScriptParallelDispatchesChildrenConcurrently` passed five isolated local repetitions after the second hosted retry exposed it.
+  - Hosted Backend Functional Coverage rerun `93739159222` passed; dependent Verification Policy rerun `93740470858` passed.
+  - All required checks for PR #1875 are terminal-success, including Backend Unit Coverage, Backend Functional Coverage, API Contract And Package, and Verification Policy.
+- **Learnings for future iterations:**
+  - When unrelated functional flakes move between concurrent tests across retries, isolate each named test and rerun only failed hosted jobs; do not widen the task diff without a reproducible task failure.
+---
