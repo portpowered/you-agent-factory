@@ -10473,3 +10473,18 @@
   - Package build/typecheck scripts mutate shared dependency `dist` directories, so dependent package verification must run sequentially; parallel build jobs can race and temporarily remove generated declarations.
   - Fetch `origin/main` immediately before final publication and record the exact live hash because mainline bookkeeping merges can make an otherwise green PR dirty again.
 ---
+## [2026-08-11 08:17 -07:00] - graph-workstation-semantics-004 review follow-up audit
+- What was implemented
+  - Rechecked the existing PR #1877 and verified that the remaining top-level public-replay blocker was posted before commit `06e3e8fa9`, which already forwards the complete package-owned workstation semantic projection instead of manually dropping `guardedControl`.
+  - Confirmed the guarded public-replay regression is present and that the branch contains no unresolved inline review threads; no additional source change was needed in this iteration.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `ui/packages/factory-graph`: 54 tests passed.
+  - `ui/packages/factory-visualizers/src/factory-topology-replay.semantics.test.tsx`: 1 test passed.
+  - Thread-aware PR audit: 0 review threads and 0 unresolved inline threads.
+  - Existing hosted PR head `9ff965503` reported all required checks terminal-successful and `MERGEABLE`/`CLEAN`.
+- **Learnings for future iterations:**
+  - Compare review-comment timestamps and the current source head before changing code; a top-level blocker can be stale when the requested fix and behavioral regression landed in a later commit.
+---
