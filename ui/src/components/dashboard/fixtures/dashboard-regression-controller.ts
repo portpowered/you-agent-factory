@@ -38,6 +38,29 @@ function createControlledPromise<T>(): ControlledPromise<T> {
   return { promise, reject: rejectPromise, resolve: resolvePromise };
 }
 
+function resolvePendingWaiters(waiters: Set<() => void> | undefined): void {
+  waiters?.forEach((resolve) => {
+    resolve();
+  });
+}
+
+function waitUntilPending<T>(
+  pendingRequests: ReadonlyMap<T, unknown>,
+  pendingWaiters: Map<T, Set<() => void>>,
+  requestID: T,
+): Promise<void> {
+  if (pendingRequests.has(requestID)) {
+    return Promise.resolve();
+  }
+
+  return new Promise<void>((resolve) => {
+    const waiters =
+      pendingWaiters.get(requestID) ?? new Set<() => void>();
+    waiters.add(() => resolve());
+    pendingWaiters.set(requestID, waiters);
+  });
+}
+
 export interface DashboardRegressionFixtureState {
   readonly selectedSessionSelector: DashboardRegressionSessionSelector | null;
   readonly resolvedSelectedSessionID: DashboardRegressionCanonicalSessionID | null;
@@ -366,24 +389,18 @@ export function createDashboardRegressionFixture(): DashboardRegressionFixtureCo
     pendingSessionLists.set(requestID, controlled);
     const waiters = pendingSessionListWaiters.get(requestID);
     pendingSessionListWaiters.delete(requestID);
-    waiters?.forEach((resolve) => resolve());
+    resolvePendingWaiters(waiters);
     return controlled.promise;
   }
 
-  function waitUntilSessionListPending(
+  const waitUntilSessionListPending = (
     requestID: DashboardRegressionSessionListID,
-  ): Promise<void> {
-    if (pendingSessionLists.has(requestID)) {
-      return Promise.resolve();
-    }
-
-    return new Promise<void>((resolve) => {
-      const waiters =
-        pendingSessionListWaiters.get(requestID) ?? new Set<() => void>();
-      waiters.add(() => resolve());
-      pendingSessionListWaiters.set(requestID, waiters);
-    });
-  }
+  ): Promise<void> =>
+    waitUntilPending(
+      pendingSessionLists,
+      pendingSessionListWaiters,
+      requestID,
+    );
 
   function resolveSessionList(
     requestID: DashboardRegressionSessionListID,
