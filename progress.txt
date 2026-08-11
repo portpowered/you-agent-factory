@@ -9162,3 +9162,15 @@
   - PR #1866 remains open and mergeable; its body matches `prd.json` byte-for-byte and its head is `9627e4526`.
 - **Learnings for future iterations:**
   - After a shared-history-only fix, rerun the complete hosted policy set on the exact pushed head; prior-head green results do not prove the corrected history commit.
+---
+## [2026-08-11 06:32:29 -07:00] - thr-functional-lane-speed-004 CI flake recovery
+- What was implemented
+  - Characterized the sole failed hosted functional test, `TestWSRFT003ProviderNeutralLifecycleWorksWithoutProviderSession`, with three passing local repetitions and reran only the failed Backend Functional Coverage job plus its dependent policy gate.
+  - Made no product, test-source, generated-file, or PRD changes in response to the untouched-fixture failure.
+- Files changed
+  - `progress.txt`
+- Verification
+  - The first final-head run failed only because the unchanged Antigravity response stream omitted a final authoritative message; the rerun passed Backend Functional Coverage and Verification Policy.
+  - All 18 checks on the final pushed head are terminal-success.
+- **Learnings for future iterations:**
+  - When a hosted functional lane names an untouched asynchronous fixture, repeat that exact test before editing source; a clean characterization supports a targeted job rerun while preserving the task scope.
