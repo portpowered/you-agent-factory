@@ -8231,3 +8231,22 @@
   - A historical top-level blocking comment can remain in PR conversation after its requested fixes land; use commit ancestry plus thread-aware unresolved state to distinguish addressed feedback from remaining work.
   - Final readiness requires checking the exact pushed head, terminal CI, PR description, and review-thread state together after any bookkeeping commit.
 ---
+
+## 2026-08-10 21:55 -07:00 - e3-event-webhooks-004 latest-main rebase verification
+- What was implemented
+  - Rebased the webhook branch onto the live `origin/main` head `7dbeb472a` after the base advanced during the previous CI run.
+  - Preserved the E3 task-scoped PRD and append-only progress history, regenerated the contract manifest during rebase conflict resolution, and kept the existing event-history size fix.
+- Files changed
+  - `packages/api/generated/manifest.json`
+  - `pkg/services/recordings/internal/events/event_history.go`
+  - `pkg/services/recordings/internal/events/event_history_dispatch_lifecycle.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Focused Webhooks/Recordings tests and the root-built factory-events functional package passed.
+  - `make contracts-check backend-size pkg-file-count pkg-maint pkg-structure vet` and `git diff --check` passed.
+  - All four PRD stories remain marked `passes:true`; exact-head CI and the final PR/thread synchronization are pending after the push.
+- **Learnings for future iterations:**
+  - Fetch the live base immediately before final verification; a passing PR can become conflicting when main advances during CI.
+  - Generated manifest conflicts should be resolved by rerunning `make contracts-generate`, then rechecking contract drift.
+---
