@@ -11,7 +11,7 @@
   },
   "deliveryAudit": {
     "pullRequest": 1857,
-    "head": "5a105e4f178e4d872c19d7b42f848d393fbff431",
+    "head": "ad8fd7c8a3c728e015cf8b0a879bd4ffd0a92ab1",
     "base": "3a0b571b234f70d68908e36669100d0ac9f66a9f",
     "reviewThreads": 0,
     "unresolvedReviewThreads": 0,
