@@ -32,8 +32,8 @@ type supervisorSettings struct {
 		cacheInspection,
 		*models.RuntimeWorker,
 	) (modelseffects.HostProcessStartSpec, error)
-	Diagnostics        hostDiagnostics
-	beforeLoadElection func()
+	Diagnostics               hostDiagnostics
+	afterLoadStateObservation func()
 }
 
 type healthChecker interface {
@@ -120,24 +120,21 @@ func (r *supervisedRuntime) ensureReady(
 		return cancelHostError(err)
 	}
 
-	// Tests use this gate to bring concurrent callers to the election boundary
-	// together. Production construction leaves it nil.
-	if r.cfg.beforeLoadElection != nil {
-		r.cfg.beforeLoadElection()
-	}
-
 	r.mu.Lock()
 	switch r.state {
 	case supervisedStateReady:
 		r.mu.Unlock()
+		r.notifyAfterLoadStateObservation()
 		return nil
 	case supervisedStateLoading:
 		loadDone := r.loadDone
 		r.mu.Unlock()
+		r.notifyAfterLoadStateObservation()
 		return r.waitForLoad(ctx, loadDone)
 	case supervisedStateFailed:
 		err := r.failureOutcomeLocked()
 		r.mu.Unlock()
+		r.notifyAfterLoadStateObservation()
 		return err
 	}
 	r.identity = identity
@@ -147,6 +144,7 @@ func (r *supervisedRuntime) ensureReady(
 	r.loadDone = make(chan struct{})
 	loadDone := r.loadDone
 	r.mu.Unlock()
+	r.notifyAfterLoadStateObservation()
 	defer close(loadDone)
 
 	r.cfg.Diagnostics.logLoadStarted(identity)
@@ -190,6 +188,12 @@ func (r *supervisedRuntime) ensureReady(
 			return r.markFailed(identity, hostFailureClassCancelled, cancelHostError(ctx.Err()))
 		case <-timer.C():
 		}
+	}
+}
+
+func (r *supervisedRuntime) notifyAfterLoadStateObservation() {
+	if r.cfg.afterLoadStateObservation != nil {
+		r.cfg.afterLoadStateObservation()
 	}
 }
 

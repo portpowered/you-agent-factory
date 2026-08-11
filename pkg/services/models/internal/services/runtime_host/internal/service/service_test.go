@@ -252,7 +252,7 @@ func TestEnsureModelHostConcurrentReuseSharesOneSupervisedProcess(t *testing.T) 
 		nil,
 		nil,
 		internalservice.SupervisorTestConfig{
-			BeforeLoadElection: func() {
+			AfterLoadStateObservation: func() {
 				arrivals.Done()
 				<-release
 			},
@@ -274,8 +274,12 @@ func TestEnsureModelHostConcurrentReuseSharesOneSupervisedProcess(t *testing.T) 
 			errCh <- err
 		}()
 	}
-	// This is a failure guard for a broken election barrier, not readiness
-	// synchronization; callers are released only after all have arrived.
+	// Each callback runs after its caller has released the runtime-state mutex.
+	// With the former split implementation, this is after awaitExistingLoad
+	// observed absent and before the second election lock. Holding all callers
+	// here forces that exact gap before any caller can publish loading. With the
+	// fixed implementation, the elected caller has already published loading
+	// atomically and followers observe that same attempt.
 	select {
 	case <-allArrived:
 	case <-time.After(5 * time.Second):
