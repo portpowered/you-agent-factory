@@ -3894,3 +3894,18 @@
 - **Learnings for future iterations:**
   - When several PRs advance `main` during a long task, record each synchronization as its own progress entry and rerun the authoritative lanes on the newest merged head rather than extending an older evidence claim.
 ---
+## 2026-08-10 19:42 -07:00 - thr-functional-lane-speed-004 final PR verification
+- What was implemented
+  - Completed the post-merge verification on current `origin/main` `aac04248d` and pushed merge commit `fc75268e6` to PR #1866.
+  - Confirmed the corrected POSIX contract test and the existing task implementation remain intact after the current-main CLI changes.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `make test` — passed in 563.5s on the merged head.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet typecheck` — passed in 128.7s.
+  - CI run `31452489907` — all checks passed, including Backend Functional Coverage, Backend Unit Coverage, Verification Policy, and the frontend/API/package lanes.
+  - PR #1866 has no conversation comments, reviews, or unresolved review threads; its body matches `prd.json`, its head is `fc75268e6`, and GitHub reports `MERGEABLE`/`CLEAN`.
+  - The fresh CI functional-coverage lane passed the full maintained functional package set with the existing coverage floor and timing/visualization workflow.
+- **Learnings for future iterations:**
+  - A current-main merge can substantially expand the local unit-suite wall time under concurrent workstation load; use the terminal CI result and preserve the measured command duration rather than treating local contention as a product regression.
+---
