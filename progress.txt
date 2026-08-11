@@ -11605,3 +11605,18 @@
 - **Learnings for future iterations:**
   - Final handoff evidence must identify the exact published head and its terminal hosted run; historical green runs are not sufficient after metadata or base-reconciliation commits advance the branch.
 ---
+## [2026-08-11 12:23:50 -07:00] - thr-deflake-cli-process-package final current-head audit
+- What was implemented
+  - Rechecked the existing PR #1884 instead of opening a duplicate; no story source changes were needed because all three PRD stories remain marked `passes:true`.
+  - Refreshed the PRD handoff metadata to the actual published branch head and terminal hosted run, then appended this audit without replacing the append-only progress history.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Local, remote, and PR heads all match `f245e537fd639d2b846ba8f4b7e9f1e6dbe6110b`; the base is `origin/main` `05db67124f6abc32b149f326533f126db2d78aa4`.
+  - Hosted CI run `31526719435` is terminal-success across all 18 required checks, including Backend Functional Coverage, Backend Unit Coverage, and Verification Policy.
+  - The UTF-8 thread-aware audit found 7 top-level conversation comments, 0 submitted reviews, 0 inline review threads, and 0 unresolved threads; the blocking comments target superseded heads.
+  - PR #1884 is open, non-draft, and `MERGEABLE` / `CLEAN`; the PR body matches `prd.json` after normalizing only line endings.
+- **Learnings for future iterations:**
+  - Treat a published head, its hosted run, thread-aware review state, mergeability, and PR-body parity as one handoff tuple; refresh all of them whenever metadata advances the branch.
+---
