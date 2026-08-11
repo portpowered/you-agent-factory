@@ -53,8 +53,8 @@
         "Verify the chart directly in a real browser at mobile and desktop widths, including a resize or remount transition"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Removed the duplicate CartesianGrid and duplicate Recharts Y-axis title, keeping one dashed grid treatment and one overlay-owned Y-axis title. Added a localized aria-describedby data description that follows visible series, preserving dashed line patterns and legend labels for non-color distinction. Added Story 0 fixture-backed Strict Mode/remount/state component coverage, localized message coverage, Storybook one-treatment assertions, and the Playwright Storybook browser gate at 320px and 1280px with a live resize. TypeScript, UI lint, focused Bun/Vitest component tests, Storybook build, and the direct browser gate pass. The exact WorkChart Storybook file still reports its pre-existing Constrained Width legend-height ratio failure (5/6 stories pass); the new direct browser check passes that story at both viewports, so the unrelated harness assertion is recorded rather than changing sizing policy."
     },
     {
       "id": "dashboard-fixture-and-quick-wins-003",

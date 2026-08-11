@@ -9,6 +9,7 @@ export interface WorkOutcomeMessages {
     ariaLabel: (rangeLabel: string) => string;
     cardRegionLabel: string;
     cardTitle: string;
+    accessibleDataDescription: (values: string) => string;
     emptyMessage: string;
     emptyTitle: string;
     errorMessage: string;
@@ -70,6 +71,7 @@ const workOutcomeMessagesByLocale = {
   en: {
     chart: {
       ariaLabel: (rangeLabel) => `Work outcome chart for ${rangeLabel}`,
+      accessibleDataDescription: (values) => `Displayed values: ${values}.`,
       cardRegionLabel: "Work outcome chart region",
       cardTitle: "Work outcome chart",
       emptyMessage:
@@ -142,6 +144,7 @@ const workOutcomeMessagesByLocale = {
   "zh-CN": {
     chart: {
       ariaLabel: (rangeLabel) => `${rangeLabel} 的工作结果图表`,
+      accessibleDataDescription: (values) => `显示值：${values}。`,
       cardRegionLabel: "工作结果图表区域",
       cardTitle: "工作结果图表",
       emptyMessage: "事件流接收到工作历史后，会显示工作结果数据。",
