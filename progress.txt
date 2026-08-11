@@ -9037,3 +9037,22 @@
   - When one implementation exposes a stricter policy variant of a shared persistence operation, model that variant as a named composite capability and bind it explicitly in Wire; do not recover it from the concrete value at operation time.
   - A create/replace recorder that makes the ordinary operation fail is stronger evidence than checking only call counts because it proves the fallback cannot silently return.
 ---
+## [2026-08-11 05:38:15 -07:00] - graph-workstation-semantics packaged dependency gate cleanup
+- What was implemented
+  - Split the new create/replace recorder into `packaged_preparation_test.go` so the existing packaged-installation test file stays within the repository’s 1,000-line backend limit.
+  - Moved the named packaged persistence interface into the internal contract layer and kept the service root exposure as a type alias, satisfying the exact-one-root-interface structure rule.
+- Files changed
+  - `pkg/services/factory_definitions/internal/services/distribution/packagedinstallation/service_test.go`
+  - `pkg/services/factory_definitions/internal/services/distribution/packagedinstallation/packaged_preparation_test.go`
+  - `pkg/services/factory_definitions/internal/contracts/application.go`
+  - `pkg/services/factory_definitions/persistence_contract.go`
+  - `progress.txt`
+- Verification
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` — passed.
+  - `make test` — passed; the full short Go unit lane completed successfully.
+  - Focused create/replace packaged-preparation tests — passed.
+  - Commits `00592ad5d` and `7dd95fea2` record the test split and contract placement correction.
+- **Learnings for future iterations:**
+  - New root-facing contracts should be declared in the internal contracts package and exposed through aliases when the package-structure gate reserves the service root for its singular public service interface.
+  - Run ratcheted gates after test-file moves and contract-placement fixes; passing focused tests alone does not prove file-count or root-structure compliance.
+---
