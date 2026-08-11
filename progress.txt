@@ -37,6 +37,7 @@
 - For final PR handoff, compare the PR body byte-for-byte with `prd.json` and use the thread-aware GraphQL review audit because flat PR comments do not expose inline-thread resolution state.
 - Worker Session async idempotency should claim the caller key and stable session identity in one lock transaction before publication or dispatch, then replay a detached tuple and stored outcome.
 - Root-built functional Worker tests can make mock script execution deterministic by injecting the same gated command runner into both provider and script command edges; the mock-worker mode may route a model-backed workstation through either edge.
+- When rebasing generated contract artifacts, resolve content-addressed manifest entries from the merged artifact bytes and rerun the canonical generator before drift checks.
 - When one request is translated through multiple execution compositions, assert the final provider-boundary request with true, false, and omitted cases; intermediate normalized structs can hide a dropped field.
 - Child-scoped permission overrides should be shape-validated first and applied only at the sandbox/approval policy boundary; routing, allowlists, budgets, and sibling state must remain on the shared validation path.
 - OS-boundary functional tests may poll an isolated durable filesystem checkpoint only when the child exposes no parent-process event or injected edge; document that reason at each polling helper and keep the bound as a failure guard.
@@ -10486,32 +10487,21 @@
   - Public JavaScript dispatch metadata has separate runtime-session and canonical-recording owners; update both projections and their generated transport schemas when adding a child field.
   - Contract generation is intentionally staged: update the authored JSON/OpenAPI fragments first, then run `make contracts-generate`, `make generate-api`, and `make interfaces-all` before drift checks.
 ---
-## [2026-08-11 08:25:23 -07:00] - thr-functional-lane-speed-004 latest-main reconciliation
+## [2026-08-10 22:49 -07:00] - js-skip-permissions-parity current-main rebase follow-up
 - What was implemented
-  - Merged live `origin/main` at `690ca9ab0ac2c1a8c8aa461ff4c7354ca3fa03e0` after the final green hosted run exposed another moving-base conflict.
-  - Preserved this task's four-story `prd.json`, accepted the incoming ACP test-split source/history, and retained the complete append-only progress log.
+  - Rebased the completed JavaScript permission-bypass branch onto the live `origin/main` head `b68e4bf95` after PR #1875 reported a conflict.
+  - Preserved the task-scoped `prd.json`, unioned the current-main and task append-only progress histories, and merged current-main Worker identity/capability assertions with the task's true/false/omitted bypass cases.
+  - Reconciled generated OpenAPI/package hashes from the merged artifact bytes; no product scope was dropped during conflict resolution.
 - Files changed
-  - Current-main ACP test and baseline files carried by the merge.
   - `prd.json`
   - `progress.txt`
+  - `pkg/services/factory_runtime/internal/services/orchestration/runtime/invoke_worker_test.go`
+  - `packages/api/generated/manifest.json`
+  - Current-main generated/API and provider files carried by the rebase.
 - Verification
-  - The task PRD parses with all four stories marked `passes:true`.
-  - `progress.txt` preserves every current-main line in order and is additions-only against live `origin/main` (`332` additions, `0` deletions); conflict-marker and whitespace checks pass.
-  - Replacement-head focused verification and hosted checks are pending for the new merge commit.
+  - Rebase completed cleanly with no conflict markers; `prd.json` parses and all four stories remain `passes:true`.
+  - `git diff --check` passed; generated manifest hashes match the merged OpenAPI and event/recording schema artifacts.
+  - The merged worker identity test passed before continuing the rebase.
 - **Learnings for future iterations:**
-  - Even a documentation-only finalization commit can be overtaken by an active mainline; reconcile the newest base after the last hosted run and rerun the complete required verification on the resulting head.
----
-## [2026-08-11 08:48:09 -07:00] - thr-functional-lane-speed-004 latest-main final audit
-- What was implemented
-  - Completed the final delivery audit for merge head `d9d1790d0aa57c9dc76b6347610633dc63db3a6a` after reconciling live `origin/main` at `690ca9ab0ac2c1a8c8aa461ff4c7354ca3fa03e0`.
-  - Posted evidence clearing the prior blocking conversation after confirming the latest-head review and CI state.
-- Files changed
-  - `progress.txt`
-- Verification
-  - Hosted run `31507344872` is terminal-success across all 18 checks, including Backend Unit Coverage, Backend Functional Coverage, Local Inference, and Verification Policy.
-  - `make typecheck backend-size pkg-maint pkg-file-count pkg-structure vet`, the support/runner/coverage-check packages, and all three touched functional packages pass on the replacement head.
-  - `prd.json` has all four stories marked `passes:true`; the PR body matches it byte-for-byte; `git diff --check` passes; `origin/main` is an ancestor; and GitHub reports `MERGEABLE` / `CLEAN`.
-  - The thread-aware audit has six conversation comments, zero reviews, and zero unresolved inline threads; the latest evidence comment is `#5255456578`.
-- **Learnings for future iterations:**
-  - Treat the latest-main merge, final hosted run, PR-body parity, and thread-aware comment audit as one handoff bundle; a green workflow before the final progress update does not certify the new bookkeeping head.
+  - Fetch the hosting base immediately before handoff, preserve the active task PRD, union append-only progress, and compute generated manifest hashes from the merged artifacts rather than choosing one parent hash.
 ---
