@@ -1,4 +1,6 @@
 ## Codebase Patterns
+- First-party packaged Factory semantic checks should consume parsed canonical definitions inside `internal/packagedfactorycatalog`; keep customer-authored and JavaScript Factory validation unchanged.
+- A lifecycle-only Work state is valid only through a named production bridge that matches the runtime contract and has direct behavioral test evidence; do not use comment-only allowlists.
 - For final PR handoff, compare the PR body byte-for-byte with `prd.json` and use the thread-aware GraphQL review audit because flat PR comments do not expose inline-thread resolution state.
 - OS-boundary functional tests may poll an isolated durable filesystem checkpoint only when the child exposes no parent-process event or injected edge; document that reason at each polling helper and keep the bound as a failure guard.
 - Git Worktree preparation treats a retained Git `*.lock` as indeterminate ownership: retry within a named bound, preserve the resource, and return its exact path with verify/remove/retry guidance.
@@ -130,7 +132,6 @@
 - **Learnings for future iterations:**
 - This checkout may have `ui/node_modules` without all lockfile dependencies; run the pinned Bun install before treating a typecheck failure as a source regression.
 ---
-
 ## 2026-08-10 04:32 -07:00 - sac-s0-2-pkg-boundary-ignores-001
 - What was implemented
   - Centralized repository-root-relative pruning for `.artifacts`, `.artifacts/bootstrap/worktrees`, generated transient worktrees, and the supported root worktree locations.
@@ -3994,4 +3995,24 @@
   - `git diff --cached --check` passed before the merge commit.
 - **Learnings for future iterations:**
   - A clean merge against a stale remote-tracking base is not sufficient; compare the live hosting ref, fetch it, and resolve shared PRD/progress files again before pushing the replacement head.
+---
+## [2026-08-10 19:05 -07:00] - graph-workstation-semantics-001
+- What was implemented
+  - Added a package-owned `ValidateFirstPartyWorkStateRoles` semantic validator for parsed first-party Petri Factory definitions.
+  - Counted external initial admission, workstation inputs/outputs, continuation, rejection, failure, classification-route outputs, and explicit invocation-return states as implemented roles.
+  - Added the named `automations.invocation_schedule.overlap_skip` lifecycle bridge for `scheduled:skipped`, matching the production scheduler contract and its direct fake-clock overlap coverage; JavaScript Factories are excluded from the Petri-only rule.
+  - Added focused tests proving valid role coverage, exact Factory-slug plus `workType:state` disconnected diagnostics, lifecycle bridge acceptance, and JavaScript scope exclusion.
+- Files changed
+  - `internal/packagedfactorycatalog/work_state_roles.go`
+  - `internal/packagedfactorycatalog/work_state_roles_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./internal/packagedfactorycatalog -run '^TestValidateFirstPartyWorkStateRoles' -count=1` — passed.
+  - `git diff --check` — passed.
+  - The full `internal/packagedfactorycatalog` package remains red on pre-existing branch inventory drift: authored `agy-clip-qa`/`agy-cold-watch` entries are not present in the generated catalog/validation ledger, and existing fixture hash expectations are based on the older inventory. No unrelated generated artifacts were changed in this one-story iteration.
+- **Learnings for future iterations:**
+  - Keep first-party semantic reachability separate from customer Factory validation; the package catalog can enforce publication-specific role completeness without tightening the general Factory validator.
+  - Lifecycle-only states need a named production bridge plus direct runtime behavior evidence; a comment-only state allowlist is not sufficient.
+  - Enable the new catalog gate only after story 002 removes `goal:execute` and reconciles all authored/generated catalog inventory, otherwise the existing catalog check cannot stay green.
 ---

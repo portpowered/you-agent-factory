@@ -1,95 +1,95 @@
 {
-  "project": "DWRO S1 — Explicit Remote Placement and Listener Selection",
-  "branchName": "dwro-s1-remote-placement-flags",
-  "description": "Implement story S1 of Direct Worker and Remote Operations by adding persistent root --remote and authored command placement capabilities, dispatching one normalized request through either the local service or exactly the selected --server endpoint without fallback, introducing --listen for local binds with a warned legacy compatibility path, and rejecting documented conflicts with run --with-server and run --with-site.",
+  "project": "Package-Owned Workstation Semantics and Truthful Packaged Factory Graphs",
+  "branchName": "graph-workstation-semantics",
+  "description": "Implement Stories 6 and 7 of the Factory Graph Visual UX plan by making the Factory graph package the single projection authority for independent workstation runtime type, scheduling behavior, and guarded-control role; removing missing-metadata exhaustion guesses; and cleaning disconnected Work states from canonical first-party packaged Factory definitions with a catalog regression check. Keep graph hosts, generated artifacts, published packages, documentation, and runtime smoke behavior aligned so downstream HITL, operation-node, and graph-grammar work can rely on a truthful workstation taxonomy.",
   "context": {
-    "customerAsk": "Implement DWRO story S1: persistent root --remote, authored command placement capabilities, endpoint-only --server, new --listen for local listener binds, no silent local fallback, and documented conflicts with run --with-server and run --with-site.",
-    "problem": "The CLI has no explicit execution-placement input and its authored manifest cannot state whether a command is local-only, remote-only, or dual-placement. The global --server flag also selects both HTTP client endpoints and local listener binds, so customers and scripts cannot unambiguously distinguish calling an existing server from hosting one, and unsupported remote requests lack one centralized no-fallback rule.",
-    "solution": "Add persistent root --remote, a resolved local/remote placement value, and per-command placement capabilities to the authored CLI contract. Normalize command inputs once and select exactly one injected local-service or HTTP-client adapter, rejecting unsupported or failed remote placement without fallback. Make --server the remote endpoint selector, add --listen to listener-owning commands, preserve explicit legacy --server binding with a deprecation warning when --listen is absent, give --listen precedence, and enforce documented usage conflicts before side effects."
+    "customerAsk": "Deliver Stories 6 and 7 of docs/internal/development/plans/factory-graph-visual-ux.md: move workstation type, scheduling behavior, and guard-role projection into ui/packages/factory-graph as the single source of truth; eliminate missing-metadata semantic guesses; remove disconnected Work states from first-party packaged Factories; and add a catalog check that prevents those states from returning.",
+    "problem": "The shared workstation presentation overloads workstation_kind, discards authored workstation type, and treats missing kind and worker metadata as evidence of exhaustion. This can mislabel ordinary or lossy replay nodes and obscure guarded logical controls. First-party packaged Factory definitions also contain states with no admission path, workstation route, invocation return, or implemented lifecycle bridge, so graph, replay, CLI, and published consumers present speculative topology as real behavior.",
+    "solution": "Derive one protocol-neutral workstation presentation from canonical authored Factory definitions with independent runtime-type, scheduling-behavior, and guarded-control axes; merge runtime activity by durable workstation identity; render unavailable semantics as an explicit neutral fallback; and make all shared graph hosts consume that projection. Add a catalog-only semantic reachability check over parsed first-party definitions, remove unimplemented disconnected states from authored sources, regenerate catalog and package artifacts, align docs and smoke expectations, and preserve existing reachable runtime outcomes without changing public schemas or scheduling behavior."
   },
   "acceptanceCriteria": [
-    "The authored CLI manifest defines persistent root --remote, a resolved local/remote placement value, and local-only, remote-only, or dual-placement capabilities for affected commands; executable help and parsing match that contract.",
-    "A representative dual-placement operation produces the same normalized request locally without --remote and sends that request to exactly the --server <uri> HTTP endpoint with --remote, with equivalent domain intent across adapters.",
-    "Unsupported remote placement, an invalid or unavailable selected server, and remote transport failure return stable actionable errors and never invoke the local product operation, start a listener, or silently select another endpoint.",
-    "you server --listen, you run --with-server --listen, and you run --with-site --listen bind the requested local address; when --listen is absent, legacy listener use of an explicitly supplied --server remains functional for the compatibility window and warns, while explicit --listen takes precedence.",
-    "--remote with run --with-server or run --with-site is rejected as a documented stable usage conflict before listener, browser, Factory, or remote-operation side effects begin; reference docs and examples use the new placement vocabulary.",
-    "Quality gates pass with direct CLI and manifest, package, functional, help and reference, and compatibility evidence as applicable; Typecheck passes, Tests pass, and there are no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
-    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared or generated-file churn are resolved against current main, and the PR is actually merged."
+    "Every user-visible Factory workstation communicates authored runtime type and scheduling behavior as separate semantic axes, and supported guarded logical moves expose their control role, target, and limit without requiring selection.",
+    "Missing, undefined, legacy, and unknown metadata uses a documented neutral fallback and never produces a fabricated exhaustion, loop-breaker, repeater, or other special role.",
+    "Current activity observe/edit, selected-tick replay, the public Factory graph package, and trace views agree on workstation semantics when the authored definition is available; lossy sources show the neutral fallback.",
+    "Every declared Work state in every first-party packaged Factory has a machine-checked implemented role, and a synthetic disconnected state causes the catalog check to fail with the Factory slug and exact workType:state diagnostic.",
+    "Canonical packaged definitions, generated catalog and published artifacts, reference documentation, smoke expectations, and rendered graphs agree after disconnected states are removed, while existing reachable invocation and routing outcomes remain unchanged.",
+    "Typecheck, focused package/component/catalog/runtime tests, generated drift checks, and required CI pass; there are no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
+    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared/generated-file churn are reconciled against current main, and the PR is actually merged."
   ],
   "userStories": [
     {
-      "id": "dwro-s1-remote-placement-flags-001",
-      "title": "Declare explicit placement in the authored CLI contract",
-      "description": "As a CLI user and command implementer, I want root placement and each command's supported placements to be explicit so help, validation, and dispatch share one authoritative contract.",
+      "id": "graph-workstation-semantics-001",
+      "title": "Reject disconnected states in the first-party catalog",
+      "description": "As a packaged Factory maintainer, I want the catalog check to reject declared Work states with no implemented behavioral role so speculative topology cannot silently ship as operational graph behavior.",
       "acceptanceCriteria": [
-        "The authored CLI manifest exposes a visible persistent root --remote boolean whose documented meaning is to execute a supported operation through a running You server; it does not imply async, follow, continuous, or listener behavior.",
-        "The executable parser resolves the root input to explicit local placement by default and remote placement when --remote appears before or after the command path, consistent with other persistent flags.",
-        "A command can authoritatively declare local-only, remote-only, or dual-placement capability, and manifest validation rejects a runnable command whose placement declaration is missing or invalid where the placement contract applies.",
-        "Existing HTTP-only commands retain their historical remote-default compatibility for this window, accept explicit --remote, and do not gain a local implementation merely to satisfy the new vocabulary.",
-        "Root and representative command help show the placement meaning and supported usage without describing --remote as a waiting or server-start option.",
-        "Focused contract and parser tests prove manifest validation, persistent flag inheritance, before and after command parsing, default placement, and explicit remote placement through observable CLI inputs and help.",
+        "The catalog check evaluates canonical parsed first-party Factory definitions and accounts for states used by external admission, workstation inputs or outputs, onContinue, onRejection, onFailure, classification-route outputs, explicit invocation return, or a named implemented lifecycle bridge backed by direct behavioral tests.",
+        "A focused test introduces a synthetic disconnected state and proves the check fails with the Factory slug and exact workType:state diagnostic.",
+        "Valid initial, routed, classification-output, failure, rejection, continuation, and invocation-return states are accepted without depending on source-text layout.",
+        "Lifecycle exceptions are accepted only when tied to named implemented behavior with direct test evidence; comment-only allowlists do not satisfy the rule.",
+        "The stricter rule is limited to the first-party packaged catalog and does not become a blanket validation error for customer-authored, JavaScript-controlled, or externally controlled Factories.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 1,
-      "passes": true,
-      "notes": ""
+      "passes": false,
+      "notes": "Implemented the package-owned semantic role validator and focused tests for canonical initial, routed, classification, failure, rejection, continuation, explicit-return, JavaScript-scope, and invocation-schedule overlap states. The repository-wide catalog gate is intentionally not enabled in this iteration because the current authored catalog still contains goal:execute, which is the separate cleanup target of story graph-workstation-semantics-002; enabling the gate before that cleanup would leave the existing catalog check red."
     },
     {
-      "id": "dwro-s1-remote-placement-flags-002",
-      "title": "Dispatch normalized operations without placement fallback",
-      "description": "As a customer, I want the same operation to run locally by default or on exactly my selected server with --remote so placement is predictable and cannot silently change during failure.",
+      "id": "graph-workstation-semantics-002",
+      "title": "Remove unreachable states from shipped packaged Factories",
+      "description": "As a Factory user, I want every Work state shown by a first-party graph to represent real shipped behavior so dashboard, replay, CLI, and package consumers present a minimal truthful topology.",
       "acceptanceCriteria": [
-        "At least one representative supported dual-placement command normalizes customer inputs once before dispatch, calls its already-injected local service adapter without --remote, and calls its HTTP client adapter with --remote.",
-        "Behavioral parity coverage proves the local and remote adapters receive contract-equivalent normalized request values for the same customer input, allowing only transport metadata differences.",
-        "you --remote --server <uri> <dual-placement-command> sends the operation to exactly <uri> and does not invoke the local product operation, start or probe a local listener, or substitute the default endpoint.",
-        "A local-only command invoked with --remote exits with a stable actionable usage error that identifies the unsupported placement before command side effects occur.",
-        "Invalid endpoint configuration, connection refusal, timeout, and other remote transport failures remain remote failures and do not retry through the local adapter; diagnostics identify the selected endpoint without leaking credentials or sensitive request content.",
-        "Placement selection remains a CLI transport concern: domain services receive normalized operation requests and do not inspect CLI placement flags or discover alternate dependencies.",
-        "Focused package and public CLI behavioral tests cover local dispatch, exact remote dispatch, unsupported placement, and failed remote transport with zero local fallback.",
+        "The goal Factory contains goal:init, goal:complete, goal:blocked, and goal:failed, does not contain goal:execute, and preserves the established repeater and loop-breaker accepted, continue, blocked, and failed outcomes.",
+        "Every other disconnected candidate identified by the catalog audit is removed unless an existing runtime operation already produces it and direct behavioral tests prove that behavior; missing lifecycle behavior is deferred to a separate product story rather than faked through projection or UI filtering.",
+        "The cleanup occurs in canonical authored Factory definitions, so dashboard, editor, replay, CLI inspection, generated catalogs, and published package consumers observe the same state inventory.",
+        "Generated catalog manifests, flattened definitions, embedded assets, and publishable package artifacts are regenerated from authored sources and pass drift verification without hand-editing generated output.",
+        "Reference documentation, diagrams or examples, and smoke expectations describe only the retained shipped paths, and a graph projection or browser fixture proves work-state:goal:execute is absent.",
+        "Existing invocation and runtime smoke coverage for each changed Factory proves its reachable admission, continuation, rejection, failure, and explicit-return outcomes remain unchanged.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 2,
-      "passes": true,
-      "notes": "Implemented dual-placement `you run` dispatch through one normalized invocation request and an injected local or exact-URI HTTP adapter, with stable unsupported-placement and no-fallback remote errors. Refreshed authored and published CLI contract artifacts and added focused package/public CLI behavioral coverage. Verified with `make contracts-validate`, `make cli-manifest-check`, `go test ./pkg/transports/cli/run ./pkg/transports/cli ./pkg/wire ./pkg/services/workers/internal/interface -count=1`, and `make test`. Review follow-up makes invalid remote endpoint labels fail closed for parse-success/base-invalid opaque and unsupported-scheme inputs, with credential-redaction regression coverage."
+      "passes": false,
+      "notes": ""
     },
     {
-      "id": "dwro-s1-remote-placement-flags-003",
-      "title": "Bind local servers with --listen and preserve legacy scripts",
-      "description": "As an operator, I want local listener addresses selected with --listen so --server can mean a remote endpoint while my existing listener scripts have a safe migration window.",
+      "id": "graph-workstation-semantics-003",
+      "title": "Project workstation semantics from canonical Factory definitions",
+      "description": "As a graph consumer, I want one package-owned workstation semantic projection so runtime type, scheduling behavior, and guarded-control meaning remain independent and reproducible across graph hosts.",
       "acceptanceCriteria": [
-        "you server --listen <address>, you run --with-server --listen <address>, and you run --with-site --listen <address> bind the requested valid local address and report existing stable bind failures for invalid, non-local, or unavailable addresses.",
-        "Listener-owning commands use the existing default local bind when neither an explicit --listen nor an explicit legacy bind value is supplied.",
-        "During the compatibility window, an explicitly supplied legacy --server <local-uri> continues to select the listener bind only when --listen is absent and emits one actionable deprecation warning on stderr directing the user to --listen.",
-        "When both inputs are supplied to a listener-owning command, explicit --listen determines the bind address; --server does not override it, and compatibility diagnostics accurately explain any retained endpoint role.",
-        "Ordinary local commands and ordinary you run do not start a listener merely because --listen or the default server endpoint exists; invalid flag placement is rejected before runtime side effects.",
-        "CLI manifest relationships, help, and examples describe --listen as the local bind input and --server as the selected You server URI, including the legacy migration behavior.",
-        "Focused listener lifecycle tests use observable readiness and bind behavior and prove requested binding, precedence, warning, bind failure, and joined shutdown without arbitrary sleeps.",
+        "The Factory graph package exposes a protocol-neutral projection with separate authored runtime type, scheduling behavior, and derived control role; no new projection writes a single overloaded kind value for multiple axes.",
+        "Runtime type provides the primary semantic role for inference, agent, script, poller-run, classifier, logical-move, legacy model values, and unknown future values, using the repository's canonical taxonomy rather than a second divergent enum table.",
+        "Scheduling behavior independently represents STANDARD, REPEATER, CRON, and POLLER, including supported lowercase legacy inputs, without replacing the primary runtime-type identity.",
+        "Only a supported guarded LOGICAL_MOVE, including a VISIT_COUNT guard, becomes a guarded-control or loop-breaker role; ordinary logical moves remain logical routers and classifiers remain classifiers.",
+        "Undefined, incomplete, or unknown semantics resolve to an explicit neutral unknown presentation; the missing-kind plus missing-worker exhaustion heuristic and equivalent semantic guesses are removed.",
+        "Authored semantics are joined to selected-tick activity by workstation id, using authored name only for legacy definitions without ids; runtime activity overlays do not overwrite authored semantics.",
+        "Pure projection tests cover every supported runtime type crossed with each scheduling behavior, guarded and unguarded logical moves, lowercase legacy inputs, missing values, and unknown future strings.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 3,
-      "passes": true,
-      "notes": "Implemented exact local listener selection through --listen for you server and server-enabled you run/you run --with-site flows, with loopback-only validation, explicit precedence over --server, one-time legacy local --server warnings, and preserved automatic legacy allocation. Ordinary runs reject misplaced --listen before the run handler, and listener lifecycle coverage proves exact readiness, unavailable-port errors, and shutdown. Refreshed authored/generated CLI contracts, command/help baselines, and reference guidance. Verified with make contracts-validate, make cli-manifest-check, make docs-reference-smoke, make test, go test ./pkg/transports/cli/... -count=1, focused CLI tests, full run-scoped-server functional tests, backend-size, pkg-maint, pkg-file-count, vet, and git diff --check; aggregate make lint is blocked by the pre-existing missing UI knip binary, and the backend-only continuation reaches existing package-boundary baseline violations; neither reports new violations."
+      "passes": false,
+      "notes": ""
     },
     {
-      "id": "dwro-s1-remote-placement-flags-004",
-      "title": "Reject remote and local-hosting conflicts and publish migration guidance",
-      "description": "As a customer, I want contradictory placement modes rejected with clear guidance so the CLI never both calls a remote server and hosts the same run locally.",
+      "id": "graph-workstation-semantics-004",
+      "title": "Render consistent workstation meaning across graph hosts",
+      "description": "As a Factory user, I want current activity, editing, replay, and trace graphs to render the same workstation meaning so I can trust icons, labels, badges, and guarded-control cards wherever I inspect a Factory.",
       "acceptanceCriteria": [
-        "you --remote run --with-server and you --remote run --with-site each exit with the same stable usage classification and actionable conflict message, regardless of persistent-flag position.",
-        "Conflict validation occurs before Factory execution, HTTP dispatch, listener startup, browser launch, recording, or other run-owned side effects.",
-        "Authored CLI relationships, executable help, and packaged reference docs state that --remote selects a running server, --server selects its URI, and --listen selects a local bind; they document both run-mode conflicts and the legacy bind migration.",
-        "New customer-facing examples use you --remote --server <uri> for supported remote operations and --listen <address> for local server or server-enabled run binding; they do not present legacy --server listener syntax as the preferred form.",
-        "Behavioral CLI tests prove both conflicts, stable exit and error output, zero side effects, and help and reference guidance rather than relying on source or route inventories.",
-        "Documentation reference smoke checks pass",
+        "Every shared workstation node communicates runtime type through an icon plus visible text or an accessible label, and communicates non-standard scheduling behavior through a distinct secondary treatment that does not erase the primary role.",
+        "In the authored goal Factory, execute-goal is visibly and accessibly both an agent-run workstation and a repeater, while goal-loop-breaker is a compact guarded logical-control card exposing its VISIT_COUNT target and limit without selection.",
+        "Current activity observe/edit and selected-tick replay resolve semantics from the authored Factory definition; public package replay does the same through FactoryGraphSource.factory; a trace source that cannot recover the definition renders the neutral unknown fallback.",
+        "Components treat React Flow node data as a disposable projection and do not reconstruct authored type, behavior, or guards from icons, CSS classes, DOM measurements, or runtime-only topology metadata.",
+        "Component tests prove projected metadata drives the visible and accessible node semantics and prove missing metadata never renders exhaustion or another fabricated special role.",
+        "Direct browser verification at fit-to-view zoom covers a mixed Factory containing classifier, logical move, guarded loop breaker, inference, agent, script, repeater, cron, and poller semantics, with representative long names at desktop and touch-sized viewports.",
+        "Existing loading, empty, error, and success behavior of host graph surfaces remains intact; semantic badges and compact control cards preserve keyboard selection, visible focus, accessible naming, responsive legibility, and localization behavior.",
+        "No backend scheduling behavior, public enum, OpenAPI shape, alternate renderer, or unrelated graph redesign is introduced.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 4,
-      "passes": true,
-      "notes": "Implemented stable REMOTE_LOCAL_HOSTING_CONFLICT validation before system initialization and again after custom run parsing, covering --remote before or after run with both --with-server and --with-site; behavioral tests prove no local, remote, browser, listener, or Factory side effects. Added authored conflict relationships, structured BAD_REQUEST output, executable help/examples, legacy --server migration guidance, and packaged reference documentation; regenerated published contracts and CLI baselines. Addressed review feedback by removing duplicate placement keys from authored/generated manifests, making manifest loading reject duplicate JSON object keys, redacting malformed credential-bearing endpoint diagnostics, keeping maintainability and package-file-count ratchets green, using worker-free listener functional cases, and removing marker-only docs assertions. Moved the generic strict decoder into the policy-free generated-artifact platform package and added loader/decoder coverage so the CLI manifest unit and functional floors remain intact. Verified with focused CLI tests, the full short Go suite, make verify-fast, make cli-manifest-check, make contracts-validate, make docs-reference-smoke, make pkg-maint, make pkg-file-count, backend-size, pkg-structure, vet, full run-scoped-server functional tests, and git diff --check."
+      "passes": false,
+      "notes": ""
     }
   ]
 }
