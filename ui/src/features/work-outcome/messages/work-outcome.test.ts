@@ -7,6 +7,9 @@ describe("getWorkOutcomeMessages", () => {
     expect(messages.chart.ariaLabel("15m")).toBe("Work outcome chart for 15m");
     expect(messages.chart.tickLabel(20)).toBe("Tick 20");
     expect(messages.chart.seriesPointLabel("Queued", 3)).toBe("Queued: 3");
+    expect(messages.chart.accessibleDataDescription("Completed: 3")).toBe(
+      "Displayed values: Completed: 3.",
+    );
     expect(messages.chart.workTypeFailureLabel("story")).toBe(
       "Work type: story",
     );
@@ -34,6 +37,9 @@ describe("getWorkOutcomeMessages", () => {
     expect(messages.chart.ariaLabel("15m")).toBe("15m 的工作结果图表");
     expect(messages.chart.tickLabel(20)).toBe("刻度 20");
     expect(messages.chart.seriesPointLabel("排队中", 3)).toBe("排队中：3");
+    expect(messages.chart.accessibleDataDescription("已完成：3")).toBe(
+      "显示值：已完成：3。",
+    );
     expect(messages.chart.workTypeFailureLabel("story")).toBe(
       "工作类型：story",
     );

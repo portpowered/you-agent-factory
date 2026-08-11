@@ -10131,3 +10131,18 @@
 - **Learnings for future iterations:**
   - A moving-base merge can conflict only in shared task metadata while carrying substantial generated/API/runtime changes; resolve the active PRD explicitly, union progress histories, and rerun both task and carried-main boundary suites before pushing.
 ---
+
+## [2026-08-11 08:00 -07:00] - dwro-s7-placement-grammar review-blocker synchronization
+- What was implemented
+  - Merged live `origin/main` at `635a43870` after PR #1878 reported a moving-base conflict.
+  - Kept the active S7 `prd.json` authoritative and preserved the S7 append-only progress history while carrying current-main source and generated changes into the branch.
+- Files changed
+  - Current-main dashboard fixture, Factory Session transport, and writing-standard files carried by the synchronization merge.
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - The merge conflict was limited to shared task metadata; no product-source conflict required a behavior choice.
+  - The next verification pass must address the latest blocking review findings on the merged head before publication.
+- **Learnings for future iterations:**
+  - Fetch and merge the live base before review-fix work; shared PRD/progress conflicts should retain the active task contract and append-only history while accepting unrelated mainline source changes.
+---

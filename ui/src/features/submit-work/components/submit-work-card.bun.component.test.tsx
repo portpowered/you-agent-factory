@@ -1,6 +1,7 @@
 // biome-ignore-all lint/style/noExcessiveLinesPerFile: submit-work interaction cases share one form and invocation fixture harness.
 import "../../../testing/vitest-dom-capabilities.setup";
 
+import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import {
   cleanup,
   fireEvent,
@@ -10,14 +11,6 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  mock,
-} from "bun:test";
 
 const vi = { fn: mock };
 
@@ -316,6 +309,7 @@ describe("SubmitWorkCard form-level status", () => {
         ...defaultDraft,
         requestName: "Driver review",
       },
+      sessionID: "019e0000-0000-7000-8000-000000000042",
       status: {
         kind: "error",
         message: "work_type_name is required",
@@ -324,6 +318,12 @@ describe("SubmitWorkCard form-level status", () => {
 
     const statusPanel = screen.getByRole("alert");
     expect(statusPanel).toHaveTextContent("work_type_name is required");
+    expect(
+      document.querySelector("[data-submit-work-destination]")?.textContent,
+    ).toContain("019e0000-0000-7000-8000-000000000042");
+    expect(screen.getByRole("form").getAttribute("aria-describedby")).toBe(
+      statusPanel.id,
+    );
     expect(statusPanel.className).toContain("bg-error-container");
     expect(
       screen.queryByText(messages.validationMessages.requestRequired),
