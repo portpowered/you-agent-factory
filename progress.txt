@@ -6862,3 +6862,17 @@
 - **Learnings for future iterations:**
   - Recheck the live remote main immediately before final push; another merged PR can make a previously clean synchronization stale during review handoff.
 ---
+## [2026-08-10 21:27 -07:00] - prose-standard-and-terms final CI handoff
+- What was implemented
+  - Completed the review follow-up and recorded the final ready-for-review status in PR #1869.
+  - Posted the final handoff comment after the corrected head passed the full required CI run.
+- Files changed
+  - `progress.txt`
+- Verification
+  - CI run `31458112019` passed all required checks, including Backend Unit Coverage, Backend Functional Coverage, Verification Policy, and every docs, frontend, API/package, packaged-factory, model-provider, UI-integration, and local-inference lane.
+  - The thread-aware review audit reports zero submitted reviews and zero inline review threads; the top-level blocking comment is addressed by the correction, owner confirmation, current-main synchronization, and green CI.
+  - Final handoff comment: https://github.com/portpowered/you-agent-factory/pull/1869#issuecomment-5248982136
+  - At the time of handoff, PR head was `a87f2993e`, base was `469204421`, the PR body matched `prd.json`, and all three stories were marked `passes:true`.
+- **Learnings for future iterations:**
+  - Treat the final CI run, thread-aware review audit, PR body/PRD comparison, and current-base SHA as one handoff bundle before marking a documentation-only PR ready for review.
+---
