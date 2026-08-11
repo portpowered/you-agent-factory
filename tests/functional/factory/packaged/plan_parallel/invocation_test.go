@@ -24,6 +24,71 @@ import (
 
 const parallelDAG = `{"request":{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"task-a","workTypeName":"planned-task","payload":"TASK_A_UNIQUE_OBJECTIVE"},{"name":"task-b","workTypeName":"planned-task","payload":"TASK_B_UNIQUE_OBJECTIVE"},{"name":"task-c","workTypeName":"planned-task","payload":"TASK_C_UNIQUE_OBJECTIVE"}],"relations":[{"type":"DEPENDS_ON","sourceWorkName":"task-c","targetWorkName":"task-a"},{"type":"DEPENDS_ON","sourceWorkName":"task-c","targetWorkName":"task-b"}]}}`
 
+const planParallelFanInChildCount = 10
+
+func TestPackagedPlanParallelMergerReceivesEveryUniqueCompletedChildResult(t *testing.T) {
+	const originalRequest = "FANIN_ORIGINAL_REQUEST_MARKER"
+	runner := newPlanParallelFanInRunner(planParallelFanInDAG())
+	response, err := runPlanParallelCLI(t, runner, "--to", originalRequest)
+	if err != nil {
+		t.Fatalf("plan-parallel CLI invocation: %v", err)
+	}
+	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
+		t.Fatalf("response = %#v, want completed fan-in invocation", response)
+	}
+	if runner.executionCount() != planParallelFanInChildCount || runner.mergeCount() != 1 {
+		t.Fatalf("executor calls = %d, merge calls = %d; want %d and 1", runner.executionCount(), runner.mergeCount(), planParallelFanInChildCount)
+	}
+
+	mergerPrompt := planParallelMergerPrompt(t, runner.requestsSnapshot())
+	if strings.Count(mergerPrompt, originalRequest) != 1 {
+		t.Fatalf("merger prompt contains original request %d times, want exactly once: %q", strings.Count(mergerPrompt, originalRequest), mergerPrompt)
+	}
+	for index := 1; index <= planParallelFanInChildCount; index++ {
+		childName := planParallelFanInChildName(index)
+		childInput := planParallelFanInChildInput(index)
+		childResult := planParallelFanInChildResult(index)
+		if strings.Count(mergerPrompt, childResult) != 1 {
+			t.Fatalf("merger prompt contains %s %d times, want exactly once: %q", childResult, strings.Count(mergerPrompt, childResult), mergerPrompt)
+		}
+		sectionStart := strings.Index(mergerPrompt, fmt.Sprintf("--- %s (planned-task) ---", childName))
+		if sectionStart < 0 {
+			t.Fatalf("merger prompt does not identify generated Work %s: %q", childName, mergerPrompt)
+		}
+		sectionEnd := strings.Index(mergerPrompt[sectionStart+1:], "\n--- ")
+		if sectionEnd < 0 {
+			sectionEnd = len(mergerPrompt) - sectionStart - 1
+		}
+		section := mergerPrompt[sectionStart : sectionStart+1+sectionEnd]
+		if strings.Count(section, childResult) != 1 {
+			t.Fatalf("generated Work %s section contains result %s %d times, want exactly once: %q", childName, childResult, strings.Count(section, childResult), section)
+		}
+		if strings.Contains(section, childInput) {
+			t.Fatalf("generated Work %s section contains planner payload %s instead of only the completed result: %q", childName, childInput, section)
+		}
+	}
+}
+
+func planParallelFanInDAG() string {
+	works := make([]string, 0, planParallelFanInChildCount)
+	for index := 1; index <= planParallelFanInChildCount; index++ {
+		works = append(works, fmt.Sprintf(`{"name":"%s","workTypeName":"planned-task","payload":"%s"}`, planParallelFanInChildName(index), planParallelFanInChildInput(index)))
+	}
+	return `{"request":{"type":"FACTORY_REQUEST_BATCH","works":[` + strings.Join(works, ",") + `]}}`
+}
+
+func planParallelFanInChildName(index int) string {
+	return fmt.Sprintf("fan-in-task-%02d", index)
+}
+
+func planParallelFanInChildInput(index int) string {
+	return fmt.Sprintf("FANIN_CHILD_INPUT_%02d", index)
+}
+
+func planParallelFanInChildResult(index int) string {
+	return fmt.Sprintf("FANIN_CHILD_RESULT_%02d", index)
+}
+
 func TestPackagedPlanParallelExecutesReadyDAGConcurrentlyAndMerges(t *testing.T) {
 	// This cell intentionally uses the public API because it owns retained
 	// Factory Event and reconnect/replay assertions below.
@@ -190,6 +255,25 @@ func assertPlanParallelPromptsContainInputs(t *testing.T, requests []platformpro
 	}
 }
 
+func planParallelMergerPrompt(t *testing.T, requests []platformprocess.CommandRequest) string {
+	t.Helper()
+	var mergerPrompt string
+	for _, request := range requests {
+		prompt := string(request.Stdin)
+		if !strings.Contains(prompt, "Treat the original request and all completed generated Work inputs") {
+			continue
+		}
+		if mergerPrompt != "" {
+			t.Fatalf("captured more than one merger prompt")
+		}
+		mergerPrompt = prompt
+	}
+	if mergerPrompt == "" {
+		t.Fatalf("captured no merge-plan-results prompt")
+	}
+	return mergerPrompt
+}
+
 func assertPlanParallelGeneratedDAGEvent(t *testing.T, events []factoryapi.FactoryEvent) {
 	t.Helper()
 	for _, event := range events {
@@ -287,6 +371,7 @@ func TestPackagedPlanParallelChildFailureFansInWithoutMerge(t *testing.T) {
 type planParallelRunner struct {
 	mu             sync.Mutex
 	plannerOutput  string
+	uniqueResults  bool
 	active         int
 	maxActive      int
 	executions     int
@@ -298,6 +383,12 @@ type planParallelRunner struct {
 
 func newPlanParallelRunner(plannerOutput string) *planParallelRunner {
 	return &planParallelRunner{plannerOutput: plannerOutput, readyExecutors: make(chan struct{})}
+}
+
+func newPlanParallelFanInRunner(plannerOutput string) *planParallelRunner {
+	runner := newPlanParallelRunner(plannerOutput)
+	runner.uniqueResults = true
+	return runner
 }
 
 func (runner *planParallelRunner) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
@@ -342,7 +433,16 @@ func (runner *planParallelRunner) Run(ctx context.Context, request platformproce
 		runner.mu.Lock()
 		runner.active--
 		runner.mu.Unlock()
-		return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("planned task completed")}, nil
+		output := "planned task completed"
+		if runner.uniqueResults {
+			for index := 1; index <= planParallelFanInChildCount; index++ {
+				if strings.Contains(prompt, planParallelFanInChildInput(index)) {
+					output = planParallelFanInChildResult(index)
+					break
+				}
+			}
+		}
+		return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout(output)}, nil
 	}
 }
 
