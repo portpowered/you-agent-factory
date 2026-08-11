@@ -708,31 +708,40 @@ func waitForPartialFanInObservation(
 	completeLocation := support.WorkCustomerLocation("task", dependencyRequiredState)
 	processingLocation := support.WorkCustomerLocation("task", "processing")
 	initLocation := support.WorkCustomerLocation("task", "init")
-	deadline := time.Now().Add(timeout)
-
-	for time.Now().Before(deadline) {
-		listed := support.ListDefaultSessionWork(t, baseURL)
-		events := support.GetFactoryEventsAt(t, baseURL)
-
-		aComplete := support.HasWorkAtCustomerState(listed, prerequisiteAWorkID, completeLocation)
-		bComplete := support.HasWorkAtCustomerState(listed, prerequisiteBWorkID, completeLocation)
-		if aComplete != bComplete &&
-			!support.HasWorkAtCustomerState(listed, dependentWorkID, completeLocation) &&
-			!support.HasWorkAtCustomerState(listed, dependentWorkID, processingLocation) &&
-			support.HasWorkAtCustomerState(listed, dependentWorkID, initLocation) {
-			return listed, events
-		}
-
-		time.Sleep(50 * time.Millisecond)
+	type observation struct {
+		listed factoryapi.ListWorkResponse
+		events []factoryapi.FactoryEvent
 	}
-
-	listed := support.ListDefaultSessionWork(t, baseURL)
-	t.Fatalf(
-		"timed out waiting %s for partial fan-in observation; listed=%#v",
+	last, err := support.WaitForObservation(
 		timeout,
-		listed,
+		func() (observation, error) {
+			return observation{
+				listed: support.ListDefaultSessionWork(t, baseURL),
+				events: support.GetFactoryEventsAt(t, baseURL),
+			}, nil
+		},
+		func(current observation) bool {
+			listed := current.listed
+			aComplete := support.HasWorkAtCustomerState(listed, prerequisiteAWorkID, completeLocation)
+			bComplete := support.HasWorkAtCustomerState(listed, prerequisiteBWorkID, completeLocation)
+			if aComplete != bComplete &&
+				!support.HasWorkAtCustomerState(listed, dependentWorkID, completeLocation) &&
+				!support.HasWorkAtCustomerState(listed, dependentWorkID, processingLocation) &&
+				support.HasWorkAtCustomerState(listed, dependentWorkID, initLocation) {
+				return true
+			}
+			return false
+		},
 	)
-	return listed, nil
+	if err != nil {
+		t.Fatalf(
+			"timed out waiting %s for partial fan-in observation: %v; listed=%#v",
+			timeout,
+			err,
+			last.listed,
+		)
+	}
+	return last.listed, last.events
 }
 
 func assertFanInBlockedAfterPartialPrerequisites(

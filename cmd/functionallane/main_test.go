@@ -91,8 +91,44 @@ func TestParseConfigDefaults(t *testing.T) {
 	os.Args = []string{"functionallane"}
 	flag.CommandLine = flag.NewFlagSet("functionallane", flag.ContinueOnError)
 	got := parseConfig()
-	if got.count != 1 || got.jobs != 8 || got.root != "./tests/functional/..." || !got.short || got.timeout != 5*time.Minute {
+	if got.count != 0 || got.jobs != 8 || got.root != "./tests/functional/..." || !got.short || got.timeout != 5*time.Minute {
 		t.Fatalf("parseConfig() defaults = %+v", got)
+	}
+}
+
+func TestRunFunctionalTestsOmitsCountForDefaultCacheMode(t *testing.T) {
+	restoreExecCommand(t)
+	var gotArgs []string
+	execCommand = func(name string, args ...string) *exec.Cmd {
+		gotArgs = append([]string{name}, args...)
+		return fakeFunctionalLaneCommand(name, args...)
+	}
+	t.Setenv("GO_WANT_FUNCTIONALLANE_HELPER", "1")
+
+	cfg := config{jobs: 8, root: "./tests/functional/...", short: true, timeout: 2 * time.Minute}
+	if err := runFunctionalTests(cfg); err != nil {
+		t.Fatalf("runFunctionalTests() error = %v", err)
+	}
+	want := []string{"go", "test", "-p=8", "-short", "./tests/functional/...", "-timeout=2m0s"}
+	if !slices.Equal(gotArgs, want) {
+		t.Fatalf("command = %v, want %v", gotArgs, want)
+	}
+}
+
+func TestRunFunctionalTestsRejectsNegativeCount(t *testing.T) {
+	restoreExecCommand(t)
+	executed := false
+	execCommand = func(name string, args ...string) *exec.Cmd {
+		executed = true
+		return fakeFunctionalLaneCommand(name, args...)
+	}
+
+	err := runFunctionalTests(config{count: -1, jobs: 1, root: "./tests/functional/...", short: true, timeout: time.Minute})
+	if err == nil || err.Error() != "invalid -count=-1: value must be zero or greater" {
+		t.Fatalf("runFunctionalTests() error = %v, want invalid-count diagnostic", err)
+	}
+	if executed {
+		t.Fatal("runFunctionalTests() invoked go test after rejecting count")
 	}
 }
 

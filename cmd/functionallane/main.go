@@ -69,7 +69,7 @@ func run() error {
 
 func parseConfig() config {
 	var cfg config
-	flag.IntVar(&cfg.count, "count", 1, "go test -count value")
+	flag.IntVar(&cfg.count, "count", 0, "go test -count value; zero preserves Go's content-addressed test cache")
 	flag.IntVar(&cfg.jobs, "jobs", 8, "go test -p value")
 	flag.StringVar(&cfg.root, "root", "./tests/functional/...", "go test package pattern for the functional lane")
 	flag.BoolVar(&cfg.short, "short", true, "run with go test -short")
@@ -83,6 +83,10 @@ func parseConfig() config {
 }
 
 func runFunctionalTests(cfg config) error {
+	if cfg.count < 0 {
+		return fmt.Errorf("invalid -count=%d: value must be zero or greater", cfg.count)
+	}
+
 	args := []string{"test", fmt.Sprintf("-p=%d", cfg.jobs)}
 	if strings.TrimSpace(cfg.timingOutput) != "" {
 		args = append(args, "-json")
@@ -91,10 +95,10 @@ func runFunctionalTests(cfg config) error {
 		args = append(args, "-short")
 	}
 	args = append(args, cfg.root)
-	args = append(args,
-		fmt.Sprintf("-count=%d", cfg.count),
-		fmt.Sprintf("-timeout=%s", cfg.timeout),
-	)
+	if cfg.count > 0 {
+		args = append(args, fmt.Sprintf("-count=%d", cfg.count))
+	}
+	args = append(args, fmt.Sprintf("-timeout=%s", cfg.timeout))
 
 	cmd := execCommand("go", args...)
 	cmd.Env = os.Environ()

@@ -261,6 +261,9 @@ func run(cfg config) (coverageResult, error) {
 		"test",
 		fmt.Sprintf("-coverpkg=%s", coverPackageArgument),
 		fmt.Sprintf("-p=%d", cfg.testJobs()),
+		// Coverage is an authoritative measurement, so every package must run
+		// even when a prior non-instrumented invocation is cached.
+		"-count=1",
 	}
 	if cfg.short {
 		mergedTestArgs = append(mergedTestArgs, "-short")
