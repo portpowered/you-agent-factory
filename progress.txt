@@ -1,5 +1,6 @@
 ## Codebase Patterns
 - When a full functional lane fails in an unrelated package and the exact test passes repeatedly against the task head, rerun only the failed CI jobs before changing feature code.
+- When `gh pr view --comments` is blocked by an unavailable `read:project` scope, use the bundled thread-aware GraphQL query with the known repository and PR number; REST issue/review endpoints do not expose inline-thread resolution state.
 - Production outbound HTTP clients must disable redirects when configured endpoint boundaries are part of the contract; preserve injected clients for deterministic tests.
 - Parse absolute `Retry-After` timestamps against the injected clock at response receipt so receiver latency is not counted twice in retry scheduling.
 - When merging a moving main into a task branch, preserve the active task PRD and progress history, regenerate derived artifacts through canonical targets, and validate the merge tree before pushing.
@@ -8671,4 +8672,19 @@
 - **Learnings for future iterations:**
   - Full functional coverage contains unrelated timing-sensitive cells; inspect the named failing test and rerun it locally before attributing a failure to the task diff.
   - Keep the final delivery audit tied to the last pushed head whose required checks are terminal-success, then resynchronize the PR body after the audit update.
+---
+
+## 2026-08-11 07:00 -07:00 - e3-event-webhooks-004 final current-head audit
+- What was implemented
+  - Re-read the PRD and progress log; all four user stories remain marked `passes:true`, so no product-code changes were needed in this iteration.
+  - Audited PR #1850 with the thread-aware GraphQL workflow: zero review threads, zero unresolved inline threads, zero formal reviews, and five historical top-level comments. The historical blockers are addressed by later commits.
+  - Synchronized `prd.json`'s delivery audit to the current pushed head `446362163de67d2a4870e4e03adfdb9c633c39ea` and green CI run `31497352479`.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - All 18 required checks pass for the exact current head against base `3521f0b0a2f313b22e2c79edcf90339a01b3bce7`.
+  - PR #1850 is open, non-draft, clean, mergeable, and current `origin/main` is an ancestor of the branch; `git diff --check` passes.
+- **Learnings for future iterations:**
+  - A clean thread-aware audit can contain historical blocking prose; completion depends on the current head's addressed changes, thread state, required checks, and mergeability.
 ---
