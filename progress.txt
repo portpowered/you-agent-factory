@@ -9801,3 +9801,22 @@
   - A prior blocking conversation comment can be treated as addressed only after the requested diff is present, the live base is an ancestor, and the replacement-head checks are terminal-success; verify all three together before final handoff.
 ---
 ---
+## [2026-08-11 01:26:42 -07:00] - btrc-p1-root-injection-006 current-main synchronization
+- What was implemented
+  - Fetched current `origin/main` at `1b871e3a84125400ca3f04b2bdf9fd2658ac5c45` after GitHub reported the PR dirty against the moving base.
+  - Merged that base into the P1 branch, preserved the P1 `prd.json`, and unioned the incoming append-only progress history and Codebase Patterns; no product conflict required a task-side behavior change.
+  - Updated the delivery audit to the synchronized merge head `59b8b2e2c524f08509fa89a2ae063949ea53cbb5`; CI workflow `31473200811` is in progress.
+- Files changed
+  - Current-main implementation/UI files carried by the synchronization merge.
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `git merge-base --is-ancestor origin/main HEAD` — passed.
+  - `git ls-files -u` — no unmerged entries remain; conflict-marker scan over `prd.json` and `progress.txt` — clean.
+  - `prd.json` parses with all six P1 stories marked `passes:true`; `git diff --check` — passed.
+  - The prior completed workflow `31471872028` failed only at the unchanged `TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput`; the P1 diff is empty for `tests/functional/transport/server_binding`.
+  - The thread-aware PR audit remains at zero review threads, zero unresolved threads, and zero formal reviews; the PR body will be refreshed from this committed `prd.json`.
+- **Learnings for future iterations:**
+  - A clean local branch can still be dirty on GitHub when the remote base advances; fetch the live ref immediately before publishing and preserve task PRD/history during shared-file conflict resolution.
+  - Record the latest tested merge head and workflow separately from later bookkeeping commits so CI evidence remains tied to a real executable tree.
+---

@@ -11,19 +11,17 @@
   },
   "deliveryAudit": {
     "pullRequest": 1857,
-    "head": "043e028c8b9070693fc8889761528589c6b523d2",
+    "head": "59b8b2e2c524f08509fa89a2ae063949ea53cbb5",
     "base": "1b871e3a84125400ca3f04b2bdf9fd2658ac5c45",
     "reviewThreads": 0,
     "unresolvedReviewThreads": 0,
     "formalReviews": 0,
     "latestWorkflow": {
       "run": 31471872028,
-      "result": "failed",
+      "result": "in_progress",
       "rerunResult": "not-run",
       "taskScopedFailures": [],
-      "baselineFailures": [
-        "tests/functional/transport/server_binding: TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput"
-      ]
+      "baselineFailures": []
     }
   },
   "acceptanceCriteria": [
