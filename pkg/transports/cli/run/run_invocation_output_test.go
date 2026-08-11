@@ -277,23 +277,44 @@ func TestRun_FactoryInvocationFailureKeepsStdoutEmpty(t *testing.T) {
 
 func TestRunRemoteInvocationUsesSelectedEndpointAndNormalizedRequest(t *testing.T) {
 	var gotRequest factoryapi.FactorySessionExecutionRequest
+	resultCalls := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			t.Fatalf("method = %s, want POST", r.Method)
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/selected/factory-sessions/async":
+			if err := json.NewDecoder(r.Body).Decode(&gotRequest); err != nil {
+				t.Fatalf("decode request: %v", err)
+			}
+			response := factoryapi.FactorySessionExecutionResponse{
+				SessionId:        "dur-sess-remote",
+				Status:           factoryapi.FactorySessionDurableLifecycleStatusQueued,
+				OrchestratorKind: factoryapi.JAVASCRIPT,
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(response)
+		case r.Method == http.MethodGet && r.URL.Path == "/selected/factory-sessions/dur-sess-remote/results":
+			resultCalls++
+			if resultCalls == 1 {
+				status := factoryapi.FactorySessionDurableLifecycleStatusRunning
+				retryable := true
+				_ = json.NewEncoder(w).Encode(factoryapi.FactorySessionResult{
+					SessionId:     "dur-sess-remote",
+					ResultStatus:  factoryapi.FactorySessionResultStatusNotReady,
+					SessionStatus: &status,
+					Availability:  &factoryapi.FactorySessionResultAvailabilityDetail{Retryable: &retryable},
+				})
+				return
+			}
+			status := factoryapi.FactorySessionDurableLifecycleStatusSucceeded
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(factoryapi.FactorySessionResult{
+				SessionId:     "dur-sess-remote",
+				ResultStatus:  factoryapi.FactorySessionResultStatusFinal,
+				SessionStatus: &status,
+				PrimaryResult: remoteTextContent(t, "remote result"),
+			})
+		default:
+			t.Fatalf("request = %s %s, want selected durable start or result endpoint", r.Method, r.URL.Path)
 		}
-		if r.URL.Path != "/selected/factory-sessions/async" {
-			t.Fatalf("path = %q, want selected durable start endpoint", r.URL.Path)
-		}
-		if err := json.NewDecoder(r.Body).Decode(&gotRequest); err != nil {
-			t.Fatalf("decode request: %v", err)
-		}
-		response := factoryapi.FactorySessionExecutionResponse{
-			SessionId:        "dur-sess-remote",
-			Status:           factoryapi.FactorySessionDurableLifecycleStatusQueued,
-			OrchestratorKind: factoryapi.JAVASCRIPT,
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
@@ -323,12 +344,151 @@ func TestRunRemoteInvocationUsesSelectedEndpointAndNormalizedRequest(t *testing.
 	if gotRequest.RequestId == "" {
 		t.Fatal("remote request ID is empty")
 	}
-	var gotResponse factoryapi.FactorySessionExecutionResponse
+	if resultCalls != 2 {
+		t.Fatalf("durable result calls = %d, want a not-ready poll followed by one authoritative terminal read", resultCalls)
+	}
+	var gotResponse factoryapi.InvocationResponse
 	if err := json.Unmarshal(bytes.TrimSpace(output.Bytes()), &gotResponse); err != nil {
 		t.Fatalf("decode CLI response: %v; output=%q", err, output.String())
 	}
-	if gotResponse.SessionId != "dur-sess-remote" || gotResponse.Status != factoryapi.FactorySessionDurableLifecycleStatusQueued {
-		t.Fatalf("CLI response identity = (%q, %q)", gotResponse.SessionId, gotResponse.Status)
+	if gotResponse.SessionId == nil || *gotResponse.SessionId != "dur-sess-remote" || gotResponse.Status != factoryapi.InvocationTerminalStatusCompleted {
+		t.Fatalf("CLI response identity/status = (%#v, %q)", gotResponse.SessionId, gotResponse.Status)
+	}
+	if gotResponse.PrimaryResult == nil || len(*gotResponse.PrimaryResult) != 1 {
+		t.Fatalf("CLI primary result = %#v, want one canonical result part", gotResponse.PrimaryResult)
+	}
+}
+
+func TestRunRemoteInvocationMapsCanonicalDurableFailuresToInvocationEnvelope(t *testing.T) {
+	tests := []struct {
+		name          string
+		sessionStatus factoryapi.FactorySessionDurableLifecycleStatus
+		resultStatus  factoryapi.FactorySessionResultStatus
+		availability  *factoryapi.FactorySessionResultAvailabilityDetail
+		wantStatus    factoryapi.InvocationTerminalStatus
+		wantErrorCode string
+		wantMessage   string
+	}{
+		{
+			name:          "failed runtime",
+			sessionStatus: factoryapi.FactorySessionDurableLifecycleStatusFailed,
+			resultStatus:  factoryapi.FactorySessionResultStatusFailedWithPartial,
+			wantStatus:    factoryapi.InvocationTerminalStatusFailed,
+			wantErrorCode: "INVOCATION_RUNTIME_FAILURE",
+			wantMessage:   "server-safe failure",
+		},
+		{
+			name:          "awaiting approval",
+			sessionStatus: factoryapi.FactorySessionDurableLifecycleStatusAwaitingApproval,
+			resultStatus:  factoryapi.FactorySessionResultStatusNotReady,
+			wantStatus:    factoryapi.InvocationTerminalStatusFailed,
+			wantErrorCode: "INVOCATION_NEEDS_HUMAN",
+		},
+		{
+			name:          "paused",
+			sessionStatus: factoryapi.FactorySessionDurableLifecycleStatusPaused,
+			resultStatus:  factoryapi.FactorySessionResultStatusPartial,
+			wantStatus:    factoryapi.InvocationTerminalStatusFailed,
+			wantErrorCode: "INVOCATION_PAUSED",
+		},
+		{
+			name:          "timed out",
+			sessionStatus: factoryapi.FactorySessionDurableLifecycleStatusTimedOut,
+			resultStatus:  factoryapi.FactorySessionResultStatusUnavailable,
+			wantStatus:    factoryapi.InvocationTerminalStatusTimedOut,
+			wantErrorCode: "INVOCATION_TIMED_OUT",
+		},
+		{
+			name:          "canceled",
+			sessionStatus: factoryapi.FactorySessionDurableLifecycleStatusCanceled,
+			resultStatus:  factoryapi.FactorySessionResultStatusUnavailable,
+			wantStatus:    factoryapi.InvocationTerminalStatusCanceled,
+			wantErrorCode: "INVOCATION_CANCELED",
+		},
+		{
+			name:          "interrupted",
+			sessionStatus: factoryapi.FactorySessionDurableLifecycleStatusInterrupted,
+			resultStatus:  factoryapi.FactorySessionResultStatusUnavailable,
+			wantStatus:    factoryapi.InvocationTerminalStatusFailed,
+			wantErrorCode: "INVOCATION_INTERRUPTED",
+		},
+		{
+			name:          "blocked availability",
+			sessionStatus: factoryapi.FactorySessionDurableLifecycleStatusRunning,
+			resultStatus:  factoryapi.FactorySessionResultStatusUnavailable,
+			availability: &factoryapi.FactorySessionResultAvailabilityDetail{
+				Reason:    stringPtr("BLOCKED"),
+				Retryable: boolPtr(false),
+			},
+			wantStatus:    factoryapi.InvocationTerminalStatusFailed,
+			wantErrorCode: "INVOCATION_BLOCKED",
+		},
+		{
+			name:          "unresolved terminal result",
+			sessionStatus: factoryapi.FactorySessionDurableLifecycleStatusSucceeded,
+			resultStatus:  factoryapi.FactorySessionResultStatusUnavailable,
+			availability: &factoryapi.FactorySessionResultAvailabilityDetail{
+				Retryable: boolPtr(false),
+			},
+			wantStatus:    factoryapi.InvocationTerminalStatusFailed,
+			wantErrorCode: "INVOCATION_PRIMARY_RESULT_UNRESOLVED",
+		},
+	}
+
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			const sessionID = "dur-sess-failure"
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				switch r.Method {
+				case http.MethodPost:
+					_ = json.NewEncoder(w).Encode(factoryapi.FactorySessionExecutionResponse{
+						SessionId: sessionID,
+						Status:    factoryapi.FactorySessionDurableLifecycleStatusQueued,
+					})
+				case http.MethodGet:
+					message := "server-safe failure"
+					failure := &factoryapi.FailureDetail{Message: message}
+					_ = json.NewEncoder(w).Encode(factoryapi.FactorySessionResult{
+						SessionId:     sessionID,
+						ResultStatus:  test.resultStatus,
+						SessionStatus: durableLifecycleStatusPtr(test.sessionStatus),
+						Availability:  test.availability,
+						FailureDetail: failure,
+					})
+				default:
+					t.Errorf("method = %s, want POST or GET", r.Method)
+				}
+			}))
+			defer server.Close()
+
+			transport, err := clihttp.NewProtocol(server.Client(), platformclock.Real{})
+			if err != nil {
+				t.Fatalf("NewProtocol: %v", err)
+			}
+			var output bytes.Buffer
+			err = RunRemoteInvocation(context.Background(), RunConfig{
+				Dir:                     "factory",
+				NamedFactoryName:        "@you/research",
+				PreparedInvocationInput: preparedRemoteArguments("failure input"),
+				JSONOutput:              true,
+				Output:                  &output,
+			}, server.URL, NewRemoteInvocation(transport))
+			if err == nil || !strings.Contains(err.Error(), test.wantErrorCode) {
+				t.Fatalf("RunRemoteInvocation error = %v, want %s", err, test.wantErrorCode)
+			}
+			var response factoryapi.InvocationResponse
+			if decodeErr := json.Unmarshal(bytes.TrimSpace(output.Bytes()), &response); decodeErr != nil {
+				t.Fatalf("decode failure response: %v; output=%q", decodeErr, output.String())
+			}
+			if response.Status != test.wantStatus || response.ErrorCode == nil || string(*response.ErrorCode) != test.wantErrorCode {
+				t.Fatalf("response = %#v, want status=%s code=%s", response, test.wantStatus, test.wantErrorCode)
+			}
+			if test.wantMessage != "" && (response.Message == nil || *response.Message != test.wantMessage) {
+				t.Fatalf("response message = %#v, want server-safe failure message", response.Message)
+			}
+		})
 	}
 }
 
@@ -665,6 +825,27 @@ func preparedRemoteArguments(prompt string) *work.PreparedInvocationInput {
 			},
 		},
 	}
+}
+
+func remoteTextContent(t *testing.T, text string) *factoryapi.WorkContent {
+	t.Helper()
+	var part factoryapi.WorkContentPart
+	if err := part.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
+		Type: factoryapi.WorkContentPartTypeText,
+		Text: text,
+	}); err != nil {
+		t.Fatalf("build remote text content: %v", err)
+	}
+	content := factoryapi.WorkContent{part}
+	return &content
+}
+
+func boolPtr(value bool) *bool {
+	return &value
+}
+
+func durableLifecycleStatusPtr(value factoryapi.FactorySessionDurableLifecycleStatus) *factoryapi.FactorySessionDurableLifecycleStatus {
+	return &value
 }
 
 type remoteInvocationOperationFunc func(context.Context, RemoteInvocationRequest) (factoryapi.FactorySessionExecutionResponse, error)
