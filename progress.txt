@@ -6978,3 +6978,31 @@
 - **Learnings for future iterations:**
   - For a shared task bookkeeping conflict, keep the branch-specific PRD authoritative and append the branch-specific progress entries after the current-main history; validate both parseability and marker-free output before staging.
 ---
+## 2026-08-10 21:32 -07:00 - btrc-p1-root-injection-006 current-main synchronization follow-up
+- What was implemented
+  - Merged current `origin/main` `4692044216626340364ac8a793881272fc2c1aac` into the P1 branch as merge commit `afe0d9a63`, preserving the P1 PRD and both branches' append-only progress history.
+  - No additional product implementation was required because all six P1 stories remain marked `passes:true`; this iteration reconciled the shared bookkeeping files and current-main changes for a fresh PR head.
+- Files changed
+  - Current-main synchronization files, including the current generated/API and verification updates.
+  - `prd.json` and `progress.txt` conflict resolution, with the P1 PRD authoritative and both histories retained.
+- Verification
+  - `make verify-fast` completed typecheck, MCP contract, 355 Vitest files/2,970 tests, and 191 Bun tests; its first parallel short-Go attempt hit a transient ACP cancellation test and Windows linker contention.
+  - Focused reruns of `TestServeACPCommand_CancellationClosesStdinToUnblockRealServerMidRead` and `pkg/services/factory_runtime/internal/services/instance_host/internal/service` passed; neither failure is in the P1 diff. Serial `make test` passed.
+  - `make wire-smoke backend-size pkg-maint pkg-file-count pkg-structure vet` passed.
+  - Focused `go test ./pkg/root ./pkg/wire ./pkg/services/factory_sessions/... ./pkg/services/factory_runtime/... ./pkg/transports/cli/run -count=1 -timeout 300s` passed.
+  - `TestRootBuildProcessIsInertAndReusableAcrossFactorySessions` passed; the root-process test emitted the expected characterized provider-failure warning and retained its passing terminal assertion.
+- **Learnings for future iterations:**
+  - On Windows, a broad parallel unit lane can report transient cancellation or linker contention even when the named tests pass in isolation; rerun the required Go lane serially before attributing the failure to the merged change.
+  - Resolve large shared progress conflicts by deleting only merge markers with bounded patches; never reconstruct a large append-only file through a truncated shell-output round trip.
+---
+## 2026-08-10 21:38 -07:00 - btrc-p1-root-injection-006 fast-tier retry
+- What was implemented
+  - Made no product change; reran the complete fast verification tier after the serial Go retry and focused transient-failure checks.
+- Files changed
+  - `progress.txt` and the Story 006 verification note in `prd.json` will carry the terminal fast-tier result.
+- Verification
+  - Second `make verify-fast` passed completely: dashboard typecheck, MCP contract boundary, 355 Vitest files/2,970 tests, 191 Bun tests, and the short Go suite.
+  - The merged head remains clean against the recorded P1 implementation surface; no source change was made in response to the first transient parallel-lane failures.
+- **Learnings for future iterations:**
+  - Record both the first transient parallel failure and the complete retry so a green fast-tier claim is backed by a terminal command result.
+---
