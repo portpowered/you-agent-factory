@@ -8763,3 +8763,16 @@
   - The published CLI copy is refreshed by `make contracts-generate` after the authored contract changes; `make cli-manifest-generate` refreshes the family/runtime projections and the smoke check catches published drift.
   - When broad Go verification is run concurrently across worktrees on Windows, isolate the exact timed-out process tree before retrying a gate so other task verification remains undisturbed.
 ---
+## [2026-08-11 02:21 -07:00] - dwro-s2-server-owned-start-005 CI follow-up
+- What was implemented
+  - Reproduced the hosted API candidate failure on PR #1880: `packages/api/generated/manifest.json` still carried the pre-merge OpenAPI hash after the final current-main synchronization.
+  - Regenerated the approved contract artifacts so `generated.openapi.openapi` records the hash of the merged `packages/api/generated/openapi/openapi.yaml`.
+- Files changed
+  - `packages/api/generated/manifest.json`
+  - `progress.txt`
+- Verification
+  - `make contracts-generate` passed and updated only the stale OpenAPI manifest hashes.
+  - The original hosted failure was `manifest artifact hash mismatch: generated.openapi.openapi`; the replacement head will rerun the API candidate and dependent checks.
+- **Learnings for future iterations:**
+  - After a current-main merge that touches generated OpenAPI artifacts, run `make contracts-generate` in addition to `make generate-api`; the API package consumer verifies manifest hashes against the generated artifact bytes.
+---
