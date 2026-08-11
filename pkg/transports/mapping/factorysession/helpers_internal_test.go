@@ -180,15 +180,19 @@ func testDispatchDetailProjectionHelpers(t *testing.T) {
 		t.Fatal("dispatchJavaScriptToAPI(nil) should be nil")
 	}
 	js := dispatchJavaScriptToAPI(&factorysessionexecution.DispatchJavaScriptProjection{
-		TaskKind:      "VERIFY",
-		TaskLabel:     " review ",
-		ExecutionMode: " live ",
+		TaskKind:        "VERIFY",
+		TaskLabel:       " review ",
+		ExecutionMode:   " live ",
+		SkipPermissions: true,
 	})
 	if js == nil || js.TaskLabel == nil || *js.TaskLabel != "review" {
 		t.Fatalf("javascript = %#v", js)
 	}
 	if js.ExecutionMode == nil || *js.ExecutionMode != "live" {
 		t.Fatalf("javascript execution mode = %#v", js)
+	}
+	if js.SkipPermissions == nil || !*js.SkipPermissions {
+		t.Fatalf("javascript skipPermissions = %#v, want true", js.SkipPermissions)
 	}
 
 	if dispatchStatusTransitionsToAPI(nil) != nil {
