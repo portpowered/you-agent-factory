@@ -149,10 +149,56 @@ func TestValidateRunSubmitFamily_DocumentsRunParityInputs(t *testing.T) {
 		"you.run.rel.to-file-work",
 		"you.run.rel.to-file-continuously",
 		"you.run.rel.to-file-replay",
+		"you.run.rel.remote-with-server",
+		"you.run.rel.remote-with-site",
 	} {
 		if _, ok := run.Relationships[relationshipID]; !ok {
 			t.Fatalf("run manifest missing documented --to-file relationship %q", relationshipID)
 		}
+	}
+
+	for _, test := range []struct {
+		name string
+		flag string
+		want []string
+	}{
+		{name: "listen", flag: "listen", want: []string{"exact local listener", "--with-server", "--with-site"}},
+		{name: "with-server", flag: "with-server", want: []string{"locally", "conflicts with --remote"}},
+		{name: "with-site", flag: "with-site", want: []string{"locally", "conflicts with --remote"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			flag, ok := run.FlagByLong(test.flag)
+			if !ok {
+				t.Fatalf("run flag --%s is missing", test.flag)
+			}
+			for _, marker := range test.want {
+				if !strings.Contains(flag.Usage, marker) {
+					t.Fatalf("run flag --%s usage = %q, want marker %q", test.flag, flag.Usage, marker)
+				}
+			}
+		})
+	}
+
+	root := manifest.Commands["you"]
+	for _, test := range []struct {
+		name string
+		flag string
+		want []string
+	}{
+		{name: "remote", flag: "remote", want: []string{"running You server", "does not wait", "listener"}},
+		{name: "server", flag: "server", want: []string{"remote placement", "--listen", "warned compatibility"}},
+	} {
+		t.Run("root-"+test.name, func(t *testing.T) {
+			flag, ok := root.FlagByLong(test.flag)
+			if !ok {
+				t.Fatalf("root flag --%s is missing", test.flag)
+			}
+			for _, marker := range test.want {
+				if !strings.Contains(flag.Usage, marker) {
+					t.Fatalf("root flag --%s usage = %q, want marker %q", test.flag, flag.Usage, marker)
+				}
+			}
+		})
 	}
 }
 

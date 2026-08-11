@@ -36,6 +36,7 @@ func TestProductionCLIObservationReportsResolvedGlobalsByStableManifestID(t *tes
 	}
 	assertResolvedGlobal(t, defaulted, "you.flag.verbose", false, resolvedinput.SourceManifestDefault, false)
 	assertResolvedGlobal(t, defaulted, "you.flag.server", "http://localhost:7437", resolvedinput.SourceManifestDefault, false)
+	assertResolvedGlobal(t, defaulted, "you.flag.remote", false, resolvedinput.SourceManifestDefault, false)
 
 	changed, err := productionCLIObservation(t, "session", "-v", "list", "--server", "https://factory.example")
 	if err != nil {
@@ -43,6 +44,25 @@ func TestProductionCLIObservationReportsResolvedGlobalsByStableManifestID(t *tes
 	}
 	assertResolvedGlobal(t, changed, "you.flag.verbose", true, resolvedinput.SourceCLIFlag, true)
 	assertResolvedGlobal(t, changed, "you.flag.server", "https://factory.example", resolvedinput.SourceCLIFlag, true)
+	assertResolvedGlobal(t, changed, "you.flag.remote", false, resolvedinput.SourceManifestDefault, false)
+}
+
+func TestProductionCLIObservationResolvesRemoteBeforeAndAfterCommandPath(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		args []string
+	}{
+		{name: "before", args: []string{"--remote", "session", "list"}},
+		{name: "after", args: []string{"session", "list", "--remote"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			observation, err := productionCLIObservation(t, test.args...)
+			if err != nil {
+				t.Fatalf("observe %s remote placement: %v", test.name, err)
+			}
+			assertResolvedGlobal(t, observation, "you.flag.remote", true, resolvedinput.SourceCLIFlag, true)
+		})
+	}
 }
 
 func TestProductionCLIObservationResolvesGlobalsAcrossStaticFamilyDepths(t *testing.T) {
