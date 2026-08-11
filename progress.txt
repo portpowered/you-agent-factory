@@ -8958,3 +8958,16 @@
   - When a review branch becomes dirty, merge the freshly fetched live base, keep the active task PRD authoritative, union append-only progress histories, and rerun the exact task gates on the replacement head.
   - Ratcheted boundary output must be compared with the exact current-main baseline; do not rewrite a deletion-only baseline to make an intentional nonzero baseline appear green.
 ---
+## [2026-08-11 02:19:28 -07:00] - thr-split-acp-stdio-tests CI characterization follow-up
+- What was implemented
+  - Made no ACP production or test-split changes after the replacement-head CI failure.
+  - Characterized the failed Backend Functional Coverage lane as the existing persistent-ACP functional test `TestPackagedSpawnRunsPlannerChildrenAndMergerThroughPersistentACPStdio`, not an ACP stdio split test.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Replacement-head CI run `31476405488` failed only in Backend Functional Coverage at the named persistent-ACP test; its terminal `unknown`/FAILED outcome prevented the pinned ACP evidence artifact from being produced.
+  - `go test ./tests/functional/providers/acp -run '^TestPackagedSpawnRunsPlannerChildrenAndMergerThroughPersistentACPStdio$' -count=10 -v -timeout 600s` — passed all 10/10 local repetitions.
+  - The isolated ACP stdio package test and all named static/typecheck gates were already passing on the same head.
+- **Learnings for future iterations:**
+  - For a coverage-lane failure naming an untouched persistent-ACP fixture, repeat the exact test locally and rerun the failed coverage/policy jobs on the same head before changing the move-only task diff.
+---
