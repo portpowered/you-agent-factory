@@ -8101,7 +8101,7 @@
 
 ## 2026-08-10 23:48 -07:00 - provider-capability-contract current-main review follow-up
 - What was implemented
-  - Addressed PR #1874's blocking review feedback by merging the latest fetched `origin/main` head `72a97cc06`.
+  - Addressed PR #1874's blocking review feedback by merging the latest fetched `origin/main` head `85619c087`.
   - Kept the provider-specific `prd.json` authoritative and reconstructed the append-only `progress.txt` from the complete merge stages, preserving both branch histories and reusable Codebase Patterns.
   - No product or generated-file conflict required a source change; the merge conflict was limited to task bookkeeping.
 - Files changed
