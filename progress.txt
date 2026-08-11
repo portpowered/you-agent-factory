@@ -7852,3 +7852,16 @@
 - **Learnings for future iterations:**
   - Main can advance while the final PR audit or CI run is in progress; fetch immediately before each handoff push and regard every replacement head as requiring fresh checks.
 ---
+
+## [2026-08-10 22:58 -07:00] - ui-packaged-factories-decoupling final handoff audit
+- What was implemented
+  - Recorded the terminal PR handoff after the latest-main reconciliation and refreshed PR #1873's body from the canonical `prd.json`.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Head `be7038ef5` matches the pushed branch, targets current `origin/main` `ecd1d2487`, and CI run `31462842504` is terminal and fully green, including Verification Policy.
+  - PR #1873 is `CLEAN/MERGEABLE`; issue comments, review comments, and formal reviews are all zero.
+  - The PR body matches `prd.json` after newline normalization, all three stories parse with `passes:true`, the worktree is clean, no unmerged entries or conflict markers remain, and `git diff --check` passes.
+- **Learnings for future iterations:**
+  - If `gh pr edit --body-file` is blocked by a missing read-only scope, update only the pull-request body through the authenticated GitHub API using the canonical file content, then verify the returned body and head.
+---
