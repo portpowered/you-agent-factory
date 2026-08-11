@@ -6229,3 +6229,25 @@
   - Treat the package file-count baseline as a deletion-only ratchet even when a split is mechanically correct; use existing responsibility-aligned test owners and verify both the 1,000-line maintainability gate and the broader 1,200-line task cap.
   - When review identifies whitespace drift in a move-only split, compare the named declarations directly against the unmodified source and restore the exact text before rerunning inventory and coverage.
 ---
+
+## 2026-08-10 18:48 -07:00 - e2-structured-worker-results current-main review follow-up
+- What was implemented
+  - Merged current `origin/main` at `0b9771fe8` into the E2 branch after PR #1855 reported a stale merge base.
+  - Resolved the shared `prd.json` and `progress.txt` conflicts by preserving the E2 task PRD and combining both append-only histories; all four E2 stories remain `passes:true`.
+  - No additional structured-result product change was required; the current-main Factory Sessions test split is carried through as base synchronization.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+  - Current-main Factory Sessions split-test files and related baseline artifacts included by the synchronization merge.
+- Verification
+  - `make test` — passed.
+  - `make typecheck` — passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` — passed.
+  - Focused structured-result worker, prompt, Work CLI/HTTP, event/replay, and projection packages — passed.
+  - Root-built functional structured-result prompt and schema-violation routing tests — passed.
+  - `make lint` passed all prerequisite checks and reached only the known `pkg-boundary` baseline of 175 findings; detached `origin/main` reports the same 175 findings.
+  - `prd.json` parses with four passing stories; conflict-marker scan and `git diff --check` passed.
+- **Learnings for future iterations:**
+  - Re-fetch and merge the live PR base immediately before pushing because shared bookkeeping files can conflict again after an otherwise clean review handoff.
+  - When a shared append-only log conflicts, preserve the task PRD as authoritative and retain both histories, then validate JSON, conflict markers, and line completeness before committing.
+---
