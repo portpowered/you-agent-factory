@@ -308,7 +308,6 @@
 
 
 
----
 ## 2026-08-10 04:32 -07:00 - sac-s0-2-pkg-boundary-ignores-001
 - What was implemented
   - Centralized repository-root-relative pruning for `.artifacts`, `.artifacts/bootstrap/worktrees`, generated transient worktrees, and the supported root worktree locations.
@@ -10302,4 +10301,18 @@
   - The replacement head is ready to push; hosted checks and final review audit remain pending.
 - **Learnings for future iterations:**
   - After merging a dashboard-heavy mainline update, rerun both UI typecheck and the task's focused Go packages before pushing; the shared base can alter composition behavior even when the task source is unchanged.
+---
+## [2026-08-11 08:07:30 -07:00] - thr-functional-lane-speed-004 final hosted audit
+- What was implemented
+  - Completed the replacement-head delivery audit after reconciling live `origin/main` at `635a43870ebc1e72a3c9ded2a2713df2fe8f8ec7`.
+  - Reran the stale Verification Policy job without changing source behavior; the replacement workflow is now terminal-green.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Hosted run `31502905472` on head `08b4dfa7032a72de7081800014014b690be2d740` has all 18 checks terminal-success, including Backend Functional Coverage and Verification Policy.
+  - The first latest-base functional coverage attempt named the untouched `TestProviderFullStreamClaimsDeltasAndSnapshotsTruthfully`; the exact test passed across three local repetitions, and the failed coverage job was rerun successfully.
+  - `git merge-base --is-ancestor origin/main HEAD`, `git diff --check`, PRD all-pass validation, and the exact PR-body/`prd.json` comparison pass; GitHub reports the PR `MERGEABLE` / `CLEAN`.
+  - Thread-aware PR audit found no review requests or unresolved inline threads; a newer evidence comment remains to be posted after this bookkeeping commit.
+- **Learnings for future iterations:**
+  - A stale aggregate policy check can outlive its successful steps; rerunning only that policy job restores a terminal PR status without repeating the substantive verification lanes.
 ---
