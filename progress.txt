@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- When merging a moving main into a task branch, preserve the active task PRD and progress history, regenerate derived artifacts through canonical targets, and validate the merge tree before pushing.
 - Terminal lifecycle publication must require the opening record's committed publication window; a failed opening must never be followed by a terminal append that becomes topic position 1.
 - Root-built direct-JavaScript functional probes that do not invoke a worker can run without `--with-mock-workers`; keep Mock Workers usage inside the feature-owning test cells.
 - Cancellation-sensitive functional fixtures must signal provider-edge entry before issuing an interrupt; a published RUNNING status can precede provider handoff and otherwise makes context-cancellation assertions race.
@@ -8359,4 +8360,22 @@
   - PR #1850 is open, non-draft, clean, mergeable, and its body matched the committed `prd.json` exactly before this metadata update.
 - **Learnings for future iterations:**
   - Final handoff metadata must be refreshed after the last pushed head and before synchronizing the PR body; compare the exact PRD bytes again after the bookkeeping commit.
+---
+
+## 2026-08-11 00:29 -07:00 - e3-event-webhooks-004 current-main synchronization
+- What was implemented
+  - Merged live `origin/main` `3a0b571b234f70d68908e36669100d0ac9f66a9f` into the webhook branch as `65cf3563f444f1927e0b75679f9df324d5707116` after GitHub reported the prior head conflicted with current main.
+  - Preserved the webhook `prd.json` and task-scoped append-only `progress.txt`; regenerated the canonical API, contract, HTTP, UI package, and provider-derived artifacts during conflict resolution.
+  - No new webhook product behavior was required; all four PRD stories remain marked `passes:true`.
+- Files changed
+  - Current-main provider capability contract and generated artifacts from the synchronized merge.
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `make interfaces-all`, `make contracts-check`, and `make api-smoke` — passed.
+  - Webhooks unit and root-built functional tests — passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure functional-boundary-check vet wire-smoke` — passed.
+  - `git merge-base --is-ancestor origin/main HEAD` and `git diff --check` — passed; required CI is pending after the push.
+- **Learnings for future iterations:**
+  - GitHub mergeability can become dirty when main advances during final CI; re-fetch immediately before handoff, merge the exact live base, regenerate shared artifacts, and re-audit the replacement head.
 ---
