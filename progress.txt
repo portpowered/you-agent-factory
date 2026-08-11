@@ -1,4 +1,6 @@
 ## Codebase Patterns
+- Production outbound HTTP clients must disable redirects when configured endpoint boundaries are part of the contract; preserve injected clients for deterministic tests.
+- Parse absolute `Retry-After` timestamps against the injected clock at response receipt so receiver latency is not counted twice in retry scheduling.
 - When merging a moving main into a task branch, preserve the active task PRD and progress history, regenerate derived artifacts through canonical targets, and validate the merge tree before pushing.
 - Terminal lifecycle publication must require the opening record's committed publication window; a failed opening must never be followed by a terminal append that becomes topic position 1.
 - Root-built direct-JavaScript functional probes that do not invoke a worker can run without `--with-mock-workers`; keep Mock Workers usage inside the feature-owning test cells.
@@ -8425,4 +8427,21 @@
   - `git diff --check` passes.
 - **Learnings for future iterations:**
   - Treat the exact pushed head, terminal CI run, current-base ancestry, PR body, and thread-aware review state as one synchronized handoff record; any metadata update creates a new head that must be revalidated.
+---
+
+## 2026-08-11 01:54 -07:00 - e3-event-webhooks-004 review follow-up
+- What was implemented
+  - Addressed the two new blocking PR comments on the current Webhooks head: production's default HTTP client now returns configured 3xx responses without following redirects, and HTTP-date `Retry-After` values are calculated from a fresh injected clock reading after the response arrives.
+  - Added a wire-level local two-receiver test proving one configured-endpoint request, no redirect-target request, one terminal dead-letter record, and preserved injected effects; added a deterministic fake-clock test proving a slow 503 response retries at the advertised absolute deadline.
+- Files changed
+  - `pkg/wire/hosted_sources.go`
+  - `pkg/wire/http_host_test.go`
+  - `pkg/services/webhooks/internal/service/delivery.go`
+  - `pkg/services/webhooks/internal/service/service_test.go`
+- Verification
+  - Focused Webhooks and wire tests, race suites, root-built functional webhook coverage, structural/maintainability/package-count/package-structure/functional-boundary/vet/wire-smoke gates, and aggregate `make test` pass.
+  - The first aggregate run reached the 300-second supervisor timeout with no package failure; the immediate rerun completed successfully. The test remains in the existing wire test file so the exact package-file-count baseline is preserved.
+- **Learnings for future iterations:**
+  - A production default `http.Client` is a security boundary for configured webhook URLs; test the full provider path with local redirect and dead-letter receivers instead of only testing a client helper in isolation.
+  - An absolute retry deadline must be measured from response receipt, especially when the receiver can spend meaningful time producing a retryable response.
 ---
