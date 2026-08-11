@@ -10766,3 +10766,22 @@
   - When a failed-job retry reproduces the same deterministic assertion in an untouched package, preserve the exact run/head evidence and do not change unrelated baseline behavior.
   - Keep the PR body synchronized with the authoritative `prd.json` after each delivery-audit update; a metadata-only handoff commit may trigger another CI run, which must be audited separately.
 ---
+## [2026-08-11 06:34:44 -07:00] - btrc-p1-root-injection-006 current PR handoff audit
+- What was implemented
+  - Re-read the PRD and consolidated Codebase Patterns; all six stories remain marked `passes:true`, so no incomplete story implementation remained for this iteration.
+  - Audited open PR #1857 with the thread-aware GitHub workflow: zero inline review threads, zero unresolved threads, and zero formal reviews. The later conversation follow-ups record the earlier operation-contract, boundary, package-count, test-construction, source-scan, documentation, and merge-conflict blockers as addressed.
+  - Refreshed `prd.json` delivery metadata to the published head `7032b7d1e15754c58d9d42aee43fb1bdc9a67b2f`, current base `3521f0b0a2f313b22e2c79edcf90339a01b3bce7`, and queued workflow `31496486937`.
+  - Corrected the PR description synchronization path so the exact local `prd.json` bytes, including Unicode text, can be published after this audit commit.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `gh auth status` — authenticated.
+  - `git fetch origin main` — current base unchanged at `3521f0b0a2f313b22e2c79edcf90339a01b3bce7`.
+  - `git merge-base --is-ancestor origin/main HEAD` — passed.
+  - PR #1857 — open, non-draft, mergeable; merge state is blocked only while required workflow `31496486937` is queued/in progress.
+  - `gh pr checks 1857` — changed-surface and required checks pending; no new task-scoped failure reported.
+- **Learnings for future iterations:**
+  - Use `gh pr edit --body-file prd.json` when the PR description must match a UTF-8 JSON planning artifact; shell-rendered body arguments can silently mojibake non-ASCII punctuation.
+  - Keep delivery metadata tied to the exact pushed head and current workflow; a bookkeeping commit that changes the head requires a fresh CI audit before the PR can be marked ready.
+---
