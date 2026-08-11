@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	"github.com/portpowered/infinite-you/pkg/root"
@@ -87,12 +86,11 @@ func TestWSRFT005CompletedWorkerReplayParity(t *testing.T) {
 	runner := newWSRFT004ProviderRunner(t, probe)
 	dir := wsrFT004Factory(t)
 
-	process, _, _ := runWSRFT004FactoryWithProcess(t, dir, serviceedges.Edges{
+	reader, _, _ := runWSRFT004FactoryWithProcess(t, dir, serviceedges.Edges{
 		ProviderCommandRunner: runner,
 		WorkerRecordingWriter: probe,
 	})
 
-	reader := workerReaderFromProcess(t, process)
 	recordingID, workerSessionID := probe.RecordingIdentity(t)
 	live := probe.LiveProjection(t)
 	snapshot, err := reader.LoadWorkerRecording(t.Context(), recordingID)
@@ -133,15 +131,6 @@ func TestWSRFT005CompletedWorkerReplayParity(t *testing.T) {
 	}
 }
 
-func workerReaderFromProcess(t *testing.T, process *initializerapplication.Process) recordings.WorkerRecordingReader {
-	t.Helper()
-	reader := root.WorkerRecordingReaderFromProcess(process)
-	if reader == nil {
-		t.Fatal("root-built process returned a nil Recordings reader")
-	}
-	return reader
-}
-
 func wsrFT004Factory(t *testing.T) string {
 	t.Helper()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
@@ -166,7 +155,7 @@ func runWSRFT004FactoryWithProcess(
 	t *testing.T,
 	dir string,
 	edges serviceedges.Edges,
-) (*initializerapplication.Process, factoryapi.FactorySession, factoryapi.ListWorkResponse) {
+) (recordings.WorkerRecordingReader, factoryapi.FactorySession, factoryapi.ListWorkResponse) {
 	t.Helper()
 	loaded := loadOpeningRecordFixture(t, "codex", "success")
 	exitCode := 0
@@ -190,6 +179,10 @@ func runWSRFT004FactoryWithProcess(
 		t.Fatalf("BuildProcess() error = %v", err)
 	}
 	process := processValue
+	reader := root.WorkerRecordingReaderFromProcess(process)
+	if reader == nil {
+		t.Fatal("root-built process returned a nil Recordings reader")
+	}
 	support.CleanupProcess(t, process)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -207,7 +200,7 @@ func runWSRFT004FactoryWithProcess(
 	if err := daemon.Err(); err != nil && !errors.Is(err, context.Canceled) {
 		t.Fatalf("recorded factory Process.Execute: %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
 	}
-	return process, session, listed
+	return reader, session, listed
 }
 
 type wsrFT004RecordingProbe struct {

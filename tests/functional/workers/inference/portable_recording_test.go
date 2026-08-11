@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -90,7 +89,7 @@ func runWSRFT006Case(t *testing.T, testCase wsrFT006Case) recordings.WorkerPorta
 	dir := wsrFT006Factory(t, testCase.provider, loaded)
 	probe := newWSRFT004RecordingProbe(t, false)
 	runner := newWSRFT004ProviderRunner(t, probe)
-	process, listed := runWSRFT006FactoryWithProcess(t, dir, loaded, runner, probe)
+	reader, listed := runWSRFT006FactoryWithProcess(t, dir, loaded, runner, probe)
 
 	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {
 		t.Fatalf("completed Work = %d, want one; listed=%#v", got, listed)
@@ -99,7 +98,6 @@ func runWSRFT006Case(t *testing.T, testCase wsrFT006Case) recordings.WorkerPorta
 		t.Fatalf("%s provider command calls = %d, want one", testCase.name, runner.CallCount())
 	}
 
-	reader := workerReaderFromProcess(t, process)
 	recordingID, workerSessionID := probe.RecordingIdentity(t)
 	snapshot, err := reader.LoadWorkerRecording(t.Context(), recordingID)
 	if err != nil {
@@ -146,7 +144,7 @@ func runWSRFT006FactoryWithProcess(
 	loaded support.ProviderSessionCase,
 	runner *wsrFT004ProviderRunner,
 	probe *wsrFT004RecordingProbe,
-) (*initializerapplication.Process, factoryapi.ListWorkResponse) {
+) (recordings.WorkerRecordingReader, factoryapi.ListWorkResponse) {
 	t.Helper()
 	exitCode := 0
 	if loaded.Process.ExitCode != nil {
@@ -168,6 +166,10 @@ func runWSRFT006FactoryWithProcess(
 		t.Fatalf("BuildProcess() error = %v", err)
 	}
 	process := processValue
+	reader := root.WorkerRecordingReaderFromProcess(process)
+	if reader == nil {
+		t.Fatal("root-built process returned a nil Recordings reader")
+	}
 	support.CleanupProcess(t, process)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -191,7 +193,7 @@ func runWSRFT006FactoryWithProcess(
 	if err := daemon.Err(); err != nil && !errors.Is(err, context.Canceled) {
 		t.Fatalf("recorded factory Process.Execute: %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
 	}
-	return process, listed
+	return reader, listed
 }
 
 func assertWSRFT006Fidelity(t *testing.T, portable recordings.WorkerPortableRecording, testCase wsrFT006Case) {
