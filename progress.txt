@@ -8534,3 +8534,22 @@
   - A new durable service must be registered in the checker source vocabularies and top-level specs as well as both generated JSON ledgers; updating only the JSON leaves the gates unable to validate the owner.
   - Full lint output is useful for separating a fixed branch-new inventory failure from unrelated baseline drift; record the named target results independently.
 ---
+
+## 2026-08-11 04:36 -07:00 - e3-event-webhooks-004 current-main synchronization
+- What was implemented
+  - Merged live `origin/main` `012e98e0fbd1b6fcac106d90b1f3d335b8a3dce6` into the Webhooks branch, preserving the webhook-owned PRD and append-only progress history while carrying the unrelated main-branch CLI test changes.
+  - Pushed replacement PR head `565b7029a2adaeb20573b1dfe26ed51786c34407`.
+- Files changed
+  - Merge commit `565b7029a`
+  - `prd.json`
+  - `progress.txt`
+  - Unrelated current-main CLI parameter test updates carried by the merge.
+- Verification
+  - `make package-target-manifest-check` — passed with 549 inventory and package rows.
+  - `make ownership-inventory-check` — passed, including the path-lease freeze.
+  - `git merge-base --is-ancestor origin/main HEAD` and `git diff --check` — passed.
+  - PR #1850 is open, non-draft, mergeable, and replacement-head required checks are pending.
+- **Learnings for future iterations:**
+  - After a review fix, synchronize with the live base before final CI; resolve shared task metadata in favor of the active task and carry unrelated source changes through the merge commit.
+  - Update the delivery audit and PR body only after the final metadata head is pushed, because each bookkeeping commit starts a new CI head.
+---
