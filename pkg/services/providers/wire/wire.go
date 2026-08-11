@@ -412,11 +412,15 @@ func externalRegistrationAttempt(registration Registration) (execution.Registrat
 		Provider: providers.ID(registration.Manifest.ID),
 		Attempt: func(ctx context.Context, request providers.ExecuteRequest) (providers.ExecuteResult, error) {
 			writer := &externalResponseWriter{}
-			err := registration.Integration.Invoke(ctx, InvocationRequest{
+			invocation := InvocationRequest{
 				ID: request.AttemptID, ModelID: request.Model,
 				ReasoningEffort: request.ReasoningEffort,
 				SkipPermissions: request.SkipPermissions, Prompt: request.UserMessage,
-			}, writer)
+			}
+			if err := validateExternalInvocationCapabilities(ctx, registration.Manifest.ID, registration.Integration, invocation); err != nil {
+				return providers.ExecuteResult{}, err
+			}
+			err := registration.Integration.Invoke(ctx, invocation, writer)
 			if err != nil {
 				return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindUnknown, Message: err.Error()}
 			}

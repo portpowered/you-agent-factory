@@ -5,6 +5,7 @@ package conductor
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 
@@ -76,7 +77,7 @@ func (c *Conductor) Capabilities(
 	if err := c.preflight(identity, request.RequiredCapabilities()); err != nil {
 		return inference.CapabilitySet{}, err
 	}
-	return c.providers.Capabilities(ctx, identity, request)
+	return c.negotiate(ctx, identity, request)
 }
 
 // Invoke validates requested capabilities against the selected integration's
@@ -95,6 +96,9 @@ func (c *Conductor) Invoke(
 	if err := c.preflight(identity, request.RequiredCapabilities()); err != nil {
 		return err
 	}
+	if _, err := c.negotiate(ctx, identity, request); err != nil {
+		return err
+	}
 	integration, err := c.providers.Integration(identity)
 	if err != nil {
 		return err
@@ -102,6 +106,30 @@ func (c *Conductor) Invoke(
 	guard := newTerminalGuard(destination)
 	invokeErr := inference.ExecuteInvocation(ctx, correlatingIntegration{Integration: integration}, request, guard)
 	return guard.finalize(ctx, invokeErr)
+}
+
+func (c *Conductor) negotiate(
+	ctx context.Context,
+	identity string,
+	request inference.InvocationRequest,
+) (inference.CapabilitySet, error) {
+	negotiated, err := c.providers.Capabilities(ctx, identity, request)
+	if err == nil {
+		return negotiated, nil
+	}
+	var missing *registry.RequiredCapabilityError
+	if errors.As(err, &missing) {
+		return inference.CapabilitySet{}, rejection(
+			InvariantCapabilityEscalation,
+			string(missing.Capability()),
+			fmt.Sprintf(
+				"provider %q does not support capability %q",
+				missing.Provider(),
+				missing.Capability(),
+			),
+		)
+	}
+	return inference.CapabilitySet{}, err
 }
 
 func (c *Conductor) preflight(identity string, required inference.CapabilitySet) error {

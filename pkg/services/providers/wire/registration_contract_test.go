@@ -98,7 +98,9 @@ func TestExternalRegistrationAttemptMapsSuccessAndRejectsInvalidRegistration(t *
 		t.Fatalf("registrationDescriptor() = %#v, want identity, alias, and five capabilities including permission bypass", descriptor)
 	}
 
-	integration := ProgressingExternalIntegration("sealed", "attempt result")
+	integration := &permissionBypassIntegration{
+		ProgressingIntegration: ProgressingExternalIntegration("sealed", "attempt result"),
+	}
 	attempt, err := externalRegistrationAttempt(Registration{
 		Manifest:    Manifest{ID: "sealed"},
 		Integration: integration,
@@ -168,3 +170,15 @@ func (writer *recordingResponseWriter) Close(_ context.Context, completion Compl
 }
 
 var _ ResponseWriter = (*recordingResponseWriter)(nil)
+
+type permissionBypassIntegration struct {
+	*ProgressingIntegration
+}
+
+func (*permissionBypassIntegration) MaximumCapabilities() CapabilitySet {
+	return NewCapabilitySet(CapabilityPromptSubmission, CapabilityPermissionBypass)
+}
+
+func (integration *permissionBypassIntegration) Capabilities(context.Context, InvocationRequest) (CapabilitySet, error) {
+	return integration.MaximumCapabilities(), nil
+}
