@@ -4200,3 +4200,22 @@
   - On Windows, isolate long Go package and process-boundary checks before changing code: concurrent runs can cause transient vet or API-server startup failures that clear on serial retry.
   - After a clean current-main merge, rerun generated-artifact and ratcheted gates, then update the P1 PRD note so the PR body remains evidence-aligned.
 ---
+
+## 2026-08-10 20:01 -07:00 - btrc-p1-root-injection-006 CI baseline characterization
+- What was implemented
+  - Audited fresh CI run `31453206215` for pushed head `7d65af5e5` and reran only its failed Backend Functional Coverage job (`gh run rerun --failed`).
+  - Compared changed paths and reproduced the named failures locally; no P1 implementation change was justified.
+  - Updated the Story 006 PRD note with the terminal CI result and current-main baseline status; all six stories remain marked `passes:true`.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - CI attempt 1: every lane passed except Backend Functional Coverage, which failed the unchanged `TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput` assertion; all other lanes, including Backend Unit Coverage, passed.
+  - CI attempt 2: repeated the unchanged server-binding failure and additionally hit variable `TestCLISuccessorAfterHardKillReportsPreRuntimeStagingContention` and `TestPlainBatchDrainPreservesFiniteAndContinuousCounterexamples/continuous_idle` failures.
+  - Local server-binding test reproduces the extra structured `API server error` line before `SERVER_BIND_FAILED`; `git diff origin/main...HEAD` is empty for `tests/functional/transport/server_binding` and `pkg/services/factory_sessions/internal/runtimehosting`.
+  - Local staging-contention test passes; the workers/mock continuous-idle test passes five consecutive focused runs.
+  - `make verify-fast`, ratcheted gates, wire smoke, focused P1 packages, root-process functional proof, body parity, and thread-aware review audit remain green/clean; the PR body is sourced from `prd.json` and the PR is conflict-free.
+- **Learnings for future iterations:**
+  - When a broad functional retry adds different failures but a deterministic assertion remains in an untouched package, retain the scoped implementation and record the baseline blocker instead of modifying unrelated tests or runtime hosting.
+  - Compare both the exact failing package paths and focused local repeats before treating a functional lane failure as a task regression.
+---
