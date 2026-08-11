@@ -10533,3 +10533,16 @@
 - **Learnings for future iterations:**
   - A successful latest-base rebase can still precede a transient process-server startup failure; isolate and rerun the named functional test before classifying the rebased source as broken.
 ---
+## [2026-08-10 23:41 -07:00] - js-skip-permissions-parity final current-main synchronization
+- What was implemented
+  - Rebased the task branch onto the latest fetched `origin/main` `85619c087` after main advanced again during handoff verification.
+  - Preserved the task-scoped PRD and append-only progress history; no JavaScript product or generated-contract changes were altered by this synchronization.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Rebase completed cleanly; no conflict markers remain, `prd.json` parses, all four stories are `passes:true`, and `git diff --check` passes.
+  - The prior exact functional retry and focused package results remain green; the latest rebase changed only shared bookkeeping relative to that verified source head.
+- **Learnings for future iterations:**
+  - When main advances repeatedly during a handoff, keep each synchronization append-only and verify that the final rebase changed no product surface before pushing the already-tested head.
+---
