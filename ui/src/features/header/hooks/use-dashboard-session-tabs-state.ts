@@ -17,6 +17,7 @@ import { clearTimelineCheckpointsForSession } from "../../timeline/public/checkp
 import { useFactoryTimelineStore } from "../../timeline/public/store";
 import {
   classifyFactorySessionFolderValidationError,
+  type FactorySessionJourney,
   type FolderValidationState,
   factorySessionTargetOptionValue,
   moveSessionTabOrder,
@@ -120,8 +121,11 @@ export function useDashboardSessionTabsState() {
 
 function useOpenSessionDialogFormState() {
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [journey, setJourney] = useState<FactorySessionJourney>("open");
   const [dialogError, setDialogError] =
     useState<FactorySessionsAPIError | null>(null);
+  const [completedJourney, setCompletedJourney] =
+    useState<FactorySessionJourney | null>(null);
   const [folderPath, setFolderPath] = useState("");
   const [validatedFolderPath, setValidatedFolderPath] = useState<string | null>(
     null,
@@ -148,6 +152,13 @@ function useOpenSessionDialogFormState() {
     setFolderPath("");
   }
 
+  function openDialog(nextJourney: FactorySessionJourney) {
+    setJourney(nextJourney);
+    setDialogError(null);
+    setCompletedJourney(null);
+    setDialogOpen(true);
+  }
+
   function handleChangeFolderPath(value: string) {
     setFolderPath(value);
     clearFolderInspection();
@@ -155,6 +166,7 @@ function useOpenSessionDialogFormState() {
 
   return {
     clearFolderInspection,
+    completedJourney,
     dialogError,
     dialogOpen,
     discoveredTargets,
@@ -162,8 +174,11 @@ function useOpenSessionDialogFormState() {
     folderValidation,
     resetDialogState,
     selectedTargetValue,
+    journey,
+    openDialog,
     setDialogError,
     setDialogOpen,
+    setCompletedJourney,
     setDiscoveredTargets,
     setFolderPath,
     setFolderValidation,
@@ -202,6 +217,7 @@ function useOpenSessionDialogState({
     try {
       const response = await openSessionMutation.mutateAsync(input);
       if (response.session) {
+        form.setCompletedJourney(form.journey);
         await finishOpeningSession(
           queryClient,
           response.session,
@@ -224,6 +240,7 @@ function useOpenSessionDialogState({
     try {
       await inspectFolderCandidate({
         folderPath: form.folderPath,
+        journey: form.journey,
         setDiscoveredTargets: form.setDiscoveredTargets,
         setFolderValidation: form.setFolderValidation,
         setSelectedTargetValue: form.setSelectedTargetValue,
@@ -252,6 +269,7 @@ function useOpenSessionDialogState({
         validatedFolderPath: form.validatedFolderPath,
       });
       if (response.session) {
+        form.setCompletedJourney(form.journey);
         await finishOpeningSession(
           queryClient,
           response.session,
@@ -278,6 +296,7 @@ function useOpenSessionDialogState({
   }
 
   return {
+    completedJourney: form.completedJourney,
     dialogError: form.dialogError,
     dialogOpen: form.dialogOpen,
     discoveredTargets: form.discoveredTargets,
@@ -289,6 +308,13 @@ function useOpenSessionDialogState({
     handleCreateNewFactory,
     handleInspectFolder,
     handleOpenTarget,
+    openFactoryDialog: () => {
+      form.openDialog("open");
+    },
+    newFactoryDialog: () => {
+      form.openDialog("new");
+    },
+    journey: form.journey,
     setSelectedTargetValue: form.setSelectedTargetValue,
     openSessionMutation,
     resetDialogState: form.resetDialogState,
@@ -335,6 +361,7 @@ async function finishOpeningSession(
 
 async function inspectFolderCandidate({
   folderPath,
+  journey,
   setDiscoveredTargets,
   setFolderValidation,
   setSelectedTargetValue,
@@ -342,6 +369,7 @@ async function inspectFolderCandidate({
   validateFolder,
 }: {
   folderPath: string;
+  journey: FactorySessionJourney;
   setDiscoveredTargets: (targets: FactorySessionTarget[]) => void;
   setFolderValidation: (state: FolderValidationState) => void;
   setSelectedTargetValue: (value: string) => void;
@@ -354,6 +382,16 @@ async function inspectFolderCandidate({
     folderPath,
   });
   if (response.initsNewFactory) {
+    if (journey === "open") {
+      setDiscoveredTargets([]);
+      setSelectedTargetValue("");
+      setValidatedFolderPath(null);
+      setFolderValidation({
+        status: "error",
+        reason: "open_no_target",
+      });
+      return;
+    }
     const resolvedFolderPath = response.folderPath ?? folderPath;
     setDiscoveredTargets([]);
     setSelectedTargetValue("");
@@ -361,6 +399,17 @@ async function inspectFolderCandidate({
     setFolderValidation({
       status: "init_ready",
       folderPath: resolvedFolderPath,
+    });
+    return;
+  }
+
+  if (journey === "new") {
+    setDiscoveredTargets([]);
+    setSelectedTargetValue("");
+    setValidatedFolderPath(null);
+    setFolderValidation({
+      status: "error",
+      reason: "new_target_exists",
     });
     return;
   }
@@ -449,11 +498,20 @@ function useActiveDashboardSession(
     if (!listReady) {
       return;
     }
+    const preferredSessionID = isDefaultFactorySessionID(activeSessionID ?? "")
+      ? defaultSessionID
+      : null;
     reconcileSessionList(
       sessions.map((session) => session.id),
-      defaultSessionID,
+      preferredSessionID,
     );
-  }, [defaultSessionID, listReady, reconcileSessionList, sessions]);
+  }, [
+    activeSessionID,
+    defaultSessionID,
+    listReady,
+    reconcileSessionList,
+    sessions,
+  ]);
 
   const orderedSessions = useMemo(
     () => orderFactorySessions(sessions, orderedSessionIDs),

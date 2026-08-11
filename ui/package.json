@@ -50,6 +50,7 @@
     "storybook:header-responsive-check": "node scripts/verify-dashboard-header-responsive-browser.mjs",
     "storybook:dashboard-viewport-check": "node scripts/verify-dashboard-viewport-browser.mjs",
     "storybook:dashboard-session-reconciliation-check": "node scripts/verify-dashboard-session-reconciliation-browser.mjs",
+    "storybook:dashboard-open-new-factory-check": "node scripts/verify-dashboard-open-new-factory-browser.mjs",
     "storybook:submit-work-session-check": "node scripts/verify-submit-work-session-scoping-browser.mjs",
     "storybook:work-chart-check": "node scripts/verify-work-chart-browser.mjs",
     "storybook:factory-graph-visual-group-save-check": "bun run build-storybook && node scripts/run-factory-graph-visual-group-save-browser-check.mjs",

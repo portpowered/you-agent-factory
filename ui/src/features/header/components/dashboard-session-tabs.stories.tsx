@@ -140,6 +140,11 @@ export const OpenFlowVerification = {
     await userEvent.click(
       within(dialog).getByRole("button", { name: /review/i }),
     );
+    await userEvent.click(
+      within(dialog).getByRole("button", {
+        name: messages.openSessionTargetLabel,
+      }),
+    );
 
     await waitFor(() => {
       expect(canvas.getByRole("tab", { name: "review" })).toHaveAttribute(

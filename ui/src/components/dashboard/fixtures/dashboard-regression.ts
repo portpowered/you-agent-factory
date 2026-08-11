@@ -352,6 +352,7 @@ export type DashboardRegressionFactoryOperationID =
   | "open-confirm-failure"
   | "new-validation-success"
   | "new-validation-failure"
+  | "new-validation-broken-success"
   | "new-confirm-success"
   | "new-confirm-failure";
 
@@ -383,7 +384,6 @@ export interface DashboardRegressionFactoryOperation {
 }
 
 const openTarget = { kind: "named", name: "secondary" } as const;
-const newTarget = { kind: "default" } as const;
 const openFactoryTarget = {
   factoryDir: secondarySession.factoryDir,
   folderPath: secondarySession.folderPath,
@@ -395,7 +395,11 @@ const openValidationResponse = {
   targets: [openFactoryTarget],
 } satisfies OpenFactorySessionResponse;
 const newValidationResponse = {
-  folderPath: "/workspace/dashboard-regression-new/factory",
+  folderPath: "/workspace/dashboard-regression-new",
+  initsNewFactory: true,
+} satisfies OpenFactorySessionResponse;
+const brokenNewValidationResponse = {
+  folderPath: "/workspace/dashboard-regression-new-broken",
   initsNewFactory: true,
 } satisfies OpenFactorySessionResponse;
 
@@ -404,7 +408,12 @@ function factoryOperation(
   journey: "open" | "new",
   phase: "validation" | "confirmation",
   folderPath: string,
-  target: { readonly kind: "default" | "named"; readonly name?: string },
+  target:
+    | {
+        readonly kind: "default" | "named";
+        readonly name?: string;
+      }
+    | undefined,
   outcome: DashboardRegressionFactoryOperation["outcome"],
   flags: {
     readonly validateOnly?: boolean;
@@ -415,7 +424,11 @@ function factoryOperation(
     operationID,
     journey,
     phase,
-    input: { folderPath, target, ...flags },
+    input: {
+      folderPath,
+      ...(target ? { target } : {}),
+      ...flags,
+    },
     outcome,
   };
 }
@@ -426,7 +439,7 @@ export const dashboardRegressionFactoryOperations = Object.freeze({
     "open",
     "validation",
     "/workspace/dashboard-regression",
-    openTarget,
+    undefined,
     { kind: "success", response: openValidationResponse },
     { validateOnly: true },
   ),
@@ -435,7 +448,7 @@ export const dashboardRegressionFactoryOperations = Object.freeze({
     "open",
     "validation",
     "/workspace/dashboard-regression-missing",
-    openTarget,
+    undefined,
     {
       kind: "failure",
       error: {
@@ -472,7 +485,7 @@ export const dashboardRegressionFactoryOperations = Object.freeze({
     "new",
     "validation",
     "/workspace/dashboard-regression-new",
-    newTarget,
+    undefined,
     { kind: "success", response: newValidationResponse },
     { validateOnly: true },
   ),
@@ -480,8 +493,8 @@ export const dashboardRegressionFactoryOperations = Object.freeze({
     "new-validation-failure",
     "new",
     "validation",
-    "/workspace/dashboard-regression-new-broken",
-    newTarget,
+    "/workspace/dashboard-regression-new-unwritable",
+    undefined,
     {
       kind: "failure",
       error: {
@@ -491,12 +504,21 @@ export const dashboardRegressionFactoryOperations = Object.freeze({
     },
     { validateOnly: true },
   ),
+  "new-validation-broken-success": factoryOperation(
+    "new-validation-broken-success",
+    "new",
+    "validation",
+    "/workspace/dashboard-regression-new-broken",
+    undefined,
+    { kind: "success", response: brokenNewValidationResponse },
+    { validateOnly: true },
+  ),
   "new-confirm-success": factoryOperation(
     "new-confirm-success",
     "new",
     "confirmation",
     "/workspace/dashboard-regression-new",
-    newTarget,
+    undefined,
     { kind: "success", response: { session: createdSession } },
     { initNewFactory: true },
   ),
@@ -505,7 +527,7 @@ export const dashboardRegressionFactoryOperations = Object.freeze({
     "new",
     "confirmation",
     "/workspace/dashboard-regression-new-broken",
-    newTarget,
+    undefined,
     {
       kind: "failure",
       error: {

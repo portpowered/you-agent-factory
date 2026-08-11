@@ -2,8 +2,12 @@ import {
   type LocalizedMessages,
   resolveLocalizedMessages,
 } from "../../../i18n";
+import {
+  type HeaderFactoryJourneyMessages,
+  headerFactoryJourneyMessagesByLocale,
+} from "./factory-journeys";
 
-export interface HeaderControlsMessages {
+export interface HeaderControlsMessages extends HeaderFactoryJourneyMessages {
   activeSessionFolderLabelTemplate: string;
   brandWordmark: string;
   browseSessionFolderButtonLabel: string;
@@ -37,8 +41,6 @@ export interface HeaderControlsMessages {
   openSessionSubmitLabel: string;
   openSessionSubmitPendingLabel: string;
   pauseSessionStreamLabelTemplate: string;
-  openSessionTargetLabel: string;
-  openSessionTargetPendingLabel: string;
   manualFactoryNameFieldLabel: string;
   manualFactoryNameFieldPlaceholder: string;
   manualFactoryNameHelperText: string;
@@ -81,6 +83,7 @@ export const HEADER_MAX_TICK_TOKEN = "{{maxTick}}";
 
 const headerControlsMessagesByLocale = {
   en: {
+    ...headerFactoryJourneyMessagesByLocale.en,
     activeSessionFolderLabelTemplate: "Active folder: {{folderPath}}",
     brandWordmark: "U",
     browseSessionFolderButtonLabel: "Choose folder",
@@ -94,7 +97,7 @@ const headerControlsMessagesByLocale = {
     loadingSessionsLabel: "Loading sessions...",
     refreshingSessionsLabel: "Refreshing sessions...",
     loadingDashboardTitle: "Loading dashboard",
-    openSessionButtonLabel: "Open another session",
+    openSessionButtonLabel: "Open Factory",
     openSessionDialogDescription:
       "Enter an absolute local factory folder path. The folder must contain a runnable factory before you can open a session.",
     openSessionFolderRequiredError:
@@ -120,13 +123,11 @@ const headerControlsMessagesByLocale = {
     openSessionCancelCreateFactoryLabel: "Cancel",
     openSessionCreateFactoryLabel: "Create factory",
     openSessionCreateFactoryPendingLabel: "Creating factory...",
-    openSessionDialogTitle: "Factory Session",
+    openSessionDialogTitle: "Open Factory",
     openSessionInitNewFactoryDescriptionTemplate:
       "No runnable factory was found at {{folderPath}}. Create a new factory under {{folderPath}}/factory using the default scaffold?",
     openSessionSubmitLabel: "Start Factory",
     openSessionSubmitPendingLabel: "Checking folder...",
-    openSessionTargetLabel: "Open selected target",
-    openSessionTargetPendingLabel: "Opening target...",
     manualFactoryNameFieldLabel: "Factory Name",
     manualFactoryNameFieldPlaceholder: "named-factory",
     manualFactoryNameHelperText:
@@ -170,6 +171,7 @@ const headerControlsMessagesByLocale = {
     waitingForMoreTicks: "Waiting for more ticks",
   },
   ja: {
+    ...headerFactoryJourneyMessagesByLocale.ja,
     activeSessionFolderLabelTemplate: "アクティブなフォルダー: {{folderPath}}",
     brandWordmark: "U",
     browseSessionFolderButtonLabel: "フォルダーを選ぶ",
@@ -183,7 +185,7 @@ const headerControlsMessagesByLocale = {
     loadingSessionsLabel: "セッションを読み込み中...",
     refreshingSessionsLabel: "セッションを更新中...",
     loadingDashboardTitle: "ダッシュボードを読み込み中",
-    openSessionButtonLabel: "別のセッションを開く",
+    openSessionButtonLabel: "ファクトリーを開く",
     openSessionDialogDescription:
       "ローカルのファクトリーフォルダーを選ぶか入力してください。セッションを開くには、そのフォルダーに実行可能なファクトリーが含まれている必要があります。",
     openSessionFolderRequiredError:
@@ -209,13 +211,11 @@ const headerControlsMessagesByLocale = {
     openSessionCancelCreateFactoryLabel: "キャンセル",
     openSessionCreateFactoryLabel: "ファクトリーを作成",
     openSessionCreateFactoryPendingLabel: "ファクトリーを作成しています...",
-    openSessionDialogTitle: "ファクトリーフォルダーを開く",
+    openSessionDialogTitle: "ファクトリーを開く",
     openSessionInitNewFactoryDescriptionTemplate:
       "{{folderPath}} には実行可能なファクトリーがありません。既定のスキャフォールドで {{folderPath}}/factory に新しいファクトリーを作成しますか？",
     openSessionSubmitLabel: "フォルダーを確認する",
     openSessionSubmitPendingLabel: "フォルダーを確認しています...",
-    openSessionTargetLabel: "選択したターゲットを開く",
-    openSessionTargetPendingLabel: "ターゲットを開いています...",
     manualFactoryNameFieldLabel: "手動ファクトリー上書き",
     manualFactoryNameFieldPlaceholder: "named-factory",
     manualFactoryNameHelperText:
@@ -260,6 +260,7 @@ const headerControlsMessagesByLocale = {
     waitingForMoreTicks: "ティックが増えるまで待機しています",
   },
   ko: {
+    ...headerFactoryJourneyMessagesByLocale.ko,
     activeSessionFolderLabelTemplate: "활성 폴더: {{folderPath}}",
     brandWordmark: "U",
     browseSessionFolderButtonLabel: "폴더 선택",
@@ -273,7 +274,7 @@ const headerControlsMessagesByLocale = {
     loadingSessionsLabel: "세션을 불러오는 중...",
     refreshingSessionsLabel: "세션을 새로 고치는 중...",
     loadingDashboardTitle: "대시보드 로드 중",
-    openSessionButtonLabel: "다른 세션 열기",
+    openSessionButtonLabel: "팩토리 열기",
     openSessionDialogDescription:
       "로컬 팩토리 폴더를 선택하거나 경로를 입력하세요. 세션을 열려면 해당 폴더에 실행 가능한 팩토리가 있어야 합니다.",
     openSessionFolderRequiredError:
@@ -299,13 +300,11 @@ const headerControlsMessagesByLocale = {
     openSessionCancelCreateFactoryLabel: "취소",
     openSessionCreateFactoryLabel: "팩토리 만들기",
     openSessionCreateFactoryPendingLabel: "팩토리를 만드는 중...",
-    openSessionDialogTitle: "팩토리 폴더 열기",
+    openSessionDialogTitle: "팩토리 열기",
     openSessionInitNewFactoryDescriptionTemplate:
       "{{folderPath}}에 실행 가능한 팩토리가 없습니다. 기본 스캐폴드로 {{folderPath}}/factory에 새 팩토리를 만드시겠습니까?",
     openSessionSubmitLabel: "폴더 확인",
     openSessionSubmitPendingLabel: "폴더 확인 중...",
-    openSessionTargetLabel: "선택한 대상 열기",
-    openSessionTargetPendingLabel: "대상을 여는 중...",
     manualFactoryNameFieldLabel: "수동 팩토리 재정의",
     manualFactoryNameFieldPlaceholder: "named-factory",
     manualFactoryNameHelperText:
@@ -349,6 +348,7 @@ const headerControlsMessagesByLocale = {
     waitingForMoreTicks: "틱이 더 쌓일 때까지 기다리는 중",
   },
   "zh-CN": {
+    ...headerFactoryJourneyMessagesByLocale["zh-CN"],
     activeSessionFolderLabelTemplate: "当前文件夹：{{folderPath}}",
     brandWordmark: "U",
     browseSessionFolderButtonLabel: "选择文件夹",
@@ -362,7 +362,7 @@ const headerControlsMessagesByLocale = {
     loadingSessionsLabel: "正在加载会话...",
     refreshingSessionsLabel: "正在刷新会话...",
     loadingDashboardTitle: "正在加载仪表板",
-    openSessionButtonLabel: "打开另一个会话",
+    openSessionButtonLabel: "打开工厂",
     openSessionDialogDescription:
       "请选择或输入本地工厂文件夹。只有文件夹中包含可运行的工厂时，才能打开会话。",
     openSessionFolderRequiredError:
@@ -388,13 +388,11 @@ const headerControlsMessagesByLocale = {
     openSessionCancelCreateFactoryLabel: "取消",
     openSessionCreateFactoryLabel: "创建工厂",
     openSessionCreateFactoryPendingLabel: "正在创建工厂...",
-    openSessionDialogTitle: "打开工厂文件夹",
+    openSessionDialogTitle: "打开工厂",
     openSessionInitNewFactoryDescriptionTemplate:
       "在 {{folderPath}} 未找到可运行的工厂。是否使用默认脚手架在 {{folderPath}}/factory 下创建新工厂？",
     openSessionSubmitLabel: "检查文件夹",
     openSessionSubmitPendingLabel: "正在检查文件夹...",
-    openSessionTargetLabel: "打开所选目标",
-    openSessionTargetPendingLabel: "正在打开目标...",
     manualFactoryNameFieldLabel: "手动工厂覆盖",
     manualFactoryNameFieldPlaceholder: "named-factory",
     manualFactoryNameHelperText:
