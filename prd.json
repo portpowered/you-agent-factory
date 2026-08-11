@@ -1,76 +1,57 @@
 {
-  "project": "WSR-001 Worker Opening Record Identifies the Execution",
-  "branchName": "wsr-001-opening-record",
-  "description": "Implement WSR-001 so every Worker event topic begins with an authoritative SESSION/STARTED record containing stable session, Factory, provider-selection, timing, Work, and attempt correlation before provider output, with synthesized lifecycle provenance and valid opening-to-terminal history even when no Provider Session reference exists.",
+  "project": "Preserve Plan-Parallel Executor Results at Merge",
+  "branchName": "pp-merge-context-bug",
+  "description": "Fix the @you/plan-parallel fan-in path so the merger receives the original request and every completed executor result exactly once, with deterministic regression evidence, a documented root cause, a narrowly scoped correction, and delivery through actual PR merge.",
   "context": {
-    "customerAsk": "Make SESSION/STARTED the first record on every Worker topic with stable session, provider-selection, timing, attempt, and Factory correlation before provider output; declare synthesized lifecycle provenance; and preserve valid opening and terminal history for providers with no Provider Session reference. Provide WSR-FT-001, WSR-FT-002, WSR-FT-003 plus focused unit, provider conformance, and Events ordering evidence.",
-    "problem": "Worker history does not yet guarantee that the first record carries every authoritative correlation and provenance fact needed to identify the execution. Provider identity may become observable too late, and consumers can incorrectly depend on an optional provider-native session reference, making live and replayed timelines ambiguous across providers.",
-    "solution": "Extend the provider-neutral Worker lifecycle contract and canonical Worker Sessions invocation path so an injected-clock timestamp and all known execution correlation are published in SESSION/STARTED at topic position 1. Bind actual provider identity before provider-authored output, retain optional Provider Session references without inference, and prove stable live/replay behavior across streaming, session-bearing, final-only, and no-session-reference providers without implementing later recording-persistence stories."
+    "customerAsk": "A recorded @you/plan-parallel run completed 10 executor children, but merge-plan-results received no usable delegated outputs and claimed that no child results existed. Reproduce the failure with known mock executor outputs, locate whether the loss occurs during result collection, join payload movement, or merger prompt assembly, fix it, retain the failing scenario as regression coverage, and document the before/after evidence and root cause in the PR description.",
+    "problem": "Successful child execution does not currently guarantee successful fan-in. The merger can start and complete without completed planned-task results in its rendered input, silently discarding executor work and returning a misleading, useless primary result.",
+    "solution": "Add a deterministic N-child plan-parallel functional scenario that captures the merger's actual input, use it to identify the precise result-loss mechanism, and correct only the owning collection, routing, or prompt-input behavior so the original request and every eligible completed child result reach the merger exactly once. Preserve the regression, focused lower-layer proof, and before/after evidence."
   },
   "acceptanceCriteria": [
-    "Every exercised Worker path publishes exactly one SESSION/STARTED as topic position 1 before provider-authored output and finishes with a legal terminal lifecycle record.",
-    "The opening exposes every known WSR lifecycle field while genuinely unknown optional facts remain absent rather than zero-filled, defaulted, or inferred.",
-    "Live and replay observations preserve the exact opening startedAt and known Worker, Factory, dispatch, turn, Work, and attempt identities, and lifecycle provenance is SYNTHESIZED, notification-shaped, and LIFECYCLE_ONLY.",
-    "Actual provider identity is present in the opening or established by a preceding provider-binding SESSION/UPDATED, so no provider-authored event is observable first.",
-    "Streaming, session-bearing, final-only, and no-Provider-Session-reference executions retain legal provider-neutral ordering, honest fidelity, and inspectable opening-to-terminal history, demonstrated by WSR-FT-001, WSR-FT-002, WSR-FT-003 and focused unit, conformance, and ordering tests.",
-    "Implementation respects service ownership and the single Events publication path, introduces no recording persistence barrier or dual write, and includes no broad unrelated cleanup.",
-    "Typecheck passes and tests pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
-    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared/generated-file churn are resolved against current main, and the PR is actually merged."
+    "A deterministic plan-parallel functional scenario runs N executor children with unique known outputs and proves that the merger's rendered input contains the original request and all N outputs exactly once.",
+    "The regression test is demonstrated failing on the exact pre-fix main revision that contained the recorded missing-output behavior and passing after the fix; when current main already contains that fix, the PR explicitly records the historical red revision, why a current-main red run is impossible, the green output, and the exact root-cause mechanism.",
+    "Completed child results remain associated with the correct generated Work and are not lost, duplicated, replaced by task specifications, or reordered in a way that violates the Factory's deterministic input contract.",
+    "Existing plan-parallel functional coverage and focused Factory Session/Work routing coverage remain green, and any new package-level tests follow the post-PR #1862 split test layout.",
+    "The implementation stays within the identified fan-in result-routing, collection, or packaged Factory wiring fault surface and preserves explicit state, isolated side effects, service ownership, and existing public contracts.",
+    "Typecheck passes; tests pass; there are no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
+    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts are resolved against current main, and the PR is actually merged."
   ],
   "userStories": [
     {
-      "id": "wsr-001-opening-record-001",
-      "title": "Publish a stable, correlated opening record",
-      "description": "As a customer inspecting a Worker Session, I want its first event to state which execution began and when so that I can interpret the stream without relying on later output.",
+      "id": "pp-merge-context-bug-001",
+      "title": "Reproduce and localize missing merger inputs",
+      "description": "As a maintainer, I want a deterministic plan-parallel run with recognizable child results so that I can observe exactly where successful executor outputs disappear before merger execution.",
       "acceptanceCriteria": [
-        "Each Worker Session topic begins at position 1 with exactly one SESSION/STARTED, committed before provider handoff or provider-authored output.",
-        "The opening includes status, injected-clock startedAt, workerSessionId, and every known Factory Session, recording, dispatch, turn, Work, attempt, continuation, provider-selection, model, and capabilities value supplied through the canonical invocation path.",
-        "attemptReason uses INITIAL, RETRY, or RESUME as appropriate, and known correlation is preserved through the Petri and JavaScript paths that share Worker Sessions invocation.",
-        "Unknown optional metadata remains absent and is not replaced with zero values, empty provider facts, or reconstructed Provider Session data.",
-        "The opening timestamp and known Worker, Factory, dispatch, turn, Work, and attempt identities are identical in live observation and replay projection, covering WSR-FT-002.",
-        "Focused Worker Sessions unit and projection/replay tests pass.",
-        "Typecheck passes.",
-        "Tests pass."
+        "A functional test runs the plan-parallel behavior with N greater than one deterministic executor results whose unique strings can be distinguished from planner task payloads and from the original request.",
+        "The test inspects the merger dispatch through the normal application execution path and asserts that its rendered input contains the original request and every unique completed child result exactly once.",
+        "On the pre-fix main revision that contained the recorded missing-output behavior, the test fails, and the PR description includes the relevant red test output; after the existing fix is applied on current main, the same assertion passes without weakening it to match the bug.",
+        "The investigation identifies whether loss occurs in result collection, relationship/join routing, or merger input/prompt assembly and records the exact mechanism and owning boundary in the PR description.",
+        "The test uses deterministic edge replacement and observation rather than sleeps, live providers, or an alternate application composition path.",
+        "Any package-level regression coverage under pkg/services/factory_sessions/internal/execution is placed in the post-PR #1862 split test layout rather than recreating the former large test file.",
+        "Typecheck passes",
+        "Tests pass, except for the intentionally captured pre-fix red run on current main"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Opening SESSION/STARTED now carries the injected-clock timestamp, stable Worker/Factory/recording/dispatch/turn/Work/attempt correlations, explicit provider/model/capability selections, and exact continuation metadata when supplied. Unknown optionals remain omitted. Runtime dispatch planning and JavaScript invocation both preserve the new request facts, and focused live/replay plus omission tests pass. WSR-FT-002 now verifies the exact opening timestamp across the public observation and replay stream. Terminal publication now also requires a committed opening, and a fail-first/succeed-second Events regression proves an opening append failure cannot create terminal-only history."
+      "notes": "Completed the deterministic root.BuildProcess/Process.Execute functional regression with 10 independent planned-task children, unique per-child executor outputs, exact-once original-request/result assertions, generated Work-name association, planner-payload exclusion, and deterministic generated-Work ordering. Before-fix red evidence (detached at b0bf1dd597^ = fb7805bd8): `go test ./tests/functional/factory/packaged/plan_parallel -run '^TestPackagedPlanParallelMergerReceivesEveryUniqueCompletedChildResult$' -count=1 -v -timeout 600s` failed at invocation_test.go:45 with `merger prompt contains original request 0 times, want exactly once`; the captured prompt contained only the merger instructions and no Factory inputs. After-fix evidence on current main's implementation: the same command with `-count=10` passed all ten runs (`ok ... 20.902s`), and the full packaged plan-parallel suite passed. Root cause is localized to two owning boundaries in b0bf1dd597: before the fix, the scheduler/FiringDecision/dispatcher propagated only CONSUME tokens, so OBSERVE-mode completed child Work results never entered the merge dispatch; independently, the packaged merge-plan-results workstation body did not render `.Inputs`. The fix carries all input tokens while mutating only consumed tokens and renders each Factory input with Payload/PreviousOutput/Content fallback. The live current main is already post-fix, so the red run is recorded against the exact pre-fix main parent rather than falsely claiming current main is failing."
     },
     {
-      "id": "wsr-001-opening-record-002",
-      "title": "Establish lifecycle provenance and provider-before-output ordering",
-      "description": "As a customer reading a Worker timeline, I want to distinguish system-authored lifecycle facts from provider output and know the selected provider before its output so that provenance and attribution are unambiguous.",
+      "id": "pp-merge-context-bug-002",
+      "title": "Deliver every completed child result to the merger",
+      "description": "As a plan-parallel customer, I want the merger to receive every successful executor's result so that the final response faithfully synthesizes the work I paid the Factory to perform.",
       "acceptanceCriteria": [
-        "Worker Sessions-owned opening and terminal lifecycle records declare DeliverySynthesized, RepresentationNotification, and FidelityLifecycleOnly without claiming provider-native authorship or fidelity.",
-        "The actual provider is present in SESSION/STARTED whenever resolved at opening.",
-        "When actual provider resolution genuinely occurs after opening, the first provider-bound record is SESSION/UPDATED and establishes actual provider identity before every dependent provider-authored event.",
-        "Events ordering integration evidence rejects provider output before the opening or required provider binding and proves the legal opening/provider-output/terminal sequence under streaming execution.",
-        "WSR-FT-001 proves opening-first, provider-identity-before-output, exactly-once live records in finalized history, and terminal-last behavior without adding a Worker Sessions-to-Recordings payload write.",
-        "Focused Worker Sessions unit and Events ordering integration tests pass.",
-        "Typecheck passes.",
-        "Tests pass."
+        "After the fix, the deterministic regression proves the merger input contains the original parent request and all N unique completed child results exactly once.",
+        "The merger receives completed result content rather than only the executor's assigned task payload, and each result remains traceable to the correct child Work identity.",
+        "The fix preserves existing all-children completion gating: the merger does not run early, failed-child behavior is not reclassified, and unrelated Factory routing remains unchanged.",
+        "Focused tests at the owning lower layer directly prove the corrected collection or prompt-input invariant, while the functional test proves the full packaged plan-parallel behavior.",
+        "The PR description records the exact root cause plus the same regression command's before-fix failure and after-fix success evidence.",
+        "Existing plan-parallel functional suites pass.",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 2,
       "passes": true,
-      "notes": "Worker Sessions now stamps opening and terminal drafts with synthesized notification/lifecycle-only provenance and carries the resolved provider on the opening when known. The provider-output bridge resolves attempt dispatches to stable Worker Session topics, publishes canonical drafts through the same Events path, and emits one SESSION/UPDATED provider binding when provider identity is first learned after opening. Contradictory provider fragments are rejected before publication and forwarding. WSR-FT-001 proves the customer-visible opening/binding/output/terminal order. Focused publisher and real in-memory Events tests prove pre-opening rejection, opening/binding/output/terminal ordering, exactly-once binding, terminal-last history, and one downstream forwarding; Worker Sessions tests, factory-runtime tests, race tests, and vet pass."
-    },
-    {
-      "id": "wsr-001-opening-record-003",
-      "title": "Preserve provider-independent opening and terminal history",
-      "description": "As a customer using any supported provider, I want a valid Worker lifecycle even when the provider has no native session identifier so that Worker history is not conditional on provider transcript capabilities.",
-      "acceptanceCriteria": [
-        "A provider that emits no providers.SessionRef still yields an inspectable SESSION/STARTED, normalized provider output when available, and a legal terminal lifecycle record; the reference remains absent rather than synthesized.",
-        "Shared provider conformance covers representative Claude tool lifecycle, Codex streaming, Cursor/ACP session-bearing, and Agy final-only fixtures through production registrations.",
-        "Each representative provider produces legal provider-neutral Kind/Phase pairs, actual provider provenance on provider-authored drafts, correct source-event idempotency, and terminal behavior.",
-        "Streaming providers report their actual delivery and fidelity, while final-only providers expose only minimal synthesized lifecycle plus final authoritative output and do not fabricate streaming capability.",
-        "WSR-FT-003 proves the same legal normalized protocol and honest fidelity across providers without requiring a provider-specific transcript reader for opening-to-terminal replay.",
-        "Functional evidence uses root.BuildProcess and Process.Execute, production registrations, ProviderCommandRunner with sanitized recorded fixtures, and deterministic event or terminal synchronization rather than Mock Workers or arbitrary sleeps.",
-        "Typecheck passes.",
-        "Tests pass."
-      ],
-      "priority": 3,
-      "passes": true,
-      "notes": "Provider-independent provenance is now carried explicitly on Worker progress and response-stream events, separate from optional Provider Session references; no reference is synthesized. The public Worker Session-ID SSE route (/factory-sessions/{session_id}/worker-sessions/{worker_session_id}/events) exposes canonical retained history without requiring Provider Sessions transcript projection, while preserving any actual provider-session reference when one exists. Root-built conformance now captures and verifies opening position 1, stable correlation, source-event idempotency, provider binding before output, honest normalized fidelity, and terminal-last replay for Antigravity final-only, Claude full-stream, Codex partial-stream, and Cursor/ACP session-bearing executions. Named WSR-FT-003 uses root.BuildProcess/Process.Execute with the sanitized Antigravity fixture to prove final output without a fabricated Provider Session reference or streaming delta. Focused service, HTTP, generated-interface, provider conformance, and unavailable-owner route tests pass. The latest review follow-up keeps the normal unavailable-owner assertion in the owning HTTP transport tests and adds a root-built direct-JavaScript public route probe for the intentionally partial handler composition, leaving no new package-boundary violation beyond the known baseline. The branch is synchronized with the latest current main and regenerated public artifacts remain drift-free."
+      "notes": "Delivered by the current fan-in correction already present on the synchronized main implementation: scheduler decisions retain deterministic InputTokens for every matched binding while ConsumeTokens remains parent-only; the dispatcher forwards all input tokens to the Work dispatch and emits consume mutations only for the parent; the packaged merge-plan-results workstation renders Payload, PreviousOutput, or Content for every Factory input. Focused lower-layer proof remains green in TestFIFOScheduler_IncludesObservedBindingsWithoutConsumingThem, TestWorkInQueueScheduler_IncludesObservedBindingsWithoutConsumingThem, and TestDispatcher_ForwardsObservedInputsWithoutConsumingThem. The N=10 root.BuildProcess/Process.Execute regression passed 10 repeated runs and the full packaged plan-parallel suite; it proves exact-once original request and unique completed result content, generated Work association, deterministic ordering, planner-payload exclusion, and one merger dispatch. Existing all-children completion and failed-child behavior remain covered by the packaged suite and current Factory Sessions execution suites. The PR description records the historical pre-fix red result at fb7805bd8, current green result, and the two owning root causes from pp-merge-context-bug-001. On synchronized HEAD, make typecheck, make backend-size pkg-maint pkg-file-count pkg-structure vet, and make test all pass."
     }
   ]
 }
