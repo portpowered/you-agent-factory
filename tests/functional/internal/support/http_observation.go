@@ -124,6 +124,17 @@ func ListDefaultSessionWork(t testing.TB, baseURL string) factoryapi.ListWorkRes
 	return GetJSON[factoryapi.ListWorkResponse](t, DefaultSessionWorkURL(baseURL, "/work"))
 }
 
+// ListDefaultSessionWorkerSessions reads the public Worker Session
+// observation projection correlated with one Work identity.
+func ListDefaultSessionWorkerSessions(t testing.TB, baseURL, workID string) factoryapi.ListWorkerSessionsResponse {
+	t.Helper()
+	if strings.TrimSpace(workID) == "" {
+		t.Fatal("workID is empty")
+	}
+	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + factorysessions.DefaultSessionID + "/worker-sessions?workId=" + url.QueryEscape(workID)
+	return GetJSON[factoryapi.ListWorkerSessionsResponse](t, endpoint)
+}
+
 // GetDefaultSessionWorkByID reads one public Work item through the same
 // session-scoped GET /work/{id} surface customers use for detail reads.
 func GetDefaultSessionWorkByID(t testing.TB, baseURL, workID string) factoryapi.Work {

@@ -177,6 +177,7 @@ func RunFactoryToCompletionWithConfiguredHome(
 		false,
 		configure,
 		terminalObservationCorrelated,
+		nil,
 	)
 	return session, work, events
 }
@@ -195,6 +196,55 @@ func RunFactoryToCompletionWithEdgesAndResponseEvents(
 	[]factoryapi.FactoryResponseEvent,
 ) {
 	return runFactoryToCompletion(t, dir, overrides, timeout, true)
+}
+
+// RunFactoryToCompletionWithEdgesAndResponseEventsAndWorkerSessionEvents also
+// drains every public Worker Session history correlated with the completed
+// Work before the root-built process stops. The callback stays at the public
+// HTTP boundary so provider-neutral sessions can be inspected by Worker ID.
+func RunFactoryToCompletionWithEdgesAndResponseEventsAndWorkerSessionEvents(
+	t testing.TB,
+	dir string,
+	overrides serviceedges.Edges,
+	timeout time.Duration,
+) (
+	factoryapi.FactorySession,
+	factoryapi.ListWorkResponse,
+	[]factoryapi.FactoryEvent,
+	[]factoryapi.FactoryResponseEvent,
+	[]factoryapi.WorkerSessionEvent,
+) {
+	var workerEvents []factoryapi.WorkerSessionEvent
+	session, work, events, responseEvents := runFactoryToCompletionWithHome(
+		t,
+		dir,
+		overrides,
+		timeout,
+		true,
+		nil,
+		terminalObservationCorrelated,
+		func(baseURL string, listed factoryapi.ListWorkResponse) {
+			seen := make(map[string]struct{})
+			for _, item := range listed.Results {
+				workID := StringPointerValue(item.WorkId)
+				if workID == "" {
+					continue
+				}
+				observations := ListDefaultSessionWorkerSessions(t, baseURL, workID)
+				for _, observation := range observations.Sessions {
+					if observation.WorkerSessionId == "" {
+						continue
+					}
+					if _, ok := seen[observation.WorkerSessionId]; ok {
+						continue
+					}
+					seen[observation.WorkerSessionId] = struct{}{}
+					workerEvents = append(workerEvents, GetWorkerSessionEventsByIDAt(t, baseURL, observation.WorkerSessionId)...)
+				}
+			}
+		},
+	)
+	return session, work, events, responseEvents, workerEvents
 }
 
 func runFactoryToCompletion(
@@ -240,6 +290,7 @@ func runFactoryToCompletionWithMode(
 		captureResponseEvents,
 		nil,
 		observationMode,
+		nil,
 	)
 }
 
@@ -252,6 +303,7 @@ func runFactoryToCompletionWithHome(
 	captureResponseEvents bool,
 	configure func(string),
 	observationMode terminalObservationMode,
+	captureWorkerSessionEvents func(string, factoryapi.ListWorkResponse),
 ) (
 	factoryapi.FactorySession,
 	factoryapi.ListWorkResponse,
@@ -343,6 +395,9 @@ func runFactoryToCompletionWithHome(
 			t.Fatalf("capture factory response events: %v", capture.err)
 		}
 		responseEvents = capture.events
+	}
+	if captureWorkerSessionEvents != nil {
+		captureWorkerSessionEvents(baseURL, work)
 	}
 	daemon.Stop(t)
 	closeCtx, cancelClose := context.WithTimeout(context.Background(), processCommandStopTimeout)

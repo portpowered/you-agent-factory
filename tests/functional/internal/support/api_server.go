@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -326,6 +327,57 @@ func ProbeFactoryEventStreamRecoveryAt(
 func GetFactoryEventsAt(t testing.TB, baseURL string) []factoryapi.FactoryEvent {
 	t.Helper()
 	return readFactoryEventsFromURL(t, DefaultSessionEventsURL(baseURL))
+}
+
+// GetWorkerSessionEventsByIDAt drains the public provider-neutral Worker
+// Session stream through its retained replay summary. The Worker Session ID
+// comes from the public list projection, so this path remains usable when no
+// Provider Session reference was emitted.
+func GetWorkerSessionEventsByIDAt(t testing.TB, baseURL, workerSessionID string) []factoryapi.WorkerSessionEvent {
+	t.Helper()
+	if strings.TrimSpace(workerSessionID) == "" {
+		t.Fatal("worker session id is empty")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), functionalServerReadyTimeout)
+	defer cancel()
+	endpoint := strings.TrimSuffix(baseURL, "/") +
+		"/factory-sessions/" + factorysessions.DefaultSessionID +
+		"/worker-sessions/" + url.PathEscape(workerSessionID) + "/events?replayOnly=true"
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		t.Fatalf("build Worker Session events request: %v", err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("GET Worker Session events: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("GET Worker Session events status = %d url = %s body = %s", response.StatusCode, endpoint, strings.TrimSpace(string(body)))
+	}
+
+	var events []factoryapi.WorkerSessionEvent
+	scanner := bufio.NewScanner(response.Body)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+		var event factoryapi.WorkerSessionEvent
+		if err := json.Unmarshal([]byte(strings.TrimSpace(strings.TrimPrefix(line, "data:"))), &event); err != nil {
+			t.Fatalf("decode Worker Session event: %v", err)
+		}
+		events = append(events, event)
+		if string(event.Delivery) == "REPLAY_SUMMARY" {
+			return events
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		t.Fatalf("read Worker Session events: %v", err)
+	}
+	t.Fatalf("Worker Session event stream ended without REPLAY_SUMMARY: %s", endpoint)
+	return nil
 }
 
 func readFactoryEventsInvalidCursorErrorFromURL(t testing.TB, endpoint string) FactoryEventsInvalidCursorError {

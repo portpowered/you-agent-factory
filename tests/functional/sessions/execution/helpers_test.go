@@ -41,11 +41,27 @@ type partialResultBlockingProvider struct {
 	calls           int
 	blockedOnce     bool
 	contextCanceled int
+	inferBlocked    chan struct{}
 	workflowName    string
 }
 
 func newPartialResultBlockingProvider(workflowName string) *partialResultBlockingProvider {
-	return &partialResultBlockingProvider{workflowName: workflowName}
+	return &partialResultBlockingProvider{
+		inferBlocked: make(chan struct{}),
+		workflowName: workflowName,
+	}
+}
+
+func (p *partialResultBlockingProvider) waitForInferBlocked(t *testing.T, timeout time.Duration) {
+	t.Helper()
+
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-p.inferBlocked:
+	case <-timer.C:
+		t.Fatal("provider Infer did not enter its cancellable wait")
+	}
 }
 
 func (p *partialResultBlockingProvider) waitForCanceledInfer(t *testing.T, timeout time.Duration) {
@@ -88,6 +104,7 @@ func (p *partialResultBlockingProvider) Infer(
 	if !alreadyBlocked {
 		p.mu.Lock()
 		p.blockedOnce = true
+		close(p.inferBlocked)
 		p.mu.Unlock()
 
 		<-ctx.Done()
@@ -638,6 +655,7 @@ func releaseBlockedPartialResultSession(
 	t.Helper()
 
 	reason := "results dispatches partial result cleanup"
+	provider.waitForInferBlocked(t, 5*time.Second)
 	interruptFactoryDispatch(t, serverURL, sessionID, partialResultSecondDispatchID, reason)
 	provider.waitForCanceledInfer(t, 5*time.Second)
 	waitForDurableSessionStatus(

@@ -20,6 +20,8 @@ func TestPlanPreservesSchedulerOrderAndCanonicalWorkersFacts(t *testing.T) {
 		runnableDecision("dispatch-implement", "correlation-implement", "implement", "implementer", "work-1"),
 	}
 	decisions[0].Execution.FactorySessionID = "session-1"
+	decisions[0].Execution.RecordingID = "recording-1"
+	decisions[0].Execution.Capabilities = &workers.Capabilities{NativeStreaming: true, ToolLifecycle: true}
 	decisions[0].Dispatch.Execution.RequestID = "request-1"
 	decisions[0].Dispatch.Execution.TraceID = "trace-1"
 	decisions[0].Dispatch.InputBindings = map[string][]string{"work": {"token-2"}}
@@ -920,6 +922,8 @@ func expectedExecution(decision dispatchplanning.RunnableDecision) workers.Works
 		RunnerSelectionSource:    facts.RunnerSelectionSource,
 		ProjectID:                facts.ProjectID,
 		FactorySessionID:         facts.FactorySessionID,
+		RecordingID:              facts.RecordingID,
+		Capabilities:             facts.Capabilities,
 		InputTokens:              facts.InputPayload,
 		ModelOperation:           facts.ModelOperation,
 		ModelBindings:            facts.ModelBindings,

@@ -3,6 +3,7 @@ package workers
 import (
 	"encoding/json"
 	"strings"
+	"time"
 )
 
 type Kind string
@@ -83,6 +84,38 @@ type Capabilities struct {
 	ProviderReconnect  bool `json:"providerReconnect"`
 }
 
+// AttemptReason identifies why the opening lifecycle record was created.
+// Worker Sessions emits INITIAL for the first record of a new session and
+// preserves RESUME when a caller starts with an exact provider continuation.
+// RETRY is reserved for a future attempt-specific lifecycle record; the first
+// record of a retried session remains the session's INITIAL opening.
+type AttemptReason string
+
+const (
+	AttemptReasonInitial AttemptReason = "INITIAL"
+	AttemptReasonRetry   AttemptReason = "RETRY"
+	AttemptReasonResume  AttemptReason = "RESUME"
+)
+
+// SessionProviderSelection carries only provider-selection facts explicitly
+// resolved by the caller. Empty selection facts are omitted from the opening
+// rather than replaced with a default provider or runner.
+type SessionProviderSelection struct {
+	RunnerID         string                `json:"runnerId,omitempty"`
+	Source           RunnerSelectionSource `json:"source,omitempty"`
+	ExecutorProvider string                `json:"executorProvider,omitempty"`
+	ModelProvider    string                `json:"modelProvider,omitempty"`
+}
+
+// SessionContinuation is the detached exact continuation identity supplied to
+// a resumed execution. It is not synthesized from model, runner, or provider
+// defaults; a nil value means no continuation reference was supplied.
+type SessionContinuation struct {
+	Provider string `json:"provider,omitempty"`
+	Kind     string `json:"kind,omitempty"`
+	ID       string `json:"id,omitempty"`
+}
+
 type Draft struct {
 	RunID              string          `json:"runId,omitempty"`
 	Kind               Kind            `json:"kind"`
@@ -127,8 +160,28 @@ type ContentBlock struct {
 }
 
 type SessionPayload struct {
-	Status       string        `json:"status,omitempty"`
-	Capabilities *Capabilities `json:"capabilities,omitempty"`
+	Status            string                    `json:"status,omitempty"`
+	StartedAt         *time.Time                `json:"startedAt,omitempty"`
+	WorkerSessionID   string                    `json:"workerSessionId,omitempty"`
+	WorkerType        string                    `json:"workerType,omitempty"`
+	FactorySessionID  string                    `json:"factorySessionId,omitempty"`
+	RecordingID       string                    `json:"recordingId,omitempty"`
+	ProjectID         string                    `json:"projectId,omitempty"`
+	DispatchID        string                    `json:"dispatchId,omitempty"`
+	TransitionID      string                    `json:"transitionId,omitempty"`
+	WorkstationName   string                    `json:"workstationName,omitempty"`
+	TurnID            string                    `json:"turnId,omitempty"`
+	TraceID           string                    `json:"traceId,omitempty"`
+	ReplayKey         string                    `json:"replayKey,omitempty"`
+	WorkIDs           []string                  `json:"workIds,omitempty"`
+	AttemptID         string                    `json:"attemptId,omitempty"`
+	Attempt           int                       `json:"attempt,omitempty"`
+	AttemptReason     AttemptReason             `json:"attemptReason,omitempty"`
+	Continuation      *SessionContinuation      `json:"continuation,omitempty"`
+	ProviderSelection *SessionProviderSelection `json:"providerSelection,omitempty"`
+	Model             string                    `json:"model,omitempty"`
+	ReasoningEffort   string                    `json:"reasoningEffort,omitempty"`
+	Capabilities      *Capabilities             `json:"capabilities,omitempty"`
 	// Title carries a mid-lifecycle Chat Session display-title change (only
 	// meaningful with Phase == PhaseUpdated; lifecycle phases leave it nil).
 	// A nil Title declares no title change, matching acp-go-sdk's own
