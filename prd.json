@@ -1,74 +1,77 @@
 {
-  "project": "Truthful Provider Capability Manifest Contract",
-  "branchName": "provider-capability-contract",
-  "description": "Implement Story 1 of the Provider Harness Capability Catalog Plan by adding a truthful OpenAPI capability-manifest vocabulary, migrating the antigravity, claude, and codex manifests with evidence, regenerating derived contracts, and preserving existing provider discovery behavior.",
+  "project": "Sever Dashboard Packaged-Factories Dependency Through a Backend Catalog Contract",
+  "branchName": "ui-packaged-factories-decoupling",
+  "description": "Decouple dashboard verification from the Packaged Factories publication package by serving the catalog and selected artifact data through a minimal backend OpenAPI contract, consuming it through typed dashboard API/state boundaries, removing UI package and lifecycle coupling, and enforcing the boundary against future direct dependencies or imports.",
   "context": {
-    "customerAsk": "Publish a truthful provider capability manifest contract so customers and automation can distinguish harness support from model support, understand ACP posture and modality routes, identify built-in versus configured tools, and trace non-unknown claims to evidence before work is dispatched.",
-    "problem": "Provider metadata cannot distinguish unsupported, conditional, and unknown facts; mixes harness routes with model capabilities; and does not qualify tool availability or evidence. This permits optimistic generic capability claims that can make incompatible harness/model pairs appear executable.",
-    "solution": "Extend the authored OpenAPI model-provider contract and offline semantic validation with explicit support states, evidence records, harness metadata, model-catalog posture, separate harness/model modality routes, and tool availability. Migrate the three native manifests without fact loss, regenerate every derived artifact, and prove discovery parity."
+    "customerAsk": "Sever the dashboard's direct dependency on @you-agent-factory/packaged-factories by exposing the required catalog through a minimal backend API contract, moving the dashboard to that contract, removing package and lifecycle coupling, and adding a guard that prevents the dependency from returning. Keep the OpenAPI addition minimal, regenerate derived outputs rather than hand-merging them, and complete the full implementation, review, CI, conflict-resolution, and merge loop.",
+    "problem": "The UI manifest, lockfile, lifecycle hooks, and catalog code make the dashboard a build-time consumer of the Packaged Factories publication package. Factory-only edits can therefore invalidate or trigger frontend verification, coupling unrelated ownership lanes and preventing the planned CI classifier from safely treating Packaged Factories changes independently from dashboard changes.",
+    "solution": "Expose a read-only backend catalog endpoint with stable identity, customer-facing metadata, invocation examples, and only the JSON/YAML artifact data the dashboard needs; regenerate all clients from authored OpenAPI; route dashboard access through typed API and server-state modules with explicit UI states; remove the package dependency, lockfile entry, lifecycle hooks, asset imports, and dashboard consumer checks; and add a focused boundary guard with a synthetic failing regression case."
   },
   "acceptanceCriteria": [
-    "The Provider Manifest and Provider Catalog schemas accept the complete new vocabulary and reject duplicate facts, dangling evidence references, unsupported route/support combinations, unqualified conditional facts, and direct/tool-mediated output contradictions.",
-    "antigravity, claude, and codex express truthful harness, model, modality, tool, and evidence states without losing current IDs, aliases, exact models, efforts, limits, prerequisites, execution capabilities, or response-fidelity facts.",
-    "Every supported, unsupported, or conditional modality fact and every supported tool references valid bounded evidence, while unknown remains explicit and requires no fabricated evidence.",
-    "Seed claims are published only with primary documentation or checked conformance evidence; unverified Grok/Qwen and later packaged-ACP facts remain unclaimed in this lane.",
-    "Existing provider discovery and projection behavior remains unchanged for established facts and deterministic ordering, with focused parity tests proving no fact loss.",
-    "Typecheck, focused schema/generator/package/projection tests, API generation and smoke checks pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
-    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts are resolved against current main, generated shared files are regenerated rather than hand-merged, and the PR is actually merged."
+    "A read-only backend API returns the stable packaged Factory catalog metadata and selected artifact data required by the dashboard, with deterministic results and an explicit error response when the backend cannot load or translate the catalog.",
+    "Authored OpenAPI components are the source of the minimal catalog contract, and the bundled OpenAPI plus generated Go and TypeScript clients are regenerated together; generated files are never hand-edited or hand-merged.",
+    "The dashboard renders catalog data obtained through the typed API boundary and exposes intentional loading, empty, error, and success states while preserving accessible semantics, keyboard selection, and responsive mobile/desktop behavior.",
+    "ui/package.json and the UI lockfile contain no @you-agent-factory/packaged-factories dependency, and ordinary UI build, lint, and test commands do not prepare, install, resolve, or validate a packaged-factories candidate.",
+    "A focused dependency-boundary guard rejects both a manifest dependency and a source import of @you-agent-factory/packaged-factories; its automated test proves at least one synthetic violation fails and the repository remains green without a violation.",
+    "Focused backend/API contract tests, dashboard component or integration tests, and direct browser verification prove the catalog path without relying on publication-package imports or bundled asset internals.",
+    "Quality gates pass: TypeScript typecheck, focused Go and UI tests, API generation/smoke verification, UI build, and no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
+    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared/generated-file churn are resolved against current main, and the PR is actually merged."
   ],
   "userStories": [
     {
-      "id": "provider-capability-contract-001",
-      "title": "Validate truthful capability facts",
-      "description": "As a catalog consumer, I want capability facts to carry an explicit state, scope, route, condition, and evidence so that absent or incompatible facts cannot be mistaken for support.",
+      "id": "ui-packaged-factories-decoupling-001",
+      "title": "Serve the dashboard catalog through a minimal backend contract",
+      "description": "As a dashboard client, I need the backend to expose the packaged Factory catalog and selected artifact data so I can discover built-in Factories without importing their publication package.",
       "acceptanceCriteria": [
-        "Authored OpenAPI components represent native_cli/acp harness kind, typed ACP support metadata, exact/runtime_discovered/operator_selected/unknown model-catalog posture, and supported/unsupported/conditional/unknown capability support.",
-        "Harness routes and model facts cover directional text, image, audio, and video and distinguish inline, file_path, implemented ACP resource delivery, tool_mediated, and none mechanisms with applicable media constraints.",
-        "Tool facts distinguish built_in, optional, operator_configured, external, and unknown availability and represent nullable default enablement and tool output modalities without treating tool output as direct model output.",
-        "Bounded evidence records support primary_documentation, protocol_probe, conformance_fixture, and maintainer_assertion with stable IDs, verification dates, optional URLs/harness versions, and fact references.",
-        "Validation rejects duplicate facts, dangling evidence references, out-of-bounds evidence, unqualified conditional facts, non-unknown claims lacking required evidence, invalid route/support combinations, and direct/tool-mediated output contradictions.",
-        "Schema and generator tests exercise every enum and representative valid and invalid combinations, including all four support states.",
+        "A successful catalog request returns deterministically ordered entries with stable identity, customer-facing metadata, invocation examples, and the JSON/YAML artifact representations required by the existing dashboard catalog and detail experience.",
+        "An empty backend catalog produces a valid response with an empty entries collection rather than a transport or decoding failure.",
+        "Catalog load, decode, or mapping failure returns the documented non-success response and emits actionable, sensitive-safe backend diagnostics without exposing raw Factory contents.",
+        "The catalog read operation remains read-only and owned behind the Factory Definitions/backend boundary; the HTTP transport maps a public service result and does not give the dashboard filesystem or publication-package access.",
+        "The authored OpenAPI entrypoint and component schemas define only the dashboard-required response, and make generate-api regenerates the bundle, Go server/client types, and dashboard TypeScript types without manual edits to generated files.",
+        "Focused service/transport tests prove success, empty, and failure behavior, and API contract or smoke coverage proves that runtime JSON conforms to the generated contract.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Implemented the additive capability vocabulary and offline semantic validator. Authored OpenAPI components now cover native_cli/acp harnesses, typed ACP support/resource delivery, model-catalog posture, directional modality routes, media constraints, tool availability/output modalities, four-state support, and bounded evidence. Validation covers duplicate and dangling/out-of-bounds facts, conditional qualification, evidence requirements, route/transport compatibility, ACP resource routing, tool-mediated output separation, and direct/tool-mediated output contradictions. Regenerated OpenAPI, Go/TypeScript, catalog schema, published package, and UI-package artifacts. Focused schema/generator/validation/package tests, make test, make typecheck, make api-smoke, provider-catalog-check, model-provider-package-smoke, contracts-check, backend-size, pkg-maint, pkg-file-count, pkg-structure, and vet pass. Native manifest migration is Story 002; discovery parity is Story 003."
+      "notes": "Moved catalog loading and artifact mapping behind the Factory Definitions HTTP adapter and injected root; top-level HTTP composition now forwards the generated route without publication-package access. Added deterministic ordering, stable metadata/artifact mapping, empty-catalog handling, payload-free failure responses and diagnostics, plus service and top-level route coverage. Added focused adapter tests for typed root failures, resolution and identity mismatches, incomplete identity/artifacts/metadata, and unavailable-root behavior; the owning HTTP package now measures 84.3% coverage against its 79.67% minimum. Verified with make generate-api, make api-smoke, focused Factory Definitions/HTTP/Wire suites, go test ./... -run '^$' -count=1, make backend-size, make pkg-maint, make pkg-file-count, make pkg-structure, and go vet ./.... Review follow-up: PR #1873 replacement head 37142ba1a is based on live origin/main 3a0b571b2, the reported oversized test is split, and all replacement-head checks are terminal-success with the PR mergeable."
     },
     {
-      "id": "provider-capability-contract-002",
-      "title": "Publish truthful native manifests",
-      "description": "As a provider catalog user, I want each native provider manifest to distinguish harness and model truth with evidence so that I can interpret its capabilities without optimistic inference.",
+      "id": "ui-packaged-factories-decoupling-002",
+      "title": "Render the catalog from the API without package lifecycle coupling",
+      "description": "As a dashboard user, I want the built-in Factory catalog to load from the running backend so I can browse and inspect Factories with the same usable experience independent of publication-package installation.",
       "acceptanceCriteria": [
-        "antigravity, claude, and codex validate against the new contract and declare native harness posture, exact model-catalog posture, harness routes, model facts, qualified tools, and referenced evidence.",
-        "Migration preserves canonical IDs, aliases, exact model IDs, effort values, known limits, discovery prerequisites, maximum execution capabilities, and maximum response-fidelity capabilities.",
-        "Antigravity and Codex seed capability statements use supported, unsupported, or conditional only when primary documentation or a checked conformance fixture supports the claim; otherwise they use unknown.",
-        "Tool-mediated image or video generation does not create a false direct model-output claim.",
-        "Grok, Qwen, and packaged ACP inventory facts are not introduced or upgraded by inference in this story.",
-        "Golden catalog tests cover supported, unsupported, conditional, and unknown native modality/tool facts and evidence-reference closure.",
+        "Dashboard catalog network access is centralized in a typed API module and server-state hook that consumes generated catalog types; rendering components do not issue ad hoc fetches or import package assets.",
+        "The catalog surface displays explicit loading, empty, recoverable error, and populated success states, and a failed selected-artifact load does not silently render stale or mismatched detail.",
+        "On success, API-shaped fixture data renders the expected catalog items and selected Factory metadata, examples, JSON, and YAML detail; changing selection renders the matching API-provided detail.",
+        "Catalog selection remains semantic and keyboard operable with visible focus and accessible state announcements, and the layout remains usable without unintended horizontal scrolling at representative mobile and desktop viewports.",
+        "@you-agent-factory/packaged-factories is absent from UI dependencies and the lockfile; its prepare/install lifecycle hooks, candidate resolver, direct artifact imports, and dashboard package-consumer release checks are removed without changing unrelated public-package workflows.",
+        "Standard UI install, typecheck, build, lint, unit/component, and relevant integration commands run without building, packing, installing, or reading a Packaged Factories candidate.",
+        "A focused dashboard component or integration test proves catalog rendering from an API-shaped response, including loading and failure behavior.",
+        "Direct browser verification confirms successful catalog rendering, keyboard selection, error recovery presentation, and responsive behavior against the runtime API or a browser-level API fixture.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 2,
       "passes": true,
-      "notes": "Migrated antigravity, claude, and codex to the additive capability contract with native_cli harness posture, exact model-catalog posture, complete eight-route harness matrices, evidence-qualified model modality facts, and qualified tool availability/output facts. Preserved canonical IDs, aliases, exact model IDs, effort values, known limits, discovery prerequisites, maximum execution capabilities, and maximum response-fidelity capabilities. Corrected Codex direct image output to explicitly unsupported while retaining image input support; AGY image generation is represented as tool-mediated output and unknown AGY output routes remain explicit. Added generated-catalog golden coverage for all four support states, availability/default enablement, direct/tool-mediated separation, and evidence-reference closure. Regenerated the published catalog and package metadata. Verification: go test ./internal/providercatalog ./packages/model-providers ./pkg/services/providers/... -count=1, go run ./cmd/providercatalogcheck -root ., make model-provider-package-check, and git diff --check pass. Story 003 remains for the next iteration."
+      "notes": "Moved the dashboard catalog to generated OpenAPI types consumed by ui/src/api/packaged-factories and a React Query server-state hook; rendering now uses API projections only, with no publication-package source prop or direct artifact imports. Added explicit loading, empty, recoverable error/retry, success, and fail-closed selected-artifact states, semantic keyboard selection/focus behavior, localized API-shaped fixtures, and responsive hosted-route/browser coverage. Added the packaged-factories Vite API proxy path for dev/preview. Removed the remaining package-boundary source contracts and package-data readers; the UI manifest/lockfile and lifecycle hooks remain free of @you-agent-factory/packaged-factories. Verified with bun install --frozen-lockfile --ignore-scripts, bun run tsc, bun run build, bun run lint, bun run test:unit (191 Bun tests plus 2,956 Vitest tests), bun run test:integration (14 files, 35 tests), bun test vite.config.test.ts, focused API/projection/component suites (17 tests), the direct hosted browser scenarios, targeted Biome, and git diff --check. The full component suite also passed all 147 files/834 tests but exceeded the local 150-second runner budget (330.59s); repository-wide bun run check still reports 269 pre-existing formatting diagnostics outside the changed files."
     },
     {
-      "id": "provider-capability-contract-003",
-      "title": "Preserve generated and discovery parity",
-      "description": "As an existing provider-discovery consumer, I want the expanded manifest contract to regenerate cleanly without losing established facts or changing discovery behavior.",
+      "id": "ui-packaged-factories-decoupling-003",
+      "title": "Prevent the direct packaged-factories dependency from returning",
+      "description": "As a maintainer, I need an automated dependency boundary so future dashboard changes cannot silently restore build-time coupling to the Packaged Factories publication package.",
       "acceptanceCriteria": [
-        "Canonical OpenAPI changes deterministically regenerate bundled OpenAPI, Go and TypeScript types, manifest/catalog JSON Schemas, generated catalog, and published package artifacts without manual edits.",
-        "Generated schemas and language types preserve the authored enum values, required fields, nullability, and evidence-reference semantics.",
-        "Provider projection and CLI capability tests prove unchanged identity, deterministic ordering, models, efforts, limits, prerequisites, execution capabilities, and response fidelity while accepting additive metadata.",
-        "Static provider discovery stays offline and inert and does not launch providers, probe the filesystem, or access the network.",
-        "Focused generation drift checks and the applicable public API smoke check pass from a clean generated state.",
+        "The normal UI check/lint path runs a focused guard that fails when @you-agent-factory/packaged-factories is declared in UI runtime, development, optional, or other supported manifest dependency sections.",
+        "The guard fails when production or testable UI source imports the package root or any package subpath through supported static or dynamic import syntax.",
+        "An automated guard test creates or supplies an isolated synthetic manifest or source violation, observes a non-zero failure with a useful path/reason, and also proves a compliant fixture passes.",
+        "The guard operates on explicit UI inputs and does not validate unrelated route, command, registration, documentation-link, or generated-asset inventories.",
+        "Repository UI checks stay green with catalog access exclusively through the backend API boundary.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 3,
       "passes": true,
-      "notes": "Preserved generated and discovery parity for the additive manifest contract. Legacy provider projections accept conditional and unknown capability facts without inventing supported/unsupported claims; generated catalog and package tests cover authored enums, required fields, nullability, evidence references, deterministic ordering, identity, models, efforts, limits, prerequisites, execution capabilities, response fidelity, additive metadata, and inert static discovery. Verification passed from a clean generated state: make interfaces-all, make provider-catalog-generate, make model-provider-package-generate, make provider-catalog-check, make model-provider-package-check, make contracts-check, make typecheck, make api-smoke, make backend-size pkg-maint pkg-file-count pkg-structure vet, make test, the focused provider/catalog/CLI/package/contract tests, and the offline discovery test."
+      "notes": "Hardened the UI boundary guard around explicit UI manifest/source inputs. It rejects dependencies, devDependencies, optionalDependencies, peerDependencies, bundledDependencies, and bundleDependencies declarations, plus static, dynamic, re-export, and CommonJS source references to the package root or subpaths. Added a CLI regression test with isolated violating and compliant fixtures that proves actionable non-zero failure output and a clean pass. Verified with the focused Vitest guard suite (2 tests), the live packaged-factories guard, bun run tsc, and bun run lint. The broader bun run check remains blocked only by the repository's existing generated dist/formatting diagnostics outside this story."
     }
   ]
 }
