@@ -4046,3 +4046,15 @@
   - The catalog gate should be enabled only after the unresolved loop-controller and quorum parent lifecycle semantics are either implemented with direct evidence or removed from their canonical definitions.
   - Current-main catalog inventory and validation-ledger expectations must be reconciled together when first-party entries arrive on the base branch, or focused catalog tests fail before feature assertions run.
 ---
+
+## [2026-08-10 20:06 -07:00] - graph-workstation-semantics-002 verification follow-up
+- What was implemented
+  - Recorded the final typecheck attempt and its environment prerequisite failure in the task bookkeeping.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `make typecheck` — blocked before project compilation because the worktree does not have the Bun type definitions; TypeScript reported `TS2688: Cannot find type definition file for 'bun'`.
+- **Learnings for future iterations:**
+  - The backend/catalog changes are independently verified, but the UI typecheck requires the repository’s Bun dependency/type-definition installation to be restored before story completion can be claimed.
+---
