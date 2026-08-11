@@ -65,32 +65,17 @@ func NewSetResourceCapacity(transport clihttp.Protocol) func(ResourceCapacityCon
 // SetResourceCapacity applies one live resource-capacity change through the
 // session-scoped REST operation.
 func SetResourceCapacity(cfg ResourceCapacityConfig) error {
-	if cfg.Context == nil {
-		return fmt.Errorf("context is required")
+	normalized, err := normalizeResourceCapacityConfig(cfg)
+	if err != nil {
+		return err
 	}
-	if cfg.Output == nil {
-		return fmt.Errorf("output writer is required")
-	}
-	if cfg.HTTP == nil {
-		return fmt.Errorf("CLI HTTP protocol is required")
-	}
-	resourceID := strings.TrimSpace(cfg.ResourceID)
-	if resourceID == "" {
-		return fmt.Errorf("resource id is required")
-	}
-	if cfg.Capacity < 0 {
-		return fmt.Errorf("capacity must be a non-negative integer")
-	}
-	requestID := strings.TrimSpace(cfg.RequestID)
-	if requestID == "" {
-		requestID = fmt.Sprintf("cli-resource-capacity-%d", time.Now().UTC().UnixNano())
-	}
-	reason := strings.TrimSpace(cfg.Reason)
+	cfg = normalized
+	resourceID := cfg.ResourceID
 	body, err := json.Marshal(factoryapi.FactorySessionResourceCapacityRequest{
 		Capacity:         cfg.Capacity,
 		ExpectedRevision: cfg.ExpectedRevision,
-		RequestId:        requestID,
-		Reason:           optionalString(reason),
+		RequestId:        cfg.RequestID,
+		Reason:           optionalString(cfg.Reason),
 	})
 	if err != nil {
 		return fmt.Errorf("marshal resource capacity request: %w", err)
@@ -101,7 +86,7 @@ func SetResourceCapacity(cfg ResourceCapacityConfig) error {
 	}
 	clidiag.Printf(cfg.Diagnostics, cfg.Verbose,
 		"session resource capacity request endpointPath=%s endpoint=%s session=%s resourceId=%s capacity=%d expectedRevision=%d requestId=%s",
-		endpoint.Path, endpoint.String(), clidiag.SessionLabel(cfg.SessionID), resourceID, cfg.Capacity, cfg.ExpectedRevision, requestID)
+		endpoint.Path, endpoint.String(), clidiag.SessionLabel(cfg.SessionID), resourceID, cfg.Capacity, cfg.ExpectedRevision, cfg.RequestID)
 	req, err := http.NewRequestWithContext(cfg.Context, http.MethodPost, endpoint.String(), bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("build resource capacity request: %w", err)
@@ -134,6 +119,31 @@ func SetResourceCapacity(cfg ResourceCapacityConfig) error {
 		return json.NewEncoder(cfg.Output).Encode(result)
 	}
 	return renderResourceCapacityHuman(cfg.Output, result)
+}
+
+func normalizeResourceCapacityConfig(cfg ResourceCapacityConfig) (ResourceCapacityConfig, error) {
+	if cfg.Context == nil {
+		return ResourceCapacityConfig{}, fmt.Errorf("context is required")
+	}
+	if cfg.Output == nil {
+		return ResourceCapacityConfig{}, fmt.Errorf("output writer is required")
+	}
+	if cfg.HTTP == nil {
+		return ResourceCapacityConfig{}, fmt.Errorf("CLI HTTP protocol is required")
+	}
+	cfg.ResourceID = strings.TrimSpace(cfg.ResourceID)
+	if cfg.ResourceID == "" {
+		return ResourceCapacityConfig{}, fmt.Errorf("resource id is required")
+	}
+	if cfg.Capacity < 0 {
+		return ResourceCapacityConfig{}, fmt.Errorf("capacity must be a non-negative integer")
+	}
+	cfg.RequestID = strings.TrimSpace(cfg.RequestID)
+	if cfg.RequestID == "" {
+		cfg.RequestID = fmt.Sprintf("cli-resource-capacity-%d", time.Now().UTC().UnixNano())
+	}
+	cfg.Reason = strings.TrimSpace(cfg.Reason)
+	return cfg, nil
 }
 
 func resourceCapacityEndpoint(server, sessionID, resourceID string) (url.URL, error) {

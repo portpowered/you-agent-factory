@@ -32,6 +32,14 @@ type runtimeGlobals struct {
 	returnedSet           bool
 }
 
+func newParallelGate(policy workflowpolicy.EffectivePolicy) chan struct{} {
+	concurrency := policy.Concurrency
+	if concurrency < 1 {
+		concurrency = 1
+	}
+	return make(chan struct{}, concurrency)
+}
+
 func (g *runtimeGlobals) bindArgs(argsValue goja.Value) {
 	g.vm.Set("args", argsValue)
 }

@@ -182,15 +182,28 @@ func assertLiveChangeSuccessPayload(t *testing.T, event interfaces.FactoryEvent)
 	if err := event.DecodePayload(&payload); err != nil {
 		t.Fatalf("decode success payload: %v", err)
 	}
-	if payload.PreviousRevision == nil || *payload.PreviousRevision != 2 || payload.NewRevision == nil || *payload.NewRevision != 3 || payload.EffectiveSequence == nil || *payload.EffectiveSequence != 1 || payload.Factory == nil {
+	assertLiveChangeRevisionedSnapshot(t, payload)
+	assertLiveChangeResourceCapacityAccounting(t, payload.ResourceCapacity)
+}
+
+func assertLiveChangeRevisionedSnapshot(t *testing.T, payload interfaces.FactoryChangeEventPayload) {
+	t.Helper()
+	if payload.PreviousRevision == nil || *payload.PreviousRevision != 2 ||
+		payload.NewRevision == nil || *payload.NewRevision != 3 ||
+		payload.EffectiveSequence == nil || *payload.EffectiveSequence != 1 || payload.Factory == nil {
 		t.Fatalf("success payload = %#v, want complete revisioned snapshot", payload)
 	}
-	if payload.ResourceCapacity == nil || payload.ResourceCapacity.ResourceID != "reviewers" ||
-		payload.ResourceCapacity.PreviousCapacity != 1 || payload.ResourceCapacity.RequestedCapacity != 8 ||
-		payload.ResourceCapacity.EffectiveCapacity != 8 || payload.ResourceCapacity.InUseCount != 1 ||
-		payload.ResourceCapacity.AvailableCount != 7 || payload.ResourceCapacity.MinimumCapacity != 1 ||
-		payload.ResourceCapacity.Outcome != string(factoryruntime.ResourceCapacityOutcomeApplied) {
-		t.Fatalf("resource capacity payload = %#v, want detached accounting", payload.ResourceCapacity)
+}
+
+func assertLiveChangeResourceCapacityAccounting(t *testing.T, accounting *interfaces.FactoryResourceCapacityChange) {
+	t.Helper()
+	if accounting == nil {
+		t.Fatal("resource capacity payload is nil, want detached accounting")
+	}
+	if accounting.ResourceID != "reviewers" || accounting.PreviousCapacity != 1 || accounting.RequestedCapacity != 8 ||
+		accounting.EffectiveCapacity != 8 || accounting.InUseCount != 1 || accounting.AvailableCount != 7 ||
+		accounting.MinimumCapacity != 1 || accounting.Outcome != string(factoryruntime.ResourceCapacityOutcomeApplied) {
+		t.Fatalf("resource capacity payload = %#v, want detached accounting", accounting)
 	}
 }
 

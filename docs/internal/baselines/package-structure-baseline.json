@@ -1574,6 +1574,11 @@
     },
     {
       "rule": "service-root-exported-function",
+      "filePath": "pkg/services/factory_runtime/resource_capacity.go",
+      "target": "NewResourceCapacityLease"
+    },
+    {
+      "rule": "service-root-exported-function",
       "filePath": "pkg/services/factory_runtime/public_work_tokens.go",
       "target": "CollectPublicWorkTokens"
     },
@@ -2363,6 +2368,16 @@
       "target": "NewWorkstationPoolBoundary"
     },
     {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/factory_sessions/service_contracts.go",
+      "target": "NewLiveChangeError"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/factory_sessions/service_contracts.go",
+      "target": "NormalizeLiveChangeRequest"
+    },
+    {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/automations/internal/services/filesystem_watchers",
       "target": "pkg/services/automations/internal/services/filesystem_watchers/service.go:HandledIdentities,pkg/services/automations/internal/services/filesystem_watchers/service.go:InputFileSystem,pkg/services/automations/internal/services/filesystem_watchers/service.go:Service,pkg/services/automations/internal/services/filesystem_watchers/service.go:Watcher"
@@ -2390,7 +2405,7 @@
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/factory_runtime",
-      "target": "pkg/services/factory_runtime/clock.go:Clock,pkg/services/factory_runtime/clock.go:LogicalClock,pkg/services/factory_runtime/execution_contracts.go:DispatchResultHook,pkg/services/factory_runtime/execution_contracts.go:DispatchResultHookWakeSignaler,pkg/services/factory_runtime/execution_contracts.go:SubmissionHook,pkg/services/factory_runtime/factory_status.go:FactoryStatusProjector,pkg/services/factory_runtime/filesystem.go:InputFileSystem,pkg/services/factory_runtime/filesystem.go:RuntimeDirectoryFileSystem,pkg/services/factory_runtime/filesystem.go:WorkflowSourceFileSystem,pkg/services/factory_runtime/hosting.go:HostedHandle,pkg/services/factory_runtime/hosting.go:HostedInstance,pkg/services/factory_runtime/hosting.go:HostedLedger,pkg/services/factory_runtime/hosting.go:Lifecycle,pkg/services/factory_runtime/hosting.go:ReplacementBuilder,pkg/services/factory_runtime/hosting.go:Sidecars,pkg/services/factory_runtime/interfaces.go:APIFactory,pkg/services/factory_runtime/interfaces.go:Factory,pkg/services/factory_runtime/interfaces.go:Service,pkg/services/factory_runtime/interfaces.go:WorkMover,pkg/services/factory_runtime/interfaces.go:WorkflowContextProvider,pkg/services/factory_runtime/javascript_checkpoint_contract.go:JavaScriptCheckpointStore,pkg/services/factory_runtime/javascript_checkpoint_contract.go:JavaScriptCheckpointSummaries,pkg/services/factory_runtime/javascript_service_contract.go:JavaScriptChildValues,pkg/services/factory_runtime/javascript_service_contract.go:JavaScriptWorkflowDefinitions,pkg/services/factory_runtime/javascript_service_contract.go:JavaScriptWorkflowRuntime,pkg/services/factory_runtime/javascript_service_contract.go:JavaScriptWorkflows,pkg/services/factory_runtime/logger.go:Logger,pkg/services/factory_runtime/metrics.go:MetricsEmitter,pkg/services/factory_runtime/orchestration_contract.go:OrchestrationCompilation,pkg/services/factory_runtime/orchestration_contract.go:OrchestrationJavaScriptExecution,pkg/services/factory_runtime/result_types.go:SessionResultProjectionOperation,pkg/services/factory_runtime/runtime_log_sink.go:RuntimeLogSink,pkg/services/factory_runtime/runtime_metrics_sink.go:RuntimeMetricRecordWriter,pkg/services/factory_runtime/runtime_metrics_sink.go:RuntimeMetricsSink,pkg/services/factory_runtime/session_build_spec.go:LoadedConfig,pkg/services/factory_runtime/workflow_preview_operation.go:WorkflowPreviewOperation"
+      "target": "pkg/services/factory_runtime/clock.go:Clock,pkg/services/factory_runtime/clock.go:LogicalClock,pkg/services/factory_runtime/execution_contracts.go:DispatchResultHook,pkg/services/factory_runtime/execution_contracts.go:DispatchResultHookWakeSignaler,pkg/services/factory_runtime/execution_contracts.go:SubmissionHook,pkg/services/factory_runtime/factory_status.go:FactoryStatusProjector,pkg/services/factory_runtime/filesystem.go:InputFileSystem,pkg/services/factory_runtime/filesystem.go:RuntimeDirectoryFileSystem,pkg/services/factory_runtime/filesystem.go:WorkflowSourceFileSystem,pkg/services/factory_runtime/hosting.go:HostedHandle,pkg/services/factory_runtime/hosting.go:HostedInstance,pkg/services/factory_runtime/hosting.go:HostedLedger,pkg/services/factory_runtime/hosting.go:Lifecycle,pkg/services/factory_runtime/hosting.go:ReplacementBuilder,pkg/services/factory_runtime/hosting.go:Sidecars,pkg/services/factory_runtime/interfaces.go:APIFactory,pkg/services/factory_runtime/interfaces.go:Factory,pkg/services/factory_runtime/interfaces.go:Service,pkg/services/factory_runtime/interfaces.go:WorkMover,pkg/services/factory_runtime/interfaces.go:WorkflowContextProvider,pkg/services/factory_runtime/javascript_checkpoint_contract.go:JavaScriptCheckpointStore,pkg/services/factory_runtime/javascript_checkpoint_contract.go:JavaScriptCheckpointSummaries,pkg/services/factory_runtime/javascript_service_contract.go:JavaScriptChildValues,pkg/services/factory_runtime/javascript_service_contract.go:JavaScriptWorkflowDefinitions,pkg/services/factory_runtime/javascript_service_contract.go:JavaScriptWorkflowRuntime,pkg/services/factory_runtime/javascript_service_contract.go:JavaScriptWorkflows,pkg/services/factory_runtime/logger.go:Logger,pkg/services/factory_runtime/metrics.go:MetricsEmitter,pkg/services/factory_runtime/orchestration_contract.go:OrchestrationCompilation,pkg/services/factory_runtime/orchestration_contract.go:OrchestrationJavaScriptExecution,pkg/services/factory_runtime/resource_capacity.go:AdmittedResourceCapacityService,pkg/services/factory_runtime/resource_capacity.go:ResourceCapacityAdmission,pkg/services/factory_runtime/resource_capacity.go:ResourceCapacityLeaseAdmission,pkg/services/factory_runtime/resource_capacity.go:ResourceCapacityRevisionService,pkg/services/factory_runtime/resource_capacity.go:ResourceCapacityService,pkg/services/factory_runtime/result_types.go:SessionResultProjectionOperation,pkg/services/factory_runtime/runtime_log_sink.go:RuntimeLogSink,pkg/services/factory_runtime/runtime_metrics_sink.go:RuntimeMetricRecordWriter,pkg/services/factory_runtime/runtime_metrics_sink.go:RuntimeMetricsSink,pkg/services/factory_runtime/session_build_spec.go:LoadedConfig,pkg/services/factory_runtime/workflow_preview_operation.go:WorkflowPreviewOperation"
     },
     {
       "rule": "service-root-interface-count",
@@ -2405,7 +2420,7 @@
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/factory_sessions",
-      "target": "pkg/services/factory_sessions/assembly_contract.go:InvocationService,pkg/services/factory_sessions/execution_contract.go:DurableExecutionService,pkg/services/factory_sessions/execution_contract.go:SessionInventoryService,pkg/services/factory_sessions/service_contracts.go:LiveControlService,pkg/services/factory_sessions/service_contracts.go:Service,pkg/services/factory_sessions/target_execution_contract.go:TargetExecutionService"
+      "target": "pkg/services/factory_sessions/assembly_contract.go:InvocationService,pkg/services/factory_sessions/execution_contract.go:DurableExecutionService,pkg/services/factory_sessions/execution_contract.go:SessionInventoryService,pkg/services/factory_sessions/service_contracts.go:LiveChangeAdmission,pkg/services/factory_sessions/service_contracts.go:LiveChangeApplication,pkg/services/factory_sessions/service_contracts.go:LiveChangeEventLog,pkg/services/factory_sessions/service_contracts.go:LiveChangePreflight,pkg/services/factory_sessions/service_contracts.go:LiveChangeService,pkg/services/factory_sessions/service_contracts.go:LiveControlService,pkg/services/factory_sessions/service_contracts.go:Service,pkg/services/factory_sessions/target_execution_contract.go:TargetExecutionService"
     },
     {
       "rule": "service-root-interface-count",

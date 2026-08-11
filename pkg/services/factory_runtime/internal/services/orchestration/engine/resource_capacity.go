@@ -13,6 +13,51 @@ import (
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 )
 
+type resourceCapacityLease struct {
+	resourceID string
+	token      factorytoken.Token
+}
+
+// WakeForResourceCapacity signals the engine after a resource pool changes.
+// Capacity changes are a wake source even when no submission or worker result
+// is buffered: a waiting transition may become enabled solely because an idle
+// resource token was added.
+func (e *FactoryEngine) WakeForResourceCapacity() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.signalResourceCapacityChangedLocked()
+}
+
+func (e *FactoryEngine) wakeForPendingProcessing() {
+	if !e.hasBufferedInputs() {
+		return
+	}
+	select {
+	case e.submitSignal <- struct{}{}:
+	default:
+	}
+	if hook, ok := e.dispatchHook.(factory.DispatchResultHookWakeSignaler); ok && hook.HasBufferedResults() {
+		hook.SignalBufferedResults()
+	}
+}
+
+func (e *FactoryEngine) hasBufferedInputs() bool {
+	if e.capacityWakePending {
+		return true
+	}
+	if e.submissionHook != nil && len(e.submissionHook.batches) > 0 {
+		return true
+	}
+	buffer := e.runtimeState.ResultBuffer
+	if buffer != nil && buffer.HasData() {
+		return true
+	}
+	if e.dispatchHook != nil && e.dispatchHook.HasPendingResults() {
+		return true
+	}
+	return false
+}
+
 // AcquireResourceCapacityAdmission reserves the same boundary used by engine
 // ticks. The caller owns the release function until the complete live-change
 // admission transaction has finished.

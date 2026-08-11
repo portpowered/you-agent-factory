@@ -48,16 +48,6 @@ var canonicalFactoryEventTypeValues = []string{
 	"ARTIFACT_CREATED",
 }
 
-var retiredFactoryEventTypeValues = []string{
-	"RUN_STARTED",
-	"INITIAL_STRUCTURE",
-	"RELATIONSHIP_CHANGE",
-	"DISPATCH_CREATED",
-	"DISPATCH_COMPLETED",
-	"FACTORY_STATE_CHANGE",
-	"RUN_FINISHED",
-}
-
 var bundledFactoryEventContractSchemaNames = []string{
 	"FactoryEvent",
 	"FactoryEventContext",

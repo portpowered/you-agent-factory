@@ -5,10 +5,56 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
+
+func generatedFactoryChangeEvents(t *testing.T, eventTime time.Time) []factoryapi.FactoryEvent {
+	t.Helper()
+	return []factoryapi.FactoryEvent{
+		{
+			SchemaVersion: factoryapi.AgentFactoryEventV1,
+			Id:            "event-factory-change-request",
+			Type:          factoryapi.FactoryEventTypeFactoryChangeRequest,
+			Context: factoryapi.FactoryEventContext{
+				Sequence:  26,
+				Tick:      10,
+				EventTime: eventTime,
+			},
+			Payload: factoryEventPayload(t, factoryapi.FactoryChangeRequestEventPayload{
+				ChangeId:         "live-change/change-request-1",
+				ExpectedRevision: 0,
+				Operation:        "resource.capacity.set",
+				TargetId:         "reviewers",
+				RequestedValue:   8,
+				Actor:            stringPtr("operator"),
+				Source:           stringPtr("api"),
+				Reason:           stringPtr("raise throughput"),
+			}),
+		},
+		{
+			SchemaVersion: factoryapi.AgentFactoryEventV1,
+			Id:            "event-factory-change-failed",
+			Type:          factoryapi.FactoryEventTypeFactoryChangeFailed,
+			Context: factoryapi.FactoryEventContext{
+				Sequence:  27,
+				Tick:      10,
+				EventTime: eventTime,
+			},
+			Payload: factoryEventPayload(t, factoryapi.FactoryChangeFailedEventPayload{
+				ChangeId:         "live-change/change-request-2",
+				ExpectedRevision: 0,
+				PreviousRevision: 0,
+				Operation:        "resource.capacity.set",
+				TargetId:         "missing-resource",
+				FailureCode:      "TARGET_NOT_FOUND",
+				FailureMessage:   "live change target was not found",
+			}),
+		},
+	}
+}
 
 func TestGeneratedOpenAPIContractsCompile(t *testing.T) {
 	submitRequest := generatedSubmitRequestFixture(t)

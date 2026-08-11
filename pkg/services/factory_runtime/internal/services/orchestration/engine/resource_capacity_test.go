@@ -152,14 +152,7 @@ func TestResourceCapacityLeaseWaitsForLiveIncreaseAndReleasesExactlyOnce(t *test
 		}
 		secondDone <- lease
 	}()
-	select {
-	case lease := <-secondDone:
-		lease.Release()
-		t.Fatal("second resource lease completed before capacity increased")
-	case err := <-secondErr:
-		t.Fatalf("second resource lease failed before capacity increased: %v", err)
-	default:
-	}
+	assertResourceCapacityLeaseWaits(t, secondDone, secondErr)
 
 	if _, err := eng.SetResourceCapacity(context.Background(), factory.ResourceCapacityRequest{
 		ResourceID: "gpu-slot", RequestedCapacity: 2,
@@ -194,6 +187,22 @@ func TestResourceCapacityLeaseWaitsForLiveIncreaseAndReleasesExactlyOnce(t *test
 	}
 	if preview.InUseCount != 0 || preview.AvailableCount != 2 {
 		t.Fatalf("released capacity accounting = in-use %d available %d, want 0/2", preview.InUseCount, preview.AvailableCount)
+	}
+}
+
+func assertResourceCapacityLeaseWaits(
+	t *testing.T,
+	secondDone <-chan *factory.ResourceCapacityLease,
+	secondErr <-chan error,
+) {
+	t.Helper()
+	select {
+	case lease := <-secondDone:
+		lease.Release()
+		t.Fatal("second resource lease completed before capacity increased")
+	case err := <-secondErr:
+		t.Fatalf("second resource lease failed before capacity increased: %v", err)
+	default:
 	}
 }
 

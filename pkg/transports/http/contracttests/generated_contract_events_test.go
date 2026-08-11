@@ -408,45 +408,6 @@ func generatedFactoryLifecycleEvents(t *testing.T) []factoryapi.FactoryEvent {
 		},
 		{
 			SchemaVersion: factoryapi.AgentFactoryEventV1,
-			Id:            "event-factory-change-request",
-			Type:          factoryapi.FactoryEventTypeFactoryChangeRequest,
-			Context: factoryapi.FactoryEventContext{
-				Sequence:  26,
-				Tick:      10,
-				EventTime: eventTime,
-			},
-			Payload: factoryEventPayload(t, factoryapi.FactoryChangeRequestEventPayload{
-				ChangeId:         "live-change/change-request-1",
-				ExpectedRevision: 0,
-				Operation:        "resource.capacity.set",
-				TargetId:         "reviewers",
-				RequestedValue:   8,
-				Actor:            stringPtr("operator"),
-				Source:           stringPtr("api"),
-				Reason:           stringPtr("raise throughput"),
-			}),
-		},
-		{
-			SchemaVersion: factoryapi.AgentFactoryEventV1,
-			Id:            "event-factory-change-failed",
-			Type:          factoryapi.FactoryEventTypeFactoryChangeFailed,
-			Context: factoryapi.FactoryEventContext{
-				Sequence:  27,
-				Tick:      10,
-				EventTime: eventTime,
-			},
-			Payload: factoryEventPayload(t, factoryapi.FactoryChangeFailedEventPayload{
-				ChangeId:         "live-change/change-request-2",
-				ExpectedRevision: 0,
-				PreviousRevision: 0,
-				Operation:        "resource.capacity.set",
-				TargetId:         "missing-resource",
-				FailureCode:      "TARGET_NOT_FOUND",
-				FailureMessage:   "live change target was not found",
-			}),
-		},
-		{
-			SchemaVersion: factoryapi.AgentFactoryEventV1,
 			Id:            "event-factory-state-response",
 			Type:          factoryapi.FactoryEventTypeFactoryStateResponse,
 			Context:       factoryapi.FactoryEventContext{Sequence: 8, Tick: 3, EventTime: eventTime},
@@ -467,6 +428,7 @@ func generatedFactoryLifecycleEvents(t *testing.T) []factoryapi.FactoryEvent {
 			}),
 		},
 	}
+	events = append(events, generatedFactoryChangeEvents(t, eventTime)...)
 	events = append(events, generatedFactorySessionLifecycleEvents(t, eventTime)...)
 	events = append(events, generatedFactoryOrchestratorLifecycleEvents(t, eventTime)...)
 	return events

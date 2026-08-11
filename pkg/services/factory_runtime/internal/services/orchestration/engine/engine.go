@@ -65,11 +65,6 @@ type FactoryEngine struct {
 	factoryRevision     int
 }
 
-type resourceCapacityLease struct {
-	resourceID string
-	token      factorytoken.Token
-}
-
 // NewFactoryEngine creates a new engine for the given net and marking.
 // Subsystems are sorted by TickGroup on construction.
 func NewFactoryEngine(
@@ -280,46 +275,6 @@ func (e *FactoryEngine) WakeForPendingProcessing() {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.wakeForPendingProcessing()
-}
-
-// WakeForResourceCapacity signals the engine after a resource pool changes.
-// Capacity changes are a wake source even when no submission or worker result
-// is buffered: a waiting transition may become enabled solely because an idle
-// resource token was added.
-func (e *FactoryEngine) WakeForResourceCapacity() {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.signalResourceCapacityChangedLocked()
-}
-
-func (e *FactoryEngine) wakeForPendingProcessing() {
-	if !e.hasBufferedInputs() {
-		return
-	}
-	select {
-	case e.submitSignal <- struct{}{}:
-	default:
-	}
-	if hook, ok := e.dispatchHook.(factory.DispatchResultHookWakeSignaler); ok && hook.HasBufferedResults() {
-		hook.SignalBufferedResults()
-	}
-}
-
-func (e *FactoryEngine) hasBufferedInputs() bool {
-	if e.capacityWakePending {
-		return true
-	}
-	if e.submissionHook != nil && len(e.submissionHook.batches) > 0 {
-		return true
-	}
-	buffer := e.runtimeState.ResultBuffer
-	if buffer != nil && buffer.HasData() {
-		return true
-	}
-	if e.dispatchHook != nil && e.dispatchHook.HasPendingResults() {
-		return true
-	}
-	return false
 }
 
 // SubmitWorkRequest validates and enqueues a canonical work request batch.
