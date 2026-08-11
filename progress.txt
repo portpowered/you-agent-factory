@@ -8900,3 +8900,16 @@
 - **Learnings for future iterations:**
   - Resolve moving-base conflicts by keeping the active task PRD authoritative, unioning complete append-only progress histories, and rerunning the task-specific gates on the exact merged ancestry.
 ---
+## [2026-08-11 04:23:37 -07:00] - dwro-s2-server-owned-start merged-head verification
+- What was implemented
+  - Revalidated the Story 004 disconnect/shutdown evidence and affected runtime packages after merging current `origin/main`; no additional product changes were needed.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/workers/transports/http -count=1 -timeout 600s` — passed.
+  - `go test -race ./tests/functional/workers/transports/http -run '^TestWorkerSessionHTTP(DisconnectKeepsAdmittedWorkerAlive|ShutdownJoinsAdmittedWorker)$' -count=1 -timeout 600s` — passed.
+  - `go test ./pkg/services/worker_sessions/... -count=1 -timeout 600s`, `go test ./pkg/services/factory_runtime/... -count=1 -timeout 600s`, and `go test ./tests/functional/transport/cli/parameters -count=1 -timeout 600s` — passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure`, affected-package `go vet`, `make typecheck`, and `git diff --check origin/main...HEAD` — passed.
+- **Learnings for future iterations:**
+  - After a moving-base merge, rerun the boundary functional and race evidence on the exact merged ancestry before pushing; prior-head green results do not prove the replacement head.
+---
