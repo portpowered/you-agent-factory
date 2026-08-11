@@ -3920,3 +3920,17 @@
 - **Learnings for future iterations:**
   - When a current-main mechanical test split was based on an older operation contract, keep the active task's owner boundary, port its behavioral coverage into the replacement file, and remove only obsolete tests that exercise the superseded capability.
 ---
+
+## 2026-08-10 19:12 -07:00 - btrc-p1-root-injection-006 post-merge CI follow-up
+- What was implemented
+  - Audited fresh CI run `31450763889` on merged head `b37e342bc` after current-main synchronization and retried only its failed Backend Functional Coverage job.
+  - Confirmed both attempts fail only on the unchanged `TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput` server-binding assertion; no P1 production, test-surface, UI, or runtime-hosting change was made for this baseline failure.
+- Files changed
+  - `progress.txt` (append-only CI handoff entry)
+- Verification
+  - Fresh merged-head CI: all lanes passed except Backend Functional Coverage; Verification Policy and the pinned ACP artifact step are dependent failures.
+  - Backend retry job `93656093095` reproduced the same server-binding failure; the branch has no diff in `tests/functional/transport/server_binding` or `pkg/services/factory_sessions/internal/runtimehosting`.
+  - The PR remains open, conflict-free, and mergeable against `origin/main` `0b9771fe8`; the P1 PRD has six of six stories passing and the PR body remains sourced from it.
+- **Learnings for future iterations:**
+  - After current-main synchronization, a repeated failure in an untouched functional package should remain an explicit baseline blocker; stop retrying once the named test and changed-path comparison are deterministic, and keep the task scope unchanged.
+---
