@@ -210,7 +210,7 @@ func TestRunScopedRawJavaScriptServerReportsUnavailableWorkerSessionOwner(t *tes
 	homeDir := t.TempDir()
 	environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 	stdout, stderr := execute(t, process, environment, workingDirectory, []string{
-		"you", "run", "--factory", workflowPath, "--with-mock-workers", "--no-record", "--with-server",
+		"you", "run", "--factory", workflowPath, "--no-record", "--with-server",
 	}, "")
 	if stderr != "" || !strings.Contains(stdout, "completed (SUCCEEDED)") {
 		t.Fatalf("JavaScript stdout=%q stderr=%q", stdout, stderr)

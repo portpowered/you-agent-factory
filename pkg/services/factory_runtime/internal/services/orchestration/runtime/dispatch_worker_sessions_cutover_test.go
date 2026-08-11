@@ -705,7 +705,7 @@ func TestRecordedDispatchFailureProjection(t *testing.T) {
 
 func TestRecordedFailureMappingBranches(t *testing.T) {
 	failureDetail := &workers.FailureDetail{Reason: workers.WorkFailureTypeAuthFailure}
-	for _, reason := range []workers.WorkFailureType{workers.WorkFailureTypeAuthFailure, workers.WorkFailureTypeTimeout, workers.WorkFailureTypeThrottled, workers.WorkFailureTypeMisconfigured, workers.WorkFailureTypeUnknown} {
+	for _, reason := range []workers.WorkFailureType{workers.WorkFailureTypeAuthFailure, workers.WorkFailureTypeTimeout, workers.WorkFailureTypeThrottled, workers.WorkFailureTypeMisconfigured, workers.WorkFailureTypeUnknown, workers.WorkFailureTypeStructuredOutputSchemaViolation} {
 		if failure := recordedFailure(failureDetail, &workers.WorkFailureMetadata{Family: workers.WorkFailureFamilyTerminal, Type: reason}, workersessions.StateFailed); failure == nil || failure.Detail == "" {
 			t.Fatalf("recordedFailure(%q) = %#v", reason, failure)
 		}
@@ -722,8 +722,8 @@ func TestRecordedFailureKindAndTypeBranches(t *testing.T) {
 	if _, ok := recordedFailureFamily("foreign"); ok {
 		t.Fatal("recordedFailureFamily(foreign) = known")
 	}
-	if typ, ok := recordedFailureType(workers.WorkFailureTypeTimeout); !ok || typ == "" {
-		t.Fatal("recordedFailureType(timeout) missing known type")
+	if typ, ok := recordedFailureType(workers.WorkFailureTypeStructuredOutputSchemaViolation); !ok || typ == "" {
+		t.Fatal("recordedFailureType(structured schema violation) missing known type")
 	}
 	if _, ok := recordedFailureType("foreign"); ok {
 		t.Fatal("recordedFailureType(foreign) = known")

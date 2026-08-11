@@ -3720,6 +3720,8 @@ export interface components {
       previousChainingTraceIds?: string[];
       outcome: components["schemas"]["WorkOutcome"];
       output?: string;
+      /** @description Optional native JSON value produced when the workstation outputSchema validates the worker response. JSON null is distinct from an omitted value. */
+      structuredResult?: unknown;
       error?: string;
       feedback?: string;
       selectedClassificationLabel?: string;
@@ -5620,6 +5622,8 @@ export interface components {
       content?: components["schemas"]["WorkContent"];
       /** @description Opaque work payload forwarded as raw JSON, or a binary data, or whatever else. */
       payload?: unknown;
+      /** @description Optional JSON value produced by a workstation whose outputSchema validated the worker response. JSON null is distinct from an omitted value. */
+      structuredResult?: unknown;
       /** @description Key-value pairs for storing arbitrary metadata about the work. Both keys and values are strings. */
       tags?: components["schemas"]["StringMap"];
       /** @description Current outbound relationships attached to this listed source work item when returned by read APIs. */
@@ -8575,6 +8579,9 @@ export const WorkFailureType = {
   WorkFailureTypeMissingExecutable: "missing_executable",
   // The provider command exceeded the operating system command-line size limit.
   WorkFailureTypeCommandLineTooLong: "command_line_too_long",
+  // The worker response was malformed JSON or did not satisfy the workstation output schema.
+  WorkFailureTypeStructuredOutputSchemaViolation:
+    "structured_output_schema_violation",
   // A successful worker did not satisfy its expected artifact declarations.
   WorkFailureTypeExpectedArtifactsUnsatisfied: "EXPECTED_ARTIFACTS_UNSATISFIED",
 } as const;

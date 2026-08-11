@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -807,7 +808,9 @@ func cloneWorkItems(input []work.FactoryWorkItem) []work.FactoryWorkItem {
 	for i, item := range input {
 		out[i] = item
 		out[i].Tags = cloneStringMap(item.Tags)
-		out[i].Content = append([]work.WorkContentPart(nil), item.Content...)
+		out[i].Content = work.CloneWorkContentParts(item.Content)
+		out[i].StructuredResult = jsonvalue.Clone(item.StructuredResult)
+		out[i].StructuredResultPresent = jsonvalue.Present(item.StructuredResult, item.StructuredResultPresent)
 	}
 	return out
 }
@@ -902,6 +905,13 @@ func mergeFactoryWorkItem(existing work.FactoryWorkItem, incoming work.FactoryWo
 	}
 	if incoming.Tags == nil {
 		incoming.Tags = cloneStringMap(existing.Tags)
+	}
+	if !jsonvalue.Present(incoming.StructuredResult, incoming.StructuredResultPresent) {
+		incoming.StructuredResult = jsonvalue.Clone(existing.StructuredResult)
+		incoming.StructuredResultPresent = existing.StructuredResultPresent
+	} else {
+		incoming.StructuredResult = jsonvalue.Clone(incoming.StructuredResult)
+		incoming.StructuredResultPresent = true
 	}
 	return incoming
 }
