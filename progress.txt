@@ -7814,3 +7814,19 @@
 - **Learnings for future iterations:**
   - Main can advance while a replacement PR head is being prepared; always fetch immediately before the final push and repeat the exact scoped verification after the last merge.
 ---
+## 2026-08-10 22:42 -07:00 - btrc-p1-root-injection-006 CI retry characterization
+- What was implemented
+  - Made no product change; audited CI run `31461563156` on head `31a6e0321` and reran only its failed Backend Functional Coverage job.
+  - Confirmed the first attempt’s CLI JSON failure was transient and the retry cleared it; the retry retained the unchanged server-binding assertion and surfaced a variable workers/mock continuous-idle failure.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - The exact `TestCLIJSONFailureRemainsValidJSON` test passed locally.
+  - `TestPlainBatchDrainPreservesFiniteAndContinuousCounterexamples/continuous_idle` passed five consecutive local runs.
+  - The server-binding assertion reproduces locally with the same extra structured `API server error` line.
+  - `git diff --name-only origin/main...HEAD` is empty for `tests/functional/transport/cli/output`, `tests/functional/transport/server_binding`, `tests/functional/workers/mock`, and `pkg/services/factory_sessions/internal/runtimehosting`; the P1 diff remains confined to `pkg/transports/cli/run` plus synchronization/bookkeeping.
+  - All non-functional CI lanes passed, including Backend Unit Coverage; the thread-aware audit remains at zero unresolved threads and zero formal reviews.
+- **Learnings for future iterations:**
+  - Retry-only functional failures can move between untouched packages; characterize each exact test locally and stop broad retries once the unchanged deterministic baseline failure remains and variable failures pass in isolation.
+---
