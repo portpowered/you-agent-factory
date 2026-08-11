@@ -1,0 +1,17 @@
+type: object
+additionalProperties: false
+properties:
+  dispatchCreatedTick:
+    type: integer
+  currentTick:
+    type: integer
+  requestId:
+    type: string
+  traceId:
+    type: string
+  workIds:
+    type: array
+    items:
+      type: string
+  replayKey:
+    type: string

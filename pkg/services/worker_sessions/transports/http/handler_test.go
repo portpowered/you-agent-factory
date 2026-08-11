@@ -569,6 +569,103 @@ func TestStreamWorkerSessionEventsBySessionIDMapsUnavailableBeforeOpening(t *tes
 	}
 }
 
+func TestStartWorkerSessionReturnsAcceptedAfterStartBarrier(t *testing.T) {
+	service := &fakeObservationService{startResult: workersessions.StartResult{Session: workersessions.Session{
+		ID: "worker-session-1", State: workersessions.StateRunning,
+	}}}
+	handler := NewHandler(NewAdapterWithStart(service, service, workServiceStub{}), zap.NewNop())
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/worker-sessions", strings.NewReader(`{
+		"requestId": " request-1 ",
+		"workerSessionId": " worker-session-1 ",
+		"execution": {
+			"workstationName": "swe",
+			"dispatch": {"dispatchId": "dispatch-1", "transitionId": "transition-1", "workstationName": "swe"},
+			"userMessage": "run the resolved work"
+		}
+	}`))
+
+	handler.StartWorkerSession(recorder, request)
+
+	if recorder.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202; body=%s", recorder.Code, recorder.Body.String())
+	}
+	var response factoryapi.WorkerSessionStartResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !response.Accepted || response.RequestId != "request-1" || response.WorkerSessionId != "worker-session-1" || response.State != factoryapi.WorkerSessionStartResponseState("RUNNING") {
+		t.Fatalf("response = %#v, want admitted Worker Session snapshot", response)
+	}
+	if response.EventTopic != "worker-session/worker-session-1/events" {
+		t.Fatalf("event topic = %q, want deterministic Worker Session topic", response.EventTopic)
+	}
+	if !service.startCalled {
+		t.Fatal("Worker Sessions Start was not called")
+	}
+	if service.startRequest.RequestID != "request-1" || service.startRequest.ID != "worker-session-1" {
+		t.Fatalf("start request identity = %#v, want normalized values", service.startRequest)
+	}
+	if service.startRequest.Execution.WorkstationName != "swe" || service.startRequest.Execution.Execution.Dispatch.DispatchID != "dispatch-1" {
+		t.Fatalf("start execution = %#v, want resolved dispatch", service.startRequest.Execution)
+	}
+}
+
+func TestStartWorkerSessionRejectsMalformedOrUnboundedInputBeforeService(t *testing.T) {
+	for _, testCase := range []struct {
+		name string
+		body string
+	}{
+		{name: "missing request id", body: `{"workerSessionId":"worker-1","execution":{"workstationName":"swe","dispatch":{"dispatchId":"dispatch-1","workstationName":"swe"}}}`},
+		{name: "retry budget too large", body: `{"requestId":"request-1","workerSessionId":"worker-1","retry":{"maxAttempts":17},"execution":{"workstationName":"swe","dispatch":{"dispatchId":"dispatch-1","workstationName":"swe"}}}`},
+		{name: "unknown field", body: `{"requestId":"request-1","workerSessionId":"worker-1","unexpected":true,"execution":{"workstationName":"swe","dispatch":{"dispatchId":"dispatch-1","workstationName":"swe"}}}`},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			service := &fakeObservationService{}
+			handler := NewHandler(NewAdapterWithStart(service, service, workServiceStub{}), zap.NewNop())
+			recorder := httptest.NewRecorder()
+			handler.StartWorkerSession(recorder, httptest.NewRequest(http.MethodPost, "/worker-sessions", strings.NewReader(testCase.body)))
+			if recorder.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want 400; body=%s", recorder.Code, recorder.Body.String())
+			}
+			if service.startCalled {
+				t.Fatal("Worker Sessions Start was called for malformed input")
+			}
+		})
+	}
+}
+
+func TestStartWorkerSessionMapsStableServiceFailures(t *testing.T) {
+	for _, testCase := range []struct {
+		name string
+		err  error
+		code factoryapi.ErrorResponseCode
+		want int
+	}{
+		{name: "request id conflict", err: workersessions.ErrStartRequestIDConflict, code: factoryapi.ErrorResponseCodeWORKERSESSIONSTARTREQUESTIDCONFLICT, want: http.StatusConflict},
+		{name: "identity conflict", err: workersessions.ErrSessionNotStartable, code: factoryapi.ErrorResponseCodeWORKERSESSIONNOTSTARTABLE, want: http.StatusConflict},
+		{name: "event unavailable", err: workersessions.ErrEventTopicUnavailable, code: factoryapi.ErrorResponseCodeWORKERSESSIONEVENTTOPICUNAVAILABLE, want: http.StatusServiceUnavailable},
+		{name: "admission unavailable", err: workersessions.ErrStartAdmissionFailed, code: factoryapi.ErrorResponseCodeWORKERSESSIONADMISSIONFAILED, want: http.StatusServiceUnavailable},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			service := &fakeObservationService{startErr: testCase.err}
+			handler := NewHandler(NewAdapterWithStart(service, service, workServiceStub{}), zap.NewNop())
+			recorder := httptest.NewRecorder()
+			handler.StartWorkerSession(recorder, httptest.NewRequest(http.MethodPost, "/worker-sessions", strings.NewReader(`{"requestId":"request-1","workerSessionId":"worker-1","execution":{"workstationName":"swe","dispatch":{"dispatchId":"dispatch-1","workstationName":"swe"}}}`)))
+			if recorder.Code != testCase.want {
+				t.Fatalf("status = %d, want %d; body=%s", recorder.Code, testCase.want, recorder.Body.String())
+			}
+			var response factoryapi.ErrorResponse
+			if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+				t.Fatalf("decode error response: %v", err)
+			}
+			if response.Code != testCase.code || response.Family != errorFamilyForStatus(testCase.want) {
+				t.Fatalf("error response = %#v, want code=%q family=%q", response, testCase.code, errorFamilyForStatus(testCase.want))
+			}
+		})
+	}
+}
+
 type fakeObservationService struct {
 	result              workersessions.ListObservationsResult
 	listErr             error
@@ -584,6 +681,10 @@ type fakeObservationService struct {
 	streamSubscription  *fakeObservationSubscription
 	streamRequest       workersessions.StreamObservationsRequest
 	streamErr           error
+	startResult         workersessions.StartResult
+	startErr            error
+	startCalled         bool
+	startRequest        workersessions.StartRequest
 }
 
 func (f *fakeObservationService) ListObservations(context.Context, workersessions.ListObservationsRequest) (workersessions.ListObservationsResult, error) {
@@ -612,6 +713,12 @@ func (f *fakeObservationService) StreamObservations(_ context.Context, request w
 		NextFunc:  f.streamSubscription.Next,
 		CloseFunc: f.streamSubscription.Close,
 	}, f.streamErr
+}
+
+func (f *fakeObservationService) Start(_ context.Context, request workersessions.StartRequest) (workersessions.StartResult, error) {
+	f.startCalled = true
+	f.startRequest = request
+	return f.startResult, f.startErr
 }
 
 type fakeObservationSubscription struct {

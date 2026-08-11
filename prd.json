@@ -72,8 +72,8 @@
         "Tests pass"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented typed POST /worker-sessions across authored, bundled, packaged, generated Go, generated TypeScript, mapping, and HTTP layers. The handler strictly decodes and maps once, delegates only to Worker Sessions Start, and returns 202 after the service admission barrier with the stable Worker Session ID and deterministic Events topic. Stable 400/409/503 classifications cover malformed input, request/session conflicts, opening/event readiness failures, and admission failures; Worker Sessions replay semantics provide same-key HTTP deduplication. Verification: make generate-api, make interfaces-all, make api-smoke, make test, backend/package quality gates, and go vet ./... pass. Repository make typecheck remains blocked by pre-existing UI test-helper assertion typings unrelated to this story."
     },
     {
       "id": "dwro-s2-server-owned-start-004",

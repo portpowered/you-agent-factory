@@ -28,6 +28,32 @@ tags:
   - name: Workflows
     description: Stored workflow inspection.
 paths:
+  /worker-sessions:
+    post:
+      tags:
+        - Worker Sessions
+      operationId: startWorkerSession
+      summary: Start one directly resolved Worker Session
+      description: Reserves and starts one already-resolved Worker execution. The server returns 202 only after the Worker Session identity is reserved, its opening record is retained-readable and subscribable on the returned event topic, and Workers has admitted the execution. The requestId is required for safe retries; replaying it with the same normalized start tuple returns the same Worker Session identity without another dispatch.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkerSessionStartRequest'
+      responses:
+        '202':
+          description: Worker Session was admitted and is observable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkerSessionStartResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/WorkerSessionStartConflict'
+        '503':
+          $ref: '#/components/responses/WorkerSessionStartUnavailable'
   /factory-sessions/{session_id}/work:
     post:
       tags:
@@ -1854,6 +1880,18 @@ components:
                 message: requestId was already used with different execution inputs.
                 family: CONFLICT
                 code: EXECUTION_REQUEST_ID_CONFLICT
+    WorkerSessionStartConflict:
+      description: The Worker Session start conflicts with an existing reservation or request identity.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    WorkerSessionStartUnavailable:
+      description: The Worker Session could not cross its event-readiness or Workers-admission barrier.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
     FactorySessionLifecycleControlConflict:
       description: Lifecycle control request conflicts with current session state, another in-flight control, or a previously applied control requestId.
       content:
@@ -2352,6 +2390,206 @@ components:
           description: Deterministically ordered Worker Session observations correlated with the requested Work.
           items:
             $ref: '#/components/schemas/WorkerSessionObservation'
+    WorkerSessionStartRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - requestId
+        - workerSessionId
+        - execution
+      description: One caller-owned idempotent request for a directly resolved Worker execution. Worker Sessions owns reservation, event visibility, supervision, and admission; it does not select a provider or runner from this payload.
+      properties:
+        requestId:
+          type: string
+          minLength: 1
+          description: Required caller idempotency key for this asynchronous start.
+        workerSessionId:
+          type: string
+          minLength: 1
+          description: Stable Worker Session identity to reserve and return.
+        execution:
+          $ref: '#/components/schemas/WorkerSessionResolvedExecution'
+          description: Already-resolved Workers route and execution input.
+        retry:
+          $ref: '#/components/schemas/WorkerSessionStartRetryPolicy'
+          description: Bounded total attempt budget; omitted means one attempt.
+    WorkerSessionStartResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - requestId
+        - workerSessionId
+        - accepted
+        - state
+        - eventTopic
+      description: Admission acknowledgment for one Worker Session. A successful response is emitted only after the opening event is readable/subscribable and Workers has admitted the execution; terminal Worker output remains asynchronous.
+      properties:
+        requestId:
+          type: string
+          description: Caller idempotency key echoed for correlation.
+        workerSessionId:
+          type: string
+          description: Stable Worker Session identity for subsequent inspection and control.
+        accepted:
+          type: boolean
+          description: Always true for a 202 response.
+        state:
+          type: string
+          enum:
+            - RESERVED
+            - STARTING
+            - RUNNING
+            - PAUSED
+            - COMPLETED
+            - FAILED
+            - CANCELED
+            - TERMINATED
+          x-enum-varnames:
+            - WorkerSessionStartResponseStateReserved
+            - WorkerSessionStartResponseStateStarting
+            - WorkerSessionStartResponseStateRunning
+            - WorkerSessionStartResponseStatePaused
+            - WorkerSessionStartResponseStateCompleted
+            - WorkerSessionStartResponseStateFailed
+            - WorkerSessionStartResponseStateCanceled
+            - WorkerSessionStartResponseStateTerminated
+        eventTopic:
+          type: string
+          description: Deterministic Events topic whose retained opening record is ready to read and subscribe.
+    WorkerSessionStartRetryPolicy:
+      type: object
+      additionalProperties: false
+      properties:
+        maxAttempts:
+          type: integer
+          minimum: 0
+          maximum: 16
+          default: 0
+          description: Total provider attempts, where zero and one both mean one attempt. Values above 16 are rejected at the HTTP boundary.
+    WorkerSessionResolvedExecution:
+      type: object
+      additionalProperties: false
+      required:
+        - workstationName
+        - dispatch
+      description: Workers-owned resolved execution input. All selection and prompt facts are supplied by the caller or an upstream resolver; Worker Sessions only passes this detached value to the named Workers route.
+      properties:
+        workstationName:
+          type: string
+          minLength: 1
+          description: Authored workstation route or the reserved provider-invocation route.
+        dispatch:
+          $ref: '#/components/schemas/WorkerSessionResolvedDispatch'
+        workerType:
+          type: string
+        workstationType:
+          type: string
+        runnerId:
+          type: string
+        runnerSelectionSource:
+          type: string
+        executorProvider:
+          type: string
+        projectId:
+          type: string
+        factorySessionId:
+          type: string
+        inputTokens:
+          type: array
+          items: {}
+        modelOperation:
+          type: string
+        modelBindings:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        model:
+          type: string
+        modelProvider:
+          type: string
+        reasoningEffort:
+          type: string
+        systemPrompt:
+          type: string
+        userMessage:
+          type: string
+        outputSchema:
+          type: string
+        outputContract:
+          type: string
+        envVars:
+          type: object
+          additionalProperties:
+            type: string
+        worktree:
+          type: string
+        workingDirectory:
+          type: string
+        workingDirectoryAuthored:
+          type: boolean
+        resumeSession:
+          $ref: '#/components/schemas/WorkerSessionProviderSessionRef'
+        skipPermissions:
+          type: boolean
+    WorkerSessionResolvedDispatch:
+      type: object
+      additionalProperties: false
+      required:
+        - dispatchId
+        - workstationName
+      properties:
+        dispatchId:
+          type: string
+          minLength: 1
+          description: Stable Workers dispatch or attempt identity.
+        transitionId:
+          type: string
+        workerType:
+          type: string
+        workstationName:
+          type: string
+          minLength: 1
+        projectId:
+          type: string
+        expectedArtifactContext:
+          type: object
+          additionalProperties: true
+        currentChainingTraceId:
+          type: string
+        previousChainingTraceIds:
+          type: array
+          items:
+            type: string
+        execution:
+          $ref: '#/components/schemas/WorkerSessionExecutionMetadata'
+        inputTokens:
+          type: array
+          items: {}
+        inputBindings:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+    WorkerSessionExecutionMetadata:
+      type: object
+      additionalProperties: false
+      properties:
+        dispatchCreatedTick:
+          type: integer
+        currentTick:
+          type: integer
+        requestId:
+          type: string
+        traceId:
+          type: string
+        workIds:
+          type: array
+          items:
+            type: string
+        replayKey:
+          type: string
     WorkerSessionTranscriptResponse:
       type: object
       additionalProperties: false
@@ -3301,6 +3539,11 @@ components:
             - MOVE_WORK_REQUEST_ALREADY_APPLIED
             - METHOD_NOT_ALLOWED
             - EXECUTION_REQUEST_ID_CONFLICT
+            - WORKER_SESSION_START_REQUEST_ID_CONFLICT
+            - WORKER_SESSION_NOT_STARTABLE
+            - WORKER_SESSION_START_OPENING_FAILED
+            - WORKER_SESSION_EVENT_TOPIC_UNAVAILABLE
+            - WORKER_SESSION_ADMISSION_FAILED
             - FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED
             - INVALID_RESPONSE_EVENT_CURSOR
             - INVALID_RESPONSE_EVENT_FILTER
@@ -3326,6 +3569,11 @@ components:
             - Operator move requestId was already applied for this session.
             - The HTTP method is not allowed for the requested route.
             - Durable execution requestId was reused with materially different inputs.
+            - Worker Session start requestId was reused with different normalized inputs.
+            - The requested Worker Session identity is already reserved or terminal.
+            - The Worker Session opening record could not be published.
+            - The Worker Session event topic did not reach the required readiness barrier.
+            - Workers could not admit the Worker Session execution.
             - Lifecycle control requestId was already applied with different control inputs.
             - The Factory Response Event reconnect cursor is invalid.
             - A Factory Response Event filter is invalid.

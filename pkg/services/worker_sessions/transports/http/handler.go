@@ -1,10 +1,12 @@
 package http
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 
@@ -28,6 +30,53 @@ func NewHandler(adapter *Adapter, logger *zap.Logger) *Handler {
 		return nil
 	}
 	return &Handler{adapter: adapter, logger: logger}
+}
+
+// StartWorkerSession handles the process-scoped asynchronous Worker Session
+// start. Decode and mapping failures are rejected before the Worker Sessions
+// root can reserve an identity; a successful call returns at the root's
+// admission barrier and never waits for terminal output.
+func (h *Handler) StartWorkerSession(w http.ResponseWriter, r *http.Request) {
+	if h == nil || h.adapter == nil {
+		writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
+		return
+	}
+	if r == nil || r.Body == nil {
+		writeError(w, http.StatusBadRequest, "request payload is required", "BAD_REQUEST")
+		return
+	}
+	request, err := decodeWorkerSessionStartRequest(r.Body)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
+		return
+	}
+	response, err := h.adapter.StartWorkerSession(r.Context(), request)
+	if err != nil {
+		h.writeMappedStartError(w, err)
+		return
+	}
+	h.writeJSON(w, http.StatusAccepted, response)
+}
+
+func decodeWorkerSessionStartRequest(body io.Reader) (factoryapi.WorkerSessionStartRequest, error) {
+	data, err := io.ReadAll(body)
+	if err != nil {
+		return factoryapi.WorkerSessionStartRequest{}, err
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	var request factoryapi.WorkerSessionStartRequest
+	if err := decoder.Decode(&request); err != nil {
+		return factoryapi.WorkerSessionStartRequest{}, err
+	}
+	var trailing struct{}
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		if err == nil {
+			return factoryapi.WorkerSessionStartRequest{}, errors.New("request payload must contain one JSON object")
+		}
+		return factoryapi.WorkerSessionStartRequest{}, err
+	}
+	return request, nil
 }
 
 // ListWorkerSessionsBySessionId handles the session-scoped Worker Sessions
@@ -420,6 +469,28 @@ func (h *Handler) writeMappedError(w http.ResponseWriter, err error) {
 	}
 }
 
+func (h *Handler) writeMappedStartError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, workersessions.ErrInvalidStartRequestID),
+		errors.Is(err, workersessions.ErrInvalidSessionID),
+		errors.Is(err, workersessions.ErrInvalidExecutionRequest),
+		errors.Is(err, errInvalidStartRetry):
+		writeError(w, http.StatusBadRequest, "invalid Worker Session start request", "BAD_REQUEST")
+	case errors.Is(err, workersessions.ErrStartRequestIDConflict):
+		writeError(w, http.StatusConflict, "Worker Session start requestId was reused with different inputs", string(factoryapi.ErrorResponseCodeWORKERSESSIONSTARTREQUESTIDCONFLICT))
+	case errors.Is(err, workersessions.ErrSessionNotStartable):
+		writeError(w, http.StatusConflict, "Worker Session identity is already in use", string(factoryapi.ErrorResponseCodeWORKERSESSIONNOTSTARTABLE))
+	case errors.Is(err, workersessions.ErrEventTopicUnavailable):
+		writeError(w, http.StatusServiceUnavailable, "Worker Session event topic is unavailable", string(factoryapi.ErrorResponseCodeWORKERSESSIONEVENTTOPICUNAVAILABLE))
+	case errors.Is(err, workersessions.ErrStartOpeningPublication):
+		writeError(w, http.StatusServiceUnavailable, "Worker Session opening event is unavailable", string(factoryapi.ErrorResponseCodeWORKERSESSIONSTARTOPENINGFAILED))
+	case errors.Is(err, workersessions.ErrStartAdmissionFailed), errors.Is(err, workersessions.ErrStartNotAccepted):
+		writeError(w, http.StatusServiceUnavailable, "Workers could not admit the Worker Session", string(factoryapi.ErrorResponseCodeWORKERSESSIONADMISSIONFAILED))
+	default:
+		writeError(w, http.StatusInternalServerError, "failed to start Worker Session", "INTERNAL_ERROR")
+	}
+}
+
 func (h *Handler) writeMappedObservationError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, workersessions.ErrObservationSessionNotFound):
@@ -493,6 +564,8 @@ func errorFamilyForStatus(status int) factoryapi.ErrorFamily {
 	switch status {
 	case http.StatusBadRequest:
 		return factoryapi.ErrorFamilyBadRequest
+	case http.StatusConflict:
+		return factoryapi.ErrorFamilyConflict
 	case http.StatusNotFound:
 		return factoryapi.ErrorFamilyNotFound
 	default:

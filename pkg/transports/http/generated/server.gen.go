@@ -82,6 +82,11 @@ const (
 	ErrorResponseCodeRESPONSEEVENTSTREAMEXPIRED                   ErrorResponseCode = "RESPONSE_EVENT_STREAM_EXPIRED"
 	ErrorResponseCodeSESSIONKINDUNSUPPORTED                       ErrorResponseCode = "SESSION_KIND_UNSUPPORTED"
 	ErrorResponseCodeSTALEFACTORYVERSION                          ErrorResponseCode = "STALE_FACTORY_VERSION"
+	ErrorResponseCodeWORKERSESSIONADMISSIONFAILED                 ErrorResponseCode = "WORKER_SESSION_ADMISSION_FAILED"
+	ErrorResponseCodeWORKERSESSIONEVENTTOPICUNAVAILABLE           ErrorResponseCode = "WORKER_SESSION_EVENT_TOPIC_UNAVAILABLE"
+	ErrorResponseCodeWORKERSESSIONNOTSTARTABLE                    ErrorResponseCode = "WORKER_SESSION_NOT_STARTABLE"
+	ErrorResponseCodeWORKERSESSIONSTARTOPENINGFAILED              ErrorResponseCode = "WORKER_SESSION_START_OPENING_FAILED"
+	ErrorResponseCodeWORKERSESSIONSTARTREQUESTIDCONFLICT          ErrorResponseCode = "WORKER_SESSION_START_REQUEST_ID_CONFLICT"
 	ErrorResponseCodeWORKERSESSIONSTREAMUNAVAILABLE               ErrorResponseCode = "WORKER_SESSION_STREAM_UNAVAILABLE"
 	ErrorResponseCodeWORKERSESSIONTRANSCRIPTACTIVE                ErrorResponseCode = "WORKER_SESSION_TRANSCRIPT_ACTIVE"
 	ErrorResponseCodeWORKERSESSIONTRANSCRIPTPROJECTIONUNAVAILABLE ErrorResponseCode = "WORKER_SESSION_TRANSCRIPT_PROJECTION_UNAVAILABLE"
@@ -1089,6 +1094,18 @@ const (
 // Defines values for WorkerSessionReplaySummaryKind.
 const (
 	ReplaySummary WorkerSessionReplaySummaryKind = "replay-summary"
+)
+
+// Defines values for WorkerSessionStartResponseState.
+const (
+	WorkerSessionStartResponseStateCanceled   WorkerSessionStartResponseState = "CANCELED"
+	WorkerSessionStartResponseStateCompleted  WorkerSessionStartResponseState = "COMPLETED"
+	WorkerSessionStartResponseStateFailed     WorkerSessionStartResponseState = "FAILED"
+	WorkerSessionStartResponseStatePaused     WorkerSessionStartResponseState = "PAUSED"
+	WorkerSessionStartResponseStateReserved   WorkerSessionStartResponseState = "RESERVED"
+	WorkerSessionStartResponseStateRunning    WorkerSessionStartResponseState = "RUNNING"
+	WorkerSessionStartResponseStateStarting   WorkerSessionStartResponseState = "STARTING"
+	WorkerSessionStartResponseStateTerminated WorkerSessionStartResponseState = "TERMINATED"
 )
 
 // Defines values for WorkerType.
@@ -6973,6 +6990,16 @@ type WorkerSessionEventRecord struct {
 	SourceType string `json:"sourceType"`
 }
 
+// WorkerSessionExecutionMetadata defines model for WorkerSessionExecutionMetadata.
+type WorkerSessionExecutionMetadata struct {
+	CurrentTick         *int      `json:"currentTick,omitempty"`
+	DispatchCreatedTick *int      `json:"dispatchCreatedTick,omitempty"`
+	ReplayKey           *string   `json:"replayKey,omitempty"`
+	RequestId           *string   `json:"requestId,omitempty"`
+	TraceId             *string   `json:"traceId,omitempty"`
+	WorkIds             *[]string `json:"workIds,omitempty"`
+}
+
 // WorkerSessionFailure defines model for WorkerSessionFailure.
 type WorkerSessionFailure struct {
 	// Detail Customer-safe failure detail derived by Worker Sessions.
@@ -7074,6 +7101,92 @@ type WorkerSessionReplaySummary struct {
 
 // WorkerSessionReplaySummaryKind Stable record kind for the finite Worker Session replay marker.
 type WorkerSessionReplaySummaryKind string
+
+// WorkerSessionResolvedDispatch defines model for WorkerSessionResolvedDispatch.
+type WorkerSessionResolvedDispatch struct {
+	CurrentChainingTraceId *string `json:"currentChainingTraceId,omitempty"`
+
+	// DispatchId Stable Workers dispatch or attempt identity.
+	DispatchId               string                          `json:"dispatchId"`
+	Execution                *WorkerSessionExecutionMetadata `json:"execution,omitempty"`
+	ExpectedArtifactContext  *map[string]interface{}         `json:"expectedArtifactContext,omitempty"`
+	InputBindings            *map[string][]string            `json:"inputBindings,omitempty"`
+	InputTokens              *[]interface{}                  `json:"inputTokens,omitempty"`
+	PreviousChainingTraceIds *[]string                       `json:"previousChainingTraceIds,omitempty"`
+	ProjectId                *string                         `json:"projectId,omitempty"`
+	TransitionId             *string                         `json:"transitionId,omitempty"`
+	WorkerType               *string                         `json:"workerType,omitempty"`
+	WorkstationName          string                          `json:"workstationName"`
+}
+
+// WorkerSessionResolvedExecution Workers-owned resolved execution input. All selection and prompt facts are supplied by the caller or an upstream resolver; Worker Sessions only passes this detached value to the named Workers route.
+type WorkerSessionResolvedExecution struct {
+	Dispatch                 WorkerSessionResolvedDispatch    `json:"dispatch"`
+	EnvVars                  *map[string]string               `json:"envVars,omitempty"`
+	ExecutorProvider         *string                          `json:"executorProvider,omitempty"`
+	FactorySessionId         *string                          `json:"factorySessionId,omitempty"`
+	InputTokens              *[]interface{}                   `json:"inputTokens,omitempty"`
+	Model                    *string                          `json:"model,omitempty"`
+	ModelBindings            *[]map[string]interface{}        `json:"modelBindings,omitempty"`
+	ModelOperation           *string                          `json:"modelOperation,omitempty"`
+	ModelProvider            *string                          `json:"modelProvider,omitempty"`
+	OutputContract           *string                          `json:"outputContract,omitempty"`
+	OutputSchema             *string                          `json:"outputSchema,omitempty"`
+	ProjectId                *string                          `json:"projectId,omitempty"`
+	ReasoningEffort          *string                          `json:"reasoningEffort,omitempty"`
+	ResumeSession            *WorkerSessionProviderSessionRef `json:"resumeSession,omitempty"`
+	RunnerId                 *string                          `json:"runnerId,omitempty"`
+	RunnerSelectionSource    *string                          `json:"runnerSelectionSource,omitempty"`
+	SkipPermissions          *bool                            `json:"skipPermissions,omitempty"`
+	SystemPrompt             *string                          `json:"systemPrompt,omitempty"`
+	UserMessage              *string                          `json:"userMessage,omitempty"`
+	WorkerType               *string                          `json:"workerType,omitempty"`
+	WorkingDirectory         *string                          `json:"workingDirectory,omitempty"`
+	WorkingDirectoryAuthored *bool                            `json:"workingDirectoryAuthored,omitempty"`
+
+	// WorkstationName Authored workstation route or the reserved provider-invocation route.
+	WorkstationName string  `json:"workstationName"`
+	WorkstationType *string `json:"workstationType,omitempty"`
+	Worktree        *string `json:"worktree,omitempty"`
+}
+
+// WorkerSessionStartRequest One caller-owned idempotent request for a directly resolved Worker execution. Worker Sessions owns reservation, event visibility, supervision, and admission; it does not select a provider or runner from this payload.
+type WorkerSessionStartRequest struct {
+	// Execution Workers-owned resolved execution input. All selection and prompt facts are supplied by the caller or an upstream resolver; Worker Sessions only passes this detached value to the named Workers route.
+	Execution WorkerSessionResolvedExecution `json:"execution"`
+
+	// RequestId Required caller idempotency key for this asynchronous start.
+	RequestId string                         `json:"requestId"`
+	Retry     *WorkerSessionStartRetryPolicy `json:"retry,omitempty"`
+
+	// WorkerSessionId Stable Worker Session identity to reserve and return.
+	WorkerSessionId string `json:"workerSessionId"`
+}
+
+// WorkerSessionStartResponse Admission acknowledgment for one Worker Session. A successful response is emitted only after the opening event is readable/subscribable and Workers has admitted the execution; terminal Worker output remains asynchronous.
+type WorkerSessionStartResponse struct {
+	// Accepted Always true for a 202 response.
+	Accepted bool `json:"accepted"`
+
+	// EventTopic Deterministic Events topic whose retained opening record is ready to read and subscribe.
+	EventTopic string `json:"eventTopic"`
+
+	// RequestId Caller idempotency key echoed for correlation.
+	RequestId string                          `json:"requestId"`
+	State     WorkerSessionStartResponseState `json:"state"`
+
+	// WorkerSessionId Stable Worker Session identity for subsequent inspection and control.
+	WorkerSessionId string `json:"workerSessionId"`
+}
+
+// WorkerSessionStartResponseState defines model for WorkerSessionStartResponse.State.
+type WorkerSessionStartResponseState string
+
+// WorkerSessionStartRetryPolicy defines model for WorkerSessionStartRetryPolicy.
+type WorkerSessionStartRetryPolicy struct {
+	// MaxAttempts Total provider attempts, where zero and one both mean one attempt. Values above 16 are rejected at the HTTP boundary.
+	MaxAttempts *int `json:"maxAttempts,omitempty"`
+}
 
 // WorkerSessionTranscriptResponse defines model for WorkerSessionTranscriptResponse.
 type WorkerSessionTranscriptResponse struct {
@@ -7549,6 +7662,12 @@ type SaveCurrentFactoryBadRequest = ErrorResponse
 // SaveCurrentFactoryConflict defines model for SaveCurrentFactoryConflict.
 type SaveCurrentFactoryConflict = ErrorResponse
 
+// WorkerSessionStartConflict defines model for WorkerSessionStartConflict.
+type WorkerSessionStartConflict = ErrorResponse
+
+// WorkerSessionStartUnavailable defines model for WorkerSessionStartUnavailable.
+type WorkerSessionStartUnavailable = ErrorResponse
+
 // ListFactorySessionsParams defines parameters for ListFactorySessions.
 type ListFactorySessionsParams struct {
 	// Scope Optional session list scope. Defaults to live for backward-compatible live workspace session listing.
@@ -7764,6 +7883,9 @@ type ValidateFactoryJSONRequestBody = Factory
 
 // InvokeModelJSONRequestBody defines body for InvokeModel for application/json ContentType.
 type InvokeModelJSONRequestBody = ModelInvocationRequest
+
+// StartWorkerSessionJSONRequestBody defines body for StartWorkerSession for application/json ContentType.
+type StartWorkerSessionJSONRequestBody = WorkerSessionStartRequest
 
 // Getter for additional properties for FactorySessionEffectivePolicy. Returns the specified
 // element and whether it was found
@@ -10270,6 +10392,9 @@ type ServerInterface interface {
 	// Get runtime status
 	// (GET /status)
 	GetStatus(w http.ResponseWriter, r *http.Request)
+	// Start one directly resolved Worker Session
+	// (POST /worker-sessions)
+	StartWorkerSession(w http.ResponseWriter, r *http.Request)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -11877,6 +12002,20 @@ func (siw *ServerInterfaceWrapper) GetStatus(w http.ResponseWriter, r *http.Requ
 	handler.ServeHTTP(w, r)
 }
 
+// StartWorkerSession operation middleware
+func (siw *ServerInterfaceWrapper) StartWorkerSession(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.StartWorkerSession(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 type UnescapedCookieParamError struct {
 	ParamName string
 	Err       error
@@ -12085,6 +12224,8 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 	r.HandleFunc(options.BaseURL+"/provider-sessions/detail", wrapper.GetProviderSessionDetails).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/status", wrapper.GetStatus).Methods("GET")
+
+	r.HandleFunc(options.BaseURL+"/worker-sessions", wrapper.StartWorkerSession).Methods("POST")
 
 	return r
 }

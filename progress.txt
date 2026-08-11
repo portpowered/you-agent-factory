@@ -4049,3 +4049,26 @@
   - Keep idempotency replay state in the Worker Sessions owner and compare cloned canonical values; reserve the caller key and session identity in one mutex transaction before downstream effects.
   - When a strict package file budget prevents a focused helper file, place small lifecycle-coordination helpers in an existing responsibility-aligned owner and rerun both backend-size and package-file-count gates.
 ---
+## 2026-08-10 23:54 -07:00 - dwro-s2-server-owned-start-003
+- What was implemented
+  - Exposed the Worker Sessions asynchronous start contract through typed `POST /worker-sessions`.
+  - Added authored request/response/retry/resolved-execution OpenAPI schemas, stable conflict/unavailable responses, and safe error codes; regenerated the bundled OpenAPI, Go server/client contracts, and TypeScript client.
+  - Added one strict HTTP decode-and-map boundary that delegates only to Worker Sessions `Start`, returns `202 Accepted` after the reservation, Events readiness, and Workers admission barrier, and returns the stable Worker Session identity plus deterministic Events topic without waiting for terminal output.
+  - Added stable 400/409/503 mapping for malformed input, bounded retry violations, idempotency/session conflicts, opening/event readiness failures, and admission failures. Same-key replay and duplicate suppression remain owned by the Worker Sessions service.
+- Files changed
+  - `api/openapi-main.yaml` and authored Worker Session start schemas/responses under `api/components/`.
+  - `api/openapi.yaml`, `packages/api/generated/manifest.json`, `packages/api/generated/openapi/openapi.yaml`, `pkg/transports/http/generated/server.gen.go`, `pkg/transports/http/client/client.gen.go`, `ui/src/api/generated/openapi.ts`, and `ui/packages/client/src/generated/openapi.ts`.
+  - `pkg/services/worker_sessions/transports/http/adapter.go`, `mapping.go`, `handler.go`, and `handler_test.go`.
+  - `pkg/transports/http/server.go` and `pkg/transports/http/application/handler.go`.
+  - `prd.json`.
+- Verification
+  - `make generate-api` passed.
+  - `make interfaces-all` passed, including packaged API and UI client artifacts.
+  - `make api-smoke` passed, including generated-artifact drift, HTTP contract alignment, and provider parity.
+  - `make test` passed the full short unit lane after the packaged contract artifacts were regenerated; `TestMockWorkersSchema_StaleStagingDetectedByContractCheck` now passes with the complete generated artifact set.
+  - Affected Worker Sessions, HTTP, contract, mapping, and CLI Go tests passed; focused `go vet` passed.
+  - `git diff --check` passed. Repository `make typecheck` remains blocked by pre-existing UI test-helper assertion typings; a full unscoped Go test run exceeded the local five-minute command budget, while all affected suites passed.
+- **Learnings for future iterations:**
+  - Add `x-enum-varnames` to new OpenAPI enums when their values overlap existing generated enum constants; otherwise code generation can rename unrelated public identifiers.
+  - Keep typed transport schemas aligned with the Workers request shape, but preserve Worker Sessions ownership of admission, idempotency, and stable failure classification in the service boundary.
+---

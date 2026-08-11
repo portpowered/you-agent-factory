@@ -4,6 +4,26 @@
  */
 
 export interface paths {
+  "/worker-sessions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Start one directly resolved Worker Session
+     * @description Reserves and starts one already-resolved Worker execution. The server returns 202 only after the Worker Session identity is reserved, its opening record is retained-readable and subscribable on the returned event topic, and Workers has admitted the execution. The requestId is required for safe retries; replaying it with the same normalized start tuple returns the same Worker Session identity without another dispatch.
+     */
+    post: operations["startWorkerSession"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/factory-sessions/{session_id}/work": {
     parameters: {
       query?: never;
@@ -1105,6 +1125,96 @@ export interface components {
     ListWorkerSessionsResponse: {
       /** @description Deterministically ordered Worker Session observations correlated with the requested Work. */
       sessions: components["schemas"]["WorkerSessionObservation"][];
+    };
+    /** @description One caller-owned idempotent request for a directly resolved Worker execution. Worker Sessions owns reservation, event visibility, supervision, and admission; it does not select a provider or runner from this payload. */
+    WorkerSessionStartRequest: {
+      /** @description Required caller idempotency key for this asynchronous start. */
+      requestId: string;
+      /** @description Stable Worker Session identity to reserve and return. */
+      workerSessionId: string;
+      /** @description Already-resolved Workers route and execution input. */
+      execution: components["schemas"]["WorkerSessionResolvedExecution"];
+      /** @description Bounded total attempt budget; omitted means one attempt. */
+      retry?: components["schemas"]["WorkerSessionStartRetryPolicy"];
+    };
+    /** @description Admission acknowledgment for one Worker Session. A successful response is emitted only after the opening event is readable/subscribable and Workers has admitted the execution; terminal Worker output remains asynchronous. */
+    WorkerSessionStartResponse: {
+      /** @description Caller idempotency key echoed for correlation. */
+      requestId: string;
+      /** @description Stable Worker Session identity for subsequent inspection and control. */
+      workerSessionId: string;
+      /** @description Always true for a 202 response. */
+      accepted: boolean;
+      /** @enum {string} */
+      state: WorkerSessionStartResponseState;
+      /** @description Deterministic Events topic whose retained opening record is ready to read and subscribe. */
+      eventTopic: string;
+    };
+    WorkerSessionStartRetryPolicy: {
+      /**
+       * @description Total provider attempts, where zero and one both mean one attempt. Values above 16 are rejected at the HTTP boundary.
+       * @default 0
+       */
+      maxAttempts: number;
+    };
+    /** @description Workers-owned resolved execution input. All selection and prompt facts are supplied by the caller or an upstream resolver; Worker Sessions only passes this detached value to the named Workers route. */
+    WorkerSessionResolvedExecution: {
+      /** @description Authored workstation route or the reserved provider-invocation route. */
+      workstationName: string;
+      dispatch: components["schemas"]["WorkerSessionResolvedDispatch"];
+      workerType?: string;
+      workstationType?: string;
+      runnerId?: string;
+      runnerSelectionSource?: string;
+      executorProvider?: string;
+      projectId?: string;
+      factorySessionId?: string;
+      inputTokens?: unknown[];
+      modelOperation?: string;
+      modelBindings?: {
+        [key: string]: unknown;
+      }[];
+      model?: string;
+      modelProvider?: string;
+      reasoningEffort?: string;
+      systemPrompt?: string;
+      userMessage?: string;
+      outputSchema?: string;
+      outputContract?: string;
+      envVars?: {
+        [key: string]: string;
+      };
+      worktree?: string;
+      workingDirectory?: string;
+      workingDirectoryAuthored?: boolean;
+      resumeSession?: components["schemas"]["WorkerSessionProviderSessionRef"];
+      skipPermissions?: boolean;
+    };
+    WorkerSessionResolvedDispatch: {
+      /** @description Stable Workers dispatch or attempt identity. */
+      dispatchId: string;
+      transitionId?: string;
+      workerType?: string;
+      workstationName: string;
+      projectId?: string;
+      expectedArtifactContext?: {
+        [key: string]: unknown;
+      };
+      currentChainingTraceId?: string;
+      previousChainingTraceIds?: string[];
+      execution?: components["schemas"]["WorkerSessionExecutionMetadata"];
+      inputTokens?: unknown[];
+      inputBindings?: {
+        [key: string]: string[];
+      };
+    };
+    WorkerSessionExecutionMetadata: {
+      dispatchCreatedTick?: number;
+      currentTick?: number;
+      requestId?: string;
+      traceId?: string;
+      workIds?: string[];
+      replayKey?: string;
     };
     WorkerSessionTranscriptResponse: {
       /** @description Stable Worker Session identity. */
@@ -6067,6 +6177,24 @@ export interface components {
         "application/json": components["schemas"]["ErrorResponse"];
       };
     };
+    /** @description The Worker Session start conflicts with an existing reservation or request identity. */
+    WorkerSessionStartConflict: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
+    /** @description The Worker Session could not cross its event-readiness or Workers-admission barrier. */
+    WorkerSessionStartUnavailable: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
     /** @description Lifecycle control request conflicts with current session state, another in-flight control, or a previously applied control requestId. */
     FactorySessionLifecycleControlConflict: {
       headers: {
@@ -6177,6 +6305,33 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+  startWorkerSession: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["WorkerSessionStartRequest"];
+      };
+    };
+    responses: {
+      /** @description Worker Session was admitted and is observable. */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkerSessionStartResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      409: components["responses"]["WorkerSessionStartConflict"];
+      503: components["responses"]["WorkerSessionStartUnavailable"];
+    };
+  };
   listWorkBySessionId: {
     parameters: {
       query?: {
@@ -7716,6 +7871,18 @@ export const SubmitWorkDocumentItemType = {
 } as const;
 export type SubmitWorkDocumentItemType =
   (typeof SubmitWorkDocumentItemType)[keyof typeof SubmitWorkDocumentItemType];
+export const WorkerSessionStartResponseState = {
+  WorkerSessionStartResponseStateReserved: "RESERVED",
+  WorkerSessionStartResponseStateStarting: "STARTING",
+  WorkerSessionStartResponseStateRunning: "RUNNING",
+  WorkerSessionStartResponseStatePaused: "PAUSED",
+  WorkerSessionStartResponseStateCompleted: "COMPLETED",
+  WorkerSessionStartResponseStateFailed: "FAILED",
+  WorkerSessionStartResponseStateCanceled: "CANCELED",
+  WorkerSessionStartResponseStateTerminated: "TERMINATED",
+} as const;
+export type WorkerSessionStartResponseState =
+  (typeof WorkerSessionStartResponseState)[keyof typeof WorkerSessionStartResponseState];
 export const WorkerSessionObservationState = {
   WorkerSessionObservationStateReserved: "RESERVED",
   WorkerSessionObservationStateStarting: "STARTING",
@@ -7868,6 +8035,18 @@ export const ErrorResponseCode = {
   METHOD_NOT_ALLOWED: "METHOD_NOT_ALLOWED",
   // Durable execution requestId was reused with materially different inputs.
   EXECUTION_REQUEST_ID_CONFLICT: "EXECUTION_REQUEST_ID_CONFLICT",
+  // Worker Session start requestId was reused with different normalized inputs.
+  WORKER_SESSION_START_REQUEST_ID_CONFLICT:
+    "WORKER_SESSION_START_REQUEST_ID_CONFLICT",
+  // The requested Worker Session identity is already reserved or terminal.
+  WORKER_SESSION_NOT_STARTABLE: "WORKER_SESSION_NOT_STARTABLE",
+  // The Worker Session opening record could not be published.
+  WORKER_SESSION_START_OPENING_FAILED: "WORKER_SESSION_START_OPENING_FAILED",
+  // The Worker Session event topic did not reach the required readiness barrier.
+  WORKER_SESSION_EVENT_TOPIC_UNAVAILABLE:
+    "WORKER_SESSION_EVENT_TOPIC_UNAVAILABLE",
+  // Workers could not admit the Worker Session execution.
+  WORKER_SESSION_ADMISSION_FAILED: "WORKER_SESSION_ADMISSION_FAILED",
   // Lifecycle control requestId was already applied with different control inputs.
   FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED:
     "FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED",
