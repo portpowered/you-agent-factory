@@ -2670,3 +2670,21 @@
 - **Learnings for future iterations:**
   - After a base-sync merge, rerun the repository gates locally before pushing so the new PR head has direct evidence in addition to the earlier green CI run.
 ---
+
+## 2026-08-10 17:43 -07:00 - btrc-p1-root-injection-006 latest-main CI follow-up
+- What was implemented
+  - Merged the newly advanced `origin/main` head `e6797fd5d` into the P1 branch, preserved the active P1 `prd.json`, and reconstructed the append-only progress log from all merge stages without dropping history.
+  - Retried only the failed CI jobs after the fresh head's functional lane reproduced the unchanged server-binding diagnostic assertion and intermittent session/worker timing cases.
+- Files changed
+  - `Makefile` from current-main synchronization
+  - `prd.json` conflict resolution retaining the active P1 PRD
+  - `progress.txt` merge reconstruction and this follow-up entry
+- Verification
+  - `prd.json` parses with all six P1 stories marked `passes:true`; reconstructed `progress.txt` contains 2,672 lines before this entry and no conflict markers.
+  - `make verify-fast` — passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` — passed.
+  - Focused session restart and partial-result tests pass locally; the server-binding test reproduces the Windows diagnostic-line mismatch locally, and the P1 diff is empty for the server-binding and mock-worker packages.
+  - CI run `31446147573` attempt 2 has all other lanes green; Backend Functional Coverage remains red on unchanged/flaky tests, so the PR is not yet ready for completion.
+- **Learnings for future iterations:**
+  - When a broad functional lane reports different failures on retries, compare changed package paths and run each named test directly before changing production behavior; preserve a reproducible baseline failure as explicit PR follow-up.
+---
