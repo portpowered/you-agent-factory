@@ -18,7 +18,8 @@
       "system_initialization",
       "chat_sessions",
       "events",
-      "worker_sessions"
+      "worker_sessions",
+      "webhooks"
     ],
     "nonServiceFamilies": [
       "initializer",
@@ -449,6 +450,9 @@
     "pkg/services/system_initialization/internal/workflow",
     "pkg/services/system_initialization/transports/cli",
     "pkg/services/system_initialization/wire",
+    "pkg/services/webhooks",
+    "pkg/services/webhooks/internal/service",
+    "pkg/services/webhooks/wire",
     "pkg/services/work",
     "pkg/services/work/internal",
     "pkg/services/work/internal/contenturl",
@@ -2624,6 +2628,21 @@
       "packagePath": "pkg/services/system_initialization/wire",
       "disposition": "retain",
       "destination": "system_initialization"
+    },
+    {
+      "packagePath": "pkg/services/webhooks",
+      "disposition": "retain",
+      "destination": "webhooks"
+    },
+    {
+      "packagePath": "pkg/services/webhooks/internal/service",
+      "disposition": "retain",
+      "destination": "webhooks"
+    },
+    {
+      "packagePath": "pkg/services/webhooks/wire",
+      "disposition": "retain",
+      "destination": "webhooks"
     },
     {
       "packagePath": "pkg/services/work",
