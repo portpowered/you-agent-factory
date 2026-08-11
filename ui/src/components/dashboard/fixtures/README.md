@@ -29,6 +29,22 @@ This catalog provides the canonical graph fixtures for dashboard layout tests, a
 - `scriptDashboardIntegrationTimelineEvents`: a mixed streamed event sequence with script success, script failure, and inference success dispatches for the dashboard integration smoke path.
 - `scriptDashboardIntegrationBackendWorkstationRequestsByDispatchID`: checked-in backend `BuildFactoryWorldWorkstationRequestProjectionSlice(...)` expectations for the mixed script-and-inference smoke dispatches.
 
+## Dashboard Regression Fixture
+
+- `dashboardRegressionFixture`: one identity-keyed scenario for dashboard
+  session discovery, out-of-order list refreshes, chart states/remounts,
+  two-session submit races, and Open/New Factory outcomes.
+- `createDashboardRegressionFixture()`: creates a fresh controller with
+  observable promise controls for list, submit, and Factory-operation
+  completion. It never uses wall-clock delays.
+- `canonicalizeDashboardRegressionSessions(...)`: fixture-local expected-row
+  normalization that drops selector aliases and duplicate canonical IDs.
+
+The regression fixture keeps `~default` in selector state and uses the resolved
+UUID for durable rows and operation ownership. Its submit, chart, and Factory
+journey records are keyed by immutable IDs so component and browser scenarios
+can advance the same race without relying on labels or array positions.
+
 ## Workstation-Request Fixtures
 
 - `buildDashboardInferenceAttemptFixture(...)`: creates a typed inference-attempt projection for request-detail coverage.

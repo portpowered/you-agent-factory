@@ -134,3 +134,62 @@ describe("useDashboardSessionStore", () => {
     });
   });
 });
+
+describe("useDashboardSessionStore session-list reconciliation", () => {
+  beforeEach(() => {
+    resetDashboardSessionStore();
+  });
+
+  it("reconciles canonical membership without retaining aliases or stale tabs", () => {
+    useDashboardSessionStore.setState({
+      pausedSessionIDs: ["session-removed", "session-beta"],
+      selectedSessionID: DEFAULT_FACTORY_SESSION_ID,
+      sessionTabOrder: [
+        DEFAULT_FACTORY_SESSION_ID,
+        "session-removed",
+        "session-beta",
+      ],
+    });
+
+    useDashboardSessionStore
+      .getState()
+      .reconcileSessionList(
+        ["session-beta", "session-created"],
+        "session-beta",
+      );
+
+    expect(useDashboardSessionStore.getState()).toMatchObject({
+      pausedSessionIDs: ["session-beta"],
+      selectedSessionID: "session-beta",
+      sessionTabOrder: ["session-beta", "session-created"],
+    });
+  });
+
+  it("remaps the default selector to the canonical default row", () => {
+    useDashboardSessionStore
+      .getState()
+      .reconcileSessionList(
+        ["session-default", "session-beta"],
+        "session-default",
+      );
+
+    expect(useDashboardSessionStore.getState()).toMatchObject({
+      selectedSessionID: "session-default",
+      sessionTabOrder: ["session-default", "session-beta"],
+    });
+  });
+
+  it("clears selection when an authoritative empty list removes every session", () => {
+    useDashboardSessionStore.setState({
+      selectedSessionID: "session-removed",
+      sessionTabOrder: ["session-removed"],
+    });
+
+    useDashboardSessionStore.getState().reconcileSessionList([]);
+
+    expect(useDashboardSessionStore.getState()).toMatchObject({
+      selectedSessionID: null,
+      sessionTabOrder: [],
+    });
+  });
+});

@@ -6,7 +6,7 @@ import {
   ChartTooltipContent,
 } from "@you-agent-factory/components/charts";
 import { Button } from "@you-agent-factory/components/primitives";
-import { useMemo } from "react";
+import { useId, useMemo } from "react";
 import {
   CartesianGrid,
   Label,
@@ -181,6 +181,7 @@ function ReadyWorkChart({
   const { overlayClassName, readyClassName } =
     workChartPresentationClasses(presentation);
   const chartMessages = getWorkOutcomeMessages(locale).chart;
+  const descriptionID = `work-chart-description-${useId()}`;
   const {
     beginSelection,
     commitSelection,
@@ -193,6 +194,14 @@ function ReadyWorkChart({
     visibleSeriesKeys,
     zoomRange,
   } = useReadyWorkChartInteractions(chartData);
+  const visibleSeries = chartData.series.filter((seriesData) =>
+    visibleSeriesKeys.includes(seriesData.key),
+  );
+  const accessibleDataDescription = buildWorkChartAccessibleDataDescription(
+    chartMessages,
+    visibleRows,
+    visibleSeries,
+  );
 
   return (
     <div className={cn(WORK_CHART_SHELL_CLASS, className)}>
@@ -256,6 +265,7 @@ function ReadyWorkChart({
           "data-work-chart-visible-ticks": visibleRows
             .map((row) => row.tick)
             .join(","),
+          "aria-describedby": descriptionID,
         }}
         style={{ minHeight: "14rem" }}
         title={ariaLabel}
@@ -265,7 +275,7 @@ function ReadyWorkChart({
           data={visibleRows}
           margin={WORK_CHART_MARGIN}
         >
-          <CartesianGrid vertical={false} />
+          <CartesianGrid strokeDasharray="3 3" vertical={false} />
           <XAxis
             axisLine={false}
             dataKey="tick"
@@ -286,16 +296,7 @@ function ReadyWorkChart({
             tickFormatter={(value) => formatAxisNumber(value)}
             tickLine={false}
             width={WORK_CHART_Y_AXIS_WIDTH}
-          >
-            <Label
-              angle={-90}
-              value={yAxisLabel}
-              position="insideLeft"
-              style={{ textAnchor: "middle" }}
-            />
-          </YAxis>
-
-          <CartesianGrid strokeDasharray="3 3" />
+          />
           <ChartTooltip
             content={(props) => {
               const tickValue = props.payload?.[0]?.payload?.tick;
@@ -314,8 +315,37 @@ function ReadyWorkChart({
           />
         </LineChart>
       </ChartContainer>
+      <p
+        className="sr-only"
+        data-work-chart-accessible-data="true"
+        id={descriptionID}
+      >
+        {accessibleDataDescription}
+      </p>
     </div>
   );
+}
+
+function buildWorkChartAccessibleDataDescription(
+  chartMessages: ReturnType<typeof getWorkOutcomeMessages>["chart"],
+  rows: readonly WorkChartData["rows"][number][],
+  series: readonly WorkChartBuiltSeries[],
+): string {
+  const values = series
+    .map((seriesData) => {
+      const points = rows
+        .filter((row) => typeof row[seriesData.key] === "number")
+        .map(
+          (row) =>
+            `${chartMessages.tickLabel(row.tick)}: ${chartMessages.seriesPointLabel(seriesData.label, row[seriesData.key] as number)}`,
+        )
+        .join("; ");
+      return points;
+    })
+    .filter((value) => value.length > 0)
+    .join(". ");
+
+  return chartMessages.accessibleDataDescription(values);
 }
 
 function buildWorkChartLegendPayload(
