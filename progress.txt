@@ -11883,3 +11883,19 @@
 - **Learnings for future iterations:**
   - A hosted functional-coverage failure in an unchanged unrelated test can be scheduling-sensitive under the parallel coverage lane; compare the exact failing assertion with focused repetitions and rerun the exact job before widening a feature diff.
 ---
+## [2026-08-11 12:52:10 -07:00] - wsr-0023-capture-replay-final-review-follow-up
+- What was implemented
+  - Re-read the active `prd.json` and append-only progress log; all three WSR stories remain marked `passes:true`, so no additional story implementation was required.
+  - Audited the existing PR #1876 rather than opening a duplicate. The historical blocking conversation is followed by implementation and acceptance evidence, and the thread-aware review scan reports zero formal reviews and zero unresolved inline threads.
+  - Confirmed the existing PR remains the requested `wsr-0023-capture-replay` submission with the `prd.json` description, current-base ancestry, clean mergeability, and terminal-success hosted checks.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `prd.json` parses and all three stories pass.
+  - `HEAD` matched `origin/wsr-0023-capture-replay`; `origin/main` was an ancestor; and `git diff --check` passed before this append.
+  - PR #1876 reported `MERGEABLE` / `CLEAN`; all 18 reported hosted checks were terminal-success; and its body matched `prd.json` after normalizing transport line endings.
+  - Thread-aware review data reported four historical conversation comments, zero formal reviews, and zero unresolved inline threads.
+- **Learnings for future iterations:**
+  - Compare PR body content after normalizing CRLF/LF transport differences; GitHub's returned body can use CRLF even when the repository JSON uses LF.
+  - A completed PR with historical blocking conversation should be audited through subsequent evidence, current head, checks, and thread state before creating any duplicate submission.
+---
