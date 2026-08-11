@@ -33,8 +33,8 @@
         "Tests pass"
       ],
       "priority": 1,
-      "passes": false,
-      "notes": "Review follow-up for this story: pre-barrier opening-append failure now aborts and joins the capture with durable OPENING_INVALID classification; Worker Sessions uses an explicit recorder dependency, production logger injection, and runtime recording identity input. Focused and race-enabled coverage passes. WSR-FT-004 root-built evidence and the remaining review follow-up are still outstanding."
+      "passes": true,
+      "notes": "Completed. Pre-barrier opening-append failure aborts and joins the capture with durable OPENING_INVALID classification; Worker Sessions uses an explicit recorder dependency, production logger injection, and runtime recording identity input. WSR-FT-004 now proves through the canonical root-built process that a real durable opening is observed before the first provider command and that a durable opening failure records PERSISTENCE_FAILED with identity and yields zero provider calls. Focused and race-enabled coverage passes. WSR-FT-005 and WSR-FT-006 remain outstanding for the replay and portable-fidelity stories."
     },
     {
       "id": "wsr-0023-capture-replay-002",
