@@ -620,6 +620,7 @@ func TestRootCommand_HelpDocumentsConciseOrientation(t *testing.T) {
 		"you run --work ./docs/examples/startup-work.json",
 		"exact Current Factory at ./factory/factory.json",
 		"you server",
+		"--remote",
 		"--with-server",
 		"--with-site",
 		"you docs agents",
@@ -724,6 +725,23 @@ func sectionProseLines(long, sectionName string) []string {
 		return nil
 	}
 	return strings.Split(rest, "\n")
+}
+
+func TestPlacementHelpDescribesRemoteExecutionWithoutListenerSemantics(t *testing.T) {
+	for _, args := range [][]string{{"--help"}, {"run", "--help"}} {
+		var out bytes.Buffer
+		root := newLegacyTestRootCommand()
+		root.SetOut(&out)
+		root.SetErr(io.Discard)
+		root.SetArgs(args)
+		if err := root.Execute(); err != nil {
+			t.Fatalf("execute %q: %v", strings.Join(args, " "), err)
+		}
+		help := out.String()
+		if !strings.Contains(help, "--remote") || !strings.Contains(help, "execute a supported operation through a running You server") {
+			t.Fatalf("help %q missing remote placement guidance:\n%s", strings.Join(args, " "), help)
+		}
+	}
 }
 
 func TestRootCommand_HelpDocumentsDiagnosticsOneLiner(t *testing.T) {

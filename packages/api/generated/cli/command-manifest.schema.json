@@ -90,6 +90,14 @@
           "description": "Whether the command exposes a runnable handler.",
           "type": "boolean"
         },
+        "placement": {
+          "description": "Where this command may execute: local-only, remote-only, or dual-placement.",
+          "enum": [
+            "local-only",
+            "remote-only",
+            "dual"
+          ]
+        },
         "completeness": {
           "description": "Marks records whose parsing and execution metadata is complete enough to serve as an authoritative generation source.",
           "enum": [
@@ -251,7 +259,8 @@
               "exits",
               "sideEffects",
               "constraints",
-              "handler"
+              "handler",
+              "placement"
             ],
             "properties": {
               "outputs": {
