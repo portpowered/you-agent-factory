@@ -11849,3 +11849,18 @@
 - **Learnings for future iterations:**
   - When a completed PR has no actionable current feedback, update only the append-only audit metadata and PRD/PR-body synchronization, then revalidate exact-head ancestry, mergeability, review-thread state, and every hosted check.
 ---
+## [2026-08-11 13:04:59 -07:00] - js-skip-permissions-parity-004 functional coverage retry audit
+- What was implemented
+  - Investigated the new-head Backend Functional Coverage failure without changing product or test code; the only failure was an unchanged-package coverage threshold under the first hosted attempt.
+  - Reran the failed Backend Functional Coverage job and dependent Verification Policy job, then recorded the successful retry against the exact pushed head.
+  - Updated the PRD delivery note so the existing PR body remains synchronized with the latest commit and hosted result.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - First workflow attempt `31529778149` reported only the unchanged `pkg/services/factory_runtime/internal/services/dispatch_planning/internal/service` functional-coverage variance (62.5468% vs 62.92% baseline); no product assertion failed.
+  - Retry Backend Functional Coverage job `93909011518` passed, and dependent Verification Policy job `93910818899` passed.
+  - The PRD still has four stories marked `passes:true`; the current PR head is `70f2a79b6e5b2db976ebdb803749fe1037320ef6`, and the PR body was synchronized from `prd.json` before this audit commit.
+- **Learnings for future iterations:**
+  - A small coverage-baseline miss in an unchanged package should be characterized and retried before changing product code or weakening the baseline; record the exact package delta and retry job evidence.
+---
