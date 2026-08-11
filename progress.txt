@@ -2,6 +2,7 @@
 - Normative customer-prose policy belongs under `docs/internal/standards/writing`; use `docs/architecture/data-model.md` and public contracts for product meaning, and keep exact machine/technical literals separate from reviewable natural-language prose.
 - The canonical product vocabulary source is `docs/internal/standards/writing/customer-technical-terms.yaml`; keep every record on one explicit schema and point its owner to the architecture or public-contract source of meaning.
 - Documentation-only stories should validate authored structured data as review evidence and leave source-scanning or meta-test enforcement to a real consumer; source shape alone is not observable customer behavior.
+- When a documentation standard mirrors a governing plan, enumerate the plan's rule sets at the policy boundary and label future checker lifecycle rules as not manually applicable until their consumer exists.
 - JSON Schema worker diagnostics must use `ErrorKind.KeywordPath()` and typed schema metadata; localized `ValidationError.Error()` text can leak rejected values and compiler-expanded host paths.
 - When an exact package file-count baseline blocks an oversized-file split, move the cohesive helpers into an existing appropriately owned file and verify both size and file-count gates.
 - Optional native JSON channels use an explicit presence bit plus custom JSON at durable boundaries to distinguish omitted values from JSON null; clone map/slice trees at projection and transport ownership boundaries.
@@ -8449,4 +8450,25 @@
   - The replacement head created by this bookkeeping append must pass its own hosted checks before final handoff.
 - **Learnings for future iterations:**
   - Main can advance during the final audit; fetch immediately before pushing the final progress record and attach CI evidence to the exact head it verifies.
+---
+## 2026-08-11 01:23:11 -07:00 - prose-standard-and-terms-001 latest normative review follow-up
+- What was implemented
+  - Updated the normative customer-writing standard to enumerate the complete governing blocking and advisory rule sets, including semicolons, contractions, public-term replacements, canonical term casing, suppression directives, baseline lifecycle, and parse failures.
+  - Marked suppression, baseline, and parse lifecycle rules as future-checker blocking rules that are not manually applicable in this documentation-only story, while keeping ordering and sequence in human review.
+  - Clarified protected-literal repair: align a stale documentation copy to a correct owning source; escalate an incorrect source to its owner and update dependents together; never use an exception to hide a contract mismatch.
+  - Preserved the documentation-only scope; no checker, source-scanning test, runtime, API, UI, generated artifact, or customer-corpus rewrite was added.
+- Files changed
+  - `docs/internal/standards/writing/customer-technical-writing-standard.md`
+  - `prd.json`
+  - `progress.txt`
+  - Current-main synchronization files carried by the merge.
+- Verification
+  - PRD JSON and terminology YAML parsed successfully; all 3 stories remain `passes:true` and all 59 term records retain the documented shape.
+  - `git diff --check`, `make docs-reference-smoke`, and `make typecheck` passed.
+  - `make ownership-inventory-check`, `make backend-size`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, and `make vet` passed individually on the synchronized head.
+  - Head `make -k lint` passed UI lint and structural checks; its known baseline failures were 175 `pkg-boundary` findings, the packaged-factory consumption migration finding, and deadcode drift from 350 baseline findings to 543 current findings. The same three failures and counts were reproduced on the detached `origin/main` audit worktree at `1b871e3a8`, so no new lint violation is attributable to this story. The aggregate vet subprocess returned `-1` under host contention, while standalone `make vet` passed.
+- **Learnings for future iterations:**
+  - Mirror the governing plan's exact rule inventory in a normative standard so future checker and reviewer work share stable IDs and boundaries.
+  - On Windows, run repository-wide Go gates sequentially; concurrent invocations can exhaust the host and leave timeout evidence that differs from standalone gate results.
+  - Fetch the live base immediately before the final merge and push; `origin/main` advanced again during this audit.
 ---
