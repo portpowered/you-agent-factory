@@ -13577,3 +13577,19 @@
   - After a failed-job retry clears transient functional failures and converges on one unchanged assertion, retain the exact retry evidence and do not modify an unrelated baseline package to force a green task PR.
   - A PRD/progress bookkeeping commit changes the tested head; update the delivery audit before pushing and treat the resulting workflow as a new verification cycle.
 ---
+## 2026-08-11 13:03:32 -07:00 - btrc-p1-root-injection-006 terminal current-head CI audit
+- What was implemented
+  - Audited the latest hosted workflow `31530189072` for PR #1857 on pushed head `75d161d2b571be1283e68b55663dbff61e8abb59`.
+  - Made no product or unrelated-baseline changes; all six P1 stories remain marked `passes:true` and the earlier blocking review findings remain addressed by the later follow-up commits.
+  - Updated `prd.json` with the exact current-head delivery result.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Backend Unit Coverage and every hosted lane other than Backend Functional Coverage passed.
+  - Backend Functional Coverage failed only `TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput` in untouched `tests/functional/transport/server_binding`; the pinned real-ACP evidence artifact was therefore not produced and Verification Policy failed dependently.
+  - `git diff --name-only origin/main...HEAD -- tests/functional/transport/server_binding` is empty; the P1 implementation does not touch the failing package, workflow, or artifact path.
+  - Thread-aware PR audit reports zero unresolved review threads and zero formal reviews; the PR body matched the pre-update `prd.json`.
+- **Learnings for future iterations:**
+  - Record the exact hosted test head and dependent artifact failure in the PRD, then keep unchanged current-main functional failures scoped as delivery evidence instead of changing unrelated baseline tests.
+---
