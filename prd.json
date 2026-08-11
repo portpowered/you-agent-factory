@@ -11,27 +11,27 @@
   },
   "deliveryAudit": {
     "pullRequest": 1857,
-    "head": "afce3a985ac16bf69df5eef26d3258f2f6bd0132",
-    "base": "650b701689fcbc467fa0e814478460b9c3316629",
+    "head": "36847a09c79f602f21ce134e8ba779dc2c6cffab",
+    "base": "9d65593006bbbc9bc95420fdd55db6a4bd5f1770",
     "reviewThreads": 0,
     "unresolvedReviewThreads": 0,
     "formalReviews": 0,
     "latestWorkflow": {
-      "run": 31520283246,
-      "testedHead": "afce3a985ac16bf69df5eef26d3258f2f6bd0132",
+      "run": 31521400194,
+      "testedHead": "076be75b955dc9e6ea575ae5d6d467355fa95206",
       "result": "terminal_failure_untouched_baseline",
       "functionalResult": "failure",
       "unitResult": "success",
       "verificationPolicy": "failure",
       "currentHeadCheckRuns": "terminal_failure",
-      "rerunResult": "Latest-head CI completed with all lanes except Backend Functional Coverage and Verification Policy passing. Functional Coverage hit the unchanged workflow baseline: the short functional sweep skips TestPinnedAcpxCompletesDefaultFactoryBuilderPrompt, so the later pinned ACP step does not produce real-acpx-evidence.json; clean origin/main run 31511537429 reproduces the same missing-artifact failure. No P1 diff touches tests/functional/transport/acp/realclient or the CI artifact path.",
+      "rerunResult": "The initial workflow and its failed-job retry passed every lane except Backend Functional Coverage and Verification Policy. Both functional attempts failed the same untouched TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput in tests/functional/transport/server_binding; the pinned real-ACP artifact was consequently absent. No P1 diff touches the failing package, and the branch was then synchronized with current origin/main 9d65593006bbbc9bc95420fdd55db6a4bd5f1770 before the next hosted run.",
       "taskScopedFailures": [],
       "baselineFailures": [
         {
           "job": "Backend Functional Coverage",
-          "package": "tests/functional/transport/acp/realclient",
-          "test": "TestPinnedAcpxCompletesDefaultFactoryBuilderPrompt",
-          "evidence": "The latest head's functional sweep runs in short mode and skips this test; the required follow-on pinned ACP step is therefore skipped after the functional step fails, leaving .artifacts/functional-test-viz/real-acpx-evidence.json absent and causing the artifact upload to fail. Current-main run 31511537429 reproduces the same missing artifact, and the P1 diff is empty for this package, the CI workflow, and the artifact path."
+          "package": "tests/functional/transport/server_binding",
+          "test": "TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput",
+          "evidence": "The initial attempt and failed-job retry both reported this unchanged server-binding assertion before the required pinned real-ACP evidence upload, leaving .artifacts/functional-test-viz/real-acpx-evidence.json absent. git diff --name-only origin/main...HEAD -- tests/functional/transport/server_binding is empty, and the P1 implementation does not touch the package, workflow, or artifact path."
         }
       ],
       "transientFailures": []
@@ -150,7 +150,7 @@
       ],
       "priority": 6,
       "passes": true,
-      "notes": "Completed the review follow-up for the reusable root-process proof and the final value-only invocation cutover. Both representative success and provider-failure invocations enter through the public `you --json run` CLI on one root.BuildProcess/Process.Execute instance; the injected API server is observation-only for public session and Factory Event streams. On current `origin/main` `650b701689fcbc467fa0e814478460b9c3316629`, workflow `31520283246` on published head `afce3a985ac16bf69df5eef26d3258f2f6bd0132` passed every lane except the unchanged pinned-ACP evidence artifact baseline. The functional sweep skips `TestPinnedAcpxCompletesDefaultFactoryBuilderPrompt` in short mode, so the required follow-on step does not emit `real-acpx-evidence.json`; current-main run `31511537429` reproduces the same failure and the package/workflow are absent from the P1 diff. The thread-aware audit has zero unresolved review threads and zero formal reviews. All six P1 stories remain marked `passes:true`; the remaining delivery note is the unrelated baseline CI policy failure."
+      "notes": "Completed the review follow-up for the reusable root-process proof and the final value-only invocation cutover. Both representative success and provider-failure invocations enter through the public `you --json run` CLI on one root.BuildProcess/Process.Execute instance; the injected API server is observation-only for public session and Factory Event streams. On published head `076be75b955dc9e6ea575ae5d6d467355fa95206`, workflow `31521400194` and its failed-job retry passed every lane except the unchanged server-binding functional baseline and dependent Verification Policy. Both attempts reported `TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput` in untouched `tests/functional/transport/server_binding`; the P1 diff is empty for that package, the workflow, and the artifact path. Current `origin/main` `9d65593006bbbc9bc95420fdd55db6a4bd5f1770` was merged as `36847a09c79f602f21ce134e8ba779dc2c6cffab`, and synchronized local verification passes. The thread-aware audit has zero unresolved review threads and zero formal reviews. All six P1 stories remain marked `passes:true`; fresh hosted verification is required for the synchronized head."
     }
   ]
 }

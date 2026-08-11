@@ -13524,3 +13524,21 @@
 - **Learnings for future iterations:**
   - When a required evidence artifact is missing because an earlier workflow step fails or skips its producer, compare the full job sequence with the latest current-main run before widening a completed product task; identical artifact failures outside the task diff are delivery-baseline evidence.
 ---
+## [2026-08-11 11:31:32 -07:00] - btrc-p1-root-injection-006 current-main sync and CI retry audit
+- What was implemented
+  - Merged current `origin/main` `9d65593006bbbc9bc95420fdd55db6a4bd5f1770` into the P1 branch as `36847a09c79f602f21ce134e8ba779dc2c6cffab`; the incoming change is isolated to `factory/scripts/setup-workspace.py`.
+  - Audited PR #1857 with the thread-aware GitHub workflow: zero unresolved inline threads and zero formal reviews remain.
+  - Retried the failed Backend Functional Coverage job for workflow `31521400194`; both attempts converged on the same untouched server-binding assertion, so no unrelated product or test change was made. All six P1 stories remain `passes:true`.
+- Files changed
+  - `factory/scripts/setup-workspace.py`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `make verify-fast backend-size pkg-maint pkg-file-count pkg-structure vet` — passed after the current-main merge.
+  - Workflow `31521400194` on prior published head `076be75b955dc9e6ea575ae5d6d467355fa95206` passed every lane except Backend Functional Coverage and dependent Verification Policy; the initial run and failed-job retry both failed only `TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput` in untouched `tests/functional/transport/server_binding`.
+  - `git diff --name-only origin/main...HEAD -- tests/functional/transport/server_binding` — empty; `git diff --check` — passed; current `origin/main` is an ancestor of the synchronized branch.
+  - Fresh hosted verification for the synchronized pushed head remains pending.
+- **Learnings for future iterations:**
+  - Refresh and merge current `origin/main` after retrying hosted CI; a terminal result for an older base cannot certify a moving PR head.
+  - When a failed functional job repeats the same assertion in an untouched package, preserve the exact baseline evidence and avoid widening a completed dependency-injection task.
+---
