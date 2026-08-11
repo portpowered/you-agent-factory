@@ -30,11 +30,11 @@ func (s *Service) forwardLiveChange(
 	request factorysessions.LiveChangeRequest,
 	recoverRequestID string,
 ) (factorysessions.LiveChangeResult, error) {
-	if s == nil {
-		return factorysessions.LiveChangeResult{}, factorysessions.ErrRuntimeNotAvailable
+	var capability liveChangeCapability
+	if s != nil {
+		capability, _ = s.Service.(liveChangeCapability)
 	}
-	capability, ok := s.Service.(liveChangeCapability)
-	if !ok {
+	if capability == nil {
 		return factorysessions.LiveChangeResult{}, factorysessions.ErrRuntimeNotAvailable
 	}
 	if recoverRequestID != "" {
