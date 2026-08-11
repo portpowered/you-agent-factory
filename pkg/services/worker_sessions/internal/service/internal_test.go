@@ -604,6 +604,79 @@ func TestAppendDraft_InvalidDraft_ReturnsErrorAndAppendsNothing(t *testing.T) {
 	}
 }
 
+func TestPublishOpeningRecordWithoutWorkerRecordingArgumentStillOpensAndCloses(t *testing.T) {
+	r := newTestRegistry(t)
+	r.reserveIfAbsent("worker-1")
+
+	if err := r.publishOpeningRecord(
+		context.Background(),
+		"worker-1",
+		"dispatch-1",
+		workers.SessionPayload{Status: string(workersessions.StateStarting)},
+		"codex",
+	); err != nil {
+		t.Fatalf("publishOpeningRecord() error = %v, want nil", err)
+	}
+	if err := r.publishTerminalRecord(
+		context.Background(),
+		"worker-1",
+		"dispatch-1",
+		workersessions.StateCompleted,
+		workersessions.TerminalResult{Outcome: workersessions.TerminalOutcomeCompleted},
+	); err != nil {
+		t.Fatalf("publishTerminalRecord() error = %v, want nil", err)
+	}
+}
+
+func TestPublishOpeningRecordAwaitOpeningFailureClosesCapture(t *testing.T) {
+	r := newTestRegistry(t)
+	r.reserveIfAbsent("worker-1")
+	recording := &awaitOpeningFailureRecording{err: errors.New("opening barrier failed")}
+
+	err := r.publishOpeningRecord(
+		context.Background(),
+		"worker-1",
+		"dispatch-1",
+		workers.SessionPayload{Status: string(workersessions.StateStarting)},
+		"codex",
+		recording,
+	)
+	if !errors.Is(err, recording.err) {
+		t.Fatalf("publishOpeningRecord() error = %v, want %v", err, recording.err)
+	}
+	if !recording.closed {
+		t.Fatal("publishOpeningRecord() did not close the failed opening capture")
+	}
+}
+
+func TestPublishTerminalRecordMissingSessionReturnsNotFound(t *testing.T) {
+	r := newTestRegistry(t)
+	err := r.publishTerminalRecord(
+		context.Background(),
+		"missing",
+		"dispatch-1",
+		workersessions.StateCompleted,
+		workersessions.TerminalResult{Outcome: workersessions.TerminalOutcomeCompleted},
+	)
+	if !errors.Is(err, workersessions.ErrSessionNotFound) {
+		t.Fatalf("publishTerminalRecord() error = %v, want ErrSessionNotFound", err)
+	}
+}
+
+type awaitOpeningFailureRecording struct {
+	err    error
+	closed bool
+}
+
+func (recording *awaitOpeningFailureRecording) AwaitOpening(context.Context) error {
+	return recording.err
+}
+
+func (recording *awaitOpeningFailureRecording) Close(context.Context) error {
+	recording.closed = true
+	return nil
+}
+
 // TestPublishOutcomeLabel_CoversEveryOutcomeIncludingUnspecified proves the
 // pure label mapping PublishRecord's logging depends on names every
 // PublishOutcome, including the zero value no production PublishRecord call
