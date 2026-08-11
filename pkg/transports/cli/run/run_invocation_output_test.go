@@ -365,7 +365,7 @@ func TestRunRemoteInvocationPassesPreparedArguments(t *testing.T) {
 	}
 }
 
-func TestRemoteDurableRequestMapsPolicyWaitAndStableIdentity(t *testing.T) {
+func TestRemoteDurableRequestMapsPolicyAndWait(t *testing.T) {
 	timeout := int64(1750)
 	requestID := "caller-request-1"
 	args := map[string]any{"prompt": "ship it", "count": 2}
@@ -406,18 +406,26 @@ func TestRemoteDurableRequestMapsPolicyWaitAndStableIdentity(t *testing.T) {
 	if first.RequestId != requestID {
 		t.Fatalf("request ID = %q, want caller identity", first.RequestId)
 	}
+}
 
-	first.RequestId = ""
-	second, err := remoteDurableRequestFromRunConfig(cfg, factoryapi.InvocationRequest{Args: &args})
+func TestRemoteDurableRequestDerivesStableIdentity(t *testing.T) {
+	args := map[string]any{"prompt": "ship it"}
+	cfg := RunConfig{
+		FactoryConfigPath: "remote-factory.json",
+		LoadFactoryConfigFile: func(string) (*interfaces.FactoryConfig, error) {
+			return &interfaces.FactoryConfig{Name: "remote-inline"}, nil
+		},
+	}
+	first, err := remoteDurableRequestFromRunConfig(cfg, factoryapi.InvocationRequest{Args: &args})
 	if err != nil {
 		t.Fatalf("remoteDurableRequestFromRunConfig retry: %v", err)
 	}
-	retry, err := remoteDurableRequestFromRunConfig(cfg, factoryapi.InvocationRequest{Args: &args})
+	second, err := remoteDurableRequestFromRunConfig(cfg, factoryapi.InvocationRequest{Args: &args})
 	if err != nil {
 		t.Fatalf("remoteDurableRequestFromRunConfig second retry: %v", err)
 	}
-	if second.RequestId == "" || second.RequestId != retry.RequestId {
-		t.Fatalf("derived request IDs = %q/%q, want stable retry identity", second.RequestId, retry.RequestId)
+	if first.RequestId == "" || first.RequestId != second.RequestId {
+		t.Fatalf("derived request IDs = %q/%q, want stable retry identity", first.RequestId, second.RequestId)
 	}
 }
 
