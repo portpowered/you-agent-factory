@@ -307,63 +307,48 @@ func TestListPackagedFactories_HidesCatalogLoadAndDecodeFailures(t *testing.T) {
 	})
 }
 
-func TestListPackagedFactories_CoversBoundaryFailures(t *testing.T) {
+func TestListPackagedFactories_RejectsMissingDefinitionsRoot(t *testing.T) {
 	t.Parallel()
 
-	t.Run("missing definitions root", func(t *testing.T) {
-		recorder := httptest.NewRecorder()
-		factorydefinitionshttp.NewHandlerFromRoot(
-			factorydefinitionshttp.RootBinding{},
-			zap.NewNop(),
-		).ListPackagedFactories(
-			recorder,
-			httptest.NewRequest(http.MethodGet, "/packaged-factories", nil),
-		)
-		if recorder.Code != http.StatusInternalServerError {
-			t.Fatalf("status = %d, want 500", recorder.Code)
-		}
-	})
+	recorder := listPackagedFactoriesResponse(t, factorydefinitionshttp.RootBinding{})
+	if recorder.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500", recorder.Code)
+	}
+}
 
-	t.Run("resolve failure", func(t *testing.T) {
-		root := &packagedFactoryCatalogRootFake{
-			listResult: factorydefinitions.ListBuiltInPackagedFactoriesResult{
-				Entries: []factorydefinitions.BuiltInPackagedFactoryEntry{{
-					Name: "@you/missing", Project: "builtin-missing",
-				}},
-			},
-		}
-		recorder := httptest.NewRecorder()
-		factorydefinitionshttp.NewHandlerFromRoot(
-			factorydefinitionshttp.RootBinding{Definitions: root},
-			zap.NewNop(),
-		).ListPackagedFactories(
-			recorder,
-			httpTestRequest("/packaged-factories"),
-		)
-		assertPackagedFactoryCatalogInternalError(t, recorder, "missing")
-	})
+func TestListPackagedFactories_RejectsResolveFailure(t *testing.T) {
+	t.Parallel()
 
-	t.Run("identity mismatch", func(t *testing.T) {
-		root := &packagedFactoryCatalogRootFake{
-			listResult: factorydefinitions.ListBuiltInPackagedFactoriesResult{
-				Entries: []factorydefinitions.BuiltInPackagedFactoryEntry{{
-					Name: "@you/mismatch", Project: "listed-project",
-				}},
-			},
-			definitions: map[string]factorydefinitions.PackagedDefinition{
-				"@you/mismatch": packagedFactoryDefinition("@you/mismatch", "resolved-project", "name: mismatch\n"),
-			},
-		}
-		recorder := httptest.NewRecorder()
-		factorydefinitionshttp.NewHandlerFromRoot(
-			factorydefinitionshttp.RootBinding{Definitions: root},
-			zap.NewNop(),
-		).ListPackagedFactories(
-			recorder,
-			httpTestRequest("/packaged-factories"),
-		)
-		assertPackagedFactoryCatalogInternalError(t, recorder, "identity mismatch")
-	})
+	root := &packagedFactoryCatalogRootFake{
+		listResult: factorydefinitions.ListBuiltInPackagedFactoriesResult{
+			Entries: []factorydefinitions.BuiltInPackagedFactoryEntry{{
+				Name: "@you/missing", Project: "builtin-missing",
+			}},
+		},
+	}
+	recorder := listPackagedFactoriesResponse(t, factorydefinitionshttp.RootBinding{Definitions: root})
+	assertPackagedFactoryCatalogInternalError(t, recorder, "missing")
+}
+
+func TestListPackagedFactories_RejectsIdentityMismatch(t *testing.T) {
+	t.Parallel()
+
+	root := &packagedFactoryCatalogRootFake{
+		listResult: factorydefinitions.ListBuiltInPackagedFactoriesResult{
+			Entries: []factorydefinitions.BuiltInPackagedFactoryEntry{{
+				Name: "@you/mismatch", Project: "listed-project",
+			}},
+		},
+		definitions: map[string]factorydefinitions.PackagedDefinition{
+			"@you/mismatch": packagedFactoryDefinition("@you/mismatch", "resolved-project", "name: mismatch\n"),
+		},
+	}
+	recorder := listPackagedFactoriesResponse(t, factorydefinitionshttp.RootBinding{Definitions: root})
+	assertPackagedFactoryCatalogInternalError(t, recorder, "identity mismatch")
+}
+
+func TestListPackagedFactories_RejectsIncompleteDefinitions(t *testing.T) {
+	t.Parallel()
 
 	for _, testCase := range []struct {
 		name       string
@@ -390,6 +375,7 @@ func TestListPackagedFactories_CoversBoundaryFailures(t *testing.T) {
 		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
 			root := &packagedFactoryCatalogRootFake{
 				listResult: factorydefinitions.ListBuiltInPackagedFactoriesResult{
 					Entries: []factorydefinitions.BuiltInPackagedFactoryEntry{{
@@ -400,34 +386,35 @@ func TestListPackagedFactories_CoversBoundaryFailures(t *testing.T) {
 					testCase.definition.Name: testCase.definition,
 				},
 			}
-			recorder := httptest.NewRecorder()
-			factorydefinitionshttp.NewHandlerFromRoot(
-				factorydefinitionshttp.RootBinding{Definitions: root},
-				zap.NewNop(),
-			).ListPackagedFactories(
-				recorder,
-				httpTestRequest("/packaged-factories"),
-			)
+			recorder := listPackagedFactoriesResponse(t, factorydefinitionshttp.RootBinding{Definitions: root})
 			assertPackagedFactoryCatalogInternalError(t, recorder, testCase.name)
 		})
 	}
+}
 
-	t.Run("typed root failure maps to public error", func(t *testing.T) {
-		root := &packagedFactoryCatalogRootFake{
-			listErr: factorydefinitions.ErrInvalidFactoryDefinitionPayload,
-		}
-		recorder := httptest.NewRecorder()
-		factorydefinitionshttp.NewHandlerFromRoot(
-			factorydefinitionshttp.RootBinding{Definitions: root},
-			zap.NewNop(),
-		).ListPackagedFactories(
-			recorder,
-			httpTestRequest("/packaged-factories"),
-		)
-		if recorder.Code != http.StatusBadRequest {
-			t.Fatalf("status = %d, want 400: %s", recorder.Code, recorder.Body.String())
-		}
-	})
+func TestListPackagedFactories_MapsTypedRootFailure(t *testing.T) {
+	t.Parallel()
+
+	root := &packagedFactoryCatalogRootFake{
+		listErr: factorydefinitions.ErrInvalidFactoryDefinitionPayload,
+	}
+	recorder := listPackagedFactoriesResponse(t, factorydefinitionshttp.RootBinding{Definitions: root})
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400: %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func listPackagedFactoriesResponse(
+	t *testing.T,
+	binding factorydefinitionshttp.RootBinding,
+) *httptest.ResponseRecorder {
+	t.Helper()
+	recorder := httptest.NewRecorder()
+	factorydefinitionshttp.NewHandlerFromRoot(binding, zap.NewNop()).ListPackagedFactories(
+		recorder,
+		httpTestRequest("/packaged-factories"),
+	)
+	return recorder
 }
 
 func httpTestRequest(path string) *http.Request {
