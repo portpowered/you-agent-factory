@@ -123,9 +123,9 @@
     },
     {
       "packagePath": "pkg/services/factory_sessions/internal/execution",
-      "fileCount": 39,
+      "fileCount": 28,
       "owner": "factory-session-maintainers",
-      "removalReason": "Remove this ratchet after the execution package is reduced below the repository limit."
+      "removalReason": "Separate execution coordination from invocation policy."
     },
     {
       "packagePath": "pkg/services/factory_sessions/internal/runtimeopening",

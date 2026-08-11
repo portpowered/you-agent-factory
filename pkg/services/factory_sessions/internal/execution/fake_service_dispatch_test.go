@@ -604,7 +604,6 @@ func TestFakeService_InterruptAcceptedBeforeCompletion_ObservableDispatchAndEven
 	}
 
 	interruptResult, err := service.InterruptDispatch(context.Background(), started.SessionID, InterruptDispatchRequest{
-
 		ControlRequest: ControlRequest{Reason: "stop before provider completion"},
 		DispatchID:     "disp-js-002",
 	})

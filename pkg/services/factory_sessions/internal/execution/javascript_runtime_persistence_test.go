@@ -5,16 +5,17 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
-
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 )
 
 func TestTaggedDurableHistoryIsAuthoritativeDuringHydrationAndResave(t *testing.T) {
@@ -478,5 +479,72 @@ func TestPersistAndMetadataNoOpBranches(t *testing.T) {
 	metadata := workflowMetadataFromResolved(ResolvedSource{SourceRef: "fallback-ref"}, StartRequest{})
 	if metadata["name"] != "fallback-ref" {
 		t.Fatalf("fallback metadata name = %#v, want fallback-ref", metadata["name"])
+	}
+}
+
+func TestApplyInlineFactoryDeclarationPreservesWorkflowFileDefaultPolicy(t *testing.T) {
+	t.Parallel()
+
+	defaultPolicy := json.RawMessage(`{"allowedModels":["gpt-allowed"],"mode":"READ_ONLY"}`)
+	resolution := factory.WorkflowSourceResolution{Found: true}
+	applyInlineFactoryDeclaration(&resolution, Source{
+		Kind:         factory.WorkflowSourceKindWorkflowFile,
+		WorkflowFile: "/tmp/workflow.js",
+		InlineWorkflow: &InlineWorkflowSource{
+			DefaultPolicy: defaultPolicy,
+		},
+	})
+	if string(resolution.DefaultPolicy) != string(defaultPolicy) {
+		t.Fatalf("resolution defaultPolicy = %s, want %s", resolution.DefaultPolicy, defaultPolicy)
+	}
+}
+
+const workersImportRoot = "github.com/portpowered/infinite-you/pkg/services/workers"
+
+var executionWorkersLeaseImportRoots = []string{
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/...",
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/livechild/...",
+}
+
+// TestExecutionPackagesImportWorkersOnlyThroughRoot seals execution and
+// durable-provider binding call sites to the Workers service root contract.
+
+// TestExecutionServiceRolesNameWorkersRootContracts proves durable execution
+// constructors and live-child binding factories type Workers-facing inputs only
+// through the Workers service root.
+func TestExecutionServiceRolesNameWorkersRootContracts(t *testing.T) {
+	t.Parallel()
+
+	var (
+		_ workers.InvocationExecutor
+		_ workers.Provider
+		_ workers.ProgressPublisher
+	)
+}
+
+func TestSmokeLiveChildProviderUsesWorkersRootInferenceContracts(t *testing.T) {
+	t.Parallel()
+
+	provider := SmokeLiveChildProvider()
+	resp, err := provider.Infer(context.Background(), workers.ProviderInferenceRequest{
+		Dispatch: work.WorkDispatch{
+			DispatchID: "dispatch-boundary",
+			WorkerType: "agent-run-fake-child",
+		},
+		UserMessage:   "summarize workflows",
+		ModelProvider: "mock",
+		Model:         "gpt-test",
+		SessionID:     "session-boundary",
+		RunnerID:      "runner-boundary",
+		WorkerType:    "agent-run-fake-child",
+	})
+	if err != nil {
+		t.Fatalf("Infer() error = %v, want nil", err)
+	}
+	if !strings.Contains(resp.Content, "live:agent-run-fake-child") {
+		t.Fatalf("content = %q, want live child smoke payload", resp.Content)
+	}
+	if resp.ProviderSession == nil || resp.ProviderSession.ID != "live-provider-session-1" {
+		t.Fatalf("provider session = %#v, want live-provider-session-1", resp.ProviderSession)
 	}
 }

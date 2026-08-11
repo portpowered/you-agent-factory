@@ -4,18 +4,24 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"os"
-	"path/filepath"
-	"sync"
-	"testing"
-	"time"
-
+	"fmt"
 	"github.com/portpowered/infinite-you/internal/testutil/checkpointfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/factoryruntimefixtures"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
+	responsestreamwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream/wire"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/testing/eventsstub"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	"os"
+	"path/filepath"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
 )
 
 func TestValidateCheckpointSummaryForResume_RejectsInvalidMetadata(t *testing.T) {
@@ -580,4 +586,272 @@ func waitForResumeCoverageDispatchStatus(
 		time.Sleep(25 * time.Millisecond)
 	}
 	t.Fatalf("dispatch %s did not reach status %s within %s", dispatchID, want, timeout)
+}
+
+func newDurableResponseEventsService(t *testing.T) *JavaScriptRuntimeService {
+	t.Helper()
+
+	eventsService := eventsstub.New()
+	var next atomic.Uint64
+	streams, err := responsestreamwire.NewService(func() string {
+		return fmt.Sprintf("response-event-%d", next.Add(1))
+	}, nil, eventsService)
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+
+	service := newConfiguredJavaScriptRuntimeService(javaScriptRuntimeServiceConfig{})
+	service.responseStreams = streams
+	service.generateResponseEventID = func() string {
+		return fmt.Sprintf("response-event-%d", next.Add(1))
+	}
+	return service
+}
+
+type progressCapturingChildExecutor struct {
+	publisher workers.ProgressPublisher
+}
+
+func (e *progressCapturingChildExecutor) Execute(context.Context, workers.InvocationInput) (workers.InvocationResult, error) {
+	return workers.InvocationResult{}, nil
+}
+
+func seedResponseEventSession(t *testing.T, service *JavaScriptRuntimeService, sessionID string) *runtimeSessionState {
+	t.Helper()
+
+	state := &runtimeSessionState{
+		session: SessionReadResult{SessionID: sessionID},
+	}
+	service.mu.Lock()
+	service.sessions[sessionID] = state
+	service.mu.Unlock()
+	return state
+}
+
+func validMessageDeltaDraft(dispatchID string) responseevents.Draft {
+	payload, _ := json.Marshal(responseevents.MessageDeltaPayload{
+		ContentBlockIndex: 0,
+		ContentBlockKind:  responseevents.ContentBlockText,
+		TextDelta:         "hello",
+	})
+	return responseevents.Draft{
+		RunID:      dispatchID,
+		DispatchID: dispatchID,
+		ItemID:     "message-1",
+		Kind:       responseevents.KindMessage,
+		Phase:      responseevents.PhaseDelta,
+		Provenance: responseevents.Provenance{
+			Provider:        "cursor",
+			NativeEventType: "content_block_delta",
+			Delivery:        responseevents.DeliveryNativeStream,
+			Representation:  responseevents.RepresentationDelta,
+			Fidelity:        responseevents.FidelityLossless,
+		},
+		Payload: payload,
+	}
+}
+
+func TestJavaScriptRuntimeService_SubscribeResponseEvents_PublishesAndStreamsChildProgress(t *testing.T) {
+	t.Parallel()
+
+	service := newDurableResponseEventsService(t)
+	sessionID := "dur-sess-response-events"
+	state := seedResponseEventSession(t, service, sessionID)
+
+	publisher := service.sessionProgressPublisher(sessionID, state)
+	publisher(workers.ProgressFragment{
+		DispatchID:     "dispatch-1",
+		CanonicalDraft: validMessageDeltaDraft("dispatch-1"),
+	})
+
+	cursor, err := service.SubscribeResponseEvents(context.Background(), sessionID, factorysessions.ResponseEventSubscriptionRequest{
+		SessionID: sessionID,
+		Kinds:     []factorysessions.ResponseEventKind{factorysessions.ResponseEventKindMessage},
+	})
+	if err != nil {
+		t.Fatalf("SubscribeResponseEvents: %v", err)
+	}
+	defer cursor.Detach()
+
+	events, err := cursor.Next(context.Background())
+	if err != nil {
+		t.Fatalf("cursor.Next: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("events = %#v, want one MESSAGE delta", events)
+	}
+	if events[0].Kind != responseevents.KindMessage || events[0].DispatchID != "dispatch-1" {
+		t.Fatalf("event = %#v, want MESSAGE dispatch-1", events[0])
+	}
+}
+
+func TestJavaScriptRuntimeService_SubscribeResponseEvents_RejectsMissingStore(t *testing.T) {
+	t.Parallel()
+
+	service := newDurableResponseEventsService(t)
+	seedResponseEventSession(t, service, "dur-sess-empty")
+
+	_, err := service.SubscribeResponseEvents(context.Background(), "dur-sess-empty", factorysessions.ResponseEventSubscriptionRequest{
+		SessionID: "dur-sess-empty",
+	})
+	if !errors.Is(err, factorysessions.ErrSessionNotFound) {
+		t.Fatalf("SubscribeResponseEvents error = %v, want ErrSessionNotFound", err)
+	}
+}
+
+func TestJavaScriptRuntimeService_SubscribeResponseEvents_RejectsInvalidCursor(t *testing.T) {
+	t.Parallel()
+
+	service := newDurableResponseEventsService(t)
+	sessionID := "dur-sess-invalid-cursor"
+	state := seedResponseEventSession(t, service, sessionID)
+	publisher := service.sessionProgressPublisher(sessionID, state)
+	publisher(workers.ProgressFragment{CanonicalDraft: validMessageDeltaDraft("dispatch-1")})
+
+	_, err := service.SubscribeResponseEvents(context.Background(), sessionID, factorysessions.ResponseEventSubscriptionRequest{
+		SessionID:     sessionID,
+		AfterSequence: -1,
+	})
+	if !errors.Is(err, factorysessions.ErrInvalidResponseEventCursor) {
+		t.Fatalf("SubscribeResponseEvents error = %v, want ErrInvalidResponseEventCursor", err)
+	}
+}
+
+func TestJavaScriptRuntimeService_SessionProgressPublisher_MapsGenericFragments(t *testing.T) {
+	t.Parallel()
+
+	service := newDurableResponseEventsService(t)
+	sessionID := "dur-sess-ignore"
+	state := seedResponseEventSession(t, service, sessionID)
+
+	publisher := service.sessionProgressPublisher(sessionID, state)
+	publisher(workers.ProgressFragment{DispatchID: "dispatch-1", Kind: workers.ProgressFragmentKind})
+	publisher(workers.ProgressFragment{CanonicalDraft: "not-a-draft"})
+
+	if state.responseEvents == nil {
+		t.Fatal("response event store was not initialized")
+	}
+	if accounting := state.responseEvents.RetentionAccounting(); accounting.EventCount != 1 {
+		t.Fatalf("retained events = %#v, want mapped generic progress fragment only", accounting)
+	}
+}
+
+func TestJavaScriptRuntimeService_SubscribeResponseEvents_RequiresRuntime(t *testing.T) {
+	t.Parallel()
+
+	var service *JavaScriptRuntimeService
+	_, err := service.SubscribeResponseEvents(context.Background(), "dur-sess-1", factorysessions.ResponseEventSubscriptionRequest{})
+	if !errors.Is(err, factorysessions.ErrRuntimeNotAvailable) {
+		t.Fatalf("SubscribeResponseEvents error = %v, want ErrRuntimeNotAvailable", err)
+	}
+}
+
+func TestEnsureSessionResponseEvents_RequiresIDGenerator(t *testing.T) {
+	t.Parallel()
+
+	service := newConfiguredJavaScriptRuntimeService(javaScriptRuntimeServiceConfig{})
+	state := &runtimeSessionState{session: SessionReadResult{SessionID: "dur-sess-missing-id"}}
+	if err := service.ensureSessionResponseEvents("dur-sess-missing-id", state); err == nil {
+		t.Fatal("ensureSessionResponseEvents succeeded without ID generator")
+	}
+}
+
+// TestPublishWorkerProgress_ReachesOnlyTheSessionThatStartedTheWorker pins the
+// routing a JavaScript child's output depends on.
+//
+// A child is a Worker, so its output arrives from Workers addressed only by
+// dispatch. Two durable sessions of one Factory share that Factory's Workers
+// pool, so the dispatch identity is the only thing that can tell their output
+// apart -- and a fragment delivered to the wrong session would show one
+// customer's provider output inside another's session.
+func TestPublishWorkerProgress_ReachesOnlyTheSessionThatStartedTheWorker(t *testing.T) {
+	service := newDurableResponseEventsService(t)
+	first := seedResponseEventSession(t, service, "dur-sess-first")
+	second := seedResponseEventSession(t, service, "dur-sess-second")
+	if err := service.ensureSessionResponseEvents("dur-sess-first", first); err != nil {
+		t.Fatalf("ensure first response events: %v", err)
+	}
+	if err := service.ensureSessionResponseEvents("dur-sess-second", second); err != nil {
+		t.Fatalf("ensure second response events: %v", err)
+	}
+
+	release := service.observeWorkerDispatch("dur-sess-first/dispatch-1", "dur-sess-first")
+	defer release()
+
+	service.PublishWorkerProgress(workers.ProgressFragment{
+		DispatchID:     "dur-sess-first/dispatch-1",
+		CanonicalDraft: validMessageDeltaDraft("dur-sess-first/dispatch-1"),
+	})
+
+	if got := first.responseEvents.RetentionAccounting().EventCount; got != 1 {
+		t.Fatalf("owning session response events = %d, want 1", got)
+	}
+	if got := second.responseEvents.RetentionAccounting().EventCount; got != 0 {
+		t.Fatalf("other session response events = %d, want 0", got)
+	}
+}
+
+// TestPublishWorkerProgress_IgnoresADispatchNoSessionOwns keeps the fan-out
+// safe for every other Worker in the process: a Petri Worker's progress passes
+// through the same publisher and must land nowhere here.
+func TestPublishWorkerProgress_IgnoresADispatchNoSessionOwns(t *testing.T) {
+	service := newDurableResponseEventsService(t)
+	state := seedResponseEventSession(t, service, "dur-sess-first")
+	if err := service.ensureSessionResponseEvents("dur-sess-first", state); err != nil {
+		t.Fatalf("ensure response events: %v", err)
+	}
+
+	service.PublishWorkerProgress(workers.ProgressFragment{
+		DispatchID:     "petri-dispatch-1",
+		CanonicalDraft: validMessageDeltaDraft("petri-dispatch-1"),
+	})
+
+	if got := state.responseEvents.RetentionAccounting().EventCount; got != 0 {
+		t.Fatalf("response events for an unowned dispatch = %d, want 0", got)
+	}
+}
+
+// TestPublishWorkerProgress_StopsOnceTheWorkerIsReleased proves the claim is
+// scoped to the Worker's run. Holding it forever would grow the index by one
+// entry per child for the life of the process and keep routing output from a
+// dispatch identity Workers may hand to nobody.
+func TestPublishWorkerProgress_StopsOnceTheWorkerIsReleased(t *testing.T) {
+	service := newDurableResponseEventsService(t)
+	state := seedResponseEventSession(t, service, "dur-sess-first")
+	if err := service.ensureSessionResponseEvents("dur-sess-first", state); err != nil {
+		t.Fatalf("ensure response events: %v", err)
+	}
+
+	release := service.observeWorkerDispatch("dur-sess-first/dispatch-1", "dur-sess-first")
+	release()
+
+	service.PublishWorkerProgress(workers.ProgressFragment{
+		DispatchID:     "dur-sess-first/dispatch-1",
+		CanonicalDraft: validMessageDeltaDraft("dur-sess-first/dispatch-1"),
+	})
+
+	if got := state.responseEvents.RetentionAccounting().EventCount; got != 0 {
+		t.Fatalf("response events after release = %d, want 0", got)
+	}
+}
+
+// TestChildWorkerExecutor_ScopesTheWorkersIdentityToItsSession pins what makes
+// those routing keys distinct in the first place.
+//
+// Child dispatch identities are minted per session and start again at
+// dispatch-1 for each, while the Workers pool they share treats a dispatch ID
+// as single-use for its whole life. Two sessions submitting an unqualified
+// dispatch-1 would leave the second refused outright.
+func TestChildWorkerExecutor_ScopesTheWorkersIdentityToItsSession(t *testing.T) {
+	first := newChildWorkerExecutor("dur-sess-first", nil, nil, nil, nil, 0, "")
+	second := newChildWorkerExecutor("dur-sess-second", nil, nil, nil, nil, 0, "")
+
+	firstID := first.workerDispatchIdentity("dispatch-1")
+	secondID := second.workerDispatchIdentity("dispatch-1")
+	if firstID == secondID {
+		t.Fatalf("two sessions submitted the same Workers dispatch identity %q", firstID)
+	}
+	if firstID != "dur-sess-first/dispatch-1" {
+		t.Fatalf("Workers dispatch identity = %q, want the session-scoped identity", firstID)
+	}
 }
