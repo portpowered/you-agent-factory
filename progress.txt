@@ -9798,6 +9798,19 @@
   - Mirror the governing plan's exact rule inventory in a normative standard so future checker and reviewer work share stable IDs and boundaries.
   - On Windows, run repository-wide Go gates sequentially; concurrent invocations can exhaust the host and leave timeout evidence that differs from standalone gate results.
   - Fetch the live base immediately before the final merge and push; `origin/main` advanced again during this audit.
+
+## 2026-08-11 08:51 -07:00 - e3-event-webhooks-004 post-merge CI audit
+- What was implemented
+  - Confirmed the current-main merge head `674d8973cb9db7264198d6267eac9a575881a403` is the clean replacement head for PR #1885.
+  - Updated the delivery audit to live base `690ca9ab0ac2c1a8c8aa461ff4c7354ca3fa03e0` and terminal CI run `31508660164`.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - All 18 required checks pass for the exact merged head, including API contract/package, backend unit/functional coverage, UI integration, and Verification Policy.
+  - The PR body is synchronized from `prd.json`; PR #1885 is open, non-draft, mergeable, and the thread-aware audit reports zero review threads, formal reviews, and conversation comments.
+- **Learnings for future iterations:**
+  - After resolving a live-base conflict, record the merge head and its full terminal CI run together; then re-audit PR body parity and review-thread state before final handoff.
 ## [2026-08-11 01:43:17 -07:00] - cli-error-classification-and-run-output review follow-up
 - What was implemented
   - Merged the live `origin/main` head `1b871e3a84125400ca3f04b2bdf9fd2658ac5c45`, preserved this task's authoritative PRD, and unioned both append-only progress histories without conflict markers.
