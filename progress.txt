@@ -51,6 +51,7 @@
 
 - Worker Session finite streams can use the injected Events `Read` contract with the first retained head as a snapshot boundary; replay-only paths must not call `Subscribe`.
 - Authored OpenAPI and CLI contracts generate their Go, TypeScript, published metadata, and family-manifest consumers; update the source contract first, then run the repository generators and drift checks.
+- Dashboard API-backed surfaces should consume generated OpenAPI types through a small API module and React Query server-state hook, leaving rendering components responsible for query states and pure projections.
 - Service-owned HTTP adapters should receive the opened domain root at the application edge; top-level generated-route composition forwards requests without reading package artifacts or constructing service state.
 - Provider-neutral output contracts belong on the workstation definition and are enforced after a successful worker response; provider process success or transport parsing alone must not satisfy a semantic report contract.
 - Stream transport dispatch stays below the package maintainability threshold by delegating lifecycle-specific frame handling to focused helpers.
@@ -4018,4 +4019,29 @@
 - **Learnings for future iterations:**
   - The existing catalog route and generated contract can remain stable while ownership moves behind the Factory Definitions root; the top-level server should only compose the service-owned adapter.
   - API generation requires the worktree UI dependencies; `bun install --frozen-lockfile --ignore-scripts` restored the missing generator without running lifecycle hooks.
+---
+
+## 2026-08-10 21:39 -07:00 - ui-packaged-factories-decoupling-002
+- What was implemented
+  - Replaced the dashboard's publication-package source with a typed `ui/src/api/packaged-factories` client built on generated OpenAPI catalog types and a React Query server-state hook.
+  - Moved catalog/detail rendering to API-shaped projections, preserving deterministic selection, localized metadata, invocation examples, JSON/YAML content, loading/empty/error/retry/success states, fail-closed selected-artifact handling, accessible keyboard selection, and responsive layout behavior.
+  - Converted component and Storybook fixtures to browser/API mocks, added API-boundary tests, expanded the hosted browser scenario for keyboard/recovery/responsive checks, and added the `/packaged-factories` Vite dev/preview proxy path.
+  - Removed the remaining dashboard package-data/public-contract readers and source coupling; the UI manifest, lockfile, and lifecycle workflow remain free of `@you-agent-factory/packaged-factories`.
+- Files changed
+  - `ui/src/api/packaged-factories/`
+  - `ui/src/App.tsx`
+  - `ui/src/features/packaged-factories/` API consumers, projections, tests, stories, messages, and retired package-boundary modules
+  - `ui/vite.config.ts` and `ui/vite.config.test.ts`
+  - `ui/integration/packaged-factories-hosted-route.integration.test.mjs`
+  - `prd.json` and `progress.txt`
+- Verification
+  - `bun install --frozen-lockfile --ignore-scripts`, `bun run tsc`, `bun run build`, `bun run lint`, `bun test vite.config.test.ts`, targeted Biome, and `git diff --check` passed.
+  - `bun run test:unit` passed on retry with 191 Bun tests and 2,956 Vitest tests.
+  - `bun run test:integration` passed on retry with 14 files and 35 tests, including both hosted packaged-factories scenarios; the first run had one unrelated durable-session timing flake, which passed in isolation.
+  - Focused API/projection/component suites passed 17 tests; direct browser verification passed catalog success, keyboard selection, recovery, and responsive assertions.
+  - The full component suite passed all 147 files/834 tests but exceeded the local 150-second runner budget at 330.59 seconds. Repository-wide `bun run check` still reports 269 pre-existing formatting diagnostics outside the changed files; targeted changed-file checks and `bun run lint` are clean.
+- **Learnings for future iterations:**
+  - Dashboard API-backed surfaces should consume generated OpenAPI types through a small API module and React Query hook, keeping rendering components focused on query states and pure projections.
+  - The shared browser preview uses a separate API port from the real backend; hosted browser scenarios need an explicit API route bridge while production Vite still needs the canonical proxy path.
+  - Live catalog ordering can change as built-in Factories evolve, so browser selection checks should use scoped first/nth controls and semantic state rather than hard-coded catalog positions or identities.
 ---

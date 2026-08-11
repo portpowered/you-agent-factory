@@ -52,9 +52,9 @@
         "Typecheck passes",
         "Tests pass"
       ],
-      "priority": 2,
-      "passes": false,
-      "notes": ""
+    "priority": 2,
+      "passes": true,
+      "notes": "Moved the dashboard catalog to generated OpenAPI types consumed by ui/src/api/packaged-factories and a React Query server-state hook; rendering now uses API projections only, with no publication-package source prop or direct artifact imports. Added explicit loading, empty, recoverable error/retry, success, and fail-closed selected-artifact states, semantic keyboard selection/focus behavior, localized API-shaped fixtures, and responsive hosted-route/browser coverage. Added the packaged-factories Vite API proxy path for dev/preview. Removed the remaining package-boundary source contracts and package-data readers; the UI manifest/lockfile and lifecycle hooks remain free of @you-agent-factory/packaged-factories. Verified with bun install --frozen-lockfile --ignore-scripts, bun run tsc, bun run build, bun run lint, bun run test:unit (191 Bun tests plus 2,956 Vitest tests), bun run test:integration (14 files, 35 tests), bun test vite.config.test.ts, focused API/projection/component suites (17 tests), the direct hosted browser scenarios, targeted Biome, and git diff --check. The full component suite also passed all 147 files/834 tests but exceeded the local 150-second runner budget (330.59s); repository-wide bun run check still reports 269 pre-existing formatting diagnostics outside the changed files."
     },
     {
       "id": "ui-packaged-factories-decoupling-003",
