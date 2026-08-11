@@ -63,8 +63,8 @@
         "Tests pass"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Extended the human Factory Event renderer and TTY progress projection to correlate dispatches with Worker Session IDs, workstation names, and canonical Work IDs across queued, started, active, completed, failed, and interrupted lifecycle events. Terminal outcomes remove the corresponding active state, including interleaved concurrent dispatches; queued Work IDs are retained when a later request payload is sparse. Added exact deterministic renderer coverage for three interleaved workers and TTY cleanup/correlation, plus functional lifecycle compatibility coverage. Verification: go test ./pkg/services/factory_visualization/transports/cli -count=1, go test -race ./pkg/services/factory_visualization/transports/cli -count=1, go test ./pkg/services/factory_visualization/... -count=1, go test ./tests/functional/cli/factory_run/output -count=1, make typecheck, make backend-size pkg-maint pkg-file-count pkg-structure vet, and git diff --check passed. Commit 303be54cf."
     },
     {
       "id": "cli-error-classification-and-run-output-004",

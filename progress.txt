@@ -4054,3 +4054,29 @@
   - Human accepted-work output is owned by the Factory Visualization CLI adapter; exercise it through the response-stream renderer so sequence prefixes and presentation behavior remain part of the assertion.
   - Canonical request validation normally guarantees named relation endpoints, but the renderer should still handle replayed or partially populated payloads without blank work lines, private JSON content, or malformed relation prose.
 ---
+## 2026-08-10 20:44 -07:00 - cli-error-classification-and-run-output-003
+- What was implemented
+  - Extended human Factory Event output with Worker Session association lines and workstation lifecycle details for queued, started, completed, failed, and interrupted dispatches.
+  - Added deterministic dispatch correlation so active TTY progress retains worker IDs, workstation names, and canonical Work IDs across interleaved concurrent workers; terminal dispatch outcomes remove stale active indications.
+  - Preserved JSON/NDJSON and redirected human output boundaries, updated the packaged run documentation, and added exact renderer plus functional lifecycle assertions.
+- Files changed
+  - `docs/reference/run.md`
+  - `pkg/services/factory_visualization/transports/cli/factory_event_renderer.go`
+  - `pkg/services/factory_visualization/transports/cli/factory_event_support.go`
+  - `pkg/services/factory_visualization/transports/cli/human_worker_progress.go`
+  - `pkg/services/factory_visualization/transports/cli/service_test.go`
+  - `tests/functional/cli/factory_run/output/output_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/factory_visualization/transports/cli -count=1` — passed.
+  - `go test -race ./pkg/services/factory_visualization/transports/cli -count=1` — passed.
+  - `go test ./pkg/services/factory_visualization/... -count=1` — passed.
+  - `go test ./tests/functional/cli/factory_run/output -count=1` — passed.
+  - `make typecheck` — passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` — passed.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - Canonical dispatch queue events can contain the only available Work IDs; retain that correlation as pending state until the dispatch request becomes active.
+  - The response-stream formatter is serialized by the Visualization presentation service, so stateful dispatch correlation can remain local to one human renderer without a cross-service event store.
+---
