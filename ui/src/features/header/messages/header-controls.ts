@@ -15,6 +15,7 @@ export interface HeaderControlsMessages {
   languageLabel: string;
   languageMenuButtonLabel: string;
   loadingSessionsLabel: string;
+  refreshingSessionsLabel: string;
   loadingDashboardTitle: string;
   openSessionButtonLabel: string;
   openSessionDialogDescription: string;
@@ -91,6 +92,7 @@ const headerControlsMessagesByLocale = {
     languageLabel: "Language",
     languageMenuButtonLabel: "Change language",
     loadingSessionsLabel: "Loading sessions...",
+    refreshingSessionsLabel: "Refreshing sessions...",
     loadingDashboardTitle: "Loading dashboard",
     openSessionButtonLabel: "Open another session",
     openSessionDialogDescription:
@@ -179,6 +181,7 @@ const headerControlsMessagesByLocale = {
     languageLabel: "言語",
     languageMenuButtonLabel: "言語を変更",
     loadingSessionsLabel: "セッションを読み込み中...",
+    refreshingSessionsLabel: "セッションを更新中...",
     loadingDashboardTitle: "ダッシュボードを読み込み中",
     openSessionButtonLabel: "別のセッションを開く",
     openSessionDialogDescription:
@@ -268,6 +271,7 @@ const headerControlsMessagesByLocale = {
     languageLabel: "언어",
     languageMenuButtonLabel: "언어 변경",
     loadingSessionsLabel: "세션을 불러오는 중...",
+    refreshingSessionsLabel: "세션을 새로 고치는 중...",
     loadingDashboardTitle: "대시보드 로드 중",
     openSessionButtonLabel: "다른 세션 열기",
     openSessionDialogDescription:
@@ -356,6 +360,7 @@ const headerControlsMessagesByLocale = {
     languageLabel: "语言",
     languageMenuButtonLabel: "切换语言",
     loadingSessionsLabel: "正在加载会话...",
+    refreshingSessionsLabel: "正在刷新会话...",
     loadingDashboardTitle: "正在加载仪表板",
     openSessionButtonLabel: "打开另一个会话",
     openSessionDialogDescription:

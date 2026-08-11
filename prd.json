@@ -91,8 +91,8 @@
         "Verify canonical tab rendering, stale-row removal, retry, and keyboard navigation directly in a real browser at mobile and desktop widths"
       ],
       "priority": 4,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Reconciled Factory Session list identity at the Go mapping boundary and the typed UI API boundary: selector-only ~default rows are removed, duplicate rows collapse by canonical ID, and canonical UUID summaries remain authoritative. Added store reconciliation for membership, tab order, paused state, selected-session fallback, and resolved default selection; refresh requests use query cancellation signals and retained-data failures render a localized retry state without hiding existing tabs. Extended the deterministic fixture/controller, component regressions, canonical Storybook story, and mobile/desktop Playwright gate with stale-row removal, keyboard Home/End ordering, refresh failure/retry, responsive overflow, and alias-plus-UUID coverage. Verified with TypeScript, focused Bun unit/component suites, focused Go mapping/HTTP suites, UI lint and boundary/test-lane guards, rebuilt Storybook, focused Storybook interaction (canonical story passed; 2 unrelated stories skipped), direct browser verification at 390x844 and 1440x900, and git diff --check. Story 005 remains intentionally open for the next iteration."
     },
     {
       "id": "dashboard-fixture-and-quick-wins-005",

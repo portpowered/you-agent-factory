@@ -357,6 +357,10 @@ export async function runStorybookCI({
       serverExit,
     ]);
     await Promise.race([
+      runCommand(["run", "storybook:dashboard-session-reconciliation-check"]),
+      serverExit,
+    ]);
+    await Promise.race([
       runCommand(["run", "storybook:work-chart-check"]),
       serverExit,
     ]);

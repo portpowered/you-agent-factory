@@ -1,5 +1,6 @@
+// biome-ignore lint/style/noExcessiveLinesPerFile: session-tab query, dialog, and canonical reconciliation state share the existing header hook boundary.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { type FormEvent, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 
 import {
   closeFactorySession,
@@ -10,6 +11,7 @@ import {
   openFactorySession,
 } from "../../../api/factory-sessions";
 import { FACTORY_SESSIONS_QUERY_KEY } from "../../../api/factory-sessions/query-keys";
+import { isDefaultFactorySessionID } from "../../../api/session-routing";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
 import { clearTimelineCheckpointsForSession } from "../../timeline/public/checkpoint-persistence";
 import { useFactoryTimelineStore } from "../../timeline/public/store";
@@ -39,7 +41,7 @@ export function useDashboardSessionTabsState() {
   );
   const sessionsQuery = useQuery({
     queryKey: FACTORY_SESSIONS_QUERY_KEY,
-    queryFn: () => listFactorySessions(),
+    queryFn: ({ signal }) => listFactorySessions({ signal }),
   });
   const closeSessionMutation = useMutation({
     mutationFn: (sessionID: string) => closeFactorySession(sessionID),
@@ -56,7 +58,7 @@ export function useDashboardSessionTabsState() {
     sessions: orderedSessions,
     setActiveSessionID,
     setSessionPaused,
-  } = useActiveDashboardSession(sessions);
+  } = useActiveDashboardSession(sessions, sessionsQuery.isSuccess);
   const dialogState = useOpenSessionDialogState({
     queryClient,
     setActiveSessionID,
@@ -97,6 +99,8 @@ export function useDashboardSessionTabsState() {
   function toggleSessionStreamPaused(sessionID: string) {
     setSessionPaused(sessionID, !isSessionStreamPaused(sessionID));
   }
+  const isRefreshingSessions =
+    sessionsQuery.isFetching && sessionsQuery.data !== undefined;
   return {
     activeSession,
     activeSessionID,
@@ -105,6 +109,7 @@ export function useDashboardSessionTabsState() {
     ...dialogState,
     handleCloseSession,
     isSessionStreamPaused,
+    isRefreshingSessions,
     moveSessionTab,
     sessions: orderedSessions,
     sessionsQuery,
@@ -404,7 +409,10 @@ function validatedTargetValue(targets: FactorySessionTarget[]): string {
     : "";
 }
 
-function useActiveDashboardSession(sessions: FactorySessionSummary[]) {
+function useActiveDashboardSession(
+  sessions: FactorySessionSummary[],
+  listReady: boolean,
+) {
   const activeSessionID = useDashboardSessionStore(
     (state) => state.selectedSessionID,
   );
@@ -423,6 +431,30 @@ function useActiveDashboardSession(sessions: FactorySessionSummary[]) {
   const setSessionTabOrder = useDashboardSessionStore(
     (state) => state.setSessionTabOrder,
   );
+  const reconcileSessionList = useDashboardSessionStore(
+    (state) => state.reconcileSessionList,
+  );
+  const defaultSessionID = useMemo(
+    () =>
+      sessions.find(
+        (session) =>
+          session.isDefault &&
+          !isDefaultFactorySessionID(session.id) &&
+          session.target.kind === "default",
+      )?.id ?? null,
+    [sessions],
+  );
+
+  useEffect(() => {
+    if (!listReady) {
+      return;
+    }
+    reconcileSessionList(
+      sessions.map((session) => session.id),
+      defaultSessionID,
+    );
+  }, [defaultSessionID, listReady, reconcileSessionList, sessions]);
+
   const orderedSessions = useMemo(
     () => orderFactorySessions(sessions, orderedSessionIDs),
     [orderedSessionIDs, sessions],

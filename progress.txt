@@ -1,5 +1,6 @@
 ## Codebase Patterns
 - For final PR handoff, compare the PR body byte-for-byte with `prd.json` and use the thread-aware GraphQL review audit because flat PR comments do not expose inline-thread resolution state.
+- Treat `~default` as a selector-only value at Factory Session list boundaries; normalize/dedupe API rows by canonical ID, then reconcile selection, tab order, and paused state only against the authoritative canonical membership.
 - Key async dashboard drafts, pending states, and completion receipts by the canonical Factory Session ID, and ignore late child-local completions after the visible session changes.
 - Keep dashboard regression data in an immutable identity-keyed catalog and put controlled promises, generation ordering, and async outcomes in a separate fixture controller so component and Storybook tests exercise existing typed boundaries without production-only seams.
 - For Recharts dashboard surfaces, keep one canonical grid and axis-title owner, attach localized value-level descriptions with `aria-describedby`, and assert the counts after Strict Mode/remount and direct viewport-resize transitions.
@@ -4100,17 +4101,40 @@
   - The isolated Submit Work widget suite is currently classified as a Vitest compatibility exception while the normal Vitest project excludes `.bun.component` files; focused runs need the DOM matcher setup explicitly until that existing lane mismatch is reconciled.
   - Moving a regression story into a focused subdirectory keeps the feature folder-count guard green without weakening the structural boundary.
 ---
-## [2026-08-11 06:20 -07:00] - prose-standard-and-terms-002
+## [2026-08-11 00:59 -07:00] - dashboard-fixture-and-quick-wins-004
 - What was implemented
-  - Completed the latest terminology-review follow-up on the current PR head. The register contains one exact `FactoryResponseEvent` record, and the `Parent-Child` example describes child-set membership and parent-aware fan-in rather than unsupported lifecycle ownership.
-  - Preserved the documentation-only scope; no source-scanning test or runtime implementation was added.
+  - Made Factory Session list mappings canonical at the Go transport boundary: selector aliases and blank IDs are omitted, duplicate canonical IDs collapse to one row, and the canonical UUID row remains the public identity.
+  - Added typed UI list normalization, abort-aware list requests, and authoritative dashboard-store reconciliation for selected session, tab order, paused state, stale membership, and resolved default selection.
+  - Preserved successful rows during background refreshes, labeled refresh failures with localized retry UI, and kept the tab navigation busy state/accessibility semantics truthful.
+  - Extended the shared dashboard regression fixture, controller, component tests, Storybook story, and browser verifier for alias-plus-UUID lists, refreshed membership, failed retry, keyboard Home/End ordering, and mobile/desktop overflow.
 - Files changed
+  - `pkg/transports/mapping/factorysession/factory_session_listing.go`
+  - `pkg/transports/mapping/factorysession/factory_session_listing_test.go`
+  - `pkg/transports/http/server_factory_sessions_test.go`
+  - `pkg/transports/http/servertests/server_durable_session_read_test.go`
+  - `ui/src/api/factory-sessions/api.ts`
+  - `ui/src/api/factory-sessions/normalize-session-list.ts`
+  - `ui/src/components/dashboard/fixtures/dashboard-regression.ts`
+  - `ui/src/components/dashboard/fixtures/dashboard-regression-controller.ts`
+  - `ui/src/features/dashboard/session/dashboard-session-provider.tsx`
+  - `ui/src/features/dashboard/state/dashboardSessionStore.ts`
+  - `ui/src/features/header/hooks/use-dashboard-session-tabs-state.ts`
+  - `ui/src/features/header/components/dashboard-session-tabs.tsx`
+  - `ui/src/features/header/components/dashboard-session-tabs.stories.tsx`
+  - `ui/scripts/verify-dashboard-session-reconciliation-browser.mjs`
+  - `ui/scripts/run-storybook-ci.mjs`
+  - `ui/package.json`
+  - `prd.json`
   - `progress.txt`
 - Verification
-  - PyYAML loaded version 1 and all 58 term records; the required fields, allowed categories, registered replacements, owner paths, internal-only Petri-term surfaces, exact `FactoryResponseEvent` spelling, and revised `Parent-Child` example passed review validation.
-  - `make typecheck` and `git diff --check` passed.
-  - `origin/main` is an ancestor of the current head, and `git merge-tree --write-tree origin/main HEAD` reported no conflicts.
+  - `bunx --no-install tsc -b --noEmit --pretty false` passed.
+  - Focused Bun unit/component suites passed: 21 unit tests across the normalizer, dashboard session store, and fixture; 2 canonical reconciliation component tests; and 22 existing session-tab component tests.
+  - Focused Go mapping/HTTP suites passed: `go test ./pkg/transports/mapping/factorysession ./pkg/transports/http/...`.
+  - `bun run lint` passed, including localized copy, semantic colors, feature boundaries, file counts, test lanes, and package boundaries.
+  - Storybook rebuilt; focused Storybook interaction for the canonical reconciliation story passed (1 test, 2 unrelated stories skipped).
+  - `node scripts/verify-dashboard-session-reconciliation-browser.mjs` passed at 390x844 and 1440x900, including canonical rendering, stale removal, retained failed refresh/retry, keyboard ordering, and overflow checks.
+  - `bun test scripts/run-storybook-ci.test.mjs` and `git diff --check` passed.
 - **Learnings for future iterations:**
-  - Public identifier spellings from the owning architecture or contract source take precedence over natural-language variants when a terminology register defines one canonical record.
-  - Relationship examples should describe observable contract effects, such as membership or fan-in, instead of inferring lifecycle ownership from relationship names.
+  - API-backed Storybook fixtures must return canonical UUID rows for durable sessions; alias-only mocks now correctly represent an empty canonical list and should be reserved for selector-resolution tests that bypass the typed list API.
+  - A focused Storybook story-file filter is the reliable interaction evidence when the broader Storybook project has unrelated browser stories and startup overhead; the direct Playwright lane remains the responsive regression gate.
 ---

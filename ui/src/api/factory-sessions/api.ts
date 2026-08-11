@@ -11,6 +11,7 @@ import {
   type NormalizedFactorySessionGet,
   normalizeFactorySessionGetResponse,
 } from "./normalize-session-get";
+import { normalizeFactorySessionList } from "./normalize-session-list";
 
 export type { NormalizedFactorySessionGet } from "./normalize-session-get";
 export type FactorySessionSummary =
@@ -48,6 +49,7 @@ export interface FactorySessionsAPIErrorDetails {
 }
 
 export interface ListFactorySessionsOptions {
+  signal?: AbortSignal;
   fetch?: typeof globalThis.fetch;
 }
 
@@ -132,6 +134,7 @@ export async function listFactorySessions(
       factoryAPIURL(FACTORY_SESSIONS_ENDPOINT),
       {
         method: "GET",
+        ...(options.signal ? { signal: options.signal } : {}),
       },
     );
   } catch (error) {
@@ -165,7 +168,9 @@ export async function listFactorySessions(
     );
   }
 
-  return responseBody.sessions.map(withoutEmbeddedSessionDispatches);
+  return normalizeFactorySessionList(
+    responseBody.sessions.map(withoutEmbeddedSessionDispatches),
+  );
 }
 
 export async function openFactorySession(

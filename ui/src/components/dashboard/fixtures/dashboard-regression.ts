@@ -88,6 +88,13 @@ export const dashboardRegressionSessionLists = Object.freeze({
   Record<DashboardRegressionSessionListID, readonly FactorySessionSummary[]>
 >;
 
+/** A transport-shaped duplicate response used to prove alias reconciliation. */
+export const dashboardRegressionAliasPlusUUIDSessions = frozenList([
+  { ...defaultSession, id: DEFAULT_FACTORY_SESSION_ID },
+  defaultSession,
+  secondarySession,
+]);
+
 /** The selector and its resolved UUID are separate identities by design. */
 export const dashboardRegressionDefaultDiscovery = Object.freeze({
   requestedSelector: DEFAULT_FACTORY_SESSION_ID,
@@ -530,6 +537,7 @@ export const dashboardRegressionFactoryJourneyOutcomes = Object.freeze({
 
 export const dashboardRegressionFixture = Object.freeze({
   sessions: {
+    aliasPlusUUID: dashboardRegressionAliasPlusUUIDSessions,
     byID: dashboardRegressionSessionByID,
     lists: dashboardRegressionSessionLists,
     defaultDiscovery: dashboardRegressionDefaultDiscovery,

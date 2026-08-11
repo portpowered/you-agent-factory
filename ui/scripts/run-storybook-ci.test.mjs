@@ -177,17 +177,21 @@ describe("runStorybookCI", () => {
     ]);
     expect(runCommand).toHaveBeenNthCalledWith(6, [
       "run",
-      "storybook:work-chart-check",
+      "storybook:dashboard-session-reconciliation-check",
     ]);
     expect(runCommand).toHaveBeenNthCalledWith(7, [
       "run",
-      "storybook:submit-work-session-check",
+      "storybook:work-chart-check",
     ]);
     expect(runCommand).toHaveBeenNthCalledWith(8, [
       "run",
-      "storybook:choose-file-check",
+      "storybook:submit-work-session-check",
     ]);
     expect(runCommand).toHaveBeenNthCalledWith(9, [
+      "run",
+      "storybook:choose-file-check",
+    ]);
+    expect(runCommand).toHaveBeenNthCalledWith(10, [
       "run",
       "storybook:checkbox-consistency-check",
     ]);
@@ -261,6 +265,10 @@ describe("runStorybookCI browser-check mode", () => {
     expect(runCommand).toHaveBeenNthCalledWith(3, [
       "run",
       "storybook:dashboard-viewport-check",
+    ]);
+    expect(runCommand).toHaveBeenNthCalledWith(4, [
+      "run",
+      "storybook:dashboard-session-reconciliation-check",
     ]);
     expect(settle).not.toHaveBeenCalled();
     expect(waitForStableIndex).not.toHaveBeenCalled();

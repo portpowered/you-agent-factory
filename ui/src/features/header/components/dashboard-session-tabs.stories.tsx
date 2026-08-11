@@ -1,9 +1,16 @@
 import "../../../styles.css";
 
-import { useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useEffect, useLayoutEffect } from "react";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 
+import { FACTORY_SESSIONS_QUERY_KEY } from "../../../api/factory-sessions/query-keys";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
+import {
+  DASHBOARD_REGRESSION_SESSION_IDS,
+  dashboardRegressionAliasPlusUUIDSessions,
+  dashboardRegressionSessionLists,
+} from "../../../components/dashboard/fixtures";
 import {
   historicalWorkOutcomeSnapshot,
   liveWorkOutcomeSnapshot,
@@ -16,7 +23,7 @@ import { DashboardSessionTabs } from "./dashboard-session-tabs";
 const defaultSession = {
   factoryDir: "/workspace/root",
   folderPath: "/workspace/root",
-  id: "~default",
+  id: DASHBOARD_REGRESSION_SESSION_IDS.default,
   isDefault: true,
   project: "root",
   target: {
@@ -153,6 +160,47 @@ export const OpenFlowVerification = {
   },
 };
 
+export const CanonicalListReconciliation = {
+  parameters: canonicalListReconciliationParameters(),
+  render: () => <CanonicalListReconciliationStory />,
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const messages = getHeaderControlsMessages("en");
+    const navigation = await canvas.findByRole("navigation", {
+      name: messages.sessionTabsLabel,
+    });
+
+    await expect(navigation).toBeVisible();
+    await expect(canvas.getAllByRole("tab")).toHaveLength(2);
+    expect(canvasElement.textContent).not.toContain(DEFAULT_FACTORY_SESSION_ID);
+
+    await userEvent.click(
+      canvas.getByRole("button", { name: "Refresh sessions" }),
+    );
+    await waitFor(() => {
+      expect(canvas.getByRole("tab", { name: "created" })).toHaveAttribute(
+        "aria-selected",
+        "false",
+      );
+    });
+    expect(canvas.queryByRole("tab", { name: "secondary" })).toBeNull();
+    expect(canvas.queryByRole("tab", { name: "removed" })).toBeNull();
+    expect(canvasElement.textContent).not.toContain(DEFAULT_FACTORY_SESSION_ID);
+
+    await userEvent.click(canvas.getByRole("button", { name: "Fail refresh" }));
+    await expect(
+      canvas.findByText(messages.sessionsErrorTitle),
+    ).resolves.toBeVisible();
+    await expect(canvas.getByRole("tab", { name: "created" })).toBeVisible();
+    await userEvent.click(
+      canvas.getByRole("button", { name: messages.retrySessionsLabel }),
+    );
+    await waitFor(() => {
+      expect(canvas.queryByText(messages.sessionsErrorTitle)).toBeNull();
+    });
+  },
+};
+
 function sessionTabShell(tab: HTMLElement): HTMLElement {
   const shell = tab.parentElement;
   if (!shell) {
@@ -175,6 +223,89 @@ function SessionTabsStory() {
   );
 }
 
+let canonicalListRequestCount = 0;
+let failNextCanonicalListRefresh = false;
+
+function CanonicalListReconciliationStory() {
+  const queryClient = useQueryClient();
+
+  useLayoutEffect(() => {
+    canonicalListRequestCount = 0;
+    failNextCanonicalListRefresh = false;
+    useDashboardSessionStore.setState({
+      selectedSessionID: DEFAULT_FACTORY_SESSION_ID,
+    });
+  }, []);
+
+  return (
+    <div className="grid min-w-0 gap-3" style={{ maxWidth: "960px" }}>
+      <button
+        className="min-h-10 rounded-lg border border-outline px-3 py-2 text-sm"
+        onClick={() => {
+          void queryClient.invalidateQueries({
+            queryKey: FACTORY_SESSIONS_QUERY_KEY,
+          });
+        }}
+        type="button"
+      >
+        Refresh sessions
+      </button>
+      <button
+        className="min-h-10 rounded-lg border border-outline px-3 py-2 text-sm"
+        onClick={() => {
+          failNextCanonicalListRefresh = true;
+          void queryClient.invalidateQueries({
+            queryKey: FACTORY_SESSIONS_QUERY_KEY,
+          });
+        }}
+        type="button"
+      >
+        Fail refresh
+      </button>
+      <DashboardSessionTabs locale="en" />
+    </div>
+  );
+}
+
+function canonicalListReconciliationParameters() {
+  return {
+    dashboardApi: {
+      fetchMocks: [
+        {
+          method: "GET",
+          path: "/factory-sessions",
+          response: () => {
+            canonicalListRequestCount += 1;
+            if (failNextCanonicalListRefresh) {
+              failNextCanonicalListRefresh = false;
+              return {
+                body: {
+                  code: "INTERNAL_ERROR",
+                  message: "The fixture refresh failed.",
+                },
+                status: 503,
+                statusText: "Service Unavailable",
+              };
+            }
+            return {
+              body: {
+                sessions:
+                  canonicalListRequestCount === 1
+                    ? dashboardRegressionAliasPlusUUIDSessions
+                    : dashboardRegressionSessionLists.refreshed,
+              },
+            };
+          },
+        },
+      ],
+      timelineSnapshots: [
+        historicalWorkOutcomeSnapshot,
+        liveWorkOutcomeSnapshot,
+      ],
+    },
+  };
+}
+
 function defaultSessionAbsolutePathStoryParameters() {
   const absoluteFactoryPath =
     "/Users/operator/infinite-you/agent-factory/examples/catalog/factory";
@@ -191,7 +322,7 @@ function defaultSessionAbsolutePathStoryParameters() {
                 {
                   factoryDir: absoluteFactoryPath,
                   folderPath: absoluteFactoryPath,
-                  id: "~default",
+                  id: DASHBOARD_REGRESSION_SESSION_IDS.default,
                   isDefault: true,
                   project: "factory",
                   target: {

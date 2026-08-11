@@ -140,6 +140,38 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
+function abortable<T>(
+  promise: Promise<T>,
+  signal?: AbortSignal | null,
+): Promise<T> {
+  if (!signal) {
+    return promise;
+  }
+  if (signal.aborted) {
+    return Promise.reject(
+      new DOMException("The request was aborted.", "AbortError"),
+    );
+  }
+
+  return new Promise<T>((resolve, reject) => {
+    const abort = () => {
+      signal.removeEventListener("abort", abort);
+      reject(new DOMException("The request was aborted.", "AbortError"));
+    };
+    signal.addEventListener("abort", abort, { once: true });
+    promise.then(
+      (value) => {
+        signal.removeEventListener("abort", abort);
+        resolve(value);
+      },
+      (error: unknown) => {
+        signal.removeEventListener("abort", abort);
+        reject(error);
+      },
+    );
+  });
+}
+
 function operationMatchesInput(
   operation: DashboardRegressionFactoryOperation,
   input: Record<string, unknown>,
@@ -187,8 +219,11 @@ function createFixtureFetch({
           500,
         );
       }
-      return requestSessionList(requestID).then((sessions) =>
-        jsonResponse({ sessions }),
+      return abortable(
+        requestSessionList(requestID).then((sessions) =>
+          jsonResponse({ sessions }),
+        ),
+        init?.signal,
       );
     }
 

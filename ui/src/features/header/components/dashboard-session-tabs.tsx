@@ -2,14 +2,12 @@ import { Dialog } from "@you-agent-factory/components/overlays";
 import { Button, Text } from "@you-agent-factory/components/primitives";
 import {
   type DragEvent as ReactDragEvent,
-  useEffect,
   useId,
   useRef,
   useState,
 } from "react";
 import type { DashboardStreamState } from "../../../api/dashboard/types";
 import type { FactorySessionSummary } from "../../../api/factory-sessions";
-import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import { AlertPanel } from "../../../components/ui/alert-panel";
 import { useDashboardStreamStore } from "../../dashboard/state/dashboardStreamStore";
 import {
@@ -51,7 +49,6 @@ function DashboardSessionTabsView({
   );
   const {
     activeSession,
-    activeSessionID,
     closeError,
     closeSessionMutation,
     dialogError,
@@ -65,6 +62,7 @@ function DashboardSessionTabsView({
     handleCreateNewFactory,
     handleInspectFolder,
     handleOpenTarget,
+    isRefreshingSessions,
     moveSessionTab,
     openSessionMutation,
     resetDialogState,
@@ -75,18 +73,6 @@ function DashboardSessionTabsView({
     setDialogOpen,
     validateFolderMutation,
   } = state;
-
-  useEffect(() => {
-    if (sessions.length === 0) {
-      return;
-    }
-    if (
-      activeSessionID === "" ||
-      !sessions.some((session) => session.id === activeSessionID)
-    ) {
-      setActiveSessionID(sessions[0]?.id ?? DEFAULT_FACTORY_SESSION_ID);
-    }
-  }, [activeSessionID, sessions, setActiveSessionID]);
 
   return (
     <>
@@ -100,6 +86,7 @@ function DashboardSessionTabsView({
                 : null
             }
             error={sessionsQuery.isError ? sessionsQuery.error : null}
+            isRefreshing={isRefreshingSessions}
             isPending={sessionsQuery.isPending}
             messages={messages}
             onCloseSession={handleCloseSession}
@@ -158,6 +145,7 @@ function SessionTabsContent({
   closingSessionID,
   error,
   isPending,
+  isRefreshing,
   messages,
   onCloseSession,
   onOpenSession,
@@ -171,6 +159,7 @@ function SessionTabsContent({
   closingSessionID: string | null;
   error: unknown;
   isPending: boolean;
+  isRefreshing: boolean;
   messages: ReturnType<typeof getHeaderControlsMessages>;
   onCloseSession: (sessionID: string) => void;
   onOpenSession: () => void;
@@ -194,17 +183,19 @@ function SessionTabsContent({
   }
   if (error) {
     const sessionError = normalizeFactorySessionsError(error);
-    return (
-      <SessionErrorState
-        label={
-          sessionError.code === "NETWORK_ERROR"
-            ? messages.sessionsOfflineTitle
-            : messages.sessionsErrorTitle
-        }
-        messages={messages}
-        onRetry={onRetry}
-      />
-    );
+    if (sessions.length === 0) {
+      return (
+        <SessionErrorState
+          label={
+            sessionError.code === "NETWORK_ERROR"
+              ? messages.sessionsOfflineTitle
+              : messages.sessionsErrorTitle
+          }
+          messages={messages}
+          onRetry={onRetry}
+        />
+      );
+    }
   }
   if (sessions.length === 0) {
     return (
@@ -245,8 +236,29 @@ function SessionTabsContent({
 
   return (
     <>
+      {isRefreshing ? (
+        <Text
+          aria-live="polite"
+          className="text-sm text-on-surface-variant"
+          role="status"
+        >
+          {messages.refreshingSessionsLabel}
+        </Text>
+      ) : null}
+      {error ? (
+        <SessionErrorState
+          label={
+            normalizeFactorySessionsError(error).code === "NETWORK_ERROR"
+              ? messages.sessionsOfflineTitle
+              : messages.sessionsErrorTitle
+          }
+          messages={messages}
+          onRetry={onRetry}
+        />
+      ) : null}
       <nav
         aria-label={messages.sessionTabsLabel}
+        aria-busy={isRefreshing}
         className="min-w-0 overflow-x-auto overscroll-x-contain"
       >
         <div
