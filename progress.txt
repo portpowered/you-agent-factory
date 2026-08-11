@@ -9242,3 +9242,15 @@
   - When a moving-base merge changes a shared lifecycle implementation, place cross-cutting gates in the shared preparation function so every entry point preserves the same ordering and failure semantics.
   - Preserve the active branch's PRD as the task contract while unioning append-only progress histories; incoming mainline PRD stories belong to the other task and must not overwrite the active story state.
 ---
+## [2026-08-11 05:16:01 -07:00] - wsr-0023-capture-replay-001 PR follow-up audit
+- What was implemented
+  - Refreshed PR #1876's body from the resolved `prd.json` and replied to the blocking review conversation with the merged-head WSR-FT-004 evidence and the two remaining replay/portable blockers.
+- Files changed
+  - `progress.txt`
+- Verification
+  - PR #1876 head is `7995207773133b59ce460078b88fd6dbda82f406`, the branch contains current `main`, and the PR remains open and mergeable while replacement CI runs.
+  - REST audit found one issue conversation comment, no reviews, and no inline review comments; the new reply explicitly records the addressed opening-gate work and unresolved stories 002/003.
+  - The replacement `Classify Verification` check is in progress; completion is not claimed while stories 002/003 and the blocking replay/portable evidence remain outstanding.
+- **Learnings for future iterations:**
+  - After a replacement push, update the PR body from the active PRD and answer the existing blocking thread with exact head/evidence plus explicit remaining criteria; a pending replacement check is not terminal CI evidence.
+---
