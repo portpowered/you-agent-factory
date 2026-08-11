@@ -151,7 +151,6 @@
   - After `bun install --frozen-lockfile` in `ui/`, `make verify-fast` passed: dashboard typecheck, MCP contract boundary, 355 UI files / 2,970 tests, and the short Go suite.
 - **Learnings for future iterations:**
 - This checkout may have `ui/node_modules` without all lockfile dependencies; run the pinned Bun install before treating a typecheck failure as a source regression.
----
 
 ## 2026-08-10 04:32 -07:00 - sac-s0-2-pkg-boundary-ignores-001
 - What was implemented
@@ -6726,4 +6725,24 @@
 - **Learnings for future iterations:**
   - After resolving a generated-artifact conflict, regenerate the artifact and refresh any runtime-observation baseline from the merged authored contract before staging the merge.
   - Keep the task PRD authoritative while unioning append-only progress histories when multiple worktrees share the same base.
+---
+## [2026-08-10 21:12 -07:00] - prose-standard-and-terms PR review follow-up
+- What was implemented
+  - Replaced the nonexistent `FACTORY_SESSION_OPENED` exception example with the shipped `SESSION_STARTED` Factory Event literal verified in `api/components/schemas/events/FactoryEventType.yaml`.
+  - Changed the valid exception example to use `B-PROC-20` only for a genuine simultaneous-action constraint and stated that exact protected literals are not `B-LITERAL` findings.
+  - Merged `origin/main` at `ee002339728765f72dab16197588664dfff163fb`, preserved this task's `prd.json`, and unioned the append-only progress patterns and history.
+  - Rechecked the terminology definitions and owner references against the current architecture data model and public schemas; the required owner confirmation will be recorded in the PR conversation.
+- Files changed
+  - `docs/internal/standards/writing/customer-technical-writing-standard.md`
+  - `prd.json`
+  - `progress.txt`
+  - Current-main synchronization files carried by the merge commit.
+- Verification
+  - `make ownership-inventory-check` passed on the synchronized head.
+  - `make typecheck` passed after restoring the pinned `@types/bun` workspace dependency with `bun install --frozen-lockfile`.
+  - `prd.json` parses with all three stories marked `passes:true`; conflict markers are absent and `git diff --check` passed during merge resolution.
+  - The bounded `make -k lint` attempt exceeded its local timeout while several repository verification processes were already active; the focused ownership-inventory target passed, and the full required CI rerun remains the authoritative final gate.
+- **Learnings for future iterations:**
+  - Protected contract literals should be verified against the owning schema before they appear in normative examples; a literal-preservation case does not justify suppressing a literal-mismatch finding.
+  - When a moving main branch changes shared `prd.json` and `progress.txt`, preserve the active task PRD and union the append-only patterns/history before staging the merge.
 ---
