@@ -11293,3 +11293,18 @@
   - Public runtime contracts must distinguish recorded child-dispatch timing from provider-attempt and execution-side-effect timing; a fail-closed capability result can be durable without promising that no dispatch record exists.
   - `make contracts-generate` is the canonical way to synchronize the JavaScript package projection and its content-addressed manifest digest after editing the authored contract.
 ---
+## [2026-08-11 08:46:39 -07:00] - js-skip-permissions-parity-004 rebased quality-gate audit
+- What was implemented
+  - Completed the required post-rebase verification for the truthful public-contract correction on `origin/main` `690ca9ab0`.
+  - Compared the lint failures against a detached exact-main worktree and the task diff; no new task-specific lint violation was identified.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `make test` passed on the exact rebased head in 121 seconds.
+  - `make typecheck backend-size pkg-maint pkg-file-count pkg-structure vet` passed.
+  - `make lint` completed its UI, deadcode, vet, size, maintenance, file-count, structure, catalog, and package checks but returned nonzero for the three recorded baseline categories: two ownership-boundary findings also present on detached `origin/main` (`pkg/initializer/application/process.go` and `pkg/services/edges/definition.go`), unchanged packaged-factory consumption in `internal/migrationledgercheck/packaged_factory_matrix.go`, and the existing deadcode baseline drift. Changed-file deadcode hits name declarations unchanged by this task's diff.
+  - Focused contract/package checks and `git diff --check` passed; all four PRD stories remain `passes:true`.
+- **Learnings for future iterations:**
+  - For lint ratchets with known baseline debt, run the same checker on a detached exact-main worktree and compare reported paths before changing feature code; a changed file can carry an unchanged pre-existing declaration while the baseline itself remains the source of the finding.
+---
