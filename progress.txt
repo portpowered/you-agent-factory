@@ -26,6 +26,7 @@
 - Reviewed functional CLI coverage requires a sorted scenario declaration, an evidence-registry entry, a manifest mapping, and one literal `functionalevidence.Covers` marker.
 - Package-target discovery is the stable-sorted set of directories containing non-test Go sources; adding a durable service owner requires updating the checker vocabulary and its live top-level inventory before regenerating the manifest.
 - Boundary check compatibility bridges should be exact package/type exceptions with request-scoped rationale; broad service-prefix allowlists can hide new durable ownership claims.
+- When hosted Go coverage reports a per-package floor regression, use its exact package diagnostic to target deterministic branch tests and verify the package floor independently before rerunning the broader lane.
 - Compatibility guard exceptions must match the reviewed method/field shape as well as the package and type name; name-only exemptions can hide ownership-expanding contract growth.
 - When an ownership burn-down ledger is corrected, regenerate it as an explicit empty array and reject retired rows so stale debt cannot silently return.
 - JSON Schema worker diagnostics must use `ErrorKind.KeywordPath()` and typed schema metadata; localized `ValidationError.Error()` text can leak rejected values and compiler-expanded host paths.
@@ -8792,4 +8793,19 @@
   - Affected Worker Sessions and Factory Runtime package tests passed.
 - **Learnings for future iterations:**
   - New OpenAPI operations must receive both a reviewed manifest mapping and a direct `functionalevidence.Covers` declaration in a qualifying functional test; `make contracts-check` enforces both sides.
+---
+## [2026-08-11 03:24:19 -07:00] - dwro-s2-server-owned-start-005 hosted coverage follow-up
+- What was implemented
+  - Diagnosed PR #1880's Backend Unit Coverage failure: `pkg/services/worker_sessions/internal/service` was at 96.8156% against its 98.72% checked-in floor.
+  - Added focused deterministic internal tests for lifecycle fallbacks, readiness-reader failures, pre-admission classification, and observation edge branches; kept all five PRD stories marked `passes:true`.
+- Files changed
+  - `pkg/services/worker_sessions/internal/service/internal_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Focused Worker Sessions internal-service coverage is 98.8%; Worker Sessions package tests and race tests pass.
+  - `go vet ./pkg/services/worker_sessions/...`, `make backend-size`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, and `git diff --check` pass.
+  - The full Windows `make test-unit-coverage` wrapper remains environment-blocked by the expanded Go command line (`go.exe: The filename or extension is too long`); the hosted failure itself was the package-floor regression, and the targeted package now clears that floor.
+- **Learnings for future iterations:**
+  - Hosted coverage logs emit an exact package-floor diagnostic; use it to target branch tests and independently verify the affected package before rerunning the broader lane.
 ---

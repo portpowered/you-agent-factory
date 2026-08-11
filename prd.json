@@ -35,7 +35,7 @@
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Implemented Worker Sessions Start with retained/live Events readiness, server-owned supervision, admission-gated return, deterministic pre-admission terminal handling, safe outcome logs, and focused barrier/failure/control-race tests."
+      "notes": "Implemented Worker Sessions Start with retained/live Events readiness, server-owned supervision, admission-gated return, deterministic pre-admission terminal handling, safe outcome logs, and focused barrier/failure/control-race tests. Added deterministic lifecycle-fallback, readiness-reader, and pre-admission classification coverage after hosted verification identified the package floor regression; the internal service now clears its 98.72% unit coverage floor."
     },
     {
       "id": "dwro-s2-server-owned-start-002",
