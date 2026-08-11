@@ -336,6 +336,7 @@ func assembleRuntimeBundle(
 		clock,
 		inlineDispatch,
 		eventHistory,
+		recordPath,
 		worldStateProjector,
 		providerSessions,
 		effectiveSubmissionRecorder,
@@ -356,7 +357,6 @@ func assembleRuntimeBundle(
 	if err != nil {
 		return nil, fmt.Errorf("create factory: %w", err)
 	}
-	runtime.SetRecordingID(activeFactory, recordPath)
 	if err := ensureRuntimeInputsDir(dir, logger, runtimeDirs); err != nil {
 		return nil, err
 	}

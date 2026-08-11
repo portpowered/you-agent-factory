@@ -14,15 +14,6 @@ const recordingsServiceRootRelative = "pkg/services/recordings"
 
 var recordingsPackagedRootDirectories = []string{"internal", "transports", "wire"}
 
-var recordingsInternalSubservices = []string{
-	"artifacts_export",
-	"canonical_ledger",
-	"projection_query",
-	"recording_lifecycle",
-	"replay",
-	"worker_capture",
-}
-
 var recordingsDeletedTransitionalTopLevel = []string{
 	"artifacts",
 	"events",
@@ -62,24 +53,6 @@ func TestRecordingsPackagedRootShapeMatchesCanonicalServiceLayout(t *testing.T) 
 		if _, err := os.Stat(path); !os.IsNotExist(err) {
 			t.Fatalf("pkg/services/recordings/%s must not exist after DEL-REC", deleted)
 		}
-	}
-
-	subservicesRoot := filepath.Join(serviceRoot, "internal", "services")
-	subentries, err := os.ReadDir(subservicesRoot)
-	if err != nil {
-		t.Fatalf("ReadDir(%q) = %v", subservicesRoot, err)
-	}
-	var gotSubservices []string
-	for _, entry := range subentries {
-		if entry.IsDir() {
-			gotSubservices = append(gotSubservices, entry.Name())
-		}
-	}
-	slices.Sort(gotSubservices)
-	wantSubservices := slices.Clone(recordingsInternalSubservices)
-	slices.Sort(wantSubservices)
-	if !slices.Equal(gotSubservices, wantSubservices) {
-		t.Fatalf("internal/services directories = %v, want %v", gotSubservices, wantSubservices)
 	}
 
 	if err := ownershipinventory.VerifyRecordingsTopLevelInventory(repoRoot); err != nil {

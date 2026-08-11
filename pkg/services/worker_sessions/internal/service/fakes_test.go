@@ -30,7 +30,7 @@ func newServiceWithClock(
 	logger logging.Logger,
 	clock platformclock.Source,
 ) (workersessions.Service, error) {
-	return workersessionservice.New(boundary, eventsAppender, logger, clock, unavailableProviderSessions{})
+	return workersessionservice.New(boundary, eventsAppender, logger, clock, unavailableProviderSessions{}, nil)
 }
 
 type unavailableProviderSessions struct {

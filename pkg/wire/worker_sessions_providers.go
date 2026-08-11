@@ -29,13 +29,15 @@ func provideWorkerSessionsFactory(
 	eventsService events.Service,
 	providerSessions providersessions.Service,
 	logger logging.Logger,
+	recorder recordings.WorkerSessionRecordingService,
 ) factoryruntime.WorkerSessionsFactory {
-	return provideWorkerSessionsFactoryWithRecorder(eventsService, providerSessions, logger, nil)
+	return provideWorkerSessionsFactoryWithRecorder(eventsService, providerSessions, logger, recorder)
 }
 
 func provideWorkerSessionRecorder(
 	eventsService events.Service,
 	edges serviceedges.Edges,
+	logger logging.Logger,
 ) (recordings.WorkerSessionRecordingService, error) {
 	writer := edges.WorkerRecordingWriter
 	if writer == nil {
@@ -48,7 +50,7 @@ func provideWorkerSessionRecorder(
 			return nil, err
 		}
 	}
-	return recordingswire.NewWorkerSessionRecorder(eventsService, writer, logging.NoopLogger{})
+	return recordingswire.NewWorkerSessionRecorder(eventsService, writer, logger)
 }
 
 func provideWorkerSessionsFactoryWithRecorder(
@@ -58,9 +60,6 @@ func provideWorkerSessionsFactoryWithRecorder(
 	recorder recordings.WorkerSessionRecordingService,
 ) factoryruntime.WorkerSessionsFactory {
 	return func(boundary workers.WorkstationPoolBoundary, clock platformclock.Source) (workersessions.Service, error) {
-		if recorder == nil {
-			return workersessionswire.NewService(boundary, eventsService, logger, clock, providerSessions)
-		}
 		return workersessionswire.NewService(boundary, eventsService, logger, clock, providerSessions, recorder)
 	}
 }

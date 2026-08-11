@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- Pre-barrier external publication failures need an explicit Recordings abort capability that persists a safe classification and joins the source subscription before Worker Sessions can publish a terminal outcome.
 - Worker-topic capture belongs behind a narrow Recordings capability: Events remains the source stream, Worker Sessions publishes once, and an injected durable writer is the only recording-side acceptance port.
 - Portable source-native recording contracts should validate every detached fact against the exact retained payload, then replay through the canonical reducer without reconstructing provider output or inventing fidelity.
 - Live Worker capture and completed replay should invoke the same pure Recordings reducer; durable snapshots should carry explicit active/completed/failed status so only terminal-complete histories are replayable.
@@ -8851,4 +8852,31 @@
   - PR #1876 is open, non-draft, mergeable, and its reported checks are terminal-success.
 - **Learnings for future iterations:**
   - Final handoff requires checking the exact pushed head together with the PRD/body, thread state, live-base ancestry, mergeability, and terminal CI state.
+---
+
+## 2026-08-11 04:32:11 -07:00 - wsr-0023-capture-replay-001 review follow-up
+- What was implemented
+  - Added a Recordings-owned `Abort` capability for active Worker captures. Opening append and opening-barrier failures now persist a safe `OPENING_INVALID` classification, stop and join the subscription, and remain behind the publication lock until cleanup completes.
+  - Replaced the optional Worker Sessions recorder variadic constructor path with one explicit dependency, passed the production logger into Worker capture, and supplied the runtime recording identity during construction instead of mutating a concrete Factory through `SetRecordingID`.
+  - Added a package-level behavioral regression proving an opening append failure yields zero provider calls, durable failure identity/code, and a closed capture; removed the Worker Capture directory inventory from the filesystem-topology functional test so structural enforcement remains in the mechanical package gate.
+- Files changed
+  - `pkg/services/recordings/worker_capture.go`
+  - `pkg/services/recordings/internal/services/worker_capture/internal/service/service.go`
+  - `pkg/services/worker_sessions/internal/service/publish_record.go`
+  - `pkg/services/worker_sessions/internal/service/service.go`
+  - Worker Sessions construction/tests and `pkg/wire/wire_gen.go`
+  - Factory Runtime construction/tests
+  - `tests/functional/recordings/root_composition/packaged_root_shape_test.go`
+  - `prd.json`, `progress.txt`
+- Verification
+  - Recordings and Worker Sessions packages passed; Recordings root-composition functional tests passed.
+  - New opening-failure, opening-barrier, and cleanup tests passed in 10 race-enabled repetitions.
+  - Focused runtime/wire tests and vet passed.
+  - `make backend-size`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, and `git diff --check` passed.
+  - Repository-wide `make generate-wire` exceeded the Windows host bound; targeted `go generate -run=wire ./pkg/wire` completed and refreshed `pkg/wire/wire_gen.go`.
+- **Learnings for future iterations:**
+  - An Events append failure is outside the source-native capture stream, so closing the subscription alone cannot classify it; the caller must pass a safe opening cause through an explicit abort port.
+  - Keep optional behavior as an explicit nil service dependency rather than a variadic constructor, and thread shared loggers through every production wire provider.
+  - Filesystem/package inventories belong in mechanical structure gates; functional tests should assert runtime behavior instead of directory membership.
+  - WSR-FT-004, production replay exposure/WSR-FT-005, and production-registration portable evidence/WSR-FT-006 remain for later story iterations.
 ---

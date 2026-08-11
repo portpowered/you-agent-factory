@@ -26,6 +26,11 @@ type WorkerSessionRecordingService interface {
 // AwaitOpening is the only operation that may release provider handoff.
 type WorkerSessionRecording interface {
 	AwaitOpening(context.Context) error
+	// Abort marks the capture failed with the supplied safe cause, stops its
+	// subscription, and waits for the consumer to exit. Worker Sessions uses
+	// this for failures before the opening can be attached to its publication
+	// window, so a started capture can never outlive a rejected handoff.
+	Abort(context.Context, error) error
 	Close(context.Context) error
 }
 

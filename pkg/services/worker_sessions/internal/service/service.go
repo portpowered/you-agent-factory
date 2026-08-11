@@ -101,7 +101,7 @@ func New(
 	logger logging.Logger,
 	clock platformclock.Source,
 	providerSessions providersessions.Service,
-	recorders ...recordings.WorkerSessionRecordingService,
+	recording recordings.WorkerSessionRecordingService,
 ) (workersessions.Service, error) {
 	if boundary == nil {
 		return nil, ErrMissingExecution
@@ -125,10 +125,8 @@ func New(
 		events:           eventsAppender,
 		clock:            clock,
 		providerSessions: providerSessions,
+		recording:        recording,
 		logger:           logging.EnsureLogger(logger),
-	}
-	if len(recorders) > 0 {
-		registry.recording = recorders[0]
 	}
 	if reader, ok := eventsAppender.(EventsReader); ok {
 		registry.eventReader = reader

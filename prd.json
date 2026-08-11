@@ -33,8 +33,8 @@
         "Tests pass"
       ],
       "priority": 1,
-      "passes": true,
-      "notes": "Implemented Recordings-owned Worker topic capture with position-zero subscription, correlated position-one opening validation, atomic durable sidecar acceptance, classified delivery/persistence failures, publication-lock handoff gating, terminal drain, runtime recording-target propagation, injectable writer edge, and focused barrier/race coverage."
+      "passes": false,
+      "notes": "Review follow-up for this story: pre-barrier opening-append failure now aborts and joins the capture with durable OPENING_INVALID classification; Worker Sessions uses an explicit recorder dependency, production logger injection, and runtime recording identity input. Focused and race-enabled coverage passes. WSR-FT-004 root-built evidence and the remaining review follow-up are still outstanding."
     },
     {
       "id": "wsr-0023-capture-replay-002",
@@ -53,8 +53,8 @@
         "Tests pass"
       ],
       "priority": 2,
-      "passes": true,
-      "notes": "Implemented the shared pure Recordings reducer, durable cursor/status snapshots with reload, terminal-last and incomplete-history enforcement, exact duplicate handling, live/replay parity coverage, and focused race/vet/package-size verification."
+      "passes": false,
+      "notes": "Package reducer and durable snapshot coverage remains green, but review follow-up found that completed replay/read capability is not reachable from production composition and WSR-FT-005 is still absent. Defer completion until that production boundary and root-built evidence are implemented."
     },
     {
       "id": "wsr-0023-capture-replay-003",
@@ -72,8 +72,8 @@
         "Tests pass"
       ],
       "priority": 3,
-      "passes": true,
-      "notes": "Implemented a strict detached Worker recording envelope with exact source-native records, identity/lifecycle/correlation/provider/provenance/fidelity facts, SHA-256 integrity, strict JSON decoding, stable diagnostics, and reducer-backed portable replay. Added production-neutral streaming/snapshot/final-only matrix fixtures, no-Provider-Session-reference coverage, ordering/fidelity/integrity/unknown-field/provider-binding tamper rejection, deterministic cancellation classification, and exact package-structure baseline registration. Focused race, vet, backend-size, pkg-maint, pkg-file-count, pkg-structure, and diff checks pass; the repository-wide boundary checker still reports its pre-existing migration baseline findings outside this story."
+      "passes": false,
+      "notes": "Portable envelope validation and package fixtures remain green, but review follow-up found that the required production-registration/sanitized-command-runner WSR-FT-006 round-trip and tamper evidence is still absent. Defer completion until that behavioral evidence is implemented."
     }
   ]
 }

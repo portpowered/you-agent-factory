@@ -41,7 +41,7 @@ func NewService(
 	logger logging.Logger,
 	clock platformclock.Source,
 	providerSessions providersessions.Service,
-	recorders ...recordings.WorkerSessionRecordingService,
+	recording recordings.WorkerSessionRecordingService,
 ) (workersessions.Service, error) {
 	return internalservice.New(
 		boundary,
@@ -49,6 +49,6 @@ func NewService(
 		logger,
 		clock,
 		providerSessions,
-		recorders...,
+		recording,
 	)
 }

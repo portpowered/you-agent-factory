@@ -362,6 +362,30 @@ func (capture *capture) AwaitOpening(ctx context.Context) error {
 	}
 }
 
+// Abort records a classified pre-barrier failure, stops the subscription,
+// and joins the consumer. The cause is deliberately supplied by the caller:
+// an Events append can fail outside the capture's source stream, but it still
+// must leave a durable failure rather than an active, unclassified capture.
+func (capture *capture) Abort(ctx context.Context, cause error) error {
+	if cause == nil {
+		cause = fmt.Errorf("%w: capture aborted before opening", recordings.ErrWorkerRecordingOpening)
+	}
+	capture.fail(cause)
+	capture.mu.Lock()
+	capture.closed = true
+	capture.closing = true
+	capture.stopOnce.Do(capture.stop)
+	capture.mu.Unlock()
+
+	select {
+	case <-capture.done:
+		return capture.failureError()
+	case <-ctx.Done():
+		capture.stopOnce.Do(capture.stop)
+		return fmt.Errorf("%w: abort wait canceled: %w", recordings.ErrWorkerRecordingCanceled, ctx.Err())
+	}
+}
+
 func (capture *capture) failureError() error {
 	capture.mu.Lock()
 	defer capture.mu.Unlock()

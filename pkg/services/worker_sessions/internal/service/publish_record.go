@@ -421,13 +421,31 @@ func (r *registry) publishOpeningRecord(
 		SourceEventID:  openingSourceEventID,
 	}
 	if _, err := r.appendDraft(ctx, workersessions.Topic(id), identity, workerDraftSchemaID, draft); err != nil {
+		openingErr := fmt.Errorf("%w: %v", recordings.ErrWorkerRecordingOpening, err)
+		if recording != nil {
+			if abortErr := recording.Abort(context.WithoutCancel(ctx), openingErr); abortErr != nil {
+				r.logger.Info(
+					"worker session recording opening cleanup failed",
+					"sessionID", id,
+					"attemptID", attemptID,
+					"outcome", "cleanup_failed",
+				)
+			}
+		}
 		pub.mu.Unlock()
 		return err
 	}
 	if recording != nil {
 		if err := recording.AwaitOpening(ctx); err != nil {
+			if abortErr := recording.Abort(context.WithoutCancel(ctx), err); abortErr != nil {
+				r.logger.Info(
+					"worker session recording opening cleanup failed",
+					"sessionID", id,
+					"attemptID", attemptID,
+					"outcome", "cleanup_failed",
+				)
+			}
 			pub.mu.Unlock()
-			_ = recording.Close(context.WithoutCancel(ctx))
 			return err
 		}
 	}

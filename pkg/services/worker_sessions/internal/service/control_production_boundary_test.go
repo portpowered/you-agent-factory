@@ -411,7 +411,7 @@ func newObservationService(
 	if projection == nil {
 		projection = unavailableProviderSessions{}
 	}
-	service, err := workersessionservice.New(boundary, eventsAppender, logging.NoopLogger{}, clock, projection)
+	service, err := workersessionservice.New(boundary, eventsAppender, logging.NoopLogger{}, clock, projection, nil)
 	if err != nil {
 		t.Fatalf("worker session service construction: %v", err)
 	}

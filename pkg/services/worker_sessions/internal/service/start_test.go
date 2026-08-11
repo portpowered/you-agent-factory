@@ -19,6 +19,7 @@ import (
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/worker_sessions/internal/service"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -1871,6 +1872,59 @@ func TestInvokeSessionOpeningBarrierFailureMakesZeroProviderCalls(t *testing.T) 
 	}
 }
 
+func TestInvokeSessionOpeningAppendFailureAbortsCaptureAndPersistsClassification(t *testing.T) {
+	execution := succeedingExecution()
+	eventService := newEventsAppender()
+	appender := &failOnNthAppendEventsAppender{Service: eventService, n: 1}
+	writer := &recordingFailureWriter{}
+	workerRecorder, err := recordingswire.NewWorkerSessionRecorder(eventService, writer, logging.NoopLogger{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	observedRecorder := &observedRecordingService{delegate: workerRecorder}
+	registry, err := service.New(
+		executionBoundary{execution: execution},
+		appender,
+		logging.NoopLogger{},
+		platformclock.Real{},
+		unavailableProviderSessionsForCapture{},
+		observedRecorder,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	request := validStartRequest("worker-opening-append-failure", "dispatch-opening-append-failure")
+	request.Execution.Execution.RecordingID = "recording-opening-append-failure"
+	result, err := registry.InvokeSession(context.Background(), request)
+	if err != nil {
+		t.Fatalf("InvokeSession() error = %v, want nil terminal result", err)
+	}
+	if result.Session.State != workersessions.StateFailed {
+		t.Fatalf("InvokeSession() state = %q, want FAILED", result.Session.State)
+	}
+	if got := execution.callCount(); got != 0 {
+		t.Fatalf("provider calls after opening append failure = %d, want 0", got)
+	}
+	failure, ok := writer.failure()
+	if !ok {
+		t.Fatal("opening append failure was not durably classified")
+	}
+	if failure.RecordingID != request.Execution.Execution.RecordingID || failure.WorkerSessionID != request.ID {
+		t.Fatalf("persisted failure identity = %#v, want recording/session identity", failure)
+	}
+	if failure.Code != "OPENING_INVALID" {
+		t.Fatalf("persisted failure code = %q, want OPENING_INVALID", failure.Code)
+	}
+	handle := observedRecorder.recording()
+	if handle == nil {
+		t.Fatal("recording service did not retain the started capture handle")
+	}
+	if closeErr := handle.Close(context.Background()); !errors.Is(closeErr, recordings.ErrWorkerRecordingOpening) {
+		t.Fatalf("capture Close() after opening append failure = %v, want ErrWorkerRecordingOpening", closeErr)
+	}
+}
+
 type controlledRecordingService struct {
 	started chan struct{}
 	release chan struct{}
@@ -1896,6 +1950,57 @@ type controlledRecording struct {
 	closeOnce sync.Once
 }
 
+type observedRecordingService struct {
+	delegate recordings.WorkerSessionRecordingService
+	mu       sync.Mutex
+	handle   recordings.WorkerSessionRecording
+}
+
+func (service *observedRecordingService) StartWorkerSessionRecording(
+	ctx context.Context,
+	request recordings.WorkerSessionRecordingRequest,
+) (recordings.WorkerSessionRecording, error) {
+	handle, err := service.delegate.StartWorkerSessionRecording(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+	service.mu.Lock()
+	service.handle = handle
+	service.mu.Unlock()
+	return handle, nil
+}
+
+func (service *observedRecordingService) recording() recordings.WorkerSessionRecording {
+	service.mu.Lock()
+	defer service.mu.Unlock()
+	return service.handle
+}
+
+type recordingFailureWriter struct {
+	mu       sync.Mutex
+	failures []recordings.WorkerRecordingFailure
+}
+
+func (*recordingFailureWriter) PersistWorkerRecord(context.Context, recordings.WorkerRecordingRecord) error {
+	return nil
+}
+
+func (writer *recordingFailureWriter) PersistWorkerRecordingFailure(_ context.Context, failure recordings.WorkerRecordingFailure) error {
+	writer.mu.Lock()
+	writer.failures = append(writer.failures, failure)
+	writer.mu.Unlock()
+	return nil
+}
+
+func (writer *recordingFailureWriter) failure() (recordings.WorkerRecordingFailure, bool) {
+	writer.mu.Lock()
+	defer writer.mu.Unlock()
+	if len(writer.failures) == 0 {
+		return recordings.WorkerRecordingFailure{}, false
+	}
+	return writer.failures[len(writer.failures)-1], true
+}
+
 func (recording *controlledRecording) AwaitOpening(ctx context.Context) error {
 	select {
 	case <-recording.release:
@@ -1908,6 +2013,10 @@ func (recording *controlledRecording) AwaitOpening(ctx context.Context) error {
 func (recording *controlledRecording) Close(context.Context) error {
 	recording.closeOnce.Do(func() { close(recording.closedCh) })
 	return nil
+}
+
+func (recording *controlledRecording) Abort(ctx context.Context, _ error) error {
+	return recording.Close(ctx)
 }
 
 func (service *controlledRecordingService) closed() bool {

@@ -124,7 +124,7 @@ func newTestRegistry(t *testing.T) *registry {
 	if err != nil {
 		t.Fatalf("eventswire.NewService() error = %v, want nil", err)
 	}
-	svc, err := New(unusedExecution{t: t}, events, nil, platformclock.Real{}, unavailableProviderSessions{})
+	svc, err := New(unusedExecution{t: t}, events, nil, platformclock.Real{}, unavailableProviderSessions{}, nil)
 	if err != nil {
 		t.Fatalf("New() error = %v, want nil", err)
 	}
@@ -675,6 +675,10 @@ func (recording *awaitOpeningFailureRecording) AwaitOpening(context.Context) err
 func (recording *awaitOpeningFailureRecording) Close(context.Context) error {
 	recording.closed = true
 	return nil
+}
+
+func (recording *awaitOpeningFailureRecording) Abort(ctx context.Context, _ error) error {
+	return recording.Close(ctx)
 }
 
 // TestPublishOutcomeLabel_CoversEveryOutcomeIncludingUnspecified proves the
@@ -1554,10 +1558,10 @@ func TestProviderBindingAndDispatchLookupEdgesAreObservable(t *testing.T) {
 		t.Fatalf("WorkerSessionIDForDispatch(known) = %q, %v, want worker-1", got, err)
 	}
 
-	if _, err := New(unusedExecution{t: t}, newEventsAppenderForInternalTest(), nil, nil, unavailableProviderSessions{}); !errors.Is(err, ErrMissingClock) {
+	if _, err := New(unusedExecution{t: t}, newEventsAppenderForInternalTest(), nil, nil, unavailableProviderSessions{}, nil); !errors.Is(err, ErrMissingClock) {
 		t.Fatalf("New(missing clock) error = %v, want ErrMissingClock", err)
 	}
-	if _, err := New(unusedExecution{t: t}, newEventsAppenderForInternalTest(), nil, platformclock.Real{}, nil); !errors.Is(err, ErrMissingProviderSessions) {
+	if _, err := New(unusedExecution{t: t}, newEventsAppenderForInternalTest(), nil, platformclock.Real{}, nil, nil); !errors.Is(err, ErrMissingProviderSessions) {
 		t.Fatalf("New(missing provider sessions) error = %v, want ErrMissingProviderSessions", err)
 	}
 

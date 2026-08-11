@@ -132,6 +132,7 @@ func New(
 	clock factory.Clock,
 	inlineDispatch bool,
 	eventHistory recordings.RuntimeLedger,
+	recordingID string,
 	worldStateProjector factory.WorldStateProjector,
 	providerSessions providersessions.Service,
 	submissionRecorder recordings.SubmissionRecorder,
@@ -188,6 +189,7 @@ func New(
 		workRequestIDs:            workRequestIDs,
 		inlineDispatch:            inlineDispatch,
 		eventHistory:              eventHistory,
+		recordingID:               strings.TrimSpace(recordingID),
 		worldStateProjector:       worldStateProjector,
 		providerSessions:          providerSessions,
 		submissionRecorder:        submissionRecorder,
@@ -266,13 +268,6 @@ func New(
 	}
 	impl.engine = runtimeEngine
 	return impl, nil
-}
-
-// SetRecordingID binds the runtime recording target before dispatch.
-func SetRecordingID(target factory.Factory, recordingID string) {
-	if implementation, ok := target.(*factoryImpl); ok && implementation != nil && implementation.cfg != nil {
-		implementation.cfg.recordingID = strings.TrimSpace(recordingID)
-	}
 }
 
 func buildRuntimeScheduler(cfg *runtimeConfig) scheduler.Scheduler {

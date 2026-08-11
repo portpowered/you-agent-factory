@@ -180,7 +180,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	workerSessionRecordingService, err := provideWorkerSessionRecorder(eventsService, edges2)
+	workerSessionRecordingService, err := provideWorkerSessionRecorder(eventsService, edges2, loggingLogger)
 	if err != nil {
 		return nil, err
 	}
