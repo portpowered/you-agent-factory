@@ -8470,3 +8470,15 @@
 - **Learnings for future iterations:**
   - When `gh pr checks` is blocked by a token's missing `read:project` scope, the REST commit check-run API still provides complete terminal status and failure attribution for the PR handoff audit.
 ---
+## 2026-08-11 03:58 -07:00 - thr-functional-lane-speed-004 final CI flake follow-up
+- What was implemented
+  - Diagnosed the first final-head CI attempt and reran only its failed GitHub Actions jobs; no product or test-source changes were needed.
+- Files changed
+  - `progress.txt`
+- Verification
+  - The first run on `65214e776` reported an unrelated browser port collision (`127.0.0.1:37929`) in one of 35 browser tests and one unrelated Backend Functional Coverage process-boundary failure, `TestCLISuccessorAfterHardKillReportsPreRuntimeStagingContention`; all other checks passed.
+  - `gh run rerun 31483624929 --failed` passed the retried Frontend Browser and Backend Functional Coverage jobs; dependent Verification Policy also passed.
+  - All 18 checks are terminal-success on the final source/PRD head `65214e776`.
+- **Learnings for future iterations:**
+  - When CI names an untouched browser/process-boundary test and the log shows port contention or a single isolated process failure, rerun only the failed jobs after the workflow settles; preserve the task diff unless the repeat reproduces a source-linked failure.
+---
