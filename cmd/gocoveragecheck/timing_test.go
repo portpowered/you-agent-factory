@@ -202,7 +202,11 @@ func TestRunWritesFunctionalTimingSummaryOnSuccess(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	commandRunner = fakeGoCoverageCommandWithTiming
+	var gotArgs []string
+	commandRunner = func(invocation commandInvocation) (string, string, error) {
+		gotArgs = append([]string(nil), invocation.args...)
+		return fakeGoCoverageCommandWithTiming(invocation)
+	}
 	stdoutWriter = &stdout
 	stderrWriter = &stderr
 
@@ -218,6 +222,9 @@ func TestRunWritesFunctionalTimingSummaryOnSuccess(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("run() error = %v", err)
+	}
+	if !strings.Contains(strings.Join(gotArgs, " "), "-count=1") {
+		t.Fatalf("coverage go test args = %v, want explicit -count=1", gotArgs)
 	}
 
 	data, readErr := os.ReadFile(timingPath)

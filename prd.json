@@ -1,72 +1,90 @@
 {
-  "project": "Split Oversized ACP Stdio Tests into Focused Behavioral Suites",
-  "branchName": "thr-split-acp-stdio-tests",
-  "description": "Mechanically split the 3,518-line session_prompt_test.go and 1,667-line prompt_stream_test.go into focused behavioral files with one shared fixture file, preserving the exact test inventory, assertions, runtime outcomes, and coverage so the queued BTRC P5B cutover can work against a readable package.",
+  "project": "Cut Functional-Lane Wall Time Without Weakening Evidence",
+  "branchName": "thr-functional-lane-speed",
+  "description": "Restore Go test caching on the default functional lane, add an explicit fresh functional target for authoritative execution, replace a measured set of high-impact fixed sleeps with bounded observable-condition waits, and publish reproducible timing evidence while preserving assertions, coverage, CI semantics, and lane ownership. The intent is to shorten every coding and review feedback cycle without weakening behavioral proof.",
   "context": {
-    "customerAsk": "Land a move-only split of the 3,518-line session_prompt_test.go and 1,667-line prompt_stream_test.go before BTRC P5B releases, deriving cohesive behavior groups from the real tests, consolidating shared fixtures into one helper file, and rebasing under the contention protocol if ACP stdio ownership changes.",
-    "problem": "Prompt admission, dispatch, terminal-state, cancellation, attachment, delivery, stream-gap, retry, and live-drain scenarios are mixed in two oversized files, causing unnecessary context burn, slow comprehension, and error-prone edits for ACP transport maintainers.",
-    "solution": "Move existing tests without semantic changes into package-local suites organized around prompt command/admission, prompt dispatch/terminal lifecycle, cancellation/connection failures, stream attachment/delivery, and stream gap/error/live-drain behavior; share cross-suite fixtures through one test-helper file and prove equivalence with before/after inventory, coverage, and focused package-test evidence."
+    "customerAsk": "Split cached and fresh functional targets, preserve fresh semantics wherever CI or documentation requires them, replace high-impact fixed-sleep polling with bounded observation-driven waits, and record cold, warm, and per-package timing evidence without weakening tests or coverage.",
+    "problem": "The default make test-functional path and cmd/functionallane both force -count=1, preventing Go from reusing successful results for unchanged packages. Observable asynchronous functional scenarios also use fixed sleeps that add avoidable worst-case latency. Agents and reviewers therefore repeatedly pay nearly the full functional-suite cost, while the CI functional coverage path is roughly 4.5 minutes.",
+    "solution": "Make the default runner omit go test -count so normal cache validity applies; add make test-functional-fresh with explicit -count=1; keep authoritative CI and coverage workflows fresh; use timing artifacts to select a small number of slow packages and replace only directly observable waits with bounded diagnostic observers; then record comparable cold, warm, fresh, and package timing results. Preserve the full suite, assertions, coverage floor, failure behavior, and JavaScript durability lane ownership."
   },
   "acceptanceCriteria": [
-    "Normalized output from go test ./pkg/transports/acp/internal/stdio -list '.*' is identical before and after the split, with the zero diff shown in the PR.",
-    "Existing prompt, dispatch, terminal-state, cancellation, attachment, stream-delivery, gap, retry, and live-drain tests retain their names, setup semantics, assertions, and observable outcomes, and focused package tests pass.",
-    "Before/after ACP stdio package coverage numbers are recorded in the PR and are unchanged using the same command and baseline revision.",
-    "Tests are grouped by cohesive behavior, fixtures shared across groups live in one test-helper file, no resulting Go test file exceeds approximately 1,200 lines, and the diff is dominated by moves.",
-    "No production code, public contract, generated artifact, assertion semantics, test inventory, or unrelated cleanup changes are included.",
-    "Typecheck and tests pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
-    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts are resolved against current main, and the PR is merged."
+    "A normal make test-functional run omits go test -count, and a second run with no relevant input change reports cached package results and completes at least 70% faster than the recorded cold run in the same environment.",
+    "make test-functional-fresh explicitly runs the same boundary check and maintained short functional package set with -count=1, and repeated fresh runs execute rather than reuse cached results.",
+    "Required CI, functional coverage, and documented workflows that require unconditional execution retain fresh semantics, package scope, short mode, timeouts, failure propagation, and coverage floors.",
+    "Fixed waits changed by this lane are limited to measured high-impact packages and directly observable conditions; they return promptly on success, fail within a generous bound with useful diagnostics, and retain every scenario assertion.",
+    "Comparable evidence records cold and warm default wall time, a fresh run, and before/after functional-timing-summary.json results; every touched performance-target package shows reduced representative wall time.",
+    "The lane does not modify tests/functional/orchestration/javascript/durability, lower coverage, weaken assertions, mechanically churn all sleep sites, or include unrelated cleanup.",
+    "Quality gate: Typecheck passes; Tests pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green; the full functional suite and required CI checks pass.",
+    "Delivery: the implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared-file contention are resolved against current origin/main, generated files are regenerated rather than hand-merged if encountered, and the PR is actually merged."
   ],
   "userStories": [
     {
-      "id": "thr-split-acp-stdio-tests-001",
-      "title": "Isolate Prompt Command and Admission Behavior",
-      "description": "As an ACP transport maintainer, I want prompt command parsing and prompt admission scenarios in focused suites so I can understand request validation and admission behavior without loading dispatch and cancellation cases.",
+      "id": "thr-functional-lane-speed-001",
+      "title": "Separate cached and fresh functional execution",
+      "description": "As a coding agent, I want the default functional command to reuse valid Go test results while retaining an explicit fresh command so repeated evidence gathering is fast without removing the ability to force execution.",
       "acceptanceCriteria": [
-        "Existing factory-command parsing, target-change, malformed or invalid prompt, identity, version, busy, duplicate-delivery, and connection-isolation tests remain discoverable under their exact test names and produce the same results.",
-        "Moved tests retain their existing setup and assertions, and setup shared by more than one behavioral suite is consolidated into the single package test-helper file without changing fixture behavior.",
-        "The partial split is move-dominated and does not change ACP production code or public contracts.",
-        "Focused ACP stdio package tests pass.",
-        "Tests pass",
-        "Typecheck passes"
+        "make test-functional runs the functional boundary check and maintained short functional suite without supplying a go test -count override.",
+        "make test-functional-fresh runs the same boundary check, package scope, job limit, short mode, and timeout while explicitly supplying -count=1.",
+        "cmd/functionallane omits -count when the caller does not request it, forwards a valid explicit count unchanged, and rejects invalid count input clearly.",
+        "Two back-to-back default runs with unchanged relevant inputs show cached package results on the warm run, while two fresh runs execute the packages both times.",
+        "Runner and target regression tests prove generated go test arguments and success/failure propagation for cached and fresh modes.",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Moved the 22 prompt command/admission tests into session_prompt_admission_test.go with their original names, setup, assertions, and outcomes. Consolidated all package-shared ACP stdio fakes and fixtures in session_test_helpers_test.go, including the cross-suite streaming fixtures. No production code or public contract changed. Against current origin/main 635a43870, normalized go test -p 1 -vet=off ./pkg/transports/acp/internal/stdio -list '.*' -count=1 remained identical at 222 tests before and after with SHA-256 da83686cb68f0988570ca0ea0f429eabf40beb2bb47dba967874a33d46481bf1; coverage remained 94.3% of statements; focused tests, race tests, package compile/typecheck, and the ACP package-boundary comparison passed. The aggregate package-boundary run reports only the two unchanged ownership findings also present on current main."
+      "notes": "Implemented cache-aware `cmd/functionallane` execution with count 0 as the default omission mode, positive explicit counts forwarded unchanged, and negative counts rejected before process launch. Added `make test-functional-fresh` with the same boundary check, package scope, jobs, short mode, timeout, and failure propagation as `make test-functional`, but with explicit `-count=1`. Added runner and Make-target regression coverage for cached/fresh command arguments and both success/failure paths. Focused runner tests, repository Go tests, vet, backend size/maintainability/file-count/structure gates, and Make dry-run verification pass. Full cold/warm/fresh timing evidence remains a project-level story 004 concern; the workstation's attempted full measurement hit untouched process-API-server timeouts under concurrent unrelated Go lanes, and typecheck is blocked by missing Bun type definitions."
     },
     {
-      "id": "thr-split-acp-stdio-tests-002",
-      "title": "Isolate Prompt Dispatch, Terminal Lifecycle, and Cancellation Behavior",
-      "description": "As an ACP transport maintainer, I want prompt execution and control-flow scenarios separated by behavior so I can reason about first and later-turn dispatch, response terminalization, and cancellation races independently.",
+      "id": "thr-functional-lane-speed-002",
+      "title": "Preserve fresh semantics for authoritative workflows",
+      "description": "As a CI owner, I want workflows that produce authoritative functional evidence to keep forcing real execution so enabling the local cache does not weaken required checks.",
       "acceptanceCriteria": [
-        "Existing first-turn start and bind, later-turn invocation, notification and response mapping, retry and recovery, transition-failure, and terminal-outcome tests remain discoverable under their exact names and produce the same results.",
-        "Existing cancellation routing, committed-intent, completion and supersession race, repeated identity, malformed or unknown request, retryability, and asynchronous connection-failure tests remain discoverable under their exact names and produce the same results.",
-        "Prompt lifecycle and cancellation suites use the same package-local shared fixtures without duplicating or altering fixture semantics.",
-        "Every resulting prompt-related Go test file is approximately 1,200 lines or fewer, and the diff remains dominated by moves.",
-        "Focused ACP stdio package tests pass.",
-        "Tests pass",
-        "Typecheck passes"
+        "Every required CI or repository workflow that invokes the ordinary functional lane and requires unconditional execution uses test-functional-fresh or an equivalent explicit -count=1 path.",
+        "Functional coverage and visualization execute the maintained short functional suite, generate coverage and timing artifacts from a real run, enforce the existing coverage floor, and fail on the same boundary, suite, coverage, metadata, or rendering failures as before.",
+        "Developer documentation distinguishes the fast cached feedback command from the fresh command and identifies fresh use for CI-equivalent evidence and flake investigation.",
+        "A representative failing functional test makes both cached and fresh targets exit non-zero; caching never converts a failure into success.",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 2,
       "passes": true,
-      "notes": "Moved prompt dispatch tests into session_prompt_dispatch_test.go, recovery tests into session_load_test.go, terminal tests into session_prompt_test.go, and cancellation/connection-failure tests into session_prompt_cancellation_test.go; session creation/configuration tests share session_new_test.go. The single session_test_helpers_test.go now owns newChatSessionsStore, sequentialIDGenerator, fixedClock, and the complete deterministic real Chat Sessions constructor, so every recovery and cross-suite active-control setup enters through one helper. The exact constructor and test-import edges are recorded in docs/internal/baselines/service-construction-baseline.json and docs/internal/baselines/test-service-import-baseline.json as deletion-only migration debt; no source-position directives or alternate constructor path remain. No production code, public contract, generated artifact, or assertion semantics changed. Against current origin/main 635a43870, normalized inventory remained 222/222 with zero diff and SHA-256 da83686cb68f0988570ca0ea0f429eabf40beb2bb47dba967874a33d46481bf1; coverage remained 94.3%. Focused tests, race tests, vet, backend-size, pkg-maint, pkg-file-count, pkg-structure, typecheck, and the ACP package-boundary comparison passed; the aggregate package-boundary run reports only the two unchanged ownership findings also present on current main. All resulting Go files are at or below the approximately 1,200-line limit."
+      "notes": "Preserved authoritative fresh semantics by making `cmd/gocoveragecheck` append `-count=1` to every instrumented coverage invocation; the existing CI `functional-test-viz` route therefore keeps its maintained short package discovery, timeout, coverage profile, timing JSON, package manifest, coverage floor, and fail-closed boundary/suite/render behavior. Updated Makefile comments and developer/functional documentation to distinguish cache-aware `make test-functional`, fresh `make test-functional-fresh`, and fresh coverage/visualization usage for CI-equivalent evidence and flake investigation. Added coverage timing-argument regression evidence and representative failing-test output checks for both cached and fresh targets. Focused coverage-check and runner tests, vet, Make dry-run, diff checks, and Linux cross-compilation of the POSIX contract tests pass; `make typecheck` remains blocked by the workstation's missing Bun type definitions (`TS2688`)."
     },
     {
-      "id": "thr-split-acp-stdio-tests-003",
-      "title": "Isolate Streaming, Attachment, Gap, and Live-Drain Behavior",
-      "description": "As an ACP transport maintainer, I want stream delivery scenarios grouped by responsibility so I can inspect attachment lifecycle, ordered delivery, and stream recovery or failure behavior without reading one monolithic suite.",
+      "id": "thr-functional-lane-speed-003",
+      "title": "Replace high-impact fixed waits with bounded observations",
+      "description": "As a contributor running functional tests, I want high-impact asynchronous scenarios to proceed when their observable condition is satisfied so tests do not pay a fixed delay after the system is ready.",
       "acceptanceCriteria": [
-        "Existing attachment cache, resume, detach, reconnect, concurrency, seeded-message, fallback, ordering, independent-delivery, and notifier-retry tests retain their exact names, assertions, and outcomes.",
-        "Existing retention-gap, invalid-cursor, acknowledgment conflict and retry, malformed projection, cancellation, subscription or read or version failure, and live-drain tests retain their exact names, assertions, and outcomes.",
-        "Stream suites reuse the single package test-helper file where fixtures are shared, and fixture extraction introduces no alternate execution path or state.",
-        "Every resulting stream-related Go test file is approximately 1,200 lines or fewer, and the diff remains dominated by moves.",
-        "The before and after test-list inventory has a zero diff, and before and after coverage numbers are unchanged and recorded for review.",
-        "Focused ACP stdio package tests pass.",
-        "Tests pass",
-        "Typecheck passes"
+        "A baseline timing summary ranks packages before edits, and implementation selects only a small set of the slowest packages with waits on observable event-stream, filesystem, HTTP readiness, process, or store state.",
+        "Selected waits use an existing specialized observer or a shared support wait that polls every 10-25 ms, accepts a generous explicit deadline, returns immediately after the condition is observed, and reports the last observation or error at timeout.",
+        "Tests for shared wait behavior prove immediate success, delayed success, timeout, and diagnostic failure behavior without relying on long real-time sleeps.",
+        "Each retained or introduced polling boundary includes an in-code justification for why deterministic observation or edge mocking cannot replace it.",
+        "Assertions and observable scenario outcomes in every touched functional test remain unchanged, and the lane does not touch tests/functional/orchestration/javascript/durability.",
+        "Focused functional tests for each touched package pass repeatedly without increasing flake incidence.",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 3,
       "passes": true,
-      "notes": "Moved stream attachment/child/wire cases into prompt_stream_attachment_test.go, delivery/response-bridge cases into prompt_stream_delivery_test.go, and history/gap/live-drain cases into prompt_stream_gap_test.go. All cross-suite fixtures, including fakeEventsService, newStreamingTestServer, notificationItemID, and seedRetentionGap, now live only in session_test_helpers_test.go; no production code, public contract, generated artifact, or alternate execution path changed. The ACP stdio package remains at the exact 22-file main baseline, with moved exemptions registered at their new owners. Against current origin/main 635a43870, normalized test inventory was 222/222 with zero diff and SHA-256 da83686cb68f0988570ca0ea0f429eabf40beb2bb47dba967874a33d46481bf1 on both sides; coverage was 94.3% before and after. Focused tests, race, vet, backend-size, pkg-maint, pkg-file-count, pkg-structure, typecheck, current-main boundary comparison, and git diff --check passed."
+      "notes": "Captured the fresh functional timing summary at `.artifacts/functional-test-viz/story-003-before-functional-timing-summary.json` (142 packages, 207.342s wall time); the measured candidates selected for this story were `work/relationships` (43.950s), `work/submission` (33.606s), and `sessions/execution` (31.719s). Replaced their fixed 50–100ms public Work/Session polling sleeps with shared `support.WaitForObservation`, which observes immediately, polls every 10ms, preserves the bounded caller deadline, and reports the last observation and observer error on timeout. Added shared-wait coverage for immediate success, delayed success, timeout, and diagnostic observer failure. Repeated focused functional runs passed three times for all three touched packages; support tests, focused vet, backend-size, pkg-maint, pkg-file-count, and pkg-structure passed. The repository typecheck remains blocked by the workstation's missing Bun type definitions (`TS2688`); the JavaScript durability package was not changed."
+    },
+    {
+      "id": "thr-functional-lane-speed-004",
+      "title": "Prove throughput gains and preserved behavior",
+      "description": "As a reviewer, I want reproducible performance and correctness evidence so I can confirm the lane is materially faster and still trustworthy.",
+      "acceptanceCriteria": [
+        "The PR records commands, environment-relevant context, and wall times for a cold default run, an unchanged warm default run, and a fresh run; the warm run is at least 70% faster than the cold run and visibly uses Go's test cache.",
+        "Before/after functional-timing-summary.json evidence is captured under comparable conditions and lists selected touched packages with reduced representative package wall times.",
+        "The full fresh functional suite passes after wait changes with the same package scope, short mode, assertions, timeout envelope, and coverage floor.",
+        "Required CI checks remain semantically equivalent and are terminal and green; variance or packages intentionally not optimized are documented rather than hidden by weakening evidence.",
+        "Scope review confirms no changes to the JavaScript durability owner package, no unrelated cleanup, and no hand-merged generated artifacts.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": "Completed the review follow-up and comparable timing evidence. Restored `tests/functional/sessions/execution/helpers_test.go::waitForCanceledInfer` to its deterministic in-process fake signal boundary; `support.WaitForObservation` remains limited to the public HTTP projection waits in the three measured packages. The representative fresh instrumented command was identical before and after: `go run ./cmd/gocoveragecheck -packages \"github.com/portpowered/infinite-you/tests/functional/sessions/execution github.com/portpowered/infinite-you/tests/functional/work/relationships github.com/portpowered/infinite-you/tests/functional/work/submission\" -jobs 8 -total-only -min 0 -short -timeout 10m -timing-output ... -profile ...`; both summaries are complete with all three package outcomes passing. The pre-change parent `50ae4f394` summary reports 137.706s wall and package times of 79.697s, 87.735s, and 73.871s; the representative implementation-head after summary reports 107.370s wall and 64.872s, 67.248s, and 60.418s for `sessions/execution`, `work/relationships`, and `work/submission` respectively. A later merged-head rerun under competing Go verification was also complete and passing but measured 102.073s, 106.715s, and 88.363s; that host variance is documented and is not used to hide a failure. After `go clean -testcache`, the unchanged default `make test-functional` passed all maintained runnable packages in 1726.934s without `-count`; the unchanged warm default run passed in 197.127s with cached output across the suite, an 88.6% reduction. `make test-functional-fresh` passed the same boundary/package scope with explicit `-count=1` in 179.939s. Current-head `make functional-test-viz` passed in 320.752s with 142 complete timing packages, 55.6% aggregate coverage against the 33.1% floor, and successful Markdown rendering. The current-main root-composition provider fixture uses the current Args/provider-native output contract and its focused test passes three repetitions. `make typecheck` passes; the full fresh functional, coverage, boundary, and timing lanes pass. Latest `origin/main` `3521f0b0a2f313b22e2c79edcf90339a01b3bce7` is merged into the replacement head; required hosted confirmation remains the final delivery gate."
     }
   ]
 }

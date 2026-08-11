@@ -92,25 +92,31 @@ func waitForWorkByTraceAtPlace(
 ) factoryapi.ListWorkResponse {
 	t.Helper()
 
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		listed := support.ListDefaultSessionWork(t, baseURL)
-		for _, item := range listed.Results {
-			if support.StringPointerValue(item.TraceId) == traceID &&
-				workCustomerPlaceID(item) == placeID {
-				return listed
+	listed, err := support.WaitForObservation(
+		timeout,
+		func() (factoryapi.ListWorkResponse, error) {
+			return support.ListDefaultSessionWork(t, baseURL), nil
+		},
+		func(listed factoryapi.ListWorkResponse) bool {
+			for _, item := range listed.Results {
+				if support.StringPointerValue(item.TraceId) == traceID &&
+					workCustomerPlaceID(item) == placeID {
+					return true
+				}
 			}
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	listed := support.ListDefaultSessionWork(t, baseURL)
-	t.Fatalf(
-		"timed out waiting for trace %q at %s; last work response: %#v",
-		traceID,
-		placeID,
-		listed.Results,
+			return false
+		},
 	)
-	return factoryapi.ListWorkResponse{}
+	if err != nil {
+		t.Fatalf(
+			"timed out waiting for trace %q at %s: %v; last work response: %#v",
+			traceID,
+			placeID,
+			err,
+			listed.Results,
+		)
+	}
+	return listed
 }
 
 func waitForWorkByTraceComplete(
@@ -135,32 +141,37 @@ func waitForWorkIDsComplete(
 	for _, workID := range workIDs {
 		want[workID] = true
 	}
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		listed := support.ListDefaultSessionWork(t, baseURL)
-		found := make(map[string]factoryapi.Work, len(want))
-		for _, item := range listed.Results {
-			workID := support.StringPointerValue(item.WorkId)
-			if want[workID] && workStateName(item.State) == "complete" {
-				found[workID] = item
+	var found map[string]factoryapi.Work
+	listed, err := support.WaitForObservation(
+		timeout,
+		func() (factoryapi.ListWorkResponse, error) {
+			return support.ListDefaultSessionWork(t, baseURL), nil
+		},
+		func(listed factoryapi.ListWorkResponse) bool {
+			currentFound := make(map[string]factoryapi.Work, len(want))
+			for _, item := range listed.Results {
+				workID := support.StringPointerValue(item.WorkId)
+				if want[workID] && workStateName(item.State) == "complete" {
+					currentFound[workID] = item
+				}
 			}
-		}
-		if len(found) == len(want) {
-			items := make([]factoryapi.Work, 0, len(workIDs))
-			for _, workID := range workIDs {
-				items = append(items, found[workID])
-			}
-			return items
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	listed := support.ListDefaultSessionWork(t, baseURL)
-	t.Fatalf(
-		"timed out waiting for completed work IDs %v; last work response: %#v",
-		workIDs,
-		listed.Results,
+			found = currentFound
+			return len(currentFound) == len(want)
+		},
 	)
-	return nil
+	if err != nil {
+		t.Fatalf(
+			"timed out waiting for completed work IDs %v: %v; last work response: %#v",
+			workIDs,
+			err,
+			listed.Results,
+		)
+	}
+	items := make([]factoryapi.Work, 0, len(workIDs))
+	for _, workID := range workIDs {
+		items = append(items, found[workID])
+	}
+	return items
 }
 
 func waitForWorkTypeComplete(
@@ -171,23 +182,36 @@ func waitForWorkTypeComplete(
 ) factoryapi.Work {
 	t.Helper()
 
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		listed := support.ListDefaultSessionWork(t, baseURL)
-		for _, item := range listed.Results {
-			if support.StringPointerValue(item.WorkTypeName) == workType &&
-				workStateName(item.State) == "complete" {
-				return item
+	listed, err := support.WaitForObservation(
+		timeout,
+		func() (factoryapi.ListWorkResponse, error) {
+			return support.ListDefaultSessionWork(t, baseURL), nil
+		},
+		func(listed factoryapi.ListWorkResponse) bool {
+			for _, item := range listed.Results {
+				if support.StringPointerValue(item.WorkTypeName) == workType &&
+					workStateName(item.State) == "complete" {
+					return true
+				}
 			}
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	listed := support.ListDefaultSessionWork(t, baseURL)
-	t.Fatalf(
-		"timed out waiting for completed work type %q; last work response: %#v",
-		workType,
-		listed.Results,
+			return false
+		},
 	)
+	if err != nil {
+		t.Fatalf(
+			"timed out waiting for completed work type %q: %v; last work response: %#v",
+			workType,
+			err,
+			listed.Results,
+		)
+	}
+	for _, item := range listed.Results {
+		if support.StringPointerValue(item.WorkTypeName) == workType &&
+			workStateName(item.State) == "complete" {
+			return item
+		}
+	}
+	t.Fatalf("accepted work type %q disappeared from last observation: %#v", workType, listed.Results)
 	return factoryapi.Work{}
 }
 
