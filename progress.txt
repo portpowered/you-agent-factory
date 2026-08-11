@@ -10262,5 +10262,23 @@
   - Workflow `31482113491` has all substantive lanes complete; Backend Functional Coverage reports the two packages above and Verification Policy remains in progress. The PR body matches `prd.json` exactly with UTF-8 comparison.
 - **Learnings for future iterations:**
   - Classify a functional coverage failure by package diff membership and repeatability before changing product code; a one-off owner-scope failure can coexist with a deterministic untouched baseline assertion.
-  - Keep an in-progress policy job distinct from terminal CI evidence, and refresh the PRD audit/body only after recording the exact tested head and workflow.
+- Keep an in-progress policy job distinct from terminal CI evidence, and refresh the PRD audit/body only after recording the exact tested head and workflow.
+---
+## [2026-08-11 03:56:01 -07:00] - btrc-p1-root-injection-006 current-head PR audit
+- What was implemented
+  - Confirmed all six PRD stories remain marked `passes:true`; no additional product story implementation was justified in this iteration.
+  - Audited existing PR #1857 with the thread-aware review script: zero review threads, zero unresolved review threads, and zero formal reviews. Historical blocking findings were addressed by later commits and no new actionable feedback is present.
+  - Refreshed `prd.json` to the live PR head `50a24ed75acee043d46c52ec24bc7ff73970775d` and recorded that workflow `31482113491` tested the prior head, not the current docs-only audit commit.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `gh auth status` — authenticated with repository access.
+  - `git status --short --branch` — clean before this bookkeeping update; `origin/main` remains an ancestor of the branch.
+  - PR #1857 is open, non-draft, mergeable, and still blocked by verification state; the PR body matched `prd.json` before this audit update.
+  - Workflow `31482113491` remains in progress on prior head `4c19dd63c4aba14decad3c14e7ef2ebaea473a4c`; its only completed failure is the untouched `tests/functional/transport/server_binding` baseline assertion plus a non-reproducing `tests/functional/runtime_api` report. No check runs are currently reported for head `50a24ed75acee043d46c52ec24bc7ff73970775d`.
+  - The PR description must be refreshed after this audit commit; completion remains pending terminal current-head CI and merge.
+- **Learnings for future iterations:**
+  - Tie every CI result to the exact commit that was tested; a docs-only bookkeeping push can supersede an in-progress workflow without inheriting its result.
+  - Keep the PR body synchronized with `prd.json` after changing delivery-audit metadata, even when no product files changed.
 ---

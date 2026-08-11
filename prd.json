@@ -11,16 +11,18 @@
   },
   "deliveryAudit": {
     "pullRequest": 1857,
-    "head": "4c19dd63c4aba14decad3c14e7ef2ebaea473a4c",
+    "head": "50a24ed75acee043d46c52ec24bc7ff73970775d",
     "base": "dd87fd04db20d755f9b44c369aa79b8c3e600f5f",
     "reviewThreads": 0,
     "unresolvedReviewThreads": 0,
     "formalReviews": 0,
     "latestWorkflow": {
       "run": 31482113491,
-      "result": "in_progress",
+      "testedHead": "4c19dd63c4aba14decad3c14e7ef2ebaea473a4c",
+      "result": "in_progress_on_previous_head",
       "functionalResult": "failure",
       "verificationPolicy": "in_progress",
+      "currentHeadCheckRuns": "not_reported",
       "rerunResult": "not_run",
       "taskScopedFailures": [],
       "baselineFailures": [
@@ -152,7 +154,7 @@
       ],
       "priority": 6,
       "passes": true,
-      "notes": "Completed the review follow-up for the reusable root-process proof and the final value-only invocation cutover. Both representative success and provider-failure invocations enter through the public `you --json run` CLI on one root.BuildProcess/Process.Execute instance; the injected API server is observation-only for public session and Factory Event streams. The current audited head is `4c19dd63c4aba14decad3c14e7ef2ebaea473a4c`, based on synchronized origin/main `dd87fd04db20d755f9b44c369aa79b8c3e600f5f`; workflow `31482113491` has all substantive lanes complete, with the unchanged server-binding baseline failure and one non-reproducing runtime-log failure, while Verification Policy remains in progress. The P1 diff is empty for both failing packages, focused runtime-log coverage passes three times locally, and the thread-aware audit has zero unresolved review threads and zero formal reviews. All six P1 stories remain marked `passes:true`; the remaining follow-up is terminal CI baseline resolution and final PR handoff."
+      "notes": "Completed the review follow-up for the reusable root-process proof and the final value-only invocation cutover. Both representative success and provider-failure invocations enter through the public `you --json run` CLI on one root.BuildProcess/Process.Execute instance; the injected API server is observation-only for public session and Factory Event streams. The current audited head is `50a24ed75acee043d46c52ec24bc7ff73970775d`, based on synchronized origin/main `dd87fd04db20d755f9b44c369aa79b8c3e600f5f`; workflow `31482113491` tested the prior head `4c19dd63c4aba14decad3c14e7ef2ebaea473a4c` and remains in progress, with the unchanged server-binding baseline failure and one non-reproducing runtime-log failure. No check runs are reported yet for the current docs-only head. The P1 diff is empty for both failing packages, focused runtime-log coverage passes three times locally, and the thread-aware audit has zero unresolved review threads and zero formal reviews. All six P1 stories remain marked `passes:true`; the remaining follow-up is current-head CI terminal resolution and final PR handoff."
     }
   ]
 }
