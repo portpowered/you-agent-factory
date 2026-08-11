@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- Treat a full functional-coverage failure in an untouched fixture as a characterization problem first: repeat the exact test locally, then rerun only the failed coverage and dependent-policy jobs if it passes.
 - When a backend-size violation names a long test function, split each failure mode into a focused test and share only request/setup plumbing so every observable assertion remains intact.
 - For concurrent single-flight state, keep the absent-to-loading election atomic with the observation; a separate precheck can let callers pass stale absent state and overwrite the shared completion signal.
 - For repeated concurrency package runs, synchronize cancellation tests on an injected launcher or process edge; a fixed sleep can cancel before startup under parallel stress and obscure the target regression.
@@ -8126,4 +8127,19 @@
   - `prd.json` parses with all three stories marked `passes:true`; conflict-marker, unmerged-entry, and `git diff --check` audits passed.
 - **Learnings for future iterations:**
   - Resolve shared `prd.json`/`progress.txt` merge conflicts by preserving the active task PRD and unioning both complete append-only histories; validate JSON, marker absence, and index state before committing.
+---
+## [2026-08-11 00:21 -07:00] - ui-packaged-factories-decoupling CI flake follow-up
+- What was implemented
+  - Investigated the first replacement-head Backend Functional Coverage failure, which named the untouched `TestProvidersACPSerializesConcurrentPromptsOnOneStdioConnection` ACP fixture and observed a transient failed session after a peer connection close.
+  - Made no product or test-code changes. Isolated the exact test locally for ten repetitions; all ten passed.
+  - Reran only the failed Backend Functional Coverage and dependent Verification Policy jobs on the same pushed head; both passed.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/providers/acp -run '^TestProvidersACPSerializesConcurrentPromptsOnOneStdioConnection$' -count=10 -v -timeout 600s` — all ten passed.
+  - Backend Functional Coverage rerun job `93705509715` — passed.
+  - Verification Policy rerun job `93706601140` — passed.
+  - All other replacement-head checks remained green; no task file was named by the failure.
+- **Learnings for future iterations:**
+  - For an untouched functional fixture that passes repeated local characterization, preserve task code and rerun only the failed coverage/policy jobs before widening the diff.
 ---
