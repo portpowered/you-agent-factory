@@ -7,4 +7,3 @@ launch:
   command: kimi
   arguments:
     - acp
-

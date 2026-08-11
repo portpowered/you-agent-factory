@@ -7,4 +7,3 @@ launch:
   command: pool
   arguments:
     - acp
-

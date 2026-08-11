@@ -7,4 +7,3 @@ launch:
   command: qwen
   arguments:
     - --acp
-

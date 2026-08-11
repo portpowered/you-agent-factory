@@ -7,4 +7,3 @@ launch:
   command: npx
   arguments:
     - pi-acp
-

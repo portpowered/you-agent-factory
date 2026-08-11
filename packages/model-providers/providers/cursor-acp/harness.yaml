@@ -7,4 +7,3 @@ launch:
   command: cursor-agent
   arguments:
     - acp
-

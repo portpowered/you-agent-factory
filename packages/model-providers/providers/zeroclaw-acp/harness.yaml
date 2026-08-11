@@ -7,4 +7,3 @@ launch:
   command: zeroclaw
   arguments:
     - acp
-

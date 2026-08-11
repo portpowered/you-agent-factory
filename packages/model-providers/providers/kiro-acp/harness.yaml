@@ -7,4 +7,3 @@ launch:
   command: kiro-cli-chat
   arguments:
     - acp
-

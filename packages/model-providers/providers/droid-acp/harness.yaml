@@ -9,4 +9,3 @@ launch:
     - exec
     - --output-format
     - acp
-
