@@ -9829,3 +9829,17 @@
   - A new policy-free platform leaf must be registered in the package-target manifest, ownership inventory, coverage manifests, and exact package-boundary allowances together; source-only additions leave several independent gates red.
   - On this shared Windows host, full Go coverage and stress commands can be affected by toolchain command length or unrelated filesystem contention; preserve those diagnostics and use task-owned temporary roots for behavioral evidence.
 ---
+## [2026-08-11 07:20:29 -07:00] - thr-deflake-cli-process-package replacement-head verification
+- What was implemented
+  - Reconciled PR #1884 with current `upstream/main` at `b99c8b942b4a684491cede70cae7f0ebf920da8c` in merge commit `1bee5d6304cf7a586c3892a163fbbf8504741e64`, preserving the task PRD and append-only progress history.
+  - Reran the failed Backend Functional Coverage job after isolating its single pre-existing `TestWithServerDrainCannotReportSuccessWhileWorkIsNonTerminal/site` listener-start assertion; the rerun passed and unlocked Verification Policy.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Hosted replacement run `31499377616` is terminal green across all 18 required checks, including Backend Unit Coverage, Backend Functional Coverage, and Verification Policy.
+  - The PR remains open as `thr-deflake-cli-process-package`, with a clean/mergeable current-main base and all three PRD stories still marked `passes: true`.
+- **Learnings for future iterations:**
+  - After current-main reconciliation, isolate and rerun a named functional test failure before changing unrelated product behavior; this distinguishes shared-suite contention from a task regression.
+  - A metadata-only final handoff commit still retriggers hosted verification, so the latest head must be checked again after synchronizing the PR body.
+---
