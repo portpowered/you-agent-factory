@@ -1,10 +1,6 @@
 package factorydefinitions
 
-import (
-	"context"
-
-	contracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts"
-)
+import contracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts"
 
 type PreparedFactoryLayoutPayload = contracts.PreparedFactoryLayoutPayload
 type FactorySplitLayoutReplaceResult = contracts.FactorySplitLayoutReplaceResult
@@ -20,10 +16,7 @@ type Persistence = contracts.Persistence
 // is intentionally separate from ordinary named-Factory persistence so its
 // catalog-only lifecycle allowances cannot be discovered through a runtime
 // type assertion or applied to customer-authored persistence.
-type PackagedFactoryPersistence interface {
-	Persistence
-	PreparePackagedFactoryLayout(context.Context, string, []byte) (*PreparedFactoryLayoutPayload, error)
-}
+type PackagedFactoryPersistence = contracts.PackagedFactoryPersistence
 
 const (
 	NamedFactoryResolutionSourceProjectLocal = contracts.NamedFactoryResolutionSourceProjectLocal
