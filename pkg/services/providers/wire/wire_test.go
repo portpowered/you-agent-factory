@@ -8,11 +8,9 @@ import (
 	"reflect"
 	"runtime"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
-	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	catalog "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog"
@@ -582,20 +580,6 @@ func (r *inertWorkersCommandRunner) Run(
 	panic("workers command runner invoked during inert construction")
 }
 
-type inertTemporaryFileSystem struct {
-	calls int
-}
-
-func (f *inertTemporaryFileSystem) CreateTemp(string, string) (platformfilesystem.TemporaryFile, error) {
-	f.calls++
-	panic("cursor temporary file creation during inert construction")
-}
-
-func (f *inertTemporaryFileSystem) Remove(string) error {
-	f.calls++
-	panic("cursor temporary file remove during inert construction")
-}
-
 type inertPTYAllocator struct {
 	calls int
 }
@@ -649,60 +633,6 @@ func (r *recordingWorkersCommandRunner) Run(
 ) (workers.CommandResult, error) {
 	r.calls++
 	return workers.CommandResult{}, nil
-}
-
-type recordingTemporaryFileSystem struct {
-	mu        sync.Mutex
-	file      *recordingTemporaryFile
-	created   int
-	directory string
-	pattern   string
-	removes   int
-}
-
-func newRecordingTemporaryFileSystem(path string) *recordingTemporaryFileSystem {
-	return &recordingTemporaryFileSystem{
-		file: &recordingTemporaryFile{path: path},
-	}
-}
-
-func (f *recordingTemporaryFileSystem) CreateTemp(directory, pattern string) (platformfilesystem.TemporaryFile, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.created++
-	f.directory = directory
-	f.pattern = pattern
-	return f.file, nil
-}
-
-func (f *recordingTemporaryFileSystem) Remove(path string) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.removes++
-	return nil
-}
-
-type recordingTemporaryFile struct {
-	mu      sync.Mutex
-	path    string
-	content string
-	closes  int
-}
-
-func (f *recordingTemporaryFile) Name() string { return f.path }
-
-func (f *recordingTemporaryFile) WriteString(value string) (int, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.content = value
-	return len(value), nil
-}
-
-func (f *recordingTemporaryFile) Close() error {
-	f.mu.Lock()
-	f.closes++
-	f.mu.Unlock()
-	return nil
 }
 
 type recordingPTYAllocator struct {
