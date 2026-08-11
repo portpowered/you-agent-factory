@@ -15,7 +15,8 @@
         "Rebased the seven dashboard commits onto the fetched current main at 3521f0b0a and resolved the shared PRD/progress conflicts while preserving the dashboard task record.",
         "Replaced exact Storybook command and registration-inventory assertions with behavioral runner coverage for readiness, completion, failure propagation, and server cleanup.",
         "Replaced the dashboard fixture API test's race-prone immediate response resolution with an explicit waitUntilPending readiness signal.",
-        "Unioned the complete append-only progress history from current main with the dashboard task history before the replacement push."
+        "Unioned the complete append-only progress history from current main with the dashboard task history before the replacement push.",
+        "Restored the Bun module mock used by the session-factory discovery test after each test so it cannot replace the typed Factory Sessions API in later coverage files."
       ],
       "qualityEvidence": [
         "make test and make vet pass on the rebased head.",

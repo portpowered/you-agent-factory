@@ -1,5 +1,6 @@
 ## Codebase Patterns
 - When reconciling a task branch against a moving mainline, keep the active task's PRD and follow-up metadata authoritative while accepting unrelated source changes from main; validate the merged JSON and preserve the append-only progress history.
+- Bun unit tests that use `mock.module` must restore the module mock after each test; the full Bun coverage process shares a module registry across files.
 - Fixture-backed async tests should expose an explicit pending/ready promise for controlled requests; do not rely on a coincidental microtask turn or a sleep before resolving them.
 - For orchestration runner tests, assert readiness, completion, failure propagation, and cleanup outcomes instead of freezing an exact command or registration inventory.
 - For no-new lint evidence, run the same gates in a disposable worktree at the exact current-main commit and compare baseline and task-head results before interpreting branch output.
@@ -9159,4 +9160,20 @@
   - `bun run typecheck`, `bun run lint`, focused Go transport/HTTP tests, and `git diff --check` passed on the rebased head.
 - **Learnings for future iterations:**
   - A small fixture synchronization helper can trip both callback-return and function-size lint rules; extract reusable control helpers before adding further fixture orchestration.
+---
+## [2026-08-11 05:33 -07:00] - dashboard-fixture-and-quick-wins-bun-mock-isolation
+- What was implemented
+  - Restored Bun module mocks after each `discoverSessionNamedFactoryNames` unit test so its mocked Factory Sessions barrel cannot leak into the dashboard regression fixture in the shared coverage process.
+  - Kept the dashboard fixture's explicit pending readiness synchronization in place; the CI failure was caused by the leaked module mock replacing the typed API, not by the fixture controller.
+- Files changed
+  - `ui/src/api/session-factory/import-activation.discover.bun.unit.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - The mock-owning unit file passed: 3 tests, 5 expectations.
+  - The dashboard regression unit file passed: 5 tests, 23 expectations.
+  - The affected dashboard test passed with direct Bun coverage instrumentation.
+  - The exact hosted Frontend Coverage job had reproduced the leak as a 5-second dashboard test timeout; a fresh hosted run is required after this fix.
+- **Learnings for future iterations:**
+  - Bun's unit coverage lane runs multiple files in one process, so module mocks are process-scoped even when each test file is logically independent; always clean up module mocks at the owning test boundary.
 ---
