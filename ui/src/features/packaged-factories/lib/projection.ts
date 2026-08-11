@@ -1,4 +1,8 @@
 import type {
+  PackagedFactoryCatalogEntry,
+  PackagedFactoryCatalogResponse,
+} from "../../../api/packaged-factories";
+import type {
   PackagedFactoryDescriptionViewModel,
   PackagedFactoryDetailViewModel,
   PackagedFactoryInventoryItemViewModel,
@@ -6,12 +10,6 @@ import type {
   PackagedFactoryInvocationExamplesViewModel,
   PackagedFactoryInvocationExampleViewModel,
 } from "./projection-types";
-import type {
-  PackagedFactoryCatalogOutcome,
-  PackagedFactoryLocalizableAsset,
-  PackagedFactoryManifestEntry,
-  PackagedFactorySelectionOutcome,
-} from "./public-contract";
 
 export type {
   PackagedFactoryConfigurationFormat,
@@ -24,17 +22,8 @@ export type {
   PackagedFactoryInvocationExampleViewModel,
 } from "./projection-types";
 
-type ReadyCatalog = Extract<
-  PackagedFactoryCatalogOutcome,
-  { readonly status: "ready" }
->;
-type ReadySelection = Extract<
-  PackagedFactorySelectionOutcome,
-  { readonly status: "ready" }
->;
-
 function projectDescription(
-  asset: PackagedFactoryLocalizableAsset | undefined,
+  asset: PackagedFactoryCatalogEntry["description"] | undefined,
   locale: string,
 ): PackagedFactoryDescriptionViewModel {
   if (!asset) {
@@ -48,7 +37,7 @@ function projectDescription(
 }
 
 function projectInventoryItem(
-  entry: PackagedFactoryManifestEntry,
+  entry: PackagedFactoryCatalogEntry,
   locale: string,
 ): PackagedFactoryInventoryItemViewModel {
   return {
@@ -61,10 +50,10 @@ function projectInventoryItem(
 }
 
 export function projectPackagedFactoryInventory(
-  catalog: ReadyCatalog,
+  catalog: PackagedFactoryCatalogResponse,
   locale: string,
 ): PackagedFactoryInventoryViewModel {
-  const items = [...catalog.manifest.factories]
+  const items = [...catalog.factories]
     .sort((left, right) =>
       left.name < right.name ? -1 : left.name > right.name ? 1 : 0,
     )
@@ -77,7 +66,7 @@ export function projectPackagedFactoryInventory(
 }
 
 function cloneArguments(
-  args: Readonly<Record<string, string | readonly string[]>>,
+  args: PackagedFactoryCatalogEntry["examples"][number]["args"],
 ): Readonly<Record<string, string | readonly string[]>> {
   return Object.fromEntries(
     Object.keys(args)
@@ -91,7 +80,7 @@ function cloneArguments(
 
 function projectExample(
   stableName: string,
-  example: NonNullable<PackagedFactoryManifestEntry["examples"]>[number],
+  example: PackagedFactoryCatalogEntry["examples"][number],
   locale: string,
 ): PackagedFactoryInvocationExampleViewModel {
   const args = cloneArguments(example.args);
@@ -105,10 +94,10 @@ function projectExample(
 }
 
 function projectExamples(
-  entry: PackagedFactoryManifestEntry,
+  entry: PackagedFactoryCatalogEntry,
   locale: string,
 ): PackagedFactoryInvocationExamplesViewModel {
-  if (!entry.examples || entry.examples.length === 0) {
+  if (entry.examples.length === 0) {
     return { status: "none" };
   }
 
@@ -120,11 +109,30 @@ function projectExamples(
   };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Projects one generated API entry and fails closed if an untyped fixture or
+ * an invalid response ever reaches this boundary with a missing artifact.
+ */
 export function projectPackagedFactoryDetail(
-  selection: ReadySelection,
+  entry: PackagedFactoryCatalogEntry,
   locale: string,
-): PackagedFactoryDetailViewModel {
-  const { entry } = selection;
+): PackagedFactoryDetailViewModel | undefined {
+  if (
+    !isRecord(entry.json) ||
+    typeof (entry as { readonly yaml?: unknown }).yaml !== "string" ||
+    entry.yaml.trim().length === 0
+  ) {
+    return undefined;
+  }
+
+  const jsonText = JSON.stringify(entry.json, undefined, 2);
+  if (jsonText === undefined) {
+    return undefined;
+  }
 
   return {
     identity: entry.name,
@@ -136,13 +144,13 @@ export function projectPackagedFactoryDetail(
     configurations: {
       json: {
         format: "json",
-        displayValue: selection.jsonText,
-        copyValue: selection.jsonText,
+        displayValue: jsonText,
+        copyValue: jsonText,
       },
       yaml: {
         format: "yaml",
-        displayValue: selection.yamlText,
-        copyValue: selection.yamlText,
+        displayValue: entry.yaml,
+        copyValue: entry.yaml,
       },
     },
     examples: projectExamples(entry, locale),

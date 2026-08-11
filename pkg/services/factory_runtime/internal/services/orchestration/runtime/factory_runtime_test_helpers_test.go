@@ -168,7 +168,15 @@ func (s *fakeWorkerSessionsService) GetObservation(context.Context, workersessio
 	return workersessions.Observation{}, nil
 }
 
+func (s *fakeWorkerSessionsService) GetObservationByWorkerSessionID(context.Context, workersessions.GetObservationByWorkerSessionIDRequest) (workersessions.Observation, error) {
+	return workersessions.Observation{}, nil
+}
+
 func (s *fakeWorkerSessionsService) StreamObservations(context.Context, workersessions.StreamObservationsRequest) (workersessions.ObservationSubscription, error) {
+	return workersessions.ObservationSubscription{}, nil
+}
+
+func (s *fakeWorkerSessionsService) StreamObservationsByWorkerSessionID(context.Context, workersessions.StreamObservationsByWorkerSessionIDRequest) (workersessions.ObservationSubscription, error) {
 	return workersessions.ObservationSubscription{}, nil
 }
 
@@ -189,6 +197,15 @@ func (s *fakeWorkerSessionsService) InvokeSession(ctx context.Context, req worke
 	}, nil
 }
 
+func (s *fakeWorkerSessionsService) Start(ctx context.Context, req workersessions.StartRequest) (workersessions.StartResult, error) {
+	result, err := s.InvokeSession(ctx, workersessions.InvokeSessionRequest{
+		ID:        req.ID,
+		Execution: req.Execution,
+		Retry:     req.Retry,
+	})
+	return workersessions.StartResult{Session: result.Session}, err
+}
+
 func (s *fakeWorkerSessionsService) PublishRecord(context.Context, workersessions.PublishRecordRequest) (workersessions.PublishRecordResult, error) {
 	return workersessions.PublishRecordResult{}, nil
 }
@@ -199,6 +216,14 @@ func (s *fakeWorkerSessionsService) AssociateProviderSession(context.Context, wo
 
 func (s *fakeWorkerSessionsService) ObserveProviderSession(context.Context, workersessions.ProviderSessionObservationRequest) (workersessions.ProviderSessionAssociationResult, error) {
 	return workersessions.ProviderSessionAssociationResult{}, nil
+}
+
+func (s *fakeWorkerSessionsService) EnsureProviderBinding(context.Context, workersessions.ProviderBindingRequest) (workersessions.ProviderBindingResult, error) {
+	return workersessions.ProviderBindingResult{}, nil
+}
+
+func (s *fakeWorkerSessionsService) WorkerSessionIDForDispatch(_ context.Context, dispatchID string) (string, error) {
+	return dispatchID, nil
 }
 
 func (s *fakeWorkerSessionsService) Pause(context.Context, workersessions.ControlRequest) (workersessions.ControlResult, error) {

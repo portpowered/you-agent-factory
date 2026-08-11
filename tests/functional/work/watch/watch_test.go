@@ -177,17 +177,18 @@ func assertWorkWatchTransitionLines(t *testing.T, lines []workWatchLine, session
 }
 
 type workWatchLine struct {
-	SchemaVersion string    `json:"schemaVersion"`
-	SessionID     string    `json:"sessionId"`
-	EventID       string    `json:"eventId"`
-	Sequence      int64     `json:"sequence"`
-	EventTime     time.Time `json:"eventTime"`
-	WorkID        string    `json:"workId"`
-	WorkTypeName  string    `json:"workTypeName"`
-	FromState     string    `json:"fromState"`
-	ToState       string    `json:"toState"`
-	Source        string    `json:"source"`
-	Terminal      bool      `json:"terminal"`
+	SchemaVersion    string          `json:"schemaVersion"`
+	SessionID        string          `json:"sessionId"`
+	EventID          string          `json:"eventId"`
+	Sequence         int64           `json:"sequence"`
+	EventTime        time.Time       `json:"eventTime"`
+	WorkID           string          `json:"workId"`
+	WorkTypeName     string          `json:"workTypeName"`
+	FromState        string          `json:"fromState"`
+	ToState          string          `json:"toState"`
+	Source           string          `json:"source"`
+	Terminal         bool            `json:"terminal"`
+	StructuredResult json.RawMessage `json:"structuredResult"`
 }
 
 func decodeSubmittedWorkID(t *testing.T, output string) string {

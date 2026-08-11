@@ -650,6 +650,18 @@ func TestSafeDetail_WithPartialFailureMetadata_FillsMissingHalfWithUnknown(t *te
 	}
 }
 
+func TestSafeDetail_WithStructuredSchemaViolationPreservesClosedVocabularyType(t *testing.T) {
+	metadata := &workers.WorkFailureMetadata{
+		Family: workers.WorkFailureFamilyTerminal,
+		Type:   workers.WorkFailureTypeStructuredOutputSchemaViolation,
+	}
+	got := safeDetail(workersessions.FailureCauseWorkersExecutionFailure, metadata)
+	want := "family=terminal type=structured_output_schema_violation"
+	if got != want {
+		t.Fatalf("safeDetail() = %q, want %q", got, want)
+	}
+}
+
 func TestSafeDetail_WithEmptyFailureMetadata_FallsBackToGenericPlaceholder(t *testing.T) {
 	got := safeDetail(workersessions.FailureCauseWorkersExecutionFailure, &workers.WorkFailureMetadata{})
 	want := genericFailureDetail[workersessions.FailureCauseWorkersExecutionFailure]
@@ -1308,21 +1320,9 @@ func TestPause_ControlOutcomesKeepTheLifecycleTruthful(t *testing.T) {
 		supervision.mu.Unlock()
 
 		observedWait := make(chan struct{})
-		stopRelease := make(chan struct{})
 		go func() {
-			select {
-			case wait <- struct{}{}:
-				close(observedWait)
-			case <-stopRelease:
-				return
-			}
-			for {
-				select {
-				case wait <- struct{}{}:
-				case <-stopRelease:
-					return
-				}
-			}
+			wait <- struct{}{}
+			close(observedWait)
 		}()
 
 		resultCh := make(chan workersessions.ControlResult, 1)
@@ -1342,7 +1342,7 @@ func TestPause_ControlOutcomesKeepTheLifecycleTruthful(t *testing.T) {
 		session.State = workersessions.StateCanceled
 		r.sessions["worker-1"] = session
 		r.mu.Unlock()
-		close(stopRelease)
+		close(wait)
 
 		result := <-resultCh
 		if err := <-errCh; err != nil || result.Outcome != workersessions.ControlOutcomeNoop || result.Session.State != workersessions.StateCanceled {
@@ -1436,4 +1436,497 @@ func TestNormalizeCommittedTerminal_RepairsInvalidFailure(t *testing.T) {
 	if strings.TrimSpace(result.Cause.Detail) == "" {
 		t.Fatal("normalized failure cause detail is empty")
 	}
+}
+
+type staticProviderBindingAppender struct {
+	result events.AppendResult
+	err    error
+}
+
+func (a staticProviderBindingAppender) Append(context.Context, events.AppendRequest) (events.AppendResult, error) {
+	return a.result, a.err
+}
+
+func providerBindingRegistry(t *testing.T, appender EventsAppender) *registry {
+	t.Helper()
+	r := newTestRegistry(t)
+	if appender != nil {
+		r.events = appender
+	}
+	r.dispatchOwners["dispatch-1"] = "worker-1"
+	r.publications["worker-1"] = &publication{open: true, turnID: "turn-1"}
+	return r
+}
+
+func TestProviderBindingAndDispatchLookupEdgesAreObservable(t *testing.T) {
+	ctx := context.Background()
+
+	r := newTestRegistry(t)
+	for _, test := range []struct {
+		name string
+		id   string
+		want error
+	}{
+		{name: "blank dispatch", id: " ", want: workersessions.ErrInvalidProviderBinding},
+		{name: "unknown dispatch", id: "missing", want: workersessions.ErrProviderBindingAttemptMismatch},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := r.WorkerSessionIDForDispatch(ctx, test.id); !errors.Is(err, test.want) {
+				t.Fatalf("WorkerSessionIDForDispatch(%q) error = %v, want %v", test.id, err, test.want)
+			}
+		})
+	}
+	r.dispatchOwners["dispatch-1"] = "worker-1"
+	if got, err := r.WorkerSessionIDForDispatch(ctx, " dispatch-1 "); err != nil || got != "worker-1" {
+		t.Fatalf("WorkerSessionIDForDispatch(known) = %q, %v, want worker-1", got, err)
+	}
+
+	if _, err := New(unusedExecution{t: t}, newEventsAppenderForInternalTest(), nil, nil, unavailableProviderSessions{}); !errors.Is(err, ErrMissingClock) {
+		t.Fatalf("New(missing clock) error = %v, want ErrMissingClock", err)
+	}
+	if _, err := New(unusedExecution{t: t}, newEventsAppenderForInternalTest(), nil, platformclock.Real{}, nil); !errors.Is(err, ErrMissingProviderSessions) {
+		t.Fatalf("New(missing provider sessions) error = %v, want ErrMissingProviderSessions", err)
+	}
+
+	if got := providerIdentityForExecution(workers.WorkstationExecutionRequest{
+		ExecutorProvider: workers.ExecutorProviderACP,
+		ModelProvider:    "cursor-acp",
+	}); got != "cursor-acp" {
+		t.Fatalf("providerIdentityForExecution(ACP) = %q, want cursor-acp", got)
+	}
+	wantResult := workers.WorkstationDispatchResult{DispatchID: "dispatch-1"}
+	if got := (&supervision{result: wantResult}).lastResult(); !reflect.DeepEqual(got, wantResult) {
+		t.Fatalf("lastResult() = %#v, want %#v", got, wantResult)
+	}
+}
+
+type internalTestEventsAppender struct{}
+
+func (internalTestEventsAppender) Append(context.Context, events.AppendRequest) (events.AppendResult, error) {
+	return events.AppendResult{}, nil
+}
+
+func newEventsAppenderForInternalTest() EventsAppender {
+	return internalTestEventsAppender{}
+}
+
+func TestProviderBindingPublicationEdgesPreserveAttributionAndOrdering(t *testing.T) {
+	t.Run("canonical provider draft", testCanonicalProviderDraftEdges)
+	t.Run("binding lifecycle", testProviderBindingLifecycleEdges)
+	t.Run("lookup errors", testProviderBindingLookupEdges)
+	t.Run("append outcomes", testProviderBindingAppendEdges)
+}
+
+func testCanonicalProviderDraftEdges(t *testing.T) {
+	ctx := context.Background()
+	providerDraft := func(provider, dispatchID string) workers.Draft {
+		return workers.Draft{DispatchID: dispatchID, Provenance: workers.Provenance{Provider: provider}}
+	}
+	r := providerBindingRegistry(t, nil)
+	pub := r.publications["worker-1"]
+	request := workersessions.PublishRecordRequest{SessionID: "worker-1", Draft: providerDraft("claude", "")}
+	if err := r.ensurePublishRecordProvider(ctx, request, pub); !errors.Is(err, workersessions.ErrInvalidProviderBinding) {
+		t.Fatalf("ensurePublishRecordProvider(blank dispatch) error = %v, want ErrInvalidProviderBinding", err)
+	}
+	request.Draft.DispatchID = "foreign-dispatch"
+	r.dispatchOwners["foreign-dispatch"] = "worker-2"
+	if err := r.ensurePublishRecordProvider(ctx, request, pub); !errors.Is(err, workersessions.ErrProviderBindingAttemptMismatch) {
+		t.Fatalf("ensurePublishRecordProvider(foreign dispatch) error = %v, want ErrProviderBindingAttemptMismatch", err)
+	}
+	request.Draft.DispatchID = "dispatch-1"
+	if err := r.ensurePublishRecordProvider(ctx, request, pub); err != nil {
+		t.Fatalf("ensurePublishRecordProvider(first provider) error = %v, want nil", err)
+	}
+	request.Draft.Provenance.Provider = "CLAUDE"
+	if err := r.ensurePublishRecordProvider(ctx, request, pub); err != nil {
+		t.Fatalf("ensurePublishRecordProvider(same provider) error = %v, want nil", err)
+	}
+	request.Draft.Provenance.Provider = "codex"
+	if err := r.ensurePublishRecordProvider(ctx, request, pub); !errors.Is(err, workersessions.ErrProviderBindingConflict) {
+		t.Fatalf("ensurePublishRecordProvider(conflicting provider) error = %v, want ErrProviderBindingConflict", err)
+	}
+}
+
+func testProviderBindingLifecycleEdges(t *testing.T) {
+	ctx := context.Background()
+	closed := providerBindingRegistry(t, nil)
+	closed.publications["worker-1"].open = false
+	if _, err := closed.EnsureProviderBinding(ctx, workersessions.ProviderBindingRequest{DispatchID: "dispatch-1", Provider: "claude"}); !errors.Is(err, workersessions.ErrPublicationNotOpen) {
+		t.Fatalf("EnsureProviderBinding(closed) error = %v, want ErrPublicationNotOpen", err)
+	}
+
+	accepted := providerBindingRegistry(t, nil)
+	first, err := accepted.EnsureProviderBinding(ctx, workersessions.ProviderBindingRequest{DispatchID: "dispatch-1", Provider: "claude"})
+	if err != nil || first.Outcome != workersessions.ProviderBindingOutcomeAccepted {
+		t.Fatalf("EnsureProviderBinding(first) = %#v, %v, want ACCEPTED", first, err)
+	}
+	duplicate, err := accepted.EnsureProviderBinding(ctx, workersessions.ProviderBindingRequest{DispatchID: "dispatch-1", Provider: "CLAUDE"})
+	if err != nil || duplicate.Outcome != workersessions.ProviderBindingOutcomeDuplicate {
+		t.Fatalf("EnsureProviderBinding(duplicate) = %#v, %v, want DUPLICATE", duplicate, err)
+	}
+	if _, err := accepted.EnsureProviderBinding(ctx, workersessions.ProviderBindingRequest{DispatchID: "dispatch-1", Provider: "codex"}); !errors.Is(err, workersessions.ErrProviderBindingConflict) {
+		t.Fatalf("EnsureProviderBinding(conflict) error = %v, want ErrProviderBindingConflict", err)
+	}
+}
+
+func testProviderBindingLookupEdges(t *testing.T) {
+	ctx := context.Background()
+	unknown := providerBindingRegistry(t, nil)
+	if _, err := unknown.EnsureProviderBinding(ctx, workersessions.ProviderBindingRequest{DispatchID: "missing", Provider: "claude"}); !errors.Is(err, workersessions.ErrProviderBindingAttemptMismatch) {
+		t.Fatalf("EnsureProviderBinding(unknown) error = %v, want ErrProviderBindingAttemptMismatch", err)
+	}
+	unknown.dispatchOwners["orphan-dispatch"] = "orphan-session"
+	if _, err := unknown.EnsureProviderBinding(ctx, workersessions.ProviderBindingRequest{DispatchID: "orphan-dispatch", Provider: "claude"}); !errors.Is(err, workersessions.ErrSessionNotFound) {
+		t.Fatalf("EnsureProviderBinding(orphan publication) error = %v, want ErrSessionNotFound", err)
+	}
+	if _, err := unknown.EnsureProviderBinding(ctx, workersessions.ProviderBindingRequest{}); !errors.Is(err, workersessions.ErrInvalidProviderBinding) {
+		t.Fatalf("EnsureProviderBinding(invalid) error = %v, want ErrInvalidProviderBinding", err)
+	}
+}
+
+func testProviderBindingAppendEdges(t *testing.T) {
+	ctx := context.Background()
+	appendFailure := providerBindingRegistry(t, staticProviderBindingAppender{err: errors.New("binding append failed")})
+	if _, err := appendFailure.EnsureProviderBinding(ctx, workersessions.ProviderBindingRequest{DispatchID: "dispatch-1", Provider: "claude"}); err == nil {
+		t.Fatal("EnsureProviderBinding(append failure) error = nil, want append error")
+	}
+	appendDuplicate := providerBindingRegistry(t, staticProviderBindingAppender{result: events.AppendResult{Outcome: events.AppendOutcomeDuplicate}})
+	result, err := appendDuplicate.EnsureProviderBinding(ctx, workersessions.ProviderBindingRequest{DispatchID: "dispatch-1", Provider: "claude"})
+	if err != nil || result.Outcome != workersessions.ProviderBindingOutcomeDuplicate {
+		t.Fatalf("EnsureProviderBinding(append duplicate) = %#v, %v, want DUPLICATE", result, err)
+	}
+}
+
+func assertWorkerObservationLookups(t *testing.T, registry *registry, got workersessions.Observation, canceled context.Context) {
+	t.Helper()
+	gotByWorker, err := registry.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "worker-1"})
+	if err != nil || gotByWorker.WorkerSessionID != "worker-1" || gotByWorker.ProviderSessionAvailable != got.ProviderSessionAvailable {
+		t.Fatalf("GetObservationByWorkerSessionID() = %#v, %v", gotByWorker, err)
+	}
+	if _, err := registry.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "missing"}); !errors.Is(err, workersessions.ErrObservationSessionNotFound) {
+		t.Fatalf("GetObservationByWorkerSessionID(missing) error = %v", err)
+	}
+	if _, err := registry.GetObservationByWorkerSessionID(canceled, workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "worker-1"}); !errors.Is(err, workersessions.ErrObservationCanceled) {
+		t.Fatalf("GetObservationByWorkerSessionID(canceled) error = %v", err)
+	}
+}
+
+func TestStreamObservationsByWorkerSessionIDRejectsInvalidContextAndMissing(t *testing.T) {
+	registry := newObservationRegistry(nil, nil)
+	if _, err := registry.StreamObservationsByWorkerSessionID(context.Background(), workersessions.StreamObservationsByWorkerSessionIDRequest{}); !errors.Is(err, workersessions.ErrInvalidSessionID) {
+		t.Fatalf("invalid Worker Session stream error = %v, want %v", err, workersessions.ErrInvalidSessionID)
+	}
+
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := registry.StreamObservationsByWorkerSessionID(canceled, workersessions.StreamObservationsByWorkerSessionIDRequest{WorkerSessionID: "worker-1"}); !errors.Is(err, workersessions.ErrObservationCanceled) {
+		t.Fatalf("canceled Worker Session stream error = %v, want %v", err, workersessions.ErrObservationCanceled)
+	}
+	if _, err := registry.StreamObservationsByWorkerSessionID(context.Background(), workersessions.StreamObservationsByWorkerSessionIDRequest{WorkerSessionID: "missing"}); !errors.Is(err, workersessions.ErrObservationSessionNotFound) {
+		t.Fatalf("missing Worker Session stream error = %v, want %v", err, workersessions.ErrObservationSessionNotFound)
+	}
+}
+
+func assertObservationProjectionEdges(t *testing.T, registry *registry, canceled context.Context) {
+	t.Helper()
+	if _, err := registry.projectObservation(canceled, "worker-1"); !errors.Is(err, workersessions.ErrObservationCanceled) {
+		t.Fatalf("projectObservation(canceled) error = %v", err)
+	}
+	if _, err := registry.projectObservation(context.Background(), "missing"); !errors.Is(err, workersessions.ErrObservationSessionNotFound) {
+		t.Fatalf("projectObservation(missing) error = %v", err)
+	}
+}
+
+func TestInvokeObservationProjectionUnavailableOutcomes(t *testing.T) {
+	ref := observationProviderRef()
+	registry := newObservationRegistry(observationProjectorFake{}, nil)
+	registry.sessions["worker-1"] = observationSession("worker-1", workersessions.StateRunning)
+	registry.observations["worker-1"] = observationMetadata()
+	noProvider := newObservationRegistry(nil, nil)
+	noProvider.sessions["worker-1"] = observationSession("worker-1", workersessions.StateRunning)
+	noProvider.observations["worker-1"] = observationMetadata()
+	if _, err := noProvider.GetObservation(context.Background(), workersessions.GetObservationRequest{ProviderSession: ref}); !errors.Is(err, workersessions.ErrObservationProjectionUnavailable) {
+		t.Fatalf("GetObservation(without provider service) error = %v", err)
+	}
+	noReference := newObservationRegistry(nil, nil)
+	noReference.sessions["worker-no-reference"] = workersessions.Session{ID: "worker-no-reference", State: workersessions.StateCompleted}
+	noReference.observations["worker-no-reference"] = observationMetadata()
+	gotNoReference, err := noReference.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "worker-no-reference"})
+	if err != nil || gotNoReference.ProviderSessionAvailable || gotNoReference.WorkerSessionID != "worker-no-reference" {
+		t.Fatalf("GetObservationByWorkerSessionID(no reference) = %#v, %v", gotNoReference, err)
+	}
+	gotIdentity, err := noProvider.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "worker-1"})
+	if err != nil || !gotIdentity.ProviderSessionAvailable || gotIdentity.ProviderSession.ID != ref.ID {
+		t.Fatalf("GetObservationByWorkerSessionID(provider reference without projector) = %#v, %v", gotIdentity, err)
+	}
+	canceledProvider := newObservationRegistry(observationProjectorFake{err: context.Canceled}, nil)
+	canceledProvider.sessions["worker-1"] = observationSession("worker-1", workersessions.StateRunning)
+	canceledProvider.observations["worker-1"] = observationMetadata()
+	if _, err := canceledProvider.GetObservation(context.Background(), workersessions.GetObservationRequest{ProviderSession: ref}); !errors.Is(err, workersessions.ErrObservationCanceled) {
+		t.Fatalf("GetObservation(provider canceled) error = %v", err)
+	}
+	projectionFailure := newObservationRegistry(observationProjectorFake{err: errors.New("projection failed")}, nil)
+	projectionFailure.sessions["worker-1"] = observationSession("worker-1", workersessions.StateRunning)
+	projectionFailure.observations["worker-1"] = observationMetadata()
+	if _, err := projectionFailure.ListObservations(context.Background(), workersessions.ListObservationsRequest{WorkID: "work-1"}); !errors.Is(err, workersessions.ErrObservationProjectionUnavailable) {
+		t.Fatalf("ListObservations(projection failure) error = %v", err)
+	}
+	if _, _, ok := registry.loadObservationState("missing"); ok {
+		t.Fatal("loadObservationState(missing) = ok, want false")
+	}
+	registry.sessions["no-metadata"] = observationSession("no-metadata", workersessions.StateRunning)
+	if _, _, ok := registry.loadObservationState("no-metadata"); ok {
+		t.Fatal("loadObservationState(missing metadata) = ok, want false")
+	}
+}
+
+func TestStartLifecycleClassificationHelpers(t *testing.T) {
+	noCause := startNotAccepted(nil)
+	if noCause.Error() != workersessions.ErrStartNotAccepted.Error() {
+		t.Fatalf("startNotAccepted(nil).Error() = %q, want stable public classification", noCause.Error())
+	}
+	if !errors.Is(noCause, workersessions.ErrStartNotAccepted) {
+		t.Fatal("startNotAccepted(nil) does not unwrap to ErrStartNotAccepted")
+	}
+
+	cause := errors.New("admission detail")
+	withCause := startNotAccepted(cause)
+	if !errors.Is(withCause, cause) {
+		t.Fatal("startNotAccepted(cause) does not preserve the underlying cause")
+	}
+
+	replay := &startReplay{
+		done:   make(chan struct{}),
+		result: workersessions.StartResult{Session: workersessions.Session{ID: "worker-replay", State: workersessions.StateRunning}},
+	}
+	close(replay.done)
+	result, err := awaitStartReplay(nil, replay)
+	if err != nil || result.Session.ID != "worker-replay" {
+		t.Fatalf("awaitStartReplay(nil) = %+v, %v, want completed replay", result, err)
+	}
+
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := awaitStartReplay(canceled, &startReplay{done: make(chan struct{})}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("awaitStartReplay(canceled) error = %v, want context.Canceled", err)
+	}
+
+	if got := startReservationOutcome(workersessions.ErrStartRequestIDConflict); got != "idempotency_conflict" {
+		t.Fatalf("startReservationOutcome(conflict) = %q, want idempotency_conflict", got)
+	}
+	if got := startReservationOutcome(workersessions.ErrStartServerStopping); got != "server_stopping" {
+		t.Fatalf("startReservationOutcome(stopping) = %q, want server_stopping", got)
+	}
+	if got := startReservationOutcome(errors.New("not startable")); got != "not_startable" {
+		t.Fatalf("startReservationOutcome(other) = %q, want not_startable", got)
+	}
+
+	registry := &registry{}
+	if registry.serverOwnedContext().Done() != nil {
+		t.Fatal("nil lifecycle context should fall back to a non-cancelable context")
+	}
+	if registry.supervisionContext(nil).Done() != nil {
+		t.Fatal("nil supervision should fall back to a non-cancelable context")
+	}
+}
+
+func TestStartSupervisionLifecycleFallbacks(t *testing.T) {
+	registry := newTestRegistry(t)
+	t.Cleanup(func() { _ = registry.Stop(context.Background()) })
+
+	registry.finishStart()
+	registry.activeStarts = 1
+	registry.startsDone = make(chan struct{})
+	registry.finishStart()
+	select {
+	case <-registry.startsDone:
+	default:
+		t.Fatal("finishStart did not close startsDone at zero active starts")
+	}
+
+	if err := registry.waitForSupervisionDriver(context.Background(), "missing"); err != nil {
+		t.Fatalf("waitForSupervisionDriver(missing) = %v, want nil", err)
+	}
+	driver := newSupervision("dispatch", "turn")
+	registry.supervisions["worker"] = driver
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := registry.waitForSupervisionDriver(canceled, "worker"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("waitForSupervisionDriver(canceled) = %v, want context.Canceled", err)
+	}
+
+	owned := newSupervision("owned-dispatch", "owned-turn")
+	owned.serverOwned = true
+	if got := registry.supervisionContext(owned); got != registry.lifecycleCtx {
+		t.Fatal("server-owned supervision did not use the registry lifecycle context")
+	}
+	owned.serverOwned = false
+	if registry.supervisionContext(owned).Done() != nil {
+		t.Fatal("non-server-owned supervision should use a non-cancelable context")
+	}
+
+	registry.reserveIfAbsent("owned-worker")
+	if _, err := registry.transitionToStarting("owned-worker"); err != nil {
+		t.Fatalf("transitionToStarting() = %v, want nil", err)
+	}
+	owned, ok := registry.registerServerOwnedSupervision("owned-worker", "owned-dispatch", "owned-turn")
+	if !ok || owned == nil || !owned.serverOwned {
+		t.Fatalf("registerServerOwnedSupervision() = %#v, %t, want owned supervision", owned, ok)
+	}
+	registry.stopping = true
+	if _, ok := registry.registerServerOwnedSupervision("owned-worker", "late-dispatch", "late-turn"); ok {
+		t.Fatal("registerServerOwnedSupervision() accepted after shutdown began")
+	}
+	delete(registry.supervisions, "owned-worker")
+}
+
+func TestStartPreparationFailureBranches(t *testing.T) {
+	ctx := context.Background()
+	stopping := newTestRegistry(t)
+	stopping.reserveIfAbsent("stopping")
+	if _, err := stopping.transitionToStarting("stopping"); err != nil {
+		t.Fatalf("transitionToStarting(stopping) = %v, want nil", err)
+	}
+	stopping.stopping = true
+	prepared, err := stopping.registerInvocationSupervision(ctx, coverageInvokeRequest("stopping"), invocationPreparationOptions{serverOwned: true})
+	if err != nil || !prepared.terminal || !errors.Is(prepared.failure, workersessions.ErrStartServerStopping) {
+		t.Fatalf("stopping registration = %+v, %v, want terminal server-stopping result", prepared, err)
+	}
+
+	terminal := newTestRegistry(t)
+	terminal.reserveIfAbsent("terminal")
+	if _, err := terminal.transitionToStarting("terminal"); err != nil {
+		t.Fatalf("transitionToStarting(terminal) = %v, want nil", err)
+	}
+	terminal.commitTerminal("terminal", workersessions.StateCompleted, workersessions.TerminalResult{Outcome: workersessions.TerminalOutcomeCompleted})
+	prepared, err = terminal.registerInvocationSupervision(ctx, coverageInvokeRequest("terminal"), invocationPreparationOptions{})
+	if err != nil || !prepared.terminal || !errors.Is(prepared.failure, workersessions.ErrStartAdmissionFailed) {
+		t.Fatalf("terminal registration = %+v, %v, want terminal admission-failed result", prepared, err)
+	}
+
+	reserved := newTestRegistry(t)
+	reserved.reserveIfAbsent("reserved")
+	_, err = reserved.registerInvocationSupervision(ctx, coverageInvokeRequest("reserved"), invocationPreparationOptions{})
+	if !errors.Is(err, workersessions.ErrStartNotAccepted) {
+		t.Fatalf("reserved registration error = %v, want ErrStartNotAccepted", err)
+	}
+
+	running := newTestRegistry(t)
+	running.sessions["running"] = workersessions.Session{ID: "running", State: workersessions.StateRunning}
+	if _, err := running.startReserved(ctx, workersessions.StartRequest{RequestID: "running-request", ID: "running"}); !errors.Is(err, workersessions.ErrSessionNotStartable) {
+		t.Fatalf("startReserved(running) error = %v, want ErrSessionNotStartable", err)
+	}
+
+	if got := running.startAdmissionCause(&supervision{}); !errors.Is(got, workersessions.ErrStartAdmissionFailed) {
+		t.Fatalf("startAdmissionCause(no error) = %v, want ErrStartAdmissionFailed", got)
+	}
+	running.publishTerminalSnapshot(ctx, "running", "", workersessions.Session{ID: "running", State: workersessions.StateRunning})
+	running.publishTerminalSnapshot(ctx, "missing", "", workersessions.Session{ID: "missing", State: workersessions.StateFailed})
+
+	secondTerminal := newTestRegistry(t)
+	secondTerminal.reserveIfAbsent("second-terminal")
+	if _, err := secondTerminal.transitionToStarting("second-terminal"); err != nil {
+		t.Fatalf("transitionToStarting(second-terminal) = %v, want nil", err)
+	}
+	secondTerminal.terminalizeInvocationBeforeAdmission(ctx, "second-terminal", "dispatch")
+	secondTerminal.terminalizeInvocationBeforeAdmission(ctx, "second-terminal", "dispatch")
+
+	if err := running.publishTerminalRecord(ctx, "missing-publication", "dispatch", workersessions.StateCompleted, workersessions.TerminalResult{Outcome: workersessions.TerminalOutcomeCompleted}); !errors.Is(err, workersessions.ErrSessionNotFound) {
+		t.Fatalf("publishTerminalRecord(missing publication) = %v, want ErrSessionNotFound", err)
+	}
+}
+
+func TestStartOpeningReadinessRejectsInvalidReaderOutcomes(t *testing.T) {
+	ctx := context.Background()
+	readFailure := newTestRegistry(t)
+	readFailure.retainedReader = coverageRetainedReader{err: errors.New("read failed")}
+	if err := readFailure.ensureOpeningTopicReady(ctx, "read-failure"); !errors.Is(err, workersessions.ErrEventTopicUnavailable) {
+		t.Fatalf("ensureOpeningTopicReady(read failure) = %v, want ErrEventTopicUnavailable", err)
+	}
+
+	for name, reader := range map[string]EventsReader{
+		"subscribe-error":  coverageEventsReader{err: errors.New("subscribe failed")},
+		"nil-subscription": coverageEventsReader{},
+		"invalid-delivery": coverageEventsReader{subscription: events.Subscription(func(context.Context) events.Delivery { return events.Delivery{} })},
+	} {
+		t.Run(name, func(t *testing.T) {
+			registry := coverageOpeningRegistry(t, name)
+			registry.eventReader = reader
+			if err := registry.ensureOpeningTopicReady(ctx, name); !errors.Is(err, workersessions.ErrEventTopicUnavailable) {
+				t.Fatalf("ensureOpeningTopicReady() = %v, want ErrEventTopicUnavailable", err)
+			}
+		})
+	}
+}
+
+func TestStartAndObservationEdgeBranches(t *testing.T) {
+	registry := newTestRegistry(t)
+	if _, err := registry.Start(nil, workersessions.StartRequest{}); !errors.Is(err, workersessions.ErrInvalidStartRequestID) {
+		t.Fatalf("Start(nil, invalid request) = %v, want ErrInvalidStartRequestID", err)
+	}
+
+	registry.startReplays = nil
+	registry.startsDone = nil
+	first := workersessions.StartRequest{RequestID: "first-request", ID: "reserved"}
+	if _, owner, err := registry.reserveStart(first); err != nil || !owner {
+		t.Fatalf("reserveStart(first) = %t, %v, want new owner", owner, err)
+	}
+	conflict := first
+	conflict.RequestID = "second-request"
+	if _, _, err := registry.reserveStart(conflict); !errors.Is(err, workersessions.ErrSessionNotStartable) {
+		t.Fatalf("reserveStart(existing session) = %v, want ErrSessionNotStartable", err)
+	}
+
+	topic := events.Topic("coverage-observation")
+	if _, err := newReplayObservationSubscription(context.Background(), nil, topic, workersessions.StateRunning, 0); !errors.Is(err, workersessions.ErrObservationSourceUnavailable) {
+		t.Fatalf("newReplayObservationSubscription(nil reader) = %v, want source unavailable", err)
+	}
+	replay := &replayObservationSubscription{topic: topic, next: events.Cursor{Topic: topic}}
+	if err := replay.appendPage(events.ReadResult{Outcome: events.ReadOutcomeInvalidCursor}); !errors.Is(err, workersessions.ErrObservationSourceUnavailable) {
+		t.Fatalf("appendPage(invalid cursor) = %v, want source unavailable", err)
+	}
+	if err := replay.appendPage(events.ReadResult{
+		Outcome:  events.ReadOutcomeAtHead,
+		Next:     events.Cursor{Topic: topic},
+		Retained: events.RetainedRange{Topic: topic},
+	}); err != nil {
+		t.Fatalf("appendPage(at head) = %v, want nil", err)
+	}
+	replay.terminalRecordSeen = true
+	if got := replay.replaySummaryReason(); got != "session-terminal-record" {
+		t.Fatalf("replaySummaryReason() = %q, want session-terminal-record", got)
+	}
+}
+
+func coverageInvokeRequest(id string) workersessions.InvokeSessionRequest {
+	return workersessions.InvokeSessionRequest{ID: id}
+}
+
+func coverageOpeningRegistry(t *testing.T, id string) *registry {
+	t.Helper()
+	registry := newTestRegistry(t)
+	registry.reserveIfAbsent(id)
+	if _, err := registry.transitionToStarting(id); err != nil {
+		t.Fatalf("transitionToStarting(%q) = %v, want nil", id, err)
+	}
+	startedAt := registry.ensureObservation(id, "dispatch", "", nil)
+	if err := registry.publishOpeningRecord(context.Background(), id, "dispatch", openingSessionPayload(id, "dispatch", startedAt, workers.WorkstationExecutionRequest{}), ""); err != nil {
+		t.Fatalf("publishOpeningRecord(%q) = %v, want nil", id, err)
+	}
+	return registry
+}
+
+type coverageRetainedReader struct{ err error }
+
+func (r coverageRetainedReader) Read(context.Context, events.ReadRequest) (events.ReadResult, error) {
+	return events.ReadResult{}, r.err
+}
+
+type coverageEventsReader struct {
+	subscription events.Subscription
+	err          error
+}
+
+func (r coverageEventsReader) Subscribe(context.Context, events.SubscribeRequest) (events.Subscription, error) {
+	return r.subscription, r.err
 }

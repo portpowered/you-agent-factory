@@ -67,8 +67,75 @@ func TestValidateRootContractRejectsIncompleteOrAmbiguousGlobals(t *testing.T) {
 	}
 }
 
+func TestValidatePlacementContractRequiresAuthoritativeRunnableCapability(t *testing.T) {
+	tests := []struct {
+		name      string
+		placement PlacementCapability
+		wantError bool
+	}{
+		{name: "local-only", placement: PlacementLocalOnly},
+		{name: "remote-only", placement: PlacementRemoteOnly},
+		{name: "dual", placement: PlacementDual},
+		{name: "missing", wantError: true},
+		{name: "invalid", placement: PlacementCapability("unsupported"), wantError: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			manifest := Manifest{Commands: map[string]Command{
+				"you.example": {
+					ID:           "you.example",
+					Runnable:     true,
+					Completeness: "authoritative",
+					Placement:    test.placement,
+				},
+			}}
+			err := ValidatePlacementContract(manifest)
+			if test.wantError {
+				if err == nil || !strings.Contains(err.Error(), "placement capability") {
+					t.Fatalf("ValidatePlacementContract() error = %v, want placement failure", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("ValidatePlacementContract() error = %v", err)
+			}
+		})
+	}
+}
+
+func TestCommandResolvePlacementUsesExplicitRootSelection(t *testing.T) {
+	tests := []struct {
+		name    string
+		command Command
+		remote  bool
+		want    ExecutionPlacement
+		wantErr bool
+	}{
+		{name: "dual defaults local", command: Command{Path: "you example", Placement: PlacementDual}, want: ExecutionPlacementLocal},
+		{name: "dual remote", command: Command{Path: "you example", Placement: PlacementDual}, remote: true, want: ExecutionPlacementRemote},
+		{name: "remote-only defaults remote", command: Command{Path: "you example", Placement: PlacementRemoteOnly}, want: ExecutionPlacementRemote},
+		{name: "local-only rejects remote", command: Command{Path: "you example", Placement: PlacementLocalOnly}, remote: true, wantErr: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := test.command.ResolvePlacement(test.remote)
+			if test.wantErr {
+				if err == nil || !strings.Contains(err.Error(), "local placement only") {
+					t.Fatalf("ResolvePlacement() error = %v, want local-only rejection", err)
+				}
+				return
+			}
+			if err != nil || got != test.want {
+				t.Fatalf("ResolvePlacement() = (%q, %v), want (%q, nil)", got, err, test.want)
+			}
+		})
+	}
+}
+
 func rootContractTestManifest() Manifest {
 	defaultServer := "http://localhost:7437"
+	defaultRemote := false
+	remoteNoOption := true
 	flag := Flag{
 		ID: "you.flag.server", Long: "server", Aliases: []string{}, Scope: "persistent",
 		ValueType: "string", Kind: "named", MaxCardinality: 1,
@@ -78,11 +145,22 @@ func rootContractTestManifest() Manifest {
 		Sensitivity: "public", Completion: "none", Visibility: "visible",
 		Lifecycle: Lifecycle{FormatVersion: "1.0.0", ItemID: "you.flag.server", State: "active", Since: "1.0.0"},
 	}
+	remote := Flag{
+		ID: "you.flag.remote", Long: "remote", Aliases: []string{}, Scope: "persistent",
+		ValueType: "bool", Kind: "named", MaxCardinality: 1,
+		DefaultValue:     &InputValue{Boolean: &defaultRemote},
+		NoOptionValue:    &InputValue{Boolean: &remoteNoOption},
+		AcceptedSources:  []string{"cli", "manifest-default"},
+		HandlerBindingID: "you.binding.remote", Usage: "execute remotely",
+		Sensitivity: "public", Completion: "none", Visibility: "visible",
+		Lifecycle: Lifecycle{FormatVersion: "1.0.0", ItemID: "you.flag.remote", State: "active", Since: "1.0.0"},
+	}
 	root := Command{
 		ID: "you", Name: "you", Path: "you",
-		Flags: map[string]Flag{flag.ID: flag},
+		Flags: map[string]Flag{flag.ID: flag, remote.ID: remote},
 		HandlerBindings: map[string]HandlerBinding{
-			flag.HandlerBindingID: {ID: flag.HandlerBindingID, InputID: flag.ID},
+			flag.HandlerBindingID:   {ID: flag.HandlerBindingID, InputID: flag.ID},
+			remote.HandlerBindingID: {ID: remote.HandlerBindingID, InputID: remote.ID},
 		},
 		RootLifecycle: &RootLifecycle{
 			NoArguments: "help", HelpOutput: "stdout", ExitCode: 0, SideEffects: "none",

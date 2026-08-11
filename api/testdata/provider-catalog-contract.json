@@ -56,6 +56,121 @@
           "providers.example-alpha.enabled"
         ]
       },
+      "harness": {
+        "kind": "acp",
+        "acpSupport": {
+          "support": "conditional",
+          "condition": "The operator must enable the ACP bridge.",
+          "protocolVersion": "1.0",
+          "resourceDelivery": "conditional",
+          "evidenceRefs": [
+            "alpha-fixture"
+          ]
+        }
+      },
+      "modelCatalogPosture": "runtime_discovered",
+      "harnessRoutes": [
+        {
+          "direction": "input",
+          "modality": "image",
+          "support": "conditional",
+          "condition": "The bridge must expose a workspace route.",
+          "transport": "file_path",
+          "mediaConstraints": {
+            "maxItems": 5,
+            "mediaTypes": [
+              "image/png"
+            ]
+          },
+          "evidenceRefs": [
+            "alpha-fixture"
+          ]
+        },
+        {
+          "direction": "output",
+          "modality": "video",
+          "support": "unknown",
+          "transport": "none"
+        }
+      ],
+      "evidence": [
+        {
+          "id": "alpha-fixture",
+          "kind": "conformance_fixture",
+          "verifiedOn": "2026-08-10",
+          "harnessVersion": "1.0.0",
+          "factRefs": [
+            "harness/acp",
+            "harness/input/image",
+            "model/example-model/input/image",
+            "tool/image_generation",
+            "tool/image_generation/output/image"
+          ]
+        }
+      ],
+      "models": [
+        {
+          "id": "example-model",
+          "efforts": [
+            "low",
+            "high"
+          ],
+          "modalities": [
+            {
+              "direction": "input",
+              "modality": "text",
+              "support": "supported",
+              "transport": "inline"
+            },
+            {
+              "direction": "input",
+              "modality": "image",
+              "support": "conditional",
+              "condition": "The bridge must expose a workspace route.",
+              "transport": "file_path",
+              "evidenceRefs": [
+                "alpha-fixture"
+              ]
+            },
+            {
+              "direction": "output",
+              "modality": "image",
+              "support": "unknown",
+              "transport": "none"
+            }
+          ]
+        }
+      ],
+      "tools": [
+        {
+          "name": "image_generation",
+          "support": "conditional",
+          "condition": "The operator must enable the image bridge.",
+          "description": "Generate image output through the provider bridge.",
+          "evidenceRefs": [
+            "alpha-fixture"
+          ],
+          "availability": "operator_configured",
+          "defaultEnabled": null,
+          "outputModalities": [
+            {
+              "modality": "image",
+              "support": "supported",
+              "transport": "tool_mediated",
+              "evidenceRefs": [
+                "alpha-fixture"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "future_tool",
+          "support": "unknown",
+          "description": "A tool whose availability is not yet verified.",
+          "availability": "unknown",
+          "defaultEnabled": null
+        }
+      ],
       "deprecation": {
         "deprecatedSince": "2026-07-23",
         "reason": {

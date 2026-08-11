@@ -96,6 +96,19 @@
       ]
     },
     {
+      "test": "tests/functional/workers/inference/opening_record_test.go::TestWSRFT003ProviderNeutralLifecycleWorksWithoutProviderSession",
+      "stableIds": [
+        "rest/streamWorkerSessionEventsByWorkerSessionId",
+        "sse/streamWorkerSessionEventsByWorkerSessionId"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/transports/http/worker_sessions_lifecycle_test.go::TestWorkerSessionHTTPDisconnectKeepsAdmittedWorkerAlive",
+      "stableIds": [
+        "rest/startWorkerSession"
+      ]
+    },
+    {
       "test": "tests/release/release_smoke_test.go::TestGoInstallSmoke_InstallsCmdFactoryBinaryIntoCleanGOBIN",
       "stableIds": [
         "cli/you.docs"

@@ -331,6 +331,7 @@ func failureReasonToAPI(reason string) factoryapi.WorkFailureType {
 		factoryapi.WorkFailureTypeMisconfigured,
 		factoryapi.WorkFailureTypeMissingExecutable,
 		factoryapi.WorkFailureTypeCommandLineTooLong,
+		factoryapi.WorkFailureTypeStructuredOutputSchemaViolation,
 		factoryapi.WorkFailureTypeExpectedArtifactsUnsatisfied:
 		return candidate
 	default:

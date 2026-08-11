@@ -1,8 +1,10 @@
 package workers
 
 import (
+	"encoding/json"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
@@ -30,7 +32,35 @@ type Color struct {
 	Relations                []work.Relation           `json:"relations"`
 	Content                  []work.WorkContentPart    `json:"content,omitempty"`
 	Payload                  []byte                    `json:"payload"`
+	StructuredResult         any                       `json:"structured_result,omitempty"`
 	InvocationArguments      *work.InvocationArguments `json:"-"`
+	// StructuredResultPresent distinguishes a present JSON null from an absent
+	// result in token/checkpoint serialization.
+	StructuredResultPresent bool `json:"-"`
+}
+
+// MarshalJSON preserves an explicitly present structured result, including
+// JSON null, without making unstructured tokens emit the optional field.
+func (value Color) MarshalJSON() ([]byte, error) {
+	type alias Color
+	return jsonvalue.MarshalOptionalField(alias(value), value.StructuredResult, value.StructuredResultPresent, "structured_result")
+}
+
+// UnmarshalJSON restores structured-result presence from token snapshots.
+func (value *Color) UnmarshalJSON(data []byte) error {
+	type alias Color
+	var decoded alias
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	structured, present, err := jsonvalue.UnmarshalOptionalField(data, "structured_result")
+	if err != nil {
+		return err
+	}
+	*value = Color(decoded)
+	value.StructuredResult = structured
+	value.StructuredResultPresent = present
+	return nil
 }
 
 // Token is the Worker-facing view of one runtime dispatch input.

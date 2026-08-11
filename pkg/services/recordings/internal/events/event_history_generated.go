@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 
+	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -185,7 +186,9 @@ func eventWorks(items []work.FactoryWorkItem) []work.WorkRequestEventWork {
 			PreviousChainingTraceIDs: append([]string(nil), item.PreviousChainingTraceIDs...),
 			TraceID:                  item.TraceID,
 			Content:                  work.CloneWorkContentParts(item.Content),
+			StructuredResult:         jsonvalue.Clone(item.StructuredResult),
 			Tags:                     cloneStringMap(item.Tags),
+			StructuredResultPresent:  jsonvalue.Present(item.StructuredResult, item.StructuredResultPresent),
 		})
 	}
 	return out

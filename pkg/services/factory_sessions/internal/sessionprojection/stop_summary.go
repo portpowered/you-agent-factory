@@ -252,7 +252,7 @@ func projectedStopDispatch(dispatch stopSummaryDispatch) *StopDispatchSummary {
 func publicFailureReason(reason string) StopFailureType {
 	candidate := StopFailureType(strings.TrimSpace(reason))
 	switch candidate {
-	case "auth_failure", "permanent_bad_request", "throttled", "internal_server_error", "timeout", "misconfigured", "missing_executable", "command_line_too_long":
+	case "auth_failure", "permanent_bad_request", "throttled", "internal_server_error", "timeout", "misconfigured", "missing_executable", "command_line_too_long", "structured_output_schema_violation":
 		return candidate
 	default:
 		return StopFailureTypeUnknown

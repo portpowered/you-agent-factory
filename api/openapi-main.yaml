@@ -28,6 +28,39 @@ tags:
   - name: Workflows
     description: Stored workflow inspection.
 paths:
+  /worker-sessions:
+    post:
+      tags:
+        - Worker Sessions
+      operationId: startWorkerSession
+      summary: Start one directly resolved Worker Session
+      description: >-
+        Reserves and starts one already-resolved Worker execution. The server
+        returns 202 only after the Worker Session identity is reserved, its
+        opening record is retained-readable and subscribable on the returned
+        event topic, and Workers has admitted the execution. The requestId is
+        required for safe retries; replaying it with the same normalized
+        start tuple returns the same Worker Session identity without another
+        dispatch.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkerSessionStartRequest'
+      responses:
+        '202':
+          description: Worker Session was admitted and is observable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkerSessionStartResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/WorkerSessionStartConflict'
+        '503':
+          $ref: '#/components/responses/WorkerSessionStartUnavailable'
   /factory-sessions/{session_id}/work:
     post:
       tags:
@@ -162,6 +195,46 @@ paths:
           schema:
             type: string
             minLength: 1
+        - name: replayOnly
+          in: query
+          required: false
+          description: Drain the retained history through a captured Events head without registering a live follower.
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Retained then live Worker Session event frames, or a finite retained replay ending in REPLAY_SUMMARY.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: Server-Sent Events where each data frame is serialized JSON matching WorkerSessionEvent.
+              x-event-schema: '#/components/schemas/WorkerSessionEvent'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/worker-sessions/{worker_session_id}/events:
+    get:
+      tags:
+        - Worker Sessions
+      operationId: streamWorkerSessionEventsByWorkerSessionId
+      summary: Stream retained and live Worker Session events by Worker Session identity
+      description: >-
+        Streams the canonical Worker Session Events topic for the stable Worker
+        Session identity returned by the Worker Sessions list operation. This
+        provider-neutral path remains available when the provider did not emit
+        a native Provider Session reference. Retained records are emitted first
+        in aggregate order, followed by live records unless replayOnly is true.
+        In replay-only mode the retained head is captured before delivery, no
+        live follower is registered, and one REPLAY_SUMMARY frame closes the
+        stream after the retained drain.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - $ref: '#/components/parameters/WorkerSessionID'
         - name: replayOnly
           in: query
           required: false
@@ -1683,6 +1756,8 @@ components:
   parameters:
     SessionID:
       $ref: './components/parameters/SessionID.yaml'
+    WorkerSessionID:
+      $ref: './components/parameters/WorkerSessionID.yaml'
     MaxResults:
       $ref: './components/parameters/MaxResults.yaml'
     NextToken:
@@ -1754,6 +1829,10 @@ components:
       $ref: './components/responses/MoveWorkConflict.yaml'
     ExecutionRequestIdConflict:
       $ref: './components/responses/ExecutionRequestIdConflict.yaml'
+    WorkerSessionStartConflict:
+      $ref: './components/responses/WorkerSessionStartConflict.yaml'
+    WorkerSessionStartUnavailable:
+      $ref: './components/responses/WorkerSessionStartUnavailable.yaml'
     FactorySessionLifecycleControlConflict:
       $ref: './components/responses/FactorySessionLifecycleControlConflict.yaml'
     InternalError:
@@ -1813,6 +1892,18 @@ components:
       $ref: './components/schemas/api/ListWorkCountSummary.yaml'
     ListWorkerSessionsResponse:
       $ref: './components/schemas/api/ListWorkerSessionsResponse.yaml'
+    WorkerSessionStartRequest:
+      $ref: './components/schemas/api/WorkerSessionStartRequest.yaml'
+    WorkerSessionStartResponse:
+      $ref: './components/schemas/api/WorkerSessionStartResponse.yaml'
+    WorkerSessionStartRetryPolicy:
+      $ref: './components/schemas/api/WorkerSessionStartRetryPolicy.yaml'
+    WorkerSessionResolvedExecution:
+      $ref: './components/schemas/api/WorkerSessionResolvedExecution.yaml'
+    WorkerSessionResolvedDispatch:
+      $ref: './components/schemas/api/WorkerSessionResolvedDispatch.yaml'
+    WorkerSessionExecutionMetadata:
+      $ref: './components/schemas/api/WorkerSessionExecutionMetadata.yaml'
     WorkerSessionTranscriptResponse:
       $ref: './components/schemas/api/WorkerSessionTranscriptResponse.yaml'
     WorkerSessionObservation:
@@ -2469,6 +2560,24 @@ components:
       $ref: './components/schemas/model-providers/ProviderCatalog.yaml'
     ProviderManifest:
       $ref: './components/schemas/model-providers/ProviderManifest.yaml'
+    ProviderCapabilitySupport:
+      $ref: './components/schemas/model-providers/ProviderCapabilitySupport.yaml'
+    ProviderCapabilityEvidence:
+      $ref: './components/schemas/model-providers/ProviderCapabilityEvidence.yaml'
+    ProviderCapabilityEvidenceKind:
+      $ref: './components/schemas/model-providers/ProviderCapabilityEvidenceKind.yaml'
+    ProviderModelCatalogPosture:
+      $ref: './components/schemas/model-providers/ProviderModelCatalogPosture.yaml'
+    ProviderHarness:
+      $ref: './components/schemas/model-providers/ProviderHarness.yaml'
+    ProviderHarnessKind:
+      $ref: './components/schemas/model-providers/ProviderHarnessKind.yaml'
+    ProviderACPSupport:
+      $ref: './components/schemas/model-providers/ProviderACPSupport.yaml'
+    ProviderACPResourceDelivery:
+      $ref: './components/schemas/model-providers/ProviderACPResourceDelivery.yaml'
+    ProviderMediaConstraints:
+      $ref: './components/schemas/model-providers/ProviderMediaConstraints.yaml'
     ProviderTechnicalSupportLevel:
       $ref: './components/schemas/model-providers/ProviderTechnicalSupportLevel.yaml'
     ProviderImplementationAvailability:
@@ -2505,6 +2614,10 @@ components:
       $ref: './components/schemas/model-providers/ProviderTool.yaml'
     ProviderToolSupport:
       $ref: './components/schemas/model-providers/ProviderToolSupport.yaml'
+    ProviderToolAvailability:
+      $ref: './components/schemas/model-providers/ProviderToolAvailability.yaml'
+    ProviderToolOutputModality:
+      $ref: './components/schemas/model-providers/ProviderToolOutputModality.yaml'
     ProviderKnownLimit:
       $ref: './components/schemas/model-providers/ProviderKnownLimit.yaml'
     ProviderKnownLimitKind:

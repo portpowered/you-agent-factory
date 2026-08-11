@@ -1,0 +1,8 @@
+type: string
+description: How a named tool becomes available to the provider harness.
+enum:
+  - built_in
+  - optional
+  - operator_configured
+  - external
+  - unknown

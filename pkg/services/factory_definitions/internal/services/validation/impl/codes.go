@@ -22,6 +22,7 @@ const (
 	CodeWorkstationMissingOutputRoutes                           = "factory.workstation.missingOutputRoutes"
 	CodeWorkstationMissingFailureRoute                           = "factory.workstation.missingFailureRoute"
 	CodeWorkstationMissingRejectionRoute                         = "factory.workstation.missingRejectionRoute"
+	CodeWorkstationInvalidOutputSchema                           = "factory.workstation.invalidOutputSchema"
 	CodeWorkstationConflictingOutputs                            = "factory.workstation.conflictingWorkStateOutputs"
 	CodeWorkTypeInvalidExpectedArtifact                          = "factory.workType.invalidExpectedArtifact"
 	CodeWorkstationInvalidExpectedArtifact                       = "factory.workstation.invalidExpectedArtifact"

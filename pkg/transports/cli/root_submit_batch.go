@@ -20,7 +20,8 @@ func newRunServerFlagBindings() climanifestcobra.RunServerFlagBindings {
 		"you.run.flag.provider", "you.run.flag.model", "you.run.flag.worker-reasoning-effort",
 		"you.run.flag.worktree", "you.run.flag.to-file",
 		"you.run.flag.runtime-log-dir", "you.run.flag.runtime-metrics-dir",
-		"you.run.flag.with-mock-workers", "you.run.flag.output",
+		"you.run.flag.with-mock-workers", "you.run.flag.output", "you.run.flag.listen",
+		"you.server.flag.listen",
 	}
 	boolInputs := []string{
 		"you.run.flag.continuously", "you.run.flag.no-record",
@@ -65,6 +66,7 @@ func applyRunResolvedInputs(cfg runcli.RunConfig, values map[string]any) (runcli
 		{"you.run.flag.runtime-metrics-dir", &cfg.RuntimeMetricsDir},
 		{"you.run.flag.with-mock-workers", &cfg.MockWorkersConfigPath},
 		{"you.run.flag.output", &cfg.InvocationOutputMode},
+		{"you.run.flag.listen", &cfg.ListenAddress},
 	}
 	boolFields := []struct {
 		id     string
@@ -149,7 +151,11 @@ func parseRunCommandArgs(cmd *cobra.Command, args []string) ([]string, error) {
 			return nil, err
 		}
 		if err := flag.Value.Set(value); err != nil {
-			return nil, err
+			return nil, &runcli.InvocationError{
+				Code:    runcli.InvocationArgumentInvalidValueCode,
+				Message: fmt.Sprintf("invalid value for %s: %s", lookupToken, err),
+				Cause:   err,
+			}
 		}
 		flag.Changed = true
 		if consumedNext {
@@ -206,7 +212,10 @@ func resolveRunFlagValue(flag *pflag.Flag, args []string, index int, hasInlineVa
 	if flag.NoOptDefVal != "" {
 		return flag.NoOptDefVal, false, nil
 	}
-	return "", false, fmt.Errorf("flag needs an argument: %s", "--"+flag.Name)
+	return "", false, &runcli.InvocationError{
+		Code:    runcli.InvocationArgumentMissingValueCode,
+		Message: fmt.Sprintf("flag needs an argument: %s", "--"+flag.Name),
+	}
 }
 
 // runFlagValueLooksLikeFlag reports whether token would be parsed as a flag

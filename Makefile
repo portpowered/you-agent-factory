@@ -71,13 +71,26 @@ BACKEND_SIZE_ROOT ?= .
 PACKAGE_MAINT_ROOT ?= .
 PACKAGE_FILE_COUNT_ROOT ?= .
 PACKAGE_BOUNDARY_ROOT ?= .
+PACKAGE_BOUNDARY_ALL ?= 0
+PACKAGE_BOUNDARY_BASE_REF ?=
 PACKAGE_STRUCTURE_ROOT ?= .
 BACKEND_DEPENDENCY_GRAPH_DIR ?= .artifacts/backend-dependency-graph
 BACKEND_DEPENDENCY_GRAPH_DOT ?= $(BACKEND_DEPENDENCY_GRAPH_DIR)/backend-dependency-graph.dot
 BACKEND_DEPENDENCY_GRAPH_SVG ?= $(BACKEND_DEPENDENCY_GRAPH_DIR)/backend-dependency-graph.svg
 COMPATIBILITY_ALIAS_CHECK_ROOT ?= .
 RETIRED_SURFACE_CHECK_ROOT ?= .
+LINT_CHECKER_CACHE_DIR ?= .cache/lint-checkers
+# Set LINT_CHECKER_FALLBACK=1 to use the original go run path for one proof.
+LINT_CHECKER_FALLBACK ?= 0
+LINT_CHECKER_DRIVER_PACKAGE := ./cmd/lintcheck
+LINT_CHECKER_DRIVER ?=
+LINT_LANE_PACKAGE := ./cmd/lintlane
+LINT_JOBS ?= 4
 LINT_TARGETS ?= ui-lint ui-deadcode vet backend-size pkg-maint pkg-file-count pkg-boundary pkg-structure package-target-manifest-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-check provider-catalog-check model-provider-package-check durable-runtime-construction-check logging-boundary-check compatibility-alias-check retired-surface-check ownership-inventory-check deadcode
+
+define run_lint_checker
+$(if $(LINT_CHECKER_DRIVER),"$(LINT_CHECKER_DRIVER)",$(GO) run $(LINT_CHECKER_DRIVER_PACKAGE)) -cache-dir "$(LINT_CHECKER_CACHE_DIR)" -go "$(GO)" $(if $(filter 1 true yes,$(LINT_CHECKER_FALLBACK)),-fallback,) -package "$(1)" -- $(2)
+endef
 
 define run_verification_step
 	@printf '%s\n' "==> $(2) [make $(1)]"
@@ -121,6 +134,7 @@ endef
 .PHONY: test-ui-browser-integration test-ui-storybook-integration test-ui-durable-session-real-backend test-ui-performance ui-component-test
 .PHONY: test-unit-coverage test-functional-coverage test-backend-coverage test-coverage-go test-race
 .PHONY: test-backend-verification test-root-process-acceptance long-tests long-tests-managed-runtime long-tests-functional-runtime pr-inference-approval
+.PHONY: frontend-verification backend-verification ui-backend-integration local-inference-verification
 
 .PHONY: verify-fast verify-pr verify-pr-inference verify-extended verify-build verify-lint verify-api
 .PHONY: verify-build-contracts verify-tests run-concurrent-ui-verification-lanes verify test-ui-coverage
@@ -479,6 +493,34 @@ test-backend-verification:
 test-backend-functional:
 	$(MAKE) test-functional-coverage
 
+# Focused classifier lanes. Each target owns only its product verification
+# scope and composes the existing checks so broader verification entry points
+# retain their current behavior.
+frontend-verification:
+	$(MAKE) typecheck
+	$(MAKE) ui-lint
+	$(MAKE) ui-component-test
+	$(MAKE) test-ui-coverage
+	$(MAKE) test-ui-browser-integration
+	$(MAKE) test-ui-storybook-integration
+	$(MAKE) ui-public-package-release
+
+backend-verification:
+	$(MAKE) build
+	$(MAKE) test-backend-verification
+
+# This lane is intentionally narrower than the general UI browser lane: it
+# runs the browser coverage that starts and calls the real backend, without
+# Storybook-only checks.
+ui-backend-integration:
+	$(MAKE) ui-durable-session-real-backend-integration-test
+
+# This focused lane includes the managed-runtime regression and the single
+# real-inference approval regression without the broader specialty sweep.
+local-inference-verification:
+	$(MAKE) long-tests-managed-runtime
+	$(MAKE) pr-inference-approval
+
 ACP_BASELINE_DIR       ?= docs/internal/projects/acp-program/baselines
 ACP_BASELINE_ARTIFACTS ?= .artifacts/acp-baseline
 
@@ -575,47 +617,47 @@ artifact-contract-closeout:
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/workers/script -run "TestWorkerPublicContractSmoke_" -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 lint:
-	$(MAKE) $(LINT_TARGETS)
+	$(GO) run $(LINT_LANE_PACKAGE) -make "$(MAKE)" -jobs "$(LINT_JOBS)" -go "$(GO)" -cache-dir "$(LINT_CHECKER_CACHE_DIR)" $(if $(LINT_CHECKER_DRIVER),-checker-driver "$(LINT_CHECKER_DRIVER)",-checker-package "$(LINT_CHECKER_DRIVER_PACKAGE)") -- $(LINT_TARGETS)
 
 backend-size:
-	$(GO) run ./cmd/backendsizecheck -root $(BACKEND_SIZE_ROOT)
+	$(call run_lint_checker,./cmd/backendsizecheck,-root "$(BACKEND_SIZE_ROOT)")
 
 backend-dependency-graph:
 	$(GO) run ./cmd/backenddependencygraph -root . -go $(GO) -output $(BACKEND_DEPENDENCY_GRAPH_DOT) -svg-output $(BACKEND_DEPENDENCY_GRAPH_SVG)
 
 pkg-maint:
-	$(GO) run ./cmd/pkgmaintcheck -root $(PACKAGE_MAINT_ROOT)
+	$(call run_lint_checker,./cmd/pkgmaintcheck,-root "$(PACKAGE_MAINT_ROOT)")
 
 pkg-file-count:
-	$(GO) run ./cmd/pkgfilecountcheck -root $(PACKAGE_FILE_COUNT_ROOT)
+	$(call run_lint_checker,./cmd/pkgfilecountcheck,-root "$(PACKAGE_FILE_COUNT_ROOT)")
 
 pkg-boundary:
-	$(GO) run ./cmd/pkgboundarycheck -root $(PACKAGE_BOUNDARY_ROOT)
-	$(GO) run ./cmd/ownershipboundarycheck
+	$(call run_lint_checker,./cmd/pkgboundarycheck,-root "$(PACKAGE_BOUNDARY_ROOT)" $(if $(strip $(PACKAGE_BOUNDARY_BASE_REF)),-base-ref "$(PACKAGE_BOUNDARY_BASE_REF)",) $(if $(filter 1 true yes,$(PACKAGE_BOUNDARY_ALL)),--all,))
+	$(call run_lint_checker,./cmd/ownershipboundarycheck,)
 
 pkg-structure:
-	$(GO) run ./cmd/pkgstructurecheck -root $(PACKAGE_STRUCTURE_ROOT)
+	$(call run_lint_checker,./cmd/pkgstructurecheck,-root "$(PACKAGE_STRUCTURE_ROOT)")
 
 package-target-manifest-check:
-	$(GO) run ./cmd/packagetargetmanifestcheck -root .
+	$(call run_lint_checker,./cmd/packagetargetmanifestcheck,-root ".")
 
 packaged-factory-source-check:
-	$(GO) run ./cmd/packagedfactorysourcecheck -root .
+	$(call run_lint_checker,./cmd/packagedfactorysourcecheck,-root ".")
 
 packaged-factory-consumption-check:
-	$(GO) run ./cmd/packagedfactoryconsumptioncheck -root .
+	$(call run_lint_checker,./cmd/packagedfactoryconsumptioncheck,-root ".")
 
 packaged-factory-catalog-generate:
 	$(GO) run ./cmd/packagedfactorycataloggenerate -root .
 
 packaged-factory-catalog-check:
-	$(GO) run ./cmd/packagedfactorycatalogcheck -root .
+	$(call run_lint_checker,./cmd/packagedfactorycatalogcheck,-root ".")
 
 provider-catalog-generate:
 	$(GO) run ./cmd/providercataloggenerate -root .
 
 provider-catalog-check:
-	$(GO) run ./cmd/providercatalogcheck -root .
+	$(call run_lint_checker,./cmd/providercatalogcheck,-root ".")
 
 model-provider-package-generate:
 	node scripts/model-provider-package.mjs generate
@@ -624,25 +666,25 @@ model-provider-package-check:
 	node scripts/model-provider-package.mjs check
 
 ownership-boundary-check:
-	$(GO) run ./cmd/ownershipboundarycheck
+	$(call run_lint_checker,./cmd/ownershipboundarycheck,)
 
 ownership-inventory-check:
-	$(GO) run ./cmd/ownershipinventorycheck
+	$(call run_lint_checker,./cmd/ownershipinventorycheck,)
 
 durable-runtime-construction-check:
-	$(GO) run ./cmd/durableruntimeconstructioncheck -root .
+	$(call run_lint_checker,./cmd/durableruntimeconstructioncheck,-root ".")
 
 logging-boundary-check:
-	$(GO) run ./cmd/loggingboundarycheck -root .
+	$(call run_lint_checker,./cmd/loggingboundarycheck,-root ".")
 
 compatibility-alias-check:
-	$(GO) run ./cmd/compatibilityaliascheck -root $(COMPATIBILITY_ALIAS_CHECK_ROOT)
+	$(call run_lint_checker,./cmd/compatibilityaliascheck,-root "$(COMPATIBILITY_ALIAS_CHECK_ROOT)")
 
 retired-surface-check:
-	$(GO) run ./cmd/retiredsurfacecheck -root $(RETIRED_SURFACE_CHECK_ROOT)
+	$(call run_lint_checker,./cmd/retiredsurfacecheck,-root "$(RETIRED_SURFACE_CHECK_ROOT)")
 
 deadcode:
-	$(GO) run ./cmd/deadcodecheck
+	$(call run_lint_checker,./cmd/deadcodecheck,)
 
 ui-deadcode:
 	cd ui && $(UI_SCRIPT) deadcode

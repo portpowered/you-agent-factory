@@ -82,6 +82,11 @@ const (
 	ErrorResponseCodeRESPONSEEVENTSTREAMEXPIRED                   ErrorResponseCode = "RESPONSE_EVENT_STREAM_EXPIRED"
 	ErrorResponseCodeSESSIONKINDUNSUPPORTED                       ErrorResponseCode = "SESSION_KIND_UNSUPPORTED"
 	ErrorResponseCodeSTALEFACTORYVERSION                          ErrorResponseCode = "STALE_FACTORY_VERSION"
+	ErrorResponseCodeWORKERSESSIONADMISSIONFAILED                 ErrorResponseCode = "WORKER_SESSION_ADMISSION_FAILED"
+	ErrorResponseCodeWORKERSESSIONEVENTTOPICUNAVAILABLE           ErrorResponseCode = "WORKER_SESSION_EVENT_TOPIC_UNAVAILABLE"
+	ErrorResponseCodeWORKERSESSIONNOTSTARTABLE                    ErrorResponseCode = "WORKER_SESSION_NOT_STARTABLE"
+	ErrorResponseCodeWORKERSESSIONSTARTOPENINGFAILED              ErrorResponseCode = "WORKER_SESSION_START_OPENING_FAILED"
+	ErrorResponseCodeWORKERSESSIONSTARTREQUESTIDCONFLICT          ErrorResponseCode = "WORKER_SESSION_START_REQUEST_ID_CONFLICT"
 	ErrorResponseCodeWORKERSESSIONSTREAMUNAVAILABLE               ErrorResponseCode = "WORKER_SESSION_STREAM_UNAVAILABLE"
 	ErrorResponseCodeWORKERSESSIONTRANSCRIPTACTIVE                ErrorResponseCode = "WORKER_SESSION_TRANSCRIPT_ACTIVE"
 	ErrorResponseCodeWORKERSESSIONTRANSCRIPTPROJECTIONUNAVAILABLE ErrorResponseCode = "WORKER_SESSION_TRANSCRIPT_PROJECTION_UNAVAILABLE"
@@ -378,6 +383,13 @@ const (
 	FactoryResponseEventProvenanceRepresentationDelta        FactoryResponseEventProvenanceRepresentation = "DELTA"
 	FactoryResponseEventProvenanceRepresentationNotification FactoryResponseEventProvenanceRepresentation = "NOTIFICATION"
 	FactoryResponseEventProvenanceRepresentationSnapshot     FactoryResponseEventProvenanceRepresentation = "SNAPSHOT"
+)
+
+// Defines values for FactoryResponseEventSessionPayloadAttemptReason.
+const (
+	INITIAL FactoryResponseEventSessionPayloadAttemptReason = "INITIAL"
+	RESUME  FactoryResponseEventSessionPayloadAttemptReason = "RESUME"
+	RETRY   FactoryResponseEventSessionPayloadAttemptReason = "RETRY"
 )
 
 // Defines values for FactorySaveMode.
@@ -788,6 +800,42 @@ const (
 	PromptTemplateVariableReferenceCategoryROOT      PromptTemplateVariableReferenceCategory = "ROOT"
 )
 
+// Defines values for ProviderACPResourceDelivery.
+const (
+	ProviderACPResourceDeliveryConditional ProviderACPResourceDelivery = "conditional"
+	ProviderACPResourceDeliveryImplemented ProviderACPResourceDelivery = "implemented"
+	ProviderACPResourceDeliveryUnknown     ProviderACPResourceDelivery = "unknown"
+	ProviderACPResourceDeliveryUnsupported ProviderACPResourceDelivery = "unsupported"
+)
+
+// Defines values for ProviderACPSupport0Support.
+const (
+	ProviderACPSupport0SupportConditional ProviderACPSupport0Support = "conditional"
+)
+
+// Defines values for ProviderACPSupport1Support.
+const (
+	ProviderACPSupport1SupportSupported   ProviderACPSupport1Support = "supported"
+	ProviderACPSupport1SupportUnknown     ProviderACPSupport1Support = "unknown"
+	ProviderACPSupport1SupportUnsupported ProviderACPSupport1Support = "unsupported"
+)
+
+// Defines values for ProviderCapabilityEvidenceKind.
+const (
+	ConformanceFixture   ProviderCapabilityEvidenceKind = "conformance_fixture"
+	MaintainerAssertion  ProviderCapabilityEvidenceKind = "maintainer_assertion"
+	PrimaryDocumentation ProviderCapabilityEvidenceKind = "primary_documentation"
+	ProtocolProbe        ProviderCapabilityEvidenceKind = "protocol_probe"
+)
+
+// Defines values for ProviderCapabilitySupport.
+const (
+	ProviderCapabilitySupportConditional ProviderCapabilitySupport = "conditional"
+	ProviderCapabilitySupportSupported   ProviderCapabilitySupport = "supported"
+	ProviderCapabilitySupportUnknown     ProviderCapabilitySupport = "unknown"
+	ProviderCapabilitySupportUnsupported ProviderCapabilitySupport = "unsupported"
+)
+
 // Defines values for ProviderCatalogFormatVersion.
 const (
 	ProviderCatalogFormatVersionV1 ProviderCatalogFormatVersion = "1.0.0"
@@ -832,6 +880,12 @@ const (
 	Xhigh   ProviderEffort = "xhigh"
 )
 
+// Defines values for ProviderHarnessKind.
+const (
+	Acp       ProviderHarnessKind = "acp"
+	NativeCli ProviderHarnessKind = "native_cli"
+)
+
 // Defines values for ProviderImplementationAvailability.
 const (
 	ProviderImplementationAvailabilityBundled            ProviderImplementationAvailability = "bundled"
@@ -844,6 +898,18 @@ const (
 	ProviderKnownLimitKindBehavior ProviderKnownLimitKind = "behavior"
 	ProviderKnownLimitKindDefault  ProviderKnownLimitKind = "default"
 	ProviderKnownLimitKindMaximum  ProviderKnownLimitKind = "maximum"
+)
+
+// Defines values for ProviderModality0Support.
+const (
+	ProviderModality0SupportConditional ProviderModality0Support = "conditional"
+)
+
+// Defines values for ProviderModality1Support.
+const (
+	ProviderModality1SupportSupported   ProviderModality1Support = "supported"
+	ProviderModality1SupportUnknown     ProviderModality1Support = "unknown"
+	ProviderModality1SupportUnsupported ProviderModality1Support = "unsupported"
 )
 
 // Defines values for ProviderModalityDirection.
@@ -862,15 +928,27 @@ const (
 
 // Defines values for ProviderModalitySupport.
 const (
+	ProviderModalitySupportConditional ProviderModalitySupport = "conditional"
 	ProviderModalitySupportSupported   ProviderModalitySupport = "supported"
+	ProviderModalitySupportUnknown     ProviderModalitySupport = "unknown"
 	ProviderModalitySupportUnsupported ProviderModalitySupport = "unsupported"
 )
 
 // Defines values for ProviderModalityTransport.
 const (
-	FilePath ProviderModalityTransport = "file_path"
-	Inline   ProviderModalityTransport = "inline"
-	None     ProviderModalityTransport = "none"
+	AcpResource  ProviderModalityTransport = "acp_resource"
+	FilePath     ProviderModalityTransport = "file_path"
+	Inline       ProviderModalityTransport = "inline"
+	None         ProviderModalityTransport = "none"
+	ToolMediated ProviderModalityTransport = "tool_mediated"
+)
+
+// Defines values for ProviderModelCatalogPosture.
+const (
+	ProviderModelCatalogPostureExact             ProviderModelCatalogPosture = "exact"
+	ProviderModelCatalogPostureOperatorSelected  ProviderModelCatalogPosture = "operator_selected"
+	ProviderModelCatalogPostureRuntimeDiscovered ProviderModelCatalogPosture = "runtime_discovered"
+	ProviderModelCatalogPostureUnknown           ProviderModelCatalogPosture = "unknown"
 )
 
 // Defines values for ProviderSessionTranscriptEntryType.
@@ -890,9 +968,44 @@ const (
 	ProviderTechnicalSupportLevelProduction   ProviderTechnicalSupportLevel = "production"
 )
 
+// Defines values for ProviderTool0Support.
+const (
+	ProviderTool0SupportConditional ProviderTool0Support = "conditional"
+)
+
+// Defines values for ProviderTool1Support.
+const (
+	ProviderTool1SupportSupported   ProviderTool1Support = "supported"
+	ProviderTool1SupportUnknown     ProviderTool1Support = "unknown"
+	ProviderTool1SupportUnsupported ProviderTool1Support = "unsupported"
+)
+
+// Defines values for ProviderToolAvailability.
+const (
+	ProviderToolAvailabilityBuiltIn            ProviderToolAvailability = "built_in"
+	ProviderToolAvailabilityExternal           ProviderToolAvailability = "external"
+	ProviderToolAvailabilityOperatorConfigured ProviderToolAvailability = "operator_configured"
+	ProviderToolAvailabilityOptional           ProviderToolAvailability = "optional"
+	ProviderToolAvailabilityUnknown            ProviderToolAvailability = "unknown"
+)
+
+// Defines values for ProviderToolOutputModality0Support.
+const (
+	ProviderToolOutputModality0SupportConditional ProviderToolOutputModality0Support = "conditional"
+)
+
+// Defines values for ProviderToolOutputModality1Support.
+const (
+	ProviderToolOutputModality1SupportSupported   ProviderToolOutputModality1Support = "supported"
+	ProviderToolOutputModality1SupportUnknown     ProviderToolOutputModality1Support = "unknown"
+	ProviderToolOutputModality1SupportUnsupported ProviderToolOutputModality1Support = "unsupported"
+)
+
 // Defines values for ProviderToolSupport.
 const (
+	Conditional ProviderToolSupport = "conditional"
 	Supported   ProviderToolSupport = "supported"
+	Unknown     ProviderToolSupport = "unknown"
 	Unsupported ProviderToolSupport = "unsupported"
 )
 
@@ -988,16 +1101,17 @@ const (
 
 // Defines values for WorkFailureType.
 const (
-	WorkFailureTypeAuthFailure                  WorkFailureType = "auth_failure"
-	WorkFailureTypeCommandLineTooLong           WorkFailureType = "command_line_too_long"
-	WorkFailureTypeExpectedArtifactsUnsatisfied WorkFailureType = "EXPECTED_ARTIFACTS_UNSATISFIED"
-	WorkFailureTypeInternalServerError          WorkFailureType = "internal_server_error"
-	WorkFailureTypeMisconfigured                WorkFailureType = "misconfigured"
-	WorkFailureTypeMissingExecutable            WorkFailureType = "missing_executable"
-	WorkFailureTypePermanentBadRequest          WorkFailureType = "permanent_bad_request"
-	WorkFailureTypeThrottled                    WorkFailureType = "throttled"
-	WorkFailureTypeTimeout                      WorkFailureType = "timeout"
-	WorkFailureTypeUnknown                      WorkFailureType = "unknown"
+	WorkFailureTypeAuthFailure                     WorkFailureType = "auth_failure"
+	WorkFailureTypeCommandLineTooLong              WorkFailureType = "command_line_too_long"
+	WorkFailureTypeExpectedArtifactsUnsatisfied    WorkFailureType = "EXPECTED_ARTIFACTS_UNSATISFIED"
+	WorkFailureTypeInternalServerError             WorkFailureType = "internal_server_error"
+	WorkFailureTypeMisconfigured                   WorkFailureType = "misconfigured"
+	WorkFailureTypeMissingExecutable               WorkFailureType = "missing_executable"
+	WorkFailureTypePermanentBadRequest             WorkFailureType = "permanent_bad_request"
+	WorkFailureTypeStructuredOutputSchemaViolation WorkFailureType = "structured_output_schema_violation"
+	WorkFailureTypeThrottled                       WorkFailureType = "throttled"
+	WorkFailureTypeTimeout                         WorkFailureType = "timeout"
+	WorkFailureTypeUnknown                         WorkFailureType = "unknown"
 )
 
 // Defines values for WorkOutcome.
@@ -1089,6 +1203,18 @@ const (
 // Defines values for WorkerSessionReplaySummaryKind.
 const (
 	ReplaySummary WorkerSessionReplaySummaryKind = "replay-summary"
+)
+
+// Defines values for WorkerSessionStartResponseState.
+const (
+	WorkerSessionStartResponseStateCanceled   WorkerSessionStartResponseState = "CANCELED"
+	WorkerSessionStartResponseStateCompleted  WorkerSessionStartResponseState = "COMPLETED"
+	WorkerSessionStartResponseStateFailed     WorkerSessionStartResponseState = "FAILED"
+	WorkerSessionStartResponseStatePaused     WorkerSessionStartResponseState = "PAUSED"
+	WorkerSessionStartResponseStateReserved   WorkerSessionStartResponseState = "RESERVED"
+	WorkerSessionStartResponseStateRunning    WorkerSessionStartResponseState = "RUNNING"
+	WorkerSessionStartResponseStateStarting   WorkerSessionStartResponseState = "STARTING"
+	WorkerSessionStartResponseStateTerminated WorkerSessionStartResponseState = "TERMINATED"
 )
 
 // Defines values for WorkerType.
@@ -1412,7 +1538,10 @@ type DispatchResponseEventPayload struct {
 	PreviousChainingTraceIds    *[]string                `json:"previousChainingTraceIds,omitempty"`
 	ProviderFailure             *ProviderFailureMetadata `json:"providerFailure,omitempty"`
 	SelectedClassificationLabel *string                  `json:"selectedClassificationLabel,omitempty"`
-	TransitionId                string                   `json:"transitionId"`
+
+	// StructuredResult Optional native JSON value produced when the workstation outputSchema validates the worker response. JSON null is distinct from an omitted value.
+	StructuredResult interface{} `json:"structuredResult,omitempty"`
+	TransitionId     string      `json:"transitionId"`
 }
 
 // DispatchWorkerSessionAssociationEventPayload Canonical association between one Factory dispatch and the Worker Session allocated to execute it. Dispatch identity remains authoritative in FactoryEvent.context.dispatchId and is not repeated in this payload.
@@ -2691,12 +2820,86 @@ type FactoryResponseEventRunPayload struct {
 
 // FactoryResponseEventSessionPayload Session-scoped lifecycle and capability metadata payload.
 type FactoryResponseEventSessionPayload struct {
+	// Attempt One-based attempt number when known.
+	Attempt *int `json:"attempt,omitempty"`
+
+	// AttemptId Stable identity of the opening attempt.
+	AttemptId *string `json:"attemptId,omitempty"`
+
+	// AttemptReason Bounded reason for the attempt lifecycle.
+	AttemptReason *FactoryResponseEventSessionPayloadAttemptReason `json:"attemptReason,omitempty"`
+
 	// Capabilities Declares which response-event features a provider session supports. Adapters publish capability flags so consumers can interpret fidelity and phase availability without depending on provider-native schemas.
 	Capabilities *FactoryResponseEventCapabilities `json:"capabilities,omitempty"`
 
+	// Continuation Exact provider continuation identity when supplied.
+	Continuation *struct {
+		Id       *string `json:"id,omitempty"`
+		Kind     *string `json:"kind,omitempty"`
+		Provider *string `json:"provider,omitempty"`
+	} `json:"continuation,omitempty"`
+
+	// DispatchId Stable dispatch identity for the execution attempt.
+	DispatchId *string `json:"dispatchId,omitempty"`
+
+	// FactorySessionId Factory Session identity when the invocation supplied one.
+	FactorySessionId *string `json:"factorySessionId,omitempty"`
+
+	// Model Explicit model selection when supplied.
+	Model *string `json:"model,omitempty"`
+
+	// ProjectId Project identity when the invocation supplied one.
+	ProjectId *string `json:"projectId,omitempty"`
+
+	// ProviderSelection Explicit provider and runner selection facts.
+	ProviderSelection *struct {
+		ExecutorProvider *string `json:"executorProvider,omitempty"`
+		ModelProvider    *string `json:"modelProvider,omitempty"`
+		RunnerId         *string `json:"runnerId,omitempty"`
+
+		// Source Configuration layer that supplied the resolved built-in runner selection for a dispatch.
+		Source *RunnerSelectionSource `json:"source,omitempty"`
+	} `json:"providerSelection,omitempty"`
+
+	// ReasoningEffort Explicit reasoning-effort selection when supplied.
+	ReasoningEffort *string `json:"reasoningEffort,omitempty"`
+
+	// RecordingId Recording identity when the invocation supplied one.
+	RecordingId *string `json:"recordingId,omitempty"`
+
+	// ReplayKey Replay correlation key when the dispatch supplied one.
+	ReplayKey *string `json:"replayKey,omitempty"`
+
+	// StartedAt Injected-clock timestamp at which the Worker Session opened.
+	StartedAt *time.Time `json:"startedAt,omitempty"`
+
 	// Status Session lifecycle status when applicable.
 	Status *string `json:"status,omitempty"`
+
+	// TraceId Work trace identity when the dispatch supplied one.
+	TraceId *string `json:"traceId,omitempty"`
+
+	// TransitionId Runtime transition identity when the dispatch supplied one.
+	TransitionId *string `json:"transitionId,omitempty"`
+
+	// TurnId Turn or request identity when the dispatch supplied one.
+	TurnId *string `json:"turnId,omitempty"`
+
+	// WorkIds Work identities carried by the canonical dispatch.
+	WorkIds *[]string `json:"workIds,omitempty"`
+
+	// WorkerSessionId Stable Worker Session identity for the execution.
+	WorkerSessionId *string `json:"workerSessionId,omitempty"`
+
+	// WorkerType Authored Worker identity when the invocation supplied one.
+	WorkerType *string `json:"workerType,omitempty"`
+
+	// WorkstationName Workstation route used by the canonical invocation.
+	WorkstationName *string `json:"workstationName,omitempty"`
 }
+
+// FactoryResponseEventSessionPayloadAttemptReason Bounded reason for the attempt lifecycle.
+type FactoryResponseEventSessionPayloadAttemptReason string
 
 // FactoryResponseEventStreamGapPayload Discontinuity marker for either unavailable retained response-event sequences or an affected provider item whose lifecycle could not be fully observed. Retention gaps include fromSequence, toSequence, and firstAvailableSequence; item-scoped gaps include affectedItemId and reason. The alternatives are exclusive so empty, partial, and mixed payloads are rejected.
 type FactoryResponseEventStreamGapPayload struct {
@@ -5362,6 +5565,72 @@ type PromptTemplateVariableReference struct {
 // PromptTemplateVariableReferenceCategory High-level grouping for the variable reference.
 type PromptTemplateVariableReferenceCategory string
 
+// ProviderACPResourceDelivery Evidence state for delivering a resource through the ACP harness.
+type ProviderACPResourceDelivery string
+
+// ProviderACPSupport Typed ACP support metadata for a provider harness.
+type ProviderACPSupport struct {
+	// Condition Bounded operator-visible condition required when ACP support is conditional.
+	Condition *string `json:"condition,omitempty"`
+
+	// EvidenceRefs Stable IDs of evidence records qualifying ACP support.
+	EvidenceRefs *[]string `json:"evidenceRefs,omitempty"`
+
+	// ProtocolVersion ACP protocol version known to the manifest author.
+	ProtocolVersion *string `json:"protocolVersion,omitempty"`
+
+	// ResourceDelivery Evidence state for delivering a resource through the ACP harness.
+	ResourceDelivery *ProviderACPResourceDelivery `json:"resourceDelivery,omitempty"`
+
+	// Support Evidence state shared by harness, modality, and tool capability facts.
+	Support ProviderCapabilitySupport `json:"support"`
+	union   json.RawMessage
+}
+
+// ProviderACPSupport0 defines model for .
+type ProviderACPSupport0 struct {
+	Condition string                      `json:"condition"`
+	Support   *ProviderACPSupport0Support `json:"support,omitempty"`
+}
+
+// ProviderACPSupport0Support defines model for ProviderACPSupport.0.Support.
+type ProviderACPSupport0Support string
+
+// ProviderACPSupport1 defines model for .
+type ProviderACPSupport1 struct {
+	Support *ProviderACPSupport1Support `json:"support,omitempty"`
+}
+
+// ProviderACPSupport1Support defines model for ProviderACPSupport.1.Support.
+type ProviderACPSupport1Support string
+
+// ProviderCapabilityEvidence Bounded evidence record qualifying one or more published capability facts.
+type ProviderCapabilityEvidence struct {
+	// FactRefs Optional bounded references to facts qualified by this record.
+	FactRefs *[]string `json:"factRefs,omitempty"`
+
+	// HarnessVersion Optional harness version used when the evidence was checked.
+	HarnessVersion *string `json:"harnessVersion,omitempty"`
+
+	// Id Stable manifest-local evidence identifier.
+	Id string `json:"id"`
+
+	// Kind Source class for evidence supporting a published capability fact.
+	Kind ProviderCapabilityEvidenceKind `json:"kind"`
+
+	// Url Optional public HTTPS source for the evidence.
+	Url *string `json:"url,omitempty"`
+
+	// VerifiedOn UTC calendar date on which the evidence was checked.
+	VerifiedOn openapi_types.Date `json:"verifiedOn"`
+}
+
+// ProviderCapabilityEvidenceKind Source class for evidence supporting a published capability fact.
+type ProviderCapabilityEvidenceKind string
+
+// ProviderCapabilitySupport Evidence state shared by harness, modality, and tool capability facts.
+type ProviderCapabilitySupport string
+
 // ProviderCatalog Versioned public collection of provider manifests.
 type ProviderCatalog struct {
 	// FormatVersion Provider Catalog document format version.
@@ -5490,6 +5759,18 @@ type ProviderFailureMetadata struct {
 	Type *WorkFailureType `json:"type,omitempty"`
 }
 
+// ProviderHarness Provider harness metadata, kept separate from model capability facts.
+type ProviderHarness struct {
+	// AcpSupport Typed ACP support metadata for a provider harness.
+	AcpSupport *ProviderACPSupport `json:"acpSupport,omitempty"`
+
+	// Kind Execution harness family represented by a provider manifest.
+	Kind ProviderHarnessKind `json:"kind"`
+}
+
+// ProviderHarnessKind Execution harness family represented by a provider manifest.
+type ProviderHarnessKind string
+
 // ProviderIdentity Open provider identity used by authored modelProvider fields. Extension identities use lowercase letters and digits separated by dots or hyphens. Built-in identities and documented legacy aliases remain accepted compatibility spellings. For example, `customer.provider` is a valid extension identity.
 type ProviderIdentity = WorkerModelProvider
 
@@ -5543,6 +5824,15 @@ type ProviderManifest struct {
 	// Documentation Stable public documentation links for this provider.
 	Documentation []ProviderDocumentationLink `json:"documentation"`
 
+	// Evidence Bounded evidence records used to qualify capability facts in this manifest.
+	Evidence *[]ProviderCapabilityEvidence `json:"evidence,omitempty"`
+
+	// Harness Provider harness metadata, kept separate from model capability facts.
+	Harness *ProviderHarness `json:"harness,omitempty"`
+
+	// HarnessRoutes Directional routes implemented by the provider harness, independent of any model catalog claim.
+	HarnessRoutes *[]ProviderModality `json:"harnessRoutes,omitempty"`
+
 	// Id Stable canonical lowercase provider identifier.
 	Id string `json:"id"`
 
@@ -5558,6 +5848,9 @@ type ProviderManifest struct {
 	// MaximumResponseFidelityCapabilities Maximum evidenced response-event fidelity of the provider integration. Capabilities describe observable output independently of support posture.
 	MaximumResponseFidelityCapabilities ProviderResponseFidelityCapabilities `json:"maximumResponseFidelityCapabilities"`
 
+	// ModelCatalogPosture How a provider's model identifiers are known to the published catalog.
+	ModelCatalogPosture *ProviderModelCatalogPosture `json:"modelCatalogPosture,omitempty"`
+
 	// Models Named provider models and their complete capability facts in canonical model-ID order.
 	Models *[]ProviderModel `json:"models,omitempty"`
 
@@ -5568,20 +5861,62 @@ type ProviderManifest struct {
 	Tools *[]ProviderTool `json:"tools,omitempty"`
 }
 
-// ProviderModality One explicit supported or unsupported directional modality fact.
+// ProviderMediaConstraints Optional bounded media constraints for one modality route.
+type ProviderMediaConstraints struct {
+	// MaxBytes Maximum payload size in bytes when documented.
+	MaxBytes *int64 `json:"maxBytes,omitempty"`
+
+	// MaxDurationSeconds Maximum media duration in seconds when documented.
+	MaxDurationSeconds *float32 `json:"maxDurationSeconds,omitempty"`
+
+	// MaxItems Maximum number of media items accepted or emitted in one route.
+	MaxItems *int `json:"maxItems,omitempty"`
+
+	// MediaTypes Accepted or emitted media types, such as image/png or audio/wav.
+	MediaTypes *[]string `json:"mediaTypes,omitempty"`
+}
+
+// ProviderModality One explicit directional modality fact for a harness route or model.
 type ProviderModality struct {
+	// Condition Bounded operator-visible condition required when support is conditional.
+	Condition *string `json:"condition,omitempty"`
+
 	// Direction Direction in which a provider model accepts or emits a modality.
 	Direction ProviderModalityDirection `json:"direction"`
+
+	// EvidenceRefs Stable IDs of evidence records qualifying this fact.
+	EvidenceRefs *[]string `json:"evidenceRefs,omitempty"`
+
+	// MediaConstraints Optional bounded media constraints for one modality route.
+	MediaConstraints *ProviderMediaConstraints `json:"mediaConstraints,omitempty"`
 
 	// Modality Media or content modality understood by a provider model.
 	Modality ProviderModalityKind `json:"modality"`
 
-	// Support Whether the provider model supports the modality in this direction.
+	// Support Evidence state for a directional harness or model modality fact.
 	Support ProviderModalitySupport `json:"support"`
 
 	// Transport How a supported modality is supplied or returned.
 	Transport ProviderModalityTransport `json:"transport"`
+	union     json.RawMessage
 }
+
+// ProviderModality0 defines model for .
+type ProviderModality0 struct {
+	Condition string                    `json:"condition"`
+	Support   *ProviderModality0Support `json:"support,omitempty"`
+}
+
+// ProviderModality0Support defines model for ProviderModality.0.Support.
+type ProviderModality0Support string
+
+// ProviderModality1 defines model for .
+type ProviderModality1 struct {
+	Support *ProviderModality1Support `json:"support,omitempty"`
+}
+
+// ProviderModality1Support defines model for ProviderModality.1.Support.
+type ProviderModality1Support string
 
 // ProviderModalityDirection Direction in which a provider model accepts or emits a modality.
 type ProviderModalityDirection string
@@ -5589,7 +5924,7 @@ type ProviderModalityDirection string
 // ProviderModalityKind Media or content modality understood by a provider model.
 type ProviderModalityKind string
 
-// ProviderModalitySupport Whether the provider model supports the modality in this direction.
+// ProviderModalitySupport Evidence state for a directional harness or model modality fact.
 type ProviderModalitySupport string
 
 // ProviderModalityTransport How a supported modality is supplied or returned.
@@ -5606,6 +5941,9 @@ type ProviderModel struct {
 	// Modalities Complete directional modality facts, including unsupported values.
 	Modalities []ProviderModality `json:"modalities"`
 }
+
+// ProviderModelCatalogPosture How a provider's model identifiers are known to the published catalog.
+type ProviderModelCatalogPosture string
 
 // ProviderResponseFidelityCapabilities Maximum evidenced response-event fidelity of the provider integration. Capabilities describe observable output independently of support posture.
 type ProviderResponseFidelityCapabilities struct {
@@ -5862,17 +6200,92 @@ type ProviderTechnicalSupportLevel string
 
 // ProviderTool One named provider tool fact used for execution planning.
 type ProviderTool struct {
+	// Availability How a named tool becomes available to the provider harness.
+	Availability *ProviderToolAvailability `json:"availability,omitempty"`
+
+	// Condition Bounded operator-visible condition required when tool support is conditional.
+	Condition *string `json:"condition,omitempty"`
+
+	// DefaultEnabled Whether the tool is enabled by default; null means the default is unknown or operator-defined.
+	DefaultEnabled *bool `json:"defaultEnabled"`
+
 	// Description Bounded explanation of the tool fact.
 	Description string `json:"description"`
+
+	// EvidenceRefs Stable IDs of evidence records qualifying this tool fact.
+	EvidenceRefs *[]string `json:"evidenceRefs,omitempty"`
 
 	// Name Stable provider-neutral tool name.
 	Name string `json:"name"`
 
-	// Support Whether the provider exposes a named tool through its integration.
+	// OutputModalities Tool-produced modalities, kept separate from direct model output modalities.
+	OutputModalities *[]ProviderToolOutputModality `json:"outputModalities,omitempty"`
+
+	// Support Evidence state for a named provider tool fact.
 	Support ProviderToolSupport `json:"support"`
+	union   json.RawMessage
 }
 
-// ProviderToolSupport Whether the provider exposes a named tool through its integration.
+// ProviderTool0 defines model for .
+type ProviderTool0 struct {
+	Condition string                `json:"condition"`
+	Support   *ProviderTool0Support `json:"support,omitempty"`
+}
+
+// ProviderTool0Support defines model for ProviderTool.0.Support.
+type ProviderTool0Support string
+
+// ProviderTool1 defines model for .
+type ProviderTool1 struct {
+	Support *ProviderTool1Support `json:"support,omitempty"`
+}
+
+// ProviderTool1Support defines model for ProviderTool.1.Support.
+type ProviderTool1Support string
+
+// ProviderToolAvailability How a named tool becomes available to the provider harness.
+type ProviderToolAvailability string
+
+// ProviderToolOutputModality A modality produced by a tool, explicitly separate from direct model output.
+type ProviderToolOutputModality struct {
+	// Condition Bounded operator-visible condition required when support is conditional.
+	Condition *string `json:"condition,omitempty"`
+
+	// EvidenceRefs Stable IDs of evidence records qualifying this tool output fact.
+	EvidenceRefs *[]string `json:"evidenceRefs,omitempty"`
+
+	// MediaConstraints Optional bounded media constraints for one modality route.
+	MediaConstraints *ProviderMediaConstraints `json:"mediaConstraints,omitempty"`
+
+	// Modality Media or content modality understood by a provider model.
+	Modality ProviderModalityKind `json:"modality"`
+
+	// Support Evidence state shared by harness, modality, and tool capability facts.
+	Support ProviderCapabilitySupport `json:"support"`
+
+	// Transport How a supported modality is supplied or returned.
+	Transport ProviderModalityTransport `json:"transport"`
+	union     json.RawMessage
+}
+
+// ProviderToolOutputModality0 defines model for .
+type ProviderToolOutputModality0 struct {
+	Condition string                              `json:"condition"`
+	Support   *ProviderToolOutputModality0Support `json:"support,omitempty"`
+}
+
+// ProviderToolOutputModality0Support defines model for ProviderToolOutputModality.0.Support.
+type ProviderToolOutputModality0Support string
+
+// ProviderToolOutputModality1 defines model for .
+type ProviderToolOutputModality1 struct {
+	Support *ProviderToolOutputModality1Support `json:"support,omitempty"`
+}
+
+// ProviderToolOutputModality1Support defines model for ProviderToolOutputModality.1.Support.
+type ProviderToolOutputModality1Support string
+
+// ProviderToolSupport Evidence state for a named provider tool fact.
 type ProviderToolSupport string
 
 // ReasoningEffort Optional provider-neutral reasoning effort. Surrounding whitespace and letter case are normalized. Omit the field to preserve the selected provider and model default. Factory definitions may use an exact invocation-parameter placeholder such as `${executorReasoningEffort}`.
@@ -6507,7 +6920,10 @@ type Work struct {
 	// State A lifecycle state that a work item can occupy inside one work type.
 	State       *WorkState          `json:"state,omitempty"`
 	StopSummary *FactoryStopSummary `json:"stopSummary,omitempty"`
-	Tags        *StringMap          `json:"tags,omitempty"`
+
+	// StructuredResult Optional JSON value produced by a workstation whose outputSchema validated the worker response. JSON null is distinct from an omitted value.
+	StructuredResult interface{} `json:"structuredResult,omitempty"`
+	Tags             *StringMap  `json:"tags,omitempty"`
 
 	// TraceId Legacy trace identifier retained for compatibility; prefer currentChainingTraceId.
 	TraceId *string `json:"traceId,omitempty"`
@@ -6973,6 +7389,16 @@ type WorkerSessionEventRecord struct {
 	SourceType string `json:"sourceType"`
 }
 
+// WorkerSessionExecutionMetadata defines model for WorkerSessionExecutionMetadata.
+type WorkerSessionExecutionMetadata struct {
+	CurrentTick         *int      `json:"currentTick,omitempty"`
+	DispatchCreatedTick *int      `json:"dispatchCreatedTick,omitempty"`
+	ReplayKey           *string   `json:"replayKey,omitempty"`
+	RequestId           *string   `json:"requestId,omitempty"`
+	TraceId             *string   `json:"traceId,omitempty"`
+	WorkIds             *[]string `json:"workIds,omitempty"`
+}
+
 // WorkerSessionFailure defines model for WorkerSessionFailure.
 type WorkerSessionFailure struct {
 	// Detail Customer-safe failure detail derived by Worker Sessions.
@@ -7074,6 +7500,92 @@ type WorkerSessionReplaySummary struct {
 
 // WorkerSessionReplaySummaryKind Stable record kind for the finite Worker Session replay marker.
 type WorkerSessionReplaySummaryKind string
+
+// WorkerSessionResolvedDispatch defines model for WorkerSessionResolvedDispatch.
+type WorkerSessionResolvedDispatch struct {
+	CurrentChainingTraceId *string `json:"currentChainingTraceId,omitempty"`
+
+	// DispatchId Stable Workers dispatch or attempt identity.
+	DispatchId               string                          `json:"dispatchId"`
+	Execution                *WorkerSessionExecutionMetadata `json:"execution,omitempty"`
+	ExpectedArtifactContext  *map[string]interface{}         `json:"expectedArtifactContext,omitempty"`
+	InputBindings            *map[string][]string            `json:"inputBindings,omitempty"`
+	InputTokens              *[]interface{}                  `json:"inputTokens,omitempty"`
+	PreviousChainingTraceIds *[]string                       `json:"previousChainingTraceIds,omitempty"`
+	ProjectId                *string                         `json:"projectId,omitempty"`
+	TransitionId             *string                         `json:"transitionId,omitempty"`
+	WorkerType               *string                         `json:"workerType,omitempty"`
+	WorkstationName          string                          `json:"workstationName"`
+}
+
+// WorkerSessionResolvedExecution Workers-owned resolved execution input. All selection and prompt facts are supplied by the caller or an upstream resolver; Worker Sessions only passes this detached value to the named Workers route.
+type WorkerSessionResolvedExecution struct {
+	Dispatch                 WorkerSessionResolvedDispatch    `json:"dispatch"`
+	EnvVars                  *map[string]string               `json:"envVars,omitempty"`
+	ExecutorProvider         *string                          `json:"executorProvider,omitempty"`
+	FactorySessionId         *string                          `json:"factorySessionId,omitempty"`
+	InputTokens              *[]interface{}                   `json:"inputTokens,omitempty"`
+	Model                    *string                          `json:"model,omitempty"`
+	ModelBindings            *[]map[string]interface{}        `json:"modelBindings,omitempty"`
+	ModelOperation           *string                          `json:"modelOperation,omitempty"`
+	ModelProvider            *string                          `json:"modelProvider,omitempty"`
+	OutputContract           *string                          `json:"outputContract,omitempty"`
+	OutputSchema             *string                          `json:"outputSchema,omitempty"`
+	ProjectId                *string                          `json:"projectId,omitempty"`
+	ReasoningEffort          *string                          `json:"reasoningEffort,omitempty"`
+	ResumeSession            *WorkerSessionProviderSessionRef `json:"resumeSession,omitempty"`
+	RunnerId                 *string                          `json:"runnerId,omitempty"`
+	RunnerSelectionSource    *string                          `json:"runnerSelectionSource,omitempty"`
+	SkipPermissions          *bool                            `json:"skipPermissions,omitempty"`
+	SystemPrompt             *string                          `json:"systemPrompt,omitempty"`
+	UserMessage              *string                          `json:"userMessage,omitempty"`
+	WorkerType               *string                          `json:"workerType,omitempty"`
+	WorkingDirectory         *string                          `json:"workingDirectory,omitempty"`
+	WorkingDirectoryAuthored *bool                            `json:"workingDirectoryAuthored,omitempty"`
+
+	// WorkstationName Authored workstation route or the reserved provider-invocation route.
+	WorkstationName string  `json:"workstationName"`
+	WorkstationType *string `json:"workstationType,omitempty"`
+	Worktree        *string `json:"worktree,omitempty"`
+}
+
+// WorkerSessionStartRequest One caller-owned idempotent request for a directly resolved Worker execution. Worker Sessions owns reservation, event visibility, supervision, and admission; it does not select a provider or runner from this payload.
+type WorkerSessionStartRequest struct {
+	// Execution Workers-owned resolved execution input. All selection and prompt facts are supplied by the caller or an upstream resolver; Worker Sessions only passes this detached value to the named Workers route.
+	Execution WorkerSessionResolvedExecution `json:"execution"`
+
+	// RequestId Required caller idempotency key for this asynchronous start.
+	RequestId string                         `json:"requestId"`
+	Retry     *WorkerSessionStartRetryPolicy `json:"retry,omitempty"`
+
+	// WorkerSessionId Stable Worker Session identity to reserve and return.
+	WorkerSessionId string `json:"workerSessionId"`
+}
+
+// WorkerSessionStartResponse Admission acknowledgment for one Worker Session. A successful response is emitted only after the opening event is readable/subscribable and Workers has admitted the execution; terminal Worker output remains asynchronous.
+type WorkerSessionStartResponse struct {
+	// Accepted Always true for a 202 response.
+	Accepted bool `json:"accepted"`
+
+	// EventTopic Deterministic Events topic whose retained opening record is ready to read and subscribe.
+	EventTopic string `json:"eventTopic"`
+
+	// RequestId Caller idempotency key echoed for correlation.
+	RequestId string                          `json:"requestId"`
+	State     WorkerSessionStartResponseState `json:"state"`
+
+	// WorkerSessionId Stable Worker Session identity for subsequent inspection and control.
+	WorkerSessionId string `json:"workerSessionId"`
+}
+
+// WorkerSessionStartResponseState defines model for WorkerSessionStartResponse.State.
+type WorkerSessionStartResponseState string
+
+// WorkerSessionStartRetryPolicy defines model for WorkerSessionStartRetryPolicy.
+type WorkerSessionStartRetryPolicy struct {
+	// MaxAttempts Total provider attempts, where zero and one both mean one attempt. Values above 16 are rejected at the HTTP boundary.
+	MaxAttempts *int `json:"maxAttempts,omitempty"`
+}
 
 // WorkerSessionTranscriptResponse defines model for WorkerSessionTranscriptResponse.
 type WorkerSessionTranscriptResponse struct {
@@ -7505,6 +8017,9 @@ type WorkListWorkTypeName = string
 // WorkOrTokenID defines model for WorkOrTokenID.
 type WorkOrTokenID = string
 
+// WorkerSessionID defines model for WorkerSessionID.
+type WorkerSessionID = string
+
 // BadRequest defines model for BadRequest.
 type BadRequest = ErrorResponse
 
@@ -7548,6 +8063,12 @@ type SaveCurrentFactoryBadRequest = ErrorResponse
 
 // SaveCurrentFactoryConflict defines model for SaveCurrentFactoryConflict.
 type SaveCurrentFactoryConflict = ErrorResponse
+
+// WorkerSessionStartConflict defines model for WorkerSessionStartConflict.
+type WorkerSessionStartConflict = ErrorResponse
+
+// WorkerSessionStartUnavailable defines model for WorkerSessionStartUnavailable.
+type WorkerSessionStartUnavailable = ErrorResponse
 
 // ListFactorySessionsParams defines parameters for ListFactorySessions.
 type ListFactorySessionsParams struct {
@@ -7693,6 +8214,12 @@ type ReadWorkerSessionTranscriptBySessionIdParams struct {
 	Id string `form:"id" json:"id"`
 }
 
+// StreamWorkerSessionEventsByWorkerSessionIdParams defines parameters for StreamWorkerSessionEventsByWorkerSessionId.
+type StreamWorkerSessionEventsByWorkerSessionIdParams struct {
+	// ReplayOnly Drain the retained history through a captured Events head without registering a live follower.
+	ReplayOnly *bool `form:"replayOnly,omitempty" json:"replayOnly,omitempty"`
+}
+
 // GetProviderSessionDetailsParams defines parameters for GetProviderSessionDetails.
 type GetProviderSessionDetailsParams struct {
 	// Provider Provider that emitted the session identifier. Only codex sessions are currently loadable.
@@ -7764,6 +8291,9 @@ type ValidateFactoryJSONRequestBody = Factory
 
 // InvokeModelJSONRequestBody defines body for InvokeModel for application/json ContentType.
 type InvokeModelJSONRequestBody = ModelInvocationRequest
+
+// StartWorkerSessionJSONRequestBody defines body for StartWorkerSession for application/json ContentType.
+type StartWorkerSessionJSONRequestBody = WorkerSessionStartRequest
 
 // Getter for additional properties for FactorySessionEffectivePolicy. Returns the specified
 // element and whether it was found
@@ -9782,6 +10312,680 @@ func (t *FactorySessionGetResponse) UnmarshalJSON(b []byte) error {
 	return err
 }
 
+// AsProviderACPSupport0 returns the union data inside the ProviderACPSupport as a ProviderACPSupport0
+func (t ProviderACPSupport) AsProviderACPSupport0() (ProviderACPSupport0, error) {
+	var body ProviderACPSupport0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromProviderACPSupport0 overwrites any union data inside the ProviderACPSupport as the provided ProviderACPSupport0
+func (t *ProviderACPSupport) FromProviderACPSupport0(v ProviderACPSupport0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeProviderACPSupport0 performs a merge with any union data inside the ProviderACPSupport, using the provided ProviderACPSupport0
+func (t *ProviderACPSupport) MergeProviderACPSupport0(v ProviderACPSupport0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsProviderACPSupport1 returns the union data inside the ProviderACPSupport as a ProviderACPSupport1
+func (t ProviderACPSupport) AsProviderACPSupport1() (ProviderACPSupport1, error) {
+	var body ProviderACPSupport1
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromProviderACPSupport1 overwrites any union data inside the ProviderACPSupport as the provided ProviderACPSupport1
+func (t *ProviderACPSupport) FromProviderACPSupport1(v ProviderACPSupport1) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeProviderACPSupport1 performs a merge with any union data inside the ProviderACPSupport, using the provided ProviderACPSupport1
+func (t *ProviderACPSupport) MergeProviderACPSupport1(v ProviderACPSupport1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t ProviderACPSupport) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	if err != nil {
+		return nil, err
+	}
+	object := make(map[string]json.RawMessage)
+	if t.union != nil {
+		err = json.Unmarshal(b, &object)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if t.Condition != nil {
+		object["condition"], err = json.Marshal(t.Condition)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'condition': %w", err)
+		}
+	}
+
+	if t.EvidenceRefs != nil {
+		object["evidenceRefs"], err = json.Marshal(t.EvidenceRefs)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'evidenceRefs': %w", err)
+		}
+	}
+
+	if t.ProtocolVersion != nil {
+		object["protocolVersion"], err = json.Marshal(t.ProtocolVersion)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'protocolVersion': %w", err)
+		}
+	}
+
+	if t.ResourceDelivery != nil {
+		object["resourceDelivery"], err = json.Marshal(t.ResourceDelivery)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'resourceDelivery': %w", err)
+		}
+	}
+
+	object["support"], err = json.Marshal(t.Support)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'support': %w", err)
+	}
+
+	b, err = json.Marshal(object)
+	return b, err
+}
+
+func (t *ProviderACPSupport) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	if err != nil {
+		return err
+	}
+	object := make(map[string]json.RawMessage)
+	err = json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["condition"]; found {
+		err = json.Unmarshal(raw, &t.Condition)
+		if err != nil {
+			return fmt.Errorf("error reading 'condition': %w", err)
+		}
+	}
+
+	if raw, found := object["evidenceRefs"]; found {
+		err = json.Unmarshal(raw, &t.EvidenceRefs)
+		if err != nil {
+			return fmt.Errorf("error reading 'evidenceRefs': %w", err)
+		}
+	}
+
+	if raw, found := object["protocolVersion"]; found {
+		err = json.Unmarshal(raw, &t.ProtocolVersion)
+		if err != nil {
+			return fmt.Errorf("error reading 'protocolVersion': %w", err)
+		}
+	}
+
+	if raw, found := object["resourceDelivery"]; found {
+		err = json.Unmarshal(raw, &t.ResourceDelivery)
+		if err != nil {
+			return fmt.Errorf("error reading 'resourceDelivery': %w", err)
+		}
+	}
+
+	if raw, found := object["support"]; found {
+		err = json.Unmarshal(raw, &t.Support)
+		if err != nil {
+			return fmt.Errorf("error reading 'support': %w", err)
+		}
+	}
+
+	return err
+}
+
+// AsProviderModality0 returns the union data inside the ProviderModality as a ProviderModality0
+func (t ProviderModality) AsProviderModality0() (ProviderModality0, error) {
+	var body ProviderModality0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromProviderModality0 overwrites any union data inside the ProviderModality as the provided ProviderModality0
+func (t *ProviderModality) FromProviderModality0(v ProviderModality0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeProviderModality0 performs a merge with any union data inside the ProviderModality, using the provided ProviderModality0
+func (t *ProviderModality) MergeProviderModality0(v ProviderModality0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsProviderModality1 returns the union data inside the ProviderModality as a ProviderModality1
+func (t ProviderModality) AsProviderModality1() (ProviderModality1, error) {
+	var body ProviderModality1
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromProviderModality1 overwrites any union data inside the ProviderModality as the provided ProviderModality1
+func (t *ProviderModality) FromProviderModality1(v ProviderModality1) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeProviderModality1 performs a merge with any union data inside the ProviderModality, using the provided ProviderModality1
+func (t *ProviderModality) MergeProviderModality1(v ProviderModality1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t ProviderModality) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	if err != nil {
+		return nil, err
+	}
+	object := make(map[string]json.RawMessage)
+	if t.union != nil {
+		err = json.Unmarshal(b, &object)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if t.Condition != nil {
+		object["condition"], err = json.Marshal(t.Condition)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'condition': %w", err)
+		}
+	}
+
+	object["direction"], err = json.Marshal(t.Direction)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'direction': %w", err)
+	}
+
+	if t.EvidenceRefs != nil {
+		object["evidenceRefs"], err = json.Marshal(t.EvidenceRefs)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'evidenceRefs': %w", err)
+		}
+	}
+
+	if t.MediaConstraints != nil {
+		object["mediaConstraints"], err = json.Marshal(t.MediaConstraints)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'mediaConstraints': %w", err)
+		}
+	}
+
+	object["modality"], err = json.Marshal(t.Modality)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'modality': %w", err)
+	}
+
+	object["support"], err = json.Marshal(t.Support)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'support': %w", err)
+	}
+
+	object["transport"], err = json.Marshal(t.Transport)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'transport': %w", err)
+	}
+
+	b, err = json.Marshal(object)
+	return b, err
+}
+
+func (t *ProviderModality) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	if err != nil {
+		return err
+	}
+	object := make(map[string]json.RawMessage)
+	err = json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["condition"]; found {
+		err = json.Unmarshal(raw, &t.Condition)
+		if err != nil {
+			return fmt.Errorf("error reading 'condition': %w", err)
+		}
+	}
+
+	if raw, found := object["direction"]; found {
+		err = json.Unmarshal(raw, &t.Direction)
+		if err != nil {
+			return fmt.Errorf("error reading 'direction': %w", err)
+		}
+	}
+
+	if raw, found := object["evidenceRefs"]; found {
+		err = json.Unmarshal(raw, &t.EvidenceRefs)
+		if err != nil {
+			return fmt.Errorf("error reading 'evidenceRefs': %w", err)
+		}
+	}
+
+	if raw, found := object["mediaConstraints"]; found {
+		err = json.Unmarshal(raw, &t.MediaConstraints)
+		if err != nil {
+			return fmt.Errorf("error reading 'mediaConstraints': %w", err)
+		}
+	}
+
+	if raw, found := object["modality"]; found {
+		err = json.Unmarshal(raw, &t.Modality)
+		if err != nil {
+			return fmt.Errorf("error reading 'modality': %w", err)
+		}
+	}
+
+	if raw, found := object["support"]; found {
+		err = json.Unmarshal(raw, &t.Support)
+		if err != nil {
+			return fmt.Errorf("error reading 'support': %w", err)
+		}
+	}
+
+	if raw, found := object["transport"]; found {
+		err = json.Unmarshal(raw, &t.Transport)
+		if err != nil {
+			return fmt.Errorf("error reading 'transport': %w", err)
+		}
+	}
+
+	return err
+}
+
+// AsProviderTool0 returns the union data inside the ProviderTool as a ProviderTool0
+func (t ProviderTool) AsProviderTool0() (ProviderTool0, error) {
+	var body ProviderTool0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromProviderTool0 overwrites any union data inside the ProviderTool as the provided ProviderTool0
+func (t *ProviderTool) FromProviderTool0(v ProviderTool0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeProviderTool0 performs a merge with any union data inside the ProviderTool, using the provided ProviderTool0
+func (t *ProviderTool) MergeProviderTool0(v ProviderTool0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsProviderTool1 returns the union data inside the ProviderTool as a ProviderTool1
+func (t ProviderTool) AsProviderTool1() (ProviderTool1, error) {
+	var body ProviderTool1
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromProviderTool1 overwrites any union data inside the ProviderTool as the provided ProviderTool1
+func (t *ProviderTool) FromProviderTool1(v ProviderTool1) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeProviderTool1 performs a merge with any union data inside the ProviderTool, using the provided ProviderTool1
+func (t *ProviderTool) MergeProviderTool1(v ProviderTool1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t ProviderTool) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	if err != nil {
+		return nil, err
+	}
+	object := make(map[string]json.RawMessage)
+	if t.union != nil {
+		err = json.Unmarshal(b, &object)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if t.Availability != nil {
+		object["availability"], err = json.Marshal(t.Availability)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'availability': %w", err)
+		}
+	}
+
+	if t.Condition != nil {
+		object["condition"], err = json.Marshal(t.Condition)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'condition': %w", err)
+		}
+	}
+
+	if t.DefaultEnabled != nil {
+		object["defaultEnabled"], err = json.Marshal(t.DefaultEnabled)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'defaultEnabled': %w", err)
+		}
+	}
+
+	object["description"], err = json.Marshal(t.Description)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'description': %w", err)
+	}
+
+	if t.EvidenceRefs != nil {
+		object["evidenceRefs"], err = json.Marshal(t.EvidenceRefs)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'evidenceRefs': %w", err)
+		}
+	}
+
+	object["name"], err = json.Marshal(t.Name)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'name': %w", err)
+	}
+
+	if t.OutputModalities != nil {
+		object["outputModalities"], err = json.Marshal(t.OutputModalities)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'outputModalities': %w", err)
+		}
+	}
+
+	object["support"], err = json.Marshal(t.Support)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'support': %w", err)
+	}
+
+	b, err = json.Marshal(object)
+	return b, err
+}
+
+func (t *ProviderTool) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	if err != nil {
+		return err
+	}
+	object := make(map[string]json.RawMessage)
+	err = json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["availability"]; found {
+		err = json.Unmarshal(raw, &t.Availability)
+		if err != nil {
+			return fmt.Errorf("error reading 'availability': %w", err)
+		}
+	}
+
+	if raw, found := object["condition"]; found {
+		err = json.Unmarshal(raw, &t.Condition)
+		if err != nil {
+			return fmt.Errorf("error reading 'condition': %w", err)
+		}
+	}
+
+	if raw, found := object["defaultEnabled"]; found {
+		err = json.Unmarshal(raw, &t.DefaultEnabled)
+		if err != nil {
+			return fmt.Errorf("error reading 'defaultEnabled': %w", err)
+		}
+	}
+
+	if raw, found := object["description"]; found {
+		err = json.Unmarshal(raw, &t.Description)
+		if err != nil {
+			return fmt.Errorf("error reading 'description': %w", err)
+		}
+	}
+
+	if raw, found := object["evidenceRefs"]; found {
+		err = json.Unmarshal(raw, &t.EvidenceRefs)
+		if err != nil {
+			return fmt.Errorf("error reading 'evidenceRefs': %w", err)
+		}
+	}
+
+	if raw, found := object["name"]; found {
+		err = json.Unmarshal(raw, &t.Name)
+		if err != nil {
+			return fmt.Errorf("error reading 'name': %w", err)
+		}
+	}
+
+	if raw, found := object["outputModalities"]; found {
+		err = json.Unmarshal(raw, &t.OutputModalities)
+		if err != nil {
+			return fmt.Errorf("error reading 'outputModalities': %w", err)
+		}
+	}
+
+	if raw, found := object["support"]; found {
+		err = json.Unmarshal(raw, &t.Support)
+		if err != nil {
+			return fmt.Errorf("error reading 'support': %w", err)
+		}
+	}
+
+	return err
+}
+
+// AsProviderToolOutputModality0 returns the union data inside the ProviderToolOutputModality as a ProviderToolOutputModality0
+func (t ProviderToolOutputModality) AsProviderToolOutputModality0() (ProviderToolOutputModality0, error) {
+	var body ProviderToolOutputModality0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromProviderToolOutputModality0 overwrites any union data inside the ProviderToolOutputModality as the provided ProviderToolOutputModality0
+func (t *ProviderToolOutputModality) FromProviderToolOutputModality0(v ProviderToolOutputModality0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeProviderToolOutputModality0 performs a merge with any union data inside the ProviderToolOutputModality, using the provided ProviderToolOutputModality0
+func (t *ProviderToolOutputModality) MergeProviderToolOutputModality0(v ProviderToolOutputModality0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsProviderToolOutputModality1 returns the union data inside the ProviderToolOutputModality as a ProviderToolOutputModality1
+func (t ProviderToolOutputModality) AsProviderToolOutputModality1() (ProviderToolOutputModality1, error) {
+	var body ProviderToolOutputModality1
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromProviderToolOutputModality1 overwrites any union data inside the ProviderToolOutputModality as the provided ProviderToolOutputModality1
+func (t *ProviderToolOutputModality) FromProviderToolOutputModality1(v ProviderToolOutputModality1) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeProviderToolOutputModality1 performs a merge with any union data inside the ProviderToolOutputModality, using the provided ProviderToolOutputModality1
+func (t *ProviderToolOutputModality) MergeProviderToolOutputModality1(v ProviderToolOutputModality1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t ProviderToolOutputModality) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	if err != nil {
+		return nil, err
+	}
+	object := make(map[string]json.RawMessage)
+	if t.union != nil {
+		err = json.Unmarshal(b, &object)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if t.Condition != nil {
+		object["condition"], err = json.Marshal(t.Condition)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'condition': %w", err)
+		}
+	}
+
+	if t.EvidenceRefs != nil {
+		object["evidenceRefs"], err = json.Marshal(t.EvidenceRefs)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'evidenceRefs': %w", err)
+		}
+	}
+
+	if t.MediaConstraints != nil {
+		object["mediaConstraints"], err = json.Marshal(t.MediaConstraints)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'mediaConstraints': %w", err)
+		}
+	}
+
+	object["modality"], err = json.Marshal(t.Modality)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'modality': %w", err)
+	}
+
+	object["support"], err = json.Marshal(t.Support)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'support': %w", err)
+	}
+
+	object["transport"], err = json.Marshal(t.Transport)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'transport': %w", err)
+	}
+
+	b, err = json.Marshal(object)
+	return b, err
+}
+
+func (t *ProviderToolOutputModality) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	if err != nil {
+		return err
+	}
+	object := make(map[string]json.RawMessage)
+	err = json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["condition"]; found {
+		err = json.Unmarshal(raw, &t.Condition)
+		if err != nil {
+			return fmt.Errorf("error reading 'condition': %w", err)
+		}
+	}
+
+	if raw, found := object["evidenceRefs"]; found {
+		err = json.Unmarshal(raw, &t.EvidenceRefs)
+		if err != nil {
+			return fmt.Errorf("error reading 'evidenceRefs': %w", err)
+		}
+	}
+
+	if raw, found := object["mediaConstraints"]; found {
+		err = json.Unmarshal(raw, &t.MediaConstraints)
+		if err != nil {
+			return fmt.Errorf("error reading 'mediaConstraints': %w", err)
+		}
+	}
+
+	if raw, found := object["modality"]; found {
+		err = json.Unmarshal(raw, &t.Modality)
+		if err != nil {
+			return fmt.Errorf("error reading 'modality': %w", err)
+		}
+	}
+
+	if raw, found := object["support"]; found {
+		err = json.Unmarshal(raw, &t.Support)
+		if err != nil {
+			return fmt.Errorf("error reading 'support': %w", err)
+		}
+	}
+
+	if raw, found := object["transport"]; found {
+		err = json.Unmarshal(raw, &t.Transport)
+		if err != nil {
+			return fmt.Errorf("error reading 'transport': %w", err)
+		}
+	}
+
+	return err
+}
+
 // AsSubmitWorkTextItem returns the union data inside the SubmitWorkItem as a SubmitWorkTextItem
 func (t SubmitWorkItem) AsSubmitWorkTextItem() (SubmitWorkTextItem, error) {
 	var body SubmitWorkTextItem
@@ -10246,6 +11450,9 @@ type ServerInterface interface {
 	// Read one finished Worker Session transcript
 	// (GET /factory-sessions/{session_id}/worker-sessions/transcript)
 	ReadWorkerSessionTranscriptBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID, params ReadWorkerSessionTranscriptBySessionIdParams)
+	// Stream retained and live Worker Session events by Worker Session identity
+	// (GET /factory-sessions/{session_id}/worker-sessions/{worker_session_id}/events)
+	StreamWorkerSessionEventsByWorkerSessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID, workerSessionId WorkerSessionID, params StreamWorkerSessionEventsByWorkerSessionIdParams)
 	// Validate factory definition
 	// (POST /factory-validations)
 	ValidateFactory(w http.ResponseWriter, r *http.Request)
@@ -10270,6 +11477,9 @@ type ServerInterface interface {
 	// Get runtime status
 	// (GET /status)
 	GetStatus(w http.ResponseWriter, r *http.Request)
+	// Start one directly resolved Worker Session
+	// (POST /worker-sessions)
+	StartWorkerSession(w http.ResponseWriter, r *http.Request)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -11682,6 +12892,51 @@ func (siw *ServerInterfaceWrapper) ReadWorkerSessionTranscriptBySessionId(w http
 	handler.ServeHTTP(w, r)
 }
 
+// StreamWorkerSessionEventsByWorkerSessionId operation middleware
+func (siw *ServerInterfaceWrapper) StreamWorkerSessionEventsByWorkerSessionId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "session_id" -------------
+	var sessionId SessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "session_id", mux.Vars(r)["session_id"], &sessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "worker_session_id" -------------
+	var workerSessionId WorkerSessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "worker_session_id", mux.Vars(r)["worker_session_id"], &workerSessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "worker_session_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params StreamWorkerSessionEventsByWorkerSessionIdParams
+
+	// ------------- Optional query parameter "replayOnly" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "replayOnly", r.URL.Query(), &params.ReplayOnly)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "replayOnly", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.StreamWorkerSessionEventsByWorkerSessionId(w, r, sessionId, workerSessionId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ValidateFactory operation middleware
 func (siw *ServerInterfaceWrapper) ValidateFactory(w http.ResponseWriter, r *http.Request) {
 
@@ -11868,6 +13123,20 @@ func (siw *ServerInterfaceWrapper) GetStatus(w http.ResponseWriter, r *http.Requ
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetStatus(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// StartWorkerSession operation middleware
+func (siw *ServerInterfaceWrapper) StartWorkerSession(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.StartWorkerSession(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -12070,6 +13339,8 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/worker-sessions/transcript", wrapper.ReadWorkerSessionTranscriptBySessionId).Methods("GET")
 
+	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/worker-sessions/{worker_session_id}/events", wrapper.StreamWorkerSessionEventsByWorkerSessionId).Methods("GET")
+
 	r.HandleFunc(options.BaseURL+"/factory-validations", wrapper.ValidateFactory).Methods("POST")
 
 	r.HandleFunc(options.BaseURL+"/models", wrapper.ListModels).Methods("GET")
@@ -12085,6 +13356,8 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 	r.HandleFunc(options.BaseURL+"/provider-sessions/detail", wrapper.GetProviderSessionDetails).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/status", wrapper.GetStatus).Methods("GET")
+
+	r.HandleFunc(options.BaseURL+"/worker-sessions", wrapper.StartWorkerSession).Methods("POST")
 
 	return r
 }

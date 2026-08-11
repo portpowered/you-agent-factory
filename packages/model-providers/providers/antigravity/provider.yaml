@@ -47,6 +47,79 @@ discovery:
     - kind: workspace
       name: writable-workspace
       description: Execution requires a writable workspace supplied through --add-dir.
+harness:
+  kind: native_cli
+modelCatalogPosture: exact
+harnessRoutes:
+  - direction: input
+    modality: audio
+    support: supported
+    transport: file_path
+    evidenceRefs: [agy-media-fixture]
+  - direction: input
+    modality: image
+    support: conditional
+    condition: AGY can inspect an image file through its workspace route; no native image-token route is declared.
+    transport: file_path
+    evidenceRefs: [agy-media-fixture]
+  - direction: input
+    modality: text
+    support: supported
+    transport: inline
+    evidenceRefs: [agy-docs, agy-conformance]
+  - direction: input
+    modality: video
+    support: supported
+    transport: file_path
+    evidenceRefs: [agy-media-fixture]
+  - direction: output
+    modality: audio
+    support: unknown
+    transport: none
+  - direction: output
+    modality: image
+    support: unknown
+    transport: none
+  - direction: output
+    modality: text
+    support: supported
+    transport: inline
+    evidenceRefs: [agy-conformance]
+  - direction: output
+    modality: video
+    support: unknown
+    transport: none
+evidence:
+  - id: agy-docs
+    kind: primary_documentation
+    verifiedOn: "2026-08-10"
+    url: https://agylabs.github.io/agy-demos/
+    factRefs:
+      - model_catalog
+      - harness/input/text
+      - harness/output/text
+  - id: agy-media-fixture
+    kind: conformance_fixture
+    verifiedOn: "2026-08-10"
+    harnessVersion: 1.1.11
+    factRefs:
+      - harness/input/audio
+      - harness/input/image
+      - harness/input/video
+      - model/claude-opus-4-6-thinking/input/audio
+      - model/claude-opus-4-6-thinking/input/image
+      - model/claude-opus-4-6-thinking/input/video
+  - id: agy-conformance
+    kind: conformance_fixture
+    verifiedOn: "2026-08-10"
+    harnessVersion: 1.1.11
+    factRefs:
+      - harness/input/text
+      - harness/output/text
+      - tool/filesystem
+      - tool/image_generation
+      - tool/image_generation/output/image
+      - tool/shell
 models:
   - id: claude-opus-4-6-thinking
     efforts: &agyEfforts []
@@ -55,34 +128,42 @@ models:
         modality: audio
         support: supported
         transport: file_path
+        evidenceRefs: [agy-media-fixture]
       - direction: input
         modality: image
         support: unsupported
         transport: none
+        evidenceRefs: [agy-media-fixture]
       - direction: input
         modality: text
         support: supported
         transport: inline
+        evidenceRefs: [agy-docs, agy-conformance]
       - direction: input
         modality: video
         support: supported
         transport: file_path
+        evidenceRefs: [agy-media-fixture]
       - direction: output
         modality: audio
         support: unsupported
         transport: none
+        evidenceRefs: [agy-docs]
       - direction: output
         modality: image
         support: unsupported
         transport: none
+        evidenceRefs: [agy-docs]
       - direction: output
         modality: text
         support: supported
         transport: inline
+        evidenceRefs: [agy-conformance]
       - direction: output
         modality: video
         support: unsupported
         transport: none
+        evidenceRefs: [agy-docs]
   - id: claude-sonnet-4-6
     efforts: *agyEfforts
     modalities: *agyModalities
@@ -117,9 +198,26 @@ tools:
   - name: filesystem
     support: supported
     description: Read and modify files in the selected AGY workspace.
+    evidenceRefs: [agy-conformance]
+    availability: built_in
+    defaultEnabled: true
+  - name: image_generation
+    support: supported
+    description: Generate image output through the built-in AGY image-generation tool.
+    evidenceRefs: [agy-conformance]
+    availability: built_in
+    defaultEnabled: true
+    outputModalities:
+      - modality: image
+        support: supported
+        transport: tool_mediated
+        evidenceRefs: [agy-conformance]
   - name: shell
     support: supported
     description: Run bounded shell commands through the AGY tool runner.
+    evidenceRefs: [agy-conformance]
+    availability: built_in
+    defaultEnabled: true
 knownLimits:
   - name: add_dir_workspace
     kind: behavior

@@ -1,7 +1,6 @@
 package climanifest
 
 import (
-	"encoding/json"
 	"fmt"
 
 	"github.com/portpowered/infinite-you/pkg/platform/generatedartifacts"
@@ -24,6 +23,9 @@ func LoadProduction(store generatedartifacts.SourceStore, path string) (Manifest
 	if err := ValidateRootContract(manifest); err != nil {
 		return Manifest{}, fmt.Errorf("validate root contract: %w", err)
 	}
+	if err := ValidatePlacementContract(manifest); err != nil {
+		return Manifest{}, fmt.Errorf("validate placement contract: %w", err)
+	}
 	return manifest, nil
 }
 
@@ -41,7 +43,7 @@ func load(store generatedartifacts.SourceStore, path, label string, requireComma
 		return Manifest{}, fmt.Errorf("read %s CLI command manifest %s: %w", label, path, err)
 	}
 	var manifest Manifest
-	if err := json.Unmarshal(raw, &manifest); err != nil {
+	if err := generatedartifacts.DecodeJSONRejectingDuplicateKeys(raw, &manifest); err != nil {
 		return Manifest{}, fmt.Errorf("decode %s CLI command manifest: %w", label, err)
 	}
 	if manifest.RootPath == "" {

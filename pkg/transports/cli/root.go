@@ -52,13 +52,17 @@ import (
 
 const (
 	defaultMockWorkersConfigPathSentinel = "__agent_factory_default_mock_workers_config__"
+	runListenInputID                     = "you.run.flag.listen"
+	serverListenInputID                  = "you.server.flag.listen"
 )
 
 const cliBinaryName = "you"
 
 type cliGlobalOptions struct {
-	server string
-	json   bool
+	server    string
+	json      bool
+	remote    bool
+	placement climanifest.ExecutionPlacement
 }
 
 type cliOperatorDefaultsOptions struct {
@@ -150,6 +154,7 @@ type CommandOperations struct {
 	ReadWorkerSession                 ReadWorkerSessionOperation
 	StreamWorkerSession               StreamWorkerSessionOperation
 	OpenRunSelection                  runcli.SelectionFactory
+	RemoteInvocation                  runcli.RemoteInvocationOperation
 	ACP                               acpcli.Service
 	ACPServer                         acp.Server
 }
@@ -208,6 +213,7 @@ type CommandFactory struct {
 	ReadWorkerSession      workersessionscli.ReadOperation
 	StreamWorkerSession    workersessionscli.StreamOperation
 	openRunSelection       runcli.SelectionFactory
+	remoteInvocation       runcli.RemoteInvocationOperation
 	acp                    acpcli.Service
 	acpServer              acp.Server
 }
@@ -262,6 +268,7 @@ func NewCommandFactory(operations CommandOperations) CommandFactory {
 		ReadWorkerSession:                 operations.ReadWorkerSession,
 		StreamWorkerSession:               operations.StreamWorkerSession,
 		openRunSelection:                  operations.OpenRunSelection,
+		remoteInvocation:                  operations.RemoteInvocation,
 		acp:                               operations.ACP,
 		acpServer:                         operations.ACPServer,
 	}
@@ -429,6 +436,12 @@ func newMCPCommand(options CommandFactory) (*cobra.Command, error) {
 // pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, globals *cliGlobalOptions, operatorDefaults *cliOperatorDefaultsOptions, policy terminalpolicy.Policy, rootOptions CommandFactory, defaultInvocation bool) error {
 	cfg = applyRunScopedServerMode(cfg)
+	if cfg.ListenExplicit || strings.TrimSpace(cfg.ListenAddress) != "" {
+		cfg.ListenExplicit = true
+		if !defaultInvocation && !cfg.WithServer && !cfg.WithSite {
+			return fmt.Errorf("--listen requires --with-server or --with-site on you run")
+		}
+	}
 	logger, err := policy.BuildLogger(rootOptions.buildTerminalLogger)
 	if err != nil {
 		return err
@@ -438,8 +451,11 @@ func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs 
 	cfg.TerminalPolicy = policy
 	cfg.ExecutionBaseDir = startupcli.WorkingDirectory(cmd.Context())
 
-	if err := resolveRunBindFromServer(cmd, globals.server, &cfg); err != nil {
-		return err
+	if !remotePlacementSelected(globals) {
+		if err := resolveRunBindFromServer(cmd, globals.server, &cfg); err != nil {
+			return err
+		}
+		warnLegacyListenerBinding(cmd, cfg, defaultInvocation, persistentInputWasCLI(cmd, "you.flag.server", "server"))
 	}
 	homeDir, err := resolveProcessHomeDir(rootOptions)
 	if err != nil {
@@ -471,8 +487,6 @@ func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs 
 	cfg.Stdin = cmd.InOrStdin()
 	cfg.StdinIsTTY = func() bool { return startupcli.StdinIsTTY(cmd.Context()) }
 	cfg.OutputIsTTY = startupcli.StdoutIsTTY(cmd.Context())
-	cfg.ProgressOutput = cmd.ErrOrStderr()
-	cfg.ProgressIsTTY = startupcli.StderrIsTTY(cmd.Context())
 	if err := resolveRunFactoryPrompt(cmd, &cfg, promptArgs, rootOptions.prepareInvocationInput); err != nil {
 		runcli.ObserveInvocationRejection(logger, err)
 		return err
@@ -490,6 +504,7 @@ func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs 
 	cfg.TerminalPolicy = runPolicy
 	cfg.Verbose = runPolicy.VerboseEnabled()
 	cfg.SuppressDashboardRendering = runPolicy.Mode() == terminalpolicy.ModeQuiet
+	configureRunProgressOutput(cmd, &cfg, policy)
 	humanTerminal := runPolicy.HumanTerminalWriter(cmd.OutOrStdout())
 	if cleanInvocation || textInvocation {
 		cfg.Output = cmd.OutOrStdout()
@@ -502,10 +517,76 @@ func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs 
 	}
 	cfg.Diagnostics = runPolicy.DiagnosticsWriter(cmd.ErrOrStderr())
 	cfg.JSONOutput = globals.json
+	if remotePlacementSelected(globals) {
+		return runcli.RunRemoteInvocation(
+			cmd.Context(), cfg, globals.server, rootOptions.remoteInvocation,
+		)
+	}
 	if rootOptions.initializer == nil {
 		return errors.New("run service initializer is required")
 	}
 	return delegateRunInitialization(cmd.Context(), cfg, defaultInvocation, rootOptions)
+}
+
+func configureRunProgressOutput(cmd *cobra.Command, cfg *runcli.RunConfig, policy terminalpolicy.Policy) {
+	if cmd == nil || cfg == nil {
+		return
+	}
+	// The effective policy intentionally suppresses operator/dashboard output
+	// for one-shot text invocations while their explicit response stream remains
+	// a customer result. Progress therefore follows the base policy resolved
+	// from the user's explicit quiet/verbose flags, and is always routed to
+	// stderr when that policy permits human terminal output.
+	cfg.ProgressOutput = nil
+	cfg.ProgressIsTTY = false
+	if policy.AllowsHumanTerminalOutput() {
+		cfg.ProgressOutput = cmd.ErrOrStderr()
+		cfg.ProgressIsTTY = startupcli.StderrIsTTY(cmd.Context())
+	}
+}
+
+func remotePlacementSelected(globals *cliGlobalOptions) bool {
+	return globals != nil && (globals.remote || globals.placement == climanifest.ExecutionPlacementRemote)
+}
+
+func handleRunExecutionError(cmd *cobra.Command, resolvedConfig runcli.RunConfig, promptArgs []string, globals *cliGlobalOptions, basePolicy terminalpolicy.Policy, err error, currentFactorySelected bool) error {
+	err = factoryload.MaybeFormatOperatorError(err, resolvedConfig.Dir)
+	err = runcli.MapServerFailure(err)
+	if currentFactorySelected {
+		err = runcli.MapCurrentFactoryFailure(err)
+	}
+	if len(promptArgs) > 0 {
+		err = runcli.MapInvocationFailure(err)
+	}
+	if writeRunIncompleteDrainError(cmd, err) {
+		return err
+	}
+	if runcli.WriteInvocationError(cmd.ErrOrStderr(), err, globals.json) {
+		return err
+	}
+	errorWriter := resolveEffectiveRunPolicy(cmd, resolvedConfig, basePolicy).HumanTerminalWriter(cmd.ErrOrStderr())
+	var ambiguousInputErr *runcli.AmbiguousInvocationInputError
+	if errors.As(err, &ambiguousInputErr) {
+		errorWriter = cmd.ErrOrStderr()
+	}
+	if errorWriter != nil {
+		writeRunHumanError(cmd, errorWriter, err)
+	}
+	return err
+}
+
+func writeRunIncompleteDrainError(cmd *cobra.Command, err error) bool {
+	if clidiag.CentralDiagnosticsEnabled(cmd.Context()) {
+		return false
+	}
+	return runcli.WriteIncompleteDrainError(cmd.ErrOrStderr(), err)
+}
+
+func writeRunHumanError(cmd *cobra.Command, output io.Writer, err error) {
+	if clidiag.CentralDiagnosticsEnabled(cmd.Context()) {
+		return
+	}
+	_, _ = fmt.Fprintln(output, err)
 }
 
 func configureRunEnvironment(cmd *cobra.Command, cfg *runcli.RunConfig, rootOptions CommandFactory, homeDir string) error {
@@ -639,6 +720,20 @@ func persistentFlagValueIfChanged(cmd *cobra.Command, name, value string) string
 	return ""
 }
 
+func persistentInputWasCLI(cmd *cobra.Command, inputID, legacyName string) bool {
+	if cmd == nil {
+		return false
+	}
+	inputs, err := climanifestcobra.ResolvedPersistentInputs(cmd)
+	if err == nil {
+		state, found := inputs.State(inputID)
+		if found {
+			return state.Provenance == resolvedinput.SourceCLIFlag
+		}
+	}
+	return cmd.Root().PersistentFlags().Changed(legacyName)
+}
+
 func resolvedPersistentStringIfCLI(
 	cmd *cobra.Command,
 	inputID string,
@@ -734,6 +829,20 @@ func operatorConfigSourceValue(
 }
 
 func resolveRunBindFromServer(cmd *cobra.Command, server string, cfg *runcli.RunConfig) error {
+	if cfg == nil {
+		return fmt.Errorf("resolve local listener: run config is required")
+	}
+	if cfg.ListenExplicit || strings.TrimSpace(cfg.ListenAddress) != "" {
+		target, err := cliserver.LocalBindTargetFromListen(cfg.ListenAddress)
+		if err != nil {
+			return err
+		}
+		cfg.BindHost = target.Host
+		cfg.Port = target.Port
+		cfg.AutoPort = false
+		cfg.ListenExplicit = true
+		return nil
+	}
 	target, err := cliserver.LocalBindTargetFromServer(server)
 	if err != nil {
 		return err
@@ -742,6 +851,30 @@ func resolveRunBindFromServer(cmd *cobra.Command, server string, cfg *runcli.Run
 	cfg.Port = target.Port
 	cfg.AutoPort = true
 	return nil
+}
+
+func listenerOwner(defaultInvocation bool, cfg runcli.RunConfig) bool {
+	return defaultInvocation || cfg.WithServer || cfg.WithSite
+}
+
+func warnLegacyListenerBinding(cmd *cobra.Command, cfg runcli.RunConfig, defaultInvocation, explicitServer bool) {
+	if !explicitServer || !listenerOwner(defaultInvocation, cfg) {
+		return
+	}
+	if cmd == nil || cmd.ErrOrStderr() == nil {
+		return
+	}
+	if cfg.ListenExplicit {
+		_, _ = fmt.Fprintln(
+			cmd.ErrOrStderr(),
+			"warning: --listen takes precedence over --server for the local listener; use --listen for the listener and reserve --server for the factory API endpoint",
+		)
+		return
+	}
+	_, _ = fmt.Fprintln(
+		cmd.ErrOrStderr(),
+		"warning: --server is deprecated for local listener binding; use --listen <host:port> instead",
+	)
 }
 
 func resolveRunFactorySelection(

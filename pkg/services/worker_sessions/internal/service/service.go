@@ -7,15 +7,19 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
+	"reflect"
 	"slices"
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -66,6 +70,7 @@ type registry struct {
 	publications map[string]*publication
 	supervisions map[string]*supervision
 	observations map[string]*observation
+	startReplays map[string]*startReplay
 	// dispatchOwners is the Worker Sessions-owned reverse lookup from the
 	// currently supervised Workers dispatch to its stable session identity.
 	// Provider progress names dispatches, never Worker Sessions, so this map is
@@ -78,6 +83,20 @@ type registry struct {
 	providerSessions providersessions.Service
 	clock            platformclock.Source
 	logger           logging.Logger
+
+	// lifecycleCtx is owned by the process composition boundary. Request
+	// contexts are never used as the lifetime of an admitted Start. Stop
+	// keeps this context alive until active callbacks have published their
+	// terminal records, then cancels it to release any remaining lifecycle
+	// work.
+	lifecycleCtx    context.Context
+	lifecycleCancel context.CancelFunc
+	stopping        bool
+	activeStarts    int
+	startsDone      chan struct{}
+	stopOnce        sync.Once
+	stopDone        chan struct{}
+	stopErr         error
 }
 
 // Compile-time proof that production registry seals the W1+W2 root contract
@@ -109,17 +128,25 @@ func New(
 	if providerSessions == nil {
 		return nil, ErrMissingProviderSessions
 	}
+	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
+	startsDone := make(chan struct{})
+	close(startsDone)
 	registry := &registry{
 		sessions:         make(map[string]workersessions.Session),
 		publications:     make(map[string]*publication),
 		supervisions:     make(map[string]*supervision),
 		observations:     make(map[string]*observation),
+		startReplays:     make(map[string]*startReplay),
 		dispatchOwners:   make(map[string]string),
 		boundary:         boundary,
 		events:           eventsAppender,
 		clock:            clock,
 		providerSessions: providerSessions,
 		logger:           logging.EnsureLogger(logger),
+		lifecycleCtx:     lifecycleCtx,
+		lifecycleCancel:  lifecycleCancel,
+		startsDone:       startsDone,
+		stopDone:         make(chan struct{}),
 	}
 	if reader, ok := eventsAppender.(EventsReader); ok {
 		registry.eventReader = reader
@@ -128,6 +155,98 @@ func New(
 		registry.retainedReader = reader
 	}
 	return registry, nil
+}
+
+// Start establishes or replays one Worker Session and returns at the exact
+// Workers admission barrier. The request ID is claimed together with the
+// stable session identity before any opening event or Workers handoff. The
+// owner drives the state machine once; concurrent and later replays wait for
+// and return the owner's stored acceptance or pre-admission failure.
+func (r *registry) Start(ctx context.Context, req workersessions.StartRequest) (workersessions.StartResult, error) {
+	callerCtx := ctx
+	if callerCtx == nil {
+		callerCtx = context.Background()
+	}
+	attemptID := req.Execution.Execution.Dispatch.DispatchID
+	if err := req.Validate(); err != nil {
+		r.logger.Info("worker session start rejected", "sessionID", req.ID, "attemptID", attemptID, "outcome", "invalid")
+		return workersessions.StartResult{}, err
+	}
+	req = normalizeStartRequest(req)
+	replay, owner, err := r.reserveStart(req)
+	if err != nil {
+		r.logger.Info("worker session start rejected", "sessionID", req.ID, "attemptID", attemptID, "requestID", req.RequestID, "outcome", startReservationOutcome(err))
+		return workersessions.StartResult{}, err
+	}
+	if !owner {
+		result, replayErr := awaitStartReplay(callerCtx, replay)
+		r.logger.Info("worker session start replay", "sessionID", replay.sessionID, "attemptID", attemptID, "requestID", req.RequestID, "outcome", startReplayOutcome(replayErr))
+		return result, replayErr
+	}
+
+	outcomes := make(chan asyncStartCompletion, 1)
+	go func() {
+		result, startErr := r.startReserved(callerCtx, req)
+		r.finishStartReplay(replay, result, startErr)
+		r.finishStart()
+		outcomes <- asyncStartCompletion{result: result, err: startErr}
+	}()
+	select {
+	case outcome := <-outcomes:
+		return outcome.result, outcome.err
+	case <-callerCtx.Done():
+		select {
+		case outcome := <-outcomes:
+			return outcome.result, outcome.err
+		default:
+		}
+		r.logger.Info("worker session start wait canceled", "sessionID", req.ID, "attemptID", attemptID, "requestID", req.RequestID, "outcome", "caller_canceled")
+		return workersessions.StartResult{}, callerCtx.Err()
+	}
+}
+
+// reserveStart atomically claims the caller request ID and stable session
+// identity. No downstream effect is possible until this method has installed
+// both registry records and returned ownership to the first caller.
+func (r *registry) reserveStart(req workersessions.StartRequest) (*startReplay, bool, error) {
+	tuple := startTupleFor(req)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.startReplays == nil {
+		r.startReplays = make(map[string]*startReplay)
+	}
+	if existing, ok := r.startReplays[req.RequestID]; ok {
+		if !reflect.DeepEqual(existing.tuple, tuple) {
+			return nil, false, workersessions.ErrStartRequestIDConflict
+		}
+		return existing, false, nil
+	}
+	if r.stopping {
+		return nil, false, workersessions.ErrStartServerStopping
+	}
+	if _, exists := r.sessions[req.ID]; exists {
+		return nil, false, workersessions.ErrSessionNotStartable
+	}
+
+	replay := &startReplay{
+		tuple:     tuple,
+		sessionID: req.ID,
+		done:      make(chan struct{}),
+	}
+	if r.startsDone == nil {
+		r.startsDone = make(chan struct{})
+		close(r.startsDone)
+	}
+	if r.activeStarts == 0 {
+		r.startsDone = make(chan struct{})
+	}
+	r.activeStarts++
+	r.sessions[req.ID] = workersessions.Session{ID: req.ID, State: workersessions.StateReserved}
+	r.publications[req.ID] = &publication{}
+	r.startReplays[req.RequestID] = replay
+	r.logger.Info("worker session start", "sessionID", req.ID, "attemptID", req.Execution.Execution.Dispatch.DispatchID, "requestID", req.RequestID, "outcome", "reserved", "state", string(workersessions.StateReserved))
+	return replay, true, nil
 }
 
 func (r *registry) Reserve(_ context.Context, req workersessions.ReserveRequest) (workersessions.Session, error) {
@@ -659,7 +778,7 @@ func (s *replayObservationSubscription) noteTerminalRecord(records []events.Reco
 		return
 	}
 	for _, record := range records {
-		if record.SourceType == lifecycleSourceType && record.SourceSequence >= terminalSourceSequence {
+		if isTerminalLifecycleRecord(record) {
 			s.terminalRecordSeen = true
 			return
 		}
@@ -692,7 +811,7 @@ func cloneEventRecords(records []events.Record) []events.Record {
 
 func observationRecordDelivery(record events.Record, terminalReplay bool) workersessions.ObservationDelivery {
 	event := projectObservationEvent(record)
-	if record.SourceType == lifecycleSourceType && record.SourceSequence >= terminalSourceSequence {
+	if isTerminalLifecycleRecord(record) {
 		kind := workersessions.ObservationDeliveryTerminal
 		if terminalReplay {
 			kind = workersessions.ObservationDeliveryTerminalReplay
@@ -718,4 +837,153 @@ func replayReason(state workersessions.State) string {
 		return "session-active"
 	}
 	return "session-" + strings.ToLower(string(state))
+}
+
+// ReadTranscript returns the final normalized Provider Sessions transcript for
+// one exact Worker Session association. The lifecycle check happens before the
+// provider projection so an active session has a stable active outcome even
+// when its provider source is not yet readable.
+func (r *registry) ReadTranscript(ctx context.Context, req workersessions.ReadTranscriptRequest) (workersessions.ReadTranscriptResult, error) {
+	if err := req.Validate(); err != nil {
+		r.logger.Info("worker session transcript read rejected", "outcome", "invalid")
+		return workersessions.ReadTranscriptResult{}, err
+	}
+	if err := observationContextError(ctx); err != nil {
+		return workersessions.ReadTranscriptResult{}, err
+	}
+
+	session, metadata, err := r.transcriptSession(req.ProviderSession)
+	if err != nil {
+		r.logger.Info("worker session transcript read", "outcome", "not_found")
+		return workersessions.ReadTranscriptResult{}, err
+	}
+	if !session.State.Terminal() {
+		r.logger.Info("worker session transcript read", "workerSessionID", session.ID, "outcome", "active")
+		return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationTranscriptActive
+	}
+	if session.ProviderSessionAssociation == nil {
+		r.logger.Info("worker session transcript read", "workerSessionID", session.ID, "outcome", "unavailable")
+		return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationTranscriptUnavailable
+	}
+	if r.providerSessions == nil {
+		r.logger.Info("worker session transcript read", "workerSessionID", session.ID, "outcome", "projection_unavailable")
+		return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationTranscriptProjectionUnavailable
+	}
+
+	projected, projectErr := r.providerSessions.Project(providersessions.ProjectRequest{
+		Session: req.ProviderSession.Clone(),
+		Context: ctx,
+	})
+	if projectErr != nil {
+		if errors.Is(projectErr, context.Canceled) || errors.Is(projectErr, providersessions.ErrOperationCanceled) {
+			return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationCanceled
+		}
+		if transcriptSourceUnavailable(projectErr) {
+			return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationTranscriptUnavailable
+		}
+		return workersessions.ReadTranscriptResult{}, fmt.Errorf("%w: %v", workersessions.ErrObservationTranscriptProjectionUnavailable, projectErr)
+	}
+
+	result := workersessions.ReadTranscriptResult{
+		WorkerSessionID: session.ID,
+		ProviderSession: req.ProviderSession.Clone(),
+		WorkIDs:         append([]string(nil), metadata.workIDs...),
+		AttemptID:       metadata.attemptID,
+		State:           session.State,
+		Entries:         transcriptEntries(projected.Detail.Transcript),
+	}
+	if session.ProviderSessionAssociation != nil {
+		result.TurnID = session.ProviderSessionAssociation.TurnID
+		result.AttemptID = session.ProviderSessionAssociation.AttemptID
+	}
+	if err := result.Validate(); err != nil {
+		return workersessions.ReadTranscriptResult{}, fmt.Errorf("validate Worker Session transcript: %w", err)
+	}
+	r.logger.Info("worker session transcript read", "workerSessionID", result.WorkerSessionID, "outcome", "success", "result_count", len(result.Entries))
+	return result, nil
+}
+
+func (r *registry) transcriptSession(ref providers.SessionRef) (workersessions.Session, *observation, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	ids := make([]string, 0, 1)
+	for id, session := range r.sessions {
+		if session.ProviderSessionAssociation != nil && session.ProviderSessionAssociation.Reference == ref {
+			ids = append(ids, id)
+		}
+	}
+	if len(ids) == 0 {
+		return workersessions.Session{}, nil, workersessions.ErrObservationSessionNotFound
+	}
+	sortStrings(ids)
+	session := cloneSession(r.sessions[ids[0]])
+	metadata := cloneObservation(r.observations[ids[0]])
+	if metadata == nil {
+		return workersessions.Session{}, nil, workersessions.ErrObservationSessionNotFound
+	}
+	return session, metadata, nil
+}
+
+func transcriptSourceUnavailable(err error) bool {
+	return errors.Is(err, providersessions.ErrSessionNotFound) ||
+		errors.Is(err, providersessions.ErrAmbiguousSessionFile) ||
+		errors.Is(err, providersessions.ErrSessionSourceNotRegularFile) ||
+		errors.Is(err, providersessions.ErrSessionStorageUnavailable) ||
+		errors.Is(err, providersessions.ErrSessionOutsideRoot)
+}
+
+func transcriptEntries(values []providersessions.TranscriptEntry) []workersessions.TranscriptEntry {
+	entries := make([]workersessions.TranscriptEntry, len(values))
+	for index, value := range values {
+		entries[index] = workersessions.TranscriptEntry{
+			Arguments:        cloneTranscriptString(value.Arguments),
+			CallID:           cloneTranscriptString(value.CallID),
+			Encrypted:        cloneTranscriptBool(value.Encrypted),
+			EncryptedContent: cloneTranscriptString(value.EncryptedContent),
+			LineNumber:       cloneTranscriptInt(value.LineNumber),
+			Name:             cloneTranscriptString(value.Name),
+			Order:            value.Order,
+			Output:           cloneTranscriptString(value.Output),
+			SourceType:       cloneTranscriptString(value.SourceType),
+			Status:           cloneTranscriptString(value.Status),
+			Summary:          cloneTranscriptString(value.Summary),
+			Text:             cloneTranscriptString(value.Text),
+			Timestamp:        cloneTranscriptTime(value.Timestamp),
+			TurnIndex:        cloneTranscriptInt(value.TurnIndex),
+			Type:             workersessions.TranscriptEntryType(value.Type),
+		}
+	}
+	return entries
+}
+
+func cloneTranscriptBool(value *bool) *bool {
+	if value == nil {
+		return nil
+	}
+	clone := *value
+	return &clone
+}
+
+func cloneTranscriptInt(value *int) *int {
+	if value == nil {
+		return nil
+	}
+	clone := *value
+	return &clone
+}
+
+func cloneTranscriptString(value *string) *string {
+	if value == nil {
+		return nil
+	}
+	clone := *value
+	return &clone
+}
+
+func cloneTranscriptTime(value *time.Time) *time.Time {
+	if value == nil {
+		return nil
+	}
+	clone := *value
+	return &clone
 }

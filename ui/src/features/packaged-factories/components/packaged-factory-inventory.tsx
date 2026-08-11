@@ -1,15 +1,14 @@
-import { type KeyboardEvent, useId, useRef } from "react";
-
 import { SurfacePanel } from "@you-agent-factory/components/layout";
 import { Heading } from "@you-agent-factory/components/primitives";
+import { type KeyboardEvent, type ReactNode, useId, useRef } from "react";
 import { AlertPanel, AlertPanelText } from "../../../components/ui/alert-panel";
+import { DashboardActionButton } from "../../../components/ui/dashboard-action-button";
 import {
   StandardListSelection,
   StandardListSelectionItem,
 } from "../../../components/ui/standard-list-selection";
 import { useAppLocale } from "../../../i18n";
 import { usePackagedFactoryInventory } from "../hooks/use-packaged-factory-inventory";
-import type { PackagedFactoryPublicDataSource } from "../lib/public-contract";
 import { getPackagedFactoryInventoryMessages } from "../messages/inventory";
 import {
   type PackagedFactoryCopyText,
@@ -19,21 +18,23 @@ import {
 export interface PackagedFactoryInventoryProps {
   readonly copyText?: PackagedFactoryCopyText;
   readonly locale?: string;
-  readonly source: PackagedFactoryPublicDataSource;
 }
 
 function CatalogStatus({
+  action,
   children,
   role = "status",
   tone = "neutral",
 }: {
-  readonly children: string;
+  readonly action?: ReactNode;
+  readonly children: ReactNode;
   readonly role?: "alert" | "status";
   readonly tone?: "danger" | "neutral";
 }) {
   return (
     <AlertPanel className="min-w-0" role={role} tone={tone} variant="empty">
       <AlertPanelText>{children}</AlertPanelText>
+      {action ? <div className="mt-3">{action}</div> : null}
     </AlertPanel>
   );
 }
@@ -74,11 +75,10 @@ function focusRelativeItem(
 export function PackagedFactoryInventory({
   copyText = copyToClipboard,
   locale: localeOverride,
-  source,
 }: PackagedFactoryInventoryProps) {
   const { locale } = useAppLocale(localeOverride);
   const messages = getPackagedFactoryInventoryMessages(locale);
-  const { select, state } = usePackagedFactoryInventory(source, locale);
+  const { retry, select, state } = usePackagedFactoryInventory(locale);
   const detailHeadingID = useId();
   const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
@@ -88,17 +88,18 @@ export function PackagedFactoryInventory({
   if (state.status === "empty") {
     return <CatalogStatus>{messages.empty}</CatalogStatus>;
   }
-  if (state.status === "invalid-contract") {
+  if (state.status === "error") {
     return (
-      <CatalogStatus role="alert" tone="danger">
+      <CatalogStatus
+        action={
+          <DashboardActionButton onClick={retry} type="button">
+            {messages.retry}
+          </DashboardActionButton>
+        }
+        role="alert"
+        tone="danger"
+      >
         {messages.invalidContract}
-      </CatalogStatus>
-    );
-  }
-  if (state.status === "unsupported-version") {
-    return (
-      <CatalogStatus role="alert" tone="danger">
-        {messages.unsupportedVersion(state.formatVersion)}
       </CatalogStatus>
     );
   }
@@ -155,9 +156,7 @@ export function PackagedFactoryInventory({
           </StandardListSelection>
         </nav>
         <SurfacePanel className="min-w-0 lg:col-span-2">
-          {state.selection.status === "loading" ? (
-            <CatalogStatus>{messages.detailLoading}</CatalogStatus>
-          ) : state.selection.status === "error" ? (
+          {state.selection.status === "error" ? (
             <CatalogStatus role="alert" tone="danger">
               {messages.detailError}
             </CatalogStatus>

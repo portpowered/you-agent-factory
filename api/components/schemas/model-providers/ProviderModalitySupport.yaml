@@ -1,5 +1,7 @@
 type: string
-description: Whether the provider model supports the modality in this direction.
+description: Evidence state for a directional harness or model modality fact.
 enum:
   - supported
   - unsupported
+  - conditional
+  - unknown

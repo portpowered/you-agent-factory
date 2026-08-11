@@ -116,6 +116,8 @@ type WorkstationExecutionRequest struct {
 	ExecutorProvider         string                          `json:"executor_provider,omitempty"`
 	ProjectID                string                          `json:"project_id,omitempty"`
 	FactorySessionID         string                          `json:"factory_session_id,omitempty"`
+	RecordingID              string                          `json:"recording_id,omitempty"`
+	Capabilities             *Capabilities                   `json:"capabilities,omitempty"`
 	InputTokens              []any                           `json:"input_tokens,omitempty"`
 	ModelOperation           string                          `json:"model_operation,omitempty"`
 	ModelBindings            []ResolvedModelOperationBinding `json:"model_bindings,omitempty"`
@@ -187,6 +189,10 @@ type SubprocessExecutionRequest = CommandRequest
 func CloneWorkstationExecutionRequest(request WorkstationExecutionRequest) WorkstationExecutionRequest {
 	clone := request
 	clone.Dispatch = work.CloneWorkDispatch(request.Dispatch)
+	if request.Capabilities != nil {
+		capabilities := *request.Capabilities
+		clone.Capabilities = &capabilities
+	}
 	clone.InputTokens = cloneAnySlice(request.InputTokens)
 	clone.ModelBindings = CloneResolvedModelOperationBindings(request.ModelBindings)
 	clone.EnvVars = cloneStringMap(request.EnvVars)
