@@ -2798,5 +2798,23 @@
   - `prd.json` parses with all four stories marked `passes:true`; merge conflict markers are absent.
 - **Learnings for future iterations:**
   - Deletion-only package baselines are ratchets, not capacity budgets; keep them at the exact current-main count and consolidate small additions into an existing focused owner.
-  - During a moving-base merge, keep the active task PRD authoritative and preserve both branches' append-only progress entries before validating the replacement head.
+ - During a moving-base merge, keep the active task PRD authoritative and preserve both branches' append-only progress entries before validating the replacement head.
+ ---
+
+## 2026-08-10 18:37 -07:00 - dwro-s1-remote-placement-flags-002 review follow-up
+- What was implemented
+  - Made `safeRemoteEndpoint` fail closed after parse-success/base-invalid endpoint inputs by validating the credential-stripped value through the shared HTTP(S) server-base resolver.
+  - Added redaction coverage for opaque HTTPS, unsupported-scheme, malformed, and malformed-userinfo endpoint values.
+- Files changed
+  - `pkg/transports/cli/run/invocation_error.go`
+  - `pkg/transports/cli/run/run_invocation_output_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/transports/cli/run -count=1` — passed.
+  - `make pkg-maint pkg-file-count backend-size pkg-structure vet` — passed.
+  - `make test` — passed.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - Redacting URL userinfo is not sufficient: parse-success values can still carry sensitive text in opaque or otherwise invalid URL components, so diagnostic labels must be produced only after shared server-base validation and normalization.
 ---
