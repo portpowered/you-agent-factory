@@ -8308,3 +8308,20 @@
 - **Learnings for future iterations:**
   - Fetch `origin/main` immediately before each final push because a moving base can invalidate a green replacement head; resolve shared PRD/progress files before starting the next CI gate.
 ---
+## 2026-08-11 00:34:30 -07:00 - ui-packaged-factories-decoupling final PR handoff audit
+- What was implemented
+  - Audited PR #1873's only blocking conversation comment against the replacement head: the 122-line backend-size test was split, live `origin/main` is included, and no unresolved review threads remain.
+  - Confirmed all three PRD stories remain marked `passes:true`; no additional product or generated-contract changes were needed.
+  - Refreshed the PRD review metadata for the mergeable, non-draft replacement head.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `prd.json` parses and all three story pass flags are true.
+  - Live `origin/main` `3a0b571b2` is an ancestor of HEAD `37142ba1a`.
+  - PR #1873 is open, non-draft, mergeable, and all 18 reported checks are terminal-success.
+  - Thread-aware PR audit found one historical conversation comment and zero review threads; its requested test split/base synchronization are present on the current head.
+  - The PR body matched the pre-update `prd.json` byte-for-byte before this metadata refresh.
+- **Learnings for future iterations:**
+  - A prior blocking conversation comment can be treated as addressed only after the requested diff is present, the live base is an ancestor, and the replacement-head checks are terminal-success; verify all three together before final handoff.
+---
