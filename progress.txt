@@ -504,3 +504,19 @@
   - After current-main reconciliation, isolate and rerun a named functional test failure before changing unrelated product behavior; this distinguishes shared-suite contention from a task regression.
   - A metadata-only final handoff commit still retriggers hosted verification, so the latest head must be checked again after synchronizing the PR body.
 ---
+## [2026-08-11 07:36 -07:00] - thr-deflake-cli-process-package current-main reconciliation
+- What was implemented
+  - Reconciled PR #1884 with the newer `upstream/main` at `635a43870ebc1e72a3c9ded2a2713df2fe8f8ec7` after GitHub reported the previous replacement head as conflicting again.
+  - Preserved the CLI-process `prd.json` as authoritative and rebuilt `progress.txt` from the complete current-main history plus all nine CLI-process entries and the union of reusable Codebase Patterns.
+  - Committed the conflict-resolved merge as `e4d169c43`; unrelated current-main dashboard changes were retained in the merge tree.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+  - current-main dashboard files brought in by the merge
+- Verification
+  - `prd.json` parses and all three CLI-process stories remain `passes: true`.
+  - The merge had conflicts only in `prd.json` and `progress.txt`; no conflict markers remain and `git diff --check` passes.
+  - The prior hosted run reported success while one packaged-factories job record remained API-visible as `in_progress`; fresh hosted verification is required for the new merge head.
+- **Learnings for future iterations:**
+  - When main advances through a large bookkeeping-heavy merge, use current main's progress as the base, append the active task's dated sections, keep the active task PRD authoritative, and rerun hosted verification on the replacement ancestry.
+---
