@@ -52,6 +52,7 @@
 - Root-built functional Worker tests can make mock script execution deterministic by injecting the same gated command runner into both provider and script command edges; the mock-worker mode may route a model-backed workstation through either edge.
 - When rebasing generated contract artifacts, resolve content-addressed manifest entries from the merged artifact bytes and rerun the canonical generator before drift checks.
 - When one request is translated through multiple execution compositions, assert the final provider-boundary request with true, false, and omitted cases; intermediate normalized structs can hide a dropped field.
+- Static maximum capability is not enough for request-sensitive provider support; execute request-time negotiation immediately before Invoke and map a typed missing-required capability to the stable public mismatch diagnostic.
 - Child-scoped permission overrides should be shape-validated first and applied only at the sandbox/approval policy boundary; routing, allowlists, budgets, and sibling state must remain on the shared validation path.
 - Functional capability-failure evidence can target an existing registered provider through an Edges catalog capability override while retaining the real provider adapter and command-runner effect; do not substitute an unknown provider or custom in-process integration.
 - OS-boundary functional tests may poll an isolated durable filesystem checkpoint only when the child exposes no parent-process event or injected edge; document that reason at each polling helper and keep the bound as a failure guard.
@@ -218,6 +219,36 @@
 - JavaScript packaged Factories that parse planner or judge output need protocol-valid provider-command evidence; the CLI `--with-mock-workers` path returns generic text for those child calls, so use focused provider-runner assertions plus a provider-free schema-bound CLI smoke and document the distinction.
 - Workstation prompt templates receive `PromptData`; access a bound work identifier through `(index .Inputs N).WorkID` rather than a root `.WorkID` field.
 - Prompt templates should clone native structured-result trees at the `TokenData` boundary and guard optional-result references before execution so absent upstream handoffs cannot silently fall back to payload text.
+
+## [2026-08-11 06:32:26 -07:00] - js-skip-permissions-parity-003 negotiated capability review follow-up
+- What was implemented
+  - Enforced request-time capability negotiation immediately before provider invocation on both the neutral conductor path and the external provider registration path.
+  - Added a typed registry error for a negotiated set that omits a request-required capability; the conductor maps it to the existing stable `capability_mismatch` diagnostic, while external registrations perform bounded maximum/negotiated/required validation before `Invoke`.
+  - Added regressions proving an advertised maximum with a request-sensitive omission of `permission_bypass` fails before integration invocation, with exactly one negotiation call and zero invocation calls on both root/execution compositions.
+- Files changed
+  - `pkg/services/providers/internal/services/execution/internal/provider/conductor/conductor.go`
+  - `pkg/services/providers/internal/services/execution/internal/provider/conductor/preflight_test.go`
+  - `pkg/services/providers/internal/services/execution/internal/provider/registry/operations.go`
+  - `pkg/services/providers/root_catalog_delegation_test.go`
+  - `pkg/services/providers/wire/capability_negotiation.go`
+  - `pkg/services/providers/wire/registration_contract_test.go`
+  - `pkg/services/providers/wire/wire.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/providers/internal/services/execution/internal/provider/conductor -count=1 -timeout 120s` — passed.
+  - `go test ./pkg/services/providers/internal/services/execution/internal/provider/registry -count=1 -timeout 120s` — passed.
+  - `go test ./pkg/services/providers/wire ./pkg/services/providers -count=1 -timeout 180s` — passed.
+  - `go test ./pkg/services/providers/... -count=1 -timeout 240s` — passed.
+  - `go test ./pkg/root ./pkg/wire ./pkg/services/edges -count=1 -timeout 240s` — passed.
+  - `go test ./tests/functional/providers/permission -count=1 -timeout 240s` — passed.
+  - `make test` — passed.
+  - `make typecheck`, `make backend-size`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, and `make vet` — passed.
+  - `make lint` completed all task-relevant checks; it reports only the three existing current-main baseline failures in `pkg-boundary`, `packaged-factory-consumption-check`, and `deadcode`, with no changed provider file implicated. `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - Static manifest maxima and request-time negotiated capabilities are separate truth surfaces; execution must re-negotiate before `Invoke` even when preflight accepted the request.
+  - Preserve the provider name and missing capability in the bounded mismatch error, but never forward a provider negotiation error or returned capability payload as a customer diagnostic.
+---
 - Run-level `--quiet` cannot be combined with structured `--json` or `--output`; verify output-mode combinations against the live CLI before documenting them.
 - For direct named packaged Factory invocations, bind inputs in authored workstation bodies with `${parameter}` interpolation; `.Inputs` payload can be empty even when the named CLI argument is present.
 - Multi-input packaged Factories must give required parameters non-ambiguous invocation bindings; the ACP reachability guard requires each required parameter to expose a text-carrying route, while authored validation rejects routing stdin to multiple parameters.
