@@ -6904,3 +6904,18 @@
   - When a PR is blocked by a moving base and shared bookkeeping conflicts, merge the live base first, keep the task PRD authoritative, union append-only progress histories, and make any impossible historical acceptance criterion explicit in the authoritative PRD rather than hiding the exception in a story note.
   - The PR body must be refreshed from the resolved checked-in `prd.json` after any criterion reconciliation, then hosted checks and thread state must be re-audited on the new head.
 ---
+## 2026-08-10 21:56 -07:00 - pp-merge-context-bug CI flake follow-up
+- What was implemented
+  - Made no product or test-code changes; investigated the initial hosted `Backend Functional Coverage` failure after the conflict-resolution push.
+  - Isolated the exact failing test, `TestFunctionalAPIServer_RuntimeLogDirectoryIsAProcessInput`, which failed because its runtime log did not yet contain `factory started`; the plan-parallel package and remaining functional package inventory passed.
+  - Reran that exact test 10 consecutive times locally; all ten passed.
+  - Reran only the failed hosted jobs from workflow run `31459255828`; the backend functional lane and downstream Verification Policy both passed.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Local isolation: `go test ./tests/functional/runtime_api -run '^TestFunctionalAPIServer_RuntimeLogDirectoryIsAProcessInput$' -count=10 -v -timeout 600s` — passed 10/10.
+  - Hosted rerun on head `b57b8c823`: Backend Functional Coverage passed in 5m8s; Verification Policy passed; all reported checks are terminal and successful.
+  - No source change was made because the isolated evidence identifies an unrelated transient runtime-log observation failure.
+- **Learnings for future iterations:**
+  - For a broad functional-coverage failure with one named runtime-log assertion, inspect the diagnostic artifact and timing summary, isolate the exact test repeatedly, and rerun only the failed jobs before touching unrelated product code.
+---
