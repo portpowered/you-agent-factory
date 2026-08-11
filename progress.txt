@@ -2,6 +2,7 @@
 - Provider OpenAPI changes that feed the published model-provider package require `make interfaces-all`, `make provider-catalog-generate`, and `make model-provider-package-generate`; `api-smoke` checks generated REST artifacts against the committed tree, so commit generated output before relying on that smoke result.
 - Provider evidence dates authored in YAML must be quoted ISO strings because yaml.v3 otherwise decodes calendar-looking values as `time.Time` before semantic validation.
 - For final PR handoff, compare the PR body byte-for-byte with `prd.json` and use the thread-aware GraphQL review audit because flat PR comments do not expose inline-thread resolution state.
+- Backward-compatible provider projections should accept additive conditional and unknown capability facts but omit them from legacy two-state fields; never infer supported or unsupported claims.
 - OS-boundary functional tests may poll an isolated durable filesystem checkpoint only when the child exposes no parent-process event or injected edge; document that reason at each polling helper and keep the bound as a failure guard.
 - Git Worktree preparation treats a retained Git `*.lock` as indeterminate ownership: retry within a named bound, preserve the resource, and return its exact path with verify/remove/retry guidance.
 - Git's `.git/config.lock` has no trustworthy owner or PID evidence; after a bounded retry, report the exact lock with `owner_liveness=indeterminate` and require verification before removing only that file—never auto-delete it.
@@ -4042,4 +4043,28 @@
 - **Learnings for future iterations:**
   - The existing provider projection accepts the established supported/unsupported tool states; keep additive conditional and unknown route facts in the published manifest without changing that projection boundary until the dedicated discovery-parity story updates its public contract.
   - Quote ISO evidence dates in authored YAML so yaml.v3 keeps them as strings for calendar-date validation.
+---
+## [2026-08-10 21:55 -07:00] - provider-capability-contract-003
+- What was implemented
+  - Preserved discovery parity while accepting the additive capability vocabulary: conditional and unknown routes/tools are validated but omitted from the legacy two-state projection instead of being downgraded into false claims.
+  - Added observable provider projection, CLI output, generated-schema/declaration, and representative contract-fixture coverage for deterministic ordering, identity, models, efforts, limits, prerequisites, execution capabilities, response fidelity, nullability, evidence references, and additive metadata.
+  - Confirmed static provider discovery remains offline and inert through the root-build functional test.
+- Files changed
+  - `pkg/services/providers/internal/services/catalog/internal/service/projection.go`
+  - `pkg/services/providers/internal/services/catalog/internal/service/projection_test.go`
+  - `pkg/services/providers/internal/services/catalog/internal/service/service_test.go`
+  - `pkg/services/providers/transports/cli/list_capability_output_test.go`
+  - `scripts/model-provider-package.test.mjs`
+  - `api/testdata/provider-catalog-contract.json`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `make interfaces-all`, `make provider-catalog-generate`, and `make model-provider-package-generate` — passed with no generated diff.
+  - `make provider-catalog-check`, `make model-provider-package-check`, `make contracts-check`, `make typecheck`, and `make api-smoke` — passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` and `make test` — passed.
+  - Focused provider/catalog/CLI/package/contract tests and `go test ./tests/functional/providers/discovery/... -run '^TestProvidersListThroughRootBuildProcess$' -count=1` — passed.
+  - `git diff --check` and clean generated-state checks — passed.
+- **Learnings for future iterations:**
+  - When a richer provider manifest is consumed by a legacy projection, preserve the richer facts at the contract boundary and make the projection conservative; additive unknowns must not become legacy assertions.
+  - Run generation and drift checks serially in a shared worktree when repository-wide Go builds are competing for resources; parallel lanes can time out without indicating a code failure.
 ---

@@ -67,8 +67,8 @@
         "Tests pass"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Preserved generated and discovery parity for the additive manifest contract. Legacy provider projections accept conditional and unknown capability facts without inventing supported/unsupported claims; generated catalog and package tests cover authored enums, required fields, nullability, evidence references, deterministic ordering, identity, models, efforts, limits, prerequisites, execution capabilities, response fidelity, additive metadata, and inert static discovery. Verification passed from a clean generated state: make interfaces-all, make provider-catalog-generate, make model-provider-package-generate, make provider-catalog-check, make model-provider-package-check, make contracts-check, make typecheck, make api-smoke, make backend-size pkg-maint pkg-file-count pkg-structure vet, make test, the focused provider/catalog/CLI/package/contract tests, and the offline discovery test."
     }
   ]
 }
