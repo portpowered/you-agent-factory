@@ -49,6 +49,7 @@
 - When synchronizing a task branch with current main, preserve the active branch's task-scoped `prd.json` and merge unrelated main history into `progress.txt`; validate the resulting PRD before staging.
 - When a termination drain consumes a runtime wake signal, the engine must re-enter its tick loop directly; returning to the outer wait loses the already-consumed wake and can strand a finite run.
 - Customer-facing functional tests must compose through `root.BuildProcess` and assert public process/CLI behavior; keep service-specific typed-error assertions in service-layer tests because the functional boundary check rejects direct Runtime imports.
+- Functional CLI scenarios outside feature-owned workers/mock cells must replace provider execution through `serviceedges.Edges.ProviderCommandRunner`; use protocol-valid shaped Codex responses for packaged decision-envelope workflows.
 - Repository-wide `pkg-boundary` traversals must prune through one root-relative, slash-normalized policy before parsing entries; adding a new `WalkDir` requires using that same decision.
 - Treat disposable artifact/worktree paths as exact repository roots, not directory-name substrings, so tracked production packages with nested artifact-like names remain visible to the gate.
 - Canonical packaged CLI docs live under `docs/reference/`; adding a topic also requires its authored file in `docs/reference/embed.go` and a registry entry in `pkg/transports/cli/docs/docs.go`.
@@ -8173,4 +8174,22 @@
   - `prd.json` parses with all nine stories marked `passes:true`; conflict-marker and whitespace checks passed.
 - **Learnings for future iterations:**
   - A replacement PR head must be validated against the exact live base after merging; the required CI run and mergeability state belong to that replacement head, not the prior reviewed commit.
+---
+## [2026-08-11 00:25 -07:00] - cli-error-classification-and-run-output review follow-up
+- What was implemented
+  - Reconciled the branch with live `origin/main` at `85619c087089e3ed6a04edad8b794de62785ee30`; the only merge conflicts were the shared `prd.json` and append-only `progress.txt` files, which were resolved by preserving this task PRD and both histories.
+  - Addressed the blocking functional-test review finding by converting the changed CLI output scenarios in the factory-run, text-stream, and run-scoped-server suites from Mock Workers to `serviceedges.Edges.ProviderCommandRunner` with protocol-valid Codex decision-envelope responses. Existing unrelated Mock Workers feature tests remain unchanged.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+  - `tests/functional/cli/factory_run/output/output_test.go`
+  - `tests/functional/transport/cli/output/text_stream_test.go`
+  - `tests/functional/transport/run_scoped_server/run_scoped_server_test.go`
+- Verification
+  - Focused functional suites passed: `go test ./tests/functional/cli/factory_run/output ./tests/functional/transport/cli/output ./tests/functional/transport/run_scoped_server -count=1 -timeout 600s`.
+  - Visualization package suite passed: `go test ./pkg/services/factory_visualization/... -count=1 -timeout 600s`.
+  - `make typecheck`, `make backend-size pkg-maint pkg-file-count pkg-structure vet`, `make cli-manifest-generate`, `make cli-manifest-check`, `make cli-contract-smoke`, `make docs-reference-smoke`, and `git diff --check` passed.
+- **Learnings for future iterations:**
+  - Functional coverage that changes CLI behavior must keep the provider-edge construction preference visible in the changed scenario itself; a pre-existing Mock Workers helper can still violate review expectations when the assertion begins proving provider-backed output.
+  - After resolving shared bookkeeping conflicts, regenerate the authored CLI manifest and validate the PRD before staging so generated artifacts and the task body remain aligned.
 ---
