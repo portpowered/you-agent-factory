@@ -13,6 +13,7 @@ work	Submitted work: session-scoped work routes, tags, batch cross-links, and su
 sessions	Live factory sessions: session list, session show, pause and resume, factory query, status API, dashboard URL, and run modes.
 orchestrators	Factory, FactoryOrchestrator, FactorySession, Dispatch, FactoryArtifact, FactoryEvent, and dynamic workflow aliases.
 javascript-workflows	Supported JavaScript authoring, equivalent CLI/API/MCP execution, worker presets, capability boundaries, and runnable examples.
+claude-dynamic-workflows	External Claude Code Workflow schema snapshot used as the JavaScript compatibility baseline.
 mcp	Canonical you mcp serve install path, preview tool catalog, scope boundaries, and automation-backed checks.
 workstations	Workstation kinds, route fields, runtime step behavior, and scoped execution settings.	workstation
 workers	Worker types, model providers, script workers, and worker configuration.

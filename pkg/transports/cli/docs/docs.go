@@ -36,6 +36,7 @@ const (
 	TopicModels              Topic = "models"
 	TopicOrchestrators       Topic = "orchestrators"
 	TopicJavaScriptWorkflows Topic = "javascript-workflows"
+	TopicClaudeWorkflows     Topic = "claude-dynamic-workflows"
 	TopicMCP                 Topic = "mcp"
 	TopicServeACP            Topic = "serve-acp"
 	TopicBatchInputs         Topic = "batch-inputs"
@@ -69,6 +70,7 @@ const (
 	referenceModelsPath              = "models.md"
 	referenceOrchestratorsPath       = "orchestrators.md"
 	referenceJavaScriptWorkflowsPath = "javascript-workflows.md"
+	referenceClaudeWorkflowsPath     = "claude-dynamic-workflows.md"
 	referenceMCPPath                 = "mcp.md"
 	referenceServeACPPath            = "serve-acp.md"
 	referenceBatchInputsPath         = "batch-inputs.md"
@@ -99,8 +101,9 @@ var topicDocuments = []topicDocument{
 	{topic: TopicSessions, description: "Live factory sessions: session list, session show, pause and resume, factory query, status API, dashboard URL, and run modes.", path: referenceSessionsPath, displayOrder: 35},
 	{topic: TopicOrchestrators, description: "Factory, FactoryOrchestrator, FactorySession, Dispatch, FactoryArtifact, FactoryEvent, and dynamic workflow aliases.", path: referenceOrchestratorsPath, displayOrder: 37},
 	{topic: TopicJavaScriptWorkflows, description: "Supported JavaScript authoring, equivalent CLI/API/MCP execution, worker presets, capability boundaries, and runnable examples.", path: referenceJavaScriptWorkflowsPath, displayOrder: 38},
-	{topic: TopicMCP, description: "Canonical you mcp serve install path, preview tool catalog, scope boundaries, and automation-backed checks.", path: referenceMCPPath, displayOrder: 39},
-	{topic: TopicWorkstations, description: "Workstation kinds, route fields, runtime step behavior, and scoped execution settings.", path: referenceWorkstationsPath, displayOrder: 40, aliases: []Topic{TopicWorkstationAlias}},
+	{topic: TopicClaudeWorkflows, description: "External Claude Code Workflow schema snapshot used as the JavaScript compatibility baseline.", path: referenceClaudeWorkflowsPath, displayOrder: 39},
+	{topic: TopicMCP, description: "Canonical you mcp serve install path, preview tool catalog, scope boundaries, and automation-backed checks.", path: referenceMCPPath, displayOrder: 40},
+	{topic: TopicWorkstations, description: "Workstation kinds, route fields, runtime step behavior, and scoped execution settings.", path: referenceWorkstationsPath, displayOrder: 41, aliases: []Topic{TopicWorkstationAlias}},
 	{topic: TopicWorkers, description: "Worker types, model providers, script workers, and worker configuration.", path: referenceWorkersPath, displayOrder: 50},
 	{topic: TopicProviders, description: "Worker/provider selection, model capabilities and limits, Factory configuration, AGY caveats, ACP lifecycle, and JavaScript usage.", path: referenceProvidersPath, displayOrder: 55, aliases: []Topic{TopicACPAlias}},
 	{topic: TopicServeACP, description: "Canonical you serve acp ACP-agent host command, stdio channel contract, clean shutdown, and minimal client configuration.", path: referenceServeACPPath, displayOrder: 56},

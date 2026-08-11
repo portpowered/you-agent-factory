@@ -35,6 +35,7 @@ concept owners below when you need the complete customer-facing contract.
 | `sessions` | Session list, session show, pause and resume, factory query, status API, dashboard, and run modes | [Sessions](sessions.md) |
 | `orchestrators` | Factory orchestrator identity, FactorySession runtime nouns, dispatch/artifact/event aliases | [Orchestrators](orchestrators.md) |
 | `javascript-workflows` | Supported JavaScript authoring, equivalent CLI/API/MCP execution, worker presets, host boundaries, and runnable examples | [JavaScript workflows](javascript-workflows.md) |
+| `claude-dynamic-workflows` | External Claude Code `Workflow` schema snapshot used for compatibility planning; not the shipped You contract | [Claude dynamic workflows](claude-dynamic-workflows.md) |
 | `mcp` | `you mcp serve` host setup, backing modes, first-use smoke, and troubleshooting | [MCP host setup](mcp.md) |
 | `workstations` | Workstation kinds, routes, runtime fields, and scoped execution settings | [Workstations](workstations.md) |
 | `workers` | Worker quick reference | [Workers](workers.md) |
@@ -94,6 +95,9 @@ filesystem work around that invocation.
 - [JavaScript workflows](javascript-workflows.md) owns the supported JavaScript
   authoring surface, equivalent execution and inspection flows, child worker
   preset rules, host-capability boundary, and executable examples.
+- [Claude dynamic workflows](claude-dynamic-workflows.md) records the external
+  Claude Code compatibility target. It does not override the supported You
+  contract in [JavaScript workflows](javascript-workflows.md).
 - [MCP host setup](mcp.md) owns the canonical `you mcp serve` host
   configuration, backing modes, first-use smoke, and troubleshooting.
 - [Workstations](workstations.md) owns workstation kinds, route fields, runtime
