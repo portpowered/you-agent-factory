@@ -4062,3 +4062,18 @@
 - **Learnings for future iterations:**
   - When the owning production correction is already on main, use the existing lower-layer tests plus an observable end-to-end regression to complete the story without duplicating a fix or widening the fan-in surface.
 ---
+
+## 2026-08-10 20:00 -07:00 - pp-merge-context-bug current-main synchronization
+- What was implemented
+  - Fetched and merged the live `origin/main` head `aac04248d95de7f5412d58f194e7ae03858a3b39` into the task branch.
+  - Preserved this task's `prd.json` and append-only fan-in evidence while carrying the current-main history forward.
+- Files changed
+  - Current-main merge files are included only as synchronization history.
+  - `progress.txt` records the synchronization evidence.
+- Verification
+  - `prd.json` parses with both `pp-merge-context-bug-001` and `pp-merge-context-bug-002` marked `passes:true`.
+  - `git status --short` is clean; `git diff origin/main...HEAD --stat` is limited to `prd.json`, `progress.txt`, and `tests/functional/factory/packaged/plan_parallel/invocation_test.go`.
+  - The merge index is resolved and the task branch is based on current `origin/main`.
+- **Learnings for future iterations:**
+  - Synchronize against the freshly fetched hosting `main` immediately before final gates, then verify the live-base diff so current-main additions do not become accidental task scope.
+---
