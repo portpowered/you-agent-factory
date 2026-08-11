@@ -4218,3 +4218,19 @@
 - **Learnings for future iterations:**
   - A progress-only push can race with default-branch advancement; fetch the live base again before handoff, use current main’s progress as the merge base, preserve task sections explicitly, and validate reconstructed history before committing.
 ---
+
+## 2026-08-10 19:08 -07:00 - wsr-001-opening-record final PR handoff audit
+- What was implemented
+  - Completed the latest PR follow-up for PR #1849; all three PRD stories remain marked `passes:true` and no additional product-code change was required.
+  - Confirmed the opening-publication fix prevents a successful terminal append from creating terminal-only Worker history after a failed `SESSION/STARTED` append, while retaining the typed publication-failure result and skipping Workers handoff.
+  - Confirmed the existing PR body still matches `prd.json` byte-for-byte, the branch is clean and conflict-free with current `origin/main`, and the historical blocking findings are addressed by the current commits.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/worker_sessions/... -count=1 -run 'Test.*(Opening|Terminal|Publication|Provider|Record)'` — passed.
+  - `gh pr checks 1849` — all listed checks terminal and passing.
+  - Thread-aware GitHub review audit — 0 formal reviews and 0 inline review threads; the historical conversation findings are covered by the pushed fixes.
+  - `git merge-tree --write-tree origin/main HEAD`, `git diff --check`, PRD validation, and PRD/body byte equality — passed.
+- **Learnings for future iterations:**
+  - A final PR audit should verify both the latest review finding’s behavioral regression and the remote PR’s body, mergeability, base synchronization, and terminal check state before handoff.
+---
