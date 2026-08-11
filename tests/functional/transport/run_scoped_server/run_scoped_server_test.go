@@ -161,6 +161,76 @@ func TestRunScopedServerOwnsRawJavaScriptLifecycleAfterReadiness(t *testing.T) {
 	}
 }
 
+// TestRunScopedRawJavaScriptServerReportsUnavailableWorkerSessionOwner proves
+// the root-built direct-JavaScript HTTP host preserves the public structured
+// error when a route has no live Worker Sessions owner. Direct JavaScript
+// hosting intentionally binds only the durable Factory Sessions handler, so
+// this is the functional exception for the unavailable-owner composition
+// without constructing transporthttp.NewServer in a functional test.
+func TestRunScopedRawJavaScriptServerReportsUnavailableWorkerSessionOwner(t *testing.T) {
+	workingDirectory := t.TempDir()
+	workflowPath := filepath.Join(workingDirectory, "workflow.js")
+	if err := os.WriteFile(workflowPath, []byte(`return "hosted JavaScript";`), 0o600); err != nil {
+		t.Fatalf("write workflow: %v", err)
+	}
+
+	type probeResult struct {
+		status   int
+		response factoryapi.ErrorResponse
+		err      error
+	}
+	probes := make(chan probeResult, 1)
+	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
+			server := httptest.NewServer(request.Handler)
+			defer server.Close()
+
+			client := &http.Client{Timeout: 5 * time.Second}
+			response, requestErr := client.Get(server.URL + "/factory-sessions/~default/worker-sessions/worker-missing/events")
+			if requestErr != nil {
+				probes <- probeResult{err: requestErr}
+			} else {
+				defer response.Body.Close()
+				var payload factoryapi.ErrorResponse
+				decodeErr := json.NewDecoder(response.Body).Decode(&payload)
+				probes <- probeResult{status: response.StatusCode, response: payload, err: decodeErr}
+			}
+
+			if request.OnBound != nil {
+				request.OnBound(platformhttpserver.Binding{Port: request.Port})
+			}
+			<-ctx.Done()
+			return ctx.Err()
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+
+	homeDir := t.TempDir()
+	environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	stdout, stderr := execute(t, process, environment, workingDirectory, []string{
+		"you", "run", "--factory", workflowPath, "--no-record", "--with-server",
+	}, "")
+	if stderr != "" || !strings.Contains(stdout, "completed (SUCCEEDED)") {
+		t.Fatalf("JavaScript stdout=%q stderr=%q", stdout, stderr)
+	}
+
+	probe := <-probes
+	if probe.err != nil {
+		t.Fatalf("GET unavailable Worker Session route: %v", probe.err)
+	}
+	if probe.status != http.StatusInternalServerError {
+		t.Fatalf("unavailable Worker Session route status = %d, want %d", probe.status, http.StatusInternalServerError)
+	}
+	if probe.response.Code != factoryapi.ErrorResponseCodeINTERNALERROR {
+		t.Fatalf("unavailable Worker Session route error code = %q, want %q", probe.response.Code, factoryapi.ErrorResponseCodeINTERNALERROR)
+	}
+	if probe.response.Family != factoryapi.ErrorFamilyInternalServerError {
+		t.Fatalf("unavailable Worker Session route error family = %q, want %q", probe.response.Family, factoryapi.ErrorFamilyInternalServerError)
+	}
+}
+
 // TestRunScopedServerUsesProductionListenerAndReportsFallback proves the
 // customer CLI path binds, reports, and joins the concrete HTTP server.
 func TestRunScopedServerUsesProductionListenerAndReportsFallback(t *testing.T) {

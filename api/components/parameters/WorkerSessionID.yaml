@@ -1,0 +1,7 @@
+name: worker_session_id
+in: path
+required: true
+description: Stable Worker Session identity returned by the Worker Sessions list operation.
+schema:
+  type: string
+  minLength: 1

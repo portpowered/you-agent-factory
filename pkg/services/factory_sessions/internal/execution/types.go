@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	workflowsource "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -277,6 +278,18 @@ func clonePetriMutations(mutations []interfaces.TokenMutationRecord) []interface
 	}
 	cloned := make([]interfaces.TokenMutationRecord, len(mutations))
 	copy(cloned, mutations)
+	for i := range cloned {
+		if mutations[i].Token == nil {
+			continue
+		}
+		token := *mutations[i].Token
+		token.Color.StructuredResult = jsonvalue.Clone(token.Color.StructuredResult)
+		token.Color.StructuredResultPresent = jsonvalue.Present(
+			token.Color.StructuredResult,
+			token.Color.StructuredResultPresent,
+		)
+		cloned[i].Token = &token
+	}
 	return cloned
 }
 

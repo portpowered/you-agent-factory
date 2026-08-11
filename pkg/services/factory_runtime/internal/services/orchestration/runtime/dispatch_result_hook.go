@@ -546,7 +546,7 @@ func recordedFailureType(typ workers.WorkFailureType) (string, bool) {
 	case workers.WorkFailureTypeAuthFailure, workers.WorkFailureTypePermanentBadRequest, workers.WorkFailureTypeThrottled,
 		workers.WorkFailureTypeInternalServerError, workers.WorkFailureTypeTimeout, workers.WorkFailureTypeUnknown,
 		workers.WorkFailureTypeMisconfigured, workers.WorkFailureTypeCommandLineTooLong, workers.WorkFailureTypeMissingExecutable,
-		workers.WorkFailureTypeExpectedArtifactsUnsatisfied:
+		workers.WorkFailureTypeStructuredOutputSchemaViolation, workers.WorkFailureTypeExpectedArtifactsUnsatisfied:
 		return string(typ), true
 	default:
 		return "", false
@@ -583,6 +583,10 @@ func mergeRecordedObservations(recorded, live []workersessions.Observation) []wo
 		liveObservation, ok := bySession[recorded[index].WorkerSessionID]
 		if !ok {
 			continue
+		}
+		if liveObservation.StartedAt != nil {
+			started := *liveObservation.StartedAt
+			recorded[index].StartedAt = &started
 		}
 		if liveObservation.ProviderSessionAvailable {
 			recorded[index].ProviderSession = liveObservation.ProviderSession.Clone()

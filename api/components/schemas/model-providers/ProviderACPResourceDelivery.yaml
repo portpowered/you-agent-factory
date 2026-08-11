@@ -1,0 +1,7 @@
+type: string
+description: Evidence state for delivering a resource through the ACP harness.
+enum:
+  - implemented
+  - unsupported
+  - conditional
+  - unknown

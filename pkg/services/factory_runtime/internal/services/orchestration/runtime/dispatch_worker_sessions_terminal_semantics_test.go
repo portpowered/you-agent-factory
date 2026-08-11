@@ -178,8 +178,20 @@ func (s *preHandoffFailedWorkerSessionsService) GetObservation(
 	return workersessions.Observation{}, nil
 }
 
+func (s *preHandoffFailedWorkerSessionsService) GetObservationByWorkerSessionID(
+	context.Context, workersessions.GetObservationByWorkerSessionIDRequest,
+) (workersessions.Observation, error) {
+	return workersessions.Observation{}, nil
+}
+
 func (s *preHandoffFailedWorkerSessionsService) StreamObservations(
 	context.Context, workersessions.StreamObservationsRequest,
+) (workersessions.ObservationSubscription, error) {
+	return workersessions.ObservationSubscription{}, nil
+}
+
+func (s *preHandoffFailedWorkerSessionsService) StreamObservationsByWorkerSessionID(
+	context.Context, workersessions.StreamObservationsByWorkerSessionIDRequest,
 ) (workersessions.ObservationSubscription, error) {
 	return workersessions.ObservationSubscription{}, nil
 }
@@ -224,6 +236,18 @@ func (s *preHandoffFailedWorkerSessionsService) ObserveProviderSession(
 	context.Context, workersessions.ProviderSessionObservationRequest,
 ) (workersessions.ProviderSessionAssociationResult, error) {
 	return workersessions.ProviderSessionAssociationResult{}, nil
+}
+
+func (s *preHandoffFailedWorkerSessionsService) EnsureProviderBinding(
+	context.Context, workersessions.ProviderBindingRequest,
+) (workersessions.ProviderBindingResult, error) {
+	return workersessions.ProviderBindingResult{}, nil
+}
+
+func (s *preHandoffFailedWorkerSessionsService) WorkerSessionIDForDispatch(
+	_ context.Context, dispatchID string,
+) (string, error) {
+	return dispatchID, nil
 }
 
 func (s *preHandoffFailedWorkerSessionsService) Pause(context.Context, workersessions.ControlRequest) (workersessions.ControlResult, error) {
