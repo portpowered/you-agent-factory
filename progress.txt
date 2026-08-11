@@ -3,6 +3,8 @@
 - When a backend-size violation names a long test function, split each failure mode into a focused test and share only request/setup plumbing so every observable assertion remains intact.
 - For concurrent single-flight state, keep the absent-to-loading election atomic with the observation; a separate precheck can let callers pass stale absent state and overwrite the shared completion signal.
 - For repeated concurrency package runs, synchronize cancellation tests on an injected launcher or process edge; a fixed sleep can cancel before startup under parallel stress and obscure the target regression.
+- Provider OpenAPI changes that feed the published model-provider package require `make interfaces-all`, `make provider-catalog-generate`, and `make model-provider-package-generate`; `api-smoke` checks generated REST artifacts against the committed tree, so commit generated output before relying on that smoke result.
+- Provider evidence dates authored in YAML must be quoted ISO strings because yaml.v3 otherwise decodes calendar-looking values as `time.Time` before semantic validation.
 - For fan-in transitions, preserve a deterministic list of all matched input token IDs separately from the consume-only mutation list; OBSERVE-mode inputs must reach the worker dispatch without being consumed.
 - Terminal lifecycle publication must require the opening record's committed publication window; a failed opening must never be followed by a terminal append that becomes topic position 1.
 - Root-built direct-JavaScript functional probes that do not invoke a worker can run without `--with-mock-workers`; keep Mock Workers usage inside the feature-owning test cells.
@@ -7870,6 +7872,137 @@
   - The PR body matches `prd.json` after newline normalization, all three stories parse with `passes:true`, the worktree is clean, no unmerged entries or conflict markers remain, and `git diff --check` passes.
 - **Learnings for future iterations:**
   - If `gh pr edit --body-file` is blocked by a missing read-only scope, update only the pull-request body through the authenticated GitHub API using the canonical file content, then verify the returned body and head.
+## [2026-08-10 22:52 -07:00] - provider-capability-contract current-main conflict resolution
+- What was implemented
+  - Merged the newly advanced live `origin/main` at `ecd1d248a` into the provider capability contract branch after PR #1874 became conflicting during final CI observation.
+  - Preserved the provider task's authoritative `prd.json`, unioned the current-main and provider append-only `progress.txt` histories and reusable patterns, and carried the four current-main Models runtime-host files forward.
+  - Reran `make interfaces-all`; the canonical generated tree remained unchanged.
+- Files changed
+  - `pkg/services/models/internal/services/runtime_host/internal/service/export_test.go`
+  - `pkg/services/models/internal/services/runtime_host/internal/service/failure_test.go`
+  - `pkg/services/models/internal/services/runtime_host/internal/service/service_test.go`
+  - `pkg/services/models/internal/services/runtime_host/internal/service/supervisor.go`
+  - `progress.txt`
+- Verification
+  - `make interfaces-all` — passed with no generated diff.
+  - `go test ./pkg/services/models/internal/services/runtime_host/internal/service -count=1 -timeout 180s` — passed.
+  - `go test ./pkg/services/providers/... -count=1 -timeout 300s` — passed.
+  - `prd.json` parses with all three stories marked `passes:true`; conflict markers are absent; `git diff --check` passes.
+- **Learnings for future iterations:**
+  - A green PR can become conflicting while its checks are running; fetch `origin/main` again immediately before push, resolve shared PRD/progress files from complete Git objects, and rerun generation plus focused owner tests on the replacement merge state.
+---
+
+## [2026-08-10 21:03 -07:00] - provider-capability-contract-001
+- What was implemented
+  - Added the truthful provider capability vocabulary to authored OpenAPI components: native CLI/ACP harness metadata, typed ACP resource delivery, model-catalog posture, four-state support, directional modality routes, modality transports and media constraints, tool availability/default enablement/tool outputs, and bounded evidence records.
+  - Added offline catalog semantic validation for duplicate facts, evidence-reference closure, qualified conditional claims, non-unknown evidence requirements, route/support compatibility, ACP resource routing, unknown tool availability defaults, and direct versus tool-mediated output contradictions.
+  - Preserved legacy manifests during the additive migration by requiring evidence as soon as a manifest opts into expanded capability metadata; native manifest migration is intentionally deferred to Story 002.
+  - Kept generated conditional requirements visible in the published TypeScript provider types and split the focused invalid-fact cases to satisfy backend-size and pkg-maint ratchets.
+- Files changed
+  - Authored provider OpenAPI schema components and `api/openapi-main.yaml`.
+  - `internal/providercatalog/capabilities.go`, `internal/providercatalog/capabilities_test.go`, and `internal/providercatalog/validation.go`.
+  - Regenerated bundled OpenAPI, Go/TypeScript HTTP clients, UI package client, provider catalog schemas, provider package types/metadata, and package generator tests.
+  - `prd.json` marks Story 001 passed; Stories 002 and 003 remain pending.
+- Verification
+  - `go test ./internal/providercatalog ./packages/model-providers ./pkg/services/providers/internal/services/catalog/internal/service -count=1` passed.
+  - `make test` passed; `make typecheck` passed; `make api-smoke` passed; `make provider-catalog-check`, `make model-provider-package-smoke`, and `make contracts-check` passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure` and `make vet` passed.
+  - Commits: `b89ad8392` capability contract implementation and `b6c640724` focused test-ratchet fix.
+- **Learnings for future iterations:**
+  - Expanded capability metadata must activate strict evidence validation without breaking the pre-migration manifests; the next story should add evidence to all three native manifests before turning that migration lane green.
+  - One-of conditional requirements need both authored schema requirements and generator support for parent properties so published TypeScript types retain the required condition field.
+---
+## [2026-08-10 21:23 -07:00] - provider-capability-contract-002
+- What was implemented
+  - Migrated the antigravity, claude, and codex authored manifests to the new native capability vocabulary with native_cli harness metadata, exact model-catalog posture, complete directional harness routes, evidence-qualified model facts, and tool availability/output metadata.
+  - Preserved existing provider identity, aliases, model IDs, efforts, limits, discovery prerequisites, execution capabilities, response-fidelity capabilities, and established discovery projection behavior.
+  - Corrected Codex direct image output to unsupported/none and represented AGY image generation as supported tool-mediated output; unknown AGY output routes remain explicit rather than inferred.
+  - Added golden generated-catalog assertions for all four support states, evidence-reference closure, tool availability/default enablement, and direct versus tool-mediated image output.
+- Files changed
+  - `packages/model-providers/providers/antigravity/provider.yaml`
+  - `packages/model-providers/providers/claude/provider.yaml`
+  - `packages/model-providers/providers/codex/provider.yaml`
+  - `packages/model-providers/generated/catalog.json`
+  - `packages/model-providers/metadata/manifest.json`
+  - `packages/model-providers/catalog_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./internal/providercatalog ./packages/model-providers ./pkg/services/providers/... -count=1` — passed.
+  - `go run ./cmd/providercatalogcheck -root .` — passed.
+  - `make model-provider-package-check` and `make typecheck` — passed.
+  - `git diff --check` — passed.
+  - Implementation commit: `cd33d4205` (`feat(providers): publish native capability manifests`).
+- **Learnings for future iterations:**
+  - The existing provider projection accepts the established supported/unsupported tool states; keep additive conditional and unknown route facts in the published manifest without changing that projection boundary until the dedicated discovery-parity story updates its public contract.
+  - Quote ISO evidence dates in authored YAML so yaml.v3 keeps them as strings for calendar-date validation.
+---
+## [2026-08-10 21:55 -07:00] - provider-capability-contract-003
+- What was implemented
+  - Preserved discovery parity while accepting the additive capability vocabulary: conditional and unknown routes/tools are validated but omitted from the legacy two-state projection instead of being downgraded into false claims.
+  - Added observable provider projection, CLI output, generated-schema/declaration, and representative contract-fixture coverage for deterministic ordering, identity, models, efforts, limits, prerequisites, execution capabilities, response fidelity, nullability, evidence references, and additive metadata.
+  - Confirmed static provider discovery remains offline and inert through the root-build functional test.
+- Files changed
+  - `pkg/services/providers/internal/services/catalog/internal/service/projection.go`
+  - `pkg/services/providers/internal/services/catalog/internal/service/projection_test.go`
+  - `pkg/services/providers/internal/services/catalog/internal/service/service_test.go`
+  - `pkg/services/providers/transports/cli/list_capability_output_test.go`
+  - `scripts/model-provider-package.test.mjs`
+  - `api/testdata/provider-catalog-contract.json`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `make interfaces-all`, `make provider-catalog-generate`, and `make model-provider-package-generate` — passed with no generated diff.
+  - `make provider-catalog-check`, `make model-provider-package-check`, `make contracts-check`, `make typecheck`, and `make api-smoke` — passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` and `make test` — passed.
+  - Focused provider/catalog/CLI/package/contract tests and `go test ./tests/functional/providers/discovery/... -run '^TestProvidersListThroughRootBuildProcess$' -count=1` — passed.
+  - `git diff --check` and clean generated-state checks — passed.
+- **Learnings for future iterations:**
+  - When a richer provider manifest is consumed by a legacy projection, preserve the richer facts at the contract boundary and make the projection conservative; additive unknowns must not become legacy assertions.
+  - Run generation and drift checks serially in a shared worktree when repository-wide Go builds are competing for resources; parallel lanes can time out without indicating a code failure.
+---
+## [2026-08-10 22:04 -07:00] - provider-capability-contract final pre-push audit
+- What was implemented
+  - Merged the live `origin/main` at `7dbeb472a` into the completed provider capability contract branch.
+  - Preserved this branch's authoritative `prd.json`, combined both reusable Codebase Patterns sections, retained append-only progress history, and regenerated the API package manifest through `make interfaces-all`.
+- Files changed
+  - `prd.json` and `progress.txt` conflict resolution.
+  - Canonical generated artifacts regenerated by `make interfaces-all`.
+  - Merge commit `f29ee5447`.
+- Verification
+  - `make api-smoke`, `make provider-catalog-check`, `make model-provider-package-check`, `make contracts-check`, and `make typecheck` — passed.
+  - `go test ./pkg/services/providers/... -count=1` and the offline root-built discovery test — passed.
+  - `prd.json` parses with all three stories marked `passes:true`; all merge markers are absent; `git diff --check` passes.
+- **Learnings for future iterations:**
+  - Resolve generated conflicts by rerunning their canonical generator after the base merge; only hand-resolve human-authored task bookkeeping and preserve the branch-specific PRD as the PR description source.
+---
+## [2026-08-10 22:24 -07:00] - provider-capability-contract latest-base refresh
+- What was implemented
+  - Merged the newly advanced live `origin/main` at `b68e4bf95` into the provider capability contract branch after the first pushed PR head became stale against main.
+  - Preserved the provider-specific PRD and append-only progress history, then regenerated all canonical API, contract, catalog, and model-provider package artifacts.
+- Files changed
+  - `prd.json` and `progress.txt` conflict resolution.
+  - Merge commit `2323dc0de`.
+- Verification
+  - `make interfaces-all`, `make provider-catalog-generate`, and `make model-provider-package-generate` — passed with a clean generated tree.
+  - `prd.json` parses with all three stories marked `passes:true`; no conflict markers remain; `git diff --check` passes.
+- **Learnings for future iterations:**
+  - Fetch the hosting `main` ref immediately before each PR push; concurrent mainline merges can invalidate an otherwise clean merge and require a fresh CI attempt.
+---
+## [2026-08-10 22:37 -07:00] - provider-capability-contract final handoff audit
+- What was implemented
+  - No additional product change was required; all three provider-capability-contract stories remain marked `passes:true`.
+  - Audited PR #1874 with the thread-aware GraphQL workflow: there are zero conversation comments, formal reviews, or unresolved/outdated inline review threads.
+  - Confirmed the existing non-draft PR is mergeable, its body matches `prd.json`, its head is the latest pushed branch commit, and the live `origin/main` base has not advanced.
+- Files changed
+  - `progress.txt`
+- Verification
+  - PR #1874 hosted checks are terminal and successful, including Verification Policy.
+  - `prd.json` parses with all three stories marked `passes:true`.
+  - `git merge-tree --write-tree origin/main HEAD` and `git diff --check` pass; the worktree was clean before this append.
+- **Learnings for future iterations:**
+  - A completed provider-contract task can be handed off without new product edits when the existing PR already has a byte-equivalent PRD body, a clean current-main merge state, terminal green checks, and an empty thread-aware review audit.
+---
 ## 2026-08-10 19:28 -07:00 - bun-compat-batch-migration-001
 - What was implemented
   - Completed the API-01 cohort handoff using the five existing native Bun owners on current `main`: bundled-file preservation, layout preservation, lifecycle controls, generated session-factory OpenAPI types, and import discovery.
@@ -8110,7 +8243,24 @@
   - `make backend-size pkg-maint pkg-file-count pkg-structure vet` — passed.
   - `prd.json` parses with all nine stories marked `passes:true`; conflict-marker and whitespace checks passed.
 - **Learnings for future iterations:**
-  - A replacement PR head must be validated against the exact live base after merging; the required CI run and mergeability state belong to that replacement head, not the prior reviewed commit.
+- A replacement PR head must be validated against the exact live base after merging; the required CI run and mergeability state belong to that replacement head, not the prior reviewed commit.
+---
+
+## 2026-08-10 23:48 -07:00 - provider-capability-contract current-main review follow-up
+- What was implemented
+  - Addressed PR #1874's blocking review feedback by merging the latest fetched `origin/main` head `85619c087`.
+  - Kept the provider-specific `prd.json` authoritative and reconstructed the append-only `progress.txt` from the complete merge stages, preserving both branch histories and reusable Codebase Patterns.
+  - No product or generated-file conflict required a source change; the merge conflict was limited to task bookkeeping.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `prd.json` parses with all three `provider-capability-contract` stories marked `passes:true`.
+  - `progress.txt` contains no merge markers and retains both provider and incoming mainline histories.
+  - `git diff --check` passes.
+- **Learnings for future iterations:**
+  - For a moving-base conflict in long append-only logs, resolve from complete bounded Git-stage slices, keep the active task PRD authoritative, and validate both histories before staging.
+---
 ---
 ## [2026-08-10 23:55 -07:00] - ui-packaged-factories-decoupling PR review follow-up
 - What was implemented
@@ -8142,4 +8292,19 @@
   - All other replacement-head checks remained green; no task file was named by the failure.
 - **Learnings for future iterations:**
   - For an untouched functional fixture that passes repeated local characterization, preserve task code and rerun only the failed coverage/policy jobs before widening the diff.
+---
+## [2026-08-11 00:22 -07:00] - ui-packaged-factories-decoupling latest-main synchronization
+- What was implemented
+  - Merged the newly advanced live `origin/main` head `3a0b571b234f70d68908e36669100d0ac9f66a9f` after the prior CI rerun became stale against the moving base.
+  - Preserved this task's authoritative `prd.json` and unioned the incoming provider-catalog API/generated-artifact history into the append-only `progress.txt` log.
+- Files changed
+  - Current-main provider catalog API, generated-contract, and package files.
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - The merge conflict set was limited to shared bookkeeping; no task-side product conflict required additional behavior changes.
+  - `prd.json` parses with all three stories marked `passes:true`; conflict-marker, unmerged-entry, and `git diff --check` audits passed.
+  - The previous replacement head's required CI rerun was terminal-green; this latest-base replacement needs a fresh run after push.
+- **Learnings for future iterations:**
+  - Fetch `origin/main` immediately before each final push because a moving base can invalidate a green replacement head; resolve shared PRD/progress files before starting the next CI gate.
 ---

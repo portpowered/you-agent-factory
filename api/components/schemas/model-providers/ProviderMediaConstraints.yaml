@@ -1,0 +1,28 @@
+type: object
+additionalProperties: false
+description: Optional bounded media constraints for one modality route.
+properties:
+  mediaTypes:
+    type: array
+    minItems: 1
+    maxItems: 32
+    uniqueItems: true
+    description: Accepted or emitted media types, such as image/png or audio/wav.
+    items:
+      type: string
+      minLength: 3
+      maxLength: 128
+      pattern: '^[A-Za-z0-9!#$&^_.+-]+/[A-Za-z0-9!#$&^_.+-]+$'
+  maxBytes:
+    type: integer
+    format: int64
+    minimum: 1
+    description: Maximum payload size in bytes when documented.
+  maxDurationSeconds:
+    type: number
+    minimum: 0
+    description: Maximum media duration in seconds when documented.
+  maxItems:
+    type: integer
+    minimum: 1
+    description: Maximum number of media items accepted or emitted in one route.
