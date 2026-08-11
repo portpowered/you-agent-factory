@@ -8994,3 +8994,18 @@
   - Treat a prior blocking comment as addressed only after its requested base synchronization is present, the PR is cleanly mergeable, and the replacement-head checks are terminal-success.
   - Keep the PR body byte-for-byte synchronized with `prd.json` when the PR description is defined by the task contract.
 ---
+## [2026-08-11 04:32:41 -07:00] - graph-workstation-semantics hosted CI and final handoff
+- What was implemented
+  - Completed the replacement-head validation after the Storybook viewport fix; hosted run `31486520825` passed all checks, including Frontend Storybook, Backend Unit Coverage, Backend Functional Coverage, and Local Inference.
+  - Confirmed the branch remains synchronized with live `origin/main` at `012e98e0fbd1b6fcac106d90b1f3d335b8a3dce6`, with `origin/main` an ancestor of `HEAD`.
+  - Confirmed the PR body remains synchronized with the authoritative `prd.json`, and the blocking review feedback has a documented response with no inline review threads or unresolved review threads.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Hosted run `31486520825` — terminal success.
+  - `git merge-base --is-ancestor origin/main HEAD` — passed.
+  - PRD story audit — four stories, all `passes:true`.
+  - Review audit — zero inline threads and zero unresolved threads.
+- **Learnings for future iterations:**
+  - A green replacement run must be recorded against the exact pushed head; any subsequent progress-only push requires another hosted replacement run before declaring the PR ready.
+---
