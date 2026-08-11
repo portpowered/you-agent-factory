@@ -62,6 +62,7 @@
 - Reviewed functional CLI coverage requires a sorted scenario declaration, an evidence-registry entry, a manifest mapping, and one literal `functionalevidence.Covers` marker.
 - Replay completeness must be derived from a terminal lifecycle record inside the captured Events range, not from a separately synchronized terminal session state.
 - When a package has a strict file-count baseline, put a small refactor in an existing focused file before adding a new helper file or changing the baseline.
+- A deletion-only package-file baseline must remain unchanged during a same-package test split; fold adjacent behavior groups into existing owners and satisfy the stricter maintainability line gate before considering any baseline change.
 - When broad functional coverage reports a cancellation-observation failure, rerun the failed lane and isolate the named test before changing an unrelated feature; parallel-suite failures can move between existing durability/restart tests while isolated runs pass.
 - Package-target discovery is the stable-sorted set of directories containing non-test Go sources; adding a durable service owner requires updating the checker vocabulary and its live top-level inventory before regenerating the manifest.
 - Boundary check compatibility bridges should be exact package/type exceptions with request-scoped rationale; broad service-prefix allowlists can hide new durable ownership claims.
@@ -3724,4 +3725,24 @@
   - The first `make test` attempt hit the unrelated Windows PTY timing test `TestAgyLegacyPTYCompatibilityThroughProvidersWire/deadline_terminates_native_process`; that exact test passed 10/10 in isolation, and the immediate full `make test` rerun passed.
 - **Learnings for future iterations:**
   - After synchronizing a moving main branch, validate both the merge bookkeeping and the task behavior evidence before pushing; when a broad unit lane reports a timing failure in an untouched test, isolate and repeat the named test before changing task code.
+---
+## [2026-08-10 18:12 -07:00] - thr-split-fake-service-runtime-tests review follow-up
+- What was implemented
+  - Addressed the two blocking PR findings: restored the exact deletion-only execution package file-count baseline from 39 to 28, and restored the flagged test/fixture declarations byte-for-byte apart from relocation.
+  - Mechanically consolidated adjacent same-package test owners while keeping the focused construction, dispatch, lifecycle, replay, runtime start/result/persistence/control/checkpoint/validation-event groups and the external-package boundary tests within the existing 28-file budget.
+  - Updated the story notes in `prd.json` so the PR description records the final file budget, inventory hash, coverage, and review-follow-up evidence; all five stories remain `passes:true`.
+- Files changed
+  - `pkg/services/factory_sessions/internal/execution/` focused test owners and mechanical source-file retirements
+  - `docs/internal/baselines/backend-package-file-count.json`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Sorted before/after `go test -list '.*' ./pkg/services/factory_sessions/internal/execution/...` inventory — 269 entries on both sides, SHA-256 `09876A7E761EAB43E48DD3729153FCCAE52802F37CC95B424B706AAFA3869B51` on both sides, diff empty.
+  - Exact `go test -covermode=atomic ./pkg/services/factory_sessions/internal/execution/...` — unchanged at 79.6% (execution), 80.0% (fixtures), 83.1% (recordingreplay), and 89.8% (runtimepersist).
+  - Focused package suite, full `make test` (311.9s), `go vet`, `make typecheck`, `make backend-size`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, and `git diff --check` — passed.
+  - On-disk execution package count is exactly 28; every resulting hand-maintained Go file is below the 1,000-line maintainability threshold and the PRD’s 1,200-line cap.
+  - Review-fix commit: `5cde8e22b` (`test(factory-sessions): preserve split file budget`).
+- **Learnings for future iterations:**
+  - Treat the package file-count baseline as a deletion-only ratchet even when a split is mechanically correct; use existing responsibility-aligned test owners and verify both the 1,000-line maintainability gate and the broader 1,200-line task cap.
+  - When review identifies whitespace drift in a move-only split, compare the named declarations directly against the unmodified source and restore the exact text before rerunning inventory and coverage.
 ---
