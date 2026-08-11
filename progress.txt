@@ -6746,3 +6746,17 @@
   - Protected contract literals should be verified against the owning schema before they appear in normative examples; a literal-preservation case does not justify suppressing a literal-mismatch finding.
   - When a moving main branch changes shared `prd.json` and `progress.txt`, preserve the active task PRD and union the append-only patterns/history before staging the merge.
 ---
+## [2026-08-10 21:16 -07:00] - prose-standard-and-terms owner confirmation
+- What was implemented
+  - Updated PR #1869's description from the current `prd.json` after the local `gh pr edit` path was blocked by the token's missing `read:project` scope; the authenticated REST fallback succeeded.
+  - Posted the required PR conversation confirmation that the architecture/data-model definitions, capitalization, and ownership references were reviewed and that the internal Petri-net terms remain internal-only.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Owner-confirmation comment: https://github.com/portpowered/you-agent-factory/pull/1869#issuecomment-5248916345
+  - PR #1869 points to head `627b87f2a9a94eb1628211d087eb123eb8e8b9b6` and base `ee002339728765f72dab16197588664dfff163fb`.
+  - The PR body contains the current `prd.json`; all three stories remain marked `passes:true`.
+  - GitHub had not yet reported checks for the new head and still showed a transient dirty mergeability state; CI and final mergeability remain to be monitored.
+- **Learnings for future iterations:**
+  - When `gh pr edit` requires an unavailable project scope, the repository-scoped pull-request REST endpoint can update the body from the checked-in PRD, while `gh pr comment` can provide the required conversation evidence.
+---
