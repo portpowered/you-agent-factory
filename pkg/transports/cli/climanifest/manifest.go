@@ -1,5 +1,7 @@
 package climanifest
 
+import "fmt"
+
 // Manifest is the production CLI command manifest document.
 type Manifest struct {
 	FormatVersion string             `json:"formatVersion"`
@@ -19,6 +21,7 @@ type Command struct {
 	Lifecycle       Lifecycle                 `json:"lifecycle"`
 	Visibility      string                    `json:"visibility"`
 	Runnable        bool                      `json:"runnable"`
+	Placement       PlacementCapability       `json:"placement,omitempty"`
 	Usage           Usage                     `json:"usage"`
 	Arguments       map[string]Argument       `json:"arguments,omitempty"`
 	Flags           map[string]Flag           `json:"flags,omitempty"`
@@ -34,6 +37,54 @@ type Command struct {
 	Constraints     Constraints               `json:"constraints,omitempty"`
 	Handler         *Handler                  `json:"handler,omitempty"`
 	RootLifecycle   *RootLifecycle            `json:"rootLifecycle,omitempty"`
+}
+
+// PlacementCapability declares where a command is allowed to execute. The
+// declaration is transport metadata: domain handlers receive normalized
+// requests and do not inspect this value themselves.
+type PlacementCapability string
+
+const (
+	PlacementLocalOnly  PlacementCapability = "local-only"
+	PlacementRemoteOnly PlacementCapability = "remote-only"
+	PlacementDual       PlacementCapability = "dual"
+)
+
+// ExecutionPlacement is the resolved transport decision for one invocation.
+type ExecutionPlacement string
+
+const (
+	ExecutionPlacementLocal  ExecutionPlacement = "local"
+	ExecutionPlacementRemote ExecutionPlacement = "remote"
+)
+
+// ResolveRootPlacement turns the persistent --remote input into an explicit
+// placement value. The false case is deliberately represented as local rather
+// than as an omitted or implicit transport choice.
+func ResolveRootPlacement(remote bool) ExecutionPlacement {
+	if remote {
+		return ExecutionPlacementRemote
+	}
+	return ExecutionPlacementLocal
+}
+
+// ResolvePlacement applies a command's capability to the root placement
+// input. Remote-only commands preserve their historical remote-default
+// behavior when --remote is omitted; dual commands default to local.
+func (c Command) ResolvePlacement(remote bool) (ExecutionPlacement, error) {
+	switch c.Placement {
+	case PlacementLocalOnly:
+		if remote {
+			return "", fmt.Errorf("command %q supports local placement only; remove --remote", c.Path)
+		}
+		return ExecutionPlacementLocal, nil
+	case PlacementRemoteOnly:
+		return ExecutionPlacementRemote, nil
+	case PlacementDual:
+		return ResolveRootPlacement(remote), nil
+	default:
+		return "", fmt.Errorf("command %q has unsupported placement capability %q", c.Path, c.Placement)
+	}
 }
 
 // SymbolicError is one stable ErrorResponse code declared by a command.

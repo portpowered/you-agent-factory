@@ -18,6 +18,24 @@ const (
 	CompositionCollisionBindingID   = "cli.composition.binding-id-collision"
 )
 
+// ValidatePlacementContract validates the placement declaration for every
+// authoritative runnable command. Older incomplete command records remain
+// readable during the CLI migration window, but an authoritative runnable
+// record must fail closed when its capability is absent or unknown.
+func ValidatePlacementContract(manifest Manifest) error {
+	for _, command := range manifest.Commands {
+		if !command.Runnable || command.Completeness != "authoritative" {
+			continue
+		}
+		switch command.Placement {
+		case PlacementLocalOnly, PlacementRemoteOnly, PlacementDual:
+		default:
+			return fmt.Errorf("command %q has missing or invalid placement capability %q", command.ID, command.Placement)
+		}
+	}
+	return nil
+}
+
 const (
 	sharedWorkerReasoningEffortFlagID       = "you.run.flag.worker-reasoning-effort"
 	sharedWorkerReasoningEffortParameter    = "workerReasoningEffort"
