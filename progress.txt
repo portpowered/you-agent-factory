@@ -6882,3 +6882,25 @@
 - **Learnings for future iterations:**
   - For a shared task bookkeeping conflict, keep the branch-specific PRD authoritative and append the branch-specific progress entries after the current-main history; validate both parseability and marker-free output before staging.
 ---
+## 2026-08-10 21:38 -07:00 - pp-merge-context-bug review follow-up
+- What was implemented
+  - Merged the freshly fetched current `origin/main` head `469204421` into PR #1870 as merge commit `e9fa81c95`, resolving the blocking `prd.json` and `progress.txt` conflicts.
+  - Preserved this task's authoritative PRD and both branches' append-only progress history.
+  - Reconciled project acceptance criterion 2 so the required red evidence is tied to the exact pre-fix revision when current main already contains the correction; the PRD now explicitly records why a current-main red run is impossible and retains the historical red, current green, and root-cause evidence.
+  - No additional fan-in production change was introduced; the existing behavioral regression and current-main correction remain the scoped implementation.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+  - Current-main merge files: `Makefile`, `cmd/ciclassify/main.go`, and `cmd/ciclassify/main_test.go`.
+- Verification
+  - `go test ./tests/functional/factory/packaged/plan_parallel -run '^TestPackagedPlanParallelMergerReceivesEveryUniqueCompletedChildResult$' -count=3 -v -timeout 600s` — passed all three runs.
+  - Focused scheduler/dispatcher orchestration packages — passed.
+  - `go test ./cmd/ciclassify -count=1` — passed.
+  - `make typecheck` — passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` — passed.
+  - `make test` — passed.
+  - `prd.json` parses, shared files contain no conflict markers, and `git diff --check` passed before the follow-up append.
+- **Learnings for future iterations:**
+  - When a PR is blocked by a moving base and shared bookkeeping conflicts, merge the live base first, keep the task PRD authoritative, union append-only progress histories, and make any impossible historical acceptance criterion explicit in the authoritative PRD rather than hiding the exception in a story note.
+  - The PR body must be refreshed from the resolved checked-in `prd.json` after any criterion reconciliation, then hosted checks and thread state must be re-audited on the new head.
+---
