@@ -1,58 +1,105 @@
 {
-  "project": "Restore Go Build-Cache Reuse in Git Worktrees",
-  "branchName": "thr-worktree-build-cache",
-  "description": "Stop forcing go build -a solely because a factory worker runs in a Git worktree. Recover and address the original staleness concern with the narrowest evidence-backed cache policy, prove that cross-worktree builds always reflect current source and preserve version behavior, and demonstrate a material warm-build speedup for make build and make install.",
+  "project": "Split Factory Sessions Fake-Service Runtime Tests into Focused Files",
+  "branchName": "thr-split-fake-service-runtime-tests",
+  "description": "Mechanically reorganize the two giant Factory Sessions execution test files into behavior-focused package-local files so maintainers and queued BTRC/WSE lanes can understand and extend coverage with less context, while preserving every test, assertion, runtime outcome, and coverage value exactly.",
   "context": {
-    "customerAsk": "Remove the blanket go build -a behavior from Git worktrees and solve any original staleness risk precisely. Record the guard's history in the PR, prove that a main-checkout build followed by worktree builds and a worktree source modification never produces a stale binary, compare make build and make install with forced-rebuild equivalents, and publish before/after wall-time evidence. This lane owns only the WORKTREE_FLAGS block and build-cache flags in the root Makefile.",
-    "problem": "The root Makefile compares git-common-dir with git-dir and sets WORKTREE_FLAGS to -a for every linked worktree. All factory lanes run in that topology, so make build, make install, verify-build, and default repeatedly rebuild the Go standard library and dependency graph instead of reusing valid content-addressed cache entries. Repository history shows the block first appearing in commit 826929a692b17490c922fec2fe05b4b9cd9fc35b with only a stale-cache comment and no recorded reproducer in the commit message, so the original correctness intent must be investigated and preserved through direct behavioral evidence.",
-    "solution": "Use Go's content-addressed build cache by default in worktrees and remove unconditional -a. Complete the guard archaeology, reproduce a main-checkout/worktree/source-mutation scenario with an observable binary probe, and introduce narrower cache keying or isolation only if evidence identifies a real missing input such as environment, cgo, or VCS metadata. Prove build/install artifact and version parity against explicit forced-rebuild controls, then record comparable before, primed, and warm wall times in the PR."
+    "customerAsk": "Land a move-only split of fake_service_runtime_test.go and fake_service_test.go before queued WSE lanes begin changing the package. Keep the tests in the same package, group them by observed behavior, centralize shared test helpers without duplication, preserve the identical test inventory and coverage, and keep every resulting file at or below approximately 1,200 lines.",
+    "problem": "The package's two largest test files contain more than 6,500 lines spanning unrelated execution behaviors. They consume maintainer and agent context, slow comprehension, increase bad-edit risk, and will create avoidable churn in the in-flight BTRC/WSE program.",
+    "solution": "Capture an authoritative test-list and coverage baseline, then move whole tests and unchanged helpers into focused construction/start/lifecycle/read, replay/dispatch, runtime start/result/persistence, and runtime control/checkpoint/event/recording files within the existing execution package. Rebase and redo the moves over authoritative main if a concurrent WSE change lands, without changing product code or test behavior."
   },
   "acceptanceCriteria": [
-    "The PR records the available history and rationale for the worktree guard, including commit 826929a692b17490c922fec2fe05b4b9cd9fc35b, any recovered original staleness scenario, and the evidence supporting the selected cache policy.",
-    "make build and make install no longer force go build -a solely because the checkout is a Git worktree; any replacement cache isolation or cache-key input is narrowly scoped to a reproduced correctness risk.",
-    "A clean main-checkout build, a linked-worktree build, and a rebuild after an observable source change in that worktree each produce the behavior expected from their own source, with no stale cross-worktree binary.",
-    "Cache-enabled make build and make install outputs are byte-identical to, or behaviorally equivalent to, comparable forced -a controls, including the same CLI version/VCS stamping and successful installed-binary behavior.",
-    "The PR records equivalent before/after worktree timing commands and environment assumptions; an immediate warm cache-enabled make build is materially faster than the forced-rebuild baseline, with the expected improvement from minutes toward seconds or any variance explained with evidence.",
-    "Scope remains limited to the root Makefile's worktree/build-cache flags and the smallest direct behavioral verification needed; lint-driver mechanics, cmd/unitlane, functional targets, public contracts, UI, generated artifacts, and unrelated cleanup remain unchanged.",
-    "Quality gates pass: focused cross-worktree build/install verification, relevant Go tests, and Typecheck pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
-    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, conflicts or adjacent Makefile churn are resolved against current origin/main, and the PR is actually merged."
+    "Existing tests are grouped into focused behavior files, shared test helpers have one package-local owner, and no resulting hand-maintained Go file in the package exceeds 1,200 lines.",
+    "Before-and-after output from go test -list '.*' ./pkg/services/factory_sessions/internal/execution/... contains no added, removed, or renamed test or example entry, with the comparison included as PR evidence.",
+    "go test ./pkg/services/factory_sessions/internal/execution/... passes with no test, subtest, assertion, fixture outcome, or observable runtime behavior changed.",
+    "Package coverage is captured with identical commands and options before and after, the reported value is unchanged, and both results are included as PR evidence.",
+    "The diff is dominated by mechanical moves and contains no production-code refactor, public-contract change, generated-file edit, assertion change, test addition/removal, or unrelated cleanup.",
+    "Typecheck and tests pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
+    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts are resolved against current main, and the PR is actually merged."
   ],
   "userStories": [
     {
-      "id": "thr-worktree-build-cache-001",
-      "title": "Preserve source freshness while enabling cached worktree builds",
-      "description": "As an implementation worker building from a linked worktree, I want the build to reuse valid cached packages and still reflect my worktree's current source so that fast builds never execute stale code.",
+      "id": "thr-split-fake-service-runtime-tests-001",
+      "title": "Freeze the behavioral baseline",
+      "description": "As a maintainer, I want an authoritative pre-move test inventory and coverage baseline so that every later mechanical slice can prove it preserved Factory Sessions execution behavior.",
       "acceptanceCriteria": [
-        "The PR archaeology identifies the guard's introducing commit and searches available commit, blame, PR, and issue context for the motivating staleness case; unsupported assumptions are explicitly labeled, and the chosen policy is tied to recovered or reproduced evidence.",
-        "Being in a Git worktree no longer adds -a to the ordinary make build or make install command.",
-        "If a cache-key risk is demonstrated, the implementation isolates only that risk through a documented deterministic input or cache boundary; if no risk is demonstrated, ordinary Go content-cache behavior remains the source of truth without new process-global or repository-local cache state.",
-        "In a controlled scenario, the main checkout builds a binary, a linked worktree builds its binary, an observable package or version-probe behavior is changed only in the worktree, and the next worktree build exhibits the changed behavior while the main-checkout result remains unchanged.",
-        "Reverting or changing the worktree probe again causes the next build to exhibit the new expected behavior, proving that both cache hits and invalidation are correct rather than passing from a one-time clean build.",
-        "The scenario is verified on the repository's supported CI platform and includes Windows-safe path handling where automation is added; it does not delete broad user cache directories or mutate a developer's installed binary as test setup.",
+        "Capture the full output of go test -list '.*' ./pkg/services/factory_sessions/internal/execution/... from the unmodified baseline in a review artifact outside production sources.",
+        "Capture package coverage from the unmodified baseline using a recorded, repeatable command whose command and options will also be used after the split.",
+        "Record a behavior-based placement map for all tests in the two source files so every test has exactly one destination and shared fixtures have exactly one owner.",
+        "The baseline package suite passes and provides a trustworthy behavioral comparison point.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Completed the available guard archaeology: 826929a692b17490c922fec2fe05b4b9cd9fc35b is the first available Makefile/blame point for the worktree block, and its associated PR #1359 changed only cron functional coverage; neither the commit message, associated PR discussion, nor available commit comments recovered a cache-staleness reproducer or issue. That unsupported historical intent is now documented explicitly. Removed the worktree-only -a policy from the root Makefile and replaced it with empty-by-default GO_BUILD_FLAGS, preserving make GO_BUILD_FLAGS=-a build/install as an explicit comparison control. On Windows with the shared Go cache, a main-checkout binary and linked-worktree binary both returned probe code 1; changing only cmd/factory/main.go in the worktree produced 37, then 73, and reverting produced 1 again, while the main artifact remained at 1. The final cache-enabled make build completed in 3.577 seconds to a temporary output path. Temporary source and artifacts were restored/isolated; no installed binary or broad cache directory was modified. make -n confirms no default -a in build/install and explicit -a remains available. make typecheck, make test, and focused cmd/factory/pkg/root tests pass. The initial clean-build wrapper attempt was terminated by concurrent host Go-build contention, so no unsupported cold-build timing claim is made here; warm timing belongs to story 002."
+      "notes": "Captured the passing baseline suite, complete go test -list output, deterministic go test -covermode=atomic coverage output, and one-to-one behavior placement/helper ownership map in docs/internal/development/plans/factory-sessions-execution-test-split-baseline.md at source commit 947152348b235f3dd0ede47f233947fcadddcc6a."
     },
     {
-      "id": "thr-worktree-build-cache-002",
-      "title": "Prove build/install parity and warm-build throughput",
-      "description": "As a factory operator repeating build and review cycles, I want cached worktree builds to preserve release-relevant output while completing dramatically faster so that throughput improves without changing the shipped CLI.",
+      "id": "thr-split-fake-service-runtime-tests-002",
+      "title": "Preserve fixture-service execution and inspection behavior in focused groups",
+      "description": "As a Factory Sessions maintainer, I want fixture-backed fake-service construction, start, lifecycle, read, listing, event, and projection tests grouped by behavior so that I can understand those outcomes without navigating unrelated replay and runtime coverage.",
       "acceptanceCriteria": [
-        "From equivalent source and environment inputs, cache-enabled and explicit forced -a make build controls are byte-identical, or a documented behavioral comparison proves equivalent CLI startup, --version output, VCS/dirty-state stamping, and representative command behavior.",
-        "make install uses the same corrected cache policy as make build; its installed binary passes the same version/behavior probe as the corresponding build artifact without overwriting an unrelated user installation during verification.",
-        "verify-build and default inherit the corrected build behavior through their existing dependency on build; no adjacent lint, unit-lane, functional-lane, or UI mechanics are changed to manufacture the timing result.",
-        "The PR includes before and after timing for make build in a fresh linked worktree under comparable Go version, source revision, host-load, and cache-state conditions, plus an immediate unchanged warm rerun.",
-        "The warm cache-enabled result is materially faster than the forced -a baseline and trends from minutes toward seconds; the PR reports raw wall times and explains material variance rather than claiming an unsupported percentage.",
-        "Focused build/install probes and the repository's required build-related CI checks pass with no version-stamping regression.",
+        "Existing fixture-service construction and synchronous/asynchronous start tests retain their names, bodies, assertions, fixture inputs, and observed outcomes in a focused construction/start test file.",
+        "Existing lifecycle-control, read, listing, event-cursor, result, artifact, and projection-validation tests retain their names, bodies, assertions, and observed outcomes in clearly named lifecycle and inspection-oriented files.",
+        "Helpers used only by one group move with that group; helpers shared across groups have one package-local definition and are not duplicated.",
+        "Comparison with the story 001 baseline shows no added, removed, or renamed test entry after this slice.",
+        "No touched test file exceeds 1,200 lines.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 2,
       "passes": true,
-      "notes": "Completed parity and throughput verification on Windows 11-era host tooling with go1.25.0 windows/amd64, CGO_ENABLED=1, source revision 6c81ae487cad95487e9931139aa43bf7622aa5b2, and a fresh detached linked worktree. The sequential benchmark used an isolated temporary GOCACHE and shared GOMODCACHE, temporary BIN_DIR/INSTALL_DIR values, and isolated HOME/USERPROFILE; it never touched a user installation or deleted a broad cache. Exact commands were make BIN_DIR=.artifacts/worktree-build-cache-002/cache-build build, the same unchanged warm build, make INSTALL_DIR=.artifacts/worktree-build-cache-002/cache-install install, make GO_BUILD_FLAGS=-a BIN_DIR=.artifacts/worktree-build-cache-002/forced-build build, and make GO_BUILD_FLAGS=-a INSTALL_DIR=.artifacts/worktree-build-cache-002/forced-install install. Raw wall times were cold cache build 109.321s, unchanged warm cache build 3.346s, warm cache install 3.898s, forced build 25.536s, and forced install 30.937s; the warm cache build is materially faster than the explicit forced baseline on the same sequential host run, while the cold run explains the initial cache priming cost. All four artifacts had the identical SHA-256 6a4667af82485916ce1bbf82070133790d2998ad615f20e5669d6b3af9c716ab. All four build/install binaries returned identical --version output v0.0.8-0.20260810184644-947152348b23+dirty and identical --help output; go version -m reported identical vcs.revision 947152348b235f3dd0ede47f233947fcadddcc6a, vcs.time 2026-08-10T18:46:44Z, and vcs.modified=true for every artifact. The linked-worktree Go metadata reflects the common checkout's state (the main checkout had unrelated dirty files), but cached and forced controls are equivalent and -a does not correct that separate stamping behavior. make -n verify-build expanded to ui-build followed by make build and a cache-enabled go build; make -n default likewise emitted cache-enabled go build, while only explicit GO_BUILD_FLAGS=-a emitted -a. Focused cmd/factory and pkg/root tests, make test, make typecheck, make backend-size, make pkg-maint, make pkg-file-count, make pkg-structure, and make vet all passed. No adjacent lint, unit-lane, functional-lane, UI, generated, or public-contract mechanics changed."
+      "notes": "Moved the fixture-service construction/start and lifecycle/inspection tests from the two consolidated files into fake_service_construction_start_test.go and fake_service_lifecycle_inspection_test.go, with shared fixture/event helpers owned by execution_test_helpers_test.go. The full go test -list '.*' comparison remains 267 baseline entries versus 267 current entries with no differences, and exact baseline coverage remains 79.6% (execution), 80.0% (fixtures), 83.1% (recordingreplay), and 89.8% (runtimepersist). New focused files are 100, 557, and 748 lines; the legacy source files retain their staged-split suppressions for stories 003-005."
+    },
+    {
+      "id": "thr-split-fake-service-runtime-tests-003",
+      "title": "Preserve replay and dispatch behavior in focused groups",
+      "description": "As a Factory Sessions maintainer, I want replay, canonical event, dispatch projection, interruption, and pause/resume tests grouped by behavior so that historical and dispatch guarantees can be reviewed independently from fixture startup coverage.",
+      "acceptanceCriteria": [
+        "Existing session replay, dispatch replay, canonical event-envelope, interrupted-dispatch, late-completion suppression, and pause/resume replay tests retain their names, bodies, assertions, event order, and observed outcomes in focused replay and dispatch test files.",
+        "fake_service_test.go is retired only after every original test and required helper has exactly one behavior-appropriate destination.",
+        "Comparison with the story 001 baseline shows no added, removed, or renamed test entry after the complete fake-service split.",
+        "The focused package suite continues to prove the same live-versus-replayed session, dispatch, result, artifact, lifecycle, and event projections.",
+        "No resulting test file exceeds 1,200 lines.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": "Moved all 24 tests from fake_service_test.go into fake_service_replay_test.go (15 replay/projection tests) and fake_service_dispatch_test.go (9 interruption/dispatch-control tests), preserving declarations, bodies, assertions, event order, and outcomes; fake_service_test.go is retired. Shared helpers remain owned by execution_test_helpers_test.go and no helper was duplicated. The story 001 go test -list '.*' comparison is 269 baseline entries versus 269 current entries with zero differences, and go test -covermode=atomic remains 79.6% (execution), 80.0% (fixtures), 83.1% (recordingreplay), and 89.8% (runtimepersist). New focused files are 798 and 586 lines; fake_service_runtime_test.go remains the staged owner for stories 004-005."
+    },
+    {
+      "id": "thr-split-fake-service-runtime-tests-004",
+      "title": "Preserve runtime start, result, and persistence behavior in focused groups",
+      "description": "As a Factory Sessions maintainer, I want JavaScript runtime startup, result shaping, persistence policy, normalization, and validation tests grouped by behavior so that execution setup and result guarantees are understandable without loading control and checkpoint scenarios.",
+      "acceptanceCriteria": [
+        "Existing synchronous/asynchronous start, timeout, cancellation propagation, result projection, artifact shaping, persistence success/failure, source resolution, policy validation, normalization, and idempotency tests retain their names, bodies, assertions, and observed outcomes in focused files.",
+        "Existing fixture helpers for runtime construction, workflows, clocks, persistence, and common start requests are moved without logic changes and have a single definition when shared.",
+        "Comparison with the story 001 baseline shows no added, removed, or renamed test entry after this slice.",
+        "The focused package suite continues to prove identical start, result, persistence, validation, and failure-propagation behavior.",
+        "No touched test file exceeds 1,200 lines.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": "Moved the JavaScript runtime start, result, persistence, normalization, source-resolution, policy-validation, and idempotency tests from fake_service_runtime_test.go into focused runtime owners, preserving declarations, bodies, assertions, fixtures, and outcomes. Shared runtime construction, workflow, clock, recording, and adapter helpers have one package-local owner. The review follow-up mechanically consolidated adjacent same-package owners so the deletion-only execution file-count baseline remains 28; all resulting files pass the stricter 1,000-line maintainability gate. The story 001 go test -list '.*' comparison is 269 baseline entries versus 269 current entries with identical sorted SHA-256 09876A7E761EAB43E48DD3729153FCCAE52802F37CC95B424B706AAFA3869B51, and go test -covermode=atomic remains 79.6% (execution), 80.0% (fixtures), 83.1% (recordingreplay), and 89.8% (runtimepersist). Focused suite, full make test, vet, pkg-maint, backend-size, pkg-file-count, pkg-structure, and typecheck pass."
+    },
+    {
+      "id": "thr-split-fake-service-runtime-tests-005",
+      "title": "Preserve runtime control, checkpoint, event, and recording behavior in focused groups",
+      "description": "As a Factory Sessions maintainer, I want runtime lifecycle control, interruption, checkpoint, resume, event history, and recording tests grouped by behavior so that high-risk runtime guarantees remain complete and easier to review.",
+      "acceptanceCriteria": [
+        "Existing lifecycle status/control, interruption timing, checkpoint projection, partial result, pause persistence, resume, phase-event, observer, append-only history, recording, and workflow-policy tests retain their names, bodies, assertions, ordering, and observed outcomes in focused files.",
+        "fake_service_runtime_test.go is retired only after every original test and required helper has exactly one behavior-appropriate destination.",
+        "The final go test -list '.*' comparison with story 001 is empty for test and example entries, and final package coverage exactly matches the recorded baseline value.",
+        "go test ./pkg/services/factory_sessions/internal/execution/... passes and no resulting hand-maintained Go file in the package exceeds 1,200 lines.",
+        "The final diff contains no assertion changes, test additions/removals, production refactor, generated-file edit, or unrelated cleanup.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 5,
+      "passes": true,
+      "notes": "Moved the remaining runtime control, interruption, checkpoint, resume, phase-event, observer, append-only-history, recording, and workflow-policy tests from fake_service_runtime_test.go into focused runtime control, checkpoint, validation/event, persistence, and dispatch owners; moved the fake-service interruption test into fake_service_dispatch_test.go; and retired fake_service_runtime_test.go. All original declarations and required helpers have exactly one behavior-appropriate destination, with the two review-identified whitespace differences restored byte-for-byte. The 269-entry story 001 inventory is unchanged as a sorted multiset, with matching SHA-256 09876A7E761EAB43E48DD3729153FCCAE52802F37CC95B424B706AAFA3869B51. Final go test -covermode=atomic coverage matches the baseline at 79.6% (execution), 80.0% (fixtures), 83.1% (recordingreplay), and 89.8% (runtimepersist). Focused suite, full make test, vet, backend-size, pkg-maint, pkg-file-count, pkg-structure, and typecheck pass; the execution package remains at the exact deletion-only baseline of 28 files and all resulting files are below 1,000 lines."
     }
   ]
 }
