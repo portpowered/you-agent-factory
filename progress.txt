@@ -11922,3 +11922,19 @@
 - **Learnings for future iterations:**
   - After resolving a moving-base merge, verify both the active story PRD and the complete append-only log before committing; then rerun the shared fast tier because incoming UI and transport changes can affect it even when the active story is already complete.
 ---
+## [2026-08-11 08:15:27 -07:00] - btrc-p1-root-injection-006 replacement-head CI baseline follow-up
+- What was implemented
+  - Audited workflow `31504194499` for pushed head `6ddb9bd13f0bcc79a1196b344a740b04a3cfdad4` and reran its failed Backend Functional Coverage job plus dependent Verification Policy gate.
+  - Made no product or unrelated-test changes after the retry reproduced the unchanged server-binding assertion; the active P1 stories remain complete.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - All non-functional lanes passed on the initial workflow, including Frontend, Frontend Component, Frontend Coverage, Frontend Storybook, Frontend Browser, UI Backend Integration, API/package, packaged-factory, model-provider, local-inference, docs, README, and Backend Unit Coverage.
+  - Attempt 1 reported the untouched server-binding assertion and a transient workers/mock continuous-idle failure; ten local repetitions of the workers/mock test passed.
+  - Attempt 2 cleared the workers/mock failure but reproduced only `TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput` in untouched `tests/functional/transport/server_binding`.
+  - `git diff --name-only origin/main...HEAD -- tests/functional/transport/server_binding tests/functional/workers/mock` is empty, and the server-binding mismatch reproduces locally on Windows with the same structured API-server diagnostic.
+  - Thread-aware review audit still reports zero inline review threads and zero formal reviews; the remaining red result is baseline CI policy, not a task-scoped failure.
+- **Learnings for future iterations:**
+  - After one failed-job retry reduces functional coverage to a deterministic failure in an untouched package, retain exact attempt evidence and stop widening the feature diff; do not “fix” an unrelated baseline assertion in a dependency-injection task.
+---
