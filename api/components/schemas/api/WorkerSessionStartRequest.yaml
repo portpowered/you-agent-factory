@@ -1,0 +1,25 @@
+type: object
+additionalProperties: false
+required:
+  - requestId
+  - workerSessionId
+  - execution
+description: >-
+  One caller-owned idempotent request for a directly resolved Worker
+  execution. Worker Sessions owns reservation, event visibility, supervision,
+  and admission; it does not select a provider or runner from this payload.
+properties:
+  requestId:
+    type: string
+    minLength: 1
+    description: Required caller idempotency key for this asynchronous start.
+  workerSessionId:
+    type: string
+    minLength: 1
+    description: Stable Worker Session identity to reserve and return.
+  execution:
+    $ref: './WorkerSessionResolvedExecution.yaml'
+    description: Already-resolved Workers route and execution input.
+  retry:
+    $ref: './WorkerSessionStartRetryPolicy.yaml'
+    description: Bounded total attempt budget; omitted means one attempt.
