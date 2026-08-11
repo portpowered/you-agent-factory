@@ -12392,3 +12392,19 @@
   - Reconcile the live hosting base before final PR checks; a branch can be locally clean against a stale tracking ref while GitHub reports a conflict.
   - For shared append-only metadata conflicts, retain the active PRD and preserve both complete pattern/history sides before staging the merge.
 ---
+
+## [2026-08-11 10:10:00 -07:00] - e3-event-webhooks-001 final review and CI follow-up
+- What was implemented
+  - Completed the requested PR feedback loop for the impossible dispatch event/status filter combinations; no additional production changes were needed after the compatibility validator and focused tests passed.
+  - Characterized the two rotating Backend Functional Coverage failures on the merged current-main head: `TestClaudeCommandCancellationThroughRootBuildProcessIsCanonical` and `TestCLISuccessorAfterHardKillReportsPreRuntimeStagingContention` each passed 10 isolated repetitions.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - GitHub Actions run `31513733456` passed all 18 required checks after rerunning only the failed jobs, including Backend Functional Coverage and Verification Policy; the pinned real ACP evidence artifact was produced.
+  - PR #1885 is open, non-draft, mergeable, and clean with zero review threads, zero unresolved inline threads, and zero formal reviews.
+  - The PRD records all four stories as `passes:true`, and its delivery audit is synchronized to the merged current-main base and green hosted run.
+- **Learnings for future iterations:**
+  - When broad functional coverage rotates between untouched cancellation or staging-contention fixtures, repeat each exact test locally before changing feature code; stable isolated runs support failed-job-only retries.
+  - A top-level review comment can be addressed by a pushed behavioral fix and focused tests even when GitHub exposes no inline review thread to resolve; keep the PRD audit explicit about the remaining conversation history.
+---
