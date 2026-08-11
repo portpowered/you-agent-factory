@@ -8997,3 +8997,17 @@
 - **Learnings for future iterations:**
   - A no-new-lint claim is strongest when the identical lint target is run on the exact fetched base and replacement head, with baseline counts compared rather than treating aggregate baseline failures as task regressions.
 ---
+## [2026-08-11 02:43:23 -07:00] - prose-standard-and-terms-003 latest-main synchronization follow-up
+- What was implemented
+  - Fetched the newly advanced live `origin/main` at `dd87fd04db20d755f9b44c369aa79b8c3e600f5f` after the first green replacement head became conflicted during final audit.
+  - Merged the current-main lint-lane and baseline-maintenance changes, preserved this task's authoritative `prd.json`, and retained the append-only progress history.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+  - Current-main lint driver, package-boundary baseline, Makefile, and baseline cleanup files carried by the synchronization merge.
+- Verification
+  - The shared PRD conflict is resolved with all three prose stories still marked `passes:true`; no conflict markers or unmerged index entries remain.
+  - The previous replacement head `ff958b2f9` had all hosted checks terminal-success, but its final PR audit detected this newer base before review handoff; replacement-head checks must be rerun on the new merge commit.
+- **Learnings for future iterations:**
+  - A green hosted run is not final evidence while `origin/main` moves; fetch and compare the live base again immediately before declaring review readiness, even after the PR becomes mergeable.
+---

@@ -1,5 +1,6 @@
 bin/
 .artifacts/
+.cache/lint-checkers/
 .playwright-mcp/
 tests/adhoc/.playwright-mcp/
 .DS_Store
