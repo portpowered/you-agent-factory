@@ -497,8 +497,6 @@ func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs 
 	cfg.Stdin = cmd.InOrStdin()
 	cfg.StdinIsTTY = func() bool { return startupcli.StdinIsTTY(cmd.Context()) }
 	cfg.OutputIsTTY = startupcli.StdoutIsTTY(cmd.Context())
-	cfg.ProgressOutput = cmd.ErrOrStderr()
-	cfg.ProgressIsTTY = startupcli.StderrIsTTY(cmd.Context())
 	if err := resolveRunFactoryPrompt(cmd, &cfg, promptArgs, rootOptions.prepareInvocationInput); err != nil {
 		runcli.ObserveInvocationRejection(logger, err)
 		return err
@@ -516,6 +514,7 @@ func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs 
 	cfg.TerminalPolicy = runPolicy
 	cfg.Verbose = runPolicy.VerboseEnabled()
 	cfg.SuppressDashboardRendering = runPolicy.Mode() == terminalpolicy.ModeQuiet
+	configureRunProgressOutput(cmd, &cfg, policy)
 	humanTerminal := runPolicy.HumanTerminalWriter(cmd.OutOrStdout())
 	if cleanInvocation || textInvocation {
 		cfg.Output = cmd.OutOrStdout()
@@ -537,6 +536,23 @@ func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs 
 		return errors.New("run service initializer is required")
 	}
 	return delegateRunInitialization(cmd.Context(), cfg, defaultInvocation, rootOptions)
+}
+
+func configureRunProgressOutput(cmd *cobra.Command, cfg *runcli.RunConfig, policy terminalpolicy.Policy) {
+	if cmd == nil || cfg == nil {
+		return
+	}
+	// The effective policy intentionally suppresses operator/dashboard output
+	// for one-shot text invocations while their explicit response stream remains
+	// a customer result. Progress therefore follows the base policy resolved
+	// from the user's explicit quiet/verbose flags, and is always routed to
+	// stderr when that policy permits human terminal output.
+	cfg.ProgressOutput = nil
+	cfg.ProgressIsTTY = false
+	if policy.AllowsHumanTerminalOutput() {
+		cfg.ProgressOutput = cmd.ErrOrStderr()
+		cfg.ProgressIsTTY = startupcli.StderrIsTTY(cmd.Context())
+	}
 }
 
 func remotePlacementSelected(globals *cliGlobalOptions) bool {

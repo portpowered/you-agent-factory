@@ -1,4 +1,6 @@
 ## Codebase Patterns
+- When a dispatch identity is upgraded to a Worker Session ID in a later event batch, migrate its progress color alias instead of allocating a second color; terminal cleanup must remove the canonical identity.
+- Functional CLI scenarios outside feature-owned workers/mock cells must replace provider execution through `serviceedges.Edges.ProviderCommandRunner`; use protocol-valid shaped Codex responses for packaged decision-envelope workflows.
 - CLI lifecycle adapters should render both local service results and remote HTTP responses through the shared Factory Session boundary mapper so placement changes preserve structured fields and outcome classifications.
 - Remote CLI execution adapters should map prepared normalized input into the canonical durable start request, derive deterministic request identities from the request tuple, and never forward compatibility content or `~default`.
 - Remote durable run adapters must wait on the canonical result projection before writing terminal output; map lifecycle/result status through the shared invocation envelope, and keep transport or malformed-response errors separate from domain classifications.
@@ -9665,4 +9667,110 @@
   - `make vet pkg-structure cli-manifest-check contracts-check` passed.
 - **Learnings for future iterations:**
   - New tests in a tightly budgeted package should reuse an existing test file when package file-count baselines are strict; keep the resulting file below the 1,000-line maintainability limit by splitting behavior into focused functions.
+---
+
+## [2026-08-10 23:16 -07:00] - cli-error-classification-and-run-output PR handoff verification
+- What was implemented
+  - Reproduced the two failing tests from hosted run `31461891506` after the PR’s stderr-output correction; both passed in ten repeated local executions, so no additional product change was justified.
+  - Merged the live `origin/main` head `ecd1d2487` into the branch, regenerated the CLI manifest, and preserved the existing PRD with all four stories marked `passes:true`.
+  - Audited PR #1872 conversation comments, reviews, and inline review threads; none are present or unresolved.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `make cli-manifest-generate` produced no diff.
+  - Focused renderer, CLI functional, typecheck, backend-size, pkg-maint, pkg-file-count, pkg-structure, vet, CLI manifest/contract, functional-scenario, and docs-reference gates passed on the reconciled head.
+  - `TestFunctionalAPIServer_RuntimeLogDirectoryIsAProcessInput` passed 10/10; `TestRunScopedServerAndSiteOwnNamedAndFileInvocationLifecycles` passed 10/10.
+  - The broad `make test` unit lane returned a single `pkg/wire` failure under aggregate parallel execution; the exact `go test ./pkg/wire -short -count=1 -v -timeout 600s` rerun passed, identifying the broad failure as a concurrency/resource-sensitive flake rather than a task regression.
+- **Learnings for future iterations:**
+  - When an aggregate Go test lane reports only one package failure, rerun that package serially with verbose output before changing source; package-level success can distinguish a scheduler/resource flake from a behavioral regression.
+  - For GitHub Actions failures in a multi-job run, fetch the exact failing job log rather than the whole run log so downstream policy failures do not obscure the first failing test.
+---
+
+## [2026-08-10 23:25 -07:00] - cli-error-classification-and-run-output hosted CI handoff
+- What was implemented
+  - Pushed the reconciled branch head `55eebb269` to PR #1872 after the current-main merge and final manifest/check verification.
+  - Completed the fresh hosted CI run and confirmed the PR is ready for review with no blocking review feedback.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Hosted run `31464542975` passed all required jobs, including Classify Verification, Backend Unit Coverage, Backend Functional Coverage, Verification Policy, typecheck/frontend, API/contract, packaged-factory, local-inference, and UI-backend lanes.
+  - PR #1872 is open, non-draft, `MERGEABLE`, points at `55eebb269`, and its description matches `prd.json` byte-for-byte.
+  - Thread-aware GraphQL audit reports zero conversation comments, review submissions, and inline review threads.
+- **Learnings for future iterations:**
+  - After a final bookkeeping-only push, wait for the replacement hosted run instead of relying on the previous head’s green checks; review readiness is a property of the exact pushed SHA.
+---
+
+## [2026-08-11 00:25 -07:00] - cli-error-classification-and-run-output review follow-up
+- What was implemented
+  - Reconciled the branch with live `origin/main` at `85619c087089e3ed6a04edad8b794de62785ee30`; the only merge conflicts were the shared `prd.json` and append-only `progress.txt` files, which were resolved by preserving this task PRD and both histories.
+  - Addressed the blocking functional-test review finding by converting the changed CLI output scenarios in the factory-run, text-stream, and run-scoped-server suites from Mock Workers to `serviceedges.Edges.ProviderCommandRunner` with protocol-valid Codex decision-envelope responses. Existing unrelated Mock Workers feature tests remain unchanged.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+  - `tests/functional/cli/factory_run/output/output_test.go`
+  - `tests/functional/transport/cli/output/text_stream_test.go`
+  - `tests/functional/transport/run_scoped_server/run_scoped_server_test.go`
+- Verification
+  - Focused functional suites passed: `go test ./tests/functional/cli/factory_run/output ./tests/functional/transport/cli/output ./tests/functional/transport/run_scoped_server -count=1 -timeout 600s`.
+  - Visualization package suite passed: `go test ./pkg/services/factory_visualization/... -count=1 -timeout 600s`.
+  - `make typecheck`, `make backend-size pkg-maint pkg-file-count pkg-structure vet`, `make cli-manifest-generate`, `make cli-manifest-check`, `make cli-contract-smoke`, `make docs-reference-smoke`, and `git diff --check` passed.
+- **Learnings for future iterations:**
+  - Functional coverage that changes CLI behavior must keep the provider-edge construction preference visible in the changed scenario itself; a pre-existing Mock Workers helper can still violate review expectations when the assertion begins proving provider-backed output.
+  - After resolving shared bookkeeping conflicts, regenerate the authored CLI manifest and validate the PRD before staging so generated artifacts and the task body remain aligned.
+---
+
+## [2026-08-11 00:32 -07:00] - cli-error-classification-and-run-output latest-main synchronization
+- What was implemented
+  - Merged the newer live `origin/main` head `3a0b571b234f70d68908e36669100d0ac9f66a9f` after it advanced during the provider-edge review verification window; the incoming API/model-provider changes were carried through the merge and the task PRD remained authoritative.
+  - Regenerated the CLI manifest after the merge and retained the provider-edge functional-test corrections unchanged.
+- Files changed
+  - Current-main API/model-provider files carried by the merge.
+  - `prd.json`
+  - `progress.txt`
+  - `packages/api/generated/manifest.json`
+- Verification
+  - Focused functional suites passed on the replacement head: `go test ./tests/functional/cli/factory_run/output ./tests/functional/transport/cli/output ./tests/functional/transport/run_scoped_server -count=1 -timeout 600s`.
+  - `go test ./pkg/services/factory_visualization/... -count=1 -timeout 600s` passed.
+  - `make typecheck`, `make backend-size pkg-maint pkg-file-count pkg-structure vet`, `make cli-manifest-generate`, `make cli-manifest-check`, `make cli-contract-smoke`, and `git diff --check` passed.
+- **Learnings for future iterations:**
+  - Fetch and merge the live base immediately before the replacement push; main advanced again while the prior local gate set was running, and the affected tests must be rerun on the actual pushed ancestry.
+---
+
+## [2026-08-11 00:40 -07:00] - cli-error-classification-and-run-output hosted CI handoff
+- What was implemented
+  - Completed the replacement-head review follow-up for PR #1872. The provider-edge test conversion and current-main reconciliation are now pushed; this entry records the green hosted run immediately before the final bookkeeping push.
+  - Audited the PR with the thread-aware GitHub workflow after the push: there are no review submissions or inline review threads; the existing top-level blocker comment is superseded by the reconciled head, provider-edge corrections, and passing replacement checks.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Hosted run `31469400154` for head `7aa3b26a01ea010fa4383822c89ea229d9e8d5fd` passed every required check: Classify Verification, Backend Unit Coverage, Backend Functional Coverage, API Contract And Package, frontend/UI lanes, Local Inference, packaged/model-provider packages, and Verification Policy.
+  - PR #1872 remains open and non-draft with title `cli-error-classification-and-run-output`; its base is `3a0b571b234f70d68908e36669100d0ac9f66a9f` and it is mergeable pending repository review/merge policy.
+- **Learnings for future iterations:**
+  - When a bookkeeping-only progress commit follows a green hosted run, trigger and wait for the replacement run on the new head before declaring review readiness; the prior run is evidence for the preceding implementation head only.
+---
+
+## [2026-08-11 01:43:17 -07:00] - cli-error-classification-and-run-output review follow-up
+- What was implemented
+  - Merged the live `origin/main` head `1b871e3a84125400ca3f04b2bdf9fd2658ac5c45`, preserved this task's authoritative PRD, and unioned both append-only progress histories without conflict markers.
+  - Expanded the authored `you run` command contract to describe accepted Work/dependency output, stderr-only worker/workstation progress, TTY color/spinner policy, deterministic redirected output, quiet suppression, and structured-output isolation; regenerated the CLI family and published contract artifacts through the repository targets.
+  - Migrated a dispatch's assigned progress color to its associated Worker Session ID when association arrives in a later event batch, and added a deterministic 12-worker split-batch regression covering palette capacity, terminal cleanup, and replacement workers.
+- Files changed
+  - `contracts/cli/commands.json`
+  - `packages/api/generated/cli/commands.json`
+  - `packages/api/generated/manifest.json`
+  - `pkg/services/factory_visualization/transports/cli/human_worker_progress.go`
+  - `pkg/services/factory_visualization/transports/cli/service_test.go`
+  - `pkg/transports/cli/generated/family_manifests_gen.go`
+  - `prd.json`
+  - `progress.txt`
+  - Current-main packaged-factories files carried by the synchronization merge.
+- Verification
+  - `go test ./pkg/services/factory_visualization/... -count=1 -timeout 180s` — passed.
+  - `go test -race ./pkg/services/factory_visualization/transports/cli -count=1 -timeout 180s` — passed.
+  - `make typecheck`, `make cli-manifest-generate`, `make cli-manifest-check`, and `make cli-contract-smoke` — passed.
+  - `make backend-size`, `make pkg-maint`, `make pkg-file-count`, and `make pkg-structure` — passed.
+  - The combined static-gate command and the standalone `make vet` invocation each reached the six-minute host command bound while unrelated verification processes were competing for the Windows host; the exact timed-out process trees were inspected and terminated, with no source failure emitted. `git diff --check` passed.
+- **Learnings for future iterations:**
+  - The published CLI copy is refreshed by `make contracts-generate` after the authored contract changes; `make cli-manifest-generate` refreshes the family/runtime projections and the smoke check catches published drift.
+  - When broad Go verification is run concurrently across worktrees on Windows, isolate the exact timed-out process tree before retrying a gate so other task verification remains undisturbed.
 ---
