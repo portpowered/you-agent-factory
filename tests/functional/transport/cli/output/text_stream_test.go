@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -291,17 +292,11 @@ func runGoalHumanInvocation(t *testing.T, runArgs []string) (string, string) {
 
 	homeDir := t.TempDir()
 	support.InstallPackagedFactory(t, homeDir, goalFactoryName)
-	mockWorkersPath := support.WriteMockWorkersConfig(t, &workers.MockWorkersConfig{
-		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
-		MockWorkers: []workers.MockWorkerConfig{{
-			WorkerName:      "goal-executor",
-			WorkstationName: "execute-goal",
-			RunType:         workers.MockWorkerRunTypeAccept,
-		}},
-	})
+	providerRunner := textStreamAcceptedProviderRunner()
 	args := []string{
 		"you", "run", "--named", goalFactoryName,
-		"--with-mock-workers", mockWorkersPath,
+		"--executor-provider", "codex",
+		"--executor-model", "gpt-5-codex",
 		"--no-record",
 	}
 	args = append(args, runArgs...)
@@ -309,7 +304,9 @@ func runGoalHumanInvocation(t *testing.T, runArgs []string) (string, string) {
 	inputs := support.FakeInputs(t.Context(), args)
 	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 	inputs.Input.WorkingDirectory = t.TempDir()
-	if err := support.BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input); err != nil {
+	if err := support.BuildProcess(t, serviceedges.Edges{
+		ProviderCommandRunner: providerRunner,
+	}).Execute(inputs.Input); err != nil {
 		t.Fatalf("Process.Execute(%v) error = %v\nstdout:\n%s\nstderr:\n%s", args, err, inputs.Stdout(), inputs.Stderr())
 	}
 	return inputs.Stdout(), inputs.Stderr()
@@ -401,6 +398,12 @@ func assertStableWorkerProgress(t *testing.T, stderr string) {
 	if strings.ContainsAny(stderr, "\x1b\r") {
 		t.Fatalf("stderr = %q, want no ANSI or cursor controls for redirected output", stderr)
 	}
+}
+
+func textStreamAcceptedProviderRunner() *support.ShapedProviderCommandRunner {
+	return support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: []byte("{\"decision\":\"accepted\",\"feedback\":\"\",\"output\":\"mock worker accepted\"}"),
+	})
 }
 
 func nonEmptyStdoutLines(value string) []string {
@@ -554,17 +557,11 @@ func runGoalHumanResponseStreamWithStdout(t *testing.T, stdout *firstChunkGatedS
 
 	homeDir := t.TempDir()
 	support.InstallPackagedFactory(t, homeDir, goalFactoryName)
-	mockWorkersPath := support.WriteMockWorkersConfig(t, &workers.MockWorkersConfig{
-		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
-		MockWorkers: []workers.MockWorkerConfig{{
-			WorkerName:      "goal-executor",
-			WorkstationName: "execute-goal",
-			RunType:         workers.MockWorkerRunTypeAccept,
-		}},
-	})
+	providerRunner := textStreamAcceptedProviderRunner()
 	args := []string{
 		"you", "run", "--named", goalFactoryName,
-		"--with-mock-workers", mockWorkersPath,
+		"--executor-provider", "codex",
+		"--executor-model", "gpt-5-codex",
 		"--no-record", "--output", "response-stream",
 		"deterministic human text-stream incremental contract",
 	}
@@ -573,7 +570,9 @@ func runGoalHumanResponseStreamWithStdout(t *testing.T, stdout *firstChunkGatedS
 	inputs.Input.WorkingDirectory = t.TempDir()
 	inputs.Input.Stdout = stdout
 	inputs.Input.Stderr = &stdout.diagnostic
-	process := support.BuildProcess(t, serviceedges.Edges{})
+	process := support.BuildProcess(t, serviceedges.Edges{
+		ProviderCommandRunner: providerRunner,
+	})
 
 	go func() {
 		stdout.err = process.Execute(inputs.Input)
