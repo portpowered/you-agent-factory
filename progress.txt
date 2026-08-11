@@ -8445,3 +8445,20 @@
   - A production default `http.Client` is a security boundary for configured webhook URLs; test the full provider path with local redirect and dead-letter receivers instead of only testing a client helper in isolation.
   - An absolute retry deadline must be measured from response receipt, especially when the receiver can spend meaningful time producing a retryable response.
 ---
+
+## 2026-08-11 02:12 -07:00 - e3-event-webhooks-004 current-main and CI handoff
+- What was implemented
+  - Merged live `origin/main` `0e7df069f80518287a7905558a525ac196b11bc0` into the webhook branch, preserved the webhook-owned PRD/progress files, and accepted current-main shared/generated changes.
+  - Pushed replacement head `20a2a09729e54e53918be87686f3bc547cfaa977` and synchronized the existing PR body from `prd.json`.
+- Files changed
+  - Current-main shared/generated CLI, API, UI, and wire artifacts from merge commit `20a2a0972`.
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `make generate-wire contracts-check api-smoke`, focused Webhooks/wire tests, root-built functional webhook coverage, post-merge race tests, and `git diff --check` pass.
+  - All 18 required checks pass in CI run `31476001620` for the exact pushed head; PR #1850 is open, non-draft, clean, and mergeable against base `0e7df069f`.
+  - Thread-aware GitHub audit reports zero unresolved inline threads, zero formal reviews, and four historical conversation comments; the latest blocking comment is addressed by the current commits.
+- **Learnings for future iterations:**
+  - A metadata audit commit changes the PR head, so refresh CI, current-base ancestry, PR body equality, mergeability, and thread state together after the final implementation merge.
+  - When current main has task-scoped PRD/progress conflicts, keep the active task’s authoritative files and carry unrelated main work through code/generated artifacts and merge history.
+---
