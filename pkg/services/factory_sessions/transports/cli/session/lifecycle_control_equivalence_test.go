@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -46,6 +47,115 @@ func TestLifecycleControlPause_CLIJSONMatchesAPIResponse(t *testing.T) {
 	assertLifecycleControlEquivalence(t, apiResponse, cliResponse)
 }
 
+func TestLocalLifecycleControl_JSONPreservesCanonicalResponse(t *testing.T) {
+	result := lifecycleEquivalenceResult(
+		"dur-sess-local-pause-001",
+		factorysessionexecution.LifecycleControlPause,
+		factorysessionexecution.LifecycleControlOutcomeAccepted,
+		factorysessionexecution.LifecycleStatusPaused,
+	)
+	result.EffectivePolicyHash = "sha256:policy"
+	result.ApprovalPreviewID = "preview-1"
+	result.DispatchID = "dispatch-1"
+	result.RetryDispatchID = "dispatch-1"
+	result.Detail = "pause accepted"
+	result.Links = factorysessionexecution.LifecycleControlLinks{
+		Session:    "/factory-sessions/dur-sess-local-pause-001",
+		Status:     "/factory-sessions/dur-sess-local-pause-001",
+		Results:    "/factory-sessions/dur-sess-local-pause-001/results",
+		Dispatches: "/factory-sessions/dur-sess-local-pause-001/dispatches",
+		Artifacts:  "/factory-sessions/dur-sess-local-pause-001/artifacts",
+		Events:     "/factory-sessions/dur-sess-local-pause-001/events",
+	}
+
+	var out bytes.Buffer
+	operation := func(_ context.Context, sessionID string, request factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error) {
+		if sessionID != result.SessionID {
+			t.Fatalf("sessionId = %q, want %q", sessionID, result.SessionID)
+		}
+		if request.RequestID != "control-1" || request.Reason != "operator pause" {
+			t.Fatalf("control request = %#v, want request metadata", request)
+		}
+		return result, nil
+	}
+	if err := NewLocalPause(operation)(LifecycleControlConfig{
+		Context: context.Background(), SessionID: result.SessionID, RequestID: "control-1",
+		Reason: "operator pause", JSON: true, Output: &out,
+	}); err != nil {
+		t.Fatalf("local pause: %v", err)
+	}
+
+	var got factoryapi.FactorySessionLifecycleControlResponse
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatalf("decode local response: %v\n%s", err, out.String())
+	}
+	want := localLifecycleControlResponse(result)
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("local response = %#v, want canonical mapping %#v", got, want)
+	}
+}
+
+func TestLocalLifecycleControl_RejectionRendersRemoteEquivalentOutcome(t *testing.T) {
+	const sessionID = "dur-sess-local-terminal-001"
+	var out bytes.Buffer
+	err := NewLocalPause(func(context.Context, string, factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error) {
+		return factorysessionexecution.LifecycleControlResult{}, &factorysessionexecution.ControlError{
+			Operation: factorysessionexecution.LifecycleControlPause,
+			Outcome:   factorysessionexecution.LifecycleControlOutcomeTerminalSession,
+			Status:    factorysessionexecution.LifecycleStatusSucceeded,
+			Message:   "terminal session",
+			Links: factorysessionexecution.LifecycleControlLinks{
+				Session: "/factory-sessions/" + sessionID,
+				Status:  "/factory-sessions/" + sessionID,
+			},
+		}
+	})(LifecycleControlConfig{
+		Context: context.Background(), SessionID: sessionID, JSON: true, Output: &out,
+	})
+
+	var rejected *LifecycleControlRejectedError
+	if !errors.As(err, &rejected) {
+		t.Fatalf("local error = %v, want LifecycleControlRejectedError", err)
+	}
+	if rejected.Response.SessionId != sessionID ||
+		rejected.Response.Operation != factoryapi.FactorySessionLifecycleControlKindPause ||
+		rejected.Response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeTerminalSession ||
+		rejected.Response.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+		t.Fatalf("rejected response = %#v, want terminal pause for %s", rejected.Response, sessionID)
+	}
+	if rejected.Response.Detail == nil || *rejected.Response.Detail != "terminal session" {
+		t.Fatalf("rejected detail = %#v, want terminal session", rejected.Response.Detail)
+	}
+
+	var output factoryapi.FactorySessionLifecycleControlResponse
+	if err := json.Unmarshal(out.Bytes(), &output); err != nil {
+		t.Fatalf("decode local rejection: %v\n%s", err, out.String())
+	}
+	if !reflect.DeepEqual(output, rejected.Response) {
+		t.Fatalf("rendered rejection = %#v, want returned rejection %#v", output, rejected.Response)
+	}
+}
+
+func TestLocalLifecycleControl_NotFoundUsesStableDiagnosticWithoutMutation(t *testing.T) {
+	calls := 0
+	var out bytes.Buffer
+	err := NewLocalCancel(func(context.Context, string, factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error) {
+		calls++
+		return factorysessionexecution.LifecycleControlResult{}, factorysessionexecution.ErrDurableSessionNotFound
+	})(LifecycleControlConfig{
+		Context: context.Background(), SessionID: "dur-sess-missing-001", Output: &out,
+	})
+	if err == nil || !strings.Contains(err.Error(), `factory session "dur-sess-missing-001" not found`) {
+		t.Fatalf("local not-found error = %v, want stable session diagnostic", err)
+	}
+	if calls != 1 {
+		t.Fatalf("local operation calls = %d, want 1", calls)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("not-found stdout = %q, want empty", out.String())
+	}
+}
+
 func TestBindServiceDelegatesToInjectedOperations(t *testing.T) {
 	t.Parallel()
 
@@ -58,6 +168,8 @@ func TestBindServiceDelegatesToInjectedOperations(t *testing.T) {
 		Show:           func(ShowConfig) error { calls++; return nil },
 		Pause:          func(LifecycleControlConfig) error { calls++; return nil },
 		Resume:         func(LifecycleControlConfig) error { calls++; return nil },
+		Cancel:         func(LifecycleControlConfig) error { calls++; return nil },
+		Terminate:      func(LifecycleControlConfig) error { calls++; return nil },
 		ListDispatches: func(DispatchesConfig) error { calls++; return nil },
 		Create:         func(CreateConfig) error { calls++; return nil },
 		Delete:         func(DeleteConfig) error { calls++; return nil },
@@ -69,6 +181,8 @@ func TestBindServiceDelegatesToInjectedOperations(t *testing.T) {
 		"show":       func() error { return service.Show(ShowConfig{}) },
 		"pause":      func() error { return service.Pause(LifecycleControlConfig{}) },
 		"resume":     func() error { return service.Resume(LifecycleControlConfig{}) },
+		"cancel":     func() error { return service.Cancel(LifecycleControlConfig{}) },
+		"terminate":  func() error { return service.Terminate(LifecycleControlConfig{}) },
 		"dispatches": func() error { return service.ListDispatches(DispatchesConfig{}) },
 		"create":     func() error { return service.Create(CreateConfig{}) },
 		"delete":     func() error { return service.Delete(DeleteConfig{}) },
@@ -77,8 +191,8 @@ func TestBindServiceDelegatesToInjectedOperations(t *testing.T) {
 			t.Fatalf("%s error = %v", name, err)
 		}
 	}
-	if calls != 7 {
-		t.Fatalf("calls = %d, want 7", calls)
+	if calls != 9 {
+		t.Fatalf("calls = %d, want 9", calls)
 	}
 }
 
@@ -91,6 +205,8 @@ func TestBindServiceRequiresInjectedOperations(t *testing.T) {
 		"show":       func() error { return service.Show(ShowConfig{}) },
 		"pause":      func() error { return service.Pause(LifecycleControlConfig{}) },
 		"resume":     func() error { return service.Resume(LifecycleControlConfig{}) },
+		"cancel":     func() error { return service.Cancel(LifecycleControlConfig{}) },
+		"terminate":  func() error { return service.Terminate(LifecycleControlConfig{}) },
 		"dispatches": func() error { return service.ListDispatches(DispatchesConfig{}) },
 		"create":     func() error { return service.Create(CreateConfig{}) },
 		"delete":     func() error { return service.Delete(DeleteConfig{}) },

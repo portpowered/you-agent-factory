@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -17,6 +18,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/sessionpath"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 )
 
 // LifecycleControlConfig holds parameters for session lifecycle controls.
@@ -244,7 +246,11 @@ func NewLocalLifecycleControls(service factorysessions.Service) Service {
 
 type localLifecycleOperation func(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
 
-func newLocalLifecycleControl(operation localLifecycleOperation) func(LifecycleControlConfig) error {
+func newLocalLifecycleControl(
+	operation localLifecycleOperation,
+	controlKind factoryapi.FactorySessionLifecycleControlKind,
+	operationLabel string,
+) func(LifecycleControlConfig) error {
 	return func(cfg LifecycleControlConfig) error {
 		if operation == nil {
 			return fmt.Errorf("local Factory Session lifecycle operation is required")
@@ -260,39 +266,56 @@ func newLocalLifecycleControl(operation localLifecycleOperation) func(LifecycleC
 			Reason:    cfg.Reason,
 		})
 		if err != nil {
-			return err
+			return renderLocalLifecycleControlError(cfg, resolvedLifecycleControlSessionID(cfg.SessionID), controlKind, operationLabel, err)
 		}
 		return renderLifecycleControlOutcome(cfg, localLifecycleControlResponse(result))
 	}
 }
 
+func renderLocalLifecycleControlError(
+	cfg LifecycleControlConfig,
+	sessionID string,
+	controlKind factoryapi.FactorySessionLifecycleControlKind,
+	operationLabel string,
+	err error,
+) error {
+	var controlErr *factorysessions.ControlError
+	if errors.As(err, &controlErr) {
+		response := factorysessionmapping.ControlErrorToAPI(sessionID, controlErr)
+		if response.Operation == "" {
+			response.Operation = controlKind
+		}
+		if writeErr := writeLifecycleControlResponse(cfg, response); writeErr != nil {
+			return writeErr
+		}
+		return &LifecycleControlRejectedError{Response: response}
+	}
+	if errors.Is(err, factorysessions.ErrDurableSessionNotFound) ||
+		errors.Is(err, factorysessions.ErrSessionNotFound) ||
+		errors.Is(err, factorysessions.ErrNotFound) {
+		return lifecycleControlNotFoundError(sessionID, nil)
+	}
+	return fmt.Errorf("factory session %s failed: %w", operationLabel, err)
+}
+
 func NewLocalPause(operation localLifecycleOperation) func(LifecycleControlConfig) error {
-	return newLocalLifecycleControl(operation)
+	return newLocalLifecycleControl(operation, factoryapi.FactorySessionLifecycleControlKindPause, "pause")
 }
 
 func NewLocalResume(operation localLifecycleOperation) func(LifecycleControlConfig) error {
-	return newLocalLifecycleControl(operation)
+	return newLocalLifecycleControl(operation, factoryapi.FactorySessionLifecycleControlKindResume, "resume")
 }
 
 func NewLocalCancel(operation localLifecycleOperation) func(LifecycleControlConfig) error {
-	return newLocalLifecycleControl(operation)
+	return newLocalLifecycleControl(operation, factoryapi.FactorySessionLifecycleControlKindCancel, "cancel")
 }
 
 func NewLocalTerminate(operation localLifecycleOperation) func(LifecycleControlConfig) error {
-	return newLocalLifecycleControl(operation)
+	return newLocalLifecycleControl(operation, factoryapi.FactorySessionLifecycleControlKindTerminate, "terminate")
 }
 
 func localLifecycleControlResponse(result factorysessions.LifecycleControlResult) factoryapi.FactorySessionLifecycleControlResponse {
-	response := factoryapi.FactorySessionLifecycleControlResponse{
-		SessionId: result.SessionID,
-		Operation: factoryapi.FactorySessionLifecycleControlKind(result.Operation),
-		Outcome:   factoryapi.FactorySessionLifecycleControlOutcome(result.Outcome),
-		Status:    factoryapi.FactorySessionDurableLifecycleStatus(result.Status),
-	}
-	if detail := strings.TrimSpace(result.Detail); detail != "" {
-		response.Detail = &detail
-	}
-	return response
+	return factorysessionmapping.LifecycleControlResponseToAPI(result)
 }
 
 // LifecycleControlRejectedError reports a typed lifecycle-control rejection returned
