@@ -13560,3 +13560,20 @@
   - When main untracks per-lane PRD/progress scaffolding, resolve the modify/delete conflict by retaining the active lane's authoritative copies; they remain required local process artifacts even though main no longer tracks them.
   - Treat ownership-boundary output as a delta against detached `origin/main`: unchanged baseline findings should be recorded as delivery context, not repaired in an unrelated root-injection task.
 ---
+## [2026-08-11 12:52:34 -07:00] - btrc-p1-root-injection-006 terminal current-head baseline audit
+- What was implemented
+  - Audited workflow `31527844490` on published head `47512a373ebf99f558b45847a4ff2f0a196dcff0` through the initial run and two failed-job retries.
+  - Made no product or unrelated-test changes; all six P1 stories remain complete and the existing review follow-ups remain addressed.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - The initial workflow passed every lane except Backend Functional Coverage and dependent Verification Policy; the only functional failure was `TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput` in untouched `tests/functional/transport/server_binding`.
+  - The first failed-job retry retained that server-binding failure and added transient `TestJavaScriptParallelDispatchesChildrenConcurrently`; the second retry cleared the JavaScript failure and reproduced only server-binding.
+  - `git diff --name-only origin/main...HEAD -- tests/functional/transport/server_binding` is empty, and the P1 implementation does not touch the package, workflow, or required ACP artifact path.
+  - Local `make verify-fast`, `backend-size`, `pkg-maint`, `pkg-file-count`, `pkg-structure`, and `vet` pass; the ownership-boundary findings remain unchanged `origin/main` baseline entries. The thread-aware PR audit reports zero unresolved review threads and zero formal reviews.
+  - The current PR is mergeable against `origin/main` `05db67124f6abc32b149f326533f126db2d78aa4`, but required hosted CI is terminally blocked by the untouched baseline failure; the next audit commit will start a fresh workflow.
+- **Learnings for future iterations:**
+  - After a failed-job retry clears transient functional failures and converges on one unchanged assertion, retain the exact retry evidence and do not modify an unrelated baseline package to force a green task PR.
+  - A PRD/progress bookkeeping commit changes the tested head; update the delivery audit before pushing and treat the resulting workflow as a new verification cycle.
+---
