@@ -169,8 +169,6 @@
   - After `bun install --frozen-lockfile` in `ui/`, `make verify-fast` passed: dashboard typecheck, MCP contract boundary, 355 UI files / 2,970 tests, and the short Go suite.
 - **Learnings for future iterations:**
 - This checkout may have `ui/node_modules` without all lockfile dependencies; run the pinned Bun install before treating a typecheck failure as a source regression.
----
-
 ## 2026-08-10 04:32 -07:00 - sac-s0-2-pkg-boundary-ignores-001
 - What was implemented
   - Centralized repository-root-relative pruning for `.artifacts`, `.artifacts/bootstrap/worktrees`, generated transient worktrees, and the supported root worktree locations.
@@ -9569,4 +9567,21 @@
 - **Learnings for future iterations:**
   - Keep CI baseline failures separate from task regressions by checking both the failing package paths and their diff membership before making implementation changes.
   - A bookkeeping-only head still needs a fresh CI run; do not claim the delivery gate is green from an earlier implementation head.
+---
+## [2026-08-11 01:16:00 -07:00] - btrc-p1-root-injection-006 latest queued-head delivery audit
+- What was implemented
+  - Audited the existing PR #1857 after the six P1 stories remained marked `passes:true`.
+  - Confirmed the thread-aware GraphQL review audit has zero review threads, zero unresolved threads, and zero formal reviews; the prior blocking comments were followed by documented fixes on later heads.
+  - Refreshed `prd.json` to the pushed head `27da2e4a2ca8b4a7b6ba4af36d848d52ac361997` and its latest workflow `31471872028`, which is queued.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `gh pr view 1857` — PR is open, titled `btrc-p1-root-injection`, with base `3a0b571b234f70d68908e36669100d0ac9f66a9f` and a mergeable but blocked state while checks are pending.
+  - `gh api graphql` review-thread audit — zero review threads and zero unresolved threads.
+  - `gh run list` / `gh run view 31471872028` — latest-head CI remains queued; the superseded `31471716765` run was cancelled after a backend functional failure and is not treated as terminal evidence.
+  - The prior completed run `31470964931` still has only the unchanged server-binding assertion and responsebridge coverage ratchet outside the P1 diff; no new implementation change is justified from that baseline evidence.
+- **Learnings for future iterations:**
+  - A queued replacement workflow is neither pass nor failure; keep the delivery audit pending and do not mark the PR complete until the exact latest head reaches terminal green CI.
+  - Recheck PR body synchronization after the final bookkeeping commit, because the body must describe the exact `prd.json` used for the handoff.
 ---
