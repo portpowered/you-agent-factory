@@ -11294,3 +11294,18 @@
 - **Learnings for future iterations:**
   - Test fakes that expose both publication and admission must provide separate readiness signals; controls should synchronize on the observable state transition they require, not merely on an earlier callback entry.
 ---
+## [2026-08-11 08:57 -07:00] - wsr-0023-capture-replay Storybook CI synchronization follow-up
+- What was implemented
+  - Addressed the hosted `Frontend Storybook` failure in the dashboard session reconciliation browser verifier by waiting for the observable `aria-selected` transition after End and Home keyboard actions before asserting the selected tab.
+  - Kept the production dashboard behavior unchanged; the fix only synchronizes the browser-level assertion with the existing React state update.
+- Files changed
+  - `ui/scripts/verify-dashboard-session-reconciliation-browser.mjs`
+  - `progress.txt`
+- Verification
+  - `bun install --frozen-lockfile` reported no dependency changes.
+  - `bun run build-storybook` passed.
+  - `bun run test-storybook:browser-checks` passed, including mobile and desktop session reconciliation.
+  - Focused Biome check and `git diff --check` passed.
+- **Learnings for future iterations:**
+  - Browser checks that observe React-controlled attributes must wait for the state transition after keyboard or click actions; an immediate read can fail under hosted rendering even when the behavior is correct.
+---
