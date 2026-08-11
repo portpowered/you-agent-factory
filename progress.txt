@@ -9310,3 +9310,18 @@
 - **Learnings for future iterations:**
   - Resolve shared metadata conflicts by keeping the active task PRD authoritative and preserving both append-only progress branches; source conflicts from a moving base should be accepted when they are outside the task's ownership.
 ---
+## [2026-08-11 06:01:51 -07:00] - graph-workstation-semantics merged-head verification
+- What was implemented
+  - Completed the post-merge validation on `6bfb8279e`, including the regenerated Wire output required after accepting the current-main Worker Sessions composition changes.
+  - Confirmed the authored REST/OpenAPI sources and generated clients are already current; `make generate-api` produced no additional API drift.
+- Files changed
+  - `pkg/wire/wire_gen.go`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/factory_definitions/... ./pkg/wire/... -count=1 -timeout 600s` — passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` — passed.
+  - `make test` — passed; the full short Go unit lane completed successfully.
+  - `go generate ./pkg/wire`, `make generate-api`, and `git diff --check` — passed; only the expected regenerated Wire file changed.
+- **Learnings for future iterations:**
+  - After a moving-base merge changes the dependency graph, rerun the generator even when the feature's Wire source is unchanged; generated variable numbering can legitimately change when mainline adds providers.
+---
