@@ -9071,3 +9071,21 @@
   - Treat a prior blocking comment as addressed only after its requested base synchronization is present, the PR is cleanly mergeable, and the replacement-head checks are terminal-success.
   - Keep the PR body byte-for-byte synchronized with `prd.json` when the PR description is defined by the task contract.
 ---
+## [2026-08-11 04:25:29 -07:00] - thr-split-acp-stdio-tests latest-main synchronization and verification
+- What was implemented
+  - Merged the freshly fetched live `origin/main` head `012e98e0fbd1b6fcac106d90b1f3d335b8a3dce6` into this branch as `350638889` and preserved the ACP task's authoritative `prd.json`.
+  - Resolved the shared `progress.txt` conflict by retaining both append-only histories; the current-main CLI changes remain in the merge without changing the ACP split.
+- Files changed
+  - `progress.txt`
+  - Current-main CLI functional-test files carried by the synchronization merge.
+  - `prd.json` remained authoritative for this task.
+- Verification
+  - `go test ./pkg/transports/acp/internal/stdio -count=1 -timeout 300s` and the race-enabled package test — passed.
+  - `make typecheck`, `make backend-size pkg-maint pkg-file-count pkg-structure`, and `go vet ./pkg/transports/acp/internal/stdio` — passed.
+  - `make pkg-boundary` reports no ACP package-boundary findings; its aggregate nonzero result remains exactly the two ownership-boundary findings also present on the checked live-base worktree. No boundary-owned source changed between the prior base check and `origin/main` `012e98e0f`.
+  - Normalized ACP stdio inventory is 222/222 with zero diff and SHA-256 `da83686cb68f0988570ca0ea0f429eabf40beb2bb47dba967874a33d46481bf1` on both live-base and task heads; coverage is 94.3% on both.
+  - `prd.json` parses with all three stories marked `passes:true`, no conflict markers remain, and `git diff --check` passes.
+- **Learnings for future iterations:**
+  - A shared append-only progress log can have divergent ordering after repeated task merges; resolve its conflict by retaining both complete conflict blocks, then append the current task entry at EOF.
+  - When a ratcheted aggregate boundary gate is nonzero, compare its ownership-specific output with a detached worktree at the exact fetched base; unchanged base findings are not ACP regressions.
+---
