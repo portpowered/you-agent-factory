@@ -38,6 +38,7 @@
 - Worker Session async idempotency should claim the caller key and stable session identity in one lock transaction before publication or dispatch, then replay a detached tuple and stored outcome.
 - Root-built functional Worker tests can make mock script execution deterministic by injecting the same gated command runner into both provider and script command edges; the mock-worker mode may route a model-backed workstation through either edge.
 - When one request is translated through multiple execution compositions, assert the final provider-boundary request with true, false, and omitted cases; intermediate normalized structs can hide a dropped field.
+- Child-scoped permission overrides should be shape-validated first and applied only at the sandbox/approval policy boundary; routing, allowlists, budgets, and sibling state must remain on the shared validation path.
 - OS-boundary functional tests may poll an isolated durable filesystem checkpoint only when the child exposes no parent-process event or injected edge; document that reason at each polling helper and keep the bound as a failure guard.
 - Git Worktree preparation treats a retained Git `*.lock` as indeterminate ownership: retry within a named bound, preserve the resource, and return its exact path with verify/remove/retry guidance.
 - Git's `.git/config.lock` has no trustworthy owner or PID evidence; after a bounded retry, report the exact lock with `owner_liveness=indeterminate` and require verification before removing only that file—never auto-delete it.
@@ -9591,44 +9592,30 @@
   - `prd.json` parses with all three `provider-capability-contract` stories marked `passes:true`.
   - `progress.txt` contains no merge markers and retains both provider and incoming mainline histories.
   - `git diff --check` passes.
-- **Learnings for future iterations:**
-  - For a moving-base conflict in long append-only logs, resolve from complete bounded Git-stage slices, keep the active task PRD authoritative, and validate both histories before staging.
+ - **Learnings for future iterations:**
+   - For a moving-base conflict in long append-only logs, resolve from complete bounded Git-stage slices, keep the active task PRD authoritative, and validate both histories before staging.
  ---
- ---
-
-## 2026-08-11 -07:00 - thr-split-acp-stdio-tests review follow-up
+## [2026-08-10 21:16 -07:00] - js-skip-permissions-parity-002
 - What was implemented
-  - Addressed PR #1861's blocking feedback by consolidating all cross-suite ACP stdio fixtures into `session_test_helpers_test.go` and removing the alternate stream helper file.
-  - Reworked the move-only split against current `origin/main` so the package remains at the exact 22-file baseline; cohesive declarations were consolidated into existing test owners rather than increasing the deletion-only file-count debt.
-  - Routed chat-session store construction through the shared helper so the package-boundary report has no new finding, and moved the affected maintainability exemption targets with their test declarations.
+  - Defined `skipPermissions` as a child-scoped policy override in the shared JavaScript orchestration contract and mapped it into runtime child-policy validation.
+  - Allowed the addressed child to bypass READ_ONLY/effective sandbox and writable-root restrictions while retaining model, reasoning, command, network, routing, fanout, concurrency, and other session/resource controls; sibling policy state remains independent.
+  - Preserved per-dispatch true/false values through resume/replay and documented the precedence rule in the JavaScript runtime reference.
 - Files changed
-  - `pkg/transports/acp/internal/stdio/*_test.go`
-  - `docs/internal/baselines/backend-exemption-budget.json`
-  - `docs/internal/baselines/backend-package-file-count.json`
+  - `pkg/services/factory_runtime/internal/services/orchestration/orchestratorcontract/policy_child_request.go`
+  - `pkg/services/factory_runtime/internal/services/orchestration/javascript/runtime/host_children.go`
+  - `pkg/services/factory_runtime/javascript_policy_child_request_test.go`
+  - `pkg/services/factory_runtime/internal/services/orchestration/javascript/runtime/host_pipeline_policy_test.go`
+  - `pkg/services/factory_runtime/internal/services/orchestration/javascript/runtime/runtime_test.go`
+  - `docs/reference/javascript-workflows.md`
   - `prd.json`
   - `progress.txt`
 - Verification
-  - Against `origin/main` `3a0b571b2`, normalized package test inventory was 222 before and after with zero diff and SHA-256 `da83686cb68f0988570ca0ea0f429eabf40beb2bb47dba967874a33d46481bf1`; coverage remained 94.3% of statements.
-  - Focused ACP stdio tests, the concurrent-attachment race test (three runs), package vet, backend-size, pkg-maint, pkg-file-count, typecheck, boundary checks, and `git diff --check` passed.
+  - `go test ./pkg/services/factory_runtime/internal/services/orchestration/orchestratorcontract -count=1` — passed.
+  - `go test ./pkg/services/factory_runtime -run 'TestValidateChildRequest|TestValidateCapability|TestBuildPreview' -count=1` — passed.
+  - `go test ./pkg/services/factory_runtime/internal/services/orchestration/javascript/runtime -run 'TestRun_SkipPermissions|TestRun_PolicyDenied|TestRun_ParallelPolicyDenied|TestResumingChildExecutor_RestoresSkipPermissions|TestCompletedChildResultsFromRecords_RestoresStoredLiveProviderOutput' -count=1` — passed.
 - **Learnings for future iterations:**
-  - Same-package deletion-only splits must be planned around the existing package-file baseline; moving declarations into existing cohesive owners keeps the file-count ratchet stable.
-  - Cross-suite fixtures are easiest to audit when one helper file owns all shared fakes and setup, including fixtures that originated in a stream-specific suite.
-  - A boundary-sensitive wire constructor can remain a single known finding when its construction is centralized in the shared test helper instead of repeated in behavioral files.
----
-## 2026-08-10 23:49 -07:00 - prose-standard-and-terms latest-main synchronization follow-up
-- What was implemented
-  - Recorded that the prose branch was synchronized with live `origin/main` at `85619c087` after the prior final CI run.
-  - Preserved this task's authoritative `prd.json` and retained the complete append-only progress history while carrying current-main changes forward.
-- Files changed
-  - `prd.json`
-  - `progress.txt`
-  - Current-main synchronization files carried by the merge.
-- Verification
-  - The pre-synchronization head `55dd2a815` passed CI run `31466033222` across every required lane, including Backend Unit Coverage, Backend Functional Coverage, and Verification Policy.
-  - `prd.json` parses with all three prose stories marked `passes:true`; conflict-marker scan, `git diff --check`, and `git merge-tree --write-tree origin/main HEAD` are clean after the merge.
-  - The replacement head created by this bookkeeping append must pass its own hosted checks before final handoff.
-- **Learnings for future iterations:**
-  - Main can advance during the final audit; fetch immediately before pushing the final progress record and attach CI evidence to the exact head it verifies.
+  - The JavaScript policy contract currently recognizes only `READ_ONLY`; precedence coverage should name that mode explicitly while keeping the validator extensible for future modes.
+  - Keep the dangerous override below input-shape validation and above only sandbox/approval restrictions; placing it around the whole child validator would silently weaken routing or resource policy.
 ---
 ## [2026-08-11 00:25 -07:00] - cli-error-classification-and-run-output review follow-up
 - What was implemented
