@@ -2792,4 +2792,20 @@
   - The working tree remains clean before push, and the PRD still has both stories marked `passes:true`.
 - **Learnings for future iterations:**
   - After a base-sync merge, rerun the repository gates locally before pushing so the new PR head has direct evidence in addition to the earlier green CI run.
+
+---
+## [2026-08-10 17:24 -07:00] - thr-split-acp-stdio-tests-003 final handoff audit
+- What was implemented
+  - Re-audited the completed ACP stdio split against the live PR; all three PRD stories remain marked `passes: true`, so no additional story source change was needed in this iteration.
+  - Confirmed the existing PR is ready for review and has no actionable review feedback.
+- Files changed
+  - `progress.txt`
+- Verification
+  - PR #1861 is open, non-draft, `MERGEABLE`, and `CLEAN` against current `origin/main`.
+  - All 18 reported GitHub Actions checks passed, including Backend Functional Coverage and Verification Policy.
+  - Thread-aware review audit found zero conversation comments, formal reviews, and unresolved inline threads.
+  - The PR body is byte-identical to `prd.json` at 9,955 UTF-8 bytes.
+  - Worktree was clean before this append; `git diff --check` passed.
+- **Learnings for future iterations:**
+  - Once the PRD is complete and the live PR has green required checks with no review threads, the remaining handoff work is limited to preserving the audit evidence and keeping the branch synchronized.
 ---
