@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- Changed-path classifiers should normalize, deduplicate, and sort at the classification boundary so direct callers, summaries, and emitted decisions remain deterministic.
 - Focused verification lanes should compose existing user-facing Make targets with `$(MAKE)` so dry-run expansion stays auditable and broader verification targets remain unchanged.
 - Specialty verification lanes should compose each required underlying regression once instead of calling a broader aggregate target that can duplicate work.
 - For final PR handoff, compare the PR body byte-for-byte with `prd.json` and use the thread-aware GraphQL review audit because flat PR comments do not expose inline-thread resolution state.
@@ -4045,4 +4046,26 @@
 - **Learnings for future iterations:**
   - Existing package-family targets can remain the canonical direct rerun commands when they already isolate self-verification; only add a new target where an existing aggregate omits or duplicates required work.
   - The local-inference command should call `long-tests-managed-runtime` and `pr-inference-approval` directly so the single real-inference regression is visible in dry-run output.
+---
+
+## [2026-08-10 19:55 -07:00] - ci-additive-classifier-003
+- What was implemented
+  - Completed additive path ownership in `cmd/ciclassify`, including deterministic normalization, duplicate removal, path-order independence, neutral factory content, exact mixed-lane unions, and conservative full verification for empty, CI/tooling, Go-toolchain, and unknown inputs.
+  - Tightened local-inference ownership to managed model/runtime, OMNIVOICE, and dedicated local-inference surfaces so generic provider or UI paths containing “inference” do not select the specialty lane accidentally.
+  - Added API ownership for service HTTP adapters and generated UI client contracts, backend ownership for release scripts, and the `run_everything` fallback output while preserving existing lane outputs and commands.
+  - Replaced broad classifier fixtures with exact complete-lane assertions for the governing matrix, package families, ownership boundaries, factory mixing, duplicate/order invariance, and stdout/GitHub output behavior.
+- Files changed
+  - `cmd/ciclassify/main.go`
+  - `cmd/ciclassify/main_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./cmd/ciclassify -count=1` passed.
+  - `go vet ./cmd/ciclassify` passed.
+  - `make typecheck` and `make ui-lint` passed.
+  - Focused `make -n` expansion passed for frontend, backend, UI-backend integration, local inference, docs, README, and all package-family lanes; `git diff --check` passed.
+  - No `.github/workflows/**` files changed.
+- **Learnings for future iterations:**
+  - Keep the classifier ownership table explicit and narrow: generic filenames such as `inference` are not sufficient to identify the Linux local-inference specialty lane.
+  - Assert the complete emitted lane set—not only selected lanes—because an accidental extra lane is the central cost/regression risk this classifier is designed to prevent.
 ---
