@@ -8847,6 +8847,7 @@
 - **Learnings for future iterations:**
   - Publication-specific lifecycle allowances must be applied at the packaged-installation boundary; filtering the shared customer validator would make topology guesses valid for ordinary authored Factories.
   - The packaged installer can preserve strict generic persistence by detecting a narrow optional preparation capability on the catalog persistence implementation, with test doubles continuing to use the ordinary path.
+---
 ## [2026-08-11 01:43:17 -07:00] - cli-error-classification-and-run-output review follow-up
 - What was implemented
   - Merged the live `origin/main` head `1b871e3a84125400ca3f04b2bdf9fd2658ac5c45`, preserved this task's authoritative PRD, and unioned both append-only progress histories without conflict markers.
@@ -8871,4 +8872,23 @@
 - **Learnings for future iterations:**
   - The published CLI copy is refreshed by `make contracts-generate` after the authored contract changes; `make cli-manifest-generate` refreshes the family/runtime projections and the smoke check catches published drift.
   - When broad Go verification is run concurrently across worktrees on Windows, isolate the exact timed-out process tree before retrying a gate so other task verification remains undisturbed.
+---
+
+## [2026-08-11 02:38 -07:00] - graph-workstation-semantics current-main replacement verification
+- What was implemented
+  - Merged live `origin/main` at `0e7df069f` into the branch, preserved this task's authoritative `prd.json`, and unioned the incoming CLI progress history with the append-only task log.
+  - Recorded the intentional validation test split in the backend package file-count baseline.
+- Files changed
+  - `docs/internal/baselines/backend-package-file-count.json`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./internal/packagedfactorycatalog -count=1` — passed.
+  - `go test ./pkg/services/factory_definitions/... -count=1 -timeout 900s` — passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` — passed.
+  - `make test` — passed.
+  - `origin/main` is an ancestor of the replacement head.
+- **Learnings for future iterations:**
+  - A focused test-file split is a maintainability improvement but still needs an explicit deletion-only package file-count baseline update when the package is already at its audited limit.
+  - After a moving-base merge, rerun the complete short lane and all ratcheted static gates on the replacement head, not only on the pre-merge feature commit.
 ---
