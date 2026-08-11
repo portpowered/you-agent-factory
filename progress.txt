@@ -11447,3 +11447,18 @@
 - **Learnings for future iterations:**
   - A PR can conflict even when its prior merge parent is clean if `origin/main` advances through a parallel merge; compare ancestry against the live base, then union the full current-main progress history before republishing.
 ---
+## [2026-08-11 09:36:15 -07:00] - thr-deflake-cli-process-package latest-main verification
+- What was implemented
+  - Completed newest-head verification on merge commit `6b3a51cba` after reconciling current `origin/main` `650b70168`.
+  - Confirmed the rolling-file review fixes remain isolated from the incoming functional-lane changes and that no new task-owned lint or structural issue appeared.
+- Files changed
+  - No source files; verification and handoff metadata only.
+- Verification
+  - `make verify-fast` — passed dashboard typecheck, MCP contract checks, 355 Vitest files/2,964 tests, 196 Bun tests, and the short Go suite.
+  - `go test -race ./pkg/platform/rollingfile -count=5`, focused vet, and `git diff --check` — passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet package-target-manifest-check ownership-inventory-check` — passed.
+  - `make lint` — exactly the three current-main findings: ownership-boundary ACP/edges imports, packaged-factory consumption, and deadcode; every other target passed, including the package-boundary subcheck.
+  - Hosted CI has not yet been started for the unpublished replacement head; the final thread-aware PR audit remains pending.
+- **Learnings for future iterations:**
+  - Record the exact replacement merge commit in the PRD only after rerunning the full fast tier and structural gates on that commit; earlier evidence can become stale when main moves again.
+---
