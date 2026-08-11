@@ -6900,3 +6900,14 @@
 - **Learnings for future iterations:**
   - Verify both the PR head SHA and the commit check-run list after pushing; a successful Git push does not guarantee that the hosted workflow was enqueued.
 ---
+## 2026-08-10 22:03 -07:00 - cli-error-classification-and-run-output-004 final local verification
+- What was implemented
+  - Re-ran the complete repository `make test` suite after the stderr progress correction; all unit and functional packages passed.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `make test` passed on the corrected local head `d8aa73d84`.
+  - The hosted PR still has no check suite for the corrected head despite the branch ref being current.
+- **Learnings for future iterations:**
+  - A complete local test pass can validate a corrected head even when hosted check scheduling is delayed or unavailable; retain the exact head SHA and missing check-run evidence for handoff.
+---
