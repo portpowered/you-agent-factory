@@ -33,6 +33,7 @@
 - When a public contract defines an exact identifier spelling, keep one register record for that identifier; relationship examples must also follow the owning contract's source/target semantics.
 - Documentation-only stories should validate authored structured data as review evidence and leave source-scanning or meta-test enforcement to a real consumer; source shape alone is not observable customer behavior.
 - When a documentation standard mirrors a governing plan, enumerate the plan's rule sets at the policy boundary and label future checker lifecycle rules as not manually applicable until their consumer exists.
+- Coverage manifest validation is per measured package and lane; adding a production Go package requires sorted entries in both unit and functional manifests, even when one lane has no meaningful exercise.
 - JSON Schema worker diagnostics must use `ErrorKind.KeywordPath()` and typed schema metadata; localized `ValidationError.Error()` text can leak rejected values and compiler-expanded host paths.
 - When an exact package file-count baseline blocks an oversized-file split, move the cohesive helpers into an existing appropriately owned file and verify both size and file-count gates.
 - Optional native JSON channels use an explicit presence bit plus custom JSON at durable boundaries to distinguish omitted values from JSON null; clone map/slice trees at projection and transport ownership boundaries.
@@ -11896,4 +11897,22 @@
   - `make pkg-boundary` remains limited to the two current-main ACP/chat-session ownership findings recorded above; no S7 violation was introduced.
 - **Learnings for future iterations:**
   - Resolve a moving-base progress conflict by retaining both complete histories and append the task’s merged-head verification as the final entry; do not replace the active PRD with an unrelated mainline task contract.
+---
+
+## [2026-08-11 10:00 -07:00] - dwro-s7-placement-grammar coverage manifest follow-up
+- What was implemented
+  - Added focused behavior coverage for the Factory Sessions-owned `Poll` and `Wait` timing helpers, including retries, input validation, propagated errors, and cancellation.
+  - Registered the new production package in the sorted unit and functional Go coverage manifests; the unit floor is 75.00 and the functional lane floor is 0.00 because the helper is not independently exercised by that lane.
+- Files changed
+  - `pkg/services/factory_sessions/transports/cli/poll_test.go`
+  - `docs/internal/baselines/go-unit-coverage-package-minimums.json`
+  - `docs/internal/baselines/go-functional-coverage-package-minimums.json`
+  - `progress.txt`
+- Verification
+  - Focused Factory Sessions CLI, CLI run, and root-built lifecycle functional tests pass.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` passes.
+  - Focused `gocoveragecheck` manifest tests and JSON parsing pass.
+  - The full local unit-coverage command remains blocked by the Windows checkout's command-line path-length limit before coverage execution; the unrelated repository-root `repoRootDir` fixture test also fails because it expects a temporary tree without `go.mod`.
+- **Learnings for future iterations:**
+  - A new measured production package must be added to both coverage manifests before hosted coverage can start; local Windows path-length failures can occur before the lane reaches manifest validation.
 ---
