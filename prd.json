@@ -11,14 +11,14 @@
   },
   "deliveryAudit": {
     "pullRequest": 1857,
-    "head": "ed2eb2c462a68b9323d76e99eace07edfbc4adf0",
+    "head": "98c4b12174f5dc95a124b1318946a6826a896998",
     "base": "3521f0b0a2f313b22e2c79edcf90339a01b3bce7",
     "reviewThreads": 0,
     "unresolvedReviewThreads": 0,
     "formalReviews": 0,
     "latestWorkflow": {
-      "run": 31488350059,
-      "testedHead": "ed2eb2c462a68b9323d76e99eace07edfbc4adf0",
+      "run": 31490079192,
+      "testedHead": "98c4b12174f5dc95a124b1318946a6826a896998",
       "result": "failure_after_failed_job_retry",
       "functionalResult": "failure",
       "verificationPolicy": "failure",
@@ -30,7 +30,7 @@
           "job": "Backend Functional Coverage",
           "package": "tests/functional/transport/server_binding",
           "test": "TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput",
-          "evidence": "The latest-head initial run and failed-job retry reproduce the unchanged assertion: current structured API-server diagnostics precede SERVER_BIND_FAILED, while the untouched test expects the legacy migration warning followed by one diagnostic line. The P1 diff is empty for this package, and the same mismatch reproduces locally on Windows."
+          "evidence": "The merge-head initial run and failed-job retry reproduce the unchanged assertion: current structured API-server diagnostics precede SERVER_BIND_FAILED, while the untouched test expects the legacy migration warning followed by one diagnostic line. The P1 diff is empty for this package, and the same mismatch reproduces locally on Windows."
         }
       ]
     }

@@ -10700,3 +10700,19 @@
 - **Learnings for future iterations:**
   - When main advances between CI and PR handoff, merge the live ref before refreshing the PR body or requesting final checks; shared PRD files require retaining the active task metadata while unioning append-only progress history.
 ---
+## [2026-08-11 05:27:24 -07:00] - btrc-p1-root-injection-006 reconciled-merge-head CI final audit
+- What was implemented
+  - Audited workflow `31490079192` on the current reconciled merge head `98c4b12174f5dc95a124b1318946a6826a896998`, with live `origin/main` base `3521f0b0a2f313b22e2c79edcf90339a01b3bce7`.
+  - The initial workflow run passed every lane except Backend Functional Coverage and its dependent Verification Policy; the failed-job retry reproduced exactly one unchanged baseline assertion in `tests/functional/transport/server_binding`.
+  - Refreshed `prd.json` to the merge-head audit while preserving all six `passes:true` story flags; no P1-scoped source failure or review-thread blocker remains.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Workflow `31490079192`, attempt 2 — terminal failure only for `TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput`; all other required lanes passed.
+  - `git diff --name-only origin/main...HEAD -- tests/functional/transport/server_binding` — empty.
+  - Thread-aware GraphQL review audit — zero review threads, zero unresolved review threads, and zero formal reviews.
+  - All six PRD stories parse as `passes:true`.
+- **Learnings for future iterations:**
+  - When a fresh mainline merge and its failed-job retry reproduce the same untouched baseline assertion, record the exact merge head and package evidence in the PRD and keep unrelated baseline tests outside the task diff.
+---
