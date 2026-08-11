@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- For concurrent single-flight state, keep the absent-to-loading election atomic with the observation; a separate precheck can let callers pass stale absent state and overwrite the shared completion signal.
 - For final PR handoff, compare the PR body byte-for-byte with `prd.json` and use the thread-aware GraphQL review audit because flat PR comments do not expose inline-thread resolution state.
 - OS-boundary functional tests may poll an isolated durable filesystem checkpoint only when the child exposes no parent-process event or injected edge; document that reason at each polling helper and keep the bound as a failure guard.
 - Git Worktree preparation treats a retained Git `*.lock` as indeterminate ownership: retry within a named bound, preserve the resource, and return its exact path with verify/remove/retry guidance.
@@ -162,7 +163,6 @@
   - `make readme-check` — passed.
 - **Learnings for future iterations:**
   - Keep the root count aligned with the canonical fifteen-entry catalog, but continue placing detailed Factory guidance in `docs/reference/packaged-factories.md`.
----
 ## 2026-08-09 13:20 - wo-d1-packaged-factories-docs-001 lint follow-up
 - What was implemented
   - No source change; checked the broad repository lint tier against the completed story.
@@ -3745,4 +3745,21 @@
 - **Learnings for future iterations:**
   - Treat the package file-count baseline as a deletion-only ratchet even when a split is mechanically correct; use existing responsibility-aligned test owners and verify both the 1,000-line maintainability gate and the broader 1,200-line task cap.
   - When review identifies whitespace drift in a move-only split, compare the named declarations directly against the unmodified source and restore the exact text before rerunning inventory and coverage.
+---
+## [2026-08-10 19:12 -07:00] - thr-deflake-model-host-concurrent-reuse-001
+- What was implemented
+  - Established that the failure is a production EnsureModelHost reuse race, not a test-only choreography race.
+  - Reproduced the reported symptom during an uncontrolled concurrent scheduler sweep (`process starts = 2, want 1`) and confirmed the same failure signature in GitHub Actions run `31449874394`, job `93651926054`, at `service_test.go:255`.
+  - Traced the exact interleaving in `supervisor.go`: callers A and B can both return `nil` from `awaitExistingLoad` while the slot is `absent`; A then publishes `loading` with `loadDoneA`; B enters the later election lock, does not handle the already-published `loading` state, overwrites it with `loadDoneB`, and starts a second supervised process. The unsafe boundary is the split between the precheck and the loading election.
+  - The diagnosis remains inside the Models runtime-host owner, with no public API or generated-contract changes. The atomic election and deterministic regression are left for story 002.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Baseline focused regression: `go test -race ./pkg/services/models/internal/services/runtime_host/internal/service -run '^TestEnsureModelHostConcurrentReuseSharesOneSupervisedProcess$' -count=50 -v` passed once, while the concurrent scheduler sweep also observed the duplicate-start failure.
+  - Sequential scheduler evidence: the same race-enabled test with `GOMAXPROCS=1`, `2`, `8`, and `32`, each at `-count=50`, passed with exit code 0.
+  - `go test ./pkg/services/models/internal/services/runtime_host/internal/service`, `go vet ./pkg/services/models/internal/services/runtime_host/internal/service`, `make typecheck`, and `git diff --check` passed.
+- **Learnings for future iterations:**
+  - A passing repeated test does not disprove a race when the state machine has a provable read/election gap; preserve both the probabilistic outcome and the lock-level interleaving before choosing the fix.
+  - Keep the one-process assertion strict and fix the shared runtime-host election in story 002; do not add sleeps, retries, or relaxed process-count checks.
 ---
