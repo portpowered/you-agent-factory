@@ -2808,4 +2808,18 @@
   - Worktree was clean before this append; `git diff --check` passed.
 - **Learnings for future iterations:**
   - Once the PRD is complete and the live PR has green required checks with no review threads, the remaining handoff work is limited to preserving the audit evidence and keeping the branch synchronized.
+
+---
+## [2026-08-10 17:52 -07:00] - thr-split-acp-stdio-tests-003 CI follow-up
+- What was implemented
+  - Investigated the final-head Backend Functional Coverage failure and confirmed each failed attempt was an unrelated intermittent functional test outside the ACP stdio split.
+  - Retried only the failed GitHub job three times; the fourth attempt completed successfully. No production, test, contract, or baseline changes were introduced.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Isolated local reruns passed for `TestProvidersACPRestartsAfterCrashWithoutReplayingUncertainPrompt`, `TestJavaScriptParallelDispatchesChildrenConcurrently`, `TestAgyConductorSuccessThroughRootBuildProcess`, `TestBTRCP0OneShotCancellationCharacterization`, and `TestCodexGoldenDerivesProviderSessionAndResponseEvents`.
+  - GitHub Actions run `31445974775`, attempt 4 — all 18 checks passed, including Backend Functional Coverage and Verification Policy.
+  - The PR remains open, non-draft, mergeable, and clean; no review feedback or unresolved threads were found.
+- **Learnings for future iterations:**
+  - For a broad functional lane that fails on changing unrelated tests, isolate each named test locally and retry only the failed job before considering any change to the scoped implementation.
 ---
