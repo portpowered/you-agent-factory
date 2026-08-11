@@ -6889,3 +6889,14 @@
   - Keep worker association/state lines on the dedicated progress channel; response-stream stdout is reserved for canonical lifecycle records and the primary result.
   - Non-TTY progress must render stable snapshots synchronously as events arrive, including intermediate active states before a batch also contains terminal events.
 ---
+## 2026-08-10 21:58 -07:00 - cli-error-classification-and-run-output-004 CI retrigger follow-up
+- What was implemented
+  - Reopened PR #1872 after pushing corrective head `3b8d30a8a` because GitHub had not created a synchronize check run for the updated branch head.
+- Files changed
+  - `progress.txt`
+- Verification
+  - The PR remains open and non-draft, its body matches `prd.json`, and thread-aware review inspection still reports no comments or review threads.
+  - Local corrective tests and repository gates remain green; the corrected head is awaiting a fresh GitHub Actions run.
+- **Learnings for future iterations:**
+  - Verify both the PR head SHA and the commit check-run list after pushing; a successful Git push does not guarantee that the hosted workflow was enqueued.
+---
