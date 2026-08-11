@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- Fixture-backed async tests should expose an explicit pending/ready promise for controlled requests; do not rely on a coincidental microtask turn or a sleep before resolving them.
 - For orchestration runner tests, assert readiness, completion, failure propagation, and cleanup outcomes instead of freezing an exact command or registration inventory.
 - For no-new lint evidence, run the same gates in a disposable worktree at the exact current-main commit and compare baseline and task-head results before interpreting branch output.
 - For final PR handoff, compare the PR body byte-for-byte with `prd.json` and use the thread-aware GraphQL review audit because flat PR comments do not expose inline-thread resolution state.
@@ -26,6 +27,7 @@
 - When moving a test with a pkgmaintcheck exemption, move the existing budget target with the test and retain legacy file suppressions until the remaining staged split retires the source file.
 - For broad functional coverage concurrency flakes, isolate the named test and rerun only the failed CI jobs before changing untouched behavior.
 - When resolving long append-only progress conflicts, read merge-stage files in bounded chunks and validate the reconstructed line count so tool-output truncation cannot drop history.
+- When a broad coverage wrapper is too slow locally, run the affected Bun test directly with the same coverage instrumentation and keep the wrapper result explicit rather than treating a timeout as a pass.
 - Treat repository-enforcement inventories and architecture guards as project-enabling PRD criteria when they have no runtime, API, CLI, UI, or emitted-event behavior; source scans support enforcement but are not customer-behavior evidence.
 - AST scanners must expand grouped Go field declarations before indexing parameter or result types; a field-count helper can exceed the AST field-list length and panic on valid source.
 - Asynchronous service characterizations should wait on observed edge/context signals rather than arbitrary `time.After` ceilings; the test context remains the failure escape hatch.
@@ -140,7 +142,6 @@
 
 
 
----
 ---
 
 ## 2026-08-10 04:32 -07:00 - sac-s0-2-pkg-boundary-ignores-001
@@ -4194,4 +4195,22 @@
   - Detached `origin/main` at `012e98e0f` passed `backend-size`, `pkg-maint`, `pkg-file-count`, and `pkg-structure`. The seven commits added to `main` after the earlier UI baseline touched only shared bookkeeping and CLI parameter tests, so the previously captured exact-main UI lint result remains applicable.
 - **Learnings for future iterations:**
   - Fetch the hosting `main` ref immediately before the final push; a clean local rebase can become conflicted again when another merge lands between verification and publication.
+---
+## [2026-08-11 05:04 -07:00] - dashboard-fixture-and-quick-wins-coverage-race
+- What was implemented
+  - Added an explicit `sessionLists.waitUntilPending` readiness signal to the dashboard regression fixture controller.
+  - Updated the typed Factory Sessions API fixture test to await that signal before resolving the controlled initial list response, removing the coverage-only scheduling race reported by PR CI.
+- Files changed
+  - `ui/src/components/dashboard/fixtures/dashboard-regression-controller.ts`
+  - `ui/src/components/dashboard/fixtures/dashboard-regression.bun.unit.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Focused dashboard regression Bun suite passed: 5 tests, 23 expectations.
+  - The same focused suite passed with Bun coverage instrumentation.
+  - `bun run typecheck` passed.
+  - The broad local `bun run test:coverage` wrapper exceeded its 15-minute bound without producing a result; its orphaned coverage subprocesses were stopped, and this timeout is recorded rather than counted as a pass.
+- **Learnings for future iterations:**
+  - Controlled async fixtures need a first-class pending/ready signal so tests do not depend on incidental scheduling, especially under coverage instrumentation.
+  - A focused instrumented rerun is useful evidence for a coverage race, but final confidence still depends on the hosted full coverage job.
 ---

@@ -12,13 +12,15 @@
     "reviewFollowUp": {
       "baseCommit": "012e98e0fbd1b6fcac106d90b1f3d335b8a3dce6",
       "resolved": [
-        "Rebased the six dashboard commits onto the fetched current main and resolved the shared PRD/progress conflicts while preserving the dashboard task record.",
-        "Replaced exact Storybook command and registration-inventory assertions with behavioral runner coverage for readiness, completion, failure propagation, and server cleanup."
+        "Rebased the seven dashboard commits onto the fetched current main and resolved the shared PRD/progress conflicts while preserving the dashboard task record.",
+        "Replaced exact Storybook command and registration-inventory assertions with behavioral runner coverage for readiness, completion, failure propagation, and server cleanup.",
+        "Replaced the dashboard fixture API test's race-prone immediate response resolution with an explicit waitUntilPending readiness signal."
       ],
       "qualityEvidence": [
         "make test and make vet pass on the rebased head.",
         "backend-size, pkg-maint, pkg-file-count, and pkg-structure pass on both the rebased head and the exact detached origin/main baseline.",
-        "bun run typecheck and bun run lint pass on the rebased head; the exact detached origin/main UI lint baseline also passes with only its existing allowlisted advisories."
+        "bun run typecheck and bun run lint pass on the rebased head; the exact detached origin/main UI lint baseline also passes with only its existing allowlisted advisories.",
+        "The affected dashboard fixture passes directly under Bun coverage instrumentation; the broad local UI coverage wrapper exceeded its 15-minute local bound and was not counted as passing."
       ]
     }
   },
