@@ -3,6 +3,8 @@
 - Go test lane runners use count `0` as cache mode and append `-count` only for positive explicit repeats; a fresh Make wrapper can select `-count=1` without changing the runner's default.
 - Authoritative coverage runners should pass `-count=1` alongside instrumentation so coverage and timing artifacts always describe a real test execution rather than a cached developer result.
 - For targeted performance evidence, `gocoveragecheck -packages ... -total-only -timing-output ...` preserves the authoritative fresh instrumentation and timing schema while isolating measured packages from an independently failing full-lane package.
+- For reproducible Go-lane evidence, pair `go clean -testcache` with an unchanged cold run and immediate warm run; use an isolated focused `gocoveragecheck` package set when parallel full-lane variance obscures representative package deltas.
+- Functional provider-edge fakes must mirror the current provider command contract: stage command Args as the prompt and emit the provider-native success envelope; stdin-only Codex fixtures can become stale when the edge contract evolves.
 - Treat repository-enforcement inventories and architecture guards as project-enabling PRD criteria when they have no runtime, API, CLI, UI, or emitted-event behavior; source scans support enforcement but are not customer-behavior evidence.
 - AST scanners must expand grouped Go field declarations before indexing parameter or result types; a field-count helper can exceed the AST field-list length and panic on valid source.
 - Asynchronous service characterizations should wait on observed edge/context signals rather than arbitrary `time.After` ceilings; the test context remains the failure escape hatch.
@@ -2042,4 +2044,23 @@
 - **Learnings for future iterations:**
   - A focused `gocoveragecheck` timing summary is useful for proving selected package deltas, but it cannot replace the required full fresh functional and coverage evidence.
   - The full functional lane currently reaches `factory_runtime/root_composition` and fails before a clean lane result; investigate that existing provider-prompt mismatch before marking story 004 complete.
+---
+## 2026-08-10 18:45 -07:00 - thr-functional-lane-speed-004
+- What was implemented
+  - Completed the story-level timing and correctness evidence on the current task head and marked story 004 passing in `prd.json`.
+  - Recorded a default cold run after `go clean -testcache` (1726.934s), an unchanged warm default run with cached package output (197.127s, 88.6% faster), and an explicit fresh run through `make test-functional-fresh` (179.939s, `-count=1`).
+  - Re-ran the authoritative fresh coverage/visualization lane and regenerated the complete full timing, coverage, and Markdown catalog artifacts; isolated focused timing confirms all three wait-target packages improved.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `make test-functional` cold and warm — passed; warm output visibly reports cached results and the cold run has no count override.
+  - `make test-functional-fresh` — passed with explicit `-count=1` and the same maintained package scope.
+  - `make functional-test-viz` — passed in 320.752s; 142 timing packages complete, 55.6% coverage against the 33.1% floor, and Markdown rendering passed.
+  - Focused fresh `gocoveragecheck` for `sessions/execution`, `work/relationships`, and `work/submission` — passed; representative timing reduced 31.719s -> 15.690s, 43.950s -> 15.060s, and 33.606s -> 12.794s respectively.
+  - Root-composition provider-fixture regression repeated three times — passed; `make typecheck` — passed.
+  - Current-main merge, final repository gates, PR creation, and required CI terminal status remain delivery follow-up.
+- **Learnings for future iterations:**
+  - Full parallel coverage timing can vary materially when another Go lane shares process/API-server resources; preserve the complete full-lane result, but use an isolated focused run for package-level before/after claims.
+  - `origin/main` may advance during long functional runs; fetch and compare the base immediately before merge and preserve this branch’s task-scoped `prd.json` while integrating append-only progress history.
 ---
