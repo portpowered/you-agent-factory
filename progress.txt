@@ -164,6 +164,7 @@
 - Transport boundary helpers must preserve caller-owned context semantics; nil inputs remain nil instead of being replaced by `context.Background()`.
 - For ratcheted repository-wide gates with intentional baseline violations, compare the current count with an exact detached current-main checkout; a non-zero command can still be clean when the counts match.
 ---
+
 ## 2026-08-09 13:20 - wo-d1-packaged-factories-docs-001 lint follow-up
 - What was implemented
   - No source change; checked the broad repository lint tier against the completed story.
@@ -217,6 +218,7 @@
   - Generic mock workers accept a planner dispatch without producing its required `FACTORY_REQUEST_BATCH`; use protocol-valid fixtures or provider-backed functional tests when verifying generated Work, concurrency, or cycle control.
   - Keep full-flow CLI smoke examples bounded and terminating; use controlled argument validation for the public command example and the isolated functional test for actual worktree/merge behavior.
 ---
+
 ---
 ## 2026-08-10 14:43 -07:00 - pf-stale-scope-diagnostic-002 verification follow-up
 - What was implemented
@@ -4645,4 +4647,25 @@
   - The planning entries are not interchangeable: builder installs a new Factory, plan-execute stays sequential in the current workspace, plan-parallel shares one repository across a bounded DAG, and full-flow owns worktrees, local merges, and replanning.
   - Generic mock workers accept a planner dispatch without producing its required `FACTORY_REQUEST_BATCH`; use protocol-valid fixtures or provider-backed functional tests when verifying generated Work, concurrency, or cycle control.
   - Keep full-flow CLI smoke examples bounded and terminating; use controlled argument validation for the public command example and the isolated functional test for actual worktree/merge behavior.
+---
+
+## 2026-08-10 17:10 -07:00 - e2-structured-worker-results current-main synchronization follow-up
+- What was implemented
+  - Merged the live `origin/main` at `acbd13fcc` into the E2 branch and preserved the task-scoped `prd.json`, all append-only progress histories, and consolidated Codebase Patterns.
+  - No additional E2 product implementation was required because all four PRD stories remain `passes:true`; current-main JavaScript durability changes were retained as part of the required base synchronization.
+- Files changed
+  - `progress.txt`
+  - `tests/fixtures/javascript_runtime/resumable-two-step-fake-children.workflow.js`
+  - `tests/functional/orchestration/javascript/durability/resume_test.go`
+- Verification
+  - `make test` — passed.
+  - `make typecheck` — passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` — passed.
+  - `make lint` passed all prerequisite checks and reached only the known `pkg-boundary` baseline of 175 violations; a detached `origin/main` audit reports the same 175.
+  - Focused structured-result worker, prompt, Work CLI/watch, and replay-related tests — passed.
+  - `go test -tags functionallong ./tests/functional/workstations/execution -run '^TestStructured(ResultFlowsIntoDownstreamPromptThroughRootBuildProcess|StructuredOutputSchemaViolationRoutesFailureWithoutDownstreamDispatch)$' -count=1` — passed.
+  - `prd.json` parses with four passing stories; conflict-marker scan and `git diff --check` passed; `origin/main` is an ancestor of `HEAD`.
+- **Learnings for future iterations:**
+  - When a moving-base merge conflicts in append-only progress, preserve every distinct section and pattern from both clean refs, then validate heading coverage before committing.
+  - Compare ratcheted lint counts in a detached current-main worktree; the intentional non-zero `pkg-boundary` result is clean only when the exact baseline matches.
 ---
