@@ -1,0 +1,5 @@
+description: The Worker Session start conflicts with an existing reservation or request identity.
+content:
+  application/json:
+    schema:
+      $ref: '../schemas/api/ErrorResponse.yaml'
