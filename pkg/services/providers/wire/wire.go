@@ -257,7 +257,7 @@ func NewService(options ...Option) (providers.Service, error) {
 			option.apply(&config)
 		}
 	}
-	packaged, err := ACPIntegrationsFromRuntimeCatalog(modelproviders.RuntimeACPJSON())
+	packaged, err := PackagedACPIntegrations()
 	if err != nil {
 		return nil, err
 	}
@@ -315,7 +315,11 @@ func packagedACPDescriptors(integrations []providers.ACPIntegration) ([]provider
 // Providers. Composition uses this exact source when materializing a new
 // operator configuration so init and runtime discovery cannot drift.
 func PackagedACPIntegrations() ([]providers.ACPIntegration, error) {
-	return ACPIntegrationsFromRuntimeCatalog(modelproviders.RuntimeACPJSON())
+	packaged, err := builtinswire.NewService()
+	if err != nil {
+		return nil, err
+	}
+	return packaged.ACPIntegrations(), nil
 }
 
 // ACPIntegrationsFromRuntimeCatalog projects a generated package-owned
