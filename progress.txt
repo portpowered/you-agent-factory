@@ -7326,3 +7326,18 @@
 - **Learnings for future iterations:**
   - For a shared task bookkeeping conflict, keep the branch-specific PRD authoritative and append the branch-specific progress entries after the current-main history; validate both parseability and marker-free output before staging.
 ---
+
+## 2026-08-10 21:23 -07:00 - wsr-001-opening-record final pushed-head audit
+- What was implemented
+  - Recorded the final pushed-head audit after the live `origin/main` advanced to `469204421` and the current-main CI classifier merge was reconciled into the WSR branch.
+  - Confirmed the latest review feedback remains addressed by the root-built JavaScript probe running without `--with-mock-workers`.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Head `36686ef79` — CI run `31457898566` has all 18 listed checks terminal and successful, including Backend Functional Coverage, Backend Unit Coverage, and Verification Policy.
+  - PR #1849 is open, non-draft, `CLEAN/MERGEABLE`, targets `origin/main` at `469204421`, and its body remains byte-for-byte equal to `prd.json`.
+  - Thread-aware review audit reports 8 conversation comments, 0 formal reviews, and 0 unresolved/outdated inline threads.
+  - `prd.json` parses with all three stories marked `passes:true`; `git merge-tree --write-tree origin/main HEAD` and `git diff --check` pass; the worktree is clean.
+- **Learnings for future iterations:**
+  - A green PR run becomes stale when `origin/main` advances during local verification; fetch immediately before handoff, merge the new base, and wait for checks on the replacement head.
+---
