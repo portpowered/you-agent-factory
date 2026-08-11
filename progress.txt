@@ -11325,3 +11325,15 @@
 - **Learnings for future iterations:**
   - A completed PR audit should verify PRD story flags, exact PR-body parity, current-base ancestry, mergeability, thread-aware review state, and terminal hosted checks together before handoff.
 ---
+## [2026-08-11 09:21:32 -07:00] - wsr-0023-capture-replay CI follow-up
+- What was implemented
+  - Investigated the replacement-head `Frontend Storybook` failure and confirmed it was an existing dashboard browser-verifier timing failure at the desktop `Home` assertion; the WSR bookkeeping commit did not change that verifier.
+  - Reran only the failed Storybook job after the workflow became terminal; the rerun passed without a source change.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Replacement run `31510982317` is terminal-success after the isolated Storybook rerun, including `Frontend Storybook` and `Verification Policy`; all other reported checks remain passing.
+  - The current branch head remains `087e6e8bb`; no product or test source changes were introduced for the transient CI failure.
+- **Learnings for future iterations:**
+  - When a hosted browser check fails on a commit that only changes bookkeeping and the same source passed immediately before, inspect the job log and rerun the isolated failed job after the workflow is terminal before widening the diff.
+---
