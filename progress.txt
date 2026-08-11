@@ -8967,3 +8967,19 @@
   - Root-built provider-gating evidence can use the exact `WorkerRecordingWriter` edge with a real sidecar writer, while the provider effect stays observable through `ProviderCommandRunner`; this preserves production composition without Mock Workers.
   - For an opening durability failure, assert the durable failure side's stable code and detached identity as well as zero provider calls; the source topic may contain the unrecorded opening, so terminal publication must not be treated as capture completion.
 ---
+
+## [2026-08-11 05:04:32 -07:00] - wsr-0023-capture-replay-001 verification characterization
+- What was implemented
+  - Restored the locked UI dependency tree locally so the repository typecheck could proceed past the missing `@types/bun` environment failure.
+  - Did not change unrelated UI helpers after typecheck identified six existing `Assertion.not` type errors in `current-selection-save-toast-test-helpers.ts` and `trace-grid-card-scroll-test-helpers.ts`, neither of which is touched by this story.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` — passed.
+  - `make typecheck` — reached source checking but remains blocked by the unrelated UI helper errors above.
+  - PR #1876 body matches `prd.json`; pushed `HEAD` matches `origin/wsr-0023-capture-replay`; `origin/main` is an ancestor; `git diff --check` passed.
+  - PR #1876 remains open and mergeable but has pending hosted checks; the blocking review comment still has replay/portable follow-up for stories 002/003.
+- **Learnings for future iterations:**
+  - A missing package dependency can mask source diagnostics; restore the lockfile dependency tree before classifying a typecheck failure.
+  - Keep unrelated baseline UI type errors out of a backend recording story; record the exact files and diagnostics so the CI owner can triage them independently.
+---
