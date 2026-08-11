@@ -13447,3 +13447,17 @@
 - **Learnings for future iterations:**
   - Treat the latest-main merge, final hosted run, PR-body parity, and thread-aware comment audit as one handoff bundle; a green workflow before the final progress update does not certify the new bookkeeping head.
 ---
+## [2026-08-11 09:41:36 -07:00] - btrc-p1-root-injection-006 current-main delivery synchronization
+- What was implemented
+  - Published the clean P1 branch head `9ea783056f45fbb9c4f778692c63ae0e15449f88` to PR #1857 after synchronizing it with live `origin/main` `650b701689fcbc467fa0e814478460b9c3316629`.
+  - Audited the existing PR conversation with the thread-aware GitHub workflow: the historical blocking findings have follow-up evidence, with zero unresolved inline threads and zero formal reviews.
+  - Updated `prd.json` delivery evidence to identify the pushed head/base and replacement workflow `31513693810`; all six P1 stories remain `passes:true`.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `gh pr view 1857` reports `MERGEABLE` with the pushed head and current main as base ancestry.
+  - `git diff --check` passed before the synchronization commit; replacement-head CI is in progress and must reach terminal success before final handoff.
+- **Learnings for future iterations:**
+  - A clean local merge is not enough for delivery: push the exact head, confirm GitHub’s mergeability, and keep PRD delivery evidence synchronized with the workflow head and current base.
+---
