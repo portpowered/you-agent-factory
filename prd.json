@@ -1,33 +1,34 @@
 {
-  "project": "DWRO S1 — Explicit Remote Placement and Listener Selection",
-  "branchName": "dwro-s1-remote-placement-flags",
-  "description": "Implement story S1 of Direct Worker and Remote Operations by adding persistent root --remote and authored command placement capabilities, dispatching one normalized request through either the local service or exactly the selected --server endpoint without fallback, introducing --listen for local binds with a warned legacy compatibility path, and rejecting documented conflicts with run --with-server and run --with-site.",
+  "project": "E2 Structured JSON Worker Result Channel",
+  "branchName": "e2-structured-worker-results",
+  "description": "Add an event-first, schema-validated JSON result channel for workstations so validated worker output is stored as native structuredResult data on resulting Work, survives replay, is available to downstream prompt templates and Work list/watch output, and fails through a stable typed dispatch failure when invalid.",
   "context": {
-    "customerAsk": "Implement DWRO story S1: persistent root --remote, authored command placement capabilities, endpoint-only --server, new --listen for local listener binds, no silent local fallback, and documented conflicts with run --with-server and run --with-site.",
-    "problem": "The CLI has no explicit execution-placement input and its authored manifest cannot state whether a command is local-only, remote-only, or dual-placement. The global --server flag also selects both HTTP client endpoints and local listener binds, so customers and scripts cannot unambiguously distinguish calling an existing server from hosting one, and unsupported remote requests lack one centralized no-fallback rule.",
-    "solution": "Add persistent root --remote, a resolved local/remote placement value, and per-command placement capabilities to the authored CLI contract. Normalize command inputs once and select exactly one injected local-service or HTTP-client adapter, rejecting unsupported or failed remote placement without fallback. Make --server the remote endpoint selector, add --listen to listener-owning commands, preserve explicit legacy --server binding with a deprecation warning when --listen is absent, give --listen precedence, and enforce documented usage conflicts before side effects."
+    "customerAsk": "Provide an optional JSON result contract per workstation, authored as JSON Schema in workstation configuration. Require and validate a JSON final response when configured, persist the validated payload on Work, expose it to downstream prompt templates and you work list/watch, and route schema violations as typed dispatch failures. Prove schema-pass templating and schema-violation failure routing with functional tests.",
+    "problem": "The existing outputSchema path can validate raw model output but discards the parsed JSON value. Later stages still parse artifacts or text, replay and Work reads cannot reproduce the structured handoff, operators cannot inspect it through Work commands, and schema failures are not distinguishable from unrelated generic failures.",
+    "solution": "Reuse outputSchema as the optional authoring contract, validate and detach the worker's final JSON value at the Workers boundary, carry native structuredResult data through canonical dispatch events and resulting Work projections, rebuild it through recordings/replay, expose it at .Inputs[n].StructuredResult and in Work CLI/API output, and classify malformed or schema-invalid responses as terminal structured_output_schema_violation failures that follow normal onFailure routing."
   },
   "acceptanceCriteria": [
-    "The authored CLI manifest defines persistent root --remote, a resolved local/remote placement value, and local-only, remote-only, or dual-placement capabilities for affected commands; executable help and parsing match that contract.",
-    "A representative dual-placement operation produces the same normalized request locally without --remote and sends that request to exactly the --server <uri> HTTP endpoint with --remote, with equivalent domain intent across adapters.",
-    "Unsupported remote placement, an invalid or unavailable selected server, and remote transport failure return stable actionable errors and never invoke the local product operation, start a listener, or silently select another endpoint.",
-    "you server --listen, you run --with-server --listen, and you run --with-site --listen bind the requested local address; when --listen is absent, legacy listener use of an explicitly supplied --server remains functional for the compatibility window and warns, while explicit --listen takes precedence.",
-    "--remote with run --with-server or run --with-site is rejected as a documented stable usage conflict before listener, browser, Factory, or remote-operation side effects begin; reference docs and examples use the new placement vocabulary.",
-    "Quality gates pass with direct CLI and manifest, package, functional, help and reference, and compatibility evidence as applicable; Typecheck passes, Tests pass, and there are no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
-    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared or generated-file churn are resolved against current main, and the PR is actually merged."
+    "A workstation with a valid outputSchema accepts only a JSON final response satisfying that schema and records the validated value as native structuredResult data; a workstation without a schema behaves as it did before and omits the field.",
+    "Successful structured results survive canonical event serialization, live projection, persisted recording replay, and process/session recovery without type loss, mutation, or dependence on workstation artifacts.",
+    "A downstream workstation can render .Inputs[n].StructuredResult, including nested fields and arrays, and attempting to use an absent structured result fails prompt construction with a clear diagnostic rather than an accidental string parse.",
+    "you work list --json and relevant you work watch lines expose structuredResult as a native JSON value, human-readable Work list output uses deterministic compact JSON, and older records without a result remain readable.",
+    "Malformed JSON and schema-invalid JSON produce terminal structured_output_schema_violation dispatch failures with safe actionable detail, no propagated structured result, and configured onFailure routing; invalid schema configuration is rejected as a workstation misconfiguration.",
+    "Focused unit, projection/replay, contract, CLI, and functional tests directly prove storage/replay, downstream prompt rendering, Work observability, backward compatibility, and typed schema-violation routing, and generated interfaces remain synchronized.",
+    "Typecheck passes; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green; focused and required broader tests pass.",
+    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared/generated-file contention are resolved against current origin/main, and the PR is actually merged."
   ],
   "userStories": [
     {
-      "id": "dwro-s1-remote-placement-flags-001",
-      "title": "Declare explicit placement in the authored CLI contract",
-      "description": "As a CLI user and command implementer, I want root placement and each command's supported placements to be explicit so help, validation, and dispatch share one authoritative contract.",
+      "id": "e2-structured-worker-results-001",
+      "title": "Preserve a validated structured result on Work",
+      "description": "As a factory author, I want a schema-valid worker response stored as typed Work data so later behavior does not depend on reparsing raw text or files.",
       "acceptanceCriteria": [
-        "The authored CLI manifest exposes a visible persistent root --remote boolean whose documented meaning is to execute a supported operation through a running You server; it does not imply async, follow, continuous, or listener behavior.",
-        "The executable parser resolves the root input to explicit local placement by default and remote placement when --remote appears before or after the command path, consistent with other persistent flags.",
-        "A command can authoritatively declare local-only, remote-only, or dual-placement capability, and manifest validation rejects a runnable command whose placement declaration is missing or invalid where the placement contract applies.",
-        "Existing HTTP-only commands retain their historical remote-default compatibility for this window, accept explicit --remote, and do not gain a local implementation merely to satisfy the new vocabulary.",
-        "Root and representative command help show the placement meaning and supported usage without describing --remote as a waiting or server-start option.",
-        "Focused contract and parser tests prove manifest validation, persistent flag inheritance, before and after command parsing, default placement, and explicit remote placement through observable CLI inputs and help.",
+        "Given a workstation whose outputSchema is a valid JSON Schema, a conforming object, array, scalar, boolean, or null final response is decoded once and returned from worker execution as detached native JSON in structuredResult while existing raw output remains available for diagnostics and compatibility.",
+        "The successful dispatch event records structuredResult, resulting Work receives the value, and live projection, persisted recording replay, and recovery reproduce the same JSON types and value; multiple resulting Work items receive independent equivalent values.",
+        "Workstations without outputSchema do not require JSON and omit structuredResult from events and Work projections, including replay of older events that lack the field.",
+        "Invalid JSON Schema configuration is rejected deterministically as a typed workstation misconfiguration before a worker response can be accepted.",
+        "Authored public contracts, generated outputs, handwritten mappings, and clone paths preserve the optional native JSON value and ownership boundaries.",
+        "Focused worker-execution, event serialization, projection, replay, and recovery tests pass.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -36,60 +37,55 @@
       "notes": ""
     },
     {
-      "id": "dwro-s1-remote-placement-flags-002",
-      "title": "Dispatch normalized operations without placement fallback",
-      "description": "As a customer, I want the same operation to run locally by default or on exactly my selected server with --remote so placement is predictable and cannot silently change during failure.",
+      "id": "e2-structured-worker-results-002",
+      "title": "Render upstream structured results in downstream prompts",
+      "description": "As a factory author, I want downstream workstation prompts to access an upstream JSON result directly so I can build reliable multi-stage factories without artifact-parsing handoffs.",
       "acceptanceCriteria": [
-        "At least one representative supported dual-placement command normalizes customer inputs once before dispatch, calls its already-injected local service adapter without --remote, and calls its HTTP client adapter with --remote.",
-        "Behavioral parity coverage proves the local and remote adapters receive contract-equivalent normalized request values for the same customer input, allowing only transport metadata differences.",
-        "you --remote --server <uri> <dual-placement-command> sends the operation to exactly <uri> and does not invoke the local product operation, start or probe a local listener, or substitute the default endpoint.",
-        "A local-only command invoked with --remote exits with a stable actionable usage error that identifies the unsupported placement before command side effects occur.",
-        "Invalid endpoint configuration, connection refusal, timeout, and other remote transport failures remain remote failures and do not retry through the local adapter; diagnostics identify the selected endpoint without leaking credentials or sensitive request content.",
-        "Placement selection remains a CLI transport concern: domain services receive normalized operation requests and do not inspect CLI placement flags or discover alternate dependencies.",
-        "Focused package and public CLI behavioral tests cover local dispatch, exact remote dispatch, unsupported placement, and failed remote transport with zero local fallback.",
+        "A downstream prompt can access the complete upstream value at .Inputs[n].StructuredResult and render nested object fields and array elements with supported Go-template expressions.",
+        "The prompt-template contract advertises .Inputs[n].StructuredResult as optional for each available input, and runtime prompt construction returns a clear diagnostic when a template attempts to use a missing result; it does not substitute raw output, payload, an empty object, or artifact content.",
+        "Structured values supplied to prompt rendering are detached from canonical Work state so template execution cannot mutate the stored result.",
+        "A functional test built through root.BuildProcess and Process.Execute, using an allowed provider command-runner edge mock and deterministic synchronization, proves an upstream schema-valid response is stored and its nested value appears in the actual downstream provider prompt.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 2,
       "passes": true,
-      "notes": "Implemented dual-placement `you run` dispatch through one normalized invocation request and an injected local or exact-URI HTTP adapter, with stable unsupported-placement and no-fallback remote errors. Refreshed authored and published CLI contract artifacts and added focused package/public CLI behavioral coverage. Verified with `make contracts-validate`, `make cli-manifest-check`, `go test ./pkg/transports/cli/run ./pkg/transports/cli ./pkg/wire ./pkg/services/workers/internal/interface -count=1`, and `make test`. Review follow-up makes invalid remote endpoint labels fail closed for parse-success/base-invalid opaque and unsupported-scheme inputs, with credential-redaction regression coverage."
+      "notes": "Implemented detached structured-result prompt rendering, optional prompt-contract metadata and absence diagnostics, plus root BuildProcess/Process.Execute functional coverage for nested objects and arrays."
     },
     {
-      "id": "dwro-s1-remote-placement-flags-003",
-      "title": "Bind local servers with --listen and preserve legacy scripts",
-      "description": "As an operator, I want local listener addresses selected with --listen so --server can mean a remote endpoint while my existing listener scripts have a safe migration window.",
+      "id": "e2-structured-worker-results-003",
+      "title": "Route schema violations as typed dispatch failures",
+      "description": "As a factory operator, I want invalid structured worker output to fail explicitly and follow factory failure routing so corrupt data never reaches a later stage.",
       "acceptanceCriteria": [
-        "you server --listen <address>, you run --with-server --listen <address>, and you run --with-site --listen <address> bind the requested valid local address and report existing stable bind failures for invalid, non-local, or unavailable addresses.",
-        "Listener-owning commands use the existing default local bind when neither an explicit --listen nor an explicit legacy bind value is supplied.",
-        "During the compatibility window, an explicitly supplied legacy --server <local-uri> continues to select the listener bind only when --listen is absent and emits one actionable deprecation warning on stderr directing the user to --listen.",
-        "When both inputs are supplied to a listener-owning command, explicit --listen determines the bind address; --server does not override it, and compatibility diagnostics accurately explain any retained endpoint role.",
-        "Ordinary local commands and ordinary you run do not start a listener merely because --listen or the default server endpoint exists; invalid flag placement is rejected before runtime side effects.",
-        "CLI manifest relationships, help, and examples describe --listen as the local bind input and --server as the selected You server URI, including the legacy migration behavior.",
-        "Focused listener lifecycle tests use observable readiness and bind behavior and prove requested binding, precedence, warning, bind failure, and joined shutdown without arbitrary sleeps.",
+        "Malformed JSON and valid JSON that violates outputSchema complete the dispatch as failed with stable reason structured_output_schema_violation and terminal non-retryable normalized failure policy.",
+        "Failure detail contains an actionable customer-safe validation summary with instance or schema location when available, never reports an empty error, and does not copy the complete rejected payload into the message or logs.",
+        "The rejected value is absent from resulting Work, downstream prompt inputs, success, continue, and rejection outputs, and structured-result projections; configured onFailure Work is emitted through existing routing semantics.",
+        "The typed reason survives dispatch event serialization, recording replay, Factory Session and Work projections, and public failure mapping without transport reclassification.",
+        "A functional test built through root.BuildProcess and Process.Execute, using an allowed provider command-runner edge mock and no sleep-based synchronization, proves schema-invalid output reaches the configured failure state or route, exposes structured_output_schema_violation, and causes no success-stage dispatch.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 3,
       "passes": true,
-      "notes": "Implemented exact local listener selection through --listen for you server and server-enabled you run/you run --with-site flows, with loopback-only validation, explicit precedence over --server, one-time legacy local --server warnings, and preserved automatic legacy allocation. Ordinary runs reject misplaced --listen before the run handler, and listener lifecycle coverage proves exact readiness, unavailable-port errors, and shutdown. Refreshed authored/generated CLI contracts, command/help baselines, and reference guidance. Verified with make contracts-validate, make cli-manifest-check, make docs-reference-smoke, make test, go test ./pkg/transports/cli/... -count=1, focused CLI tests, full run-scoped-server functional tests, backend-size, pkg-maint, pkg-file-count, vet, and git diff --check; aggregate make lint is blocked by the pre-existing missing UI knip binary, and the backend-only continuation reaches existing package-boundary baseline violations; neither reports new violations."
+      "notes": "Added terminal structured_output_schema_violation classification for malformed/schema-invalid output, safe validation diagnostics, onFailure routing, generated public enum/mappings, replay/session projection coverage, and root-built functional coverage proving no success-stage dispatch. Review follow-up now builds bounded instance/schema/keyword diagnostics without rejected values or host paths, with scalar pattern coverage at focused and functional boundaries; the pkg-boundary count is restored to the main baseline."
     },
     {
-      "id": "dwro-s1-remote-placement-flags-004",
-      "title": "Reject remote and local-hosting conflicts and publish migration guidance",
-      "description": "As a customer, I want contradictory placement modes rejected with clear guidance so the CLI never both calls a remote server and hosts the same run locally.",
+      "id": "e2-structured-worker-results-004",
+      "title": "Inspect structured results through Work commands",
+      "description": "As a factory operator, I want Work list and watch output to show validated results so I can monitor stage handoffs without opening artifacts or decoding escaped JSON.",
       "acceptanceCriteria": [
-        "you --remote run --with-server and you --remote run --with-site each exit with the same stable usage classification and actionable conflict message, regardless of persistent-flag position.",
-        "Conflict validation occurs before Factory execution, HTTP dispatch, listener startup, browser launch, recording, or other run-owned side effects.",
-        "Authored CLI relationships, executable help, and packaged reference docs state that --remote selects a running server, --server selects its URI, and --listen selects a local bind; they document both run-mode conflicts and the legacy bind migration.",
-        "New customer-facing examples use you --remote --server <uri> for supported remote operations and --listen <address> for local server or server-enabled run binding; they do not present legacy --server listener syntax as the preferred form.",
-        "Behavioral CLI tests prove both conflicts, stable exit and error output, zero side effects, and help and reference guidance rather than relying on source or route inventories.",
-        "Documentation reference smoke checks pass",
+        "you work list --json represents structuredResult as a native optional JSON value on each Work result, not an escaped string, and list/get transport contracts and mappings preserve the same shape.",
+        "you work watch includes structuredResult on the transition line where canonical Work first has the value and omits it from unrelated transitions, failures, unstructured Work, and older recordings.",
+        "Human-readable Work list output renders deterministic compact JSON for objects, arrays, scalars, booleans, and null; you work watch preserves one complete JSON object per line, and large values follow existing bounded-output conventions.",
+        "Focused CLI and contract tests exercise structured and unstructured Work, JSON type preservation, watch line framing and order, omission semantics, and replay-backed output.",
+        "Public workstation and Work command documentation explains outputSchema, .Inputs[n].StructuredResult, typed violation behavior, and list/watch visibility with an end-to-end example that has no artifact handoff.",
+        "Generated public interfaces are regenerated from authored sources after rebasing, and generated conflicts are resolved by regeneration rather than manual merging.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 4,
       "passes": true,
-      "notes": "Implemented stable REMOTE_LOCAL_HOSTING_CONFLICT validation before system initialization and again after custom run parsing, covering --remote before or after run with both --with-server and --with-site; behavioral tests prove no local, remote, browser, listener, or Factory side effects. Added authored conflict relationships, structured BAD_REQUEST output, executable help/examples, legacy --server migration guidance, and packaged reference documentation; regenerated published contracts and CLI baselines. Addressed review feedback by removing duplicate placement keys from authored/generated manifests, making manifest loading reject duplicate JSON object keys, redacting malformed credential-bearing endpoint diagnostics, keeping maintainability and package-file-count ratchets green, using worker-free listener functional cases, and removing marker-only docs assertions. Moved the generic strict decoder into the policy-free generated-artifact platform package and added loader/decoder coverage so the CLI manifest unit and functional floors remain intact. Verified with focused CLI tests, the full short Go suite, make verify-fast, make cli-manifest-check, make contracts-validate, make docs-reference-smoke, make pkg-maint, make pkg-file-count, backend-size, pkg-structure, vet, full run-scoped-server functional tests, and git diff --check."
+      "notes": "Replaced the customer-representable watch null sentinel with raw event-payload presence handling. Reducer application restores only fields whose canonical raw value is JSON null, preserving the exact historical sentinel string as a string while keeping explicit null and omission distinct. Added focused decode/reducer/render coverage for both values; Work/CLI/functional suites, contract/docs checks, typecheck, test, vet, and repository quality gates pass. Review follow-up moved the recorded Work identity and structured-result projection helpers into the existing invocation-output owner so the transitioner stays within the backend-size and maintainability limits without changing behavior."
     }
   ]
 }

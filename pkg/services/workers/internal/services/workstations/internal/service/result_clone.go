@@ -3,6 +3,7 @@ package service
 import (
 	"encoding/json"
 
+	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -16,6 +17,8 @@ func cloneDispatchResult(result workers.WorkstationDispatchResult) workers.Works
 
 func cloneWorkResult(result workers.WorkResult) workers.WorkResult {
 	result.RecordedOutputWork = cloneFactoryWorkItems(result.RecordedOutputWork)
+	result.StructuredResult = jsonvalue.Clone(result.StructuredResult)
+	result.StructuredResultPresent = jsonvalue.Present(result.StructuredResult, result.StructuredResultPresent)
 	result.ArtifactVerification = result.ArtifactVerification.Clone()
 	result.FailureMetadata = workers.CloneWorkFailureMetadata(result.FailureMetadata)
 	result.ProviderSession = workers.CloneProviderSessionMetadata(result.ProviderSession)
@@ -31,6 +34,8 @@ func cloneFactoryWorkItems(items []work.FactoryWorkItem) []work.FactoryWorkItem 
 	for index, item := range items {
 		item.PreviousChainingTraceIDs = append([]string(nil), item.PreviousChainingTraceIDs...)
 		item.Content = cloneWorkContentParts(item.Content)
+		item.StructuredResult = jsonvalue.Clone(item.StructuredResult)
+		item.StructuredResultPresent = jsonvalue.Present(item.StructuredResult, item.StructuredResultPresent)
 		item.Tags = work.CloneTags(item.Tags)
 		cloned[index] = item
 	}
