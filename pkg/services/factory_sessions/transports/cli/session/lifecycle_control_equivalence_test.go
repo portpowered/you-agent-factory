@@ -156,6 +156,60 @@ func TestLocalLifecycleControl_NotFoundUsesStableDiagnosticWithoutMutation(t *te
 	}
 }
 
+func TestLocalLifecycleControls_RenderAllOperationsForExactSession(t *testing.T) {
+	tests := []struct {
+		name      string
+		operation factorysessionexecution.LifecycleControlKind
+		status    factorysessionexecution.LifecycleStatus
+		invoke    func(localLifecycleOperation) func(LifecycleControlConfig) error
+	}{
+		{
+			name: "pause", operation: factorysessionexecution.LifecycleControlPause,
+			status: factorysessionexecution.LifecycleStatusPaused, invoke: NewLocalPause,
+		},
+		{
+			name: "resume", operation: factorysessionexecution.LifecycleControlResume,
+			status: factorysessionexecution.LifecycleStatusRunning, invoke: NewLocalResume,
+		},
+		{
+			name: "cancel", operation: factorysessionexecution.LifecycleControlCancel,
+			status: factorysessionexecution.LifecycleStatusCanceling, invoke: NewLocalCancel,
+		},
+		{
+			name: "terminate", operation: factorysessionexecution.LifecycleControlTerminate,
+			status: factorysessionexecution.LifecycleStatusTerminated, invoke: NewLocalTerminate,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			const sessionID = "dur-sess-local-exact-001"
+			var out bytes.Buffer
+			operation := func(_ context.Context, gotSessionID string, _ factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error) {
+				if gotSessionID != sessionID {
+					t.Fatalf("sessionId = %q, want %q", gotSessionID, sessionID)
+				}
+				return lifecycleEquivalenceResult(sessionID, test.operation, factorysessionexecution.LifecycleControlOutcomeAccepted, test.status), nil
+			}
+			if err := test.invoke(operation)(LifecycleControlConfig{
+				Context: context.Background(), SessionID: sessionID, JSON: true, Output: &out,
+			}); err != nil {
+				t.Fatalf("local %s: %v", test.name, err)
+			}
+
+			var response factoryapi.FactorySessionLifecycleControlResponse
+			if err := json.Unmarshal(out.Bytes(), &response); err != nil {
+				t.Fatalf("decode local %s response: %v\n%s", test.name, err, out.String())
+			}
+			if response.SessionId != sessionID ||
+				response.Operation != factoryapi.FactorySessionLifecycleControlKind(test.operation) ||
+				response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted ||
+				response.Status != factoryapi.FactorySessionDurableLifecycleStatus(test.status) {
+				t.Fatalf("local %s response = %#v, want exact accepted outcome", test.name, response)
+			}
+		})
+	}
+}
+
 func TestBindServiceDelegatesToInjectedOperations(t *testing.T) {
 	t.Parallel()
 
