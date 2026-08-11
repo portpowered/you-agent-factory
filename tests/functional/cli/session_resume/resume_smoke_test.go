@@ -444,7 +444,14 @@ func startRootCLIResumeAPIServer(
 func (h *cliResumeSmokeHarness) executeCLI(t *testing.T, args ...string) (bytes.Buffer, error) {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
-	inputArgs := []string{"you", "--json", "--server", h.serverURL}
+	inputArgs := []string{"you", "--json"}
+	if len(args) >= 2 && args[0] == "session" {
+		switch args[1] {
+		case "pause", "resume", "cancel", "terminate":
+			inputArgs = append(inputArgs, "--remote")
+		}
+	}
+	inputArgs = append(inputArgs, "--server", h.serverURL)
 	inputArgs = append(inputArgs, args...)
 	err := h.process.Execute(root.Input{
 		Args:             inputArgs,
