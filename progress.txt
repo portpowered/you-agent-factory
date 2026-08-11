@@ -7883,7 +7883,27 @@
   - `git fetch origin main` and `git diff --check` — passed.
 - **Learnings for future iterations:**
   - A historical top-level blocking comment can remain in PR conversation after its requested fixes land; use commit ancestry plus thread-aware unresolved state to distinguish addressed feedback from remaining work.
-  - Final readiness requires checking the exact pushed head, terminal CI, PR description, and review-thread state together after any bookkeeping commit.
+ - Final readiness requires checking the exact pushed head, terminal CI, PR description, and review-thread state together after any bookkeeping commit.
+---
+
+## 2026-08-10 21:26 -07:00 - e3-event-webhooks-004 current-main rebase and gate follow-up
+- What was implemented
+  - Rebased the existing PR head `78b55fab2` onto the current fork `main` `ee0023397`, preserving the webhook implementation, Factory PRD, and shared append-only progress history.
+  - Regenerated the merged contract manifest and moved the existing model/script/agent dispatch-event methods into the dispatch-lifecycle owner so `event_history.go` stays below the backend-size limit without adding a package file or changing behavior.
+- Files changed
+  - `packages/api/generated/manifest.json`
+  - `pkg/services/recordings/internal/events/event_history.go`
+  - `pkg/services/recordings/internal/events/event_history_dispatch_lifecycle.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `make generate-api` and `make contracts-generate` — passed; contract drift is clean.
+  - Focused Webhooks/Recordings tests, `tests/functional/events/factory_events`, `make contracts-check wire-smoke functional-boundary-check`, `make backend-size pkg-file-count pkg-maint pkg-structure vet`, and the second full `make test` run — passed.
+  - The first aggregate run failed only while compiling unrelated hosted-sources tests under 32-way parallelism; the named package passed in isolation and the cached aggregate rerun passed.
+  - Implementation synchronization commit: `41c45cb11` (`fix: sync webhook branch with current main`).
+- **Learnings for future iterations:**
+  - After rebasing a feature that adds fields to a near-limit shared event-history file, prefer moving an existing responsibility-aligned method group into an existing owner before adding another package file or weakening the size gate.
+  - Regenerate contract staging after resolving generated-file conflicts; `make generate-api` alone does not refresh the contract manifest hashes.
 ---
 
 
