@@ -67,18 +67,17 @@ func (p *partialResultBlockingProvider) waitForInferBlocked(t *testing.T, timeou
 func (p *partialResultBlockingProvider) waitForCanceledInfer(t *testing.T, timeout time.Duration) {
 	t.Helper()
 
-	_, err := support.WaitForObservation(
-		timeout,
-		func() (int, error) {
-			p.mu.Lock()
-			defer p.mu.Unlock()
-			return p.contextCanceled, nil
-		},
-		func(canceled int) bool { return canceled > 0 },
-	)
-	if err != nil {
-		t.Fatal("provider Infer did not observe canceled workflow context:", err)
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		p.mu.Lock()
+		canceled := p.contextCanceled
+		p.mu.Unlock()
+		if canceled > 0 {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
+	t.Fatal("provider Infer did not observe canceled workflow context")
 }
 
 func (p *partialResultBlockingProvider) Infer(
