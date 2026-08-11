@@ -8084,3 +8084,20 @@
 - **Learnings for future iterations:**
   - Treat a wrapper timeout with live descendants as an environment/process-capacity issue until the exact child failure is observed; do not kill broad concurrent test trees or convert the timeout into a false green result.
 ---
+## [2026-08-10 23:45 -07:00] - btrc-p1-root-injection-006 CI failed-job rerun characterization
+- What was implemented
+  - Made no product-code change. The full CI run on the bookkeeping head completed with every lane green except Backend Functional Coverage.
+  - Reran only the failed CI jobs. The retry cleared the transient runtime-API failure and retained only the unchanged server-binding assertion.
+  - Updated the story-006 PRD note with the final evidence for head `31513d733`.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - CI run `31465418516` initial attempt — all lanes passed except Backend Functional Coverage; the named failures were `TestFunctionalAPIServer_RuntimeLogDirectoryIsAProcessInput` and `TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput`.
+  - `go test ./tests/functional/runtime_api -run '^TestFunctionalAPIServer_RuntimeLogDirectoryIsAProcessInput$' -count=1 -v -timeout 300s` — passed.
+  - Failed-job rerun for CI run `31465418516` — the runtime-API test cleared; `TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput` remained the only failure.
+  - `git diff --name-only origin/main...HEAD` — contains no files under `tests/functional/runtime_api` or `tests/functional/transport/server_binding`; the server-binding failure is outside the P1 implementation diff.
+  - All non-functional and package lanes, including Backend Unit Coverage and Local Inference, passed on the latest CI attempt.
+- **Learnings for future iterations:**
+  - Rerun only failed jobs once after isolating exact unchanged functional tests; when the retry leaves one reproducible current-main assertion, preserve the task diff and report the baseline rather than broadening scope.
+---
