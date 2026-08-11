@@ -162,11 +162,20 @@ async function expectWorkChartLegendAndAxisContract(
   const chartMessages = getWorkOutcomeMessages().chart;
 
   await waitFor(() => {
+    expect(chart.querySelectorAll(".recharts-wrapper")).toHaveLength(1);
+    expect(chart.querySelectorAll(".recharts-cartesian-grid")).toHaveLength(1);
+    expect(within(chart).getAllByText(chartMessages.yAxisLabel)).toHaveLength(
+      1,
+    );
     expectWorkChartCompactLegendContract(chart);
     expectWorkChartAxisLabelsVisible(chart, {
       xAxisLabel: chartMessages.xAxisLabel,
       yAxisLabel: chartMessages.yAxisLabel,
     });
+
+    const descriptionID = chart.getAttribute("aria-describedby");
+    expect(descriptionID).not.toBeNull();
+    expect(document.getElementById(descriptionID ?? "")).toBeTruthy();
   });
 }
 

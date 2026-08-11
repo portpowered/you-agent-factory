@@ -1,6 +1,5 @@
 // Isolated because Bun module mocks are process-global.
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   act,
   cleanup,
@@ -12,8 +11,13 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FactoryDefinition } from "../../../api/events";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
+import {
+  createDashboardRegressionFixture,
+  DASHBOARD_REGRESSION_SESSION_IDS,
+} from "../../../components/dashboard/fixtures";
 import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
 import {
   DashboardSessionTestProvider,
@@ -56,9 +60,9 @@ const { SubmitWorkWidget } = await import("./submit-work-widget");
  */
 function resetCurrentFactoryDefinitionMock() {
   useCurrentFactoryDefinitionMock.mockReturnValue({
-      data: undefined,
-      error: null,
-      isLoading: false,
+    data: undefined,
+    error: null,
+    isLoading: false,
   });
 }
 
@@ -1832,6 +1836,168 @@ describe("SubmitWorkWidget submission behavior", () => {
         }),
       );
     });
+  });
+
+  it("keeps a late canonical session A success out of session B while retaining A's result", async () => {
+    const fixture = createDashboardRegressionFixture();
+    vi.stubGlobal("fetch", fixture.fetch);
+    useDashboardSessionStore.setState({
+      selectedSessionID: DASHBOARD_REGRESSION_SESSION_IDS.default,
+    });
+    renderSubmitWorkWidgetWithStore(
+      <SubmitWorkWidget submitWorkTypes={[{ work_type_name: "story" }]} />,
+    );
+
+    await selectWorkType();
+    fireEvent.change(screen.getByRole("textbox", { name: /Request name/ }), {
+      target: { value: "Session A request" },
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "Text item 1" }), {
+      target: { value: "Keep this with session A." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Submit work" }));
+
+    await waitFor(() => {
+      expect(fixture.state().pendingSubmitScenarioIDs).toEqual(["sessionA"]);
+    });
+
+    act(() => {
+      useDashboardSessionStore
+        .getState()
+        .setSelectedSessionID(DASHBOARD_REGRESSION_SESSION_IDS.secondary);
+    });
+    await waitFor(() => {
+      expect(screen.getByRole("textbox", { name: /Request name/ })).toHaveValue(
+        "",
+      );
+    });
+    expect(screen.getByRole("textbox", { name: "Text item 1" })).toHaveValue(
+      "",
+    );
+
+    await selectWorkType();
+    fireEvent.change(screen.getByRole("textbox", { name: /Request name/ }), {
+      target: { value: "Session B request" },
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "Text item 1" }), {
+      target: { value: "Keep this with session B." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Submit work" }));
+
+    await waitFor(() => {
+      expect(fixture.state().pendingSubmitScenarioIDs).toEqual([
+        "sessionA",
+        "sessionB",
+      ]);
+    });
+
+    await act(async () => {
+      fixture.submissions.resolve("sessionA", "success");
+    });
+    expect(
+      screen.queryByText(
+        "Your request was submitted. Trace ID: trace-session-a.",
+      ),
+    ).toBeNull();
+    expect(screen.getByRole("button", { name: "Submitting..." })).toBeTruthy();
+    expect(screen.getByRole("textbox", { name: /Request name/ })).toHaveValue(
+      "Session B request",
+    );
+
+    await act(async () => {
+      fixture.submissions.resolve("sessionB", "failure");
+    });
+    expect(
+      await screen.findByText("Session B submission failed."),
+    ).toBeTruthy();
+
+    act(() => {
+      useDashboardSessionStore
+        .getState()
+        .setSelectedSessionID(DASHBOARD_REGRESSION_SESSION_IDS.default);
+    });
+    expect(
+      await screen.findByText(
+        "Your request was submitted. Trace ID: trace-session-a.",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByRole("textbox", { name: /Request name/ })).toHaveValue(
+      "",
+    );
+    expect(screen.getByRole("textbox", { name: "Text item 1" })).toHaveValue(
+      "",
+    );
+  });
+
+  it("keeps the simple default-work composer scoped when session A fails after switching to B", async () => {
+    useCurrentFactoryDefinitionMock.mockReturnValue({
+      data: {
+        workTypes: [
+          { handlingBehavior: ["DEFAULT"], name: "task", states: [] },
+        ],
+      } as unknown as FactoryDefinition,
+      error: null,
+      isLoading: false,
+    });
+    const fixture = createDashboardRegressionFixture();
+    vi.stubGlobal("fetch", fixture.fetch);
+    useDashboardSessionStore.setState({
+      selectedSessionID: DASHBOARD_REGRESSION_SESSION_IDS.default,
+    });
+    renderSubmitWorkWidgetWithStore(
+      <SubmitWorkWidget
+        factoryState="RUNNING"
+        submitWorkTypes={[{ work_type_name: "task" }]}
+      />,
+    );
+
+    const textArea = screen.getByRole("textbox", { name: "Submit text" });
+    await user.type(textArea, "Session A simple request");
+    await user.click(screen.getByRole("button", { name: "Submit" }));
+    await waitFor(() => {
+      expect(fixture.state().pendingSubmitScenarioIDs).toEqual(["sessionA"]);
+    });
+
+    act(() => {
+      useDashboardSessionStore
+        .getState()
+        .setSelectedSessionID(DASHBOARD_REGRESSION_SESSION_IDS.secondary);
+    });
+    await waitFor(() => {
+      expect(screen.getByRole("textbox", { name: "Submit text" })).toHaveValue(
+        "",
+      );
+    });
+
+    await user.type(
+      screen.getByRole("textbox", { name: "Submit text" }),
+      "Session B simple request",
+    );
+    await user.click(screen.getByRole("button", { name: "Submit" }));
+    await waitFor(() => {
+      expect(fixture.state().pendingSubmitScenarioIDs).toEqual([
+        "sessionA",
+        "sessionB",
+      ]);
+    });
+
+    await act(async () => {
+      fixture.submissions.resolve("sessionA", "failure");
+    });
+    expect(screen.queryByText("Session A submission failed.")).toBeNull();
+    expect(screen.getByRole("button", { name: "Submitting..." })).toBeTruthy();
+
+    await act(async () => {
+      fixture.submissions.resolve("sessionB", "success");
+    });
+    expect(
+      await screen.findByText(
+        "Your request was submitted. Trace ID: trace-session-b.",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByRole("textbox", { name: "Submit text" })).toHaveValue(
+      "",
+    );
   });
 
   it("renders an explained disabled state when no submit work types are configured", () => {

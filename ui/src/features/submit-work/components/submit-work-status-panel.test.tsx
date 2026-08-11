@@ -28,6 +28,12 @@ describe("SubmitWorkStatusPanel", () => {
     expect(document.getElementById("submit-progress")?.className).toContain(
       "bg-info-container",
     );
+    expect(document.getElementById("submit-progress")?.className).toContain(
+      "w-full",
+    );
+    expect(document.getElementById("submit-progress")?.className).toContain(
+      "max-w-none",
+    );
     expect(guidanceCopy.className).toContain("!text-current");
     expect(submittingCopy.className).toContain("text-body-medium");
   });

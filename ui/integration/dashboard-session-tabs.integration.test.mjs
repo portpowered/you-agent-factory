@@ -246,14 +246,14 @@ describe.concurrent("dashboard session tabs browser integration", () => {
           .getByRole("heading", { level: 1, name: "U", exact: true })
           .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
         await browserPage.page
-          .getByRole("button", { name: "Open another session" })
+          .getByRole("button", { name: "Open Factory" })
           .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
         await browserPage.page
-          .getByRole("button", { name: "Open another session" })
+          .getByRole("button", { name: "Open Factory" })
           .click();
 
         const dialog = browserPage.page.getByRole("dialog", {
-          name: "Factory Session",
+          name: "Open Factory",
         });
         await dialog.waitFor({
           state: "visible",
@@ -266,6 +266,9 @@ describe.concurrent("dashboard session tabs browser integration", () => {
           .getByRole("button", { name: "Review factory" })
           .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
         await dialog.getByRole("button", { name: "Review factory" }).click();
+        await dialog
+          .getByRole("button", { name: "Open selected target" })
+          .click();
 
         await dialog.waitFor({
           state: "hidden",
