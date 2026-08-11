@@ -1,5 +1,6 @@
 ## Codebase Patterns
 - Public UI package build and pack verification mutate sibling `dist` directories; run dependency preparation, package build, and pack verification serially to avoid transient missing-module or Windows file-lock failures.
+- Cross-host graph semantics should enter React Flow nodes as a disposable package projection and render through the shared workstation node; host-specific activity metadata must remain decoration, not classification.
 - First-party packaged Factory semantic checks should consume parsed canonical definitions inside `internal/packagedfactorycatalog`; keep customer-authored and JavaScript Factory validation unchanged.
 - A lifecycle-only Work state is valid only through a named production bridge that matches the runtime contract and has direct behavioral test evidence; do not use comment-only allowlists.
 - When a catalog audit finds a lifecycle state that the current runtime does not emit, leave it as explicit follow-up work rather than relaxing validation with a guessed bridge; source comments and stale diagrams are not behavioral evidence.
@@ -134,6 +135,7 @@
 - **Learnings for future iterations:**
 - This checkout may have `ui/node_modules` without all lockfile dependencies; run the pinned Bun install before treating a typecheck failure as a source regression.
 ---
+
 ## 2026-08-10 04:32 -07:00 - sac-s0-2-pkg-boundary-ignores-001
 - What was implemented
   - Centralized repository-root-relative pruning for `.artifacts`, `.artifacts/bootstrap/worktrees`, generated transient worktrees, and the supported root worktree locations.
@@ -4089,4 +4091,28 @@
   - The graph package’s canonical source is the complete authored `FactoryDefinition`; React Flow node data receives only a disposable semantic projection and selected-tick activity overlay.
   - Treat each semantic axis independently: a known scheduling behavior must remain visible even when runtime type is future, while omitted scheduling metadata must not be guessed as `STANDARD`.
   - Continue story 004 with host-level visible/accessibility coverage for guarded-control cards and browser verification; story 003 intentionally stops at the shared projection and replay-node wiring.
+---
+
+## [2026-08-10 23:49 -07:00] - graph-workstation-semantics-004
+- What was implemented
+  - Completed the shared workstation rendering layer for current activity, Factory-definition editing, selected-tick replay, public Factory graph replay, and trace dispatch hosts.
+  - Added visible and accessible runtime-type labels, distinct scheduling treatments, and a selection-independent guarded logical-control card exposing VISIT_COUNT role, target, and limit.
+  - Preserved neutral UNKNOWN semantics for missing, future, or lossy metadata and made authored workstation identity joins id-safe; names are used only by id-less legacy definitions.
+  - Added mixed semantic Storybook coverage with long names, component/projection/replay/trace assertions, and direct fit-to-view touch and desktop browser verification.
+- Files changed
+  - `ui/packages/factory-graph/src/semantic-workstation-node.tsx`, `semantic-workstation-presentation.ts`, `workstation-semantics.ts`, and generated `dist/*`
+  - `ui/src/features/factory-graph-editor/`, `ui/src/features/workflow-activity/`, `ui/src/features/trace-drilldown/`, and shared flowchart semantic adapters/tests
+  - `ui/src/components/dashboard/test-fixtures.ts` and the mixed current-activity Storybook story
+  - `ui/scripts/verify-factory-graph-touch-browser.mjs` and the feature-folder allowlist
+  - `prd.json`
+- Verification
+  - `make typecheck` — passed.
+  - `make ui-test` — passed: 355 Vitest files/2,970 tests and 191 Bun-native tests.
+  - `make ui-lint` — passed.
+  - Factory graph package tests (54), build, package-boundary, and pack verification — passed.
+  - Storybook build, filtered `Mixed Workstation Semantics` interaction test, and direct touch/desktop browser verification — passed.
+- **Learnings for future iterations:**
+  - Shared dashboard fixtures are also consumed by Bun-native tests; keep package-only runtime imports out of those fixture modules unless the native lane can resolve their generated declaration dependencies.
+  - Storybook browser checks need a fresh static server after rebuilding; an older server can serve stale assets or make readiness timeouts misleading.
+  - A host can preserve runtime activity overlays without allowing topology metadata to classify authored workstation semantics; the package projection and shared node renderer should remain the only semantic authority.
 ---
