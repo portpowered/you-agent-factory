@@ -8983,3 +8983,22 @@
 - **Learnings for future iterations:**
   - Final handoff requires checking the exact pushed head, live-base ancestry, terminal CI, PRD/body identity, and thread-aware review state together; a clean local merge alone is insufficient.
 ---
+## [2026-08-11 04:11:12 -07:00] - thr-split-acp-stdio-tests current-main review follow-up
+- What was implemented
+  - Merged live `origin/main` `dd87fd04db20d755f9b44c369aa79b8c3e600f5f` into the ACP branch as `5c56aeb4f`, preserving this task's authoritative `prd.json` and the complete append-only progress history.
+  - Reconciled the current-main boundary checker without changing production code or test assertions: the terminal lifecycle suite remains at the pre-existing `session_prompt_test.go` path, while the shared helper no longer imports `chat_sessions/wire`; the five pre-existing constructor selections remain represented by that path's reviewed migration edge.
+- Files changed
+  - `pkg/transports/acp/internal/stdio/session_prompt_test.go`
+  - `pkg/transports/acp/internal/stdio/session_test_helpers_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/transports/acp/internal/stdio -count=1 -timeout 300s` and `go test -race ./pkg/transports/acp/internal/stdio -count=1 -timeout 300s` — passed.
+  - `make typecheck`, `make backend-size pkg-maint pkg-file-count pkg-structure` — passed.
+  - `make pkg-boundary` reports no blocking package-boundary findings on the ACP split; its aggregate exit remains nonzero only for the same two ownership-boundary findings reported on live `origin/main`. `make vet` reached the 15-minute Windows host bound with no diagnostic; only its exact process descendants were terminated.
+  - Normalized inventory comparison against the detached live-base worktree: 222 tests on both sides, `DIFF_COUNT=0`, SHA-256 `d613f4f6cdfdc310b42ce01e543b2942b968ab8b3079e27b125af2db576bd031` on both sides. `go test -p 1 -vet=off -cover -count=1 ./pkg/transports/acp/internal/stdio` reports 94.3% statement coverage on both sides.
+- **Learnings for future iterations:**
+  - The current package-boundary presentation fingerprint includes the source line of a service-construction finding; a move-only split must preserve the reviewed edge deliberately or the checker treats line-only relocation as new debt.
+  - Compare package-boundary and ownership-boundary outputs against the exact live base separately; the current main has two unchanged ownership findings even when the package-boundary portion passes.
+  - Under concurrent Windows Go workloads, broad vet can exceed the host ceiling without a source failure; inspect the exact invocation tree before terminating anything.
+---
