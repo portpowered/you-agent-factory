@@ -10571,3 +10571,17 @@
 - **Learnings for future iterations:**
   - An existing open PR with an exact task-PRD body and no actionable feedback needs a tracking-only handoff commit; avoid creating a duplicate PR.
 ---
+## [2026-08-11 00:21:33 -07:00] - js-skip-permissions-parity CI retry follow-up
+- What was implemented
+  - No product changes; investigated the latest PR failures and reran only the failed hosted jobs.
+  - Preserved the completed task PRD with all four stories marked `passes:true`.
+- Files changed
+  - `progress.txt`
+- Verification
+  - The three failed backend functional tests passed in isolated local reruns: operator-settings root composition, CLI pre-runtime staging contention, and Codex golden text/tool success.
+  - The failed Bun-owned frontend composer test passed in isolation; the hosted failure was an out-of-memory interruption.
+  - `gh run rerun 31467299700 --failed` completed successfully: Backend Functional Coverage, Frontend Component, Verification Policy, and every previously passing check are green for PR #1875 at head `912b15ac6`.
+  - The thread-aware PR audit remains empty; the PR is open, non-draft, mergeable, and its description remains the canonical `prd.json`.
+- **Learnings for future iterations:**
+  - When isolated reproduction passes and a hosted lane reports parallel-process startup or memory failures, rerun the failed lane before changing unrelated product code.
+---
