@@ -4036,3 +4036,21 @@
 - **Learnings for future iterations:**
   - On this shared Windows host, broad test runs can be delayed by concurrent test trees; use the focused package and process-boundary suites for fast feedback, then record any uncompleted broad-gate result explicitly.
 ---
+## 2026-08-10 20:05 -07:00 - cli-error-classification-and-run-output-002
+- What was implemented
+  - Extended human accepted-work rendering to use a singular item label for one-item payloads, keep partially populated work items readable with a stable unnamed fallback, and skip relation records with no type instead of presenting an ambiguous edge.
+  - Preserved the canonical batch listing of work IDs/names and text descriptions, dependency direction, and provider-payload redaction while adding exact renderer coverage for independent and partially populated items.
+- Files changed
+  - `pkg/services/factory_visualization/transports/cli/factory_event_support.go`
+  - `pkg/services/factory_visualization/transports/cli/service_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/factory_visualization/transports/cli -count=1` passed.
+  - `go test ./pkg/services/factory_visualization/... -count=1` passed.
+  - `go test ./tests/functional/cli/factory_run/output -count=1` passed.
+  - `make typecheck` and `git diff --check` passed.
+- **Learnings for future iterations:**
+  - Human accepted-work output is owned by the Factory Visualization CLI adapter; exercise it through the response-stream renderer so sequence prefixes and presentation behavior remain part of the assertion.
+  - Canonical request validation normally guarantees named relation endpoints, but the renderer should still handle replayed or partially populated payloads without blank work lines, private JSON content, or malformed relation prose.
+---

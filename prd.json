@@ -47,8 +47,8 @@
         "Tests pass"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Extended the human Factory Event projection to render singular accepted-work payloads, preserve readable fallbacks for partially populated work items, and omit malformed dependency records rather than emitting misleading edges. Added exact renderer coverage for a deterministic four-item batch with IDs, names, an available JSON payload that is not exposed, a name-based DEPENDS_ON edge, an independent item, and a single-item relation payload. Verification: go test ./pkg/services/factory_visualization/... -count=1, go test ./tests/functional/cli/factory_run/output -count=1, make typecheck, and git diff --check passed."
     },
     {
       "id": "cli-error-classification-and-run-output-003",
