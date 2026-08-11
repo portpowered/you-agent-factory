@@ -4102,3 +4102,17 @@
 - **Learnings for future iterations:**
   - Recheck ancestry immediately after long verification commands; a merge can become stale while CI or local gates run if main is receiving concurrent merges.
 ---
+
+## 2026-08-10 19:42 -07:00 - thr-lint-speed final CI and review audit
+- What was implemented
+  - No additional story implementation was needed; all three PRD stories remain `passes:true`.
+  - Investigated the first CI failure as an unchanged functional-test flake in `TestCLISuccessorAfterHardKillReportsPreRuntimeStagingContention`, reran only failed Actions jobs, and left source and coverage baselines unchanged.
+- Files changed
+  - `progress.txt`
+- Verification
+  - CI run `31452396230` is terminal and green after rerun: Backend Functional Coverage passed in 5m27s and Verification Policy passed; all other required checks also pass.
+  - PR #1863 is open, non-draft, mergeable, targets `main` at `aac04248d`, and points to pushed head `6d68e55d9`.
+  - The PR body matches local `prd.json` exactly. The thread-aware GraphQL audit reports two top-level conversation comments (the original blocking review and its resolution reply), zero submitted reviews, and zero inline review threads.
+- **Learnings for future iterations:**
+  - When a broad functional lane fails in an unchanged test, inspect the exact test output and rerun only the failed job before changing task code or coverage policy.
+---
