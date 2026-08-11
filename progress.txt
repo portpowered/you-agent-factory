@@ -8284,3 +8284,17 @@
   - A feature branch can become dirty after a green run when `main` advances through another merge; fetch the hosting branch before final handoff and rebase the complete feature history.
   - Shared task metadata files are branch-scoped in this workflow; retain the active task's append-only history when resolving `prd.json`/`progress.txt` against another task's main-branch metadata.
 ---
+
+## 2026-08-10 23:06 -07:00 - e3-event-webhooks-004 terminal rebased-head audit
+- What was implemented
+  - Recorded the terminal review state for the rebased webhook branch; all four PRD stories remain `passes:true` and no further product implementation is required.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - All 18 required checks pass in CI run `31463375138` for pushed head `9193b60cb817a08f3b2c09e864ee3756f915cfb2`.
+  - PR #1850 is open, non-draft, clean, and mergeable against base `ecd1d248731c9108dbbc4dafe2f28c4120043346`.
+  - The PR body matches committed `prd.json` before this audit commit; the thread-aware review audit reports three historical conversation comments, zero formal reviews, and zero inline review threads. The original blocking feedback is addressed by follow-up commits.
+- **Learnings for future iterations:**
+  - Record the exact CI run, head, base, body synchronization, and thread state together after a current-main rebase; a green prior head is insufficient evidence when GitHub has reported a branch conflict.
+---
