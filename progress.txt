@@ -11805,3 +11805,17 @@
 - **Learnings for future iterations:**
   - Once a replacement head is green and review-clean, keep the final handoff metadata concise and distinguish historical blocker comments from current unresolved threads.
 ---
+## 2026-08-11 12:12 -07:00 - js-skip-permissions-parity-004 final functional retry audit
+- What was implemented
+  - Investigated the final exact-head Backend Functional Coverage failure without changing product or test code; the named process-boundary test is outside this PR’s diff and failed on packaged-factory staging-owner contention.
+  - Reran only the failed Backend Functional Coverage job and its dependent Verification Policy job after the exact test passed in local characterization.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/transport/cli/process -run '^TestCLISuccessorAfterHardKillReportsPreRuntimeStagingContention$' -count=3 -v -timeout 600s` — passed 3/3.
+  - Hosted Backend Functional Coverage retry job `93895666423` passed, including the pinned ACP evidence artifact; dependent Verification Policy job `93897103119` passed.
+  - All 18 checks in workflow run `31525575688` are terminal-success; the branch remains based on current `origin/main`, and no product/test source changed for the retry.
+- **Learnings for future iterations:**
+  - When coverage fails on an untouched process-boundary fixture with a staging-owner diagnostic, reproduce the exact test serially and rerun only coverage plus policy; do not conflate the expected diagnostic fixture with a feature regression.
+---
