@@ -7799,3 +7799,18 @@
   - A PR can become conflicting again after a successful retry because `main` advances asynchronously; fetch the hosting ref immediately before each final push and repeat the shared-file merge protocol.
   - When parallel Go test processes produce a tool subprocess failure, rerun the named package serially before treating it as a source regression.
 ---
+## 2026-08-10 22:24 -07:00 - btrc-p1-root-injection-006 latest-main re-synchronization and verification
+- What was implemented
+  - Merged the newly advanced `origin/main` `b68e4bf956fc127b346e61f76e033a0223175fc2` into the P1 branch as merge commit `a45b303c6`; the only non-bookkeeping current-main change was the packaged plan-parallel functional proof.
+  - Made no P1 product change; `prd.json` remains authoritative with all six stories marked `passes:true`, and append-only progress histories were retained.
+- Files changed
+  - Current-main `tests/functional/factory/packaged/plan_parallel/invocation_test.go`.
+  - `prd.json` and `progress.txt` with the latest-head verification record.
+- Verification
+  - `go test ./tests/functional/factory/packaged/plan_parallel -count=1 -v -timeout 300s` passed all five scenarios.
+  - `make verify-fast` passed dashboard typecheck, MCP contract boundary, 355 Vitest files/2,970 tests, 191 Bun tests, and the short Go suite.
+  - `git merge-base HEAD origin/main` equals `b68e4bf956fc127b346e61f76e033a0223175fc2`; conflict-marker, diff-check, and Wire/generated checks remain clean.
+  - Prior CI run `31459190668` predates this synchronization; fresh CI is required on the pushed replacement head. The thread-aware review audit remains at zero unresolved threads and zero formal reviews.
+- **Learnings for future iterations:**
+  - Main can advance while a replacement PR head is being prepared; always fetch immediately before the final push and repeat the exact scoped verification after the last merge.
+---
