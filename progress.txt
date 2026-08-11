@@ -10486,3 +10486,320 @@
   - Public identifier spellings from the owning architecture or contract source take precedence over natural-language variants when a terminology register defines one canonical record.
   - Relationship examples should describe observable contract effects, such as membership or fan-in, instead of inferring lifecycle ownership from relationship names.
 ---
+## [2026-08-10 22:06 -07:00] - dashboard-fixture-and-quick-wins-001
+- What was implemented
+  - Added the reusable `dashboard-regression` fixture catalog with immutable canonical Factory Session UUIDs, the `~default` selector, initial/stale/refreshed lists, chart states, session-scoped delayed submission outcomes, and Open/New validation, cancellation, success, and failure outcomes.
+  - Added a controlled fixture controller with observable promises, stale-response generation ordering, typed API fetch adapters, canonical session selection, and deterministic mutation/factory completions.
+  - Added typed API/session-provider component coverage, a Storybook interaction story, viewport-registry coverage, and fixture documentation for Stories 002–005 to reuse.
+- Files changed
+  - `ui/src/components/dashboard/fixtures/dashboard-regression.ts`
+  - `ui/src/components/dashboard/fixtures/dashboard-regression-controller.ts`
+  - `ui/src/components/dashboard/fixtures/dashboard-regression.bun.unit.test.ts`
+  - `ui/src/components/dashboard/fixtures/dashboard-regression.component.test.tsx`
+  - `ui/src/components/dashboard/fixtures/index.ts`
+  - `ui/src/components/dashboard/fixtures/README.md`
+  - `ui/src/App.dashboard-regression-fixture.stories.tsx`
+  - `ui/scripts/verify-dashboard-viewport-browser.mjs`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `bunx --no-install tsc -b --noEmit --pretty false` passed.
+  - `bun test src/components/dashboard/fixtures/dashboard-regression.bun.unit.test.ts` passed (5 tests, 23 expectations).
+  - Focused Vitest component test passed (1 test).
+  - `bun run lint` passed, including localized-copy, semantic-color, boundary, and UI test-lane guards.
+  - `bun run build-storybook` passed; the dashboard viewport browser check passed at 320, 375, 768, and 1280 pixels.
+  - Focused Storybook interaction run with `-t Canonical` passed (2 tests, 274 unrelated tests skipped). The broader Storybook project still reports 25 unrelated pre-existing failing files, so it is recorded as non-clean rather than used as Story 001 evidence.
+  - `git diff --check` passed.
+- **Learnings for future iterations:**
+  - The fixture catalog/controller split lets later chart, submit, reconciliation, and Open/New stories share immutable records and deterministic controls while staying on the real typed query, session-store, and API boundaries.
+  - The existing Storybook viewport verifier is the browser regression registry; adding a story ID there is required for its mobile/desktop coverage.
+---
+## [2026-08-10 22:31 -07:00] - dashboard-fixture-and-quick-wins-002
+- What was implemented
+  - Removed the duplicate outcomes `CartesianGrid` and duplicate Recharts Y-axis title so the ready chart has one dashed grid treatment and one overlay-owned Y-axis title through remounts and Strict Mode rerenders.
+  - Added a localized `aria-describedby` data description for visible chart values; legend labels and distinct dashed line patterns preserve non-color series distinction.
+  - Added Story 0 fixture-backed chart-state/remount component coverage, localized message assertions, Storybook one-treatment assertions, and a Playwright browser check wired into Storybook CI for 320px/1280px viewports and a live resize.
+- Files changed
+  - `ui/src/features/work-outcome/components/work-chart/work-chart.tsx`
+  - `ui/src/features/work-outcome/components/work-chart/contracts/work-chart-dashboard-regression.bun.component.test.tsx`
+  - `ui/src/features/work-outcome/components/work-chart/work-chart.stories.tsx`
+  - `ui/src/features/work-outcome/messages/work-outcome.ts`
+  - `ui/src/features/work-outcome/messages/work-outcome.test.ts`
+  - `ui/scripts/verify-work-chart-browser.mjs`
+  - `ui/scripts/run-storybook-ci.mjs`
+  - `ui/package.json`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `bunx --no-install tsc -b --noEmit --pretty false` passed.
+  - `bun run lint` and the focused Biome check passed.
+  - Focused Bun chart component suite passed: 20 tests across four WorkChart contract files; the new fixture file passed 2 tests with 27 expectations.
+  - Focused Vitest chart/hook component suite passed: 6 tests; localized message unit suite passed: 2 tests.
+  - `bun run build-storybook` passed.
+  - `node scripts/verify-work-chart-browser.mjs` passed against the generated Storybook at 320px and 1280px, including the in-page resize transition.
+  - The exact WorkChart Storybook file passed 5 of 6 stories; its pre-existing Constrained Width legend-height ratio assertion still fails at `0.648 < 0.4`, while the new direct browser gate passes that story at both viewports. The broader `Work Chart` filter also matched the known unrelated empty-model timeline story, so neither failure was used as Story 002 behavior evidence.
+  - `prd.json` parses with Stories 001 and 002 marked `passes:true`; Stories 003–005 remain open.
+- **Learnings for future iterations:**
+  - `ChartContainer` passes chart children through Recharts `ResponsiveContainer`, so an accessible value description belongs beside the chart root and should be referenced with `aria-describedby`, not inserted as a non-chart child.
+  - Vitest Storybook `-t` filters match full generated test names unpredictably; filtering by the concrete story file path isolates the intended chart stories, while a broad phrase can select unrelated stories.
+  - The direct viewport browser check is useful evidence for resize containment even when an older Storybook geometry assertion fails independently.
+---
+## [2026-08-10 23:45 -07:00] - dashboard-fixture-and-quick-wins-003
+- What was implemented
+  - Keyed rich Submit Work drafts, validation, file staging, pending mutations, and completion receipts by the exact canonical Factory Session ID, with request guards that ignore late results outside their owning session.
+  - Keyed the default-work/simple composer independently, including a child-level guard so a late session A rejection cannot surface in session B; preserved the owning session's success state and draft reset behavior.
+  - Added visible canonical destination labels to both submit paths, localized success/error copy with programmatic associations, an explicit accessible rich-form name, and full-width wrapping status/receipt regions.
+  - Added a deterministic two-session Storybook fixture harness and a mobile/desktop Playwright gate covering A-to-B draft isolation, delayed A success/failure, B feedback, canonical destinations, full-width feedback, and page-overflow checks.
+- Files changed
+  - `ui/src/features/submit-work/hooks/use-submit-work-widget.ts`
+  - `ui/src/features/submit-work/hooks/use-session-scoped-simple-submission.ts`
+  - `ui/src/features/submit-work/components/submit-work-widget.tsx`
+  - `ui/src/features/submit-work/components/composer/factory-simple-submission-composer.tsx`
+  - `ui/src/features/submit-work/components/submit-work-card.tsx`
+  - `ui/src/features/submit-work/components/submit-work-status-panel.tsx`
+  - `ui/src/features/submit-work/components/regression/submit-work-dashboard-regression.stories.tsx`
+  - `ui/src/features/submit-work/components/submit-work-widget.isolated.bun.component.test.tsx`
+  - `ui/src/features/submit-work/components/submit-work-card.bun.component.test.tsx`
+  - `ui/src/features/submit-work/components/submit-work-status-panel.test.tsx`
+  - `ui/src/features/submit-work/messages/submit-work.ts`
+  - `ui/scripts/verify-submit-work-session-scoping-browser.mjs`
+  - `ui/scripts/run-storybook-ci.mjs`
+  - `ui/scripts/run-storybook-ci.test.mjs`
+  - `ui/package.json`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `bunx --no-install tsc -b --noEmit --pretty false` passed.
+  - `bun run lint` passed, including localized-copy, semantic-color, feature-boundary, file-count, test-lane, and public-package checks.
+  - Focused simple-composer/status Vitest suite passed (12 tests); the fixture-backed rich and simple session regressions passed in isolated focused Vitest runs.
+  - Native Bun `SubmitWorkCard` component suite passed (13 tests); Storybook CI scheduling tests passed (10 tests).
+  - `bun run build-storybook` passed; the generated Storybook contains the moved regression story.
+  - `bun run storybook:submit-work-session-check` passed at 390x844 and 1440x900, including full-width feedback and no horizontal overflow.
+  - `git diff --check` passed.
+- **Learnings for future iterations:**
+  - The direct browser lane must own the delayed fixture interaction when a Storybook story is used as a passive harness; an in-story `play` function races the standalone Playwright flow against the same controlled promises.
+  - The isolated Submit Work widget suite is currently classified as a Vitest compatibility exception while the normal Vitest project excludes `.bun.component` files; focused runs need the DOM matcher setup explicitly until that existing lane mismatch is reconciled.
+  - Moving a regression story into a focused subdirectory keeps the feature folder-count guard green without weakening the structural boundary.
+---
+## [2026-08-11 00:59 -07:00] - dashboard-fixture-and-quick-wins-004
+- What was implemented
+  - Made Factory Session list mappings canonical at the Go transport boundary: selector aliases and blank IDs are omitted, duplicate canonical IDs collapse to one row, and the canonical UUID row remains the public identity.
+  - Added typed UI list normalization, abort-aware list requests, and authoritative dashboard-store reconciliation for selected session, tab order, paused state, stale membership, and resolved default selection.
+  - Preserved successful rows during background refreshes, labeled refresh failures with localized retry UI, and kept the tab navigation busy state/accessibility semantics truthful.
+  - Extended the shared dashboard regression fixture, controller, component tests, Storybook story, and browser verifier for alias-plus-UUID lists, refreshed membership, failed retry, keyboard Home/End ordering, and mobile/desktop overflow.
+- Files changed
+  - `pkg/transports/mapping/factorysession/factory_session_listing.go`
+  - `pkg/transports/mapping/factorysession/factory_session_listing_test.go`
+  - `pkg/transports/http/server_factory_sessions_test.go`
+  - `pkg/transports/http/servertests/server_durable_session_read_test.go`
+  - `ui/src/api/factory-sessions/api.ts`
+  - `ui/src/api/factory-sessions/normalize-session-list.ts`
+  - `ui/src/components/dashboard/fixtures/dashboard-regression.ts`
+  - `ui/src/components/dashboard/fixtures/dashboard-regression-controller.ts`
+  - `ui/src/features/dashboard/session/dashboard-session-provider.tsx`
+  - `ui/src/features/dashboard/state/dashboardSessionStore.ts`
+  - `ui/src/features/header/hooks/use-dashboard-session-tabs-state.ts`
+  - `ui/src/features/header/components/dashboard-session-tabs.tsx`
+  - `ui/src/features/header/components/dashboard-session-tabs.stories.tsx`
+  - `ui/scripts/verify-dashboard-session-reconciliation-browser.mjs`
+  - `ui/scripts/run-storybook-ci.mjs`
+  - `ui/package.json`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `bunx --no-install tsc -b --noEmit --pretty false` passed.
+  - Focused Bun unit/component suites passed: 21 unit tests across the normalizer, dashboard session store, and fixture; 2 canonical reconciliation component tests; and 22 existing session-tab component tests.
+  - Focused Go mapping/HTTP suites passed: `go test ./pkg/transports/mapping/factorysession ./pkg/transports/http/...`.
+  - `bun run lint` passed, including localized copy, semantic colors, feature boundaries, file counts, test lanes, and package boundaries.
+  - Storybook rebuilt; focused Storybook interaction for the canonical reconciliation story passed (1 test, 2 unrelated stories skipped).
+  - `node scripts/verify-dashboard-session-reconciliation-browser.mjs` passed at 390x844 and 1440x900, including canonical rendering, stale removal, retained failed refresh/retry, keyboard ordering, and overflow checks.
+  - `bun test scripts/run-storybook-ci.test.mjs` and `git diff --check` passed.
+- **Learnings for future iterations:**
+  - API-backed Storybook fixtures must return canonical UUID rows for durable sessions; alias-only mocks now correctly represent an empty canonical list and should be reserved for selector-resolution tests that bypass the typed list API.
+  - A focused Storybook story-file filter is the reliable interaction evidence when the broader Storybook interaction project contains unrelated browser stories and startup overhead; the direct Playwright lane remains the responsive regression gate.
+---
+## [2026-08-11 02:52 -07:00] - dashboard-fixture-and-quick-wins-005
+- What was implemented
+  - Replaced the ambiguous single session action with separately named Open Factory and New Factory controls, distinct localized dialog journeys, accessible loading/error/success states, and focus restoration to the invoking action.
+  - Kept validation and New preview non-mutating; Open now requires explicit target confirmation, while New previews the normalized `/factory` target and requires explicit creation confirmation.
+  - Added existing-target and broken-target guards, cancel/dismissal/failure coverage, canonical list invalidation and reconciliation after success, deterministic resulting-session selection, and protection against reintroducing a `~default` tab.
+  - Extended the shared fixture/controller, isolated and reconciliation component coverage, Storybook fixture story, Storybook CI schedule, and direct mobile/desktop browser verifier for the complete Open/New journeys.
+- Files changed
+  - `prd.json`, `progress.txt`
+  - `ui/package.json`, `ui/scripts/button-usage-allowlist.mjs`, `ui/scripts/run-storybook-ci.mjs`, `ui/scripts/verify-dashboard-open-new-factory-browser.mjs`
+  - `ui/src/components/dashboard/fixtures/dashboard-regression.ts`
+  - `ui/src/features/header/components/dashboard-session-tab.tsx`, `dashboard-session-tabs-open-dialog.tsx`, `dashboard-session-tabs.tsx`, `components/stories/dashboard-session-tabs-open-new-factory.stories.tsx`
+  - `ui/src/features/header/components/dashboard-session-tabs.isolated.bun.component.test.tsx`, `dashboard-session-tabs.launch-target-selection.test.tsx`, `dashboard-session-tabs.reconciliation.bun.component.test.tsx`, `dashboard-session-tabs.stories.tsx`
+  - `ui/src/features/header/hooks/use-dashboard-session-tabs-state.ts`, `ui/src/features/header/lib/dashboard-session-tabs-utils.ts`, `ui/src/features/header/messages/header-controls.ts`, `ui/src/features/header/messages/factory-journeys.ts`
+- Verification
+  - `bun run typecheck` passed.
+  - `bun run lint` passed, including localized-copy, semantic-color, feature-boundary, folder-count, test-lane, package-boundary, button-usage, and form-control guards.
+  - Focused Bun component suites passed: 22 isolated session-tab tests with 178 expectations and 5 reconciliation tests with 45 expectations. Focused Vitest target-selection, fixture, and Storybook scheduling suites passed.
+  - `bun run build-storybook` passed, and `bun run storybook:dashboard-open-new-factory-check` passed at 390x844 and 1440x900.
+  - `git diff --check` passed and all five PRD user stories are now marked `passes: true`.
+- **Learnings for future iterations:**
+  - When a shared Button replaces a raw action in a semantic exception file, update the narrow raw-button fingerprint allowlist so it describes only the remaining tab semantics.
+  - Keep journey-specific locale catalogs separate from broad header controls to stay below the feature's file-size guard while preserving one resolved public message type.
+  - Storybook fixture operation matchers use request payload identity, so paths for overlapping validation outcomes must remain unique; otherwise a broken-target scenario can resolve the earlier matching operation.
+---
+## [2026-08-11 04:17 -07:00] - dashboard-fixture-and-quick-wins-review-follow-up
+- What was implemented
+  - Rebased the seven dashboard commits onto current `origin/main` at `012e98e0f` and resolved the shared `prd.json`/`progress.txt` conflicts while preserving the dashboard PRD and append-only history.
+  - Removed the prohibited exact Storybook command/registration-inventory assertions from `ui/scripts/run-storybook-ci.test.mjs` and replaced them with behavioral readiness, completion, failure-propagation, and server-cleanup coverage.
+  - Recorded the review-fix quality evidence and current-main baseline in `prd.json`.
+- Files changed
+  - `ui/scripts/run-storybook-ci.test.mjs`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `bun test scripts/run-storybook-ci.test.mjs` — 11 tests passed.
+  - `bun run typecheck`, `bun run lint`, focused Go transport/HTTP tests, `make test`, `make vet`, `make backend-size`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, and `git diff --check` — passed.
+  - Detached exact-`origin/main` baseline at `dd87fd04d` passed `backend-size`, `pkg-maint`, `pkg-file-count`, `pkg-structure`, and the same UI lint gate; the final live base moved to `012e98e0f` during rebase and no new lint findings were observed against either fetched baseline.
+- **Learnings for future iterations:**
+  - Runner tests remain useful when they prove externally meaningful readiness, completion, failure, and cleanup behavior; exact command lists are brittle registration inventories and violate the behavioral-test rule.
+  - A detached worktree is the reliable way to compare repository-wide lint baselines when the active worktree contains task changes and many sibling worktrees are moving independently.
+---
+## [2026-08-11 04:39 -07:00] - dashboard-fixture-and-quick-wins-final-main-sync
+- What was implemented
+  - Rebased the replacement head onto the live `origin/main` commit `012e98e0f` after `main` advanced during the first push, preserving the dashboard PRD and task commits.
+  - Refreshed the PRD review evidence to name the actual final base commit.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Final replacement head `ba5d9cb3c` passed `bun test scripts/run-storybook-ci.test.mjs`, `bun run typecheck`, `bun run lint`, focused Go transport/HTTP tests, `make test`, `make vet`, `make backend-size`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, and `git diff --check`.
+  - Detached `origin/main` at `012e98e0f` passed `backend-size`, `pkg-maint`, `pkg-file-count`, and `pkg-structure`. The seven commits added to `main` after the earlier UI baseline touched only shared bookkeeping and CLI parameter tests, so the previously captured exact-main UI lint result remains applicable.
+- **Learnings for future iterations:**
+  - Fetch the hosting `main` ref immediately before the final push; a clean local rebase can become conflicted again when another merge lands between verification and publication.
+---
+## [2026-08-11 05:04 -07:00] - dashboard-fixture-and-quick-wins-coverage-race
+- What was implemented
+  - Added an explicit `sessionLists.waitUntilPending` readiness signal to the dashboard regression fixture controller.
+  - Updated the typed Factory Sessions API fixture test to await that signal before resolving the controlled initial list response, removing the coverage-only scheduling race reported by PR CI.
+- Files changed
+  - `ui/src/components/dashboard/fixtures/dashboard-regression-controller.ts`
+  - `ui/src/components/dashboard/fixtures/dashboard-regression.bun.unit.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Focused dashboard regression Bun suite passed: 5 tests, 23 expectations.
+  - The same focused suite passed with Bun coverage instrumentation.
+  - `bun run typecheck` passed.
+  - The broad local `bun run test:coverage` wrapper exceeded its 15-minute bound without producing a result; its orphaned coverage subprocesses were stopped, and this timeout is recorded rather than counted as a pass.
+- **Learnings for future iterations:**
+  - Controlled async fixtures need a first-class pending/ready signal so tests do not depend on incidental scheduling, especially under coverage instrumentation.
+  - A focused instrumented rerun is useful evidence for a coverage race, but final confidence still depends on the hosted full coverage job.
+---
+## [2026-08-11 05:13 -07:00] - dashboard-fixture-and-quick-wins-latest-main-reconciliation
+- What was implemented
+  - Rebased the dashboard replacement head onto live `origin/main` at `3521f0b0a` after the hosting branch advanced again.
+  - Unioned the complete current-main append-only `progress.txt` history with the dashboard task entries and retained the dashboard PRD as authoritative.
+  - Updated the PRD review evidence to name the new live base and require replacement-head verification.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Rebase completed without source conflicts after resolving only the shared bookkeeping files.
+  - `prd.json` parses; the five dashboard stories remain marked `passes: true`.
+  - The fixture readiness fix and focused coverage evidence are retained in the rebased source tree.
+- **Learnings for future iterations:**
+  - Moving-base resolution for append-only logs must union full Git-object histories; choosing one side can silently drop unrelated mainline progress even when the source rebase is clean.
+  - Rerun task-specific gates after the final mainline reconciliation because a replacement head is a new verification surface.
+---
+## [2026-08-11 05:16 -07:00] - dashboard-fixture-and-quick-wins-rebased-verification
+- What was implemented
+  - Revalidated the fixture readiness fix and dashboard transport surface after the final rebase onto `3521f0b0a`.
+  - Kept the fixture controller lint-clean by moving the reusable readiness/waiter helpers outside the construction function and using a block-bodied waiter callback.
+- Files changed
+  - `ui/src/components/dashboard/fixtures/dashboard-regression-controller.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `bun test src/components/dashboard/fixtures/dashboard-regression.bun.unit.test.ts` passed: 5 tests, 23 expectations.
+  - The same focused suite passed with Bun coverage instrumentation.
+  - `bun run typecheck`, `bun run lint`, focused Go transport/HTTP tests, and `git diff --check` passed on the rebased head.
+- **Learnings for future iterations:**
+  - A small fixture synchronization helper can trip both callback-return and function-size lint rules; extract reusable control helpers before adding further fixture orchestration.
+---
+## [2026-08-11 05:33 -07:00] - dashboard-fixture-and-quick-wins-bun-mock-isolation
+- What was implemented
+  - Restored Bun module mocks after each `discoverSessionNamedFactoryNames` unit test so its mocked Factory Sessions barrel cannot leak into the dashboard regression fixture in the shared coverage process.
+  - Kept the dashboard fixture's explicit pending readiness synchronization in place; the CI failure was caused by the leaked module mock replacing the typed API, not by the fixture controller.
+- Files changed
+  - `ui/src/api/session-factory/import-activation.discover.bun.unit.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - The mock-owning unit file passed: 3 tests, 5 expectations.
+  - The dashboard regression unit file passed: 5 tests, 23 expectations.
+  - The affected dashboard test passed with direct Bun coverage instrumentation.
+  - The exact hosted Frontend Coverage job had reproduced the leak as a 5-second dashboard test timeout; a fresh hosted run is required after this fix.
+- **Learnings for future iterations:**
+  - Bun's unit coverage lane runs multiple files in one process, so module mocks are process-scoped even when each test file is logically independent; always clean up module mocks at the owning test boundary.
+---
+## [2026-08-11 06:02 -07:00] - dashboard-fixture-and-quick-wins-ci-follow-up
+- What was implemented
+  - Replaced the session-factory discovery Bun test's process-global `mock.module` with a queued `fetch` boundary against the real typed Factory Sessions API, eliminating the shared coverage-process race.
+  - Made default-selector discovery resolve the canonical `isDefault` session row after selector-only `~default` rows are removed by list normalization.
+  - Updated the two existing browser integration journeys for the renamed `Open Factory` dialog and explicit `Open selected target` confirmation.
+- Files changed
+  - `ui/src/api/session-factory/import-activation.ts`
+  - `ui/src/api/session-factory/import-activation.discover.bun.unit.test.ts`
+  - `ui/integration/dashboard-session-tabs.integration.test.mjs`
+  - `ui/integration/factory-import-second-session.integration.test.mjs`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `bun run typecheck` passed.
+  - Full Bun unit lane passed: 196 tests across 36 files; the lcov coverage variant also passed with 196 tests.
+  - `bun run lint` passed.
+  - Focused browser integration for both affected files passed: 2 test files, 3 tests.
+  - `make test`, `make vet`, `make backend-size`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, and `git diff --check` passed.
+- **Learnings for future iterations:**
+  - Updating a visible action label is not enough for browser coverage: integration scenarios must follow the complete semantic journey, including renamed dialog titles and newly explicit confirmation controls.
+  - Canonical session-list normalization requires selector resolution to consult the row's `isDefault` marker when callers still use the `~default` selector.
+---
+## [2026-08-11 06:25 -07:00] - dashboard-fixture-and-quick-wins-functional-coverage-follow-up
+- What was implemented
+  - Investigated the hosted Backend Functional Coverage failure and isolated it to the untouched `TestJavaScriptParallelDispatchesChildrenConcurrently` test, which observed one active child call instead of two under the parallel suite scheduler.
+  - Made no unrelated Go product or test changes; the named test passed once and across ten local repetitions.
+  - Reran only the failed Backend Functional Coverage job and its dependent Verification Policy gate on the pushed dashboard head; both passed.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Hosted run `31494337558` is terminal-green with all 18 PR checks passing, including Backend Functional Coverage and Verification Policy.
+  - The PR remains based on `3521f0b0a2f313b22e2c79edcf90339a01b3bce7`; the local worktree was clean before this bookkeeping update.
+- **Learnings for future iterations:**
+  - When broad functional coverage names an untouched concurrency-sensitive fixture, repeat that exact test locally before widening the feature diff; a clean repeated characterization supports rerunning only the failed coverage and policy jobs.
+---
+## [2026-08-11 06:45 -07:00] - dashboard-fixture-and-quick-wins-final-review-audit
+- What was implemented
+  - Rechecked PR #1882 against the latest review feedback and confirmed that the stale pre-fix blocking comments are addressed by the rebased, green head `1023eefe6`.
+  - Recorded the thread-aware review audit, clean mergeability, exact `prd.json` PR-body match, and latest hosted verification run in the PRD.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Five PRD stories remain marked `passes: true`.
+  - The current PR head is cleanly based on `main` at `3521f0b0a2f313b22e2c79edcf90339a01b3bce7`; GitHub reports `MERGEABLE` / `CLEAN`.
+  - Thread-aware GraphQL audit found no unresolved inline review threads; the two top-level blocking comments refer to the superseded pre-fix head.
+  - Hosted run `31496150336` is terminal-green with all 18 PR checks passing, including Frontend, Frontend Browser, Backend Functional Coverage, and Verification Policy.
+  - The PR body matches `prd.json` byte-for-byte; `git diff --check` passes.
+- **Learnings for future iterations:**
+  - When a review comment names an old head, verify the current PR head, mergeability, thread state, checks, and PR-body parity before making another source change; stale gate comments can remain in the conversation after their required fixes are already on the branch.
+---
+## [2026-08-11 07:06 -07:00] - dashboard-fixture-and-quick-wins-current-main-reconciliation
+- What was implemented
+  - Rebased the dashboard branch onto the newer live `origin/main` commit `b99c8b942` after GitHub reported a merge conflict caused by mainline advancement.
+  - Preserved the dashboard PRD as authoritative and rebuilt the append-only progress log from the complete current-main history plus all 14 dashboard-only entries.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `prd.json` parses and all five dashboard stories remain marked `passes: true`.
+  - The rebased worktree has no conflict markers; progress contains all 538 current-main headings plus the 14 dashboard-only headings.
+  - Fresh hosted verification is intentionally pending for the new rebased head.
+- **Learnings for future iterations:**
+  - When main advances through another bookkeeping-heavy merge, retain the active task PRD, use current main as the progress-log base, append the task-only history, and rerun all hosted checks on the replacement ancestry.
+---
