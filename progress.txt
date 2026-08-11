@@ -11489,3 +11489,18 @@
 - **Learnings for future iterations:**
   - When a hosted functional run reveals a test-only process-pipe race, record both the exact first-run failure and the terminal rerun evidence so review can distinguish a corrected flake from an unverified retry.
 ---
+## [2026-08-11 10:21:35 -07:00] - thr-deflake-cli-process-package final review audit
+- What was implemented
+  - Completed the blocking review follow-up audit without adding another source change: the rolling-file collision, mode/ownership, failed-target cleanup, and append-only progress fixes are present, and the hosted terminal-pipe-close fix is included in the published head.
+  - Confirmed that all three PRD stories remain `passes:true` and that the historical blocking conversation comments target superseded head `02b56e26c`, not the current replacement head.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Required thread-aware `fetch_comments.py` audit for PR #1884 returned 6 top-level conversation comments, 0 submitted reviews, and 0 inline review threads; unresolved inline threads: 0.
+  - Hosted run `31515252431` on head `cf6385e2e2caf9e6ba15a02d2ae36889fe80e1ad` is terminal-success across all 18 required checks, including Backend Functional Coverage, Backend Unit Coverage, and Verification Policy.
+  - GitHub reports the PR `CLEAN` against `origin/main` `650b701689fcbc467fa0e814478460b9c3316629`; `progress.txt` is additions-only against that base (307 additions, 0 deletions), `prd.json` parses, and `git diff --check` passes.
+  - The PR body will be synchronized from this exact `prd.json` after the metadata commit.
+- **Learnings for future iterations:**
+  - Historical top-level blocking comments can remain in the conversation after their referenced head is superseded; final handoff requires checking the current head, hosted checks, mergeability, and thread-aware resolution state together.
+---
