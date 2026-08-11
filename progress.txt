@@ -7429,3 +7429,19 @@
   - Fetch the live base immediately before pushing and resolve shared PRD/progress conflicts before opening a PR; a task branch can be clean yet already stale against the hosting base.
   - Keep the active task PRD authoritative during a shared-bookkeeping merge, while preserving unrelated current-main progress entries for auditability.
 ---
+
+## [2026-08-10 22:11 -07:00] - ui-packaged-factories-decoupling backend coverage follow-up
+- What was implemented
+  - Investigated the first PR run's Backend Unit Coverage failure and reproduced the `pkg/services/factory_definitions/transports/http` package shortfall locally at 79.5% against the 79.67% ratchet.
+  - Added observable HTTP adapter tests for unavailable roots, resolution and identity mismatches, incomplete identity/artifact/discovery metadata, and typed root-error mapping.
+- Files changed
+  - `pkg/services/factory_definitions/transports/http/handlers_current_factory_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Focused Factory Definitions HTTP tests passed.
+  - Package coverage increased to 84.3%; the coverage baseline was not lowered.
+  - `gofmt`, `git diff --check`, and the exact failed CI job rerun were initiated; the rerun is still pending on GitHub.
+- **Learnings for future iterations:**
+  - When a new backend adapter causes a small package-coverage ratchet miss, inspect the coverage profile for the adapter's unexercised failure branches and add behavior assertions before changing the manifest threshold.
+---
