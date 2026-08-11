@@ -32,7 +32,7 @@
       ],
       "priority": 1,
       "passes": false,
-      "notes": "Implemented the package-owned semantic role validator and focused tests for canonical initial, routed, classification, failure, rejection, continuation, explicit-return, JavaScript-scope, and invocation-schedule overlap states. The repository-wide catalog gate remains deferred because the audit still identifies loop-controller:stopped and quorum task:complete as authored states without direct current runtime routes; they need an explicit lifecycle decision rather than a projection allowlist."
+      "notes": "Implemented the package-owned semantic role validator and focused tests for canonical initial, routed, classification, failure, rejection, continuation, explicit-return, JavaScript-scope, and invocation-schedule overlap states. Added regression coverage proving disconnected terminal declarations are rejected with the Factory slug and exact workType:state identities. The repository-wide catalog gate remains deferred because the audit still identifies loop-controller:stopped and quorum task:complete as authored states without direct current runtime routes; removing them also conflicts with the existing canonical requirement that referenced Work types declare a terminal state, so they need an explicit lifecycle/topology decision rather than a projection allowlist."
     },
     {
       "id": "graph-workstation-semantics-002",

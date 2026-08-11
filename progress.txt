@@ -4116,3 +4116,21 @@
   - Storybook browser checks need a fresh static server after rebuilding; an older server can serve stale assets or make readiness timeouts misleading.
   - A host can preserve runtime activity overlays without allowing topology metadata to classify authored workstation semantics; the package projection and shared node renderer should remain the only semantic authority.
 ---
+
+## [2026-08-11 00:12 -07:00] - graph-workstation-semantics-001
+- What was implemented
+  - Added focused catalog-role regression coverage for a disconnected terminal Work state alongside the existing orphan processing-state case; diagnostics still require the Factory slug and exact `workType:state` identities.
+  - Audited the attempted repository-wide discovery wiring against the canonical Factory validator. The current `loop-controller:stopped` and `quorum task:complete` declarations have no direct runtime route, while removing them causes the existing canonical validator to reject their referenced Work types for lacking a terminal state.
+  - Kept the global catalog gate deferred rather than adding a guessed lifecycle allowlist or leaving the package suite red; the lifecycle/topology contract must be decided before the gate can be enabled.
+- Files changed
+  - `internal/packagedfactorycatalog/work_state_roles_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./internal/packagedfactorycatalog -run '^TestValidateFirstPartyWorkStateRoles' -count=1` — passed.
+  - `go test ./internal/packagedfactorycatalog -count=1` — passed.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - The semantic catalog rule and the general canonical completion-state rule must be reconciled before strict discovery validation is enabled; do not solve that mismatch with comment-only exceptions or fabricated routes.
+  - A disconnected terminal declaration is as important to reject as an orphan processing state because terminal declarations can make speculative topology look operational in generated graph consumers.
+---

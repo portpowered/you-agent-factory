@@ -73,6 +73,7 @@ func TestValidateFirstPartyWorkStateRolesRejectsDisconnectedStateWithExactIdenti
 				{Name: "complete", Type: factorydefinitions.StateTypeTerminal},
 				{Name: "failed", Type: factorydefinitions.StateTypeFailed},
 				{Name: "orphan", Type: factorydefinitions.StateTypeProcessing},
+				{Name: "terminal-orphan", Type: factorydefinitions.StateTypeTerminal},
 			},
 		}},
 		Workstations: []factorydefinitions.FactoryWorkstationConfig{{
@@ -89,8 +90,10 @@ func TestValidateFirstPartyWorkStateRolesRejectsDisconnectedStateWithExactIdenti
 	if err == nil {
 		t.Fatal("ValidateFirstPartyWorkStateRoles() error = nil, want disconnected-state diagnostic")
 	}
-	if !strings.Contains(err.Error(), `"synthetic"`) || !strings.Contains(err.Error(), "task:orphan") {
-		t.Fatalf("error = %q, want Factory slug and exact task:orphan identity", err)
+	if !strings.Contains(err.Error(), `"synthetic"`) ||
+		!strings.Contains(err.Error(), "task:orphan") ||
+		!strings.Contains(err.Error(), "task:terminal-orphan") {
+		t.Fatalf("error = %q, want Factory slug and exact disconnected state identities", err)
 	}
 }
 
