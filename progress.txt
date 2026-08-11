@@ -13508,3 +13508,19 @@
 - **Learnings for future iterations:**
   - A docs-only audit commit can trigger the full CI matrix; record that exact published-head result separately from the validated implementation head and keep baseline failures scoped to their untouched package.
 ---
+## [2026-08-11 11:08:42 -07:00] - btrc-p1-root-injection-006 latest-head CI baseline audit
+- What was implemented
+  - Completed the latest-head delivery audit for `afce3a985ac16bf69df5eef26d3258f2f6bd0132` against `origin/main` `650b701689fcbc467fa0e814478460b9c3316629`.
+  - Synchronized the PR description from `prd.json` through the repository API fallback after `gh pr edit` reported the token's missing `read:project` scope.
+  - Kept the six P1 stories complete and made no product or unrelated-test changes; the existing review follow-ups remain addressed.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Workflow `31520283246` is terminal and passed every lane except Backend Functional Coverage and its dependent Verification Policy.
+  - The functional failure is the unchanged current-main workflow baseline: the short functional sweep skips `TestPinnedAcpxCompletesDefaultFactoryBuilderPrompt`, the required follow-on pinned ACP step does not emit `.artifacts/functional-test-viz/real-acpx-evidence.json`, and the required artifact upload fails. Current-main run `31511537429` reproduces the same missing-artifact failure; the P1 diff is empty for the ACP package, CI workflow, and artifact path.
+  - Backend Unit Coverage, frontend, API/package, docs, model-provider, local-inference, and all other completed lanes passed. `gh pr view 1857` reports the branch mergeable but blocked by the failed required check; the thread-aware audit reports zero unresolved review threads, zero formal reviews, and no inline review comments.
+  - `git diff --check` and PRD JSON parsing pass; all six stories remain marked `passes:true`.
+- **Learnings for future iterations:**
+  - When a required evidence artifact is missing because an earlier workflow step fails or skips its producer, compare the full job sequence with the latest current-main run before widening a completed product task; identical artifact failures outside the task diff are delivery-baseline evidence.
+---
