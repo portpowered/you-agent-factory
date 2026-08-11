@@ -9009,3 +9009,31 @@
 - **Learnings for future iterations:**
   - A green replacement run must be recorded against the exact pushed head; any subsequent progress-only push requires another hosted replacement run before declaring the PR ready.
 ---
+## [2026-08-11 05:20:03 -07:00] - graph-workstation-semantics packaged preparation dependency review follow-up
+- What was implemented
+  - Addressed the blocking PR feedback by introducing the explicit `factorydefinitions.PackagedFactoryPersistence` capability for first-party packaged installation.
+  - Removed the packaged installer’s optional runtime type assertion and strict fallback; create and replace now call `PreparePackagedFactoryLayout` directly through the required capability.
+  - Updated catalog persistence, Factory Definitions Wire, application Wire bindings, generated `pkg/wire/wire_gen.go`, and affected composition fixtures so the catalog-owned capability is injected explicitly while ordinary named-Factory persistence remains strict.
+  - Added a recorder-backed create/replace regression that fails if either path calls ordinary `PrepareFactoryLayout`.
+- Files changed
+  - `pkg/services/factory_definitions/persistence_contract.go`
+  - `pkg/services/factory_definitions/internal/services/distribution/packagedinstallation/service.go`
+  - `pkg/services/factory_definitions/internal/services/distribution/packagedinstallation/service_test.go`
+  - `pkg/services/factory_definitions/internal/services/catalog/persistence/service.go`
+  - `pkg/services/factory_definitions/internal/services/catalog/wire/wire.go`
+  - `pkg/services/factory_definitions/wire/{catalog_ports.go,root_wire_persistence.go,packaged_catalog_ports.go}`
+  - `pkg/services/factory_definitions/internal/packaged_installer.go`
+  - `pkg/services/factory_definitions/internal/testcomposition/composition.go`
+  - packaged/runtime/Wire composition test helpers and generated `pkg/wire/wire_gen.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/factory_definitions/internal/services/distribution/packagedinstallation -count=1 -timeout 180s` — passed.
+  - `go test ./pkg/services/factory_definitions/... ./pkg/wire/... -count=1 -timeout 600s` — passed.
+  - `go generate ./pkg/wire` — passed and refreshed generated Wire output.
+  - `git diff --check` — passed before commit.
+  - Commit `a14b3d9f9` records the implementation checkpoint.
+- **Learnings for future iterations:**
+  - When one implementation exposes a stricter policy variant of a shared persistence operation, model that variant as a named composite capability and bind it explicitly in Wire; do not recover it from the concrete value at operation time.
+  - A create/replace recorder that makes the ordinary operation fail is stronger evidence than checking only call counts because it proves the fallback cannot silently return.
+---
