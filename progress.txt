@@ -13477,3 +13477,19 @@
 - **Learnings for future iterations:**
   - When retry-only functional failures rotate across untouched packages but local repetitions pass, retain the exact convergence evidence and stop widening a completed task to repair unrelated baseline behavior.
 ---
+## [2026-08-11 10:47:00 -07:00] - btrc-p1-root-injection-006 final latest-head delivery audit
+- What was implemented
+  - Audited workflow `31517302904` on pushed audit head `427f9277c13fad2f74272163aefcb9d014d782ec` through its initial run and two failed-job retries.
+  - Made no product or unrelated-test changes; the six P1 stories remain complete and the final retry converged on the known untouched server-binding baseline.
+  - Refreshed the PRD delivery audit and story 006 note to the latest tested head and terminal workflow result.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Backend Unit Coverage and every non-functional lane passed on the latest head.
+  - The only remaining functional failure after the initial run and two failed-job retries is `TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput` in untouched `tests/functional/transport/server_binding`; its structured API-server diagnostic mismatch reproduces locally on Windows.
+  - Runtime-api’s one retry failure passed five local repetitions and cleared on the final retry; the server-binding package remains absent from `git diff --name-only origin/main...HEAD`.
+  - Thread-aware review audit remains at zero unresolved inline threads and zero formal reviews.
+- **Learnings for future iterations:**
+  - Once the latest-head retry converges on one deterministic untouched baseline assertion, preserve the evidence and hand off the complete task rather than altering unrelated behavior.
+---
