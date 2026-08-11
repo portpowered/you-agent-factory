@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/internal/contractopenapiconverter"
+	"github.com/portpowered/infinite-you/internal/providerpackages"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"gopkg.in/yaml.v3"
 )
@@ -48,6 +49,9 @@ func Build(source fs.FS) (Catalog, error) {
 	providers, err := loadProviders(source, manifestSchema)
 	if err != nil {
 		return Catalog{}, err
+	}
+	if _, err := providerpackages.Validate(source, providerpackages.DefaultRuntimeProfiles()); err != nil {
+		return Catalog{}, fmt.Errorf("validate provider packages: %w", err)
 	}
 	if err := validateCatalogSemantics(providers); err != nil {
 		return Catalog{}, err
