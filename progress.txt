@@ -1,6 +1,7 @@
 ## Codebase Patterns
 - Normative customer-prose policy belongs under `docs/internal/standards/writing`; use `docs/architecture/data-model.md` and public contracts for product meaning, and keep exact machine/technical literals separate from reviewable natural-language prose.
 - The canonical product vocabulary source is `docs/internal/standards/writing/customer-technical-terms.yaml`; keep every record on one explicit schema and point its owner to the architecture or public-contract source of meaning.
+- Documentation-only stories should validate authored structured data as review evidence and leave source-scanning or meta-test enforcement to a real consumer; source shape alone is not observable customer behavior.
 - JSON Schema worker diagnostics must use `ErrorKind.KeywordPath()` and typed schema metadata; localized `ValidationError.Error()` text can leak rejected values and compiler-expanded host paths.
 - When an exact package file-count baseline blocks an oversized-file split, move the cohesive helpers into an existing appropriately owned file and verify both size and file-count gates.
 - Optional native JSON channels use an explicit presence bit plus custom JSON at durable boundaries to distinguish omitted values from JSON null; clone map/slice trees at projection and transport ownership boundaries.
@@ -24,6 +25,8 @@
 - When moving a test with a pkgmaintcheck exemption, move the existing budget target with the test and retain legacy file suppressions until the remaining staged split retires the source file.
 - For broad functional coverage concurrency flakes, isolate the named test and rerun only the failed CI jobs before changing untouched behavior.
 - When resolving long append-only progress conflicts, read merge-stage files in bounded chunks and validate the reconstructed line count so tool-output truncation cannot drop history.
+- For concurrent single-flight state, keep the absent-to-loading election atomic with the observation; a separate precheck can let callers pass stale absent state and overwrite the shared completion signal.
+- For repeated concurrency package runs, synchronize cancellation tests on an injected launcher or process edge; a fixed sleep can cancel before startup under parallel stress and obscure the target regression.
 - For fan-in transitions, preserve a deterministic list of all matched input token IDs separately from the consume-only mutation list; OBSERVE-mode inputs must reach the worker dispatch without being consumed.
 - Terminal lifecycle publication must require the opening record's committed publication window; a failed opening must never be followed by a terminal append that becomes topic position 1.
 - Root-built direct-JavaScript functional probes that do not invoke a worker can run without `--with-mock-workers`; keep Mock Workers usage inside the feature-owning test cells.
@@ -7719,7 +7722,186 @@
   - Thread-aware review audit reports 8 conversation comments, 0 formal reviews, and 0 unresolved/outdated inline threads.
   - `prd.json` parses with all three stories marked `passes:true`; `git merge-tree --write-tree origin/main HEAD` and `git diff --check` pass; the worktree is clean.
 - **Learnings for future iterations:**
-  - A green PR run becomes stale when `origin/main` advances during local verification; fetch immediately before handoff, merge the new base, and wait for checks on the replacement head.
+- A green PR run becomes stale when `origin/main` advances during local verification; fetch immediately before handoff, merge the new base, and wait for checks on the replacement head.
+---
+
+## [2026-08-10 19:12 -07:00] - thr-deflake-model-host-concurrent-reuse-001
+- What was implemented
+  - Established that the failure is a production EnsureModelHost reuse race, not a test-only choreography race.
+  - Reproduced the reported symptom during an uncontrolled concurrent scheduler sweep (`process starts = 2, want 1`) and confirmed the same failure signature in GitHub Actions run `31449874394`, job `93651926054`, at `service_test.go:255`.
+  - Traced the exact interleaving in `supervisor.go`: callers A and B can both return `nil` from `awaitExistingLoad` while the slot is `absent`; A then publishes `loading` with `loadDoneA`; B enters the later election lock, does not handle the already-published `loading` state, overwrites it with `loadDoneB`, and starts a second supervised process. The unsafe boundary is the split between the precheck and the loading election.
+  - The diagnosis remains inside the Models runtime-host owner, with no public API or generated-contract changes. The atomic election and deterministic regression are left for story 002.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Baseline focused regression: `go test -race ./pkg/services/models/internal/services/runtime_host/internal/service -run '^TestEnsureModelHostConcurrentReuseSharesOneSupervisedProcess$' -count=50 -v` passed once, while the concurrent scheduler sweep also observed the duplicate-start failure.
+  - Sequential scheduler evidence: the same race-enabled test with `GOMAXPROCS=1`, `2`, `8`, and `32`, each at `-count=50`, passed with exit code 0.
+  - `go test ./pkg/services/models/internal/services/runtime_host/internal/service`, `go vet ./pkg/services/models/internal/services/runtime_host/internal/service`, `make typecheck`, and `git diff --check` passed.
+- **Learnings for future iterations:**
+  - A passing repeated test does not disprove a race when the state machine has a provable read/election gap; preserve both the probabilistic outcome and the lock-level interleaving before choosing the fix.
+  - Keep the one-process assertion strict and fix the shared runtime-host election in story 002; do not add sleeps, retries, or relaxed process-count checks.
+---
+## [2026-08-10 19:24 -07:00] - thr-deflake-model-host-concurrent-reuse-002
+- What was implemented
+  - Fixed the Models runtime-host production race by moving the ready/loading/failed observation and absent-to-loading election into one mutex-protected transition in `supervisedRuntime.ensureReady`.
+  - Loading followers now capture the elected attempt's completion channel and await its terminal result; the elected caller alone launches, supervises, and publishes the process, preserving the strict one-process invariant.
+  - Added a test-only `BeforeLoadElection` seam and a channel/WaitGroup barrier that brings all eight `EnsureModelHost` callers to the diagnosed election boundary before release. The regression asserts every caller receives a ready/loaded host and exactly one launcher start, with no sleeps or retries.
+- Files changed
+  - `pkg/services/models/internal/services/runtime_host/internal/service/supervisor.go`
+  - `pkg/services/models/internal/services/runtime_host/internal/service/export_test.go`
+  - `pkg/services/models/internal/services/runtime_host/internal/service/service_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/models/internal/services/runtime_host/internal/service -count=1 -v` — passed.
+  - `go test -race ./pkg/services/models/internal/services/runtime_host/internal/service -run '^TestEnsureModelHostConcurrentReuseSharesOneSupervisedProcess$' -count=50` — passed all 50 repetitions with no race report or extra start.
+  - `go test -race ./pkg/services/models/internal/services/runtime_host/internal/service -count=1` — passed.
+  - `go vet ./pkg/services/models/internal/services/runtime_host/internal/service`, `make typecheck`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, and `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - Put the single-flight decision and loading publication in the same lock-protected switch; a separate absence precheck creates a stale observation that can overwrite `loadDone` and process ownership.
+  - A test-only barrier immediately before the atomic election can force all callers to contend at the diagnosed boundary while keeping production free of sleeps, retries, and timing-dependent coordination.
+---
+## [2026-08-10 19:41 -07:00] - thr-deflake-model-host-concurrent-reuse-003
+- What was implemented
+  - Completed scheduler-independent stability evidence for the Models runtime-host fix. The exact full-package command `go test -race ./pkg/services/models/internal/services/runtime_host/internal/service -count=50` passed all 50 repetitions after the focused test was also repeated 50 times.
+  - Repeated the strict concurrent-reuse regression at `GOMAXPROCS=1`, `2`, `8`, and `32`, each with `-race -count=50`; every run passed without race reports, deadlocks, failures, or a second launcher start.
+  - Replaced the cancellation test's fixed 50ms startup sleep with an observable injected launcher-start channel and a bounded failure guard. The first whole-package stress attempt showed that this separate test choreography race could cancel before process launch and report `ErrAssetCancelled`; after the change the same full-package stress command passed.
+  - Marked story 003 `passes:true` in `prd.json` with the commands, scheduler settings, outcomes, original CI root-cause classification, and final quality-gate evidence.
+- Files changed
+  - `pkg/services/models/internal/services/runtime_host/internal/service/failure_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test -race ./pkg/services/models/internal/services/runtime_host/internal/service -count=50` — passed in 22.488s.
+  - `go test -race ./pkg/services/models/internal/services/runtime_host/internal/service -run '^TestEnsureModelHostConcurrentReuseSharesOneSupervisedProcess$' -count=50` — passed in 1.411s.
+  - GOMAXPROCS 1/2/8/32 named-regression runs — passed in 1.403s/1.353s/1.286s/1.276s respectively.
+  - Full runtime-host race suite — passed; `make test` — passed in 380s; `make typecheck backend-size pkg-maint pkg-file-count pkg-structure vet` — passed; `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - Treat a repeated package failure outside the target test as a separate characterization: isolate its named test, identify whether the failure is caused by a fixed timing assumption, and observe the injected runtime edge directly before changing production behavior.
+  - Record both the exact package-wide race command and a low/high GOMAXPROCS matrix so reviewers can distinguish broad-suite stability from targeted scheduler contention evidence.
+---
+## [2026-08-10 20:04 -07:00] - thr-deflake-model-host-concurrent-reuse-003 final verification
+- What was implemented
+  - No additional production change; completed the post-edit broad-suite verification and retained the final timing in the append-only evidence log.
+- Files changed
+  - `progress.txt`
+- Verification
+  - The first post-edit `make test` attempt exited non-zero without diagnostic output after 518.7s; the immediate captured-output rerun completed with `make test exit code: 0` in 315.9s, with all unit packages passing.
+  - The exact post-edit `go test -race ./pkg/services/models/internal/services/runtime_host/internal/service -count=50` remained green in 22.488s.
+- **Learnings for future iterations:**
+  - When a long-running shell wrapper returns a silent non-zero result, rerun the same command while capturing and reporting its final output before classifying the failure or changing code.
+---
+## [2026-08-10 20:23 -07:00] - thr-deflake-model-host-concurrent-reuse final CI rerun
+- What was implemented
+  - Investigated the first PR CI failure and confirmed it was the known unrelated `TestFactorySessionHistoryIsNotPersistedByDefault` cancellation-observation flake, not a Models runtime-host regression.
+  - Reran the exact failing functional test locally ten times, then reran only the failed GitHub Actions jobs; no source behavior changed.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/sessions/restart -run '^TestFactorySessionHistoryIsNotPersistedByDefault$' -count=10 -v -timeout 300s` — all ten passed in 22.410s.
+  - `gh run rerun 31454365225 --failed` — Backend Functional Coverage passed in 5m5s and Verification Policy passed in 4s; all other required checks remained passing.
+  - PR #1868 remains open, mergeable, non-draft, and synchronized to head `0447883f3`; thread-aware review audit remains empty.
+- **Learnings for future iterations:**
+  - When a broad functional lane fails at an untouched cancellation observation, isolate and repeat the named test before changing task code, then rerun only the failed jobs once the characterization is clean.
+---
+## [2026-08-10 20:53 -07:00] - thr-deflake-model-host-concurrent-reuse review follow-up
+- What was implemented
+  - Replaced the pre-election arrival barrier with an `AfterLoadStateObservation` test seam that runs after each caller releases the runtime-state mutex.
+  - Coordinated all eight callers at that edge; the fixed implementation atomically publishes `loading` before followers observe it, while the historical split observation/election implementation fails deterministically with `process starts = 8, want 1`.
+  - Merged current `origin/main` at `ee0023397`, kept this task's `prd.json` authoritative, and retained the unrelated main-line progress history.
+- Files changed
+  - `pkg/services/models/internal/services/runtime_host/internal/service/supervisor.go`
+  - `pkg/services/models/internal/services/runtime_host/internal/service/export_test.go`
+  - `pkg/services/models/internal/services/runtime_host/internal/service/service_test.go`
+  - `prd.json`
+  - `progress.txt`
+  - Current-main synchronization files carried by the merge.
+- Verification
+  - The corrected focused regression passed; the temporary historical implementation failed at the strict single-start assertion with `process starts = 8, want 1`.
+  - `prd.json` parses with all three task stories marked `passes:true`, conflict markers are absent, and the merged worktree has no unmerged entries.
+- **Learnings for future iterations:**
+  - To prove a single-flight regression against a split read/election implementation, synchronize after the state-read lock is released and before the second election lock; a pre-lock arrival barrier alone does not force the unsafe interleaving.
+---
+## [2026-08-10 21:08 -07:00] - thr-deflake-model-host-concurrent-reuse-002 review follow-up
+- What was implemented
+  - Completed the blocking review follow-up for the deterministic concurrent-reuse regression. The `AfterLoadStateObservation` seam coordinates all eight callers after they release the runtime-state mutex; the production path has already published `loading` atomically, while the historical split path can be instrumented at the same post-observation/pre-election edge.
+  - Reproduced the former implementation's failure in a detached temporary checkout: the strict launcher assertion reported `process starts = 8, want 1`. The corrected implementation passed the focused race-enabled regression 50 times at `GOMAXPROCS=8`.
+  - Confirmed the branch already contains the current `origin/main` merge at `ee0023397`; `git merge-tree --write-tree HEAD origin/main` completed without conflicts.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `GOMAXPROCS=8 go test -race ./pkg/services/models/internal/services/runtime_host/internal/service -run '^TestEnsureModelHostConcurrentReuseSharesOneSupervisedProcess$' -count=50` — passed all 50 repetitions in 1.457s with no race report, deadlock, failure, or extra process start.
+  - Instrumented historical split implementation — failed deterministically at `service_test.go:305` with `process starts = 8, want 1 shared supervised process`.
+  - `git merge-tree --write-tree HEAD origin/main`, `git diff --check`, and the conflict audit — passed; all three PRD stories remain `passes:true`.
+- **Learnings for future iterations:**
+  - A deterministic regression for a removed synchronization gap should identify the semantic post-observation/pre-election edge and retain a strict externally visible side-effect assertion; a pre-lock arrival barrier does not distinguish the historical implementation.
+---
+## [2026-08-10 21:23 -07:00] - thr-deflake-model-host-concurrent-reuse-002 current-main synchronization
+- What was implemented
+  - Merged the live `origin/main` head `469204421` after it advanced beyond `ee0023397`; preserved this task's authoritative `prd.json` and appended the four current-main `ci-additive-classifier` progress entries without truncating the append-only log.
+  - Kept the deterministic `AfterLoadStateObservation` regression and Models runtime-host production fix unchanged while reconciling the shared bookkeeping files.
+- Files changed
+  - `Makefile`
+  - `cmd/ciclassify/main.go`
+  - `cmd/ciclassify/main_test.go`
+  - `progress.txt`
+- Verification
+  - `GOMAXPROCS=8 go test -race ./pkg/services/models/internal/services/runtime_host/internal/service -run '^TestEnsureModelHostConcurrentReuseSharesOneSupervisedProcess$' -count=50` — passed all 50 repetitions in 3.411s.
+  - `prd.json` parses with three passing stories; `progress.txt` remains 6,872 lines before this entry, has no conflict markers, and retains both branch histories.
+  - `git diff --check` and `git merge-tree --write-tree origin/main HEAD` passed with `origin/main=469204421`.
+- **Learnings for future iterations:**
+  - For long append-only conflict files, resolve from full Git objects or bounded patches; never reconstruct a large file from truncated shell output, and validate line count plus both branch histories before staging.
+---
+## [2026-08-10 21:43 -07:00] - thr-deflake-model-host-concurrent-reuse-003 CI flake follow-up
+- What was implemented
+  - Investigated the first post-reconciliation CI failure in run `31458338809`. Backend Functional Coverage failed only at the unrelated `tests/functional/workers/inference/codex:TestCodexGoldenTextAndToolSuccess`, whose fixture transcript omitted the expected tool lifecycle; the required real-ACP evidence artifact was consequently absent and Verification Policy failed downstream.
+  - Made no production or test-code changes. Downloaded the functional diagnostics, isolated the named test locally for ten repetitions, and confirmed it passed every run.
+  - Reran only the failed GitHub Actions jobs with `gh run rerun 31458338809 --failed`; the backend functional rerun and dependent Verification Policy both passed.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/workers/inference/codex -run '^TestCodexGoldenTextAndToolSuccess$' -count=10 -v -timeout 300s` — all ten passed in 9.537s.
+  - Backend Functional Coverage rerun job `93678695912` — passed.
+  - Verification Policy rerun job `93679483557` — passed.
+  - All other required checks on the replacement head remained passing; the Models runtime-host focused race regression was unaffected.
+- **Learnings for future iterations:**
+- When functional diagnostics name an untouched Codex or worker fixture failure, isolate that exact test before changing task code; rerun only the failed coverage and policy jobs after the characterization passes.
+---
+
+## [2026-08-10 21:57 -07:00] - thr-deflake-model-host-concurrent-reuse final current-main reconciliation
+- What was implemented
+  - Merged the live `origin/main` head `7dbeb472a` after it advanced beyond the previously synchronized `469204421`.
+  - Preserved this task's authoritative `prd.json`, retained the complete current-main append-only progress history, and added the task-specific concurrency history and reusable patterns without truncating either branch.
+  - Carried the current-main Worker Sessions/API/generated-artifact changes through the merge; no additional Models runtime-host production change was required.
+- Files changed
+  - Current-main files carried by the merge.
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `prd.json` parses with all three task stories marked `passes:true`.
+  - `progress.txt` contains 7,490 lines, no conflict markers, and both branch histories.
+  - `$env:GOMAXPROCS=8; go test -race ./pkg/services/models/internal/services/runtime_host/internal/service -run '^TestEnsureModelHostConcurrentReuseSharesOneSupervisedProcess$' -count=50` — passed all 50 repetitions in 1.650s.
+  - The merge commit is `dd925e6fb`; the staged merge passed `git diff --cached --check` and the committed tree is conflict-free.
+- **Learnings for future iterations:**
+- Fetch `origin/main` immediately before final handoff because another merged PR can invalidate an otherwise green head; resolve shared PRD/progress files from complete Git objects and rerun the focused regression on the replacement merge head.
+---
+
+## [2026-08-10 22:16 -07:00] - thr-deflake-model-host-concurrent-reuse final CI flake follow-up
+- What was implemented
+  - Investigated the only failure in final-head CI run `31460167917`: Backend Functional Coverage named the unrelated `tests/functional/providers/acp:TestFactoryRunRetriesACPProviderByResumingExactSession`, which observed zero completed work after a transient ACP session-load failure.
+  - Made no production or test-code changes. Isolated the exact test locally for ten repetitions; every repetition passed.
+  - Reran only the failed Backend Functional Coverage and dependent Verification Policy jobs; both passed on the same pushed head.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/providers/acp -run '^TestFactoryRunRetriesACPProviderByResumingExactSession$' -count=10 -v -timeout 300s` — all ten passed in 39.776s.
+  - Backend Functional Coverage rerun in `31460167917` — passed.
+  - Verification Policy rerun in `31460167917` — passed.
+  - All other final-head jobs remained passing, including Backend Unit Coverage, Local Inference, UI Backend Integration, and the focused Models runtime-host race regression.
+- **Learnings for future iterations:**
+  - When a functional coverage lane names an untouched ACP session-resume fixture and the exact test passes repeated local characterization, preserve task code and rerun only the failed coverage and policy jobs before recording the flake.
 ---
 ## [2026-08-10 22:07 -07:00] - prose-standard-and-terms-002
 - What was implemented
@@ -7776,7 +7958,23 @@
   - `prd.json` parses, no conflict markers remain, and `git diff --check` passed before this append.
 - **Learnings for future iterations:**
   - A PR can become conflicting again after a successful retry because `main` advances asynchronously; fetch the hosting ref immediately before each final push and repeat the shared-file merge protocol.
-  - When parallel Go test processes produce a tool subprocess failure, rerun the named package serially before treating it as a source regression.
+- When parallel Go test processes produce a tool subprocess failure, rerun the named package serially before treating it as a source regression.
+---
+
+## [2026-08-10 22:19 -07:00] - thr-deflake-model-host-concurrent-reuse latest-main synchronization follow-up
+- What was implemented
+  - Merged the live `origin/main` head `b68e4bf95` after it advanced beyond `7dbeb472a`.
+  - Preserved this task's authoritative `prd.json`, retained both append-only progress histories, and carried the current-main plan-parallel regression changes forward without adding unrelated task behavior.
+- Files changed
+  - `pkg/services/factory_runtime/internal/services/orchestration/packaged/plan_parallel/invocation_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `prd.json` parses with all three task stories marked `passes:true`; `progress.txt` contains both branch histories and no conflict markers.
+  - `$env:GOMAXPROCS=8; go test -race ./pkg/services/models/internal/services/runtime_host/internal/service -run '^TestEnsureModelHostConcurrentReuseSharesOneSupervisedProcess$' -count=50` — passed all 50 repetitions in 2.205s.
+  - `git diff --cached --check` passed for the resolved merge, and the merge tree contains no unmerged entries.
+- **Learnings for future iterations:**
+  - Main can advance again while a targeted rerun is in flight; merge the latest hosting ref before the final push and combine the synchronization evidence with the merge commit so CI runs on the actual handoff head.
 ---
 ## [2026-08-10 22:30 -07:00] - prose-standard-and-terms current-main synchronization follow-up
 - What was implemented
@@ -7792,4 +7990,23 @@
   - The replacement head must be pushed before GitHub can recompute checks and mergeability.
 - **Learnings for future iterations:**
   - Fetch `origin/main` immediately before each replacement push; a second independent merge can advance the base while hosted checks are still pending.
+---
+
+## 2026-08-10 22:50 -07:00 - prose-standard-and-terms-002 review follow-up
+- What was implemented
+  - Removed `cmd/contractsvalidate/customer_terms_test.go` because it only scanned the authored YAML source and was out of scope for this documentation-only story.
+  - Updated the terminology story note so the checked-in PRD describes the shipped register and review evidence accurately.
+  - Merged `origin/main` at `ecd1d248731c9108dbbc4dafe2f28c4120043346`, retaining the prose task PRD, unioning the append-only progress history, and carrying the current-main model runtime changes forward.
+- Files changed
+  - `cmd/contractsvalidate/customer_terms_test.go`
+  - `prd.json`
+  - `progress.txt`
+  - Current-main model runtime files carried by the merge.
+- Verification
+  - `prd.json` parses with all three prose stories marked `passes:true`.
+  - Conflict-marker scan is clean and `git diff --check` passes.
+  - The merge resolution preserves the branch-scoped PRD and both task histories; final merge-tree and hosted checks remain to be verified after the merge commit is pushed.
+- **Learnings for future iterations:**
+  - Documentation-only acceptance criteria can justify parser review evidence, but a test that only reads and validates source-file shape is a prohibited meta test unless a real enforcement consumer makes that behavior user-visible.
+  - Resolve a moving-base conflict before final review handoff, then rerun validation on the replacement head rather than relying on checks from the old base.
 ---

@@ -15,9 +15,10 @@ import (
 
 // SupervisorTestConfig overrides supervisor timing and health probing for tests.
 type SupervisorTestConfig struct {
-	ReadinessTimeout    time.Duration
-	HealthCheckInterval time.Duration
-	HealthChecker       healthChecker
+	ReadinessTimeout          time.Duration
+	HealthCheckInterval       time.Duration
+	HealthChecker             healthChecker
+	AfterLoadStateObservation func()
 }
 
 // HostPolicyTestConfig overrides idle unload and loaded-runtime pressure policy for tests.
@@ -81,6 +82,7 @@ func NewWithHostTestConfig(
 	if supervisorCfg.HealthChecker != nil {
 		s.supervisor.HealthChecker = supervisorCfg.HealthChecker
 	}
+	s.supervisor.afterLoadStateObservation = supervisorCfg.AfterLoadStateObservation
 	s.idleUnloadAfter, s.maxLoadedRuntimes = normalizeHostPolicy(
 		policyCfg.IdleUnloadAfter,
 		policyCfg.MaxLoadedRuntimes,
