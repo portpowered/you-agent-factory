@@ -1,5 +1,6 @@
 ## Codebase Patterns
 - Keep transport event consumers behind the process-scoped OpeningPresentationOwner: operation contracts carry only a typed scope ID, while the owner owns subscription lifecycle, final history reconciliation, and full-snapshot deduplication for mutable event IDs.
+- For fan-in transitions, preserve a deterministic list of all matched input token IDs separately from the consume-only mutation list; OBSERVE-mode inputs must reach the worker dispatch without being consumed.
 - Terminal lifecycle publication must require the opening record's committed publication window; a failed opening must never be followed by a terminal append that becomes topic position 1.
 - Root-built direct-JavaScript functional probes that do not invoke a worker can run without `--with-mock-workers`; keep Mock Workers usage inside the feature-owning test cells.
 - Cancellation-sensitive functional fixtures must signal provider-edge entry before issuing an interrupt; a published RUNNING status can precede provider handoff and otherwise makes context-cancellation assertions race.
@@ -7321,6 +7322,116 @@
 - **Learnings for future iterations:**
   - A clean merge against a stale remote-tracking base is not sufficient; compare the live hosting ref, fetch it, and resolve shared PRD/progress files again before pushing the replacement head.
 ---
+## 2026-08-10 19:25 -07:00 - pp-merge-context-bug-001
+- What was implemented
+  - Added a deterministic packaged `@you/plan-parallel` functional regression with 10 independent generated children and unique executor output markers.
+  - Captured the actual merger provider request through the injected `ProviderCommandRunner` while executing through `root.BuildProcess` and `Process.Execute`.
+  - Asserted the original request exactly once, every unique completed child result exactly once, each result under its generated Work name, and absence of the planner payload in that Work section.
+  - Updated the story note in `prd.json`; the story remains `passes:false` because the same test passes on the current `origin/main`, so the required current-main red reproduction is not established yet.
+- Files changed
+  - `tests/functional/factory/packaged/plan_parallel/invocation_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/factory/packaged/plan_parallel -run '^TestPackagedPlanParallelMergerReceivesEveryUniqueCompletedChildResult$' -count=10 -v -timeout 600s` — passed 10/10.
+  - `go test ./tests/functional/factory/packaged/plan_parallel -count=1 -v -timeout 300s` — passed.
+  - `go test ./pkg/services/factory_runtime/internal/services/orchestration/token_transformer ./pkg/services/factory_runtime/internal/services/orchestration/subsystems -count=1 -timeout 300s` — passed.
+  - Historical inspection localized the earlier omission to packaged merger prompt assembly: `b0bf1dd597` added the Factory-input rendering block, and the current base already contains the `Payload`/`PreviousOutput`/`Content` fallback.
+  - Regression commit: `ab6593506` (`test(plan-parallel): assert unique merger fan-in inputs`).
+- **Learnings for future iterations:**
+  - The existing three-child test's identical executor output marker can pass without proving child-result identity; fan-in coverage must derive unique result markers from each assigned payload and assert section-level association.
+  - A green strengthened regression on the current base is evidence against the recorded omission in this exact scenario; do not mark the story complete or claim a red run until the failing mechanism is reproduced or a distinct current-base gap is proven.
+---
+
+## 2026-08-10 19:35 -07:00 - pp-merge-context-bug-001 verification follow-up
+- What was implemented
+  - Restored the frozen UI dependencies required by the repository typecheck; no tracked dependency files changed.
+  - Confirmed the focused Go regression, Go orchestration package tests, backend structural checks, `go vet ./...`, and `make typecheck` all pass.
+- Files changed
+  - `progress.txt`
+- **Learnings for future iterations:**
+  - A fresh checkout may need `bun install --frozen-lockfile` before `make typecheck`; the configured Bun version and lockfile restore the missing `@types/bun` package.
+---
+
+## 2026-08-10 19:49 -07:00 - pp-merge-context-bug-001 historical red localization
+- What was implemented
+  - Reproduced the exact regression on a disposable worktree at the pre-fix parent `b0bf1dd597^` (`fb7805bd8`): the merger provider request contained only its static instructions, and the original request occurred zero times.
+  - Strengthened the current functional regression to reject planner payload markers anywhere in the merger input and to require generated Work sections in deterministic name order, while continuing to assert every unique completed result exactly once under the matching Work identity.
+  - Updated `prd.json` to record the red pre-fix output, green current-main output, and the two-part root cause: consume-only scheduler/dispatcher routing plus missing packaged merger `.Inputs` rendering.
+- Files changed
+  - `tests/functional/factory/packaged/plan_parallel/invocation_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Pre-fix red: `go test ./tests/functional/factory/packaged/plan_parallel -run '^TestPackagedPlanParallelMergerReceivesEveryUniqueCompletedChildResult$' -count=1 -v -timeout 600s` — failed at `invocation_test.go:45` with `merger prompt contains original request 0 times, want exactly once`; the captured prompt had no Factory inputs.
+  - Current implementation: the same regression with `-count=10` — passed all ten runs (`ok ... 20.902s`).
+  - `go test ./tests/functional/factory/packaged/plan_parallel -count=1 -v -timeout 300s` — passed.
+  - `prd.json` parses; `git diff --check` passes.
+- **Learnings for future iterations:**
+  - When the live base already contains a fix for a recorded production incident, preserve the exact historical pre-fix revision for red evidence and state explicitly that current main is post-fix; do not mislabel a historical failure as a current-main failure.
+---
+
+## 2026-08-10 19:56 -07:00 - pp-merge-context-bug-002
+- What was implemented
+  - Completed the delivery story against the fan-in correction already present on the synchronized main implementation; no duplicate production change was introduced.
+  - Confirmed the lower-layer invariant: scheduler decisions retain all observed child input token IDs in deterministic order, the dispatcher forwards those tokens to the merger Work dispatch, and only the consumed parent token produces a consume mutation.
+  - Updated `prd.json` to mark `pp-merge-context-bug-002` passed with the exact lower-layer, functional, failure-gating, and root-cause evidence.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/factory_runtime/internal/services/orchestration/scheduler ./pkg/services/factory_runtime/internal/services/orchestration/subsystems/... -count=1 -timeout 300s` — passed, including FIFO, priority, and dispatcher observed-input tests.
+  - `go test ./tests/functional/factory/packaged/plan_parallel -run '^TestPackagedPlanParallelMergerReceivesEveryUniqueCompletedChildResult$' -count=10 -v -timeout 600s` — passed all ten N=10 runs.
+  - `go test ./tests/functional/factory/packaged/plan_parallel -count=1 -v -timeout 600s` — full packaged plan-parallel suite passed.
+  - `go test ./pkg/services/factory_sessions/internal/execution/... -count=1 -timeout 600s` — all Factory Sessions execution packages passed.
+- **Learnings for future iterations:**
+  - When the owning production correction is already on main, use the existing lower-layer tests plus an observable end-to-end regression to complete the story without duplicating a fix or widening the fan-in surface.
+---
+
+## 2026-08-10 20:00 -07:00 - pp-merge-context-bug current-main synchronization
+- What was implemented
+  - Fetched and merged the live `origin/main` head `aac04248d95de7f5412d58f194e7ae03858a3b39` into the task branch.
+  - Preserved this task's `prd.json` and append-only fan-in evidence while carrying the current-main history forward.
+- Files changed
+  - Current-main merge files are included only as synchronization history.
+  - `progress.txt` records the synchronization evidence.
+- Verification
+  - `prd.json` parses with both `pp-merge-context-bug-001` and `pp-merge-context-bug-002` marked `passes:true`.
+  - `git status --short` is clean; `git diff origin/main...HEAD --stat` is limited to `prd.json`, `progress.txt`, and `tests/functional/factory/packaged/plan_parallel/invocation_test.go`.
+  - The merge index is resolved and the task branch is based on current `origin/main`.
+- **Learnings for future iterations:**
+  - Synchronize against the freshly fetched hosting `main` immediately before final gates, then verify the live-base diff so current-main additions do not become accidental task scope.
+---
+
+## 2026-08-10 20:01 -07:00 - pp-merge-context-bug final verification
+- What was implemented
+  - Completed synchronized-head verification without changing the fan-in implementation or broadening the task diff.
+- Files changed
+  - `prd.json` records the final verification gates for story 002.
+  - `progress.txt` records the terminal local gate results.
+- Verification
+  - `make typecheck` — passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` — passed; backend file/function limits, maintainability, package count/structure, and `go vet ./...` are green.
+  - `make test` — passed; the repository short Go unit suite completed successfully.
+  - The focused lower-layer and packaged plan-parallel suites remain green after the current-main merge, as recorded in the preceding story entry.
+- **Learnings for future iterations:**
+  - Run the repository-wide gates after the final base synchronization; focused evidence from a pre-sync head is useful but not sufficient for PR handoff.
+---
+
+## 2026-08-10 20:27 -07:00 - pp-merge-context-bug PR CI rerun
+- What was implemented
+  - Investigated the first hosted `Backend Functional Coverage` failure and confirmed it was unrelated to the plan-parallel diff: the existing ACP retry test failed with a transient cursor-ACP session/load internal error.
+  - Isolated the failed ACP test, then the two unrelated runtime/API tests exposed by the first rerun; each exact test passed 10/10 locally.
+  - Reran only the failed hosted jobs twice. The final rerun passed both `Backend Functional Coverage` and downstream `Verification Policy`.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Initial backend failure: `TestFactoryRunRetriesACPProviderByResumingExactSession` reported temporary cursor-ACP session/load unavailability; the required real-ACP evidence artifact was absent because the lane stopped on that failure.
+  - First rerun failures: `TestAPIEventReplaySmoke_PublicEventsAndSessionProjectionExposeActiveAndCompletedTimeline` and `TestAPIPartialResultIsAvailableBeforeTerminalCompletion`; both passed 10/10 in isolated local runs.
+  - Final hosted rerun on PR #1870 head `d165f5a1eb3bc6fbc1f2b8c47cd12e6466639ee8`: `Backend Functional Coverage` passed in 5m13s and `Verification Policy` passed; all 17 reported checks are terminal and successful.
+  - No source or PRD change was made in response to unrelated flaky failures.
+- **Learnings for future iterations:**
+  - For broad functional-coverage flakes, isolate every named failing test and repeat it before changing untouched behavior; rerun only the failed CI jobs after the isolated characterization is clean.
 
 ## 2026-08-10 19:41 -07:00 - btrc-p1-root-injection-006 current-main synchronization
 - What was implemented
@@ -7441,6 +7552,20 @@
   - After resolving a generated-artifact conflict, regenerate the artifact and refresh any runtime-observation baseline from the merged authored contract before staging the merge.
   - Keep the task PRD authoritative while unioning append-only progress histories when multiple worktrees share the same base.
 ---
+## [2026-08-10 20:53 -07:00] - pp-merge-context-bug delivery handoff
+- What was implemented
+  - No additional product change was required; both task stories remain marked `passes:true` and the existing regression/fan-in correction is complete.
+  - Audited PR #1870 with the thread-aware GraphQL review workflow; there are no conversation comments, reviews, or unresolved review threads.
+  - Confirmed the local branch is synchronized with current `origin/main` and the task diff remains limited to the PRD, append-only progress log, and plan-parallel regression test.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/factory/packaged/plan_parallel -run '^TestPackagedPlanParallelMergerReceivesEveryUniqueCompletedChildResult$' -count=3 -v -timeout 600s` — passed all three runs.
+  - `prd.json` parses with every story marked `passes:true`; `git diff --check` passes.
+  - The existing PR body is semantically identical to the current `prd.json`; it will be refreshed from the checked-in PRD during handoff.
+- **Learnings for future iterations:**
+  - Before final publication, fetch the live base, inspect the three-way task diff, and audit GraphQL review threads even when the flat PR comment list is empty.
+  - A completed task whose production correction is already on current main should retain its behavioral regression and evidence rather than duplicate the production fix.
 
 ## 2026-08-10 21:00 -07:00 - wsr-001-opening-record review feedback and current-main synchronization
 - What was implemented
@@ -7589,6 +7714,42 @@
   - The PR thread audit remains at zero unresolved review threads and zero formal reviews; the PR is open with all six stories still marked `passes:true`.
 - **Learnings for future iterations:**
   - When a CI failure is outside the implementation diff, rerun the exact test locally and record whether it reproduces before changing production behavior; isolated passes and a deterministic untouched baseline failure should remain a CI follow-up rather than an unrelated fix.
+## 2026-08-10 21:38 -07:00 - pp-merge-context-bug review follow-up
+- What was implemented
+  - Merged the freshly fetched current `origin/main` head `469204421` into PR #1870 as merge commit `e9fa81c95`, resolving the blocking `prd.json` and `progress.txt` conflicts.
+  - Preserved this task's authoritative PRD and both branches' append-only progress history.
+  - Reconciled project acceptance criterion 2 so the required red evidence is tied to the exact pre-fix revision when current main already contains the correction; the PRD now explicitly records why a current-main red run is impossible and retains the historical red, current green, and root-cause evidence.
+  - No additional fan-in production change was introduced; the existing behavioral regression and current-main correction remain the scoped implementation.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+  - Current-main merge files: `Makefile`, `cmd/ciclassify/main.go`, and `cmd/ciclassify/main_test.go`.
+- Verification
+  - `go test ./tests/functional/factory/packaged/plan_parallel -run '^TestPackagedPlanParallelMergerReceivesEveryUniqueCompletedChildResult$' -count=3 -v -timeout 600s` — passed all three runs.
+  - Focused scheduler/dispatcher orchestration packages — passed.
+  - `go test ./cmd/ciclassify -count=1` — passed.
+  - `make typecheck` — passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` — passed.
+  - `make test` — passed.
+  - `prd.json` parses, shared files contain no conflict markers, and `git diff --check` passed before the follow-up append.
+- **Learnings for future iterations:**
+  - When a PR is blocked by a moving base and shared bookkeeping conflicts, merge the live base first, keep the task PRD authoritative, union append-only progress histories, and make any impossible historical acceptance criterion explicit in the authoritative PRD rather than hiding the exception in a story note.
+  - The PR body must be refreshed from the resolved checked-in `prd.json` after any criterion reconciliation, then hosted checks and thread state must be re-audited on the new head.
+---
+## 2026-08-10 21:56 -07:00 - pp-merge-context-bug CI flake follow-up
+- What was implemented
+  - Made no product or test-code changes; investigated the initial hosted `Backend Functional Coverage` failure after the conflict-resolution push.
+  - Isolated the exact failing test, `TestFunctionalAPIServer_RuntimeLogDirectoryIsAProcessInput`, which failed because its runtime log did not yet contain `factory started`; the plan-parallel package and remaining functional package inventory passed.
+  - Reran that exact test 10 consecutive times locally; all ten passed.
+  - Reran only the failed hosted jobs from workflow run `31459255828`; the backend functional lane and downstream Verification Policy both passed.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Local isolation: `go test ./tests/functional/runtime_api -run '^TestFunctionalAPIServer_RuntimeLogDirectoryIsAProcessInput$' -count=10 -v -timeout 600s` — passed 10/10.
+  - Hosted rerun on head `b57b8c823`: Backend Functional Coverage passed in 5m8s; Verification Policy passed; all reported checks are terminal and successful.
+  - No source change was made because the isolated evidence identifies an unrelated transient runtime-log observation failure.
+- **Learnings for future iterations:**
+  - For a broad functional-coverage failure with one named runtime-log assertion, inspect the diagnostic artifact and timing summary, isolate the exact test repeatedly, and rerun only the failed jobs before touching unrelated product code.
 
 ## 2026-08-10 21:23 -07:00 - wsr-001-opening-record final pushed-head audit
 - What was implemented
@@ -7619,4 +7780,22 @@
   - The prior CI run `31459190668` was on the pre-sync head; fresh CI is required for `614fcff03`. The thread-aware review audit remains at zero unresolved threads and zero formal reviews.
 - **Learnings for future iterations:**
   - Fetch `origin/main` immediately before push; if it advances after local verification, merge it first and repeat the fast, focused, generated, and ratcheted checks on the actual replacement head.
+## 2026-08-10 22:02 -07:00 - pp-merge-context-bug latest-main synchronization follow-up
+- What was implemented
+  - Fetched and merged the live `origin/main` head `7dbeb472a` into PR #1870 as merge commit `051c7bb4e` after the base advanced again.
+  - Preserved the task-scoped `prd.json`, retained both branches' append-only progress history, and carried the current-main Worker Sessions/API/generated changes forward without adding another fan-in production change.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+  - Current-main synchronization files under API, Factory Runtime, Factory Sessions, Worker Sessions, Workers, HTTP/generated clients, and related functional tests.
+- Verification
+  - `go test ./tests/functional/factory/packaged/plan_parallel -run '^TestPackagedPlanParallelMergerReceivesEveryUniqueCompletedChildResult$' -count=3 -timeout 600s` — passed all three runs.
+  - `go test ./pkg/services/factory_runtime/internal/services/orchestration/scheduler ./pkg/services/factory_runtime/internal/services/orchestration/subsystems/... -count=1 -timeout 300s` — passed.
+  - `go test ./pkg/services/worker_sessions/... -count=1 -timeout 600s` — passed.
+  - `go test ./pkg/services/operator_settings/transports/cli -count=1 -timeout 300s` — passed.
+  - `make typecheck` — passed.
+  - `prd.json` parses, no conflict markers remain, and `git diff --check` passed before this append.
+- **Learnings for future iterations:**
+  - A PR can become conflicting again after a successful retry because `main` advances asynchronously; fetch the hosting ref immediately before each final push and repeat the shared-file merge protocol.
+  - When parallel Go test processes produce a tool subprocess failure, rerun the named package serially before treating it as a source regression.
 ---
