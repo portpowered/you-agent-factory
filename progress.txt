@@ -8313,3 +8313,17 @@
 - **Learnings for future iterations:**
   - When a broad functional lane fails on one named current-main timing test, isolate and repeat that test before changing feature code; if it passes repeatedly, rerun only the failed CI jobs and record the exact attempt.
 ---
+
+## 2026-08-10 23:40 -07:00 - e3-event-webhooks-004 final current-head audit
+- What was implemented
+  - Recorded the final current-head CI rerun; no product changes were needed because the only failure was the unrelated current-main `TestWorkWatchFollowsStateTransitionsUntilTerminal` timing test.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - The named work-watch test passed five consecutive local repetitions.
+  - All 18 required checks pass in CI run `31465088216` attempt 2 for pushed head `b499977821f04743105f19f482dd71a04b19da81`.
+  - PR #1850 is clean and mergeable against `ecd1d248731c9108dbbc4dafe2f28c4120043346`; the thread-aware review audit reports three historical conversation comments, zero formal reviews, and zero inline review threads.
+- **Learnings for future iterations:**
+  - Keep the final PRD audit anchored to the actual pushed implementation/metadata head and record transient unrelated CI flakes with their isolated local reproduction and rerun attempt.
+---
