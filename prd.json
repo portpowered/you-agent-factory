@@ -40,7 +40,7 @@
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Implemented the Factory webhook declaration contract, generated API/schema mappings, default delivery-policy resolver, structural/effective validation, secret-reference-only handling, clone preservation, and focused round-trip/default/validation coverage. Backend and UI typechecks plus Factory Definitions, HTTP, mapping, and contract verification pass."
+      "notes": "Implemented the Factory webhook declaration contract, generated API/schema mappings, default delivery-policy resolver, structural/effective validation, secret-reference-only handling, clone preservation, and focused round-trip/default/validation coverage. Added compatibility validation so dispatchStatuses must overlap a status realizable by at least one selected dispatch event type, with focused impossible-pair and mixed-filter tests. Backend and UI typechecks plus Factory Definitions, HTTP, mapping, and contract verification pass."
     },
     {
       "id": "e3-event-webhooks-002",

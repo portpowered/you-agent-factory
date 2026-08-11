@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- Cross-field event/status filters must validate that at least one configured pair is realizable, not only that each value is individually supported.
 - When a full functional lane fails in an unrelated package and the exact test passes repeatedly against the task head, rerun only the failed CI jobs before changing feature code.
 - When a required GitHub Actions job's steps are all successful but its check remains in progress, rerun only that job and re-audit the resulting terminal check before handoff.
 - When `gh pr view --comments` is blocked by an unavailable `read:project` scope, use the bundled thread-aware GraphQL query with the known repository and PR number; REST issue/review endpoints do not expose inline-thread resolution state.
@@ -11934,3 +11935,23 @@
   - Mirror the governing plan's exact rule inventory in a normative standard so future checker and reviewer work share stable IDs and boundaries.
   - On Windows, run repository-wide Go gates sequentially; concurrent invocations can exhaust the host and leave timeout evidence that differs from standalone gate results.
   - Fetch the live base immediately before the final merge and push; `origin/main` advanced again during this audit.
+
+## [2026-08-11 09:26:00 -07:00] - e3-event-webhooks-001 review feedback follow-up
+- What was implemented
+  - Added effective webhook filter validation so `dispatchStatuses` must overlap the status realizable by at least one selected dispatch event type: `FAILED` for `DISPATCH_RESPONSE`/`DISPATCH_RECONCILED` and `INTERRUPTED` for `DISPATCH_INTERRUPTED`.
+  - Preserved the existing rejection for dispatch statuses without any dispatch event type and added focused coverage for both impossible pairings plus valid mixed Work/dispatch filters.
+- Files changed
+  - `pkg/services/factory_definitions/internal/services/validation/impl/validate.go`
+  - `pkg/services/factory_definitions/internal/services/validation/impl/topology_guards_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/factory_definitions/internal/services/validation/impl -run 'TestWebhookTargets' -count=1` passed.
+  - `go test ./pkg/services/factory_definitions/... -count=1 -timeout 600s` passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` passed.
+  - `make test` passed.
+  - `git diff --check` passed.
+- **Learnings for future iterations:**
+  - Validation of cross-field filters must model realizable runtime outcomes; independent enum checks can accept declarations that silently match nothing.
+  - When a small validation branch crosses the maintainability threshold, extract the cohesive field-level validation into a focused helper and rerun the package gates.
+---
