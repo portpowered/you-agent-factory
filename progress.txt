@@ -11279,3 +11279,18 @@
 - **Learnings for future iterations:**
   - Reconcile the live base immediately before handoff, preserve the active task PRD, and union shared append-only logs even when another task changes the same bookkeeping files.
 ---
+## [2026-08-11 08:44:44 -07:00] - wsr-0023-capture-replay CI coverage follow-up
+- What was implemented
+  - Diagnosed the hosted Backend Unit Coverage failure in `TestPausedControl_TerminalizesWithoutRecancelingCompletedPauseDispatch` as a test-helper race: its publish signal fired before the session transitioned from `STARTING` to `RUNNING`.
+  - Added a deterministic admitted signal to the existing controlled Worker Sessions boundary and made the helper wait for that signal before issuing controls; no production behavior or arbitrary sleep was added.
+- Files changed
+  - `pkg/services/worker_sessions/internal/service/control_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Focused affected test passed 100 coverage-instrumented repetitions.
+  - Full `pkg/services/worker_sessions/internal/service` package coverage passed five repetitions at 98.7% statement coverage.
+  - Hosted run `31507332522` failure was isolated to the pre-fix race; Verification Policy failed only because the backend lane failed. Fresh hosted verification is required for this replacement head.
+- **Learnings for future iterations:**
+  - Test fakes that expose both publication and admission must provide separate readiness signals; controls should synchronize on the observable state transition they require, not merely on an earlier callback entry.
+---
