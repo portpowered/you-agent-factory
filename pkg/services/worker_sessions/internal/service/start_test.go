@@ -2545,8 +2545,9 @@ func assertNoProviderSessionHistory(t *testing.T, read events.ReadResult, forwar
 	assertLifecycleDraft(t, opening, workers.PhaseStarted, "", "opening")
 	assertLifecycleDraft(t, binding, workers.PhaseUpdated, "antigravity", "binding")
 	if output.Kind != workers.KindMessage || output.Phase != workers.PhaseCompleted || output.Provenance.Provider != "antigravity" ||
-		output.Provenance.Fidelity != workers.FidelityNormalized || output.Provenance.Delivery != workers.DeliveryNativeStream {
-		t.Fatalf("output = %#v, want normalized antigravity MESSAGE/COMPLETED", output)
+		output.Provenance.Fidelity != workers.FidelityFinalOnly || output.Provenance.Delivery != workers.DeliveryNativeFinal ||
+		output.Provenance.Representation != workers.RepresentationSnapshot {
+		t.Fatalf("output = %#v, want final-only antigravity MESSAGE/COMPLETED snapshot", output)
 	}
 	assertLifecycleDraft(t, terminal, workers.PhaseCompleted, "antigravity", "terminal")
 	if forwarded[0].ProviderSessionReference != nil || forwarded[0].ProviderSessionRef != nil {

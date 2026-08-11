@@ -224,12 +224,23 @@ func assertAgyWorkerSessionRecords(t *testing.T, records []factoryapi.WorkerSess
 			if firstProviderOutputIndex == -1 {
 				firstProviderOutputIndex = index
 			}
-			if workerEventProvider(event) != "antigravity" || workerEventProvenanceString(event, "delivery") != "NATIVE_STREAM" ||
-				workerEventProvenanceString(event, "representation") != "NOTIFICATION" || workerEventProvenanceString(event, "fidelity") != "NORMALIZED" {
-				t.Fatalf("Antigravity provider output provenance = %#v, want antigravity/NATIVE_STREAM/NOTIFICATION/NORMALIZED", event.Event.Payload)
+			if workerEventProvider(event) != "antigravity" {
+				t.Fatalf("Antigravity provider output attribution = %#v, want antigravity", event.Event.Payload)
 			}
-			if kind == "MESSAGE" && phase == "DELTA" {
-				t.Fatalf("Antigravity final-only Worker Session fabricated MESSAGE/DELTA: %#v", event.Event.Payload)
+			switch kind {
+			case "MESSAGE":
+				if workerEventProvenanceString(event, "delivery") != "NATIVE_FINAL" ||
+					workerEventProvenanceString(event, "representation") != "SNAPSHOT" || workerEventProvenanceString(event, "fidelity") != "FINAL_ONLY" {
+					t.Fatalf("Antigravity final message provenance = %#v, want NATIVE_FINAL/SNAPSHOT/FINAL_ONLY", event.Event.Payload)
+				}
+				if phase == "DELTA" {
+					t.Fatalf("Antigravity final-only Worker Session fabricated MESSAGE/DELTA: %#v", event.Event.Payload)
+				}
+			case "RUN":
+				if workerEventProvenanceString(event, "delivery") != "SYNTHESIZED" ||
+					workerEventProvenanceString(event, "representation") != "NOTIFICATION" || workerEventProvenanceString(event, "fidelity") != "LIFECYCLE_ONLY" {
+					t.Fatalf("Antigravity lifecycle provenance = %#v, want SYNTHESIZED/NOTIFICATION/LIFECYCLE_ONLY", event.Event.Payload)
+				}
 			}
 		}
 		if event.Event.SourceType == "worker_session_lifecycle" && phase == "COMPLETED" {
