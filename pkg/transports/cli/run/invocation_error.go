@@ -17,14 +17,11 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimecli "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/cli"
-	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	factoryconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
-	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
 )
 
 const (
@@ -198,8 +195,10 @@ func (client remoteInvocationClient) StartFactorySession(
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpointURL, bytes.NewReader(body))
 	if err != nil {
+
 		return factoryapi.FactorySessionExecutionResponse{}, &InvocationError{
-			Code:    RemoteDurableRequestInvalidCode,
+			Code: RemoteDurableRequestInvalidCode,
+
 			Message: fmt.Sprintf("build remote durable start request: %v", err),
 			Cause:   err,
 		}
@@ -398,6 +397,7 @@ func remoteDurableTransportError(
 		cfg.Verbose,
 		"remote durable start response endpointPath=%s error=unreachable durationMillis=%d",
 		remoteDurableStartPath,
+
 		durationMillis,
 	)
 	return &InvocationError{
@@ -546,6 +546,7 @@ func remoteDurableSourceFromRunConfig(
 	cfg RunConfig,
 ) (factoryapi.FactorySessionExecutionSource, *factoryapi.FactorySessionRequestedPolicy, error) {
 	factoryName := strings.TrimSpace(cfg.NamedFactoryName)
+
 	if factoryName == "" && cfg.NamedFactoryResolution != nil {
 		factoryName = strings.TrimSpace(cfg.NamedFactoryResolution.Name)
 	}
@@ -598,6 +599,7 @@ func remoteFactoryConfigPath(cfg RunConfig) (string, error) {
 	if configPath := strings.TrimSpace(cfg.FactoryConfigPath); configPath != "" {
 		return configPath, nil
 	}
+
 	if factoryRoot := strings.TrimSpace(cfg.Dir); factoryRoot != "" {
 		return filepath.Join(factoryRoot, interfaces.FactoryConfigFile), nil
 	}
@@ -689,388 +691,6 @@ func writeRemoteDurableStartResult(cfg RunConfig, response factoryapi.FactorySes
 	return err
 }
 
-func waitForRemoteInvocationResult(
-	ctx context.Context,
-	cfg RunConfig,
-	server string,
-	start factoryapi.FactorySessionExecutionResponse,
-	requestID string,
-	operation RemoteInvocationResultOperation,
-) (apisurface.FactoryInvocationResult, error) {
-	if ctx == nil {
-		return apisurface.FactoryInvocationResult{}, &InvocationError{
-			Code:    RemoteDurableResultCode,
-			Message: "wait for remote durable result: context is required",
-		}
-	}
-	if operation == nil {
-		return apisurface.FactoryInvocationResult{}, &InvocationError{
-			Code:    RemoteDurableResultCode,
-			Message: "wait for remote durable result: operation is required",
-		}
-	}
-	for {
-		result, err := operation.GetFactorySessionResult(ctx, RemoteInvocationResultRequest{
-			Server:      server,
-			SessionID:   start.SessionId,
-			Diagnostics: cfg.Diagnostics,
-			Verbose:     cfg.Verbose,
-		})
-		if err != nil {
-			return apisurface.FactoryInvocationResult{}, err
-		}
-		invocationResult, ready, poll, err := remoteInvocationResultFromDurable(
-			result,
-			start.SessionId,
-			requestID,
-		)
-		if err != nil {
-			return apisurface.FactoryInvocationResult{}, err
-		}
-		if ready {
-			return invocationResult, nil
-		}
-		if !poll {
-			return apisurface.FactoryInvocationResult{}, &InvocationError{
-				Code:    RemoteDurableResponseInvalidCode,
-				Message: "remote durable result ended without a terminal classification",
-			}
-		}
-
-		timer := time.NewTimer(remoteDurableResultPollInterval)
-		select {
-		case <-ctx.Done():
-			if !timer.Stop() {
-				<-timer.C
-			}
-			endpoint := safeRemoteEndpoint(server)
-			return apisurface.FactoryInvocationResult{}, &InvocationError{
-				Code: RemoteDurableResultCode,
-				Message: fmt.Sprintf(
-					"remote durable result wait canceled at %s: %v",
-					endpoint,
-					ctx.Err(),
-				),
-				Cause: ctx.Err(),
-			}
-		case <-timer.C:
-		}
-	}
-}
-
-func remoteInvocationResultFromDurable(
-	result factoryapi.FactorySessionResult,
-	expectedSessionID string,
-	requestID string,
-) (apisurface.FactoryInvocationResult, bool, bool, error) {
-	expectedSessionID = strings.TrimSpace(expectedSessionID)
-	actualSessionID := strings.TrimSpace(result.SessionId)
-	if expectedSessionID == "" || actualSessionID == "" || actualSessionID != expectedSessionID {
-		return apisurface.FactoryInvocationResult{}, false, false, &InvocationError{
-			Code:    RemoteDurableResponseInvalidCode,
-			Message: "remote durable result returned a session identity different from the accepted session",
-		}
-	}
-	if strings.TrimSpace(string(result.ResultStatus)) == "" {
-		return apisurface.FactoryInvocationResult{}, false, false, &InvocationError{
-			Code:    RemoteDurableResponseInvalidCode,
-			Message: fmt.Sprintf("remote durable result for session %s has no result status", actualSessionID),
-		}
-	}
-
-	parts := contentcontract.PartsFromGenerated(result.PrimaryResult)
-	status, code, message, terminalFailure := remoteDurableFailureClassification(result)
-	if terminalFailure {
-		return remoteDurableInvocationFailure(
-			requestID,
-			actualSessionID,
-			status,
-			code,
-			message,
-			parts,
-		), true, false, nil
-	}
-
-	if result.ResultStatus == factoryapi.FactorySessionResultStatusFinal {
-		if len(parts) == 0 {
-			return remoteDurableInvocationFailure(
-				requestID,
-				actualSessionID,
-				interfaces.InvocationTerminalStatusFailed,
-				string(factoryapi.INVOCATIONPRIMARYRESULTUNRESOLVED),
-				remoteDurableResultMessage(result, "primary result could not be resolved"),
-				nil,
-			), true, false, nil
-		}
-		return apisurface.FactoryInvocationResult{
-			RequestID:     strings.TrimSpace(requestID),
-			Status:        interfaces.InvocationTerminalStatusCompleted,
-			PrimaryResult: parts,
-			SessionID:     actualSessionID,
-		}, true, false, nil
-	}
-
-	if remoteDurableResultShouldPoll(result) {
-		return apisurface.FactoryInvocationResult{}, false, true, nil
-	}
-
-	return remoteDurableInvocationFailure(
-		requestID,
-		actualSessionID,
-		interfaces.InvocationTerminalStatusFailed,
-		string(factoryapi.INVOCATIONPRIMARYRESULTUNRESOLVED),
-		remoteDurableResultMessage(result, "primary result could not be resolved"),
-		parts,
-	), true, false, nil
-}
-
-func remoteDurableInvocationFailure(
-	requestID string,
-	sessionID string,
-	status interfaces.InvocationTerminalStatus,
-	code string,
-	message string,
-	parts []work.WorkContentPart,
-) apisurface.FactoryInvocationResult {
-	return apisurface.FactoryInvocationResult{
-		RequestID:     strings.TrimSpace(requestID),
-		Status:        status,
-		PrimaryResult: parts,
-		ErrorCode:     strings.TrimSpace(code),
-		Message:       strings.TrimSpace(message),
-		SessionID:     strings.TrimSpace(sessionID),
-	}
-}
-
-func remoteDurableFailureClassification(
-	result factoryapi.FactorySessionResult,
-) (interfaces.InvocationTerminalStatus, string, string, bool) {
-	lifecycle := remoteDurableLifecycleStatus(result.SessionStatus)
-	switch lifecycle {
-	case string(factoryapi.FactorySessionDurableLifecycleStatusAwaitingApproval):
-		return interfaces.InvocationTerminalStatusFailed,
-			string(factoryapi.INVOCATIONNEEDSHUMAN),
-			remoteDurableResultMessage(result, "factory session is awaiting human approval"),
-			true
-	case string(factoryapi.FactorySessionDurableLifecycleStatusPaused):
-		return interfaces.InvocationTerminalStatusFailed,
-			string(factoryapi.INVOCATIONPAUSED),
-			remoteDurableResultMessage(result, "factory session is paused; resume the session to continue waiting for the primary result"),
-			true
-	case string(factoryapi.FactorySessionDurableLifecycleStatusTimedOut):
-		return interfaces.InvocationTerminalStatusTimedOut,
-			string(factoryapi.INVOCATIONTIMEDOUT),
-			remoteDurableResultMessage(result, "invocation timed out while waiting for primary result"),
-			true
-	case string(factoryapi.FactorySessionDurableLifecycleStatusCanceled):
-		return interfaces.InvocationTerminalStatusCanceled,
-			string(factoryapi.INVOCATIONCANCELED),
-			remoteDurableResultMessage(result, "invocation was canceled while waiting for primary result"),
-			true
-	case string(factoryapi.FactorySessionDurableLifecycleStatusInterrupted), string(factoryapi.FactorySessionDurableLifecycleStatusTerminated):
-		return interfaces.InvocationTerminalStatusFailed,
-			string(factoryapi.INVOCATIONINTERRUPTED),
-			remoteDurableResultMessage(result, "invocation was interrupted before the primary result was available"),
-			true
-	case string(factoryapi.FactorySessionDurableLifecycleStatusFailed):
-		return interfaces.InvocationTerminalStatusFailed,
-			string(factoryapi.INVOCATIONRUNTIMEFAILURE),
-			remoteDurableResultMessage(result, "remote Factory Session failed before the primary result was available"),
-			true
-	}
-
-	for _, rawReason := range []string{remoteDurableAvailabilityReason(result), remoteDurableFailureReason(result)} {
-		reason := strings.ToUpper(strings.TrimSpace(rawReason))
-		switch {
-		case strings.Contains(reason, "BLOCKED"):
-			return interfaces.InvocationTerminalStatusFailed,
-				string(factoryapi.INVOCATIONBLOCKED),
-				remoteDurableResultMessage(result, "invocation was blocked before the primary result was available"),
-				true
-		case strings.Contains(reason, "NEEDS_HUMAN"), strings.Contains(reason, "NEEDS-HUMAN"), strings.Contains(reason, "APPROVAL"):
-			return interfaces.InvocationTerminalStatusFailed,
-				string(factoryapi.INVOCATIONNEEDSHUMAN),
-				remoteDurableResultMessage(result, "factory session is awaiting human approval"),
-				true
-		case strings.Contains(reason, "PAUSED"):
-			return interfaces.InvocationTerminalStatusFailed,
-				string(factoryapi.INVOCATIONPAUSED),
-				remoteDurableResultMessage(result, "factory session is paused; resume the session to continue waiting for the primary result"),
-				true
-		case strings.Contains(reason, "TIMEOUT"), strings.Contains(reason, "TIMED_OUT"):
-			return interfaces.InvocationTerminalStatusTimedOut,
-				string(factoryapi.INVOCATIONTIMEDOUT),
-				remoteDurableResultMessage(result, "invocation timed out while waiting for primary result"),
-				true
-		case strings.Contains(reason, "CANCELED"), strings.Contains(reason, "CANCELLED"):
-			return interfaces.InvocationTerminalStatusCanceled,
-				string(factoryapi.INVOCATIONCANCELED),
-				remoteDurableResultMessage(result, "invocation was canceled while waiting for primary result"),
-				true
-		case strings.Contains(reason, "INTERRUPT"), strings.Contains(reason, "TERMINAT"):
-			return interfaces.InvocationTerminalStatusFailed,
-				string(factoryapi.INVOCATIONINTERRUPTED),
-				remoteDurableResultMessage(result, "invocation was interrupted before the primary result was available"),
-				true
-		}
-	}
-
-	if result.ResultStatus == factoryapi.FactorySessionResultStatusFailedWithPartial {
-		return interfaces.InvocationTerminalStatusFailed,
-			string(factoryapi.INVOCATIONRUNTIMEFAILURE),
-			remoteDurableResultMessage(result, "remote Factory Session failed before the primary result was available"),
-			true
-	}
-	if result.ResultStatus == factoryapi.FactorySessionResultStatusPartial && lifecycle == string(factoryapi.FactorySessionDurableLifecycleStatusSucceeded) {
-		return interfaces.InvocationTerminalStatusFailed,
-			string(factoryapi.INVOCATIONPRIMARYRESULTUNRESOLVED),
-			remoteDurableResultMessage(result, "primary result could not be resolved"),
-			true
-	}
-	if result.ResultStatus == factoryapi.FactorySessionResultStatusUnavailable && !remoteDurableResultShouldPoll(result) {
-		return interfaces.InvocationTerminalStatusFailed,
-			string(factoryapi.INVOCATIONPRIMARYRESULTUNRESOLVED),
-			remoteDurableResultMessage(result, "primary result could not be resolved"),
-			true
-	}
-	return "", "", "", false
-}
-
-func remoteDurableResultShouldPoll(result factoryapi.FactorySessionResult) bool {
-	if result.Availability != nil && result.Availability.Retryable != nil && !*result.Availability.Retryable {
-		return false
-	}
-	lifecycle := remoteDurableLifecycleStatus(result.SessionStatus)
-	switch lifecycle {
-	case "", string(factoryapi.FactorySessionDurableLifecycleStatusQueued), string(factoryapi.FactorySessionDurableLifecycleStatusRunning), string(factoryapi.FactorySessionDurableLifecycleStatusResuming), string(factoryapi.FactorySessionDurableLifecycleStatusCanceling):
-		return result.ResultStatus == factoryapi.FactorySessionResultStatusNotReady || result.ResultStatus == factoryapi.FactorySessionResultStatusPartial || result.ResultStatus == factoryapi.FactorySessionResultStatusUnavailable
-	default:
-		return false
-	}
-}
-
-func remoteDurableResultMessage(result factoryapi.FactorySessionResult, fallback string) string {
-	if result.FailureDetail != nil && strings.TrimSpace(result.FailureDetail.Message) != "" {
-		return strings.TrimSpace(result.FailureDetail.Message)
-	}
-	if result.Availability != nil && result.Availability.Message != nil && strings.TrimSpace(*result.Availability.Message) != "" {
-		return strings.TrimSpace(*result.Availability.Message)
-	}
-	return fallback
-}
-
-func remoteDurableAvailabilityReason(result factoryapi.FactorySessionResult) string {
-	if result.Availability == nil || result.Availability.Reason == nil {
-		return ""
-	}
-	return *result.Availability.Reason
-}
-
-func remoteDurableFailureReason(result factoryapi.FactorySessionResult) string {
-	if result.FailureDetail == nil {
-		return ""
-	}
-	return string(result.FailureDetail.Reason)
-}
-
-func remoteDurableLifecycleStatus(status *factoryapi.FactorySessionDurableLifecycleStatus) string {
-	if status == nil {
-		return ""
-	}
-	return string(*status)
-}
-
-func writeRemoteInvocationResult(cfg RunConfig, result apisurface.FactoryInvocationResult) error {
-	if cfg.Output == nil {
-		cfg.Output = cfg.StartupOutput
-	}
-	if isResponseStreamOutputMode(cfg.InvocationOutputMode) {
-		if cfg.JSONOutput {
-			if err := writeRemoteInvocationNDJSON(cfg.Output, result); err != nil {
-				return err
-			}
-			if result.Status != interfaces.InvocationTerminalStatusCompleted {
-				return invocationResultFailure(result)
-			}
-			return nil
-		}
-		if result.Status != interfaces.InvocationTerminalStatusCompleted {
-			if err := writeRemoteInvocationHumanFailure(cfg.Output, result); err != nil {
-				return err
-			}
-			return invocationResultFailure(result)
-		}
-	}
-	if result.Status != interfaces.InvocationTerminalStatusCompleted {
-		return writeInvocationFailure(cfg, result, nil)
-	}
-	return writeInvocationSuccess(cfg, result, nil)
-}
-
-type remoteInvocationNDJSONRecord struct {
-	RecordType string                        `json:"recordType"`
-	Response   factoryapi.InvocationResponse `json:"response"`
-}
-
-func writeRemoteInvocationNDJSON(output io.Writer, result apisurface.FactoryInvocationResult) error {
-	if output == nil {
-		return fmt.Errorf("write remote invocation response stream: process output is required")
-	}
-	encoded, err := json.Marshal(remoteInvocationNDJSONRecord{
-		RecordType: "invocation_result",
-		Response:   apisurface.InvocationResponseFromResult(result),
-	})
-	if err != nil {
-		return fmt.Errorf("marshal remote invocation terminal record: %w", err)
-	}
-	_, err = fmt.Fprintln(output, string(encoded))
-	return err
-}
-
-func writeRemoteInvocationHumanFailure(output io.Writer, result apisurface.FactoryInvocationResult) error {
-	if output == nil {
-		return fmt.Errorf("write remote invocation outcome: process output is required")
-	}
-	if _, err := fmt.Fprintln(output, "--- invocation outcome ---"); err != nil {
-		return err
-	}
-	lines := []string{"status: " + string(result.Status)}
-	if code := strings.TrimSpace(result.ErrorCode); code != "" {
-		lines = append(lines, "error: "+code)
-	}
-	if message := strings.TrimSpace(result.Message); message != "" {
-		lines = append(lines, "message: "+message)
-	}
-	if sessionID := strings.TrimSpace(result.SessionID); sessionID != "" {
-		lines = append(lines, "session: "+sessionID)
-	}
-	if workID := strings.TrimSpace(result.WorkID); workID != "" {
-		lines = append(lines, "workId: "+workID)
-	}
-	if workName := strings.TrimSpace(result.WorkName); workName != "" {
-		lines = append(lines, "workName: "+workName)
-	}
-	if workState := strings.TrimSpace(result.WorkState); workState != "" {
-		lines = append(lines, "workState: "+workState)
-	}
-	for _, line := range lines {
-		if _, err := fmt.Fprintln(output, line); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// ResolveFactoryInvocationRequest exposes the same request projection used by
-// the local run operation. Callers must prepare the RunConfig through the
-// shared Work input preparation boundary before invoking this helper.
-func ResolveFactoryInvocationRequest(cfg RunConfig) (*factoryapi.InvocationRequest, bool, error) {
-	return resolveFactoryInvocationRequest(cfg)
-}
-
-// RunRemoteInvocation starts one server-owned durable Factory Session through
-// the selected remote adapter. It does not open local runtime state or use the
-// live-session compatibility invocation route.
 func RunRemoteInvocation(
 	ctx context.Context,
 	cfg RunConfig,
