@@ -10226,6 +10226,23 @@
   - `git merge-base --is-ancestor origin/main HEAD` — passed; `git diff --name-only origin/main...HEAD -- tests/functional/transport/server_binding` — empty.
   - PR #1857 has zero review threads, zero unresolved review threads, and zero formal reviews.
 - **Learnings for future iterations:**
-  - Keep the final progress entry physically at EOF when shared-file merges add incoming history; append-only logs are easiest to audit from their tail.
-  - A clean, conflict-free merge head can still remain review-blocked by an unchanged repository baseline test, so preserve the evidence and return `<CONTINUE>` rather than altering unrelated code.
+- Keep the final progress entry physically at EOF when shared-file merges add incoming history; append-only logs are easiest to audit from their tail.
+- A clean, conflict-free merge head can still remain review-blocked by an unchanged repository baseline test, so preserve the evidence and return `<CONTINUE>` rather than altering unrelated code.
+---
+## [2026-08-11 03:23:55 -07:00] - btrc-p1-root-injection-006 terminal retry audit
+- What was implemented
+  - Audited the existing PR #1857 after confirming all six PRD stories remain marked `passes:true`; no additional story implementation was necessary.
+  - Reproduced the first CI attempt's failures locally, confirmed both failing packages are outside the P1 diff, and reran only the failed CI jobs once.
+  - Updated `prd.json`'s delivery audit to the exact pushed head and terminal retry result.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Thread-aware GraphQL audit: 0 review threads, 0 unresolved threads, and 0 formal reviews; the PR body matches `prd.json` byte-for-byte.
+  - Branch head `93f7a1382f75be79412836524c1a8439ce11ec62` is synchronized with `origin/main` `dd87fd04db20d755f9b44c369aa79b8c3e600f5f`, mergeable, and the worktree is clean.
+  - Initial workflow `31480665825` had an intermittent `tests/functional/sessions/execution` drain failure and the unchanged server-binding assertion; the failed-job retry cleared the drain failure and reproduced only `TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput`.
+  - Local drain coverage passed five consecutive runs; local server-binding coverage reproduced the unchanged extra `API server error` diagnostic. `git diff --name-only origin/main...HEAD -- tests/functional/sessions/execution tests/functional/transport/server_binding` is empty.
+- **Learnings for future iterations:**
+  - When a broad functional lane fails on both a flaky session test and a deterministic untouched baseline assertion, rerun the failed jobs once before classifying the remaining failure; this separates transient coverage noise from a reproducible repository baseline.
+  - Keep the PRD delivery audit tied to the exact pushed head and retry result, while preserving all passing story flags and avoiding unrelated baseline-test changes.
 ---

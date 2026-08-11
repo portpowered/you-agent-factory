@@ -11,13 +11,13 @@
   },
   "deliveryAudit": {
     "pullRequest": 1857,
-    "head": "bfb2a2e8fd1170461d36b98b32de8d70119ae4b1",
+    "head": "93f7a1382f75be79412836524c1a8439ce11ec62",
     "base": "dd87fd04db20d755f9b44c369aa79b8c3e600f5f",
     "reviewThreads": 0,
     "unresolvedReviewThreads": 0,
     "formalReviews": 0,
     "latestWorkflow": {
-      "run": 31479393484,
+      "run": 31480665825,
       "result": "failure",
       "rerunResult": "failure",
       "taskScopedFailures": [],
@@ -26,7 +26,7 @@
           "job": "Backend Functional Coverage",
           "package": "tests/functional/transport/server_binding",
           "test": "TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput",
-          "evidence": "The untouched test expects one diagnostic line, while the current-main baseline emits the migration warning plus structured API-server diagnostics before the SERVER_BIND_FAILED payload."
+          "evidence": "The untouched test fails on the pushed head and on clean current main: it expects one diagnostic line, while the baseline emits the migration warning plus structured API-server diagnostics before the SERVER_BIND_FAILED payload. The failed-job retry cleared the intermittent sessions/execution drain failure; the P1 diff is empty for both packages."
         }
       ]
     }
@@ -144,7 +144,7 @@
       ],
       "priority": 6,
       "passes": true,
-      "notes": "Completed the review follow-up for the reusable root-process proof and the final value-only invocation cutover. Both representative success and provider-failure invocations enter through the public `you --json run` CLI on one root.BuildProcess/Process.Execute instance; the injected API server is observation-only for public session and Factory Event streams. The current tested merge head is `bfb2a2e8fd1170461d36b98b32de8d70119ae4b1`, based on synchronized origin/main `dd87fd04db20d755f9b44c369aa79b8c3e600f5f`; workflow `31479393484` and its failed-job rerun retain only the unchanged `tests/functional/transport/server_binding` baseline assertion. The synchronized rerun cleared the unrelated browser integration timeout, and all other product-scoped lanes pass; the P1 diff is empty for the remaining failing package. The thread-aware audit has zero unresolved review threads and zero formal reviews. All six P1 stories remain marked `passes:true`; the remaining follow-up is baseline CI resolution/acceptance and final PR handoff."
+      "notes": "Completed the review follow-up for the reusable root-process proof and the final value-only invocation cutover. Both representative success and provider-failure invocations enter through the public `you --json run` CLI on one root.BuildProcess/Process.Execute instance; the injected API server is observation-only for public session and Factory Event streams. The current tested merge head is `93f7a1382f75be79412836524c1a8439ce11ec62`, based on synchronized origin/main `dd87fd04db20d755f9b44c369aa79b8c3e600f5f`; workflow `31480665825` and its failed-job retry retain only the unchanged `tests/functional/transport/server_binding` baseline assertion. The retry cleared the intermittent sessions/execution drain failure, and all other product-scoped lanes pass; the P1 diff is empty for the remaining failing package. The thread-aware audit has zero unresolved review threads and zero formal reviews. All six P1 stories remain marked `passes:true`; the remaining follow-up is baseline CI resolution/acceptance and final PR handoff."
     }
   ]
 }
