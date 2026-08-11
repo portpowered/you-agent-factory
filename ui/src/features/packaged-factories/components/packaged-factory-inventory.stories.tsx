@@ -1,77 +1,46 @@
 import { expect, userEvent, within } from "storybook/test";
-
-import {
-  type PackagedFactoryPublicDataSource,
-  type PackagedFactoryPublicExport,
-  packagedFactoryManifestExport,
-  packagedFactorySchemaExport,
-} from "../lib/public-contract";
+import type { PackagedFactoryCatalogResponse } from "../../../api/packaged-factories";
 import { PackagedFactoryInventory } from "./packaged-factory-inventory";
 
-const schemaIdentity =
-  "https://schemas.portpowered.com/you/config/factory.schema.json";
 const entry = (slug: string) => ({
   description: {
-    type: "LOCALIZABLE_ASSET",
+    type: "LOCALIZABLE_ASSET" as const,
     value: `${slug} Packaged Factory`,
   },
-  json: {
-    locator: `generated/factories/${slug}/factory.json`,
-    sha256: "a".repeat(64),
-  },
+  examples: [
+    {
+      name: "default",
+      description: {
+        type: "LOCALIZABLE_ASSET" as const,
+        value: `Run ${slug}`,
+      },
+      args: { input: `Run ${slug}` },
+    },
+  ],
+  json: { id: `builtin-${slug}`, name: slug },
   name: `@you/${slug}`,
   project: `builtin-${slug}`,
   slug,
-  yaml: {
-    locator: `generated/factories/${slug}/factory.yaml`,
-    sha256: "b".repeat(64),
-  },
+  yaml: `id: builtin-${slug}\nname: ${slug}\n`,
 });
-const entryWithoutDescription = (slug: string) => {
-  const { description: _description, ...value } = entry(slug);
-  return value;
-};
-const schema = {
-  $id: schemaIdentity,
-  $schema: "https://json-schema.org/draft/2020-12/schema",
-  additionalProperties: false,
-  properties: {
-    id: { type: "string" },
-    name: { type: "string" },
-  },
-  required: ["id", "name"],
-  type: "object",
+
+const readyCatalog: PackagedFactoryCatalogResponse = {
+  factories: [entry("alpha"), entry("beta")],
 };
 
-function storySource(
-  manifest: unknown,
-  overrides: Partial<Record<PackagedFactoryPublicExport, unknown>> = {},
-): PackagedFactoryPublicDataSource {
-  const values: Partial<Record<PackagedFactoryPublicExport, unknown>> = {
-    [packagedFactoryManifestExport]: manifest,
-    [packagedFactorySchemaExport]: schema,
-    "@you-agent-factory/packaged-factories/factories/alpha.json":
-      '{"id":"builtin-alpha","name":"alpha"}',
-    "@you-agent-factory/packaged-factories/factories/alpha.yaml":
-      "id: builtin-alpha\nname: alpha\n",
-    "@you-agent-factory/packaged-factories/factories/beta.json":
-      '{"id":"builtin-beta","name":"beta"}',
-    "@you-agent-factory/packaged-factories/factories/beta.yaml":
-      "id: builtin-beta\nname: beta\n",
-    ...overrides,
-  };
+function catalogParameters(body: PackagedFactoryCatalogResponse) {
   return {
-    async read(specifier) {
-      return values[specifier];
+    dashboardApi: {
+      fetchMocks: [
+        {
+          method: "GET",
+          path: "/packaged-factories",
+          response: { body },
+        },
+      ],
     },
   };
 }
-
-const readyManifest = {
-  factories: [entry("alpha"), entry("beta")],
-  factorySchema: schemaIdentity,
-  formatVersion: "1",
-};
 
 export default {
   component: PackagedFactoryInventory,
@@ -87,7 +56,7 @@ export default {
 };
 
 export const ReadyResponsive = {
-  args: { source: storySource(readyManifest) },
+  parameters: catalogParameters(readyCatalog),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
     const beta = await canvas.findByRole("button", { name: /@you\/beta/ });
@@ -106,12 +75,7 @@ export const ReadyResponsive = {
 };
 
 export const Empty = {
-  args: {
-    source: storySource({
-      ...readyManifest,
-      factories: [],
-    }),
-  },
+  parameters: catalogParameters({ factories: [] }),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     await expect(
       within(canvasElement).findByText("No Packaged Factories are available."),
@@ -120,7 +84,17 @@ export const Empty = {
 };
 
 export const InvalidContract = {
-  args: { source: storySource({ factories: [] }) },
+  parameters: {
+    dashboardApi: {
+      fetchMocks: [
+        {
+          method: "GET",
+          path: "/packaged-factories",
+          response: { body: { factories: [{ invalid: true }] } },
+        },
+      ],
+    },
+  },
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     await expect(
       within(canvasElement).findByRole("alert"),
@@ -131,35 +105,29 @@ export const InvalidContract = {
 };
 
 export const SelectedArtifactFailureRecovery = {
-  args: {
-    source: storySource(readyManifest, {
-      "@you-agent-factory/packaged-factories/factories/alpha.json": undefined,
-    }),
-  },
+  parameters: catalogParameters({
+    factories: [entry("alpha"), { ...entry("beta"), yaml: "" }],
+  }),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
-    await expect(canvas.findByRole("alert")).resolves.toBeVisible();
+    await expect(
+      canvas.findByRole("heading", { level: 3, name: "@you/alpha" }),
+    ).resolves.toBeVisible();
     await userEvent.click(
       await canvas.findByRole("button", { name: /@you\/beta/ }),
     );
-    await expect(
-      canvas.findByRole("heading", { level: 3, name: "@you/beta" }),
-    ).resolves.toBeVisible();
+    await expect(canvas.findByRole("alert")).resolves.toHaveTextContent(
+      "This Factory could not be loaded. Select another Factory to continue.",
+    );
   },
 };
 
 export const MissingMetadata = {
-  args: {
-    source: storySource({
-      ...readyManifest,
-      factories: [entryWithoutDescription("alpha")],
-    }),
-  },
+  parameters: catalogParameters({
+    factories: [{ ...entry("alpha"), examples: [] }],
+  }),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
-    await expect(
-      canvas.findAllByText("Description unavailable"),
-    ).resolves.toHaveLength(2);
     await expect(
       canvas.findByText("No invocation examples are available."),
     ).resolves.toBeVisible();
@@ -171,8 +139,8 @@ export const CopyFailure = {
     copyText: async () => {
       throw new Error("Clipboard permission denied.");
     },
-    source: storySource(readyManifest),
   },
+  parameters: catalogParameters(readyCatalog),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(

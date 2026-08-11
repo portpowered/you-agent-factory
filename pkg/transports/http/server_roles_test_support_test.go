@@ -71,5 +71,5 @@ func newServerFromRoles(
 			providersessionshttp.NewAdapter(providerSessions), logger,
 		)
 	}
-	return NewServer(handler, workAdapter, modelsHTTP, providerSessionsHTTP, logger)
+	return NewServer(handler, workAdapter, modelsHTTP, providerSessionsHTTP, nil, logger)
 }
