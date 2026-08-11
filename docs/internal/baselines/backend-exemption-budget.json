@@ -207,12 +207,6 @@
     },
     {
       "rule": "backendsizecheck:ignore-file",
-      "target": "pkg/transports/acp/internal/stdio/prompt_stream_test.go",
-      "owner": "backend-maintainers",
-      "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption."
-    },
-    {
-      "rule": "backendsizecheck:ignore-file",
       "target": "pkg/transports/acp/internal/stdio/server_test.go",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption."
@@ -226,12 +220,6 @@
     {
       "rule": "backendsizecheck:ignore-file",
       "target": "pkg/transports/acp/internal/stdio/session_prompt.go",
-      "owner": "backend-maintainers",
-      "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption."
-    },
-    {
-      "rule": "backendsizecheck:ignore-file",
-      "target": "pkg/transports/acp/internal/stdio/session_prompt_test.go",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption."
     },
@@ -654,6 +642,12 @@
       "target": "pkg/transports/acp/internal/stdio/session_close_test.go#TestHandleSessionCloseCommittedIntentSafetyCases",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption."
+    },
+    {
+      "rule": "backendsizecheck:ignore-function",
+      "target": "pkg/transports/acp/internal/stdio/session_prompt_cancellation_test.go#TestHandleSessionCancelCommittedSafetyCases",
+      "owner": "backend-maintainers",
+      "removalReason": "pre-existing baseline debt recorded 2026-08-08; preserve the move-only split and remove this exemption when the safety cases are refactored."
     },
     {
       "rule": "backendsizecheck:ignore-function",
@@ -2247,19 +2241,19 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/transports/acp/internal/stdio/prompt_stream_test.go#TestLiveDrainTurnUpdatesRetriesGapAcknowledgementConflictBeforeCatchUp",
+      "target": "pkg/transports/acp/internal/stdio/prompt_stream_delivery_test.go#TestDeliverBoundWorkerChildProjectionPreservesNotificationOutcomes",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/transports/acp/internal/stdio/response_bridge_test.go#TestDeliverBoundWorkerChildProjectionPreservesNotificationOutcomes",
+      "target": "pkg/transports/acp/internal/stdio/prompt_stream_delivery_test.go#TestStreamTurnUpdatesBoundsNoisyChildWithoutReducingSiblingBudget",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/transports/acp/internal/stdio/response_bridge_test.go#TestStreamTurnUpdatesBoundsNoisyChildWithoutReducingSiblingBudget",
+      "target": "pkg/transports/acp/internal/stdio/prompt_stream_gap_test.go#TestLiveDrainTurnUpdatesRetriesGapAcknowledgementConflictBeforeCatchUp",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
     },
@@ -2283,13 +2277,13 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/transports/acp/internal/stdio/session_prompt_test.go#TestHandleSessionCancelCommitsCapturedIntentBeforeFactoryCancel",
+      "target": "pkg/transports/acp/internal/stdio/session_prompt_cancellation_test.go#TestHandleSessionCancelCommitsCapturedIntentBeforeFactoryCancel",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/transports/acp/internal/stdio/session_prompt_test.go#TestHandleSessionCancelDependencyFailureLeavesTurnRunningAndRetryable",
+      "target": "pkg/transports/acp/internal/stdio/session_prompt_cancellation_test.go#TestHandleSessionCancelDependencyFailureLeavesTurnRunningAndRetryable",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
     },
@@ -2733,12 +2727,6 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-file-lines",
-      "target": "pkg/transports/acp/internal/stdio/prompt_stream_test.go",
-      "owner": "backend-maintainers",
-      "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-file-lines",
       "target": "pkg/transports/acp/internal/stdio/server_test.go",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
@@ -2752,12 +2740,6 @@
     {
       "rule": "pkgmaintcheck:ignore-file-lines",
       "target": "pkg/transports/acp/internal/stdio/session_prompt.go",
-      "owner": "backend-maintainers",
-      "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-file-lines",
-      "target": "pkg/transports/acp/internal/stdio/session_prompt_test.go",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
     },
@@ -3147,7 +3129,7 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-function-lines",
-      "target": "pkg/transports/acp/internal/stdio/session_prompt_test.go#TestHandleSessionCancelCommittedSafetyCases",
+      "target": "pkg/transports/acp/internal/stdio/session_prompt_cancellation_test.go#TestHandleSessionCancelCommittedSafetyCases",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
     },
