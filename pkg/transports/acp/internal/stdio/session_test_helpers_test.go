@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -506,6 +507,22 @@ func (f *fakeFactoryTargetService) SubscribeFactoryResponseEvents(
 	defer f.mu.Unlock()
 	return f.responseCursor, f.responseErr
 }
+func sequentialIDGenerator(prefix string) func() string {
+	n := 0
+	return func() string {
+		n++
+		return prefix + "-" + strconv.Itoa(n)
+	}
+}
+
+func fixedClock(at time.Time) func() time.Time {
+	return func() time.Time { return at }
+}
+
+func newChatSessionsStore(prefix string) (chatsessions.Service, error) {
+	return newBoundarySensitiveChatSessionsStore(prefix)
+}
+
 type stubEventsAppender struct{}
 func (stubEventsAppender) Append(context.Context, events.AppendRequest) (events.AppendResult, error) {
 	return events.AppendResult{}, nil

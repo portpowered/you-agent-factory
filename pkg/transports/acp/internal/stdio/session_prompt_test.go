@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -19,25 +18,12 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/identity"
 )
 
-// Keep this boundary-sensitive real Chat Sessions construction at the
-// pre-existing prompt test path while the shared helper owns the wrapper and
-// all other package fixtures. The move-only split must retain the exact
-// current-main migration edge until the owning composition boundary changes.
-func sequentialIDGenerator(prefix string) chatsessionswire.IDGenerator {
-	n := 0
-	return func() string {
-		n++
-		return prefix + "-" + strconv.Itoa(n)
-	}
-}
-
-func fixedClock(at time.Time) chatsessionswire.Clock {
-	return func() time.Time { return at }
-}
-
-func newChatSessionsStore(prefix string) (chatsessions.Service, error) {
-	// The direct constructor is pre-existing migration debt; keep its recorded
-	// source location stable while the surrounding tests move.
+// Keep this boundary-sensitive real Chat Sessions constructor at the
+// pre-existing prompt test path while session_test_helpers_test.go owns the
+// shared fixture entry point and deterministic ID/clock dependencies. The
+// move-only split must retain the exact current-main migration edge until the
+// owning composition boundary changes.
+func newBoundarySensitiveChatSessionsStore(prefix string) (chatsessions.Service, error) {
 //line pkg/transports/acp/internal/stdio/session_prompt_test.go:2140
 	return chatsessionswire.NewService(
 		sequentialIDGenerator(prefix),
