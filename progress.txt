@@ -9311,3 +9311,21 @@
   - Provider-neutral progress fragments can lose native fidelity when they are flattened before Worker publication; provider-specific final-only mappings must preserve final output facts and classify only lifecycle records as synthesized.
   - Portable WSR evidence is strongest when the test exports the exact durable root-built snapshot and checks replay side effects through the injected provider edge, rather than treating fixture labels as sufficient evidence.
 ---
+
+## [2026-08-11 06:54:05 -07:00] - wsr-0023-capture-replay-003 hosted CI follow-up
+- What was implemented
+  - Addressed the failed `Backend Functional Coverage` gate by removing the functional recording fixtures' direct `pkg/initializer/application` dependency; both WSR-FT-004/005 and WSR-FT-006 now obtain the public durable reader directly from their inferred `root.BuildProcess` result.
+  - Pushed the focused fix as commit `67b03148d` to PR #1876.
+- Files changed
+  - `tests/functional/workers/inference/recording_gate_test.go`
+  - `tests/functional/workers/inference/portable_recording_test.go`
+  - `progress.txt`
+- Verification
+  - `make functional-boundary-check` — passed.
+  - WSR-FT-003/004/005/006 functional tests — passed.
+  - The same WSR-FT-003/004/005/006 suite under `go test -race` — passed.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - The functional-boundary checker evaluates all changed functional-test imports, including shared helper files; keep root-built tests from naming the neutral initializer package by returning the narrow public capability they consume.
+  - A failure before functional assertions can still be a repository policy failure: inspect the earliest workflow command and reproduce that exact gate before changing feature behavior.
+---
