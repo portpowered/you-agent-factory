@@ -9814,3 +9814,21 @@
   - Run broad Go verification serially on this host; concurrent worktrees can turn a cold package compile into a long-running process without useful output.
   - Treat the Bun type-definition failure as an environment prerequisite, not a source regression, until `ui/node_modules/@types/bun` is available.
 ---
+## [2026-08-11 04:03:28 -07:00] - dwro-s7-placement-grammar-006
+- What was implemented
+  - Addressed the first post-push CI failure in Backend Functional Coverage by updating established CLI functional helpers to express remote Factory Session controls with explicit root `--remote` alongside `--server`.
+  - Kept session read, list, and dispatch inspection helpers on their existing server-backed read routes; only pause, resume, cancel, and terminate control calls gained the placement selector.
+- Files changed
+  - `tests/functional/cli/root_discovery/root_discovery_test.go`
+  - `tests/functional/cli/session_resume/resume_smoke_test.go`
+  - `tests/functional/orchestration/javascript/loading/named_factory_test.go`
+  - `tests/functional/sessions/cli/resolved_session_family_test.go`
+  - `progress.txt`
+- Verification
+  - CI run `31484034270` identified the stale lifecycle fixtures; the other required lanes passed, while the policy lane failed only because Backend Functional Coverage failed.
+  - `go test -p=1 ./tests/functional/cli/session_resume ./tests/functional/orchestration/javascript/loading ./tests/functional/sessions/cli ./tests/functional/cli/root_discovery -count=1 -timeout 900s` — passed.
+  - `go test -p=1 ./tests/functional/workers/inference/codex -run '^TestCodexGoldenDerivesProviderSessionAndResponseEvents$' -count=3 -timeout 600s` — passed; the CI-only Codex golden mismatch was not reproducible in isolation.
+- **Learnings for future iterations:**
+  - `--server` remains the endpoint selector for session inspection, but lifecycle mutation fixtures must opt into `--remote` explicitly under the placement grammar.
+  - When CI reports several unrelated functional failures, extract the exact `Action:fail` records first; the first batch here shared the same stale control-routing assumption.
+---
