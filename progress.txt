@@ -6841,3 +6841,28 @@
 - **Learnings for future iterations:**
   - For a shared task bookkeeping conflict, keep the branch-specific PRD authoritative and append the branch-specific progress entries after the current-main history; validate both parseability and marker-free output before staging.
 ---
+## 2026-08-10 21:29 -07:00 - cli-error-classification-and-run-output-004
+- What was implemented
+  - Wired human progress output through the explicit terminal policy and stderr channel, preserving response-stream progress for ordinary one-shot invocations while suppressing explicit quiet-mode progress.
+  - Added deterministic collision-resolved worker colors over the varied ANSI palette and retained cursor-free, ANSI-free behavior for redirected, non-interactive, and structured output.
+  - Documented the interactive spinner/color/channel behavior in the packaged run guide and synchronized the branch with `origin/main` at `469204421`.
+- Files changed
+  - `docs/reference/run.md`
+  - `pkg/services/factory_visualization/transports/cli/factory_event_renderer.go`
+  - `pkg/services/factory_visualization/transports/cli/factory_event_support.go`
+  - `pkg/services/factory_visualization/transports/cli/human_worker_progress.go`
+  - `pkg/services/factory_visualization/transports/cli/service_test.go`
+  - `pkg/transports/cli/root.go`
+  - `pkg/transports/cli/root_run_factory_prompt_test.go`
+  - `pkg/transports/cli/root_terminal_policy_test.go`
+  - `prd.json`
+  - `progress.txt`
+  - regenerated CLI/package contract artifacts
+- Verification
+  - Focused CLI, renderer, functional output, and race tests passed after the final rebase.
+  - `make test`, `make typecheck`, `make cli-manifest-check`, `make docs-reference-smoke`, `make backend-size pkg-maint pkg-file-count pkg-structure`, `make vet`, and `git diff --check` passed.
+  - All four PRD stories are marked `passes:true`; generated artifacts are current and no merge conflict markers remain.
+- **Learnings for future iterations:**
+  - When a command has a quiet effective rendering policy but still emits an intentional one-shot response stream, keep progress gating tied to the explicit terminal policy so customer-visible response progress is not accidentally removed.
+  - Assign concurrent worker colors with a deterministic collision resolver rather than relying only on a hash modulo palette size; this preserves stable identity while keeping simultaneous workers visually distinct.
+---
