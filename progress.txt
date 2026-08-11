@@ -4,6 +4,7 @@
 - Cross-host graph semantics should enter React Flow nodes as a disposable package projection and render through the shared workstation node; host-specific activity metadata must remain decoration, not classification.
 - Normalize trimmed blank durable identifiers to absent before authored-versus-runtime joins; only non-empty IDs select identity, otherwise use the documented legacy-name fallback.
 - First-party packaged Factory semantic checks should consume parsed canonical definitions inside `internal/packagedfactorycatalog`; keep customer-authored and JavaScript Factory validation unchanged.
+- Keep packaged-installation validation on an optional catalog-owned preparation hook; ordinary named-Factory persistence stays strict while only exact first-party identities may filter named lifecycle-bridge targets.
 - A lifecycle-only Work state is valid only through a named production bridge that matches the runtime contract and has direct behavioral test evidence; do not use comment-only allowlists.
 - When a catalog audit finds a lifecycle state that the current runtime does not emit, leave it as explicit follow-up work rather than relaxing validation with a guessed bridge; source comments and stale diagrams are not behavioral evidence.
 - Treat a full functional-coverage failure in an untouched fixture as a characterization problem first: repeat the exact test locally, then rerun only the failed coverage and dependent-policy jobs if it passes.
@@ -8569,4 +8570,25 @@
   - `make pkg-maint` — failed on the same two file-line violations.
 - **Learnings for future iterations:**
   - The remaining quality-gate work is an isolated backend file split; preserve the validator behavior and its existing test evidence while moving cohesive helpers/tests under the established package boundaries.
+---
+
+## [2026-08-11 02:19 -07:00] - graph-workstation-semantics review follow-up
+- What was implemented
+  - Restored the shared customer Factory validator to require completion states without inferring exceptions from CRON self-loops or composite topology shape.
+  - Kept the two lifecycle exceptions in `internal/packagedfactorycatalog`, tied them to exact `builtin-loop`/`builtin-quorum` identities and named workstation bridges, and routed packaged installation through a catalog-owned preparation hook only.
+  - Split the oversized topology validator test/helpers so the backend-size and package-maintainability gates pass, while preserving observable missing-completion assertions.
+  - Preserved the blank workstation-ID editor join fix from the prior review iteration.
+- Files changed
+  - `internal/packagedfactorycatalog/{artifacts.go,definition_catalog_validation.go,factory_validation.go,inventory.go,work_state_roles.go,work_state_roles_test.go}`
+  - `pkg/services/factory_definitions/internal/services/catalog/persistence/service.go`
+  - `pkg/services/factory_definitions/internal/services/distribution/packagedinstallation/service.go`
+  - `pkg/services/factory_definitions/internal/services/validation/impl/{topology_validator_test.go,validate_structural.go,work_type_outcome_test.go}`
+  - `progress.txt`
+- Verification
+  - `go test ./internal/packagedfactorycatalog ./pkg/services/factory_definitions/... -count=1` — passed.
+  - `make backend-size pkg-maint` — passed.
+  - `make test` — passed.
+- **Learnings for future iterations:**
+  - Publication-specific lifecycle allowances must be applied at the packaged-installation boundary; filtering the shared customer validator would make topology guesses valid for ordinary authored Factories.
+  - The packaged installer can preserve strict generic persistence by detecting a narrow optional preparation capability on the catalog persistence implementation, with test doubles continuing to use the ordinary path.
 ---

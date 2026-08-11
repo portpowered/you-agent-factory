@@ -8,7 +8,12 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
-const invocationScheduleOverlapSkipBridge = "automations.invocation_schedule.overlap_skip"
+const (
+	invocationScheduleOverlapSkipBridge  = "automations.invocation_schedule.overlap_skip"
+	loopControllerLifecycleBridge        = "factory.loop.controller_session_lifecycle"
+	quorumCompositeParentLifecycleBridge = "factory.quorum.composite_parent_lifecycle"
+	loopFactoryProject                   = "builtin-loop"
+)
 
 // ValidateFirstPartyWorkStateRoles verifies the semantic role inventory for a
 // parsed first-party Petri Factory. It is intentionally owned by the packaged
@@ -29,7 +34,7 @@ func ValidateFirstPartyWorkStateRoles(
 		for _, state := range workType.States {
 			identity := workStateIdentity(workType.Name, state.Name)
 			_, referenced := used[identity]
-			if referenced || lifecycleBridgeName(cfg, workType.Name, state.Name) != "" {
+			if referenced || lifecycleBridgeName(slug, cfg, workType.Name, state.Name) != "" {
 				continue
 			}
 			disconnected = append(disconnected, identity)
@@ -79,17 +84,82 @@ func addIOStates(used map[string]struct{}, routes []factorydefinitions.IOConfig)
 }
 
 func lifecycleBridgeName(
+	slug string,
 	cfg *factorydefinitions.FactoryConfig,
 	workTypeName string,
 	stateName string,
 ) string {
-	if stateName != "skipped" {
+	if slug != "loop" || workTypeName != "scheduled-execution" || stateName != "skipped" {
 		return ""
 	}
 	if !invocationScheduleOverlapSkipImplemented(cfg, workTypeName) {
 		return ""
 	}
 	return invocationScheduleOverlapSkipBridge
+}
+
+func firstPartyLifecycleBridgeName(
+	slug string,
+	cfg *factorydefinitions.FactoryConfig,
+	workTypeName string,
+) string {
+	switch {
+	case slug == "loop" &&
+		strings.TrimSpace(cfg.Project) == loopFactoryProject &&
+		workTypeName == "loop-controller" &&
+		loopControllerLifecycleImplemented(cfg):
+		return loopControllerLifecycleBridge
+	case slug == "quorum" &&
+		strings.TrimSpace(cfg.Project) == factorydefinitions.PackagedQuorumFactoryProject &&
+		workTypeName == "task" &&
+		quorumCompositeParentLifecycleImplemented(cfg):
+		return quorumCompositeParentLifecycleBridge
+	default:
+		return ""
+	}
+}
+
+func loopControllerLifecycleImplemented(cfg *factorydefinitions.FactoryConfig) bool {
+	for _, workstation := range cfg.Workstations {
+		if workstation.Name != "schedule-loop-request" ||
+			workstation.Kind != factorydefinitions.WorkstationKindCron ||
+			workstation.Cron == nil {
+			continue
+		}
+		if !hasIO(workstation.Inputs, "loop-controller", "active") ||
+			!hasIO(workstation.Outputs, "loop-controller", "active") ||
+			!hasIO(workstation.Outputs, "scheduled-execution", "init") ||
+			!hasIO(workstation.OnFailure, "loop-controller", "failed") {
+			continue
+		}
+		return true
+	}
+	return false
+}
+
+func quorumCompositeParentLifecycleImplemented(cfg *factorydefinitions.FactoryConfig) bool {
+	for _, workstation := range cfg.Workstations {
+		if workstation.Name != "split-quorum" || workstation.Type != factorydefinitions.WorkstationTypeLogical {
+			continue
+		}
+		if !hasIO(workstation.Inputs, "task", "init") ||
+			!hasIO(workstation.Outputs, "task", "quorum-context") ||
+			!hasIO(workstation.Outputs, "quorum-branch-a", "init") ||
+			!hasIO(workstation.Outputs, "quorum-branch-b", "init") {
+			continue
+		}
+		return true
+	}
+	return false
+}
+
+func hasIO(routes []factorydefinitions.IOConfig, workTypeName, stateName string) bool {
+	for _, route := range routes {
+		if route.WorkTypeName == workTypeName && route.StateName == stateName {
+			return true
+		}
+	}
+	return false
 }
 
 // invocationScheduleOverlapSkipImplemented mirrors the production automation
@@ -102,7 +172,9 @@ func invocationScheduleOverlapSkipImplemented(
 	workTypeName string,
 ) bool {
 	for _, workstation := range cfg.Workstations {
-		if workstation.Kind != factorydefinitions.WorkstationKindCron || workstation.Cron == nil {
+		if workstation.Name != "schedule-loop-request" ||
+			workstation.Kind != factorydefinitions.WorkstationKindCron ||
+			workstation.Cron == nil {
 			continue
 		}
 		controllerTypes := make(map[string]struct{}, len(workstation.Inputs))

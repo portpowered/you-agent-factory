@@ -32,6 +32,7 @@
       ],
       "priority": 1,
       "passes": true,
+      "reviewFollowUp": "Restored the shared customer validator's strict completion-state rule and kept recurring-controller and composite-parent allowances inside the first-party catalog. Packaged installation now uses a catalog-owned preparation hook that filters only exact builtin-loop/builtin-quorum lifecycle bridge targets; ordinary named-Factory persistence remains strict. The topology validator tests were split so backend-size and package-maintainability gates pass.",
       "notes": "Implemented the package-owned semantic role validator and focused tests for canonical initial, routed, classification, failure, rejection, continuation, explicit-return, JavaScript-scope, and invocation-schedule overlap states. The first-party catalog gate is wired to the real BuildCatalog path, with route-proven canonical exceptions for the recurring controller and composite-parent lifecycle shapes; ordinary nonterminal Work types remain rejected. Added regression coverage proving disconnected declarations are rejected with the Factory slug and exact workType:state identities. Acceptance audit completed with the focused catalog, canonical-validator, automation, generated-catalog drift, and diff checks passing."
     },
     {

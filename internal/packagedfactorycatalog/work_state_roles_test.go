@@ -99,13 +99,14 @@ func TestValidateFirstPartyWorkStateRolesRejectsDisconnectedStateWithExactIdenti
 
 func TestValidateFirstPartyWorkStateRolesAcceptsInvocationScheduleOverlapBridge(t *testing.T) {
 	cfg := &factorydefinitions.FactoryConfig{
+		Project: "builtin-loop",
 		WorkTypes: []factorydefinitions.WorkTypeConfig{
 			{
 				Name:   "controller",
 				States: []factorydefinitions.StateConfig{{Name: "active", Type: factorydefinitions.StateTypeInitial}},
 			},
 			{
-				Name: "scheduled",
+				Name: "scheduled-execution",
 				States: []factorydefinitions.StateConfig{
 					{Name: "init", Type: factorydefinitions.StateTypeInitial},
 					{Name: "complete", Type: factorydefinitions.StateTypeTerminal},
@@ -115,11 +116,11 @@ func TestValidateFirstPartyWorkStateRolesAcceptsInvocationScheduleOverlapBridge(
 		},
 		InvocationReturn: &factorydefinitions.InvocationReturnConfig{
 			Policy:        factorydefinitions.InvocationReturnPolicyExplicit,
-			WorkTypeName:  "scheduled",
+			WorkTypeName:  "scheduled-execution",
 			TerminalState: "complete",
 		},
 		Workstations: []factorydefinitions.FactoryWorkstationConfig{{
-			Name: "schedule",
+			Name: "schedule-loop-request",
 			Kind: factorydefinitions.WorkstationKindCron,
 			Cron: &factorydefinitions.CronConfig{Every: "1m"},
 			Inputs: []factorydefinitions.IOConfig{{
@@ -128,12 +129,12 @@ func TestValidateFirstPartyWorkStateRolesAcceptsInvocationScheduleOverlapBridge(
 			Outputs: []factorydefinitions.IOConfig{{
 				WorkTypeName: "controller", StateName: "active",
 			}, {
-				WorkTypeName: "scheduled", StateName: "init",
+				WorkTypeName: "scheduled-execution", StateName: "init",
 			}},
 		}},
 	}
 
-	if err := packagedfactorycatalog.ValidateFirstPartyWorkStateRoles("synthetic-loop", cfg); err != nil {
+	if err := packagedfactorycatalog.ValidateFirstPartyWorkStateRoles("loop", cfg); err != nil {
 		t.Fatalf("ValidateFirstPartyWorkStateRoles() error = %v, want named scheduler bridge to accept scheduled:skipped: %v", err, err)
 	}
 }

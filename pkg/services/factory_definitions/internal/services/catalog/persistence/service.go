@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	authoringlayoutpersist "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/persist"
 	catalognamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedpaths"
@@ -122,6 +123,43 @@ func (s *service) PrepareFactoryLayout(
 	segment string,
 	payload []byte,
 ) (*factorydefinitions.PreparedFactoryLayoutPayload, error) {
+	return s.prepareFactoryLayout(ctx, segment, payload, nil)
+}
+
+// PreparePackagedFactoryLayout is the catalog-owned preparation path used by
+// packaged installation. It keeps customer persistence on the strict shared
+// validator while allowing only the named first-party lifecycle bridges.
+func (s *service) PreparePackagedFactoryLayout(
+	ctx context.Context,
+	segment string,
+	payload []byte,
+) (*factorydefinitions.PreparedFactoryLayoutPayload, error) {
+	return s.prepareFactoryLayout(
+		ctx,
+		segment,
+		payload,
+		func(
+			request factorydefinitions.DefinitionValidationRequest,
+			result factorydefinitions.ValidationResult,
+		) factorydefinitions.ValidationResult {
+			return packagedfactorycatalog.FilterFirstPartyLifecycleBridgeTargets(
+				request.Config.Name,
+				request.Config,
+				result,
+			)
+		},
+	)
+}
+
+func (s *service) prepareFactoryLayout(
+	ctx context.Context,
+	segment string,
+	payload []byte,
+	filter func(
+		factorydefinitions.DefinitionValidationRequest,
+		factorydefinitions.ValidationResult,
+	) factorydefinitions.ValidationResult,
+) (*factorydefinitions.PreparedFactoryLayoutPayload, error) {
 	if s == nil || s.prepare == nil {
 		return nil, fmt.Errorf("Factory Definitions layout preparer is required")
 	}
@@ -145,6 +183,9 @@ func (s *service) PrepareFactoryLayout(
 			return nil, err
 		}
 		return nil, fmt.Errorf("%w: %v", factorydefinitions.ErrInvalidNamedFactory, err)
+	}
+	if filter != nil {
+		result = filter(request, result)
 	}
 	if targets := result.BlockingTargets(); len(targets) != 0 {
 		return nil, factorydefinitions.NewBlockingFactoryLoadError(
