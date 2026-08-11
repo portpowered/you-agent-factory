@@ -13461,3 +13461,19 @@
 - **Learnings for future iterations:**
   - A clean local merge is not enough for delivery: push the exact head, confirm GitHub’s mergeability, and keep PRD delivery evidence synchronized with the workflow head and current base.
 ---
+## [2026-08-11 10:23:00 -07:00] - btrc-p1-root-injection-006 terminal CI baseline audit
+- What was implemented
+  - Audited workflow `31513831083` on head `ecc019a984825d25ca25ac87fb47c8ff37f8d88d` through the initial run and three failed-job retries.
+  - Made no product or unrelated-test changes: all six P1 stories remain complete and no task-scoped failure appeared.
+  - Updated the delivery audit and story 006 evidence to the pushed head, current `origin/main` base, and terminal retry outcome.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Backend Unit Coverage and every non-functional lane passed.
+  - Runtime-api log-directory characterization passed five local repetitions; CLI writer cancellation passed ten; AGY conductor success passed five.
+  - The only remaining functional failure after four hosted attempts is `TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput` in untouched `tests/functional/transport/server_binding`; the same structured API-server diagnostic mismatch reproduces locally on Windows.
+  - `git diff --name-only origin/main...HEAD` is empty for the runtime-api, CLI-output, AGY, and server-binding failure packages; thread-aware review audit remains at zero unresolved inline threads and zero formal reviews.
+- **Learnings for future iterations:**
+  - When retry-only functional failures rotate across untouched packages but local repetitions pass, retain the exact convergence evidence and stop widening a completed task to repair unrelated baseline behavior.
+---
