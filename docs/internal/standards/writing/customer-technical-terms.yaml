@@ -297,27 +297,6 @@ terms:
       - CLI NDJSON and public event documentation
     owner: api/components/schemas/events/FactoryEvent.yaml
 
-  - canonical: Factory Response Event
-    definition: An ephemeral process-local observation of invocation progress, such as a message snapshot, tool update, or running status.
-    category: product-term
-    approvedForms:
-      singular: Factory Response Event
-      plural: Factory Response Events
-      verb: null
-    discouragedAlternatives:
-      - text: canonical event
-        status: prohibited
-        replacement: Factory Event
-      - text: progress log entry
-        status: discouraged
-        replacement: Factory Response Event
-    example: The response stream delivers a `Factory Response Event` while the `Factory Session` is running.
-    surfaces:
-      - Ephemeral response-event stream
-      - Invocation progress and dashboard observations
-      - Response-event API documentation
-    owner: api/components/schemas/response-events/FactoryResponseEvent.yaml
-
   - canonical: Chat Session
     definition: The customer-facing conversation and control context for addressing a selected target.
     category: product-term
@@ -584,7 +563,7 @@ terms:
       - text: tree relation
         status: discouraged
         replacement: Parent-Child
-    example: Use `Parent-Child` when one Work item owns the lifecycle of its child Work items.
+    example: Use `Parent-Child` to put a child Work item in a parent's child set for parent-aware fan-in.
     surfaces:
       - Work relationship authoring
       - Batch input documentation
@@ -1220,7 +1199,7 @@ terms:
     owner: api/components/schemas/events/FactoryEvent.yaml
 
   - canonical: FactoryResponseEvent
-    definition: The protected schema identifier for the ephemeral Factory Response Event envelope.
+    definition: The public FactoryResponseEvent observation resource and its protected schema identifier for ephemeral invocation progress.
     category: protected-literal
     approvedForms:
       singular: FactoryResponseEvent
@@ -1229,7 +1208,7 @@ terms:
     discouragedAlternatives:
       - text: Factory Response Event schema
         status: discouraged
-        replacement: Factory Response Event
+        replacement: FactoryResponseEvent
       - text: FactoryResponseevent
         status: prohibited
         replacement: FactoryResponseEvent
