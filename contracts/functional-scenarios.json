@@ -372,6 +372,26 @@
       "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
     },
     {
+      "stableId": "cli/you.session.resource",
+      "name": "you session resource",
+      "interface": "cli",
+      "classification": "grouping",
+      "status": "not-applicable",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "CLI grouping node has no independently runnable customer behavior; its child commands remain separately inventoried."
+    },
+    {
+      "stableId": "cli/you.session.resource.set",
+      "name": "you session resource set",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
       "stableId": "cli/you.session.resume",
       "name": "you session resume",
       "interface": "cli",
@@ -1159,6 +1179,16 @@
     {
       "stableId": "rest/saveCurrentFactoryBySessionId",
       "name": "saveCurrentFactoryBySessionId",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "rest/setFactorySessionResourceCapacity",
+      "name": "setFactorySessionResourceCapacity",
       "interface": "rest",
       "classification": "operation",
       "status": "missing",

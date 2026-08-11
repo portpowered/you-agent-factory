@@ -17,6 +17,7 @@ type (
 	FactoryChangeEventPayload                    = contracts.FactoryChangeEventPayload
 	FactoryChangeRequestEventPayload             = contracts.FactoryChangeRequestEventPayload
 	FactoryChangeFailedEventPayload              = contracts.FactoryChangeFailedEventPayload
+	FactoryResourceCapacityChange                = contracts.FactoryResourceCapacityChange
 	FactoryEvent                                 = contracts.FactoryEvent
 	FactoryEventContext                          = contracts.FactoryEventContext
 	FactoryEventReconnectCursor                  = contracts.FactoryEventReconnectCursor

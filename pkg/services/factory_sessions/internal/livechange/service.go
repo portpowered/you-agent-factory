@@ -562,6 +562,7 @@ func (s *Service) closeSuccess(
 		TargetID:         request.TargetID,
 		PreviousRevision: &previous,
 		NewRevision:      &next,
+		ResourceCapacity: resourceCapacityEventPayload(resourceCapacity),
 	})
 	if err != nil {
 		return factorysessions.LiveChangeResult{}, eventAppendError(request, err)
@@ -649,6 +650,7 @@ func (s *Service) replayTerminal(
 			Outcome: factorysessions.LiveChangeOutcomeReplayed, PreviousRevision: previous,
 			NewRevision: next, EffectiveSequence: sequence, Factory: cloneSnapshot(payload.Factory),
 		}
+		result.ResourceCapacity = resourceCapacityResultFromEvent(payload.ResourceCapacity, payload.Factory)
 		return result, nil
 	}
 	if terminal.Failure != nil {
@@ -784,6 +786,44 @@ func cloneResourceCapacity(result *factoryruntime.ResourceCapacityResult) *facto
 	clone := *result
 	clone.Factory = result.Factory.Clone()
 	return &clone
+}
+
+func resourceCapacityEventPayload(result *factoryruntime.ResourceCapacityResult) *interfaces.FactoryResourceCapacityChange {
+	if result == nil {
+		return nil
+	}
+	return &interfaces.FactoryResourceCapacityChange{
+		ResourceID:        result.ResourceID,
+		ResourceName:      result.ResourceName,
+		PreviousCapacity:  result.PreviousCapacity,
+		RequestedCapacity: result.RequestedCapacity,
+		EffectiveCapacity: result.EffectiveCapacity,
+		InUseCount:        result.InUseCount,
+		AvailableCount:    result.AvailableCount,
+		MinimumCapacity:   result.MinimumCapacity,
+		Outcome:           string(result.Outcome),
+	}
+}
+
+func resourceCapacityResultFromEvent(
+	payload *interfaces.FactoryResourceCapacityChange,
+	factorySnapshot *interfaces.FactorySnapshot,
+) *factoryruntime.ResourceCapacityResult {
+	if payload == nil {
+		return nil
+	}
+	return &factoryruntime.ResourceCapacityResult{
+		ResourceID:        payload.ResourceID,
+		ResourceName:      payload.ResourceName,
+		PreviousCapacity:  payload.PreviousCapacity,
+		RequestedCapacity: payload.RequestedCapacity,
+		EffectiveCapacity: payload.EffectiveCapacity,
+		InUseCount:        payload.InUseCount,
+		AvailableCount:    payload.AvailableCount,
+		MinimumCapacity:   payload.MinimumCapacity,
+		Outcome:           factoryruntime.ResourceCapacityOutcome(payload.Outcome),
+		Factory:           cloneSnapshot(factorySnapshot),
+	}
 }
 
 func intValue(value *int) int {

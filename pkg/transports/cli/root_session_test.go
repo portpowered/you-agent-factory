@@ -863,6 +863,13 @@ func TestProductionRootUsesGeneratedSessionFamilyCutover(t *testing.T) {
 	if session.RunE != nil {
 		t.Fatal("session parent must remain non-runnable through generated cutover")
 	}
+	resourceSet, _, findErr := root.Find([]string{"session", "resource", "set"})
+	if findErr != nil {
+		t.Fatalf("Find(session resource set) error = %v", findErr)
+	}
+	if resourceSet.RunE == nil {
+		t.Fatal("session resource set must attach resolved RunE through generated cutover")
+	}
 	for _, name := range []string{"run", "submit", "factory", "models", "work"} {
 		if _, _, err := root.Find([]string{name}); err != nil {
 			t.Fatalf("Find(%s) error = %v, want non-representative families on handwritten constructors", name, err)

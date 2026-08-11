@@ -977,6 +977,37 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/resources/{resource_id}/capacity:
+    post:
+      tags:
+        - Factory
+      operationId: setFactorySessionResourceCapacity
+      summary: Set one Factory Session resource capacity
+      description: Changes the effective capacity of one live Factory Session resource by stable Resource.id. The operation is revisioned and idempotent. It does not cancel, interrupt, terminate, restart, or admit work directly; a capacity increase wakes waiting runtime dispatches.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - $ref: '#/components/parameters/ResourceID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FactorySessionResourceCapacityRequest'
+      responses:
+        '200':
+          description: Capacity was applied, was an exact no-op, or replayed an identical request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionResourceCapacityResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/FactorySessionResourceCapacityConflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /factory-sessions/{session_id}/artifacts:
     get:
       tags:
@@ -1533,6 +1564,14 @@ components:
       schema:
         type: string
         minLength: 1
+    ResourceID:
+      name: resource_id
+      in: path
+      required: true
+      description: Stable authored Resource.id. Mutable display names are not accepted as identifiers.
+      schema:
+        type: string
+        minLength: 1
     MaxResults:
       name: maxResults
       in: query
@@ -1939,6 +1978,14 @@ components:
           schema:
             oneOf:
               - $ref: '#/components/schemas/FactorySessionLifecycleControlResponse'
+              - $ref: '#/components/schemas/ErrorResponse'
+    FactorySessionResourceCapacityConflict:
+      description: Resource capacity admission was rejected because the request revision or Factory Session lifecycle is stale, the requested capacity is below units in use, or the request would be an exact no-op.
+      content:
+        application/json:
+          schema:
+            oneOf:
+              - $ref: '#/components/schemas/FactorySessionResourceCapacityResponse'
               - $ref: '#/components/schemas/ErrorResponse'
     InternalError:
       description: Server failed while reading or building runtime state.
@@ -3590,6 +3637,10 @@ components:
             - WORKER_SESSION_EVENT_TOPIC_UNAVAILABLE
             - WORKER_SESSION_ADMISSION_FAILED
             - FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED
+            - RESOURCE_CAPACITY_IN_USE
+            - REVISION_CONFLICT
+            - LIFECYCLE_CONFLICT
+            - ADMITTED_APPLICATION_FAILURE
             - INVALID_RESPONSE_EVENT_CURSOR
             - INVALID_RESPONSE_EVENT_FILTER
             - RESPONSE_EVENT_SESSION_NOT_FOUND
@@ -3620,6 +3671,10 @@ components:
             - The Worker Session event topic did not reach the required readiness barrier.
             - Workers could not admit the Worker Session execution.
             - Lifecycle control requestId was already applied with different control inputs.
+            - Requested resource capacity is below the number of units currently in use.
+            - The caller's expected Factory revision is no longer current.
+            - The Factory Session lifecycle does not admit the requested change.
+            - A live change was admitted but its runtime application failed.
             - The Factory Response Event reconnect cursor is invalid.
             - A Factory Response Event filter is invalid.
             - The explicitly selected Factory Session for response events does not exist.
@@ -3638,6 +3693,9 @@ components:
           description: Optional canonical validation targets that clients can map to factory graph nodes, handles, and form fields.
           items:
             $ref: '#/components/schemas/FactoryValidationTarget'
+        resourceCapacity:
+          $ref: '#/components/schemas/FactorySessionResourceCapacityErrorDetails'
+          description: Resource accounting for a rejected capacity reduction.
     ErrorTarget:
       type: object
       additionalProperties: false
@@ -6435,6 +6493,135 @@ components:
         links:
           $ref: '#/components/schemas/FactorySessionLifecycleControlLinks'
           description: Inspection links for session, results, dispatches, and artifacts.
+    FactorySessionResourceCapacityRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - requestId
+        - expectedRevision
+        - capacity
+      properties:
+        requestId:
+          type: string
+          minLength: 1
+          description: Caller-owned idempotency identity for this capacity request.
+        expectedRevision:
+          type: integer
+          minimum: 0
+          description: Effective Factory revision observed before admission.
+        capacity:
+          type: integer
+          minimum: 0
+          description: Requested total resource capacity. Zero is valid only when no units are in use.
+        reason:
+          type: string
+          description: Optional safe operator reason retained with the canonical change request.
+    FactorySessionResourceCapacityErrorDetails:
+      type: object
+      additionalProperties: false
+      description: Accounting details explaining why a resource-capacity reduction was rejected.
+      required:
+        - resourceId
+        - currentCapacity
+        - requestedCapacity
+        - inUseCount
+        - availableCount
+        - minimumCapacity
+      properties:
+        resourceId:
+          type: string
+          minLength: 1
+          description: Stable authored Resource.id.
+        currentCapacity:
+          type: integer
+          minimum: 0
+        requestedCapacity:
+          type: integer
+        inUseCount:
+          type: integer
+          minimum: 0
+        availableCount:
+          type: integer
+          minimum: 0
+        minimumCapacity:
+          type: integer
+          minimum: 0
+    FactorySessionResourceCapacityOutcome:
+      type: string
+      enum:
+        - APPLIED
+        - NO_OP
+        - REPLAYED
+      description: Terminal capacity decision outcome.
+    FactorySessionResourceCapacityLinks:
+      type: object
+      additionalProperties: false
+      description: Canonical relative links for inspecting the affected Factory Session and its events.
+      properties:
+        session:
+          type: string
+          description: Relative URL for the affected Factory Session.
+        events:
+          type: string
+          description: Relative URL for the session's canonical Factory Events.
+        status:
+          type: string
+          description: Relative URL for the session status projection.
+    FactorySessionResourceCapacityResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - sessionId
+        - resourceId
+        - previousCapacity
+        - requestedCapacity
+        - effectiveCapacity
+        - inUseCount
+        - availableCount
+        - minimumCapacity
+        - outcome
+        - revision
+        - requestId
+        - changeId
+      properties:
+        sessionId:
+          type: string
+        resourceId:
+          type: string
+          description: Stable authored Resource.id. This is the only resource identity used by the operation.
+        resourceName:
+          type: string
+          description: Current display label, provided for presentation only.
+        previousCapacity:
+          type: integer
+          minimum: 0
+        requestedCapacity:
+          type: integer
+          minimum: 0
+        effectiveCapacity:
+          type: integer
+          minimum: 0
+        inUseCount:
+          type: integer
+          minimum: 0
+        availableCount:
+          type: integer
+          minimum: 0
+        minimumCapacity:
+          type: integer
+          minimum: 0
+          description: Lowest capacity currently safe to admit without interrupting in-use work.
+        outcome:
+          $ref: '#/components/schemas/FactorySessionResourceCapacityOutcome'
+        revision:
+          type: integer
+          minimum: 0
+        requestId:
+          type: string
+        changeId:
+          type: string
+        links:
+          $ref: '#/components/schemas/FactorySessionResourceCapacityLinks'
     LoadableProviderSessionRef:
       type: object
       additionalProperties: false
@@ -7605,6 +7792,57 @@ components:
           $ref: '#/components/schemas/RunnerID'
         runnerSelectionSource:
           $ref: '#/components/schemas/RunnerSelectionSource'
+    FactoryResourceCapacityChange:
+      type: object
+      additionalProperties: false
+      description: Detached resource-capacity accounting retained in a successful Factory change event so replay does not depend on mutable runtime state.
+      required:
+        - resourceId
+        - previousCapacity
+        - requestedCapacity
+        - effectiveCapacity
+        - inUseCount
+        - availableCount
+        - minimumCapacity
+        - outcome
+      properties:
+        resourceId:
+          type: string
+          minLength: 1
+          description: Stable authored Resource.id whose capacity changed.
+        resourceName:
+          type: string
+          description: Optional display name retained for inspection only.
+        previousCapacity:
+          type: integer
+          minimum: 0
+          description: Capacity immediately before the change.
+        requestedCapacity:
+          type: integer
+          minimum: 0
+          description: Capacity requested by the operator.
+        effectiveCapacity:
+          type: integer
+          minimum: 0
+          description: Capacity effective after the change.
+        inUseCount:
+          type: integer
+          minimum: 0
+          description: Number of leases in use at the decision boundary.
+        availableCount:
+          type: integer
+          minimum: 0
+          description: Number of currently available capacity units.
+        minimumCapacity:
+          type: integer
+          minimum: 0
+          description: Lowest capacity permitted by the current in-use count.
+        outcome:
+          type: string
+          enum:
+            - APPLIED
+            - NO_OP
+          description: Terminal capacity decision recorded by the runtime.
     RunRequestEventPayload:
       type: object
       additionalProperties: false
@@ -7664,6 +7902,9 @@ components:
           type: integer
           minimum: 0
           description: Canonical Factory Event sequence at which this change became effective.
+        resourceCapacity:
+          $ref: '#/components/schemas/FactoryResourceCapacityChange'
+          description: Detached resource-capacity accounting for a capacity change.
         sourceDirectory:
           type: string
         metadata:

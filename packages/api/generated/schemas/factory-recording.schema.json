@@ -989,18 +989,143 @@
       "additionalProperties": false,
       "description": "Runtime topology snapshot after a live factory definition change replaces the running factory.",
       "properties": {
+        "changeId": {
+          "description": "Stable live-change identity when this is a revisioned change boundary.",
+          "type": "string"
+        },
+        "effectiveSequence": {
+          "description": "Canonical Factory Event sequence at which this change became effective.",
+          "minimum": 0,
+          "type": "integer"
+        },
         "factory": {
           "$ref": "#/$defs/Factory"
         },
         "metadata": {
           "$ref": "#/$defs/StringMap"
         },
+        "newRevision": {
+          "description": "Effective Factory revision created by this change.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "operation": {
+          "description": "Normalized live-change operation name.",
+          "type": "string"
+        },
+        "previousRevision": {
+          "description": "Effective Factory revision immediately before this change.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "resourceCapacity": {
+          "$ref": "#/$defs/FactoryResourceCapacityChange"
+        },
         "sourceDirectory": {
+          "type": "string"
+        },
+        "targetId": {
+          "description": "Stable target identity changed by the operation.",
           "type": "string"
         }
       },
       "required": [
         "factory"
+      ],
+      "type": "object"
+    },
+    "FactoryChangeFailedEventPayload": {
+      "additionalProperties": false,
+      "description": "Safe terminal failure for an admitted live Factory Session change. Raw provider payloads, commands, stack traces, and requested values are excluded.",
+      "properties": {
+        "changeId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "failureCode": {
+          "description": "Stable safe failure category.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "failureMessage": {
+          "description": "Bounded safe failure explanation.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "operation": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "previousRevision": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "targetId": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "changeId",
+        "operation",
+        "targetId",
+        "expectedRevision",
+        "previousRevision",
+        "failureCode",
+        "failureMessage"
+      ],
+      "type": "object"
+    },
+    "FactoryChangeRequestEventPayload": {
+      "additionalProperties": false,
+      "description": "Normalized live Factory Session change intent. Request identity and session scope are carried by FactoryEvent.context.",
+      "properties": {
+        "actor": {
+          "description": "Safe actor identity supplied by the caller.",
+          "type": "string"
+        },
+        "changeId": {
+          "description": "Stable identity of the requested live change.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "expectedRevision": {
+          "description": "Effective Factory revision the operator observed before admission.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "operation": {
+          "description": "Normalized live-change operation name.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "reason": {
+          "description": "Optional normalized safe operator reason.",
+          "type": "string"
+        },
+        "requestedValue": {
+          "description": "Canonical JSON value requested by the operation."
+        },
+        "source": {
+          "description": "Safe source label such as cli or api.",
+          "type": "string"
+        },
+        "targetId": {
+          "description": "Stable target identity changed by the operation.",
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "changeId",
+        "expectedRevision",
+        "operation",
+        "targetId",
+        "requestedValue"
       ],
       "type": "object"
     },
@@ -1096,6 +1221,8 @@
           "DISPATCH_RESPONSE": "#/$defs/DispatchResponseEventPayload",
           "DISPATCH_WORKER_SESSION_ASSOCIATION": "#/$defs/DispatchWorkerSessionAssociationEventPayload",
           "FACTORY_CHANGE": "#/$defs/FactoryChangeEventPayload",
+          "FACTORY_CHANGE_FAILED": "#/$defs/FactoryChangeFailedEventPayload",
+          "FACTORY_CHANGE_REQUEST": "#/$defs/FactoryChangeRequestEventPayload",
           "FACTORY_STATE_RESPONSE": "#/$defs/FactoryStateResponseEventPayload",
           "INFERENCE_REQUEST": "#/$defs/InferenceRequestEventPayload",
           "INFERENCE_RESPONSE": "#/$defs/InferenceResponseEventPayload",
@@ -1189,6 +1316,36 @@
             },
             "type": {
               "const": "FACTORY_CHANGE"
+            }
+          },
+          "required": [
+            "type",
+            "payload"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "payload": {
+              "$ref": "#/$defs/FactoryChangeRequestEventPayload"
+            },
+            "type": {
+              "const": "FACTORY_CHANGE_REQUEST"
+            }
+          },
+          "required": [
+            "type",
+            "payload"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "payload": {
+              "$ref": "#/$defs/FactoryChangeFailedEventPayload"
+            },
+            "type": {
+              "const": "FACTORY_CHANGE_FAILED"
             }
           },
           "required": [
@@ -1770,6 +1927,8 @@
         "RUN_REQUEST",
         "INITIAL_STRUCTURE_REQUEST",
         "FACTORY_CHANGE",
+        "FACTORY_CHANGE_REQUEST",
+        "FACTORY_CHANGE_FAILED",
         "WORK_REQUEST",
         "RELATIONSHIP_CHANGE_REQUEST",
         "DISPATCH_REQUEST",
@@ -2794,6 +2953,70 @@
     "FactoryOrchestratorPetriConfig": {
       "additionalProperties": false,
       "description": "Petri-specific orchestrator configuration. Existing Petri factories may omit this block and rely on compatibility defaulting to orchestrator.kind = PETRI.",
+      "type": "object"
+    },
+    "FactoryResourceCapacityChange": {
+      "additionalProperties": false,
+      "description": "Detached resource-capacity accounting retained in a successful Factory change event so replay does not depend on mutable runtime state.",
+      "properties": {
+        "availableCount": {
+          "description": "Number of currently available capacity units.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "effectiveCapacity": {
+          "description": "Capacity effective after the change.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "inUseCount": {
+          "description": "Number of leases in use at the decision boundary.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "minimumCapacity": {
+          "description": "Lowest capacity permitted by the current in-use count.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "outcome": {
+          "description": "Terminal capacity decision recorded by the runtime.",
+          "enum": [
+            "APPLIED",
+            "NO_OP"
+          ],
+          "type": "string"
+        },
+        "previousCapacity": {
+          "description": "Capacity immediately before the change.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "requestedCapacity": {
+          "description": "Capacity requested by the operator.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "resourceId": {
+          "description": "Stable authored Resource.id whose capacity changed.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "resourceName": {
+          "description": "Optional display name retained for inspection only.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "resourceId",
+        "previousCapacity",
+        "requestedCapacity",
+        "effectiveCapacity",
+        "inUseCount",
+        "availableCount",
+        "minimumCapacity",
+        "outcome"
+      ],
       "type": "object"
     },
     "FactorySessionDurableLifecycleStatus": {

@@ -1,0 +1,29 @@
+type: object
+additionalProperties: false
+description: Accounting details explaining why a resource-capacity reduction was rejected.
+required:
+  - resourceId
+  - currentCapacity
+  - requestedCapacity
+  - inUseCount
+  - availableCount
+  - minimumCapacity
+properties:
+  resourceId:
+    type: string
+    minLength: 1
+    description: Stable authored Resource.id.
+  currentCapacity:
+    type: integer
+    minimum: 0
+  requestedCapacity:
+    type: integer
+  inUseCount:
+    type: integer
+    minimum: 0
+  availableCount:
+    type: integer
+    minimum: 0
+  minimumCapacity:
+    type: integer
+    minimum: 0

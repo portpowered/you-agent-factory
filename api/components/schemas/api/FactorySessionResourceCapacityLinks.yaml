@@ -1,0 +1,13 @@
+type: object
+additionalProperties: false
+description: Canonical relative links for inspecting the affected Factory Session and its events.
+properties:
+  session:
+    type: string
+    description: Relative URL for the affected Factory Session.
+  events:
+    type: string
+    description: Relative URL for the session's canonical Factory Events.
+  status:
+    type: string
+    description: Relative URL for the session status projection.

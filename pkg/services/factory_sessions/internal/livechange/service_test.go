@@ -9,6 +9,7 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -111,7 +112,9 @@ func TestApplyLiveChange_AppendsCorrelatedRequestAndSuccessOnce(t *testing.T) {
 	if err != nil {
 		t.Fatalf("replay live change: %v", err)
 	}
-	if replayed.Outcome != factorysessions.LiveChangeOutcomeReplayed || len(log.events) != 2 || app.applyCalls != 1 {
+	if replayed.Outcome != factorysessions.LiveChangeOutcomeReplayed || len(log.events) != 2 || app.applyCalls != 1 ||
+		replayed.ResourceCapacity == nil || replayed.ResourceCapacity.ResourceID != "reviewers" ||
+		replayed.ResourceCapacity.AvailableCount != 7 || replayed.ResourceCapacity.EffectiveCapacity != 8 {
 		t.Fatalf("replay = %#v, events=%d applicationCalls=%d", replayed, len(log.events), app.applyCalls)
 	}
 	assertSafeLiveChangeLogs(t, observed)
@@ -124,8 +127,16 @@ func successfulApplication(t *testing.T) *application {
 		t.Fatalf("create updated snapshot: %v", err)
 	}
 	return &application{
-		preflight:   factorysessions.LiveChangePreflightResult{Admissible: true},
-		applyResult: factorysessions.LiveChangeApplicationResult{Factory: updated},
+		preflight: factorysessions.LiveChangePreflightResult{Admissible: true},
+		applyResult: factorysessions.LiveChangeApplicationResult{
+			Factory: updated,
+			ResourceCapacity: &factoryruntime.ResourceCapacityResult{
+				ResourceID: "reviewers", ResourceName: "Review Pool", PreviousCapacity: 1,
+				RequestedCapacity: 8, EffectiveCapacity: 8, InUseCount: 1,
+				AvailableCount: 7, MinimumCapacity: 1,
+				Outcome: factoryruntime.ResourceCapacityOutcomeApplied,
+			},
+		},
 	}
 }
 
@@ -173,6 +184,13 @@ func assertLiveChangeSuccessPayload(t *testing.T, event interfaces.FactoryEvent)
 	}
 	if payload.PreviousRevision == nil || *payload.PreviousRevision != 2 || payload.NewRevision == nil || *payload.NewRevision != 3 || payload.EffectiveSequence == nil || *payload.EffectiveSequence != 1 || payload.Factory == nil {
 		t.Fatalf("success payload = %#v, want complete revisioned snapshot", payload)
+	}
+	if payload.ResourceCapacity == nil || payload.ResourceCapacity.ResourceID != "reviewers" ||
+		payload.ResourceCapacity.PreviousCapacity != 1 || payload.ResourceCapacity.RequestedCapacity != 8 ||
+		payload.ResourceCapacity.EffectiveCapacity != 8 || payload.ResourceCapacity.InUseCount != 1 ||
+		payload.ResourceCapacity.AvailableCount != 7 || payload.ResourceCapacity.MinimumCapacity != 1 ||
+		payload.ResourceCapacity.Outcome != string(factoryruntime.ResourceCapacityOutcomeApplied) {
+		t.Fatalf("resource capacity payload = %#v, want detached accounting", payload.ResourceCapacity)
 	}
 }
 

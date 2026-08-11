@@ -15,4 +15,6 @@ var SessionFamilyCommandIDs = []string{
 	"you.session.cancel",
 	"you.session.terminate",
 	"you.session.dispatches",
+	"you.session.resource",
+	"you.session.resource.set",
 }

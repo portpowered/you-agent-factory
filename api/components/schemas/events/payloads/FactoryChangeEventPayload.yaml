@@ -27,6 +27,9 @@ properties:
     type: integer
     minimum: 0
     description: Canonical Factory Event sequence at which this change became effective.
+  resourceCapacity:
+    $ref: '../FactoryResourceCapacityChange.yaml'
+    description: Detached resource-capacity accounting for a capacity change.
   sourceDirectory:
     type: string
   metadata:

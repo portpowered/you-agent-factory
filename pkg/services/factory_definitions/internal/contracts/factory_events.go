@@ -570,15 +570,30 @@ type InitialStructureRequestEventPayload struct {
 // FactoryChangeEventPayload carries the replacement Factory snapshot after a
 // live definition change becomes active.
 type FactoryChangeEventPayload struct {
-	Factory           *FactorySnapshot   `json:"factory"`
-	ChangeID          string             `json:"changeId,omitempty"`
-	Operation         string             `json:"operation,omitempty"`
-	TargetID          string             `json:"targetId,omitempty"`
-	PreviousRevision  *int               `json:"previousRevision,omitempty"`
-	NewRevision       *int               `json:"newRevision,omitempty"`
-	EffectiveSequence *int               `json:"effectiveSequence,omitempty"`
-	Metadata          *map[string]string `json:"metadata,omitempty"`
-	SourceDirectory   *string            `json:"sourceDirectory,omitempty"`
+	Factory           *FactorySnapshot               `json:"factory"`
+	ChangeID          string                         `json:"changeId,omitempty"`
+	Operation         string                         `json:"operation,omitempty"`
+	TargetID          string                         `json:"targetId,omitempty"`
+	PreviousRevision  *int                           `json:"previousRevision,omitempty"`
+	NewRevision       *int                           `json:"newRevision,omitempty"`
+	EffectiveSequence *int                           `json:"effectiveSequence,omitempty"`
+	ResourceCapacity  *FactoryResourceCapacityChange `json:"resourceCapacity,omitempty"`
+	Metadata          *map[string]string             `json:"metadata,omitempty"`
+	SourceDirectory   *string                        `json:"sourceDirectory,omitempty"`
+}
+
+// FactoryResourceCapacityChange retains the detached accounting needed to
+// replay a resource-capacity change without inspecting mutable runtime state.
+type FactoryResourceCapacityChange struct {
+	ResourceID        string `json:"resourceId"`
+	ResourceName      string `json:"resourceName,omitempty"`
+	PreviousCapacity  int    `json:"previousCapacity"`
+	RequestedCapacity int    `json:"requestedCapacity"`
+	EffectiveCapacity int    `json:"effectiveCapacity"`
+	InUseCount        int    `json:"inUseCount"`
+	AvailableCount    int    `json:"availableCount"`
+	MinimumCapacity   int    `json:"minimumCapacity"`
+	Outcome           string `json:"outcome"`
 }
 
 // FactoryChangeRequestEventPayload carries the normalized operator intent

@@ -1153,6 +1153,41 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/resources/{resource_id}/capacity:
+    post:
+      tags:
+        - Factory
+      operationId: setFactorySessionResourceCapacity
+      summary: Set one Factory Session resource capacity
+      description: >-
+        Changes the effective capacity of one live Factory Session resource by
+        stable Resource.id. The operation is revisioned and idempotent. It does
+        not cancel, interrupt, terminate, restart, or admit work directly; a
+        capacity increase wakes waiting runtime dispatches.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - $ref: '#/components/parameters/ResourceID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FactorySessionResourceCapacityRequest'
+      responses:
+        '200':
+          description: Capacity was applied, was an exact no-op, or replayed an identical request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionResourceCapacityResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/FactorySessionResourceCapacityConflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /factory-sessions/{session_id}/artifacts:
     get:
       tags:
@@ -1758,6 +1793,8 @@ components:
       $ref: './components/parameters/SessionID.yaml'
     WorkerSessionID:
       $ref: './components/parameters/WorkerSessionID.yaml'
+    ResourceID:
+      $ref: './components/parameters/ResourceID.yaml'
     MaxResults:
       $ref: './components/parameters/MaxResults.yaml'
     NextToken:
@@ -1835,6 +1872,8 @@ components:
       $ref: './components/responses/WorkerSessionStartUnavailable.yaml'
     FactorySessionLifecycleControlConflict:
       $ref: './components/responses/FactorySessionLifecycleControlConflict.yaml'
+    FactorySessionResourceCapacityConflict:
+      $ref: './components/responses/FactorySessionResourceCapacityConflict.yaml'
     InternalError:
       $ref: './components/responses/InternalError.yaml'
     ResponseEventBadRequest:
@@ -2228,6 +2267,16 @@ components:
       $ref: './components/schemas/api/FactorySessionInterruptDispatchRequest.yaml'
     FactorySessionLifecycleControlResponse:
       $ref: './components/schemas/api/FactorySessionLifecycleControlResponse.yaml'
+    FactorySessionResourceCapacityRequest:
+      $ref: './components/schemas/api/FactorySessionResourceCapacityRequest.yaml'
+    FactorySessionResourceCapacityErrorDetails:
+      $ref: './components/schemas/api/FactorySessionResourceCapacityErrorDetails.yaml'
+    FactorySessionResourceCapacityOutcome:
+      $ref: './components/schemas/api/FactorySessionResourceCapacityOutcome.yaml'
+    FactorySessionResourceCapacityLinks:
+      $ref: './components/schemas/api/FactorySessionResourceCapacityLinks.yaml'
+    FactorySessionResourceCapacityResponse:
+      $ref: './components/schemas/api/FactorySessionResourceCapacityResponse.yaml'
     LoadableProviderSessionRef:
       $ref: './components/schemas/api/LoadableProviderSessionRef.yaml'
     LoadableProviderSessionProvider:
@@ -2326,6 +2375,8 @@ components:
       $ref: './components/schemas/events/DispatchConsumedWorkRef.yaml'
     DispatchRequestEventMetadata:
       $ref: './components/schemas/events/DispatchRequestEventMetadata.yaml'
+    FactoryResourceCapacityChange:
+      $ref: './components/schemas/events/FactoryResourceCapacityChange.yaml'
     RunRequestEventPayload:
       $ref: './components/schemas/events/payloads/RunRequestEventPayload.yaml'
     InitialStructureRequestEventPayload:

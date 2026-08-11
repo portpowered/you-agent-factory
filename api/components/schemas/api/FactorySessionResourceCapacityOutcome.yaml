@@ -1,0 +1,6 @@
+type: string
+enum:
+  - APPLIED
+  - NO_OP
+  - REPLAYED
+description: Terminal capacity decision outcome.

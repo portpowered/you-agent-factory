@@ -1,0 +1,52 @@
+type: object
+additionalProperties: false
+description: >-
+  Detached resource-capacity accounting retained in a successful Factory
+  change event so replay does not depend on mutable runtime state.
+required:
+  - resourceId
+  - previousCapacity
+  - requestedCapacity
+  - effectiveCapacity
+  - inUseCount
+  - availableCount
+  - minimumCapacity
+  - outcome
+properties:
+  resourceId:
+    type: string
+    minLength: 1
+    description: Stable authored Resource.id whose capacity changed.
+  resourceName:
+    type: string
+    description: Optional display name retained for inspection only.
+  previousCapacity:
+    type: integer
+    minimum: 0
+    description: Capacity immediately before the change.
+  requestedCapacity:
+    type: integer
+    minimum: 0
+    description: Capacity requested by the operator.
+  effectiveCapacity:
+    type: integer
+    minimum: 0
+    description: Capacity effective after the change.
+  inUseCount:
+    type: integer
+    minimum: 0
+    description: Number of leases in use at the decision boundary.
+  availableCount:
+    type: integer
+    minimum: 0
+    description: Number of currently available capacity units.
+  minimumCapacity:
+    type: integer
+    minimum: 0
+    description: Lowest capacity permitted by the current in-use count.
+  outcome:
+    type: string
+    enum:
+      - APPLIED
+      - NO_OP
+    description: Terminal capacity decision recorded by the runtime.

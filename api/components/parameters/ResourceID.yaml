@@ -1,0 +1,7 @@
+name: resource_id
+in: path
+required: true
+description: Stable authored Resource.id. Mutable display names are not accepted as identifiers.
+schema:
+  type: string
+  minLength: 1

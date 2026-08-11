@@ -44,6 +44,7 @@ type Service interface {
 	Resume(LifecycleControlConfig) error
 	Cancel(LifecycleControlConfig) error
 	Terminate(LifecycleControlConfig) error
+	SetResourceCapacity(ResourceCapacityConfig) error
 	ListDispatches(DispatchesConfig) error
 	Create(CreateConfig) error
 	Delete(DeleteConfig) error
@@ -51,15 +52,16 @@ type Service interface {
 
 // Operations carries the accepted per-command operations used to build Service.
 type Operations struct {
-	List           func(ListConfig) error
-	Show           func(ShowConfig) error
-	Pause          func(LifecycleControlConfig) error
-	Resume         func(LifecycleControlConfig) error
-	Cancel         func(LifecycleControlConfig) error
-	Terminate      func(LifecycleControlConfig) error
-	ListDispatches func(DispatchesConfig) error
-	Create         func(CreateConfig) error
-	Delete         func(DeleteConfig) error
+	List                func(ListConfig) error
+	Show                func(ShowConfig) error
+	Pause               func(LifecycleControlConfig) error
+	Resume              func(LifecycleControlConfig) error
+	Cancel              func(LifecycleControlConfig) error
+	Terminate           func(LifecycleControlConfig) error
+	SetResourceCapacity func(ResourceCapacityConfig) error
+	ListDispatches      func(DispatchesConfig) error
+	Create              func(CreateConfig) error
+	Delete              func(DeleteConfig) error
 }
 
 type service struct {
@@ -68,15 +70,16 @@ type service struct {
 }
 
 type boundService struct {
-	list           func(ListConfig) error
-	show           func(ShowConfig) error
-	pause          func(LifecycleControlConfig) error
-	resume         func(LifecycleControlConfig) error
-	cancel         func(LifecycleControlConfig) error
-	terminate      func(LifecycleControlConfig) error
-	listDispatches func(DispatchesConfig) error
-	create         func(CreateConfig) error
-	delete         func(DeleteConfig) error
+	list                func(ListConfig) error
+	show                func(ShowConfig) error
+	pause               func(LifecycleControlConfig) error
+	resume              func(LifecycleControlConfig) error
+	cancel              func(LifecycleControlConfig) error
+	terminate           func(LifecycleControlConfig) error
+	setResourceCapacity func(ResourceCapacityConfig) error
+	listDispatches      func(DispatchesConfig) error
+	create              func(CreateConfig) error
+	delete              func(DeleteConfig) error
 }
 
 // New constructs the Sessions CLI service injected into Cobra composition.
@@ -91,15 +94,16 @@ func New(httpProtocol clihttp.Protocol, prepare RequestPreparation) Service {
 // Production composition should use New instead.
 func Bind(ops Operations) Service {
 	return &boundService{
-		list:           ops.List,
-		show:           ops.Show,
-		pause:          ops.Pause,
-		resume:         ops.Resume,
-		cancel:         ops.Cancel,
-		terminate:      ops.Terminate,
-		listDispatches: ops.ListDispatches,
-		create:         ops.Create,
-		delete:         ops.Delete,
+		list:                ops.List,
+		show:                ops.Show,
+		pause:               ops.Pause,
+		resume:              ops.Resume,
+		cancel:              ops.Cancel,
+		terminate:           ops.Terminate,
+		setResourceCapacity: ops.SetResourceCapacity,
+		listDispatches:      ops.ListDispatches,
+		create:              ops.Create,
+		delete:              ops.Delete,
 	}
 }
 
@@ -132,6 +136,11 @@ func (service *service) Cancel(cfg LifecycleControlConfig) error {
 func (service *service) Terminate(cfg LifecycleControlConfig) error {
 	cfg.HTTP = service.http
 	return Terminate(cfg)
+}
+
+func (service *service) SetResourceCapacity(cfg ResourceCapacityConfig) error {
+	cfg.HTTP = service.http
+	return SetResourceCapacity(cfg)
 }
 
 func (service *service) ListDispatches(cfg DispatchesConfig) error {
@@ -189,6 +198,13 @@ func (service *boundService) Terminate(cfg LifecycleControlConfig) error {
 		return fmt.Errorf("session terminate service is required")
 	}
 	return service.terminate(cfg)
+}
+
+func (service *boundService) SetResourceCapacity(cfg ResourceCapacityConfig) error {
+	if service == nil || service.setResourceCapacity == nil {
+		return fmt.Errorf("session resource capacity service is required")
+	}
+	return service.setResourceCapacity(cfg)
 }
 
 func (service *boundService) ListDispatches(cfg DispatchesConfig) error {

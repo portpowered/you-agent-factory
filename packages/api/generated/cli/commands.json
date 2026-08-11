@@ -5165,6 +5165,323 @@
       },
       "visibility": "visible"
     },
+    "you.session.resource": {
+      "aliases": [],
+      "documentation": {
+        "documentation": {
+          "description": {
+            "canonicalEnglish": "Manage live Factory Session resource capacity by stable authored Resource.id. Mutable display names and labels are never accepted as resource identity.",
+            "id": "you.session.resource.description"
+          },
+          "title": {
+            "canonicalEnglish": "Manage Factory Session resources",
+            "id": "you.session.resource.title"
+          }
+        },
+        "examples": [
+          "you session resource set reviewers 8",
+          "you session resource set reviewers 1 session-beta"
+        ],
+        "formatVersion": "1.0.0",
+        "itemId": "you.session.resource",
+        "visibility": "public"
+      },
+      "id": "you.session.resource",
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.session.resource",
+        "since": "1.0.0",
+        "state": "active"
+      },
+      "name": "resource",
+      "path": "you session resource",
+      "runnable": false,
+      "usage": {
+        "example": "  you session resource set reviewers 8",
+        "line": "resource"
+      },
+      "visibility": "visible"
+    },
+    "you.session.resource.set": {
+      "aliases": [],
+      "arguments": {
+        "you.session.resource.set.arg.0": {
+          "channels": ["cli"],
+          "completion": "none",
+          "doubleDash": "terminates-flags",
+          "enum": [],
+          "id": "you.session.resource.set.arg.0",
+          "kind": "positional",
+          "maxCardinality": 1,
+          "minCardinality": 1,
+          "name": "resource-id",
+          "pattern": "",
+          "position": 0,
+          "required": true,
+          "valueType": "string",
+          "variadic": false
+        },
+        "you.session.resource.set.arg.1": {
+          "channels": ["cli"],
+          "completion": "none",
+          "doubleDash": "terminates-flags",
+          "enum": [],
+          "id": "you.session.resource.set.arg.1",
+          "kind": "positional",
+          "maxCardinality": 1,
+          "minCardinality": 1,
+          "name": "capacity",
+          "pattern": "",
+          "position": 1,
+          "required": true,
+          "valueType": "int",
+          "variadic": false
+        },
+        "you.session.resource.set.arg.2": {
+          "channels": ["cli"],
+          "completion": "none",
+          "doubleDash": "terminates-flags",
+          "enum": [],
+          "id": "you.session.resource.set.arg.2",
+          "kind": "positional",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "name": "session-id",
+          "pattern": "",
+          "position": 2,
+          "required": false,
+          "valueType": "string",
+          "variadic": false
+        }
+      },
+      "channels": {
+        "input": ["cli", "env", "config", "stdin"],
+        "output": ["stdout", "stderr"]
+      },
+      "constraints": {
+        "platforms": ["linux", "darwin", "windows"],
+        "runtime": ["local"]
+      },
+      "documentation": {
+        "documentation": {
+          "description": {
+            "canonicalEnglish": "Set one live Factory Session resource's capacity by stable Resource.id through POST /factory-sessions/{session_id}/resources/{resource_id}/capacity. The operation is revisioned and idempotent. Use --request-id to replay a known request, --expected-revision to protect against stale state, and --reason for a safe audit reason. Omit session-id for the default compatibility session (~default).",
+            "id": "you.session.resource.set.description"
+          },
+          "title": {
+            "canonicalEnglish": "Set live Factory Session resource capacity",
+            "id": "you.session.resource.set.title"
+          }
+        },
+        "examples": [
+          "you session resource set reviewers 8",
+          "you session resource set reviewers 8 --request-id raise-reviewers-001 --expected-revision 2",
+          "you --json session resource set reviewers 1 session-beta --expected-revision 3"
+        ],
+        "formatVersion": "1.0.0",
+        "itemId": "you.session.resource.set",
+        "visibility": "public"
+      },
+      "errors": {
+        "you.session.resource.set.error.bad-request": {"code": "BAD_REQUEST", "id": "you.session.resource.set.error.bad-request"},
+        "you.session.resource.set.error.capacity-in-use": {
+          "code": "RESOURCE_CAPACITY_IN_USE",
+          "id": "you.session.resource.set.error.capacity-in-use"
+        },
+        "you.session.resource.set.error.admitted-application-failure": {
+          "code": "ADMITTED_APPLICATION_FAILURE",
+          "id": "you.session.resource.set.error.admitted-application-failure"
+        },
+        "you.session.resource.set.error.lifecycle-conflict": {
+          "code": "LIFECYCLE_CONFLICT",
+          "id": "you.session.resource.set.error.lifecycle-conflict"
+        },
+        "you.session.resource.set.error.not-found": {
+          "code": "NOT_FOUND",
+          "id": "you.session.resource.set.error.not-found"
+        },
+        "you.session.resource.set.error.revision-conflict": {
+          "code": "REVISION_CONFLICT",
+          "id": "you.session.resource.set.error.revision-conflict"
+        }
+      },
+      "exits": {
+        "you.session.resource.set.exit.failure": {
+          "code": 1,
+          "id": "you.session.resource.set.exit.failure",
+          "kind": "failure"
+        },
+        "you.session.resource.set.exit.success": {
+          "code": 0,
+          "id": "you.session.resource.set.exit.success",
+          "kind": "success"
+        },
+        "you.session.resource.set.exit.usage": {
+          "code": 1,
+          "id": "you.session.resource.set.exit.usage",
+          "kind": "usage"
+        }
+      },
+      "flags": {
+        "you.session.resource.set.flag.debug": {
+          "aliases": [],
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.session.resource.set.flag.debug",
+          "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.session.resource.set.flag.debug", "since": "1.0.0", "state": "active"},
+          "long": "debug",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
+          "shorthand": "d",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.session.resource.set.flag.expected-revision": {
+          "aliases": [],
+          "changedDefault": false,
+          "completion": "none",
+          "default": "0",
+          "id": "you.session.resource.set.flag.expected-revision",
+          "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.session.resource.set.flag.expected-revision", "since": "1.0.0", "state": "active"},
+          "long": "expected-revision",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "shorthand": "",
+          "usage": "effective Factory revision observed before admission",
+          "valueType": "int",
+          "visibility": "visible"
+        },
+        "you.session.resource.set.flag.json": {
+          "aliases": [],
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.session.resource.set.flag.json",
+          "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.session.resource.set.flag.json", "since": "1.0.0", "state": "active"},
+          "long": "json",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.session.resource.set.flag.reason": {
+          "aliases": [],
+          "changedDefault": false,
+          "completion": "none",
+          "default": "",
+          "id": "you.session.resource.set.flag.reason",
+          "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.session.resource.set.flag.reason", "since": "1.0.0", "state": "active"},
+          "long": "reason",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "shorthand": "",
+          "usage": "safe operator reason retained with the live change request",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.session.resource.set.flag.server": {
+          "aliases": [],
+          "changedDefault": false,
+          "completion": "none",
+          "default": "http://localhost:7437",
+          "id": "you.session.resource.set.flag.server",
+          "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.session.resource.set.flag.server", "since": "1.0.0", "state": "active"},
+          "long": "server",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.session.resource.set.flag.verbose": {
+          "aliases": [],
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.session.resource.set.flag.verbose",
+          "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.session.resource.set.flag.verbose", "since": "1.0.0", "state": "active"},
+          "long": "verbose",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
+          "shorthand": "v",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.session.resource.set.flag.request-id": {
+          "aliases": [],
+          "changedDefault": false,
+          "completion": "none",
+          "default": "",
+          "id": "you.session.resource.set.flag.request-id",
+          "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.session.resource.set.flag.request-id", "since": "1.0.0", "state": "active"},
+          "long": "request-id",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "shorthand": "",
+          "usage": "idempotency identity for this capacity request",
+          "valueType": "string",
+          "visibility": "visible"
+        }
+      },
+      "handler": {
+        "id": "you.session.resource.set.handler",
+        "operationId": "setFactorySessionResourceCapacity"
+      },
+      "id": "you.session.resource.set",
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.session.resource.set",
+        "since": "1.0.0",
+        "state": "active"
+      },
+      "name": "set",
+      "outputs": {
+        "you.session.resource.set.output.human": {"channel": "stdout", "format": "text", "id": "you.session.resource.set.output.human"},
+        "you.session.resource.set.output.json": {"channel": "stdout", "format": "json", "id": "you.session.resource.set.output.json"}
+      },
+      "path": "you session resource set",
+      "placement": "remote-only",
+      "precedence": {
+        "order": ["cli", "stdin", "environment", "operator-config", "manifest-default", "factory-signature-default"],
+        "withinTier": {"scalar": "last", "repeated": "append"},
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
+      },
+      "runnable": true,
+      "sideEffects": {"you.session.resource.set.side-effect.network": {"id": "you.session.resource.set.side-effect.network", "kind": "network"}},
+      "usage": {
+        "example": "  # Raise the reviewers pool in the default session.\n  you session resource set reviewers 8\n\n  # Use an explicit session, revision, and idempotency key.\n  you session resource set reviewers 1 session-beta --expected-revision 3 --request-id reviewers-lower-001",
+        "line": "set <resource-id> <capacity> [session-id]"
+      },
+      "visibility": "visible"
+    },
     "you.session.list": {
       "aliases": [],
       "arguments": {

@@ -109,15 +109,18 @@ func TestResourceCapacityAdmissionBlocksUntilReleased(t *testing.T) {
 	}
 	defer release()
 
+	started := make(chan struct{})
 	done := make(chan error, 1)
 	go func() {
+		close(started)
 		_, err := eng.SetResourceCapacity(context.Background(), factory.ResourceCapacityRequest{ResourceID: "gpu-slot", RequestedCapacity: 2})
 		done <- err
 	}()
+	<-started
 	select {
 	case err := <-done:
 		t.Fatalf("capacity mutation completed before release: %v", err)
-	case <-time.After(20 * time.Millisecond):
+	default:
 	}
 	release()
 	if err := <-done; err != nil {
