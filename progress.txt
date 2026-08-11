@@ -11575,3 +11575,20 @@
   - Fetch the live base immediately before merging and pushing; a cached PR base can lag the branch that GitHub currently evaluates, producing a false-looking dirty merge state.
   - Shared bookkeeping conflicts should retain the active task PRD and both append-only progress histories; incoming source/documentation changes remain staged in the merge.
 ---
+## [2026-08-11 07:35:09 -07:00] - btrc-p1-root-injection-006 reconciled-head CI retry final audit
+- What was implemented
+  - Audited workflow `31500180426` on the reconciled/pushed head `10d5c056568c34de5c88e0209077a9bbc6cab52e`; all six P1 stories remain marked `passes:true`.
+  - Reran the failed Backend Functional Coverage and Verification Policy jobs twice. The work-recovery and provider-neutral inference failures cleared; attempt 3 retained only the unchanged server-binding diagnostic assertion.
+  - Refreshed `prd.json` to the terminal attempt-3 result and retained zero task-scoped failures.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/work/root_composition -run '^TestWorkRecoveryActivatesThroughRootBuildProcessAfterLifecycle$' -count=3 -timeout 600s` — passed.
+  - `git diff --name-only origin/main...HEAD -- tests/functional/work/root_composition tests/functional/transport/server_binding tests/functional/workers/inference` — empty.
+  - Workflow `31500180426`, attempt 3 — every lane passed except Backend Functional Coverage and its dependent Verification Policy; the only functional failure was `TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput` in untouched `tests/functional/transport/server_binding`.
+  - The server-binding test reproduces locally with the same structured API-server diagnostic mismatch.
+- **Learnings for future iterations:**
+  - After repeated retries reduce current-head functional coverage to one deterministic failure in an untouched package, preserve the exact attempt evidence and stop widening the task diff; unrelated baseline behavior is the remaining delivery blocker.
+  - Keep the PRD’s tested head tied to the exact pushed commit even when the final failure is outside the task scope.
+---
