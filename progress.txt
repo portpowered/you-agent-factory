@@ -2,6 +2,7 @@
 - Terminal lifecycle publication must require the opening record's committed publication window; a failed opening must never be followed by a terminal append that becomes topic position 1.
 - Cancellation-sensitive functional fixtures must signal provider-edge entry before issuing an interrupt; a published RUNNING status can precede provider handoff and otherwise makes context-cancellation assertions race.
 - For broad functional coverage concurrency flakes, isolate the named test and rerun only the failed CI jobs before changing untouched behavior.
+- When a Windows coverage wrapper times out, inspect its exact process tree and terminate only that invocation's descendants; preserve concurrent test processes.
 - When resolving long append-only progress conflicts, read merge-stage files in bounded chunks and validate the reconstructed line count so tool-output truncation cannot drop history.
 - When splitting oversized same-package tests into focused files, remove stale file/maintainability exemptions and update the package file-count baseline for the intentional net increase; keep shared fixtures in one package-local helper file.
 - For final PR handoff, compare the PR body byte-for-byte with `prd.json` and use the thread-aware GraphQL review audit because flat PR comments do not expose inline-thread resolution state.
@@ -2013,4 +2014,20 @@
   - The working tree remains clean before push, and the PRD still has both stories marked `passes:true`.
 - **Learnings for future iterations:**
   - After a base-sync merge, rerun the repository gates locally before pushing so the new PR head has direct evidence in addition to the earlier green CI run.
+---
+
+## 2026-08-10 18:41 -07:00 - wsr-001-opening-record final PR audit and CI follow-up
+- What was implemented
+  - No product-code changes were needed: all three WSR stories remain marked `passes:true`, the branch is clean and conflict-free with `origin/main` at `e6797fd5d`, and PR #1849 still has the exact `prd.json` body.
+  - Re-audited the PR with the thread-aware GitHub workflow: six historical conversation comments, zero formal reviews, and zero inline review threads remain; no unresolved review feedback is outstanding.
+  - Reran the failed CI jobs. The functional tests completed on retry, but Backend Functional Coverage failed its existing `pkg/transports/cli` ratchet (`72.8180%` actual vs `72.98%` minimum), which also caused Verification Policy to fail.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Focused JavaScript parallel-dispatch and Codex golden tests passed five local repetitions each.
+  - `gh run rerun 31448113624 --failed` reached a terminal result, with the only retry coverage diagnostic being the unchanged `pkg/transports/cli` minimum.
+  - The local `make test-functional-coverage` attempt exceeded its 10-minute bound without a diagnostic; its exact descendant test processes were stopped without touching a concurrent `make test` process.
+- **Learnings for future iterations:**
+  - A clean PR diff and passing focused tests do not establish the shared functional coverage ratchet; inspect the package-level CI diagnostic before changing unrelated production code.
+  - Verification Policy is an aggregate failure when Backend Functional Coverage misses its package minimum; address the underlying coverage lane first.
 ---
