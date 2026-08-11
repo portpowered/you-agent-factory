@@ -4061,3 +4061,16 @@
 - **Learnings for future iterations:**
   - A clean merge against a stale remote-tracking base is not sufficient; compare the live hosting ref, fetch it, and resolve shared PRD/progress files again before pushing the replacement head.
 ---
+## [2026-08-10 20:23 -07:00] - thr-deflake-model-host-concurrent-reuse final CI rerun
+- What was implemented
+  - Investigated the first PR CI failure and confirmed it was the known unrelated `TestFactorySessionHistoryIsNotPersistedByDefault` cancellation-observation flake, not a Models runtime-host regression.
+  - Reran the exact failing functional test locally ten times, then reran only the failed GitHub Actions jobs; no source behavior changed.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/sessions/restart -run '^TestFactorySessionHistoryIsNotPersistedByDefault$' -count=10 -v -timeout 300s` — all ten passed in 22.410s.
+  - `gh run rerun 31454365225 --failed` — Backend Functional Coverage passed in 5m5s and Verification Policy passed in 4s; all other required checks remained passing.
+  - PR #1868 remains open, mergeable, non-draft, and synchronized to head `0447883f3`; thread-aware review audit remains empty.
+- **Learnings for future iterations:**
+  - When a broad functional lane fails at an untouched cancellation observation, isolate and repeat the named test before changing task code, then rerun only the failed jobs once the characterization is clean.
+---
