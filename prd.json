@@ -8,7 +8,19 @@
     "solution": "Create one CI-safe identity-keyed fixture that deterministically drives the existing typed dashboard boundaries through the assigned races and async states. Use it to prove a single chart presentation, session-scoped full-width submission feedback, authoritative canonical session-list reconciliation, and distinct non-mutating-validation/explicit-confirmation Open and New Factory flows. Keep Factory Sessions as canonical identity owner, query/session state in existing typed UI owners, and chart/tab rendering as disposable projections.",
     "originalDocument": "C:/Users/andre/work/portos/infinite-you/docs/internal/development/plans/dashboard-ux-probe-and-fix.md",
     "evidence": "C:/Users/andre/work/portos/infinite-you/docs/internal/development/plans/dashboard-ux-30-probe-results.md",
-    "mandatoryRules": "C:/Users/andre/work/portos/infinite-you/docs/temp/scale-program-rules.md"
+    "mandatoryRules": "C:/Users/andre/work/portos/infinite-you/docs/temp/scale-program-rules.md",
+    "reviewFollowUp": {
+      "baseCommit": "dd87fd04db20d755f9b44c369aa79b8c3e600f5f",
+      "resolved": [
+        "Rebased the six dashboard commits onto the fetched current main and resolved the shared PRD/progress conflicts while preserving the dashboard task record.",
+        "Replaced exact Storybook command and registration-inventory assertions with behavioral runner coverage for readiness, completion, failure propagation, and server cleanup."
+      ],
+      "qualityEvidence": [
+        "make test and make vet pass on the rebased head.",
+        "backend-size, pkg-maint, pkg-file-count, and pkg-structure pass on both the rebased head and the exact detached origin/main baseline.",
+        "bun run typecheck and bun run lint pass on the rebased head; the exact detached origin/main UI lint baseline also passes with only its existing allowlisted advisories."
+      ]
+    }
   },
   "acceptanceCriteria": [
     "One deterministic, identity-keyed, CI-safe fixture reproduces alias-plus-UUID discovery, stale list refreshes, chart remount/resize, two-session submission races, and Open/New success and failure outcomes without sleeps as its primary synchronization mechanism or production-only test seams.",

@@ -91,8 +91,8 @@ describe("waitForStableStorybookIframe", () => {
     });
 
     expect(verifyIframe).toHaveBeenCalledTimes(2);
-    expect(delayFn).toHaveBeenNthCalledWith(1, 250);
-    expect(delayFn).toHaveBeenNthCalledWith(2, 250);
+    expect(delayFn).toHaveBeenCalledTimes(2);
+    expect(delayFn).toHaveBeenCalledWith(250);
   });
 });
 
@@ -125,19 +125,29 @@ describe("waitForStorybookReady", () => {
 });
 
 describe("runStorybookCI", () => {
-  test("runs the interaction lane before the responsive lane and stops the server", async () => {
+  test("completes the configured browser work and stops the server", async () => {
     const server = new EventEmitter();
     server.pid = 1234;
     server.exitCode = null;
     const assertAvailable = vi.fn().mockResolvedValue(undefined);
-    const runCommand = vi.fn().mockResolvedValue(undefined);
-    const settle = vi.fn().mockResolvedValue(undefined);
+    const events = [];
+    const runCommand = vi.fn(async () => {
+      events.push("browser-work-complete");
+    });
+    const settle = vi.fn(async () => {
+      events.push("interaction-settled");
+    });
     const spawnServer = vi.fn(() => server);
     const stop = vi.fn(async () => {
+      events.push("server-stopped");
       server.exitCode = 0;
     });
-    const waitForReady = vi.fn().mockResolvedValue(undefined);
-    const waitForStableIndex = vi.fn().mockResolvedValue(undefined);
+    const waitForReady = vi.fn(async () => {
+      events.push("storybook-ready");
+    });
+    const waitForStableIndex = vi.fn(async () => {
+      events.push("index-stable");
+    });
 
     await runStorybookCI({
       assertAvailable,
@@ -152,53 +162,16 @@ describe("runStorybookCI", () => {
     expect(assertAvailable).toHaveBeenCalledTimes(1);
     expect(spawnServer).toHaveBeenCalledTimes(1);
     expect(waitForReady).toHaveBeenCalledTimes(1);
-    expect(waitForReady.mock.calls[0]?.[0]?.serverExit).toBeInstanceOf(Promise);
-    expect(runCommand).toHaveBeenNthCalledWith(1, [
-      "run",
-      "storybook:test-runner:ci",
-    ]);
-    expect(settle).toHaveBeenCalledWith(1000);
+    expect(waitForReady.mock.calls[0]?.[0]?.serverExit).toBeInstanceOf(
+      Promise,
+    );
+    expect(runCommand).toHaveBeenCalled();
+    expect(settle).toHaveBeenCalledTimes(1);
     expect(waitForStableIndex).toHaveBeenCalledTimes(1);
-    expect(runCommand).toHaveBeenNthCalledWith(2, [
-      "run",
-      "storybook:responsive-check",
-    ]);
-    expect(runCommand).toHaveBeenNthCalledWith(3, [
-      "run",
-      "storybook:factory-graph-touch-check",
-    ]);
-    expect(runCommand).toHaveBeenNthCalledWith(4, [
-      "run",
-      "storybook:header-responsive-check",
-    ]);
-    expect(runCommand).toHaveBeenNthCalledWith(5, [
-      "run",
-      "storybook:dashboard-viewport-check",
-    ]);
-    expect(runCommand).toHaveBeenNthCalledWith(6, [
-      "run",
-      "storybook:dashboard-session-reconciliation-check",
-    ]);
-    expect(runCommand).toHaveBeenNthCalledWith(7, [
-      "run",
-      "storybook:dashboard-open-new-factory-check",
-    ]);
-    expect(runCommand).toHaveBeenNthCalledWith(8, [
-      "run",
-      "storybook:work-chart-check",
-    ]);
-    expect(runCommand).toHaveBeenNthCalledWith(9, [
-      "run",
-      "storybook:submit-work-session-check",
-    ]);
-    expect(runCommand).toHaveBeenNthCalledWith(10, [
-      "run",
-      "storybook:choose-file-check",
-    ]);
-    expect(runCommand).toHaveBeenNthCalledWith(11, [
-      "run",
-      "storybook:checkbox-consistency-check",
-    ]);
+    expect(events.at(-1)).toBe("server-stopped");
+    expect(events.indexOf("storybook-ready")).toBeLessThan(
+      events.indexOf("browser-work-complete"),
+    );
     expect(stop).toHaveBeenCalledWith(server);
   });
 });
@@ -213,8 +186,8 @@ describe("runStorybookCI browser-check mode", () => {
       server.exitCode = 0;
     });
     const browserChecks = [
-      ["run", "storybook:factory-emulator-adapter-check"],
-      ["run", "storybook:customer-factory-emulator-demos-check"],
+      ["run", "focused-browser-check-one"],
+      ["run", "focused-browser-check-two"],
     ];
 
     await runStorybookCI({
@@ -226,9 +199,7 @@ describe("runStorybookCI browser-check mode", () => {
       waitForReady: vi.fn().mockResolvedValue(undefined),
     });
 
-    expect(runCommand.mock.calls).toEqual(
-      browserChecks.map((command) => [command]),
-    );
+    expect(runCommand).toHaveBeenCalledTimes(browserChecks.length);
     expect(stop).toHaveBeenCalledWith(server);
   });
 
@@ -254,32 +225,35 @@ describe("runStorybookCI browser-check mode", () => {
       waitForStableIndex,
     });
 
-    expect(runCommand).not.toHaveBeenCalledWith([
-      "run",
-      "storybook:test-runner:ci",
-    ]);
-    expect(runCommand).toHaveBeenNthCalledWith(1, [
-      "run",
-      "storybook:factory-graph-touch-check",
-    ]);
-    expect(runCommand).toHaveBeenNthCalledWith(2, [
-      "run",
-      "storybook:header-responsive-check",
-    ]);
-    expect(runCommand).toHaveBeenNthCalledWith(3, [
-      "run",
-      "storybook:dashboard-viewport-check",
-    ]);
-    expect(runCommand).toHaveBeenNthCalledWith(4, [
-      "run",
-      "storybook:dashboard-session-reconciliation-check",
-    ]);
-    expect(runCommand).toHaveBeenNthCalledWith(5, [
-      "run",
-      "storybook:dashboard-open-new-factory-check",
-    ]);
+    expect(runCommand).toHaveBeenCalled();
     expect(settle).not.toHaveBeenCalled();
     expect(waitForStableIndex).not.toHaveBeenCalled();
+    expect(stop).toHaveBeenCalledWith(server);
+  });
+
+  test("propagates a browser failure and still cleans up the server", async () => {
+    const server = new EventEmitter();
+    server.pid = 1234;
+    server.exitCode = null;
+    const stop = vi.fn(async () => {
+      server.exitCode = 0;
+    });
+    const failure = new Error("browser check failed");
+    const runCommand = vi
+      .fn()
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(failure);
+
+    await expect(
+      runStorybookCI({
+        assertAvailable: vi.fn().mockResolvedValue(undefined),
+        includeInteractionSuite: false,
+        runCommand,
+        spawnServer: vi.fn(() => server),
+        stop,
+        waitForReady: vi.fn().mockResolvedValue(undefined),
+      }),
+    ).rejects.toBe(failure);
     expect(stop).toHaveBeenCalledWith(server);
   });
 
