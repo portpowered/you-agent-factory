@@ -75,8 +75,8 @@
         "Typecheck passes"
       ],
       "priority": 4,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Verified the current-factory-definition-01 cohort already present in branch ancestry: the seven native Bun owners (runner selection, work-type default handling, worker/workstation taxonomy, editable document values, workstation guards, Go-duration parsing, and cron validation) preserve all 39 source-level named cases and 46 executable cases, including seven cron descriptor expansions, with no legacy .test.ts paths remaining. Focused `bun test` passed 46/46 across 7 files with 101 expect calls; dashboard-unit Vitest selection of both migrated `.bun.unit.test.ts` paths and retired `.test.ts` paths returned `No test files found`; `bun run check:test-lanes` and `bun run typecheck` passed. No production behavior, generated artifact, coverage membership, or browser ownership changed."
     },
     {
       "id": "bun-compat-batch-migration-005",

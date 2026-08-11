@@ -4048,3 +4048,19 @@
   - When a cohort is already migrated in branch ancestry, reproduce its exact focused Bun count, both Vitest exclusion selections, lane-contract, and typecheck evidence before marking the batch story complete.
   - On Windows PowerShell, use the repository-pinned `ui\\node_modules\\.bin\\vitest.exe` for direct lane checks when the bare `vitest` command is not on PATH.
 ---
+
+## 2026-08-10 19:52 -07:00 - bun-compat-batch-migration-004
+- What was implemented
+  - Completed the current-factory-definition-01 cohort handoff using the seven existing native Bun owners for runner selection, default handling, worker/workstation taxonomy, editable document values, workstation guards, Go-duration parsing, and cron validation.
+  - Preserved all 39 source-level named cases and the cron descriptor parameterization's seven expanded cases for the exact 46-case executable total; the retired Vitest paths are absent.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Focused `bun test` — 7 files / 46 tests passed, 101 expect calls.
+  - Pinned `vitest.exe` `dashboard-unit` selection of all seven migrated paths and all seven retired `.test.ts` paths — `No test files found` in each selection, confirming zero Vitest execution and no fallback copies.
+  - `bun run check:test-lanes` — passed.
+  - `bun run typecheck` — passed.
+- **Learnings for future iterations:**
+  - A cohort already migrated in branch ancestry still needs direct focused Bun execution, exact source/expanded-case reconciliation, retired-path absence, both Vitest exclusion selections, lane-contract, and typecheck evidence before its batch story can be marked complete.
+---
