@@ -8823,3 +8823,18 @@
   - A Worker Session list observation and its provider-session stream lookup are separate asynchronous readiness boundaries; functional fixtures must synchronize each public operation they invoke.
   - When an existing functional fixture fails only after a terminal stream frame, poll the authoritative terminal projection instead of adding a fixed sleep or weakening the lifecycle assertion.
 ---
+
+## 2026-08-11 03:16:49 -07:00 - wsr-0023-capture-replay hosted verification follow-up
+- What was implemented
+  - Repeated the hosted functional characterization after the Worker Sessions fixture stabilization; the changed `TestWorkerSessionsCLI` passed in the full coverage lane.
+  - Reran only the failed Backend Functional Coverage and dependent Verification Policy jobs after unrelated untouched fixture flakes; both completed successfully on the pushed head.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Backend Functional Coverage rerun job `93745995192` — passed, including pinned real ACP evidence artifact publication.
+  - Verification Policy rerun job `93747003137` — passed.
+  - All other required checks on the replacement head remained successful.
+- **Learnings for future iterations:**
+  - After a clean characterization of an untouched functional failure, a failed-job rerun is sufficient evidence for that head; avoid widening the task diff to unrelated timing-sensitive fixtures.
+  - Record the terminal rerun job IDs before the final head/body/thread audit so the review handoff can distinguish the original flaky attempt from the passing attempt.
+---
