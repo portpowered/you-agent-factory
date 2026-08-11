@@ -2617,3 +2617,17 @@
 - **Learnings for future iterations:**
   - Coverage-floor failures on unchanged packages should be compared against the same revision and a successful base run before treating them as regressions; preserve the existing floor when the failing diff does not touch that package.
 ---
+
+## 2026-08-10 18:27 -07:00 - thr-lint-speed-003 PR CI follow-up retry
+- What was implemented
+  - Compared the successful `origin/main` functional coverage artifact with the fresh branch artifact after the CI retry.
+  - Confirmed both profiles contain the same 1,203 measurable `pkg/transports/cli` statements and identical functional package outcomes; the branch profile covers seven fewer statements, all in unchanged `pkg/transports/cli/root_factory.go` system-initialization blocks.
+  - Left the existing coverage floor and lint implementation unchanged because the failure is outside this PR’s changed paths and unrelated baseline modification would weaken review scope.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Fresh CI run `31448898619` completed with only Backend Functional Coverage failing at 72.8180% versus the 72.98% floor; all other checks passed.
+  - PR #1863 remains mergeable with no conversation comments, submitted reviews, or unresolved inline threads; the working tree is clean before this progress update.
+- **Learnings for future iterations:**
+  - Coverage profile comparison can isolate an unchanged-package dip to exact statement blocks; use that evidence to avoid changing a baseline for an unrelated PR.
+---
