@@ -93,6 +93,19 @@
 - This checkout may have `ui/node_modules` without all lockfile dependencies; run the pinned Bun install before treating a typecheck failure as a source regression.
 ---
 
+## 2026-08-10 18:03 -07:00 - wsr-001-opening-record-001
+- What was implemented
+  - Completed the post-push CI follow-up. The first run exposed a 0.162 percentage-point functional coverage fluctuation in `pkg/transports/cli` (72.8180% versus the 72.98% floor); the green current-main run and prior green WSR run both covered 883/1203 statements, while the failed run covered 876/1203.
+  - Re-ran only the failed GitHub Actions jobs after confirming no root CLI source changed in the WSR diff; the fresh Backend Functional Coverage and Verification Policy jobs passed.
+- Files changed
+  - `progress.txt`
+- Verification
+  - All 17 required PR checks for head `add05ef4d` are terminal and successful after the failed-job rerun.
+  - Downloaded CI coverage artifacts and confirmed the failing result was limited to five `root_factory.go` blocks; no WSR assertion or package test failure was reported.
+- **Learnings for future iterations:**
+  - For a tiny ratcheted coverage miss, compare the failed profile with current-main and the previous green profile before adding tests or changing a baseline; a failed run may be a measurement fluctuation when the changed source is outside the affected package.
+---
+
 ## 2026-08-10 17:30 -07:00 - wsr-001-opening-record-001
 - What was implemented
   - Completed the latest review follow-up for the opening-first invariant: the existing terminal publication guard requires a committed opening, and the fail-first/succeed-second Events regression verifies that an opening append failure cannot create terminal-only history.
