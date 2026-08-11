@@ -11,6 +11,7 @@ import (
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
@@ -57,6 +58,61 @@ func TestProvidersListThroughRootBuildProcess(t *testing.T) {
 		t.Fatalf("provider command calls = %d, want 0 for discovery and usage failure", calls)
 	}
 	functionalevidence.Covers(t, "cli/you.providers.list")
+}
+
+func TestPackagedACPProjectionRejectsInvalidRuntimeBindings(t *testing.T) {
+	const base = `{
+  "acp": [{
+    "name": "cursor-acp",
+    "transport": "stdio",
+    "command": "cursor-agent acp",
+    "arguments": ["acp"],
+    "posture": "installed_executable",
+    "implementation": {"kind": "acp_agent", "profile": "cursor-acp"}
+  }]
+}`
+	tests := []struct {
+		name   string
+		mutate func(string) string
+		want   string
+	}{
+		{
+			name: "unknown runtime profile",
+			mutate: func(document string) string {
+				return strings.Replace(document, `"profile": "cursor-acp"`, `"profile": "missing-profile"`, 1)
+			},
+			want: "unknown runtime profile",
+		},
+		{
+			name: "unsupported transport",
+			mutate: func(document string) string {
+				return strings.Replace(document, `"transport": "stdio"`, `"transport": "tcp"`, 1)
+			},
+			want: "unsupported transport",
+		},
+		{
+			name: "argument drift",
+			mutate: func(document string) string {
+				return strings.Replace(document, `"arguments": ["acp"]`, `"arguments": ["wrong"]`, 1)
+			},
+			want: "command arguments drift",
+		},
+		{
+			name: "canonical alias",
+			mutate: func(document string) string {
+				return strings.Replace(document, `"transport": "stdio",`, "\"aliases\": [\"cursor-acp\"],\n    \"transport\": \"stdio\",", 1)
+			},
+			want: "duplicates its canonical identity",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := providerswire.ACPIntegrationsFromRuntimeCatalog([]byte(test.mutate(base)))
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("packaged runtime validation error = %v, want containing %q", err, test.want)
+			}
+		})
+	}
 }
 
 type countingCommandRunner struct {

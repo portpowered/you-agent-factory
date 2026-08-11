@@ -257,11 +257,11 @@ func NewService(options ...Option) (providers.Service, error) {
 			option.apply(&config)
 		}
 	}
-	packaged, err := builtinswire.NewService()
+	packaged, err := ACPIntegrationsFromRuntimeCatalog(modelproviders.RuntimeACPJSON())
 	if err != nil {
 		return nil, err
 	}
-	acp := effectiveACPIntegrations(packaged.ACPIntegrations(), config.acpIntegrations)
+	acp := effectiveACPIntegrations(packaged, config.acpIntegrations)
 	descriptors, err := packagedACPDescriptors(acp)
 	if err != nil {
 		return nil, err
@@ -315,7 +315,16 @@ func packagedACPDescriptors(integrations []providers.ACPIntegration) ([]provider
 // Providers. Composition uses this exact source when materializing a new
 // operator configuration so init and runtime discovery cannot drift.
 func PackagedACPIntegrations() ([]providers.ACPIntegration, error) {
-	packaged, err := builtinswire.NewService()
+	return ACPIntegrationsFromRuntimeCatalog(modelproviders.RuntimeACPJSON())
+}
+
+// ACPIntegrationsFromRuntimeCatalog projects a generated package-owned
+// runtime catalog into detached Providers integrations. The production
+// catalog uses RuntimeACPJSON; the parameter keeps the composition boundary
+// able to validate and diagnose alternate generated documents without starting
+// any provider process.
+func ACPIntegrationsFromRuntimeCatalog(document []byte) ([]providers.ACPIntegration, error) {
+	packaged, err := builtinswire.NewServiceFromRuntimeCatalog(document)
 	if err != nil {
 		return nil, err
 	}
