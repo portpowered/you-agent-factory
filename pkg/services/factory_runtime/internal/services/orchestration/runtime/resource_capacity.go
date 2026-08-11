@@ -12,6 +12,8 @@ var (
 	_ factory.ResourceCapacityService         = (*factoryImpl)(nil)
 	_ factory.AdmittedResourceCapacityService = (*factoryImpl)(nil)
 	_ factory.ResourceCapacityAdmission       = (*factoryImpl)(nil)
+	_ factory.ResourceCapacityLeaseAdmission  = (*factoryImpl)(nil)
+	_ factory.ResourceCapacityRevisionService = (*factoryImpl)(nil)
 )
 
 func (f *factoryImpl) AcquireResourceCapacityAdmission(ctx context.Context) (func(), error) {
@@ -19,6 +21,30 @@ func (f *factoryImpl) AcquireResourceCapacityAdmission(ctx context.Context) (fun
 		return nil, fmt.Errorf("Factory Runtime resource admission is unavailable")
 	}
 	return f.engine.AcquireResourceCapacityAdmission(ctx)
+}
+
+func (f *factoryImpl) AcquireResourceCapacityLease(
+	ctx context.Context,
+	request factory.ResourceCapacityLeaseRequest,
+) (*factory.ResourceCapacityLease, error) {
+	if f == nil || f.engine == nil {
+		return nil, fmt.Errorf("Factory Runtime resource lease admission is unavailable")
+	}
+	return f.engine.AcquireResourceCapacityLease(ctx, request)
+}
+
+func (f *factoryImpl) CurrentFactoryRevision() int {
+	if f == nil || f.engine == nil {
+		return 0
+	}
+	return f.engine.CurrentFactoryRevision()
+}
+
+func (f *factoryImpl) SetFactoryRevision(revision int) {
+	if f == nil || f.engine == nil {
+		return
+	}
+	f.engine.SetFactoryRevision(revision)
 }
 
 func (f *factoryImpl) PreviewResourceCapacity(ctx context.Context, request factory.ResourceCapacityRequest) (factory.ResourceCapacityResult, error) {

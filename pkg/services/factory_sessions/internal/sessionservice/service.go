@@ -239,10 +239,19 @@ func (s *Service) runLiveChange(
 	stateProvider := liveChangeStateProvider(runtime)
 	coordinator := livechange.New(nil, runtime.LiveChangeLogger)
 	canonicalID := livesession.CanonicalID(session)
+	var result factorysessions.LiveChangeResult
+	var applyErr error
 	if recoverRequestID != "" {
-		return coordinator.Recover(ctx, canonicalID, recoverRequestID, stateProvider, runtime.LiveChangeEvents, runtime.LiveChangeApplication)
+		result, applyErr = coordinator.Recover(ctx, canonicalID, recoverRequestID, stateProvider, runtime.LiveChangeEvents, runtime.LiveChangeApplication)
+	} else {
+		result, applyErr = coordinator.Apply(ctx, canonicalID, request, stateProvider, runtime.LiveChangeEvents, runtime.LiveChangeApplication)
 	}
-	return coordinator.Apply(ctx, canonicalID, request, stateProvider, runtime.LiveChangeEvents, runtime.LiveChangeApplication)
+	if applyErr == nil && (result.Outcome == factorysessions.LiveChangeOutcomeApplied || result.Outcome == factorysessions.LiveChangeOutcomeReplayed) {
+		if revision, ok := runtime.Factory.(factoryruntime.ResourceCapacityRevisionService); ok {
+			revision.SetFactoryRevision(result.NewRevision)
+		}
+	}
+	return result, applyErr
 }
 
 func acquireLiveChangeAdmission(

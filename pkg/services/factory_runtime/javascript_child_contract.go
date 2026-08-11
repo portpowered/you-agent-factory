@@ -9,6 +9,7 @@ const (
 	FieldModelProvider   = orchestratorcontract.FieldModelProvider
 	FieldModel           = orchestratorcontract.FieldModel
 	FieldReasoningEffort = orchestratorcontract.FieldReasoningEffort
+	FieldResourceID      = orchestratorcontract.FieldResourceID
 )
 
 type JavaScriptChildSpec = orchestratorcontract.JavaScriptChildSpec

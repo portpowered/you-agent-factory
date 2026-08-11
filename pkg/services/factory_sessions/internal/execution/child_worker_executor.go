@@ -130,6 +130,14 @@ func (e *childWorkerExecutor) Execute(
 			"javascript child execution requires a Factory Runtime worker invoker",
 		)
 	}
+	lease, err := e.acquireResourceLease(ctx, req)
+	if err != nil {
+		return factory.JavaScriptChildExecutionResult{}, err
+	}
+	if lease != nil {
+		req.FactoryRevision = lease.FactoryRevision
+		defer lease.Release()
+	}
 
 	dispatchID, childIndex := e.childDispatchIdentity(req)
 	base, err := e.openChild(req, dispatchID, childIndex)
@@ -193,6 +201,26 @@ func (e *childWorkerExecutor) Execute(
 	}, nil
 }
 
+func (e *childWorkerExecutor) acquireResourceLease(
+	ctx context.Context,
+	req factory.JavaScriptChildExecutionRequest,
+) (*factory.ResourceCapacityLease, error) {
+	resourceID := strings.TrimSpace(req.ResourceID)
+	if resourceID == "" {
+		return nil, nil
+	}
+	admission, ok := e.invoke.(factory.ResourceCapacityLeaseAdmission)
+	if !ok {
+		return nil, fmt.Errorf(
+			"javascript child resource %q requires Factory Runtime resource lease admission",
+			resourceID,
+		)
+	}
+	return admission.AcquireResourceCapacityLease(ctx, factory.ResourceCapacityLeaseRequest{
+		ResourceID: resourceID,
+	})
+}
+
 // openChild resolves everything the session records about one child before its
 // Worker runs, and commits the queued and running dispatch facts.
 //
@@ -226,6 +254,8 @@ func (e *childWorkerExecutor) openChild(
 		ModelProvider:   req.ModelProvider,
 		Model:           req.Model,
 		ReasoningEffort: req.ReasoningEffort,
+		ResourceID:      req.ResourceID,
+		FactoryRevision: req.FactoryRevision,
 		SkipPermissions: req.SkipPermissions,
 		Command:         req.Command,
 		Sandbox:         req.Sandbox,

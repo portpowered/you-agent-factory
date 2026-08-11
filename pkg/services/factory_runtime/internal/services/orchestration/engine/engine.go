@@ -59,6 +59,15 @@ type FactoryEngine struct {
 	// with ticks that may acquire or release resource tokens.
 	admissionGate       chan struct{}
 	capacityWakePending bool
+	capacityChanged     chan struct{}
+	resourceLeases      map[string]resourceCapacityLease
+	nextResourceLeaseID uint64
+	factoryRevision     int
+}
+
+type resourceCapacityLease struct {
+	resourceID string
+	token      factorytoken.Token
 }
 
 // NewFactoryEngine creates a new engine for the given net and marking.
@@ -136,6 +145,8 @@ func NewFactoryEngine(
 		transformer:           transformer,
 		acceptingSubmits:      true,
 		admissionGate:         make(chan struct{}, 1),
+		capacityChanged:       make(chan struct{}),
+		resourceLeases:        make(map[string]resourceCapacityLease),
 	}
 	e.admissionGate <- struct{}{}
 	e.submissionHooks = append([]factory.SubmissionHook{e.submissionHook}, e.submissionHooks...)
@@ -278,11 +289,7 @@ func (e *FactoryEngine) WakeForPendingProcessing() {
 func (e *FactoryEngine) WakeForResourceCapacity() {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	e.capacityWakePending = true
-	select {
-	case e.submitSignal <- struct{}{}:
-	default:
-	}
+	e.signalResourceCapacityChangedLocked()
 }
 
 func (e *FactoryEngine) wakeForPendingProcessing() {

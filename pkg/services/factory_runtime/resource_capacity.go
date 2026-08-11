@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
@@ -115,6 +116,65 @@ type AdmittedResourceCapacityService interface {
 // acquisition at one runtime boundary.
 type ResourceCapacityAdmission interface {
 	AcquireResourceCapacityAdmission(context.Context) (release func(), err error)
+}
+
+// ResourceCapacityLeaseRequest identifies one resource unit a dispatch needs
+// for the duration of its external effect. ResourceID is the canonical
+// authored identifier; display names are never used as a fallback.
+type ResourceCapacityLeaseRequest struct {
+	ResourceID string
+}
+
+// ResourceCapacityLease is the detached handle returned after one resource
+// unit has been admitted. The runtime keeps the unit in use until Release is
+// called; Release is idempotent so terminal and cancellation cleanup can share
+// one defer without risking a duplicate token.
+type ResourceCapacityLease struct {
+	ResourceID      string
+	FactoryRevision int
+	release         func()
+	releaseOnce     sync.Once
+}
+
+// NewResourceCapacityLease constructs a runtime-owned lease handle. The
+// release callback is intentionally supplied by the runtime implementation;
+// callers should normally receive leases from ResourceCapacityLeaseAdmission
+// and only invoke Release.
+func NewResourceCapacityLease(resourceID string, factoryRevision int, release func()) *ResourceCapacityLease {
+	return &ResourceCapacityLease{
+		ResourceID:      strings.TrimSpace(resourceID),
+		FactoryRevision: factoryRevision,
+		release:         release,
+	}
+}
+
+// Release returns the leased unit to the runtime. It is safe to call more than
+// once and safe to call on a nil lease.
+func (l *ResourceCapacityLease) Release() {
+	if l == nil {
+		return
+	}
+	l.releaseOnce.Do(func() {
+		if l.release != nil {
+			l.release()
+		}
+	})
+}
+
+// ResourceCapacityLeaseAdmission extends the shared resource admission
+// boundary with waitable unit leases. Implementations must serialize lease
+// acquisition and capacity mutation with ResourceCapacityAdmission.
+type ResourceCapacityLeaseAdmission interface {
+	ResourceCapacityAdmission
+	AcquireResourceCapacityLease(context.Context, ResourceCapacityLeaseRequest) (*ResourceCapacityLease, error)
+}
+
+// ResourceCapacityRevisionService exposes the session's effective Factory
+// revision to resource-bound dispatches. The setter is monotonic so replay or
+// a late duplicate cannot move a running runtime back to an older revision.
+type ResourceCapacityRevisionService interface {
+	CurrentFactoryRevision() int
+	SetFactoryRevision(int)
 }
 
 func normalizeResourceCapacityRequest(request ResourceCapacityRequest) ResourceCapacityRequest {

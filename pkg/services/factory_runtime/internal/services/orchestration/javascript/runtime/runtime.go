@@ -32,6 +32,10 @@ func Run(ctx context.Context, req Request, hooks Hooks) (Outcome, error) {
 	records.onRecord = hooks.OnRecord
 	sessionID := strings.TrimSpace(req.SessionID)
 	childExecutor := childExecutorForRequest(sessionID, records, hooks, req.Resume, policy)
+	parallelConcurrency := policy.Concurrency
+	if parallelConcurrency < 1 {
+		parallelConcurrency = 1
+	}
 	globals := &runtimeGlobals{
 		vm:             vm,
 		policy:         policy,
@@ -39,6 +43,7 @@ func Run(ctx context.Context, req Request, hooks Hooks) (Outcome, error) {
 		ctx:            ctx,
 		records:        records,
 		childExecutor:  childExecutor,
+		parallelGate:   make(chan struct{}, parallelConcurrency),
 		agents:         req.Agents,
 		workerSettings: req.WorkerSettings,
 		onArtifact:     hooks.OnArtifact,

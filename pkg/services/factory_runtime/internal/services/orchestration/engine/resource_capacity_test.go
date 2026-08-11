@@ -3,12 +3,15 @@ package engine
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
+	workflowruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/javascript/runtime"
+	workflowpolicy "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/orchestratorcontract"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 )
@@ -126,6 +129,259 @@ func TestResourceCapacityAdmissionBlocksUntilReleased(t *testing.T) {
 	if err := <-done; err != nil {
 		t.Fatalf("capacity mutation after release: %v", err)
 	}
+}
+
+func TestResourceCapacityLeaseWaitsForLiveIncreaseAndReleasesExactlyOnce(t *testing.T) {
+	eng := newResourceCapacityTestEngine(1)
+	first, err := eng.AcquireResourceCapacityLease(context.Background(), factory.ResourceCapacityLeaseRequest{
+		ResourceID: "gpu-slot",
+	})
+	if err != nil {
+		t.Fatalf("acquire first resource lease: %v", err)
+	}
+
+	secondDone := make(chan *factory.ResourceCapacityLease, 1)
+	secondErr := make(chan error, 1)
+	go func() {
+		lease, acquireErr := eng.AcquireResourceCapacityLease(context.Background(), factory.ResourceCapacityLeaseRequest{
+			ResourceID: "gpu-slot",
+		})
+		if acquireErr != nil {
+			secondErr <- acquireErr
+			return
+		}
+		secondDone <- lease
+	}()
+	select {
+	case lease := <-secondDone:
+		lease.Release()
+		t.Fatal("second resource lease completed before capacity increased")
+	case err := <-secondErr:
+		t.Fatalf("second resource lease failed before capacity increased: %v", err)
+	default:
+	}
+
+	if _, err := eng.SetResourceCapacity(context.Background(), factory.ResourceCapacityRequest{
+		ResourceID: "gpu-slot", RequestedCapacity: 2,
+	}); err != nil {
+		t.Fatalf("increase resource capacity: %v", err)
+	}
+
+	var second *factory.ResourceCapacityLease
+	select {
+	case second = <-secondDone:
+	case err := <-secondErr:
+		t.Fatalf("second resource lease after capacity increase: %v", err)
+	}
+	if second.FactoryRevision != 0 {
+		t.Fatalf("second lease factory revision = %d, want initial revision 0", second.FactoryRevision)
+	}
+	preview, err := eng.PreviewResourceCapacity(context.Background(), factory.ResourceCapacityRequest{ResourceID: "gpu-slot", RequestedCapacity: 2})
+	if err != nil {
+		t.Fatalf("preview leased capacity: %v", err)
+	}
+	if preview.InUseCount != 2 || preview.AvailableCount != 0 {
+		t.Fatalf("leased capacity accounting = in-use %d available %d, want 2/0", preview.InUseCount, preview.AvailableCount)
+	}
+
+	first.Release()
+	first.Release()
+	second.Release()
+	second.Release()
+	preview, err = eng.PreviewResourceCapacity(context.Background(), factory.ResourceCapacityRequest{ResourceID: "gpu-slot", RequestedCapacity: 2})
+	if err != nil {
+		t.Fatalf("preview released capacity: %v", err)
+	}
+	if preview.InUseCount != 0 || preview.AvailableCount != 2 {
+		t.Fatalf("released capacity accounting = in-use %d available %d, want 0/2", preview.InUseCount, preview.AvailableCount)
+	}
+}
+
+func TestResourceCapacityLeasePreventsReductionBelowInUse(t *testing.T) {
+	eng := newResourceCapacityTestEngine(1)
+	lease, err := eng.AcquireResourceCapacityLease(context.Background(), factory.ResourceCapacityLeaseRequest{ResourceID: "gpu-slot"})
+	if err != nil {
+		t.Fatalf("acquire resource lease: %v", err)
+	}
+	if _, err := eng.SetResourceCapacity(context.Background(), factory.ResourceCapacityRequest{ResourceID: "gpu-slot", RequestedCapacity: 0}); !errors.Is(err, factory.ErrResourceCapacityInUse) {
+		t.Fatalf("reduce leased resource error = %v, want ErrResourceCapacityInUse", err)
+	}
+	lease.Release()
+	result, err := eng.SetResourceCapacity(context.Background(), factory.ResourceCapacityRequest{ResourceID: "gpu-slot", RequestedCapacity: 0})
+	if err != nil || result.Outcome != factory.ResourceCapacityOutcomeApplied {
+		t.Fatalf("reduce released resource = %#v, err %v, want applied", result, err)
+	}
+}
+
+func TestResourceCapacityIncreaseDoesNotReuseLeasedTokenID(t *testing.T) {
+	eng := newResourceCapacityTestEngine(2)
+	lease, err := eng.AcquireResourceCapacityLease(context.Background(), factory.ResourceCapacityLeaseRequest{ResourceID: "gpu-slot"})
+	if err != nil {
+		t.Fatalf("acquire resource lease: %v", err)
+	}
+	if _, err := eng.SetResourceCapacity(context.Background(), factory.ResourceCapacityRequest{ResourceID: "gpu-slot", RequestedCapacity: 1}); err != nil {
+		t.Fatalf("reduce capacity around leased token: %v", err)
+	}
+	if _, err := eng.SetResourceCapacity(context.Background(), factory.ResourceCapacityRequest{ResourceID: "gpu-slot", RequestedCapacity: 2}); err != nil {
+		t.Fatalf("increase capacity around leased token: %v", err)
+	}
+	lease.Release()
+
+	marking := eng.GetMarking()
+	tokens := marking.TokensInPlace("gpu-slot:available")
+	if len(tokens) != 2 {
+		t.Fatalf("available resource tokens = %d, want 2", len(tokens))
+	}
+	seen := make(map[string]struct{}, len(tokens))
+	for _, token := range tokens {
+		if _, exists := seen[token.ID]; exists {
+			t.Fatalf("duplicate available resource token ID %q", token.ID)
+		}
+		seen[token.ID] = struct{}{}
+	}
+}
+
+func TestResourceCapacityIncreaseDoesNotReuseActiveDispatchTokenID(t *testing.T) {
+	eng := newResourceCapacityTestEngine(1)
+	markResourceUnitsInUse(eng, 1)
+	if _, err := eng.SetResourceCapacity(context.Background(), factory.ResourceCapacityRequest{ResourceID: "gpu-slot", RequestedCapacity: 2}); err != nil {
+		t.Fatalf("increase capacity around active dispatch: %v", err)
+	}
+
+	marking := eng.GetMarking()
+	tokens := marking.TokensInPlace("gpu-slot:available")
+	if len(tokens) != 1 {
+		t.Fatalf("available resource tokens = %d, want 1", len(tokens))
+	}
+	if tokens[0].ID == "gpu-slot:resource:0" {
+		t.Fatalf("capacity increase reused active dispatch token ID %q", tokens[0].ID)
+	}
+}
+
+func TestResourceCapacityLeaseUsesMonotonicFactoryRevision(t *testing.T) {
+	eng := newResourceCapacityTestEngine(1)
+	eng.SetFactoryRevision(4)
+	eng.SetFactoryRevision(2)
+	lease, err := eng.AcquireResourceCapacityLease(context.Background(), factory.ResourceCapacityLeaseRequest{ResourceID: "gpu-slot"})
+	if err != nil {
+		t.Fatalf("acquire revisioned resource lease: %v", err)
+	}
+	defer lease.Release()
+	if lease.FactoryRevision != 4 || eng.CurrentFactoryRevision() != 4 {
+		t.Fatalf("resource lease revision = %d, runtime revision = %d, want both 4", lease.FactoryRevision, eng.CurrentFactoryRevision())
+	}
+}
+
+func TestJavaScriptParallelResourceChildrenWakeOnLiveCapacityIncrease(t *testing.T) {
+	eng := newResourceCapacityTestEngine(1)
+	eng.SetFactoryRevision(4)
+	releaseFirst := make(chan struct{})
+	children := &resourceBoundJavaScriptChildren{
+		engine:         eng,
+		firstAdmitted:  make(chan struct{}),
+		secondAdmitted: make(chan struct{}),
+		releaseFirst:   releaseFirst,
+	}
+	policy := workflowpolicy.DefaultEffectivePolicy()
+	policy.MaxAgents = 2
+	policy.Concurrency = 2
+
+	done := make(chan workflowruntime.Outcome, 1)
+	errDone := make(chan error, 1)
+	go func() {
+		outcome, err := workflowruntime.Run(context.Background(), workflowruntime.Request{
+			Source:    `return parallel([{prompt: "one", resourceId: "gpu-slot"}, {prompt: "two", resourceId: "gpu-slot"}]);`,
+			SessionID: "session-resource-parallel",
+			Policy:    policy,
+		}, workflowruntime.Hooks{
+			NewChildExecutor: func(string, workflowruntime.ChildRecordSink, workflowpolicy.EffectivePolicy) workflowruntime.ChildExecutor {
+				return children
+			},
+		})
+		done <- outcome
+		errDone <- err
+	}()
+
+	<-children.firstAdmitted
+	select {
+	case <-children.secondAdmitted:
+		t.Fatal("second JavaScript resource child admitted before capacity increase")
+	default:
+	}
+	eng.SetFactoryRevision(5)
+	if _, err := eng.SetResourceCapacity(context.Background(), factory.ResourceCapacityRequest{ResourceID: "gpu-slot", RequestedCapacity: 2}); err != nil {
+		t.Fatalf("increase JavaScript resource capacity: %v", err)
+	}
+	<-children.secondAdmitted
+	if children.peakActive() != 2 {
+		t.Fatalf("peak JavaScript resource admissions = %d, want 2", children.peakActive())
+	}
+	close(releaseFirst)
+
+	outcome := <-done
+	if err := <-errDone; err != nil || !outcome.OK {
+		t.Fatalf("JavaScript resource workflow outcome=%#v err=%v", outcome, err)
+	}
+	children.mu.Lock()
+	revisions := append([]int(nil), children.revisions...)
+	children.mu.Unlock()
+	if len(revisions) != 2 || revisions[0] != 4 || revisions[1] != 5 {
+		t.Fatalf("JavaScript child admission revisions = %v, want prior/new [4 5]", revisions)
+	}
+}
+
+type resourceBoundJavaScriptChildren struct {
+	engine         *FactoryEngine
+	firstAdmitted  chan struct{}
+	secondAdmitted chan struct{}
+	releaseFirst   <-chan struct{}
+	mu             sync.Mutex
+	active         int
+	peak           int
+	admitted       int
+	revisions      []int
+}
+
+func (e *resourceBoundJavaScriptChildren) Execute(
+	ctx context.Context,
+	req workflowruntime.ChildExecutionRequest,
+) (workflowruntime.ChildExecutionResult, error) {
+	lease, err := e.engine.AcquireResourceCapacityLease(ctx, factory.ResourceCapacityLeaseRequest{ResourceID: req.ResourceID})
+	if err != nil {
+		return workflowruntime.ChildExecutionResult{}, err
+	}
+	defer lease.Release()
+	e.mu.Lock()
+	e.admitted++
+	e.active++
+	if e.active > e.peak {
+		e.peak = e.active
+	}
+	e.revisions = append(e.revisions, lease.FactoryRevision)
+	which := e.admitted
+	if which == 1 {
+		close(e.firstAdmitted)
+	} else if which == 2 {
+		close(e.secondAdmitted)
+	}
+	e.mu.Unlock()
+	if which == 1 {
+		<-e.releaseFirst
+	}
+	e.mu.Lock()
+	e.active--
+	e.mu.Unlock()
+	return workflowruntime.ChildExecutionResult{
+		Status:        workflowruntime.ChildDispatchStatusCompleted,
+		ExecutionMode: workflowruntime.ChildExecutionModeLive,
+		Request:       req,
+	}, nil
+}
+
+func (e *resourceBoundJavaScriptChildren) peakActive() int {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.peak
 }
 
 func newResourceCapacityTestEngine(capacity int) *FactoryEngine {

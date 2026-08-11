@@ -87,6 +87,8 @@ func (e *directChildExecutor) Execute(
 		ModelProvider:   req.ModelProvider,
 		Model:           req.Model,
 		ReasoningEffort: req.ReasoningEffort,
+		ResourceID:      req.ResourceID,
+		FactoryRevision: req.FactoryRevision,
 		SkipPermissions: req.SkipPermissions,
 		Command:         req.Command,
 		Sandbox:         req.Sandbox,

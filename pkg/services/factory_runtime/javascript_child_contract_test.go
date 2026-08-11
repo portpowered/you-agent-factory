@@ -121,13 +121,14 @@ func TestNormalize_AcceptsAndTrimsCanonicalFields(t *testing.T) {
 		"modelProvider":    "  codex  ",
 		"model":            "  gpt-test  ",
 		"reasoningEffort":  "  high  ",
+		"resourceId":       "  reviewers  ",
 	})
 	if err != nil {
 		t.Fatalf("Normalize() error = %v", err)
 	}
 	want := factory.JavaScriptChildSpec{
 		Prompt: "review this", Label: "reviewer", Preset: "careful", ExecutorProvider: "cursor-acp",
-		ModelProvider: "codex", Model: "gpt-test", ReasoningEffort: "high",
+		ModelProvider: "codex", Model: "gpt-test", ReasoningEffort: "high", ResourceID: "reviewers",
 	}
 	if got != want {
 		t.Fatalf("Normalize() = %#v, want %#v", got, want)

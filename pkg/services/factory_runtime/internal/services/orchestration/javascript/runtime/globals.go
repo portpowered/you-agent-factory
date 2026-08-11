@@ -21,6 +21,7 @@ type runtimeGlobals struct {
 	ctx                   context.Context
 	records               *recordCollector
 	childExecutor         ChildExecutor
+	parallelGate          chan struct{}
 	agents                map[string]interfaces.FactoryOrchestratorJavaScriptAgent
 	workerSettings        WorkerSettingsConfig
 	onArtifact            func(kind string, content json.RawMessage) error

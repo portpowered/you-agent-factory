@@ -2,6 +2,7 @@ package internal
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"strconv"
 	"strings"
@@ -118,6 +119,83 @@ func (wrapped *invocationScheduleFactory) AcceptDispatchResult(ctx context.Conte
 
 func (wrapped *invocationScheduleFactory) InvokeWorker(ctx context.Context, request factory.InvokeWorkerRequest) (factory.InvokeWorkerResult, error) {
 	return wrapped.runtimeService().InvokeWorker(ctx, request)
+}
+
+func (wrapped *invocationScheduleFactory) PreviewResourceCapacity(
+	ctx context.Context,
+	request factory.ResourceCapacityRequest,
+) (factory.ResourceCapacityResult, error) {
+	service, ok := wrapped.Factory.(factory.ResourceCapacityService)
+	if !ok {
+		return factory.ResourceCapacityResult{}, fmt.Errorf("Factory Runtime resource capacity is unavailable")
+	}
+	return service.PreviewResourceCapacity(ctx, request)
+}
+
+func (wrapped *invocationScheduleFactory) SetResourceCapacity(
+	ctx context.Context,
+	request factory.ResourceCapacityRequest,
+) (factory.ResourceCapacityResult, error) {
+	service, ok := wrapped.Factory.(factory.ResourceCapacityService)
+	if !ok {
+		return factory.ResourceCapacityResult{}, fmt.Errorf("Factory Runtime resource capacity is unavailable")
+	}
+	return service.SetResourceCapacity(ctx, request)
+}
+
+func (wrapped *invocationScheduleFactory) PreviewResourceCapacityAdmitted(
+	ctx context.Context,
+	request factory.ResourceCapacityRequest,
+) (factory.ResourceCapacityResult, error) {
+	service, ok := wrapped.Factory.(factory.AdmittedResourceCapacityService)
+	if !ok {
+		return factory.ResourceCapacityResult{}, fmt.Errorf("Factory Runtime admitted resource capacity is unavailable")
+	}
+	return service.PreviewResourceCapacityAdmitted(ctx, request)
+}
+
+func (wrapped *invocationScheduleFactory) SetResourceCapacityAdmitted(
+	ctx context.Context,
+	request factory.ResourceCapacityRequest,
+) (factory.ResourceCapacityResult, error) {
+	service, ok := wrapped.Factory.(factory.AdmittedResourceCapacityService)
+	if !ok {
+		return factory.ResourceCapacityResult{}, fmt.Errorf("Factory Runtime admitted resource capacity is unavailable")
+	}
+	return service.SetResourceCapacityAdmitted(ctx, request)
+}
+
+func (wrapped *invocationScheduleFactory) AcquireResourceCapacityAdmission(ctx context.Context) (func(), error) {
+	service, ok := wrapped.Factory.(factory.ResourceCapacityAdmission)
+	if !ok {
+		return nil, fmt.Errorf("Factory Runtime resource admission is unavailable")
+	}
+	return service.AcquireResourceCapacityAdmission(ctx)
+}
+
+func (wrapped *invocationScheduleFactory) AcquireResourceCapacityLease(
+	ctx context.Context,
+	request factory.ResourceCapacityLeaseRequest,
+) (*factory.ResourceCapacityLease, error) {
+	service, ok := wrapped.Factory.(factory.ResourceCapacityLeaseAdmission)
+	if !ok {
+		return nil, fmt.Errorf("Factory Runtime resource lease admission is unavailable")
+	}
+	return service.AcquireResourceCapacityLease(ctx, request)
+}
+
+func (wrapped *invocationScheduleFactory) CurrentFactoryRevision() int {
+	service, ok := wrapped.Factory.(factory.ResourceCapacityRevisionService)
+	if !ok {
+		return 0
+	}
+	return service.CurrentFactoryRevision()
+}
+
+func (wrapped *invocationScheduleFactory) SetFactoryRevision(revision int) {
+	if service, ok := wrapped.Factory.(factory.ResourceCapacityRevisionService); ok {
+		service.SetFactoryRevision(revision)
+	}
 }
 
 func (wrapped *invocationScheduleFactory) SubmitWorkRequest(
@@ -442,3 +520,8 @@ func consecutiveScheduleFailures(outcomes map[int64]interfaces.StateType) int {
 
 var _ factory.Factory = (*invocationScheduleFactory)(nil)
 var _ factory.Service = (*invocationScheduleFactory)(nil)
+var _ factory.ResourceCapacityService = (*invocationScheduleFactory)(nil)
+var _ factory.AdmittedResourceCapacityService = (*invocationScheduleFactory)(nil)
+var _ factory.ResourceCapacityAdmission = (*invocationScheduleFactory)(nil)
+var _ factory.ResourceCapacityLeaseAdmission = (*invocationScheduleFactory)(nil)
+var _ factory.ResourceCapacityRevisionService = (*invocationScheduleFactory)(nil)
