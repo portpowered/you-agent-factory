@@ -11,9 +11,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -39,6 +41,7 @@ type Writer struct {
 	mu   sync.Mutex
 	file *os.File
 	size int64
+	now  func() time.Time
 }
 
 var _ io.WriteCloser = (*Writer)(nil)
@@ -157,20 +160,45 @@ func (w *Writer) openNew() error {
 }
 
 func (w *Writer) nextBackupPath() (string, error) {
-	base := w.backupPath(time.Now())
-	if _, err := os.Stat(base); errors.Is(err, os.ErrNotExist) {
-		return base, nil
-	} else if err != nil {
-		return "", fmt.Errorf("inspect log backup path: %w", err)
+	base := w.backupPath(w.currentTime())
+	parsedBase, ok := w.parseBackup(filepath.Base(base))
+	if !ok {
+		return "", fmt.Errorf("parse log backup path %q", base)
 	}
-	for index := 1; ; index++ {
-		candidate := backupPathWithSuffix(base, index)
-		if _, err := os.Stat(candidate); errors.Is(err, os.ErrNotExist) {
-			return candidate, nil
-		} else if err != nil {
-			return "", fmt.Errorf("inspect log backup path: %w", err)
+	highestIndex := -1
+	backups, err := w.readBackups()
+	if err != nil {
+		return "", fmt.Errorf("inspect existing log backups: %w", err)
+	}
+	for _, backup := range backups {
+		if backup.timestamp.Equal(parsedBase.timestamp) && backup.collisionIndex > highestIndex {
+			highestIndex = backup.collisionIndex
 		}
 	}
+	for index := highestIndex + 1; ; index++ {
+		candidate := base
+		if index > 0 {
+			candidate = backupPathWithSuffix(base, index)
+		}
+		occupied, err := backupPathOccupied(candidate)
+		if err != nil {
+			return "", fmt.Errorf("inspect log backup path: %w", err)
+		}
+		if !occupied {
+			return candidate, nil
+		}
+	}
+}
+
+func backupPathOccupied(path string) (bool, error) {
+	for _, candidate := range []string{path, path + compressSuffix} {
+		if _, err := os.Lstat(candidate); err == nil {
+			return true, nil
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return false, err
+		}
+	}
+	return false, nil
 }
 
 func (w *Writer) backupPath(at time.Time) string {
@@ -206,10 +234,11 @@ func (w *Writer) close() error {
 }
 
 type backup struct {
-	path      string
-	name      string
-	baseName  string
-	timestamp time.Time
+	path           string
+	name           string
+	baseName       string
+	timestamp      time.Time
+	collisionIndex int
 }
 
 func (w *Writer) cleanBackups() error {
@@ -243,10 +272,17 @@ func (w *Writer) readBackups() ([]backup, error) {
 		backups = append(backups, backup{
 			path: filepath.Join(filepath.Dir(w.Filename), entry.Name()), name: entry.Name(),
 			baseName: parsed.baseName, timestamp: parsed.timestamp,
+			collisionIndex: parsed.collisionIndex,
 		})
 	}
 	sort.SliceStable(backups, func(i, j int) bool {
-		return backups[i].timestamp.After(backups[j].timestamp)
+		if !backups[i].timestamp.Equal(backups[j].timestamp) {
+			return backups[i].timestamp.After(backups[j].timestamp)
+		}
+		if backups[i].collisionIndex != backups[j].collisionIndex {
+			return backups[i].collisionIndex > backups[j].collisionIndex
+		}
+		return backups[i].name < backups[j].name
 	})
 	return backups, nil
 }
@@ -273,7 +309,7 @@ func (w *Writer) markExcessBackups(backups []backup, remove map[string]struct{})
 }
 
 func (w *Writer) markExpiredBackups(backups []backup, remove map[string]struct{}) {
-	cutoff := time.Now().Add(-time.Duration(w.MaxAge) * 24 * time.Hour)
+	cutoff := w.currentTime().Add(-time.Duration(w.MaxAge) * 24 * time.Hour)
 	for _, file := range backups {
 		if file.timestamp.Before(cutoff) {
 			remove[file.path] = struct{}{}
@@ -318,8 +354,9 @@ func (w *Writer) compressBackups(backups []backup, remove map[string]struct{}) e
 }
 
 type parsedBackup struct {
-	baseName  string
-	timestamp time.Time
+	baseName       string
+	timestamp      time.Time
+	collisionIndex int
 }
 
 func (w *Writer) parseBackup(name string) (parsedBackup, bool) {
@@ -347,7 +384,25 @@ func (w *Writer) parseBackup(name string) (parsedBackup, bool) {
 		return parsedBackup{}, false
 	}
 	baseName := strings.TrimSuffix(withoutCompression, compressSuffix)
-	return parsedBackup{baseName: baseName, timestamp: parsed}, true
+	collisionIndex := 0
+	collisionSuffix := suffix[len(backupTimeLayout):]
+	if collisionSuffix != "" {
+		if !strings.HasPrefix(collisionSuffix, "-") {
+			return parsedBackup{}, false
+		}
+		collisionIndex, err = strconv.Atoi(strings.TrimPrefix(collisionSuffix, "-"))
+		if err != nil || collisionIndex < 1 {
+			return parsedBackup{}, false
+		}
+	}
+	return parsedBackup{baseName: baseName, timestamp: parsed, collisionIndex: collisionIndex}, true
+}
+
+func (w *Writer) currentTime() time.Time {
+	if w != nil && w.now != nil {
+		return w.now()
+	}
+	return time.Now()
 }
 
 func compress(sourcePath, targetPath string) error {
@@ -355,15 +410,57 @@ func compress(sourcePath, targetPath string) error {
 	if err != nil {
 		return err
 	}
-	defer source.Close()
-	target, err := os.Create(targetPath)
+	sourceInfo, err := source.Stat()
+	if err != nil {
+		_ = source.Close()
+		return err
+	}
+	compressErr := compressReader(source, sourceInfo, targetPath)
+	closeSourceErr := source.Close()
+	if compressErr != nil {
+		return compressErr
+	}
+	if closeSourceErr != nil {
+		_ = os.Remove(targetPath)
+		return closeSourceErr
+	}
+	if err := os.Remove(sourcePath); err != nil {
+		_ = os.Remove(targetPath)
+		return err
+	}
+	return nil
+}
+
+func compressReader(source io.Reader, sourceInfo fs.FileInfo, targetPath string) (returnErr error) {
+	target, err := os.OpenFile(targetPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, sourceInfo.Mode().Perm())
 	if err != nil {
 		return err
 	}
+	targetClosed := false
+	removeTarget := true
+	defer func() {
+		if !targetClosed {
+			if err := target.Close(); returnErr == nil && err != nil {
+				returnErr = err
+			}
+		}
+		if removeTarget {
+			_ = os.Remove(targetPath)
+		}
+	}()
+
+	if err := target.Chmod(sourceInfo.Mode().Perm()); err != nil {
+		return err
+	}
+	if err := preserveFileOwnership(targetPath, sourceInfo); err != nil {
+		return err
+	}
+
 	gzipWriter := gzip.NewWriter(target)
 	_, copyErr := io.Copy(gzipWriter, source)
 	closeGzipErr := gzipWriter.Close()
 	closeTargetErr := target.Close()
+	targetClosed = true
 	if copyErr != nil {
 		return copyErr
 	}
@@ -373,5 +470,6 @@ func compress(sourcePath, targetPath string) error {
 	if closeTargetErr != nil {
 		return closeTargetErr
 	}
-	return os.Remove(sourcePath)
+	removeTarget = false
+	return nil
 }

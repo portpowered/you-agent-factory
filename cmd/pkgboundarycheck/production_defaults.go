@@ -156,9 +156,8 @@ var productionDefaultAllowances = []productionDefaultAllowance{
 	// rollingfile is the shared policy-free writer used by the Wire-selected
 	// runtime log, metrics, and ACP transcript openers. Keep these as exact
 	// file/operation allowances so a new ambient effect elsewhere still fails.
-	{filePath: "pkg/platform/rollingfile/rollingfile.go", operation: "Writer.markExpiredBackups", symbol: "time.Now", wireSymbol: repositoryImportPrefix + "pkg/platform/logging.NewRuntimeLogOpener"},
-	{filePath: "pkg/platform/rollingfile/rollingfile.go", operation: "Writer.nextBackupPath", symbol: "time.Now", wireSymbol: repositoryImportPrefix + "pkg/platform/logging.NewRuntimeLogOpener"},
-	{filePath: "pkg/platform/rollingfile/rollingfile.go", operation: "Writer.nextBackupPath", symbol: "os.Stat", wireSymbol: repositoryImportPrefix + "pkg/platform/logging.NewRuntimeLogOpener"},
+	{filePath: "pkg/platform/rollingfile/rollingfile.go", operation: "Writer.currentTime", symbol: "time.Now", wireSymbol: repositoryImportPrefix + "pkg/platform/logging.NewRuntimeLogOpener"},
+	{filePath: "pkg/platform/rollingfile/rollingfile.go", operation: "Writer.nextBackupPath", symbol: "os.Lstat", wireSymbol: repositoryImportPrefix + "pkg/platform/logging.NewRuntimeLogOpener"},
 	{filePath: "pkg/platform/rollingfile/rollingfile.go", operation: "Writer.openExistingOrNew", symbol: "os.OpenFile", wireSymbol: repositoryImportPrefix + "pkg/platform/logging.NewRuntimeLogOpener"},
 	{filePath: "pkg/platform/rollingfile/rollingfile.go", operation: "Writer.openExistingOrNew", symbol: "os.Stat", wireSymbol: repositoryImportPrefix + "pkg/platform/logging.NewRuntimeLogOpener"},
 	{filePath: "pkg/platform/rollingfile/rollingfile.go", operation: "Writer.openNew", symbol: "os.MkdirAll", wireSymbol: repositoryImportPrefix + "pkg/platform/logging.NewRuntimeLogOpener"},
@@ -166,9 +165,10 @@ var productionDefaultAllowances = []productionDefaultAllowance{
 	{filePath: "pkg/platform/rollingfile/rollingfile.go", operation: "Writer.openNew", symbol: "os.Rename", wireSymbol: repositoryImportPrefix + "pkg/platform/logging.NewRuntimeLogOpener"},
 	{filePath: "pkg/platform/rollingfile/rollingfile.go", operation: "Writer.openNew", symbol: "os.Stat", wireSymbol: repositoryImportPrefix + "pkg/platform/logging.NewRuntimeLogOpener"},
 	{filePath: "pkg/platform/rollingfile/rollingfile.go", operation: "Writer.readBackups", symbol: "os.ReadDir", wireSymbol: repositoryImportPrefix + "pkg/platform/logging.NewRuntimeLogOpener"},
-	{filePath: "pkg/platform/rollingfile/rollingfile.go", operation: "compress", symbol: "os.Create", wireSymbol: repositoryImportPrefix + "pkg/platform/logging.NewRuntimeLogOpener"},
 	{filePath: "pkg/platform/rollingfile/rollingfile.go", operation: "compress", symbol: "os.Open", wireSymbol: repositoryImportPrefix + "pkg/platform/logging.NewRuntimeLogOpener"},
 	{filePath: "pkg/platform/rollingfile/rollingfile.go", operation: "compress", symbol: "os.Remove", wireSymbol: repositoryImportPrefix + "pkg/platform/logging.NewRuntimeLogOpener"},
+	{filePath: "pkg/platform/rollingfile/rollingfile.go", operation: "compressReader", symbol: "os.OpenFile", wireSymbol: repositoryImportPrefix + "pkg/platform/logging.NewRuntimeLogOpener"},
+	{filePath: "pkg/platform/rollingfile/rollingfile.go", operation: "compressReader", symbol: "os.Remove", wireSymbol: repositoryImportPrefix + "pkg/platform/logging.NewRuntimeLogOpener"},
 	{filePath: "pkg/platform/rollingfile/rollingfile.go", operation: "package", symbol: "os.File", wireSymbol: repositoryImportPrefix + "pkg/platform/logging.NewRuntimeLogOpener"},
 	{filePath: "pkg/platform/rollingfile/rollingfile.go", operation: "removeBackups", symbol: "os.Remove", wireSymbol: repositoryImportPrefix + "pkg/platform/logging.NewRuntimeLogOpener"},
 
