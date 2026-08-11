@@ -310,7 +310,6 @@
 
 
 
----
 ## 2026-08-10 04:32 -07:00 - sac-s0-2-pkg-boundary-ignores-001
 - What was implemented
   - Centralized repository-root-relative pruning for `.artifacts`, `.artifacts/bootstrap/worktrees`, generated transient worktrees, and the supported root worktree locations.
@@ -10457,4 +10456,20 @@
   - Fresh hosted verification is intentionally pending for the new rebased head.
 - **Learnings for future iterations:**
   - When main advances through another bookkeeping-heavy merge, retain the active task PRD, use current main as the progress-log base, append the task-only history, and rerun all hosted checks on the replacement ancestry.
+---
+## [2026-08-11 07:50 -07:00] - graph-workstation-semantics current-main reconciliation
+- What was implemented
+  - Merged the live `origin/main` commit `635a43870` after the PR became dirty again, preserving the graph PRD as authoritative and unioning the dashboard mainline progress history with the graph task history.
+  - Revalidated the complete public replay semantic projection and guarded-control regression on the new merge head.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+  - Mainline dashboard and documentation files carried by the merge.
+- Verification
+  - `prd.json` parses with four user stories and zero incomplete `passes` values; no conflict markers remain.
+  - Factory graph typecheck, 54 tests, build, package-boundary, and 31-file package-pack verification passed.
+  - Factory visualizers typecheck, 31 tests, and lint passed; `git diff --check` passed.
+- **Learnings for future iterations:**
+  - Package build/typecheck scripts mutate shared dependency `dist` directories, so dependent package verification must run sequentially; parallel build jobs can race and temporarily remove generated declarations.
+  - Fetch `origin/main` immediately before final publication and record the exact live hash because mainline bookkeeping merges can make an otherwise green PR dirty again.
 ---
