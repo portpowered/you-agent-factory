@@ -2241,19 +2241,19 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/transports/acp/internal/stdio/prompt_stream_live_drain_test.go#TestLiveDrainTurnUpdatesRetriesGapAcknowledgementConflictBeforeCatchUp",
+      "target": "pkg/transports/acp/internal/stdio/prompt_stream_delivery_test.go#TestDeliverBoundWorkerChildProjectionPreservesNotificationOutcomes",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/transports/acp/internal/stdio/response_bridge_test.go#TestDeliverBoundWorkerChildProjectionPreservesNotificationOutcomes",
+      "target": "pkg/transports/acp/internal/stdio/prompt_stream_delivery_test.go#TestStreamTurnUpdatesBoundsNoisyChildWithoutReducingSiblingBudget",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/transports/acp/internal/stdio/response_bridge_test.go#TestStreamTurnUpdatesBoundsNoisyChildWithoutReducingSiblingBudget",
+      "target": "pkg/transports/acp/internal/stdio/prompt_stream_gap_test.go#TestLiveDrainTurnUpdatesRetriesGapAcknowledgementConflictBeforeCatchUp",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
     },

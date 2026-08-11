@@ -303,9 +303,9 @@
     },
     {
       "packagePath": "pkg/transports/acp/internal/stdio",
-      "fileCount": 31,
+      "fileCount": 22,
       "owner": "backend-maintainers",
-      "removalReason": "focused ACP stdio behavioral suites and their package-local fixtures are intentionally split across exact owner files; remove this entry when the package is decomposed or the suites are consolidated without losing behavioral ownership."
+      "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this package into focused sub-packages and remove this entry."
     },
     {
       "packagePath": "pkg/transports/cli",

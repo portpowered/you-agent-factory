@@ -6,13 +6,18 @@ import (
 	"fmt"
 	"sync"
 	"testing"
-
 	acpsdk "github.com/coder/acp-go-sdk"
-
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/identity"
+	"encoding/json"
+	"math"
+	"github.com/portpowered/infinite-you/pkg/services/events"
+	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/mapping"
+	"strings"
+	"github.com/portpowered/infinite-you/pkg/platform/wiretranscript"
+	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 )
 
 func TestAttachmentCacheResumeAttachmentID(t *testing.T) {
@@ -413,3 +418,203 @@ func TestStreamTurnUpdatesPropagatesEnsureAttachmentFailure(t *testing.T) {
 // TestStreamTurnUpdatesNoAttachmentIsNoOp proves a blank connectionID (no
 // attachment ever registered) is a silent, successful no-op -- the same
 // convention s.events == nil already has.
+
+func TestWorkerChildProjectionCacheFailsClosedAcrossRestoreBoundaries(t *testing.T) {
+	var nilCache *attachmentCache
+	if nilCache.beginWorkerChildBudget("session") {
+		t.Fatal("nil cache initialized a child budget")
+	}
+	nilCache.resetWorkerChildBudgetInitialization("session")
+
+	item := chatsessions.SequencedItem{
+		ParentItemID: "worker", WorkerSessionAssociation: &chatsessions.WorkerSessionAssociation{DispatchID: "dispatch", WorkerSessionID: "worker"},
+		Kind: workers.KindMessage, Phase: workers.PhaseDelta,
+		Payload: json.RawMessage(`{"contentBlockIndex":0,"contentBlockKind":"TEXT","textDelta":"text"}`),
+	}
+	update, err := mapping.ProjectWorkerChild(item)
+	if err != nil || update == nil || update.ToolCallUpdate == nil {
+		t.Fatalf("ProjectWorkerChild() = (%#v, %v), want content update", update, err)
+	}
+	if bounded, err := nilCache.boundWorkerChildProjection("session", item, update); err != nil || bounded == nil {
+		t.Fatalf("nil cache bound = (%#v, %v), want bounded update", bounded, err)
+	}
+	unsafe := &acpsdk.SessionUpdate{ToolCallUpdate: &acpsdk.SessionToolCallUpdate{ToolCallId: "worker", RawInput: math.Inf(1)}}
+	if bounded, err := (&attachmentCache{}).boundWorkerChildProjection("session", item, unsafe); bounded != nil || !errors.Is(err, mapping.ErrMalformedRecord) {
+		t.Fatalf("unsafe cached projection = (%#v, %v), want malformed", bounded, err)
+	}
+
+	server, eventsSvc := newStreamingTestServer(t, &fakeFactoryTargetService{})
+	readErr := errors.New("read failed")
+	eventsSvc.readErr = readErr
+	cache := &attachmentCache{}
+	ctx := contextWithAttachmentCache(context.Background(), cache)
+	if err := server.restoreWorkerChildProjectionBudget(ctx, streamingTestSessionID, 1); !errors.Is(err, readErr) {
+		t.Fatalf("restore read error = %v, want %v", err, readErr)
+	}
+	if !cache.beginWorkerChildBudget(streamingTestSessionID) {
+		t.Fatal("failed restore did not reset budget initialization for retry")
+	}
+
+	eventsSvc.readErr = nil
+	if err := server.restoreWorkerChildProjectionBudget(contextWithAttachmentCache(context.Background(), &attachmentCache{}), streamingTestSessionID, 1); !errors.Is(err, errStreamGapEncountered) {
+		t.Fatalf("restore invalid cursor = %v, want %v", err, errStreamGapEncountered)
+	}
+
+	eventsSvc.seed(t, streamingTestSessionID, workers.KindMessage, workers.PhaseCompleted, assistantMessagePayload("one"))
+	eventsSvc.seed(t, streamingTestSessionID, workers.KindMessage, workers.PhaseCompleted, assistantMessagePayload("two"))
+	eventsSvc.markEvictedThrough(streamingTestSessionID, 1)
+	if err := server.restoreWorkerChildProjectionBudget(contextWithAttachmentCache(context.Background(), &attachmentCache{}), streamingTestSessionID, 2); err == nil {
+		t.Fatal("restore retention gap error = nil, want failure")
+	}
+}
+
+func TestRebuildWorkerChildProjectionBudgetIsolatesMalformedChildRecords(t *testing.T) {
+	server, _ := newStreamingTestServer(t, &fakeFactoryTargetService{})
+	cache := &attachmentCache{}
+	if err := server.rebuildWorkerChildProjectionBudget(cache, streamingTestSessionID, events.Record{Payload: json.RawMessage(`not-json`)}); !errors.Is(err, errMalformedSequencedEnvelope) {
+		t.Fatalf("rebuild malformed envelope error = %v, want %v", err, errMalformedSequencedEnvelope)
+	}
+
+	badChild, err := json.Marshal(chatsessions.SequencedItem{
+		ParentItemID: "worker", WorkerSessionAssociation: &chatsessions.WorkerSessionAssociation{DispatchID: "dispatch", WorkerSessionID: "worker"},
+		Kind: workers.KindError, Phase: workers.PhaseUpdated, Payload: json.RawMessage(`{"code":"bad"}`),
+	})
+	if err != nil {
+		t.Fatalf("marshal bad child: %v", err)
+	}
+	if err := server.rebuildWorkerChildProjectionBudget(cache, streamingTestSessionID, events.Record{Payload: badChild}); err != nil {
+		t.Fatalf("rebuild malformed child error = %v, want isolated skip", err)
+	}
+	if cache.workerChildBudgets != nil {
+		t.Fatalf("malformed child populated budgets = %#v, want none", cache.workerChildBudgets)
+	}
+}
+
+func TestWorkerChildProjectionSkipLoggingAcceptsAbsentLogger(t *testing.T) {
+	item := chatsessions.SequencedItem{WorkerSessionAssociation: &chatsessions.WorkerSessionAssociation{DispatchID: "dispatch", WorkerSessionID: "worker"}}
+	var nilServer *Server
+	nilServer.logWorkerChildProjectionSkipped(item)
+	(&Server{}).logWorkerChildProjectionSkipped(item)
+}
+
+// capturingTranscript records what the server hands the recorder.
+type capturingTranscript struct {
+	mu      sync.Mutex
+	records []wiretranscript.Record
+	closed  bool
+	failing bool
+}
+
+func (t *capturingTranscript) Record(
+	conn string,
+	peer wiretranscript.Peer,
+	direction wiretranscript.Direction,
+	stream wiretranscript.Stream,
+	line []byte,
+) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.records = append(t.records, wiretranscript.Record{
+		Conn: conn, Peer: peer, Direction: direction, Stream: stream,
+		Bytes: len(line), Text: string(line),
+	})
+	return nil
+}
+
+func (t *capturingTranscript) Path() string { return "/dev/null/transcript" }
+
+func (t *capturingTranscript) Close() error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.closed = true
+	return nil
+}
+
+func (t *capturingTranscript) snapshot() ([]wiretranscript.Record, bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return append([]wiretranscript.Record(nil), t.records...), t.closed
+}
+
+// TestServeRecordsBothDirectionsIncludingRejectedFrames proves the recorder
+// sees the inbound line even when the transport rejects it, and the outbound
+// error frame it produces. A frame the decoder refuses is exactly what a
+// customer opens the transcript to find.
+func TestServeRecordsBothDirectionsIncludingRejectedFrames(t *testing.T) {
+	t.Parallel()
+
+	transcript := &capturingTranscript{}
+	server := New(nil, nil, nil, nil, nil, nil, nil,
+		acp.WireRecorder(func(string) (acp.WireTranscript, error) { return transcript, nil }))
+
+	var out strings.Builder
+	input := strings.NewReader("this is not json\n")
+	if err := server.Serve(context.Background(), input, &out); err != nil {
+		t.Fatalf("Serve() error = %v", err)
+	}
+
+	records, closed := transcript.snapshot()
+	if !closed {
+		t.Fatal("transcript was not closed when the connection ended")
+	}
+
+	var sawInbound, sawOutbound bool
+	for _, record := range records {
+		switch record.Direction {
+		case wiretranscript.DirectionIn:
+			if strings.Contains(record.Text, "this is not json") {
+				sawInbound = true
+			}
+			if record.Peer != wiretranscript.PeerClient || record.Stream != wiretranscript.StreamStdin {
+				t.Fatalf("inbound record attribution = %+v", record)
+			}
+		case wiretranscript.DirectionOut:
+			if strings.Contains(record.Text, "Parse error") {
+				sawOutbound = true
+			}
+			if record.Peer != wiretranscript.PeerAgent || record.Stream != wiretranscript.StreamStdout {
+				t.Fatalf("outbound record attribution = %+v", record)
+			}
+		}
+	}
+	if !sawInbound {
+		t.Fatalf("the rejected inbound line was not recorded; got %+v", records)
+	}
+	if !sawOutbound {
+		t.Fatalf("the outbound error frame was not recorded; got %+v", records)
+	}
+}
+
+// TestServeWithoutARecorderIsUnchanged keeps recording strictly additive: a
+// server built without one must behave exactly as before.
+func TestServeWithoutARecorderIsUnchanged(t *testing.T) {
+	t.Parallel()
+
+	server := New(nil, nil, nil, nil, nil, nil, nil, nil)
+	var out strings.Builder
+	if err := server.Serve(context.Background(), strings.NewReader("this is not json\n"), &out); err != nil {
+		t.Fatalf("Serve() error = %v", err)
+	}
+	if !strings.Contains(out.String(), "Parse error") {
+		t.Fatalf("stdout = %q, want the ordinary parse-error frame", out.String())
+	}
+}
+
+// TestServeSurvivesARecorderThatCannotOpen proves a diagnostic artifact never
+// costs a customer their session.
+func TestServeSurvivesARecorderThatCannotOpen(t *testing.T) {
+	t.Parallel()
+
+	server := New(nil, nil, nil, nil, nil, nil, nil,
+		acp.WireRecorder(func(string) (acp.WireTranscript, error) {
+			return nil, context.DeadlineExceeded
+		}))
+
+	var out strings.Builder
+	if err := server.Serve(context.Background(), strings.NewReader("this is not json\n"), &out); err != nil {
+		t.Fatalf("Serve() error = %v, want the connection to continue without recording", err)
+	}
+	if !strings.Contains(out.String(), "Parse error") {
+		t.Fatalf("stdout = %q, want the ordinary parse-error frame", out.String())
+	}
+}

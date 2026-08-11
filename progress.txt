@@ -33,6 +33,7 @@
 - Atomic orphan reclaim must rename the exact revalidated lease to a distinct still-visible recovery path before publishing the new owner; never remove and reuse the same path across a delayed contender.
 - Cross-process lease probes must suspend before filesystem inspection and match the exact ownership-resource suffix; observe-then-suspend leaves a release race even when the path is re-stat'ed.
 - For mechanical test splits, capture the exact go test inventory, repeatable coverage command/output, and one-to-one behavior/helper placement map in a review artifact before moving tests.
+- For deletion-only same-package test splits, preserve the exact package-file baseline by consolidating cohesive declarations into existing owners; keep every cross-suite fixture in the one shared helper and route boundary-sensitive construction through that helper.
 - Keep comments and exemption directives attached to the declaration they govern when splitting Go test files; otherwise a boundary can duplicate or orphan maintainability policy.
 - Replacing a file-level size exemption with focused test files may require per-function directives; update both the source directive and the sorted exemption-budget entry together.
 - When moving a test with a pkgmaintcheck exemption, move the existing budget target with the test and retain legacy file suppressions until the remaining staged split retires the source file.
@@ -8429,3 +8430,23 @@
   - For a moving-base conflict in long append-only logs, resolve from complete bounded Git-stage slices, keep the active task PRD authoritative, and validate both histories before staging.
  ---
  ---
+
+## 2026-08-11 -07:00 - thr-split-acp-stdio-tests review follow-up
+- What was implemented
+  - Addressed PR #1861's blocking feedback by consolidating all cross-suite ACP stdio fixtures into `session_test_helpers_test.go` and removing the alternate stream helper file.
+  - Reworked the move-only split against current `origin/main` so the package remains at the exact 22-file baseline; cohesive declarations were consolidated into existing test owners rather than increasing the deletion-only file-count debt.
+  - Routed chat-session store construction through the shared helper so the package-boundary report has no new finding, and moved the affected maintainability exemption targets with their test declarations.
+- Files changed
+  - `pkg/transports/acp/internal/stdio/*_test.go`
+  - `docs/internal/baselines/backend-exemption-budget.json`
+  - `docs/internal/baselines/backend-package-file-count.json`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Against `origin/main` `3a0b571b2`, normalized package test inventory was 222 before and after with zero diff and SHA-256 `da83686cb68f0988570ca0ea0f429eabf40beb2bb47dba967874a33d46481bf1`; coverage remained 94.3% of statements.
+  - Focused ACP stdio tests, the concurrent-attachment race test (three runs), package vet, backend-size, pkg-maint, pkg-file-count, typecheck, boundary checks, and `git diff --check` passed.
+- **Learnings for future iterations:**
+  - Same-package deletion-only splits must be planned around the existing package-file baseline; moving declarations into existing cohesive owners keeps the file-count ratchet stable.
+  - Cross-suite fixtures are easiest to audit when one helper file owns all shared fakes and setup, including fixtures that originated in a stream-specific suite.
+  - A boundary-sensitive wire constructor can remain a single known finding when its construction is centralized in the shared test helper instead of repeated in behavioral files.
+---
