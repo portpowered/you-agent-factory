@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/services/events"
+	workerrecording "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/worker_capture"
 )
 
 // WorkerSessionRecordingService is the narrow Recordings capability used by
@@ -61,20 +62,68 @@ type WorkerRecordingRecord struct {
 	Record          events.Record
 }
 
-// WorkerRecordingSnapshot is the durable sidecar shape used by the default
-// local writer. The schema is deliberately source-native: later replay work
-// can load the exact Events records without reconstructing them from a
-// provider-specific projection.
-type WorkerRecordingSnapshot struct {
-	RecordingID string                           `json:"recordingId"`
-	Sessions    []WorkerSessionRecordingSnapshot `json:"sessions"`
+// Worker recording values and the shared pure reducer live in the focused
+// Recordings-owned internal Worker capture package and are re-exported here
+// as the customer-facing service vocabulary.
+type (
+	WorkerRecordingSnapshot        = workerrecording.WorkerRecordingSnapshot
+	WorkerSessionRecordingSnapshot = workerrecording.WorkerSessionRecordingSnapshot
+	WorkerRecordingStatus          = workerrecording.WorkerRecordingStatus
+	WorkerRecordingHistory         = workerrecording.WorkerRecordingHistory
+	WorkerRecordingTerminal        = workerrecording.WorkerRecordingTerminal
+	WorkerRecordingProjection      = workerrecording.WorkerRecordingProjection
+	WorkerRecordingReplayRequest   = workerrecording.WorkerRecordingReplayRequest
+	WorkerRecordingReplayResult    = workerrecording.WorkerRecordingReplayResult
+)
+
+const (
+	WorkerRecordingStatusActive    = workerrecording.WorkerRecordingStatusActive
+	WorkerRecordingStatusCompleted = workerrecording.WorkerRecordingStatusCompleted
+	WorkerRecordingStatusFailed    = workerrecording.WorkerRecordingStatusFailed
+)
+
+// ReduceWorkerRecording applies the one deterministic Worker history reducer.
+func ReduceWorkerRecording(history WorkerRecordingHistory) (WorkerRecordingProjection, error) {
+	return workerrecording.ReduceWorkerRecording(history)
 }
 
-// WorkerSessionRecordingSnapshot contains one detached Worker topic history
-// in aggregate order.
-type WorkerSessionRecordingSnapshot struct {
-	WorkerSessionID string          `json:"workerSessionId"`
-	Records         []events.Record `json:"records"`
+// ReplayWorkerRecording reduces one durable Worker snapshot and rejects an
+// active prefix as incomplete replay.
+func ReplayWorkerRecording(request WorkerRecordingReplayRequest) (WorkerRecordingReplayResult, error) {
+	return workerrecording.ReplayWorkerRecording(request)
+}
+
+// WorkerRecordingReader is the optional read side of the durable Worker
+// recording store. The default local FileWriter implements it; keeping it
+// separate from WorkerRecordingWriter lets tests and alternate stores expose
+// only the effect they own.
+type WorkerRecordingReader interface {
+	LoadWorkerRecording(context.Context, string) (WorkerRecordingSnapshot, error)
+}
+
+// WorkerRecordingProjectionReader is an optional observation seam for a live
+// capture. It is separate from WorkerSessionRecording so the opening barrier
+// remains the only handoff gate and existing callers need not implement a
+// replay-shaped method.
+type WorkerRecordingProjectionReader interface {
+	WorkerRecordingProjection() (WorkerRecordingProjection, error)
+}
+
+// WorkerRecordingFailure is the safe durable classification written when
+// capture cannot reach a legal terminal. It intentionally carries no raw
+// provider payload or implementation error text.
+type WorkerRecordingFailure struct {
+	RecordingID     string
+	WorkerSessionID string
+	Topic           events.Topic
+	Code            string
+}
+
+// WorkerRecordingFailureWriter is an optional failure side of the durable
+// Worker recording store. The capture writer remains the only Recordings
+// acceptance port; Worker Sessions never receives this capability.
+type WorkerRecordingFailureWriter interface {
+	PersistWorkerRecordingFailure(context.Context, WorkerRecordingFailure) error
 }
 
 // WorkerRecordingWriter is the exact durable acceptance port owned by
@@ -99,16 +148,19 @@ func (writer WorkerRecordingWriterFunc) PersistWorkerRecord(
 }
 
 var (
-	ErrInvalidWorkerRecordingRequest = errors.New("recordings: invalid Worker recording request")
+	ErrInvalidWorkerRecordingRequest = workerrecording.ErrInvalidWorkerRecordingRequest
 	ErrMissingWorkerRecordingWriter  = errors.New("recordings: Worker recording writer is required")
 	ErrWorkerRecordingSubscribe      = errors.New("recordings: Worker recording subscription failed")
-	ErrWorkerRecordingOpening        = errors.New("recordings: Worker recording opening is invalid")
+	ErrWorkerRecordingOpening        = workerrecording.ErrWorkerRecordingOpening
 	ErrWorkerRecordingPersistence    = errors.New("recordings: Worker recording persistence failed")
-	ErrWorkerRecordingDelivery       = errors.New("recordings: Worker recording delivery failed")
+	ErrWorkerRecordingDelivery       = workerrecording.ErrWorkerRecordingDelivery
 	ErrWorkerRecordingGap            = errors.New("recordings: Worker recording retention gap")
 	ErrWorkerRecordingClosed         = errors.New("recordings: Worker recording source closed")
 	ErrWorkerRecordingCanceled       = errors.New("recordings: Worker recording subscription canceled")
 	ErrWorkerRecordingBackpressure   = errors.New("recordings: Worker recording backpressure")
-	ErrWorkerRecordingOrder          = errors.New("recordings: Worker recording order is invalid")
-	ErrWorkerRecordingDuplicate      = errors.New("recordings: Worker recording duplicate conflicts")
+	ErrWorkerRecordingOrder          = workerrecording.ErrWorkerRecordingOrder
+	ErrWorkerRecordingDuplicate      = workerrecording.ErrWorkerRecordingDuplicate
+	ErrWorkerRecordingTerminal       = workerrecording.ErrWorkerRecordingTerminal
+	ErrWorkerRecordingIncomplete     = workerrecording.ErrWorkerRecordingIncomplete
+	ErrWorkerRecordingReplay         = workerrecording.ErrWorkerRecordingReplay
 )

@@ -3,7 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -13,13 +13,6 @@ import (
 )
 
 const defaultSubscriptionLimit = 128
-
-const (
-	workerLifecycleSourceType = events.SourceType("worker_session_lifecycle")
-	openingSourceSequence     = events.SourceSequence(1)
-	openingSourceEventID      = events.SourceEventID("started")
-	workerDraftSchemaID       = events.SchemaID("workers.draft.v1")
-)
 
 // Service owns the Recordings side of one source-native Worker capture. It
 // never appends to Events: Events is the source stream, while writer is the
@@ -87,6 +80,7 @@ func (service *Service) StartWorkerSessionRecording(
 	runCtx, stop := context.WithCancel(context.Background())
 	capture := &capture{
 		request:      request,
+		events:       service.events,
 		writer:       service.writer,
 		subscription: subscription,
 		logger:       service.logger,
@@ -103,12 +97,14 @@ func (service *Service) StartWorkerSessionRecording(
 
 type capture struct {
 	request      recordings.WorkerSessionRecordingRequest
+	events       events.Service
 	writer       recordings.WorkerRecordingWriter
 	subscription events.Subscription
 	logger       logging.Logger
 	runCtx       context.Context
 	stop         context.CancelFunc
 	stopOnce     sync.Once
+	failureOnce  sync.Once
 
 	opening chan struct{}
 	failure chan struct{}
@@ -118,14 +114,32 @@ type capture struct {
 	opened       bool
 	terminal     bool
 	closed       bool
+	closing      bool
 	failed       error
 	lastPosition events.AggregateSequence
 	identities   map[events.AppendIdentity]events.Record
+	history      []events.Record
+	projection   recordings.WorkerRecordingProjection
 }
 
 func (capture *capture) consume() {
 	defer close(capture.done)
 	for {
+		if capture.isClosing() {
+			pending, err := capture.hasPendingRecords(capture.runCtx)
+			if err != nil {
+				capture.fail(fmt.Errorf("%w: inspect closing Worker topic: %v", recordings.ErrWorkerRecordingDelivery, err))
+				return
+			}
+			if !pending {
+				if capture.isTerminal() {
+					capture.stopOnce.Do(capture.stop)
+					return
+				}
+				capture.fail(fmt.Errorf("%w: source closed before a durable terminal record", recordings.ErrWorkerRecordingIncomplete))
+				return
+			}
+		}
 		delivery := capture.subscription.Next(capture.runCtx)
 		if err := delivery.Validate(); err != nil {
 			capture.fail(fmt.Errorf("%w: malformed delivery: %w", recordings.ErrWorkerRecordingDelivery, err))
@@ -135,9 +149,6 @@ func (capture *capture) consume() {
 		case events.DeliveryRecord:
 			if err := capture.accept(delivery.Record); err != nil {
 				capture.fail(err)
-				return
-			}
-			if capture.isTerminal() {
 				return
 			}
 		case events.DeliveryGap:
@@ -178,28 +189,27 @@ func (capture *capture) accept(record events.Record) error {
 		}
 		return fmt.Errorf("%w: source identity %q/%q/%d/%q changed", recordings.ErrWorkerRecordingDuplicate, identity.SourceType, identity.SourceID, identity.SourceSequence, identity.SourceEventID)
 	}
+	if capture.terminal {
+		capture.mu.Unlock()
+		return fmt.Errorf("%w: record position %d follows the durable terminal", recordings.ErrWorkerRecordingTerminal, record.ID.Position)
+	}
 	lastPosition := capture.lastPosition
 	opened := capture.opened
+	history := cloneWorkerRecords(capture.history)
 	capture.mu.Unlock()
-
-	if !opened {
-		if record.ID.Topic != capture.request.Topic || record.ID.Position != 1 ||
-			record.SourceType != workerLifecycleSourceType ||
-			record.SourceID != events.SourceID(capture.request.WorkerSessionID) ||
-			record.SourceSequence != openingSourceSequence ||
-			record.SourceEventID != openingSourceEventID ||
-			record.SchemaID != workerDraftSchemaID {
-			return fmt.Errorf("%w: expected correlated position-1 SESSION/STARTED for Worker Session %q", recordings.ErrWorkerRecordingOpening, capture.request.WorkerSessionID)
-		}
-		if err := validateOpeningPayload(record.Payload, capture.request.WorkerSessionID); err != nil {
-			return err
-		}
-	} else if record.ID.Topic != capture.request.Topic {
-		return fmt.Errorf("%w: record topic %q does not match %q", recordings.ErrWorkerRecordingOrder, record.ID.Topic, capture.request.Topic)
-	}
 
 	if opened && record.ID.Position != lastPosition+1 {
 		return fmt.Errorf("%w: expected aggregate position %d, got %d", recordings.ErrWorkerRecordingOrder, lastPosition+1, record.ID.Position)
+	}
+	history = append(history, record.Detached())
+	projection, err := recordings.ReduceWorkerRecording(recordings.WorkerRecordingHistory{
+		RecordingID:     capture.request.RecordingID,
+		WorkerSessionID: capture.request.WorkerSessionID,
+		Topic:           capture.request.Topic,
+		Records:         history,
+	})
+	if err != nil {
+		return err
 	}
 	if err := capture.writer.PersistWorkerRecord(capture.runCtx, recordings.WorkerRecordingRecord{
 		RecordingID:     capture.request.RecordingID,
@@ -212,12 +222,9 @@ func (capture *capture) accept(record events.Record) error {
 	capture.mu.Lock()
 	capture.identities[identity] = record.Detached()
 	capture.lastPosition = record.ID.Position
-	if record.SourceType == workerLifecycleSourceType &&
-		record.SourceSequence >= openingSourceSequence+1 &&
-		record.SourceEventID == events.SourceEventID("terminal") {
-		capture.terminal = true
-		capture.stopOnce.Do(capture.stop)
-	}
+	capture.history = history
+	capture.projection = projection
+	capture.terminal = projection.Complete
 	if !capture.opened {
 		capture.opened = true
 		close(capture.opening)
@@ -230,31 +237,6 @@ func (capture *capture) isTerminal() bool {
 	capture.mu.Lock()
 	defer capture.mu.Unlock()
 	return capture.terminal
-}
-
-func validateOpeningPayload(payload []byte, sessionID string) error {
-	var envelope struct {
-		Kind    string          `json:"kind"`
-		Phase   string          `json:"phase"`
-		Payload json.RawMessage `json:"payload"`
-	}
-	if err := json.Unmarshal(payload, &envelope); err != nil {
-		return fmt.Errorf("%w: opening payload is not valid Worker draft JSON: %v", recordings.ErrWorkerRecordingOpening, err)
-	}
-	if envelope.Kind != "SESSION" || envelope.Phase != "STARTED" {
-		return fmt.Errorf("%w: got kind=%q phase=%q", recordings.ErrWorkerRecordingOpening, envelope.Kind, envelope.Phase)
-	}
-	var session struct {
-		Status          string `json:"status"`
-		WorkerSessionID string `json:"workerSessionId"`
-	}
-	if err := json.Unmarshal(envelope.Payload, &session); err != nil {
-		return fmt.Errorf("%w: opening payload facts are malformed: %v", recordings.ErrWorkerRecordingOpening, err)
-	}
-	if session.Status != "STARTING" || session.WorkerSessionID != sessionID {
-		return fmt.Errorf("%w: payload status=%q Worker Session ID=%q does not match STARTING/%q", recordings.ErrWorkerRecordingOpening, session.Status, session.WorkerSessionID, sessionID)
-	}
-	return nil
 }
 
 func sameRecord(left, right events.Record) bool {
@@ -277,7 +259,90 @@ func (capture *capture) fail(err error) {
 	close(capture.failure)
 	capture.stopOnce.Do(capture.stop)
 	capture.mu.Unlock()
-	capture.logger.Info("Worker recording capture failed", "workerSessionID", capture.request.WorkerSessionID, "topic", capture.request.Topic, "outcome", "failed", "error", err.Error())
+	code := workerRecordingFailureCode(err)
+	if failureWriter, ok := capture.writer.(recordings.WorkerRecordingFailureWriter); ok {
+		capture.failureOnce.Do(func() {
+			if persistErr := failureWriter.PersistWorkerRecordingFailure(context.Background(), recordings.WorkerRecordingFailure{
+				RecordingID:     capture.request.RecordingID,
+				WorkerSessionID: capture.request.WorkerSessionID,
+				Topic:           capture.request.Topic,
+				Code:            code,
+			}); persistErr != nil {
+				capture.logger.Info("Worker recording failure persistence failed", "workerSessionID", capture.request.WorkerSessionID, "topic", capture.request.Topic, "outcome", "failed", "code", code)
+			}
+		})
+	}
+	capture.logger.Info("Worker recording capture failed", "workerSessionID", capture.request.WorkerSessionID, "topic", capture.request.Topic, "outcome", "failed", "code", code)
+}
+
+func workerRecordingFailureCode(err error) string {
+	switch {
+	case errors.Is(err, recordings.ErrWorkerRecordingOpening):
+		return "OPENING_INVALID"
+	case errors.Is(err, recordings.ErrWorkerRecordingPersistence):
+		return "PERSISTENCE_FAILED"
+	case errors.Is(err, recordings.ErrWorkerRecordingGap):
+		return "RETENTION_GAP"
+	case errors.Is(err, recordings.ErrWorkerRecordingClosed):
+		return "SOURCE_CLOSED"
+	case errors.Is(err, recordings.ErrWorkerRecordingCanceled):
+		return "CANCELED"
+	case errors.Is(err, recordings.ErrWorkerRecordingBackpressure):
+		return "BACKPRESSURE"
+	case errors.Is(err, recordings.ErrWorkerRecordingTerminal):
+		return "TERMINAL_INVALID"
+	case errors.Is(err, recordings.ErrWorkerRecordingIncomplete):
+		return "INCOMPLETE"
+	case errors.Is(err, recordings.ErrWorkerRecordingDuplicate):
+		return "DUPLICATE_CONFLICT"
+	case errors.Is(err, recordings.ErrWorkerRecordingOrder):
+		return "ORDER_INVALID"
+	default:
+		return "DELIVERY_FAILED"
+	}
+}
+
+func (capture *capture) isClosing() bool {
+	capture.mu.Lock()
+	defer capture.mu.Unlock()
+	return capture.closing
+}
+
+func (capture *capture) hasPendingRecords(ctx context.Context) (bool, error) {
+	capture.mu.Lock()
+	position := capture.lastPosition
+	capture.mu.Unlock()
+	result, err := capture.events.Read(ctx, events.ReadRequest{
+		Topic: capture.request.Topic,
+		From:  events.Cursor{Topic: capture.request.Topic, Position: position},
+		Limit: defaultSubscriptionLimit,
+	})
+	if err != nil {
+		return false, err
+	}
+	if err := result.Validate(); err != nil {
+		return false, err
+	}
+	return result.Outcome == events.ReadOutcomeProgress && len(result.Records) > 0, nil
+}
+
+func cloneWorkerRecords(records []events.Record) []events.Record {
+	clone := make([]events.Record, len(records))
+	for i, record := range records {
+		clone[i] = record.Detached()
+	}
+	return clone
+}
+
+func cloneWorkerProjection(projection recordings.WorkerRecordingProjection) recordings.WorkerRecordingProjection {
+	clone := projection
+	clone.Opening = projection.Opening.Detached()
+	clone.Records = cloneWorkerRecords(projection.Records)
+	if projection.Terminal != nil {
+		terminal := *projection.Terminal
+		clone.Terminal = &terminal
+	}
+	return clone
 }
 
 func (capture *capture) AwaitOpening(ctx context.Context) error {
@@ -303,21 +368,49 @@ func (capture *capture) failureError() error {
 	return capture.failed
 }
 
+// WorkerRecordingProjection returns a detached live reduction. It is an
+// observation seam for Recordings tests and replay callers; provider handoff
+// still depends only on AwaitOpening.
+func (capture *capture) WorkerRecordingProjection() (recordings.WorkerRecordingProjection, error) {
+	capture.mu.Lock()
+	defer capture.mu.Unlock()
+	if capture.failed != nil {
+		return recordings.WorkerRecordingProjection{}, capture.failed
+	}
+	return cloneWorkerProjection(capture.projection), nil
+}
+
 func (capture *capture) Close(ctx context.Context) error {
 	capture.mu.Lock()
 	if !capture.closed {
 		capture.closed = true
-		if !capture.opened || capture.terminal || capture.failed != nil {
+		capture.closing = true
+		if capture.terminal || capture.failed != nil {
 			capture.stopOnce.Do(capture.stop)
 		}
 	}
 	capture.mu.Unlock()
+	if !capture.isTerminal() && capture.failureError() == nil && ctx.Err() != nil {
+		capture.fail(fmt.Errorf("%w: close wait canceled: %w", recordings.ErrWorkerRecordingCanceled, ctx.Err()))
+	} else if !capture.isTerminal() && capture.failureError() == nil {
+		pending, err := capture.hasPendingRecords(ctx)
+		if err != nil {
+			if ctx.Err() != nil {
+				capture.fail(fmt.Errorf("%w: close wait canceled: %w", recordings.ErrWorkerRecordingCanceled, ctx.Err()))
+			} else {
+				capture.fail(fmt.Errorf("%w: inspect closing Worker topic: %v", recordings.ErrWorkerRecordingDelivery, err))
+			}
+		} else if !pending {
+			capture.fail(fmt.Errorf("%w: source closed before a durable terminal record", recordings.ErrWorkerRecordingIncomplete))
+		}
+	}
 
 	select {
 	case <-capture.done:
 		return capture.failureError()
 	case <-ctx.Done():
+		capture.fail(fmt.Errorf("%w: close wait canceled: %w", recordings.ErrWorkerRecordingCanceled, ctx.Err()))
 		capture.stopOnce.Do(capture.stop)
-		return ctx.Err()
+		return capture.failureError()
 	}
 }
