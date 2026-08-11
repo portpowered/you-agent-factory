@@ -13,9 +13,12 @@ import (
 	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
 	packagedfactories "github.com/portpowered/infinite-you/packages/packaged-factories"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 )
 
 var publishedCatalogNames = []string{
+	"@you/agy-clip-qa",
+	"@you/agy-cold-watch",
 	"@you/classify",
 	"@you/deep-research",
 	"@you/factory-builder",
@@ -95,6 +98,39 @@ func TestLoadPublishedDefinitionCatalogReturnsExactDetachedGeneratedDefinitions(
 	if _, ok := catalog.Lookup("@you/missing"); ok {
 		t.Fatal("Lookup(@you/missing) unexpectedly found a definition")
 	}
+}
+
+func TestPublishedGoalDefinitionContainsOnlyShippedWorkStates(t *testing.T) {
+	t.Parallel()
+
+	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
+	if err != nil {
+		t.Fatalf("LoadPublishedDefinitionCatalog: %v", err)
+	}
+	definition, ok := catalog.Lookup("@you/goal")
+	if !ok {
+		t.Fatal("Lookup(@you/goal) did not find a definition")
+	}
+	factory, err := factorymapping.NewFactoryConfigMapper().Expand(definition.JSON)
+	if err != nil {
+		t.Fatalf("decode published @you/goal: %v", err)
+	}
+
+	for _, workType := range factory.WorkTypes {
+		if workType.Name != "goal" {
+			continue
+		}
+		got := make([]string, 0, len(workType.States))
+		for _, state := range workType.States {
+			got = append(got, state.Name)
+		}
+		want := []string{"init", "complete", "blocked", "failed"}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("published @you/goal work states = %v, want %v", got, want)
+		}
+		return
+	}
+	t.Fatal("published @you/goal does not declare the goal Work type")
 }
 
 func TestLoadDefinitionCatalogRejectsManifestAndSchemaFailuresWithoutPartialCatalog(t *testing.T) {
@@ -194,7 +230,7 @@ func TestLoadDefinitionCatalogRejectsUnsafeMissingDuplicateAndMismatchedEntries(
 			name: "unsafe locator",
 			mutate: func(t *testing.T, fixture fstest.MapFS) {
 				mutateManifest(t, fixture, func(manifest *packagedfactorycatalog.Manifest) {
-					manifest.Factories[0].JSON.Locator = "../factory.json"
+					manifest.Factories[manifestFactoryIndex(t, *manifest, "classify")].JSON.Locator = "../factory.json"
 				})
 			},
 			wantErrors: []string{"@you/classify", "JSON", "unsafe package-public locator"},
@@ -203,7 +239,8 @@ func TestLoadDefinitionCatalogRejectsUnsafeMissingDuplicateAndMismatchedEntries(
 			name: "locator does not match slug",
 			mutate: func(t *testing.T, fixture fstest.MapFS) {
 				mutateManifest(t, fixture, func(manifest *packagedfactorycatalog.Manifest) {
-					manifest.Factories[0].JSON.Locator = manifest.Factories[1].JSON.Locator
+					classify := manifestFactoryIndex(t, *manifest, "classify")
+					manifest.Factories[classify].JSON.Locator = manifest.Factories[0].JSON.Locator
 				})
 			},
 			wantErrors: []string{"does not resolve", "classify"},
@@ -212,7 +249,8 @@ func TestLoadDefinitionCatalogRejectsUnsafeMissingDuplicateAndMismatchedEntries(
 			name: "missing artifact",
 			mutate: func(t *testing.T, fixture fstest.MapFS) {
 				manifest := readFixtureManifest(t, fixture)
-				delete(fixture, manifest.Factories[0].YAML.Locator)
+				classify := manifestFactoryIndex(t, manifest, "classify")
+				delete(fixture, manifest.Factories[classify].YAML.Locator)
 			},
 			wantErrors: []string{"@you/classify", "YAML", "read", "file does not exist"},
 		},
@@ -220,7 +258,8 @@ func TestLoadDefinitionCatalogRejectsUnsafeMissingDuplicateAndMismatchedEntries(
 			name: "duplicate public name",
 			mutate: func(t *testing.T, fixture fstest.MapFS) {
 				mutateManifest(t, fixture, func(manifest *packagedfactorycatalog.Manifest) {
-					manifest.Factories[1] = manifest.Factories[0]
+					classify := manifestFactoryIndex(t, *manifest, "classify")
+					manifest.Factories[0] = manifest.Factories[classify]
 				})
 			},
 			wantErrors: []string{"duplicate public name", "@you/classify"},
@@ -229,7 +268,8 @@ func TestLoadDefinitionCatalogRejectsUnsafeMissingDuplicateAndMismatchedEntries(
 			name: "duplicate project",
 			mutate: func(t *testing.T, fixture fstest.MapFS) {
 				mutateManifest(t, fixture, func(manifest *packagedfactorycatalog.Manifest) {
-					manifest.Factories[1].Project = manifest.Factories[0].Project
+					classify := manifestFactoryIndex(t, *manifest, "classify")
+					manifest.Factories[len(manifest.Factories)-1].Project = manifest.Factories[classify].Project
 				})
 			},
 			wantErrors: []string{"duplicate project", "builtin-classify"},
@@ -238,13 +278,14 @@ func TestLoadDefinitionCatalogRejectsUnsafeMissingDuplicateAndMismatchedEntries(
 			name: "case-insensitive duplicate slug",
 			mutate: func(t *testing.T, fixture fstest.MapFS) {
 				mutateManifest(t, fixture, func(manifest *packagedfactorycatalog.Manifest) {
-					duplicate := manifest.Factories[0]
+					classify := manifestFactoryIndex(t, *manifest, "classify")
+					duplicate := manifest.Factories[classify]
 					duplicate.PublicName = "@you/Classify"
 					duplicate.Project = "builtin-classify-copy"
 					duplicate.Slug = "Classify"
 					duplicate.JSON.Locator = "generated/factories/Classify/factory.json"
 					duplicate.YAML.Locator = "generated/factories/Classify/factory.yaml"
-					manifest.Factories[1] = duplicate
+					manifest.Factories[len(manifest.Factories)-1] = duplicate
 				})
 			},
 			wantErrors: []string{"duplicate slug", "Classify"},
@@ -253,7 +294,7 @@ func TestLoadDefinitionCatalogRejectsUnsafeMissingDuplicateAndMismatchedEntries(
 			name: "public name disagrees with slug",
 			mutate: func(t *testing.T, fixture fstest.MapFS) {
 				mutateManifest(t, fixture, func(manifest *packagedfactorycatalog.Manifest) {
-					manifest.Factories[0].PublicName = "@you/other"
+					manifest.Factories[manifestFactoryIndex(t, *manifest, "classify")].PublicName = "@you/other"
 				})
 			},
 			wantErrors: []string{"public name", "does not agree", "classify"},
@@ -284,7 +325,7 @@ func TestLoadDefinitionCatalogRejectsIntegrityDecodeIdentityAndValidationFailure
 			name: "invalid hash declaration",
 			mutate: func(t *testing.T, fixture fstest.MapFS) {
 				mutateManifest(t, fixture, func(manifest *packagedfactorycatalog.Manifest) {
-					manifest.Factories[0].JSON.SHA256 = "NOT-A-HASH"
+					manifest.Factories[manifestFactoryIndex(t, *manifest, "classify")].JSON.SHA256 = "NOT-A-HASH"
 				})
 			},
 			wantErrors: []string{"invalid SHA-256", "64 lowercase hexadecimal"},
@@ -293,7 +334,7 @@ func TestLoadDefinitionCatalogRejectsIntegrityDecodeIdentityAndValidationFailure
 			name: "hash mismatch",
 			mutate: func(t *testing.T, fixture fstest.MapFS) {
 				manifest := readFixtureManifest(t, fixture)
-				artifact := manifest.Factories[0].JSON.Locator
+				artifact := manifest.Factories[manifestFactoryIndex(t, manifest, "classify")].JSON.Locator
 				writeFixture(fixture, artifact, append(fixture[artifact].Data, '\n'))
 			},
 			wantErrors: []string{"SHA-256 mismatch", "manifest=", "actual="},
@@ -301,14 +342,14 @@ func TestLoadDefinitionCatalogRejectsIntegrityDecodeIdentityAndValidationFailure
 		{
 			name: "JSON decode failure with valid hash",
 			mutate: func(t *testing.T, fixture fstest.MapFS) {
-				replaceArtifactAndHash(t, fixture, 0, "JSON", []byte(`{`))
+				replaceArtifactAndHash(t, fixture, manifestFactoryIndex(t, readFixtureManifest(t, fixture), "classify"), "JSON", []byte(`{`))
 			},
 			wantErrors: []string{"JSON artifact", "decode JSON boundary"},
 		},
 		{
 			name: "YAML decode failure with valid hash",
 			mutate: func(t *testing.T, fixture fstest.MapFS) {
-				replaceArtifactAndHash(t, fixture, 0, "YAML", []byte("value: [\n"))
+				replaceArtifactAndHash(t, fixture, manifestFactoryIndex(t, readFixtureManifest(t, fixture), "classify"), "YAML", []byte("value: [\n"))
 			},
 			wantErrors: []string{"YAML artifact", "decode"},
 		},
@@ -316,12 +357,13 @@ func TestLoadDefinitionCatalogRejectsIntegrityDecodeIdentityAndValidationFailure
 			name: "decoded identity mismatch",
 			mutate: func(t *testing.T, fixture fstest.MapFS) {
 				manifest := readFixtureManifest(t, fixture)
-				entry := manifest.Factories[0]
+				classify := manifestFactoryIndex(t, manifest, "classify")
+				entry := manifest.Factories[classify]
 				var document map[string]any
 				decodeJSON(t, fixture[entry.JSON.Locator].Data, &document)
 				document["name"] = "other"
 				payload := marshalJSON(t, document)
-				replaceArtifactAndHash(t, fixture, 0, "JSON", payload)
+				replaceArtifactAndHash(t, fixture, classify, "JSON", payload)
 			},
 			wantErrors: []string{"decoded identity", `name="other"`, `slug="classify"`},
 		},
@@ -329,13 +371,14 @@ func TestLoadDefinitionCatalogRejectsIntegrityDecodeIdentityAndValidationFailure
 			name: "Factory Definitions validation failure",
 			mutate: func(t *testing.T, fixture fstest.MapFS) {
 				manifest := readFixtureManifest(t, fixture)
-				entry := manifest.Factories[2]
+				classify := manifestFactoryIndex(t, manifest, "classify")
+				entry := manifest.Factories[classify]
 				var document map[string]any
 				decodeJSON(t, fixture[entry.JSON.Locator].Data, &document)
 				invocationReturn := document["invocationReturn"].(map[string]any)
 				invocationReturn["terminalState"] = "missing-terminal"
 				payload := marshalJSON(t, document)
-				replaceArtifactAndHash(t, fixture, 2, "JSON", payload)
+				replaceArtifactAndHash(t, fixture, classify, "JSON", payload)
 			},
 			wantErrors: []string{"Factory Definitions validation", "missing-terminal"},
 		},
@@ -392,6 +435,21 @@ func readFixtureManifest(t *testing.T, fixture fstest.MapFS) packagedfactorycata
 	var manifest packagedfactorycatalog.Manifest
 	decodeJSON(t, fixture[packagedfactorycatalog.CatalogManifestPath].Data, &manifest)
 	return manifest
+}
+
+func manifestFactoryIndex(
+	t *testing.T,
+	manifest packagedfactorycatalog.Manifest,
+	slug string,
+) int {
+	t.Helper()
+	for index, entry := range manifest.Factories {
+		if entry.Slug == slug {
+			return index
+		}
+	}
+	t.Fatalf("manifest does not contain Factory slug %q", slug)
+	return -1
 }
 
 func replaceArtifactAndHash(

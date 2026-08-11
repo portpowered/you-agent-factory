@@ -23,7 +23,7 @@ func TestDiscoverReturnsCompleteSortedAuthoredInventory(t *testing.T) {
 	}
 
 	want := []string{
-		"classify", "deep-research", "factory-builder", "full-flow", "fusion", "goal", "loop",
+		"agy-clip-qa", "agy-cold-watch", "classify", "deep-research", "factory-builder", "full-flow", "fusion", "goal", "loop",
 		"plan-execute", "plan-parallel", "quorum", "review", "spawn", "subagent",
 		"tournament", "tts",
 	}

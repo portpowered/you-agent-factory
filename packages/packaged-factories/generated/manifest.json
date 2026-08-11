@@ -253,11 +253,11 @@
       "slug": "goal",
       "json": {
         "locator": "generated/factories/goal/factory.json",
-        "sha256": "99efafd8a3e17ec2042e8978cdcb2cd9b5a09277b3cbc2fabb6dc105ced6692a"
+        "sha256": "47e9f442372e5d39f67d7a785b6b69ddf6e85eced5aad23cd7e0392637cac747"
       },
       "yaml": {
         "locator": "generated/factories/goal/factory.yaml",
-        "sha256": "5db8ae98de28723b44ee5707944fdd7119c7e1b238f14240d3cdcc3357bee9e7"
+        "sha256": "eb965edb82ff1ac9dd7a814abfbb0cb86fecec9593bda84605f8cecc456d667f"
       },
       "description": {
         "type": "LOCALIZABLE_ASSET",
