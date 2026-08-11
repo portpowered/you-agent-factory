@@ -16,14 +16,17 @@ import { FactoryOrchestratorKind } from "../../../api/generated/openapi";
 import { AlertPanel } from "../../../components/ui/alert-panel";
 import { DashboardStatusPill } from "../../../components/ui/dashboard-status-pill";
 import { ExpandablePanelTrigger } from "../../../components/ui/expandable-panel-trigger";
+import type { FactorySessionArtifactDrilldownViewState } from "../hooks/use-factory-session-artifact-drilldown";
 import {
   type FactorySessionDetailViewState,
   useFactorySessionDetail,
 } from "../hooks/use-factory-session-detail";
 import {
   FACTORY_SESSION_DISPATCH_DETAIL_QUERY_KEY,
+  type FactorySessionDispatchDetailViewState,
   useFactorySessionDispatchDetail,
 } from "../hooks/use-factory-session-dispatch-detail";
+import type { FactorySessionEventReplayViewState } from "../hooks/use-factory-session-event-replay";
 import type { FactorySessionLifecycleControl } from "../hooks/use-factory-session-lifecycle-control";
 import { useFactorySessionLifecycleControl } from "../hooks/use-factory-session-lifecycle-control";
 import { resolveFactorySessionLifecycleActionAvailability } from "../lib/factory-session-lifecycle-controls";
@@ -42,8 +45,16 @@ import { LifecycleActionSection } from "./lifecycle/lifecycle-action-section";
 type FactoryArtifact = components["schemas"]["FactoryArtifact"];
 type FactoryDispatch = components["schemas"]["FactoryDispatch"];
 
+export interface FactorySessionDetailInspectionState {
+  artifactDrilldowns?: Record<string, FactorySessionArtifactDrilldownViewState>;
+  dispatchDetails?: Record<string, FactorySessionDispatchDetailViewState>;
+  eventReplay?: FactorySessionEventReplayViewState;
+  onRetryDispatchDetail?: (dispatchID: string) => void;
+}
+
 export interface FactorySessionDetailPanelProps {
   detailState?: FactorySessionDetailViewState;
+  inspectionState?: FactorySessionDetailInspectionState;
   lifecycleControl?: FactorySessionLifecycleControl;
   locale?: string;
   sessionID: string | null;
@@ -51,6 +62,7 @@ export interface FactorySessionDetailPanelProps {
 
 export function FactorySessionDetailPanel({
   detailState,
+  inspectionState,
   lifecycleControl,
   locale,
   sessionID,
@@ -63,6 +75,7 @@ export function FactorySessionDetailPanel({
     return (
       <FactorySessionDetailPanelContent
         detailState={detailState}
+        inspectionState={inspectionState}
         lifecycleControl={lifecycleControl}
         locale={locale}
         sessionID={sessionID}
@@ -72,6 +85,7 @@ export function FactorySessionDetailPanel({
 
   return (
     <FactorySessionDetailPanelWithQuery
+      inspectionState={inspectionState}
       lifecycleControl={lifecycleControl}
       locale={locale}
       sessionID={sessionID}
@@ -80,10 +94,12 @@ export function FactorySessionDetailPanel({
 }
 
 function FactorySessionDetailPanelWithQuery({
+  inspectionState,
   lifecycleControl,
   locale,
   sessionID,
 }: {
+  inspectionState?: FactorySessionDetailInspectionState;
   lifecycleControl?: FactorySessionLifecycleControl;
   locale?: string;
   sessionID: string;
@@ -93,6 +109,7 @@ function FactorySessionDetailPanelWithQuery({
   return (
     <FactorySessionDetailPanelContent
       detailState={detailState}
+      inspectionState={inspectionState}
       lifecycleControl={lifecycleControl}
       locale={locale}
       sessionID={sessionID}
@@ -102,11 +119,13 @@ function FactorySessionDetailPanelWithQuery({
 
 function FactorySessionDetailPanelContent({
   detailState,
+  inspectionState,
   lifecycleControl,
   locale,
   sessionID,
 }: {
   detailState: FactorySessionDetailViewState;
+  inspectionState?: FactorySessionDetailInspectionState;
   lifecycleControl?: FactorySessionLifecycleControl;
   locale?: string;
   sessionID: string;
@@ -138,6 +157,7 @@ function FactorySessionDetailPanelContent({
       {detailState.status === "success" ? (
         <FactorySessionRuntimeSections
           data={detailState.data}
+          inspectionState={inspectionState}
           lifecycleControl={lifecycleControl}
           locale={locale}
         />
@@ -148,6 +168,7 @@ function FactorySessionDetailPanelContent({
 
 function FactorySessionRuntimeSections({
   data,
+  inspectionState,
   lifecycleControl,
   locale,
 }: {
@@ -159,6 +180,7 @@ function FactorySessionRuntimeSections({
     result?: components["schemas"]["FactorySessionLiveResult"];
     session: components["schemas"]["FactorySession"];
   };
+  inspectionState?: FactorySessionDetailInspectionState;
   lifecycleControl?: FactorySessionLifecycleControl;
   locale?: string;
 }) {
@@ -204,6 +226,7 @@ function FactorySessionRuntimeSections({
           artifacts={runtime.artifacts}
           durableLifecycleStatus={data.durableLifecycleStatus}
           dispatches={data.dispatches}
+          inspectionState={inspectionState}
           lifecycleControl={lifecycleControl}
           javascript={runtime.javascript}
           locale={locale}
@@ -335,6 +358,7 @@ function JavaScriptSessionProjection({
   artifacts,
   durableLifecycleStatus,
   dispatches,
+  inspectionState,
   lifecycleControl,
   javascript,
   locale,
@@ -345,6 +369,7 @@ function JavaScriptSessionProjection({
   artifacts?: FactoryArtifact[];
   durableLifecycleStatus?: components["schemas"]["FactorySessionDurableLifecycleStatus"];
   dispatches?: FactoryDispatch[];
+  inspectionState?: FactorySessionDetailInspectionState;
   lifecycleControl?: FactorySessionLifecycleControl;
   javascript?: components["schemas"]["FactorySessionJavaScriptProjection"];
   locale?: string;
@@ -371,6 +396,7 @@ function JavaScriptSessionProjection({
   const projectionProps = {
     artifacts,
     dispatches,
+    inspectionState,
     isDurableSession,
     javascript,
     lifecycleActionAvailability,
@@ -425,6 +451,7 @@ function JavaScriptSessionProjectionWithQueryControl({
 interface JavaScriptSessionProjectionContentProps {
   artifacts?: FactoryArtifact[];
   dispatches?: FactoryDispatch[];
+  inspectionState?: FactorySessionDetailInspectionState;
   isDurableSession: boolean;
   javascript?: components["schemas"]["FactorySessionJavaScriptProjection"];
   lifecycleActionAvailability: ReturnType<
@@ -441,6 +468,7 @@ interface JavaScriptSessionProjectionContentProps {
 function JavaScriptSessionProjectionContent({
   artifacts,
   dispatches,
+  inspectionState,
   isDurableSession,
   javascript,
   lifecycleActionAvailability,
@@ -512,6 +540,7 @@ function JavaScriptSessionProjectionContent({
       {isDurableSession ? (
         <FactorySessionEventReplayDisclosure
           locale={locale}
+          replayState={inspectionState?.eventReplay}
           sessionID={sessionID}
         />
       ) : null}
@@ -519,6 +548,7 @@ function JavaScriptSessionProjectionContent({
       {artifacts && artifacts.length > 0 ? (
         <FactorySessionArtifactList
           artifacts={artifacts}
+          drilldownStates={inspectionState?.artifactDrilldowns}
           heading={messages.artifactsHeading}
           locale={locale}
           sessionID={sessionID}
@@ -532,6 +562,7 @@ function JavaScriptSessionProjectionContent({
       {dispatches && dispatches.length > 0 ? (
         <DispatchSummaryList
           dispatches={dispatches}
+          inspectionState={inspectionState}
           locale={locale}
           selectedDispatchID={selectedDispatchID}
           setSelectedDispatchID={setSelectedDispatchID}
@@ -557,12 +588,14 @@ function JavaScriptSessionProjectionContent({
 
 function DispatchSummaryList({
   dispatches,
+  inspectionState,
   locale,
   selectedDispatchID,
   sessionID,
   setSelectedDispatchID,
 }: {
   dispatches: FactoryDispatch[];
+  inspectionState?: FactorySessionDetailInspectionState;
   locale?: string;
   selectedDispatchID: string | null;
   sessionID?: string;
@@ -579,10 +612,22 @@ function DispatchSummaryList({
           <DispatchSummaryRow
             dispatch={dispatch}
             expanded={selectedDispatchID === dispatch.id}
+            detailState={
+              inspectionState?.dispatchDetails
+                ? (inspectionState.dispatchDetails[dispatch.id] ?? {
+                    status: "idle",
+                  })
+                : undefined
+            }
             key={dispatch.id}
             locale={locale}
             onToggle={(expanded) =>
               setSelectedDispatchID(expanded ? dispatch.id : null)
+            }
+            onRetry={
+              inspectionState?.onRetryDispatchDetail
+                ? () => inspectionState.onRetryDispatchDetail?.(dispatch.id)
+                : undefined
             }
             sessionID={sessionID ?? dispatch.sessionId}
           />
@@ -594,26 +639,57 @@ function DispatchSummaryList({
 
 function DispatchSummaryRow({
   dispatch,
+  detailState,
   expanded,
   locale,
+  onRetry,
   onToggle,
   sessionID,
 }: {
   dispatch: FactoryDispatch;
+  detailState?: FactorySessionDispatchDetailViewState;
   expanded: boolean;
   locale?: string;
+  onRetry?: () => void;
   onToggle: (expanded: boolean) => void;
   sessionID: string;
 }) {
-  const messages = getFactorySessionDetailMessages(locale);
-  const detailRegionID = useId();
+  if (detailState !== undefined) {
+    return (
+      <DispatchSummaryRowContent
+        detailState={detailState}
+        dispatch={dispatch}
+        expanded={expanded}
+        locale={locale}
+        onRetry={onRetry ?? (() => undefined)}
+        onToggle={onToggle}
+      />
+    );
+  }
+
+  return (
+    <DispatchSummaryRowWithQuery
+      dispatch={dispatch}
+      expanded={expanded}
+      locale={locale}
+      onToggle={onToggle}
+      sessionID={sessionID}
+    />
+  );
+}
+
+function DispatchSummaryRowWithQuery({
+  dispatch,
+  expanded,
+  locale,
+  onToggle,
+  sessionID,
+}: Omit<DispatchSummaryRowProps, "detailState" | "onRetry">) {
   const queryClient = useQueryClient();
   const detailState = useFactorySessionDispatchDetail(
     sessionID,
     expanded ? dispatch.id : null,
   );
-  const dispatchLabel = dispatch.label?.trim() || dispatch.id;
-  const summaryDetails = getDispatchSummaryDetails(dispatch, messages);
   const handleRetryDispatchDetail = () => {
     void queryClient.refetchQueries({
       queryKey: [
@@ -623,6 +699,44 @@ function DispatchSummaryRow({
       ],
     });
   };
+
+  return (
+    <DispatchSummaryRowContent
+      detailState={detailState}
+      dispatch={dispatch}
+      expanded={expanded}
+      locale={locale}
+      onRetry={handleRetryDispatchDetail}
+      onToggle={onToggle}
+    />
+  );
+}
+
+interface DispatchSummaryRowProps {
+  dispatch: FactoryDispatch;
+  detailState?: FactorySessionDispatchDetailViewState;
+  expanded: boolean;
+  locale?: string;
+  onRetry?: () => void;
+  onToggle: (expanded: boolean) => void;
+  sessionID: string;
+}
+
+function DispatchSummaryRowContent({
+  detailState,
+  dispatch,
+  expanded,
+  locale,
+  onRetry,
+  onToggle,
+}: Omit<DispatchSummaryRowProps, "detailState" | "sessionID"> & {
+  detailState: FactorySessionDispatchDetailViewState;
+  onRetry: () => void;
+}) {
+  const messages = getFactorySessionDetailMessages(locale);
+  const detailRegionID = useId();
+  const dispatchLabel = dispatch.label?.trim() || dispatch.id;
+  const summaryDetails = getDispatchSummaryDetails(dispatch, messages);
 
   return (
     <article className="grid gap-3 rounded-lg border border-outline bg-surface-container-low p-3">
@@ -680,7 +794,7 @@ function DispatchSummaryRow({
           detailRegionID={detailRegionID}
           dispatchID={dispatch.id}
           locale={locale}
-          onRetry={handleRetryDispatchDetail}
+          onRetry={onRetry}
           state={detailState}
         />
       ) : null}

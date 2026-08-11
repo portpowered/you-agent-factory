@@ -1,10 +1,13 @@
+import { Label, Text } from "@you-agent-factory/components/primitives";
 import { WidgetDetailCopy } from "@you-agent-factory/components/recipes";
 import { useId, useState } from "react";
-import { Label, Text } from "@you-agent-factory/components/primitives";
 import { AlertPanel } from "../../../../components/ui/alert-panel";
 import { DashboardStatusPill } from "../../../../components/ui/dashboard-status-pill";
 import { ExpandablePanelTrigger } from "../../../../components/ui/expandable-panel-trigger";
-import { useFactorySessionEventReplay } from "../../hooks/use-factory-session-event-replay";
+import {
+  type FactorySessionEventReplayViewState,
+  useFactorySessionEventReplay,
+} from "../../hooks/use-factory-session-event-replay";
 import { buildFactorySessionEventReplayTimeline } from "../../lib/factory-session-event-replay-timeline";
 import { getFactorySessionDetailMessages } from "../../messages/factory-session-detail";
 
@@ -12,17 +15,69 @@ const MAX_VISIBLE_REPLAY_EVENTS = 12;
 
 export interface FactorySessionEventReplayDisclosureProps {
   locale?: string;
+  replayState?: FactorySessionEventReplayViewState;
   sessionID: string;
 }
 
 export function FactorySessionEventReplayDisclosure({
   locale,
+  replayState,
   sessionID,
 }: FactorySessionEventReplayDisclosureProps) {
-  const messages = getFactorySessionDetailMessages(locale);
-  const detailRegionID = useId();
+  if (replayState !== undefined) {
+    return (
+      <FactorySessionEventReplayDisclosureContent
+        locale={locale}
+        state={replayState}
+      />
+    );
+  }
+
+  return (
+    <FactorySessionEventReplayDisclosureWithQuery
+      locale={locale}
+      sessionID={sessionID}
+    />
+  );
+}
+
+function FactorySessionEventReplayDisclosureWithQuery({
+  locale,
+  sessionID,
+}: {
+  locale?: string;
+  sessionID: string;
+}) {
   const [expanded, setExpanded] = useState(false);
   const replayState = useFactorySessionEventReplay(sessionID, expanded);
+
+  return (
+    <FactorySessionEventReplayDisclosureContent
+      expanded={expanded}
+      locale={locale}
+      onToggle={() => setExpanded((current) => !current)}
+      state={replayState}
+    />
+  );
+}
+
+function FactorySessionEventReplayDisclosureContent({
+  expanded: expandedOverride,
+  locale,
+  onToggle: onToggleOverride,
+  state,
+}: {
+  expanded?: boolean;
+  locale?: string;
+  onToggle?: () => void;
+  state: FactorySessionEventReplayViewState;
+}) {
+  const messages = getFactorySessionDetailMessages(locale);
+  const detailRegionID = useId();
+  const [localExpanded, setLocalExpanded] = useState(false);
+  const expanded = expandedOverride ?? localExpanded;
+  const onToggle =
+    onToggleOverride ?? (() => setLocalExpanded((current) => !current));
 
   return (
     <section className="grid gap-3 rounded-lg border border-outline bg-surface-container-low p-3">
@@ -39,7 +94,7 @@ export function FactorySessionEventReplayDisclosure({
           }
           controlsID={detailRegionID}
           expanded={expanded}
-          onClick={() => setExpanded((current) => !current)}
+          onClick={onToggle}
           variant="compact"
         >
           {messages.eventReplayHeading}
@@ -50,7 +105,7 @@ export function FactorySessionEventReplayDisclosure({
         <EventReplayState
           detailRegionID={detailRegionID}
           locale={locale}
-          state={replayState}
+          state={state}
         />
       ) : null}
     </section>
@@ -64,7 +119,7 @@ function EventReplayState({
 }: {
   detailRegionID: string;
   locale?: string;
-  state: ReturnType<typeof useFactorySessionEventReplay>;
+  state: FactorySessionEventReplayViewState;
 }) {
   const messages = getFactorySessionDetailMessages(locale);
 
