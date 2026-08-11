@@ -9337,5 +9337,21 @@
   - Conflict-marker scan over `prd.json` and `progress.txt` — clean.
   - The merged progress contains the P1 failed-job rerun entry and the current-main Bun synchronization history; the full stage blobs were read directly and merged without truncated shell reconstruction.
 - **Learnings for future iterations:**
-  - When a long append-only log conflicts with another task branch, merge complete Git stage blobs by section/header identity, retain differing same-header sections, validate line counts and markers, and keep the active task PRD authoritative.
+- When a long append-only log conflicts with another task branch, merge complete Git stage blobs by section/header identity, retain differing same-header sections, validate line counts and markers, and keep the active task PRD authoritative.
+---
+## [2026-08-11 00:13 -07:00] - btrc-p1-root-injection-006 synchronized CI rerun audit
+- What was implemented
+  - Reran the failed jobs for CI run `31466967242` on synchronized head `23e4f2f5e3a5529e565b16a9ba22c493bdb516a5` after the initial Backend Functional Coverage failure.
+  - Confirmed the runtime-log-directory test and hard-kill staging-contention test pass on the rerun; the untouched server-binding test remains the only functional assertion failure and still emits the extra structured `API server error` diagnostic before the expected bind-failure response.
+  - Updated Story 006's PRD evidence while preserving all six `passes:true` stories; no product source change was warranted because the failing packages are outside the P1 diff.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `gh run rerun 31466967242 --failed` — completed; runtime-API and CLI-process failures cleared, server-binding remained.
+  - All scoped CI lanes and Backend Unit Coverage/Local Inference passed on the synchronized head.
+  - `prd.json` parses with six stories marked `passes:true`.
+  - The P1 diff is empty for `tests/functional/runtime_api`, `tests/functional/transport/cli/process`, and `tests/functional/transport/server_binding`.
+- **Learnings for future iterations:**
+  - A failed-job rerun can separate transient functional failures from the stable baseline assertion; record the rerun's surviving test and exact diagnostic before deciding whether a source change is in scope.
 ---
