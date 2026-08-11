@@ -73,7 +73,7 @@
       ],
       "priority": 3,
       "passes": true,
-      "notes": "Completed. Root-built WSR-FT-006 now proves portable streaming, snapshot, and final-only round-trip parity with sanitized fixtures, tamper diagnostics, no Provider Session reference when absent, and zero provider calls during replay. The Worker bridge preserves Antigravity's synthesized lifecycle and final-only message provenance. Focused and race-enabled Worker Sessions, Recordings, and WSR-FT-003/004/005/006 coverage passes; make typecheck passes."
+      "notes": "Completed. Root-built WSR-FT-006 now proves portable streaming, snapshot, and final-only round-trip parity with sanitized fixtures, tamper diagnostics, no Provider Session reference when absent, and zero provider calls during replay. The Worker bridge preserves Antigravity's synthesized lifecycle and final-only message provenance. Focused and race-enabled Worker Sessions, Recordings, and WSR-FT-003/004/005/006 coverage passes; make typecheck passes. Final PR audit confirms the current head is cleanly based on main, required checks are terminal-success, no inline review threads remain unresolved, and the PR description is synchronized from this file."
     }
   ]
 }
