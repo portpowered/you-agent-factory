@@ -11,17 +11,30 @@
   },
   "deliveryAudit": {
     "pullRequest": 1857,
-    "head": "b024469767f321efacfdde747b9707046073c470",
+    "head": "c956c59875f8e391ee61049534f8da89afbcd48c",
     "base": "0e7df069f80518287a7905558a525ac196b11bc0",
     "reviewThreads": 0,
     "unresolvedReviewThreads": 0,
     "formalReviews": 0,
     "latestWorkflow": {
-      "run": 31476020462,
-      "result": "queued",
-      "rerunResult": "not-run",
+      "run": 31476115214,
+      "result": "failure",
+      "rerunResult": "failure",
       "taskScopedFailures": [],
-      "baselineFailures": []
+      "baselineFailures": [
+        {
+          "job": "Backend Functional Coverage",
+          "package": "tests/functional/transport/server_binding",
+          "test": "TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput",
+          "evidence": "The untouched test expects one diagnostic line, while the current-main baseline emits the migration warning plus structured API-server diagnostics before the SERVER_BIND_FAILED payload."
+        },
+        {
+          "job": "Backend Functional Coverage",
+          "package": "tests/functional/transport/cli/process",
+          "test": "TestBuiltCLIDeclaredCancellationExitCodes/continuous_run",
+          "evidence": "The untouched test intermittently observed a nil exit error instead of exit code 130 on the failed-job rerun; the local Windows run is documented to skip this unsupported os.Interrupt child-process path."
+        }
+      ]
     }
   },
   "acceptanceCriteria": [
@@ -137,7 +150,7 @@
       ],
       "priority": 6,
       "passes": true,
-      "notes": "Completed the review follow-up for the reusable root-process proof and the final value-only invocation cutover. Both representative success and provider-failure invocations enter through the public `you --json run` CLI on one root.BuildProcess/Process.Execute instance; the injected API server is observation-only for public session and Factory Event streams. The last tested pushed head was `aeecd983102b8e9500ca577e74890858858bcc53`, based on synchronized origin/main `1b871e3a84125400ca3f04b2bdf9fd2658ac5c45`; its full workflow and failed-job reruns retained only the unchanged `TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput`, with an empty P1 diff for that package. The branch is now synchronized with newer live origin/main `0e7df069f80518287a7905558a525ac196b11bc0`; workflow `31476020462` is queued for replacement head `b024469767f321efacfdde747b9707046073c470`. The thread-aware audit has zero unresolved review threads and zero formal reviews. All six P1 stories remain marked `passes:true`; the remaining follow-up is terminal CI and final PR handoff."
+      "notes": "Completed the review follow-up for the reusable root-process proof and the final value-only invocation cutover. Both representative success and provider-failure invocations enter through the public `you --json run` CLI on one root.BuildProcess/Process.Execute instance; the injected API server is observation-only for public session and Factory Event streams. The current tested head is `c956c59875f8e391ee61049534f8da89afbcd48c`, based on synchronized origin/main `0e7df069f80518287a7905558a525ac196b11bc0`; workflow `31476115214` and its failed-job rerun retain only baseline failures in untouched `tests/functional/transport/server_binding` and the intermittent `tests/functional/transport/cli/process` cancellation check. All product-scoped lanes pass, and the P1 diff is empty for both failing packages. The thread-aware audit has zero unresolved review threads and zero formal reviews. All six P1 stories remain marked `passes:true`; the remaining follow-up is baseline CI resolution/acceptance and final PR handoff."
     }
   ]
 }

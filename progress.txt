@@ -10177,3 +10177,21 @@
   - Fetching the live base immediately before each publish is essential while main is moving; resolve only shared bookkeeping conflicts and preserve the active task PRD.
   - A fresh workflow is required after every current-main synchronization, even when the merge introduces no task-side behavior change.
 ---
+## [2026-08-11 02:26:00 -07:00] - btrc-p1-root-injection-006 terminal rerun baseline audit
+- What was implemented
+  - Audited workflow `31476115214` for pushed head `c956c59875f8e391ee61049534f8da89afbcd48c` and reran its failed jobs once.
+  - Updated the delivery audit to distinguish the two untouched baseline failures from the P1 implementation: the deterministic server-binding diagnostic assertion and the intermittent continuous-run cancellation exit-code assertion.
+  - Preserved all six P1 stories as `passes:true`; no product or unrelated-test source change was justified.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Initial workflow and failed-job rerun both passed every product-scoped lane; Backend Unit Coverage passed.
+  - The rerun reproduced `TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput` in `tests/functional/transport/server_binding`, where the untouched expectation differs from the current structured bind-failure diagnostics.
+  - The rerun also observed `TestBuiltCLIDeclaredCancellationExitCodes/continuous_run` in `tests/functional/transport/cli/process`; its failure is outside the P1 diff and the local Windows-focused run passes through the test's documented unsupported-interrupt skip.
+  - `git diff --name-only origin/main...HEAD -- tests/functional/transport/server_binding tests/functional/transport/cli/process` remains empty.
+  - The thread-aware PR audit remains at zero review threads, zero unresolved threads, and zero formal reviews.
+- **Learnings for future iterations:**
+  - A failed-job rerun can reproduce a stable baseline assertion and independently surface an intermittent untouched test; record both package paths and diff membership before changing task code.
+  - Keep `prd.json`'s delivery audit tied to the exact tested head and workflow, and refresh the PR body after every bookkeeping commit.
+---
