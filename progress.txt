@@ -1,5 +1,6 @@
 ## Codebase Patterns
 - For concurrent single-flight state, keep the absent-to-loading election atomic with the observation; a separate precheck can let callers pass stale absent state and overwrite the shared completion signal.
+- For repeated concurrency package runs, synchronize cancellation tests on an injected launcher or process edge; a fixed sleep can cancel before startup under parallel stress and obscure the target regression.
 - For final PR handoff, compare the PR body byte-for-byte with `prd.json` and use the thread-aware GraphQL review audit because flat PR comments do not expose inline-thread resolution state.
 - OS-boundary functional tests may poll an isolated durable filesystem checkpoint only when the child exposes no parent-process event or injected edge; document that reason at each polling helper and keep the bound as a failure guard.
 - Git Worktree preparation treats a retained Git `*.lock` as indeterminate ownership: retry within a named bound, preserve the resource, and return its exact path with verify/remove/retry guidance.
@@ -172,7 +173,6 @@
   - `make lint` completed the UI lint/dead-code checks, `go vet`, backend-size, pkg-maint, pkg-file-count, and related checks, then stopped at the existing `pkg-boundary` baseline with 176 violations. The reported violations are in pre-existing service-boundary/Petri migration surfaces and none are in this story's changed files.
 - **Learnings for future iterations:**
   - Treat the current `pkg-boundary` findings as baseline debt unless a changed file introduces a new violation; this documentation story does not touch those ownership surfaces.
----
 ## 2026-08-09 13:36 - wo-d1-packaged-factories-docs-002
 - What was implemented
   - Added full bounded/iterative operator entries for `@you/goal`, `@you/loop`, `@you/fusion`, `@you/classify`, and `@you/review` to `docs/reference/packaged-factories.md`.
@@ -3782,4 +3782,34 @@
 - **Learnings for future iterations:**
   - Put the single-flight decision and loading publication in the same lock-protected switch; a separate absence precheck creates a stale observation that can overwrite `loadDone` and process ownership.
   - A test-only barrier immediately before the atomic election can force all callers to contend at the diagnosed boundary while keeping production free of sleeps, retries, and timing-dependent coordination.
+---
+## [2026-08-10 19:41 -07:00] - thr-deflake-model-host-concurrent-reuse-003
+- What was implemented
+  - Completed scheduler-independent stability evidence for the Models runtime-host fix. The exact full-package command `go test -race ./pkg/services/models/internal/services/runtime_host/internal/service -count=50` passed all 50 repetitions after the focused test was also repeated 50 times.
+  - Repeated the strict concurrent-reuse regression at `GOMAXPROCS=1`, `2`, `8`, and `32`, each with `-race -count=50`; every run passed without race reports, deadlocks, failures, or a second launcher start.
+  - Replaced the cancellation test's fixed 50ms startup sleep with an observable injected launcher-start channel and a bounded failure guard. The first whole-package stress attempt showed that this separate test choreography race could cancel before process launch and report `ErrAssetCancelled`; after the change the same full-package stress command passed.
+  - Marked story 003 `passes:true` in `prd.json` with the commands, scheduler settings, outcomes, original CI root-cause classification, and final quality-gate evidence.
+- Files changed
+  - `pkg/services/models/internal/services/runtime_host/internal/service/failure_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test -race ./pkg/services/models/internal/services/runtime_host/internal/service -count=50` — passed in 22.488s.
+  - `go test -race ./pkg/services/models/internal/services/runtime_host/internal/service -run '^TestEnsureModelHostConcurrentReuseSharesOneSupervisedProcess$' -count=50` — passed in 1.411s.
+  - GOMAXPROCS 1/2/8/32 named-regression runs — passed in 1.403s/1.353s/1.286s/1.276s respectively.
+  - Full runtime-host race suite — passed; `make test` — passed in 380s; `make typecheck backend-size pkg-maint pkg-file-count pkg-structure vet` — passed; `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - Treat a repeated package failure outside the target test as a separate characterization: isolate its named test, identify whether the failure is caused by a fixed timing assumption, and observe the injected runtime edge directly before changing production behavior.
+  - Record both the exact package-wide race command and a low/high GOMAXPROCS matrix so reviewers can distinguish broad-suite stability from targeted scheduler contention evidence.
+---
+## [2026-08-10 20:04 -07:00] - thr-deflake-model-host-concurrent-reuse-003 final verification
+- What was implemented
+  - No additional production change; completed the post-edit broad-suite verification and retained the final timing in the append-only evidence log.
+- Files changed
+  - `progress.txt`
+- Verification
+  - The first post-edit `make test` attempt exited non-zero without diagnostic output after 518.7s; the immediate captured-output rerun completed with `make test exit code: 0` in 315.9s, with all unit packages passing.
+  - The exact post-edit `go test -race ./pkg/services/models/internal/services/runtime_host/internal/service -count=50` remained green in 22.488s.
+- **Learnings for future iterations:**
+  - When a long-running shell wrapper returns a silent non-zero result, rerun the same command while capturing and reporting its final output before classifying the failure or changing code.
 ---

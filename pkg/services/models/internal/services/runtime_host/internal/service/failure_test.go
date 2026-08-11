@@ -129,12 +129,15 @@ func TestEnsureModelHostCancellationStopsManagedProcess(t *testing.T) {
 	t.Cleanup(healthServer.Close)
 
 	var stopCount atomic.Int32
+	processStarted := make(chan struct{})
+	var processStartedOnce sync.Once
 	cacheDirectory := t.TempDir()
 	writeCacheFixture(t, cacheDirectory, true)
 	scopes := newScopes(t, "cancellation")
 	ref := openScope(t, scopes, cacheDirectory, supervisedRuntimeConfig())
 	launcher := &fakeProcessLauncher{
 		newProcess: func(spec modelseffects.HostProcessStartSpec) *fakeManagedProcess {
+			processStartedOnce.Do(func() { close(processStarted) })
 			process := newFakeManagedProcess(healthServer.URL, nil)
 			process.stopFn = func() error {
 				stopCount.Add(1)
@@ -166,7 +169,13 @@ func TestEnsureModelHostCancellationStopsManagedProcess(t *testing.T) {
 		})
 		errCh <- err
 	}()
-	time.Sleep(50 * time.Millisecond)
+	// Observe the injected launcher instead of guessing when startup has begun;
+	// the timeout only bounds a broken startup so the regression cannot hang.
+	select {
+	case <-processStarted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("managed process did not start before cancellation")
+	}
 	cancel()
 
 	err := <-errCh

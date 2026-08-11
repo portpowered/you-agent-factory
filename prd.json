@@ -65,8 +65,8 @@
         "Tests pass"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Completed on 2026-08-10. Recorded `go test -race ./pkg/services/models/internal/services/runtime_host/internal/service -count=50`: all 50 package repetitions passed in 22.488s with no race report, deadlock, failure, or extra supervised-process start. The named reuse regression also passed `go test -race ./pkg/services/models/internal/services/runtime_host/internal/service -run '^TestEnsureModelHostConcurrentReuseSharesOneSupervisedProcess$' -count=50` (1.411s) and the same race-enabled test at `GOMAXPROCS=1`, `2`, `8`, and `32`, each with `-count=50` (1.403s, 1.353s, 1.286s, and 1.276s). The full runtime-host race suite covers healthy startup, concurrent reuse, readiness timeout, process crash, cancellation, inspection, stop, idle unload, resource-pressure eviction, and shutdown. An initial whole-package `-count=50` attempt exposed a separate cancellation-test choreography flake: its fixed 50ms sleep could cancel before the injected launcher started under parallel stress, returning `ErrAssetCancelled`; `failure_test.go` now observes the launcher-start channel with a bounded failure guard, and the exact whole-package command passes. The original CI run 31449874394/job 93651926054 failure remains classified as the production ensure/reuse race diagnosed in story 001 and fixed in story 002; no public API or generated contract changed. `make test` passed in 380s, and `make typecheck backend-size pkg-maint pkg-file-count pkg-structure vet` plus `git diff --check` passed. No unrelated Models, provider, worker, API, UI, generated-artifact, or repository-wide test-runner changes were included."
     }
   ]
 }
