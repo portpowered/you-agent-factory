@@ -6267,3 +6267,17 @@
 - **Learnings for future iterations:**
   - A completed review handoff is ready when the latest conversation blockers are cleared, thread state is empty, the branch is clean against current main, the PR body is byte-identical to `prd.json`, and all required checks are terminal-green.
 ---
+
+## [2026-08-10 19:25 -07:00] - e2-structured-worker-results CI flake follow-up
+- What was implemented
+  - Made no product or test-code changes. Investigated the final-head CI failure and reran only the failed Backend Functional Coverage job.
+  - Confirmed the first failure was an unchanged `pkg/transports/cli` functional-coverage measurement at 72.818% versus the 72.98% manifest floor; the targeted rerun then exposed the existing `TestPlainBatchDrainPreservesFiniteAndContinuousCounterexamples/continuous_idle` shutdown race in `tests/functional/workers/mock`.
+- Files changed
+  - `progress.txt`
+- Verification
+  - The isolated `continuous_idle` subtest passed 20 consecutive local runs; no feature diff touches its package.
+  - Failed-job rerun Backend Functional Coverage job `93658010711` passed, including the pinned real ACP evidence artifact; Verification Policy job `93658764710` passed.
+  - The branch remains at the pushed head `868990d2b4a07270cce311ec715c98bf10eacb7e`, with all four PRD stories marked `passes:true` and the PR body still byte-identical to `prd.json`.
+- **Learnings for future iterations:**
+  - When functional coverage first reports a package-floor variance and a retry names an unrelated cancellation/shutdown race, preserve the feature diff, stress the exact subtest locally, and rerun only the failed job after clean characterization.
+---
