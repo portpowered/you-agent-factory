@@ -10,7 +10,7 @@
     "evidence": "C:/Users/andre/work/portos/infinite-you/docs/internal/development/plans/dashboard-ux-30-probe-results.md",
     "mandatoryRules": "C:/Users/andre/work/portos/infinite-you/docs/temp/scale-program-rules.md",
     "reviewFollowUp": {
-      "baseCommit": "3521f0b0a2f313b22e2c79edcf90339a01b3bce7",
+      "baseCommit": "b99c8b942b4a684491cede70cae7f0ebf920da8c",
       "resolved": [
         "Rebased the seven dashboard commits onto the fetched current main at 3521f0b0a and resolved the shared PRD/progress conflicts while preserving the dashboard task record.",
         "Replaced exact Storybook command and registration-inventory assertions with behavioral runner coverage for readiness, completion, failure propagation, and server cleanup.",
@@ -19,14 +19,15 @@
         "Removed the process-global Bun module mock from the session-factory discovery test and replaced it with a queued typed-fetch boundary; canonical default-session discovery now resolves the authoritative isDefault row after selector-only rows are filtered.",
         "Updated the existing browser integration journeys to use the renamed Open Factory dialog and the explicit Open selected target confirmation required by the non-mutating Open flow.",
         "Isolated the untouched TestJavaScriptParallelDispatchesChildrenConcurrently functional-coverage flake, confirmed ten local repetitions pass, and reran the failed Backend Functional Coverage plus Verification Policy jobs successfully on the same head.",
-        "Rechecked the stale pre-fix blocking conversation comments against the current head 1023eefe6; the branch is cleanly based on main 3521f0b0a, the thread-aware audit has no unresolved inline threads, and the latest hosted run is terminal-green."
+        "Rechecked the stale pre-fix blocking conversation comments against the current head 1023eefe6; the branch is cleanly based on main 3521f0b0a, the thread-aware audit has no unresolved inline threads, and the latest hosted run is terminal-green.",
+        "Rebased the task branch onto the newer current main b99c8b942, retained the dashboard PRD as authoritative, and rebuilt progress.txt as the complete current-main history plus all dashboard-only entries."
       ],
       "qualityEvidence": [
         "make test and make vet pass on the rebased head.",
         "backend-size, pkg-maint, pkg-file-count, and pkg-structure pass on both the rebased head and the exact detached origin/main baseline.",
         "bun run typecheck and bun run lint pass on the rebased head; the exact detached origin/main UI lint baseline also passes with only its existing allowlisted advisories.",
         "The full Bun unit coverage lane passes: 196 tests across 36 files with lcov instrumentation; the dashboard fixture no longer times out when the unit files share one coverage process.",
-        "The replacement head remains based on live main 3521f0b0a; focused browser integration for the two affected dashboard/import files passes all 3 tests, and post-fix typecheck, UI lint, make test, make vet, backend-size, pkg-maint, pkg-file-count, pkg-structure, and git diff checks pass.",
+        "The pre-current-main-sync replacement head was based on live main 3521f0b0a; focused browser integration for the two affected dashboard/import files passes all 3 tests, and post-fix typecheck, UI lint, make test, make vet, backend-size, pkg-maint, pkg-file-count, pkg-structure, and git diff checks pass.",
         "Hosted run 31494337558 is terminal-green after the retry: Backend Functional Coverage and the dependent Verification Policy gate pass, and all 18 PR checks are successful.",
         "Hosted run 31496150336 for head 1023eefe6 is terminal-green: all 18 PR checks pass, including Frontend, Frontend Browser, Backend Functional Coverage, and Verification Policy; the PR is mergeable and has no unresolved inline review threads."
       ]
