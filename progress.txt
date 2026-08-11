@@ -7886,6 +7886,23 @@
  - Final readiness requires checking the exact pushed head, terminal CI, PR description, and review-thread state together after any bookkeeping commit.
 ---
 
+## 2026-08-10 21:36 -07:00 - e3-event-webhooks-004 final live-main rebase verification
+- What was implemented
+  - Rebased the complete webhook implementation and handoff commits onto the live fork `main` head `4692044216626340364ac8a793881272fc2c1aac` after the base advanced again.
+  - Preserved the E3 PRD and append-only progress entries while resolving the shared-file rebase conflicts; no product behavior change was introduced by this synchronization.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+  - Current-main generated and runtime synchronization files carried by the rebase.
+- Verification
+  - Focused Webhooks/Recordings tests and `tests/functional/events/factory_events` — passed.
+  - `make contracts-check backend-size pkg-file-count pkg-maint pkg-structure vet` — passed.
+  - Final rebased local head before this bookkeeping commit: `7b5fefba9452b5bb7baf0c3c9d5d522238bea095`; exact-head CI remains to be triggered after pushing this final head.
+- **Learnings for future iterations:**
+  - Fetch the hosting repository's live base immediately before the final push; a long local verification window can make an otherwise clean PR dirty again.
+  - Keep the delivery audit's implementation head distinct from later PRD/progress-only bookkeeping commits so the evidence names the code that was actually verified.
+---
+
 ## 2026-08-10 21:26 -07:00 - e3-event-webhooks-004 current-main rebase and gate follow-up
 - What was implemented
   - Rebased the existing PR head `78b55fab2` onto the current fork `main` `ee0023397`, preserving the webhook implementation, Factory PRD, and shared append-only progress history.
