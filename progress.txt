@@ -8343,3 +8343,19 @@
   - Functional coverage that changes CLI behavior must keep the provider-edge construction preference visible in the changed scenario itself; a pre-existing Mock Workers helper can still violate review expectations when the assertion begins proving provider-backed output.
   - After resolving shared bookkeeping conflicts, regenerate the authored CLI manifest and validate the PRD before staging so generated artifacts and the task body remain aligned.
 ---
+## [2026-08-11 00:32 -07:00] - cli-error-classification-and-run-output latest-main synchronization
+- What was implemented
+  - Merged the newer live `origin/main` head `3a0b571b234f70d68908e36669100d0ac9f66a9f` after it advanced during the provider-edge review verification window; the incoming API/model-provider changes were carried through the merge and the task PRD remained authoritative.
+  - Regenerated the CLI manifest after the merge and retained the provider-edge functional-test corrections unchanged.
+- Files changed
+  - Current-main API/model-provider files carried by the merge.
+  - `prd.json`
+  - `progress.txt`
+  - `packages/api/generated/manifest.json`
+- Verification
+  - Focused functional suites passed on the replacement head: `go test ./tests/functional/cli/factory_run/output ./tests/functional/transport/cli/output ./tests/functional/transport/run_scoped_server -count=1 -timeout 600s`.
+  - `go test ./pkg/services/factory_visualization/... -count=1 -timeout 600s` passed.
+  - `make typecheck`, `make backend-size pkg-maint pkg-file-count pkg-structure vet`, `make cli-manifest-generate`, `make cli-manifest-check`, `make cli-contract-smoke`, and `git diff --check` passed.
+- **Learnings for future iterations:**
+  - Fetch and merge the live base immediately before the replacement push; main advanced again while the prior local gate set was running, and the affected tests must be rerun on the actual pushed ancestry.
+---
