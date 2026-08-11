@@ -9539,3 +9539,18 @@
   - Refresh `origin/main` immediately before publishing a replacement head; shared PRD/progress files may conflict even when implementation ownership is unchanged.
   - Resolve a task PRD by retaining the active task’s story evidence and merge unrelated current-main history into the append-only progress log.
 ---
+## 2026-08-11 00:53:49 -07:00 - btrc-p1-root-injection-006 synchronized CI rerun audit
+- What was implemented
+  - Reran the failed Backend Functional Coverage job for CI run `31469696120` on synchronized head `24faa7e1f9da44eda3db4563f81503c220600387`.
+  - Confirmed the packaged-loop and mock-worker failures cleared on rerun; the unchanged server-binding assertion is the only surviving functional failure.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `gh run rerun 31469696120 --failed` — Backend Functional Coverage still fails only at `TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput`; all other required lanes pass.
+  - `TestRootBuildProcessIsInertAndReusableAcrossFactorySessions` and `TestRootBuildProcessRoutesProviderAndScriptWorkThroughInjectedRunnerInstances` pass on the rerun.
+  - The P1 diff is empty for `tests/functional/transport/server_binding`, `tests/functional/factory/packaged/loop`, and `tests/functional/workers/mock`.
+- **Learnings for future iterations:**
+  - Repeated failed-job reruns separated transient packaged-loop/mock-worker failures from the stable current-main server-binding baseline; do not change P1 implementation code for those untouched packages.
+  - The PR remains on a conflict-free head with no unresolved review threads, but required CI is not green until the unchanged server-binding assertion is resolved or accepted by the repository baseline.
+---
