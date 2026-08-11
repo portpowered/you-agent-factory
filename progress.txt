@@ -11308,3 +11308,17 @@
 - **Learnings for future iterations:**
   - For lint ratchets with known baseline debt, run the same checker on a detached exact-main worktree and compare reported paths before changing feature code; a changed file can carry an unchanged pre-existing declaration while the baseline itself remains the source of the finding.
 ---
+## [2026-08-11 09:09:27 -07:00] - js-skip-permissions-parity-004 hosted verification follow-up
+- What was implemented
+  - Investigated the initial hosted `Backend Functional Coverage` failure, which was an isolated runtime-log assertion (`TestFunctionalAPIServer_RuntimeLogDirectoryIsAProcessInput`) outside the JavaScript bypass change; the focused test passed three consecutive local runs.
+  - Reran the failed GitHub jobs without changing code; the functional coverage retry and dependent Verification Policy both passed.
+- Files changed
+  - `progress.txt`
+- Verification
+  - All 18 PR checks are terminal-success for head `adc1ebc6f2636e1b9fd6c28e5815383702813b07` in run `31508934064`.
+  - GitHub reports `mergeable_state=clean`; `origin/main` remains an ancestor of the head, and the PR body remains synchronized with `prd.json`.
+  - Thread-aware PR review audit reports zero review threads and zero unresolved threads; all four PRD stories remain `passes:true`.
+- **Learnings for future iterations:**
+  - When a broad functional coverage lane fails on an unrelated timing-sensitive assertion, reproduce the exact test repeatedly before changing feature code; a focused green reproduction supports a bounded failed-job retry.
+  - After rerunning failed jobs, verify both the original failed lane and its dependent policy gate before declaring the PR review-ready.
+---
