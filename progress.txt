@@ -4498,3 +4498,21 @@
 - **Learnings for future iterations:**
   - A documentation-only PR update can still become conflicting when current main advances; fetch the live base immediately before handoff and validate the replacement merge head before pushing.
 ---
+
+## 2026-08-10 19:38 -07:00 - wsr-001-opening-record final CI and handoff follow-up
+- What was implemented
+  - Re-audited PR #1849 with the thread-aware GitHub workflow; all historical conversation feedback is addressed, with zero formal reviews and zero unresolved or outdated inline threads.
+  - Investigated the failed Backend Functional Coverage retry as unrelated current-main functional-test flakiness, verified the WSR-specific focused test locally, and reran only the failed CI jobs until the complete required check set passed.
+  - Merged the live `origin/main` head `aac04248d` into the branch before final handoff; the merge contained only current-main development-plan documentation and had no conflicts.
+- Files changed
+  - `progress.txt`
+  - Current-main files under `docs/internal/development/plans/` carried by the synchronization merge.
+- Verification
+  - `go test ./tests/functional/transport/cli/process -run '^TestCLISuccessorAfterHardKillReportsPreRuntimeStagingContention$' -count=1 -v` — passed.
+  - CI run `31451707750` — all required checks, including Backend Functional Coverage and Verification Policy, passed after the failed-lane retries.
+  - `prd.json` JSON validation and all three `passes:true` stories — passed; PR #1849 body remains byte-for-byte identical to `prd.json`.
+  - Thread-aware PR audit — 7 conversation comments, 0 formal reviews, and 0 unresolved/outdated inline threads.
+  - `git merge-tree --write-tree origin/main HEAD` and `git diff --check` — passed with `origin/main` at `aac04248d`.
+- **Learnings for future iterations:**
+  - When a broad functional lane fails on different timing-sensitive tests across retries, inspect the exact failed test and rerun only the failed jobs before widening an unrelated feature diff; the repository already records this as the preferred flake-handling pattern.
+---
