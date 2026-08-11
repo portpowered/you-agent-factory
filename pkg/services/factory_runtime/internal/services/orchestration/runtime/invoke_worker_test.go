@@ -82,12 +82,15 @@ func TestInvokeWorker_FirstAttemptUsesTheCallerDispatchIdentity(t *testing.T) {
 func TestInvokeWorker_CarriesTheAuthoredWorkerNameAndPermissionPolicy(t *testing.T) {
 	boundary := newControlledWorkstationBoundary()
 	impl := newInvokeWorkerTestFactory(t, boundary)
+	capabilities := &workers.Capabilities{NativeStreaming: true, ToolLifecycle: true}
 
 	observed, _ := runInvokeWorker(t, impl, boundary, factory.InvokeWorkerRequest{
 		DispatchID:      "child-1",
 		Prompt:          "run",
 		WorkerName:      "worker-a",
 		SkipPermissions: true,
+		RecordingID:     "recording-1",
+		Capabilities:    capabilities,
 	})
 	if observed.Execution.WorkerType != "worker-a" {
 		t.Fatalf("Workers worker type = %q, want the authored worker name %q", observed.Execution.WorkerType, "worker-a")
@@ -101,6 +104,12 @@ func TestInvokeWorker_CarriesTheAuthoredWorkerNameAndPermissionPolicy(t *testing
 	}
 	if !observed.Execution.SkipPermissions {
 		t.Fatal("Workers skip-permissions = false, want the caller's resolved policy")
+	}
+	if observed.Execution.RecordingID != "recording-1" {
+		t.Fatalf("Workers recording ID = %q, want recording-1", observed.Execution.RecordingID)
+	}
+	if observed.Execution.Capabilities == nil || !observed.Execution.Capabilities.NativeStreaming || !observed.Execution.Capabilities.ToolLifecycle {
+		t.Fatalf("Workers capabilities = %+v, want caller-supplied capability facts", observed.Execution.Capabilities)
 	}
 }
 
