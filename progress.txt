@@ -11056,3 +11056,17 @@
   - After a conflict-resolving merge, rerun the repository-level fast tier even when the task-owned source files are unchanged; mainline test reorganizations can affect the replacement head.
   - Keep review metadata explicit about the exact base and merge commit so hosted verification can be tied to the PR head rather than an earlier local result.
 ---
+## [2026-08-11 09:20:58 -07:00] - thr-deflake-cli-process-package post-merge gates
+- What was implemented
+  - Re-ran the required structural and lint gates after the current-main merge rather than carrying forward pre-merge results.
+  - Confirmed the task-owned rolling-file changes do not add a package-boundary or lint violation; the current mainline ownership baseline is the ACP initializer import plus the edges factory-definitions wire import, alongside the existing packaged-factory consumption and deadcode findings.
+- Files changed
+  - No source files; verification and handoff metadata only.
+- Verification
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet package-target-manifest-check ownership-inventory-check` — passed.
+  - `make pkg-boundary` — package-boundary subcheck passed; ownership-boundary reports the two current-main findings above.
+  - `make lint` — exactly the three current-main findings above; all other lint targets passed.
+  - `git diff --check` — passed; the worktree remained clean after all checks.
+- **Learnings for future iterations:**
+  - A composite gate can pass its primary package check while a nested ownership check still fails; record the nested result precisely so baseline comparisons do not overstate a green lint lane.
+---
