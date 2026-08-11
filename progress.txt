@@ -4100,3 +4100,20 @@
   - A migration that predates the current batch still needs exact baseline-case reconciliation, focused Bun execution, both Vitest exclusion selections, lane-contract, and typecheck evidence before its story is marked complete.
   - For this cohort, the source-level and executable totals are both five because no parameterized cases expand the baseline.
 ---
+
+## 2026-08-10 20:08 -07:00 - bun-compat-batch-migration-007
+- What was implemented
+  - Verified the current-selection-06 selected-work relationship cohort already present in branch ancestry: graph construction and dashboard relation projection execute exclusively through four native Bun owners.
+  - Preserved the frozen connected, empty, unavailable, direct-relation, fallback-edge, and repeated `DEPENDS_ON` contracts without changing product code or test behavior.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Focused `bun test` passed 9/9 across 4 files with 26 expect calls, matching the nine baseline named cases.
+  - Pinned `vitest.exe` `dashboard-unit` selection of all four migrated `.bun.unit.test.ts` paths returned `No test files found` with expected exit code 1.
+  - The four retired `.test.ts` paths are absent; selecting them in `dashboard-unit` also returned `No test files found` with expected exit code 1.
+  - `bun run check:test-lanes` and `bun run typecheck` passed.
+- **Learnings for future iterations:**
+  - When a frozen cohort is already migrated in branch ancestry, complete the story by reconciling the baseline names/counts and reproducing focused Bun, both Vitest exclusion, lane-contract, and typecheck evidence before changing task metadata.
+  - The relationship cohort's nine source-level cases remain nine executable cases because it has no parameterized tests; the existing baseline report already contains the matched latency evidence for the later aggregate audit.
+---

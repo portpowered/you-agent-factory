@@ -120,8 +120,8 @@
         "Typecheck passes"
       ],
       "priority": 7,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Verified the current-selection-06 relationship cohort already present in branch ancestry: graph and relation projection owners are the exclusive *.bun.unit.test.ts files (4 files / 9 named and executable cases), and all four retired Vitest paths are absent. Focused `bun test` passed 9/9 with 26 expect calls; dashboard-unit Vitest selection of both migrated and retired paths returned `No test files found`; `bun run check:test-lanes` and `bun run typecheck` passed. Connected, empty, unavailable, direct-relation, fallback-edge, and repeated DEPENDS_ON behavior remains covered; no product behavior, public contract, generated artifact, coverage membership, or browser ownership changed."
     },
     {
       "id": "bun-compat-batch-migration-008",
