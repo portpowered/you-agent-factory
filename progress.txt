@@ -6846,3 +6846,19 @@
 - **Learnings for future iterations:**
   - For a shared task bookkeeping conflict, keep the branch-specific PRD authoritative and append the branch-specific progress entries after the current-main history; validate both parseability and marker-free output before staging.
 ---
+## [2026-08-10 21:18 -07:00] - prose-standard-and-terms current-main synchronization follow-up
+- What was implemented
+  - Merged the live `origin/main` head `4692044216626340364ac8a793881272fc2c1aac` after main advanced during the PR handoff.
+  - Preserved the prose-standard task PRD and unioned the newly arrived CI-classifier progress history with the existing append-only log.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+  - Current-main files carried by the merge commit.
+- Verification
+  - `prd.json` parses with all three prose stories marked `passes:true`.
+  - `progress.txt` contains both task histories with no merge conflict markers.
+  - `git diff --check` passed before the merge commit.
+  - The replacement head must be pushed before GitHub can recompute checks and mergeability.
+- **Learnings for future iterations:**
+  - Recheck the live remote main immediately before final push; another merged PR can make a previously clean synchronization stale during review handoff.
+---
