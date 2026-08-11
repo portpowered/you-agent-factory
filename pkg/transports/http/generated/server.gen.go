@@ -380,6 +380,13 @@ const (
 	FactoryResponseEventProvenanceRepresentationSnapshot     FactoryResponseEventProvenanceRepresentation = "SNAPSHOT"
 )
 
+// Defines values for FactoryResponseEventSessionPayloadAttemptReason.
+const (
+	INITIAL FactoryResponseEventSessionPayloadAttemptReason = "INITIAL"
+	RESUME  FactoryResponseEventSessionPayloadAttemptReason = "RESUME"
+	RETRY   FactoryResponseEventSessionPayloadAttemptReason = "RETRY"
+)
+
 // Defines values for FactorySaveMode.
 const (
 	FactorySaveModeReplaceCurrent         FactorySaveMode = "REPLACE_CURRENT"
@@ -1089,16 +1096,17 @@ const (
 
 // Defines values for WorkFailureType.
 const (
-	WorkFailureTypeAuthFailure                  WorkFailureType = "auth_failure"
-	WorkFailureTypeCommandLineTooLong           WorkFailureType = "command_line_too_long"
-	WorkFailureTypeExpectedArtifactsUnsatisfied WorkFailureType = "EXPECTED_ARTIFACTS_UNSATISFIED"
-	WorkFailureTypeInternalServerError          WorkFailureType = "internal_server_error"
-	WorkFailureTypeMisconfigured                WorkFailureType = "misconfigured"
-	WorkFailureTypeMissingExecutable            WorkFailureType = "missing_executable"
-	WorkFailureTypePermanentBadRequest          WorkFailureType = "permanent_bad_request"
-	WorkFailureTypeThrottled                    WorkFailureType = "throttled"
-	WorkFailureTypeTimeout                      WorkFailureType = "timeout"
-	WorkFailureTypeUnknown                      WorkFailureType = "unknown"
+	WorkFailureTypeAuthFailure                     WorkFailureType = "auth_failure"
+	WorkFailureTypeCommandLineTooLong              WorkFailureType = "command_line_too_long"
+	WorkFailureTypeExpectedArtifactsUnsatisfied    WorkFailureType = "EXPECTED_ARTIFACTS_UNSATISFIED"
+	WorkFailureTypeInternalServerError             WorkFailureType = "internal_server_error"
+	WorkFailureTypeMisconfigured                   WorkFailureType = "misconfigured"
+	WorkFailureTypeMissingExecutable               WorkFailureType = "missing_executable"
+	WorkFailureTypePermanentBadRequest             WorkFailureType = "permanent_bad_request"
+	WorkFailureTypeStructuredOutputSchemaViolation WorkFailureType = "structured_output_schema_violation"
+	WorkFailureTypeThrottled                       WorkFailureType = "throttled"
+	WorkFailureTypeTimeout                         WorkFailureType = "timeout"
+	WorkFailureTypeUnknown                         WorkFailureType = "unknown"
 )
 
 // Defines values for WorkOutcome.
@@ -1513,7 +1521,10 @@ type DispatchResponseEventPayload struct {
 	PreviousChainingTraceIds    *[]string                `json:"previousChainingTraceIds,omitempty"`
 	ProviderFailure             *ProviderFailureMetadata `json:"providerFailure,omitempty"`
 	SelectedClassificationLabel *string                  `json:"selectedClassificationLabel,omitempty"`
-	TransitionId                string                   `json:"transitionId"`
+
+	// StructuredResult Optional native JSON value produced when the workstation outputSchema validates the worker response. JSON null is distinct from an omitted value.
+	StructuredResult interface{} `json:"structuredResult,omitempty"`
+	TransitionId     string      `json:"transitionId"`
 }
 
 // DispatchWorkerSessionAssociationEventPayload Canonical association between one Factory dispatch and the Worker Session allocated to execute it. Dispatch identity remains authoritative in FactoryEvent.context.dispatchId and is not repeated in this payload.
@@ -2792,12 +2803,86 @@ type FactoryResponseEventRunPayload struct {
 
 // FactoryResponseEventSessionPayload Session-scoped lifecycle and capability metadata payload.
 type FactoryResponseEventSessionPayload struct {
+	// Attempt One-based attempt number when known.
+	Attempt *int `json:"attempt,omitempty"`
+
+	// AttemptId Stable identity of the opening attempt.
+	AttemptId *string `json:"attemptId,omitempty"`
+
+	// AttemptReason Bounded reason for the attempt lifecycle.
+	AttemptReason *FactoryResponseEventSessionPayloadAttemptReason `json:"attemptReason,omitempty"`
+
 	// Capabilities Declares which response-event features a provider session supports. Adapters publish capability flags so consumers can interpret fidelity and phase availability without depending on provider-native schemas.
 	Capabilities *FactoryResponseEventCapabilities `json:"capabilities,omitempty"`
 
+	// Continuation Exact provider continuation identity when supplied.
+	Continuation *struct {
+		Id       *string `json:"id,omitempty"`
+		Kind     *string `json:"kind,omitempty"`
+		Provider *string `json:"provider,omitempty"`
+	} `json:"continuation,omitempty"`
+
+	// DispatchId Stable dispatch identity for the execution attempt.
+	DispatchId *string `json:"dispatchId,omitempty"`
+
+	// FactorySessionId Factory Session identity when the invocation supplied one.
+	FactorySessionId *string `json:"factorySessionId,omitempty"`
+
+	// Model Explicit model selection when supplied.
+	Model *string `json:"model,omitempty"`
+
+	// ProjectId Project identity when the invocation supplied one.
+	ProjectId *string `json:"projectId,omitempty"`
+
+	// ProviderSelection Explicit provider and runner selection facts.
+	ProviderSelection *struct {
+		ExecutorProvider *string `json:"executorProvider,omitempty"`
+		ModelProvider    *string `json:"modelProvider,omitempty"`
+		RunnerId         *string `json:"runnerId,omitempty"`
+
+		// Source Configuration layer that supplied the resolved built-in runner selection for a dispatch.
+		Source *RunnerSelectionSource `json:"source,omitempty"`
+	} `json:"providerSelection,omitempty"`
+
+	// ReasoningEffort Explicit reasoning-effort selection when supplied.
+	ReasoningEffort *string `json:"reasoningEffort,omitempty"`
+
+	// RecordingId Recording identity when the invocation supplied one.
+	RecordingId *string `json:"recordingId,omitempty"`
+
+	// ReplayKey Replay correlation key when the dispatch supplied one.
+	ReplayKey *string `json:"replayKey,omitempty"`
+
+	// StartedAt Injected-clock timestamp at which the Worker Session opened.
+	StartedAt *time.Time `json:"startedAt,omitempty"`
+
 	// Status Session lifecycle status when applicable.
 	Status *string `json:"status,omitempty"`
+
+	// TraceId Work trace identity when the dispatch supplied one.
+	TraceId *string `json:"traceId,omitempty"`
+
+	// TransitionId Runtime transition identity when the dispatch supplied one.
+	TransitionId *string `json:"transitionId,omitempty"`
+
+	// TurnId Turn or request identity when the dispatch supplied one.
+	TurnId *string `json:"turnId,omitempty"`
+
+	// WorkIds Work identities carried by the canonical dispatch.
+	WorkIds *[]string `json:"workIds,omitempty"`
+
+	// WorkerSessionId Stable Worker Session identity for the execution.
+	WorkerSessionId *string `json:"workerSessionId,omitempty"`
+
+	// WorkerType Authored Worker identity when the invocation supplied one.
+	WorkerType *string `json:"workerType,omitempty"`
+
+	// WorkstationName Workstation route used by the canonical invocation.
+	WorkstationName *string `json:"workstationName,omitempty"`
 }
+
+// FactoryResponseEventSessionPayloadAttemptReason Bounded reason for the attempt lifecycle.
+type FactoryResponseEventSessionPayloadAttemptReason string
 
 // FactoryResponseEventStreamGapPayload Discontinuity marker for either unavailable retained response-event sequences or an affected provider item whose lifecycle could not be fully observed. Retention gaps include fromSequence, toSequence, and firstAvailableSequence; item-scoped gaps include affectedItemId and reason. The alternatives are exclusive so empty, partial, and mixed payloads are rejected.
 type FactoryResponseEventStreamGapPayload struct {
@@ -6818,7 +6903,10 @@ type Work struct {
 	// State A lifecycle state that a work item can occupy inside one work type.
 	State       *WorkState          `json:"state,omitempty"`
 	StopSummary *FactoryStopSummary `json:"stopSummary,omitempty"`
-	Tags        *StringMap          `json:"tags,omitempty"`
+
+	// StructuredResult Optional JSON value produced by a workstation whose outputSchema validated the worker response. JSON null is distinct from an omitted value.
+	StructuredResult interface{} `json:"structuredResult,omitempty"`
+	Tags             *StringMap  `json:"tags,omitempty"`
 
 	// TraceId Legacy trace identifier retained for compatibility; prefer currentChainingTraceId.
 	TraceId *string `json:"traceId,omitempty"`
@@ -7816,6 +7904,9 @@ type WorkListWorkTypeName = string
 // WorkOrTokenID defines model for WorkOrTokenID.
 type WorkOrTokenID = string
 
+// WorkerSessionID defines model for WorkerSessionID.
+type WorkerSessionID = string
+
 // BadRequest defines model for BadRequest.
 type BadRequest = ErrorResponse
 
@@ -8002,6 +8093,12 @@ type ReadWorkerSessionTranscriptBySessionIdParams struct {
 
 	// Id Provider-issued session identifier, not a filesystem path.
 	Id string `form:"id" json:"id"`
+}
+
+// StreamWorkerSessionEventsByWorkerSessionIdParams defines parameters for StreamWorkerSessionEventsByWorkerSessionId.
+type StreamWorkerSessionEventsByWorkerSessionIdParams struct {
+	// ReplayOnly Drain the retained history through a captured Events head without registering a live follower.
+	ReplayOnly *bool `form:"replayOnly,omitempty" json:"replayOnly,omitempty"`
 }
 
 // GetProviderSessionDetailsParams defines parameters for GetProviderSessionDetails.
@@ -11231,6 +11328,9 @@ type ServerInterface interface {
 	// Read one finished Worker Session transcript
 	// (GET /factory-sessions/{session_id}/worker-sessions/transcript)
 	ReadWorkerSessionTranscriptBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID, params ReadWorkerSessionTranscriptBySessionIdParams)
+	// Stream retained and live Worker Session events by Worker Session identity
+	// (GET /factory-sessions/{session_id}/worker-sessions/{worker_session_id}/events)
+	StreamWorkerSessionEventsByWorkerSessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID, workerSessionId WorkerSessionID, params StreamWorkerSessionEventsByWorkerSessionIdParams)
 	// Validate factory definition
 	// (POST /factory-validations)
 	ValidateFactory(w http.ResponseWriter, r *http.Request)
@@ -12667,6 +12767,51 @@ func (siw *ServerInterfaceWrapper) ReadWorkerSessionTranscriptBySessionId(w http
 	handler.ServeHTTP(w, r)
 }
 
+// StreamWorkerSessionEventsByWorkerSessionId operation middleware
+func (siw *ServerInterfaceWrapper) StreamWorkerSessionEventsByWorkerSessionId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "session_id" -------------
+	var sessionId SessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "session_id", mux.Vars(r)["session_id"], &sessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "worker_session_id" -------------
+	var workerSessionId WorkerSessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "worker_session_id", mux.Vars(r)["worker_session_id"], &workerSessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "worker_session_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params StreamWorkerSessionEventsByWorkerSessionIdParams
+
+	// ------------- Optional query parameter "replayOnly" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "replayOnly", r.URL.Query(), &params.ReplayOnly)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "replayOnly", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.StreamWorkerSessionEventsByWorkerSessionId(w, r, sessionId, workerSessionId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ValidateFactory operation middleware
 func (siw *ServerInterfaceWrapper) ValidateFactory(w http.ResponseWriter, r *http.Request) {
 
@@ -13054,6 +13199,8 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/worker-sessions/events", wrapper.StreamWorkerSessionEventsBySessionId).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/worker-sessions/transcript", wrapper.ReadWorkerSessionTranscriptBySessionId).Methods("GET")
+
+	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/worker-sessions/{worker_session_id}/events", wrapper.StreamWorkerSessionEventsByWorkerSessionId).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/factory-validations", wrapper.ValidateFactory).Methods("POST")
 

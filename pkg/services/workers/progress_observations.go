@@ -32,6 +32,10 @@ type ProgressFragment struct {
 	Kind       string
 	Type       string
 	Payload    string
+	// Provider is the provider identity selected for this attempt. It is
+	// intentionally independent from ProviderSessionReference: a provider may
+	// author progress without exposing a resumable native session identity.
+	Provider string
 	// ProviderSessionReference is the exact detached typed reference returned
 	// by Providers for this attempt. ProviderSessionRef remains the
 	// response-stream metadata projection; Worker Sessions must use this field
