@@ -3995,3 +3995,24 @@
 - **Learnings for future iterations:**
   - A clean merge against a stale remote-tracking base is not sufficient; compare the live hosting ref, fetch it, and resolve shared PRD/progress files again before pushing the replacement head.
 ---
+
+## 2026-08-10 19:25 -07:00 - pp-merge-context-bug-001
+- What was implemented
+  - Added a deterministic packaged `@you/plan-parallel` functional regression with 10 independent generated children and unique executor output markers.
+  - Captured the actual merger provider request through the injected `ProviderCommandRunner` while executing through `root.BuildProcess` and `Process.Execute`.
+  - Asserted the original request exactly once, every unique completed child result exactly once, each result under its generated Work name, and absence of the planner payload in that Work section.
+  - Updated the story note in `prd.json`; the story remains `passes:false` because the same test passes on the current `origin/main`, so the required current-main red reproduction is not established yet.
+- Files changed
+  - `tests/functional/factory/packaged/plan_parallel/invocation_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/factory/packaged/plan_parallel -run '^TestPackagedPlanParallelMergerReceivesEveryUniqueCompletedChildResult$' -count=10 -v -timeout 600s` — passed 10/10.
+  - `go test ./tests/functional/factory/packaged/plan_parallel -count=1 -v -timeout 300s` — passed.
+  - `go test ./pkg/services/factory_runtime/internal/services/orchestration/token_transformer ./pkg/services/factory_runtime/internal/services/orchestration/subsystems -count=1 -timeout 300s` — passed.
+  - Historical inspection localized the earlier omission to packaged merger prompt assembly: `b0bf1dd597` added the Factory-input rendering block, and the current base already contains the `Payload`/`PreviousOutput`/`Content` fallback.
+  - Regression commit: `ab6593506` (`test(plan-parallel): assert unique merger fan-in inputs`).
+- **Learnings for future iterations:**
+  - The existing three-child test's identical executor output marker can pass without proving child-result identity; fan-in coverage must derive unique result markers from each assigned payload and assert section-level association.
+  - A green strengthened regression on the current base is evidence against the recorded omission in this exact scenario; do not mark the story complete or claim a red run until the failing mechanism is reproduced or a distinct current-base gap is proven.
+---
