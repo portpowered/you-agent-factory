@@ -1,145 +1,124 @@
+import "@testing-library/jest-dom/vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { axe } from "jest-axe";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  type PackagedFactoryPublicDataSource,
-  type PackagedFactoryPublicExport,
-  packagedFactoryManifestExport,
-  packagedFactorySchemaExport,
-} from "../lib/public-contract";
+import type { PackagedFactoryCatalogResponse } from "../../../api/packaged-factories";
 import { PackagedFactoryInventory } from "./packaged-factory-inventory";
 
-const schemaIdentity =
-  "https://schemas.portpowered.com/you/config/factory.schema.json";
-const schema = {
-  $id: schemaIdentity,
-  $schema: "https://json-schema.org/draft/2020-12/schema",
-  additionalProperties: false,
-  properties: {
-    id: { type: "string" },
-    name: { type: "string" },
-  },
-  required: ["id", "name"],
-  type: "object",
-};
-
-function manifestEntry(slug: string, description: string, localized?: string) {
+function catalogEntry(
+  slug: string,
+  description: string,
+  localized?: string,
+  overrides: Partial<PackagedFactoryCatalogResponse["factories"][number]> = {},
+) {
   return {
     description: {
-      type: "LOCALIZABLE_ASSET",
+      type: "LOCALIZABLE_ASSET" as const,
       value: description,
       values: localized ? { "zh-CN": localized } : undefined,
     },
-    json: {
-      locator: `generated/factories/${slug}/factory.json`,
-      sha256: "a".repeat(64),
-    },
+    examples: [
+      {
+        name: "default",
+        description: {
+          type: "LOCALIZABLE_ASSET" as const,
+          value: `Run ${slug}`,
+        },
+        args: { input: `Run ${slug}` },
+      },
+    ],
+    json: { id: `builtin-${slug}`, name: slug },
     name: `@you/${slug}`,
     project: `builtin-${slug}`,
     slug,
-    yaml: {
-      locator: `generated/factories/${slug}/factory.yaml`,
-      sha256: "b".repeat(64),
-    },
-  };
-}
-
-function manifest(factories: unknown[]) {
-  return {
-    factories,
-    factorySchema: schemaIdentity,
-    formatVersion: "1",
-  };
-}
-
-function source({
-  factories = [
-    manifestEntry("alpha", "Alpha description", "Alpha 中文说明"),
-    manifestEntry("beta", "Beta description"),
-  ],
-  overrides = {},
-}: {
-  factories?: unknown[];
-  overrides?: Partial<Record<PackagedFactoryPublicExport, unknown>>;
-} = {}): PackagedFactoryPublicDataSource {
-  const values: Partial<Record<PackagedFactoryPublicExport, unknown>> = {
-    [packagedFactoryManifestExport]: manifest(factories),
-    [packagedFactorySchemaExport]: schema,
-    "@you-agent-factory/packaged-factories/factories/alpha.json":
-      '{"id":"builtin-alpha","name":"alpha"}',
-    "@you-agent-factory/packaged-factories/factories/alpha.yaml":
-      "id: builtin-alpha\nname: alpha\n",
-    "@you-agent-factory/packaged-factories/factories/beta.json":
-      '{"id":"builtin-beta","name":"beta"}',
-    "@you-agent-factory/packaged-factories/factories/beta.yaml":
-      "id: builtin-beta\nname: beta\n",
+    yaml: `id: builtin-${slug}\nname: ${slug}\n`,
     ...overrides,
-  };
-  return {
-    async read(specifier) {
-      return values[specifier];
-    },
-  };
+  } satisfies PackagedFactoryCatalogResponse["factories"][number];
 }
 
-describe("PackagedFactoryInventory catalog states", () => {
-  it("shows loading, empty, unsupported-version, and invalid-contract states without stale content", async () => {
-    const neverResolves: PackagedFactoryPublicDataSource = {
-      read: () => new Promise(() => {}),
-    };
-    const { rerender } = render(
-      <PackagedFactoryInventory source={neverResolves} />,
-    );
-    expect(screen.getByText("Loading Packaged Factories…")).not.toBeNull();
+function catalog(
+  factories = [
+    catalogEntry("alpha", "Alpha description", "Alpha 中文说明"),
+    catalogEntry("beta", "Beta description"),
+  ],
+): PackagedFactoryCatalogResponse {
+  return { factories };
+}
 
-    rerender(
-      <PackagedFactoryInventory
-        source={source({
-          factories: [],
-        })}
-      />,
-    );
+function response(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    headers: { "Content-Type": "application/json" },
+    status,
+  });
+}
+
+function renderInventory() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <PackagedFactoryInventory />
+    </QueryClientProvider>,
+  );
+}
+
+describe("PackagedFactoryInventory API states", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("shows loading and empty states from the backend response", async () => {
+    vi.mocked(globalThis.fetch).mockReturnValue(new Promise(() => {}));
+    const { unmount } = renderInventory();
+    expect(screen.getByText("Loading Packaged Factories…")).toBeVisible();
+    unmount();
+
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(response(catalog([])));
+    renderInventory();
     expect(
       await screen.findByText("No Packaged Factories are available."),
-    ).not.toBeNull();
+    ).toBeVisible();
+  });
 
-    rerender(
-      <PackagedFactoryInventory
-        source={source({
-          overrides: {
-            [packagedFactoryManifestExport]: {
-              ...manifest([]),
-              formatVersion: "2",
-            },
-          },
-        })}
-      />,
-    );
-    expect((await screen.findByRole("alert")).textContent).toContain(
-      "This website does not support Packaged Factory catalog format 2.",
-    );
+  it("shows a recoverable API error and retries through the typed boundary", async () => {
+    const user = userEvent.setup();
+    vi.mocked(globalThis.fetch)
+      .mockResolvedValueOnce(response({ code: "INTERNAL_ERROR" }, 500))
+      .mockResolvedValueOnce(response(catalog()));
+    renderInventory();
 
-    rerender(
-      <PackagedFactoryInventory
-        source={source({
-          overrides: { [packagedFactoryManifestExport]: { factories: [] } },
-        })}
-      />,
-    );
-    expect((await screen.findByRole("alert")).textContent).toContain(
-      "The Packaged Factory catalog is unavailable.",
-    );
-    expect(screen.queryByText("@you/alpha")).toBeNull();
+    expect(
+      await screen.findByText("The Packaged Factory catalog is unavailable."),
+    ).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+    expect(
+      await screen.findByRole("heading", { level: 3, name: "@you/alpha" }),
+    ).toBeVisible();
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
   });
 });
 
 describe("PackagedFactoryInventory selection", () => {
-  it("renders every stable name once and supports arrow traversal and keyboard activation", async () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("renders API-shaped catalog data and supports arrow traversal and keyboard activation", async () => {
     const user = userEvent.setup();
-    const { baseElement } = render(
-      <PackagedFactoryInventory source={source()} />,
-    );
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(response(catalog()));
+    const { baseElement } = renderInventory();
 
     const alpha = await screen.findByRole("button", { name: /@you\/alpha/ });
     const beta = screen.getByRole("button", {
@@ -162,34 +141,30 @@ describe("PackagedFactoryInventory selection", () => {
         level: 3,
         name: "@you/beta",
       }),
-    ).not.toBeNull();
+    ).toBeVisible();
     expect(
       screen.getByText("@you/beta selected").getAttribute("aria-live"),
     ).toBe("polite");
     expect((await axe(baseElement)).violations).toEqual([]);
   });
 
-  it("contains selected-artifact failures and recovers through another selection", async () => {
+  it("does not render stale detail after a selected artifact failure and recovers through another selection", async () => {
     const user = userEvent.setup();
-    render(
-      <PackagedFactoryInventory
-        source={source({
-          overrides: {
-            "@you-agent-factory/packaged-factories/factories/alpha.json":
-              undefined,
-          },
-        })}
-      />,
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      response(
+        catalog([
+          catalogEntry("alpha", "Alpha description", undefined, {
+            yaml: "",
+          }),
+          catalogEntry("beta", "Beta description"),
+        ]),
+      ),
     );
+    renderInventory();
 
     expect((await screen.findByRole("alert")).textContent).toContain(
       "This Factory could not be loaded. Select another Factory to continue.",
     );
-    expect(
-      screen
-        .getByRole("button", { name: /@you\/alpha/ })
-        .getAttribute("aria-current"),
-    ).toBe("true");
     expect(
       screen.queryByRole("heading", { level: 3, name: "@you/alpha" }),
     ).toBeNull();
@@ -198,7 +173,7 @@ describe("PackagedFactoryInventory selection", () => {
 
     expect(
       await screen.findByRole("heading", { level: 3, name: "@you/beta" }),
-    ).not.toBeNull();
+    ).toBeVisible();
     expect(
       screen.queryByText(
         "This Factory could not be loaded. Select another Factory to continue.",
@@ -206,20 +181,39 @@ describe("PackagedFactoryInventory selection", () => {
     ).toBeNull();
   });
 
-  it("uses localized copy and renders package content as inert escaped text", async () => {
+  it("uses localized copy and renders API artifact content as inert escaped text", async () => {
     const hostile = "<img src=x onerror=alert(1)>";
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      response(
+        catalog([
+          catalogEntry("alpha", hostile, hostile, {
+            examples: [
+              {
+                name: hostile,
+                description: {
+                  type: "LOCALIZABLE_ASSET",
+                  value: hostile,
+                },
+                args: { input: hostile },
+              },
+            ],
+          }),
+        ]),
+      ),
+    );
     render(
-      <PackagedFactoryInventory
-        locale="zh-CN"
-        source={source({
-          factories: [manifestEntry("alpha", hostile, hostile)],
-        })}
-      />,
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <PackagedFactoryInventory locale="zh-CN" />
+      </QueryClientProvider>,
     );
 
     expect(
       await screen.findByRole("navigation", { name: "可用的打包工厂" }),
-    ).not.toBeNull();
+    ).toBeVisible();
     expect(screen.getAllByText(hostile).length).toBeGreaterThan(0);
     expect(document.querySelector("img")).toBeNull();
   });
