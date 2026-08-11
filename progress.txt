@@ -10110,6 +10110,7 @@
   - Factory graph build, package-boundary, package-pack verification, Biome, and `git diff --check` — passed.
 - **Learnings for future iterations:**
   - A host boundary that copies only required-looking semantic axes can erase optional behavior; pass the package-owned projection through or explicitly preserve every semantic field used by the shared renderer.
+---
 ## [2026-08-11 06:20 -07:00] - prose-standard-and-terms-002
 - What was implemented
   - Completed the latest terminology-review follow-up on the current PR head. The register contains one exact `FactoryResponseEvent` record, and the `Parent-Child` example describes child-set membership and parent-aware fan-in rather than unsupported lifecycle ownership.
@@ -10123,4 +10124,20 @@
 - **Learnings for future iterations:**
   - Public identifier spellings from the owning architecture or contract source take precedence over natural-language variants when a terminology register defines one canonical record.
   - Relationship examples should describe observable contract effects, such as membership or fan-in, instead of inferring lifecycle ownership from relationship names.
+---
+## [2026-08-11 07:19:50 -07:00] - graph-workstation-semantics latest-main replay verification
+- What was implemented
+  - Merged live `origin/main` at `b99c8b942` and retained the graph task's authoritative four-story PRD while unioning both append-only progress histories without conflict markers.
+  - Revalidated the guarded-control replay fix and regenerated package output on the conflict-free merged head.
+- Files changed
+  - Current-main writing-standard files carried by the merge.
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `origin/main` is an ancestor of `HEAD`; `git merge-tree --write-tree origin/main HEAD` reports no conflicts.
+  - Factory graph typecheck, 54 tests, build, package-boundary, and package-pack verification — passed.
+  - Factory visualizers typecheck, 31 tests, and lint — passed.
+  - `prd.json` parses with all four stories marked `passes:true`; `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - Re-run package generation and focused host tests after a moving-main merge even when source conflicts are absent; generated consumers and dependency aliases can change independently.
 ---
