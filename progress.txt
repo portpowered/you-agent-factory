@@ -9200,3 +9200,17 @@
   - Updating a visible action label is not enough for browser coverage: integration scenarios must follow the complete semantic journey, including renamed dialog titles and newly explicit confirmation controls.
   - Canonical session-list normalization requires selector resolution to consult the row's `isDefault` marker when callers still use the `~default` selector.
 ---
+## [2026-08-11 06:25 -07:00] - dashboard-fixture-and-quick-wins-functional-coverage-follow-up
+- What was implemented
+  - Investigated the hosted Backend Functional Coverage failure and isolated it to the untouched `TestJavaScriptParallelDispatchesChildrenConcurrently` test, which observed one active child call instead of two under the parallel suite scheduler.
+  - Made no unrelated Go product or test changes; the named test passed once and across ten local repetitions.
+  - Reran only the failed Backend Functional Coverage job and its dependent Verification Policy gate on the pushed dashboard head; both passed.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Hosted run `31494337558` is terminal-green with all 18 PR checks passing, including Backend Functional Coverage and Verification Policy.
+  - The PR remains based on `3521f0b0a2f313b22e2c79edcf90339a01b3bce7`; the local worktree was clean before this bookkeeping update.
+- **Learnings for future iterations:**
+  - When broad functional coverage names an untouched concurrency-sensitive fixture, repeat that exact test locally before widening the feature diff; a clean repeated characterization supports rerunning only the failed coverage and policy jobs.
+---

@@ -17,14 +17,16 @@
         "Replaced the dashboard fixture API test's race-prone immediate response resolution with an explicit waitUntilPending readiness signal.",
         "Unioned the complete append-only progress history from current main with the dashboard task history before the replacement push.",
         "Removed the process-global Bun module mock from the session-factory discovery test and replaced it with a queued typed-fetch boundary; canonical default-session discovery now resolves the authoritative isDefault row after selector-only rows are filtered.",
-        "Updated the existing browser integration journeys to use the renamed Open Factory dialog and the explicit Open selected target confirmation required by the non-mutating Open flow."
+        "Updated the existing browser integration journeys to use the renamed Open Factory dialog and the explicit Open selected target confirmation required by the non-mutating Open flow.",
+        "Isolated the untouched TestJavaScriptParallelDispatchesChildrenConcurrently functional-coverage flake, confirmed ten local repetitions pass, and reran the failed Backend Functional Coverage plus Verification Policy jobs successfully on the same head."
       ],
       "qualityEvidence": [
         "make test and make vet pass on the rebased head.",
         "backend-size, pkg-maint, pkg-file-count, and pkg-structure pass on both the rebased head and the exact detached origin/main baseline.",
         "bun run typecheck and bun run lint pass on the rebased head; the exact detached origin/main UI lint baseline also passes with only its existing allowlisted advisories.",
         "The full Bun unit coverage lane passes: 196 tests across 36 files with lcov instrumentation; the dashboard fixture no longer times out when the unit files share one coverage process.",
-        "The replacement head remains based on live main 3521f0b0a; focused browser integration for the two affected dashboard/import files passes all 3 tests, and post-fix typecheck, UI lint, make test, make vet, backend-size, pkg-maint, pkg-file-count, pkg-structure, and git diff checks pass."
+        "The replacement head remains based on live main 3521f0b0a; focused browser integration for the two affected dashboard/import files passes all 3 tests, and post-fix typecheck, UI lint, make test, make vet, backend-size, pkg-maint, pkg-file-count, pkg-structure, and git diff checks pass.",
+        "Hosted run 31494337558 is terminal-green after the retry: Backend Functional Coverage and the dependent Verification Policy gate pass, and all 18 PR checks are successful."
       ]
     }
   },
