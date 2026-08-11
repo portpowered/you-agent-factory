@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/json"
 	"reflect"
 	"strings"
 	"testing"
@@ -237,6 +238,65 @@ func TestProjectStructuredPrerequisitesReplaceLegacyExecutableDuplicate(t *testi
 		if prerequisite.Kind == providers.PrerequisiteDependency && prerequisite.Name == "agy" {
 			t.Fatal("legacy AGY executable prerequisite duplicated the structured executable fact")
 		}
+	}
+}
+
+func TestProjectManifestAcceptsAdditiveCapabilityFactsWithoutInventingLegacyClaims(t *testing.T) {
+	t.Parallel()
+
+	var catalog publishedProviderCatalog
+	if err := json.Unmarshal([]byte(`{
+		"providers": [{
+			"id": "codex",
+			"technicalSupportLevel": "production",
+			"implementationAvailability": "bundled",
+			"harness": {"kind": "native_cli"},
+			"modelCatalogPosture": "exact",
+			"harnessRoutes": [
+				{"direction": "input", "modality": "image", "support": "conditional", "condition": "workspace route", "transport": "file_path"},
+				{"direction": "output", "modality": "video", "support": "unknown", "transport": "none"}
+			],
+			"evidence": [{
+				"id": "fixture",
+				"kind": "conformance_fixture",
+				"verifiedOn": "2026-08-10",
+				"factRefs": ["harness/input/image", "model/gpt-5.6/input/image", "tool/image_generation"]
+			}],
+			"models": [{
+				"id": "gpt-5.6",
+				"efforts": ["high", "low"],
+				"modalities": [
+					{"direction": "input", "modality": "text", "support": "supported", "transport": "inline"},
+					{"direction": "input", "modality": "image", "support": "conditional", "condition": "workspace route", "transport": "file_path", "evidenceRefs": ["fixture"]},
+					{"direction": "output", "modality": "image", "support": "unknown", "transport": "none"}
+				]
+			}],
+			"tools": [
+				{"name": "filesystem", "support": "supported", "description": "Use the workspace.", "availability": "built_in", "defaultEnabled": true},
+				{"name": "image_generation", "support": "conditional", "condition": "when enabled", "description": "Generate images.", "availability": "optional", "defaultEnabled": null, "outputModalities": [{"modality": "image", "support": "supported", "transport": "tool_mediated", "evidenceRefs": ["fixture"]}]},
+				{"name": "future_tool", "support": "unknown", "description": "Future tool.", "availability": "unknown", "defaultEnabled": null}
+			]
+		}]
+	}`), &catalog); err != nil {
+		t.Fatalf("decode additive provider catalog: %v", err)
+	}
+
+	descriptors, err := projectManifests(catalog.Providers)
+	if err != nil {
+		t.Fatalf("projectManifests() = %v", err)
+	}
+	if len(descriptors) != 1 {
+		t.Fatalf("len(descriptors) = %d, want 1", len(descriptors))
+	}
+	got := descriptors[0]
+	if !reflect.DeepEqual(got.Models[0].Efforts, []providers.ReasoningEffort{"low", "high"}) {
+		t.Fatalf("efforts = %v, want low, high", got.Models[0].Efforts)
+	}
+	if len(got.Models[0].Modalities) != 1 || got.Models[0].Modalities[0].Kind != providers.ModalityText {
+		t.Fatalf("legacy modalities = %#v, want only the established text fact", got.Models[0].Modalities)
+	}
+	if len(got.Tools) != 1 || got.Tools[0].Name != "filesystem" {
+		t.Fatalf("legacy tools = %#v, want only the established filesystem fact", got.Tools)
 	}
 }
 
