@@ -11576,3 +11576,18 @@
 - **Learnings for future iterations:**
   - When current main deletes task-local PRD/progress artifacts, resolve the merge by retaining the active task files and explicitly record the deletion conflict; do not silently drop the task handoff history.
 ---
+## [2026-08-11 12:04:13 -07:00] - thr-deflake-cli-process-package replacement-head hosted audit
+- What was implemented
+  - Rechecked the published replacement head `200d06d4832a431aad15dd867e83f0cdeed5fae9` after the current-main merge and its fresh hosted run.
+  - Reran the unrelated Backend Functional Coverage job after its session-drain fixture flaked; the targeted retry passed and the dependent Verification Policy gate passed.
+  - Refreshed `prd.json` with the final head, base, hosted run, mergeability, and review-thread state while preserving all three `passes:true` stories.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Hosted run `31524708385` is terminal-success across all 18 required checks; Backend Functional Coverage retry job `93892384928` and Verification Policy job `93893941387` pass.
+  - GitHub reports PR #1884 `MERGEABLE` / `CLEAN` against `origin/main` `05db67124f6abc32b149f326533f126db2d78aa4`.
+  - The thread-aware GraphQL audit found 7 top-level conversation comments, 0 submitted reviews, 0 inline review threads, and 0 unresolved threads.
+- **Learnings for future iterations:**
+  - After a moving-base merge, treat the first green source verification as provisional until the replacement head’s full hosted run, targeted reruns, mergeability, and review-thread audit all agree.
+---
