@@ -34,7 +34,7 @@
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Completed. Pre-barrier opening-append failure aborts and joins the capture with durable OPENING_INVALID classification; Worker Sessions uses an explicit recorder dependency, production logger injection, and runtime recording identity input. WSR-FT-004 now proves through the canonical root-built process that a real durable opening is observed before the first provider command and that a durable opening failure records PERSISTENCE_FAILED with identity and yields zero provider calls. Focused and race-enabled coverage passes. WSR-FT-005 and WSR-FT-006 remain outstanding for the replay and portable-fidelity stories."
+      "notes": "Completed. Pre-barrier opening-append failure aborts and joins the capture with durable OPENING_INVALID classification; Worker Sessions uses an explicit recorder dependency, production logger injection, and runtime recording identity input. WSR-FT-004 now proves through the canonical root-built process that a real durable opening is observed before the first provider command and that a durable opening failure records PERSISTENCE_FAILED with identity and yields zero provider calls. Focused and race-enabled coverage passes. WSR-FT-005 is now complete with story 002; WSR-FT-006 remains outstanding for portable fidelity."
     },
     {
       "id": "wsr-0023-capture-replay-002",
@@ -53,8 +53,8 @@
         "Tests pass"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": "Package reducer and durable snapshot coverage remains green, but review follow-up found that completed replay/read capability is not reachable from production composition and WSR-FT-005 is still absent. Defer completion until that production boundary and root-built evidence are implemented."
+      "passes": true,
+      "notes": "Completed. Canonical Wire now retains the same durable Worker recording writer instance for capture and its existing WorkerRecordingReader read side; the neutral application Process carries that read capability and pkg/root narrows it without widening the Recordings service-root interface inventory. Root-built WSR-FT-005 reloads the completed snapshot, replays it through the existing pure reducer, proves exact live projection equality, terminal-last ordering, unique source identities, and zero provider calls during replay. Focused Recordings, root, Wire, and race coverage passes. WSR-FT-006 and portable-fidelity evidence remain outstanding for story 003."
     },
     {
       "id": "wsr-0023-capture-replay-003",

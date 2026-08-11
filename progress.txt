@@ -1,6 +1,8 @@
 ## Codebase Patterns
 - Pre-barrier external publication failures need an explicit Recordings abort capability that persists a safe classification and joins the source subscription before Worker Sessions can publish a terminal outcome.
 - Worker-topic capture belongs behind a narrow Recordings capability: Events remains the source stream, Worker Sessions publishes once, and an injected durable writer is the only recording-side acceptance port.
+- When a neutral initializer must carry a product-owned read port, inject one named opaque capability at the Process boundary and narrow it in pkg/root; retain the same external writer instance for capture and its existing reader instead of adding a second service root or write path.
+- Wire providers that share a durable external effect should construct that effect once, then pass the same typed instance to both the domain service and the optional observation capability.
 - Portable source-native recording contracts should validate every detached fact against the exact retained payload, then replay through the canonical reducer without reconstructing provider output or inventing fidelity.
 - Live Worker capture and completed replay should invoke the same pure Recordings reducer; durable snapshots should carry explicit active/completed/failed status so only terminal-complete histories are replayable.
 - To gate handoff without a publication race, hold the Worker Session publication lock across the opening append and Recordings opening barrier; drain the terminal record before closing the capture subscription.
@@ -199,7 +201,6 @@
 - **Learnings for future iterations:**
 - This checkout may have `ui/node_modules` without all lockfile dependencies; run the pinned Bun install before treating a typecheck failure as a source regression.
 ---
-
 ## 2026-08-10 04:32 -07:00 - sac-s0-2-pkg-boundary-ignores-001
 - What was implemented
   - Centralized repository-root-relative pruning for `.artifacts`, `.artifacts/bootstrap/worktrees`, generated transient worktrees, and the supported root worktree locations.
@@ -9253,4 +9254,33 @@
   - The replacement `Classify Verification` check is in progress; completion is not claimed while stories 002/003 and the blocking replay/portable evidence remain outstanding.
 - **Learnings for future iterations:**
   - After a replacement push, update the PR body from the active PRD and answer the existing blocking thread with exact head/evidence plus explicit remaining criteria; a pending replacement check is not terminal CI evidence.
+---
+## [2026-08-11 06:07:46 -07:00] - wsr-0023-capture-replay-002
+- What was implemented
+  - Retained the production Worker recording writer in canonical Wire composition and exposed its existing durable `WorkerRecordingReader` through a neutral application-process capability narrowed at `pkg/root`.
+  - Added root-built WSR-FT-005 coverage that reloads the completed durable Worker snapshot, replays it through the existing pure Recordings reducer, proves exact live projection equality, terminal-last ordering, unique source identities, and zero provider calls during replay.
+  - Added service-level abort persistence coverage and process/composition capability coverage without widening the Recordings service-root interface inventory.
+- Files changed
+  - `pkg/initializer/application/process.go`
+  - `pkg/initializer/application/process_test.go`
+  - `pkg/root/worker_recording_replay.go`
+  - `pkg/root/root_test.go`
+  - `pkg/services/recordings/worker_capture.go`
+  - `pkg/services/recordings/internal/services/worker_capture/internal/service/replay_test.go`
+  - `pkg/wire/worker_sessions_providers.go`
+  - `pkg/wire/wire.go`, `pkg/wire/wire_gen.go`
+  - `pkg/wire/recordings_neutral_replay_composition_test.go`
+  - `pkg/wire/session_runtime_providers_test.go`
+  - `tests/functional/workers/inference/recording_gate_test.go`
+  - `prd.json`, `progress.txt`
+- Verification
+  - `go generate ./pkg/wire` — passed.
+  - Focused Recordings, initializer, root, and Wire tests — passed; focused Worker capture coverage is 79.2% against the 78.04% floor, initializer/application is 79.7% against 78.83%, and root is 100%.
+  - `go test -race ./pkg/services/recordings/internal/services/worker_capture/... ./pkg/initializer/application ./pkg/root ./pkg/wire` — passed.
+  - `go test ./tests/functional/workers/inference -run '^TestWSRFT00(4|5)'` — passed.
+  - `make pkg-structure`, `make pkg-file-count`, focused `go vet`, and `git diff --check` — passed. Combined Wire/root coverage is 80.6% against the 80.46% Wire floor.
+  - `make backend-size` and `make pkg-maint` remain blocked by untouched mainline Worker Sessions files over the 1000-line limit; `make test-unit-coverage` is blocked in this Windows environment by the centralized runner's command-line-length failure. Existing UI typecheck diagnostics remain unrelated to this backend story.
+- **Learnings for future iterations:**
+  - The package-structure checker treats new Recordings root interfaces as additive deletion-only debt; an existing narrow reader plus a neutral Process capability preserves the boundary without creating another root service contract.
+  - Keep production registration/replay evidence at the root-built Process boundary, but call the pure Recordings reducer directly after loading the durable snapshot so replay has no provider or runtime effects.
 ---
