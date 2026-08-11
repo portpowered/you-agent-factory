@@ -81,6 +81,7 @@ describe("dashboard Vite config", () => {
 
   it("keeps preview and dev proxy coverage aligned for all OpenAPI-backed API paths", () => {
     const expectedProxyPaths = [
+      "/packaged-factories",
       "/work",
       "^/factory-sessions/[^/]+/work$",
       "^/factory-sessions/[^/]+/invocations$",

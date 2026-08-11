@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -579,6 +580,101 @@ func TestHumanFactoryEventRenderer_TTYProgressUsesStableDistinctWorkerColors(t *
 	}
 }
 
+func TestHumanFactoryEventRenderer_TTYProgressMigratesSplitBatchColorsAndCleansUp(t *testing.T) {
+	t.Parallel()
+
+	const workerCapacity = 12 // humanWorkerProgressColors contains the supported palette.
+	service := visualizationcli.New(nil, factoryvisualizationwire.NewResponsePresentation())
+	var output, progress bytes.Buffer
+	renderer, err := service.OpenFactoryEventRenderer(visualizationcli.FactoryEventRendererConfig{
+		Output: &output, ProgressOutput: &progress, ProgressIsTTY: true,
+		ProgressTicks:        make(chan time.Time),
+		InvocationOutputMode: visualizationcli.InvocationOutputResponseStream,
+	})
+	if err != nil {
+		t.Fatalf("open renderer: %v", err)
+	}
+
+	request := func(index int) interfaces.FactoryEvent {
+		dispatchID := fmt.Sprintf("dispatch-%02d", index)
+		workID := fmt.Sprintf("work-%02d", index)
+		workstation := fmt.Sprintf("station-%02d", index)
+		payload, marshalErr := json.Marshal(interfaces.DispatchRequestEventPayload{
+			TransitionID: workstation,
+			Inputs:       []interfaces.DispatchConsumedWorkRef{{WorkID: workID}},
+		})
+		if marshalErr != nil {
+			t.Fatalf("marshal request %s: %v", dispatchID, marshalErr)
+		}
+		return interfaces.FactoryEvent{Type: interfaces.FactoryEventTypeDispatchRequest, Payload: payload,
+			Context: interfaces.FactoryEventContext{DispatchID: &dispatchID}}
+	}
+	associate := func(index int) interfaces.FactoryEvent {
+		dispatchID := fmt.Sprintf("dispatch-%02d", index)
+		workerID := fmt.Sprintf("worker-%02d", index)
+		payload, marshalErr := json.Marshal(interfaces.DispatchWorkerSessionAssociationEventPayload{
+			WorkerSessionID: workerID,
+		})
+		if marshalErr != nil {
+			t.Fatalf("marshal association %s: %v", dispatchID, marshalErr)
+		}
+		return interfaces.FactoryEvent{Type: interfaces.FactoryEventTypeDispatchWorkerSessionAssoc, Payload: payload,
+			Context: interfaces.FactoryEventContext{DispatchID: &dispatchID}}
+	}
+	presentSplitBatch := func(index int) {
+		renderer.PresentFactoryEvents([]interfaces.FactoryEvent{request(index)})
+		renderer.PresentFactoryEvents([]interfaces.FactoryEvent{associate(index)})
+	}
+
+	for index := 0; index < workerCapacity; index++ {
+		presentSplitBatch(index)
+	}
+	frame := latestTTYProgressFrame(progress.String())
+	colors := make(map[string]string, workerCapacity)
+	for index := 0; index < workerCapacity; index++ {
+		workerID := fmt.Sprintf("worker-%02d", index)
+		color := progressColorForWorker(frame, workerID)
+		if color == "" {
+			t.Fatalf("progress frame = %q, missing color for %s", frame, workerID)
+		}
+		if previous := colors[color]; previous != "" {
+			t.Fatalf("progress frame = %q, workers %s and %s share color %s", frame, previous, workerID, color)
+		}
+		colors[color] = workerID
+	}
+
+	for index := 0; index < workerCapacity/2; index++ {
+		dispatchID := fmt.Sprintf("dispatch-%02d", index)
+		renderer.PresentFactoryEvents([]interfaces.FactoryEvent{{
+			Type:    interfaces.FactoryEventTypeDispatchResponse,
+			Context: interfaces.FactoryEventContext{DispatchID: &dispatchID},
+		}})
+	}
+	for index := workerCapacity; index < workerCapacity+workerCapacity/2; index++ {
+		presentSplitBatch(index)
+	}
+	frame = latestTTYProgressFrame(progress.String())
+	colors = make(map[string]string, workerCapacity)
+	for index := 0; index < workerCapacity/2; index++ {
+		workerID := fmt.Sprintf("worker-%02d", index)
+		if strings.Contains(frame, "worker "+workerID) {
+			t.Fatalf("progress frame = %q, terminal worker %s remains active", frame, workerID)
+		}
+	}
+	for index := workerCapacity / 2; index < workerCapacity+workerCapacity/2; index++ {
+		workerID := fmt.Sprintf("worker-%02d", index)
+		color := progressColorForWorker(frame, workerID)
+		if color == "" {
+			t.Fatalf("progress frame = %q, missing color for active %s", frame, workerID)
+		}
+		if previous := colors[color]; previous != "" {
+			t.Fatalf("progress frame = %q, workers %s and %s share color %s after cleanup", frame, previous, workerID, color)
+		}
+		colors[color] = workerID
+	}
+	renderer.StopProgressRendering()
+}
+
 func progressColorForWorker(progress, workerID string) string {
 	workerIndex := strings.Index(progress, "worker "+workerID)
 	if workerIndex < 0 {
@@ -594,6 +690,15 @@ func progressColorForWorker(progress, workerID string) string {
 		return ""
 	}
 	return prefix[start+2 : start+end]
+}
+
+func latestTTYProgressFrame(progress string) string {
+	const prefix = "\r\x1b[2K"
+	start := strings.LastIndex(progress, prefix)
+	if start < 0 {
+		return progress
+	}
+	return progress[start+len(prefix):]
 }
 
 func TestOpenFactoryEventRenderer_JSONStreamUsesLosslessPresentation(t *testing.T) {

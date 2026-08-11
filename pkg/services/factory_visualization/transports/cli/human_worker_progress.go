@@ -135,6 +135,7 @@ func (renderer *humanWorkerProgressRenderer) applyWorkerAssociationLocked(event 
 		return
 	}
 	renderer.workerByDispatch[dispatchID] = workerID
+	renderer.migrateProgressColorLocked(dispatchID, workerID)
 	if state, exists := renderer.active[dispatchID]; exists {
 		state.workerID = workerID
 		renderer.active[dispatchID] = state
@@ -143,6 +144,20 @@ func (renderer *humanWorkerProgressRenderer) applyWorkerAssociationLocked(event 
 		state.workerID = workerID
 		renderer.pending[dispatchID] = state
 	}
+}
+
+func (renderer *humanWorkerProgressRenderer) migrateProgressColorLocked(from, to string) {
+	if from == "" || to == "" || from == to {
+		return
+	}
+	color := renderer.colors[from]
+	if color == "" {
+		return
+	}
+	if renderer.colors[to] == "" {
+		renderer.colors[to] = color
+	}
+	delete(renderer.colors, from)
 }
 
 func (renderer *humanWorkerProgressRenderer) applyDispatchRequestLocked(event interfaces.FactoryEvent) {
