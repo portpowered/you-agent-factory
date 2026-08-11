@@ -16,6 +16,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
 
 func TestWorkerSessionHTTPDisconnectKeepsAdmittedWorkerAlive(t *testing.T) {
@@ -60,6 +61,7 @@ func TestWorkerSessionHTTPDisconnectKeepsAdmittedWorkerAlive(t *testing.T) {
 	if runner.callCount() != 1 {
 		t.Fatalf("worker command calls = %d, want one after disconnect and replay", runner.callCount())
 	}
+	functionalevidence.Covers(t, "rest/startWorkerSession")
 }
 
 func TestWorkerSessionHTTPShutdownJoinsAdmittedWorker(t *testing.T) {

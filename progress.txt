@@ -8776,3 +8776,20 @@
 - **Learnings for future iterations:**
   - After a current-main merge that touches generated OpenAPI artifacts, run `make contracts-generate` in addition to `make generate-api`; the API package consumer verifies manifest hashes against the generated artifact bytes.
 ---
+## [2026-08-11 02:32:32 -07:00] - dwro-s2-server-owned-start-005 contract-manifest follow-up
+- What was implemented
+  - Added the new `rest/startWorkerSession` operation to the reviewed functional-scenario projection and bound it to the existing HTTP lifecycle test that observes admission, disconnect survival, idempotent replay, and single execution.
+  - Added the matching runtime evidence declaration so the contract drift gate can verify the customer-boundary test directly.
+- Files changed
+  - `contracts/functional-scenarios.json`
+  - `contracts/functional-scenario-evidence.json`
+  - `internal/functionalscenarios/manifest.go`
+  - `tests/functional/workers/transports/http/worker_sessions_lifecycle_test.go`
+- Verification
+  - Focused HTTP functional tests passed.
+  - `go run ./cmd/functionalscenarioproject -check contracts/functional-scenarios.json` passed with 118 reviewed scenarios current.
+  - `make contracts-check` passed.
+  - Affected Worker Sessions and Factory Runtime package tests passed.
+- **Learnings for future iterations:**
+  - New OpenAPI operations must receive both a reviewed manifest mapping and a direct `functionalevidence.Covers` declaration in a qualifying functional test; `make contracts-check` enforces both sides.
+---
