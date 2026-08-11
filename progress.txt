@@ -7604,3 +7604,19 @@
 - **Learnings for future iterations:**
   - A green PR run becomes stale when `origin/main` advances during local verification; fetch immediately before handoff, merge the new base, and wait for checks on the replacement head.
 ---
+## 2026-08-10 22:11 -07:00 - btrc-p1-root-injection-006 latest-main synchronization and verification
+- What was implemented
+  - Merged latest `origin/main` `7dbeb472a8db18648bc262355f9c96d98930aabe` into the P1 branch as merge commit `614fcff03`, preserving the P1 `prd.json`, both append-only progress histories, and current-main generated/API changes.
+  - Made no additional product change; all six P1 stories remain marked `passes:true`.
+- Files changed
+  - Current-main synchronization files.
+  - `prd.json` and `progress.txt` with the latest handoff evidence.
+- Verification
+  - `make verify-fast` passed dashboard typecheck, MCP contract boundary, 355 Vitest files/2,970 tests, 191 Bun tests, and the short Go suite.
+  - `make wire-smoke backend-size pkg-maint pkg-file-count pkg-structure vet` passed; Wire generation is drift-free.
+  - Focused `go test ./pkg/root ./pkg/wire ./pkg/services/factory_sessions/... ./pkg/services/factory_runtime/... ./pkg/transports/cli/run -count=1 -timeout 300s` passed.
+  - `TestRootBuildProcessIsInertAndReusableAcrossFactorySessions` passed with the expected characterized provider-failure warning.
+  - The prior CI run `31459190668` was on the pre-sync head; fresh CI is required for `614fcff03`. The thread-aware review audit remains at zero unresolved threads and zero formal reviews.
+- **Learnings for future iterations:**
+  - Fetch `origin/main` immediately before push; if it advances after local verification, merge it first and repeat the fast, focused, generated, and ratcheted checks on the actual replacement head.
+---
