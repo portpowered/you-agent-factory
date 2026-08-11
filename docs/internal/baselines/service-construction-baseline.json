@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "owner": "chat_sessions",
+      "importPath": "github.com/portpowered/infinite-you/pkg/services/chat_sessions/wire",
+      "symbol": "NewService",
+      "filePath": "pkg/transports/acp/internal/stdio/session_test_helpers_test.go",
+      "count": 1,
+      "stage": "wire-injection-full-blow",
+      "deletionGate": "inject the already-constructed service role from pkg/wire or move the invariant to the owning service"
+    }
+  ]
+}
