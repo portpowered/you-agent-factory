@@ -5213,6 +5213,8 @@ type ListWorkResponse struct {
 
 // ListWorkerSessionsResponse defines model for ListWorkerSessionsResponse.
 type ListWorkerSessionsResponse struct {
+	PaginationContext *PaginationContext `json:"paginationContext,omitempty"`
+
 	// Sessions Deterministically ordered Worker Session observations correlated with the requested Work.
 	Sessions []WorkerSessionObservation `json:"sessions"`
 }
@@ -7690,7 +7692,10 @@ type WorkerSessionFailure struct {
 // WorkerSessionObservation defines model for WorkerSessionObservation.
 type WorkerSessionObservation struct {
 	// AttemptId Stable attempt or dispatch identity.
-	AttemptId     string                                `json:"attemptId"`
+	AttemptId string `json:"attemptId"`
+
+	// Direct Whether this observation was admitted through the direct top-level Worker Session surface.
+	Direct        bool                                  `json:"direct"`
 	DurationBasis WorkerSessionObservationDurationBasis `json:"durationBasis"`
 
 	// DurationMillis Projected duration in milliseconds when authoritative timing exists.

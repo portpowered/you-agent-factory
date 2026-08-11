@@ -2,8 +2,10 @@ package service
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -264,11 +266,12 @@ type observation struct {
 	workIDs   []string
 	turnID    string
 	attemptID string
+	direct    bool
 	startedAt time.Time
 	endedAt   *time.Time
 }
 
-func (r *registry) ensureObservation(id, attemptID, turnID string, workIDs []string) time.Time {
+func (r *registry) ensureObservation(id, attemptID, turnID string, workIDs []string, direct ...bool) time.Time {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if current, exists := r.observations[id]; exists {
@@ -279,6 +282,7 @@ func (r *registry) ensureObservation(id, attemptID, turnID string, workIDs []str
 		workIDs:   append([]string(nil), workIDs...),
 		turnID:    turnID,
 		attemptID: attemptID,
+		direct:    len(direct) > 0 && direct[0],
 		startedAt: startedAt,
 	}
 	return startedAt
@@ -475,6 +479,90 @@ func (r *registry) GetObservationByWorkerSessionID(ctx context.Context, req work
 	return projected, nil
 }
 
+func (r *registry) ListWorkerSessionObservations(
+	ctx context.Context,
+	req workersessions.ListWorkerSessionObservationsRequest,
+) (workersessions.ListWorkerSessionObservationsResult, error) {
+	if err := req.Validate(); err != nil {
+		r.logger.Info("worker session top-level observation list rejected", "outcome", "invalid")
+		return workersessions.ListWorkerSessionObservationsResult{}, err
+	}
+	if err := observationContextError(ctx); err != nil {
+		return workersessions.ListWorkerSessionObservationsResult{}, err
+	}
+	limit := req.MaxResults
+	if limit == 0 {
+		limit = workersessions.DefaultWorkerSessionObservationListMaxResults
+	}
+	cursor := ""
+	if strings.TrimSpace(req.NextToken) != "" {
+		decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(req.NextToken))
+		if err != nil {
+			return workersessions.ListWorkerSessionObservationsResult{}, workersessions.ErrInvalidObservationPagination
+		}
+		cursor = string(decoded)
+	}
+
+	scope := req.Scope.Normalized()
+	r.mu.RLock()
+	ids := make([]string, 0, len(r.observations))
+	for id, metadata := range r.observations {
+		if metadata == nil || id <= cursor || !observationScopeMatches(metadata.direct, scope) {
+			continue
+		}
+		session, exists := r.sessions[id]
+		if !exists || !observationStateMatches(session.State, req.States) {
+			continue
+		}
+		ids = append(ids, id)
+	}
+	r.mu.RUnlock()
+	sort.Strings(ids)
+
+	pageIDs := ids
+	if len(pageIDs) > limit {
+		pageIDs = pageIDs[:limit]
+	}
+	observations := make([]workersessions.Observation, 0, len(pageIDs))
+	for _, id := range pageIDs {
+		projected, err := r.projectObservation(ctx, id)
+		if err != nil {
+			return workersessions.ListWorkerSessionObservationsResult{}, err
+		}
+		observations = append(observations, projected)
+	}
+	nextToken := ""
+	if len(ids) > len(pageIDs) && len(pageIDs) > 0 {
+		nextToken = base64.StdEncoding.EncodeToString([]byte(pageIDs[len(pageIDs)-1]))
+	}
+	r.logger.Info("worker session top-level observation list", "scope", string(scope), "state_count", len(req.States), "result_count", len(observations), "has_next", nextToken != "")
+	return workersessions.ListWorkerSessionObservationsResult{
+		Observations: observations,
+		MaxResults:   limit,
+		NextToken:    nextToken,
+	}, nil
+}
+
+func observationScopeMatches(direct bool, scope workersessions.ObservationScope) bool {
+	switch scope.Normalized() {
+	case workersessions.ObservationScopeDirect:
+		return direct
+	case workersessions.ObservationScopeFactory:
+		return !direct
+	case workersessions.ObservationScopeAll:
+		return true
+	default:
+		return false
+	}
+}
+
+func observationStateMatches(state workersessions.State, states []workersessions.State) bool {
+	if len(states) == 0 {
+		return true
+	}
+	return slices.Contains(states, state)
+}
+
 func (r *registry) projectObservation(ctx context.Context, id string) (workersessions.Observation, error) {
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.Observation{}, err
@@ -537,6 +625,7 @@ func (r *registry) loadObservationState(id string) (workersessions.Session, *obs
 func baseObservation(id string, session workersessions.Session, metadata *observation) workersessions.Observation {
 	projected := workersessions.Observation{
 		WorkerSessionID: id,
+		Direct:          metadata.direct,
 		WorkIDs:         append([]string(nil), metadata.workIDs...),
 		TurnID:          metadata.turnID,
 		AttemptID:       metadata.attemptID,

@@ -226,17 +226,34 @@ durable watch cursor or replay lost session state. See `you docs work` for the
 transition schema and reconnect boundary.
 
 When a model-backed dispatch needs provider-level diagnosis, inspect its
-Worker Session in four steps. First locate every attempt correlated with one
-Work:
+Worker Session through its stable identity. Direct Worker Sessions do not need
+a Factory Session or Work correlation:
+
+```bash
+you --server http://localhost:7437 worker-sessions list
+you --server http://localhost:7437 worker-sessions list --scope direct --state COMPLETED --max-results 25
+you --server http://localhost:7437 worker-sessions show --worker-session-id <worker-session-id>
+you --server http://localhost:7437 worker-sessions stream --worker-session-id <worker-session-id>
+you --server http://localhost:7437 worker-sessions read --worker-session-id <worker-session-id>
+```
+
+Top-level list defaults to `direct`; use `--scope factory` or `--scope all` to
+include Factory-originated observations explicitly. Repeat `--state` to filter
+by lifecycle state. `--max-results` bounds one page and `--next-token` resumes
+from the opaque cursor returned in JSON `paginationContext`.
+
+The existing Work-oriented entry point remains available when a Work
+correlation is what you need:
 
 ```bash
 you --server http://localhost:7437 worker-sessions list --work-id <work-id>
 ```
 
-`list` is the Work-oriented entry point and returns a stable table. It can
+The Work-scoped `list` returns a stable table. It can
 return `No worker sessions found.` with exit status `0` when the Work has no
 matching attempts. If a listed attempt exposes a provider, kind, and provider
-session ID, pass those exact values to the identity-oriented commands:
+session ID, the Factory compatibility routes remain available with the exact
+tuple:
 
 ```bash
 you --server http://localhost:7437 worker-sessions show --provider codex --kind session_id --id <provider-session-id>
@@ -244,7 +261,7 @@ you --server http://localhost:7437 worker-sessions stream --provider codex --kin
 you --server http://localhost:7437 worker-sessions read --provider codex --kind session_id --id <provider-session-id>
 ```
 
-Use `show` for one session's correlation, lifecycle state, timing, token
+Use `show` for one session's origin, correlation, lifecycle state, timing, token
 usage, transcript availability, failure, and parse diagnostics. Use `stream`
 to follow retained and live canonical session events; it ends successfully on
 a terminal event and reports source failures. Use `read` only after the

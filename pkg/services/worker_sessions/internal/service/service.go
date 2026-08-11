@@ -807,6 +807,41 @@ func (r *registry) ReadTranscript(ctx context.Context, req workersessions.ReadTr
 		r.logger.Info("worker session transcript read", "outcome", "not_found")
 		return workersessions.ReadTranscriptResult{}, err
 	}
+	return r.projectTranscript(ctx, session, metadata, req.ProviderSession)
+}
+
+// ReadTranscriptByWorkerSessionID resolves the registry-owned association
+// before projecting a direct or Factory Worker Session transcript. The caller
+// cannot substitute a provider tuple or cause a provider-session discovery.
+func (r *registry) ReadTranscriptByWorkerSessionID(
+	ctx context.Context,
+	req workersessions.ReadTranscriptByWorkerSessionIDRequest,
+) (workersessions.ReadTranscriptResult, error) {
+	if err := req.Validate(); err != nil {
+		r.logger.Info("worker session identity transcript read rejected", "outcome", "invalid")
+		return workersessions.ReadTranscriptResult{}, err
+	}
+	if err := observationContextError(ctx); err != nil {
+		return workersessions.ReadTranscriptResult{}, err
+	}
+	session, metadata, ok := r.loadObservationState(req.WorkerSessionID)
+	if !ok {
+		r.logger.Info("worker session identity transcript read", "workerSessionID", req.WorkerSessionID, "outcome", "not_found")
+		return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationSessionNotFound
+	}
+	providerSession := providers.SessionRef{}
+	if session.ProviderSessionAssociation != nil {
+		providerSession = session.ProviderSessionAssociation.Reference
+	}
+	return r.projectTranscript(ctx, session, metadata, providerSession)
+}
+
+func (r *registry) projectTranscript(
+	ctx context.Context,
+	session workersessions.Session,
+	metadata *observation,
+	providerSession providers.SessionRef,
+) (workersessions.ReadTranscriptResult, error) {
 	if !session.State.Terminal() {
 		r.logger.Info("worker session transcript read", "workerSessionID", session.ID, "outcome", "active")
 		return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationTranscriptActive
@@ -821,7 +856,7 @@ func (r *registry) ReadTranscript(ctx context.Context, req workersessions.ReadTr
 	}
 
 	projected, projectErr := r.providerSessions.Project(providersessions.ProjectRequest{
-		Session: req.ProviderSession.Clone(),
+		Session: providerSession.Clone(),
 		Context: ctx,
 	})
 	if projectErr != nil {
@@ -836,7 +871,7 @@ func (r *registry) ReadTranscript(ctx context.Context, req workersessions.ReadTr
 
 	result := workersessions.ReadTranscriptResult{
 		WorkerSessionID: session.ID,
-		ProviderSession: req.ProviderSession.Clone(),
+		ProviderSession: providerSession.Clone(),
 		WorkIDs:         append([]string(nil), metadata.workIDs...),
 		AttemptID:       metadata.attemptID,
 		State:           session.State,

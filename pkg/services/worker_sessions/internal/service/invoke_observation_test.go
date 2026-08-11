@@ -28,6 +28,17 @@ func (f observationProjectorFake) Project(providersessions.ProjectRequest) (prov
 	return f.result, f.err
 }
 
+type trackingObservationProjector struct {
+	providersessions.Service
+	result  providersessions.ProjectResult
+	request providersessions.ProjectRequest
+}
+
+func (f *trackingObservationProjector) Project(request providersessions.ProjectRequest) (providersessions.ProjectResult, error) {
+	f.request = request
+	return f.result, nil
+}
+
 type observationEventReaderFake struct {
 	subscription   events.Subscription
 	err            error
@@ -322,6 +333,62 @@ func TestInvokeObservationProjectionAndTranscriptOutcomes(t *testing.T) {
 	applyObservationTiming(&projected, observationSession("worker-1", workersessions.StateRunning), noStarted, registry.clock)
 	if projected.StartedAt != nil {
 		t.Fatalf("applyObservationTiming(zero start) = %#v, want no timing", projected)
+	}
+}
+
+func TestListWorkerSessionObservationsUsesDirectDefaultFiltersAndCursor(t *testing.T) {
+	registry := newObservationRegistry(nil, nil)
+	registry.sessions["direct-a"] = workersessions.Session{ID: "direct-a", State: workersessions.StateCompleted}
+	metadataA := observationMetadata()
+	metadataA.direct = true
+	registry.observations["direct-a"] = metadataA
+	registry.sessions["direct-b"] = workersessions.Session{ID: "direct-b", State: workersessions.StateRunning}
+	metadataB := observationMetadata()
+	metadataB.direct = true
+	registry.observations["direct-b"] = metadataB
+	registry.sessions["factory-a"] = workersessions.Session{ID: "factory-a", State: workersessions.StateCompleted}
+	registry.observations["factory-a"] = observationMetadata()
+
+	first, err := registry.ListWorkerSessionObservations(context.Background(), workersessions.ListWorkerSessionObservationsRequest{MaxResults: 1})
+	if err != nil || len(first.Observations) != 1 || first.Observations[0].WorkerSessionID != "direct-a" || !first.Observations[0].Direct || first.NextToken == "" {
+		t.Fatalf("direct first page = %#v, %v, want direct-a and cursor", first, err)
+	}
+	second, err := registry.ListWorkerSessionObservations(context.Background(), workersessions.ListWorkerSessionObservationsRequest{NextToken: first.NextToken})
+	if err != nil || len(second.Observations) != 1 || second.Observations[0].WorkerSessionID != "direct-b" || !second.Observations[0].Direct || second.NextToken != "" {
+		t.Fatalf("direct second page = %#v, %v, want direct-b without another cursor", second, err)
+	}
+	factory, err := registry.ListWorkerSessionObservations(context.Background(), workersessions.ListWorkerSessionObservationsRequest{Scope: workersessions.ObservationScopeFactory, States: []workersessions.State{workersessions.StateCompleted}})
+	if err != nil || len(factory.Observations) != 1 || factory.Observations[0].WorkerSessionID != "factory-a" || factory.Observations[0].Direct {
+		t.Fatalf("factory filtered page = %#v, %v, want factory-a only", factory, err)
+	}
+	if _, err := registry.ListWorkerSessionObservations(context.Background(), workersessions.ListWorkerSessionObservationsRequest{NextToken: "not-base64"}); !errors.Is(err, workersessions.ErrInvalidObservationPagination) {
+		t.Fatalf("invalid cursor error = %v, want ErrInvalidObservationPagination", err)
+	}
+}
+
+func TestReadTranscriptByWorkerSessionIDResolvesRecordedAssociationAndLifecycle(t *testing.T) {
+	text := "continued"
+	projector := &trackingObservationProjector{result: providersessions.ProjectResult{Detail: providersessions.Detail{
+		Transcript: []providersessions.TranscriptEntry{{Order: 1, Type: providersessions.TranscriptAssistantMessage, Text: &text}},
+	}}}
+	registry := newObservationRegistry(projector, nil)
+	registry.sessions["direct-1"] = observationSession("direct-1", workersessions.StateCompleted)
+	registry.observations["direct-1"] = observationMetadata()
+	result, err := registry.ReadTranscriptByWorkerSessionID(context.Background(), workersessions.ReadTranscriptByWorkerSessionIDRequest{WorkerSessionID: "direct-1"})
+	if err != nil || result.WorkerSessionID != "direct-1" || len(result.Entries) != 1 || result.Entries[0].Text == nil || *result.Entries[0].Text != text {
+		t.Fatalf("identity transcript = %#v, %v, want normalized entry", result, err)
+	}
+	if projector.request.Session != observationProviderRef() {
+		t.Fatalf("projector reference = %#v, want recorded association %v", projector.request.Session, observationProviderRef())
+	}
+	active := newObservationRegistry(projector, nil)
+	active.sessions["direct-active"] = workersessions.Session{ID: "direct-active", State: workersessions.StateRunning}
+	active.observations["direct-active"] = observationMetadata()
+	if _, err := active.ReadTranscriptByWorkerSessionID(context.Background(), workersessions.ReadTranscriptByWorkerSessionIDRequest{WorkerSessionID: "direct-active"}); !errors.Is(err, workersessions.ErrObservationTranscriptActive) {
+		t.Fatalf("active identity transcript error = %v, want ErrObservationTranscriptActive", err)
+	}
+	if _, err := registry.ReadTranscriptByWorkerSessionID(context.Background(), workersessions.ReadTranscriptByWorkerSessionIDRequest{WorkerSessionID: "missing"}); !errors.Is(err, workersessions.ErrObservationSessionNotFound) {
+		t.Fatalf("missing identity transcript error = %v, want ErrObservationSessionNotFound", err)
 	}
 }
 

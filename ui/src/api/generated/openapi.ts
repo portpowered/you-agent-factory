@@ -11,13 +11,77 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    get?: never;
+    /**
+     * List top-level Worker Session observations
+     * @description Lists Worker Session observations through their stable top-level identity. The default scope is direct Worker Sessions admitted through this API; Factory-originated observations require an explicit scope. Results are deterministically ordered by Worker Session identity and use an opaque cursor for bounded pagination. State filters compose with the selected origin scope.
+     */
+    get: operations["listWorkerSessions"];
     put?: never;
     /**
      * Start one directly resolved Worker Session
      * @description Reserves and starts one already-resolved Worker execution. The server returns 202 only after the Worker Session identity is reserved, its opening record is retained-readable and subscribable on the returned event topic, and Workers has admitted the execution. The requestId is required for safe retries; replaying it with the same normalized start tuple returns the same Worker Session identity without another dispatch.
      */
     post: operations["startWorkerSession"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/worker-sessions/{worker_session_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Show one top-level Worker Session observation
+     * @description Returns one authoritative Worker Session observation by its stable Worker Session identity. Direct observations expose their origin and any recorded Provider Session association without requiring callers to reconstruct a provider tuple.
+     */
+    get: operations["getWorkerSessionObservationByWorkerSessionId"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/worker-sessions/{worker_session_id}/events": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Stream top-level Worker Session events
+     * @description Streams the retained and live Worker Session Events topic by stable Worker Session identity. The server resolves the exact topic from its own observation registry; callers do not supply Provider Session identity fields. Retained records are emitted first, followed by live records unless replayOnly is true.
+     */
+    get: operations["streamWorkerSessionEventsByTopLevelWorkerSessionId"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/worker-sessions/{worker_session_id}/transcript": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Read one top-level Worker Session transcript
+     * @description Returns the normalized transcript for a terminal Worker Session by its stable identity. Provider Session association and projection are resolved by the Worker Sessions service; callers cannot substitute a provider, kind, or provider-issued id tuple.
+     */
+    get: operations["readWorkerSessionTranscriptByWorkerSessionId"];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -1165,6 +1229,8 @@ export interface components {
     ListWorkerSessionsResponse: {
       /** @description Deterministically ordered Worker Session observations correlated with the requested Work. */
       sessions: components["schemas"]["WorkerSessionObservation"][];
+      /** @description Bounded pagination context for top-level Worker Session observation queries. */
+      paginationContext?: components["schemas"]["PaginationContext"];
     };
     /** @description One caller-owned idempotent request for a directly resolved Worker execution. Worker Sessions owns reservation, event visibility, supervision, and admission; it does not select a provider or runner from this payload. */
     WorkerSessionStartRequest: {
@@ -1274,6 +1340,8 @@ export interface components {
     WorkerSessionObservation: {
       /** @description Stable Worker Session identity. */
       workerSessionId: string;
+      /** @description Whether this observation was admitted through the direct top-level Worker Session surface. */
+      direct: boolean;
       providerSession?: components["schemas"]["WorkerSessionProviderSessionRef"];
       /** @description Whether a provider-session identity is available for this attempt. */
       providerSessionAvailable: boolean;
@@ -6750,6 +6818,37 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+  listWorkerSessions: {
+    parameters: {
+      query?: {
+        /** @description Origin scope to inspect. Direct is the safe default. */
+        scope?: PathsWorkerSessionsGetParametersQueryScope;
+        /** @description Optional repeated Worker Session lifecycle state filters. */
+        state?: PathsWorkerSessionsGetParametersQueryState[];
+        /** @description Optional positive page size. Omit to use the default page size; non-positive values fall back to the default after successful integer binding. */
+        maxResults?: components["parameters"]["MaxResults"];
+        /** @description Optional base64-encoded token ID cursor. */
+        nextToken?: components["parameters"]["NextToken"];
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Deterministically ordered top-level Worker Session observations. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListWorkerSessionsResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      500: components["responses"]["InternalError"];
+    };
+  };
   startWorkerSession: {
     parameters: {
       query?: never;
@@ -6775,6 +6874,96 @@ export interface operations {
       400: components["responses"]["BadRequest"];
       409: components["responses"]["WorkerSessionStartConflict"];
       503: components["responses"]["WorkerSessionStartUnavailable"];
+    };
+  };
+  getWorkerSessionObservationByWorkerSessionId: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable Worker Session identity returned by the Worker Sessions list operation. */
+        worker_session_id: components["parameters"]["WorkerSessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description One top-level Worker Session observation. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkerSessionObservation"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  streamWorkerSessionEventsByTopLevelWorkerSessionId: {
+    parameters: {
+      query?: {
+        /** @description Drain retained history without registering a live follower. */
+        replayOnly?: boolean;
+      };
+      header?: never;
+      path: {
+        /** @description Stable Worker Session identity returned by the Worker Sessions list operation. */
+        worker_session_id: components["parameters"]["WorkerSessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Retained then live Worker Session event frames. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "text/event-stream": string;
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  readWorkerSessionTranscriptByWorkerSessionId: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable Worker Session identity returned by the Worker Sessions list operation. */
+        worker_session_id: components["parameters"]["WorkerSessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Normalized transcript for a finished Worker Session. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkerSessionTranscriptResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      /** @description The Worker Session is still active and has no final transcript. */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      500: components["responses"]["InternalError"];
     };
   };
   listWorkBySessionId: {
@@ -8310,6 +8499,25 @@ export interface operations {
     };
   };
 }
+export const PathsWorkerSessionsGetParametersQueryScope = {
+  direct: "direct",
+  factory: "factory",
+  all: "all",
+} as const;
+export type PathsWorkerSessionsGetParametersQueryScope =
+  (typeof PathsWorkerSessionsGetParametersQueryScope)[keyof typeof PathsWorkerSessionsGetParametersQueryScope];
+export const PathsWorkerSessionsGetParametersQueryState = {
+  RESERVED: "RESERVED",
+  STARTING: "STARTING",
+  RUNNING: "RUNNING",
+  PAUSED: "PAUSED",
+  COMPLETED: "COMPLETED",
+  FAILED: "FAILED",
+  CANCELED: "CANCELED",
+  TERMINATED: "TERMINATED",
+} as const;
+export type PathsWorkerSessionsGetParametersQueryState =
+  (typeof PathsWorkerSessionsGetParametersQueryState)[keyof typeof PathsWorkerSessionsGetParametersQueryState];
 export const InvocationInputSourceKind = {
   // Text supplied in canonical WorkContent.
   InvocationInputSourceKindText: "text",

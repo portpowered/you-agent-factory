@@ -29,6 +29,62 @@ tags:
     description: Stored workflow inspection.
 paths:
   /worker-sessions:
+    get:
+      tags:
+        - Worker Sessions
+      operationId: listWorkerSessions
+      summary: List top-level Worker Session observations
+      description: >-
+        Lists Worker Session observations through their stable top-level
+        identity. The default scope is direct Worker Sessions admitted through
+        this API; Factory-originated observations require an explicit scope.
+        Results are deterministically ordered by Worker Session identity and
+        use an opaque cursor for bounded pagination. State filters compose with
+        the selected origin scope.
+      parameters:
+        - name: scope
+          in: query
+          required: false
+          description: Origin scope to inspect. Direct is the safe default.
+          schema:
+            type: string
+            enum:
+              - direct
+              - factory
+              - all
+            default: direct
+        - name: state
+          in: query
+          required: false
+          description: Optional repeated Worker Session lifecycle state filters.
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              type: string
+              enum:
+                - RESERVED
+                - STARTING
+                - RUNNING
+                - PAUSED
+                - COMPLETED
+                - FAILED
+                - CANCELED
+                - TERMINATED
+        - $ref: '#/components/parameters/MaxResults'
+        - $ref: '#/components/parameters/NextToken'
+      responses:
+        '200':
+          description: Deterministically ordered top-level Worker Session observations.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListWorkerSessionsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
     post:
       tags:
         - Worker Sessions
@@ -61,6 +117,100 @@ paths:
           $ref: '#/components/responses/WorkerSessionStartConflict'
         '503':
           $ref: '#/components/responses/WorkerSessionStartUnavailable'
+  /worker-sessions/{worker_session_id}:
+    get:
+      tags:
+        - Worker Sessions
+      operationId: getWorkerSessionObservationByWorkerSessionId
+      summary: Show one top-level Worker Session observation
+      description: >-
+        Returns one authoritative Worker Session observation by its stable
+        Worker Session identity. Direct observations expose their origin and
+        any recorded Provider Session association without requiring callers to
+        reconstruct a provider tuple.
+      parameters:
+        - $ref: '#/components/parameters/WorkerSessionID'
+      responses:
+        '200':
+          description: One top-level Worker Session observation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkerSessionObservation'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /worker-sessions/{worker_session_id}/events:
+    get:
+      tags:
+        - Worker Sessions
+      operationId: streamWorkerSessionEventsByTopLevelWorkerSessionId
+      summary: Stream top-level Worker Session events
+      description: >-
+        Streams the retained and live Worker Session Events topic by stable
+        Worker Session identity. The server resolves the exact topic from its
+        own observation registry; callers do not supply Provider Session
+        identity fields. Retained records are emitted first, followed by live
+        records unless replayOnly is true.
+      parameters:
+        - $ref: '#/components/parameters/WorkerSessionID'
+        - name: replayOnly
+          in: query
+          required: false
+          description: Drain retained history without registering a live follower.
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Retained then live Worker Session event frames.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: Server-Sent Events where each data frame is serialized JSON matching WorkerSessionEvent.
+              x-event-schema: '#/components/schemas/WorkerSessionEvent'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /worker-sessions/{worker_session_id}/transcript:
+    get:
+      tags:
+        - Worker Sessions
+      operationId: readWorkerSessionTranscriptByWorkerSessionId
+      summary: Read one top-level Worker Session transcript
+      description: >-
+        Returns the normalized transcript for a terminal Worker Session by its
+        stable identity. Provider Session association and projection are
+        resolved by the Worker Sessions service; callers cannot substitute a
+        provider, kind, or provider-issued id tuple.
+      parameters:
+        - $ref: '#/components/parameters/WorkerSessionID'
+      responses:
+        '200':
+          description: Normalized transcript for a finished Worker Session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkerSessionTranscriptResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The Worker Session is still active and has no final transcript.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /factory-sessions/{session_id}/work:
     post:
       tags:

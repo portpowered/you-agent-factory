@@ -2,6 +2,7 @@ type: object
 additionalProperties: false
 required:
   - workerSessionId
+  - direct
   - providerSessionAvailable
   - workIds
   - turnId
@@ -17,6 +18,9 @@ properties:
   workerSessionId:
     type: string
     description: Stable Worker Session identity.
+  direct:
+    type: boolean
+    description: Whether this observation was admitted through the direct top-level Worker Session surface.
   providerSession:
     $ref: './WorkerSessionProviderSessionRef.yaml'
     nullable: true

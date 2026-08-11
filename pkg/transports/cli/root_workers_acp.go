@@ -203,6 +203,22 @@ func executeGeneratedWorkerSessionsList(
 	if err != nil {
 		return err
 	}
+	scope, err := commandInputValue[string](values, "you.worker-sessions.list.flag.scope")
+	if err != nil {
+		return err
+	}
+	states, err := commandInputValue[[]string](values, "you.worker-sessions.list.flag.state")
+	if err != nil {
+		return err
+	}
+	maxResults, err := commandInputValue[int](values, "you.worker-sessions.list.flag.max-results")
+	if err != nil {
+		return err
+	}
+	nextToken, err := commandInputValue[string](values, "you.worker-sessions.list.flag.next-token")
+	if err != nil {
+		return err
+	}
 	sessionID, err := commandInputValue[string](values, "you.worker-sessions.list.flag.session")
 	if err != nil {
 		return err
@@ -214,7 +230,8 @@ func executeGeneratedWorkerSessionsList(
 	jsonOutput := globals.json || strings.EqualFold(strings.TrimSpace(outputFormat), "json")
 	return list(workersessionscli.ListConfig{
 		Context: cmd.Context(), Server: globals.server, SessionID: sessionID,
-		WorkID: workID, OutputFormat: outputFormat, JSON: jsonOutput,
+		WorkID: workID, Scope: scope, States: states, MaxResults: maxResults, NextToken: nextToken,
+		OutputFormat: outputFormat, JSON: jsonOutput,
 		Output: cmd.OutOrStdout(), Diagnostics: diagnostics.writer(cmd),
 		Verbose: diagnostics.verboseEnabled(), Debug: diagnostics.debug,
 	})
@@ -237,6 +254,10 @@ func executeGeneratedWorkerSessionsShow(
 	if err != nil {
 		return err
 	}
+	workerSessionID, err := commandInputValue[string](values, "you.worker-sessions.show.flag.worker-session-id")
+	if err != nil {
+		return err
+	}
 	kind, err := commandInputValue[string](values, "you.worker-sessions.show.flag.kind")
 	if err != nil {
 		return err
@@ -256,7 +277,7 @@ func executeGeneratedWorkerSessionsShow(
 	jsonOutput := globals.json || strings.EqualFold(strings.TrimSpace(outputFormat), "json")
 	return show(workersessionscli.ShowConfig{
 		Context: cmd.Context(), Server: globals.server, SessionID: sessionID,
-		Provider: provider, Kind: kind, ID: id, OutputFormat: outputFormat, JSON: jsonOutput,
+		WorkerSessionID: workerSessionID, Provider: provider, Kind: kind, ID: id, OutputFormat: outputFormat, JSON: jsonOutput,
 		Output: cmd.OutOrStdout(), Diagnostics: diagnostics.writer(cmd),
 		Verbose: diagnostics.verboseEnabled(), Debug: diagnostics.debug,
 	})
@@ -276,6 +297,10 @@ func executeGeneratedWorkerSessionsStream(
 		return err
 	}
 	provider, err := commandInputValue[string](values, "you.worker-sessions.stream.flag.provider")
+	if err != nil {
+		return err
+	}
+	workerSessionID, err := commandInputValue[string](values, "you.worker-sessions.stream.flag.worker-session-id")
 	if err != nil {
 		return err
 	}
@@ -306,7 +331,7 @@ func executeGeneratedWorkerSessionsStream(
 	jsonOutput := globals.json || strings.EqualFold(strings.TrimSpace(outputFormat), "json")
 	return stream(workersessionscli.StreamConfig{
 		Context: cmd.Context(), Server: globals.server, SessionID: sessionID,
-		Provider: provider, Kind: kind, ID: id, OutputFormat: outputFormat, JSON: jsonOutput, Follow: follow, ReplayOnly: replayOnly,
+		WorkerSessionID: workerSessionID, Provider: provider, Kind: kind, ID: id, OutputFormat: outputFormat, JSON: jsonOutput, Follow: follow, ReplayOnly: replayOnly,
 		Output: cmd.OutOrStdout(), Diagnostics: diagnostics.writer(cmd),
 		Verbose: diagnostics.verboseEnabled(), Debug: diagnostics.debug,
 	})
@@ -329,6 +354,10 @@ func executeGeneratedWorkerSessionsRead(
 	if err != nil {
 		return err
 	}
+	workerSessionID, err := commandInputValue[string](values, "you.worker-sessions.read.flag.worker-session-id")
+	if err != nil {
+		return err
+	}
 	kind, err := commandInputValue[string](values, "you.worker-sessions.read.flag.kind")
 	if err != nil {
 		return err
@@ -348,7 +377,7 @@ func executeGeneratedWorkerSessionsRead(
 	jsonOutput := globals.json || strings.EqualFold(strings.TrimSpace(outputFormat), "json")
 	return read(workersessionscli.ReadConfig{
 		Context: cmd.Context(), Server: globals.server, SessionID: sessionID,
-		Provider: provider, Kind: kind, ID: id, OutputFormat: outputFormat, JSON: jsonOutput,
+		WorkerSessionID: workerSessionID, Provider: provider, Kind: kind, ID: id, OutputFormat: outputFormat, JSON: jsonOutput,
 		Output: cmd.OutOrStdout(), Diagnostics: diagnostics.writer(cmd),
 		Verbose: diagnostics.verboseEnabled(), Debug: diagnostics.debug,
 	})

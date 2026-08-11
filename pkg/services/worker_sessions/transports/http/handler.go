@@ -79,6 +79,97 @@ func decodeWorkerSessionStartRequest(body io.Reader) (factoryapi.WorkerSessionSt
 	return request, nil
 }
 
+// ListWorkerSessions handles the top-level Worker Session observation list.
+// Query binding is intentionally translated into the service-owned request so
+// scope, lifecycle filters, and cursor validation remain one policy boundary.
+func (h *Handler) ListWorkerSessions(
+	w http.ResponseWriter,
+	r *http.Request,
+	params factoryapi.ListWorkerSessionsParams,
+) {
+	if h == nil || h.adapter == nil {
+		writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
+		return
+	}
+	if r == nil {
+		writeError(w, http.StatusBadRequest, "request is required", "BAD_REQUEST")
+		return
+	}
+	scope := ""
+	if params.Scope != nil {
+		scope = string(*params.Scope)
+	}
+	var states []string
+	if params.State != nil {
+		states = make([]string, 0, len(*params.State))
+		for _, state := range *params.State {
+			states = append(states, string(state))
+		}
+	}
+	var maxResults *int
+	if params.MaxResults != nil {
+		value := *params.MaxResults
+		maxResults = &value
+	}
+	var nextToken *string
+	if params.NextToken != nil {
+		value := string(*params.NextToken)
+		nextToken = &value
+	}
+	response, err := h.adapter.ListTopLevelWorkerSessions(r.Context(), scope, states, maxResults, nextToken)
+	if err != nil {
+		h.writeMappedError(w, err)
+		return
+	}
+	h.writeJSON(w, http.StatusOK, response)
+}
+
+// GetWorkerSessionObservationByWorkerSessionId handles the top-level identity
+// detail operation. Provider Session tuple fields are deliberately absent.
+func (h *Handler) GetWorkerSessionObservationByWorkerSessionId(
+	w http.ResponseWriter,
+	r *http.Request,
+	workerSessionID factoryapi.WorkerSessionID,
+) {
+	if h == nil || h.adapter == nil {
+		writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
+		return
+	}
+	if r == nil {
+		writeError(w, http.StatusBadRequest, "request is required", "BAD_REQUEST")
+		return
+	}
+	response, err := h.adapter.GetTopLevelWorkerSessionObservation(r.Context(), string(workerSessionID))
+	if err != nil {
+		h.writeMappedObservationError(w, err)
+		return
+	}
+	h.writeJSON(w, http.StatusOK, response)
+}
+
+// ReadWorkerSessionTranscriptByWorkerSessionId handles top-level transcript
+// projection by Worker Session identity.
+func (h *Handler) ReadWorkerSessionTranscriptByWorkerSessionId(
+	w http.ResponseWriter,
+	r *http.Request,
+	workerSessionID factoryapi.WorkerSessionID,
+) {
+	if h == nil || h.adapter == nil {
+		writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
+		return
+	}
+	if r == nil {
+		writeError(w, http.StatusBadRequest, "request is required", "BAD_REQUEST")
+		return
+	}
+	response, err := h.adapter.ReadTopLevelWorkerSessionTranscript(r.Context(), string(workerSessionID))
+	if err != nil {
+		h.writeMappedTranscriptError(w, err)
+		return
+	}
+	h.writeJSON(w, http.StatusOK, response)
+}
+
 // ListWorkerSessionsBySessionId handles the session-scoped Worker Sessions
 // list operation.
 func (h *Handler) ListWorkerSessionsBySessionId(
@@ -262,6 +353,28 @@ func (h *Handler) StreamWorkerSessionEventsByWorkerSessionId(
 	h.writeWorkerSessionStream(w, r, flusher, observation, subscription, replayOnly)
 }
 
+// StreamWorkerSessionEventsByTopLevelWorkerSessionId writes the top-level
+// retained/live stream addressed only by the stable Worker Session identity.
+func (h *Handler) StreamWorkerSessionEventsByTopLevelWorkerSessionId(
+	w http.ResponseWriter,
+	r *http.Request,
+	workerSessionID factoryapi.WorkerSessionID,
+	params factoryapi.StreamWorkerSessionEventsByTopLevelWorkerSessionIdParams,
+) {
+	flusher, ok := h.prepareTopLevelWorkerSessionIDStreamRequest(w, r, workerSessionID)
+	if !ok {
+		return
+	}
+	replayOnly := params.ReplayOnly != nil && *params.ReplayOnly
+	observation, subscription, err := h.adapter.StreamTopLevelWorkerSessionEvents(r.Context(), string(workerSessionID), replayOnly)
+	if err != nil {
+		h.writeMappedStreamError(w, err)
+		return
+	}
+	defer subscription.Close()
+	h.writeWorkerSessionStream(w, r, flusher, observation, subscription, replayOnly)
+}
+
 func (h *Handler) prepareWorkerSessionIDStreamRequest(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -274,6 +387,31 @@ func (h *Handler) prepareWorkerSessionIDStreamRequest(
 	}
 	if strings.TrimSpace(string(sessionID)) == "" {
 		writeError(w, http.StatusBadRequest, "session id is required", "BAD_REQUEST")
+		return nil, false
+	}
+	if strings.TrimSpace(string(workerSessionID)) == "" {
+		writeError(w, http.StatusBadRequest, "worker session id is required", "BAD_REQUEST")
+		return nil, false
+	}
+	if r == nil {
+		writeError(w, http.StatusBadRequest, "request is required", "BAD_REQUEST")
+		return nil, false
+	}
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeError(w, http.StatusInternalServerError, "Worker Session streaming is unavailable", "WORKER_SESSION_STREAM_UNAVAILABLE")
+		return nil, false
+	}
+	return flusher, true
+}
+
+func (h *Handler) prepareTopLevelWorkerSessionIDStreamRequest(
+	w http.ResponseWriter,
+	r *http.Request,
+	workerSessionID factoryapi.WorkerSessionID,
+) (http.Flusher, bool) {
+	if h == nil || h.adapter == nil {
+		writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
 		return nil, false
 	}
 	if strings.TrimSpace(string(workerSessionID)) == "" {
@@ -517,6 +655,11 @@ func (h *Handler) writeMappedError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, work.ErrWorkNotFound):
 		writeError(w, http.StatusNotFound, "work not found", "NOT_FOUND")
+	case errors.Is(err, workersessions.ErrInvalidObservationScope),
+		errors.Is(err, workersessions.ErrInvalidObservationPagination),
+		errors.Is(err, workersessions.ErrInvalidState),
+		strings.Contains(err.Error(), "worker session id is required"):
+		writeError(w, http.StatusBadRequest, "invalid Worker Session observation query", "BAD_REQUEST")
 	case errors.Is(err, context.Canceled), errors.Is(err, workersessions.ErrObservationCanceled):
 		return
 	case strings.Contains(err.Error(), "session id is required"), strings.Contains(err.Error(), "work id is required"):
@@ -556,6 +699,8 @@ func (h *Handler) writeMappedObservationError(w http.ResponseWriter, err error) 
 	switch {
 	case errors.Is(err, workersessions.ErrObservationSessionNotFound):
 		writeError(w, http.StatusNotFound, "worker session observation not found", "NOT_FOUND")
+	case errors.Is(err, workersessions.ErrObservationNotDirect):
+		writeError(w, http.StatusNotFound, "worker session observation is not direct", "NOT_FOUND")
 	case errors.Is(err, workersessions.ErrObservationProjectionUnavailable):
 		writeError(w, http.StatusInternalServerError, "worker session observation is unavailable", string(factoryapi.ErrorResponseCodePROJECTIONUNAVAILABLE))
 	case errors.Is(err, context.Canceled), errors.Is(err, workersessions.ErrObservationCanceled):
@@ -571,6 +716,8 @@ func (h *Handler) writeMappedTranscriptError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, workersessions.ErrObservationSessionNotFound):
 		writeError(w, http.StatusNotFound, "worker session transcript not found", "NOT_FOUND")
+	case errors.Is(err, workersessions.ErrObservationNotDirect):
+		writeError(w, http.StatusNotFound, "worker session transcript is not direct", "NOT_FOUND")
 	case errors.Is(err, workersessions.ErrObservationTranscriptActive):
 		writeError(w, http.StatusConflict, "worker session is still active; transcript is not final", string(factoryapi.ErrorResponseCodeWORKERSESSIONTRANSCRIPTACTIVE))
 	case errors.Is(err, workersessions.ErrObservationTranscriptUnavailable):
@@ -590,6 +737,8 @@ func (h *Handler) writeMappedStreamError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, workersessions.ErrObservationSessionNotFound):
 		writeError(w, http.StatusNotFound, "worker session observation not found", "NOT_FOUND")
+	case errors.Is(err, workersessions.ErrObservationNotDirect):
+		writeError(w, http.StatusNotFound, "worker session observation is not direct", "NOT_FOUND")
 	case errors.Is(err, workersessions.ErrObservationProjectionUnavailable):
 		writeError(w, http.StatusInternalServerError, "worker session observation is unavailable", string(factoryapi.ErrorResponseCodePROJECTIONUNAVAILABLE))
 	case errors.Is(err, workersessions.ErrObservationSourceUnavailable), errors.Is(err, workersessions.ErrObservationSourceGap), errors.Is(err, workersessions.ErrObservationSourceClosed):

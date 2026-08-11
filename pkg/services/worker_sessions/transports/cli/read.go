@@ -21,19 +21,20 @@ import (
 
 // ReadConfig holds parameters for the Worker Sessions read command.
 type ReadConfig struct {
-	Context      context.Context
-	Server       string
-	SessionID    string
-	Provider     string
-	Kind         string
-	ID           string
-	OutputFormat string
-	JSON         bool
-	Verbose      bool
-	Debug        bool
-	Output       io.Writer
-	Diagnostics  io.Writer
-	HTTP         clihttp.Protocol
+	Context         context.Context
+	Server          string
+	SessionID       string
+	WorkerSessionID string
+	Provider        string
+	Kind            string
+	ID              string
+	OutputFormat    string
+	JSON            bool
+	Verbose         bool
+	Debug           bool
+	Output          io.Writer
+	Diagnostics     io.Writer
+	HTTP            clihttp.Protocol
 }
 
 // NewRead returns the composition-facing transcript operation bound to one
@@ -49,6 +50,7 @@ func read(config ReadConfig) error {
 	config.Provider = strings.TrimSpace(config.Provider)
 	config.Kind = strings.TrimSpace(config.Kind)
 	config.ID = strings.TrimSpace(config.ID)
+	config.WorkerSessionID = strings.TrimSpace(config.WorkerSessionID)
 	jsonOutput := config.JSON || strings.EqualFold(strings.TrimSpace(config.OutputFormat), "json")
 	if err := validateReadConfig(config); err != nil {
 		return emitReadCLIError(config, jsonOutput, err)
@@ -58,13 +60,13 @@ func read(config ReadConfig) error {
 		return emitReadCLIError(config, config.JSON, err)
 	}
 	jsonOutput = config.JSON || format == "json"
-	endpoint, err := workerSessionTranscriptEndpoint(config.Server, config.SessionID, config.Provider, config.Kind, config.ID)
+	endpoint, err := workerSessionTranscriptEndpoint(config.Server, config.SessionID, config.WorkerSessionID, config.Provider, config.Kind, config.ID)
 	if err != nil {
 		return emitReadCLIError(config, jsonOutput, err)
 	}
 	clidiag.Printf(config.Diagnostics, config.Verbose || config.Debug,
-		"worker sessions read request endpointPath=%s endpoint=%s server=%s session=%s provider=%s kind=%s id=%s",
-		endpoint.Path, endpoint.String(), config.Server, clidiag.SessionLabel(config.SessionID), config.Provider, config.Kind, config.ID)
+		"worker sessions read request endpointPath=%s endpoint=%s server=%s session=%s workerSessionID=%s provider=%s kind=%s id=%s",
+		endpoint.Path, endpoint.String(), config.Server, clidiag.SessionLabel(config.SessionID), config.WorkerSessionID, config.Provider, config.Kind, config.ID)
 
 	var transcript factoryapi.WorkerSessionTranscriptResponse
 	response, requestErr := config.HTTP.GetJSON(config.Context, endpoint.String(), &transcript)
@@ -105,6 +107,16 @@ func validateReadConfig(config ReadConfig) error {
 	if config.HTTP == nil {
 		return fmt.Errorf("CLI HTTP protocol is required")
 	}
+	config.WorkerSessionID = strings.TrimSpace(config.WorkerSessionID)
+	config.Provider = strings.TrimSpace(config.Provider)
+	config.Kind = strings.TrimSpace(config.Kind)
+	config.ID = strings.TrimSpace(config.ID)
+	if config.WorkerSessionID != "" {
+		if config.Provider != "" || config.Kind != "" || config.ID != "" {
+			return newCLIError("WORKER_SESSION_MODE_CONFLICT", "--worker-session-id cannot be combined with --provider, --kind, or --id", nil)
+		}
+		return nil
+	}
 	if config.Provider == "" {
 		return newCLIError("PROVIDER_REQUIRED", "--provider is required", nil)
 	}
@@ -123,14 +135,21 @@ func validateReadConfig(config ReadConfig) error {
 	return nil
 }
 
-func workerSessionTranscriptEndpoint(server, sessionID, provider, kind, id string) (url.URL, error) {
-	endpointURL, err := cliserver.RequestURL(server, sessionpath.WorkerSessionsTranscriptPath(sessionID))
+func workerSessionTranscriptEndpoint(server, sessionID, workerSessionID, provider, kind, id string) (url.URL, error) {
+	path := sessionpath.WorkerSessionsTranscriptPath(sessionID)
+	if strings.TrimSpace(workerSessionID) != "" {
+		path = sessionpath.TopLevelWorkerSessionTranscriptPath(workerSessionID)
+	}
+	endpointURL, err := cliserver.RequestURL(server, path)
 	if err != nil {
 		return url.URL{}, err
 	}
 	endpoint, err := url.Parse(endpointURL)
 	if err != nil {
 		return url.URL{}, fmt.Errorf("parse Worker Sessions read endpoint: %w", err)
+	}
+	if strings.TrimSpace(workerSessionID) != "" {
+		return *endpoint, nil
 	}
 	query := endpoint.Query()
 	query.Set("provider", provider)

@@ -247,6 +247,23 @@ func ListWorkerSessionsResponseToAPI(result workersessions.ListObservationsResul
 	return factoryapi.ListWorkerSessionsResponse{Sessions: sessions}
 }
 
+// ListWorkerSessionObservationsResponseToAPI maps the bounded top-level
+// identity query, including its opaque pagination context.
+func ListWorkerSessionObservationsResponseToAPI(result workersessions.ListWorkerSessionObservationsResult) factoryapi.ListWorkerSessionsResponse {
+	sessions := make([]factoryapi.WorkerSessionObservation, 0, len(result.Observations))
+	for _, observation := range result.Observations {
+		sessions = append(sessions, WorkerSessionObservationToAPI(observation))
+	}
+	response := factoryapi.ListWorkerSessionsResponse{Sessions: sessions}
+	if result.MaxResults > 0 {
+		response.PaginationContext = &factoryapi.PaginationContext{MaxResults: result.MaxResults}
+		if result.NextToken != "" {
+			response.PaginationContext.NextToken = stringPtr(result.NextToken)
+		}
+	}
+	return response
+}
+
 // WorkerSessionTranscriptToAPI maps a detached normalized transcript result to
 // the public session-scoped response without exposing Provider Sessions
 // storage or reader details.
@@ -291,6 +308,7 @@ func WorkerSessionTranscriptToAPI(result workersessions.ReadTranscriptResult) fa
 func WorkerSessionObservationToAPI(observation workersessions.Observation) factoryapi.WorkerSessionObservation {
 	result := factoryapi.WorkerSessionObservation{
 		WorkerSessionId:          observation.WorkerSessionID,
+		Direct:                   observation.Direct,
 		ProviderSessionAvailable: observation.ProviderSessionAvailable,
 		WorkIds:                  append([]string(nil), observation.WorkIDs...),
 		AttemptId:                observation.AttemptID,

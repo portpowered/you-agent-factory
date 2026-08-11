@@ -19,9 +19,11 @@ import (
 // exists; Worker Sessions remains the authority for correlated attempts.
 type observationService interface {
 	ListObservations(context.Context, workersessions.ListObservationsRequest) (workersessions.ListObservationsResult, error)
+	ListWorkerSessionObservations(context.Context, workersessions.ListWorkerSessionObservationsRequest) (workersessions.ListWorkerSessionObservationsResult, error)
 	GetObservation(context.Context, workersessions.GetObservationRequest) (workersessions.Observation, error)
 	GetObservationByWorkerSessionID(context.Context, workersessions.GetObservationByWorkerSessionIDRequest) (workersessions.Observation, error)
 	ReadTranscript(context.Context, workersessions.ReadTranscriptRequest) (workersessions.ReadTranscriptResult, error)
+	ReadTranscriptByWorkerSessionID(context.Context, workersessions.ReadTranscriptByWorkerSessionIDRequest) (workersessions.ReadTranscriptResult, error)
 	StreamObservations(context.Context, workersessions.StreamObservationsRequest) (workersessions.ObservationSubscription, error)
 	StreamObservationsByWorkerSessionID(context.Context, workersessions.StreamObservationsByWorkerSessionIDRequest) (workersessions.ObservationSubscription, error)
 }
@@ -282,6 +284,142 @@ func (a *Adapter) ListWorkerSessions(
 	}
 	sortObservations(result.Observations)
 	return ListWorkerSessionsResponseToAPI(result), nil
+}
+
+// ListTopLevelWorkerSessions returns bounded observations through the stable
+// Worker Session identity surface. The Worker Sessions service owns the
+// default direct scope, lifecycle validation, ordering, and cursor semantics.
+func (a *Adapter) ListTopLevelWorkerSessions(
+	ctx context.Context,
+	scope string,
+	states []string,
+	maxResults *int,
+	nextToken *string,
+) (factoryapi.ListWorkerSessionsResponse, error) {
+	if a == nil || a.observations == nil {
+		return factoryapi.ListWorkerSessionsResponse{}, errors.New("Worker Sessions service is required")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return factoryapi.ListWorkerSessionsResponse{}, err
+	}
+	request := workersessions.ListWorkerSessionObservationsRequest{
+		Scope:  workersessions.ObservationScope(strings.TrimSpace(scope)),
+		States: make([]workersessions.State, 0, len(states)),
+	}
+	for _, state := range states {
+		request.States = append(request.States, workersessions.State(strings.TrimSpace(state)))
+	}
+	if maxResults != nil {
+		request.MaxResults = *maxResults
+	}
+	if nextToken != nil {
+		request.NextToken = strings.TrimSpace(*nextToken)
+	}
+	result, err := a.observations.ListWorkerSessionObservations(ctx, request)
+	if err != nil {
+		return factoryapi.ListWorkerSessionsResponse{}, fmt.Errorf("list top-level Worker Session observations: %w", err)
+	}
+	return ListWorkerSessionObservationsResponseToAPI(result), nil
+}
+
+// GetTopLevelWorkerSessionObservation resolves one Worker Session using only
+// its stable identity. Provider association facts remain service-owned.
+func (a *Adapter) GetTopLevelWorkerSessionObservation(
+	ctx context.Context,
+	workerSessionID string,
+) (factoryapi.WorkerSessionObservation, error) {
+	if a == nil || a.observations == nil {
+		return factoryapi.WorkerSessionObservation{}, errors.New("Worker Sessions service is required")
+	}
+	workerSessionID = strings.TrimSpace(workerSessionID)
+	if workerSessionID == "" {
+		return factoryapi.WorkerSessionObservation{}, errors.New("worker session id is required")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return factoryapi.WorkerSessionObservation{}, err
+	}
+	observation, err := a.observations.GetObservationByWorkerSessionID(ctx, workersessions.GetObservationByWorkerSessionIDRequest{
+		WorkerSessionID: workerSessionID,
+	})
+	if err != nil {
+		return factoryapi.WorkerSessionObservation{}, fmt.Errorf("get top-level Worker Session observation: %w", err)
+	}
+	return WorkerSessionObservationToAPI(observation), nil
+}
+
+// ReadTopLevelWorkerSessionTranscript resolves the exact Provider Session
+// association recorded for one Worker Session before projecting its transcript.
+func (a *Adapter) ReadTopLevelWorkerSessionTranscript(
+	ctx context.Context,
+	workerSessionID string,
+) (factoryapi.WorkerSessionTranscriptResponse, error) {
+	if a == nil || a.observations == nil {
+		return factoryapi.WorkerSessionTranscriptResponse{}, errors.New("Worker Sessions service is required")
+	}
+	workerSessionID = strings.TrimSpace(workerSessionID)
+	if workerSessionID == "" {
+		return factoryapi.WorkerSessionTranscriptResponse{}, errors.New("worker session id is required")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return factoryapi.WorkerSessionTranscriptResponse{}, err
+	}
+	result, err := a.observations.ReadTranscriptByWorkerSessionID(ctx, workersessions.ReadTranscriptByWorkerSessionIDRequest{
+		WorkerSessionID: workerSessionID,
+	})
+	if err != nil {
+		return factoryapi.WorkerSessionTranscriptResponse{}, fmt.Errorf("read top-level Worker Session transcript: %w", err)
+	}
+	return WorkerSessionTranscriptToAPI(result), nil
+}
+
+// StreamTopLevelWorkerSessionEvents resolves the canonical event topic by
+// Worker Session identity and returns the detached observation envelope with
+// its retained-then-live subscription.
+func (a *Adapter) StreamTopLevelWorkerSessionEvents(
+	ctx context.Context,
+	workerSessionID string,
+	replayOnly bool,
+) (factoryapi.WorkerSessionObservation, workersessions.ObservationSubscription, error) {
+	if a == nil || a.observations == nil {
+		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, errors.New("Worker Sessions service is required")
+	}
+	workerSessionID = strings.TrimSpace(workerSessionID)
+	if workerSessionID == "" {
+		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, errors.New("worker session id is required")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, err
+	}
+	observation, err := a.observations.GetObservationByWorkerSessionID(ctx, workersessions.GetObservationByWorkerSessionIDRequest{
+		WorkerSessionID: workerSessionID,
+	})
+	if err != nil {
+		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, fmt.Errorf("get top-level Worker Session observation: %w", err)
+	}
+	subscription, err := a.observations.StreamObservationsByWorkerSessionID(ctx, workersessions.StreamObservationsByWorkerSessionIDRequest{
+		WorkerSessionID: workerSessionID,
+		Limit:           workersessions.DefaultObservationStreamLimit,
+		ReplayOnly:      replayOnly,
+	})
+	if err != nil {
+		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, fmt.Errorf("stream top-level Worker Session events: %w", err)
+	}
+	if subscription.NextFunc == nil {
+		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, workersessions.ErrObservationSourceUnavailable
+	}
+	return WorkerSessionObservationToAPI(observation), subscription, nil
 }
 
 // sortObservations gives the public list a chronological attempt order while

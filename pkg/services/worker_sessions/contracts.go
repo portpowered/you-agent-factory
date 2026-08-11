@@ -56,9 +56,21 @@ type Service interface {
 	// provider-neutral histories inspectable when no Provider Session exists.
 	GetObservationByWorkerSessionID(ctx context.Context, req GetObservationByWorkerSessionIDRequest) (Observation, error)
 
+	// ListWorkerSessionObservations returns detached observations through the
+	// top-level Worker Session identity surface. The zero Scope selects direct
+	// sessions; callers must explicitly select All to include Factory-originated
+	// sessions. Results are sorted by Worker Session ID and use a bounded opaque
+	// cursor.
+	ListWorkerSessionObservations(ctx context.Context, req ListWorkerSessionObservationsRequest) (ListWorkerSessionObservationsResult, error)
+
 	// ReadTranscript returns the normalized Provider Sessions transcript for one
 	// terminal Worker Session identified by its exact Provider Session reference.
 	ReadTranscript(ctx context.Context, req ReadTranscriptRequest) (ReadTranscriptResult, error)
+
+	// ReadTranscriptByWorkerSessionID resolves the exact Provider Session
+	// association recorded by Worker Sessions before projecting the normalized
+	// transcript. Callers never supply a provider/kind/id tuple.
+	ReadTranscriptByWorkerSessionID(ctx context.Context, req ReadTranscriptByWorkerSessionIDRequest) (ReadTranscriptResult, error)
 
 	// StreamObservations returns a cancellable retained-then-live stream over
 	// the canonical Worker Session Events topic for the exact Provider Session
