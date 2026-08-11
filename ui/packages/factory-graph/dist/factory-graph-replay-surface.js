@@ -149,14 +149,7 @@ function semanticNode(node, input) {
                     selectedWorkID: null,
                     selectedWorkstation: input.selected,
                     summaryOnly: true,
-                    workstationSemantics: input.workstationProjection
-                        ? {
-                            controlRole: input.workstationProjection.controlRole,
-                            runtimeRole: input.workstationProjection.runtimeRole,
-                            runtimeType: input.workstationProjection.runtimeType,
-                            schedulingBehavior: input.workstationProjection.schedulingBehavior,
-                        }
-                        : undefined,
+                    workstationSemantics: input.workstationProjection,
                     workstation: {
                         node_id: node.id,
                         transition_id: node.label,

@@ -3,6 +3,7 @@
 - Package-owned React Flow replay surfaces should set a mobile-safe minimum zoom below React Flow's default when fit-to-view must keep authored node controls inside narrow viewports.
 - Packaged catalog generation runs canonical Factory validation before publication-specific semantic-role checks; removing a referenced terminal state requires a real terminal route/bridge or a coordinated validator decision.
 - Cross-host graph semantics should enter React Flow nodes as a disposable package projection and render through the shared workstation node; host-specific activity metadata must remain decoration, not classification.
+- Forward the complete package-owned workstation semantic projection across shared graph hosts; manually selecting axes can silently drop optional guarded-control details.
 - Normalize trimmed blank durable identifiers to absent before authored-versus-runtime joins; only non-empty IDs select identity, otherwise use the documented legacy-name fallback.
 - First-party packaged Factory semantic checks should consume parsed canonical definitions inside `internal/packagedfactorycatalog`; keep customer-authored and JavaScript Factory validation unchanged.
 - Keep packaged installation on an explicit catalog-owned `PackagedFactoryPersistence` capability; ordinary named-Factory persistence stays strict while only exact first-party identities may filter named lifecycle-bridge targets.
@@ -9350,4 +9351,21 @@
   - No product source was changed for this unrelated hosted-only functional race; the next replacement head requires another hosted rerun.
 - **Learnings for future iterations:**
   - When a rerun moves to a different untouched functional fixture, preserve the exact failing stderr and repeat only that test locally; do not widen the task diff to mask a nondeterministic hosted failure.
+---
+## [2026-08-11 07:12:17 -07:00] - graph-workstation-semantics-004
+- What was implemented
+  - Preserved the complete package-owned workstation semantic projection in the public Factory replay node data, including guarded `VISIT_COUNT` control details.
+  - Added a public replay-host render regression that proves a guarded logical move exposes its accessible Loop breaker card, target workstation, visit limit, and guard type.
+- Files changed
+  - `ui/packages/factory-graph/src/factory-graph-replay-surface.tsx`
+  - `ui/packages/factory-graph/dist/factory-graph-replay-surface.js`
+  - `ui/packages/factory-visualizers/src/factory-topology-replay.semantics.test.tsx`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Factory graph typecheck and 54 package tests — passed.
+  - Factory visualizers typecheck, 31 package tests, and lint — passed.
+  - Factory graph build, package-boundary, package-pack verification, Biome, and `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - A host boundary that copies only required-looking semantic axes can erase optional behavior; pass the package-owned projection through or explicitly preserve every semantic field used by the shared renderer.
 ---

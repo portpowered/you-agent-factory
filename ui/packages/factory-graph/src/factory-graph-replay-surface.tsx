@@ -1,4 +1,4 @@
-import { Background, Controls, ReactFlow, type Edge } from "@xyflow/react";
+import { Background, Controls, type Edge, ReactFlow } from "@xyflow/react";
 import { GraphViewportSurface } from "@you-agent-factory/components/graphs";
 import type { FactoryTopologyNode } from "@you-agent-factory/factory-replay";
 
@@ -224,15 +224,7 @@ function semanticNode(
           selectedWorkID: null,
           selectedWorkstation: input.selected,
           summaryOnly: true,
-          workstationSemantics: input.workstationProjection
-            ? {
-                controlRole: input.workstationProjection.controlRole,
-                runtimeRole: input.workstationProjection.runtimeRole,
-                runtimeType: input.workstationProjection.runtimeType,
-                schedulingBehavior:
-                  input.workstationProjection.schedulingBehavior,
-              }
-            : undefined,
+          workstationSemantics: input.workstationProjection,
           workstation: {
             node_id: node.id,
             transition_id: node.label,
