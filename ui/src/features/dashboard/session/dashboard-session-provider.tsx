@@ -85,7 +85,7 @@ function DashboardSessionDiscoveryProvider({
   );
   const sessionsQuery = useQuery({
     queryKey: FACTORY_SESSIONS_QUERY_KEY,
-    queryFn: () => listFactorySessions(),
+    queryFn: ({ signal }) => listFactorySessions({ signal }),
   });
   const requiresDefaultResolution =
     isDefaultFactorySessionID(selectedSessionID);

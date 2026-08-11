@@ -7,7 +7,6 @@ export const approvedButtonUsageAllowlist = [
   },
   {
     rawButtonFingerprints: [
-      'aria-haspopup="dialog"',
       "aria-controls={controlsID}",
       "aria-label={sessionCloseLabel(session, messages)}",
     ],

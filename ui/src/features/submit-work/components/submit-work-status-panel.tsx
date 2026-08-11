@@ -1,4 +1,7 @@
-import { AlertPanel, AlertPanelText } from "@you-agent-factory/components/feedback";
+import {
+  AlertPanel,
+  AlertPanelText,
+} from "@you-agent-factory/components/feedback";
 import type { SubmitWorkStatus } from "./submit-work-card";
 
 const SUBMIT_WORK_STATUS_TONE_BY_KIND: Record<
@@ -26,14 +29,17 @@ export function SubmitWorkStatusPanel({
 
   return (
     <AlertPanel
-      className="min-w-0 max-w-xl leading-relaxed"
+      className="w-full min-w-0 max-w-none break-words leading-relaxed"
       compact
+      data-submit-work-status=""
       id={id}
       role={isErrorStatus ? "alert" : "status"}
       tone={SUBMIT_WORK_STATUS_TONE_BY_KIND[status.kind]}
       variant="empty"
     >
-      <AlertPanelText>{status.message}</AlertPanelText>
+      <AlertPanelText className="min-w-0 break-words">
+        {status.message}
+      </AlertPanelText>
     </AlertPanel>
   );
 }
