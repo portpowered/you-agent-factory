@@ -103,15 +103,15 @@
       ]
     },
     {
-      "test": "tests/functional/workers/transports/http/worker_sessions_lifecycle_test.go::TestWorkerSessionHTTPDisconnectKeepsAdmittedWorkerAlive",
-      "stableIds": [
-        "rest/startWorkerSession"
-      ]
-    },
-    {
       "test": "tests/functional/workers/mock/live_capacity_test.go::TestLiveResourceCapacityIncreaseAdmitsWaitingMockDispatch",
       "stableIds": [
         "cli/you.session.resource.set"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/transports/http/worker_sessions_lifecycle_test.go::TestWorkerSessionHTTPDisconnectKeepsAdmittedWorkerAlive",
+      "stableIds": [
+        "rest/startWorkerSession"
       ]
     },
     {

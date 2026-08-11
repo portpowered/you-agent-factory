@@ -84,55 +84,65 @@ func TestJavaScriptRuntimeService_DurableLiveChangeSharesAdmissionWithChildLease
 	}
 	defer childLease.Release()
 
-	firstDone := make(chan struct {
-		result factorysessions.LiveChangeResult
-		err    error
-	}, 1)
-	go func() {
-		result, applyErr := service.ApplyLiveChange(context.Background(), sessionID, request)
-		firstDone <- struct {
-			result factorysessions.LiveChangeResult
-			err    error
-		}{result: result, err: applyErr}
-	}()
+	firstDone := startDurableLiveChange(service, sessionID, request)
 	<-runtime.changeAdmissionAttempt
-	select {
-	case outcome := <-firstDone:
-		t.Fatalf("durable live change completed while child lease was held: result=%#v err=%v", outcome.result, outcome.err)
-	default:
-	}
+	assertDurableLiveChangePending(t, firstDone, "durable live change completed while child lease was held")
 
-	secondDone := make(chan struct {
-		result factorysessions.LiveChangeResult
-		err    error
-	}, 1)
-	go func() {
-		result, applyErr := service.ApplyLiveChange(context.Background(), sessionID, request)
-		secondDone <- struct {
-			result factorysessions.LiveChangeResult
-			err    error
-		}{result: result, err: applyErr}
-	}()
-	select {
-	case outcome := <-secondDone:
-		t.Fatalf("duplicate durable live change completed before the first admitted request: result=%#v err=%v", outcome.result, outcome.err)
-	default:
-	}
+	secondDone := startDurableLiveChange(service, sessionID, request)
+	assertDurableLiveChangePending(t, secondDone, "duplicate durable live change completed before the first admitted request")
 
 	childLease.Release()
-	first := <-firstDone
-	if first.err != nil || first.result.Outcome != factorysessions.LiveChangeOutcomeApplied {
-		t.Fatalf("first durable live change = %#v, err %v", first.result, first.err)
+	assertDurableLiveChangeOutcome(t, <-firstDone, factorysessions.LiveChangeOutcomeApplied, "first durable live change")
+	assertDurableLiveChangeOutcome(t, <-secondDone, factorysessions.LiveChangeOutcomeReplayed, "duplicate durable live change")
+	assertDurableLiveChangeApplicationCounts(t, runtime)
+
+	events := (durableLiveChangeEventLog{service: service, sessionID: sessionID}).LiveChangeEvents()
+	assertDurableLiveChangeEvents(t, events)
+}
+
+type durableLiveChangeOutcome struct {
+	result factorysessions.LiveChangeResult
+	err    error
+}
+
+func startDurableLiveChange(
+	service *JavaScriptRuntimeService,
+	sessionID string,
+	request factorysessions.LiveChangeRequest,
+) <-chan durableLiveChangeOutcome {
+	done := make(chan durableLiveChangeOutcome, 1)
+	go func() {
+		result, err := service.ApplyLiveChange(context.Background(), sessionID, request)
+		done <- durableLiveChangeOutcome{result: result, err: err}
+	}()
+	return done
+}
+
+func assertDurableLiveChangePending(t *testing.T, done <-chan durableLiveChangeOutcome, message string) {
+	t.Helper()
+	select {
+	case outcome := <-done:
+		t.Fatalf("%s: result=%#v err=%v", message, outcome.result, outcome.err)
+	default:
 	}
-	second := <-secondDone
-	if second.err != nil || second.result.Outcome != factorysessions.LiveChangeOutcomeReplayed {
-		t.Fatalf("duplicate durable live change = %#v, err %v", second.result, second.err)
+}
+
+func assertDurableLiveChangeOutcome(t *testing.T, outcome durableLiveChangeOutcome, want factorysessions.LiveChangeOutcome, label string) {
+	t.Helper()
+	if outcome.err != nil || outcome.result.Outcome != want {
+		t.Fatalf("%s = %#v, err %v; want outcome %q", label, outcome.result, outcome.err, want)
 	}
+}
+
+func assertDurableLiveChangeApplicationCounts(t *testing.T, runtime *durableLiveChangeAdmissionTestRuntime) {
+	t.Helper()
 	if runtime.changeAdmissionAcquires != 2 || runtime.previewCalls != 1 || runtime.setCalls != 1 {
 		t.Fatalf("durable admission calls = acquire %d preview %d set %d, want 2/1/1", runtime.changeAdmissionAcquires, runtime.previewCalls, runtime.setCalls)
 	}
+}
 
-	events := (durableLiveChangeEventLog{service: service, sessionID: sessionID}).LiveChangeEvents()
+func assertDurableLiveChangeEvents(t *testing.T, events []interfaces.FactoryEvent) {
+	t.Helper()
 	if len(events) != 2 || events[0].Type != interfaces.FactoryEventTypeFactoryChangeRequest || events[1].Type != interfaces.FactoryEventTypeFactoryChange {
 		t.Fatalf("durable live change events = %#v, want one request and one success", events)
 	}
