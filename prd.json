@@ -22,7 +22,7 @@
         "backend-size, pkg-maint, pkg-file-count, and pkg-structure pass on both the rebased head and the exact detached origin/main baseline.",
         "bun run typecheck and bun run lint pass on the rebased head; the exact detached origin/main UI lint baseline also passes with only its existing allowlisted advisories.",
         "The affected dashboard fixture passes directly under Bun coverage instrumentation; the broad local UI coverage wrapper exceeded its 15-minute local bound and was not counted as passing.",
-        "The replacement head is based on live main 3521f0b0a; task-specific checks must be rerun on this ancestry before handoff."
+        "The replacement head is based on live main 3521f0b0a; post-rebase focused Bun tests (including coverage instrumentation), typecheck, UI lint, focused Go transport/HTTP tests, and git diff checks pass."
       ]
     }
   },

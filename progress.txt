@@ -9145,3 +9145,18 @@
   - Moving-base resolution for append-only logs must union full Git-object histories; choosing one side can silently drop unrelated mainline progress even when the source rebase is clean.
   - Rerun task-specific gates after the final mainline reconciliation because a replacement head is a new verification surface.
 ---
+## [2026-08-11 05:16 -07:00] - dashboard-fixture-and-quick-wins-rebased-verification
+- What was implemented
+  - Revalidated the fixture readiness fix and dashboard transport surface after the final rebase onto `3521f0b0a`.
+  - Kept the fixture controller lint-clean by moving the reusable readiness/waiter helpers outside the construction function and using a block-bodied waiter callback.
+- Files changed
+  - `ui/src/components/dashboard/fixtures/dashboard-regression-controller.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `bun test src/components/dashboard/fixtures/dashboard-regression.bun.unit.test.ts` passed: 5 tests, 23 expectations.
+  - The same focused suite passed with Bun coverage instrumentation.
+  - `bun run typecheck`, `bun run lint`, focused Go transport/HTTP tests, and `git diff --check` passed on the rebased head.
+- **Learnings for future iterations:**
+  - A small fixture synchronization helper can trip both callback-return and function-size lint rules; extract reusable control helpers before adding further fixture orchestration.
+---
