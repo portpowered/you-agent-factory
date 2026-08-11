@@ -9139,3 +9139,18 @@
   - Resolve moving-main conflicts by retaining the active task PRD and unioning both progress histories, then rerun the complete replacement-head gates before refreshing the PR body.
   - On this Windows host, sequential Go gates avoid the contention that can make aggregate verification appear hung.
 ---
+## [2026-08-11 04:54:05 -07:00] - prose-standard-and-terms-002 CI retry and PR audit
+- What was implemented
+  - Characterized the first replacement-head Backend Functional Coverage failure as the unchanged Linux-only process-boundary test `TestBuiltCLIDeclaredCancellationExitCodes/continuous_run`; no task or current-main source change was implicated.
+  - Reran the failed hosted coverage and dependent Verification Policy jobs after the focused local characterization; the replacement head remained unchanged.
+- Files changed
+  - `progress.txt`
+- Verification
+  - The focused Windows run passed all ten repetitions as expected skips because `os.Interrupt` is unsupported for child processes on Windows.
+  - Initial run `31487373457` failed only Backend Functional Coverage on the named process-boundary test; rerun coverage job `93768201391` and Verification Policy job `93769473623` passed, with all 18 required lanes terminal-success.
+  - The thread-aware PR audit reports 13 conversation comments, 0 formal reviews, 0 inline review threads, 0 unresolved threads, and 0 outdated threads. The latest historical blocker is addressed by the exact `FactoryResponseEvent` register correction, contract-backed Parent-Child example, current-main merge, and green retry.
+  - `origin/main` remains an ancestor of `HEAD` `2e530e12d`; the PR body is sourced from the current `prd.json`, and the worktree was clean before this progress append.
+- **Learnings for future iterations:**
+  - For an unchanged Linux process-boundary test that is intentionally skipped on Windows, preserve task code, document the characterization, and rerun only the failed hosted lane plus its dependent policy check.
+  - Treat the thread-aware audit and terminal replacement checks as separate final evidence: a clean thread list does not replace rerunning failed hosted jobs.
+---
