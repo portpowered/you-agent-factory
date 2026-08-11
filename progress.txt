@@ -12408,3 +12408,20 @@
   - When broad functional coverage rotates between untouched cancellation or staging-contention fixtures, repeat each exact test locally before changing feature code; stable isolated runs support failed-job-only retries.
   - A top-level review comment can be addressed by a pushed behavioral fix and focused tests even when GitHub exposes no inline review thread to resolve; keep the PRD audit explicit about the remaining conversation history.
 ---
+
+## [2026-08-11 10:55:57 -07:00] - e3-event-webhooks-001 final handoff audit
+- What was implemented
+  - Completed the final review audit for the existing PR after confirming the previously blocking impossible dispatch event/status combinations are rejected by endpoint- and field-specific validation.
+  - Synchronized the delivery audit to the latest branch head and the terminal-green CI run for that exact head; no additional production code was required.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/factory_definitions/internal/services/validation/impl -run 'TestWebhookTargets' -count=1` passed.
+  - CI run `31518931118` passed all 18 required checks for head `ebecfdc43f8f5f6e8c1e8576faf5047f7b108187`.
+  - PR #1885 is open, non-draft, mergeable, and clean; thread-aware audit found zero inline review threads and zero formal reviews, with the historical blocking conversation addressed by the pushed validator and focused tests.
+  - All four PRD stories remain marked `passes:true`.
+- **Learnings for future iterations:**
+  - Keep the final delivery audit pinned to the exact pushed head and its terminal CI run; a green predecessor head is not sufficient evidence for handoff.
+  - Top-level conversation comments do not expose inline resolution state, so retain explicit behavioral and test evidence in the PRD audit and handoff comment.
+---
