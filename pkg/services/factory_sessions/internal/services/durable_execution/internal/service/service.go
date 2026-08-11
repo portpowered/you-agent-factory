@@ -17,26 +17,6 @@ type Service struct {
 	durableexecution.Service
 }
 
-// liveChangeCapability is the optional durable-session boundary used by the
-// live-change coordinator without widening the root execution contract.
-type liveChangeCapability interface {
-	ApplyLiveChange(context.Context, string, factorysessions.LiveChangeRequest) (factorysessions.LiveChangeResult, error)
-	RecoverLiveChange(context.Context, string, string) (factorysessions.LiveChangeResult, error)
-}
-
-type liveChangeForward func(liveChangeCapability) (factorysessions.LiveChangeResult, error)
-
-func (s *Service) forwardLiveChange(forward liveChangeForward) (factorysessions.LiveChangeResult, error) {
-	if s == nil || s.Service == nil {
-		return factorysessions.LiveChangeResult{}, factorysessions.ErrRuntimeNotAvailable
-	}
-	capability, ok := s.Service.(liveChangeCapability)
-	if !ok {
-		return factorysessions.LiveChangeResult{}, factorysessions.ErrRuntimeNotAvailable
-	}
-	return forward(capability)
-}
-
 // BindWorkerInvoker forwards the session's Factory Runtime to the underlying
 // JavaScript runtime, which invokes its workflow children as Workers through
 // it. An execution backend that runs no Workers of its own -- the fake and
@@ -82,9 +62,16 @@ func (s *Service) ApplyLiveChange(
 	sessionID string,
 	request factorysessions.LiveChangeRequest,
 ) (factorysessions.LiveChangeResult, error) {
-	return s.forwardLiveChange(func(capability liveChangeCapability) (factorysessions.LiveChangeResult, error) {
-		return capability.ApplyLiveChange(ctx, sessionID, request)
+	if s == nil || s.Service == nil {
+		return factorysessions.LiveChangeResult{}, factorysessions.ErrRuntimeNotAvailable
+	}
+	capability, ok := s.Service.(interface {
+		ApplyLiveChange(context.Context, string, factorysessions.LiveChangeRequest) (factorysessions.LiveChangeResult, error)
 	})
+	if !ok {
+		return factorysessions.LiveChangeResult{}, factorysessions.ErrRuntimeNotAvailable
+	}
+	return capability.ApplyLiveChange(ctx, sessionID, request)
 }
 
 // RecoverLiveChange forwards durable live-change recovery when the underlying
@@ -94,9 +81,16 @@ func (s *Service) RecoverLiveChange(
 	sessionID string,
 	requestID string,
 ) (factorysessions.LiveChangeResult, error) {
-	return s.forwardLiveChange(func(capability liveChangeCapability) (factorysessions.LiveChangeResult, error) {
-		return capability.RecoverLiveChange(ctx, sessionID, requestID)
+	if s == nil || s.Service == nil {
+		return factorysessions.LiveChangeResult{}, factorysessions.ErrRuntimeNotAvailable
+	}
+	capability, ok := s.Service.(interface {
+		RecoverLiveChange(context.Context, string, string) (factorysessions.LiveChangeResult, error)
 	})
+	if !ok {
+		return factorysessions.LiveChangeResult{}, factorysessions.ErrRuntimeNotAvailable
+	}
+	return capability.RecoverLiveChange(ctx, sessionID, requestID)
 }
 
 // New constructs an inert durable execution capability around an explicitly
