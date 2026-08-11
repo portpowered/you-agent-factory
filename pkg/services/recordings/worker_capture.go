@@ -192,6 +192,7 @@ var (
 	ErrWorkerRecordingTerminal              = workerrecording.ErrWorkerRecordingTerminal
 	ErrWorkerRecordingIncomplete            = workerrecording.ErrWorkerRecordingIncomplete
 	ErrWorkerRecordingReplay                = workerrecording.ErrWorkerRecordingReplay
+	ErrMissingWorkerRecordingReader         = errors.New("recordings: Worker recording reader is required")
 	ErrWorkerPortableRecording              = workerrecording.ErrWorkerPortableRecording
 	ErrWorkerPortableRecordingCompatibility = workerrecording.ErrWorkerPortableRecordingCompatibility
 	ErrWorkerPortableRecordingIdentity      = workerrecording.ErrWorkerPortableRecordingIdentity

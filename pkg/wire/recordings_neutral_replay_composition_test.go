@@ -1,6 +1,7 @@
 package wire
 
 import (
+	"context"
 	"errors"
 	"path/filepath"
 	"strings"
@@ -15,6 +16,29 @@ import (
 
 type neutralReplayCompositionLedger struct {
 	recordings.Ledger
+}
+
+func TestProvideWorkerRecordingReaderCapabilityPreservesReader(t *testing.T) {
+	t.Parallel()
+
+	reader := workerRecordingReaderCompositionProbe{}
+	capability := provideWorkerRecordingReaderCapability(reader)
+	if capability == nil {
+		t.Fatal("provideWorkerRecordingReaderCapability() returned nil")
+	}
+	if got, ok := capability.Value().(recordings.WorkerRecordingReader); !ok || got != reader {
+		t.Fatalf("reader capability value = %T/%#v, want %T/%#v", capability.Value(), capability.Value(), reader, reader)
+	}
+}
+
+type workerRecordingReaderCompositionProbe struct{}
+
+func (workerRecordingReaderCompositionProbe) PersistWorkerRecord(context.Context, recordings.WorkerRecordingRecord) error {
+	return nil
+}
+
+func (workerRecordingReaderCompositionProbe) LoadWorkerRecording(context.Context, string) (recordings.WorkerRecordingSnapshot, error) {
+	return recordings.WorkerRecordingSnapshot{}, nil
 }
 
 // TestInjectBundleComposesRecordingsNeutralReplayThroughWireFactory proves the

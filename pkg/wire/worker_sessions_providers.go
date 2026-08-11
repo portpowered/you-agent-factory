@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	runtime "runtime"
 
+	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
@@ -18,6 +19,21 @@ import (
 	workersessionswire "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+type workerRecordingReaderCapability struct {
+	reader recordings.WorkerRecordingReader
+}
+
+func (capability workerRecordingReaderCapability) Value() any {
+	return capability.reader
+}
+
+func provideWorkerRecordingReaderCapability(
+	writer recordings.WorkerRecordingWriter,
+) initializerapplication.WorkerRecordingReaderCapability {
+	reader, _ := writer.(recordings.WorkerRecordingReader)
+	return workerRecordingReaderCapability{reader: reader}
+}
 
 // provideWorkerSessionsFactory constructs the one canonical per-session
 // Worker Sessions (W4 Runtime dispatch cutover) construction path over the
@@ -36,9 +52,15 @@ func provideWorkerSessionsFactory(
 
 func provideWorkerSessionRecorder(
 	eventsService events.Service,
-	edges serviceedges.Edges,
+	writer recordings.WorkerRecordingWriter,
 	logger logging.Logger,
 ) (recordings.WorkerSessionRecordingService, error) {
+	return recordingswire.NewWorkerSessionRecorder(eventsService, writer, logger)
+}
+
+func provideWorkerRecordingWriter(
+	edges serviceedges.Edges,
+) (recordings.WorkerRecordingWriter, error) {
 	writer := edges.WorkerRecordingWriter
 	if writer == nil {
 		var err error
@@ -50,7 +72,7 @@ func provideWorkerSessionRecorder(
 			return nil, err
 		}
 	}
-	return recordingswire.NewWorkerSessionRecorder(eventsService, writer, logger)
+	return writer, nil
 }
 
 func provideWorkerSessionsFactoryWithRecorder(

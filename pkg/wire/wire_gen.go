@@ -180,7 +180,11 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	workerSessionRecordingService, err := provideWorkerSessionRecorder(eventsService, edges2, loggingLogger)
+	workerRecordingWriter, err := provideWorkerRecordingWriter(edges2)
+	if err != nil {
+		return nil, err
+	}
+	workerSessionRecordingService, err := provideWorkerSessionRecorder(eventsService, workerRecordingWriter, loggingLogger)
 	if err != nil {
 		return nil, err
 	}
@@ -654,7 +658,8 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	process, err := application.NewProcess(commandFactory, initializer, providerRegistry, processLifecycle, server)
+	applicationWorkerRecordingReaderCapability := provideWorkerRecordingReaderCapability(workerRecordingWriter)
+	process, err := application.NewProcess(commandFactory, initializer, providerRegistry, processLifecycle, server, applicationWorkerRecordingReaderCapability)
 	if err != nil {
 		return nil, err
 	}
@@ -670,7 +675,9 @@ var apiSet = wire4.NewSet(http.NewAdapter, http.NewHandler, composition.NewHTTPB
 var servicesSet = wire4.NewSet(
 	provideProvidersService,
 	provideEventsService,
+	provideWorkerRecordingWriter,
 	provideWorkerSessionRecorder,
+	provideWorkerRecordingReaderCapability,
 	provideWorkerSessionsFactoryWithRecorder,
 	provideApplicationProcessLifecycle,
 	provideProviderRegistry,

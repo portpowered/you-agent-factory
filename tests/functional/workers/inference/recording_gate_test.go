@@ -5,15 +5,19 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
+	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/events"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -70,6 +74,74 @@ func TestWSRFT004DurableOpeningGatesProviderHandoff(t *testing.T) {
 	})
 }
 
+// TestWSRFT005CompletedWorkerReplayParity proves the root-composed durable
+// read side reloads the finalized source history and returns the exact live
+// reduction. The replay call is made after the provider run and its runner
+// count must remain unchanged, proving replay does not reopen provider or
+// Worker execution.
+//
+// WSR-FT-005: exact finalized live-to-reloaded-replay equality, terminal-last
+// behavior, no duplicates, and zero provider invocations during replay.
+func TestWSRFT005CompletedWorkerReplayParity(t *testing.T) {
+	probe := newWSRFT004RecordingProbe(t, false)
+	runner := newWSRFT004ProviderRunner(t, probe)
+	dir := wsrFT004Factory(t)
+
+	process, _, _ := runWSRFT004FactoryWithProcess(t, dir, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+		WorkerRecordingWriter: probe,
+	})
+
+	reader := workerReaderFromProcess(t, process)
+	recordingID, workerSessionID := probe.RecordingIdentity(t)
+	live := probe.LiveProjection(t)
+	snapshot, err := reader.LoadWorkerRecording(t.Context(), recordingID)
+	if err != nil {
+		t.Fatalf("LoadWorkerRecording(%q) error = %v", recordingID, err)
+	}
+	if len(snapshot.Sessions) != 1 || snapshot.Sessions[0].Status != recordings.WorkerRecordingStatusCompleted {
+		t.Fatalf("durable Worker snapshot = %#v, want one completed session", snapshot)
+	}
+
+	providerCallsBeforeReplay := runner.CallCount()
+	replayed, err := recordings.ReplayWorkerRecording(recordings.WorkerRecordingReplayRequest{
+		Snapshot:        snapshot,
+		WorkerSessionID: workerSessionID,
+	})
+	if err != nil {
+		t.Fatalf("ReplayWorkerRecording(%q, %q) error = %v", recordingID, workerSessionID, err)
+	}
+	if providerCallsAfterReplay := runner.CallCount(); providerCallsAfterReplay != providerCallsBeforeReplay {
+		t.Fatalf("provider command calls changed during replay: before=%d after=%d", providerCallsBeforeReplay, providerCallsAfterReplay)
+	}
+	if !reflect.DeepEqual(live, replayed.Projection) {
+		t.Fatalf("live projection = %#v, replay projection = %#v", live, replayed.Projection)
+	}
+	if !replayed.Projection.Complete || replayed.Projection.Terminal == nil {
+		t.Fatalf("replayed projection = %#v, want completed terminal history", replayed.Projection)
+	}
+	last := replayed.Projection.Records[len(replayed.Projection.Records)-1]
+	if replayed.Projection.Terminal.Position != last.ID.Position {
+		t.Fatalf("terminal position = %d, last record position = %d; terminal must be last", replayed.Projection.Terminal.Position, last.ID.Position)
+	}
+	identities := make(map[events.AppendIdentity]struct{}, len(replayed.Projection.Records))
+	for _, record := range replayed.Projection.Records {
+		if _, exists := identities[record.Identity()]; exists {
+			t.Fatalf("replayed history contains duplicate source identity %#v", record.Identity())
+		}
+		identities[record.Identity()] = struct{}{}
+	}
+}
+
+func workerReaderFromProcess(t *testing.T, process *initializerapplication.Process) recordings.WorkerRecordingReader {
+	t.Helper()
+	reader := root.WorkerRecordingReaderFromProcess(process)
+	if reader == nil {
+		t.Fatal("root-built process returned a nil Recordings reader")
+	}
+	return reader
+}
+
 func wsrFT004Factory(t *testing.T) string {
 	t.Helper()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
@@ -85,6 +157,16 @@ func runWSRFT004Factory(
 	dir string,
 	edges serviceedges.Edges,
 ) (factoryapi.FactorySession, factoryapi.ListWorkResponse) {
+	t.Helper()
+	_, session, listed := runWSRFT004FactoryWithProcess(t, dir, edges)
+	return session, listed
+}
+
+func runWSRFT004FactoryWithProcess(
+	t *testing.T,
+	dir string,
+	edges serviceedges.Edges,
+) (*initializerapplication.Process, factoryapi.FactorySession, factoryapi.ListWorkResponse) {
 	t.Helper()
 	loaded := loadOpeningRecordFixture(t, "codex", "success")
 	exitCode := 0
@@ -103,7 +185,11 @@ func runWSRFT004Factory(
 
 	api := support.NewProcessAPIServer()
 	edges.APIServerStarter = api.Start
-	process := support.BuildProcess(t, edges)
+	processValue, err := root.BuildProcess(context.Background(), edges)
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+	process := processValue
 	support.CleanupProcess(t, process)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -121,7 +207,7 @@ func runWSRFT004Factory(
 	if err := daemon.Err(); err != nil && !errors.Is(err, context.Canceled) {
 		t.Fatalf("recorded factory Process.Execute: %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
 	}
-	return session, listed
+	return process, session, listed
 }
 
 type wsrFT004RecordingProbe struct {
@@ -132,6 +218,9 @@ type wsrFT004RecordingProbe struct {
 	events      []string
 	failure     *recordings.WorkerRecordingFailure
 	failureOnce sync.Once
+	recordingID string
+	workerID    string
+	live        recordings.WorkerRecordingProjection
 }
 
 func newWSRFT004RecordingProbe(t *testing.T, failOpening bool) *wsrFT004RecordingProbe {
@@ -160,9 +249,65 @@ func (probe *wsrFT004RecordingProbe) PersistWorkerRecord(
 		return err
 	}
 	probe.mu.Lock()
+	probe.recordingID = record.RecordingID
+	probe.workerID = record.WorkerSessionID
+	history := append([]events.Record(nil), probe.live.Records...)
+	history = append(history, record.Record.Detached())
+	live, err := recordings.ReduceWorkerRecording(recordings.WorkerRecordingHistory{
+		RecordingID:     record.RecordingID,
+		WorkerSessionID: record.WorkerSessionID,
+		Topic:           record.Record.ID.Topic,
+		Records:         history,
+	})
+	if err != nil {
+		probe.mu.Unlock()
+		return fmt.Errorf("reduce accepted Worker history: %w", err)
+	}
+	probe.live = live
 	probe.events = append(probe.events, fmt.Sprintf("durable:%d", record.Record.ID.Position))
 	probe.mu.Unlock()
 	return nil
+}
+
+func (probe *wsrFT004RecordingProbe) LoadWorkerRecording(
+	ctx context.Context,
+	recordingID string,
+) (recordings.WorkerRecordingSnapshot, error) {
+	reader, ok := probe.delegate.(recordings.WorkerRecordingReader)
+	if !ok {
+		return recordings.WorkerRecordingSnapshot{}, recordings.ErrMissingWorkerRecordingReader
+	}
+	return reader.LoadWorkerRecording(ctx, recordingID)
+}
+
+func (probe *wsrFT004RecordingProbe) RecordingIdentity(t *testing.T) (string, string) {
+	t.Helper()
+	probe.mu.Lock()
+	defer probe.mu.Unlock()
+	if probe.recordingID == "" || probe.workerID == "" {
+		t.Fatalf("recording identity = (%q, %q), want durable Worker identity", probe.recordingID, probe.workerID)
+	}
+	return probe.recordingID, probe.workerID
+}
+
+func (probe *wsrFT004RecordingProbe) LiveProjection(t *testing.T) recordings.WorkerRecordingProjection {
+	t.Helper()
+	probe.mu.Lock()
+	defer probe.mu.Unlock()
+	if !probe.live.Complete {
+		t.Fatalf("live Worker projection = %#v, want completed history", probe.live)
+	}
+	projection := probe.live
+	projection.Records = make([]events.Record, len(probe.live.Records))
+	for index, record := range probe.live.Records {
+		projection.Records[index] = record.Detached()
+	}
+	projection.Opening = probe.live.Opening.Detached()
+	if probe.live.Terminal != nil {
+		terminal := *probe.live.Terminal
+		projection.Terminal = &terminal
+	}
+	return projection
 }
 
 func (probe *wsrFT004RecordingProbe) PersistWorkerRecordingFailure(

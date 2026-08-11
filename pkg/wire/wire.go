@@ -48,7 +48,9 @@ var apiSet = wire.NewSet(
 var servicesSet = wire.NewSet(
 	provideProvidersService,
 	provideEventsService,
+	provideWorkerRecordingWriter,
 	provideWorkerSessionRecorder,
+	provideWorkerRecordingReaderCapability,
 	provideWorkerSessionsFactoryWithRecorder,
 	provideApplicationProcessLifecycle,
 	provideProviderRegistry,

@@ -39,6 +39,45 @@ func TestWorkerCaptureLiveProjectionEqualsCompletedReplay(t *testing.T) {
 	}
 }
 
+func TestWorkerCaptureAbortPersistsFailedSnapshot(t *testing.T) {
+	eventService, err := eventswire.NewService()
+	if err != nil {
+		t.Fatal(err)
+	}
+	recordingRoot := t.TempDir()
+	writer, err := NewFileWriter(platformreplay.NewLocal(runtime.GOOS), recordingRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, err := New(eventService, writer, logging.NoopLogger{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := recordings.WorkerSessionRecordingRequest{
+		RecordingID:     "recording-aborted",
+		WorkerSessionID: "worker-aborted",
+		Topic:           events.Topic("worker-session/worker-aborted/events"),
+	}
+	handle, err := service.StartWorkerSessionRecording(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := handle.Abort(context.Background(), nil); !errors.Is(err, recordings.ErrWorkerRecordingOpening) {
+		t.Fatalf("Abort() error = %v, want opening failure", err)
+	}
+	reader, ok := writer.(recordings.WorkerRecordingReader)
+	if !ok {
+		t.Fatal("FileWriter does not expose its durable reader")
+	}
+	snapshot, err := reader.LoadWorkerRecording(context.Background(), request.RecordingID)
+	if err != nil {
+		t.Fatalf("LoadWorkerRecording() error = %v", err)
+	}
+	if len(snapshot.Sessions) != 1 || snapshot.Sessions[0].Status != recordings.WorkerRecordingStatusFailed {
+		t.Fatalf("aborted snapshot = %#v, want one FAILED Worker Session", snapshot)
+	}
+}
+
 func startCompletedWorkerCapture(t *testing.T) (recordings.WorkerSessionRecordingRequest, recordings.WorkerSessionRecording, string) {
 	t.Helper()
 	eventService, err := eventswire.NewService()

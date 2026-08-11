@@ -18,9 +18,11 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	inference "github.com/portpowered/infinite-you/pkg/services/providers/wire"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
 func TestMain(m *testing.M) {
@@ -65,6 +67,71 @@ func TestBuildProcessConstructionFailureDoesNotStartExternalLifecycle(t *testing
 	if apiStarts != 0 {
 		t.Fatalf("construction failure started API lifecycle %d times, want zero", apiStarts)
 	}
+}
+
+func TestWorkerRecordingReaderFromProcessUsesComposedReader(t *testing.T) {
+	t.Parallel()
+
+	if reader := WorkerRecordingReaderFromProcess(nil); reader != nil {
+		t.Fatalf("WorkerRecordingReaderFromProcess(nil) = %#v, want nil", reader)
+	}
+	processWithoutReader, err := initializerapplication.NewProcess(
+		nil,
+		nil,
+		rootWorkerProcessRegistry{},
+		rootWorkerProcessLifecycle{},
+		nil,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("NewProcess(without reader) error = %v", err)
+	}
+	if reader := WorkerRecordingReaderFromProcess(processWithoutReader); reader != nil {
+		t.Fatalf("WorkerRecordingReaderFromProcess(without reader) = %#v, want nil", reader)
+	}
+
+	readerWriter := &rootWorkerRecordingReaderProbe{}
+	process, err := BuildProcess(context.Background(), serviceedges.Edges{
+		WorkerRecordingWriter: readerWriter,
+	})
+	if err != nil {
+		t.Fatalf("BuildProcess(reader writer) error = %v", err)
+	}
+	if got := WorkerRecordingReaderFromProcess(process); got != readerWriter {
+		t.Fatalf("WorkerRecordingReaderFromProcess() = %T/%#v, want %T/%#v", got, got, readerWriter, readerWriter)
+	}
+
+	writeOnlyProcess, err := BuildProcess(context.Background(), serviceedges.Edges{
+		WorkerRecordingWriter: recordings.WorkerRecordingWriterFunc(func(context.Context, recordings.WorkerRecordingRecord) error {
+			return nil
+		}),
+	})
+	if err != nil {
+		t.Fatalf("BuildProcess(write-only writer) error = %v", err)
+	}
+	if reader := WorkerRecordingReaderFromProcess(writeOnlyProcess); reader != nil {
+		t.Fatalf("WorkerRecordingReaderFromProcess(write-only) = %#v, want nil", reader)
+	}
+}
+
+type rootWorkerRecordingReaderProbe struct{}
+
+type rootWorkerProcessRegistry struct{}
+
+func (rootWorkerProcessRegistry) CanonicalIdentity(identity string) (string, error) {
+	return identity, nil
+}
+
+type rootWorkerProcessLifecycle struct{}
+
+func (rootWorkerProcessLifecycle) Close(context.Context) error { return nil }
+
+func (*rootWorkerRecordingReaderProbe) PersistWorkerRecord(context.Context, recordings.WorkerRecordingRecord) error {
+	return nil
+}
+
+func (*rootWorkerRecordingReaderProbe) LoadWorkerRecording(context.Context, string) (recordings.WorkerRecordingSnapshot, error) {
+	return recordings.WorkerRecordingSnapshot{}, nil
 }
 
 func TestBuildProcessComposesInertModelsRuntimeHost(t *testing.T) {

@@ -21,6 +21,13 @@ type ProcessLifecycle interface {
 	Close(context.Context) error
 }
 
+// WorkerRecordingReaderCapability is an opaque handoff role. The initializer
+// keeps this capability neutral over product services; pkg/root narrows its
+// value to the Recordings contract at the caller-facing boundary.
+type WorkerRecordingReaderCapability interface {
+	Value() any
+}
+
 // Process is the inert, behavior-bearing process entrypoint assembled by
 // Wire. It retains only its command/lifecycle roles, immutable provider
 // authority, and the production ACP server, not runtime configuration,
@@ -32,6 +39,10 @@ type Process struct {
 	providers      ProviderRegistry
 	lifecycle      ProcessLifecycle
 	acpServer      acp.Server
+	// workerReader is intentionally opaque here. The initializer/application
+	// package must remain neutral over product services; pkg/root narrows this
+	// one injected capability at the caller-facing boundary.
+	workerReader WorkerRecordingReaderCapability
 }
 
 func NewProcess(
@@ -40,6 +51,7 @@ func NewProcess(
 	providers ProviderRegistry,
 	lifecycle ProcessLifecycle,
 	acpServer acp.Server,
+	workerReader WorkerRecordingReaderCapability,
 ) (*Process, error) {
 	if providers == nil {
 		return nil, fmt.Errorf("construct application process: provider registry is required")
@@ -53,6 +65,7 @@ func NewProcess(
 		providers:      providers,
 		lifecycle:      lifecycle,
 		acpServer:      acpServer,
+		workerReader:   workerReader,
 	}, nil
 }
 
@@ -83,6 +96,17 @@ func (p *Process) ACPServer() acp.Server {
 		return nil
 	}
 	return p.acpServer
+}
+
+// WorkerRecordingReader returns the Recordings-owned durable read capability
+// composed for this process. Callers can pass its detached snapshot to the
+// pure Recordings replay or portable-export functions; this does not expose
+// the Worker Sessions capture writer or any runtime service graph.
+func (p *Process) WorkerRecordingReader() WorkerRecordingReaderCapability {
+	if p == nil {
+		return nil
+	}
+	return p.workerReader
 }
 
 // Execute constructs and runs one fresh command tree using invocation-local
