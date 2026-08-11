@@ -8557,3 +8557,16 @@
 - **Learnings for future iterations:**
   - After a long moving-base merge, validate the active task PRD and append-only history independently of the incoming task’s bookkeeping before staging the merge commit.
 ---
+
+## [2026-08-11 01:50 -07:00] - graph-workstation-semantics post-merge gate characterization
+- What was implemented
+  - Re-ran the reviewer-requested repository gates on the current-main merge head without changing the remaining backend validation files.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `make test` — passed; the full short Go unit lane completed successfully on the synchronized head, so the earlier unit-lane `Error -1` did not reproduce.
+  - `make backend-size` — blocked by `pkg/services/factory_definitions/internal/services/validation/impl/topology_validator_test.go` at 1107 lines and `validate_structural.go` at 1037 lines, both over the 1000-line limit.
+  - `make pkg-maint` — failed on the same two file-line violations.
+- **Learnings for future iterations:**
+  - The remaining quality-gate work is an isolated backend file split; preserve the validator behavior and its existing test evidence while moving cohesive helpers/tests under the established package boundaries.
+---
