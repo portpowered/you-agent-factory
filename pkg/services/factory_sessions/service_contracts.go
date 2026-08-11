@@ -278,6 +278,7 @@ type LiveChangeResult struct {
 	NewRevision       int
 	EffectiveSequence int
 	Factory           *factorydefinitions.FactorySnapshot
+	ResourceCapacity  *factoryruntime.ResourceCapacityResult
 	FailureCode       string
 	FailureMessage    string
 }
@@ -305,7 +306,8 @@ type LiveChangeApplicationRequest struct {
 
 // LiveChangeApplicationResult is the successful application result.
 type LiveChangeApplicationResult struct {
-	Factory *factorydefinitions.FactorySnapshot
+	Factory          *factorydefinitions.FactorySnapshot
+	ResourceCapacity *factoryruntime.ResourceCapacityResult
 }
 
 // LiveChangePreflightResult lets an application reject a no-op or other
@@ -354,6 +356,7 @@ const (
 	LiveChangeErrorRequestConflict        LiveChangeErrorCode = "REQUEST_CONFLICT"
 	LiveChangeErrorTargetNotFound         LiveChangeErrorCode = "TARGET_NOT_FOUND"
 	LiveChangeErrorNoOp                   LiveChangeErrorCode = "NO_OP"
+	LiveChangeErrorCapacityInUse          LiveChangeErrorCode = "RESOURCE_CAPACITY_IN_USE"
 	LiveChangeErrorApplicationFailed      LiveChangeErrorCode = "APPLICATION_FAILED"
 	LiveChangeErrorApplicationUnavailable LiveChangeErrorCode = "APPLICATION_UNAVAILABLE"
 	LiveChangeErrorRecoveryUnavailable    LiveChangeErrorCode = "RECOVERY_UNAVAILABLE"
@@ -368,6 +371,7 @@ var (
 	ErrLiveChangeRequestConflict        = errors.New("live change request identity conflicts with a prior request")
 	ErrLiveChangeTargetNotFound         = errors.New("live change target was not found")
 	ErrLiveChangeNoOp                   = errors.New("live change is an exact no-op")
+	ErrLiveChangeCapacityInUse          = errors.New("live change resource capacity is in use")
 	ErrLiveChangeApplicationFailed      = errors.New("live change application failed")
 	ErrLiveChangeApplicationUnavailable = errors.New("live change application is unavailable")
 	ErrLiveChangeRecoveryUnavailable    = errors.New("live change recovery is unavailable")
@@ -381,6 +385,7 @@ var liveChangeErrorSentinels = map[LiveChangeErrorCode]error{
 	LiveChangeErrorRequestConflict:        ErrLiveChangeRequestConflict,
 	LiveChangeErrorTargetNotFound:         ErrLiveChangeTargetNotFound,
 	LiveChangeErrorNoOp:                   ErrLiveChangeNoOp,
+	LiveChangeErrorCapacityInUse:          ErrLiveChangeCapacityInUse,
 	LiveChangeErrorApplicationFailed:      ErrLiveChangeApplicationFailed,
 	LiveChangeErrorApplicationUnavailable: ErrLiveChangeApplicationUnavailable,
 	LiveChangeErrorRecoveryUnavailable:    ErrLiveChangeRecoveryUnavailable,
@@ -390,12 +395,13 @@ var liveChangeErrorSentinels = map[LiveChangeErrorCode]error{
 // LiveChangeError is the typed, safe error returned by admission. Cause is
 // retained only for local errors.Is matching and is never serialized.
 type LiveChangeError struct {
-	Code      LiveChangeErrorCode
-	Field     string
-	Message   string
-	RequestID string
-	ChangeID  string
-	Cause     error
+	Code             LiveChangeErrorCode
+	Field            string
+	Message          string
+	RequestID        string
+	ChangeID         string
+	ResourceCapacity *factoryruntime.ResourceCapacityResult
+	Cause            error
 }
 
 func (e *LiveChangeError) Error() string {

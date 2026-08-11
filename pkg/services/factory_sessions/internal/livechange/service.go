@@ -12,6 +12,7 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"go.uber.org/zap"
 )
@@ -176,7 +177,7 @@ func (s *Service) applyApplication(
 		)
 	}
 
-	return s.closeSuccess(events, sessionID, request, result.Factory, s.now())
+	return s.closeSuccess(events, sessionID, request, result.Factory, result.ResourceCapacity, s.now())
 }
 
 // Recover closes a request event that has no terminal event. It is intentionally
@@ -549,6 +550,7 @@ func (s *Service) closeSuccess(
 	sessionID string,
 	request factorysessions.LiveChangeRequest,
 	factorySnapshot *interfaces.FactorySnapshot,
+	resourceCapacity *factoryruntime.ResourceCapacityResult,
 	eventTime time.Time,
 ) (factorysessions.LiveChangeResult, error) {
 	previous := request.ExpectedRevision
@@ -582,6 +584,7 @@ func (s *Service) closeSuccess(
 		SessionID: sessionID, RequestID: request.RequestID, ChangeID: request.ChangeID,
 		Outcome: factorysessions.LiveChangeOutcomeApplied, PreviousRevision: previous,
 		NewRevision: next, EffectiveSequence: sequence, Factory: factorySnapshot.Clone(),
+		ResourceCapacity: cloneResourceCapacity(resourceCapacity),
 	}
 	s.logger.Info("live change completed", logFields(sessionID, request, next, zap.String("outcome", string(result.Outcome)))...)
 	return result, nil
@@ -730,6 +733,8 @@ func safeFailureMessageForCode(code string) string {
 		return "live change target was not found"
 	case string(factorysessions.LiveChangeErrorNoOp):
 		return "live change would not alter the effective Factory"
+	case string(factorysessions.LiveChangeErrorCapacityInUse):
+		return "requested resource capacity is below the current in-use minimum"
 	case string(factorysessions.LiveChangeErrorRevisionConflict):
 		return "live change revision is no longer current"
 	case string(factorysessions.LiveChangeErrorApplicationUnavailable):
@@ -761,6 +766,7 @@ func isKnownTerminalErrorCode(code string) bool {
 		factorysessions.LiveChangeErrorRequestConflict,
 		factorysessions.LiveChangeErrorTargetNotFound,
 		factorysessions.LiveChangeErrorNoOp,
+		factorysessions.LiveChangeErrorCapacityInUse,
 		factorysessions.LiveChangeErrorApplicationFailed,
 		factorysessions.LiveChangeErrorApplicationUnavailable,
 		factorysessions.LiveChangeErrorRecoveryUnavailable,
@@ -769,6 +775,15 @@ func isKnownTerminalErrorCode(code string) bool {
 	default:
 		return false
 	}
+}
+
+func cloneResourceCapacity(result *factoryruntime.ResourceCapacityResult) *factoryruntime.ResourceCapacityResult {
+	if result == nil {
+		return nil
+	}
+	clone := *result
+	clone.Factory = result.Factory.Clone()
+	return &clone
 }
 
 func intValue(value *int) int {

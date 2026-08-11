@@ -55,6 +55,10 @@ type FactoryEngine struct {
 	transformer           *token_transformer.Transformer
 	acceptingSubmits      bool
 	terminationResult     *interfaces.TerminationResult
+	// admissionGate serializes a complete live-change admission transaction
+	// with ticks that may acquire or release resource tokens.
+	admissionGate       chan struct{}
+	capacityWakePending bool
 }
 
 // NewFactoryEngine creates a new engine for the given net and marking.
@@ -131,7 +135,9 @@ func NewFactoryEngine(
 		onResultBufferDrained: onResultBufferDrained,
 		transformer:           transformer,
 		acceptingSubmits:      true,
+		admissionGate:         make(chan struct{}, 1),
 	}
+	e.admissionGate <- struct{}{}
 	e.submissionHooks = append([]factory.SubmissionHook{e.submissionHook}, e.submissionHooks...)
 	e.submissionHooks = sortedSubmissionHooks(e.submissionHooks)
 	return e, nil
@@ -265,6 +271,20 @@ func (e *FactoryEngine) WakeForPendingProcessing() {
 	e.wakeForPendingProcessing()
 }
 
+// WakeForResourceCapacity signals the engine after a resource pool changes.
+// Capacity changes are a wake source even when no submission or worker result
+// is buffered: a waiting transition may become enabled solely because an idle
+// resource token was added.
+func (e *FactoryEngine) WakeForResourceCapacity() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.capacityWakePending = true
+	select {
+	case e.submitSignal <- struct{}{}:
+	default:
+	}
+}
+
 func (e *FactoryEngine) wakeForPendingProcessing() {
 	if !e.hasBufferedInputs() {
 		return
@@ -279,6 +299,9 @@ func (e *FactoryEngine) wakeForPendingProcessing() {
 }
 
 func (e *FactoryEngine) hasBufferedInputs() bool {
+	if e.capacityWakePending {
+		return true
+	}
 	if e.submissionHook != nil && len(e.submissionHook.batches) > 0 {
 		return true
 	}
@@ -570,6 +593,7 @@ func (e *FactoryEngine) tick(ctx context.Context) (bool, bool, error) {
 		e.logger.Debug("engine: skipping automatic tick while factory is paused")
 		return false, false, nil
 	}
+	e.capacityWakePending = false
 	e.terminationResult = nil
 
 	rtSnapshot, mutated, keepAlive, err := e.beginTick(ctx)
