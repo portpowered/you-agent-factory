@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- For fan-in transitions, preserve a deterministic list of all matched input token IDs separately from the consume-only mutation list; OBSERVE-mode inputs must reach the worker dispatch without being consumed.
 - For final PR handoff, compare the PR body byte-for-byte with `prd.json` and use the thread-aware GraphQL review audit because flat PR comments do not expose inline-thread resolution state.
 - OS-boundary functional tests may poll an isolated durable filesystem checkpoint only when the child exposes no parent-process event or injected edge; document that reason at each polling helper and keep the bound as a failure guard.
 - Git Worktree preparation treats a retained Git `*.lock` as indeterminate ownership: retry within a named bound, preserve the resource, and return its exact path with verify/remove/retry guidance.
@@ -4025,4 +4026,22 @@
   - `progress.txt`
 - **Learnings for future iterations:**
   - A fresh checkout may need `bun install --frozen-lockfile` before `make typecheck`; the configured Bun version and lockfile restore the missing `@types/bun` package.
+---
+
+## 2026-08-10 19:49 -07:00 - pp-merge-context-bug-001 historical red localization
+- What was implemented
+  - Reproduced the exact regression on a disposable worktree at the pre-fix parent `b0bf1dd597^` (`fb7805bd8`): the merger provider request contained only its static instructions, and the original request occurred zero times.
+  - Strengthened the current functional regression to reject planner payload markers anywhere in the merger input and to require generated Work sections in deterministic name order, while continuing to assert every unique completed result exactly once under the matching Work identity.
+  - Updated `prd.json` to record the red pre-fix output, green current-main output, and the two-part root cause: consume-only scheduler/dispatcher routing plus missing packaged merger `.Inputs` rendering.
+- Files changed
+  - `tests/functional/factory/packaged/plan_parallel/invocation_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Pre-fix red: `go test ./tests/functional/factory/packaged/plan_parallel -run '^TestPackagedPlanParallelMergerReceivesEveryUniqueCompletedChildResult$' -count=1 -v -timeout 600s` — failed at `invocation_test.go:45` with `merger prompt contains original request 0 times, want exactly once`; the captured prompt had no Factory inputs.
+  - Current implementation: the same regression with `-count=10` — passed all ten runs (`ok ... 20.902s`).
+  - `go test ./tests/functional/factory/packaged/plan_parallel -count=1 -v -timeout 300s` — passed.
+  - `prd.json` parses; `git diff --check` passes.
+- **Learnings for future iterations:**
+  - When the live base already contains a fix for a recorded production incident, preserve the exact historical pre-fix revision for red evidence and state explicitly that current main is post-fix; do not mislabel a historical failure as a current-main failure.
 ---

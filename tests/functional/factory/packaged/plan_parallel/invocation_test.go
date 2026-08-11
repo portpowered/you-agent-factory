@@ -44,6 +44,7 @@ func TestPackagedPlanParallelMergerReceivesEveryUniqueCompletedChildResult(t *te
 	if strings.Count(mergerPrompt, originalRequest) != 1 {
 		t.Fatalf("merger prompt contains original request %d times, want exactly once: %q", strings.Count(mergerPrompt, originalRequest), mergerPrompt)
 	}
+	previousSectionStart := -1
 	for index := 1; index <= planParallelFanInChildCount; index++ {
 		childName := planParallelFanInChildName(index)
 		childInput := planParallelFanInChildInput(index)
@@ -51,10 +52,17 @@ func TestPackagedPlanParallelMergerReceivesEveryUniqueCompletedChildResult(t *te
 		if strings.Count(mergerPrompt, childResult) != 1 {
 			t.Fatalf("merger prompt contains %s %d times, want exactly once: %q", childResult, strings.Count(mergerPrompt, childResult), mergerPrompt)
 		}
+		if strings.Contains(mergerPrompt, childInput) {
+			t.Fatalf("merger prompt contains planner payload %s instead of completed child results: %q", childInput, mergerPrompt)
+		}
 		sectionStart := strings.Index(mergerPrompt, fmt.Sprintf("--- %s (planned-task) ---", childName))
 		if sectionStart < 0 {
 			t.Fatalf("merger prompt does not identify generated Work %s: %q", childName, mergerPrompt)
 		}
+		if sectionStart <= previousSectionStart {
+			t.Fatalf("generated Work %s appears out of deterministic input order at offset %d after %d: %q", childName, sectionStart, previousSectionStart, mergerPrompt)
+		}
+		previousSectionStart = sectionStart
 		sectionEnd := strings.Index(mergerPrompt[sectionStart+1:], "\n--- ")
 		if sectionEnd < 0 {
 			sectionEnd = len(mergerPrompt) - sectionStart - 1
