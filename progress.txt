@@ -4087,3 +4087,18 @@
 - **Learnings for future iterations:**
   - A clean merge against a stale remote-tracking base is not sufficient; compare the live hosting ref, fetch it, and resolve shared PRD/progress files again before pushing the replacement head.
 ---
+
+## 2026-08-10 19:25 -07:00 - thr-lint-speed final moving-base synchronization
+- What was implemented
+  - Merged the newest live `origin/main` head `aac04248d` after it advanced during post-merge verification; the merge added only current-main documentation plans and left the lint implementation and authoritative PRD unchanged.
+  - No additional story work was needed; all three lint stories remain `passes:true`.
+- Files changed
+  - `progress.txt`
+  - Current-main documentation plan files carried forward by the synchronization merge.
+- Verification
+  - `origin/main` is an ancestor of the replacement head `f50c079c6`; the worktree is clean, `git diff --check` passes, and `prd.json` parses with all stories passing.
+  - Post-merge focused tests, race coverage, typecheck, maintenance/vet gates, and the scoped package-boundary verification passed before this final documentation-only synchronization.
+  - The existing PR will be pushed and its body reset from `prd.json` before the final thread/check audit.
+- **Learnings for future iterations:**
+  - Recheck ancestry immediately after long verification commands; a merge can become stale while CI or local gates run if main is receiving concurrent merges.
+---
