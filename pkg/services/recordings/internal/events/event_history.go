@@ -279,17 +279,6 @@ func (h *FactoryEventHistory) AddEventTypeRecorder(recorder func(interfaces.Fact
 	}
 }
 
-// AppendRecordedEvent appends one already-shaped canonical domain event so
-// runtime owners can bridge their events into this history without depending
-// on a transport representation.
-func (h *FactoryEventHistory) AppendRecordedEvent(event interfaces.FactoryEvent) {
-	if h == nil {
-		return
-	}
-	event.Context.EventTime = interfaces.CanonicalEventTime(event.Context.EventTime)
-	h.appendEvent(event)
-}
-
 // RecordInitialStructure records the static topology before work events.
 func (h *FactoryEventHistory) RecordInitialStructure() {
 	if h == nil {
@@ -618,10 +607,15 @@ func (h *FactoryEventHistory) RecordFactoryStateChange(tick int, previous interf
 	))
 }
 
-func (h *FactoryEventHistory) appendEvent(event interfaces.FactoryEvent) {
+func (h *FactoryEventHistory) appendEvent(event interfaces.FactoryEvent) interfaces.FactoryEvent {
+	if h == nil {
+		return interfaces.FactoryEvent{}
+	}
 	h.mu.Lock()
 	event.SchemaVersion = interfaces.FactoryEventSchemaVersionV1
 	event.Context.Sequence = len(h.events)
+	h.assignLiveChangeSessionSequenceLocked(&event)
+	event = enrichFactoryChangeSequence(event)
 	h.events = append(h.events, event)
 	streams := make([]*eventHistorySubscription, 0, len(h.streams))
 	for _, stream := range h.streams {
@@ -645,6 +639,7 @@ func (h *FactoryEventHistory) appendEvent(event interfaces.FactoryEvent) {
 			stream.signalOverflow()
 		}
 	}
+	return event.Clone()
 }
 
 func domainFactoryEvent(eventType interfaces.FactoryEventType, id string, context interfaces.FactoryEventContext, payload any) interfaces.FactoryEvent {

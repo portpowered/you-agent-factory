@@ -115,6 +115,14 @@ func (fake *httpSessionsRootFake) GetFactorySession(ctx context.Context, session
 	return factorysessions.SessionProjection{}, factorysessions.ErrSessionNotFound
 }
 
+func (fake *httpSessionsRootFake) ApplyLiveChange(context.Context, string, factorysessions.LiveChangeRequest) (factorysessions.LiveChangeResult, error) {
+	return factorysessions.LiveChangeResult{}, factorysessions.ErrLiveChangeApplicationUnavailable
+}
+
+func (fake *httpSessionsRootFake) RecoverLiveChange(context.Context, string, string) (factorysessions.LiveChangeResult, error) {
+	return factorysessions.LiveChangeResult{}, factorysessions.ErrLiveChangeApplicationUnavailable
+}
+
 func (fake *httpSessionsRootFake) ListSessions(ctx context.Context, request factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error) {
 	if fake.listSessions == nil {
 		return factorysessions.ListSessionsResult{}, nil

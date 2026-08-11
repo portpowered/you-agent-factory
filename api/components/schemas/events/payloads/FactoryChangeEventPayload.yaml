@@ -6,6 +6,27 @@ description: Runtime topology snapshot after a live factory definition change re
 properties:
   factory:
     $ref: '../../../../openapi-main.yaml#/components/schemas/Factory'
+  changeId:
+    type: string
+    description: Stable live-change identity when this is a revisioned change boundary.
+  operation:
+    type: string
+    description: Normalized live-change operation name.
+  targetId:
+    type: string
+    description: Stable target identity changed by the operation.
+  previousRevision:
+    type: integer
+    minimum: 0
+    description: Effective Factory revision immediately before this change.
+  newRevision:
+    type: integer
+    minimum: 0
+    description: Effective Factory revision created by this change.
+  effectiveSequence:
+    type: integer
+    minimum: 0
+    description: Canonical Factory Event sequence at which this change became effective.
   sourceDirectory:
     type: string
   metadata:

@@ -182,6 +182,8 @@ const (
 	FactoryEventTypeDispatchResponse                 FactoryEventType = "DISPATCH_RESPONSE"
 	FactoryEventTypeDispatchWorkerSessionAssociation FactoryEventType = "DISPATCH_WORKER_SESSION_ASSOCIATION"
 	FactoryEventTypeFactoryChange                    FactoryEventType = "FACTORY_CHANGE"
+	FactoryEventTypeFactoryChangeFailed              FactoryEventType = "FACTORY_CHANGE_FAILED"
+	FactoryEventTypeFactoryChangeRequest             FactoryEventType = "FACTORY_CHANGE_REQUEST"
 	FactoryEventTypeFactoryStateResponse             FactoryEventType = "FACTORY_STATE_RESPONSE"
 	FactoryEventTypeInferenceRequest                 FactoryEventType = "INFERENCE_REQUEST"
 	FactoryEventTypeInferenceResponse                FactoryEventType = "INFERENCE_RESPONSE"
@@ -1803,10 +1805,70 @@ type FactoryArtifactVisibility string
 
 // FactoryChangeEventPayload Runtime topology snapshot after a live factory definition change replaces the running factory.
 type FactoryChangeEventPayload struct {
+	// ChangeId Stable live-change identity when this is a revisioned change boundary.
+	ChangeId *string `json:"changeId,omitempty"`
+
+	// EffectiveSequence Canonical Factory Event sequence at which this change became effective.
+	EffectiveSequence *int `json:"effectiveSequence,omitempty"`
+
 	// Factory Top-level factory.json contract. Declare the work types, resources, portability resources, workers, and workstations that make up one authored factory here. Guarded loop breakers should be authored as guarded LOGICAL_MOVE workstations using VISIT_COUNT guards instead of a top-level exhaustion-rules field.
-	Factory         Factory    `json:"factory"`
-	Metadata        *StringMap `json:"metadata,omitempty"`
-	SourceDirectory *string    `json:"sourceDirectory,omitempty"`
+	Factory  Factory    `json:"factory"`
+	Metadata *StringMap `json:"metadata,omitempty"`
+
+	// NewRevision Effective Factory revision created by this change.
+	NewRevision *int `json:"newRevision,omitempty"`
+
+	// Operation Normalized live-change operation name.
+	Operation *string `json:"operation,omitempty"`
+
+	// PreviousRevision Effective Factory revision immediately before this change.
+	PreviousRevision *int    `json:"previousRevision,omitempty"`
+	SourceDirectory  *string `json:"sourceDirectory,omitempty"`
+
+	// TargetId Stable target identity changed by the operation.
+	TargetId *string `json:"targetId,omitempty"`
+}
+
+// FactoryChangeFailedEventPayload Safe terminal failure for an admitted live Factory Session change. Raw provider payloads, commands, stack traces, and requested values are excluded.
+type FactoryChangeFailedEventPayload struct {
+	ChangeId         string `json:"changeId"`
+	ExpectedRevision int    `json:"expectedRevision"`
+
+	// FailureCode Stable safe failure category.
+	FailureCode string `json:"failureCode"`
+
+	// FailureMessage Bounded safe failure explanation.
+	FailureMessage   string `json:"failureMessage"`
+	Operation        string `json:"operation"`
+	PreviousRevision int    `json:"previousRevision"`
+	TargetId         string `json:"targetId"`
+}
+
+// FactoryChangeRequestEventPayload Normalized live Factory Session change intent. Request identity and session scope are carried by FactoryEvent.context.
+type FactoryChangeRequestEventPayload struct {
+	// Actor Safe actor identity supplied by the caller.
+	Actor *string `json:"actor,omitempty"`
+
+	// ChangeId Stable identity of the requested live change.
+	ChangeId string `json:"changeId"`
+
+	// ExpectedRevision Effective Factory revision the operator observed before admission.
+	ExpectedRevision int `json:"expectedRevision"`
+
+	// Operation Normalized live-change operation name.
+	Operation string `json:"operation"`
+
+	// Reason Optional normalized safe operator reason.
+	Reason *string `json:"reason,omitempty"`
+
+	// RequestedValue Canonical JSON value requested by the operation.
+	RequestedValue interface{} `json:"requestedValue"`
+
+	// Source Safe source label such as cli or api.
+	Source *string `json:"source,omitempty"`
+
+	// TargetId Stable target identity changed by the operation.
+	TargetId string `json:"targetId"`
 }
 
 // FactoryDispatch defines model for FactoryDispatch.
@@ -8376,6 +8438,58 @@ func (t *FactoryEvent_Payload) FromFactoryChangeEventPayload(v FactoryChangeEven
 
 // MergeFactoryChangeEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided FactoryChangeEventPayload
 func (t *FactoryEvent_Payload) MergeFactoryChangeEventPayload(v FactoryChangeEventPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsFactoryChangeRequestEventPayload returns the union data inside the FactoryEvent_Payload as a FactoryChangeRequestEventPayload
+func (t FactoryEvent_Payload) AsFactoryChangeRequestEventPayload() (FactoryChangeRequestEventPayload, error) {
+	var body FactoryChangeRequestEventPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromFactoryChangeRequestEventPayload overwrites any union data inside the FactoryEvent_Payload as the provided FactoryChangeRequestEventPayload
+func (t *FactoryEvent_Payload) FromFactoryChangeRequestEventPayload(v FactoryChangeRequestEventPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeFactoryChangeRequestEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided FactoryChangeRequestEventPayload
+func (t *FactoryEvent_Payload) MergeFactoryChangeRequestEventPayload(v FactoryChangeRequestEventPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsFactoryChangeFailedEventPayload returns the union data inside the FactoryEvent_Payload as a FactoryChangeFailedEventPayload
+func (t FactoryEvent_Payload) AsFactoryChangeFailedEventPayload() (FactoryChangeFailedEventPayload, error) {
+	var body FactoryChangeFailedEventPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromFactoryChangeFailedEventPayload overwrites any union data inside the FactoryEvent_Payload as the provided FactoryChangeFailedEventPayload
+func (t *FactoryEvent_Payload) FromFactoryChangeFailedEventPayload(v FactoryChangeFailedEventPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeFactoryChangeFailedEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided FactoryChangeFailedEventPayload
+func (t *FactoryEvent_Payload) MergeFactoryChangeFailedEventPayload(v FactoryChangeFailedEventPayload) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err

@@ -32,6 +32,8 @@ const (
 	FactoryEventTypeDispatchResponse              FactoryEventType = "DISPATCH_RESPONSE"
 	FactoryEventTypeDispatchWorkerSessionAssoc    FactoryEventType = "DISPATCH_WORKER_SESSION_ASSOCIATION"
 	FactoryEventTypeFactoryChange                 FactoryEventType = "FACTORY_CHANGE"
+	FactoryEventTypeFactoryChangeRequest          FactoryEventType = "FACTORY_CHANGE_REQUEST"
+	FactoryEventTypeFactoryChangeFailed           FactoryEventType = "FACTORY_CHANGE_FAILED"
 	FactoryEventTypeFactoryStateResponse          FactoryEventType = "FACTORY_STATE_RESPONSE"
 	FactoryEventTypeInferenceRequest              FactoryEventType = "INFERENCE_REQUEST"
 	FactoryEventTypeInferenceResponse             FactoryEventType = "INFERENCE_RESPONSE"
@@ -568,9 +570,42 @@ type InitialStructureRequestEventPayload struct {
 // FactoryChangeEventPayload carries the replacement Factory snapshot after a
 // live definition change becomes active.
 type FactoryChangeEventPayload struct {
-	Factory         *FactorySnapshot   `json:"factory"`
-	Metadata        *map[string]string `json:"metadata,omitempty"`
-	SourceDirectory *string            `json:"sourceDirectory,omitempty"`
+	Factory           *FactorySnapshot   `json:"factory"`
+	ChangeID          string             `json:"changeId,omitempty"`
+	Operation         string             `json:"operation,omitempty"`
+	TargetID          string             `json:"targetId,omitempty"`
+	PreviousRevision  *int               `json:"previousRevision,omitempty"`
+	NewRevision       *int               `json:"newRevision,omitempty"`
+	EffectiveSequence *int               `json:"effectiveSequence,omitempty"`
+	Metadata          *map[string]string `json:"metadata,omitempty"`
+	SourceDirectory   *string            `json:"sourceDirectory,omitempty"`
+}
+
+// FactoryChangeRequestEventPayload carries the normalized operator intent
+// before a live Factory Session change is applied. Request identity and
+// session scope remain authoritative on FactoryEventContext.
+type FactoryChangeRequestEventPayload struct {
+	ChangeID         string          `json:"changeId"`
+	ExpectedRevision int             `json:"expectedRevision"`
+	Operation        string          `json:"operation"`
+	TargetID         string          `json:"targetId"`
+	RequestedValue   json.RawMessage `json:"requestedValue"`
+	Actor            string          `json:"actor,omitempty"`
+	Source           string          `json:"source,omitempty"`
+	Reason           string          `json:"reason,omitempty"`
+}
+
+// FactoryChangeFailedEventPayload closes an admitted live change when its
+// application cannot commit. Failure fields are deliberately safe and never
+// carry provider payloads, commands, stack traces, or raw requested values.
+type FactoryChangeFailedEventPayload struct {
+	ChangeID         string `json:"changeId"`
+	Operation        string `json:"operation"`
+	TargetID         string `json:"targetId"`
+	ExpectedRevision int    `json:"expectedRevision"`
+	PreviousRevision int    `json:"previousRevision"`
+	FailureCode      string `json:"failureCode"`
+	FailureMessage   string `json:"failureMessage"`
 }
 
 // WorkInputPayload describes a work item submitted to the factory.

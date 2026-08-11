@@ -217,9 +217,11 @@ func (a *Assembly) Complete(
 	}
 	session.ResponseEvents = responseEvents
 	session.Runtime = &factorysessions.LiveRuntime{
-		Factory:        startupRuntime.RuntimeService(),
-		BackendScopeID: startupRuntime.BackendScope(),
-		RuntimeConfig:  runtimeConfig,
+		Factory:          startupRuntime.RuntimeService(),
+		BackendScopeID:   startupRuntime.BackendScope(),
+		RuntimeConfig:    runtimeConfig,
+		LiveChangeEvents: runtimebinding.NewLiveChangeEventLog(startupRuntime.RecordingLedger()),
+		LiveChangeLogger: startupRuntime.RuntimeLogger(),
 	}
 	startupRuntime.AddEventTypeRecorder(func(eventType factorydefinitions.FactoryEventType) {
 		if eventType == factorydefinitions.FactoryEventTypeSessionCompleted {

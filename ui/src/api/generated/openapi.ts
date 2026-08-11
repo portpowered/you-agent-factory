@@ -3508,6 +3508,8 @@ export interface components {
         | components["schemas"]["RunRequestEventPayload"]
         | components["schemas"]["InitialStructureRequestEventPayload"]
         | components["schemas"]["FactoryChangeEventPayload"]
+        | components["schemas"]["FactoryChangeRequestEventPayload"]
+        | components["schemas"]["FactoryChangeFailedEventPayload"]
         | components["schemas"]["WorkRequestEventPayload"]
         | components["schemas"]["RelationshipChangeRequestEventPayload"]
         | components["schemas"]["DispatchRequestEventPayload"]
@@ -3627,8 +3629,51 @@ export interface components {
     /** @description Runtime topology snapshot after a live factory definition change replaces the running factory. */
     FactoryChangeEventPayload: {
       factory: components["schemas"]["Factory"];
+      /** @description Stable live-change identity when this is a revisioned change boundary. */
+      changeId?: string;
+      /** @description Normalized live-change operation name. */
+      operation?: string;
+      /** @description Stable target identity changed by the operation. */
+      targetId?: string;
+      /** @description Effective Factory revision immediately before this change. */
+      previousRevision?: number;
+      /** @description Effective Factory revision created by this change. */
+      newRevision?: number;
+      /** @description Canonical Factory Event sequence at which this change became effective. */
+      effectiveSequence?: number;
       sourceDirectory?: string;
       metadata?: components["schemas"]["StringMap"];
+    };
+    /** @description Normalized live Factory Session change intent. Request identity and session scope are carried by FactoryEvent.context. */
+    FactoryChangeRequestEventPayload: {
+      /** @description Stable identity of the requested live change. */
+      changeId: string;
+      /** @description Effective Factory revision the operator observed before admission. */
+      expectedRevision: number;
+      /** @description Normalized live-change operation name. */
+      operation: string;
+      /** @description Stable target identity changed by the operation. */
+      targetId: string;
+      /** @description Canonical JSON value requested by the operation. */
+      requestedValue: unknown;
+      /** @description Safe actor identity supplied by the caller. */
+      actor?: string;
+      /** @description Safe source label such as cli or api. */
+      source?: string;
+      /** @description Optional normalized safe operator reason. */
+      reason?: string;
+    };
+    /** @description Safe terminal failure for an admitted live Factory Session change. Raw provider payloads, commands, stack traces, and requested values are excluded. */
+    FactoryChangeFailedEventPayload: {
+      changeId: string;
+      operation: string;
+      targetId: string;
+      expectedRevision: number;
+      previousRevision: number;
+      /** @description Stable safe failure category. */
+      failureCode: string;
+      /** @description Bounded safe failure explanation. */
+      failureMessage: string;
     };
     /** @description Normalized work request entering the factory. Single-work submissions accepted by POST /work are converted into this one-work request shape before an event is emitted. */
     WorkRequestEventPayload: {
@@ -8803,6 +8848,10 @@ export const FactoryEventType = {
   FactoryEventTypeInitialStructureRequest: "INITIAL_STRUCTURE_REQUEST",
   // The running factory definition changed and a canonical replacement topology is now active.
   FactoryEventTypeFactoryChange: "FACTORY_CHANGE",
+  // A normalized live Factory Session change request was admitted before application.
+  FactoryEventTypeFactoryChangeRequest: "FACTORY_CHANGE_REQUEST",
+  // An admitted live Factory Session change could not become effective and was closed with a safe failure.
+  FactoryEventTypeFactoryChangeFailed: "FACTORY_CHANGE_FAILED",
   // Work entered the factory as a normalized request.
   FactoryEventTypeWorkRequest: "WORK_REQUEST",
   // A relationship-change request between work items was recorded.

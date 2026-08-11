@@ -41,6 +41,51 @@
   },
   {
     "schemaVersion": "agent-factory.event.v1",
+    "id": "event-factory-change-request",
+    "type": "FACTORY_CHANGE_REQUEST",
+    "context": {
+      "sequence": 26,
+      "tick": 10,
+      "eventTime": "2026-04-21T12:00:19Z",
+      "sessionId": "session-alpha",
+      "requestId": "change-request-1",
+      "source": "api"
+    },
+    "payload": {
+      "changeId": "live-change/change-request-1",
+      "expectedRevision": 0,
+      "operation": "resource.capacity.set",
+      "targetId": "reviewers",
+      "requestedValue": 8,
+      "actor": "operator",
+      "source": "api",
+      "reason": "raise throughput"
+    }
+  },
+  {
+    "schemaVersion": "agent-factory.event.v1",
+    "id": "event-factory-change-failed",
+    "type": "FACTORY_CHANGE_FAILED",
+    "context": {
+      "sequence": 27,
+      "tick": 10,
+      "eventTime": "2026-04-21T12:00:20Z",
+      "sessionId": "session-alpha",
+      "requestId": "change-request-2",
+      "source": "api"
+    },
+    "payload": {
+      "changeId": "live-change/change-request-2",
+      "expectedRevision": 0,
+      "previousRevision": 0,
+      "operation": "resource.capacity.set",
+      "targetId": "missing-resource",
+      "failureCode": "TARGET_NOT_FOUND",
+      "failureMessage": "live change target was not found"
+    }
+  },
+  {
+    "schemaVersion": "agent-factory.event.v1",
     "id": "event-work-request",
     "type": "WORK_REQUEST",
     "context": {

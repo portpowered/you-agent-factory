@@ -15,6 +15,8 @@ type (
 	DispatchRequestEventPayload                  = contracts.DispatchRequestEventPayload
 	DispatchWorkerSessionAssociationEventPayload = contracts.DispatchWorkerSessionAssociationEventPayload
 	FactoryChangeEventPayload                    = contracts.FactoryChangeEventPayload
+	FactoryChangeRequestEventPayload             = contracts.FactoryChangeRequestEventPayload
+	FactoryChangeFailedEventPayload              = contracts.FactoryChangeFailedEventPayload
 	FactoryEvent                                 = contracts.FactoryEvent
 	FactoryEventContext                          = contracts.FactoryEventContext
 	FactoryEventReconnectCursor                  = contracts.FactoryEventReconnectCursor
@@ -53,6 +55,8 @@ const (
 	FactoryEventTypeDispatchResponse              = contracts.FactoryEventTypeDispatchResponse
 	FactoryEventTypeDispatchWorkerSessionAssoc    = contracts.FactoryEventTypeDispatchWorkerSessionAssoc
 	FactoryEventTypeFactoryChange                 = contracts.FactoryEventTypeFactoryChange
+	FactoryEventTypeFactoryChangeRequest          = contracts.FactoryEventTypeFactoryChangeRequest
+	FactoryEventTypeFactoryChangeFailed           = contracts.FactoryEventTypeFactoryChangeFailed
 	FactoryEventTypeFactoryStateResponse          = contracts.FactoryEventTypeFactoryStateResponse
 	FactoryEventTypeInferenceRequest              = contracts.FactoryEventTypeInferenceRequest
 	FactoryEventTypeInferenceResponse             = contracts.FactoryEventTypeInferenceResponse

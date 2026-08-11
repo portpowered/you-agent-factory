@@ -7,6 +7,8 @@ x-enum-varnames:
   - FactoryEventTypeRunRequest
   - FactoryEventTypeInitialStructureRequest
   - FactoryEventTypeFactoryChange
+  - FactoryEventTypeFactoryChangeRequest
+  - FactoryEventTypeFactoryChangeFailed
   - FactoryEventTypeWorkRequest
   - FactoryEventTypeRelationshipChangeRequest
   - FactoryEventTypeDispatchRequest
@@ -40,6 +42,8 @@ enum:
   - RUN_REQUEST
   - INITIAL_STRUCTURE_REQUEST
   - FACTORY_CHANGE
+  - FACTORY_CHANGE_REQUEST
+  - FACTORY_CHANGE_FAILED
   - WORK_REQUEST
   - RELATIONSHIP_CHANGE_REQUEST
   - DISPATCH_REQUEST
@@ -73,6 +77,8 @@ x-enum-descriptions:
   - A factory run request was recorded and its effective runtime configuration is known.
   - The static factory topology and configured resources are available before work moves.
   - The running factory definition changed and a canonical replacement topology is now active.
+  - A normalized live Factory Session change request was admitted before application.
+  - An admitted live Factory Session change could not become effective and was closed with a safe failure.
   - Work entered the factory as a normalized request.
   - A relationship-change request between work items was recorded.
   - A workstation request began processing a set of input work.

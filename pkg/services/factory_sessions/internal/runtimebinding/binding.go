@@ -194,7 +194,9 @@ func Replace(
 		},
 		Runtime: &factorysessions.LiveRuntime{
 			Factory: replacement.RuntimeService(), BackendScopeID: replacement.BackendScope(),
-			RuntimeConfig: loadedFactorySnapshotSource(replacement.LoadedRuntimeConfig()),
+			RuntimeConfig:    loadedFactorySnapshotSource(replacement.LoadedRuntimeConfig()),
+			LiveChangeEvents: NewLiveChangeEventLog(replacement.RecordingLedger()),
+			LiveChangeLogger: replacement.RuntimeLogger(),
 		},
 		Default: session.IsDefault, Project: session.Project,
 		Select: isActive, AddEventTypeRecorder: replacement.AddEventTypeRecorder,
@@ -293,8 +295,13 @@ func Register(state *sessionruntime.Service, input Registration) string {
 	return state.Register(sessionruntime.Registration{
 		SessionID: input.SessionID, FactoryDir: metadata.FactoryDir, FolderPath: metadata.FolderPath,
 		ExecutionBaseDir: metadata.ExecutionBaseDir, Target: metadata.Target,
-		Handle:  &SessionState{Instance: bundle, Handle: input.Handle, Spec: metadata.PreparedSpec},
-		Runtime: &factorysessions.LiveRuntime{Factory: bundle.RuntimeService(), BackendScopeID: bundle.BackendScope(), RuntimeConfig: loadedFactorySnapshotSource(bundle.LoadedRuntimeConfig())},
+		Handle: &SessionState{Instance: bundle, Handle: input.Handle, Spec: metadata.PreparedSpec},
+		Runtime: &factorysessions.LiveRuntime{
+			Factory: bundle.RuntimeService(), BackendScopeID: bundle.BackendScope(),
+			RuntimeConfig:    loadedFactorySnapshotSource(bundle.LoadedRuntimeConfig()),
+			LiveChangeEvents: NewLiveChangeEventLog(bundle.RecordingLedger()),
+			LiveChangeLogger: bundle.RuntimeLogger(),
+		},
 		Default: logicaltarget.IsLiveSessionDefaultSelector(input.SessionID), Project: metadata.Project,
 		Select: input.Select, AllocateDefaultID: true, AddEventTypeRecorder: bundle.AddEventTypeRecorder,
 	})

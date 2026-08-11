@@ -2332,6 +2332,10 @@ components:
       $ref: './components/schemas/events/payloads/InitialStructureRequestEventPayload.yaml'
     FactoryChangeEventPayload:
       $ref: './components/schemas/events/payloads/FactoryChangeEventPayload.yaml'
+    FactoryChangeRequestEventPayload:
+      $ref: './components/schemas/events/payloads/FactoryChangeRequestEventPayload.yaml'
+    FactoryChangeFailedEventPayload:
+      $ref: './components/schemas/events/payloads/FactoryChangeFailedEventPayload.yaml'
     WorkRequestEventPayload:
       $ref: './components/schemas/events/payloads/WorkRequestEventPayload.yaml'
     RelationshipChangeRequestEventPayload:

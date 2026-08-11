@@ -2,12 +2,15 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livechange"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
@@ -178,5 +181,134 @@ func liveRuntimeDependencies(host Host) liveruntime.Dependencies {
 		SessionFactory:         host.SessionFactory,
 		StopSession:            host.StopLiveSession,
 		ObserveControl:         host.ObserveLiveLifecycleControl,
+	}
+}
+
+// ApplyLiveChange owns the service-root live-change boundary. The concrete
+// application and dispatch/resource coordination are explicit fields on the
+// selected LiveRuntime, while this gateway owns session identity and locking.
+func (s *Service) ApplyLiveChange(
+	ctx context.Context,
+	sessionID string,
+	request factorysessions.LiveChangeRequest,
+) (factorysessions.LiveChangeResult, error) {
+	return s.runLiveChange(ctx, sessionID, request, "")
+}
+
+// RecoverLiveChange closes the one pending request event for requestID after a
+// crash or process restart without requiring the caller to resubmit its body.
+func (s *Service) RecoverLiveChange(
+	ctx context.Context,
+	sessionID string,
+	requestID string,
+) (factorysessions.LiveChangeResult, error) {
+	return s.runLiveChange(ctx, sessionID, factorysessions.LiveChangeRequest{}, requestID)
+}
+
+func (s *Service) runLiveChange(
+	ctx context.Context,
+	sessionID string,
+	request factorysessions.LiveChangeRequest,
+	recoverRequestID string,
+) (factorysessions.LiveChangeResult, error) {
+	if s == nil || s.host == nil {
+		return factorysessions.LiveChangeResult{}, fmt.Errorf("Factory Sessions gateway is required")
+	}
+	session, err := s.host.RequireSession(sessionID)
+	if err != nil {
+		return factorysessions.LiveChangeResult{}, liveChangeSessionError(err)
+	}
+	if session == nil {
+		return factorysessions.LiveChangeResult{}, liveChangeSessionError(factorysessions.ErrSessionNotFound)
+	}
+	if session.Runtime == nil {
+		return factorysessions.LiveChangeResult{}, factorysessions.ErrRuntimeNotAvailable
+	}
+	session.LiveChangeMu.Lock()
+	defer session.LiveChangeMu.Unlock()
+
+	release, acquireErr := acquireLiveChangeAdmission(ctx, session)
+	if acquireErr != nil {
+		return factorysessions.LiveChangeResult{}, acquireErr
+	}
+	if release != nil {
+		defer release()
+	}
+
+	runtime := session.Runtime
+	stateProvider := liveChangeStateProvider(runtime)
+	coordinator := livechange.New(nil, runtime.LiveChangeLogger)
+	canonicalID := livesession.CanonicalID(session)
+	if recoverRequestID != "" {
+		return coordinator.Recover(ctx, canonicalID, recoverRequestID, stateProvider, runtime.LiveChangeEvents, runtime.LiveChangeApplication)
+	}
+	return coordinator.Apply(ctx, canonicalID, request, stateProvider, runtime.LiveChangeEvents, runtime.LiveChangeApplication)
+}
+
+func acquireLiveChangeAdmission(
+	ctx context.Context,
+	session *livesession.LiveSession,
+) (func(), error) {
+	if session == nil || session.Runtime == nil || session.Runtime.LiveChangeAdmission == nil {
+		return nil, nil
+	}
+	release, err := session.Runtime.LiveChangeAdmission.AcquireLiveChange(ctx, livesession.CanonicalID(session))
+	if err != nil {
+		return nil, &factorysessions.LiveChangeError{
+			Code:    factorysessions.LiveChangeErrorApplicationUnavailable,
+			Message: "live change coordination is unavailable",
+			Cause:   err,
+		}
+	}
+	return release, nil
+}
+
+func liveChangeStateProvider(runtime *factorysessions.LiveRuntime) livechange.StateProvider {
+	return func(ctx context.Context, id string) (factorysessions.LiveChangeSessionState, error) {
+		if runtime == nil || runtime.Factory == nil || runtime.LiveChangeEvents == nil {
+			return factorysessions.LiveChangeSessionState{}, factorysessions.ErrRuntimeNotAvailable
+		}
+		observed, err := runtime.Factory.Observe(ctx, factoryruntime.ObserveRequest{Scope: factoryruntime.ObservationScopeFull})
+		if err != nil {
+			return factorysessions.LiveChangeSessionState{}, err
+		}
+		state := livechange.ProjectState(id, runtime.LiveChangeEvents.LiveChangeEvents())
+		state.Lifecycle = liveChangeLifecycleFromObservation(observed.Observation)
+		return state, nil
+	}
+}
+
+func liveChangeLifecycleFromObservation(observation factoryruntime.Observation) factorysessions.LiveChangeLifecycle {
+	switch observation.Status {
+	case factoryruntime.ObservationStatusFinished:
+		return factorysessions.LiveChangeLifecycleCompleted
+	case factoryruntime.ObservationStatusIdle:
+		return factorysessions.LiveChangeLifecycleIdle
+	default:
+		return liveChangeLifecycleFromFactoryState(observation.Health.FactoryState)
+	}
+}
+
+var _ factorysessions.LiveChangeService = (*Service)(nil)
+
+func liveChangeSessionError(err error) error {
+	if errors.Is(err, factorysessions.ErrSessionNotFound) || errors.Is(err, factorysessions.ErrNotFound) {
+		return &factorysessions.LiveChangeError{
+			Code: factorysessions.LiveChangeErrorSessionNotFound, Message: "Factory Session was not found", Cause: err,
+		}
+	}
+	return err
+}
+
+func liveChangeLifecycleFromFactoryState(factoryState string) factorysessions.LiveChangeLifecycle {
+	switch strings.ToUpper(strings.TrimSpace(factoryState)) {
+	case "PAUSED":
+		return factorysessions.LiveChangeLifecyclePaused
+	case "FAILED":
+		return factorysessions.LiveChangeLifecycleFailed
+	case "COMPLETED":
+		return factorysessions.LiveChangeLifecycleCompleted
+	default:
+		return factorysessions.LiveChangeLifecycleRunning
 	}
 }
