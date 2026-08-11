@@ -77,6 +77,18 @@ func TestWorkerSessionOperationsReturnStructuredErrorWhenHandlerIsUnavailable(t 
 				srv.StreamWorkerSessionEventsBySessionId(recorder, httptest.NewRequest(http.MethodGet, "/", nil), sessionID, factoryapi.StreamWorkerSessionEventsBySessionIdParams{})
 			},
 		},
+		{
+			name: "stream by worker session id",
+			call: func(recorder *httptest.ResponseRecorder) {
+				srv.StreamWorkerSessionEventsByWorkerSessionId(
+					recorder,
+					httptest.NewRequest(http.MethodGet, "/", nil),
+					sessionID,
+					factoryapi.WorkerSessionID("worker-missing"),
+					factoryapi.StreamWorkerSessionEventsByWorkerSessionIdParams{},
+				)
+			},
+		},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {

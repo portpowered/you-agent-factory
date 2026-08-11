@@ -148,6 +148,26 @@ func TestExecuteStillPublishesBufferedProviderProgress(t *testing.T) {
 	}
 }
 
+// TestExecuteWithoutProviderSessionReferenceStillCarriesProviderIdentity
+// proves a provider can leave the resumable session reference absent without
+// making its normalized output provenance disappear with it.
+func TestExecuteWithoutProviderSessionReferenceStillCarriesProviderIdentity(t *testing.T) {
+	t.Parallel()
+
+	published := runOneAttempt(t, &bufferingProvidersFake{facts: liveProgressFixture()})
+	if len(published) == 0 {
+		t.Fatal("published progress = empty, want provider output and terminal observation")
+	}
+	for index, fragment := range published {
+		if fragment.Provider != string(providers.IDCodex) {
+			t.Fatalf("published[%d].Provider = %q, want codex", index, fragment.Provider)
+		}
+		if fragment.ProviderSessionReference != nil || fragment.ProviderSessionRef != nil {
+			t.Fatalf("published[%d] = %#v, want no synthesized Provider Session", index, fragment)
+		}
+	}
+}
+
 // TestExecutePublishesProviderProgressBeforeTheAttemptReturns proves the facts
 // reach the publisher while the provider attempt is still running, which is
 // the behavior a live Worker trace depends on. A buffered provider cannot pass

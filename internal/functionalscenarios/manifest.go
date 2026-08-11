@@ -26,10 +26,11 @@ const (
 	SSEDeprecatedLaterRemoval = "deprecated-later-removal"
 	SSECurrentlyDeferred      = "currently-deferred"
 
-	sessionEventsStableID       = "sse/getEventsBySessionId"
-	globalEventsStableID        = "sse/getEvents"
-	responseEventsStableID      = "sse/getFactoryResponseEventsBySessionId"
-	workerSessionEventsStableID = "sse/streamWorkerSessionEventsBySessionId"
+	sessionEventsStableID                        = "sse/getEventsBySessionId"
+	globalEventsStableID                         = "sse/getEvents"
+	responseEventsStableID                       = "sse/getFactoryResponseEventsBySessionId"
+	workerSessionEventsStableID                  = "sse/streamWorkerSessionEventsBySessionId"
+	workerSessionEventsByWorkerSessionIDStableID = "sse/streamWorkerSessionEventsByWorkerSessionId"
 
 	sessionEventsScope       = "session Factory Event stream, including recovery after malformed JSON data"
 	workerSessionEventsScope = "session Worker Session event stream, including retained replay, live delivery, terminal completion, and cancellation"
@@ -147,6 +148,8 @@ func applyReviewedEvidence(scenario *Scenario) {
 		markCovered(scenario, LaneLong, "tests/functional/sessions/execution/results_dispatches_test.go::TestAPIResultAndResultsExposeTerminalInvocationData", InterfaceREST)
 	case "rest/invokeFactorySessionBySessionId":
 		markCovered(scenario, LaneLong, "tests/functional/sessions/execution/results_dispatches_test.go::TestAPIResultAndResultsExposeTerminalInvocationData", InterfaceREST)
+	case "rest/streamWorkerSessionEventsByWorkerSessionId":
+		markCovered(scenario, LaneLong, "tests/functional/workers/inference/opening_record_test.go::TestWSRFT003ProviderNeutralLifecycleWorksWithoutProviderSession", InterfaceREST)
 	case "rest/getEventsBySessionId":
 		scenario.Status = StatusPartial
 		scenario.Lane = LaneLong
@@ -169,6 +172,9 @@ func applyReviewedEvidence(scenario *Scenario) {
 		scenario.ReviewedReason = "Factory response-event stream functional coverage is non-required and currently deferred."
 		scenario.SSE = &SSEDisposition{Required: false, Disposition: SSECurrentlyDeferred, Scope: "session Factory response-event stream"}
 	case workerSessionEventsStableID:
+		scenario.SSE = &SSEDisposition{Required: true, Disposition: SSERequired, Scope: workerSessionEventsScope}
+	case workerSessionEventsByWorkerSessionIDStableID:
+		markCovered(scenario, LaneLong, "tests/functional/workers/inference/opening_record_test.go::TestWSRFT003ProviderNeutralLifecycleWorksWithoutProviderSession", InterfaceSSE)
 		scenario.SSE = &SSEDisposition{Required: true, Disposition: SSERequired, Scope: workerSessionEventsScope}
 	}
 }
@@ -325,6 +331,8 @@ func validateSSE(prefix string, scenario Scenario) error {
 	case responseEventsStableID:
 		wantDisposition, wantScope = SSECurrentlyDeferred, "session Factory response-event stream"
 	case workerSessionEventsStableID:
+		wantRequired, wantDisposition, wantScope = true, SSERequired, workerSessionEventsScope
+	case workerSessionEventsByWorkerSessionIDStableID:
 		wantRequired, wantDisposition, wantScope = true, SSERequired, workerSessionEventsScope
 	default:
 		return fmt.Errorf("%s: unknown public SSE operation; add a reviewed required or non-required disposition", prefix)
