@@ -9338,3 +9338,16 @@
 - **Learnings for future iterations:**
   - When hosted functional coverage fails in an untouched fixture with an active packaged-installation owner, repeat that exact test locally before changing runtime behavior; a clean repetition supports rerunning the failed lane and its dependent policy check.
 ---
+## [2026-08-11 06:28:54 -07:00] - graph-workstation-semantics second hosted functional characterization
+- What was implemented
+  - Investigated the second replacement-run failure; the earlier plain-batch fixture passed, while an unrelated CLI process scenario `TestCLIFailureWritesDiagnosticToStderr` failed with an incomplete terminal diagnostic and `Workers workstation dispatch is unknown`.
+  - Confirmed the failure is not deterministic in the feature branch by rerunning the exact scenario locally ten times without failure.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Hosted run `31495390070`, job `93791902103`, was green for all other lanes and failed only on that functional test; the dependent Verification Policy job failed as a consequence.
+  - `go test ./tests/functional/transport/cli/process -run '^TestCLIFailureWritesDiagnosticToStderr$' -count=10 -timeout 600s` — passed all ten repetitions locally.
+  - No product source was changed for this unrelated hosted-only functional race; the next replacement head requires another hosted rerun.
+- **Learnings for future iterations:**
+  - When a rerun moves to a different untouched functional fixture, preserve the exact failing stderr and repeat only that test locally; do not widen the task diff to mask a nondeterministic hosted failure.
+---
