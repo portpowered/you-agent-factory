@@ -346,6 +346,8 @@ var documentedDomainTransportExceptions []string
 type config struct {
 	root                              string
 	packageRoot                       string
+	all                               bool
+	baseRef                           string
 	writeTestServiceImportBaseline    bool
 	writeSupportServiceImportBaseline bool
 	writeTransportBehaviorBaseline    bool
@@ -355,46 +357,55 @@ type config struct {
 }
 
 type scanResult struct {
-	rootPackageFindings                []rootPackageFinding
-	retiredPackageRootFindings         []retiredPackageRootFinding
-	retiredPackageImportFindings       []retiredPackageImportFinding
-	migrationShimFindings              []migrationShimFinding
-	applicationGraphImportFindings     []applicationGraphImportFinding
-	handwrittenGeneratedFindings       []handwrittenGeneratedFinding
-	domainTransportFindings            []domainTransportImportFinding
-	peerServiceImportFindings          []peerServiceImportFinding
-	stalePeerServiceBaselineEntries    []peerServiceImportBaselineEntry
-	peerServiceBaselineCount           int
-	testServiceImportFindings          []testServiceImportFinding
-	staleTestServiceBaselineEntries    []testServiceImportBaselineEntry
-	testServiceBaselineCount           int
-	supportServiceImportFindings       []supportServiceImportFinding
-	staleSupportServiceBaselineEntries []supportServiceImportBaselineEntry
-	supportServiceBaselineCount        int
-	serviceConstructionFindings        []serviceConstructionFinding
-	staleServiceConstructionEntries    []serviceConstructionBaselineEntry
-	serviceConstructionBaselineCount   int
-	transportImplementationFindings    []transportServiceImplementationFinding
-	externalImplementationFindings     []transportServiceImplementationFinding
-	transportBehaviorFindings          []transportBehaviorFinding
-	staleTransportBehaviorEntries      []transportBehaviorBaselineEntry
-	transportBehaviorBaselineCount     int
-	functionalProcessEdgeFindings      []functionalProcessEdgeFinding
-	constructedServiceEdgesFindings    []constructedServiceEdgesFinding
-	testWorkNormalizationFindings      []testWorkNormalizationFinding
-	productionDefaultFindings          []productionDefaultFinding
-	staleProductionDefaultEntries      []productionDefaultBaselineEntry
-	productionDefaultBaselineCount     int
-	initializerBehaviorFindings        []initializerBehaviorFinding
-	staleInitializerBehaviorEntries    []initializerBehaviorBaselineEntry
-	initializerBehaviorBaselineCount   int
-	testBehaviorFindings               []testBehaviorFinding
-	staleTestBehaviorEntries           []testBehaviorBaselineEntry
-	testBehaviorBaselineCount          int
-	petriPublicSurfaceFindings         []petriPublicSurfaceFinding
-	stalePetriPublicSurfaceEntries     []petriPublicSurfaceBaselineEntry
-	petriPublicSurfaceBaselineCount    int
-	providerEffectOwnershipFindings    []providerEffectOwnershipFinding
+	rootPackageFindings                  []rootPackageFinding
+	retiredPackageRootFindings           []retiredPackageRootFinding
+	retiredPackageImportFindings         []retiredPackageImportFinding
+	migrationShimFindings                []migrationShimFinding
+	applicationGraphImportFindings       []applicationGraphImportFinding
+	handwrittenGeneratedFindings         []handwrittenGeneratedFinding
+	domainTransportFindings              []domainTransportImportFinding
+	peerServiceImportFindings            []peerServiceImportFinding
+	recordedPeerServiceImportFindings    []peerServiceImportFinding
+	stalePeerServiceBaselineEntries      []peerServiceImportBaselineEntry
+	peerServiceBaselineCount             int
+	testServiceImportFindings            []testServiceImportFinding
+	recordedTestServiceImportFindings    []testServiceImportFinding
+	staleTestServiceBaselineEntries      []testServiceImportBaselineEntry
+	testServiceBaselineCount             int
+	supportServiceImportFindings         []supportServiceImportFinding
+	recordedSupportServiceImportFindings []supportServiceImportFinding
+	staleSupportServiceBaselineEntries   []supportServiceImportBaselineEntry
+	supportServiceBaselineCount          int
+	serviceConstructionFindings          []serviceConstructionFinding
+	recordedServiceConstructionFindings  []serviceConstructionFinding
+	staleServiceConstructionEntries      []serviceConstructionBaselineEntry
+	serviceConstructionBaselineCount     int
+	transportImplementationFindings      []transportServiceImplementationFinding
+	externalImplementationFindings       []transportServiceImplementationFinding
+	transportBehaviorFindings            []transportBehaviorFinding
+	recordedTransportBehaviorFindings    []transportBehaviorFinding
+	staleTransportBehaviorEntries        []transportBehaviorBaselineEntry
+	transportBehaviorBaselineCount       int
+	functionalProcessEdgeFindings        []functionalProcessEdgeFinding
+	constructedServiceEdgesFindings      []constructedServiceEdgesFinding
+	testWorkNormalizationFindings        []testWorkNormalizationFinding
+	productionDefaultFindings            []productionDefaultFinding
+	recordedProductionDefaultFindings    []productionDefaultFinding
+	staleProductionDefaultEntries        []productionDefaultBaselineEntry
+	productionDefaultBaselineCount       int
+	initializerBehaviorFindings          []initializerBehaviorFinding
+	recordedInitializerBehaviorFindings  []initializerBehaviorFinding
+	staleInitializerBehaviorEntries      []initializerBehaviorBaselineEntry
+	initializerBehaviorBaselineCount     int
+	testBehaviorFindings                 []testBehaviorFinding
+	recordedTestBehaviorFindings         []testBehaviorFinding
+	staleTestBehaviorEntries             []testBehaviorBaselineEntry
+	testBehaviorBaselineCount            int
+	petriPublicSurfaceFindings           []petriPublicSurfaceFinding
+	recordedPetriPublicSurfaceFindings   []petriPublicSurfaceFinding
+	stalePetriPublicSurfaceEntries       []petriPublicSurfaceBaselineEntry
+	petriPublicSurfaceBaselineCount      int
+	providerEffectOwnershipFindings      []providerEffectOwnershipFinding
 }
 
 type retiredPackageRoot struct {
@@ -563,6 +574,8 @@ func parseConfig() config {
 	cfg := config{}
 	flag.StringVar(&cfg.root, "root", ".", "repository root to scan")
 	flag.StringVar(&cfg.packageRoot, "package-root", defaultScanRoot, "repository-relative package root to scan")
+	flag.BoolVar(&cfg.all, "all", false, "show recorded package-boundary diagnostics as well as unrecorded findings")
+	flag.StringVar(&cfg.baseRef, "base-ref", "", "optional Git ref used to identify recorded package-boundary findings")
 	flag.BoolVar(
 		&cfg.writeTestServiceImportBaseline,
 		"create-test-service-import-baseline",
@@ -620,7 +633,36 @@ func runWithPolicy(cfg config, policy boundaryPolicy, stdout io.Writer, stderr i
 	if err != nil {
 		return err
 	}
-	blockingViolationCount := len(findings.rootPackageFindings) +
+	baseline, err := loadRecordedBoundaryBaseline(cfg, policy)
+	if err != nil {
+		return err
+	}
+	visibleFindings, _ := filterRecordedScanResult(findings, baseline)
+	blockingViolationCount := countBlockingViolations(visibleFindings)
+	if blockingViolationCount == 0 {
+		if cfg.all {
+			writeBoundaryFindings(stdout, findings)
+			writeBaselineSummaries(stdout, findings)
+		}
+		fmt.Fprintln(stdout, "[agent-factory:pkg-boundary] package boundary passed (no blocking package-boundary violations)")
+		writeGeneratedCodeExceptionSummary(stdout, policy)
+		return nil
+	}
+
+	reportFindings := visibleFindings
+	if cfg.all {
+		reportFindings = findings
+	}
+	writeBoundaryFindings(stderr, reportFindings)
+	if cfg.all {
+		writeBaselineSummaries(stderr, findings)
+	}
+	writeGeneratedCodeExceptionSummary(stderr, policy)
+	return fmt.Errorf("[agent-factory:pkg-boundary] found %d package-boundary violation(s)", blockingViolationCount)
+}
+
+func countBlockingViolations(findings scanResult) int {
+	count := len(findings.rootPackageFindings) +
 		len(findings.retiredPackageRootFindings) +
 		len(findings.retiredPackageImportFindings) +
 		len(findings.migrationShimFindings) +
@@ -646,72 +688,68 @@ func runWithPolicy(cfg config, policy boundaryPolicy, stdout io.Writer, stderr i
 		len(findings.staleProductionDefaultEntries) +
 		len(findings.initializerBehaviorFindings) +
 		len(findings.staleInitializerBehaviorEntries)
-	blockingViolationCount += len(findings.testBehaviorFindings) +
-		len(findings.staleTestBehaviorEntries)
-	blockingViolationCount += len(findings.petriPublicSurfaceFindings) +
-		len(findings.stalePetriPublicSurfaceEntries)
-	blockingViolationCount += len(findings.providerEffectOwnershipFindings)
-	if blockingViolationCount == 0 {
-		fmt.Fprintln(stdout, "[agent-factory:pkg-boundary] package boundary passed (no blocking package-boundary violations)")
-		writePeerServiceBaselineSummary(stdout, findings.peerServiceBaselineCount)
-		writeTestServiceBaselineSummary(stdout, findings.testServiceBaselineCount)
-		writeSupportServiceBaselineSummary(stdout, findings.supportServiceBaselineCount)
-		writeServiceConstructionBaselineSummary(stdout, findings.serviceConstructionBaselineCount)
-		writeTransportBehaviorBaselineSummary(stdout, findings.transportBehaviorBaselineCount)
-		writeProductionDefaultBaselineSummary(stdout, findings.productionDefaultBaselineCount)
-		writeInitializerBehaviorBaselineSummary(stdout, findings.initializerBehaviorBaselineCount)
-		writeTestBehaviorBaselineSummary(stdout, findings.testBehaviorBaselineCount)
-		writePetriPublicSurfaceBaselineSummary(stdout, findings.petriPublicSurfaceBaselineCount)
-		writeGeneratedCodeExceptionSummary(stdout, policy)
-		return nil
-	}
+	count += len(findings.testBehaviorFindings) + len(findings.staleTestBehaviorEntries)
+	count += len(findings.petriPublicSurfaceFindings) + len(findings.stalePetriPublicSurfaceEntries)
+	return count + len(findings.providerEffectOwnershipFindings)
+}
 
+func writeBoundaryFindings(writer io.Writer, findings scanResult) {
 	for _, finding := range findings.rootPackageFindings {
-		fmt.Fprintf(stderr, "[agent-factory:pkg-boundary] unapproved root package family: %s\n", finding.packagePath)
-		fmt.Fprintf(stderr, "  reason: %s is outside the approved package-family allowlist.\n", finding.packagePath)
-		fmt.Fprintln(stderr, "  remediation: move the code under an approved owner or deliberately update the allowlist with ownership rationale.")
+		fmt.Fprintf(writer, "[agent-factory:pkg-boundary] unapproved root package family: %s\n", finding.packagePath)
+		fmt.Fprintf(writer, "  reason: %s is outside the approved package-family allowlist.\n", finding.packagePath)
+		fmt.Fprintln(writer, "  remediation: move the code under an approved owner or deliberately update the allowlist with ownership rationale.")
 	}
-	writeRetiredPackageRootFindings(stderr, findings.retiredPackageRootFindings)
-	writeRetiredPackageImportFindings(stderr, findings.retiredPackageImportFindings)
-	writeMigrationShimBlockingFindings(stderr, findings.migrationShimFindings)
-	writeApplicationGraphImportFindings(stderr, findings.applicationGraphImportFindings)
-	writeHandwrittenGeneratedFindings(stderr, findings.handwrittenGeneratedFindings)
-	writeDomainTransportImportFindings(stderr, findings.domainTransportFindings)
-	writePeerServiceImportFindings(stderr, findings.peerServiceImportFindings)
-	writeStalePeerServiceBaselineEntries(stderr, findings.stalePeerServiceBaselineEntries)
-	writePeerServiceBaselineSummary(stderr, findings.peerServiceBaselineCount)
-	writeTestServiceImportFindings(stderr, findings.testServiceImportFindings)
-	writeStaleTestServiceBaselineEntries(stderr, findings.staleTestServiceBaselineEntries)
-	writeTestServiceBaselineSummary(stderr, findings.testServiceBaselineCount)
-	writeSupportServiceImportFindings(stderr, findings.supportServiceImportFindings)
-	writeStaleSupportServiceBaselineEntries(stderr, findings.staleSupportServiceBaselineEntries)
-	writeSupportServiceBaselineSummary(stderr, findings.supportServiceBaselineCount)
-	writeServiceConstructionFindings(stderr, findings.serviceConstructionFindings)
-	writeStaleServiceConstructionBaselineEntries(stderr, findings.staleServiceConstructionEntries)
-	writeServiceConstructionBaselineSummary(stderr, findings.serviceConstructionBaselineCount)
-	writeTransportServiceImplementationFindings(stderr, findings.transportImplementationFindings)
-	writeExternalServiceImplementationFindings(stderr, findings.externalImplementationFindings)
-	writeTransportBehaviorFindings(stderr, findings.transportBehaviorFindings)
-	writeStaleTransportBehaviorBaselineEntries(stderr, findings.staleTransportBehaviorEntries)
-	writeFunctionalProcessEdgeFindings(stderr, findings.functionalProcessEdgeFindings)
-	writeConstructedServiceEdgesFindings(stderr, findings.constructedServiceEdgesFindings)
-	writeTestWorkNormalizationFindings(stderr, findings.testWorkNormalizationFindings)
-	writeTransportBehaviorBaselineSummary(stderr, findings.transportBehaviorBaselineCount)
-	writeProductionDefaultFindings(stderr, findings.productionDefaultFindings)
-	writeStaleProductionDefaultBaselineEntries(stderr, findings.staleProductionDefaultEntries)
-	writeProductionDefaultBaselineSummary(stderr, findings.productionDefaultBaselineCount)
-	writeInitializerBehaviorFindings(stderr, findings.initializerBehaviorFindings)
-	writeStaleInitializerBehaviorBaselineEntries(stderr, findings.staleInitializerBehaviorEntries)
-	writeInitializerBehaviorBaselineSummary(stderr, findings.initializerBehaviorBaselineCount)
-	writeTestBehaviorFindings(stderr, findings.testBehaviorFindings)
-	writeStaleTestBehaviorBaselineEntries(stderr, findings.staleTestBehaviorEntries)
-	writeTestBehaviorBaselineSummary(stderr, findings.testBehaviorBaselineCount)
-	writePetriPublicSurfaceFindings(stderr, findings.petriPublicSurfaceFindings)
-	writeStalePetriPublicSurfaceBaselineEntries(stderr, findings.stalePetriPublicSurfaceEntries)
-	writePetriPublicSurfaceBaselineSummary(stderr, findings.petriPublicSurfaceBaselineCount)
-	writeProviderEffectOwnershipFindings(stderr, findings.providerEffectOwnershipFindings)
-	writeGeneratedCodeExceptionSummary(stderr, policy)
-	return fmt.Errorf("[agent-factory:pkg-boundary] found %d package-boundary violation(s)", blockingViolationCount)
+	writeRetiredPackageRootFindings(writer, findings.retiredPackageRootFindings)
+	writeRetiredPackageImportFindings(writer, findings.retiredPackageImportFindings)
+	writeMigrationShimBlockingFindings(writer, findings.migrationShimFindings)
+	writeApplicationGraphImportFindings(writer, findings.applicationGraphImportFindings)
+	writeHandwrittenGeneratedFindings(writer, findings.handwrittenGeneratedFindings)
+	writeDomainTransportImportFindings(writer, findings.domainTransportFindings)
+	writePeerServiceImportFindings(writer, findings.peerServiceImportFindings)
+	writePeerServiceImportFindings(writer, findings.recordedPeerServiceImportFindings)
+	writeStalePeerServiceBaselineEntries(writer, findings.stalePeerServiceBaselineEntries)
+	writeTestServiceImportFindings(writer, findings.testServiceImportFindings)
+	writeTestServiceImportFindings(writer, findings.recordedTestServiceImportFindings)
+	writeStaleTestServiceBaselineEntries(writer, findings.staleTestServiceBaselineEntries)
+	writeSupportServiceImportFindings(writer, findings.supportServiceImportFindings)
+	writeSupportServiceImportFindings(writer, findings.recordedSupportServiceImportFindings)
+	writeStaleSupportServiceBaselineEntries(writer, findings.staleSupportServiceBaselineEntries)
+	writeServiceConstructionFindings(writer, findings.serviceConstructionFindings)
+	writeServiceConstructionFindings(writer, findings.recordedServiceConstructionFindings)
+	writeStaleServiceConstructionBaselineEntries(writer, findings.staleServiceConstructionEntries)
+	writeTransportServiceImplementationFindings(writer, findings.transportImplementationFindings)
+	writeExternalServiceImplementationFindings(writer, findings.externalImplementationFindings)
+	writeTransportBehaviorFindings(writer, findings.transportBehaviorFindings)
+	writeTransportBehaviorFindings(writer, findings.recordedTransportBehaviorFindings)
+	writeStaleTransportBehaviorBaselineEntries(writer, findings.staleTransportBehaviorEntries)
+	writeFunctionalProcessEdgeFindings(writer, findings.functionalProcessEdgeFindings)
+	writeConstructedServiceEdgesFindings(writer, findings.constructedServiceEdgesFindings)
+	writeTestWorkNormalizationFindings(writer, findings.testWorkNormalizationFindings)
+	writeProductionDefaultFindings(writer, findings.productionDefaultFindings)
+	writeProductionDefaultFindings(writer, findings.recordedProductionDefaultFindings)
+	writeStaleProductionDefaultBaselineEntries(writer, findings.staleProductionDefaultEntries)
+	writeInitializerBehaviorFindings(writer, findings.initializerBehaviorFindings)
+	writeInitializerBehaviorFindings(writer, findings.recordedInitializerBehaviorFindings)
+	writeStaleInitializerBehaviorBaselineEntries(writer, findings.staleInitializerBehaviorEntries)
+	writeTestBehaviorFindings(writer, findings.testBehaviorFindings)
+	writeTestBehaviorFindings(writer, findings.recordedTestBehaviorFindings)
+	writeStaleTestBehaviorBaselineEntries(writer, findings.staleTestBehaviorEntries)
+	writePetriPublicSurfaceFindings(writer, findings.petriPublicSurfaceFindings)
+	writePetriPublicSurfaceFindings(writer, findings.recordedPetriPublicSurfaceFindings)
+	writeStalePetriPublicSurfaceBaselineEntries(writer, findings.stalePetriPublicSurfaceEntries)
+	writeProviderEffectOwnershipFindings(writer, findings.providerEffectOwnershipFindings)
+}
+
+func writeBaselineSummaries(writer io.Writer, findings scanResult) {
+	writePeerServiceBaselineSummary(writer, findings.peerServiceBaselineCount)
+	writeTestServiceBaselineSummary(writer, findings.testServiceBaselineCount)
+	writeSupportServiceBaselineSummary(writer, findings.supportServiceBaselineCount)
+	writeServiceConstructionBaselineSummary(writer, findings.serviceConstructionBaselineCount)
+	writeTransportBehaviorBaselineSummary(writer, findings.transportBehaviorBaselineCount)
+	writeProductionDefaultBaselineSummary(writer, findings.productionDefaultBaselineCount)
+	writeInitializerBehaviorBaselineSummary(writer, findings.initializerBehaviorBaselineCount)
+	writeTestBehaviorBaselineSummary(writer, findings.testBehaviorBaselineCount)
+	writePetriPublicSurfaceBaselineSummary(writer, findings.petriPublicSurfaceBaselineCount)
 }
 
 func scanRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
@@ -817,6 +855,13 @@ func scanRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
 	if err != nil {
 		return scanResult{}, err
 	}
+	result.recordedPeerServiceImportFindings = recordedFindingsFromPartition(
+		peerServiceFindings,
+		result.peerServiceImportFindings,
+		func(finding peerServiceImportFinding) string {
+			return peerServiceImportKey(finding.filePath, finding.importPath)
+		},
+	)
 	result.peerServiceBaselineCount = len(peerServiceBaseline.Entries)
 	testServiceFindings, err := scanTestServiceSubpackageImports(repoRoot)
 	if err != nil {
@@ -831,6 +876,13 @@ func scanRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
 	if err != nil {
 		return scanResult{}, err
 	}
+	result.recordedTestServiceImportFindings = recordedFindingsFromPartition(
+		testServiceFindings,
+		result.testServiceImportFindings,
+		func(finding testServiceImportFinding) string {
+			return testServiceImportKey(finding.filePath, finding.importPath)
+		},
+	)
 	result.testServiceBaselineCount = len(testServiceBaseline.Entries)
 	supportServiceFindings, err := scanSupportServiceSubpackageImports(repoRoot)
 	if err != nil {
@@ -845,6 +897,13 @@ func scanRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
 	if err != nil {
 		return scanResult{}, err
 	}
+	result.recordedSupportServiceImportFindings = recordedFindingsFromPartition(
+		supportServiceFindings,
+		result.supportServiceImportFindings,
+		func(finding supportServiceImportFinding) string {
+			return supportServiceImportKey(finding.filePath, finding.importPath)
+		},
+	)
 	result.supportServiceBaselineCount = len(supportServiceBaseline.Entries)
 	serviceConstructionFindings, err := scanProductServiceConstruction(repoRoot)
 	if err != nil {
@@ -859,6 +918,13 @@ func scanRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
 	if err != nil {
 		return scanResult{}, err
 	}
+	result.recordedServiceConstructionFindings = recordedFindingsFromPartition(
+		serviceConstructionFindings,
+		result.serviceConstructionFindings,
+		func(finding serviceConstructionFinding) string {
+			return serviceConstructionKey(finding.filePath, finding.importPath, finding.symbol)
+		},
+	)
 	result.serviceConstructionBaselineCount = len(serviceConstructionBaseline.Entries)
 	result.transportImplementationFindings, err = scanTransportServiceImplementationImports(repoRoot)
 	if err != nil {
@@ -881,6 +947,13 @@ func scanRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
 	if err != nil {
 		return scanResult{}, err
 	}
+	result.recordedTransportBehaviorFindings = recordedFindingsFromPartition(
+		transportBehaviorFindings,
+		result.transportBehaviorFindings,
+		func(finding transportBehaviorFinding) string {
+			return transportBehaviorKey(finding.filePath, finding.kind, finding.symbol)
+		},
+	)
 	result.transportBehaviorBaselineCount = len(transportBehaviorBaseline.Entries)
 	result.functionalProcessEdgeFindings, err = scanFunctionalProcessEdges(repoRoot)
 	if err != nil {
@@ -907,6 +980,13 @@ func scanRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
 	if err != nil {
 		return scanResult{}, err
 	}
+	result.recordedTestBehaviorFindings = recordedFindingsFromPartition(
+		testBehaviorFindings,
+		result.testBehaviorFindings,
+		func(finding testBehaviorFinding) string {
+			return testBehaviorKey(finding.FilePath, finding.Kind, finding.ImportPath, finding.Symbol)
+		},
+	)
 	result.testBehaviorBaselineCount = len(testBehaviorBaseline.Entries)
 	productionDefaultFindings, err := scanProductionDefaultSelections(repoRoot)
 	if err != nil {
@@ -921,6 +1001,13 @@ func scanRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
 	if err != nil {
 		return scanResult{}, err
 	}
+	result.recordedProductionDefaultFindings = recordedFindingsFromPartition(
+		productionDefaultFindings,
+		result.productionDefaultFindings,
+		func(finding productionDefaultFinding) string {
+			return productionDefaultKey(finding.filePath, finding.operation, finding.kind, finding.symbol)
+		},
+	)
 	result.productionDefaultBaselineCount = len(productionDefaultBaseline.Entries)
 	initializerBehaviorFindings, err := scanInitializerBehavior(repoRoot)
 	if err != nil {
@@ -935,6 +1022,13 @@ func scanRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
 	if err != nil {
 		return scanResult{}, err
 	}
+	result.recordedInitializerBehaviorFindings = recordedFindingsFromPartition(
+		initializerBehaviorFindings,
+		result.initializerBehaviorFindings,
+		func(finding initializerBehaviorFinding) string {
+			return initializerBehaviorKey(finding.filePath, finding.kind, finding.symbol)
+		},
+	)
 	result.initializerBehaviorBaselineCount = len(initializerBehaviorBaseline.Entries)
 	petriPublicSurfaceFindings, err := scanPetriPublicSurface(repoRoot)
 	if err != nil {
@@ -949,6 +1043,13 @@ func scanRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
 	if err != nil {
 		return scanResult{}, err
 	}
+	result.recordedPetriPublicSurfaceFindings = recordedFindingsFromPartition(
+		petriPublicSurfaceFindings,
+		result.petriPublicSurfaceFindings,
+		func(finding petriPublicSurfaceFinding) string {
+			return petriPublicSurfaceKey(finding.FilePath, finding.Symbol, finding.ImportPath)
+		},
+	)
 	result.petriPublicSurfaceBaselineCount = len(petriPublicSurfaceBaseline.Entries)
 	result.providerEffectOwnershipFindings, err = scanProviderEffectOwnership(repoRoot)
 	if err != nil {
