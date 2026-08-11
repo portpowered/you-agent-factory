@@ -10404,3 +10404,25 @@
 - **Learnings for future iterations:**
   - When main advances between CI and PR handoff, merge the live ref before refreshing the PR body or requesting final checks; shared PRD files require retaining the active task metadata while unioning append-only progress history.
 ---
+## [2026-08-11 04:48:09 -07:00] - btrc-p1-root-injection-006 reconciled-head CI retry audit
+- What was implemented
+  - Audited workflow `31487033938` on the conflict-free merge head `99d354da264c605635448196cd594b6dff98d6a7`, based on live `origin/main` `012e98e0fbd1b6fcac106d90b1f3d335b8a3dce6`.
+  - Reran only the failed Backend Functional Coverage/Verification Policy jobs. The retry cleared the P1 root-reuse, workers/mock, and workers/inference failures; it retained the intermittent untouched AGY conductor failure and the unchanged server-binding assertion.
+  - Refreshed the P1 delivery audit to the reconciled head and preserved all six story flags as `passes:true`; no product or unrelated-test change was justified.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `git merge-base --is-ancestor origin/main HEAD` — passed after merge commit `99d354da2`.
+  - `go test ./tests/functional/sessions/root_composition -run '^TestRootBuildProcessIsInertAndReusableAcrossFactorySessions$' -count=3 -timeout 180s` — passed.
+  - `go test ./tests/functional/providers/agy -run '^TestAgyConductorSuccessThroughRootBuildProcess$' -count=3 -timeout 180s` — passed.
+  - `go test ./tests/functional/workers/mock -run '^TestPlainBatchDrainPreservesFiniteAndContinuousCounterexamples/continuous_idle$' -count=5 -timeout 180s` — passed.
+  - `go test ./tests/functional/workers/inference -run '^TestProviderFullStreamClaimsDeltasAndSnapshotsTruthfully$' -count=3 -timeout 180s` — passed.
+  - `go test ./tests/functional/transport/server_binding -run '^TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput$' -count=1 -timeout 180s` — reproduced the unchanged structured-diagnostic mismatch.
+  - `git diff --name-only origin/main...HEAD -- tests/functional/providers/agy tests/functional/transport/server_binding` — empty.
+  - Workflow `31487033938` — all non-functional lanes and Backend Unit Coverage passed; the final failed functional retry reported only AGY and server-binding baseline failures, and Verification Policy failed only because that lane failed.
+  - Thread-aware review audit remains at zero review threads, zero unresolved review threads, and zero formal reviews.
+- **Learnings for future iterations:**
+  - A fresh current-main merge can expose unrelated functional flakes in addition to the known baseline assertion; rerun only the failed lanes and classify the final retry by exact package diff membership.
+  - Keep the P1 PRD’s tested head and base synchronized to the reconciled ancestry before refreshing the PR body, even when terminal CI remains blocked by untouched baseline tests.
+---

@@ -11,32 +11,32 @@
   },
   "deliveryAudit": {
     "pullRequest": 1857,
-    "head": "be80d644fd6f258325d98ee0708039d8ced7d12d",
+    "head": "99d354da264c605635448196cd594b6dff98d6a7",
     "base": "012e98e0fbd1b6fcac106d90b1f3d335b8a3dce6",
     "reviewThreads": 0,
     "unresolvedReviewThreads": 0,
     "formalReviews": 0,
     "latestWorkflow": {
-      "run": 31485203874,
-      "testedHead": "be80d644fd6f258325d98ee0708039d8ced7d12d",
+      "run": 31487033938,
+      "testedHead": "99d354da264c605635448196cd594b6dff98d6a7",
       "result": "failure_after_failed_job_retry",
       "functionalResult": "failure",
       "verificationPolicy": "failure",
       "currentHeadCheckRuns": "terminal_failure",
-      "rerunResult": "failed_job_retry_cleared_agy_and_reproduced_only_untouched_baseline_failures",
+      "rerunResult": "failed_job_retry_cleared_root_reuse_workers_mock_and_workers_inference_failures_and_reproduced_only_untouched_agy_and_server_binding_failures",
       "taskScopedFailures": [],
       "baselineFailures": [
         {
           "job": "Backend Functional Coverage",
-          "package": "tests/functional/transport/server_binding",
-          "test": "TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput",
-          "evidence": "The initial run and failed-job retry reproduce the unchanged assertion: current structured API-server diagnostics precede SERVER_BIND_FAILED, while the untouched test expects the legacy migration warning followed by one diagnostic line. The P1 diff is empty for this package, and the same mismatch reproduces locally on Windows."
+          "package": "tests/functional/providers/agy",
+          "test": "TestAgyConductorSuccessThroughRootBuildProcess",
+          "evidence": "The reconciled-head retry observed zero completed message events once; the package is outside the P1 diff and the focused local test passed three consecutive runs on the reconciled head."
         },
         {
           "job": "Backend Functional Coverage",
-          "package": "tests/functional/workers/mock",
-          "test": "TestPlainBatchDrainPreservesFiniteAndContinuousCounterexamples/continuous_idle",
-          "evidence": "The failed-job retry observed this intermittent untouched test once; the P1 diff is empty for this package and the focused local test passed five consecutive runs."
+          "package": "tests/functional/transport/server_binding",
+          "test": "TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput",
+          "evidence": "The reconciled-head initial run and failed-job retry reproduce the unchanged assertion: current structured API-server diagnostics precede SERVER_BIND_FAILED, while the untouched test expects the legacy migration warning followed by one diagnostic line. The P1 diff is empty for this package, and the same mismatch reproduces locally on Windows."
         }
       ]
     }
@@ -154,7 +154,7 @@
       ],
       "priority": 6,
       "passes": true,
-      "notes": "Completed the review follow-up for the reusable root-process proof and the final value-only invocation cutover. Both representative success and provider-failure invocations enter through the public `you --json run` CLI on one root.BuildProcess/Process.Execute instance; the injected API server is observation-only for public session and Factory Event streams. The current audited head is `be80d644fd6f258325d98ee0708039d8ced7d12d`, based on synchronized origin/main `012e98e0fbd1b6fcac106d90b1f3d335b8a3dce6`; workflow `31485203874` reached terminal failure after its failed-job retry, which cleared the non-reproducing AGY failure and retained only the untouched server-binding assertion plus one intermittent workers/mock failure. The P1 diff is empty for both failing packages, focused AGY coverage passes three times locally, focused workers/mock coverage passes five times locally, and the server-binding mismatch reproduces locally. The thread-aware audit has zero unresolved review threads and zero formal reviews. All six P1 stories remain marked `passes:true`; the remaining follow-up is baseline CI policy and final PR handoff."
+      "notes": "Completed the review follow-up for the reusable root-process proof and the final value-only invocation cutover. Both representative success and provider-failure invocations enter through the public `you --json run` CLI on one root.BuildProcess/Process.Execute instance; the injected API server is observation-only for public session and Factory Event streams. The current audited head is `99d354da264c605635448196cd594b6dff98d6a7`, based on synchronized origin/main `012e98e0fbd1b6fcac106d90b1f3d335b8a3dce6`; workflow `31487033938` reached terminal failure after its failed-job retry, which cleared the P1 root-reuse, workers/mock, and workers/inference failures and retained only the intermittent untouched AGY failure plus the unchanged server-binding assertion. The P1 root-reuse test passed three focused local runs; focused AGY coverage passes three times locally, and the server-binding mismatch reproduces locally. The thread-aware audit has zero unresolved review threads and zero formal reviews. All six P1 stories remain marked `passes:true`; the remaining follow-up is baseline CI policy and final PR handoff."
     }
   ]
 }
