@@ -10785,3 +10785,21 @@
   - Use `gh pr edit --body-file prd.json` when the PR description must match a UTF-8 JSON planning artifact; shell-rendered body arguments can silently mojibake non-ASCII punctuation.
   - Keep delivery metadata tied to the exact pushed head and current workflow; a bookkeeping commit that changes the head requires a fresh CI audit before the PR can be marked ready.
 ---
+## [2026-08-11 06:59:28 -07:00] - btrc-p1-root-injection-006 current-head CI retry final audit
+- What was implemented
+  - Audited workflow `31497026205` on head `2138bc36fe565433cb12819355d0a03d5054f8a2`; all six P1 stories remain marked `passes:true`.
+  - Reran only the failed Backend Functional Coverage/Verification Policy jobs. The retry reproduced the same two unchanged functional failures: server-binding diagnostic-line expectations and provider-neutral Antigravity final-event omission.
+  - Kept both failures outside the P1 scope: neither package appears in `git diff origin/main...HEAD`, the provider-neutral test passes three consecutive local runs, and the server-binding test reproduces locally with the same structured API-server diagnostic mismatch.
+  - Refreshed the PRD delivery audit to the terminal retry result and retained zero task-scoped failures.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/workers/inference -run '^TestWSRFT003ProviderNeutralLifecycleWorksWithoutProviderSession$' -count=3 -timeout 600s` — passed.
+  - `go test ./tests/functional/transport/server_binding -run '^TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput$' -count=1 -timeout 180s` — reproduced the unchanged legacy-diagnostic mismatch.
+  - `git diff --name-only origin/main...HEAD -- tests/functional/workers/inference tests/functional/transport/server_binding` — empty.
+  - Workflow `31497026205`, attempt 2 — all lanes passed except Backend Functional Coverage and its dependent Verification Policy; no P1-scoped failure appeared.
+- **Learnings for future iterations:**
+  - Classify a repeated functional failure by exact package diff membership before changing source; a clean local repeat of an untouched package is evidence for baseline characterization, not a justification for unrelated test edits.
+  - Preserve both the initial and failed-job-retry results in the PRD when more than one untouched baseline test fails, so the next handoff can distinguish task regressions from repository-wide functional drift.
+---
