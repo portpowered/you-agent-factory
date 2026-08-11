@@ -319,5 +319,9 @@ func safeRemoteEndpoint(raw string) string {
 		return invalidRemoteEndpointLabel
 	}
 	parsed.User = nil
-	return parsed.String()
+	base, err := cliserver.ResolveBase(parsed.String())
+	if err != nil {
+		return invalidRemoteEndpointLabel
+	}
+	return base.String()
 }

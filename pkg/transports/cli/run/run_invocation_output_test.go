@@ -552,10 +552,24 @@ func TestSafeRemoteEndpointRedactsCredentialsAndFailsClosedForInvalidInput(t *te
 	if got := safeRemoteEndpoint("https://user:secret@selected.test/path"); got != "https://selected.test/path" {
 		t.Fatalf("safe endpoint = %q, want credentials removed", got)
 	}
-	for _, endpoint := range []string{"http://[::1", "http://user:secret@[::1"} {
-		if got := safeRemoteEndpoint(endpoint); got != invalidRemoteEndpointLabel {
-			t.Fatalf("invalid safe endpoint %q = %q, want fixed redacted label", endpoint, got)
-		}
+	for _, test := range []struct {
+		name     string
+		endpoint string
+		secret   string
+	}{
+		{name: "malformed URI", endpoint: "http://[::1", secret: "::1"},
+		{name: "malformed URI with userinfo", endpoint: "http://user:secret@[::1", secret: "secret"},
+		{name: "opaque HTTPS URI", endpoint: "https:user:secret@selected.test", secret: "secret"},
+		{name: "unsupported scheme", endpoint: "ftp://user:secret@selected.test", secret: "secret"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := safeRemoteEndpoint(test.endpoint); got != invalidRemoteEndpointLabel {
+				t.Fatalf("invalid safe endpoint %q = %q, want fixed redacted label", test.endpoint, got)
+			}
+			if strings.Contains(safeRemoteEndpoint(test.endpoint), test.secret) {
+				t.Fatalf("safe endpoint leaked %q", test.secret)
+			}
+		})
 	}
 }
 
