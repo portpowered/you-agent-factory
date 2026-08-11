@@ -188,6 +188,8 @@ func providerInvocationExecutionRequest(
 			RunnerID:         strings.TrimSpace(req.RunnerID),
 			ExecutorProvider: strings.TrimSpace(req.ExecutorProvider),
 			FactorySessionID: requestID,
+			RecordingID:      strings.TrimSpace(req.RecordingID),
+			Capabilities:     cloneSessionCapabilities(req.Capabilities),
 			SystemPrompt:     req.SystemPrompt,
 			UserMessage:      req.Prompt,
 			OutputSchema:     req.OutputSchema,
@@ -197,6 +199,14 @@ func providerInvocationExecutionRequest(
 			WorkingDirectory: strings.TrimSpace(req.WorkingDirectory),
 		},
 	}
+}
+
+func cloneSessionCapabilities(value *workers.Capabilities) *workers.Capabilities {
+	if value == nil {
+		return nil
+	}
+	clone := *value
+	return &clone
 }
 
 // invokeWorkerResultFrom narrows one Worker Sessions outcome onto the caller

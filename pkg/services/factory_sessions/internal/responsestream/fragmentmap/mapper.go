@@ -609,6 +609,9 @@ func fragmentPayloadTruncated(metadata map[string]string) bool {
 }
 
 func fragmentProvider(fragment responsestream.Event) string {
+	if provider := strings.TrimSpace(fragment.Provider); provider != "" {
+		return provider
+	}
 	if fragment.ProviderSessionRef != nil {
 		if provider := workerexecution.CanonicalProviderSessionProvider(fragment.ProviderSessionRef.Provider); provider != "" {
 			return provider

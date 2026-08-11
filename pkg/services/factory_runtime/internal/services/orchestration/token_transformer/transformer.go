@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
@@ -38,21 +39,23 @@ func New(
 // OutputTokenInput contains the data needed to convert consumed input tokens
 // plus an output arc into a routed output token.
 type OutputTokenInput struct {
-	ArcIndex            int
-	Arcs                []petri.Arc
-	ConsumedTokens      []factorytoken.Token
-	InputColors         []factorytoken.Color
-	Output              string
-	WorkPropagationMode interfaces.WorkPropagationMode
-	WorkstationName     string
-	WorkstationType     string
-	Outcome             workerexecution.WorkOutcome
-	TransitionID        string
-	Error               string
-	Feedback            string
-	Now                 time.Time
-	History             factorytoken.History
-	ResourceTokenIndex  int
+	ArcIndex                int
+	Arcs                    []petri.Arc
+	ConsumedTokens          []factorytoken.Token
+	InputColors             []factorytoken.Color
+	Output                  string
+	StructuredResult        any
+	StructuredResultPresent bool
+	WorkPropagationMode     interfaces.WorkPropagationMode
+	WorkstationName         string
+	WorkstationType         string
+	Outcome                 workerexecution.WorkOutcome
+	TransitionID            string
+	Error                   string
+	Feedback                string
+	Now                     time.Time
+	History                 factorytoken.History
+	ResourceTokenIndex      int
 }
 
 // InitialTokenFromSubmit converts a submit request into a token placed in the
@@ -164,6 +167,11 @@ func (t *Transformer) OutputToken(in OutputTokenInput) (*factorytoken.Token, err
 	}
 
 	if color.DataType != factorytoken.DataTypeResource {
+		if in.Outcome == workerexecution.OutcomeAccepted &&
+			jsonvalue.Present(in.StructuredResult, in.StructuredResultPresent) {
+			color.StructuredResult = jsonvalue.Clone(in.StructuredResult)
+			color.StructuredResultPresent = true
+		}
 		place := t.places[arc.PlaceID]
 		targetTypeID := ""
 		if place != nil {

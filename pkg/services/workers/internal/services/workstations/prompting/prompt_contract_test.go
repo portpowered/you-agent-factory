@@ -20,6 +20,7 @@ func TestBuildPromptTemplateContract_ListsSelectedInputVariablesAndUnavailablePa
 		".Inputs[0].ParentID",
 		".Inputs[0].Project",
 		".Inputs[0].Payload",
+		".Inputs[0].StructuredResult",
 		".Inputs[0].Content",
 		".Inputs[0].Tags[\"KEY\"]",
 		".Inputs[0].Relations",
@@ -46,6 +47,18 @@ func TestBuildPromptTemplateContract_ListsSelectedInputVariablesAndUnavailablePa
 	}
 	if !hasUnavailablePattern(contract.UnavailableAccessPatterns, ".Inputs[N]") {
 		t.Fatalf("unavailable patterns = %#v, want .Inputs[N]", contract.UnavailableAccessPatterns)
+	}
+}
+
+func TestValidatePromptTemplate_AcceptsNestedStructuredResultObjectAndArrayAccess(t *testing.T) {
+	result := ValidatePromptTemplate(
+		`{{ (index .Inputs 0).StructuredResult.summary.title }} / {{ (index (index (index .Inputs 0).StructuredResult "items") 0).name }}`,
+		1,
+		nil,
+	)
+
+	if !result.Valid {
+		t.Fatalf("Valid = false, diagnostics = %#v", result.Diagnostics)
 	}
 }
 

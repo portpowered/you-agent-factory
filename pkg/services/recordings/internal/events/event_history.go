@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	eventsnapshot "github.com/portpowered/infinite-you/pkg/services/recordings/internal/events/snapshot"
@@ -505,6 +506,8 @@ func (h *FactoryEventHistory) RecordWorkstationResponse(tick int, result workers
 			PreviousChainingTraceIDs:    stringSlicePtr(workers.PreviousChainingTraceIDs(completed.ConsumedTokens)),
 			Outcome:                     result.Outcome,
 			Output:                      stringPtrIfNotEmpty(result.Output),
+			StructuredResult:            jsonvalue.Clone(result.StructuredResult),
+			StructuredResultPresent:     jsonvalue.Present(result.StructuredResult, result.StructuredResultPresent),
 			Error:                       stringPtrIfNotEmpty(result.Error),
 			Feedback:                    stringPtrIfNotEmpty(result.Feedback),
 			SelectedClassificationLabel: stringPtrIfNotEmpty(result.SelectedClassificationLabel),
@@ -883,7 +886,9 @@ func workItemFromToken(token workers.Token) work.FactoryWorkItem {
 		ParentID:                 token.Color.ParentID,
 		State:                    stateValue,
 		PlaceID:                  token.PlaceID,
+		StructuredResult:         jsonvalue.Clone(token.Color.StructuredResult),
 		Tags:                     cloneStringMap(token.Color.Tags),
+		StructuredResultPresent:  jsonvalue.Present(token.Color.StructuredResult, token.Color.StructuredResultPresent),
 	}
 }
 
@@ -968,6 +973,7 @@ func normalizedFailureReason(reason string) workers.WorkFailureType {
 		workers.WorkFailureTypeMisconfigured,
 		workers.WorkFailureTypeMissingExecutable,
 		workers.WorkFailureTypeCommandLineTooLong,
+		workers.WorkFailureTypeStructuredOutputSchemaViolation,
 		workers.WorkFailureTypeExpectedArtifactsUnsatisfied:
 		return candidate
 	default:

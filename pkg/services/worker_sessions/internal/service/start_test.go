@@ -4,12 +4,16 @@ package service_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -1388,5 +1392,405 @@ func TestInvokeSession_RetryableFailureUsesOneSessionAcrossAttempts(t *testing.T
 	}
 	if result.Session.ID != request.ID {
 		t.Fatalf("retry session ID = %q, want %q", result.Session.ID, request.ID)
+	}
+}
+
+// decodeDraft decodes a committed record's payload as a workers.Draft for
+// Kind/Phase/payload assertions.
+func decodeDraft(t *testing.T, record events.Record) workers.Draft {
+	t.Helper()
+	var draft workers.Draft
+	if err := json.Unmarshal(record.Payload, &draft); err != nil {
+		t.Fatalf("unmarshal record payload as workers.Draft error = %v", err)
+	}
+	return draft
+}
+
+func decodeSessionPayload(t *testing.T, draft workers.Draft) workers.SessionPayload {
+	t.Helper()
+	var payload workers.SessionPayload
+	if err := json.Unmarshal(draft.Payload, &payload); err != nil {
+		t.Fatalf("unmarshal session payload error = %v", err)
+	}
+	return payload
+}
+
+// TestStart_OpeningRecordCarriesCanonicalExecutionCorrelation proves that the
+// opening payload is built from the resolved execution request before the
+// Workers boundary and replay returns the same lifecycle facts.
+func TestStart_OpeningRecordCarriesCanonicalExecutionCorrelation(t *testing.T) {
+	eventsSvc := newEventsAppender()
+	topic := workersessions.Topic("worker-1")
+	startedAt := time.Date(2035, time.March, 4, 5, 6, 7, 123000000, time.UTC)
+	clock := platformclock.NewDeterministic(startedAt, time.Second)
+
+	var liveDraft workers.Draft
+	var livePayload workers.SessionPayload
+	execution := &fakeExecution{
+		dispatch: func(ctx context.Context, _ workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+			liveDraft, livePayload = readOpening(t, eventsSvc, topic, ctx)
+			return workers.WorkstationDispatchResult{
+				DispatchID: "dispatch-1",
+				Result: workers.WorkResult{
+					DispatchID: "dispatch-1",
+					Outcome:    workers.OutcomeAccepted,
+				},
+			}, nil
+		},
+	}
+	registry, err := newServiceWithClock(executionBoundary{execution: execution}, eventsSvc, nil, clock)
+	if err != nil {
+		t.Fatalf("service.New() error = %v, want nil", err)
+	}
+
+	request := canonicalOpeningRequest()
+	if _, err := registry.InvokeSession(context.Background(), request); err != nil {
+		t.Fatalf("InvokeSession() error = %v, want nil", err)
+	}
+
+	replay, replayPayload := readOpening(t, eventsSvc, topic, context.Background())
+	assertOpeningRecord(t, liveDraft, replay, livePayload, replayPayload, startedAt, request)
+}
+
+func canonicalOpeningRequest() workersessions.InvokeSessionRequest {
+	request := validStartRequest("worker-1", "dispatch-1")
+	resolved := &request.Execution.Execution
+	resolved.WorkerType = "review-worker"
+	resolved.ProjectID = "project-1"
+	resolved.FactorySessionID = "factory-session-1"
+	resolved.RecordingID = "recording-1"
+	resolved.RunnerID = workers.RunnerIDCodex
+	resolved.RunnerSelectionSource = workers.RunnerSelectionSourceFactory
+	resolved.ExecutorProvider = workers.ExecutorProviderACP
+	resolved.Model = "gpt-5"
+	resolved.ModelProvider = workers.RunnerIDCodex
+	resolved.ReasoningEffort = "high"
+	resolved.Capabilities = &workers.Capabilities{
+		NativeStreaming: true, MessageDeltas: true, MessageSnapshots: true,
+		ReasoningSummaries: true, ToolLifecycle: true, ToolOutputDeltas: true,
+		FileChanges: true, Plans: true, Usage: true, StableItemIDs: true,
+		ProviderReconnect: true,
+	}
+	resolved.Dispatch.WorkerType = resolved.WorkerType
+	resolved.Dispatch.ProjectID = resolved.ProjectID
+	resolved.Dispatch.TransitionID = "transition-1"
+	resolved.Dispatch.Execution.RequestID = "turn-1"
+	resolved.Dispatch.Execution.TraceID = "trace-1"
+	resolved.Dispatch.Execution.ReplayKey = "replay-1"
+	resolved.Dispatch.Execution.WorkIDs = []string{"work-1", "work-2"}
+	return request
+}
+
+func readOpening(t *testing.T, eventsSvc events.Service, topic events.Topic, ctx context.Context) (workers.Draft, workers.SessionPayload) {
+	t.Helper()
+	read, err := eventsSvc.Read(ctx, events.ReadRequest{Topic: topic, From: events.Cursor{Topic: topic}, Limit: 10})
+	if err != nil {
+		t.Fatalf("opening Read() error = %v", err)
+	}
+	if len(read.Records) == 0 {
+		t.Fatalf("opening Read() returned no records")
+	}
+	draft := decodeDraft(t, read.Records[0])
+	return draft, decodeSessionPayload(t, draft)
+}
+
+func assertOpeningRecord(
+	t *testing.T,
+	liveDraft, replayDraft workers.Draft,
+	livePayload, replayPayload workers.SessionPayload,
+	startedAt time.Time,
+	request workersessions.InvokeSessionRequest,
+) {
+	t.Helper()
+	if !reflect.DeepEqual(liveDraft, replayDraft) || !reflect.DeepEqual(livePayload, replayPayload) {
+		t.Fatalf("live opening differs from replay: live=%+v/%+v replay=%+v/%+v", liveDraft, livePayload, replayDraft, replayPayload)
+	}
+	if liveDraft.Kind != workers.KindSession || liveDraft.Phase != workers.PhaseStarted {
+		t.Fatalf("opening draft = %+v, want SESSION/STARTED", liveDraft)
+	}
+	if liveDraft.Provenance != (workers.Provenance{
+		Delivery: workers.DeliverySynthesized, Fidelity: workers.FidelityLifecycleOnly,
+		NativeEventType: "worker_session_lifecycle", Provider: workers.RunnerIDCodex,
+		Representation: workers.RepresentationNotification,
+	}) {
+		t.Fatalf("opening provenance = %#v, want synthesized codex lifecycle provenance", liveDraft.Provenance)
+	}
+	if livePayload.StartedAt == nil || !livePayload.StartedAt.Equal(startedAt) {
+		t.Fatalf("startedAt = %v, want injected clock value %v", livePayload.StartedAt, startedAt)
+	}
+	if !openingCorrelationMatches(livePayload, request) {
+		t.Fatalf("opening correlation payload = %+v, want canonical values", livePayload)
+	}
+	if !providerSelectionMatches(livePayload) {
+		t.Fatalf("provider selection = %+v, want resolved selection", livePayload.ProviderSelection)
+	}
+	if livePayload.Model != "gpt-5" || livePayload.ReasoningEffort != "high" ||
+		!reflect.DeepEqual(livePayload.Capabilities, request.Execution.Execution.Capabilities) {
+		t.Fatalf("model/capabilities = %q/%q/%+v, want resolved values", livePayload.Model, livePayload.ReasoningEffort, livePayload.Capabilities)
+	}
+}
+
+func openingCorrelationMatches(payload workers.SessionPayload, request workersessions.InvokeSessionRequest) bool {
+	return payload.Status == string(workersessions.StateStarting) &&
+		payload.WorkerSessionID == request.ID && payload.WorkerType == "review-worker" &&
+		payload.FactorySessionID == "factory-session-1" && payload.RecordingID == "recording-1" &&
+		payload.ProjectID == "project-1" && payload.DispatchID == "dispatch-1" &&
+		payload.TransitionID == "transition-1" && payload.TurnID == "turn-1" &&
+		payload.TraceID == "trace-1" && payload.ReplayKey == "replay-1" &&
+		reflect.DeepEqual(payload.WorkIDs, []string{"work-1", "work-2"}) &&
+		payload.AttemptID == "dispatch-1" && payload.Attempt == 1 &&
+		payload.AttemptReason == workers.AttemptReasonInitial
+}
+
+func providerSelectionMatches(payload workers.SessionPayload) bool {
+	return payload.ProviderSelection != nil &&
+		payload.ProviderSelection.RunnerID == workers.RunnerIDCodex &&
+		payload.ProviderSelection.Source == workers.RunnerSelectionSourceFactory &&
+		payload.ProviderSelection.ExecutorProvider == workers.ExecutorProviderACP &&
+		payload.ProviderSelection.ModelProvider == workers.RunnerIDCodex
+}
+
+func TestStart_OpeningRecordOmitsUnknownOptionalCorrelation(t *testing.T) {
+	eventsSvc := newEventsAppender()
+	registry, err := newServiceWithClock(
+		executionBoundary{execution: succeedingExecution()}, eventsSvc, nil,
+		platformclock.NewDeterministic(time.Date(2035, time.March, 4, 5, 6, 7, 0, time.UTC), time.Second),
+	)
+	if err != nil {
+		t.Fatalf("service.New() error = %v, want nil", err)
+	}
+	if _, err := registry.InvokeSession(context.Background(), validStartRequest("worker-1", "dispatch-1")); err != nil {
+		t.Fatalf("InvokeSession() error = %v, want nil", err)
+	}
+
+	topic := workersessions.Topic("worker-1")
+	read, err := eventsSvc.Read(context.Background(), events.ReadRequest{Topic: topic, From: events.Cursor{Topic: topic}, Limit: 10})
+	if err != nil {
+		t.Fatalf("Read() error = %v", err)
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(decodeDraft(t, read.Records[0]).Payload, &fields); err != nil {
+		t.Fatalf("unmarshal opening fields error = %v", err)
+	}
+	assertUnknownOpeningFieldsOmitted(t, fields)
+}
+
+func assertUnknownOpeningFieldsOmitted(t *testing.T, fields map[string]json.RawMessage) {
+	t.Helper()
+	for _, key := range []string{
+		"factorySessionId", "recordingId", "projectId", "turnId", "traceId", "replayKey",
+		"workIds", "providerSelection", "continuation", "model", "reasoningEffort", "capabilities",
+	} {
+		if _, present := fields[key]; present {
+			t.Fatalf("opening field %q = %s, want unknown optional field omitted", key, fields[key])
+		}
+	}
+}
+
+func TestStart_OpeningRecordCarriesExactContinuationAndResumeReason(t *testing.T) {
+	eventsSvc := newEventsAppender()
+	registry, err := newServiceWithClock(
+		executionBoundary{execution: succeedingExecution()}, eventsSvc, nil,
+		platformclock.NewDeterministic(time.Date(2035, time.March, 4, 5, 6, 7, 0, time.UTC), time.Second),
+	)
+	if err != nil {
+		t.Fatalf("service.New() error = %v, want nil", err)
+	}
+	request := validStartRequest("worker-1", "dispatch-1")
+	request.Execution.Execution.ResumeSession = &providers.SessionRef{
+		Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "opaque-provider-session",
+	}
+	if _, err := registry.InvokeSession(context.Background(), request); err != nil {
+		t.Fatalf("InvokeSession() error = %v, want nil", err)
+	}
+
+	topic := workersessions.Topic("worker-1")
+	read, err := eventsSvc.Read(context.Background(), events.ReadRequest{Topic: topic, From: events.Cursor{Topic: topic}, Limit: 10})
+	if err != nil {
+		t.Fatalf("Read() error = %v", err)
+	}
+	payload := decodeSessionPayload(t, decodeDraft(t, read.Records[0]))
+	if payload.AttemptReason != workers.AttemptReasonResume || payload.Continuation == nil {
+		t.Fatalf("opening continuation = %+v, want RESUME with exact reference", payload)
+	}
+	if payload.Continuation.Provider != string(providers.IDCodex) || payload.Continuation.Kind != providers.SessionIDKind || payload.Continuation.ID != "opaque-provider-session" {
+		t.Fatalf("continuation = %+v, want exact provider reference", payload.Continuation)
+	}
+}
+
+// TestStart_NoProviderSessionReferenceStillRetainsProviderIndependentHistory
+// proves a final-only provider output establishes provenance without inventing
+// a Provider Session reference and remains bracketed by lifecycle records.
+func TestStart_NoProviderSessionReferenceStillRetainsProviderIndependentHistory(t *testing.T) {
+	eventsSvc := newEventsAppender()
+	var svc workersessions.Service
+	var forwarded []workers.ProgressFragment
+	publisher := workersessions.NewProviderSessionObservationPublisher(func(fragment workers.ProgressFragment) {
+		forwarded = append(forwarded, fragment)
+	})
+	execution := &fakeExecution{dispatch: func(_ context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+		publisher.Publish(workers.ProgressFragment{
+			DispatchID: req.Execution.Dispatch.DispatchID, Kind: workers.ProgressFragmentKind,
+			Type: "message.completed", Payload: "final-only output", Provider: "antigravity",
+			Metadata: map[string]string{"item_id": "message-1"},
+		})
+		return openingCompletedDispatchResult(req.Execution.Dispatch.DispatchID), nil
+	}}
+	var err error
+	svc, err = newService(executionBoundary{execution: execution}, eventsSvc, nil)
+	if err != nil {
+		t.Fatalf("service.New() error = %v, want nil", err)
+	}
+	publisher.Bind(svc)
+	if _, err := svc.InvokeSession(context.Background(), validStartRequest("worker-no-session", "dispatch-no-session")); err != nil {
+		t.Fatalf("InvokeSession() error = %v, want nil", err)
+	}
+	read, err := eventsSvc.Read(context.Background(), events.ReadRequest{
+		Topic: workersessions.Topic("worker-no-session"),
+		From:  events.Cursor{Topic: workersessions.Topic("worker-no-session")}, Limit: 10,
+	})
+	if err != nil {
+		t.Fatalf("Events.Read() error = %v", err)
+	}
+	assertNoProviderSessionHistory(t, read, forwarded)
+}
+
+func assertNoProviderSessionHistory(t *testing.T, read events.ReadResult, forwarded []workers.ProgressFragment) {
+	t.Helper()
+	if len(read.Records) != 4 || len(forwarded) != 1 {
+		t.Fatalf("records=%d forwarded=%d, want opening/binding/output/terminal and one downstream output", len(read.Records), len(forwarded))
+	}
+	opening, binding := decodeDraft(t, read.Records[0]), decodeDraft(t, read.Records[1])
+	output, terminal := decodeDraft(t, read.Records[2]), decodeDraft(t, read.Records[3])
+	assertLifecycleDraft(t, opening, workers.PhaseStarted, "", "opening")
+	assertLifecycleDraft(t, binding, workers.PhaseUpdated, "antigravity", "binding")
+	if output.Kind != workers.KindMessage || output.Phase != workers.PhaseCompleted || output.Provenance.Provider != "antigravity" ||
+		output.Provenance.Fidelity != workers.FidelityNormalized || output.Provenance.Delivery != workers.DeliveryNativeStream {
+		t.Fatalf("output = %#v, want normalized antigravity MESSAGE/COMPLETED", output)
+	}
+	assertLifecycleDraft(t, terminal, workers.PhaseCompleted, "antigravity", "terminal")
+	if forwarded[0].ProviderSessionReference != nil || forwarded[0].ProviderSessionRef != nil {
+		t.Fatalf("forwarded output = %#v, want no synthesized Provider Session reference", forwarded[0])
+	}
+	if read.Records[2].SourceType != workersessions.WorkerObservationSourceType || read.Records[2].SourceSequence != 1 || read.Records[2].SourceEventID != "worker-no-session/1" {
+		t.Fatalf("output source identity = %q/%q/%d/%q, want worker observation worker-no-session/1", read.Records[2].SourceType, read.Records[2].SourceID, read.Records[2].SourceSequence, read.Records[2].SourceEventID)
+	}
+}
+
+func assertLifecycleDraft(t *testing.T, draft workers.Draft, phase workers.Phase, provider, label string) {
+	t.Helper()
+	if draft.Kind != workers.KindSession || draft.Phase != phase || draft.Provenance.Provider != provider {
+		t.Fatalf("%s = %#v, want SESSION/%s provider %q", label, draft, phase, provider)
+	}
+}
+
+// TestStart_CanonicalProviderOutputBindsBeforePublication proves a canonical
+// provider draft cannot overtake the synthesized provider binding or terminal.
+func TestStart_CanonicalProviderOutputBindsBeforePublication(t *testing.T) {
+	eventsSvc := newEventsAppender()
+	var svc workersessions.Service
+	forwarded := 0
+	publisher := workersessions.NewProviderSessionObservationPublisher(func(workers.ProgressFragment) { forwarded++ })
+	execution := &fakeExecution{dispatch: func(_ context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+		publisher.Publish(workers.CanonicalDraftFragment(req.Execution.Dispatch.DispatchID, canonicalMessageDraft(t, req.Execution.Dispatch.DispatchID)))
+		return completedDispatchResult(req.Execution.Dispatch.DispatchID), nil
+	}}
+	var err error
+	svc, err = newService(executionBoundary{execution: execution}, eventsSvc, nil)
+	if err != nil {
+		t.Fatalf("service.New() error = %v, want nil", err)
+	}
+	publisher.Bind(svc)
+	publisher.Publish(workers.CanonicalDraftFragment("dispatch-canonical", workers.Draft{
+		Kind: workers.KindProgress, Phase: workers.PhaseUpdated, DispatchID: "dispatch-canonical",
+		Provenance: workers.Provenance{Provider: "codex", NativeEventType: "progress.updated", Delivery: workers.DeliveryNativeStream, Representation: workers.RepresentationNotification, Fidelity: workers.FidelityNormalized},
+		Payload:    []byte(`{"label":"too-early"}`),
+	}))
+	if forwarded != 0 {
+		t.Fatalf("pre-opening canonical output forwarded=%d, want rejection before opening", forwarded)
+	}
+	if _, err := svc.InvokeSession(context.Background(), validStartRequest("worker-canonical", "dispatch-canonical")); err != nil {
+		t.Fatalf("InvokeSession() error = %v, want nil", err)
+	}
+	read, err := eventsSvc.Read(context.Background(), events.ReadRequest{
+		Topic: workersessions.Topic("worker-canonical"), From: events.Cursor{Topic: workersessions.Topic("worker-canonical")}, Limit: 10,
+	})
+	if err != nil {
+		t.Fatalf("Read() error = %v, want nil", err)
+	}
+	assertCanonicalProviderHistory(t, read, forwarded)
+}
+
+func canonicalMessageDraft(t *testing.T, dispatchID string) workers.Draft {
+	t.Helper()
+	payload, err := json.Marshal(workers.MessagePayload{
+		Role: "assistant", ContentBlocks: []workers.ContentBlock{{Kind: workers.ContentBlockText, Text: "canonical"}},
+	})
+	if err != nil {
+		t.Fatalf("marshal canonical payload error = %v", err)
+	}
+	draft := workers.Draft{
+		Kind: workers.KindMessage, Phase: workers.PhaseCompleted, DispatchID: dispatchID,
+		Provenance: workers.Provenance{Provider: "codex", NativeEventType: "message.completed", Delivery: workers.DeliveryNativeFinal, Representation: workers.RepresentationSnapshot, Fidelity: workers.FidelityFinalOnly},
+		Payload:    payload,
+	}
+	if err := workers.ValidateDraft(draft); err != nil {
+		t.Fatalf("ValidateDraft(canonical) error = %v", err)
+	}
+	return draft
+}
+
+func openingCompletedDispatchResult(dispatchID string) workers.WorkstationDispatchResult {
+	return workers.WorkstationDispatchResult{
+		DispatchID: dispatchID,
+		Result:     workers.WorkResult{DispatchID: dispatchID, Outcome: workers.OutcomeAccepted},
+	}
+}
+
+func assertCanonicalProviderHistory(t *testing.T, read events.ReadResult, forwarded int) {
+	t.Helper()
+	if len(read.Records) != 4 || forwarded != 1 {
+		t.Fatalf("records=%d forwarded=%d, want opening/binding/output/terminal and one downstream output", len(read.Records), forwarded)
+	}
+	opening, binding := decodeDraft(t, read.Records[0]), decodeDraft(t, read.Records[1])
+	output, terminal := decodeDraft(t, read.Records[2]), decodeDraft(t, read.Records[3])
+	assertCanonicalOpening(t, opening)
+	assertCanonicalBinding(t, binding)
+	assertCanonicalOutput(t, output)
+	assertCanonicalTerminal(t, terminal)
+}
+
+func assertCanonicalOpening(t *testing.T, draft workers.Draft) {
+	t.Helper()
+	if draft.Kind != workers.KindSession || draft.Phase != workers.PhaseStarted || draft.Provenance.Provider != "" ||
+		draft.Provenance.Delivery != workers.DeliverySynthesized || draft.Provenance.Representation != workers.RepresentationNotification || draft.Provenance.Fidelity != workers.FidelityLifecycleOnly {
+		t.Fatalf("opening = %#v, want provider-neutral synthesized lifecycle provenance", draft)
+	}
+}
+
+func assertCanonicalBinding(t *testing.T, draft workers.Draft) {
+	t.Helper()
+	if draft.Kind != workers.KindSession || draft.Phase != workers.PhaseUpdated || draft.Provenance.Provider != "codex" ||
+		draft.Provenance.Delivery != workers.DeliverySynthesized || draft.Provenance.Representation != workers.RepresentationNotification || draft.Provenance.Fidelity != workers.FidelityLifecycleOnly {
+		t.Fatalf("binding = %#v, want codex synthesized lifecycle binding", draft)
+	}
+	payload := decodeSessionPayload(t, draft)
+	if payload.ProviderSelection == nil || payload.ProviderSelection.RunnerID != "codex" {
+		t.Fatalf("binding payload = %#v, want codex provider selection", payload)
+	}
+}
+
+func assertCanonicalOutput(t *testing.T, draft workers.Draft) {
+	t.Helper()
+	if draft.Kind != workers.KindMessage || draft.Provenance.Provider != "codex" {
+		t.Fatalf("output = %#v, want codex provider output after binding", draft)
+	}
+}
+
+func assertCanonicalTerminal(t *testing.T, draft workers.Draft) {
+	t.Helper()
+	if draft.Kind != workers.KindSession || draft.Phase != workers.PhaseCompleted || draft.Provenance.Provider != "codex" ||
+		draft.Provenance.Delivery != workers.DeliverySynthesized || draft.Provenance.Representation != workers.RepresentationNotification || draft.Provenance.Fidelity != workers.FidelityLifecycleOnly {
+		t.Fatalf("terminal = %#v, want terminal-last synthesized codex lifecycle record", draft)
 	}
 }

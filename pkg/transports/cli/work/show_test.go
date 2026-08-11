@@ -238,6 +238,39 @@ func TestShow_JSONOutputEmitsWorkObject(t *testing.T) {
 	}
 }
 
+func TestShow_JSONOutputPreservesExplicitStructuredResultNull(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(factoryapi.Work{
+			WorkId:           stringPtr("work-null"),
+			StructuredResult: json.RawMessage("null"),
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	err := NewShow(testHTTPProtocol(t))(ShowConfig{
+		Context: context.Background(),
+		Server:  serverBase(t, srv),
+		WorkID:  "work-null",
+		JSON:    true,
+		Output:  &out,
+	})
+	if err != nil {
+		t.Fatalf("Show: %v", err)
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(out.Bytes(), &fields); err != nil {
+		t.Fatalf("decode JSON output: %v\n%s", err, out.String())
+	}
+	value, ok := fields["structuredResult"]
+	if !ok || !bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
+		t.Fatalf("structuredResult = %q (present=%t), want explicit null", value, ok)
+	}
+}
+
 func TestShow_NotFoundExitsWithClearError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

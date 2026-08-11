@@ -501,6 +501,8 @@ func watchFactoryEvent(t *testing.T, eventType factoryapi.FactoryEventType, id s
 		err = union.FromInitialStructureRequestEventPayload(typed)
 	case factoryapi.WorkRequestEventPayload:
 		err = union.FromWorkRequestEventPayload(typed)
+	case factoryapi.DispatchResponseEventPayload:
+		err = union.FromDispatchResponseEventPayload(typed)
 	case factoryapi.WorkStateChangeEventPayload:
 		err = union.FromWorkStateChangeEventPayload(typed)
 	default:

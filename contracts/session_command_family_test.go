@@ -13,6 +13,7 @@ func TestProductionSessionManifestContractsCanonicalFamily(t *testing.T) {
 
 	wantIDs := []string{
 		"you.session",
+		"you.session.cancel",
 		"you.session.create",
 		"you.session.delete",
 		"you.session.dispatches",
@@ -20,6 +21,7 @@ func TestProductionSessionManifestContractsCanonicalFamily(t *testing.T) {
 		"you.session.pause",
 		"you.session.resume",
 		"you.session.show",
+		"you.session.terminate",
 	}
 	gotIDs := make([]string, 0, len(wantIDs))
 	for id := range commands {
@@ -43,6 +45,7 @@ func TestProductionSessionManifestContractsCanonicalFamily(t *testing.T) {
 		argRequired bool
 		portMode    bool
 	}{
+		{id: "you.session.cancel", operationID: "cancelFactorySession"},
 		{id: "you.session.create", operationID: "openFactorySession", portMode: true},
 		{id: "you.session.delete", operationID: "closeFactorySession", argRequired: true, portMode: true},
 		{id: "you.session.dispatches", operationID: "listFactorySessionDispatches", argRequired: true},
@@ -50,6 +53,7 @@ func TestProductionSessionManifestContractsCanonicalFamily(t *testing.T) {
 		{id: "you.session.pause", operationID: "pauseFactorySession"},
 		{id: "you.session.resume", operationID: "resumeFactorySession"},
 		{id: "you.session.show", operationID: "getFactorySession"},
+		{id: "you.session.terminate", operationID: "terminateFactorySession"},
 	}
 	for _, leaf := range leaves {
 		t.Run(leaf.id, func(t *testing.T) {

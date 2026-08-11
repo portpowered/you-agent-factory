@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	factorydefinitionshttp "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/http"
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
 	providersessionshttp "github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http"
@@ -30,11 +31,12 @@ var _ factoryapi.ServerInterface = (*Server)(nil)
 type Server struct {
 	*factorySessionsAdapter
 	*workAdapter
-	modelsHTTP           *modelshttp.Handler
-	providerSessionsHTTP *providersessionshttp.Handler
-	workerSessionsHTTP   *workersessionshttp.Handler
-	logger               *zap.Logger
-	router               *mux.Router
+	factoryDefinitionsHTTP *factorydefinitionshttp.Handler
+	modelsHTTP             *modelshttp.Handler
+	providerSessionsHTTP   *providersessionshttp.Handler
+	workerSessionsHTTP     *workersessionshttp.Handler
+	logger                 *zap.Logger
+	router                 *mux.Router
 }
 
 type factorySessionsAdapter struct{ *factorysessionshttp.Adapter }
@@ -48,6 +50,7 @@ func NewServer(
 	workHTTP *workhttp.Adapter,
 	modelsHTTP *modelshttp.Handler,
 	providerSessionsHTTP *providersessionshttp.Handler,
+	factoryDefinitionsHTTP *factorydefinitionshttp.Handler,
 	logger *zap.Logger,
 	workerSessions ...*workersessionshttp.Handler,
 ) *Server {
@@ -57,6 +60,7 @@ func NewServer(
 	srv := &Server{
 		factorySessionsAdapter: &factorySessionsAdapter{Adapter: factorySessionsHTTP},
 		workAdapter:            &workAdapter{Adapter: workHTTP},
+		factoryDefinitionsHTTP: factoryDefinitionsHTTP,
 		modelsHTTP:             modelsHTTP, providerSessionsHTTP: providerSessionsHTTP, logger: logger,
 	}
 	if len(workerSessions) > 0 {
@@ -124,6 +128,22 @@ func (s *Server) StreamWorkerSessionEventsBySessionId(
 		return
 	}
 	s.workerSessionsHTTP.StreamWorkerSessionEventsBySessionId(w, r, sessionID, params)
+}
+
+// StreamWorkerSessionEventsByWorkerSessionId forwards the provider-neutral
+// Worker Session identity stream to the Worker Sessions owner handler.
+func (s *Server) StreamWorkerSessionEventsByWorkerSessionId(
+	w http.ResponseWriter,
+	r *http.Request,
+	sessionID factoryapi.SessionID,
+	workerSessionID factoryapi.WorkerSessionID,
+	params factoryapi.StreamWorkerSessionEventsByWorkerSessionIdParams,
+) {
+	if s.workerSessionsHTTP == nil {
+		s.writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
+		return
+	}
+	s.workerSessionsHTTP.StreamWorkerSessionEventsByWorkerSessionId(w, r, sessionID, workerSessionID, params)
 }
 
 var noModTime = time.Time{}

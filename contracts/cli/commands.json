@@ -6080,7 +6080,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "you.session.cancel",
-        "sourceHash": "",
+        "sourceHash": "e5f83667ae14844ae67db7652cfd1d9ef42fc87a5f09ae14dd665c69df72dc84",
         "visibility": "public"
       },
       "exits": {
@@ -6148,7 +6148,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "you.session.terminate",
-        "sourceHash": "",
+        "sourceHash": "e5f83667ae14844ae67db7652cfd1d9ef42fc87a5f09ae14dd665c69df72dc84",
         "visibility": "public"
       },
       "exits": {
@@ -6639,7 +6639,7 @@
           },
           "description": {
             "id": "you.work.list.description",
-          "canonicalEnglish": "List work from a running you-agent-factory service.\n\nBy default the command targets the default compatibility session. Use --session to route the request to one specific live factory session instead. Run you session list to discover live session ids.\n\nOptional filters are applied on the server before ordering and pagination. --state matches the current state name exactly (legacy alias: --state-name). --name matches a case-insensitive substring of the work name. --work-type matches workTypeName exactly (legacy alias: --work-type-name). --trace-id matches traceId or currentChainingTraceId exactly. --terminal selects TERMINAL and FAILED work; --non-terminal selects INITIAL and PROCESSING work. The terminality flags are mutually exclusive. Combine all filters with logical AND, plus --max-results and --next-token to page through the filtered result set. --counts adds the total for the complete filtered result set before pagination in human and JSON output."
+            "canonicalEnglish": "List work from a running you-agent-factory service.\n\nBy default the command targets the default compatibility session. Use --session to route the request to one specific live factory session instead. Run you session list to discover live session ids.\n\nOptional filters are applied on the server before ordering and pagination. --state matches the current state name exactly (legacy alias: --state-name). --name matches a case-insensitive substring of the work name. --work-type matches workTypeName exactly (legacy alias: --work-type-name). --trace-id matches traceId or currentChainingTraceId exactly. --terminal selects TERMINAL and FAILED work; --non-terminal selects INITIAL and PROCESSING work. The terminality flags are mutually exclusive. Combine all filters with logical AND, plus --max-results and --next-token to page through the filtered result set. --counts adds the total for the complete filtered result set before pagination in human and JSON output.\n\nWhen a Work has a validated workstation result, JSON output exposes it as native structuredResult data, including explicit null. Human output adds a STRUCTURED RESULT column with deterministic compact JSON and leaves it blank when the field is omitted."
           }
         },
         "examples": [
@@ -7209,7 +7209,7 @@
           },
           "description": {
             "id": "you.work.watch.description",
-            "canonicalEnglish": "Watch Work state transitions from a running you-agent-factory service.\n\nBy default the command targets the default compatibility session (~default). Use --session to route the watch to one specific live factory session instead.\n\nEvery stdout line is one complete you.work.watch.v1 NDJSON object with sessionId, eventId, sequence, eventTime, workId, workTypeName, fromState, toState, source, and terminal fields. Lines preserve canonical Factory Event order and diagnostics remain on stderr. Finite mode stops after the observed Work cohort reaches terminal states; --follow stays attached until Ctrl-C or parent cancellation. A transient disconnect resumes from the last accepted event ID and sequence with bounded retries, without creating durable watch history or a cursor journal."
+            "canonicalEnglish": "Watch Work state transitions from a running you-agent-factory service.\n\nBy default the command targets the default compatibility session (~default). Use --session to route the watch to one specific live factory session instead.\n\nEvery stdout line is one complete you.work.watch.v1 NDJSON object with sessionId, eventId, sequence, eventTime, workId, workTypeName, fromState, toState, source, and terminal fields. When a validated structured result first enters canonical Work state, the first following transition line includes optional native structuredResult data, including null; unrelated transitions, failed or unstructured Work, and older recordings omit it. Lines preserve canonical Factory Event order and diagnostics remain on stderr. Finite mode stops after the observed Work cohort reaches terminal states; --follow stays attached until Ctrl-C or parent cancellation. A transient disconnect resumes from the last accepted event ID and sequence with bounded retries, without creating durable watch history or a cursor journal."
           }
         },
         "examples": [

@@ -246,6 +246,7 @@ const currentFactoryPromptTemplateProxyPaths = [
   "^/factory-sessions/[^/]+/factory/workstations/[^/]+/prompt-template-validation$",
 ] as const;
 const proxiedAPIPaths = [
+  "/packaged-factories",
   "/work",
   "^/factory-sessions/[^/]+/work$",
   "^/factory-sessions/[^/]+/invocations$",
