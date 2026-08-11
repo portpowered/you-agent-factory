@@ -8041,3 +8041,16 @@
 - **Learnings for future iterations:**
   - Do not treat a green mergeability calculation as final while the hosting branch is advancing; fetch and merge the newest `origin/main` immediately before the handoff push.
 ---
+## 2026-08-10 23:01 -07:00 - btrc-p1-root-injection-006 terminal CI baseline result
+- What was implemented
+  - Made no product change; completed the terminal audit of CI run `31463126279` on head `99a56b8fe` after the final current-main synchronization.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - All CI lanes passed except Backend Functional Coverage, whose only failure was `TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput` in the unchanged `tests/functional/transport/server_binding` package.
+  - The same server-binding failure reproduces locally with the extra structured `API server error` line; no P1 diff exists in that test package or `pkg/services/factory_sessions/internal/runtimehosting`.
+  - The PR is open, mergeable against the latest synchronized base, the body remains sourced from `prd.json`, and the thread-aware audit has zero unresolved threads and zero formal reviews.
+- **Learnings for future iterations:**
+  - Once repeated fresh CI attempts converge on one reproducible failure outside the implementation diff, retain the scoped P1 result and hand off the baseline CI issue rather than changing unrelated runtime or test behavior.
+---
