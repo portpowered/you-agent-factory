@@ -191,9 +191,7 @@ func testDispatchDetailProjectionHelpers(t *testing.T) {
 	if js.ExecutionMode == nil || *js.ExecutionMode != "live" {
 		t.Fatalf("javascript execution mode = %#v", js)
 	}
-	if js.SkipPermissions == nil || !*js.SkipPermissions {
-		t.Fatalf("javascript skipPermissions = %#v, want true", js.SkipPermissions)
-	}
+	assertJavaScriptSkipPermissions(t, js.SkipPermissions)
 
 	if dispatchStatusTransitionsToAPI(nil) != nil {
 		t.Fatal("dispatchStatusTransitionsToAPI(nil) should be nil")
@@ -205,6 +203,13 @@ func testDispatchDetailProjectionHelpers(t *testing.T) {
 	})
 	if transitions == nil || len(*transitions) != 2 {
 		t.Fatalf("status transitions = %#v", transitions)
+	}
+}
+
+func assertJavaScriptSkipPermissions(t *testing.T, value *bool) {
+	t.Helper()
+	if value == nil || !*value {
+		t.Fatalf("javascript skipPermissions = %#v, want true", value)
 	}
 }
 

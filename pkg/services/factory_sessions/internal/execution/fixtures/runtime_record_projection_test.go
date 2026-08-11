@@ -465,11 +465,7 @@ func assertListedAgentRunFakeChildDispatch(
 	if len(dispatch.OutputArtifactIDs) != 1 || dispatch.OutputArtifactIDs[0] != want.OutputArtifactIDs[0] {
 		t.Fatalf("outputArtifactIds = %#v, want %v", dispatch.OutputArtifactIDs, want.OutputArtifactIDs)
 	}
-	if want.JavaScript != nil {
-		if dispatch.JavaScript == nil || dispatch.JavaScript.SkipPermissions != want.JavaScript.SkipPermissions {
-			t.Fatalf("dispatch javascript = %#v, want skipPermissions=%v", dispatch.JavaScript, want.JavaScript.SkipPermissions)
-		}
-	}
+	assertDispatchJavaScriptSkipPermissions(t, dispatch.JavaScript, want.JavaScript)
 	return dispatch
 }
 
@@ -487,8 +483,20 @@ func assertAgentRunFakeChildDispatchDetail(
 	if dispatchDetail.OrchestratorKind != "JAVASCRIPT" || dispatchDetail.Label != dispatch.Label {
 		t.Fatalf("dispatch detail = %#v", dispatchDetail)
 	}
-	if dispatch.JavaScript != nil && (dispatchDetail.JavaScript == nil || dispatchDetail.JavaScript.SkipPermissions != dispatch.JavaScript.SkipPermissions) {
-		t.Fatalf("dispatch detail javascript = %#v, want skipPermissions=%v", dispatchDetail.JavaScript, dispatch.JavaScript.SkipPermissions)
+	assertDispatchJavaScriptSkipPermissions(t, dispatchDetail.JavaScript, dispatch.JavaScript)
+}
+
+func assertDispatchJavaScriptSkipPermissions(
+	t *testing.T,
+	actual *fse.DispatchJavaScriptProjection,
+	want *fse.DispatchJavaScriptProjection,
+) {
+	t.Helper()
+	if want == nil {
+		return
+	}
+	if actual == nil || actual.SkipPermissions != want.SkipPermissions {
+		t.Fatalf("dispatch javascript = %#v, want skipPermissions=%v", actual, want.SkipPermissions)
 	}
 }
 
