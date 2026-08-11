@@ -2,6 +2,7 @@ import { WorkstationKind } from "@you-agent-factory/client";
 import type { GraphSemanticIconKind } from "./semantic-icon.js";
 import { factoryGraphNodeTitleClassName } from "./semantic-node-style.js";
 import {
+  type FactoryGraphWorkstationGuardedControl,
   type FactoryGraphWorkstationRuntimeRole,
   type FactoryGraphWorkstationRuntimeType,
   type FactoryGraphWorkstationSchedulingBehavior,
@@ -32,6 +33,7 @@ export interface FactoryGraphWorkstationPresentation
   className: string;
   iconKind: GraphSemanticIconKind;
   label: string;
+  schedulingLabel: string | undefined;
 }
 
 /** Render-independent workstation presentation metadata for a graph node. */
@@ -42,7 +44,7 @@ export function factoryGraphWorkstationPresentation(
   const runtime = runtimePresentation(semantics.runtimeType, locale);
   return {
     ...semantics,
-    ...schedulingPresentation(semantics.schedulingBehavior),
+    ...schedulingPresentation(semantics.schedulingBehavior, locale),
     className: runtime.className,
     iconKind: runtime.iconKind,
     label: runtime.label,
@@ -85,18 +87,89 @@ function runtimePresentation(
 
 function schedulingPresentation(
   behavior: FactoryGraphWorkstationSchedulingBehavior,
-): { borderClassName?: string } {
+  locale?: string,
+): { borderClassName?: string; schedulingLabel: string | undefined } {
+  const chinese = locale === "zh-CN";
   switch (behavior) {
     case WorkstationKind.CRON:
-      return { borderClassName: "border-dashed" };
+      return {
+        borderClassName: "border-dashed",
+        schedulingLabel: chinese ? "Cron 调度" : "Cron schedule",
+      };
     case WorkstationKind.POLLER:
-      return { borderClassName: "border-dotted" };
+      return {
+        borderClassName: "border-dotted",
+        schedulingLabel: chinese ? "轮询调度" : "Poller schedule",
+      };
     case WorkstationKind.REPEATER:
-      return { borderClassName: "border-double" };
+      return {
+        borderClassName: "border-double",
+        schedulingLabel: chinese ? "重复调度" : "Repeater schedule",
+      };
     case WorkstationKind.STANDARD:
+      return { schedulingLabel: undefined };
     case "UNKNOWN":
-      return {};
+      return {
+        schedulingLabel: chinese
+          ? "调度语义未知"
+          : "Unknown scheduling behavior",
+      };
   }
+}
+
+export function factoryGraphWorkstationControlRoleLabel(
+  controlRole: FactoryGraphWorkstationSemantics["controlRole"],
+  locale?: string,
+): string {
+  if (locale === "zh-CN") {
+    switch (controlRole) {
+      case "CLASSIFIER":
+        return "分类器路由";
+      case "LOGICAL_ROUTER":
+        return "逻辑路由";
+      case "LOOP_BREAKER":
+        return "循环断路器";
+      case "NONE":
+        return "无控制角色";
+      case "UNKNOWN":
+        return "控制角色未知";
+    }
+  }
+
+  switch (controlRole) {
+    case "CLASSIFIER":
+      return "Classifier route";
+    case "LOGICAL_ROUTER":
+      return "Logical router";
+    case "LOOP_BREAKER":
+      return "Loop breaker";
+    case "NONE":
+      return "No control role";
+    case "UNKNOWN":
+      return "Unknown control role";
+  }
+}
+
+export function factoryGraphWorkstationGuardLimitValue(
+  control: FactoryGraphWorkstationGuardedControl,
+): string {
+  const fixed =
+    control.limit.fixed === undefined ? undefined : String(control.limit.fixed);
+  const argument = control.limit.argument;
+  if (fixed && argument) return `${fixed} (${argument})`;
+  return fixed ?? argument ?? "Unknown";
+}
+
+export function factoryGraphWorkstationGuardTargetLabel(
+  locale?: string,
+): string {
+  return locale === "zh-CN" ? "目标工作站" : "Target workstation";
+}
+
+export function factoryGraphWorkstationGuardLimitLabel(
+  locale?: string,
+): string {
+  return locale === "zh-CN" ? "访问上限" : "Visit limit";
 }
 
 export function factoryGraphWorkItemLabel(

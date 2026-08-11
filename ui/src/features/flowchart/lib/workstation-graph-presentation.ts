@@ -5,6 +5,7 @@ import {
   POLLER_WORKSTATION_KIND,
   REPEATER_WORKSTATION_KIND,
   STANDARD_WORKSTATION_KIND,
+  UNKNOWN_WORKSTATION_KIND,
   type WorkstationIconMetadata,
   type WorkstationSemanticKind,
   workstationIconMetadata,
@@ -25,8 +26,9 @@ export function workstationBehaviorSemanticKind(
     case "REPEATER":
       return REPEATER_WORKSTATION_KIND;
     case "STANDARD":
-    case undefined:
       return STANDARD_WORKSTATION_KIND;
+    case undefined:
+      return UNKNOWN_WORKSTATION_KIND;
   }
 }
 

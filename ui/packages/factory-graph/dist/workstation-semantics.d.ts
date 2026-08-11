@@ -5,8 +5,17 @@ export type FactoryGraphWorkstationRuntimeType = components["schemas"]["Workstat
 export type FactoryGraphWorkstationRuntimeRole = "AGENT" | "CLASSIFIER" | "INFERENCE" | "LOGICAL_MOVE" | "POLLER" | "SCRIPT" | "UNKNOWN";
 export type FactoryGraphWorkstationSchedulingBehavior = components["schemas"]["WorkstationKind"] | "UNKNOWN";
 export type FactoryGraphWorkstationControlRole = "CLASSIFIER" | "LOGICAL_ROUTER" | "LOOP_BREAKER" | "NONE" | "UNKNOWN";
+export interface FactoryGraphWorkstationGuardedControl {
+    guardType: "VISIT_COUNT";
+    limit: {
+        argument?: string;
+        fixed?: number;
+    };
+    targetWorkstation: string;
+}
 export interface FactoryGraphWorkstationSemantics {
     controlRole: FactoryGraphWorkstationControlRole;
+    guardedControl?: FactoryGraphWorkstationGuardedControl;
     runtimeRole: FactoryGraphWorkstationRuntimeRole;
     runtimeType: FactoryGraphWorkstationRuntimeType;
     schedulingBehavior: FactoryGraphWorkstationSchedulingBehavior;

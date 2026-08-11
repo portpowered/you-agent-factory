@@ -1,12 +1,11 @@
 import {
+  type FactoryDefinition,
   WorkstationKind,
   WorkstationType,
-  type FactoryDefinition,
 } from "@you-agent-factory/client";
 import { describe, expect, test } from "vitest";
-
-import type { FactoryGraphSource } from "./source";
 import { factoryGraphWorkstationPresentation } from "./semantic-workstation-presentation";
+import type { FactoryGraphSource } from "./source";
 import {
   factoryGraphWorkstationRuntimeRole,
   projectFactoryGraphWorkstationSemantics,
@@ -33,6 +32,7 @@ function workstation(
   };
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: semantic axis matrix and guard cases stay grouped around one projection fixture.
 describe("Factory workstation axis resolution", () => {
   test.each(
     RUNTIME_TYPES.flatMap((runtimeType) =>
@@ -106,6 +106,11 @@ describe("Factory workstation axis resolution", () => {
 
     expect(logicalRouter.controlRole).toBe("LOGICAL_ROUTER");
     expect(loopBreaker.controlRole).toBe("LOOP_BREAKER");
+    expect(loopBreaker.guardedControl).toEqual({
+      guardType: "VISIT_COUNT",
+      limit: { fixed: 3 },
+      targetWorkstation: "review",
+    });
     expect(classifier.controlRole).toBe("CLASSIFIER");
     expect(
       factoryGraphWorkstationRuntimeRole(WorkstationType.LOGICAL_MOVE),
@@ -126,6 +131,30 @@ describe("Factory workstation axis resolution", () => {
         }),
       ).controlRole,
     ).toBe("LOGICAL_ROUTER");
+  });
+
+  test("exposes an authored argument-backed visit limit", () => {
+    expect(
+      resolveFactoryGraphWorkstationSemantics(
+        workstation({
+          guards: [
+            {
+              maxVisitsArgument: "max_review_visits",
+              type: "VISIT_COUNT",
+              workstation: "review",
+            },
+          ],
+          type: WorkstationType.LOGICAL_MOVE,
+        }),
+      ),
+    ).toMatchObject({
+      controlRole: "LOOP_BREAKER",
+      guardedControl: {
+        guardType: "VISIT_COUNT",
+        limit: { argument: "max_review_visits" },
+        targetWorkstation: "review",
+      },
+    });
   });
 
   test("uses a neutral unknown result for missing or future semantic metadata", () => {
@@ -167,6 +196,7 @@ describe("Factory workstation presentation", () => {
       borderClassName: "border-double",
       iconKind: "processing",
       runtimeType: WorkstationType.INFERENCE_RUN,
+      schedulingLabel: "Repeater schedule",
       schedulingBehavior: WorkstationKind.REPEATER,
     });
 

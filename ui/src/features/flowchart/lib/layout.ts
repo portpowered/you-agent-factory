@@ -9,7 +9,6 @@ import type {
 } from "../../../api/dashboard/types";
 import { formatDashboardPlaceLabel } from "../../../components/ui/place-labels";
 import { buildLayeredGraphLayout } from "./layered-layout";
-import { isExhaustionWorkstation } from "./workstation-semantics";
 
 export type PositionedNodeKind =
   | "constraint"
@@ -75,8 +74,6 @@ export interface GraphLayout {
 
 const WORKSTATION_NODE_WIDTH = 156;
 const WORKSTATION_NODE_HEIGHT = 196;
-const EXHAUSTION_NODE_WIDTH = 132;
-const EXHAUSTION_NODE_HEIGHT = 58;
 const STATE_NODE_WIDTH = 164;
 const STATE_NODE_HEIGHT = 86;
 const RESOURCE_NODE_WIDTH = 168;
@@ -155,12 +152,8 @@ function placeNodeDimensions(place: DashboardPlaceRef): {
 }
 
 function workstationNodeDimensions(
-  workstation: DashboardWorkstationNode | undefined,
+  _workstation: DashboardWorkstationNode | undefined,
 ): { height: number; width: number } {
-  if (workstation && isExhaustionWorkstation(workstation)) {
-    return { height: EXHAUSTION_NODE_HEIGHT, width: EXHAUSTION_NODE_WIDTH };
-  }
-
   return { height: WORKSTATION_NODE_HEIGHT, width: WORKSTATION_NODE_WIDTH };
 }
 

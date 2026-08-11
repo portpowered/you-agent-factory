@@ -1,5 +1,9 @@
 // biome-ignore lint/style/noExcessiveLinesPerFile: React Flow projection keeps node, edge, and handle mapping together for one adapter seam.
 import { type Edge, MarkerType, type Node } from "@xyflow/react";
+import {
+  type FactoryGraphWorkstationSemantics,
+  resolveFactoryGraphWorkstationSemantics,
+} from "@you-agent-factory/factory-graph";
 import { workTypeHasDefaultHandling } from "../../../current-factory-definition/lib/work-type-default-handling";
 import { workstationHasZAxisIncompleteForConnections } from "../../../current-factory-definition/lib/workstation-progress-outcome-routes";
 import type {
@@ -7,7 +11,6 @@ import type {
   ZAxisIncompleteHints,
 } from "../../../flowchart/components/current-activity-node-shell";
 import { factoryGraphEditorEdgeHoverClassName } from "../../../flowchart/lib/current-activity-graph-hover";
-import { workstationGraphPresentationFromBehavior } from "../../../flowchart/lib/workstation-graph-presentation";
 import { getFactoryGraphEditorMessages } from "../../messages/editor";
 import type {
   CanonicalFactoryDefinition,
@@ -70,10 +73,8 @@ export type FactoryGraphReactFlowNode = Node<
     workStateType?: FactoryGraphWorkStateType;
     workerStatus?: FactoryGraphWorkerRuntimeStatus;
     workerStatusLabel?: string;
-    workstationSemanticBorderClassName?: string;
-    workstationSemanticIconClassName?: string;
-    workstationSemanticIconKind?: string;
-    workstationSemanticLabel?: string;
+    locale?: string;
+    workstationSemantics?: FactoryGraphWorkstationSemantics;
     zAxisIncompleteHints?: ZAxisIncompleteHints | null;
   },
   "factoryEntity"
@@ -127,6 +128,9 @@ export interface ProjectFactoryGraphToReactFlowOptions {
   mode?: FactoryGraphReactFlowMode;
   runtime?: FactoryGraphReactFlowRuntimeOverlay;
   topology: FactoryGraphTopology;
+  workstations?: readonly NonNullable<
+    CanonicalFactoryDefinition["workstations"]
+  >[number][];
   workstationResolver?: FactoryGraphConnectionResolver;
 }
 
@@ -238,15 +242,16 @@ function buildFactoryGraphReactFlowNode(input: {
           input.node.label,
         )
       : false;
-  const workstationPresentation =
-    input.node.kind === "workstation" &&
-    anchorContext?.workstation?.behavior !== undefined
-      ? workstationGraphPresentationFromBehavior(
-          anchorContext.workstation.behavior,
-          input.input.locale,
+  const workstationSemantics =
+    input.node.kind === "workstation"
+      ? resolveFactoryGraphWorkstationSemantics(
+          authoredWorkstationForGraphNode(
+            input.input.factoryDefinition,
+            input.node,
+            input.input.workstations,
+          ),
         )
-      : null;
-
+      : undefined;
   return {
     className: nodeClassName(input.node.id, input.input),
     data: {
@@ -274,6 +279,7 @@ function buildFactoryGraphReactFlowNode(input: {
       kind: input.node.kind,
       kindLabel: input.messages.kindLabel(input.node.kind),
       label: input.node.label,
+      locale: input.input.locale,
       muted: input.input.runtime?.mutedNodeIds?.has(input.node.id) ?? false,
       pendingLabel: input.messages.flowPendingLabel,
       removingLabel: input.messages.flowRemovingLabel,
@@ -287,16 +293,7 @@ function buildFactoryGraphReactFlowNode(input: {
       workerStatusLabel: workerStatus
         ? input.messages.workerStatusLabel(workerStatus)
         : undefined,
-      ...(workstationPresentation &&
-      workstationPresentation.semanticKind !== "STANDARD"
-        ? {
-            workstationSemanticBorderClassName:
-              workstationPresentation.borderClassName,
-            workstationSemanticIconClassName: workstationPresentation.className,
-            workstationSemanticIconKind: workstationPresentation.iconKind,
-            workstationSemanticLabel: workstationPresentation.label,
-          }
-        : {}),
+      ...(workstationSemantics ? { workstationSemantics } : {}),
       zAxisIncompleteHints: resolveFactoryGraphZAxisIncompleteHints({
         anchorContext,
         canEditConnections,
@@ -312,6 +309,29 @@ function buildFactoryGraphReactFlowNode(input: {
     },
     type: "factoryEntity",
   } satisfies FactoryGraphReactFlowNode;
+}
+
+function authoredWorkstationForGraphNode(
+  factoryDefinition: CanonicalFactoryDefinition | null | undefined,
+  node: FactoryGraphNode,
+  workstations:
+    | readonly NonNullable<CanonicalFactoryDefinition["workstations"]>[number][]
+    | undefined,
+) {
+  const workstationKey = node.key.kind === "workstation" ? node.key : undefined;
+  if (node.kind !== "workstation" || !workstationKey) {
+    return undefined;
+  }
+
+  const authoredID = workstationKey.id?.trim();
+  return (factoryDefinition?.workstations ?? workstations ?? []).find(
+    (workstation) => {
+      const workstationID = workstation.id?.trim();
+      return authoredID !== undefined
+        ? workstationID === authoredID
+        : workstation.name === workstationKey.name;
+    },
+  );
 }
 
 function normalizeProjectionOptions(

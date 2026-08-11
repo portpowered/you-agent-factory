@@ -53,8 +53,12 @@ export function resolveFactoryGraphWorkstationSemantics(workstation) {
         return UNKNOWN_FACTORY_GRAPH_WORKSTATION_SEMANTICS;
     const runtimeType = resolveFactoryGraphWorkstationRuntimeType(workstation);
     const runtimeRole = factoryGraphWorkstationRuntimeRole(runtimeType);
+    const guardedControl = runtimeRole === "LOGICAL_MOVE"
+        ? resolveSupportedVisitCountGuard(workstation.guards)
+        : undefined;
     return {
-        controlRole: workstationControlRole(runtimeRole, workstation),
+        controlRole: workstationControlRole(runtimeRole, guardedControl),
+        ...(guardedControl ? { guardedControl } : {}),
         runtimeRole,
         runtimeType,
         schedulingBehavior: resolveFactoryGraphWorkstationSchedulingBehavior(workstation),
@@ -102,30 +106,40 @@ function overlayMatchesWorkstation(overlay, workstationId, workstationNodeId) {
     return (overlay.workstationNodeId === workstationNodeId ||
         overlay.workstationId === workstationId);
 }
-function workstationControlRole(runtimeRole, workstation) {
+function workstationControlRole(runtimeRole, guardedControl) {
     if (runtimeRole === "UNKNOWN")
         return "UNKNOWN";
     if (runtimeRole === "CLASSIFIER")
         return "CLASSIFIER";
     if (runtimeRole !== "LOGICAL_MOVE")
         return "NONE";
-    return hasSupportedVisitCountGuard(workstation.guards)
-        ? "LOOP_BREAKER"
-        : "LOGICAL_ROUTER";
+    return guardedControl ? "LOOP_BREAKER" : "LOGICAL_ROUTER";
 }
-function hasSupportedVisitCountGuard(guards) {
-    return (guards ?? []).some((guard) => {
+function resolveSupportedVisitCountGuard(guards) {
+    for (const guard of guards ?? []) {
         const type = normalizeEnumValue(guard.type);
         if (type !== WorkstationGuardType.VISIT_COUNT)
-            return false;
-        if (!guard.workstation?.trim())
-            return false;
+            continue;
+        const targetWorkstation = guard.workstation?.trim();
+        if (!targetWorkstation)
+            continue;
         const fixedLimit = typeof guard.maxVisits === "number" &&
             Number.isInteger(guard.maxVisits) &&
             guard.maxVisits > 0;
-        const argumentLimit = Boolean(guard.maxVisitsArgument?.trim());
-        return fixedLimit || argumentLimit;
-    });
+        const argument = guard.maxVisitsArgument?.trim();
+        const argumentLimit = Boolean(argument);
+        if (!fixedLimit && !argumentLimit)
+            continue;
+        return {
+            guardType: "VISIT_COUNT",
+            limit: {
+                ...(fixedLimit ? { fixed: guard.maxVisits } : {}),
+                ...(argument ? { argument } : {}),
+            },
+            targetWorkstation,
+        };
+    }
+    return undefined;
 }
 function normalizeEnumValue(value) {
     const normalized = value?.trim().toUpperCase();

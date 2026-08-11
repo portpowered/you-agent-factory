@@ -6,7 +6,7 @@ export function factoryGraphWorkstationPresentation(semantics = UNKNOWN_FACTORY_
     const runtime = runtimePresentation(semantics.runtimeType, locale);
     return {
         ...semantics,
-        ...schedulingPresentation(semantics.schedulingBehavior),
+        ...schedulingPresentation(semantics.schedulingBehavior, locale),
         className: runtime.className,
         iconKind: runtime.iconKind,
         label: runtime.label,
@@ -39,18 +39,74 @@ function runtimePresentation(runtimeType, locale) {
         label: labels[runtimeRole],
     };
 }
-function schedulingPresentation(behavior) {
+function schedulingPresentation(behavior, locale) {
+    const chinese = locale === "zh-CN";
     switch (behavior) {
         case WorkstationKind.CRON:
-            return { borderClassName: "border-dashed" };
+            return {
+                borderClassName: "border-dashed",
+                schedulingLabel: chinese ? "Cron 调度" : "Cron schedule",
+            };
         case WorkstationKind.POLLER:
-            return { borderClassName: "border-dotted" };
+            return {
+                borderClassName: "border-dotted",
+                schedulingLabel: chinese ? "轮询调度" : "Poller schedule",
+            };
         case WorkstationKind.REPEATER:
-            return { borderClassName: "border-double" };
+            return {
+                borderClassName: "border-double",
+                schedulingLabel: chinese ? "重复调度" : "Repeater schedule",
+            };
         case WorkstationKind.STANDARD:
+            return { schedulingLabel: undefined };
         case "UNKNOWN":
-            return {};
+            return {
+                schedulingLabel: chinese
+                    ? "调度语义未知"
+                    : "Unknown scheduling behavior",
+            };
     }
+}
+export function factoryGraphWorkstationControlRoleLabel(controlRole, locale) {
+    if (locale === "zh-CN") {
+        switch (controlRole) {
+            case "CLASSIFIER":
+                return "分类器路由";
+            case "LOGICAL_ROUTER":
+                return "逻辑路由";
+            case "LOOP_BREAKER":
+                return "循环断路器";
+            case "NONE":
+                return "无控制角色";
+            case "UNKNOWN":
+                return "控制角色未知";
+        }
+    }
+    switch (controlRole) {
+        case "CLASSIFIER":
+            return "Classifier route";
+        case "LOGICAL_ROUTER":
+            return "Logical router";
+        case "LOOP_BREAKER":
+            return "Loop breaker";
+        case "NONE":
+            return "No control role";
+        case "UNKNOWN":
+            return "Unknown control role";
+    }
+}
+export function factoryGraphWorkstationGuardLimitValue(control) {
+    const fixed = control.limit.fixed === undefined ? undefined : String(control.limit.fixed);
+    const argument = control.limit.argument;
+    if (fixed && argument)
+        return `${fixed} (${argument})`;
+    return fixed ?? argument ?? "Unknown";
+}
+export function factoryGraphWorkstationGuardTargetLabel(locale) {
+    return locale === "zh-CN" ? "目标工作站" : "Target workstation";
+}
+export function factoryGraphWorkstationGuardLimitLabel(locale) {
+    return locale === "zh-CN" ? "访问上限" : "Visit limit";
 }
 export function factoryGraphWorkItemLabel(item) {
     return item.display_name?.trim() || item.work_id?.trim() || "Unknown work";

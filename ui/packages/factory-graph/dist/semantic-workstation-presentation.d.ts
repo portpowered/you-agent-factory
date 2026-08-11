@@ -1,5 +1,5 @@
 import type { GraphSemanticIconKind } from "./semantic-icon.js";
-import { type FactoryGraphWorkstationSemantics } from "./workstation-semantics.js";
+import { type FactoryGraphWorkstationGuardedControl, type FactoryGraphWorkstationSemantics } from "./workstation-semantics.js";
 export interface FactoryGraphWorkstationRef {
     node_id: string;
     transition_id: string;
@@ -19,9 +19,14 @@ export interface FactoryGraphWorkstationPresentation extends FactoryGraphWorksta
     className: string;
     iconKind: GraphSemanticIconKind;
     label: string;
+    schedulingLabel: string | undefined;
 }
 /** Render-independent workstation presentation metadata for a graph node. */
 export declare function factoryGraphWorkstationPresentation(semantics?: FactoryGraphWorkstationSemantics, locale?: string): FactoryGraphWorkstationPresentation;
+export declare function factoryGraphWorkstationControlRoleLabel(controlRole: FactoryGraphWorkstationSemantics["controlRole"], locale?: string): string;
+export declare function factoryGraphWorkstationGuardLimitValue(control: FactoryGraphWorkstationGuardedControl): string;
+export declare function factoryGraphWorkstationGuardTargetLabel(locale?: string): string;
+export declare function factoryGraphWorkstationGuardLimitLabel(locale?: string): string;
 export declare function factoryGraphWorkItemLabel(item: FactoryGraphWorkItemRef): string;
 export declare function factoryGraphGraphDuration(startedAt: string, now: number, locale?: string): string;
 export declare function factoryGraphDurationText(startedAt: string, now: number, locale?: string): string;

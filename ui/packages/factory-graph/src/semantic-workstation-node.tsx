@@ -18,6 +18,10 @@ import {
   factoryGraphDurationText as durationText,
   type FactoryGraphWorkItemRef,
   type FactoryGraphWorkstationRef,
+  factoryGraphWorkstationControlRoleLabel,
+  factoryGraphWorkstationGuardLimitLabel,
+  factoryGraphWorkstationGuardLimitValue,
+  factoryGraphWorkstationGuardTargetLabel,
   factoryGraphGraphDuration as graphDuration,
   factoryGraphSelectWorkstationLabel as selectWorkstationLabel,
   type FactoryGraphWorkstationPresentation as WorkstationPresentation,
@@ -134,33 +138,43 @@ function Summary({
   title: string;
 }) {
   return (
-    <GraphNodeButton
-      aria-label={
-        data.onSelectWorkstation
-          ? selectWorkstationLabel(title, data.locale)
-          : undefined
-      }
-      aria-pressed={
-        data.onSelectWorkstation ? data.selectedWorkstation : undefined
-      }
-      className="flex min-w-0 w-full items-center justify-between gap-2 overflow-hidden"
-      data-selected-workstation={data.selectedWorkstation ? "true" : undefined}
+    <div
+      className="grid min-w-0 gap-1"
       data-workstation-control-role={presentation.controlRole}
       data-workstation-runtime-type={presentation.runtimeType}
       data-workstation-scheduling-behavior={presentation.schedulingBehavior}
-      disabled={data.onSelectWorkstation === undefined}
-      onClick={
-        data.onSelectWorkstation
-          ? (event) => {
-              event.stopPropagation();
-              data.onSelectWorkstation?.(data.workstation.node_id);
-            }
-          : undefined
-      }
-      title={title}
     >
-      <Header presentation={presentation} title={title} />
-    </GraphNodeButton>
+      <GraphNodeButton
+        aria-label={
+          data.onSelectWorkstation
+            ? selectWorkstationLabel(title, data.locale)
+            : undefined
+        }
+        aria-pressed={
+          data.onSelectWorkstation ? data.selectedWorkstation : undefined
+        }
+        className="flex min-w-0 w-full items-center justify-between gap-2 overflow-hidden"
+        data-selected-workstation={
+          data.selectedWorkstation ? "true" : undefined
+        }
+        disabled={data.onSelectWorkstation === undefined}
+        onClick={
+          data.onSelectWorkstation
+            ? (event) => {
+                event.stopPropagation();
+                data.onSelectWorkstation?.(data.workstation.node_id);
+              }
+            : undefined
+        }
+        title={title}
+      >
+        <Header presentation={presentation} title={title} />
+      </GraphNodeButton>
+      <FactoryGraphWorkstationGuardedControlCard
+        locale={data.locale}
+        presentation={presentation}
+      />
+    </div>
   );
 }
 
@@ -182,7 +196,7 @@ function ActiveContent({
   const header = <Header presentation={presentation} title={title} />;
   return (
     <div
-      className="grid h-full min-w-0 grid-rows-[auto_1fr_auto]"
+      className="grid h-full min-w-0 grid-rows-[auto_auto_1fr_auto]"
       data-active={data.active ? "true" : undefined}
       data-selected-work={data.selectedWorkID !== null ? "true" : undefined}
       data-selected-workstation={data.selectedWorkstation ? "true" : undefined}
@@ -211,6 +225,10 @@ function ActiveContent({
           {header}
         </div>
       )}
+      <FactoryGraphWorkstationGuardedControlCard
+        locale={data.locale}
+        presentation={presentation}
+      />
       <ul className="mt-2 grid min-w-0 list-none content-start gap-1 p-0">
         {visible.map(({ execution, workItem }) => (
           <WorkItem
@@ -331,7 +349,81 @@ function Header({
       >
         {title}
       </span>
+      <span
+        className="min-w-0 truncate text-[0.62rem] font-semibold leading-tight text-on-surface-subtle"
+        data-workstation-runtime-label
+        title={presentation.label}
+      >
+        {presentation.label}
+      </span>
+      {presentation.schedulingLabel ? (
+        <span
+          className="min-w-0 shrink-0 truncate rounded-sm border border-outline-variant bg-surface px-1.5 py-0.5 text-[0.62rem] font-semibold leading-none text-on-surface-subtle"
+          data-workstation-scheduling-label
+          title={presentation.schedulingLabel}
+        >
+          {presentation.schedulingLabel}
+        </span>
+      ) : null}
     </>
+  );
+}
+
+export function FactoryGraphWorkstationGuardedControlCard({
+  locale,
+  presentation,
+}: {
+  locale?: string;
+  presentation: WorkstationPresentation;
+}) {
+  const control = presentation.guardedControl;
+  if (presentation.controlRole !== "LOOP_BREAKER" || !control) return null;
+
+  const roleLabel = factoryGraphWorkstationControlRoleLabel(
+    presentation.controlRole,
+    locale,
+  );
+  return (
+    <fieldset
+      aria-label={roleLabel}
+      className="grid min-w-0 gap-1 rounded-md border border-af-warning-border bg-warning-container px-2 py-1.5 text-[0.68rem] text-on-warning-container"
+      data-workstation-guard-card
+      data-workstation-guard-type={control.guardType}
+      data-workstation-control-role={presentation.controlRole}
+    >
+      <span
+        className="truncate font-semibold uppercase tracking-[0.06em]"
+        data-workstation-control-role-label
+      >
+        {roleLabel}
+      </span>
+      <dl className="m-0 grid min-w-0 gap-0.5">
+        <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-1">
+          <dt className="shrink-0">
+            {factoryGraphWorkstationGuardTargetLabel(locale)}
+          </dt>
+          <dd
+            className="m-0 truncate font-mono"
+            data-workstation-guard-target
+            title={control.targetWorkstation}
+          >
+            {control.targetWorkstation}
+          </dd>
+        </div>
+        <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-1">
+          <dt className="shrink-0">
+            {factoryGraphWorkstationGuardLimitLabel(locale)}
+          </dt>
+          <dd
+            className="m-0 truncate font-mono"
+            data-workstation-guard-limit
+            title={factoryGraphWorkstationGuardLimitValue(control)}
+          >
+            {factoryGraphWorkstationGuardLimitValue(control)}
+          </dd>
+        </div>
+      </dl>
+    </fieldset>
   );
 }
 

@@ -39,8 +39,18 @@ export type FactoryGraphWorkstationControlRole =
   | "NONE"
   | "UNKNOWN";
 
+export interface FactoryGraphWorkstationGuardedControl {
+  guardType: "VISIT_COUNT";
+  limit: {
+    argument?: string;
+    fixed?: number;
+  };
+  targetWorkstation: string;
+}
+
 export interface FactoryGraphWorkstationSemantics {
   controlRole: FactoryGraphWorkstationControlRole;
+  guardedControl?: FactoryGraphWorkstationGuardedControl;
   runtimeRole: FactoryGraphWorkstationRuntimeRole;
   runtimeType: FactoryGraphWorkstationRuntimeType;
   schedulingBehavior: FactoryGraphWorkstationSchedulingBehavior;
@@ -126,8 +136,13 @@ export function resolveFactoryGraphWorkstationSemantics(
 
   const runtimeType = resolveFactoryGraphWorkstationRuntimeType(workstation);
   const runtimeRole = factoryGraphWorkstationRuntimeRole(runtimeType);
+  const guardedControl =
+    runtimeRole === "LOGICAL_MOVE"
+      ? resolveSupportedVisitCountGuard(workstation.guards)
+      : undefined;
   return {
-    controlRole: workstationControlRole(runtimeRole, workstation),
+    controlRole: workstationControlRole(runtimeRole, guardedControl),
+    ...(guardedControl ? { guardedControl } : {}),
     runtimeRole,
     runtimeType,
     schedulingBehavior:
@@ -203,30 +218,41 @@ function overlayMatchesWorkstation(
 
 function workstationControlRole(
   runtimeRole: FactoryGraphWorkstationRuntimeRole,
-  workstation: FactoryWorkstation,
+  guardedControl: FactoryGraphWorkstationGuardedControl | undefined,
 ): FactoryGraphWorkstationControlRole {
   if (runtimeRole === "UNKNOWN") return "UNKNOWN";
   if (runtimeRole === "CLASSIFIER") return "CLASSIFIER";
   if (runtimeRole !== "LOGICAL_MOVE") return "NONE";
-  return hasSupportedVisitCountGuard(workstation.guards)
-    ? "LOOP_BREAKER"
-    : "LOGICAL_ROUTER";
+  return guardedControl ? "LOOP_BREAKER" : "LOGICAL_ROUTER";
 }
 
-function hasSupportedVisitCountGuard(
+function resolveSupportedVisitCountGuard(
   guards: readonly FactoryWorkstationGuard[] | undefined,
-): boolean {
-  return (guards ?? []).some((guard) => {
+): FactoryGraphWorkstationGuardedControl | undefined {
+  for (const guard of guards ?? []) {
     const type = normalizeEnumValue(guard.type);
-    if (type !== WorkstationGuardType.VISIT_COUNT) return false;
-    if (!guard.workstation?.trim()) return false;
+    if (type !== WorkstationGuardType.VISIT_COUNT) continue;
+    const targetWorkstation = guard.workstation?.trim();
+    if (!targetWorkstation) continue;
     const fixedLimit =
       typeof guard.maxVisits === "number" &&
       Number.isInteger(guard.maxVisits) &&
       guard.maxVisits > 0;
-    const argumentLimit = Boolean(guard.maxVisitsArgument?.trim());
-    return fixedLimit || argumentLimit;
-  });
+    const argument = guard.maxVisitsArgument?.trim();
+    const argumentLimit = Boolean(argument);
+    if (!fixedLimit && !argumentLimit) continue;
+
+    return {
+      guardType: "VISIT_COUNT",
+      limit: {
+        ...(fixedLimit ? { fixed: guard.maxVisits } : {}),
+        ...(argument ? { argument } : {}),
+      },
+      targetWorkstation,
+    };
+  }
+
+  return undefined;
 }
 
 function normalizeEnumValue(value: string | undefined): string | undefined {

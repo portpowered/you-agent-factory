@@ -65,8 +65,13 @@ describe("buildTraceDispatchFactoryGraphFlow", () => {
         workstation: {
           node_id: "dispatch-plan",
           transition_id: "dispatch-plan",
-          workstation_kind: "STANDARD",
           workstation_name: "dispatch-plan",
+        },
+        workstationSemantics: {
+          controlRole: "UNKNOWN",
+          runtimeRole: "UNKNOWN",
+          runtimeType: "UNKNOWN",
+          schedulingBehavior: "UNKNOWN",
         },
       },
     });
