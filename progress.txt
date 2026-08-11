@@ -51,6 +51,7 @@
 
 - Worker Session finite streams can use the injected Events `Read` contract with the first retained head as a snapshot boundary; replay-only paths must not call `Subscribe`.
 - Authored OpenAPI and CLI contracts generate their Go, TypeScript, published metadata, and family-manifest consumers; update the source contract first, then run the repository generators and drift checks.
+- Service-owned HTTP adapters should receive the opened domain root at the application edge; top-level generated-route composition forwards requests without reading package artifacts or constructing service state.
 - Provider-neutral output contracts belong on the workstation definition and are enforced after a successful worker response; provider process success or transport parsing alone must not satisfy a semantic report contract.
 - Stream transport dispatch stays below the package maintainability threshold by delegating lifecycle-specific frame handling to focused helpers.
 - Deterministic Worker Session lifecycle tests can combine the controlled workstation boundary with the real in-memory Events service to verify retained replay ordering without sleeps or cancellation.
@@ -3994,4 +3995,27 @@
   - `git diff --cached --check` passed before the merge commit.
 - **Learnings for future iterations:**
   - A clean merge against a stale remote-tracking base is not sufficient; compare the live hosting ref, fetch it, and resolve shared PRD/progress files again before pushing the replacement head.
+---
+
+## [2026-08-10 20:04 -07:00] - ui-packaged-factories-decoupling-001
+- What was implemented
+  - Moved the packaged Factory catalog translation from the top-level Models handler into the Factory Definitions HTTP adapter, backed by the injected Definitions root.
+  - Preserved deterministic catalog ordering and exposed stable identity, customer-facing description, invocation examples, and backend-provided JSON/YAML artifacts through the existing generated contract.
+  - Added safe internal-error mapping and actionable, payload-free catalog diagnostics for load, resolution, identity, and artifact decode failures; empty catalogs return a non-nil empty collection.
+  - Wired the opened Factory Definitions root through application HTTP binding and updated the top-level server/test constructors.
+- Files changed
+  - `pkg/services/factory_definitions/transports/http/handlers_current_factory.go`
+  - `pkg/services/factory_definitions/transports/http/handlers_current_factory_test.go`
+  - `pkg/transports/http/application/handler.go`
+  - `pkg/transports/http/handlers_models.go`
+  - `pkg/transports/http/server.go` and HTTP route tests/support
+  - `prd.json`
+- Verification
+  - `make generate-api` and `make api-smoke` passed; authored OpenAPI, bundled OpenAPI, generated Go contracts, and generated UI types had no drift.
+  - Focused Factory Definitions, HTTP transport/contract/server, and Wire suites passed.
+  - `go test ./... -run '^$' -count=1` passed as a repository-wide compile sweep.
+  - `make backend-size`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, and `go vet ./...` passed.
+- **Learnings for future iterations:**
+  - The existing catalog route and generated contract can remain stable while ownership moves behind the Factory Definitions root; the top-level server should only compose the service-owned adapter.
+  - API generation requires the worktree UI dependencies; `bun install --frozen-lockfile --ignore-scripts` restored the missing generator without running lifecycle hooks.
 ---

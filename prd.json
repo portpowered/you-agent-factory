@@ -1,95 +1,77 @@
 {
-  "project": "DWRO S1 — Explicit Remote Placement and Listener Selection",
-  "branchName": "dwro-s1-remote-placement-flags",
-  "description": "Implement story S1 of Direct Worker and Remote Operations by adding persistent root --remote and authored command placement capabilities, dispatching one normalized request through either the local service or exactly the selected --server endpoint without fallback, introducing --listen for local binds with a warned legacy compatibility path, and rejecting documented conflicts with run --with-server and run --with-site.",
+  "project": "Sever Dashboard Packaged-Factories Dependency Through a Backend Catalog Contract",
+  "branchName": "ui-packaged-factories-decoupling",
+  "description": "Decouple dashboard verification from the Packaged Factories publication package by serving the catalog and selected artifact data through a minimal backend OpenAPI contract, consuming it through typed dashboard API/state boundaries, removing UI package and lifecycle coupling, and enforcing the boundary against future direct dependencies or imports.",
   "context": {
-    "customerAsk": "Implement DWRO story S1: persistent root --remote, authored command placement capabilities, endpoint-only --server, new --listen for local listener binds, no silent local fallback, and documented conflicts with run --with-server and run --with-site.",
-    "problem": "The CLI has no explicit execution-placement input and its authored manifest cannot state whether a command is local-only, remote-only, or dual-placement. The global --server flag also selects both HTTP client endpoints and local listener binds, so customers and scripts cannot unambiguously distinguish calling an existing server from hosting one, and unsupported remote requests lack one centralized no-fallback rule.",
-    "solution": "Add persistent root --remote, a resolved local/remote placement value, and per-command placement capabilities to the authored CLI contract. Normalize command inputs once and select exactly one injected local-service or HTTP-client adapter, rejecting unsupported or failed remote placement without fallback. Make --server the remote endpoint selector, add --listen to listener-owning commands, preserve explicit legacy --server binding with a deprecation warning when --listen is absent, give --listen precedence, and enforce documented usage conflicts before side effects."
+    "customerAsk": "Sever the dashboard's direct dependency on @you-agent-factory/packaged-factories by exposing the required catalog through a minimal backend API contract, moving the dashboard to that contract, removing package and lifecycle coupling, and adding a guard that prevents the dependency from returning. Keep the OpenAPI addition minimal, regenerate derived outputs rather than hand-merging them, and complete the full implementation, review, CI, conflict-resolution, and merge loop.",
+    "problem": "The UI manifest, lockfile, lifecycle hooks, and catalog code make the dashboard a build-time consumer of the Packaged Factories publication package. Factory-only edits can therefore invalidate or trigger frontend verification, coupling unrelated ownership lanes and preventing the planned CI classifier from safely treating Packaged Factories changes independently from dashboard changes.",
+    "solution": "Expose a read-only backend catalog endpoint with stable identity, customer-facing metadata, invocation examples, and only the JSON/YAML artifact data the dashboard needs; regenerate all clients from authored OpenAPI; route dashboard access through typed API and server-state modules with explicit UI states; remove the package dependency, lockfile entry, lifecycle hooks, asset imports, and dashboard consumer checks; and add a focused boundary guard with a synthetic failing regression case."
   },
   "acceptanceCriteria": [
-    "The authored CLI manifest defines persistent root --remote, a resolved local/remote placement value, and local-only, remote-only, or dual-placement capabilities for affected commands; executable help and parsing match that contract.",
-    "A representative dual-placement operation produces the same normalized request locally without --remote and sends that request to exactly the --server <uri> HTTP endpoint with --remote, with equivalent domain intent across adapters.",
-    "Unsupported remote placement, an invalid or unavailable selected server, and remote transport failure return stable actionable errors and never invoke the local product operation, start a listener, or silently select another endpoint.",
-    "you server --listen, you run --with-server --listen, and you run --with-site --listen bind the requested local address; when --listen is absent, legacy listener use of an explicitly supplied --server remains functional for the compatibility window and warns, while explicit --listen takes precedence.",
-    "--remote with run --with-server or run --with-site is rejected as a documented stable usage conflict before listener, browser, Factory, or remote-operation side effects begin; reference docs and examples use the new placement vocabulary.",
-    "Quality gates pass with direct CLI and manifest, package, functional, help and reference, and compatibility evidence as applicable; Typecheck passes, Tests pass, and there are no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
-    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared or generated-file churn are resolved against current main, and the PR is actually merged."
+    "A read-only backend API returns the stable packaged Factory catalog metadata and selected artifact data required by the dashboard, with deterministic results and an explicit error response when the backend cannot load or translate the catalog.",
+    "Authored OpenAPI components are the source of the minimal catalog contract, and the bundled OpenAPI plus generated Go and TypeScript clients are regenerated together; generated files are never hand-edited or hand-merged.",
+    "The dashboard renders catalog data obtained through the typed API boundary and exposes intentional loading, empty, error, and success states while preserving accessible semantics, keyboard selection, and responsive mobile/desktop behavior.",
+    "ui/package.json and the UI lockfile contain no @you-agent-factory/packaged-factories dependency, and ordinary UI build, lint, and test commands do not prepare, install, resolve, or validate a packaged-factories candidate.",
+    "A focused dependency-boundary guard rejects both a manifest dependency and a source import of @you-agent-factory/packaged-factories; its automated test proves at least one synthetic violation fails and the repository remains green without a violation.",
+    "Focused backend/API contract tests, dashboard component or integration tests, and direct browser verification prove the catalog path without relying on publication-package imports or bundled asset internals.",
+    "Quality gates pass: TypeScript typecheck, focused Go and UI tests, API generation/smoke verification, UI build, and no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
+    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared/generated-file churn are resolved against current main, and the PR is actually merged."
   ],
   "userStories": [
     {
-      "id": "dwro-s1-remote-placement-flags-001",
-      "title": "Declare explicit placement in the authored CLI contract",
-      "description": "As a CLI user and command implementer, I want root placement and each command's supported placements to be explicit so help, validation, and dispatch share one authoritative contract.",
+      "id": "ui-packaged-factories-decoupling-001",
+      "title": "Serve the dashboard catalog through a minimal backend contract",
+      "description": "As a dashboard client, I need the backend to expose the packaged Factory catalog and selected artifact data so I can discover built-in Factories without importing their publication package.",
       "acceptanceCriteria": [
-        "The authored CLI manifest exposes a visible persistent root --remote boolean whose documented meaning is to execute a supported operation through a running You server; it does not imply async, follow, continuous, or listener behavior.",
-        "The executable parser resolves the root input to explicit local placement by default and remote placement when --remote appears before or after the command path, consistent with other persistent flags.",
-        "A command can authoritatively declare local-only, remote-only, or dual-placement capability, and manifest validation rejects a runnable command whose placement declaration is missing or invalid where the placement contract applies.",
-        "Existing HTTP-only commands retain their historical remote-default compatibility for this window, accept explicit --remote, and do not gain a local implementation merely to satisfy the new vocabulary.",
-        "Root and representative command help show the placement meaning and supported usage without describing --remote as a waiting or server-start option.",
-        "Focused contract and parser tests prove manifest validation, persistent flag inheritance, before and after command parsing, default placement, and explicit remote placement through observable CLI inputs and help.",
+        "A successful catalog request returns deterministically ordered entries with stable identity, customer-facing metadata, invocation examples, and the JSON/YAML artifact representations required by the existing dashboard catalog and detail experience.",
+        "An empty backend catalog produces a valid response with an empty entries collection rather than a transport or decoding failure.",
+        "Catalog load, decode, or mapping failure returns the documented non-success response and emits actionable, sensitive-safe backend diagnostics without exposing raw Factory contents.",
+        "The catalog read operation remains read-only and owned behind the Factory Definitions/backend boundary; the HTTP transport maps a public service result and does not give the dashboard filesystem or publication-package access.",
+        "The authored OpenAPI entrypoint and component schemas define only the dashboard-required response, and make generate-api regenerates the bundle, Go server/client types, and dashboard TypeScript types without manual edits to generated files.",
+        "Focused service/transport tests prove success, empty, and failure behavior, and API contract or smoke coverage proves that runtime JSON conforms to the generated contract.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 1,
       "passes": true,
-      "notes": ""
+      "notes": "Moved catalog loading and artifact mapping behind the Factory Definitions HTTP adapter and injected root; top-level HTTP composition now forwards the generated route without publication-package access. Added deterministic ordering, stable metadata/artifact mapping, empty-catalog handling, payload-free failure responses and diagnostics, plus service and top-level route coverage. Verified with make generate-api, make api-smoke, focused Factory Definitions/HTTP/Wire suites, go test ./... -run '^$' -count=1, make backend-size, make pkg-maint, make pkg-file-count, make pkg-structure, and go vet ./...."
     },
     {
-      "id": "dwro-s1-remote-placement-flags-002",
-      "title": "Dispatch normalized operations without placement fallback",
-      "description": "As a customer, I want the same operation to run locally by default or on exactly my selected server with --remote so placement is predictable and cannot silently change during failure.",
+      "id": "ui-packaged-factories-decoupling-002",
+      "title": "Render the catalog from the API without package lifecycle coupling",
+      "description": "As a dashboard user, I want the built-in Factory catalog to load from the running backend so I can browse and inspect Factories with the same usable experience independent of publication-package installation.",
       "acceptanceCriteria": [
-        "At least one representative supported dual-placement command normalizes customer inputs once before dispatch, calls its already-injected local service adapter without --remote, and calls its HTTP client adapter with --remote.",
-        "Behavioral parity coverage proves the local and remote adapters receive contract-equivalent normalized request values for the same customer input, allowing only transport metadata differences.",
-        "you --remote --server <uri> <dual-placement-command> sends the operation to exactly <uri> and does not invoke the local product operation, start or probe a local listener, or substitute the default endpoint.",
-        "A local-only command invoked with --remote exits with a stable actionable usage error that identifies the unsupported placement before command side effects occur.",
-        "Invalid endpoint configuration, connection refusal, timeout, and other remote transport failures remain remote failures and do not retry through the local adapter; diagnostics identify the selected endpoint without leaking credentials or sensitive request content.",
-        "Placement selection remains a CLI transport concern: domain services receive normalized operation requests and do not inspect CLI placement flags or discover alternate dependencies.",
-        "Focused package and public CLI behavioral tests cover local dispatch, exact remote dispatch, unsupported placement, and failed remote transport with zero local fallback.",
+        "Dashboard catalog network access is centralized in a typed API module and server-state hook that consumes generated catalog types; rendering components do not issue ad hoc fetches or import package assets.",
+        "The catalog surface displays explicit loading, empty, recoverable error, and populated success states, and a failed selected-artifact load does not silently render stale or mismatched detail.",
+        "On success, API-shaped fixture data renders the expected catalog items and selected Factory metadata, examples, JSON, and YAML detail; changing selection renders the matching API-provided detail.",
+        "Catalog selection remains semantic and keyboard operable with visible focus and accessible state announcements, and the layout remains usable without unintended horizontal scrolling at representative mobile and desktop viewports.",
+        "@you-agent-factory/packaged-factories is absent from UI dependencies and the lockfile; its prepare/install lifecycle hooks, candidate resolver, direct artifact imports, and dashboard package-consumer release checks are removed without changing unrelated public-package workflows.",
+        "Standard UI install, typecheck, build, lint, unit/component, and relevant integration commands run without building, packing, installing, or reading a Packaged Factories candidate.",
+        "A focused dashboard component or integration test proves catalog rendering from an API-shaped response, including loading and failure behavior.",
+        "Direct browser verification confirms successful catalog rendering, keyboard selection, error recovery presentation, and responsive behavior against the runtime API or a browser-level API fixture.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 2,
-      "passes": true,
-      "notes": "Implemented dual-placement `you run` dispatch through one normalized invocation request and an injected local or exact-URI HTTP adapter, with stable unsupported-placement and no-fallback remote errors. Refreshed authored and published CLI contract artifacts and added focused package/public CLI behavioral coverage. Verified with `make contracts-validate`, `make cli-manifest-check`, `go test ./pkg/transports/cli/run ./pkg/transports/cli ./pkg/wire ./pkg/services/workers/internal/interface -count=1`, and `make test`. Review follow-up makes invalid remote endpoint labels fail closed for parse-success/base-invalid opaque and unsupported-scheme inputs, with credential-redaction regression coverage."
+      "passes": false,
+      "notes": ""
     },
     {
-      "id": "dwro-s1-remote-placement-flags-003",
-      "title": "Bind local servers with --listen and preserve legacy scripts",
-      "description": "As an operator, I want local listener addresses selected with --listen so --server can mean a remote endpoint while my existing listener scripts have a safe migration window.",
+      "id": "ui-packaged-factories-decoupling-003",
+      "title": "Prevent the direct packaged-factories dependency from returning",
+      "description": "As a maintainer, I need an automated dependency boundary so future dashboard changes cannot silently restore build-time coupling to the Packaged Factories publication package.",
       "acceptanceCriteria": [
-        "you server --listen <address>, you run --with-server --listen <address>, and you run --with-site --listen <address> bind the requested valid local address and report existing stable bind failures for invalid, non-local, or unavailable addresses.",
-        "Listener-owning commands use the existing default local bind when neither an explicit --listen nor an explicit legacy bind value is supplied.",
-        "During the compatibility window, an explicitly supplied legacy --server <local-uri> continues to select the listener bind only when --listen is absent and emits one actionable deprecation warning on stderr directing the user to --listen.",
-        "When both inputs are supplied to a listener-owning command, explicit --listen determines the bind address; --server does not override it, and compatibility diagnostics accurately explain any retained endpoint role.",
-        "Ordinary local commands and ordinary you run do not start a listener merely because --listen or the default server endpoint exists; invalid flag placement is rejected before runtime side effects.",
-        "CLI manifest relationships, help, and examples describe --listen as the local bind input and --server as the selected You server URI, including the legacy migration behavior.",
-        "Focused listener lifecycle tests use observable readiness and bind behavior and prove requested binding, precedence, warning, bind failure, and joined shutdown without arbitrary sleeps.",
+        "The normal UI check/lint path runs a focused guard that fails when @you-agent-factory/packaged-factories is declared in UI runtime, development, optional, or other supported manifest dependency sections.",
+        "The guard fails when production or testable UI source imports the package root or any package subpath through supported static or dynamic import syntax.",
+        "An automated guard test creates or supplies an isolated synthetic manifest or source violation, observes a non-zero failure with a useful path/reason, and also proves a compliant fixture passes.",
+        "The guard operates on explicit UI inputs and does not validate unrelated route, command, registration, documentation-link, or generated-asset inventories.",
+        "Repository UI checks stay green with catalog access exclusively through the backend API boundary.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 3,
-      "passes": true,
-      "notes": "Implemented exact local listener selection through --listen for you server and server-enabled you run/you run --with-site flows, with loopback-only validation, explicit precedence over --server, one-time legacy local --server warnings, and preserved automatic legacy allocation. Ordinary runs reject misplaced --listen before the run handler, and listener lifecycle coverage proves exact readiness, unavailable-port errors, and shutdown. Refreshed authored/generated CLI contracts, command/help baselines, and reference guidance. Verified with make contracts-validate, make cli-manifest-check, make docs-reference-smoke, make test, go test ./pkg/transports/cli/... -count=1, focused CLI tests, full run-scoped-server functional tests, backend-size, pkg-maint, pkg-file-count, vet, and git diff --check; aggregate make lint is blocked by the pre-existing missing UI knip binary, and the backend-only continuation reaches existing package-boundary baseline violations; neither reports new violations."
-    },
-    {
-      "id": "dwro-s1-remote-placement-flags-004",
-      "title": "Reject remote and local-hosting conflicts and publish migration guidance",
-      "description": "As a customer, I want contradictory placement modes rejected with clear guidance so the CLI never both calls a remote server and hosts the same run locally.",
-      "acceptanceCriteria": [
-        "you --remote run --with-server and you --remote run --with-site each exit with the same stable usage classification and actionable conflict message, regardless of persistent-flag position.",
-        "Conflict validation occurs before Factory execution, HTTP dispatch, listener startup, browser launch, recording, or other run-owned side effects.",
-        "Authored CLI relationships, executable help, and packaged reference docs state that --remote selects a running server, --server selects its URI, and --listen selects a local bind; they document both run-mode conflicts and the legacy bind migration.",
-        "New customer-facing examples use you --remote --server <uri> for supported remote operations and --listen <address> for local server or server-enabled run binding; they do not present legacy --server listener syntax as the preferred form.",
-        "Behavioral CLI tests prove both conflicts, stable exit and error output, zero side effects, and help and reference guidance rather than relying on source or route inventories.",
-        "Documentation reference smoke checks pass",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 4,
-      "passes": true,
-      "notes": "Implemented stable REMOTE_LOCAL_HOSTING_CONFLICT validation before system initialization and again after custom run parsing, covering --remote before or after run with both --with-server and --with-site; behavioral tests prove no local, remote, browser, listener, or Factory side effects. Added authored conflict relationships, structured BAD_REQUEST output, executable help/examples, legacy --server migration guidance, and packaged reference documentation; regenerated published contracts and CLI baselines. Addressed review feedback by removing duplicate placement keys from authored/generated manifests, making manifest loading reject duplicate JSON object keys, redacting malformed credential-bearing endpoint diagnostics, keeping maintainability and package-file-count ratchets green, using worker-free listener functional cases, and removing marker-only docs assertions. Moved the generic strict decoder into the policy-free generated-artifact platform package and added loader/decoder coverage so the CLI manifest unit and functional floors remain intact. Verified with focused CLI tests, the full short Go suite, make verify-fast, make cli-manifest-check, make contracts-validate, make docs-reference-smoke, make pkg-maint, make pkg-file-count, backend-size, pkg-structure, vet, full run-scoped-server functional tests, and git diff --check."
+      "passes": false,
+      "notes": ""
     }
   ]
 }
