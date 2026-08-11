@@ -10290,3 +10290,16 @@
 - **Learnings for future iterations:**
   - A passing replacement workflow does not freeze a moving base; refresh `origin/main` after hosted checks and repeat metadata reconciliation before declaring the PR ready.
 ---
+## [2026-08-11 07:40:49 -07:00] - thr-functional-lane-speed-004 latest-main focused verification
+- What was implemented
+  - Completed focused verification on merge commit `cef100557` after reconciling `origin/main` `635a43870`; no functional-lane source changes were needed.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `make typecheck backend-size pkg-maint pkg-file-count pkg-structure vet` passed with the current-main dashboard changes present.
+  - `go test ./tests/functional/internal/support ./cmd/functionallane ./cmd/gocoveragecheck -count=1 -timeout 300s` passed with a clean temporary parent.
+  - `go test ./tests/functional/sessions/execution ./tests/functional/work/relationships ./tests/functional/work/submission -short -count=1 -timeout 600s` passed for all three touched packages.
+  - The replacement head is ready to push; hosted checks and final review audit remain pending.
+- **Learnings for future iterations:**
+  - After merging a dashboard-heavy mainline update, rerun both UI typecheck and the task's focused Go packages before pushing; the shared base can alter composition behavior even when the task source is unchanged.
+---
