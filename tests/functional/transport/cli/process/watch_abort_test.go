@@ -9,8 +9,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os/exec"
-	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -114,21 +112,6 @@ func TestCLIWorkWatchStreamAbortReturnsNonZeroExit(t *testing.T) {
 	if successErr != nil || successResult.ExitCode != 0 {
 		t.Fatalf("successful finite Work watch result = %#v error = %v; want exit code 0", successResult, successErr)
 	}
-}
-
-func buildYouBinary(t testing.TB, ctx context.Context, repoRoot string) string {
-	t.Helper()
-	binaryName := "you"
-	if runtime.GOOS == "windows" {
-		binaryName += ".exe"
-	}
-	binaryPath := filepath.Join(t.TempDir(), binaryName)
-	command := exec.CommandContext(ctx, "go", "build", "-o", binaryPath, "./cmd/factory")
-	command.Dir = repoRoot
-	if output, err := command.CombinedOutput(); err != nil {
-		t.Fatalf("build you CLI: %v\n%s", err, output)
-	}
-	return binaryPath
 }
 
 func runBuiltYouBinary(

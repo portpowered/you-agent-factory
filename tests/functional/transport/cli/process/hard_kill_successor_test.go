@@ -26,6 +26,11 @@ const (
 	preRuntimeStagingOwnerMetadata    = ".owner.json"
 )
 
+type hardKillProcessControl struct {
+	resume    func() error
+	terminate func() error
+}
+
 // TestCLISuccessorAfterHardKillReportsPreRuntimeStagingContention proves the
 // actual process boundary around startup. It observes the first durable
 // startup checkpoint and packaged-factory staging acquisition, force-kills the
@@ -52,12 +57,12 @@ func TestCLISuccessorAfterHardKillReportsPreRuntimeStagingContention(t *testing.
 	if !operatorsettings.IsLocalBackendScopeID(predecessorScope) {
 		t.Fatalf("predecessor persisted backendScopeID = %q, want local scope", predecessorScope)
 	}
-	stagingPath, releasePredecessor := waitForPreRuntimeStagingPath(t, session, predecessor.command.Process.Pid)
-	t.Cleanup(releasePredecessor)
-	if err := predecessor.stop(); err != nil {
+	stagingPath, predecessorControl := waitForPreRuntimeStagingPath(t, session, predecessor.command.Process.Pid)
+	t.Cleanup(func() { _ = predecessorControl.resume() })
+	if err := predecessor.stopWith(predecessorControl.terminate); err != nil {
 		t.Fatalf("hard-kill predecessor: %v; stdout=%q stderr=%q process=%s", err, predecessor.stdoutText(), predecessor.stderrText(), predecessor.processState())
 	}
-	releasePredecessor()
+	_ = predecessorControl.resume()
 	t.Logf("predecessor acquired pre-runtime packaged-factory staging resource and was hard-killed: %s", stagingPath)
 	if _, err := os.Stat(stagingPath); err != nil {
 		t.Fatalf("hard-killed predecessor did not retain staged resource %s: %v", stagingPath, err)
@@ -195,10 +200,17 @@ func (process *hardKillCLIProcess) waitForBoundedFailure(t testing.TB, role stri
 }
 
 func (process *hardKillCLIProcess) stop() error {
+	if process == nil || process.command == nil || process.command.Process == nil {
+		return nil
+	}
+	return process.stopWith(process.command.Process.Kill)
+}
+
+func (process *hardKillCLIProcess) stopWith(terminate func() error) error {
 	if process == nil || process.command == nil {
 		return nil
 	}
-	if err := process.kill(); err != nil {
+	if err := process.killWith(terminate); err != nil {
 		return err
 	}
 	if _, exited := process.waitForExit(hardKillProcessExitTimeout); !exited {
@@ -215,10 +227,17 @@ func (process *hardKillCLIProcess) stop() error {
 }
 
 func (process *hardKillCLIProcess) kill() error {
+	if process == nil || process.command == nil || process.command.Process == nil {
+		return nil
+	}
+	return process.killWith(process.command.Process.Kill)
+}
+
+func (process *hardKillCLIProcess) killWith(terminate func() error) error {
 	if process.command.Process == nil || process.command.ProcessState != nil {
 		return nil
 	}
-	if err := process.command.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
+	if err := terminate(); err != nil && !errors.Is(err, os.ErrProcessDone) {
 		return fmt.Errorf("kill process: %w", err)
 	}
 	return nil
@@ -348,7 +367,7 @@ func waitForPersistedBackendScopeID(t testing.TB, session *builtcliacceptance.Se
 	}
 }
 
-func waitForPreRuntimeStagingPath(t testing.TB, session *builtcliacceptance.Session, predecessorPID int) (string, func()) {
+func waitForPreRuntimeStagingPath(t testing.TB, session *builtcliacceptance.Session, predecessorPID int) (string, hardKillProcessControl) {
 	t.Helper()
 	root := filepath.Join(session.HomeDir, ".you-agent-factory", "factories")
 	deadline := time.NewTimer(hardKillSuccessorReadinessTimeout)
@@ -375,22 +394,19 @@ func waitForPreRuntimeStagingPath(t testing.TB, session *builtcliacceptance.Sess
 			path = ""
 		}
 		if path != "" {
-			resume, err := suspendHardKillProcess(predecessorPID)
+			control, err := suspendHardKillProcess(predecessorPID)
 			if err != nil {
 				t.Fatalf("suspend predecessor before observing pre-runtime staging: %v", err)
 			}
 			_, statErr := os.Stat(path)
 			if statErr == nil || isPreRuntimeStagingMetadataUnavailable(statErr) {
-				var releaseOnce sync.Once
-				return path, func() {
-					releaseOnce.Do(func() { _ = resume() })
-				}
+				return path, control
 			}
 			if !errors.Is(statErr, os.ErrNotExist) {
-				_ = resume()
+				_ = control.resume()
 				t.Fatalf("verify pre-runtime packaged-factory staging under %s: %v", root, statErr)
 			}
-			if err := resume(); err != nil {
+			if err := control.resume(); err != nil {
 				t.Fatalf("resume predecessor after staging release before suspension: %v", err)
 			}
 		}
