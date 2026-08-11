@@ -3805,6 +3805,8 @@
   - `cmd/pkgboundarycheck/recorded_baseline.go`
   - `cmd/pkgboundarycheck/main.go`
   - `cmd/pkgboundarycheck/recorded_baseline_test.go`
+  - `docs/internal/baselines/test-service-import-baseline.json` (removed obsolete zero-debt file)
+  - `docs/internal/baselines/service-construction-baseline.json` (removed obsolete zero-debt file)
   - `prd.json`
   - `progress.txt`
 - Verification
@@ -3812,8 +3814,28 @@
   - `go vet ./cmd/pkgboundarycheck` and `git diff --check` passed before merge resolution.
   - Scratch proof command: `go run ./cmd/pkgboundarycheck -root C:\Users\andre\AppData\Local\Temp\pkg-boundary-scratch-e994d8f5990d44f392251e6472570299`.
   - Scratch terminal output and exit: `1`; `[agent-factory:pkg-boundary] prohibited domain transport import: github.com/portpowered/infinite-you/pkg/transports/http (pkg/services/work/committed.go)`, the domain-owner/reason/remediation lines, the active generated-code exception summary, `[agent-factory:pkg-boundary] found 1 package-boundary violation(s)`, and `exit status 1`.
-  - `prd.json` parses with all three stories still `passes:true`; conflict markers are absent. Full post-merge gates and required CI remain to be rerun on the new head.
+  - Post-merge `go test ./cmd/pkgboundarycheck -count=1`, `go vet ./cmd/pkgboundarycheck`, `make typecheck`, `make backend-size pkg-maint pkg-file-count pkg-structure vet`, and full `make test` passed.
+  - After deleting the two stale durable-provider baseline files, the package-boundary scanner passed in `make lint LINT_TARGETS=pkg-boundary LINT_JOBS=1`; the aggregate target then reported only the two ownership-boundary findings from unchanged `pkg/initializer/application/process.go` and `pkg/services/edges/definition.go`. `git diff --quiet origin/main...HEAD --` for those source files passed, confirming they are not introduced by this PR.
+  - `prd.json` parses with all three stories still `passes:true`; conflict markers are absent. Required CI and final PR feedback audit remain to be completed on the new head.
 - **Learnings for future iterations:**
   - A branch-local `HEAD` is evidence of the current tree, not a trustworthy recorded baseline; when no main-tracking ref exists, fail open by preserving blocking findings rather than suppressing them.
   - Treat an explicitly requested base ref as an operator assertion: do not silently substitute another candidate when it cannot resolve.
+---
+
+## 2026-08-10 19:16 -07:00 - thr-lint-speed-003 final PR follow-up
+- What was implemented
+  - Re-audited PR #1863 with the thread-aware GitHub workflow; the sole blocking conversation comment is addressed by the local `HEAD`-fallback fix, committed-violation regression, invalid-base coverage, current-main synchronization, and removal of the two stale durable-provider baseline entries.
+  - No additional story implementation was needed; all three PRD stories remain marked `passes:true`.
+- Files changed
+  - `docs/internal/baselines/service-construction-baseline.json` (removed obsolete entry)
+  - `docs/internal/baselines/test-service-import-baseline.json` (removed obsolete entry)
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./cmd/lintcheck ./cmd/lintlane ./cmd/pkgboundarycheck -count=1`, `go test -race ./cmd/lintlane -count=1`, focused `go vet`, `make typecheck`, `make backend-size pkg-maint pkg-file-count pkg-structure vet`, and `git diff --check` pass.
+  - `make pkg-boundary` reports `package boundary passed` and only the two unchanged ownership-boundary findings from `pkg/initializer/application/process.go` and `pkg/services/edges/definition.go`; both files are byte-for-byte unchanged versus `origin/main`.
+  - The PR body will be updated byte-for-byte from `prd.json`; required CI and the final post-push review-thread audit remain before declaring the handoff complete.
+- **Learnings for future iterations:**
+  - Distinguish a passing scoped checker from an aggregate gate that surfaces unchanged main-branch ownership debt; compare each reported source path against `origin/main` before classifying it as task regression.
+  - A corrected local PR head does not address review feedback until the commits, PR body, and explicit evidence are pushed and re-audited on GitHub.
 ---
