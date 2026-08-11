@@ -126,8 +126,12 @@ func TestPackagedACPIdentitiesAndLegacyAliasesResolveToTheirCanonicalIDs(t *test
 			if canonical.Provider.Readiness != providers.ReadinessUnverified {
 				t.Fatalf("GetProvider(%q) readiness = %q, want unverified", test.canonical, canonical.Provider.Readiness)
 			}
-			if len(canonical.Provider.Capabilities) != 1 || canonical.Provider.Capabilities[0] != providers.CapabilityPromptSubmission {
-				t.Fatalf("GetProvider(%q) capabilities = %v, want prompt_submission only", test.canonical, canonical.Provider.Capabilities)
+			wantCapabilities := []providers.Capability{providers.CapabilityPromptSubmission}
+			if test.canonical == "cursor-acp" {
+				wantCapabilities = append(wantCapabilities, providers.CapabilityImageInput)
+			}
+			if !reflect.DeepEqual(canonical.Provider.Capabilities, wantCapabilities) {
+				t.Fatalf("GetProvider(%q) capabilities = %v, want %v", test.canonical, canonical.Provider.Capabilities, wantCapabilities)
 			}
 			for _, alias := range test.aliases {
 				resolved, err := root.GetProvider(context.Background(), providers.GetProviderRequest{ID: providers.ID(alias)})

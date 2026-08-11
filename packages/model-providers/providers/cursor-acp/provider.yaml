@@ -13,7 +13,7 @@ technicalSupportLevel: experimental
 implementationAvailability: externally-supplied
 maximumExecutionCapabilities:
   promptSubmission: true
-  imageInput: false
+  imageInput: true
   sessionResume: false
   structuredOutput: false
   toolExecution: false
@@ -50,7 +50,7 @@ harness:
   acpSupport:
     support: supported
     protocolVersion: "1"
-    resourceDelivery: unknown
+    resourceDelivery: implemented
     evidenceRefs: [cursor-acp-protocol]
 modelCatalogPosture: unknown
 harnessRoutes:
@@ -60,8 +60,9 @@ harnessRoutes:
     transport: none
   - direction: input
     modality: image
-    support: unknown
-    transport: none
+    support: supported
+    transport: acp_resource
+    evidenceRefs: [cursor-acp-protocol]
   - direction: input
     modality: text
     support: supported
@@ -95,6 +96,7 @@ evidence:
     factRefs:
       - model_catalog
       - harness/acp
+      - harness/input/image
       - harness/input/text
       - harness/output/text
 models: []

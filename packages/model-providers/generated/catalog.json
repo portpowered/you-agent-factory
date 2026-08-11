@@ -2415,6 +2415,7 @@
           "factRefs": [
             "model_catalog",
             "harness/acp",
+            "harness/input/image",
             "harness/input/text",
             "harness/output/text"
           ],
@@ -2429,7 +2430,7 @@
             "cursor-acp-protocol"
           ],
           "protocolVersion": "1",
-          "resourceDelivery": "unknown",
+          "resourceDelivery": "implemented",
           "support": "supported"
         },
         "kind": "acp"
@@ -2443,9 +2444,12 @@
         },
         {
           "direction": "input",
+          "evidenceRefs": [
+            "cursor-acp-protocol"
+          ],
           "modality": "image",
-          "support": "unknown",
-          "transport": "none"
+          "support": "supported",
+          "transport": "acp_resource"
         },
         {
           "direction": "input",
@@ -2494,7 +2498,7 @@
       "implementationAvailability": "externally-supplied",
       "knownLimits": [],
       "maximumExecutionCapabilities": {
-        "imageInput": false,
+        "imageInput": true,
         "promptSubmission": true,
         "sessionResume": false,
         "structuredOutput": false,

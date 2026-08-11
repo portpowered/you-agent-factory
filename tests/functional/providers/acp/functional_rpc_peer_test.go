@@ -133,7 +133,7 @@ func (p *functionalRPCPeer) createSession(request rpcEnvelope) error {
 		return err
 	}
 	config := `[]`
-	if p.mode == "model" {
+	if p.mode == "model" || p.mode == "package-conformance" {
 		config = `[{"type":"select","id":"model","name":"Model","category":"model","currentValue":"default","options":[{"name":"Test model","value":"test-model"}]}]`
 	}
 	p.sessions++
@@ -259,7 +259,7 @@ func (p *functionalRPCPeer) prompt(request rpcEnvelope) error {
 	if err := p.validatePromptPayload(request); err != nil {
 		return err
 	}
-	if p.mode == "model" && !p.modelSet {
+	if (p.mode == "model" || p.mode == "package-conformance") && !p.modelSet {
 		return p.respondError(request.ID, -32603, "Internal error", map[string]any{"error": "advertised model was not applied"})
 	}
 	if p.mode == "unsupported" {
