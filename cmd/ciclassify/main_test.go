@@ -94,6 +94,10 @@ func TestRunWritesNamedLaneOutputs(t *testing.T) {
 		"backend_command=make backend-verification",
 		"run_ui_backend_integration=true",
 		"ui_backend_integration_command=make ui-backend-integration",
+		"api_package_command=make api-package-verify",
+		"packaged_factories_package_command=make packaged-factory-package-verify",
+		"model_providers_package_command=make model-provider-package-verify",
+		"local_inference_command=make local-inference-verification",
 		"run_docs_reference=false",
 	} {
 		if !strings.Contains(string(contents), want) {

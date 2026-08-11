@@ -241,7 +241,7 @@ func newLanePlans() map[string]lanePlan {
 		laneAPIPackage:               {Name: laneAPIPackage, Command: "make api-package-verify"},
 		lanePackagedFactoriesPackage: {Name: lanePackagedFactoriesPackage, Command: "make packaged-factory-package-verify"},
 		laneModelProvidersPackage:    {Name: laneModelProvidersPackage, Command: "make model-provider-package-verify"},
-		laneLocalInference:           {Name: laneLocalInference, Command: "make verify-pr-inference"},
+		laneLocalInference:           {Name: laneLocalInference, Command: "make local-inference-verification"},
 	}
 }
 

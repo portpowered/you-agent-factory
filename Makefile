@@ -121,7 +121,7 @@ endef
 .PHONY: test-ui-browser-integration test-ui-storybook-integration test-ui-durable-session-real-backend test-ui-performance ui-component-test
 .PHONY: test-unit-coverage test-functional-coverage test-backend-coverage test-coverage-go test-race
 .PHONY: test-backend-verification test-root-process-acceptance long-tests long-tests-managed-runtime long-tests-functional-runtime pr-inference-approval
-.PHONY: frontend-verification backend-verification ui-backend-integration
+.PHONY: frontend-verification backend-verification ui-backend-integration local-inference-verification
 
 .PHONY: verify-fast verify-pr verify-pr-inference verify-extended verify-build verify-lint verify-api
 .PHONY: verify-build-contracts verify-tests run-concurrent-ui-verification-lanes verify test-ui-coverage
@@ -501,6 +501,12 @@ backend-verification:
 # Storybook-only checks.
 ui-backend-integration:
 	$(MAKE) ui-durable-session-real-backend-integration-test
+
+# This focused lane includes the managed-runtime regression and the single
+# real-inference approval regression without the broader specialty sweep.
+local-inference-verification:
+	$(MAKE) long-tests-managed-runtime
+	$(MAKE) pr-inference-approval
 
 ACP_BASELINE_DIR       ?= docs/internal/projects/acp-program/baselines
 ACP_BASELINE_ARTIFACTS ?= .artifacts/acp-baseline

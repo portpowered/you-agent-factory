@@ -48,8 +48,8 @@
         "Tests pass"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Kept docs-reference-smoke, readme-check, api-package-verify, packaged-factory-package-verify, and model-provider-package-verify as the direct supporting-lane rerun commands. Added local-inference-verification, which composes long-tests-managed-runtime and exactly one pr-inference-approval execution without the broader specialty sweep, and updated classifier output to emit that command. Verified all five supporting commands, the managed-runtime regression, make -n command expansion, go test ./cmd/ciclassify -count=1, and make typecheck; the real-inference executable is Linux/runner-gated and was not available in this Windows worktree."
     },
     {
       "id": "ci-additive-classifier-003",
