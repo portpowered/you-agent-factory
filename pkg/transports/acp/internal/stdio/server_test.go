@@ -3,20 +3,20 @@
 package stdio
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"io"
+	"os"
 	"reflect"
 	"strings"
 	"sync"
 	"testing"
 	"time"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
-	"bufio"
-	"os"
 )
 
 type recordingLogger struct {

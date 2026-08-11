@@ -6,15 +6,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"reflect"
-	"strings"
-	"testing"
 	acpsdk "github.com/coder/acp-go-sdk"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/identity"
+	"reflect"
+	"strings"
+	"testing"
 )
 
 // TestHandleSessionPromptFirstTurnStartsFactorySessionWithExactTargetRootAndContent

@@ -39,6 +39,7 @@
 - For mechanical test splits, capture the exact go test inventory, repeatable coverage command/output, and one-to-one behavior/helper placement map in a review artifact before moving tests.
 - For deletion-only same-package test splits, preserve the exact package-file baseline by consolidating cohesive declarations into existing owners; keep every cross-suite fixture in the one shared helper and route boundary-sensitive construction through that helper.
 - For split package tests with a preserved boundary migration fingerprint, keep the shared fixture entry point in the package helper and retain only the exact constructor callback at its reviewed source path; compare the checker fingerprint against the live base.
+- When relocating a cross-suite test constructor, keep its complete import and construction path in the one shared helper and record moved migration debt with exact deletion-only service-import/construction baselines; never use source-position directives to preserve a lint fingerprint.
 - Keep comments and exemption directives attached to the declaration they govern when splitting Go test files; otherwise a boundary can duplicate or orphan maintainability policy.
 - Replacing a file-level size exemption with focused test files may require per-function directives; update both the source directive and the sorted exemption-budget entry together.
 - When moving a test with a pkgmaintcheck exemption, move the existing budget target with the test and retain legacy file suppressions until the remaining staged split retires the source file.
@@ -9540,4 +9541,32 @@
   - `progress.txt`
 - **Learnings for future iterations:**
   - Full `make test` includes the broader functional package set and can take several minutes even when most package results are cached; retain the final exit status when collecting bounded output.
+---
+## [2026-08-11 07:14:00 -07:00] - thr-split-acp-stdio-tests review-fix
+- What was implemented
+  - Removed the `newBoundarySensitiveChatSessionsStore` shim and both `//line` directives.
+  - Moved the complete real Chat Sessions constructor into `session_test_helpers_test.go` and routed every recovery/control setup through `newChatSessionsStore`.
+  - Added exact deletion-only `service-construction` and `test-service-import` baseline entries for the relocated pre-existing `chat_sessions/wire` test edge.
+  - Formatted all nine Go files identified by review and updated the PRD evidence note.
+- Files changed
+  - `docs/internal/baselines/service-construction-baseline.json`
+  - `docs/internal/baselines/test-service-import-baseline.json`
+  - `pkg/transports/acp/internal/stdio/prompt_stream_attachment_test.go`
+  - `pkg/transports/acp/internal/stdio/prompt_stream_delivery_test.go`
+  - `pkg/transports/acp/internal/stdio/prompt_stream_gap_test.go`
+  - `pkg/transports/acp/internal/stdio/server_test.go`
+  - `pkg/transports/acp/internal/stdio/session_load_test.go`
+  - `pkg/transports/acp/internal/stdio/session_new_test.go`
+  - `pkg/transports/acp/internal/stdio/session_prompt_admission_test.go`
+  - `pkg/transports/acp/internal/stdio/session_prompt_dispatch_test.go`
+  - `pkg/transports/acp/internal/stdio/session_prompt_test.go`
+  - `pkg/transports/acp/internal/stdio/session_test_helpers_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Focused ACP stdio tests, `make typecheck`, `make backend-size pkg-maint pkg-file-count pkg-structure`, `make vet`, and `git diff --check` passed.
+  - Against `origin/main` `b99c8b942`, normalized inventory was 222/222 with zero diff and SHA-256 `adbe5493c77fd04c100112584add6454b690d8d6ec7aaed486cc65914976cddc`; coverage was 94.3% before and after.
+  - Package-boundary checker passed with no blocking package-boundary violations; the aggregate `make pkg-boundary` result remains nonzero only for the two unchanged ownership-boundary findings also present on current main.
+- **Learnings for future iterations:**
+  - Exact service-construction and test-service-import baselines are the repository-supported way to carry reviewed migration debt when a move changes the finding path; preserving a source line with `//line` is not acceptable.
 ---

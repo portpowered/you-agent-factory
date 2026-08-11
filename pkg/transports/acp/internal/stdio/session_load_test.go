@@ -5,15 +5,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"strings"
-	"testing"
 	acpsdk "github.com/coder/acp-go-sdk"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/envelope"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/identity"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/session"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"strings"
+	"testing"
 )
 
 const validSessionLoadParams = `{"sessionId":"session-1","cwd":"/work/project","mcpServers":[]}`

@@ -2,22 +2,22 @@ package stdio
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"sync"
-	"testing"
 	acpsdk "github.com/coder/acp-go-sdk"
+	"github.com/portpowered/infinite-you/pkg/platform/wiretranscript"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/events"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/identity"
-	"encoding/json"
-	"math"
-	"github.com/portpowered/infinite-you/pkg/services/events"
-	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/mapping"
-	"strings"
-	"github.com/portpowered/infinite-you/pkg/platform/wiretranscript"
 	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
+	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/identity"
+	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/mapping"
+	"math"
+	"strings"
+	"sync"
+	"testing"
 )
 
 func TestAttachmentCacheResumeAttachmentID(t *testing.T) {

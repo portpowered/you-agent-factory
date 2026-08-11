@@ -6,80 +6,83 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	acpsdk "github.com/coder/acp-go-sdk"
+	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
+	chatsessionswire "github.com/portpowered/infinite-you/pkg/services/chat_sessions/wire"
+	"github.com/portpowered/infinite-you/pkg/services/events"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
+	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
+	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/envelope"
+	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/identity"
 	"strconv"
 	"sync"
 	"testing"
 	"time"
-	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/events"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
-	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/envelope"
-	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/identity"
-	acpsdk "github.com/coder/acp-go-sdk"
-	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 type fakeChatSessionsService struct {
-	mu sync.Mutex
-	createCalled bool
-	created      chatsessions.CreateSessionRequest
-	createErr    error
-	sessionID    string
-	getSessionCalled bool
-	getSessionReq    chatsessions.GetSessionRequest
-	getSessionReqs   []chatsessions.GetSessionRequest
-	getSessionResult chatsessions.GetSessionResult
-	getSessionErrs []error
-	getSessionResults []chatsessions.GetSessionResult
-	getSessionErr     error
-	setTargetCalled bool
-	setTargetReq    chatsessions.SetTargetRequest
-	setTargetResult chatsessions.SetTargetResult
-	setTargetErr    error
-	startTurnCalled bool
-	startTurnReq    chatsessions.StartTurnRequest
-	startTurnReqs   []chatsessions.StartTurnRequest
-	startTurnResult chatsessions.StartTurnResult
-	startTurnResults []chatsessions.StartTurnResult
-	startTurnErr     error
-	bindFactorySessionCalled bool
-	bindFactorySessionReq    chatsessions.BindFactorySessionRequest
-	bindFactorySessionReqs   []chatsessions.BindFactorySessionRequest
-	bindFactorySessionResult chatsessions.BindFactorySessionResult
-	bindFactorySessionErrs []error
-	bindFactorySessionErr  error
+	mu                                sync.Mutex
+	createCalled                      bool
+	created                           chatsessions.CreateSessionRequest
+	createErr                         error
+	sessionID                         string
+	getSessionCalled                  bool
+	getSessionReq                     chatsessions.GetSessionRequest
+	getSessionReqs                    []chatsessions.GetSessionRequest
+	getSessionResult                  chatsessions.GetSessionResult
+	getSessionErrs                    []error
+	getSessionResults                 []chatsessions.GetSessionResult
+	getSessionErr                     error
+	setTargetCalled                   bool
+	setTargetReq                      chatsessions.SetTargetRequest
+	setTargetResult                   chatsessions.SetTargetResult
+	setTargetErr                      error
+	startTurnCalled                   bool
+	startTurnReq                      chatsessions.StartTurnRequest
+	startTurnReqs                     []chatsessions.StartTurnRequest
+	startTurnResult                   chatsessions.StartTurnResult
+	startTurnResults                  []chatsessions.StartTurnResult
+	startTurnErr                      error
+	bindFactorySessionCalled          bool
+	bindFactorySessionReq             chatsessions.BindFactorySessionRequest
+	bindFactorySessionReqs            []chatsessions.BindFactorySessionRequest
+	bindFactorySessionResult          chatsessions.BindFactorySessionResult
+	bindFactorySessionErrs            []error
+	bindFactorySessionErr             error
 	recordPendingFactorySessionCalled bool
 	recordPendingFactorySessionReq    chatsessions.RecordPendingFactorySessionRequest
 	recordPendingFactorySessionReqs   []chatsessions.RecordPendingFactorySessionRequest
 	recordPendingFactorySessionResult chatsessions.RecordPendingFactorySessionResult
-	recordPendingFactorySessionErrs []error
-	recordPendingFactorySessionErr  error
-	advanceTurnCalled bool
-	advanceTurnReq    chatsessions.AdvanceTurnRequest
-	advanceTurnReqs   []chatsessions.AdvanceTurnRequest
-	advanceTurnErrs []error
-	advanceTurnErr  error
-	attachments      map[string]chatsessions.Attachment
-	nextAttachmentID int
-	attachErr error
-	detachCalls []chatsessions.DetachRequest
-	detachErr   error
-	acknowledgeAttachmentErr error
-	acknowledgeAttachmentErrs []error
-	acknowledgeAttachmentReqs []chatsessions.AcknowledgeAttachmentRequest
-	acknowledgeAttachmentPositionErr bool
-	requestControlReqs   []chatsessions.RequestControlRequest
-	requestControlResult chatsessions.RequestControlResult
-	requestControlErr    error
-	lastControlIntent    chatsessions.ControlIntent
-	advanceControlReqs   []chatsessions.AdvanceControlRequest
-	advanceControlResult chatsessions.AdvanceControlResult
-	advanceControlResults []chatsessions.AdvanceControlResult
-	advanceControlErr     error
+	recordPendingFactorySessionErrs   []error
+	recordPendingFactorySessionErr    error
+	advanceTurnCalled                 bool
+	advanceTurnReq                    chatsessions.AdvanceTurnRequest
+	advanceTurnReqs                   []chatsessions.AdvanceTurnRequest
+	advanceTurnErrs                   []error
+	advanceTurnErr                    error
+	attachments                       map[string]chatsessions.Attachment
+	nextAttachmentID                  int
+	attachErr                         error
+	detachCalls                       []chatsessions.DetachRequest
+	detachErr                         error
+	acknowledgeAttachmentErr          error
+	acknowledgeAttachmentErrs         []error
+	acknowledgeAttachmentReqs         []chatsessions.AcknowledgeAttachmentRequest
+	acknowledgeAttachmentPositionErr  bool
+	requestControlReqs                []chatsessions.RequestControlRequest
+	requestControlResult              chatsessions.RequestControlResult
+	requestControlErr                 error
+	lastControlIntent                 chatsessions.ControlIntent
+	advanceControlReqs                []chatsessions.AdvanceControlRequest
+	advanceControlResult              chatsessions.AdvanceControlResult
+	advanceControlResults             []chatsessions.AdvanceControlResult
+	advanceControlErr                 error
 }
+
 var _ chatsessions.Service = (*fakeChatSessionsService)(nil)
+
 func (f *fakeChatSessionsService) CreateSession(_ context.Context, req chatsessions.CreateSessionRequest) (chatsessions.CreateSessionResult, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -357,12 +360,15 @@ func (f *fakeChatSessionsService) AcknowledgeAttachment(_ context.Context, req c
 	f.attachments[req.AttachmentID] = attachment
 	return chatsessions.AcknowledgeAttachmentResult{Attachment: attachment, Outcome: chatsessions.AcknowledgeAttachmentOutcomeAdvanced}, nil
 }
+
 type fakeFactoryTargetCatalogService struct {
 	calls  []chatsessions.ResolveFactoryTargetCatalogRequest
 	result chatsessions.ResolveFactoryTargetCatalogResult
 	err    error
 }
+
 var _ chatsessions.FactoryTargetCatalogService = (*fakeFactoryTargetCatalogService)(nil)
+
 func (f *fakeFactoryTargetCatalogService) ResolveFactoryTargetCatalog(
 	_ context.Context,
 	req chatsessions.ResolveFactoryTargetCatalogRequest,
@@ -373,28 +379,29 @@ func (f *fakeFactoryTargetCatalogService) ResolveFactoryTargetCatalog(
 	}
 	return f.result, nil
 }
+
 type fakeFactoryTargetService struct {
-	mu sync.Mutex
-	startCalls  []factorysessions.StartRequest
-	startResult factorysessions.AsyncStartResult
-	startErr    error
-	invokeCalls  []invokeFactoryTargetCall
-	invokeResult factorysessions.InvocationResult
-	invokeErr    error
-	invokeErrs []error
-	invokeEnter   chan struct{}
-	invokeRelease chan struct{}
-	cancelCalls []cancelFactoryTargetCall
-	cancelErr   error
+	mu             sync.Mutex
+	startCalls     []factorysessions.StartRequest
+	startResult    factorysessions.AsyncStartResult
+	startErr       error
+	invokeCalls    []invokeFactoryTargetCall
+	invokeResult   factorysessions.InvocationResult
+	invokeErr      error
+	invokeErrs     []error
+	invokeEnter    chan struct{}
+	invokeRelease  chan struct{}
+	cancelCalls    []cancelFactoryTargetCall
+	cancelErr      error
 	responseCursor *factorysessions.ResponseEventCursor
 	responseErr    error
-	cancelEntered chan struct{}
-	cancelRelease chan struct{}
+	cancelEntered  chan struct{}
+	cancelRelease  chan struct{}
 	closeCalls     []string
 	closeErr       error
 	terminateCalls []terminateFactoryTargetCall
-	closeEntered chan struct{}
-	closeRelease chan struct{}
+	closeEntered   chan struct{}
+	closeRelease   chan struct{}
 }
 type cancelFactoryTargetCall struct {
 	sessionID string
@@ -408,6 +415,7 @@ type terminateFactoryTargetCall struct {
 	sessionID string
 	request   factorysessions.ControlRequest
 }
+
 func (f *fakeFactoryTargetService) StartAsync(
 	_ context.Context,
 	request factorysessions.StartRequest,
@@ -520,14 +528,22 @@ func fixedClock(at time.Time) func() time.Time {
 }
 
 func newChatSessionsStore(prefix string) (chatsessions.Service, error) {
-	return newBoundarySensitiveChatSessionsStore(prefix)
+	return chatsessionswire.NewService(
+		sequentialIDGenerator(prefix),
+		fixedClock(time.Unix(0, 1)),
+		stubEventsAppender{},
+		stubEventsReader{},
+	)
 }
 
 type stubEventsAppender struct{}
+
 func (stubEventsAppender) Append(context.Context, events.AppendRequest) (events.AppendResult, error) {
 	return events.AppendResult{}, nil
 }
+
 type stubEventsReader struct{}
+
 func (stubEventsReader) Read(context.Context, events.ReadRequest) (events.ReadResult, error) {
 	return events.ReadResult{}, nil
 }
@@ -568,7 +584,9 @@ func catalogResultWithCurrent(current string) chatsessions.ResolveFactoryTargetC
 		},
 	}
 }
+
 const validSessionNewParams = `{"cwd":"/work/project","mcpServers":[]}`
+
 func newTestServer(chatSessions *fakeChatSessionsService, catalog *fakeFactoryTargetCatalogService, homeDir string) *Server {
 	return newTestServerWithFactoryTarget(chatSessions, catalog, nil, homeDir)
 }
@@ -677,18 +695,20 @@ func admittedTurnResult(id, target string, version uint64, workingRoot, turnID, 
 		},
 	}
 }
+
 type controlRecordingChatSessions struct {
 	chatsessions.Service
 	requestEntered chan struct{}
 	requestRelease <-chan struct{}
 	requestOnce    sync.Once
-	commitEntered chan struct{}
-	commitRelease <-chan struct{}
-	commitOnce    sync.Once
-	mu       sync.Mutex
-	requests []chatsessions.RequestControlRequest
-	advances []chatsessions.AdvanceControlResult
+	commitEntered  chan struct{}
+	commitRelease  <-chan struct{}
+	commitOnce     sync.Once
+	mu             sync.Mutex
+	requests       []chatsessions.RequestControlRequest
+	advances       []chatsessions.AdvanceControlResult
 }
+
 func (s *controlRecordingChatSessions) RequestControl(
 	ctx context.Context,
 	req chatsessions.RequestControlRequest,
@@ -743,17 +763,20 @@ func waitForChannel(t *testing.T, ch <-chan struct{}, description string) {
 		t.Fatalf("timed out waiting for %s", description)
 	}
 }
+
 type fakeEventsService struct {
 	events.Service
 	mu             sync.Mutex
 	records        map[events.Topic][]events.Record
 	evictedThrough map[events.Topic]events.AggregateSequence
-	cond *sync.Cond
-	subscribed chan struct{}
-	readErr error
-	subscribeErr error
+	cond           *sync.Cond
+	subscribed     chan struct{}
+	readErr        error
+	subscribeErr   error
 }
+
 var _ events.Service = (*fakeEventsService)(nil)
+
 func (f *fakeEventsService) Read(_ context.Context, req events.ReadRequest) (events.ReadResult, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -902,7 +925,9 @@ func (f *fakeEventsService) Subscribe(_ context.Context, req events.SubscribeReq
 		}
 	}), nil
 }
+
 const streamingTestSessionID = "session-1"
+
 func newStreamingTestServer(t *testing.T, factoryTarget *fakeFactoryTargetService, turnIDs ...string) (*Server, *fakeEventsService) {
 	t.Helper()
 	session := chatsessions.Session{ID: streamingTestSessionID, Version: 1, WorkingRoot: "/work/project", TargetEpisode: 1}
