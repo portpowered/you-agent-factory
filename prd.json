@@ -8,7 +8,7 @@
     "solution": "Preserve the optional boolean through normalization, policy resolution, both child execution compositions, provider selection, and durable observation. Treat true as a per-child override of provider approval and sandbox restrictions while retaining unrelated policy limits. Let Providers truthfully declare and apply bypass support, reject unsupported routes before any execution side effect, and align authored contracts, generated projections, documentation, events, recordings, resume, and replay."
   },
   "acceptanceCriteria": [
-    "Static and dynamically constructed agent.run requests preserve boolean skipPermissions values through normalization and canonical Factory Session execution; omission and false reach providers as false.",
+    "Static and dynamically constructed agent.run requests preserve boolean skipPermissions values through standalone and canonical Factory Session execution; omission and false reach providers as false.",
     "Under every recognized policy.mode, skipPermissions: true overrides only provider approval and sandbox restrictions for the addressed child; unrelated policy controls remain enforced and siblings retain their own effective policy.",
     "Claude, Codex, Agy, and ACP routes truthfully apply their supported bypass behavior, while any selected route that cannot honor bypass fails with a stable, safe capability diagnostic before an attempt or provider side effect starts.",
     "Authored JavaScript contracts, generated projections, reference documentation, dispatch events, recordings, resume, and replay consistently expose and preserve the child-scoped boolean without leaking prompts, credentials, or raw command lines.",
@@ -49,7 +49,7 @@
       ],
       "priority": 2,
       "passes": true,
-      "notes": "Carried skipPermissions into the shared child-policy request and defined it as a child-scoped override. The READ_ONLY mode (the only currently recognized JavaScript policy mode) now permits the addressed child's sandbox and writable-root restrictions when skipPermissions is true, while model, reasoning, command, network, concurrency, fanout, session, duration, token, output, and artifact controls remain policy-owned; siblings retain independent evaluation. Resume/replay coverage restores true and false per dispatch. Focused policy and runtime suites pass, and the owning JavaScript runtime documentation states the precedence and retained controls."
+      "notes": "Carried skipPermissions into the shared child-policy request and defined it as a child-scoped override. The READ_ONLY mode (the only currently recognized JavaScript policy mode) now permits the addressed child’s sandbox and writable-root restrictions when skipPermissions is true, while model, reasoning, command, network, concurrency, fanout, session, duration, token, output, and artifact controls remain policy-owned; siblings retain independent evaluation. Resume/replay coverage restores true and false per dispatch. Focused policy and runtime suites pass, and the owning JavaScript runtime documentation states the precedence and retained controls."
     },
     {
       "id": "js-skip-permissions-parity-003",

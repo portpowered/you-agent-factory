@@ -10546,3 +10546,15 @@
 - **Learnings for future iterations:**
   - When main advances repeatedly during a handoff, keep each synchronization append-only and verify that the final rebase changed no product surface before pushing the already-tested head.
 ---
+## [2026-08-10 23:44 -07:00] - js-skip-permissions-parity PRD/body reconciliation
+- What was implemented
+  - Restored the checked-in `prd.json` exactly to the completed task PRD used for PR #1875 before rebase synchronization; the conflict resolution had changed only one acceptance-criterion phrase and one punctuation character.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Normalized `prd.json` matches the original completed PRD at `5714af694`; all four stories remain `passes:true` and `git diff --check` passes.
+  - The hosted PR body will be rechecked for exact normalized equality before the final handoff.
+- **Learnings for future iterations:**
+  - After resolving a task-PRD conflict, compare it with the pre-rebase task commit as well as parsing it; semantic equivalence is insufficient when the PR body must remain byte-identical.
+---
