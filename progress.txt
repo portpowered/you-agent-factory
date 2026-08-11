@@ -12475,3 +12475,19 @@
   - Main can advance through lane-scaffolding cleanup after a branch merge; fetch the actual remote branch tip explicitly and preserve task bookkeeping files when resolving modify/delete conflicts.
   - Broad functional coverage can rotate among unrelated process, runtime-log, JavaScript, and ACP fixtures; isolate each exact failure repeatedly and rerun only the failed hosted job before changing feature code.
 ---
+
+## [2026-08-11 12:43:09 -07:00] - e3-event-webhooks-004 current-head PR audit
+- What was implemented
+  - Confirmed all four Webhooks stories remain marked `passes:true`; no additional product implementation was required.
+  - Audited PR #1885 at exact head `d433f9d986076d050e774bf258c5f1b02b8191e8` against current base `05db67124f6abc32b149f326533f126db2d78aa4`.
+  - Confirmed the historical blocking dispatch-filter feedback is addressed by endpoint/field-specific compatibility validation and focused impossible-pair/mixed-filter tests.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - CI run `31527792274` reports all 18 required checks terminal-success for exact head `d433f9d986076d050e774bf258c5f1b02b8191e8`.
+  - Thread-aware PR audit reports 3 historical conversation comments, 0 formal reviews, 0 inline review threads, and 0 unresolved threads; the PR is open, non-draft, mergeable, and clean.
+  - The PR body is byte-identical to the checked-in `prd.json` before this metadata update; the body will be refreshed after the resulting audit commit is pushed.
+- **Learnings for future iterations:**
+  - A delivery-audit update creates a new head, so refresh the exact-head, terminal-CI, review-thread, and PR-body evidence again after pushing the bookkeeping commit.
+---

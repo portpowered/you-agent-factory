@@ -3,10 +3,10 @@
   "branchName": "e3-event-webhooks",
   "deliveryAudit": {
     "pullRequest": 1885,
-    "auditedHead": "7536a83b6585ae6b2ff61a9963fb23f2b7e7ee7a",
+    "auditedHead": "d433f9d986076d050e774bf258c5f1b02b8191e8",
     "base": "05db67124f6abc32b149f326533f126db2d78aa4",
-    "requiredChecks": "CI run 31524475713 passed all 18 required checks for exact head 7536a83b6585ae6b2ff61a9963fb23f2b7e7ee7a against current base 05db67124f6abc32b149f326533f126db2d78aa4; package-target-manifest-check, ownership-inventory-check, API smoke, and API package verification also pass locally",
-    "reviewThreads": "PR #1885 is open, non-draft, mergeable, and clean with zero unresolved inline threads and zero formal reviews. The historical blocking top-level conversation comment is addressed by endpoint/field-specific dispatch compatibility validation and focused impossible-pair/mixed-filter tests"
+    "requiredChecks": "CI run 31527792274 passed all 18 required checks for exact head d433f9d986076d050e774bf258c5f1b02b8191e8 against current base 05db67124f6abc32b149f326533f126db2d78aa4; all required checks are terminal-success",
+    "reviewThreads": "PR #1885 is open, non-draft, mergeable, and clean with 3 historical conversation comments, zero inline review threads, zero unresolved threads, and zero formal reviews. The historical blocking top-level conversation comment is addressed by endpoint/field-specific dispatch compatibility validation and focused impossible-pair/mixed-filter tests"
   },
   "description": "Add Factory-configured outbound webhooks that subscribe to the existing canonical Factory Event stream and POST signed Work state-transition and dispatch-failure envelopes with filtering, bounded retry/backoff, and durable dead-letter logging. The feature lets external monitors react without polling while preserving Recordings as the event authority and keeping delivery failure isolated from Factory Runtime state.",
   "context": {
