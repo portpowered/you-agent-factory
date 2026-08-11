@@ -17,12 +17,14 @@ import (
 	"time"
 
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 const (
@@ -53,6 +55,9 @@ func TestRunScopedServerAndSiteOwnNamedAndFileInvocationLifecycles(t *testing.T)
 			homeDir := t.TempDir()
 			workingDirectory := t.TempDir()
 			var listenerStarts, listenerStops, browserCalls atomic.Int32
+			providerRunner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
+				Stdout: []byte("{\"decision\":\"accepted\",\"feedback\":\"\",\"output\":\"mock worker accepted\"}"),
+			})
 			process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
 				APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
 					listenerStarts.Add(1)
@@ -65,13 +70,13 @@ func TestRunScopedServerAndSiteOwnNamedAndFileInvocationLifecycles(t *testing.T)
 					browserCalls.Add(1)
 					return nil
 				},
+				ProviderCommandRunner: providerRunner,
 			})
 			if err != nil {
 				t.Fatalf("BuildProcess() error = %v", err)
 			}
 			environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 			factoryDir := initializeGoalFactory(t, process, environment, workingDirectory, homeDir)
-			mockWorkersPath := writeMockWorkersConfig(t)
 			selection := []string{"--named", goalFactoryName}
 			if test.file {
 				selection = []string{"--factory", filepath.Join(factoryDir, "factory.json")}
@@ -81,7 +86,11 @@ func TestRunScopedServerAndSiteOwnNamedAndFileInvocationLifecycles(t *testing.T)
 				mode = "--with-site"
 			}
 			args := append([]string{"you", "run"}, selection...)
-			args = append(args, "--with-mock-workers", mockWorkersPath, "--no-record", mode)
+			args = append(args,
+				"--executor-provider", "codex",
+				"--executor-model", "gpt-5-codex",
+				"--no-record", mode,
+			)
 			args = append(args, test.input...)
 			stdout, stderr := execute(
 				t, process, environment, workingDirectory, args, test.stdin,
