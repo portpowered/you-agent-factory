@@ -45,6 +45,7 @@ make verify-extended
 make test
 make test-unit
 make test-functional
+make test-functional-fresh
 make test-stress
 make test-release
 make test-full
@@ -142,8 +143,12 @@ The older aggregate names remain available as compatibility aliases while docs, 
 Treat the matrix below as the canonical suite-ownership and rerun guide for the tiered test surface:
 
 The focused Go suite commands are `make test-unit`, `make test-maintenance`,
-`make test-integration`, `make test-contract`, `make test-functional`, `make
-test-stress`, and `make test-release`. The unit command enumerates only
+`make test-integration`, `make test-contract`, `make test-functional`,
+`make test-functional-fresh`, `make test-stress`, and `make test-release`. The
+default functional command is cache-aware for fast unchanged feedback;
+`make test-functional-fresh` explicitly executes every maintained short
+functional package and is the CI-equivalent and flake-investigation path. The
+unit command enumerates only
 `./pkg/...`, then uses the shared `internal/testlanes` policy to exclude
 specialized packages. Code under `cmd/`, `internal/`, `tests/`, root
 `contracts/`, and the Go UI embed package is intentionally outside unit
@@ -245,7 +250,7 @@ The UI Coverage contract also includes the replay coverage check. Keep browser-b
 
 Covered UI and browser integration lanes emit stable slow-file summaries through `ui/scripts/ui-test-cost-report.mjs`. The monolithic unit-coverage pass prints `[ui-coverage] Main covered pass slowest test files` after enforcing aggregate thresholds. Browser integration uses `ui/scripts/ui-integration-runner.mjs` behind `test:integration` and prints `[ui-browser-integration] Browser integration slowest test files` with per-file cost categories (`app-shell-integration`, `react-flow-graph`, `replay-timeline`, `import-export`, `script-style`, `uncategorized`). Copy those lines into closeout notes to compare runs without scraping source topology.
 
-Backend coverage is intentionally split. `make test-unit-coverage` discovers only `./cmd/factory` and maintained backend `./pkg/...` test packages and enforces both the aggregate unit floor and `go-unit-coverage-package-minimums.json`. `make test-functional-coverage` runs `functional-boundary-check` first, then discovers only maintained short packages under `tests/functional/...`, excludes `tests/functional/internal/...`, and enforces both the aggregate functional floor and `go-functional-coverage-package-minimums.json` over the same backend-owned code. Packages not exercised by a functional test are reported at `0.0%`; their unit-test coverage is never substituted. Ordinary low coverage is represented by the lane manifest's numeric current floor, so the required lanes no longer depend on newline-delimited package exception lists or a shared 80% package target. `make test-backend-coverage` and `make test-backend-functional` remain focused aliases for the unit and functional lanes respectively; `make test-backend-verification` is an aggregate compatibility target that runs both blocking reports in sequence. Stress, root-process release acceptance, release-surface smoke, and tagged long tests remain outside both coverage profiles.
+Backend coverage is intentionally split. `make test-unit-coverage` discovers only `./cmd/factory` and maintained backend `./pkg/...` test packages and enforces both the aggregate unit floor and `go-unit-coverage-package-minimums.json`. `make test-functional-coverage` runs `functional-boundary-check` first, then discovers only maintained short packages under `tests/functional/...`, excludes `tests/functional/internal/...`, and performs an explicit `-count=1` instrumented run before enforcing both the aggregate functional floor and `go-functional-coverage-package-minimums.json` over the same backend-owned code. Packages not exercised by a functional test are reported at `0.0%`; their unit-test coverage is never substituted. Ordinary low coverage is represented by the lane manifest's numeric current floor, so the required lanes no longer depend on newline-delimited package exception lists or a shared 80% package target. `make test-backend-coverage` and `make test-backend-functional` remain focused aliases for the unit and functional lanes respectively; `make test-backend-verification` is an aggregate compatibility target that runs both blocking reports in sequence. Stress, root-process release acceptance, release-surface smoke, and tagged long tests remain outside both coverage profiles.
 
 The deterministic current package floors are recorded in
 `go-unit-coverage-package-minimums.json` and

@@ -4,11 +4,12 @@
 
 ## Commands
 
-- Default non-long lane: `make test-functional`
+- Default non-long lane: `make test-functional` (cache-aware developer feedback)
+- Fresh non-long lane: `make test-functional-fresh` (CI-equivalent reruns and flake investigation; explicitly executes every package)
 - Ordinary unit and package-integration lane: `make test-unit`
 - Stress lane: `make test-stress`
 - Release-package lane: `make test-release`
-- Independent functional coverage report: `make test-functional-coverage` (runs `functional-boundary-check` first; coverage-only local rerun)
+- Independent functional coverage report: `make test-functional-coverage` (runs `functional-boundary-check` first and performs an explicit `-count=1` instrumented run; coverage-only local rerun)
 - Independent backend unit coverage report: `make test-unit-coverage`
 - Inventory-plus-coverage Markdown catalog (boundary → one coverage run → viz): `make functional-test-viz` (fail-closed; keeps already-written `.artifacts/functional-test-viz/` diagnostics on later-step failure). Required CI Backend Functional Coverage runs this target with `FUNCTIONAL_TEST_VIZ_DIR=.artifacts/backend-functional-coverage` and uploads `functional-tests.md`, `coverage-summary.json`, `coverage.out`, and `command.log` on success and failure when present. Wiring is covered by stubbed/dry-run Make contract smoke under `tests/functional/observability/coverage/functional_test_viz_contract_test.go` (does not run the full functional suite).
 - Root-process S24 acceptance lane (also run by `make verify-pr`): `make test-root-process-acceptance`
@@ -39,6 +40,14 @@ not run a separate `go list` package-discovery or package-structure validation
 step. The long lane runs the full behavior tree plus any `functionallong`-tagged
 files, so broad or slow scenarios stay available without widening the default
 feedback loop.
+
+The default lane leaves `-count` unspecified so Go can reuse valid successful
+results on unchanged local runs. Use `make test-functional-fresh` when the
+result must come from a new execution, including CI-equivalent evidence and
+flake investigation. The functional coverage lane is authoritative and does
+not use the cache: `cmd/gocoveragecheck` passes `-count=1` together with its
+coverage profile, timing, and short-mode flags, then retains the existing
+coverage-floor and package-manifest checks.
 
 The coverage lanes intentionally use separate profiles. The
 `make test-functional-coverage` command executes only the maintained non-long
