@@ -8772,3 +8772,18 @@
   - The published CLI copy is refreshed by `make contracts-generate` after the authored contract changes; `make cli-manifest-generate` refreshes the family/runtime projections and the smoke check catches published drift.
   - When broad Go verification is run concurrently across worktrees on Windows, isolate the exact timed-out process tree before retrying a gate so other task verification remains undisturbed.
 ---
+
+## 2026-08-11 02:08:27 -07:00 - wsr-0023-capture-replay current-main synchronization follow-up
+- What was implemented
+  - Merged the live `origin/main` head `0e7df069f` into the WSR branch after the CLI error-classification changes advanced the PR base again.
+  - Preserved the WSR-specific `prd.json` and unioned the incoming CLI/generated-artifact changes with both append-only progress histories.
+- Files changed
+  - Current-main CLI, documentation, generated-contract, and functional-test files from the merge.
+  - `prd.json`, `progress.txt`
+- Verification
+  - Merge commit: `0fc08cced`; `origin/main` is an ancestor of the merged head.
+  - `prd.json` has all three WSR stories marked `passes:true`, contains no conflict markers, and still matches the PR body.
+  - The merge conflict set was limited to shared bookkeeping files; no WSR product files conflicted.
+- **Learnings for future iterations:**
+  - Recheck the live base immediately before each hosted handoff; a mergeable PR can become conflicting while a long backend CI run is still executing.
+---
