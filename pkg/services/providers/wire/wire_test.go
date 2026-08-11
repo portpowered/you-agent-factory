@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io/fs"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"sync"
@@ -178,6 +179,19 @@ func TestACPWireOptionsComposeConfiguredCatalogAndValidateCommands(t *testing.T)
 	)
 	if len(replaced) != 1 || replaced[0].ID != "replacement" {
 		t.Fatalf("effectiveACPIntegrations(replacement) = %#v", replaced)
+	}
+	legacySaved := effectiveACPIntegrations(
+		[]providers.ACPIntegration{{
+			ID: "entry-1", Name: "cursor-acp", Aliases: []string{"cursor"},
+			Transport: "stdio", Command: "cursor-agent acp", Arguments: []string{"acp"},
+			RuntimePosture: "installed_executable", ImplementationProfile: "cursor-acp",
+		}},
+		[]providers.ACPIntegration{{
+			ID: "saved-entry", Name: "cursor-acp", Transport: "stdio", Command: "cursor-agent acp",
+		}},
+	)
+	if len(legacySaved) != 1 || legacySaved[0].ImplementationProfile != "cursor-acp" || legacySaved[0].RuntimePosture != "installed_executable" || !reflect.DeepEqual(legacySaved[0].Arguments, []string{"acp"}) || !reflect.DeepEqual(legacySaved[0].Aliases, []string{"cursor"}) {
+		t.Fatalf("effectiveACPIntegrations(legacy package command) = %#v, want package runtime metadata preserved", legacySaved)
 	}
 
 	factory := NewFactory(nil)

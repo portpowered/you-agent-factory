@@ -8,6 +8,8 @@ package providerpackages
 import (
 	"sort"
 	"strings"
+
+	"github.com/portpowered/infinite-you/internal/providerprofiles"
 )
 
 const (
@@ -138,30 +140,19 @@ func RuntimeProjection(packages []Package) RuntimeCatalog {
 	return result
 }
 
+// RuntimeProfilesFromIDs adapts the runtime owner's registered profile
+// identities to the offline validator's small data-only input type.
+func RuntimeProfilesFromIDs(ids []string) []RuntimeProfile {
+	profiles := make([]RuntimeProfile, 0, len(ids))
+	for _, id := range ids {
+		profiles = append(profiles, RuntimeProfile{ID: strings.TrimSpace(id)})
+	}
+	return profiles
+}
+
 // DefaultRuntimeProfiles returns the ACP profile identities currently known
 // to the Providers runtime. Each registered profile is required to be owned by
 // exactly one selectable package during offline validation.
 func DefaultRuntimeProfiles() []RuntimeProfile {
-	return []RuntimeProfile{
-		{ID: "pi-acp"},
-		{ID: "openclaw-acp"},
-		{ID: "gemini-acp"},
-		{ID: "cursor-acp"},
-		{ID: "copilot-acp"},
-		{ID: "droid-acp"},
-		{ID: "fast-agent-acp"},
-		{ID: "grok-build-acp"},
-		{ID: "iflow-acp"},
-		{ID: "kilocode-acp"},
-		{ID: "kimi-acp"},
-		{ID: "kiro-acp"},
-		{ID: "mux-acp"},
-		{ID: "opencode-acp"},
-		{ID: "pool-acp"},
-		{ID: "qoder-acp"},
-		{ID: "qwen-acp"},
-		{ID: "reasonix-acp"},
-		{ID: "trae-acp"},
-		{ID: "zeroclaw-acp"},
-	}
+	return RuntimeProfilesFromIDs(providerprofiles.RegisteredACPProfileIDs())
 }

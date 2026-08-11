@@ -2,6 +2,7 @@ package wire
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -45,11 +46,29 @@ func TestPackagedACPCatalogIsExactAndDetached(t *testing.T) {
 		if integration.Name.String() != want[index].name || integration.ID != want[index].name || integration.Transport != want[index].transport || integration.Command != want[index].command || !reflect.DeepEqual(integration.Aliases, want[index].aliases) {
 			t.Fatalf("packaged ACP integration[%d] = %#v, want name=%q aliases=%v transport=%q command=%q", index, integration, want[index].name, want[index].aliases, want[index].transport, want[index].command)
 		}
+		if got := integration.Arguments; !reflect.DeepEqual(got, strings.Fields(want[index].command)[1:]) {
+			t.Fatalf("packaged ACP integration[%d] arguments = %#v, want command arguments %#v", index, got, strings.Fields(want[index].command)[1:])
+		}
+		if integration.ImplementationProfile != integration.Name.String() {
+			t.Fatalf("packaged ACP integration[%d] profile = %q, want %q", index, integration.ImplementationProfile, integration.Name)
+		}
+		if integration.RuntimePosture != wantPosture(integration.Name.String()) {
+			t.Fatalf("packaged ACP integration[%d] posture = %q, want %q", index, integration.RuntimePosture, wantPosture(integration.Name.String()))
+		}
 	}
 	droidIndex := 2
 	first[droidIndex].Aliases[0] = "mutated"
 	second := service.ACPIntegrations()
 	if second[droidIndex].Aliases[0] != "factory-droid" {
 		t.Fatalf("catalog retained caller mutation: %#v", second[droidIndex].Aliases)
+	}
+}
+
+func wantPosture(name string) string {
+	switch name {
+	case "fast-agent-acp", "kilocode-acp", "opencode-acp", "pi-acp":
+		return "package_runner"
+	default:
+		return "installed_executable"
 	}
 }

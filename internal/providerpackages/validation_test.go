@@ -33,6 +33,33 @@ func TestValidateRejectsRegisteredRuntimeProfileWithoutPackageOwner(t *testing.T
 	}
 }
 
+func TestValidateRejectsMultiplePackagesClaimingOneRuntimeProfile(t *testing.T) {
+	source := packageFixture()
+	addFile(source, "packages/model-providers/providers/other-acp/provider.yaml", []byte(providerManifest("other-acp", "externally-supplied", "other-docs", "supported")))
+	addFile(source, "packages/model-providers/providers/other-acp/harness.yaml", selectableHarness("cursor-acp", "other-agent"))
+
+	_, err := Validate(source, []RuntimeProfile{{ID: "cursor-acp"}})
+	if err == nil || !strings.Contains(err.Error(), `runtime profile collision: "cursor-acp"`) {
+		t.Fatalf("Validate() error = %v, want runtime profile collision", err)
+	}
+}
+
+func TestRuntimeProjectionIncludesSelectablePackageOnceAndOmitsCatalogOnly(t *testing.T) {
+	packages, err := Validate(packageFixture(), []RuntimeProfile{{ID: "cursor-acp"}})
+	if err != nil {
+		t.Fatalf("Validate() error = %v", err)
+	}
+
+	projection := RuntimeProjection(packages)
+	if len(projection.ACP) != 1 {
+		t.Fatalf("runtime projection count = %d, want one selectable package", len(projection.ACP))
+	}
+	entry := projection.ACP[0]
+	if entry.Name != "cursor-acp" || !sameStrings(entry.Aliases, nil) || entry.Transport != TransportStdio || entry.Command != "cursor-agent acp" || !sameStrings(entry.Arguments, []string{"acp"}) || entry.Posture != LaunchPostureInstalledExecutable || entry.Implementation.Kind != ImplementationKindACPAgent || entry.Implementation.Profile != "cursor-acp" {
+		t.Fatalf("runtime projection = %#v, want package-owned cursor launch", entry)
+	}
+}
+
 func TestValidateRejectsFailClosedACPPackageShapes(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -223,4 +250,16 @@ func mutateFile(source fstest.MapFS, path, old, replacement string) {
 		panic("fixture does not contain " + old)
 	}
 	source[path] = &fstest.MapFile{Data: []byte(updated), Mode: file.Mode}
+}
+
+func sameStrings(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
 }

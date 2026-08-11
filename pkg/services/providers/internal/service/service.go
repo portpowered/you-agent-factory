@@ -640,7 +640,25 @@ func effectiveACPIntegrations(packaged, configured []providers.ACPIntegration) [
 		replaced := false
 		for index := range values {
 			if values[index].Name == integration.Name {
-				values[index] = integration.Clone()
+				replacement := integration.Clone()
+				if replacement.Command == values[index].Command {
+					// Persisted settings carry the legacy command-only shape. Keep
+					// the reviewed package runtime binding when that command still
+					// identifies the package-owned launch.
+					if replacement.Aliases == nil {
+						replacement.Aliases = append([]string(nil), values[index].Aliases...)
+					}
+					if replacement.Arguments == nil {
+						replacement.Arguments = append([]string(nil), values[index].Arguments...)
+					}
+					if replacement.RuntimePosture == "" {
+						replacement.RuntimePosture = values[index].RuntimePosture
+					}
+					if replacement.ImplementationProfile == "" {
+						replacement.ImplementationProfile = values[index].ImplementationProfile
+					}
+				}
+				values[index] = replacement
 				replaced = true
 				break
 			}

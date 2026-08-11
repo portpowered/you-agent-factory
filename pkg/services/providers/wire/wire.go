@@ -512,7 +512,26 @@ func effectiveACPIntegrations(packaged, configured []providers.ACPIntegration) [
 		found := false
 		for i := range values {
 			if values[i].Name == value.Name {
-				values[i] = value.Clone()
+				replacement := value.Clone()
+				if replacement.Command == values[i].Command {
+					// Persisted operator settings predate the generated runtime
+					// projection and only carry the legacy command shape. Preserve
+					// package-owned runtime facts when the saved command is still
+					// the reviewed package command.
+					if replacement.Aliases == nil {
+						replacement.Aliases = append([]string(nil), values[i].Aliases...)
+					}
+					if replacement.Arguments == nil {
+						replacement.Arguments = append([]string(nil), values[i].Arguments...)
+					}
+					if replacement.RuntimePosture == "" {
+						replacement.RuntimePosture = values[i].RuntimePosture
+					}
+					if replacement.ImplementationProfile == "" {
+						replacement.ImplementationProfile = values[i].ImplementationProfile
+					}
+				}
+				values[i] = replacement
 				found = true
 				break
 			}
