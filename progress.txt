@@ -7837,3 +7837,18 @@
   - When a required functional job fails on changing timing-sensitive tests, inspect the exact test output and retry only that job; do not alter unrelated product code.
   - A PR can become conflicting after its checks pass when `main` advances; synchronize again immediately before the final push and treat the replacement head as a new CI gate.
 ---
+
+## [2026-08-10 22:47 -07:00] - ui-packaged-factories-decoupling latest-main reconciliation
+- What was implemented
+  - Fetched the next live `origin/main` head `ecd1d2487` after it advanced during the final PR audit and made PR #1873 conflicting again.
+  - Merged that current main into this branch as merge commit `5e4b645cd`, retained the dashboard `prd.json` as authoritative, and preserved the automatically merged append-only progress history.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+  - Current-main model-host synchronization files under `pkg/services/models/internal/services/runtime_host/internal/service/`
+- Verification
+  - The merge is resolved with no unmerged entries or conflict markers; `prd.json` remains valid and all three dashboard stories remain marked `passes:true`; `git diff --check` passes.
+  - The prior synchronized head `ec87a80c9` had terminal green required CI, but this replacement head needs its own CI run after push.
+- **Learnings for future iterations:**
+  - Main can advance while the final PR audit or CI run is in progress; fetch immediately before each handoff push and regard every replacement head as requiring fresh checks.
+---
