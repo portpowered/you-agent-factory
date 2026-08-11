@@ -46,22 +46,10 @@ ifeq ($(OS),Windows_NT)
 	BINARY_NAME := you.exe
 endif
 
-# Detect git worktree environment
-# In a worktree, --git-common-dir points to the main repo's .git directory,
-# while --git-dir points to the worktree's .git file. When they differ, we're
-# in a worktree and must force a full rebuild to avoid stale build cache.
-_GIT_COMMON_DIR := $(shell git rev-parse --git-common-dir 2>/dev/null)
-_GIT_DIR := $(shell git rev-parse --git-dir 2>/dev/null)
-IS_WORKTREE :=
-ifneq ($(_GIT_COMMON_DIR),$(_GIT_DIR))
-	IS_WORKTREE := 1
-endif
-
-# When in a worktree, add -a flag to force rebuild all packages
-WORKTREE_FLAGS :=
-ifdef IS_WORKTREE
-	WORKTREE_FLAGS := -a
-endif
+# Go's build cache is content-addressed and already includes the inputs that
+# determine a package's compiled output. Keep the default cache-enabled for
+# worktrees; callers can set GO_BUILD_FLAGS=-a for an explicit comparison.
+GO_BUILD_FLAGS ?=
 
 GO_TEST_TIMEOUT ?= 300s
 GO_COVERAGE_TIMEOUT ?= 10m
@@ -189,10 +177,10 @@ default:
 	$(MAKE) lint
 
 build:
-	$(GO) build $(WORKTREE_FLAGS) -o $(BIN_DIR)/$(BINARY_NAME) $(CMD_PATH)
+	$(GO) build $(GO_BUILD_FLAGS) -o $(BIN_DIR)/$(BINARY_NAME) $(CMD_PATH)
 
 install:
-	$(GO) build $(WORKTREE_FLAGS) -o $(INSTALL_DIR)/$(BINARY_NAME) $(CMD_PATH)
+	$(GO) build $(GO_BUILD_FLAGS) -o $(INSTALL_DIR)/$(BINARY_NAME) $(CMD_PATH)
 
 bundle-api:
 	node scripts/run-quiet-api-command.js bundle:rest ./api/openapi-main.yaml ./api/openapi.yaml

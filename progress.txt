@@ -2541,32 +2541,64 @@
   - Keep the active task PRD authoritative when current main carries another task's PRD, and record the base SHA in the append-only progress log so PR description parity remains auditable after repeated base advances.
 ---
 
-## 2026-08-10 16:00 -07:00 - thr-lint-speed current-main synchronization and PR follow-up
+## 2026-08-10 16:18 -07:00 - thr-worktree-build-cache-002 PR scope follow-up
 - What was implemented
-  - Preserved the completed `thr-lint-speed` PRD while merging the live `origin/main` history and unrelated progress entries into this branch's append-only log.
-  - Revalidated PR #1863's thread-aware review state: there are no conversation comments, reviews, or unresolved inline review threads.
-  - Reran the failed Backend Functional Coverage, Backend Unit Coverage, and dependent Verification Policy jobs after reproducing the unit timeout locally as a passing test; the rerun remains pending while the merged head is prepared.
+  - Reconciled `progress.txt` with the live `origin/main` after PR #1860 review identified unrelated merged-task history as out-of-scope churn.
+  - Retained the build-cache PRD and root Makefile change; appended only the task-specific review follow-up instead of restoring unrelated progress entries.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `git diff origin/main...HEAD --stat` is now limited to `Makefile`, `prd.json`, and this task-specific progress entry.
+  - The PR review's build-cache correctness, parity, throughput, and required-CI criteria remain satisfied; the blocking scope issue was the shared progress-file churn.
+  - `prd.json` still parses with both `thr-worktree-build-cache-001` and `thr-worktree-build-cache-002` marked `passes:true`.
+- **Learnings for future iterations:**
+  - When a shared append-only log is merged across task branches, reconcile it against the live base before handoff and preserve only entries owned by the current PR.
+---
+
+## 2026-08-10 16:46 -07:00 - thr-worktree-build-cache-002 merge follow-up
+- What was implemented
+  - Merged the current `origin/main` (`acbd13fcc`) into the build-cache branch after PR review identified a live `prd.json` conflict.
+  - Kept this branch's build-cache PRD, accepted current-main progress history, and retained only the task-scoped progress follow-up in the live-base diff.
 - Files changed
   - `prd.json`
   - `progress.txt`
-  - Current-main JavaScript durability fixture and functional test files included by the synchronization merge.
+  - Current-main durability changes included by the synchronization merge.
 - Verification
-  - All `thr-lint-speed` stories remain `passes:true`; conflict markers are absent; the focused `TestPause_ControlOutcomesKeepTheLifecycleTruthful` test passes with a two-minute timeout.
+  - The merge conflict is resolved and `prd.json` parses with both build-cache stories marked `passes:true`.
+  - The live-base diff remains limited to `Makefile`, `prd.json`, and the task-specific `progress.txt` entry; current-main test changes are merge-base synchronization only.
+  - Focused final checks and the post-merge CI run remain to be completed before handoff.
 - **Learnings for future iterations:**
-  - When a completed PR becomes conflicting because the base advances, resolve the active task PRD from the task branch, retain the full current-main progress history, and rerun only the failed CI lanes before changing unrelated behavior.
+  - After fetching a moving base, merge it before final review and preserve the active task PRD when the shared `prd.json` is owned by another task on main.
 ---
 
-## 2026-08-10 17:00 -07:00 - thr-lint-speed final PR handoff audit
+## 2026-08-10 16:49 -07:00 - thr-worktree-build-cache-002 verification follow-up
 - What was implemented
-  - Completed the current-main synchronization and kept the lint task's PRD authoritative with all three stories marked `passes:true`.
-  - Confirmed PR #1863 has no conversation comments, reviews, or unresolved review threads and remains mergeable.
+  - Completed post-merge verification for the corrected cache policy and current-main synchronization.
 - Files changed
   - `progress.txt`
 - Verification
-  - Focused lint/checker tests for `cmd/lintcheck`, `cmd/lintlane`, `cmd/pkgboundarycheck`, and `cmd/pkgfilecountcheck` — passed.
-  - Focused `go vet`, `git diff --check`, and PRD JSON validation — passed.
-  - All 18 checks in merged-head CI run `31443794704` — passed, including Backend Unit Coverage, Backend Functional Coverage, and Verification Policy.
-  - Local `HEAD` and PR #1863 head both equal `b4bea8bce`; the worktree is clean; the PR body matches `prd.json` after line-ending normalization.
+  - `make test` passed.
+  - `make typecheck` passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` passed.
+  - Dry-run `make build` and `make install` omit `-a`; explicit `GO_BUILD_FLAGS=-a` retains the forced-rebuild control.
+  - The working tree remains clean before push, and the PRD still has both stories marked `passes:true`.
 - **Learnings for future iterations:**
-  - A final PR handoff is complete only after the last bookkeeping commit is pushed and CI, PRD/body parity, head identity, mergeability, and thread-aware review state are rechecked together.
+  - After a base-sync merge, rerun the repository gates locally before pushing so the new PR head has direct evidence in addition to the earlier green CI run.
+---
+
+## 2026-08-10 17:20 -07:00 - thr-lint-speed current-main synchronization and final PR follow-up
+- What was implemented
+  - Fetched the moving default branch and merged the current `origin/main` head `e6797fd5d` so PR #1863 no longer carries a stale base.
+  - Preserved this task's `prd.json` as the PR description source, retained the current-main append-only progress history, and added the lint-specific reusable patterns and prior PR audit evidence.
+  - Resolved the shared bookkeeping-file conflicts without changing the completed lint implementation; the active PRD still marks all three stories `passes:true`.
+- Files changed
+  - `Makefile` (current-main merge result)
+  - `prd.json`
+  - `progress.txt`
+  - Current-main files included by the synchronization merge
+- Verification
+  - Before synchronization, PR #1863 had no conversation comments, reviews, or unresolved review threads, and all 18 checks passed on head `e87c0b623` after a bounded retry of intermittent functional coverage failures.
+  - The PR body remained sourced from `prd.json`; the post-merge PRD will be validated again before push.
+- **Learnings for future iterations:**
+  - A PR can become conflicting after a green run when the default branch advances again; always fetch the live base immediately before the final mergeability audit, then rerun required CI on the new head.
 ---
