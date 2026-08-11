@@ -9836,3 +9836,21 @@
   - On Windows, a timed-out verification wrapper can leave descendants running; identify the exact parent/child tree before stopping only that invocation's processes.
   - Focused P1 coverage remains green after current-main synchronization, while final completion still depends on terminal CI and merge state.
 ---
+## [2026-08-11 02:00:13 -07:00] - btrc-p1-root-injection-006 terminal CI baseline characterization
+- What was implemented
+  - Audited the full latest-head workflow `31474198084` and reran its failed jobs three times; the intermittent untouched CLI cancellation failure cleared, while the unchanged server-binding assertion remained.
+  - Made no product or unrelated-test changes because both failing package paths are absent from the P1 diff.
+  - Refreshed `prd.json` to the current pushed head and terminal CI baseline evidence while preserving all six `passes:true` stories.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Initial workflow `31474198084` — all lanes passed except `TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput` in `tests/functional/transport/server_binding`.
+  - Failed-job reruns — the transient `TestBuiltCLIDeclaredCancellationExitCodes/continuous_run` failure cleared; the server-binding assertion reproduced on each terminal rerun.
+  - `git diff --name-only origin/main...HEAD -- tests/functional/transport/server_binding tests/functional/transport/cli/process` — empty.
+  - Local isolated `go test ./tests/functional/transport/cli/process -run '^TestBuiltCLIDeclaredCancellationExitCodes/continuous_run$' -count=5` — pass via the test's documented Windows skip because `os.Interrupt` is unsupported for child processes on this host.
+  - Review-thread GraphQL audit — zero review threads, zero unresolved threads, and zero formal reviews.
+- **Learnings for future iterations:**
+  - After repeated failed-job reruns reduce a broad failure to one deterministic assertion in an untouched package, preserve the scoped implementation and record the baseline rather than widening the diff.
+  - A terminal CI failure outside the task diff still blocks `<COMPLETE>` until repository baseline behavior or policy changes; it is not evidence that P1 code regressed.
+---
