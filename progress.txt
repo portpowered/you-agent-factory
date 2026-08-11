@@ -7504,5 +7504,21 @@
   - `$env:GOMAXPROCS=8; go test -race ./pkg/services/models/internal/services/runtime_host/internal/service -run '^TestEnsureModelHostConcurrentReuseSharesOneSupervisedProcess$' -count=50` — passed all 50 repetitions in 1.650s.
   - The merge commit is `dd925e6fb`; the staged merge passed `git diff --cached --check` and the committed tree is conflict-free.
 - **Learnings for future iterations:**
-  - Fetch `origin/main` immediately before final handoff because another merged PR can invalidate an otherwise green head; resolve shared PRD/progress files from complete Git objects and rerun the focused regression on the replacement merge head.
+- Fetch `origin/main` immediately before final handoff because another merged PR can invalidate an otherwise green head; resolve shared PRD/progress files from complete Git objects and rerun the focused regression on the replacement merge head.
+---
+
+## [2026-08-10 22:16 -07:00] - thr-deflake-model-host-concurrent-reuse final CI flake follow-up
+- What was implemented
+  - Investigated the only failure in final-head CI run `31460167917`: Backend Functional Coverage named the unrelated `tests/functional/providers/acp:TestFactoryRunRetriesACPProviderByResumingExactSession`, which observed zero completed work after a transient ACP session-load failure.
+  - Made no production or test-code changes. Isolated the exact test locally for ten repetitions; every repetition passed.
+  - Reran only the failed Backend Functional Coverage and dependent Verification Policy jobs; both passed on the same pushed head.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/providers/acp -run '^TestFactoryRunRetriesACPProviderByResumingExactSession$' -count=10 -v -timeout 300s` — all ten passed in 39.776s.
+  - Backend Functional Coverage rerun in `31460167917` — passed.
+  - Verification Policy rerun in `31460167917` — passed.
+  - All other final-head jobs remained passing, including Backend Unit Coverage, Local Inference, UI Backend Integration, and the focused Models runtime-host race regression.
+- **Learnings for future iterations:**
+  - When a functional coverage lane names an untouched ACP session-resume fixture and the exact test passes repeated local characterization, preserve task code and rerun only the failed coverage and policy jobs before recording the flake.
 ---
