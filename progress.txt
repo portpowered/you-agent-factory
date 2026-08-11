@@ -11790,3 +11790,18 @@
 - **Learnings for future iterations:**
   - When mainline intentionally untracks shared task metadata, preserve the active task’s required PRD/progress files during rebase and rerun hosted checks because the replacement ancestry is a new verification surface.
 ---
+## 2026-08-11 11:58 -07:00 - js-skip-permissions-parity-004 final review-ready audit
+- What was implemented
+  - Completed the final post-rebase handoff audit for the four-story JavaScript child permission-bypass lane; no product or generated source changes were needed.
+  - Updated the PRD’s delivery note to reflect the successful replacement-head workflow and posted the final review handoff on PR #1875.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - All four PRD stories remain marked `passes:true`; `prd.json` parses and the PR body matches it byte-for-byte.
+  - Hosted workflow run `31524546487` on replacement head `49e249ccf6de34a227d98d6488420b79a9b92676` is terminal-success across all 18 checks, including Backend Functional Coverage and Verification Policy.
+  - Thread-aware review audit reports 11 conversation comments, zero reviews, zero inline review threads, and zero unresolved threads; the historical blockers are superseded by addressed updates.
+  - GitHub reports PR #1875 open/non-draft and `MERGEABLE`/`CLEAN`; `origin/main` `05db67124f6abc32b149f326533f126db2d78aa4` is an ancestor and `git diff --check` passes.
+- **Learnings for future iterations:**
+  - Once a replacement head is green and review-clean, keep the final handoff metadata concise and distinguish historical blocker comments from current unresolved threads.
+---
