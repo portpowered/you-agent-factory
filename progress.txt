@@ -11323,3 +11323,17 @@
   - The current-main ACP baseline already contains a different partial test split, so the task branch must preserve the complete focused-suite layout while proving the normalized inventory and coverage remain identical.
   - Compare boundary-gate output against the detached current-main checkout when the aggregate gate reports existing ownership debt; identical findings are not new task regressions.
 ---
+## [2026-08-11 09:04 -07:00] - graph-workstation-semantics-004 final PR audit
+- What was implemented
+  - Re-audited PR #1877 after the current-main reconciliation and confirmed that all four PRD stories remain marked `passes: true`.
+  - Confirmed the latest head contains the guarded public-replay fix, the review-follow-up regressions, and no unresolved actionable review feedback; no additional source change was needed.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Fetched live `origin/main` at `690ca9ab0`; it is an ancestor of head `8413bc67e`, and `git merge-tree HEAD origin/main` reports no conflicts.
+  - GitHub reports PR #1877 open, non-draft, `MERGEABLE`/`CLEAN`, with all 18 required checks terminal-successful, including Backend Functional Coverage and Verification Policy.
+  - The thread-aware review audit reports zero inline review threads and zero unresolved threads. The parsed local PRD and remote PR body are semantically equal; only GitHub's CRLF normalization differs.
+  - `git diff --check` passes and the worktree is clean after the progress update.
+- **Learnings for future iterations:**
+  - When all story markers and current-head review evidence are already complete, retain the PRD as the authoritative description and record the new audit in append-only progress instead of changing the PR body without a substantive requirement.
+---
