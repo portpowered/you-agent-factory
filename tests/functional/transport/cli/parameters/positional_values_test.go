@@ -1,6 +1,7 @@
 package parameters_test
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +15,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	cliobservation "github.com/portpowered/infinite-you/pkg/transports/cli/observation"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -107,6 +109,14 @@ func TestRunRejectsExtraPositionalValues(t *testing.T) {
 				diagnostic,
 			)
 		}
+	}
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal([]byte(strings.TrimSpace(inputs.Stderr())), &response); err != nil {
+		t.Fatalf("stderr is not one ErrorResponse: %v\nstderr:\n%s", err, inputs.Stderr())
+	}
+	if response.Code != factoryapi.ErrorResponseCode("INVOCATION_ARGUMENT_POSITIONAL_OVERFLOW") ||
+		response.Family != factoryapi.ErrorFamilyBadRequest {
+		t.Fatalf("ErrorResponse = %#v, want positional-overflow code and BAD_REQUEST", response)
 	}
 	if providerRunner.CallCount() != 0 {
 		t.Fatalf("provider dispatch calls = %d, want 0", providerRunner.CallCount())

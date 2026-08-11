@@ -206,7 +206,7 @@ func TestRunMalformedKeyValueFailsWithoutDispatch(t *testing.T) {
 				"--priority",
 			},
 			wantFragments: []string{
-				"RUN_INVOCATION_FAILED",
+				"INVOCATION_ARGUMENT_MISSING_VALUE",
 				"factory argument --priority requires a value",
 			},
 		},

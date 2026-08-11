@@ -57,5 +57,5 @@ func newAPIServerFromRoles(
 			providersessionshttp.NewAdapter(providerSessions), logger,
 		)
 	}
-	return api.NewServer(handler, workhttp.NewAdapterFromRoles(workRoot, workRoot, workAPI, workRead), modelsHTTP, providerSessionsHTTP, logger)
+	return api.NewServer(handler, workhttp.NewAdapterFromRoles(workRoot, workRoot, workAPI, workRead), modelsHTTP, providerSessionsHTTP, nil, logger)
 }

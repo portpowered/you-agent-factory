@@ -1,234 +1,127 @@
-import {
-  type Dispatch,
-  type MutableRefObject,
-  type SetStateAction,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
+import {
+  getPackagedFactoryCatalog,
+  type PackagedFactoryCatalogResponse,
+} from "../../../api/packaged-factories";
 import {
   type PackagedFactoryDetailViewModel,
   type PackagedFactoryInventoryViewModel,
   projectPackagedFactoryDetail,
   projectPackagedFactoryInventory,
 } from "../lib/projection";
-import {
-  loadPackagedFactoryCatalog,
-  type PackagedFactoryCatalogOutcome,
-  type PackagedFactoryPublicDataSource,
-  resolvePackagedFactorySelection,
-  type SelectedArtifactFailure,
-} from "../lib/public-contract";
-
-type ReadyCatalog = Extract<
-  PackagedFactoryCatalogOutcome,
-  { readonly status: "ready" }
->;
 
 type SelectionState =
-  | { readonly status: "loading" }
+  | { readonly status: "error" }
   | {
       readonly status: "ready";
       readonly detail: PackagedFactoryDetailViewModel;
-    }
-  | {
-      readonly status: "error";
-      readonly failure: SelectedArtifactFailure;
     };
 
 type InventoryState =
   | { readonly status: "loading" }
   | { readonly status: "empty" }
-  | { readonly status: "invalid-contract" }
-  | {
-      readonly status: "unsupported-version";
-      readonly formatVersion: string;
-    }
+  | { readonly status: "error" }
   | {
       readonly status: "ready";
-      readonly catalog: ReadyCatalog;
       readonly inventory: PackagedFactoryInventoryViewModel;
       readonly selectedIdentity: string;
       readonly selection: SelectionState;
     };
 
-interface ScopedInventoryState {
-  readonly locale: string;
-  readonly source: PackagedFactoryPublicDataSource;
-  readonly value: InventoryState;
-}
-
-type ScopedStateSetter = Dispatch<SetStateAction<ScopedInventoryState>>;
-
 export interface PackagedFactoryInventoryController {
+  readonly retry: () => void;
   readonly select: (identity: string) => void;
   readonly state: InventoryState;
 }
 
-function catalogOutcomeState(
-  outcome: Exclude<PackagedFactoryCatalogOutcome, ReadyCatalog>,
-): InventoryState {
-  if (outcome.status === "unsupported-version") {
-    return {
-      status: "unsupported-version",
-      formatVersion: outcome.formatVersion,
-    };
-  }
-  return { status: outcome.status };
-}
+const packagedFactoryCatalogQueryKey = [
+  "packaged-factories",
+  "catalog",
+] as const;
 
-function useSelectionResolver(
-  source: PackagedFactoryPublicDataSource,
+function projectCatalogState(
+  catalog: PackagedFactoryCatalogResponse,
   locale: string,
-  requestID: MutableRefObject<number>,
-  setScopedState: ScopedStateSetter,
-) {
-  return useCallback(
-    async (
-      catalog: ReadyCatalog,
-      inventory: PackagedFactoryInventoryViewModel,
-      identity: string,
-      activeRequestID: number,
-    ) => {
-      const item = inventory.byIdentity[identity];
-      if (!item) {
-        return;
-      }
-      const outcome = await resolvePackagedFactorySelection(
-        source,
-        catalog,
-        item.slug,
-      );
-      if (requestID.current !== activeRequestID) {
-        return;
-      }
-      setScopedState({
-        locale,
-        source,
-        value: {
-          status: "ready",
-          catalog,
-          inventory,
-          selectedIdentity: identity,
-          selection:
-            outcome.status === "ready"
-              ? {
-                  status: "ready",
-                  detail: projectPackagedFactoryDetail(outcome, locale),
-                }
-              : {
-                  status: "error",
-                  failure: outcome.failure,
-                },
-        },
-      });
-    },
-    [locale, requestID, setScopedState, source],
+  selectedIdentity: string | undefined,
+): InventoryState {
+  const inventory = projectPackagedFactoryInventory(catalog, locale);
+  const firstIdentity = inventory.items[0]?.identity;
+  if (!firstIdentity) {
+    return { status: "empty" };
+  }
+
+  const effectiveIdentity =
+    selectedIdentity && inventory.byIdentity[selectedIdentity]
+      ? selectedIdentity
+      : firstIdentity;
+  const selectedEntry = catalog.factories.find(
+    (entry) => entry.name === effectiveIdentity,
   );
+  const detail = selectedEntry
+    ? projectPackagedFactoryDetail(selectedEntry, locale)
+    : undefined;
+
+  return {
+    status: "ready",
+    inventory,
+    selectedIdentity: effectiveIdentity,
+    selection: detail ? { status: "ready", detail } : { status: "error" },
+  };
 }
 
 export function usePackagedFactoryInventory(
-  source: PackagedFactoryPublicDataSource,
   locale: string,
 ): PackagedFactoryInventoryController {
-  const requestID = useRef(0);
-  const [scopedState, setScopedState] = useState<ScopedInventoryState>({
-    locale,
-    source,
-    value: { status: "loading" },
+  const [selectedIdentity, setSelectedIdentity] = useState<string>();
+  const catalogQuery = useQuery({
+    queryKey: packagedFactoryCatalogQueryKey,
+    queryFn: ({ signal }) => getPackagedFactoryCatalog({ signal }),
+    retry: false,
+    staleTime: Infinity,
   });
-  const resolveSelection = useSelectionResolver(
-    source,
-    locale,
-    requestID,
-    setScopedState,
-  );
+
+  const inventory = useMemo(() => {
+    if (!catalogQuery.data) {
+      return undefined;
+    }
+    return projectPackagedFactoryInventory(catalogQuery.data, locale);
+  }, [catalogQuery.data, locale]);
 
   useEffect(() => {
-    const activeRequestID = ++requestID.current;
-    setScopedState({ locale, source, value: { status: "loading" } });
+    if (!inventory) {
+      setSelectedIdentity(undefined);
+      return;
+    }
 
-    void loadPackagedFactoryCatalog(source).then((outcome) => {
-      if (requestID.current !== activeRequestID) {
-        return;
-      }
-      if (outcome.status !== "ready") {
-        setScopedState({
-          locale,
-          source,
-          value: catalogOutcomeState(outcome),
-        });
-        return;
-      }
-
-      const inventory = projectPackagedFactoryInventory(outcome, locale);
-      const selectedIdentity = inventory.items[0]?.identity;
-      if (!selectedIdentity) {
-        setScopedState({ locale, source, value: { status: "empty" } });
-        return;
-      }
-
-      setScopedState({
-        locale,
-        source,
-        value: {
-          status: "ready",
-          catalog: outcome,
-          inventory,
-          selectedIdentity,
-          selection: { status: "loading" },
-        },
-      });
-      void resolveSelection(
-        outcome,
-        inventory,
-        selectedIdentity,
-        activeRequestID,
-      );
-    });
-
-    return () => {
-      requestID.current += 1;
-    };
-  }, [locale, resolveSelection, source]);
+    setSelectedIdentity((current) =>
+      current && inventory.byIdentity[current]
+        ? current
+        : inventory.items[0]?.identity,
+    );
+  }, [inventory]);
 
   const select = useCallback(
     (identity: string) => {
-      const state =
-        scopedState.source === source && scopedState.locale === locale
-          ? scopedState.value
-          : { status: "loading" as const };
-      if (state.status !== "ready" || !state.inventory.byIdentity[identity]) {
-        return;
+      if (inventory?.byIdentity[identity]) {
+        setSelectedIdentity(identity);
       }
-
-      const activeRequestID = ++requestID.current;
-      setScopedState({
-        locale,
-        source,
-        value: {
-          ...state,
-          selectedIdentity: identity,
-          selection: { status: "loading" },
-        },
-      });
-      void resolveSelection(
-        state.catalog,
-        state.inventory,
-        identity,
-        activeRequestID,
-      );
     },
-    [locale, resolveSelection, scopedState, source],
+    [inventory],
   );
+  const retry = useCallback(() => {
+    void catalogQuery.refetch();
+  }, [catalogQuery.refetch]);
 
-  return {
-    select,
-    state:
-      scopedState.source === source && scopedState.locale === locale
-        ? scopedState.value
-        : { status: "loading" },
-  };
+  let state: InventoryState;
+  if (catalogQuery.isPending) {
+    state = { status: "loading" };
+  } else if (catalogQuery.isError || !catalogQuery.data) {
+    state = { status: "error" };
+  } else {
+    state = projectCatalogState(catalogQuery.data, locale, selectedIdentity);
+  }
+
+  return { retry, select, state };
 }

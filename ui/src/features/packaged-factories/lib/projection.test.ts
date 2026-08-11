@@ -1,65 +1,47 @@
+import type { PackagedFactoryCatalogEntry } from "../../../api/packaged-factories";
 import {
   projectPackagedFactoryDetail,
   projectPackagedFactoryInventory,
 } from "./projection";
-import type {
-  PackagedFactoryCatalogOutcome,
-  PackagedFactoryManifestEntry,
-  PackagedFactorySelectionOutcome,
-} from "./public-contract";
 
 function entry(
   slug: string,
-  overrides: Partial<PackagedFactoryManifestEntry> = {},
-): PackagedFactoryManifestEntry {
+  overrides: Partial<PackagedFactoryCatalogEntry> = {},
+): PackagedFactoryCatalogEntry {
   return {
     name: `@you/${slug}`,
     project: `builtin-${slug}`,
     slug,
-    json: {
-      locator: `generated/factories/${slug}/factory.json`,
-      sha256: "a".repeat(64),
+    description: {
+      type: "LOCALIZABLE_ASSET",
+      value: `${slug} description`,
     },
-    yaml: {
-      locator: `generated/factories/${slug}/factory.yaml`,
-      sha256: "b".repeat(64),
-    },
+    examples: [
+      {
+        name: "default",
+        description: {
+          type: "LOCALIZABLE_ASSET",
+          value: "Run the Factory.",
+        },
+        args: { input: "hello" },
+      },
+    ],
+    json: { id: `builtin-${slug}`, name: slug },
+    yaml: `id: builtin-${slug}\nname: ${slug}\n`,
     ...overrides,
   };
 }
 
-function catalog(
-  factories: readonly PackagedFactoryManifestEntry[],
-): Extract<PackagedFactoryCatalogOutcome, { status: "ready" }> {
-  return {
-    status: "ready",
-    manifest: {
-      formatVersion: "1",
-      factorySchema:
-        "https://schemas.portpowered.com/you/config/factory.schema.json",
-      factories,
-    },
-  };
-}
-
-function selection(
-  selectedEntry: PackagedFactoryManifestEntry,
-): Extract<PackagedFactorySelectionOutcome, { status: "ready" }> {
-  return {
-    status: "ready",
-    entry: selectedEntry,
-    json: { id: selectedEntry.project, name: selectedEntry.slug },
-    yaml: { id: selectedEntry.project, name: selectedEntry.slug },
-    jsonText: `{\n  "id": "${selectedEntry.project}"\n}`,
-    yamlText: `id: ${selectedEntry.project}\n`,
-  };
+function catalog(factories: readonly PackagedFactoryCatalogEntry[]) {
+  return { factories: [...factories] };
 }
 
 describe("Packaged Factory inventory projection", () => {
   it("keys and orders disposable inventory by stable Factory identity", () => {
-    const source = catalog([entry("zulu"), entry("alpha"), entry("middle")]);
-
-    const projected = projectPackagedFactoryInventory(source, "en");
+    const projected = projectPackagedFactoryInventory(
+      catalog([entry("zulu"), entry("alpha"), entry("middle")]),
+      "en",
+    );
 
     expect(projected.items.map(({ identity }) => identity)).toEqual([
       "@you/alpha",
@@ -106,8 +88,14 @@ describe("Packaged Factory inventory projection", () => {
   });
 
   it("represents a missing description without losing stable identity", () => {
+    const missingDescription = {
+      ...entry("plain"),
+      description: undefined,
+    } as unknown as PackagedFactoryCatalogEntry;
+
     expect(
-      projectPackagedFactoryInventory(catalog([entry("plain")]), "en").items[0],
+      projectPackagedFactoryInventory(catalog([missingDescription]), "en")
+        .items[0],
     ).toEqual({
       identity: "@you/plain",
       stableName: "@you/plain",
@@ -140,12 +128,11 @@ describe("Packaged Factory detail content projection", () => {
           },
         },
       ],
+      json: { id: "builtin-hostile", name: "hostile" },
+      yaml: "id: builtin-hostile\nname: hostile\n",
     });
 
-    const detail = projectPackagedFactoryDetail(
-      selection(selectedEntry),
-      "fr-CA",
-    );
+    const detail = projectPackagedFactoryDetail(selectedEntry, "fr-CA");
 
     expect(detail).toMatchObject({
       identity: "@you/hostile",
@@ -159,13 +146,13 @@ describe("Packaged Factory detail content projection", () => {
       configurations: {
         json: {
           format: "json",
-          displayValue: '{\n  "id": "builtin-hostile"\n}',
-          copyValue: '{\n  "id": "builtin-hostile"\n}',
+          displayValue: '{\n  "id": "builtin-hostile",\n  "name": "hostile"\n}',
+          copyValue: '{\n  "id": "builtin-hostile",\n  "name": "hostile"\n}',
         },
         yaml: {
           format: "yaml",
-          displayValue: "id: builtin-hostile\n",
-          copyValue: "id: builtin-hostile\n",
+          displayValue: "id: builtin-hostile\nname: hostile\n",
+          copyValue: "id: builtin-hostile\nname: hostile\n",
         },
       },
       examples: {
@@ -185,7 +172,7 @@ describe("Packaged Factory detail content projection", () => {
         ],
       },
     });
-    if (detail.examples.status !== "available") {
+    if (detail?.examples.status !== "available") {
       throw new Error("Expected projected invocation examples.");
     }
     expect(detail.examples.items[0]?.copyValue).toBe(
@@ -208,18 +195,31 @@ describe("Packaged Factory detail content projection", () => {
 describe("Packaged Factory detail state projection", () => {
   it("uses explicit missing-description and no-examples states", () => {
     const detail = projectPackagedFactoryDetail(
-      selection(entry("minimal")),
+      {
+        ...entry("minimal"),
+        description: undefined,
+        examples: [],
+      } as unknown as PackagedFactoryCatalogEntry,
       "ja",
     );
 
-    expect(detail.description).toEqual({ status: "unavailable" });
-    expect(detail.examples).toEqual({ status: "none" });
-    expect(detail.configurations.json.displayValue).toContain(
+    expect(detail?.description).toEqual({ status: "unavailable" });
+    expect(detail?.examples).toEqual({ status: "none" });
+    expect(detail?.configurations.json.displayValue).toContain(
       "builtin-minimal",
     );
   });
 
-  it("is reproducible and leaves canonical package data unchanged", () => {
+  it("fails closed for a selected entry with a missing artifact", () => {
+    expect(
+      projectPackagedFactoryDetail(
+        { ...entry("broken"), yaml: "" } as PackagedFactoryCatalogEntry,
+        "en",
+      ),
+    ).toBeUndefined();
+  });
+
+  it("is reproducible and leaves canonical API data unchanged", () => {
     const selectedEntry = entry("stable", {
       examples: [
         {
@@ -232,20 +232,16 @@ describe("Packaged Factory detail state projection", () => {
         },
       ],
     });
-    const canonicalSelection = selection(selectedEntry);
-    const before = structuredClone(canonicalSelection);
+    const before = structuredClone(selectedEntry);
 
-    const first = projectPackagedFactoryDetail(canonicalSelection, "en");
-    const second = projectPackagedFactoryDetail(canonicalSelection, "en");
+    const first = projectPackagedFactoryDetail(selectedEntry, "en");
+    const second = projectPackagedFactoryDetail(selectedEntry, "en");
 
     expect(first).toEqual(second);
     expect(first).not.toBe(second);
-    expect(first.examples).not.toBe(second.examples);
-    expect(canonicalSelection).toEqual(before);
-    if (
-      first.examples.status !== "available" ||
-      selectedEntry.examples === undefined
-    ) {
+    expect(first?.examples).not.toBe(second?.examples);
+    expect(selectedEntry).toEqual(before);
+    if (first?.examples.status !== "available") {
       throw new Error("Expected projected and canonical invocation examples.");
     }
     expect(first.examples.items[0]?.args).not.toBe(

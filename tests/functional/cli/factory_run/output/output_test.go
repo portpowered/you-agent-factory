@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -21,7 +21,8 @@ func TestSuccessfulInvocationOutputModes(t *testing.T) {
 	t.Run("human lifecycle followed by final response", func(t *testing.T) {
 		t.Parallel()
 
-		stdout := runGoalInvocation(t, nil, []string{"--output", "response-stream"})
+		stdout, stderr := runGoalInvocation(t, nil, []string{"--output", "response-stream"})
+		assertStableWorkerProgress(t, stderr)
 
 		lines := nonEmptyLines(stdout)
 		if len(lines) < 3 {
@@ -43,34 +44,33 @@ func TestSuccessfulInvocationOutputModes(t *testing.T) {
 	t.Run("quiet raw final result", func(t *testing.T) {
 		t.Parallel()
 
-		stdout := runGoalInvocation(t, nil, []string{"--quiet"})
+		stdout, stderr := runGoalInvocation(t, nil, []string{"--quiet"})
 
 		if stdout != primaryResult {
 			t.Fatalf("stdout = %q, want only raw final result %q", stdout, primaryResult)
 		}
+		if stderr != "" {
+			t.Fatalf("stderr = %q, want quiet mode to suppress progress", stderr)
+		}
 	})
 }
 
-func runGoalInvocation(t *testing.T, globalArgs, runArgs []string) string {
+func runGoalInvocation(t *testing.T, globalArgs, runArgs []string) (string, string) {
 	t.Helper()
 
 	homeDir := t.TempDir()
 	workingDirectory := t.TempDir()
 	support.InstallPackagedFactory(t, homeDir, goalFactoryName)
-	mockWorkersPath := support.WriteMockWorkersConfig(t, &workers.MockWorkersConfig{
-		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
-		MockWorkers: []workers.MockWorkerConfig{{
-			WorkerName:      "goal-executor",
-			WorkstationName: "execute-goal",
-			RunType:         workers.MockWorkerRunTypeAccept,
-		}},
+	providerRunner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: []byte("{\"decision\":\"accepted\",\"feedback\":\"\",\"output\":\"mock worker accepted\"}"),
 	})
 
 	args := []string{"you"}
 	args = append(args, globalArgs...)
 	args = append(args,
 		"run", "--named", goalFactoryName,
-		"--with-mock-workers", mockWorkersPath,
+		"--executor-provider", "codex",
+		"--executor-model", "gpt-5-codex",
 		"--no-record",
 	)
 	args = append(args, runArgs...)
@@ -79,13 +79,22 @@ func runGoalInvocation(t *testing.T, globalArgs, runArgs []string) string {
 	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 	inputs.Input.WorkingDirectory = workingDirectory
 
-	if err := support.BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input); err != nil {
+	if err := support.BuildProcess(t, serviceedges.Edges{
+		ProviderCommandRunner: providerRunner,
+	}).Execute(inputs.Input); err != nil {
 		t.Fatalf("Process.Execute(%v) error = %v\nstdout:\n%s\nstderr:\n%s", args, err, inputs.Stdout(), inputs.Stderr())
 	}
-	if inputs.Stderr() != "" {
-		t.Fatalf("stderr = %q, want empty successful-run stderr", inputs.Stderr())
+	return inputs.Stdout(), inputs.Stderr()
+}
+
+func assertStableWorkerProgress(t *testing.T, stderr string) {
+	t.Helper()
+	if !strings.Contains(stderr, "worker ") || !strings.Contains(stderr, ": active") {
+		t.Fatalf("stderr = %q, want stable worker progress", stderr)
 	}
-	return inputs.Stdout()
+	if strings.ContainsAny(stderr, "\x1b\r") {
+		t.Fatalf("stderr = %q, want no ANSI or cursor controls for redirected output", stderr)
+	}
 }
 
 func nonEmptyLines(value string) []string {
