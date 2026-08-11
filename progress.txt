@@ -3848,3 +3848,19 @@
   - Full parallel coverage timing can vary materially when another Go lane shares process/API-server resources; preserve the complete full-lane result, but use an isolated focused run for package-level before/after claims.
   - `origin/main` may advance during long functional runs; fetch and compare the base immediately before merge and preserve this branch's task-scoped `prd.json` while integrating append-only progress history.
 ---
+## 2026-08-10 18:58 -07:00 - thr-functional-lane-speed-004 post-merge verification
+- What was implemented
+  - Merged `origin/main` at `0b9771fe85fd1aedf9968d636de5e72cd193970c` into the task branch, preserving this task's `prd.json`, carrying current-main source changes, and unioning both append-only progress histories.
+  - Completed the final post-merge quality and functional verification without changing the story implementation.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+  - Current-main source/test changes carried by merge commit `ed1ed41fe`.
+- Verification
+  - `make test` — passed in 47.547s.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet typecheck` — passed in 29.249s.
+  - `make test-functional-fresh` — passed all maintained packages with the explicit `-count=1` lane in 165.083s.
+  - `git diff --cached --check`, PRD JSON parsing, conflict-marker scan, and unmerged-index scan — passed during merge resolution.
+- **Learnings for future iterations:**
+  - A moving main branch can change both runtime tests and shared task metadata while long timing runs are in flight; merge the freshly fetched base before the final quality pass and rerun the authoritative functional lane on that merged head.
+---
