@@ -64,6 +64,7 @@
     "pkg/platform/pty",
     "pkg/platform/random",
     "pkg/platform/replay",
+    "pkg/platform/rollingfile",
     "pkg/platform/runtimeartifact",
     "pkg/platform/stdio",
     "pkg/platform/taskgroup",
@@ -697,6 +698,11 @@
     },
     {
       "packagePath": "pkg/platform/replay",
+      "disposition": "retain",
+      "destination": "platform"
+    },
+    {
+      "packagePath": "pkg/platform/rollingfile",
       "disposition": "retain",
       "destination": "platform"
     },

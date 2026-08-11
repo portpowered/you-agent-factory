@@ -2661,6 +2661,12 @@
       "destinationKind": "family"
     },
     {
+      "packagePath": "pkg/platform/rollingfile",
+      "disposition": "retain",
+      "destination": "platform",
+      "destinationKind": "family"
+    },
+    {
       "packagePath": "pkg/platform/runtimeartifact",
       "disposition": "retain",
       "destination": "platform",
