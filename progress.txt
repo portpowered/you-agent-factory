@@ -11904,3 +11904,21 @@
 - **Learnings for future iterations:**
   - When main advances through another bookkeeping-heavy merge, retain the active task PRD, use current main as the progress-log base, append the task-only history, and rerun all hosted checks on the replacement ancestry.
 ---
+## [2026-08-11 07:53:51 -07:00] - btrc-p1-root-injection-006 current-main merge and local verification
+- What was implemented
+  - Resolved the interrupted current-main merge at `origin/main` `635a43870ebc1e72a3c9ded2a2713df2fe8f8ec7` as merge commit `8771e452f534dd4be59cc83bd345a47f44c998a8`.
+  - Retained the active P1 PRD, removed all merge markers, and preserved both append-only task and incoming-main progress histories.
+  - Kept the incoming dashboard/mainline source changes staged in the merge result without adding a separate task implementation story; all six P1 stories remain complete.
+- Files changed
+  - Current-main dashboard transport/UI files carried by the synchronization merge.
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `prd.json` parses with six stories marked `passes:true`; `progress.txt` and `prd.json` contain no conflict markers.
+  - Focused Factory Sessions, Factory Runtime, Root, and Wire Go suites passed.
+  - Repeated root-process reuse functional coverage passed three times.
+  - `make backend-size`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, `make vet`, and `make verify-fast` passed; the fast tier included dashboard typecheck, MCP contract validation, 355 Vitest files with 2,964 tests, 196 Bun tests, and the short Go unit lane.
+  - The branch contains `origin/main` as an ancestor and is awaiting replacement-head hosted CI.
+- **Learnings for future iterations:**
+  - After resolving a moving-base merge, verify both the active story PRD and the complete append-only log before committing; then rerun the shared fast tier because incoming UI and transport changes can affect it even when the active story is already complete.
+---
