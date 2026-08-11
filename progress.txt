@@ -4045,3 +4045,25 @@
   - The shared browser preview uses a separate API port from the real backend; hosted browser scenarios need an explicit API route bridge while production Vite still needs the canonical proxy path.
   - Live catalog ordering can change as built-in Factories evolve, so browser selection checks should use scoped first/nth controls and semantic state rather than hard-coded catalog positions or identities.
 ---
+
+## [2026-08-10 21:48 -07:00] - ui-packaged-factories-decoupling-003
+- What was implemented
+  - Strengthened the dashboard packaged-factories boundary guard around explicit UI manifest and source roots.
+  - Added coverage for runtime, development, optional, peer, and bundled dependency declarations, plus static, dynamic, re-export, and CommonJS references to the package root or subpaths.
+  - Added an isolated CLI regression fixture proving useful non-zero failure output for synthetic manifest/source violations and a compliant fixture pass.
+- Files changed
+  - `ui/scripts/check-packaged-factories-boundary.mjs`
+  - `ui/scripts/check-packaged-factories-boundary.test.mjs`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Focused Vitest guard suite — 2 tests passed.
+  - Live `bun run check:packaged-factories-boundary` — passed.
+  - `bun run tsc` — passed.
+  - `bun run lint` — passed.
+  - Focused Biome and `git diff --check` — passed.
+  - `bun run check` remains blocked by 268 existing generated `packages/*/dist` and root `tsconfig.json` formatting diagnostics; no changed-file diagnostics remain.
+- **Learnings for future iterations:**
+  - Boundary guards should expose an injectable manifest/source-root inspection function so synthetic fixtures can exercise the real CLI path without scanning unrelated repository inventories.
+  - TypeScript AST inspection catches side-effect static imports and dynamic subpath imports more reliably than a `from`/`import()` regular expression, while keeping the guard limited to UI source files.
+---

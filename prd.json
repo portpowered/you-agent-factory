@@ -70,8 +70,8 @@
         "Tests pass"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Hardened the UI boundary guard around explicit UI manifest/source inputs. It rejects dependencies, devDependencies, optionalDependencies, peerDependencies, bundledDependencies, and bundleDependencies declarations, plus static, dynamic, re-export, and CommonJS source references to the package root or subpaths. Added a CLI regression test with isolated violating and compliant fixtures that proves actionable non-zero failure output and a clean pass. Verified with the focused Vitest guard suite (2 tests), the live packaged-factories guard, bun run tsc, and bun run lint. The broader bun run check remains blocked only by the repository's existing generated dist/formatting diagnostics outside this story."
     }
   ]
 }
