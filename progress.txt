@@ -7411,3 +7411,21 @@
 - **Learnings for future iterations:**
   - A green PR run becomes stale when `origin/main` advances during local verification; fetch immediately before handoff, merge the new base, and wait for checks on the replacement head.
 ---
+
+## [2026-08-10 21:56 -07:00] - ui-packaged-factories-decoupling current-main synchronization
+- What was implemented
+  - Merged live `origin/main` at `7dbeb472a` before handoff after the base advanced during story implementation.
+  - Preserved the three-story dashboard PRD as authoritative and retained both branches' append-only progress histories while carrying current-main source and generated-artifact changes forward.
+- Files changed
+  - Current-main synchronization files.
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Merge index is resolved, `git ls-files -u` is empty, conflict markers are absent, and `git diff --check` passes.
+  - All three PRD stories parse with `passes:true`.
+  - Post-merge packaged-factories boundary guard and isolated 2-test suite passed.
+  - Post-merge `bun run tsc`, `bun run lint`, and `bun run build` passed.
+- **Learnings for future iterations:**
+  - Fetch the live base immediately before pushing and resolve shared PRD/progress conflicts before opening a PR; a task branch can be clean yet already stale against the hosting base.
+  - Keep the active task PRD authoritative during a shared-bookkeeping merge, while preserving unrelated current-main progress entries for auditability.
+---
