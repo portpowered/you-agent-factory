@@ -550,7 +550,7 @@ type runtimeLogOwner struct {
 }
 
 func (owner runtimeLogOwner) Open(request factoryruntime.RuntimeLogScopeRequest) (factoryruntime.RuntimeLogSink, error) {
-	if !runtimeLogPolicyEnabled(request.Policy) {
+	if request.Policy == factoryruntime.RuntimeFileLoggingPolicyDisabled {
 		return nil, nil
 	}
 	if owner.opener == nil || owner.clock == nil || owner.newID == nil {
@@ -604,7 +604,7 @@ type runtimeMetricsOwner struct {
 }
 
 func (owner runtimeMetricsOwner) Open(request factoryruntime.RuntimeMetricsScopeRequest) (factoryruntime.RuntimeMetricsSink, error) {
-	if !runtimeMetricsPolicyEnabled(request.Policy) {
+	if request.Policy == factoryruntime.RuntimeMetricsPolicyDisabled {
 		return nil, nil
 	}
 	if owner.opener == nil || owner.clock == nil || owner.newID == nil {
@@ -635,14 +635,6 @@ func (owner runtimeMetricsOwner) Open(request factoryruntime.RuntimeMetricsScope
 
 type runtimeMetricRecordWriterAdapter struct {
 	writer *platformmetrics.RuntimeMetricsSink
-}
-
-func runtimeLogPolicyEnabled(policy factoryruntime.RuntimeFileLoggingPolicy) bool {
-	return policy != factoryruntime.RuntimeFileLoggingPolicyDisabled
-}
-
-func runtimeMetricsPolicyEnabled(policy factoryruntime.RuntimeMetricsPolicy) bool {
-	return policy != factoryruntime.RuntimeMetricsPolicyDisabled
 }
 
 func (a runtimeMetricRecordWriterAdapter) WriteMetric(
