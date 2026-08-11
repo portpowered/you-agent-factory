@@ -330,6 +330,9 @@ func registrationDescriptor(manifest Manifest) providers.Descriptor {
 	if manifest.MaximumExecutionCapabilities.StructuredOutput {
 		capabilities = append(capabilities, providers.CapabilityStructuredOutput)
 	}
+	if manifest.MaximumExecutionCapabilities.PermissionBypass {
+		capabilities = append(capabilities, providers.CapabilityPermissionBypass)
+	}
 	return providers.Descriptor{
 		ID: providers.ID(manifest.ID), Aliases: append([]string(nil), manifest.Aliases...),
 		DisplayName: manifest.DisplayName.Value, Availability: providers.AvailabilitySelectable,
@@ -350,7 +353,8 @@ func externalRegistrationAttempt(registration Registration) (execution.Registrat
 			writer := &externalResponseWriter{}
 			err := registration.Integration.Invoke(ctx, InvocationRequest{
 				ID: request.AttemptID, ModelID: request.Model,
-				ReasoningEffort: request.ReasoningEffort, Prompt: request.UserMessage,
+				ReasoningEffort: request.ReasoningEffort,
+				SkipPermissions: request.SkipPermissions, Prompt: request.UserMessage,
 			}, writer)
 			if err != nil {
 				return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindUnknown, Message: err.Error()}
@@ -436,7 +440,7 @@ func effectiveACPIntegrations(packaged, configured []providers.ACPIntegration) [
 }
 
 func acpDescriptor(integration providers.ACPIntegration) providers.Descriptor {
-	return providers.Descriptor{ID: integration.Name, Aliases: append([]string(nil), integration.Aliases...), DisplayName: integration.Name.String(), Availability: providers.AvailabilitySelectable, Readiness: providers.ReadinessReady, Capabilities: []providers.Capability{providers.CapabilityPromptSubmission, providers.CapabilityImageInput, providers.CapabilitySessionResume, providers.CapabilityNativeStreaming, providers.CapabilityMessageDeltas, providers.CapabilityReasoningSummaries, providers.CapabilityToolLifecycle, providers.CapabilityFileChanges, providers.CapabilityPlans, providers.CapabilityUsage}}
+	return providers.Descriptor{ID: integration.Name, Aliases: append([]string(nil), integration.Aliases...), DisplayName: integration.Name.String(), Availability: providers.AvailabilitySelectable, Readiness: providers.ReadinessReady, Capabilities: []providers.Capability{providers.CapabilityPromptSubmission, providers.CapabilityImageInput, providers.CapabilitySessionResume, providers.CapabilityPermissionBypass, providers.CapabilityNativeStreaming, providers.CapabilityMessageDeltas, providers.CapabilityReasoningSummaries, providers.CapabilityToolLifecycle, providers.CapabilityFileChanges, providers.CapabilityPlans, providers.CapabilityUsage}}
 }
 
 // NewFactory returns an inert constructor used for operator-configured ACP catalogs.

@@ -5729,6 +5729,9 @@ type ProviderExecutionCapabilities struct {
 	// ImageInput Accepts image content as invocation input.
 	ImageInput bool `json:"imageInput"`
 
+	// PermissionBypass Can explicitly bypass the provider's normal permission and sandbox prompts.
+	PermissionBypass bool `json:"permissionBypass"`
+
 	// PromptSubmission Accepts authored prompt input for execution.
 	PromptSubmission bool `json:"promptSubmission"`
 

@@ -3,6 +3,7 @@ package service
 import (
 	"encoding/json"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -149,6 +150,9 @@ func TestProjectManifestCapabilityFactsAreCanonicalAndCloneable(t *testing.T) {
 		DisplayName:                publishedNameValue{Value: "Codex"},
 		TechnicalSupportLevel:      "production",
 		ImplementationAvailability: "bundled",
+		MaximumExecutionCapabilities: publishedExecutionCapabilities{
+			PermissionBypass: true,
+		},
 		Models: []publishedModel{{
 			ID:      "gpt-5.6",
 			Efforts: []string{"max", "low", "minimal"},
@@ -175,6 +179,9 @@ func TestProjectManifestCapabilityFactsAreCanonicalAndCloneable(t *testing.T) {
 	got := descriptors[0]
 	if got.TechnicalSupportLevel != providers.TechnicalSupportProduction || got.ImplementationAvailability != providers.ImplementationBundled {
 		t.Fatalf("publication posture = %q/%q, want production/bundled", got.TechnicalSupportLevel, got.ImplementationAvailability)
+	}
+	if !slices.Contains(got.Capabilities, providers.CapabilityPermissionBypass) {
+		t.Fatalf("capabilities = %v, want permission bypass", got.Capabilities)
 	}
 	if got.Models[0].ID != "gpt-5.6" {
 		t.Fatalf("model ID = %q, want gpt-5.6", got.Models[0].ID)

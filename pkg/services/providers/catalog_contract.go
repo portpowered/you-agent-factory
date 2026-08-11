@@ -239,6 +239,10 @@ const (
 	CapabilityUsage              Capability = "usage"
 	CapabilityStableItemIDs      Capability = "stable_item_ids"
 	CapabilityProviderReconnect  Capability = "provider_reconnect"
+	// CapabilityPermissionBypass means the provider route has an explicit,
+	// provider-owned way to bypass its normal permission and sandbox prompts.
+	// It is a capability fact, not an instruction to bypass permissions.
+	CapabilityPermissionBypass Capability = "permission_bypass"
 )
 
 // ListProvidersRequest is the plain catalog list request vocabulary.

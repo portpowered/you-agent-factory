@@ -5090,6 +5090,8 @@ export interface components {
       sessionResume: boolean;
       /** @description Can constrain authoritative output using a structured schema. */
       structuredOutput: boolean;
+      /** @description Can explicitly bypass the provider's normal permission and sandbox prompts. */
+      permissionBypass: boolean;
       /** @description Can execute provider-managed tools during an invocation. */
       toolExecution: boolean;
       /** @description Can execute with an explicit working directory. */

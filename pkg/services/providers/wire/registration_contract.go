@@ -45,6 +45,7 @@ type InvocationRequest struct {
 	ID              string
 	ModelID         string
 	ReasoningEffort string
+	SkipPermissions bool
 	Prompt          string
 }
 
@@ -107,7 +108,7 @@ type DiscoveryPrerequisites struct {
 type DocumentationLink struct{ Kind, URL string }
 
 type ExecutionCapabilities struct {
-	ImageInput, PromptSubmission, SessionResume, StructuredOutput, ToolExecution, WorkingDirectory, Worktree bool
+	ImageInput, PromptSubmission, SessionResume, StructuredOutput, PermissionBypass, ToolExecution, WorkingDirectory, Worktree bool
 }
 
 type ResponseFidelityCapabilities struct {
@@ -137,6 +138,7 @@ type ProviderRegistrations []Registration
 
 type ProgressingIntegrationStats struct {
 	DiscoverCalls, CapabilityCalls, InvokeCalls, ProgressWrites, TerminalCloses int
+	LastSkipPermissions                                                         bool
 }
 
 type ProgressingIntegration struct {
@@ -170,9 +172,10 @@ func (integration *ProgressingIntegration) Capabilities(context.Context, Invocat
 	return integration.MaximumCapabilities(), nil
 }
 
-func (integration *ProgressingIntegration) Invoke(ctx context.Context, _ InvocationRequest, writer ResponseWriter) error {
+func (integration *ProgressingIntegration) Invoke(ctx context.Context, request InvocationRequest, writer ResponseWriter) error {
 	integration.mu.Lock()
 	integration.stats.InvokeCalls++
+	integration.stats.LastSkipPermissions = request.SkipPermissions
 	integration.mu.Unlock()
 	if err := writer.WriteEvent(ctx, EventDraft{}); err != nil {
 		return err

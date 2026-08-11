@@ -264,6 +264,7 @@ func limitedExternalManifest(t *testing.T, identity, alias string) registry.Mani
 	manifest.Deprecation = nil
 	manifest.MaximumExecutionCapabilities = registry.ExecutionCapabilities{
 		PromptSubmission: true,
+		PermissionBypass: false,
 	}
 	manifest.MaximumResponseFidelityCapabilities = registry.ResponseFidelityCapabilities{}
 	return manifest

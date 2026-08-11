@@ -10390,6 +10390,7 @@ components:
         - imageInput
         - sessionResume
         - structuredOutput
+        - permissionBypass
         - toolExecution
         - workingDirectory
         - worktree
@@ -10406,6 +10407,9 @@ components:
         structuredOutput:
           type: boolean
           description: Can constrain authoritative output using a structured schema.
+        permissionBypass:
+          type: boolean
+          description: Can explicitly bypass the provider's normal permission and sandbox prompts.
         toolExecution:
           type: boolean
           description: Can execute provider-managed tools during an invocation.
