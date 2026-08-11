@@ -71,6 +71,48 @@ type SourceCandidateProvider func(
 // complete persistent snapshot to handlers that still own typed option structs.
 type ResolvedInputsBinding func(resolvedinput.Inputs) error
 
+type resolvedPlacementContextKey struct{}
+
+// ResolveCommandPlacement resolves the root --remote input against one
+// command's authored capability. A missing root input is treated as the
+// explicit false/default value so detached family constructors remain useful
+// in focused tests and compatibility adapters.
+func ResolveCommandPlacement(
+	command climanifest.Command,
+	inputs resolvedinput.Inputs,
+) (climanifest.ExecutionPlacement, error) {
+	remote := false
+	if _, present := inputs.Lookup("you.flag.remote"); present {
+		value, err := inputs.Bool("you.flag.remote")
+		if err != nil {
+			return "", fmt.Errorf("resolve command %q placement: %w", command.ID, err)
+		}
+		remote = value
+	}
+	placement, err := command.ResolvePlacement(remote)
+	if err != nil {
+		return "", err
+	}
+	return placement, nil
+}
+
+func attachResolvedPlacement(cmd *cobra.Command, placement climanifest.ExecutionPlacement) {
+	cmd.SetContext(context.WithValue(cmd.Context(), resolvedPlacementContextKey{}, placement))
+}
+
+// ResolvedPlacementFromContext returns the placement resolved for the current
+// command invocation by the generic CLI constructor.
+func ResolvedPlacementFromContext(ctx context.Context) (climanifest.ExecutionPlacement, error) {
+	if ctx == nil {
+		return "", fmt.Errorf("read resolved placement: context is required")
+	}
+	placement, ok := ctx.Value(resolvedPlacementContextKey{}).(climanifest.ExecutionPlacement)
+	if !ok {
+		return "", fmt.Errorf("read resolved placement: invocation has not resolved command placement")
+	}
+	return placement, nil
+}
+
 // GenericBindings supplies executable transport bindings used while projecting
 // a generic manifest. Additional stable-ID registries can be added here without
 // coupling manifest records to public command or input spellings.

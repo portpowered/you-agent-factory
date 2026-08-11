@@ -390,9 +390,13 @@ func TestServerBindExhaustionWritesDeclaredErrorWithoutResidualEffects(t *testin
 			t.Fatalf("server stdout exposed readiness %q before bind failure:\n%s", forbidden, stdout)
 		}
 	}
+	stderrLines := strings.Split(strings.TrimSpace(stderr), "\n")
+	if len(stderrLines) != 2 || !strings.Contains(stderrLines[0], "--server is deprecated") || !strings.Contains(stderrLines[0], "--listen") {
+		t.Fatalf("server stderr = %q, want one migration warning followed by one ErrorResponse", stderr)
+	}
 	var response factoryapi.ErrorResponse
-	if err := json.Unmarshal([]byte(stderr), &response); err != nil {
-		t.Fatalf("server stderr is not exactly one ErrorResponse: %v\n%s", err, stderr)
+	if err := json.Unmarshal([]byte(stderrLines[1]), &response); err != nil {
+		t.Fatalf("server stderr ErrorResponse is invalid: %v\n%s", err, stderr)
 	}
 	if response.Code != factoryapi.ErrorResponseCode("SERVER_BIND_FAILED") {
 		t.Fatalf("ErrorResponse = %#v, want SERVER_BIND_FAILED", response)

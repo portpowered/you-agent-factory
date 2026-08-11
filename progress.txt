@@ -3880,3 +3880,17 @@
 - **Learnings for future iterations:**
   - A full instrumented Go lane can reveal Linux-only contract tests skipped by the Windows developer suite; run POSIX-tagged functional tests under Linux/WSL when their behavior depends on GNU Make or `sh`.
 ---
+## 2026-08-10 19:31 -07:00 - thr-functional-lane-speed-004 current-main synchronization
+- What was implemented
+  - Fetched the live `origin/main` head `aac04248d` after PR #1866's base advanced beyond `0b9771fe8`.
+  - Merged the current base while preserving the task-scoped `prd.json` and this branch's append-only progress history; the current-main synchronization entry was retained as a separate log item.
+- Files changed
+  - Current-main merge files.
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - The task PRD parses with all four stories marked `passes:true`.
+  - Conflict markers were removed and the merge index is ready for final staging; post-merge focused and full required checks remain to be rerun before the PR can be considered ready.
+- **Learnings for future iterations:**
+  - When several PRs advance `main` during a long task, record each synchronization as its own progress entry and rerun the authoritative lanes on the newest merged head rather than extending an older evidence claim.
+---

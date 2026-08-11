@@ -65,6 +65,8 @@ type Config struct {
 	DirectoryCreator              platformfilesystem.DirectoryCreator
 	BrowserOpener                 platformbrowser.Opener
 	BindHost                      string
+	ListenAddress                 string
+	ListenExplicit                bool
 	Port                          int
 	AutoPort                      bool
 	RecordPath                    string
