@@ -10300,3 +10300,22 @@
   - When all stories are complete, keep the iteration focused on exact-head delivery evidence and do not reopen product work solely because the PR has historical blocking comments that later commits already address.
   - A queued current-head workflow can be held by a stale verification-policy run; cancel only the superseded run for the same PR before waiting for the current run.
 ---
+## [2026-08-11 04:26:22 -07:00] - btrc-p1-root-injection-006 terminal CI retry audit
+- What was implemented
+  - Audited terminal workflow `31485203874` on head `be80d644fd6f258325d98ee0708039d8ced7d12d`; all lanes passed except Backend Functional Coverage and its dependent Verification Policy.
+  - Reran only the failed jobs. The retry cleared the initial AGY conductor failure; it reproduced the untouched server-binding assertion and observed one intermittent untouched `workers/mock` continuous-idle failure.
+  - Updated the delivery audit with the exact terminal retry result while preserving all six story flags as `passes:true`; no product or unrelated-test source change was justified.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/providers/agy -run '^TestAgyConductorSuccessThroughRootBuildProcess$' -count=3 -timeout 180s` — passed.
+  - `go test ./tests/functional/workers/mock -run '^TestPlainBatchDrainPreservesFiniteAndContinuousCounterexamples/continuous_idle$' -count=5 -timeout 180s` — passed.
+  - `go test ./tests/functional/transport/server_binding -run '^TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput$' -count=1 -timeout 180s` — reproduced the unchanged structured-diagnostic mismatch.
+  - `git diff --name-only origin/main...HEAD -- tests/functional/providers/agy tests/functional/workers/mock tests/functional/transport/server_binding` — empty.
+  - Workflow `31485203874` — Backend Unit Coverage and every non-functional lane passed; Backend Functional Coverage failed on the two baseline paths above, and Verification Policy failed only because that lane failed.
+  - Thread-aware review audit remains at zero review threads, zero unresolved review threads, and zero formal reviews.
+- **Learnings for future iterations:**
+  - A failed functional retry that clears one flaky test but surfaces another untouched intermittent should be classified by package diff membership and focused local repeatability before any implementation change.
+  - Preserve terminal CI evidence in the PRD even when the remaining failure is an existing main-baseline mismatch; this keeps the final handoff honest and avoids unrelated test churn.
+---
