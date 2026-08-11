@@ -18,8 +18,9 @@ even when it does not follow a prose rule.
 ## Quick rules
 
 1. Classify the text before editing it.
-2. Preserve protected machine and technical text byte-for-byte unless the
-   owning contract changes.
+2. Preserve protected machine and technical text byte-for-byte when it matches
+   the owning source; align a stale copy to a correct source or escalate a
+   source defect to its owner.
 3. Use the canonical customer term for the intended meaning.
 4. Write procedures as short, ordered actions with observable results.
 5. Write descriptions in small, single-topic units.
@@ -35,9 +36,11 @@ references](#conformance-and-external-references).
 
 This standard governs the form of customer-facing prose. It does not redefine
 product behavior. When wording conflicts with a public contract or the
-[architecture data model](../../../architecture/data-model.md), preserve the
-contract and ask its owner to correct the source definition or approve an
-explicit exception.
+[architecture data model](../../../architecture/data-model.md), verify which
+source owns the meaning. If the contract is correct, align the wording to the
+contract. If the source definition is wrong, ask its owner to correct the
+source and its dependent documentation. Do not use an exception to hide a
+contract mismatch.
 
 The standard applies to:
 
@@ -184,13 +187,20 @@ comment in this snippet, but preserve the command and flag literals:
 you server --listen 127.0.0.1:7437
 ```
 
-If a protected value is wrong, update the owning source or report the contract
-defect. Do not “fix” it by changing only a documentation copy.
+If a protected value in documentation differs from its owning source, verify
+the source before editing. When the source is correct, update the
+documentation copy to match the exact source literal; this is a `B-LITERAL`
+repair. When the source itself is wrong, do not silently change documentation
+to another value. Report the contract defect, correct the source with its
+owner, and then update dependent documentation. An exact literal that already
+matches its source is not a finding.
 
 ## Rule sets and review boundary
 
 The governing plan separates deterministic findings, advisory findings, and
-human language review. This standard preserves that boundary:
+human language review. The rule IDs below reproduce its complete blocking and
+advisory sets. A future checker may implement these IDs, but this story does
+not implement one.
 
 ### Blocking deterministic rules
 
@@ -199,23 +209,41 @@ These findings are blocking when the text is in the applicable class:
 - **B-PROC-20:** a procedural sentence exceeds 20 natural-language words;
 - **B-DESC-25:** a descriptive sentence exceeds 25 natural-language words;
 - **B-PARA-6:** a descriptive paragraph exceeds six sentences;
+- **B-SEMICOLON:** natural-language prose contains a prohibited semicolon;
+- **B-CONTRACTION:** natural-language prose contains a contraction;
+- **B-TERM-PUBLIC:** prose uses a prohibited public term where the register
+  supplies an approved replacement;
+- **B-TERM-CASE:** a canonical product term has incorrect spelling or
+  capitalization;
 - **B-LITERAL:** a protected literal differs from its owning contract or
-  source artifact; and
-- **B-TERM:** a customer concept uses a known canonical term with different
-  spelling or capitalization, without an approved exception.
+  source artifact;
+- **B-SUPPRESSION:** a suppression directive is malformed or names an unknown
+  rule;
+- **B-BASELINE-STALE:** a baseline entry no longer matches its finding or
+  source span;
+- **B-BASELINE-NEW:** a blocking finding is absent from the baseline; and
+- **B-PARSE:** parsing or extraction fails in a way that could silently skip
+  source text.
 
 ### Advisory deterministic rules
 
 These findings help a reviewer find likely problems but do not prove that the
 prose is wrong:
 
-- **A-PASSIVE:** flag passive constructions for review;
-- **A-ORDER:** flag procedural paragraphs that use a sequence but do not use a
-  vertical or ordered list;
-- **A-KEYWORD:** flag related descriptions that alternate between near-
-  synonyms; and
-- **A-FORM:** flag a possible unapproved plural or verb form for a registered
-  term.
+- **A-PASSIVE:** flag probable passive voice;
+- **A-ACTION:** flag multiple probable imperative actions in one sentence;
+- **A-PRONOUN:** flag repeated vague pronouns;
+- **A-NOMINAL:** flag nominalizations;
+- **A-TERM:** flag an unregistered candidate technical term; and
+- **A-DENSE:** flag unusually dense headings, lists, or table cells.
+
+The following blocking rules are checker-lifecycle rules. They are part of
+the normative contract, but they are not manually applicable in this
+documentation-only story because no suppression syntax, baseline, parser, or
+checker is implemented here: `B-SUPPRESSION`, `B-BASELINE-STALE`,
+`B-BASELINE-NEW`, and `B-PARSE`. When the corresponding checker exists, it
+MUST treat these findings as blocking. Ordering and sequence remain a human
+judgment under `H-SEQUENCE`; they are not an additional advisory rule.
 
 ### Human-review rules
 
@@ -254,7 +282,8 @@ An exception record MUST name:
 
 Valid reasons include:
 
-- a protected literal or quoted external output must remain exact;
+- a prose rule around a protected literal or quoted external output must yield
+  to the exact value;
 - two actions must occur simultaneously and separating them would imply a
   false order;
 - a legal, safety, security, or compatibility warning must preserve approved
@@ -266,8 +295,10 @@ Valid reasons include:
 
 Do not suppress a finding because the author prefers a longer sentence, did
 not have time to revise it, or considers ordinary readability optional. Do not
-suppress `B-LITERAL` to conceal a documentation and contract mismatch. Fix the
-source or obtain an owner decision.
+use an exception to conceal a documentation and contract mismatch. If the
+owning source is correct, align the documentation copy to it. If the owning
+source is wrong, obtain an owner decision and correct the source and its
+dependents together.
 
 For a manual review, record an exception in this form:
 
