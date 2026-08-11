@@ -1,6 +1,8 @@
 ## Codebase Patterns
 - For final PR handoff, compare the PR body byte-for-byte with `prd.json` and use the thread-aware GraphQL review audit because flat PR comments do not expose inline-thread resolution state.
 - Native Bun UI unit owners use the `.bun.unit.test.ts` suffix and `bun:test`; the shared `bunVi` adapter is the compatibility seam for global stubs/spies while the lane contract excludes those owners from Vitest.
+- Aggregate UI-unit evidence must reconcile both runner outputs to the unchanged full workload; the leased Bun cohort can coexist with pre-existing Bun owners and the remaining Vitest files.
+- The component wrapper has a separate wall-clock budget from assertion correctness; report passing sublane counts and host-specific budget overruns separately rather than treating warnings as test failures.
 - OS-boundary functional tests may poll an isolated durable filesystem checkpoint only when the child exposes no parent-process event or injected edge; document that reason at each polling helper and keep the bound as a failure guard.
 - Git Worktree preparation treats a retained Git `*.lock` as indeterminate ownership: retry within a named bound, preserve the resource, and return its exact path with verify/remove/retry guidance.
 - Git's `.git/config.lock` has no trustworthy owner or PID evidence; after a bounded retry, report the exact lock with `owner_liveness=indeterminate` and require verification before removing only that file—never auto-delete it.
@@ -4133,4 +4135,24 @@
 - **Learnings for future iterations:**
   - The final frozen cohort was already migrated in branch ancestry, so story completion required reproducing exact focused Bun counts, both Vitest exclusion selections, retired-path absence, lane-contract, and typecheck evidence before changing task metadata.
   - The workstation-selection-08 cohort has no parameterized cases; its source-level and executable totals remain identical at 34.
+---
+
+## 2026-08-10 20:45 -07:00 - bun-compat-batch-migration-009
+- What was implemented
+  - Completed the final batch audit: all eight frozen cohorts reconcile to 33 unique native Bun files, 176 source-level named cases, and 183 executable cases; all retired Vitest owners are absent.
+  - Ran one focused Bun command over all 33 migrated files (183/183 passing, 390 expect calls) and pinned Vitest `dashboard-unit` selections for both migrated and retired paths; both selections returned `No test files found`.
+  - Recorded the frozen per-cohort warm focused medians and a matched aggregate `bun run test:unit -- --logHeapUsage --no-color` comparison in `prd.json`; the full workload remains 390 files / 3,161 tests, with current after median 82.935s versus 95.89s before (12.955s / 13.5% lower).
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `bun test <all 33 migrated cohort paths>` — passed 183/183 across 33 files with 390 expect calls.
+  - Pinned `vitest.exe` `dashboard-unit` selections of all migrated `.bun.unit.test.ts` paths and all retired `.test.ts` paths — both returned `No test files found` with exit code 1.
+  - `bun run test:unit -- --logHeapUsage --no-color` — three aggregate samples passed; current output was 35 Bun files / 191 tests plus 355 Vitest files / 2,970 tests, preserving 390 files / 3,161 tests overall; wrapper samples were 90.657s, 82.935s, and 55.186s.
+  - `bun run check:test-lanes`, `bun run typecheck`, and `bun run lint` — passed.
+  - Browserless component sublanes — 860 Bun tests and 829 Vitest tests passed with no assertion failures; the Windows wrapper measured 323.43s against the CI-configured 300s duration guard, so the host-only performance-budget overrun is recorded separately from test correctness.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` — passed.
+- **Learnings for future iterations:**
+  - The full unit wrapper's unchanged workload is the strongest aggregate parity check: sum Bun and remaining Vitest outputs before comparing wall time, because the leased cohort is only part of the native Bun inventory.
+  - `test:component` can report a nonzero result solely for its wall-clock budget after every component assertion passes; preserve the sublane pass counts and host/budget context in review evidence.
 ---
