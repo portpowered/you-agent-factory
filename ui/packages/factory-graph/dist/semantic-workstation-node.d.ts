@@ -1,6 +1,7 @@
 import type { Node, NodeProps } from "@xyflow/react";
 import { type FactoryGraphNodeHandle, type FactoryGraphZAxisIncompleteHints } from "./semantic-node-shell.js";
 import { type FactoryGraphWorkItemRef, type FactoryGraphWorkstationRef } from "./semantic-workstation-presentation.js";
+import type { FactoryGraphWorkstationSemantics } from "./workstation-semantics.js";
 export type { FactoryGraphWorkItemRef, FactoryGraphWorkstationRef, } from "./semantic-workstation-presentation.js";
 export interface FactoryGraphActiveExecution {
     dispatch_id: string;
@@ -22,6 +23,7 @@ export interface FactoryGraphWorkstationNodeData extends Record<string, unknown>
     selectedWorkstation: boolean;
     summaryOnly?: boolean;
     workstation: FactoryGraphWorkstationRef;
+    workstationSemantics?: FactoryGraphWorkstationSemantics;
     zAxisIncompleteHints?: FactoryGraphZAxisIncompleteHints | null;
     onSelectWorkstation?: (nodeId: string) => void;
     onSelectWorkID?: (workID: string, hint?: {
@@ -31,4 +33,4 @@ export interface FactoryGraphWorkstationNodeData extends Record<string, unknown>
 }
 export type FactoryGraphWorkstationNode = Node<FactoryGraphWorkstationNodeData, "workstation">;
 /** Original Factory workstation presentation, with host-owned selection callbacks. */
-export declare function FactoryGraphWorkstationNodeView({ data, }: NodeProps<FactoryGraphWorkstationNode>): import("react").JSX.Element;
+export declare function FactoryGraphWorkstationNodeView({ data, }: NodeProps<FactoryGraphWorkstationNode>): import("react/jsx-runtime").JSX.Element;

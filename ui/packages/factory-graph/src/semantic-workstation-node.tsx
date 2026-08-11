@@ -3,8 +3,8 @@ import { GraphNodeButton } from "@you-agent-factory/components/graphs";
 
 import { GraphSemanticIcon } from "./semantic-icon.js";
 import {
-  FactoryGraphNodeShell,
   type FactoryGraphNodeHandle,
+  FactoryGraphNodeShell,
   type FactoryGraphZAxisIncompleteHints,
 } from "./semantic-node-shell.js";
 import {
@@ -16,17 +16,17 @@ import {
   factoryGraphActiveItemsLabel as activeItemsLabel,
   factoryGraphClassNames as classNames,
   factoryGraphDurationText as durationText,
+  type FactoryGraphWorkItemRef,
+  type FactoryGraphWorkstationRef,
   factoryGraphGraphDuration as graphDuration,
-  factoryGraphSelectExhaustionLabel as selectExhaustionLabel,
   factoryGraphSelectWorkstationLabel as selectWorkstationLabel,
+  type FactoryGraphWorkstationPresentation as WorkstationPresentation,
   factoryGraphWorkItemLabel as workItemLabel,
   factoryGraphWorkItemLabelClassName as workItemLabelClassName,
   factoryGraphWorkstationPresentation as workstationPresentation,
   factoryGraphWorkstationTitleClassName as workstationTitleClassName,
-  type FactoryGraphWorkItemRef,
-  type FactoryGraphWorkstationPresentation as WorkstationPresentation,
-  type FactoryGraphWorkstationRef,
 } from "./semantic-workstation-presentation.js";
+import type { FactoryGraphWorkstationSemantics } from "./workstation-semantics.js";
 
 export type {
   FactoryGraphWorkItemRef,
@@ -53,6 +53,7 @@ export interface FactoryGraphWorkstationNodeData
   selectedWorkstation: boolean;
   summaryOnly?: boolean;
   workstation: FactoryGraphWorkstationRef;
+  workstationSemantics?: FactoryGraphWorkstationSemantics;
   zAxisIncompleteHints?: FactoryGraphZAxisIncompleteHints | null;
   onSelectWorkstation?: (nodeId: string) => void;
   onSelectWorkID?: (
@@ -71,8 +72,10 @@ const VISIBLE_WORK_ITEM_LIMIT = 3;
 export function FactoryGraphWorkstationNodeView({
   data,
 }: NodeProps<FactoryGraphWorkstationNode>) {
-  const presentation = workstationPresentation(data.workstation, data.locale);
-  const exhaustion = presentation.semanticKind === "exhaustion";
+  const presentation = workstationPresentation(
+    data.workstationSemantics,
+    data.locale,
+  );
   const title =
     data.workstation.workstation_name ||
     data.workstation.transition_id ||
@@ -87,19 +90,16 @@ export function FactoryGraphWorkstationNodeView({
       { muted: data.muted, selected: data.selectedWorkstation },
       "primary",
     ),
-    exhaustion ? "border-dashed border-af-danger-border" : "border-info-border",
-    !exhaustion && presentation.borderClassName,
-    !exhaustion &&
-      data.active &&
+    "border-info-border",
+    presentation.borderClassName,
+    data.active &&
       !data.selectedWorkstation &&
       "border-af-success-border shadow-af-success-chip",
-    !exhaustion &&
-      data.activeFlow &&
+    data.activeFlow &&
       !data.selectedWorkstation &&
       "agent-flow-node--active ring-2 ring-af-success-border",
     data.selectedWorkstation && "border-primary shadow-af-accent-selected",
-    !exhaustion &&
-      data.selectedWorkID !== null &&
+    data.selectedWorkID !== null &&
       "border-info-border shadow-af-info-selected",
     data.muted && "opacity-[0.45]",
   );
@@ -110,9 +110,7 @@ export function FactoryGraphWorkstationNodeView({
       nodeType="workstation"
       zAxisIncompleteHints={data.zAxisIncompleteHints}
     >
-      {exhaustion ? (
-        <Exhaustion data={data} presentation={presentation} title={title} />
-      ) : data.summaryOnly ? (
+      {data.summaryOnly ? (
         <Summary data={data} presentation={presentation} title={title} />
       ) : (
         <ActiveContent
@@ -147,7 +145,9 @@ function Summary({
       }
       className="flex min-w-0 w-full items-center justify-between gap-2 overflow-hidden"
       data-selected-workstation={data.selectedWorkstation ? "true" : undefined}
-      data-workstation-kind={presentation.semanticKind}
+      data-workstation-control-role={presentation.controlRole}
+      data-workstation-runtime-type={presentation.runtimeType}
+      data-workstation-scheduling-behavior={presentation.schedulingBehavior}
       disabled={data.onSelectWorkstation === undefined}
       onClick={
         data.onSelectWorkstation
@@ -160,47 +160,6 @@ function Summary({
       title={title}
     >
       <Header presentation={presentation} title={title} />
-    </GraphNodeButton>
-  );
-}
-
-function Exhaustion({
-  data,
-  presentation,
-  title,
-}: {
-  data: FactoryGraphWorkstationNodeData;
-  presentation: WorkstationPresentation;
-  title: string;
-}) {
-  const header = <Header presentation={presentation} title={title} compact />;
-  if (!data.onSelectWorkstation)
-    return (
-      <div
-        className="flex h-full min-w-0 w-full items-center gap-2 overflow-hidden"
-        data-selected-workstation={
-          data.selectedWorkstation ? "true" : undefined
-        }
-        data-workstation-kind={presentation.semanticKind}
-        title={title}
-      >
-        {header}
-      </div>
-    );
-  return (
-    <GraphNodeButton
-      aria-label={selectExhaustionLabel(title, data.locale)}
-      aria-pressed={data.selectedWorkstation}
-      className="flex h-full min-w-0 w-full items-center gap-2 overflow-hidden"
-      data-selected-workstation={data.selectedWorkstation ? "true" : undefined}
-      data-workstation-kind={presentation.semanticKind}
-      onClick={(event) => {
-        event.stopPropagation();
-        data.onSelectWorkstation?.(data.workstation.node_id);
-      }}
-      title={title}
-    >
-      {header}
     </GraphNodeButton>
   );
 }
@@ -227,7 +186,9 @@ function ActiveContent({
       data-active={data.active ? "true" : undefined}
       data-selected-work={data.selectedWorkID !== null ? "true" : undefined}
       data-selected-workstation={data.selectedWorkstation ? "true" : undefined}
-      data-workstation-kind={presentation.semanticKind}
+      data-workstation-control-role={presentation.controlRole}
+      data-workstation-runtime-type={presentation.runtimeType}
+      data-workstation-scheduling-behavior={presentation.schedulingBehavior}
     >
       {data.onSelectWorkstation ? (
         <GraphNodeButton

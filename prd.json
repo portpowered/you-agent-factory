@@ -68,8 +68,8 @@
         "Tests pass"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented the package-owned Factory workstation projection with independent canonical runtime-type, scheduling-behavior, and guarded-control axes. Canonical AGENT_RUN, INFERENCE_RUN, SCRIPT_RUN, POLLER_RUN, CLASSIFIER_WORKSTATION, LOGICAL_MOVE, and legacy MODEL_WORKSTATION/MODEL_INVOKE values map through the generated client taxonomy; lowercase legacy values normalize, and omitted/invalid/future values remain neutral UNKNOWN on the affected axis. Supported VISIT_COUNT guards alone produce LOOP_BREAKER; ordinary logical moves and classifiers retain their distinct roles. Authored workstation ids join selected-tick activity overlays, with names used only for id-less legacy definitions, and replay nodes consume the disposable projection without reconstructing semantics from runtime metadata. The former missing-kind plus missing-worker exhaustion presentation and overloaded semanticKind output were removed. Verification: `make typecheck`; graph package typecheck; 53 focused graph tests; 88 client tests; graph build; client generated-contract check; package-boundary check; package pack verification (31 files); and `git diff --check` all pass. Story 004 remains for cross-host visible control-card/browser coverage."
     },
     {
       "id": "graph-workstation-semantics-004",

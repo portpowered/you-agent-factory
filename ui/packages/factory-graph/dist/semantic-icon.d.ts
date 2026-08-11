@@ -7,4 +7,4 @@ export interface GraphSemanticIconProps {
     locale?: string;
 }
 export declare function graphSemanticIconLabel(kind: GraphSemanticIconProps["kind"]): string;
-export declare function GraphSemanticIcon({ className, kind, label, }: GraphSemanticIconProps): import("react").JSX.Element;
+export declare function GraphSemanticIcon({ className, kind, label, }: GraphSemanticIconProps): import("react/jsx-runtime").JSX.Element;

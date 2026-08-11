@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- Public UI package build and pack verification mutate sibling `dist` directories; run dependency preparation, package build, and pack verification serially to avoid transient missing-module or Windows file-lock failures.
 - First-party packaged Factory semantic checks should consume parsed canonical definitions inside `internal/packagedfactorycatalog`; keep customer-authored and JavaScript Factory validation unchanged.
 - A lifecycle-only Work state is valid only through a named production bridge that matches the runtime contract and has direct behavioral test evidence; do not use comment-only allowlists.
 - When a catalog audit finds a lifecycle state that the current runtime does not emit, leave it as explicit follow-up work rather than relaxing validation with a guessed bridge; source comments and stale diagrams are not behavioral evidence.
@@ -4057,4 +4058,35 @@
   - `make typecheck` — blocked before project compilation because the worktree does not have the Bun type definitions; TypeScript reported `TS2688: Cannot find type definition file for 'bun'`.
 - **Learnings for future iterations:**
   - The backend/catalog changes are independently verified, but the UI typecheck requires the repository’s Bun dependency/type-definition installation to be restored before story completion can be claimed.
+---
+
+## [2026-08-10 20:54 -07:00] - graph-workstation-semantics-003
+- What was implemented
+  - Added the public `@you-agent-factory/factory-graph` workstation semantic projection with separate authored runtime type, scheduling behavior, and guarded-control role axes sourced from the generated client taxonomy.
+  - Mapped inference, agent, script, poller-run, classifier, logical-move, and legacy model workstation values; normalized lowercase legacy inputs; and kept omitted, incomplete, invalid, or future metadata neutral instead of inferring exhaustion or another special role.
+  - Derived `LOOP_BREAKER` only for supported guarded `LOGICAL_MOVE` workstations with a `VISIT_COUNT` target and positive fixed or argument limit; ordinary logical moves remain routers and classifiers remain classifiers.
+  - Joined authored semantics and selected-tick activity by durable workstation id, using names only for id-less legacy definitions, and carried the disposable projection into replay node data without allowing runtime overlays to replace authored meaning.
+  - Removed the package’s overloaded `semanticKind`/exhaustion presentation path and exported the canonical semantic projection through the package entrypoint.
+- Files changed
+  - `ui/packages/client/src/contracts.ts`
+  - `ui/packages/client/src/index.ts`
+  - `ui/packages/factory-graph/README.md`
+  - `ui/packages/factory-graph/src/workstation-semantics.ts`
+  - `ui/packages/factory-graph/src/workstation-semantics.test.ts`
+  - `ui/packages/factory-graph/src/factory-graph-replay-surface.tsx`
+  - `ui/packages/factory-graph/src/factory-graph-replay-surface.test.ts`
+  - `ui/packages/factory-graph/src/semantic-workstation-presentation.ts`
+  - `ui/packages/factory-graph/src/semantic-workstation-node.tsx`
+  - `ui/packages/factory-graph/src/index.ts`
+  - Regenerated `ui/packages/factory-graph/dist/*` artifacts.
+- Verification
+  - `make typecheck` — passed.
+  - Graph package typecheck and 53 focused graph tests — passed.
+  - Client package typecheck and 88 tests — passed.
+  - Graph package build, client generated-contract drift check, graph package-boundary check, and graph package pack verification (31 files) — passed.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - The graph package’s canonical source is the complete authored `FactoryDefinition`; React Flow node data receives only a disposable semantic projection and selected-tick activity overlay.
+  - Treat each semantic axis independently: a known scheduling behavior must remain visible even when runtime type is future, while omitted scheduling metadata must not be guessed as `STANDARD`.
+  - Continue story 004 with host-level visible/accessibility coverage for guarded-control cards and browser verification; story 003 intentionally stops at the shared projection and replay-node wiring.
 ---

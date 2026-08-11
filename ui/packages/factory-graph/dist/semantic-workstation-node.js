@@ -4,50 +4,37 @@ import { GraphSemanticIcon } from "./semantic-icon.js";
 import { FactoryGraphNodeShell, } from "./semantic-node-shell.js";
 import { factoryGraphNodeHoverClassName, factoryGraphNodeSurfaceClassName, } from "./semantic-node-style.js";
 import { FactoryGraphWorkProgressMarker } from "./semantic-place-nodes.js";
-import { factoryGraphActiveItemsLabel as activeItemsLabel, factoryGraphClassNames as classNames, factoryGraphDurationText as durationText, factoryGraphGraphDuration as graphDuration, factoryGraphSelectExhaustionLabel as selectExhaustionLabel, factoryGraphSelectWorkstationLabel as selectWorkstationLabel, factoryGraphWorkItemLabel as workItemLabel, factoryGraphWorkItemLabelClassName as workItemLabelClassName, factoryGraphWorkstationPresentation as workstationPresentation, factoryGraphWorkstationTitleClassName as workstationTitleClassName, } from "./semantic-workstation-presentation.js";
+import { factoryGraphActiveItemsLabel as activeItemsLabel, factoryGraphClassNames as classNames, factoryGraphDurationText as durationText, factoryGraphGraphDuration as graphDuration, factoryGraphSelectWorkstationLabel as selectWorkstationLabel, factoryGraphWorkItemLabel as workItemLabel, factoryGraphWorkItemLabelClassName as workItemLabelClassName, factoryGraphWorkstationPresentation as workstationPresentation, factoryGraphWorkstationTitleClassName as workstationTitleClassName, } from "./semantic-workstation-presentation.js";
 const VISIBLE_WORK_ITEM_LIMIT = 3;
 /** Original Factory workstation presentation, with host-owned selection callbacks. */
 export function FactoryGraphWorkstationNodeView({ data, }) {
-    const presentation = workstationPresentation(data.workstation, data.locale);
-    const exhaustion = presentation.semanticKind === "exhaustion";
+    const presentation = workstationPresentation(data.workstationSemantics, data.locale);
     const title = data.workstation.workstation_name ||
         data.workstation.transition_id ||
         data.workstation.node_id;
     const entries = data.executions.flatMap((execution) => (execution.work_items ?? []).map((workItem) => ({ execution, workItem })));
-    const className = classNames(factoryGraphNodeSurfaceClassName("workstation"), "min-w-0 w-full justify-start overflow-hidden border-2", factoryGraphNodeHoverClassName({ muted: data.muted, selected: data.selectedWorkstation }, "primary"), exhaustion ? "border-dashed border-af-danger-border" : "border-info-border", !exhaustion && presentation.borderClassName, !exhaustion &&
-        data.active &&
+    const className = classNames(factoryGraphNodeSurfaceClassName("workstation"), "min-w-0 w-full justify-start overflow-hidden border-2", factoryGraphNodeHoverClassName({ muted: data.muted, selected: data.selectedWorkstation }, "primary"), "border-info-border", presentation.borderClassName, data.active &&
         !data.selectedWorkstation &&
-        "border-af-success-border shadow-af-success-chip", !exhaustion &&
-        data.activeFlow &&
+        "border-af-success-border shadow-af-success-chip", data.activeFlow &&
         !data.selectedWorkstation &&
-        "agent-flow-node--active ring-2 ring-af-success-border", data.selectedWorkstation && "border-primary shadow-af-accent-selected", !exhaustion &&
-        data.selectedWorkID !== null &&
+        "agent-flow-node--active ring-2 ring-af-success-border", data.selectedWorkstation && "border-primary shadow-af-accent-selected", data.selectedWorkID !== null &&
         "border-info-border shadow-af-info-selected", data.muted && "opacity-[0.45]");
-    return (_jsx(FactoryGraphNodeShell, { className: className, handles: data.handles, nodeType: "workstation", zAxisIncompleteHints: data.zAxisIncompleteHints, children: exhaustion ? (_jsx(Exhaustion, { data: data, presentation: presentation, title: title })) : data.summaryOnly ? (_jsx(Summary, { data: data, presentation: presentation, title: title })) : (_jsx(ActiveContent, { data: data, entries: entries, presentation: presentation, title: title })) }));
+    return (_jsx(FactoryGraphNodeShell, { className: className, handles: data.handles, nodeType: "workstation", zAxisIncompleteHints: data.zAxisIncompleteHints, children: data.summaryOnly ? (_jsx(Summary, { data: data, presentation: presentation, title: title })) : (_jsx(ActiveContent, { data: data, entries: entries, presentation: presentation, title: title })) }));
 }
 function Summary({ data, presentation, title, }) {
     return (_jsx(GraphNodeButton, { "aria-label": data.onSelectWorkstation
             ? selectWorkstationLabel(title, data.locale)
-            : undefined, "aria-pressed": data.onSelectWorkstation ? data.selectedWorkstation : undefined, className: "flex min-w-0 w-full items-center justify-between gap-2 overflow-hidden", "data-selected-workstation": data.selectedWorkstation ? "true" : undefined, "data-workstation-kind": presentation.semanticKind, disabled: data.onSelectWorkstation === undefined, onClick: data.onSelectWorkstation
+            : undefined, "aria-pressed": data.onSelectWorkstation ? data.selectedWorkstation : undefined, className: "flex min-w-0 w-full items-center justify-between gap-2 overflow-hidden", "data-selected-workstation": data.selectedWorkstation ? "true" : undefined, "data-workstation-control-role": presentation.controlRole, "data-workstation-runtime-type": presentation.runtimeType, "data-workstation-scheduling-behavior": presentation.schedulingBehavior, disabled: data.onSelectWorkstation === undefined, onClick: data.onSelectWorkstation
             ? (event) => {
                 event.stopPropagation();
                 data.onSelectWorkstation?.(data.workstation.node_id);
             }
             : undefined, title: title, children: _jsx(Header, { presentation: presentation, title: title }) }));
 }
-function Exhaustion({ data, presentation, title, }) {
-    const header = _jsx(Header, { presentation: presentation, title: title, compact: true });
-    if (!data.onSelectWorkstation)
-        return (_jsx("div", { className: "flex h-full min-w-0 w-full items-center gap-2 overflow-hidden", "data-selected-workstation": data.selectedWorkstation ? "true" : undefined, "data-workstation-kind": presentation.semanticKind, title: title, children: header }));
-    return (_jsx(GraphNodeButton, { "aria-label": selectExhaustionLabel(title, data.locale), "aria-pressed": data.selectedWorkstation, className: "flex h-full min-w-0 w-full items-center gap-2 overflow-hidden", "data-selected-workstation": data.selectedWorkstation ? "true" : undefined, "data-workstation-kind": presentation.semanticKind, onClick: (event) => {
-            event.stopPropagation();
-            data.onSelectWorkstation?.(data.workstation.node_id);
-        }, title: title, children: header }));
-}
 function ActiveContent({ data, entries, presentation, title, }) {
     const visible = entries.slice(0, VISIBLE_WORK_ITEM_LIMIT);
     const header = _jsx(Header, { presentation: presentation, title: title });
-    return (_jsxs("div", { className: "grid h-full min-w-0 grid-rows-[auto_1fr_auto]", "data-active": data.active ? "true" : undefined, "data-selected-work": data.selectedWorkID !== null ? "true" : undefined, "data-selected-workstation": data.selectedWorkstation ? "true" : undefined, "data-workstation-kind": presentation.semanticKind, children: [data.onSelectWorkstation ? (_jsx(GraphNodeButton, { "aria-label": selectWorkstationLabel(title, data.locale), "aria-pressed": data.selectedWorkstation, className: "flex min-w-0 w-full items-center justify-between gap-2 overflow-hidden", onClick: (event) => {
+    return (_jsxs("div", { className: "grid h-full min-w-0 grid-rows-[auto_1fr_auto]", "data-active": data.active ? "true" : undefined, "data-selected-work": data.selectedWorkID !== null ? "true" : undefined, "data-selected-workstation": data.selectedWorkstation ? "true" : undefined, "data-workstation-control-role": presentation.controlRole, "data-workstation-runtime-type": presentation.runtimeType, "data-workstation-scheduling-behavior": presentation.schedulingBehavior, children: [data.onSelectWorkstation ? (_jsx(GraphNodeButton, { "aria-label": selectWorkstationLabel(title, data.locale), "aria-pressed": data.selectedWorkstation, className: "flex min-w-0 w-full items-center justify-between gap-2 overflow-hidden", onClick: (event) => {
                     event.stopPropagation();
                     data.onSelectWorkstation?.(data.workstation.node_id);
                 }, title: title, children: header })) : (_jsx("div", { className: "flex min-w-0 w-full items-center justify-between gap-2 overflow-hidden", title: title, children: header })), _jsx("ul", { className: "mt-2 grid min-w-0 list-none content-start gap-1 p-0", children: visible.map(({ execution, workItem }) => (_jsx(WorkItem, { data: data, execution: execution, workItem: workItem }, `${execution.dispatch_id}:${workItem.work_id}`))) }), _jsx(Overflow, { total: entries.length, visible: visible.length, locale: data.locale })] }));

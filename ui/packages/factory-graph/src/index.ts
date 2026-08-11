@@ -73,10 +73,27 @@ export {
   type FactoryGraphWorkstationNode,
   type FactoryGraphWorkstationNodeData,
 } from "./semantic-workstation-node.js";
-export type {
-  FactoryGraphWorkItemRef,
-  FactoryGraphWorkstationRef,
+export {
+  factoryGraphWorkstationPresentation,
+  type FactoryGraphWorkstationPresentation,
+  type FactoryGraphWorkItemRef,
+  type FactoryGraphWorkstationRef,
 } from "./semantic-workstation-presentation.js";
+export {
+  factoryGraphWorkstationRuntimeRole,
+  projectFactoryGraphWorkstationSemantics,
+  resolveFactoryGraphWorkstationRuntimeType,
+  resolveFactoryGraphWorkstationSchedulingBehavior,
+  resolveFactoryGraphWorkstationSemantics,
+  UNKNOWN_FACTORY_GRAPH_WORKSTATION_SEMANTICS,
+  type FactoryGraphWorkstationActivityProjection,
+  type FactoryGraphWorkstationControlRole,
+  type FactoryGraphWorkstationRuntimeRole,
+  type FactoryGraphWorkstationRuntimeType,
+  type FactoryGraphWorkstationSchedulingBehavior,
+  type FactoryGraphWorkstationSemanticProjection,
+  type FactoryGraphWorkstationSemantics,
+} from "./workstation-semantics.js";
 export {
   FACTORY_GRAPH_NODE_TYPES,
   type FactoryGraphNode,

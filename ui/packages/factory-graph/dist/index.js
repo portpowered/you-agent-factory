@@ -7,5 +7,7 @@ export { FactoryGraphDocNodeView, } from "./semantic-doc-node.js";
 export { FactoryGraphNodeBadge, FactoryGraphResourceNodeView, FactoryGraphWorkerNodeView, FactoryGraphWorkTypeNodeView, } from "./semantic-support-nodes.js";
 export { FactoryGraphConstraintNodeView, FactoryGraphStatePositionNodeView, FactoryGraphWorkProgressMarker, } from "./semantic-place-nodes.js";
 export { FactoryGraphWorkstationNodeView, } from "./semantic-workstation-node.js";
+export { factoryGraphWorkstationPresentation, } from "./semantic-workstation-presentation.js";
+export { factoryGraphWorkstationRuntimeRole, projectFactoryGraphWorkstationSemantics, resolveFactoryGraphWorkstationRuntimeType, resolveFactoryGraphWorkstationSchedulingBehavior, resolveFactoryGraphWorkstationSemantics, UNKNOWN_FACTORY_GRAPH_WORKSTATION_SEMANTICS, } from "./workstation-semantics.js";
 export { FACTORY_GRAPH_NODE_TYPES, } from "./semantic-nodes.js";
 export { FactoryGraphReplaySurface, projectFactoryGraphReplayFlow, } from "./factory-graph-replay-surface.js";
