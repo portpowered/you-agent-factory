@@ -177,9 +177,17 @@ describe("runStorybookCI", () => {
     ]);
     expect(runCommand).toHaveBeenNthCalledWith(6, [
       "run",
-      "storybook:choose-file-check",
+      "storybook:work-chart-check",
     ]);
     expect(runCommand).toHaveBeenNthCalledWith(7, [
+      "run",
+      "storybook:submit-work-session-check",
+    ]);
+    expect(runCommand).toHaveBeenNthCalledWith(8, [
+      "run",
+      "storybook:choose-file-check",
+    ]);
+    expect(runCommand).toHaveBeenNthCalledWith(9, [
       "run",
       "storybook:checkbox-consistency-check",
     ]);

@@ -1,13 +1,15 @@
-import { OptionalEnumSelect } from "@you-agent-factory/components/forms";
+import {
+  FormError,
+  OptionalEnumSelect,
+} from "@you-agent-factory/components/forms";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@you-agent-factory/components/overlays";
+import { Label, Text } from "@you-agent-factory/components/primitives";
 import { Plus } from "lucide-react";
 import { type ReactNode, useState } from "react";
-import { FormError } from "@you-agent-factory/components/forms";
-import { Label, Text } from "@you-agent-factory/components/primitives";
 import { Button } from "../../../components/ui/button";
 import { DashboardIconButtonShell } from "../../../components/ui/dashboard-icon-button-shell";
 import { Input } from "../../../components/ui/input";
@@ -69,6 +71,7 @@ export interface SubmitWorkCardProps {
   onWorkTypeNameChange: (value: string) => void;
   status: SubmitWorkStatus;
   submitWorkTypeNames: string[];
+  sessionID?: string;
   validationErrors?: SubmitWorkValidationErrors;
   widgetId?: string;
 }
@@ -93,6 +96,7 @@ export function SubmitWorkCard({
   onStageFileItems,
   onSubmit,
   onWorkTypeNameChange,
+  sessionID,
   status,
   submitWorkTypeNames,
   validationErrors,
@@ -144,7 +148,19 @@ export function SubmitWorkCard({
       title={messages.cardTitle}
       widgetId={widgetId}
     >
+      {sessionID ? (
+        <div className="grid min-w-0 gap-1" data-submit-work-destination="">
+          <Text className="text-on-surface-variant" variant="supporting">
+            {messages.destinationLabel}
+          </Text>
+          <Text className="min-w-0 break-words" variant="body">
+            {sessionID}
+          </Text>
+        </div>
+      ) : null}
       <form
+        aria-label={messages.cardTitle}
+        aria-describedby={shouldRenderStatus ? statusID : undefined}
         className="grid content-start gap-3"
         onSubmit={(event) => {
           event.preventDefault();

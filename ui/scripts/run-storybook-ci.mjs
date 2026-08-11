@@ -360,6 +360,10 @@ export async function runStorybookCI({
       runCommand(["run", "storybook:work-chart-check"]),
       serverExit,
     ]);
+    await Promise.race([
+      runCommand(["run", "storybook:submit-work-session-check"]),
+      serverExit,
+    ]);
     if (includeInteractionSuite) {
       await Promise.race([
         runCommand(["run", "storybook:choose-file-check"]),

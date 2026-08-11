@@ -72,8 +72,8 @@
         "Verify the A-to-B draft and late-completion journey directly in a real browser at mobile and desktop widths"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Keyed rich and simple Submit Work drafts, pending states, receipts, file staging, and late completion guards by the exact canonical Factory Session ID. Added visible canonical destinations, localized programmatic success/error/loading associations, full-width wrapping feedback, and an explicit accessible form name. Added fixture-backed A-to-B delayed success/failure component regressions, a passive Storybook fixture harness with deterministic completion controls, and a Playwright browser gate at 390px and 1440px that checks draft isolation, late-result isolation, canonical destinations, full-width feedback, and page overflow. TypeScript, focused Biome/lint and boundary checks, focused Vitest composer/status tests, the native Bun SubmitWorkCard suite, Storybook build, Storybook CI scheduling test, and the direct mobile/desktop browser gate pass. Stories 004 and 005 remain intentionally open for later iterations."
     },
     {
       "id": "dashboard-fixture-and-quick-wins-004",

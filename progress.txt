@@ -1,5 +1,6 @@
 ## Codebase Patterns
 - For final PR handoff, compare the PR body byte-for-byte with `prd.json` and use the thread-aware GraphQL review audit because flat PR comments do not expose inline-thread resolution state.
+- Key async dashboard drafts, pending states, and completion receipts by the canonical Factory Session ID, and ignore late child-local completions after the visible session changes.
 - Keep dashboard regression data in an immutable identity-keyed catalog and put controlled promises, generation ordering, and async outcomes in a separate fixture controller so component and Storybook tests exercise existing typed boundaries without production-only seams.
 - For Recharts dashboard surfaces, keep one canonical grid and axis-title owner, attach localized value-level descriptions with `aria-describedby`, and assert the counts after Strict Mode/remount and direct viewport-resize transitions.
 - Stories added to the dashboard Storybook viewport registry are covered at the repository's mobile and desktop widths; use a case-matched Vitest `-t` filter to isolate a story when the broader interaction project contains unrelated failures.
@@ -4060,7 +4061,44 @@
 - **Learnings for future iterations:**
   - `ChartContainer` passes chart children through Recharts `ResponsiveContainer`, so an accessible value description belongs beside the chart root and should be referenced with `aria-describedby`, not inserted as a non-chart child.
   - Vitest Storybook `-t` filters match full generated test names unpredictably; filtering by the concrete story file path isolates the intended chart stories, while a broad phrase can select unrelated stories.
-  - The direct viewport browser check is useful evidence for resize containment even when an older Storybook geometry assertion fails independently.
+- The direct viewport browser check is useful evidence for resize containment even when an older Storybook geometry assertion fails independently.
+---
+## [2026-08-10 23:45 -07:00] - dashboard-fixture-and-quick-wins-003
+- What was implemented
+  - Keyed rich Submit Work drafts, validation, file staging, pending mutations, and completion receipts by the exact canonical Factory Session ID, with request guards that ignore late results outside their owning session.
+  - Keyed the default-work/simple composer independently, including a child-level guard so a late session A rejection cannot surface in session B; preserved the owning session's success state and draft reset behavior.
+  - Added visible canonical destination labels to both submit paths, localized success/error copy with programmatic associations, an explicit accessible rich-form name, and full-width wrapping status/receipt regions.
+  - Added a deterministic two-session Storybook fixture harness and a mobile/desktop Playwright gate covering A-to-B draft isolation, delayed A success/failure, B feedback, canonical destinations, full-width feedback, and page-overflow checks.
+- Files changed
+  - `ui/src/features/submit-work/hooks/use-submit-work-widget.ts`
+  - `ui/src/features/submit-work/hooks/use-session-scoped-simple-submission.ts`
+  - `ui/src/features/submit-work/components/submit-work-widget.tsx`
+  - `ui/src/features/submit-work/components/composer/factory-simple-submission-composer.tsx`
+  - `ui/src/features/submit-work/components/submit-work-card.tsx`
+  - `ui/src/features/submit-work/components/submit-work-status-panel.tsx`
+  - `ui/src/features/submit-work/components/regression/submit-work-dashboard-regression.stories.tsx`
+  - `ui/src/features/submit-work/components/submit-work-widget.isolated.bun.component.test.tsx`
+  - `ui/src/features/submit-work/components/submit-work-card.bun.component.test.tsx`
+  - `ui/src/features/submit-work/components/submit-work-status-panel.test.tsx`
+  - `ui/src/features/submit-work/messages/submit-work.ts`
+  - `ui/scripts/verify-submit-work-session-scoping-browser.mjs`
+  - `ui/scripts/run-storybook-ci.mjs`
+  - `ui/scripts/run-storybook-ci.test.mjs`
+  - `ui/package.json`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `bunx --no-install tsc -b --noEmit --pretty false` passed.
+  - `bun run lint` passed, including localized-copy, semantic-color, feature-boundary, file-count, test-lane, and public-package checks.
+  - Focused simple-composer/status Vitest suite passed (12 tests); the fixture-backed rich and simple session regressions passed in isolated focused Vitest runs.
+  - Native Bun `SubmitWorkCard` component suite passed (13 tests); Storybook CI scheduling tests passed (10 tests).
+  - `bun run build-storybook` passed; the generated Storybook contains the moved regression story.
+  - `bun run storybook:submit-work-session-check` passed at 390x844 and 1440x900, including full-width feedback and no horizontal overflow.
+  - `git diff --check` passed.
+- **Learnings for future iterations:**
+  - The direct browser lane must own the delayed fixture interaction when a Storybook story is used as a passive harness; an in-story `play` function races the standalone Playwright flow against the same controlled promises.
+  - The isolated Submit Work widget suite is currently classified as a Vitest compatibility exception while the normal Vitest project excludes `.bun.component` files; focused runs need the DOM matcher setup explicitly until that existing lane mismatch is reconciled.
+  - Moving a regression story into a focused subdirectory keeps the feature folder-count guard green without weakening the structural boundary.
 ---
 ## [2026-08-11 06:20 -07:00] - prose-standard-and-terms-002
 - What was implemented
