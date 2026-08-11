@@ -11545,3 +11545,18 @@
 - **Learnings for future iterations:**
   - A final metadata commit advances the PR head and invalidates prior handoff evidence; rerun the hosted-check, mergeability, thread, and PR-body tuple after pushing the metadata update.
 ---
+## [2026-08-11 11:44:15 -07:00] - thr-deflake-cli-process-package hosted functional coverage follow-up
+- What was implemented
+  - Investigated the fresh Backend Functional Coverage failure on head `956d0393f`; the initial attempt failed only on untouched `TestWithServerDrainCannotReportSuccessWhileWorkIsNonTerminal/site`, which locally passed 10/10.
+  - Reran only the failed coverage job. Its first retry characterized two additional untouched suite flakes—`TestJavaScriptParallelDispatchesChildrenConcurrently` and `TestWorkerSessionsCLI`—and both exact tests passed 10/10 locally before a second targeted retry.
+  - Reran the failed coverage job again; its second retry passed, and the dependent Verification Policy job passed. No CLI-process or production source change was made.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Hosted run `31521695289` is terminal-success on head `956d0393f0f03f339e037c95673d4a0935012094`; Backend Functional Coverage second retry job `93886129869` and Verification Policy job `93887648127` pass, with all 18 checks green.
+  - Local focused repetitions passed: session-drain test 10/10; JavaScript parallel-dispatch test 10/10; Worker Sessions CLI test 10/10.
+  - The thread-aware GraphQL audit still finds 7 top-level conversation comments, 0 submitted reviews, 0 inline review threads, and 0 unresolved threads.
+- **Learnings for future iterations:**
+  - Broad functional coverage can expose unrelated concurrency flakes one test at a time; characterize each exact failure locally and rerun only the failed job before changing an unrelated product or test surface.
+---
