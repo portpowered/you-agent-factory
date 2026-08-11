@@ -253,9 +253,37 @@ func TestLiveResourceCapacityRecordingReplayAndCursor(t *testing.T) {
 	}
 
 	stableEvents := append([]factoryapi.FactoryEvent(nil), events...)
+	assertLiveCapacityReplayAndRejections(t, server, stableEvents, applied.ChangeId)
+
+	if len(events) <= len(initialEvents) {
+		t.Fatalf("recorded event count = %d, want request and success beyond initial %d", len(events), len(initialEvents))
+	}
+	cursorSequence := support.ReconnectSequenceForFactoryEvent(requestEvent)
+	afterCursor := server.GetFactoryEventsAfter(t, support.FactoryEventReadCursor{
+		AfterEventID:  requestEvent.Id,
+		AfterSequence: &cursorSequence,
+	})
+	wantAfterCursor := events[requestIndex+1:]
+	if len(afterCursor) != len(wantAfterCursor) {
+		t.Fatalf("cursor replay count = %d, want %d after request event", len(afterCursor), len(wantAfterCursor))
+	}
+	for index := range wantAfterCursor {
+		if afterCursor[index].Id != wantAfterCursor[index].Id {
+			t.Fatalf("cursor replay event %d = %q, want %q", index, afterCursor[index].Id, wantAfterCursor[index].Id)
+		}
+	}
+}
+
+func assertLiveCapacityReplayAndRejections(
+	t *testing.T,
+	server *support.FunctionalAPIServer,
+	stableEvents []factoryapi.FactoryEvent,
+	changeID string,
+) {
+	t.Helper()
 	replayed := setLiveCapacityREST(t, server.URL(), "~default", liveCapacityResourceID, 2, 0, "recorded-capacity-raise")
 	if replayed.Outcome != factoryapi.FactorySessionResourceCapacityOutcome("REPLAYED") ||
-		replayed.ChangeId != applied.ChangeId || replayed.Revision != 1 || replayed.EffectiveCapacity != 2 {
+		replayed.ChangeId != changeID || replayed.Revision != 1 || replayed.EffectiveCapacity != 2 {
 		t.Fatalf("replayed capacity response = %#v, want REPLAYED original outcome", replayed)
 	}
 	assertLiveCapacityEventIDsUnchanged(t, stableEvents, server.GetFactoryEvents(t), "same-body replay")
@@ -298,24 +326,6 @@ func TestLiveResourceCapacityRecordingReplayAndCursor(t *testing.T) {
 		t.Fatalf("stale revision response = %#v, want REVISION_CONFLICT", stale)
 	}
 	assertLiveCapacityEventIDsUnchanged(t, stableEvents, server.GetFactoryEvents(t), "stale revision")
-
-	if len(events) <= len(initialEvents) {
-		t.Fatalf("recorded event count = %d, want request and success beyond initial %d", len(events), len(initialEvents))
-	}
-	cursorSequence := support.ReconnectSequenceForFactoryEvent(requestEvent)
-	afterCursor := server.GetFactoryEventsAfter(t, support.FactoryEventReadCursor{
-		AfterEventID:  requestEvent.Id,
-		AfterSequence: &cursorSequence,
-	})
-	wantAfterCursor := events[requestIndex+1:]
-	if len(afterCursor) != len(wantAfterCursor) {
-		t.Fatalf("cursor replay count = %d, want %d after request event", len(afterCursor), len(wantAfterCursor))
-	}
-	for index := range wantAfterCursor {
-		if afterCursor[index].Id != wantAfterCursor[index].Id {
-			t.Fatalf("cursor replay event %d = %q, want %q", index, afterCursor[index].Id, wantAfterCursor[index].Id)
-		}
-	}
 }
 
 // TestJavaScriptLiveResourceCapacityIncreaseWakesWaitingChildren proves the
