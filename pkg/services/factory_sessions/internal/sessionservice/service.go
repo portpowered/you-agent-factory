@@ -214,20 +214,9 @@ func (s *Service) runLiveChange(
 	if s == nil || s.host == nil {
 		return factorysessions.LiveChangeResult{}, fmt.Errorf("Factory Sessions gateway is required")
 	}
-	session, err := s.host.RequireSession(sessionID)
-	if err != nil {
-		if isMissingLiveSession(err) {
-			if result, handled := s.runDurableLiveChange(ctx, sessionID, request, recoverRequestID); handled {
-				return result, nil
-			}
-		}
-		return factorysessions.LiveChangeResult{}, liveChangeSessionError(err)
-	}
-	if session == nil {
-		if result, handled := s.runDurableLiveChange(ctx, sessionID, request, recoverRequestID); handled {
-			return result, nil
-		}
-		return factorysessions.LiveChangeResult{}, liveChangeSessionError(factorysessions.ErrSessionNotFound)
+	session, durableResult, durable, err := s.resolveLiveChangeSession(ctx, sessionID, request, recoverRequestID)
+	if durable || err != nil {
+		return durableResult, err
 	}
 	if session.Runtime == nil {
 		return factorysessions.LiveChangeResult{}, factorysessions.ErrRuntimeNotAvailable
@@ -260,6 +249,28 @@ func (s *Service) runLiveChange(
 		}
 	}
 	return result, applyErr
+}
+
+func (s *Service) resolveLiveChangeSession(
+	ctx context.Context,
+	sessionID string,
+	request factorysessions.LiveChangeRequest,
+	recoverRequestID string,
+) (*livesession.LiveSession, factorysessions.LiveChangeResult, bool, error) {
+	session, err := s.host.RequireSession(sessionID)
+	if err != nil && !isMissingLiveSession(err) {
+		return nil, factorysessions.LiveChangeResult{}, false, liveChangeSessionError(err)
+	}
+	if err != nil || session == nil {
+		if result, handled := s.runDurableLiveChange(ctx, sessionID, request, recoverRequestID); handled {
+			return nil, result, true, nil
+		}
+		if err != nil {
+			return nil, factorysessions.LiveChangeResult{}, false, liveChangeSessionError(err)
+		}
+		return nil, factorysessions.LiveChangeResult{}, false, liveChangeSessionError(factorysessions.ErrSessionNotFound)
+	}
+	return session, factorysessions.LiveChangeResult{}, false, nil
 }
 
 type durableLiveChangeCapability interface {
