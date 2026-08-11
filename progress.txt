@@ -7502,3 +7502,22 @@
 - **Learnings for future iterations:**
   - A green PR run becomes stale when `origin/main` advances during local verification; fetch immediately before handoff, merge the new base, and wait for checks on the replacement head.
 ---
+## 2026-08-10 22:02 -07:00 - pp-merge-context-bug latest-main synchronization follow-up
+- What was implemented
+  - Fetched and merged the live `origin/main` head `7dbeb472a` into PR #1870 as merge commit `051c7bb4e` after the base advanced again.
+  - Preserved the task-scoped `prd.json`, retained both branches' append-only progress history, and carried the current-main Worker Sessions/API/generated changes forward without adding another fan-in production change.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+  - Current-main synchronization files under API, Factory Runtime, Factory Sessions, Worker Sessions, Workers, HTTP/generated clients, and related functional tests.
+- Verification
+  - `go test ./tests/functional/factory/packaged/plan_parallel -run '^TestPackagedPlanParallelMergerReceivesEveryUniqueCompletedChildResult$' -count=3 -timeout 600s` — passed all three runs.
+  - `go test ./pkg/services/factory_runtime/internal/services/orchestration/scheduler ./pkg/services/factory_runtime/internal/services/orchestration/subsystems/... -count=1 -timeout 300s` — passed.
+  - `go test ./pkg/services/worker_sessions/... -count=1 -timeout 600s` — passed.
+  - `go test ./pkg/services/operator_settings/transports/cli -count=1 -timeout 300s` — passed.
+  - `make typecheck` — passed.
+  - `prd.json` parses, no conflict markers remain, and `git diff --check` passed before this append.
+- **Learnings for future iterations:**
+  - A PR can become conflicting again after a successful retry because `main` advances asynchronously; fetch the hosting ref immediately before each final push and repeat the shared-file merge protocol.
+  - When parallel Go test processes produce a tool subprocess failure, rerun the named package serially before treating it as a source regression.
+---
