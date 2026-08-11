@@ -38,6 +38,7 @@
 - Cross-process lease probes must suspend before filesystem inspection and match the exact ownership-resource suffix; observe-then-suspend leaves a release race even when the path is re-stat'ed.
 - For mechanical test splits, capture the exact go test inventory, repeatable coverage command/output, and one-to-one behavior/helper placement map in a review artifact before moving tests.
 - For deletion-only same-package test splits, preserve the exact package-file baseline by consolidating cohesive declarations into existing owners; keep every cross-suite fixture in the one shared helper and route boundary-sensitive construction through that helper.
+- For split package tests with a preserved boundary migration fingerprint, keep the shared fixture entry point in the package helper and retain only the exact constructor callback at its reviewed source path; compare the checker fingerprint against the live base.
 - Keep comments and exemption directives attached to the declaration they govern when splitting Go test files; otherwise a boundary can duplicate or orphan maintainability policy.
 - Replacing a file-level size exemption with focused test files may require per-function directives; update both the source directive and the sorted exemption-budget entry together.
 - When moving a test with a pkgmaintcheck exemption, move the existing budget target with the test and retain legacy file suppressions until the remaining staged split retires the source file.
@@ -194,7 +195,6 @@
 - **Learnings for future iterations:**
 - This checkout may have `ui/node_modules` without all lockfile dependencies; run the pinned Bun install before treating a typecheck failure as a source regression.
 ---
-
 ## 2026-08-10 15:08 -07:00 - dwro-s1-remote-placement-flags current-main test-split reconciliation
 - What was implemented
   - Reconciled the branch with current `origin/main` commit `78584efb5`, retaining main's focused root/run test split while preserving the S1 remote adapter and its behavioral coverage.
@@ -9512,4 +9512,32 @@
 - **Learnings for future iterations:**
   - A shared append-only progress log can have divergent ordering after repeated task merges; resolve its conflict by retaining both complete conflict blocks, then append the current task entry at EOF.
   - When a ratcheted aggregate boundary gate is nonzero, compare its ownership-specific output with a detached worktree at the exact fetched base; unchanged base findings are not ACP regressions.
+---
+## 2026-08-11 06:07:54 -07:00 - thr-split-acp-stdio-tests review follow-up
+- What was implemented
+  - Moved the complete shared Chat Sessions fixture chain (`newChatSessionsStore`, `sequentialIDGenerator`, and `fixedClock`) into the single `session_test_helpers_test.go` owner; all cross-suite active-control setup now enters through that helper.
+  - Preserved the exact current-main boundary migration fingerprint by retaining only the constructor callback at `session_prompt_test.go`; no production code, public contract, generated artifact, or test assertion changed.
+  - Merged live `origin/main` `3521f0b0a` and unioned the incoming append-only progress history while keeping this task's authoritative `prd.json`.
+- Files changed
+  - `pkg/transports/acp/internal/stdio/session_prompt_test.go`
+  - `pkg/transports/acp/internal/stdio/session_test_helpers_test.go`
+  - `prd.json`
+  - `progress.txt`
+  - Current-main Worker Sessions/API/generated files carried by the synchronization merge.
+- Verification
+  - `go test ./pkg/transports/acp/internal/stdio -count=1 -timeout 300s` — passed.
+  - `go test -race ./pkg/transports/acp/internal/stdio -count=1 -timeout 300s` — passed.
+  - `make typecheck`, `make backend-size pkg-maint pkg-file-count pkg-structure`, ACP `go vet`, and `git diff --check` — passed.
+  - Against exact live `origin/main` `3521f0b0a`, normalized ACP inventory was 222/222 with zero diff and SHA-256 `da83686cb68f0988570ca0ea0f429eabf40beb2bb47dba967874a33d46481bf1`; coverage was 94.3% before and after.
+  - Current-main package-boundary comparison reported no new ACP finding; the pre-existing `chat_sessions/wire` import and five-construction selection fingerprint remained at `session_prompt_test.go`.
+- **Learnings for future iterations:**
+  - When a shared fixture must move but a deletion-only boundary ratchet keys an existing constructor by source path and selection count, keep the helper entry point in the shared owner and isolate the reviewed constructor callback at that exact path rather than adding a new migration baseline.
+---
+## 2026-08-11 06:16:00 -07:00 - thr-split-acp-stdio-tests verification follow-up
+- What was implemented
+  - Completed the requested full repository `make test` gate after synchronizing with live `origin/main`.
+- Files changed
+  - `progress.txt`
+- **Learnings for future iterations:**
+  - Full `make test` includes the broader functional package set and can take several minutes even when most package results are cached; retain the final exit status when collecting bounded output.
 ---
