@@ -11705,3 +11705,17 @@
 - **Learnings for future iterations:**
   - A green PR can become conflicting while checks are running; fetch `origin/main` again after hosted completion, keep the active task PRD authoritative, and union append-only progress histories before the final handoff.
 ---
+## [2026-08-11 09:42 -07:00] - graph-workstation-semantics merged-head final verification
+- What was implemented
+  - Completed the graph-task verification after reconciling the moving base at merge head `92a4a0a98`.
+  - Confirmed the graph PRD remains authoritative and all four story markers remain `passes: true`.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Local `make typecheck backend-size pkg-maint pkg-file-count pkg-structure vet`, Factory graph tests (54), and Factory visualizer tests (31) pass.
+  - Hosted run `31513033174` on merge head `92a4a0a98` is terminal-successful across all 18 required checks, including Backend Unit Coverage, Backend Functional Coverage, Frontend Browser, and Verification Policy.
+  - Live `origin/main` remains `650b701689fcbc467fa0e814478460b9c3316629`, is an ancestor of the merge head, and GitHub reports the PR `MERGEABLE` / `CLEAN`.
+  - `git diff --check` passes; the task PRD has zero incomplete stories and the worktree is clean before this audit-only commit.
+- **Learnings for future iterations:**
+  - After a mainline reconciliation, verify both the merged parent and the final PR metadata; a successful workflow on the pre-audit head must be followed by a replacement-head check after any bookkeeping commit.
+---
