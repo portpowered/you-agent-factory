@@ -10716,3 +10716,19 @@
 - **Learnings for future iterations:**
   - When a fresh mainline merge and its failed-job retry reproduce the same untouched baseline assertion, record the exact merge head and package evidence in the PRD and keep unrelated baseline tests outside the task diff.
 ---
+## [2026-08-11 05:49:00 -07:00] - btrc-p1-root-injection-006 terminal CI retry audit
+- What was implemented
+  - Reran only the failed Backend Functional Coverage and Verification Policy jobs for PR #1857 on the current head `cfcdcc3ba737e5b3adbc4ade28d7c4331db24d42`.
+  - Confirmed all six P1 stories remain marked `passes:true`; no product-code change or unrelated baseline-test change was justified.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Workflow `31491457621`, attempt 2 — terminal failure only for `TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput` in untouched `tests/functional/transport/server_binding`; all other required lanes passed.
+  - The retry reproduced the same structured API-server diagnostic mismatch as attempt 1; the P1 diff is empty for that package.
+  - Thread-aware GraphQL review audit — zero review threads, zero unresolved review threads, and zero formal reviews.
+  - `prd.json` parses with all six stories marked `passes:true`; the branch remains on the requested PR head.
+- **Learnings for future iterations:**
+  - When a failed-job retry reproduces one deterministic failure in an untouched baseline package, preserve the exact run/head evidence and keep unrelated test behavior outside the task diff.
+  - A terminal baseline CI failure still requires PR follow-up even when all story implementation criteria and review threads are clear.
+---
