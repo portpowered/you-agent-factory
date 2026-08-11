@@ -1,5 +1,6 @@
 ## Codebase Patterns
 - Normative customer-prose policy belongs under `docs/internal/standards/writing`; use `docs/architecture/data-model.md` and public contracts for product meaning, and keep exact machine/technical literals separate from reviewable natural-language prose.
+- The canonical product vocabulary source is `docs/internal/standards/writing/customer-technical-terms.yaml`; keep every record on one explicit schema and point its owner to the architecture or public-contract source of meaning.
 - For final PR handoff, compare the PR body byte-for-byte with `prd.json` and use the thread-aware GraphQL review audit because flat PR comments do not expose inline-thread resolution state.
 - OS-boundary functional tests may poll an isolated durable filesystem checkpoint only when the child exposes no parent-process event or injected edge; document that reason at each polling helper and keep the bound as a failure guard.
 - Git Worktree preparation treats a retained Git `*.lock` as indeterminate ownership: retry within a named bound, preserve the resource, and return its exact path with verify/remove/retry guidance.
@@ -4012,4 +4013,22 @@
 - **Learnings for future iterations:**
   - Keep the writing standard independent from the terminology data and standards-index wiring so each documentation story remains reviewable; add those companion links only when their target artifacts exist.
   - A docs-only change can still inherit a repository-wide typecheck failure; record the exact untouched files and error class instead of broadening the story into unrelated UI cleanup.
+---
+
+## 2026-08-10 19:54 -07:00 - prose-standard-and-terms-002
+- What was implemented
+  - Added the versioned YAML product terminology register with an explicit record schema for canonical terms, definitions, categories, approved forms, alternatives, examples, valid surfaces, and ownership references.
+  - Added 59 consistently shaped records covering the required public nouns, customer-visible relationships and protected relationship literals, live and durable lifecycle names, and the internal-only CPN, place, transition, marking, and token terms.
+- Files changed
+  - `docs/internal/standards/writing/customer-technical-terms.yaml`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - PyYAML parsed the complete register and verified version `1`, the documented schema, identical record fields, allowed categories, non-empty required values, alternative-record shape, required terms, and internal-only surfaces.
+  - Every owner reference resolves to an existing architecture or public-contract source.
+  - `git diff --check` passed before the register commit `5df0598a8` (`docs: add customer terminology register`).
+  - `make typecheck` passed on the repository-wide rerun after dependencies were restored; this story changed no UI or runtime files.
+- **Learnings for future iterations:**
+  - Keep natural-language product terms separate from exact contract literals, and give both records an owner when authors need to know which spelling is protected.
+  - Explicit `null` values in `approvedForms` make non-applicable plural and verb forms reviewable instead of relying on omitted keys.
 ---

@@ -33,7 +33,7 @@
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Implemented the normative customer technical-writing standard at docs/internal/standards/writing/customer-technical-writing-standard.md. It defines labels, procedures, descriptions, machine and technical text, technical terms, the protected-literal boundary, blocking/advisory/human review rules, bounded rule-specific exceptions, ASD-STE100-aligned claim limits, paired repository examples, and the manual review checklist. `git diff --cached --check` passed before commit. `make typecheck` reaches TypeScript but remains blocked by pre-existing Assertion.not errors in untouched UI test helpers; no UI or runtime files changed in this story. Stories 002 and 003 remain open."
+      "notes": "Implemented the normative customer technical-writing standard at docs/internal/standards/writing/customer-technical-writing-standard.md. It defines labels, procedures, descriptions, machine and technical text, technical terms, the protected-literal boundary, blocking/advisory/human review rules, bounded rule-specific exceptions, ASD-STE100-aligned claim limits, paired repository examples, and the manual review checklist. `git diff --cached --check` passed before commit. An initial make typecheck run reached TypeScript but was blocked by pre-existing Assertion.not errors in untouched UI test helpers; the repository-wide rerun during Story 002 passed after dependencies were restored. No UI or runtime files changed in this story. Stories 002 and 003 remain open."
     },
     {
       "id": "prose-standard-and-terms-002",
@@ -50,8 +50,8 @@
         "Typecheck passes"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added docs/internal/standards/writing/customer-technical-terms.yaml with version: 1, an explicit term-record schema, and 59 consistently shaped records. The register covers the required public nouns, customer-visible relationship names and protected literals, durable and live lifecycle names, and CPN/place/transition/marking/token with internal-only surfaces. Every owner reference resolves to an existing architecture or public-contract source. PyYAML loaded the complete register successfully, verified the required fields, allowed categories, alternative-record shape, and internal-term surface restrictions; `git diff --check` passed before the implementation commit. Definitions remain tied to the recorded architecture and contract owners for review. `make typecheck` passed on 2026-08-10 after dependencies were restored. No UI or runtime files changed. Story 003 remains incomplete."
     },
     {
       "id": "prose-standard-and-terms-003",
