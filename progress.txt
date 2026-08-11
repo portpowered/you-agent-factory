@@ -11431,3 +11431,19 @@
 - **Learnings for future iterations:**
   - A composite gate can pass its primary package check while a nested ownership check still fails; record the nested result precisely so baseline comparisons do not overstate a green lint lane.
 ---
+## [2026-08-11 09:26:52 -07:00] - thr-deflake-cli-process-package latest-main reconciliation
+- What was implemented
+  - Merged the current `origin/main` at `650b701689fcbc467fa0e814478460b9c3316629` after GitHub reported the metadata head as conflicting; the conflict-resolved merge is `6b3a51cba`.
+  - Preserved the task-owned `prd.json`, accepted the incoming functional-lane source and test changes, and rebuilt `progress.txt` from the complete current-main history plus the CLI-process task entries and rolling-file pattern.
+  - Updated the review metadata to identify the current base and replacement merge commit.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+  - current-main functional-lane files included by the merge
+- Verification
+  - Merge conflicts were limited to the two shared bookkeeping files; no source conflict markers remain.
+  - The current-main progress prefix is preserved with zero line mismatches after the added reusable pattern; all three CLI-process stories remain `passes:true`.
+  - Fresh replacement-head verification and hosted checks are pending; the branch must be rechecked after this moving-base reconciliation.
+- **Learnings for future iterations:**
+  - A PR can conflict even when its prior merge parent is clean if `origin/main` advances through a parallel merge; compare ancestry against the live base, then union the full current-main progress history before republishing.
+---
