@@ -7,6 +7,7 @@ import (
 	"errors"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -55,6 +56,197 @@ func TestTaggedDurableHistoryIsAuthoritativeDuringHydrationAndResave(t *testing.
 	resaved := persistedSnapshotFromRuntimeState(hydrated)
 	if len(resaved.Records) != 3 || resaved.Records[2].PetriMutation == nil || resaved.Records[2].PetriMutation.TransitionID != "approve" {
 		t.Fatalf("resaved tagged history = %#v, want lossless mixed records", resaved.Records)
+	}
+}
+
+func TestJavaScriptRuntimeService_DurableLiveChangeSharesAdmissionWithChildLeaseAndReplays(t *testing.T) {
+	const sessionID = "dur-sess-live-capacity-admission"
+	runtime := newDurableLiveChangeAdmissionTestRuntime(t)
+	service := &JavaScriptRuntimeService{
+		clock: runtimeTestClock{now: time.Date(2026, 8, 11, 0, 0, 0, 0, time.UTC)},
+		sessions: map[string]*runtimeSessionState{
+			sessionID: {session: SessionReadResult{SessionID: sessionID, Status: LifecycleStatusRunning}},
+		},
+		resolveWorkerInvoker: func(string) factory.Service { return runtime },
+	}
+	request := factorysessions.LiveChangeRequest{
+		RequestID:        "request-live-capacity-admission",
+		ExpectedRevision: 0,
+		Operation:        "resource.capacity.set",
+		TargetID:         "reviewers",
+		RequestedValue:   json.RawMessage("1"),
+		Source:           "test",
+	}
+
+	childLease, err := runtime.AcquireResourceCapacityLease(context.Background(), factory.ResourceCapacityLeaseRequest{ResourceID: "reviewers"})
+	if err != nil {
+		t.Fatalf("acquire child resource lease: %v", err)
+	}
+	defer childLease.Release()
+
+	firstDone := make(chan struct {
+		result factorysessions.LiveChangeResult
+		err    error
+	}, 1)
+	go func() {
+		result, applyErr := service.ApplyLiveChange(context.Background(), sessionID, request)
+		firstDone <- struct {
+			result factorysessions.LiveChangeResult
+			err    error
+		}{result: result, err: applyErr}
+	}()
+	<-runtime.changeAdmissionAttempt
+	select {
+	case outcome := <-firstDone:
+		t.Fatalf("durable live change completed while child lease was held: result=%#v err=%v", outcome.result, outcome.err)
+	default:
+	}
+
+	secondDone := make(chan struct {
+		result factorysessions.LiveChangeResult
+		err    error
+	}, 1)
+	go func() {
+		result, applyErr := service.ApplyLiveChange(context.Background(), sessionID, request)
+		secondDone <- struct {
+			result factorysessions.LiveChangeResult
+			err    error
+		}{result: result, err: applyErr}
+	}()
+	select {
+	case outcome := <-secondDone:
+		t.Fatalf("duplicate durable live change completed before the first admitted request: result=%#v err=%v", outcome.result, outcome.err)
+	default:
+	}
+
+	childLease.Release()
+	first := <-firstDone
+	if first.err != nil || first.result.Outcome != factorysessions.LiveChangeOutcomeApplied {
+		t.Fatalf("first durable live change = %#v, err %v", first.result, first.err)
+	}
+	second := <-secondDone
+	if second.err != nil || second.result.Outcome != factorysessions.LiveChangeOutcomeReplayed {
+		t.Fatalf("duplicate durable live change = %#v, err %v", second.result, second.err)
+	}
+	if runtime.changeAdmissionAcquires != 2 || runtime.previewCalls != 1 || runtime.setCalls != 1 {
+		t.Fatalf("durable admission calls = acquire %d preview %d set %d, want 2/1/1", runtime.changeAdmissionAcquires, runtime.previewCalls, runtime.setCalls)
+	}
+
+	events := (durableLiveChangeEventLog{service: service, sessionID: sessionID}).LiveChangeEvents()
+	if len(events) != 2 || events[0].Type != interfaces.FactoryEventTypeFactoryChangeRequest || events[1].Type != interfaces.FactoryEventTypeFactoryChange {
+		t.Fatalf("durable live change events = %#v, want one request and one success", events)
+	}
+}
+
+type runtimeTestClock struct{ now time.Time }
+
+func (c runtimeTestClock) Now() time.Time { return c.now }
+
+type durableLiveChangeAdmissionTestRuntime struct {
+	factory.Service
+	gate                    chan struct{}
+	changeAdmissionAttempt  chan struct{}
+	changeAdmissionAcquires int
+	previewCalls            int
+	setCalls                int
+	mu                      sync.Mutex
+	snapshot                *interfaces.FactorySnapshot
+	changeAdmissionHeld     bool
+}
+
+func newDurableLiveChangeAdmissionTestRuntime(t *testing.T) *durableLiveChangeAdmissionTestRuntime {
+	t.Helper()
+	snapshot, err := interfaces.NewFactorySnapshot(map[string]any{"resources": map[string]any{"reviewers": map[string]any{"capacity": 1}}})
+	if err != nil {
+		t.Fatalf("create effective Factory snapshot: %v", err)
+	}
+	runtime := &durableLiveChangeAdmissionTestRuntime{
+		gate:                   make(chan struct{}, 1),
+		changeAdmissionAttempt: make(chan struct{}, 1),
+		snapshot:               snapshot,
+	}
+	runtime.gate <- struct{}{}
+	return runtime
+}
+
+func (r *durableLiveChangeAdmissionTestRuntime) AcquireResourceCapacityAdmission(ctx context.Context) (func(), error) {
+	select {
+	case r.changeAdmissionAttempt <- struct{}{}:
+	default:
+	}
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-r.gate:
+	}
+	r.mu.Lock()
+	r.changeAdmissionAcquires++
+	r.changeAdmissionHeld = true
+	r.mu.Unlock()
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			r.mu.Lock()
+			r.changeAdmissionHeld = false
+			r.mu.Unlock()
+			r.gate <- struct{}{}
+		})
+	}, nil
+}
+
+func (r *durableLiveChangeAdmissionTestRuntime) AcquireResourceCapacityLease(ctx context.Context, request factory.ResourceCapacityLeaseRequest) (*factory.ResourceCapacityLease, error) {
+	if request.ResourceID == "" {
+		return nil, errors.New("resource id is required")
+	}
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-r.gate:
+	}
+	var once sync.Once
+	return factory.NewResourceCapacityLease(request.ResourceID, 0, func() {
+		once.Do(func() { r.gate <- struct{}{} })
+	}), nil
+}
+
+func (r *durableLiveChangeAdmissionTestRuntime) PreviewResourceCapacity(context.Context, factory.ResourceCapacityRequest) (factory.ResourceCapacityResult, error) {
+	return factory.ResourceCapacityResult{}, errors.New("non-admitted preview should not be used")
+}
+
+func (r *durableLiveChangeAdmissionTestRuntime) SetResourceCapacity(context.Context, factory.ResourceCapacityRequest) (factory.ResourceCapacityResult, error) {
+	return factory.ResourceCapacityResult{}, errors.New("non-admitted mutation should not be used")
+}
+
+func (r *durableLiveChangeAdmissionTestRuntime) PreviewResourceCapacityAdmitted(_ context.Context, request factory.ResourceCapacityRequest) (factory.ResourceCapacityResult, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if !r.changeAdmissionHeld {
+		return factory.ResourceCapacityResult{}, errors.New("admitted preview called without the live-change admission lease")
+	}
+	r.previewCalls++
+	return r.capacityResult(request), nil
+}
+
+func (r *durableLiveChangeAdmissionTestRuntime) SetResourceCapacityAdmitted(_ context.Context, request factory.ResourceCapacityRequest) (factory.ResourceCapacityResult, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if !r.changeAdmissionHeld {
+		return factory.ResourceCapacityResult{}, errors.New("admitted mutation called without the live-change admission lease")
+	}
+	r.setCalls++
+	return r.capacityResult(request), nil
+}
+
+func (r *durableLiveChangeAdmissionTestRuntime) capacityResult(request factory.ResourceCapacityRequest) factory.ResourceCapacityResult {
+	return factory.ResourceCapacityResult{
+		ResourceID:        request.ResourceID,
+		PreviousCapacity:  2,
+		RequestedCapacity: request.RequestedCapacity,
+		EffectiveCapacity: request.RequestedCapacity,
+		InUseCount:        0,
+		AvailableCount:    request.RequestedCapacity,
+		Outcome:           factory.ResourceCapacityOutcomeApplied,
+		Factory:           r.snapshot,
 	}
 }
 

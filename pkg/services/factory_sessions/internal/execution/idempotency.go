@@ -659,6 +659,25 @@ func (s *JavaScriptRuntimeService) runDurableLiveChange(
 			Message: "resource capacity application is unavailable",
 		}
 	}
+	admission := runtimebinding.NewLiveChangeAdmission(runtime)
+	if admission == nil {
+		if _, requiresAdmission := runtime.(workflowsource.AdmittedResourceCapacityService); requiresAdmission {
+			return factorysessions.LiveChangeResult{}, &factorysessions.LiveChangeError{
+				Code:    factorysessions.LiveChangeErrorApplicationUnavailable,
+				Message: "live change coordination is unavailable",
+			}
+		}
+	} else {
+		release, admissionErr := admission.AcquireLiveChange(ctx, id)
+		if admissionErr != nil {
+			return factorysessions.LiveChangeResult{}, &factorysessions.LiveChangeError{
+				Code:    factorysessions.LiveChangeErrorApplicationUnavailable,
+				Message: "live change coordination is unavailable",
+				Cause:   admissionErr,
+			}
+		}
+		defer release()
+	}
 	stateProvider := s.durableLiveChangeStateProvider(id, events)
 	coordinator := livechange.New(s.now, nil)
 	var result factorysessions.LiveChangeResult
