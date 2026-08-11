@@ -9046,3 +9046,31 @@
 - **Learnings for future iterations:**
   - Run the final thread-aware audit after the last source or metadata push so the review handoff is based on the actual latest PR state.
 ---
+## [2026-08-11 06:47:21 -07:00] - thr-deflake-cli-process-package review follow-up
+- What was implemented
+  - Addressed the blocking review findings by fixing rolling-file retention to preserve newest backup identities, handling partial PID-file publication as incomplete readiness, documenting the deliberate built-CLI mock-worker seam, and merging current `upstream/main` at `3521f0b0a2f313b22e2c79edcf90339a01b3bce7` while retaining the task PRD and append-only history.
+  - Added direct rolling-file behavioral tests for newest-backup retention, age retention, rotation/compression, and close/reopen behavior; split retention maintenance helpers below the repository complexity threshold.
+  - Registered the new platform leaf in package-target, ownership, and coverage inventories and added exact boundary allowances tied to the Wire-selected runtime-log opener.
+- Files changed
+  - `pkg/platform/rollingfile/rollingfile.go`
+  - `pkg/platform/rollingfile/rollingfile_test.go`
+  - `tests/functional/transport/cli/process/context_cancellation_test.go`
+  - `tests/functional/transport/cli/process/fixtures_test.go`
+  - `tests/functional/transport/cli/process/stdout_stderr_test.go`
+  - `cmd/pkgboundarycheck/production_defaults.go`
+  - `docs/internal/packaged-service-structure/package-target-manifest.json`
+  - `docs/internal/baselines/ownership-inventory.json`
+  - `docs/internal/baselines/go-unit-coverage-package-minimums.json`
+  - `docs/internal/baselines/go-functional-coverage-package-minimums.json`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `make test` — passed, including `pkg/platform/rollingfile`.
+  - `make verify-fast` — passed: typecheck, MCP contract boundary, 354 Vitest files/2,956 tests, 191 Bun tests, and the short Go suite.
+  - Rolling-file race tests (`-race -count=5`), focused partial-PID readiness test, focused CLI stream tests, focused `go vet`, `make backend-size pkg-maint pkg-file-count pkg-structure vet`, package-boundary, package-target-manifest, and ownership-inventory checks — passed.
+  - `make lint` has three failures unchanged from `upstream/main`: two ownership-boundary findings, packaged-factory consumption import drift, and dead-code baseline drift; all task-owned lint checks pass, including rolling-file boundary registration.
+  - The Windows unit-coverage wrapper could not launch its generated command because the cached Go 1.25 toolchain path exceeded the Windows filename/command-length limit; package floors were added from the measured rolling-file unit coverage (76.20%) for the hosted Linux lane.
+- **Learnings for future iterations:**
+  - A new policy-free platform leaf must be registered in the package-target manifest, ownership inventory, coverage manifests, and exact package-boundary allowances together; source-only additions leave several independent gates red.
+  - On this shared Windows host, full Go coverage and stress commands can be affected by toolchain command length or unrelated filesystem contention; preserve those diagnostics and use task-owned temporary roots for behavioral evidence.
+---
