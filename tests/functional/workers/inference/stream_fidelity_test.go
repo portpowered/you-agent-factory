@@ -151,6 +151,23 @@ func assertFullStreamPublicResponseEvents(
 	wantCompletedText string,
 ) {
 	t.Helper()
+	if len(events) == 0 {
+		t.Fatal("full-stream response capture is empty; want a terminal response stream")
+	}
+	terminalRunCount := 0
+	for _, event := range events {
+		if event.Kind == factoryapi.FactoryResponseEventKindRun &&
+			event.Phase == factoryapi.FactoryResponseEventPhaseCompleted {
+			terminalRunCount++
+		}
+	}
+	if terminalRunCount != 1 {
+		t.Fatalf(
+			"full-stream response capture has %d RUN/COMPLETED events; want exactly one: %#v",
+			terminalRunCount,
+			events,
+		)
+	}
 
 	var (
 		deltaCount    int
