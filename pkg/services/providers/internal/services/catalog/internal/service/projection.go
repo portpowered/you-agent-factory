@@ -384,11 +384,20 @@ func projectModalities(providerID, modelID string, values []publishedModality) (
 		if !isKnownModalityKind(kind) {
 			return nil, fmt.Errorf("provider %q model %q: unknown modality %q", providerID, modelID, value.Kind)
 		}
-		if support != providers.ModalitySupported && support != providers.ModalityUnsupported {
+		switch support {
+		case providers.ModalitySupported, providers.ModalityUnsupported, "conditional", "unknown":
+		default:
 			return nil, fmt.Errorf("provider %q model %q: unknown modality support %q", providerID, modelID, value.Support)
 		}
 		if !isKnownModalityTransport(transport) {
 			return nil, fmt.Errorf("provider %q model %q: unknown modality transport %q", providerID, modelID, value.Transport)
+		}
+		// The legacy Providers contract has a two-state modality vocabulary.
+		// Conditional and unknown facts remain available in the published
+		// model-provider catalog, but must not be downgraded to a false
+		// supported or unsupported claim here.
+		if support == "conditional" || support == "unknown" {
+			continue
 		}
 		if (support == providers.ModalityUnsupported) != (transport == providers.ModalityTransportNone) {
 			return nil, fmt.Errorf("provider %q model %q modality %s/%s has inconsistent support and transport", providerID, modelID, direction, kind)
@@ -437,7 +446,14 @@ func projectTools(providerID string, values []publishedTool) ([]providers.Tool, 
 			return nil, fmt.Errorf("provider %q: incomplete tool record %q", providerID, name)
 		}
 		support := providers.ToolSupport(strings.TrimSpace(value.Support))
-		if support != providers.ToolSupported && support != providers.ToolUnsupported {
+		switch support {
+		case providers.ToolSupported, providers.ToolUnsupported:
+		case "conditional", "unknown":
+			// The legacy Providers contract cannot represent these additive
+			// states without inventing certainty, so leave them in the
+			// published catalog and omit them from this projection.
+			continue
+		default:
 			return nil, fmt.Errorf("provider %q tool %q: unknown support %q", providerID, name, value.Support)
 		}
 		if _, exists := seen[name]; exists {
