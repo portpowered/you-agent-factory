@@ -47,6 +47,75 @@ discovery:
     - kind: workspace
       name: writable-workspace
       description: Execution requires a writable workspace selected by the factory.
+harness:
+  kind: native_cli
+modelCatalogPosture: exact
+harnessRoutes:
+  - direction: input
+    modality: audio
+    support: unsupported
+    transport: none
+    evidenceRefs: [claude-docs, claude-conformance]
+  - direction: input
+    modality: image
+    support: unsupported
+    transport: none
+    evidenceRefs: [claude-docs, claude-conformance]
+  - direction: input
+    modality: text
+    support: supported
+    transport: inline
+    evidenceRefs: [claude-docs, claude-conformance]
+  - direction: input
+    modality: video
+    support: unsupported
+    transport: none
+    evidenceRefs: [claude-docs, claude-conformance]
+  - direction: output
+    modality: audio
+    support: unsupported
+    transport: none
+    evidenceRefs: [claude-docs, claude-conformance]
+  - direction: output
+    modality: image
+    support: unsupported
+    transport: none
+    evidenceRefs: [claude-docs, claude-conformance]
+  - direction: output
+    modality: text
+    support: supported
+    transport: inline
+    evidenceRefs: [claude-docs, claude-conformance]
+  - direction: output
+    modality: video
+    support: unsupported
+    transport: none
+    evidenceRefs: [claude-docs, claude-conformance]
+evidence:
+  - id: claude-docs
+    kind: primary_documentation
+    verifiedOn: "2026-08-10"
+    url: https://docs.anthropic.com/en/docs/claude-code/cli-usage
+    factRefs:
+      - model_catalog
+      - harness/input/text
+      - harness/output/text
+  - id: claude-conformance
+    kind: conformance_fixture
+    verifiedOn: "2026-08-10"
+    factRefs:
+      - harness/input/audio
+      - harness/input/image
+      - harness/input/text
+      - harness/input/video
+      - harness/output/audio
+      - harness/output/image
+      - harness/output/text
+      - harness/output/video
+      - model/claude-opus-4-6-thinking/input/text
+      - tool/filesystem
+      - tool/shell
+      - tool/web_search
 models:
   - id: claude-opus-4-6-thinking
     efforts:
@@ -60,34 +129,42 @@ models:
         modality: audio
         support: unsupported
         transport: none
+        evidenceRefs: [claude-docs, claude-conformance]
       - direction: input
         modality: image
         support: unsupported
         transport: none
+        evidenceRefs: [claude-docs, claude-conformance]
       - direction: input
         modality: text
         support: supported
         transport: inline
+        evidenceRefs: [claude-docs, claude-conformance]
       - direction: input
         modality: video
         support: unsupported
         transport: none
+        evidenceRefs: [claude-docs, claude-conformance]
       - direction: output
         modality: audio
         support: unsupported
         transport: none
+        evidenceRefs: [claude-docs, claude-conformance]
       - direction: output
         modality: image
         support: unsupported
         transport: none
+        evidenceRefs: [claude-docs, claude-conformance]
       - direction: output
         modality: text
         support: supported
         transport: inline
+        evidenceRefs: [claude-docs, claude-conformance]
       - direction: output
         modality: video
         support: unsupported
         transport: none
+        evidenceRefs: [claude-docs, claude-conformance]
   - id: claude-sonnet-4-20250514
     efforts:
       - low
@@ -100,34 +177,42 @@ models:
         modality: audio
         support: unsupported
         transport: none
+        evidenceRefs: [claude-docs, claude-conformance]
       - direction: input
         modality: image
         support: unsupported
         transport: none
+        evidenceRefs: [claude-docs, claude-conformance]
       - direction: input
         modality: text
         support: supported
         transport: inline
+        evidenceRefs: [claude-docs, claude-conformance]
       - direction: input
         modality: video
         support: unsupported
         transport: none
+        evidenceRefs: [claude-docs, claude-conformance]
       - direction: output
         modality: audio
         support: unsupported
         transport: none
+        evidenceRefs: [claude-docs, claude-conformance]
       - direction: output
         modality: image
         support: unsupported
         transport: none
+        evidenceRefs: [claude-docs, claude-conformance]
       - direction: output
         modality: text
         support: supported
         transport: inline
+        evidenceRefs: [claude-docs, claude-conformance]
       - direction: output
         modality: video
         support: unsupported
         transport: none
+        evidenceRefs: [claude-docs, claude-conformance]
   - id: claude-sonnet-5
     efforts:
       - low
@@ -140,42 +225,59 @@ models:
         modality: audio
         support: unsupported
         transport: none
+        evidenceRefs: [claude-docs, claude-conformance]
       - direction: input
         modality: image
         support: unsupported
         transport: none
+        evidenceRefs: [claude-docs, claude-conformance]
       - direction: input
         modality: text
         support: supported
         transport: inline
+        evidenceRefs: [claude-docs, claude-conformance]
       - direction: input
         modality: video
         support: unsupported
         transport: none
+        evidenceRefs: [claude-docs, claude-conformance]
       - direction: output
         modality: audio
         support: unsupported
         transport: none
+        evidenceRefs: [claude-docs, claude-conformance]
       - direction: output
         modality: image
         support: unsupported
         transport: none
+        evidenceRefs: [claude-docs, claude-conformance]
       - direction: output
         modality: text
         support: supported
         transport: inline
+        evidenceRefs: [claude-docs, claude-conformance]
       - direction: output
         modality: video
         support: unsupported
         transport: none
+        evidenceRefs: [claude-docs, claude-conformance]
 tools:
   - name: filesystem
     support: supported
     description: Read and modify files in the selected workspace.
+    evidenceRefs: [claude-conformance]
+    availability: built_in
+    defaultEnabled: true
   - name: shell
     support: supported
     description: Run bounded shell commands through the Claude tool runner.
+    evidenceRefs: [claude-conformance]
+    availability: built_in
+    defaultEnabled: true
   - name: web_search
     support: supported
     description: Use the provider web-search tool when enabled by the invocation.
+    evidenceRefs: [claude-docs, claude-conformance]
+    availability: optional
+    defaultEnabled: null
 knownLimits: []

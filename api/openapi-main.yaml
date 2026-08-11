@@ -2511,6 +2511,24 @@ components:
       $ref: './components/schemas/model-providers/ProviderCatalog.yaml'
     ProviderManifest:
       $ref: './components/schemas/model-providers/ProviderManifest.yaml'
+    ProviderCapabilitySupport:
+      $ref: './components/schemas/model-providers/ProviderCapabilitySupport.yaml'
+    ProviderCapabilityEvidence:
+      $ref: './components/schemas/model-providers/ProviderCapabilityEvidence.yaml'
+    ProviderCapabilityEvidenceKind:
+      $ref: './components/schemas/model-providers/ProviderCapabilityEvidenceKind.yaml'
+    ProviderModelCatalogPosture:
+      $ref: './components/schemas/model-providers/ProviderModelCatalogPosture.yaml'
+    ProviderHarness:
+      $ref: './components/schemas/model-providers/ProviderHarness.yaml'
+    ProviderHarnessKind:
+      $ref: './components/schemas/model-providers/ProviderHarnessKind.yaml'
+    ProviderACPSupport:
+      $ref: './components/schemas/model-providers/ProviderACPSupport.yaml'
+    ProviderACPResourceDelivery:
+      $ref: './components/schemas/model-providers/ProviderACPResourceDelivery.yaml'
+    ProviderMediaConstraints:
+      $ref: './components/schemas/model-providers/ProviderMediaConstraints.yaml'
     ProviderTechnicalSupportLevel:
       $ref: './components/schemas/model-providers/ProviderTechnicalSupportLevel.yaml'
     ProviderImplementationAvailability:
@@ -2547,6 +2565,10 @@ components:
       $ref: './components/schemas/model-providers/ProviderTool.yaml'
     ProviderToolSupport:
       $ref: './components/schemas/model-providers/ProviderToolSupport.yaml'
+    ProviderToolAvailability:
+      $ref: './components/schemas/model-providers/ProviderToolAvailability.yaml'
+    ProviderToolOutputModality:
+      $ref: './components/schemas/model-providers/ProviderToolOutputModality.yaml'
     ProviderKnownLimit:
       $ref: './components/schemas/model-providers/ProviderKnownLimit.yaml'
     ProviderKnownLimitKind:
