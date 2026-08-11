@@ -2721,3 +2721,19 @@
 - **Learnings for future iterations:**
   - Inspect the exact failing job log and compare changed paths before fixing broad functional failures; a reproducible failure in an untouched package is a current-main baseline issue, not evidence for widening a completed story.
 ---
+
+## 2026-08-10 18:41 -07:00 - btrc-p1-root-injection-006 final CI retry follow-up
+- What was implemented
+  - Re-audited open PR #1857 after the completed P1 stories and confirmed the thread-aware review audit has zero unresolved inline threads and zero formal reviews.
+  - Confirmed the PR body matches `prd.json` after UTF-8 newline normalization; all six stories remain marked `passes:true`, and `origin/main` is an ancestor of the current head.
+  - Reran only the failed CI jobs on run `31449076502`. The Frontend Browser retry passed. Backend Functional Coverage reproduced the unchanged server-binding diagnostic-line assertion, so no unrelated production or UI change was made.
+- Files changed
+  - `progress.txt` (append-only audit entry)
+- Verification
+  - Local `make backend-size pkg-maint pkg-file-count pkg-structure vet` — passed.
+  - Local `git diff --check`, PRD completeness, and PR-body parity — passed.
+  - Focused `go test ./tests/functional/transport/server_binding -run '^TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput$' -count=1 -v -timeout 120s` — reproduced the extra `API server error` diagnostic line plus `SERVER_BIND_FAILED`; the branch has no diff in that test package or `pkg/services/factory_sessions/internal/runtimehosting`.
+  - CI run `31449076502` retry — all lanes passed except Backend Functional Coverage; Verification Policy is red only as its dependent aggregate.
+- **Learnings for future iterations:**
+  - When a retry clears a transient lane but repeats a deterministic failure in an untouched package, preserve the completed task scope and record the current-main baseline blocker instead of changing unrelated behavior.
+---
