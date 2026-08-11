@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- For cross-process Windows checkpoints, wait for atomically published metadata to be readable before suspension, then verify the exact resource survives the suspend gap; treat a sharing violation during publication as an incomplete checkpoint, not as a failed assertion retry.
 - For long real-process race baselines, record the ordinary `-count=20` result separately from a `-failfast` rerun; capture output in an out-of-tree temporary log when console truncation could hide the first failing test, and never commit the generated log.
 - For final PR handoff, compare the PR body byte-for-byte with `prd.json` and use the thread-aware GraphQL review audit because flat PR comments do not expose inline-thread resolution state.
 - OS-boundary functional tests may poll an isolated durable filesystem checkpoint only when the child exposes no parent-process event or injected edge; document that reason at each polling helper and keep the bound as a failure guard.
@@ -164,6 +165,7 @@
 - **Learnings for future iterations:**
   - Keep the root count aligned with the canonical fifteen-entry catalog, but continue placing detailed Factory guidance in `docs/reference/packaged-factories.md`.
 ---
+
 ## 2026-08-09 13:20 - wo-d1-packaged-factories-docs-001 lint follow-up
 - What was implemented
   - No source change; checked the broad repository lint tier against the completed story.
@@ -3768,4 +3770,34 @@
   - The hard-kill test’s exact shared resource is the packaged-factory `.<factory>.staging-owner` lease and its atomically published `.owner.json`, not persisted `backendScopeID`; an observer that inspects before suspending leaves a release race even if it re-stats the path.
   - The JSON failure is a lifecycle/output ordering symptom: a terminal failed response is already emitted, then teardown races against removed dispatch state and emits a mismatched command diagnostic. Preserve the existing stdout/stderr contract while making process/session teardown observe a complete terminal lifecycle.
   - A clean focused race repetition does not clear a full-package race failure; retain both aggregate outcomes and isolate the named hard-kill/JSON scenarios before changing code.
+---
+
+## 2026-08-10 21:06 -07:00 - thr-deflake-cli-process-package-002
+- What was implemented
+  - Isolated process-package subscenarios with fresh homes, workspaces, runtime-log directories, reserved server ports, Factory fixtures, and mock-worker artifacts where the scenario owns them.
+  - Reworked the hard-kill process wrapper to synchronize process wait and stdout-scanner completion, and changed the staging checkpoint to observe a complete owner record before suspending, verify the exact owner directory after suspension, and release platform handles idempotently after reaping.
+  - Removed the old retryable-observation shim from the hard-kill assertion path. A Windows sharing violation while the owner metadata writer is still publishing is now classified as an incomplete readiness checkpoint; the successor assertion itself is not retried.
+  - Added direct ownership-resource inventory comparison around the successor run and joined the stdin submit/server scanner during teardown.
+- Files changed
+  - `tests/functional/transport/cli/process/context_cancellation_test.go`
+  - `tests/functional/transport/cli/process/exit_codes_test.go`
+  - `tests/functional/transport/cli/process/fixtures_test.go`
+  - `tests/functional/transport/cli/process/hard_kill_successor_process_nonwindows_test.go`
+  - `tests/functional/transport/cli/process/hard_kill_successor_process_windows_test.go`
+  - `tests/functional/transport/cli/process/hard_kill_successor_test.go`
+  - `tests/functional/transport/cli/process/help_and_version_test.go`
+  - `tests/functional/transport/cli/process/stdin_test.go`
+  - `tests/functional/transport/cli/process/stdout_stderr_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Windows/amd64, go1.25.0: `go test ./tests/functional/transport/cli/process -count=1 -timeout 10m` passed in 77.711s.
+  - `go test ./tests/functional/transport/cli/process -run '^TestCLISuccessorAfterHardKillReportsPreRuntimeStagingContention$' -count=10 -v -timeout 10m` passed 10/10 in 116.687s, including the previously reproduced metadata sharing-violation interleaving.
+  - Focused `go test -race ./tests/functional/transport/cli/process -run '^TestCLISuccessorAfterHardKillReportsPreRuntimeStagingContention$' -count=3 -timeout 10m` passed 3/3 in 52.818s.
+  - `go test -c` with `GOOS=linux GOARCH=amd64` compiled the non-Windows process test package; `go vet ./tests/functional/transport/cli/process`, `make typecheck`, and `git diff --check` passed.
+  - Implementation commit: `774649a9e` (`test(cli-process): make lifecycle checkpoints deterministic`).
+- **Learnings for future iterations:**
+  - A visible ownership directory is not a sufficient Windows checkpoint: the writer can still hold `.owner.json` while the directory is enumerated. Read the atomically published metadata first, then suspend and verify the exact directory before treating it as a kill barrier.
+  - Process-boundary tests need to join both `Cmd.Wait` and every stdout scanner; a successful process assertion can still leave a pipe-reading goroutine unjoined.
+  - Story 003 still owns aggregate `-count=20`, 20 separate `-count=1` runs, merged-main JSON regression, and warm-cache median evidence; do not mark it complete from focused story-002 repetitions.
 ---
