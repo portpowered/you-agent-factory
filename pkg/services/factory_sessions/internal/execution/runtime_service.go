@@ -244,6 +244,7 @@ type JavaScriptRuntimeService struct {
 	startReplay   map[string]startReplayRecord
 	startInflight map[string]*startInflightFlight
 	controlReplay map[string]controlReplayRecord
+	liveChangeMu  sync.Mutex
 }
 
 var _ Service = (*JavaScriptRuntimeService)(nil)

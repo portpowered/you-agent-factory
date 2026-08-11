@@ -100,8 +100,9 @@ func (s *JavaScriptRuntimeService) recordCanonicalTerminalState(target *runtimeS
 		events,
 		extractDispatchInterruptedEvents(candidate.events),
 	)
+	preserveAppendOnly := target.eventConsumer != nil || hasDurableLiveChangeEvents(target.events)
 	candidate.events = projected
-	if target.eventConsumer != nil {
+	if preserveAppendOnly {
 		candidate.events = reconcileAppendOnlyCanonicalEvents(target.events, projected)
 	}
 	if err := s.persistTerminalSessionState(candidate); err != nil {

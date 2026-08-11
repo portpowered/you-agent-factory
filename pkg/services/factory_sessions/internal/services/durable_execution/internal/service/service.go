@@ -54,6 +54,45 @@ func (s *Service) SubscribeResponseEvents(
 	return subscriber.SubscribeResponseEvents(ctx, sessionID, request)
 }
 
+// ApplyLiveChange forwards the optional durable-session live-change capability
+// without widening the durable execution root interface used by other
+// backends.
+func (s *Service) ApplyLiveChange(
+	ctx context.Context,
+	sessionID string,
+	request factorysessions.LiveChangeRequest,
+) (factorysessions.LiveChangeResult, error) {
+	if s == nil || s.Service == nil {
+		return factorysessions.LiveChangeResult{}, factorysessions.ErrRuntimeNotAvailable
+	}
+	capability, ok := s.Service.(interface {
+		ApplyLiveChange(context.Context, string, factorysessions.LiveChangeRequest) (factorysessions.LiveChangeResult, error)
+	})
+	if !ok {
+		return factorysessions.LiveChangeResult{}, factorysessions.ErrRuntimeNotAvailable
+	}
+	return capability.ApplyLiveChange(ctx, sessionID, request)
+}
+
+// RecoverLiveChange forwards durable live-change recovery when the underlying
+// execution backend retains canonical change events.
+func (s *Service) RecoverLiveChange(
+	ctx context.Context,
+	sessionID string,
+	requestID string,
+) (factorysessions.LiveChangeResult, error) {
+	if s == nil || s.Service == nil {
+		return factorysessions.LiveChangeResult{}, factorysessions.ErrRuntimeNotAvailable
+	}
+	capability, ok := s.Service.(interface {
+		RecoverLiveChange(context.Context, string, string) (factorysessions.LiveChangeResult, error)
+	})
+	if !ok {
+		return factorysessions.LiveChangeResult{}, factorysessions.ErrRuntimeNotAvailable
+	}
+	return capability.RecoverLiveChange(ctx, sessionID, requestID)
+}
+
 // New constructs an inert durable execution capability around an explicitly
 // injected implementation.
 func New(execution durableexecution.Service) (*Service, error) {

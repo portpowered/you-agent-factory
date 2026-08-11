@@ -216,9 +216,17 @@ func (s *Service) runLiveChange(
 	}
 	session, err := s.host.RequireSession(sessionID)
 	if err != nil {
+		if isMissingLiveSession(err) {
+			if result, handled := s.runDurableLiveChange(ctx, sessionID, request, recoverRequestID); handled {
+				return result, nil
+			}
+		}
 		return factorysessions.LiveChangeResult{}, liveChangeSessionError(err)
 	}
 	if session == nil {
+		if result, handled := s.runDurableLiveChange(ctx, sessionID, request, recoverRequestID); handled {
+			return result, nil
+		}
 		return factorysessions.LiveChangeResult{}, liveChangeSessionError(factorysessions.ErrSessionNotFound)
 	}
 	if session.Runtime == nil {
@@ -252,6 +260,43 @@ func (s *Service) runLiveChange(
 		}
 	}
 	return result, applyErr
+}
+
+type durableLiveChangeCapability interface {
+	ApplyLiveChange(context.Context, string, factorysessions.LiveChangeRequest) (factorysessions.LiveChangeResult, error)
+	RecoverLiveChange(context.Context, string, string) (factorysessions.LiveChangeResult, error)
+}
+
+func (s *Service) runDurableLiveChange(
+	ctx context.Context,
+	sessionID string,
+	request factorysessions.LiveChangeRequest,
+	recoverRequestID string,
+) (factorysessions.LiveChangeResult, bool) {
+	if s == nil || s.durable == nil {
+		return factorysessions.LiveChangeResult{}, false
+	}
+	capability, ok := s.durable.(durableLiveChangeCapability)
+	if !ok {
+		return factorysessions.LiveChangeResult{}, false
+	}
+	var (
+		result factorysessions.LiveChangeResult
+		err    error
+	)
+	if recoverRequestID != "" {
+		result, err = capability.RecoverLiveChange(ctx, sessionID, recoverRequestID)
+	} else {
+		result, err = capability.ApplyLiveChange(ctx, sessionID, request)
+	}
+	if errors.Is(err, factorysessions.ErrRuntimeNotAvailable) {
+		return factorysessions.LiveChangeResult{}, false
+	}
+	return result, true
+}
+
+func isMissingLiveSession(err error) bool {
+	return errors.Is(err, factorysessions.ErrSessionNotFound) || errors.Is(err, factorysessions.ErrNotFound)
 }
 
 func acquireLiveChangeAdmission(
@@ -319,5 +364,127 @@ func liveChangeLifecycleFromFactoryState(factoryState string) factorysessions.Li
 		return factorysessions.LiveChangeLifecycleCompleted
 	default:
 		return factorysessions.LiveChangeLifecycleRunning
+	}
+}
+
+// SessionRuntime forwards the optional resource-capacity ports to the active
+// runtime. Durable JavaScript children invoke this Factory Sessions façade, so
+// forwarding the ports keeps their resource leases on the same admission gate
+// used by live capacity changes and ordinary Factory dispatches.
+func (fs *SessionRuntime) activeResourceCapacityService() factoryruntime.ResourceCapacityService {
+	if fs == nil {
+		return nil
+	}
+	service, _ := fs.currentRuntimeService().(factoryruntime.ResourceCapacityService)
+	return service
+}
+
+func (fs *SessionRuntime) activeAdmittedResourceCapacityService() factoryruntime.AdmittedResourceCapacityService {
+	if fs == nil {
+		return nil
+	}
+	service, _ := fs.currentRuntimeService().(factoryruntime.AdmittedResourceCapacityService)
+	return service
+}
+
+func (fs *SessionRuntime) activeResourceCapacityAdmission() factoryruntime.ResourceCapacityAdmission {
+	if fs == nil {
+		return nil
+	}
+	service, _ := fs.currentRuntimeService().(factoryruntime.ResourceCapacityAdmission)
+	return service
+}
+
+func (fs *SessionRuntime) activeResourceCapacityLeaseAdmission() factoryruntime.ResourceCapacityLeaseAdmission {
+	if fs == nil {
+		return nil
+	}
+	service, _ := fs.currentRuntimeService().(factoryruntime.ResourceCapacityLeaseAdmission)
+	return service
+}
+
+func (fs *SessionRuntime) activeResourceCapacityRevisionService() factoryruntime.ResourceCapacityRevisionService {
+	if fs == nil {
+		return nil
+	}
+	service, _ := fs.currentRuntimeService().(factoryruntime.ResourceCapacityRevisionService)
+	return service
+}
+
+func (fs *SessionRuntime) PreviewResourceCapacity(
+	ctx context.Context,
+	request factoryruntime.ResourceCapacityRequest,
+) (factoryruntime.ResourceCapacityResult, error) {
+	service := fs.activeResourceCapacityService()
+	if service == nil {
+		return factoryruntime.ResourceCapacityResult{}, fmt.Errorf("Factory Runtime resource capacity is unavailable")
+	}
+	return service.PreviewResourceCapacity(ctx, request)
+}
+
+func (fs *SessionRuntime) SetResourceCapacity(
+	ctx context.Context,
+	request factoryruntime.ResourceCapacityRequest,
+) (factoryruntime.ResourceCapacityResult, error) {
+	service := fs.activeResourceCapacityService()
+	if service == nil {
+		return factoryruntime.ResourceCapacityResult{}, fmt.Errorf("Factory Runtime resource capacity is unavailable")
+	}
+	return service.SetResourceCapacity(ctx, request)
+}
+
+func (fs *SessionRuntime) PreviewResourceCapacityAdmitted(
+	ctx context.Context,
+	request factoryruntime.ResourceCapacityRequest,
+) (factoryruntime.ResourceCapacityResult, error) {
+	service := fs.activeAdmittedResourceCapacityService()
+	if service == nil {
+		return factoryruntime.ResourceCapacityResult{}, fmt.Errorf("Factory Runtime admitted resource capacity is unavailable")
+	}
+	return service.PreviewResourceCapacityAdmitted(ctx, request)
+}
+
+func (fs *SessionRuntime) SetResourceCapacityAdmitted(
+	ctx context.Context,
+	request factoryruntime.ResourceCapacityRequest,
+) (factoryruntime.ResourceCapacityResult, error) {
+	service := fs.activeAdmittedResourceCapacityService()
+	if service == nil {
+		return factoryruntime.ResourceCapacityResult{}, fmt.Errorf("Factory Runtime admitted resource capacity is unavailable")
+	}
+	return service.SetResourceCapacityAdmitted(ctx, request)
+}
+
+func (fs *SessionRuntime) AcquireResourceCapacityAdmission(ctx context.Context) (func(), error) {
+	service := fs.activeResourceCapacityAdmission()
+	if service == nil {
+		return nil, fmt.Errorf("Factory Runtime resource admission is unavailable")
+	}
+	return service.AcquireResourceCapacityAdmission(ctx)
+}
+
+func (fs *SessionRuntime) AcquireResourceCapacityLease(
+	ctx context.Context,
+	request factoryruntime.ResourceCapacityLeaseRequest,
+) (*factoryruntime.ResourceCapacityLease, error) {
+	service := fs.activeResourceCapacityLeaseAdmission()
+	if service == nil {
+		return nil, fmt.Errorf("Factory Runtime resource lease admission is unavailable")
+	}
+	return service.AcquireResourceCapacityLease(ctx, request)
+}
+
+func (fs *SessionRuntime) CurrentFactoryRevision() int {
+	service := fs.activeResourceCapacityRevisionService()
+	if service == nil {
+		return 0
+	}
+	return service.CurrentFactoryRevision()
+}
+
+func (fs *SessionRuntime) SetFactoryRevision(revision int) {
+	service := fs.activeResourceCapacityRevisionService()
+	if service != nil {
+		service.SetFactoryRevision(revision)
 	}
 }
