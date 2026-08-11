@@ -497,6 +497,7 @@ func TestInstallPackagedFactory_MaterializesPortableEditableFormats(t *testing.T
 	if !ok {
 		t.Fatal("published catalog is missing @you/full-flow")
 	}
+	installer := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir)
 	tests := []struct {
 		format   factorydefinitions.PackagedFactoryFormat
 		rootFile string
@@ -508,14 +509,10 @@ func TestInstallPackagedFactory_MaterializesPortableEditableFormats(t *testing.T
 	for _, test := range tests {
 		test := test
 		t.Run(string(test.format), func(t *testing.T) {
-			t.Parallel()
+		t.Parallel()
 
 			root := t.TempDir()
-			result, installErr := New(
-				packagedInstallationTestPersistence(),
-				platformfilesystem.Local{},
-				os.Mkdir,
-			).InstallPackagedFactory(t.Context(), factorydefinitions.PackagedFactoryInstallParams{
+			result, installErr := installer.InstallPackagedFactory(t.Context(), factorydefinitions.PackagedFactoryInstallParams{
 				NamedFactoriesRoot: root,
 				Definition:         definition,
 				Format:             test.format,
@@ -592,16 +589,12 @@ func TestInstallPackagedFactory_MaterializesEveryPublishedFactory(t *testing.T) 
 	if err != nil {
 		t.Fatalf("LoadPublishedDefinitionCatalog() error = %v", err)
 	}
+	installer := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}, os.Mkdir)
 	for _, definition := range catalog.All() {
 		definition := definition
 		t.Run(definition.Name, func(t *testing.T) {
 			t.Parallel()
-
-			result, installErr := New(
-				packagedInstallationTestPersistence(),
-				platformfilesystem.Local{},
-				os.Mkdir,
-			).InstallPackagedFactory(
+			result, installErr := installer.InstallPackagedFactory(
 				t.Context(),
 				factorydefinitions.PackagedFactoryInstallParams{
 					NamedFactoriesRoot: t.TempDir(),
