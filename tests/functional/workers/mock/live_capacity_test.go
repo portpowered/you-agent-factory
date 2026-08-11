@@ -68,7 +68,7 @@ func TestLiveResourceCapacityIncreaseAdmitsWaitingMockDispatch(t *testing.T) {
 	submitLiveCapacityWork(t, server.URL(), liveCapacityQueuedWorkName)
 	submitLiveCapacityWork(t, server.URL(), liveCapacitySecondQueuedName)
 
-	capacity := runLiveCapacityCLI(t, dir, server.URL(), liveCapacityResourceID, 2, 0, liveCapacityRaiseRequestID)
+	capacity := runLiveCapacityCLI(t, dir, server.URL(), "~default", liveCapacityResourceID, 2, 0, liveCapacityRaiseRequestID, "raise functional throughput")
 	if capacity.ResourceId != liveCapacityResourceID || capacity.EffectiveCapacity != 2 ||
 		capacity.PreviousCapacity != 1 || capacity.RequestedCapacity != 2 ||
 		capacity.InUseCount != 1 || capacity.AvailableCount != 1 ||
@@ -120,7 +120,7 @@ func TestLiveResourceCapacityReductionPreservesActiveWork(t *testing.T) {
 	runner.waitForCall(t, 1)
 	before := support.GetDefaultSession(t, server.URL())
 
-	capacity := setLiveCapacityREST(t, server.URL(), "~default", liveCapacityResourceID, 1, 0, "capacity-lower-safe")
+	capacity := runLiveCapacityCLI(t, dir, server.URL(), "~default", liveCapacityResourceID, 1, 0, "capacity-lower-safe", "lower capacity safely")
 	if capacity.ResourceId != liveCapacityResourceID || capacity.PreviousCapacity != 3 ||
 		capacity.RequestedCapacity != 1 || capacity.EffectiveCapacity != 1 ||
 		capacity.InUseCount != 1 || capacity.AvailableCount != 0 || capacity.MinimumCapacity != 1 ||
@@ -210,7 +210,7 @@ func TestLiveResourceCapacityRecordingReplayAndCursor(t *testing.T) {
 	server := startLiveCapacityServer(t, dir, runner)
 
 	initialEvents := server.GetFactoryEvents(t)
-	applied := setLiveCapacityREST(t, server.URL(), "~default", liveCapacityResourceID, 2, 0, "recorded-capacity-raise")
+	applied := runLiveCapacityCLI(t, dir, server.URL(), "~default", liveCapacityResourceID, 2, 0, "recorded-capacity-raise", "raise capacity for recording")
 	if applied.Outcome != factoryapi.FactorySessionResourceCapacityOutcome("APPLIED") ||
 		applied.PreviousCapacity != 1 || applied.RequestedCapacity != 2 || applied.EffectiveCapacity != 2 ||
 		applied.Revision != 1 {
@@ -253,7 +253,7 @@ func TestLiveResourceCapacityRecordingReplayAndCursor(t *testing.T) {
 	}
 
 	stableEvents := append([]factoryapi.FactoryEvent(nil), events...)
-	assertLiveCapacityReplayAndRejections(t, server, stableEvents, applied.ChangeId)
+	assertLiveCapacityReplayAndRejections(t, server, dir, stableEvents, applied.ChangeId)
 
 	if len(events) <= len(initialEvents) {
 		t.Fatalf("recorded event count = %d, want request and success beyond initial %d", len(events), len(initialEvents))
@@ -277,11 +277,15 @@ func TestLiveResourceCapacityRecordingReplayAndCursor(t *testing.T) {
 func assertLiveCapacityReplayAndRejections(
 	t *testing.T,
 	server *support.FunctionalAPIServer,
+	factoryDir string,
 	stableEvents []factoryapi.FactoryEvent,
 	changeID string,
 ) {
 	t.Helper()
-	replayed := setLiveCapacityREST(t, server.URL(), "~default", liveCapacityResourceID, 2, 0, "recorded-capacity-raise")
+	// Successful customer flows use the public CLI above. These REST calls are
+	// intentionally limited to error-envelope assertions, where the HTTP status
+	// and typed ErrorResponse are the observable contract under test.
+	replayed := runLiveCapacityCLI(t, factoryDir, server.URL(), "~default", liveCapacityResourceID, 2, 0, "recorded-capacity-raise", "raise capacity for recording")
 	if replayed.Outcome != factoryapi.FactorySessionResourceCapacityOutcome("REPLAYED") ||
 		replayed.ChangeId != changeID || replayed.Revision != 1 || replayed.EffectiveCapacity != 2 {
 		t.Fatalf("replayed capacity response = %#v, want REPLAYED original outcome", replayed)
@@ -334,7 +338,7 @@ func assertLiveCapacityReplayAndRejections(
 // waits on reviewers capacity one, and a live increase admits it in the same
 // durable session with exactly two completed child dispatches.
 func TestJavaScriptLiveResourceCapacityIncreaseWakesWaitingChildren(t *testing.T) {
-	provider := newLiveCapacityJavaScriptProvider()
+	provider := newLiveCapacityJavaScriptProviderRunner()
 	dir := scaffoldLiveCapacityFactory(t, 1)
 	support.WriteAgentConfig(t, dir, liveCapacityWorker, "---\n"+
 		"type: MODEL_WORKER\n"+
@@ -348,7 +352,7 @@ func TestJavaScriptLiveResourceCapacityIncreaseWakesWaitingChildren(t *testing.T
 			"HOME="+homeDir,
 			"USERPROFILE="+homeDir,
 		),
-		Edges: serviceedges.Edges{ProviderOverride: provider},
+		Edges: serviceedges.Edges{ProviderCommandRunner: provider},
 	})
 	t.Cleanup(func() { server.Stop(t) })
 
@@ -359,7 +363,7 @@ func TestJavaScriptLiveResourceCapacityIncreaseWakesWaitingChildren(t *testing.T
 	provider.waitForCall(t, 1)
 	before := readLiveCapacityDurableSession(t, server.URL(), started.SessionId)
 
-	capacity := setLiveCapacityREST(t, server.URL(), started.SessionId, liveCapacityResourceID, 2, 0, "javascript-capacity-raise")
+	capacity := runLiveCapacityCLI(t, dir, server.URL(), started.SessionId, liveCapacityResourceID, 2, 0, "javascript-capacity-raise", "raise JavaScript capacity")
 	if capacity.Outcome != factoryapi.FactorySessionResourceCapacityOutcome("APPLIED") ||
 		capacity.SessionId != started.SessionId || capacity.PreviousCapacity != 1 ||
 		capacity.EffectiveCapacity != 2 || capacity.InUseCount != 1 || capacity.AvailableCount != 1 ||
@@ -476,27 +480,29 @@ func waitForLiveCapacityDurableSessionTerminal(
 	timeout time.Duration,
 ) factoryapi.FactorySessionDurableReadModel {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(t.Context(), timeout)
-	defer cancel()
-	ticker := time.NewTicker(10 * time.Millisecond)
-	defer ticker.Stop()
-	for {
-		session := readLiveCapacityDurableSession(t, serverURL, sessionID)
-		switch session.Status {
-		case factoryapi.FactorySessionDurableLifecycleStatusSucceeded,
-			factoryapi.FactorySessionDurableLifecycleStatusFailed,
-			factoryapi.FactorySessionDurableLifecycleStatusCanceled,
-			factoryapi.FactorySessionDurableLifecycleStatusTimedOut,
-			factoryapi.FactorySessionDurableLifecycleStatusInterrupted,
-			factoryapi.FactorySessionDurableLifecycleStatusTerminated:
-			return session
-		}
-		select {
-		case <-ticker.C:
-		case <-ctx.Done():
-			t.Fatalf("timed out waiting for durable Factory Session %q to become terminal: last status %q", sessionID, session.Status)
-		}
+	session, err := support.WaitForObservation(
+		timeout,
+		func() (factoryapi.FactorySessionDurableReadModel, error) {
+			return readLiveCapacityDurableSession(t, serverURL, sessionID), nil
+		},
+		func(session factoryapi.FactorySessionDurableReadModel) bool {
+			switch session.Status {
+			case factoryapi.FactorySessionDurableLifecycleStatusSucceeded,
+				factoryapi.FactorySessionDurableLifecycleStatusFailed,
+				factoryapi.FactorySessionDurableLifecycleStatusCanceled,
+				factoryapi.FactorySessionDurableLifecycleStatusTimedOut,
+				factoryapi.FactorySessionDurableLifecycleStatusInterrupted,
+				factoryapi.FactorySessionDurableLifecycleStatusTerminated:
+				return true
+			default:
+				return false
+			}
+		},
+	)
+	if err != nil {
+		t.Fatalf("waiting for durable Factory Session %q to become terminal: %v", sessionID, err)
 	}
+	return session
 }
 
 func writeLiveCapacityJavaScriptGlobalConfig(t *testing.T) string {
@@ -675,9 +681,9 @@ func submitLiveCapacityWork(t *testing.T, serverURL, name string) factoryapi.Sub
 
 func runLiveCapacityCLI(
 	t *testing.T,
-	factoryDir, serverURL, resourceID string,
+	factoryDir, serverURL, sessionID, resourceID string,
 	capacity, expectedRevision int,
-	requestID string,
+	requestID, reason string,
 ) factoryapi.FactorySessionResourceCapacityResponse {
 	t.Helper()
 	process := support.BuildProcess(t, serviceedges.Edges{})
@@ -693,10 +699,10 @@ func runLiveCapacityCLI(
 		"--json",
 		"--server", serverURL,
 		"session", "resource", "set",
-		resourceID, fmt.Sprintf("%d", capacity), "~default",
+		resourceID, fmt.Sprintf("%d", capacity), sessionID,
 		"--request-id", requestID,
 		"--expected-revision", fmt.Sprintf("%d", expectedRevision),
-		"--reason", "raise functional throughput",
+		"--reason", reason,
 	})
 	inputs.WorkingDirectory = factoryDir
 	if err := process.Execute(inputs.Input); err != nil {
@@ -747,7 +753,7 @@ func scaffoldLiveCapacityFactory(t *testing.T, capacity int) string {
 	return dir
 }
 
-type liveCapacityJavaScriptProvider struct {
+type liveCapacityJavaScriptProviderRunner struct {
 	mu             sync.Mutex
 	calls          int
 	active         int
@@ -756,14 +762,14 @@ type liveCapacityJavaScriptProvider struct {
 	releaseBlocked chan struct{}
 }
 
-func newLiveCapacityJavaScriptProvider() *liveCapacityJavaScriptProvider {
-	return &liveCapacityJavaScriptProvider{
+func newLiveCapacityJavaScriptProviderRunner() *liveCapacityJavaScriptProviderRunner {
+	return &liveCapacityJavaScriptProviderRunner{
 		started:        make(chan int, 8),
 		releaseBlocked: make(chan struct{}),
 	}
 }
 
-func (p *liveCapacityJavaScriptProvider) Infer(ctx context.Context, request workers.ProviderInferenceRequest) (workers.InferenceResponse, error) {
+func (p *liveCapacityJavaScriptProviderRunner) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	p.mu.Lock()
 	p.calls++
 	call := p.calls
@@ -782,19 +788,19 @@ func (p *liveCapacityJavaScriptProvider) Infer(ctx context.Context, request work
 		select {
 		case <-p.releaseBlocked:
 		case <-ctx.Done():
-			return workers.InferenceResponse{}, ctx.Err()
+			return platformprocess.CommandResult{}, ctx.Err()
 		}
 	}
 	label := "javascript-child-one"
-	if strings.Contains(request.UserMessage, "two") {
+	if strings.Contains(string(request.Stdin), "javascript capacity child two") {
 		label = "javascript-child-two"
 	}
-	return workers.InferenceResponse{
-		Content: fmt.Sprintf(`{"text":"live capacity complete","label":%q}`, label),
+	return platformprocess.CommandResult{
+		Stdout: support.CodexSuccessStdout(fmt.Sprintf(`{"text":"live capacity complete","label":%q}`, label)),
 	}, nil
 }
 
-func (p *liveCapacityJavaScriptProvider) waitForCall(t *testing.T, want int) {
+func (p *liveCapacityJavaScriptProviderRunner) waitForCall(t *testing.T, want int) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), liveCapacityTestTimeout)
 	defer cancel()
@@ -810,13 +816,13 @@ func (p *liveCapacityJavaScriptProvider) waitForCall(t *testing.T, want int) {
 	}
 }
 
-func (p *liveCapacityJavaScriptProvider) callCount() int {
+func (p *liveCapacityJavaScriptProviderRunner) callCount() int {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.calls
 }
 
-func (p *liveCapacityJavaScriptProvider) peakActive() int {
+func (p *liveCapacityJavaScriptProviderRunner) peakActive() int {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.peak
@@ -879,3 +885,4 @@ func (r *liveCapacityBarrierRunner) waitForCall(t *testing.T, want int) {
 func stringPointer(value string) *string { return &value }
 
 var _ platformprocess.CommandRunner = (*liveCapacityBarrierRunner)(nil)
+var _ platformprocess.CommandRunner = (*liveCapacityJavaScriptProviderRunner)(nil)

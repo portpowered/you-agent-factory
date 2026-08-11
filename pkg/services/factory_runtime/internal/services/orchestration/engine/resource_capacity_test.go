@@ -558,6 +558,68 @@ func TestResourceCapacityAdmissionOrderingNeverExceedsCapacity(t *testing.T) {
 	}
 }
 
+func TestResourceCapacityConcurrentAdmissionOrderingNeverExceedsCapacity(t *testing.T) {
+	for iteration := 0; iteration < 32; iteration++ {
+		eng := newResourceCapacityTestEngine(1)
+		start := make(chan struct{})
+		leaseContext, cancelLease := context.WithCancel(context.Background())
+		var ready sync.WaitGroup
+		ready.Add(2)
+		leaseResult := make(chan struct {
+			lease *factory.ResourceCapacityLease
+			err   error
+		}, 1)
+		reductionResult := make(chan struct {
+			result factory.ResourceCapacityResult
+			err    error
+		}, 1)
+
+		go func() {
+			ready.Done()
+			<-start
+			lease, err := eng.AcquireResourceCapacityLease(leaseContext, factory.ResourceCapacityLeaseRequest{ResourceID: "gpu-slot"})
+			leaseResult <- struct {
+				lease *factory.ResourceCapacityLease
+				err   error
+			}{lease: lease, err: err}
+		}()
+		go func() {
+			ready.Done()
+			<-start
+			result, err := eng.SetResourceCapacity(context.Background(), factory.ResourceCapacityRequest{
+				ResourceID: "gpu-slot", RequestedCapacity: 0,
+			})
+			reductionResult <- struct {
+				result factory.ResourceCapacityResult
+				err    error
+			}{result: result, err: err}
+		}()
+		ready.Wait()
+		close(start)
+
+		reduction := <-reductionResult
+		cancelLease()
+		lease := <-leaseResult
+		switch {
+		case reduction.err == nil:
+			if reduction.result.Outcome != factory.ResourceCapacityOutcomeApplied {
+				t.Fatalf("iteration %d reduction-first outcome = %q, want APPLIED", iteration, reduction.result.Outcome)
+			}
+			if lease.lease != nil || !errors.Is(lease.err, context.Canceled) {
+				t.Fatalf("iteration %d reduction-first lease = %#v, err=%v, want cancellation while waiting", iteration, lease.lease, lease.err)
+			}
+		case errors.Is(reduction.err, factory.ErrResourceCapacityInUse):
+			if lease.err != nil || lease.lease == nil {
+				t.Fatalf("iteration %d acquisition-first lease = %#v, err=%v, want lease", iteration, lease.lease, lease.err)
+			}
+			lease.lease.Release()
+		default:
+			t.Fatalf("iteration %d reduction error = %v, want success or capacity-in-use", iteration, reduction.err)
+		}
+		assertResourceCapacityNeverExceedsCapacity(t, eng, iteration)
+	}
+}
+
 func assertResourceCapacityNeverExceedsCapacity(t *testing.T, eng *FactoryEngine, iteration int) {
 	t.Helper()
 	result, err := eng.PreviewResourceCapacity(context.Background(), factory.ResourceCapacityRequest{ResourceID: "gpu-slot", RequestedCapacity: eng.state.Resources["gpu-slot"].Capacity})
