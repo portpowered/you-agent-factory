@@ -9151,3 +9151,14 @@
   - Conflict-marker scan and `git diff --check` passed.
 - **Learnings for future iterations:**
   - A no-deletion diff against the live base is a useful guard that shared progress reconciliation preserved unrelated histories before the branch is pushed for hosted verification.
+---
+## [2026-08-11 06:16:17 -07:00] - thr-functional-lane-speed-004 hosted CI follow-up
+- What was implemented
+  - Completed hosted verification for replacement commit `9627e4526`; no product or test-source changes were required after the progress-history repair.
+- Files changed
+  - `progress.txt`
+- Verification
+  - All 18 replacement-head checks are terminal-success, including Backend Functional Coverage, Backend Unit Coverage, Verification Policy, and the API/UI/package lanes.
+  - PR #1866 remains open and mergeable; its body matches `prd.json` byte-for-byte and its head is `9627e4526`.
+- **Learnings for future iterations:**
+  - After a shared-history-only fix, rerun the complete hosted policy set on the exact pushed head; prior-head green results do not prove the corrected history commit.
