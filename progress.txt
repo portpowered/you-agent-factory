@@ -10673,3 +10673,20 @@
 - **Learnings for future iterations:**
   - When unrelated functional flakes move between concurrent tests across retries, isolate each named test and rerun only failed hosted jobs; do not widen the task diff without a reproducible task failure.
 ---
+## [2026-08-11 02:53:01 -07:00] - js-skip-permissions-parity final-base synchronization
+- What was implemented
+  - Rebased the final task branch onto the live `origin/main` head `dd87fd04db20d755f9b44c369aa79b8c3e600f5f` after main advanced during hosted verification.
+  - Preserved the authoritative JavaScript task PRD and append-only progress history; no product conflict required a behavior change.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+  - Task implementation and generated contract files carried through the final rebase.
+- Verification
+  - `origin/main` is an ancestor of the rebased head; no unmerged entries or conflict markers remain.
+  - `go test ./pkg/services/providers/... -count=1 -timeout 240s` — passed.
+  - `go test ./tests/functional/providers/permission -count=1 -timeout 240s` — passed.
+  - `go test ./pkg/root ./pkg/wire ./pkg/services/edges -count=1 -timeout 240s` — passed.
+  - PRD parsing confirms all four stories remain `passes:true`; `git diff --check` passed.
+- **Learnings for future iterations:**
+  - Recheck the live base immediately before the final push; a moving `main` can make an otherwise green PR head conflicting before its latest checks are attached.
+---
