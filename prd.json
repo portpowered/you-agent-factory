@@ -11,34 +11,21 @@
   },
   "deliveryAudit": {
     "pullRequest": 1857,
-    "head": "50a24ed75acee043d46c52ec24bc7ff73970775d",
+    "head": "2cfefc60503adfa6a0e7b18bcc2257cbee9d26d5",
     "base": "dd87fd04db20d755f9b44c369aa79b8c3e600f5f",
     "reviewThreads": 0,
     "unresolvedReviewThreads": 0,
     "formalReviews": 0,
     "latestWorkflow": {
-      "run": 31482113491,
-      "testedHead": "4c19dd63c4aba14decad3c14e7ef2ebaea473a4c",
-      "result": "in_progress_on_previous_head",
-      "functionalResult": "failure",
-      "verificationPolicy": "in_progress",
-      "currentHeadCheckRuns": "not_reported",
+      "run": 31484490779,
+      "testedHead": "2cfefc60503adfa6a0e7b18bcc2257cbee9d26d5",
+      "result": "in_progress_on_current_head",
+      "functionalResult": "pending",
+      "verificationPolicy": "pending",
+      "currentHeadCheckRuns": "pending",
       "rerunResult": "not_run",
       "taskScopedFailures": [],
-      "baselineFailures": [
-        {
-          "job": "Backend Functional Coverage",
-          "package": "tests/functional/transport/server_binding",
-          "test": "TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput",
-          "evidence": "The untouched test fails on the pushed head and local current main: it expects one diagnostic line, while the baseline emits the migration warning plus structured API-server diagnostics before the SERVER_BIND_FAILED payload. The P1 diff is empty for this package."
-        },
-        {
-          "job": "Backend Functional Coverage",
-          "package": "tests/functional/runtime_api",
-          "test": "TestFunctionalAPIServer_RuntimeLogDirectoryIsAProcessInput",
-          "evidence": "The current workflow reported a missing factory-started log entry and runtime log sink closed messages, but the test is untouched by the P1 diff and passed three consecutive focused local runs. Treat this as non-reproducing CI noise pending a failed-job rerun."
-        }
-      ]
+      "baselineFailures": []
     }
   },
   "acceptanceCriteria": [

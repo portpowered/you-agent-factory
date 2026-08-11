@@ -10282,3 +10282,21 @@
   - Tie every CI result to the exact commit that was tested; a docs-only bookkeeping push can supersede an in-progress workflow without inheriting its result.
   - Keep the PR body synchronized with `prd.json` after changing delivery-audit metadata, even when no product files changed.
 ---
+## [2026-08-11 04:05:16 -07:00] - btrc-p1-root-injection-006 current-head delivery follow-up
+- What was implemented
+  - Confirmed all six PRD stories remain marked `passes:true`; no unfinished story work or product-code change was required for this iteration.
+  - Audited PR #1857 through the GitHub REST API and thread-aware GraphQL query: there are no inline review threads, unresolved threads, formal reviews, or new actionable comments. Historical blocking findings are represented as addressed by later commits in the existing PR conversation.
+  - Refreshed `prd.json` to the implementation head `2cfefc60503adfa6a0e7b18bcc2257cbee9d26d5` and its current CI run `31484490779`, which is queued on that exact head.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `gh auth status` — authenticated with repository access.
+  - `git status --short --branch` — clean before this bookkeeping update; `origin/main` is an ancestor of the branch.
+  - PR #1857 — open, non-draft, mergeable, and named `btrc-p1-root-injection`; the PR body still needs refresh after this bookkeeping commit.
+  - Thread-aware GraphQL review audit — zero review threads, zero unresolved review threads, and zero formal reviews.
+  - CI run `31484490779` — pending with no jobs reported yet; superseded run `31482113491` was explicitly cancelled so current-head CI can proceed.
+- **Learnings for future iterations:**
+  - When all stories are complete, keep the iteration focused on exact-head delivery evidence and do not reopen product work solely because the PR has historical blocking comments that later commits already address.
+  - A queued current-head workflow can be held by a stale verification-policy run; cancel only the superseded run for the same PR before waiting for the current run.
+---
