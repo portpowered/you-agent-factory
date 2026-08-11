@@ -4516,3 +4516,16 @@
 - **Learnings for future iterations:**
   - When a broad functional lane fails on different timing-sensitive tests across retries, inspect the exact failed test and rerun only the failed jobs before widening an unrelated feature diff; the repository already records this as the preferred flake-handling pattern.
 ---
+
+## 2026-08-10 20:00 -07:00 - wsr-001-opening-record pushed-head CI confirmation
+- What was implemented
+  - Recorded the final pushed-head verification after the latest-main synchronization and progress handoff commit.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Head `4795b0d1c` — CI run `31453029741` is terminal and all required checks pass, including Backend Functional Coverage and Verification Policy.
+  - PR #1849 is open, non-draft, `CLEAN/MERGEABLE`, and targets `origin/main` at `aac04248d`.
+  - Thread-aware audit remains at 7 conversation comments, 0 formal reviews, and 0 unresolved/outdated inline threads; all three PRD stories remain `passes:true` and the PR body remains byte-identical to `prd.json`.
+- **Learnings for future iterations:**
+  - Treat the CI result on the pushed head, rather than the pre-push synchronization head, as the final handoff evidence.
+---
