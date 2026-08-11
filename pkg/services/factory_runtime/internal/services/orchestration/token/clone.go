@@ -1,6 +1,9 @@
 package token
 
-import "github.com/portpowered/infinite-you/pkg/services/work"
+import (
+	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+)
 
 // Clone returns a detached token copy.
 func Clone(value Token) Token {
@@ -28,6 +31,8 @@ func CloneColor(value Color) Color {
 	value.Relations = cloneRelations(value.Relations)
 	value.Content = work.CloneWorkContentParts(value.Content)
 	value.Payload = cloneBytes(value.Payload)
+	value.StructuredResult = jsonvalue.Clone(value.StructuredResult)
+	value.StructuredResultPresent = jsonvalue.Present(value.StructuredResult, value.StructuredResultPresent)
 	value.InvocationArguments = work.CloneInvocationArguments(value.InvocationArguments)
 	return value
 }
