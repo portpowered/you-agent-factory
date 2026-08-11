@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+
+	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 )
 
 // ErrMoveWorkRequestAlreadyApplied is the typed state-access failure returned
@@ -202,7 +204,37 @@ type WorkRequestEventWork struct {
 	TraceID                  string            `json:"traceId,omitempty"`
 	Content                  []WorkContentPart `json:"content,omitempty"`
 	Payload                  json.RawMessage   `json:"payload,omitempty"`
+	StructuredResult         any               `json:"structuredResult,omitempty"`
 	Tags                     map[string]string `json:"tags,omitempty"`
+	// StructuredResultPresent preserves the distinction between an absent
+	// result and a schema-valid JSON null. It is an in-process ownership fact,
+	// not a second public field.
+	StructuredResultPresent bool `json:"-"`
+}
+
+// MarshalJSON preserves an explicitly present structuredResult when its JSON
+// value is null while keeping the field omitted for older/unstructured events.
+func (value WorkRequestEventWork) MarshalJSON() ([]byte, error) {
+	type alias WorkRequestEventWork
+	return jsonvalue.MarshalOptionalField(alias(value), value.StructuredResult, value.StructuredResultPresent, "structuredResult")
+}
+
+// UnmarshalJSON restores structured-result presence for replay, including a
+// present JSON null.
+func (value *WorkRequestEventWork) UnmarshalJSON(data []byte) error {
+	type alias WorkRequestEventWork
+	var decoded alias
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	structured, present, err := jsonvalue.UnmarshalOptionalField(data, "structuredResult")
+	if err != nil {
+		return err
+	}
+	*value = WorkRequestEventWork(decoded)
+	value.StructuredResult = structured
+	value.StructuredResultPresent = present
+	return nil
 }
 
 // WorkEventState is the state reference embedded in the public Work event
@@ -374,7 +406,36 @@ type FactoryWorkItem struct {
 	Content                  []WorkContentPart `json:"content,omitempty"`
 	ParentID                 string            `json:"parentId,omitempty"`
 	PlaceID                  string            `json:"placeId,omitempty"`
+	StructuredResult         any               `json:"structuredResult,omitempty"`
 	Tags                     map[string]string `json:"tags,omitempty"`
+	// StructuredResultPresent preserves an explicitly stored JSON null without
+	// making absent results appear on older snapshots or API projections.
+	StructuredResultPresent bool `json:"-"`
+}
+
+// MarshalJSON preserves an explicitly present structuredResult when its JSON
+// value is null while keeping the field omitted for older/unstructured items.
+func (value FactoryWorkItem) MarshalJSON() ([]byte, error) {
+	type alias FactoryWorkItem
+	return jsonvalue.MarshalOptionalField(alias(value), value.StructuredResult, value.StructuredResultPresent, "structuredResult")
+}
+
+// UnmarshalJSON restores structured-result presence for persisted snapshots
+// and recordings, including a present JSON null.
+func (value *FactoryWorkItem) UnmarshalJSON(data []byte) error {
+	type alias FactoryWorkItem
+	var decoded alias
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	structured, present, err := jsonvalue.UnmarshalOptionalField(data, "structuredResult")
+	if err != nil {
+		return err
+	}
+	*value = FactoryWorkItem(decoded)
+	value.StructuredResult = structured
+	value.StructuredResultPresent = present
+	return nil
 }
 
 type FactoryRelation struct {

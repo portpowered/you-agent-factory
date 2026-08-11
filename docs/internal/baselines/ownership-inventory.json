@@ -1263,7 +1263,7 @@
       "fromOwner": "factory_definitions",
       "toOwner": "platform",
       "class": "external_effect",
-      "evidence": "pkg/services/factory_definitions/internal -> pkg/platform/logging"
+      "evidence": "pkg/services/factory_definitions/internal/contracts -> pkg/platform/jsonvalue"
     },
     {
       "fromOwner": "factory_definitions",
@@ -1411,7 +1411,7 @@
       "fromOwner": "factory_sessions",
       "toOwner": "platform",
       "class": "external_effect",
-      "evidence": "pkg/services/factory_sessions/internal/runtimehosting -> pkg/platform/httpserver"
+      "evidence": "pkg/services/factory_sessions/internal/execution -> pkg/platform/jsonvalue"
     },
     {
       "fromOwner": "factory_sessions",
@@ -1607,6 +1607,8 @@
       "fromOwner": "platform",
       "toOwner": "work",
       "class": "command",
+      "bidirectional": true,
+      "unresolved": true,
       "evidence": "pkg/platform/contentstaging -> pkg/services/work"
     },
     {
@@ -1683,7 +1685,7 @@
       "fromOwner": "recordings",
       "toOwner": "platform",
       "class": "external_effect",
-      "evidence": "pkg/services/recordings/internal/replay -> pkg/platform/replay"
+      "evidence": "pkg/services/recordings/internal/events -> pkg/platform/jsonvalue"
     },
     {
       "fromOwner": "recordings",
@@ -2017,6 +2019,14 @@
     },
     {
       "fromOwner": "work",
+      "toOwner": "platform",
+      "class": "external_effect",
+      "bidirectional": true,
+      "unresolved": true,
+      "evidence": "pkg/services/work -> pkg/platform/jsonvalue"
+    },
+    {
+      "fromOwner": "work",
       "toOwner": "recordings",
       "class": "event",
       "bidirectional": true,
@@ -2030,6 +2040,14 @@
       "bidirectional": true,
       "unresolved": true,
       "evidence": "pkg/services/work/transports/cli -> pkg/transports/cli/clihttp"
+    },
+    {
+      "fromOwner": "work",
+      "toOwner": "workers",
+      "class": "command",
+      "bidirectional": true,
+      "unresolved": true,
+      "evidence": "pkg/services/work/internal/services/state_access/wire -> pkg/services/workers"
     },
     {
       "fromOwner": "worker_sessions",
@@ -2103,7 +2121,7 @@
       "fromOwner": "workers",
       "toOwner": "platform",
       "class": "external_effect",
-      "evidence": "pkg/services/workers/internal -> pkg/platform/filesystem"
+      "evidence": "pkg/services/workers -> pkg/platform/jsonvalue"
     },
     {
       "fromOwner": "workers",
@@ -2123,6 +2141,8 @@
       "fromOwner": "workers",
       "toOwner": "work",
       "class": "command",
+      "bidirectional": true,
+      "unresolved": true,
       "evidence": "pkg/services/workers -> pkg/services/work"
     }
   ],
@@ -2588,6 +2608,12 @@
     },
     {
       "packagePath": "pkg/platform/internal/runtimeartifact",
+      "disposition": "retain",
+      "destination": "platform",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/platform/jsonvalue",
       "disposition": "retain",
       "destination": "platform",
       "destinationKind": "family"

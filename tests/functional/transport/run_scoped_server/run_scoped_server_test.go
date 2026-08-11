@@ -17,12 +17,14 @@ import (
 	"time"
 
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 const (
@@ -53,6 +55,9 @@ func TestRunScopedServerAndSiteOwnNamedAndFileInvocationLifecycles(t *testing.T)
 			homeDir := t.TempDir()
 			workingDirectory := t.TempDir()
 			var listenerStarts, listenerStops, browserCalls atomic.Int32
+			providerRunner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
+				Stdout: []byte("{\"decision\":\"accepted\",\"feedback\":\"\",\"output\":\"mock worker accepted\"}"),
+			})
 			process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
 				APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
 					listenerStarts.Add(1)
@@ -65,13 +70,13 @@ func TestRunScopedServerAndSiteOwnNamedAndFileInvocationLifecycles(t *testing.T)
 					browserCalls.Add(1)
 					return nil
 				},
+				ProviderCommandRunner: providerRunner,
 			})
 			if err != nil {
 				t.Fatalf("BuildProcess() error = %v", err)
 			}
 			environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 			factoryDir := initializeGoalFactory(t, process, environment, workingDirectory, homeDir)
-			mockWorkersPath := writeMockWorkersConfig(t)
 			selection := []string{"--named", goalFactoryName}
 			if test.file {
 				selection = []string{"--factory", filepath.Join(factoryDir, "factory.json")}
@@ -81,16 +86,24 @@ func TestRunScopedServerAndSiteOwnNamedAndFileInvocationLifecycles(t *testing.T)
 				mode = "--with-site"
 			}
 			args := append([]string{"you", "run"}, selection...)
-			args = append(args, "--with-mock-workers", mockWorkersPath, "--no-record", mode)
+			args = append(args,
+				"--executor-provider", "codex",
+				"--executor-model", "gpt-5-codex",
+				"--no-record", mode,
+			)
 			args = append(args, test.input...)
 			stdout, stderr := execute(
 				t, process, environment, workingDirectory, args, test.stdin,
 			)
-			if stderr != "" ||
-				!strings.Contains(stdout, "[0] factory started") ||
+			if !strings.Contains(stdout, "[0] factory started") ||
 				!strings.Contains(stdout, "--- primary result ---") ||
 				!strings.HasSuffix(stdout, wantInvocationResponse) {
 				t.Fatalf("invocation stdout=%q stderr=%q", stdout, stderr)
+			}
+			if !strings.Contains(stderr, "dispatch ") ||
+				!strings.Contains(stderr, "active at "+goalWorkstationName) ||
+				!strings.Contains(stderr, "worker ") {
+				t.Fatalf("invocation progress stderr=%q", stderr)
 			}
 			if listenerStarts.Load() != 1 || listenerStops.Load() != 1 {
 				t.Fatalf(
@@ -158,6 +171,76 @@ func TestRunScopedServerOwnsRawJavaScriptLifecycleAfterReadiness(t *testing.T) {
 				t.Fatalf("browser calls = %d, want %d", browserCalls.Load(), test.wantBrowser)
 			}
 		})
+	}
+}
+
+// TestRunScopedRawJavaScriptServerReportsUnavailableWorkerSessionOwner proves
+// the root-built direct-JavaScript HTTP host preserves the public structured
+// error when a route has no live Worker Sessions owner. Direct JavaScript
+// hosting intentionally binds only the durable Factory Sessions handler, so
+// this is the functional exception for the unavailable-owner composition
+// without constructing transporthttp.NewServer in a functional test.
+func TestRunScopedRawJavaScriptServerReportsUnavailableWorkerSessionOwner(t *testing.T) {
+	workingDirectory := t.TempDir()
+	workflowPath := filepath.Join(workingDirectory, "workflow.js")
+	if err := os.WriteFile(workflowPath, []byte(`return "hosted JavaScript";`), 0o600); err != nil {
+		t.Fatalf("write workflow: %v", err)
+	}
+
+	type probeResult struct {
+		status   int
+		response factoryapi.ErrorResponse
+		err      error
+	}
+	probes := make(chan probeResult, 1)
+	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
+			server := httptest.NewServer(request.Handler)
+			defer server.Close()
+
+			client := &http.Client{Timeout: 5 * time.Second}
+			response, requestErr := client.Get(server.URL + "/factory-sessions/~default/worker-sessions/worker-missing/events")
+			if requestErr != nil {
+				probes <- probeResult{err: requestErr}
+			} else {
+				defer response.Body.Close()
+				var payload factoryapi.ErrorResponse
+				decodeErr := json.NewDecoder(response.Body).Decode(&payload)
+				probes <- probeResult{status: response.StatusCode, response: payload, err: decodeErr}
+			}
+
+			if request.OnBound != nil {
+				request.OnBound(platformhttpserver.Binding{Port: request.Port})
+			}
+			<-ctx.Done()
+			return ctx.Err()
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+
+	homeDir := t.TempDir()
+	environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	stdout, stderr := execute(t, process, environment, workingDirectory, []string{
+		"you", "run", "--factory", workflowPath, "--no-record", "--with-server",
+	}, "")
+	if stderr != "" || !strings.Contains(stdout, "completed (SUCCEEDED)") {
+		t.Fatalf("JavaScript stdout=%q stderr=%q", stdout, stderr)
+	}
+
+	probe := <-probes
+	if probe.err != nil {
+		t.Fatalf("GET unavailable Worker Session route: %v", probe.err)
+	}
+	if probe.status != http.StatusInternalServerError {
+		t.Fatalf("unavailable Worker Session route status = %d, want %d", probe.status, http.StatusInternalServerError)
+	}
+	if probe.response.Code != factoryapi.ErrorResponseCodeINTERNALERROR {
+		t.Fatalf("unavailable Worker Session route error code = %q, want %q", probe.response.Code, factoryapi.ErrorResponseCodeINTERNALERROR)
+	}
+	if probe.response.Family != factoryapi.ErrorFamilyInternalServerError {
+		t.Fatalf("unavailable Worker Session route error family = %q, want %q", probe.response.Family, factoryapi.ErrorFamilyInternalServerError)
 	}
 }
 

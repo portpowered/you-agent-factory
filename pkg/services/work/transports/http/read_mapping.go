@@ -1,8 +1,10 @@
 package http
 
 import (
+	"encoding/json"
 	"errors"
 
+	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/optional"
@@ -86,6 +88,15 @@ func WorkReadModelToAPI(item work.ReadModel) factoryapi.Work {
 		Content:                  contentcontract.GeneratedPtrFromParts(item.Content),
 		Tags:                     optional.CopiedStringMapPtr(item.Tags),
 		StopSummary:              workStopSummaryToAPI(item.StopSummary),
+	}
+	if jsonvalue.Present(item.StructuredResult, item.StructuredResultPresent) {
+		if item.StructuredResult == nil {
+			// A non-nil RawMessage keeps JSON null present through generated
+			// interface{} fields that use omitempty.
+			result.StructuredResult = json.RawMessage("null")
+		} else {
+			result.StructuredResult = jsonvalue.Clone(item.StructuredResult)
+		}
 	}
 	if item.State != nil {
 		result.State = &factoryapi.WorkState{

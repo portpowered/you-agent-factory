@@ -210,9 +210,31 @@ func assertCodexCatalogFacts(t *testing.T, codex providers.Descriptor) {
 	if !slices.Contains(codex.Capabilities, providers.CapabilityPromptSubmission) {
 		t.Fatalf("codex capabilities = %#v, want prompt_submission", codex.Capabilities)
 	}
+	assertCapabilities(t, codex, []providers.Capability{
+		providers.CapabilityPromptSubmission,
+		providers.CapabilityImageInput,
+		providers.CapabilitySessionResume,
+		providers.CapabilityStructuredOutput,
+		providers.CapabilityNativeStreaming,
+		providers.CapabilityMessageSnapshots,
+		providers.CapabilityReasoningSummaries,
+		providers.CapabilityToolLifecycle,
+		providers.CapabilityToolOutputDeltas,
+		providers.CapabilityFileChanges,
+		providers.CapabilityPlans,
+		providers.CapabilityUsage,
+		providers.CapabilityStableItemIDs,
+	})
 	if codex.TechnicalSupportLevel != providers.TechnicalSupportProduction || codex.ImplementationAvailability != providers.ImplementationBundled {
 		t.Fatalf("codex publication posture = %q/%q, want production/bundled", codex.TechnicalSupportLevel, codex.ImplementationAvailability)
 	}
+	assertPrerequisiteNames(t, codex, []string{
+		"authentication/account-authentication",
+		"configuration/stdio",
+		"executable/codex",
+		"workspace/writable-workspace",
+	})
+	assertToolNames(t, codex, []string{"filesystem", "shell", "web_search"})
 	wantModels := []string{"gpt-5.6", "gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra"}
 	if len(codex.Models) != len(wantModels) {
 		t.Fatalf("codex models = %#v, want exact IDs %v", codex.Models, wantModels)
@@ -235,11 +257,20 @@ func assertCodexCatalogFacts(t *testing.T, codex providers.Descriptor) {
 
 func assertAntigravityCatalogFacts(t *testing.T, agy providers.Descriptor) {
 	t.Helper()
-	if len(agy.Models) != 11 {
-		t.Fatalf("AGY models = %d, want 11", len(agy.Models))
+	wantModels := []string{
+		"claude-opus-4-6-thinking", "claude-sonnet-4-6", "gemini-3.1-pro-high",
+		"gemini-3.1-pro-low", "gemini-3.5-flash-high", "gemini-3.5-flash-low",
+		"gemini-3.5-flash-medium", "gemini-3.6-flash-high", "gemini-3.6-flash-low",
+		"gemini-3.6-flash-medium", "gpt-oss-120b-medium",
+	}
+	if len(agy.Models) != len(wantModels) {
+		t.Fatalf("AGY models = %d, want %d", len(agy.Models), len(wantModels))
 		return
 	}
-	for _, model := range agy.Models {
+	for index, model := range agy.Models {
+		if model.ID != wantModels[index] {
+			t.Fatalf("AGY model[%d] = %q, want %q", index, model.ID, wantModels[index])
+		}
 		if len(model.Efforts) != 0 {
 			t.Fatalf("AGY %s efforts = %v, want explicit empty model-encoded effort list", model.ID, model.Efforts)
 		}
@@ -250,11 +281,23 @@ func assertAntigravityCatalogFacts(t *testing.T, agy providers.Descriptor) {
 	if len(agy.KnownLimits) != 3 || agy.KnownLimits[0].Name != "add_dir_workspace" || agy.KnownLimits[1].Name != "effort_selection" || agy.KnownLimits[2].Name != "print_timeout" {
 		t.Fatalf("AGY known limits = %#v, want stable name order", agy.KnownLimits)
 	}
+	assertCapabilities(t, agy, []providers.Capability{
+		providers.CapabilityPromptSubmission,
+		providers.CapabilitySessionResume,
+		providers.CapabilityMessageSnapshots,
+	})
 	assertAntigravityPrerequisites(t, agy)
+	assertToolNames(t, agy, []string{"filesystem", "image_generation", "shell"})
 }
 
 func assertAntigravityPrerequisites(t *testing.T, agy providers.Descriptor) {
 	t.Helper()
+	assertPrerequisiteNames(t, agy, []string{
+		"authentication/account-authentication",
+		"configuration/stdio",
+		"executable/agy",
+		"workspace/writable-workspace",
+	})
 	prerequisiteKinds := make(map[providers.PrerequisiteKind]bool, len(agy.Prerequisites))
 	for _, prerequisite := range agy.Prerequisites {
 		prerequisiteKinds[prerequisite.Kind] = true
@@ -291,10 +334,59 @@ func assertClaudeCatalogFacts(t *testing.T, claude providers.Descriptor) {
 		assertProviderModality(t, "Claude audio input", model, providers.ModalityAudio, providers.ModalityUnsupported, providers.ModalityTransportNone)
 		assertProviderModality(t, "Claude video input", model, providers.ModalityVideo, providers.ModalityUnsupported, providers.ModalityTransportNone)
 	}
+	assertCapabilities(t, claude, []providers.Capability{
+		providers.CapabilityPromptSubmission,
+		providers.CapabilitySessionResume,
+		providers.CapabilityNativeStreaming,
+		providers.CapabilityMessageDeltas,
+		providers.CapabilityMessageSnapshots,
+		providers.CapabilityToolLifecycle,
+		providers.CapabilityToolOutputDeltas,
+		providers.CapabilityStableItemIDs,
+	})
+	assertPrerequisiteNames(t, claude, []string{
+		"authentication/account-authentication",
+		"configuration/stdio",
+		"executable/claude",
+		"workspace/writable-workspace",
+	})
+	assertToolNames(t, claude, []string{"filesystem", "shell", "web_search"})
 	for _, prerequisite := range claude.Prerequisites {
 		if prerequisite.Status != providers.PrerequisiteRequired {
 			t.Fatalf("Claude prerequisite %s/%s status = %q, want required", prerequisite.Kind, prerequisite.Name, prerequisite.Status)
 		}
+	}
+}
+
+func assertCapabilities(t *testing.T, descriptor providers.Descriptor, want []providers.Capability) {
+	t.Helper()
+	if !slices.Equal(descriptor.Capabilities, want) {
+		t.Fatalf("%s capabilities = %v, want %v", descriptor.ID, descriptor.Capabilities, want)
+	}
+}
+
+func assertPrerequisiteNames(t *testing.T, descriptor providers.Descriptor, want []string) {
+	t.Helper()
+	got := make([]string, len(descriptor.Prerequisites))
+	for index, prerequisite := range descriptor.Prerequisites {
+		got[index] = string(prerequisite.Kind) + "/" + prerequisite.Name
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("%s prerequisites = %v, want %v", descriptor.ID, got, want)
+	}
+}
+
+func assertToolNames(t *testing.T, descriptor providers.Descriptor, want []string) {
+	t.Helper()
+	got := make([]string, len(descriptor.Tools))
+	for index, tool := range descriptor.Tools {
+		got[index] = tool.Name
+		if tool.Support != providers.ToolSupported {
+			t.Fatalf("%s tool %q support = %q, want supported", descriptor.ID, tool.Name, tool.Support)
+		}
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("%s tools = %v, want %v", descriptor.ID, got, want)
 	}
 }
 

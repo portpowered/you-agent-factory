@@ -32,34 +32,37 @@ type WatchConfig struct {
 // WatchTransition is the transport-neutral transition data rendered by one
 // Work watch NDJSON line.
 type WatchTransition struct {
-	SessionID     string
-	EventID       string
-	Sequence      int64
-	EventTime     time.Time
-	WorkID        string
-	WorkTypeName  string
-	FromState     string
-	ToState       string
-	Source        string
-	Terminal      bool
-	TriggerWorkID string
-	Reason        string
+	SessionID               string
+	EventID                 string
+	Sequence                int64
+	EventTime               time.Time
+	WorkID                  string
+	WorkTypeName            string
+	FromState               string
+	ToState                 string
+	Source                  string
+	Terminal                bool
+	TriggerWorkID           string
+	Reason                  string
+	StructuredResult        any
+	StructuredResultPresent bool
 }
 
 type watchLine struct {
-	SchemaVersion string    `json:"schemaVersion"`
-	SessionID     string    `json:"sessionId"`
-	EventID       string    `json:"eventId"`
-	Sequence      int64     `json:"sequence"`
-	EventTime     time.Time `json:"eventTime"`
-	WorkID        string    `json:"workId"`
-	WorkTypeName  string    `json:"workTypeName"`
-	FromState     string    `json:"fromState"`
-	ToState       string    `json:"toState"`
-	Source        string    `json:"source"`
-	Terminal      bool      `json:"terminal"`
-	TriggerWorkID string    `json:"triggerWorkId,omitempty"`
-	Reason        string    `json:"reason,omitempty"`
+	SchemaVersion    string          `json:"schemaVersion"`
+	SessionID        string          `json:"sessionId"`
+	EventID          string          `json:"eventId"`
+	Sequence         int64           `json:"sequence"`
+	EventTime        time.Time       `json:"eventTime"`
+	WorkID           string          `json:"workId"`
+	WorkTypeName     string          `json:"workTypeName"`
+	FromState        string          `json:"fromState"`
+	ToState          string          `json:"toState"`
+	Source           string          `json:"source"`
+	Terminal         bool            `json:"terminal"`
+	TriggerWorkID    string          `json:"triggerWorkId,omitempty"`
+	Reason           string          `json:"reason,omitempty"`
+	StructuredResult json.RawMessage `json:"structuredResult,omitempty"`
 }
 
 // ValidateWatchConfig validates command-owned options before a stream is
@@ -88,20 +91,25 @@ func RenderWatchTransition(output io.Writer, transition WatchTransition) error {
 	if err := validateWatchTransition(transition); err != nil {
 		return fmt.Errorf("render work watch transition: %w", err)
 	}
+	structuredResult, err := structuredResultJSON(transition.StructuredResult, transition.StructuredResultPresent)
+	if err != nil {
+		return fmt.Errorf("render work watch transition: encode structuredResult: %w", err)
+	}
 	payload, err := json.Marshal(watchLine{
-		SchemaVersion: WatchSchemaVersion,
-		SessionID:     transition.SessionID,
-		EventID:       transition.EventID,
-		Sequence:      transition.Sequence,
-		EventTime:     transition.EventTime,
-		WorkID:        transition.WorkID,
-		WorkTypeName:  transition.WorkTypeName,
-		FromState:     transition.FromState,
-		ToState:       transition.ToState,
-		Source:        transition.Source,
-		Terminal:      transition.Terminal,
-		TriggerWorkID: transition.TriggerWorkID,
-		Reason:        transition.Reason,
+		SchemaVersion:    WatchSchemaVersion,
+		SessionID:        transition.SessionID,
+		EventID:          transition.EventID,
+		Sequence:         transition.Sequence,
+		EventTime:        transition.EventTime,
+		WorkID:           transition.WorkID,
+		WorkTypeName:     transition.WorkTypeName,
+		FromState:        transition.FromState,
+		ToState:          transition.ToState,
+		Source:           transition.Source,
+		Terminal:         transition.Terminal,
+		TriggerWorkID:    transition.TriggerWorkID,
+		Reason:           transition.Reason,
+		StructuredResult: json.RawMessage(structuredResult),
 	})
 	if err != nil {
 		return fmt.Errorf("encode work watch transition: %w", err)

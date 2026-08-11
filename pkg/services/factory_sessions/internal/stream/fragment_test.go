@@ -62,3 +62,19 @@ func TestMapProgressFragment_PreservesOnlyProjectableProgressPhases(t *testing.T
 		})
 	}
 }
+
+func TestMapProgressFragment_PreservesProviderWithoutSessionReference(t *testing.T) {
+	t.Parallel()
+
+	event := stream.MapProgressFragment(workers.ProgressFragment{
+		Kind:     workers.ProgressFragmentKind,
+		Type:     "message.completed",
+		Provider: "antigravity",
+	})
+	if event.Provider != "antigravity" {
+		t.Fatalf("event.Provider = %q, want antigravity", event.Provider)
+	}
+	if event.ProviderSessionRef != nil {
+		t.Fatalf("event.ProviderSessionRef = %#v, want nil", event.ProviderSessionRef)
+	}
+}

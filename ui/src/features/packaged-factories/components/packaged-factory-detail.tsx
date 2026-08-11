@@ -1,6 +1,5 @@
-import { useId, useState } from "react";
-
 import { Heading, Text } from "@you-agent-factory/components/primitives";
+import { useId, useState } from "react";
 import { AlertPanel, AlertPanelText } from "../../../components/ui/alert-panel";
 import { CodePanel } from "../../../components/ui/code-panel";
 import { DashboardActionButton } from "../../../components/ui/dashboard-action-button";

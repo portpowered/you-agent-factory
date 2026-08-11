@@ -168,8 +168,19 @@ func TestRunAllowsRecordedPeerServiceMigrationEdge(t *testing.T) {
 	if err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, stdout, stderr); err != nil {
 		t.Fatalf("run() error = %v, want migration baseline edge allowed; stderr=%q", err, stderr.String())
 	}
+	if strings.Contains(stdout.String(), "active peer-service root-contract migration baseline") {
+		t.Fatalf("run() stdout = %q, default output must hide migration baseline summaries", stdout.String())
+	}
+
+	stdout.Reset()
+	if err := run(config{root: repoRoot, packageRoot: defaultScanRoot, all: true}, stdout, stderr); err != nil {
+		t.Fatalf("run(--all) error = %v, want migration baseline edge allowed; stderr=%q", err, stderr.String())
+	}
 	if !strings.Contains(stdout.String(), "active peer-service root-contract migration baseline: 1 edge(s)") {
-		t.Fatalf("run() stdout = %q, want active migration baseline summary", stdout.String())
+		t.Fatalf("run(--all) stdout = %q, want active migration baseline summary", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), filePath) || !strings.Contains(stdout.String(), importPath) {
+		t.Fatalf("run(--all) stdout = %q, want the recorded peer-service diagnostic", stdout.String())
 	}
 }
 
@@ -259,8 +270,19 @@ func TestRunAllowsRecordedTestServiceInternalAndRejectsStaleEntry(t *testing.T) 
 		if err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, stdout, stderr); err != nil {
 			t.Fatalf("run() error = %v, want recorded migration edge allowed; stderr=%q", err, stderr.String())
 		}
+		if strings.Contains(stdout.String(), "active test service-internal migration baseline") {
+			t.Fatalf("run() stdout = %q, default output must hide migration baseline summaries", stdout.String())
+		}
+
+		stdout.Reset()
+		if err := run(config{root: repoRoot, packageRoot: defaultScanRoot, all: true}, stdout, stderr); err != nil {
+			t.Fatalf("run(--all) error = %v, want recorded migration edge allowed; stderr=%q", err, stderr.String())
+		}
 		if !strings.Contains(stdout.String(), "active test service-internal migration baseline: 1 edge(s)") {
-			t.Fatalf("run() stdout = %q, want active test baseline summary", stdout.String())
+			t.Fatalf("run(--all) stdout = %q, want active test baseline summary", stdout.String())
+		}
+		if !strings.Contains(stdout.String(), filePath) || !strings.Contains(stdout.String(), importPath) {
+			t.Fatalf("run(--all) stdout = %q, want the recorded test-service diagnostic", stdout.String())
 		}
 	})
 	t.Run("stale", func(t *testing.T) {

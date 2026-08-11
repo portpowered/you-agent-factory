@@ -65,20 +65,16 @@ func newHumanFactoryEventRenderer(
 	cfg FactoryEventRendererConfig,
 	presentation factoryvisualization.ResponsePresentation,
 ) *humanFactoryEventRenderer {
-	formatter := formatHumanFactoryEvent
-	if cfg.Color {
-		formatter = formatColorHumanFactoryEvent
-	}
 	return &humanFactoryEventRenderer{stream: presentation.OpenBestEffortFactoryEventStream(
 		cfg.Output,
-		formatter,
+		newHumanFactoryEventFormatter(cfg.Color),
 	), progress: newHumanWorkerProgressRenderer(cfg.ProgressOutput, cfg.ProgressIsTTY, cfg.ProgressTicks)}
 }
 
 func (renderer *humanFactoryEventRenderer) PresentFactoryEvents(events []interfaces.FactoryEvent) {
 	if renderer != nil {
-		renderer.stream.PresentFactoryEvents(events)
 		renderer.progress.PresentFactoryEvents(events)
+		renderer.stream.PresentFactoryEvents(events)
 	}
 }
 

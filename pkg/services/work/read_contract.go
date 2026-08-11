@@ -49,10 +49,14 @@ type ReadModel struct {
 	PreviousChainingTraceIDs []string
 	TraceID                  string
 	Content                  []WorkContentPart
-	Tags                     map[string]string
-	Relations                []ReadRelation
-	StopSummary              *StopSummary
-	ExpectedArtifacts        []ExpectedArtifactReadModel
+	StructuredResult         any
+	// StructuredResultPresent preserves an explicitly stored JSON null in the
+	// detached read contract while keeping absent results distinguishable.
+	StructuredResultPresent bool
+	Tags                    map[string]string
+	Relations               []ReadRelation
+	StopSummary             *StopSummary
+	ExpectedArtifacts       []ExpectedArtifactReadModel
 }
 
 // ExpectedArtifactDeclaration is the detached, compiled form of one authored

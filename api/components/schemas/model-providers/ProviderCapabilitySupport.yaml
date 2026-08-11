@@ -1,0 +1,7 @@
+type: string
+description: Evidence state shared by harness, modality, and tool capability facts.
+enum:
+  - supported
+  - unsupported
+  - conditional
+  - unknown
