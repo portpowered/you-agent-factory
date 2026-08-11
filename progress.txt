@@ -4032,3 +4032,23 @@
   - Keep natural-language product terms separate from exact contract literals, and give both records an owner when authors need to know which spelling is protected.
   - Explicit `null` values in `approvedForms` make non-applicable plural and verb forms reviewable instead of relying on omitted keys.
 ---
+
+## 2026-08-10 20:08 -07:00 - prose-standard-and-terms-003
+- What was implemented
+  - Connected the normative writing standard, versioned terminology register, and embedded manual review checklist from the standards index.
+  - Added a direct terminology-register link in the technical-terms guidance and made the checklist’s sentence-level, contract-meaning, and review-boundary expectations explicit.
+  - Kept the story documentation-only: no prose checker, baseline, CI enforcement, generated artifact, CLI manifest change, or customer-corpus rewrite was added.
+- Files changed
+  - `docs/internal/standards/STANDARDS.md`
+  - `docs/internal/standards/writing/customer-technical-writing-standard.md`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `make typecheck` passed on 2026-08-10.
+  - Markdown links resolve to the writing standard, terminology register, architecture data model, and official ASD-STE100 references; the manual-checklist index link resolves to the standard’s checklist heading.
+  - `prd.json` parses with all three stories marked `passes:true`.
+  - `git diff --check` passed; no code, generated artifact, or customer-corpus file changed.
+- **Learnings for future iterations:**
+  - Keep the standards index focused on discoverability: link the normative writing entry point first, then its structured register and embedded manual checklist.
+  - When a checklist is embedded in a normative standard, expose its heading anchor from the index so reviewers can reach the manual-review contract directly.
+---

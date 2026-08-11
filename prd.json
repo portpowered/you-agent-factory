@@ -67,8 +67,8 @@
         "Typecheck passes"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Connected the normative writing standard, versioned terminology register, and embedded manual review checklist from docs/internal/standards/STANDARDS.md. The standard now links directly to the register, architecture data model, and official ASD-STE100 references; the checklist explicitly covers vocabulary and meaning, one subject or instruction per sentence, justified passive voice, single-topic paragraphs, technical and contract meaning, shipped CLI/public-schema examples, warnings, destructive instructions, failure recovery, exceptions, and the deterministic-versus-human review boundary. No checker, baseline, CI enforcement, generated artifact, CLI manifest change, or customer-corpus rewrite was added. `make typecheck` passed on 2026-08-10."
     }
   ]
 }

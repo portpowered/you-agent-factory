@@ -143,8 +143,11 @@ the same capitalization for the same meaning. Use an approved plural or verb
 form when the term record provides one.
 
 Define a term on first use when a reader could confuse it with an ordinary
-English word or with another product concept. Do not introduce an internal
-implementation term as if it were a customer resource. Terms such as `CPN`,
+English word or with another product concept. Use the [customer technical
+terms register](./customer-technical-terms.yaml) for canonical spelling,
+approved forms, discouraged alternatives, valid surfaces, and the owner of
+each meaning. Do not introduce an internal implementation term as if it were a
+customer resource. Terms such as `CPN`,
 `place`, `transition`, `marking`, and `token` belong only in material marked
 internal or implementation-focused unless a public contract explicitly
 exposes one of them.
@@ -376,6 +379,8 @@ not applicable only when the reviewer records why.
 ### Sentence and paragraph shape
 
 - [ ] Procedural sentences contain no more than 20 natural-language words.
+- [ ] Each sentence has one clear subject or instruction; unrelated subjects
+      are not joined into one sentence.
 - [ ] Each procedural sentence has one instruction unless simultaneous action
       is necessary.
 - [ ] Procedures use imperative verbs, state necessary conditions first, and
@@ -392,6 +397,8 @@ not applicable only when the reviewer records why.
 - [ ] Protected literals remain exact and come from the correct source.
 - [ ] Natural-language comments remain understandable even when they are
       adjacent to protected code.
+- [ ] Technical and contract meaning remains unchanged outside approved source
+      or owner decisions.
 - [ ] Examples match shipped CLI behavior, API methods and routes, public
       schemas, identifiers, statuses, and error codes.
 - [ ] Warnings identify the risk and affected object precisely.
