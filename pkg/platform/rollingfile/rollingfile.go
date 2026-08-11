@@ -231,8 +231,8 @@ func (w *Writer) cleanBackups() error {
 			baseName: parsed.baseName, timestamp: parsed.timestamp,
 		})
 	}
-	sort.Slice(backups, func(i, j int) bool {
-		return backups[i].timestamp.Before(backups[j].timestamp)
+	sort.SliceStable(backups, func(i, j int) bool {
+		return backups[i].timestamp.After(backups[j].timestamp)
 	})
 
 	remove := make(map[string]struct{})

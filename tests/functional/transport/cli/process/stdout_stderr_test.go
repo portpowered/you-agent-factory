@@ -14,6 +14,13 @@ import (
 
 const successStdoutPrimaryResult = "mock worker accepted"
 
+// These tests intentionally use the CLI's serialized --with-mock-workers
+// fixture. ProviderCommandRunner is an in-process edges.Edges dependency and
+// cannot enter the separately built `you` executable; using it would move the
+// assertions off the stdout/stderr and exit-code process boundary this cell
+// exists to prove. The fixture supplies deterministic provider-shaped results
+// inside that real child process without weakening the public stream checks.
+
 // TestCLISuccessWritesPrimaryResultOnlyToStdout proves a successful one-shot
 // built you CLI run writes the primary invocation result to stdout only and
 // does not mix diagnostics, lifecycle chatter, or other non-result noise onto

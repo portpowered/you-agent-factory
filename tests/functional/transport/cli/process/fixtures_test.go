@@ -41,6 +41,13 @@ func initializeOperatorConfig(
 	return operatorConfigOutcome{ConfigPath: configPath}
 }
 
+// Functional-test construction exception: this package invokes a separately
+// built `you` executable to prove OS process, pipe, signal, and exit behavior.
+// ProviderCommandRunner is an edges.Edges dependency in the parent test
+// process and cannot cross that executable boundary, so these serialized
+// --with-mock-workers fixtures are the deterministic child-process seam for
+// the stream and lifecycle assertions below. They do not replace provider-edge
+// coverage for in-process root.BuildProcess scenarios.
 func writeAcceptingGoalMockWorkers(t *testing.T) string {
 	t.Helper()
 
