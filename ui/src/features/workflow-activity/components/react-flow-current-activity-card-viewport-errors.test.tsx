@@ -119,57 +119,18 @@ const importController: CurrentActivityImportController = {
   onDrop: vi.fn(),
 };
 
-const DEFAULT_GRAPH_RECT = {
-  bottom: 720,
+const DEFAULT_VIEWPORT_MEASUREMENT = {
   height: 720,
-  left: 0,
-  right: 1280,
-  top: 0,
+  ready: true,
   width: 1280,
-  x: 0,
-  y: 0,
-  toJSON: () => ({}),
-} as DOMRect;
+} as const;
 
 afterEach(() => {
   cleanup();
   reactFlowErrorToReport = null;
 });
 
-// biome-ignore lint/complexity/noExcessiveLinesPerFunction: React Flow error coverage keeps the viewport bootstrap setup and endpoint assertions together.
 describe("CurrentActivityGraphViewport React Flow errors", () => {
-  const originalBoundingClientRect =
-    HTMLElement.prototype.getBoundingClientRect;
-  const originalResizeObserver = globalThis.ResizeObserver;
-
-  beforeEach(() => {
-    HTMLElement.prototype.getBoundingClientRect = () => DEFAULT_GRAPH_RECT;
-    globalThis.ResizeObserver = class {
-      public constructor(private readonly callback: ResizeObserverCallback) {}
-
-      public disconnect(): void {}
-
-      public observe(target: Element): void {
-        this.callback(
-          [
-            {
-              contentRect: DEFAULT_GRAPH_RECT,
-              target,
-            } as ResizeObserverEntry,
-          ],
-          this as unknown as ResizeObserver,
-        );
-      }
-
-      public unobserve(): void {}
-    } as unknown as typeof ResizeObserver;
-  });
-
-  afterEach(() => {
-    HTMLElement.prototype.getBoundingClientRect = originalBoundingClientRect;
-    globalThis.ResizeObserver = originalResizeObserver;
-  });
-
   it("throws when React Flow reports an edge endpoint handle mismatch", () => {
     reactFlowErrorToReport = {
       errorId: "008",
@@ -328,6 +289,7 @@ function renderViewport({
       }}
       edges={edges}
       flowContainerRef={flowContainerRef}
+      viewportMeasurement={DEFAULT_VIEWPORT_MEASUREMENT}
       handleNodesChange={vi.fn()}
       hasPendingChanges={false}
       layoutControls={{

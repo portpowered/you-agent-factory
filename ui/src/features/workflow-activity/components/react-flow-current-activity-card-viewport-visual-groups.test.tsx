@@ -110,51 +110,13 @@ const visualGroupControls = {
   staleMemberNodeIds: [],
 };
 
-const DEFAULT_GRAPH_RECT = {
-  bottom: 720,
+const DEFAULT_VIEWPORT_MEASUREMENT = {
   height: 720,
-  left: 0,
-  right: 1280,
-  top: 0,
+  ready: true,
   width: 1280,
-  x: 0,
-  y: 0,
-  toJSON: () => ({}),
-} as DOMRect;
+} as const;
 
 describe("CurrentActivityGraphViewport visual groups", () => {
-  const originalBoundingClientRect =
-    HTMLElement.prototype.getBoundingClientRect;
-  const originalResizeObserver = globalThis.ResizeObserver;
-
-  beforeEach(() => {
-    HTMLElement.prototype.getBoundingClientRect = () => DEFAULT_GRAPH_RECT;
-    globalThis.ResizeObserver = class {
-      public constructor(private readonly callback: ResizeObserverCallback) {}
-
-      public disconnect(): void {}
-
-      public observe(target: Element): void {
-        this.callback(
-          [
-            {
-              contentRect: DEFAULT_GRAPH_RECT,
-              target,
-            } as ResizeObserverEntry,
-          ],
-          this as unknown as ResizeObserver,
-        );
-      }
-
-      public unobserve(): void {}
-    } as unknown as typeof ResizeObserver;
-  });
-
-  afterEach(() => {
-    HTMLElement.prototype.getBoundingClientRect = originalBoundingClientRect;
-    globalThis.ResizeObserver = originalResizeObserver;
-  });
-
   it("renders visual group overlays while editing and hides them in observer mode", async () => {
     const { rerender } = renderVisualGroupViewport({
       editorMode: true,
@@ -242,6 +204,7 @@ function buildVisualGroupViewportProps({
     },
     edges: [] as Edge[],
     flowContainerRef,
+    viewportMeasurement: DEFAULT_VIEWPORT_MEASUREMENT,
     handleNodesChange: vi.fn(),
     hasPendingChanges: false,
     layoutControls: {

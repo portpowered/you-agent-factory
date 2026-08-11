@@ -12,6 +12,12 @@ import {
   useWorkflowTopologyAsyncCache,
 } from "./workflow-topology-async-cache";
 
+export type CurrentActivityGraphLayoutBuilder = (
+  factory: NonNullable<DashboardSnapshot["factory"]>,
+  hiddenNodeClasses: ReadonlySet<FactoryGraphNodeKind>,
+  visibilityPreset: FactoryGraphEditorVisibilityPreset,
+) => Promise<GraphLayout>;
+
 const GRAPH_LAYOUT_CACHE = createWorkflowTopologyAsyncCache<GraphLayout>();
 
 export function resetCurrentActivityGraphLayoutCacheForTests(): void {
@@ -25,6 +31,7 @@ export function useCurrentActivityGraphLayoutForFactory(
   factoryOverride?: DashboardSnapshot["factory"] | null,
   hiddenNodeClasses: ReadonlySet<FactoryGraphNodeKind> = new Set(),
   visibilityPreset: FactoryGraphEditorVisibilityPreset = "all",
+  buildLayout: CurrentActivityGraphLayoutBuilder = buildCurrentActivityGraphLayoutFromFactory,
 ) {
   const factory =
     factoryOverride === undefined ? snapshot.factory : factoryOverride;
@@ -50,12 +57,12 @@ export function useCurrentActivityGraphLayoutForFactory(
 
   return useWorkflowTopologyAsyncCache({
     cache: GRAPH_LAYOUT_CACHE,
-    dependencies: [layoutSource],
+    dependencies: [buildLayout, layoutSource],
     fallbackValue: EMPTY_GRAPH_LAYOUT,
     initialValue: EMPTY_GRAPH_LAYOUT,
     loadLayout: () =>
       layoutSource.kind === "factory"
-        ? buildCurrentActivityGraphLayoutFromFactory(
+        ? buildLayout(
             layoutSource.factory,
             hiddenNodeClasses,
             layoutSource.visibilityPreset,
