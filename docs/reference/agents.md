@@ -119,8 +119,10 @@ Before `you submit` or `you submit batch`, confirm a factory service is listenin
 
 1. **`you session list`** (primary) — calls `GET /factory-sessions` on the running host
    (default `http://localhost:7437`). Empty table means no open sessions; connection refused
-   means start a listening service with `you server` or a server-enabled run such as
-   `you run --continuously --with-server`.
+   means start a listening service with `you server --listen <host:port>` or a
+   server-enabled run such as `you run --continuously --with-server`. Omit
+   `--listen` for the default local bind; an explicit local `--server` is only
+   a warned compatibility path.
 2. **`you factory query`** — active factory definition for the selected session when you need
    the loaded factory name before `--session` on submit or work commands.
 3. **Deeper checks** — status API fields, dashboard URL, and continuous run modes: `you docs sessions`.

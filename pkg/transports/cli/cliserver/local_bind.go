@@ -3,12 +3,13 @@ package cliserver
 import (
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
 	"strconv"
 	"strings"
 )
 
-// LocalBindTarget is the host and TCP port derived from a local --server URI for you run.
+// LocalBindTarget is the host and TCP port selected for a local listener.
 type LocalBindTarget struct {
 	Host string
 	Port int
@@ -50,6 +51,37 @@ func LocalBindTargetFromServer(server string) (LocalBindTarget, error) {
 	return LocalBindTargetFromBase(base)
 }
 
+// LocalBindTargetFromListen resolves the explicit host:port syntax accepted by
+// listener-owning CLI commands. Unlike the legacy --server compatibility path,
+// --listen requires a non-zero port because it is an exact bind request.
+func LocalBindTargetFromListen(listen string) (LocalBindTarget, error) {
+	trimmed := strings.TrimSpace(listen)
+	if trimmed == "" {
+		return LocalBindTarget{}, &LocalBindError{Cause: fmt.Errorf(
+			"--listen address is required (use --listen 127.0.0.1:7437)",
+		)}
+	}
+	hostname, portText, err := net.SplitHostPort(trimmed)
+	if err != nil {
+		return LocalBindTarget{}, &LocalBindError{Cause: fmt.Errorf(
+			"invalid --listen address %q: expected a local host:port such as 127.0.0.1:7437: %w",
+			listen, err,
+		)}
+	}
+	host, err := localBindHostnameFor("--listen", hostname)
+	if err != nil {
+		return LocalBindTarget{}, &LocalBindError{Cause: err}
+	}
+	port, err := strconv.Atoi(portText)
+	if err != nil || port <= 0 || port > 65535 {
+		return LocalBindTarget{}, &LocalBindError{Cause: fmt.Errorf(
+			"invalid --listen port %q: a non-zero TCP port between 1 and 65535 is required",
+			portText,
+		)}
+	}
+	return LocalBindTarget{Host: host, Port: port}, nil
+}
+
 // LocalBindTargetFromBase derives a local bind host and TCP port from a validated base URI.
 func LocalBindTargetFromBase(base Base) (LocalBindTarget, error) {
 	host, err := localBindHostname(base.URL.Hostname())
@@ -64,14 +96,18 @@ func LocalBindTargetFromBase(base Base) (LocalBindTarget, error) {
 }
 
 func localBindHostname(hostname string) (string, error) {
+	return localBindHostnameFor("server", hostname)
+}
+
+func localBindHostnameFor(source, hostname string) (string, error) {
 	normalized := strings.ToLower(strings.TrimSpace(hostname))
 	switch normalized {
 	case "localhost", "127.0.0.1", "::1":
 		return normalized, nil
 	default:
 		return "", fmt.Errorf(
-			"server host %q is not a local bind target; you run only supports local hosts such as localhost or 127.0.0.1 (use --server http://localhost:7437)",
-			hostname,
+			"%s host %q is not a local bind target; use a loopback host such as localhost or 127.0.0.1",
+			source, hostname,
 		)
 	}
 }

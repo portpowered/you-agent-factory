@@ -24,6 +24,7 @@ const (
 	CurrentFactoryInvalidCode       = "CURRENT_FACTORY_INVALID"
 	InvocationOutputConflictCode    = "INVOCATION_OUTPUT_CONFLICT"
 	InvocationOutputUnsupportedCode = "INVOCATION_OUTPUT_UNSUPPORTED"
+	RemoteLocalHostingConflictCode  = "REMOTE_LOCAL_HOSTING_CONFLICT"
 	ServerBindFailedCode            = "SERVER_BIND_FAILED"
 )
 
@@ -138,7 +139,8 @@ func newInvocationErrorResponse(code, message string) factoryapi.ErrorResponse {
 		family = factoryapi.ErrorFamilyNotFound
 	case code == CurrentFactoryInvalidCode ||
 		code == InvocationOutputConflictCode ||
-		code == InvocationOutputUnsupportedCode:
+		code == InvocationOutputUnsupportedCode ||
+		code == RemoteLocalHostingConflictCode:
 		family = factoryapi.ErrorFamilyBadRequest
 	}
 	return factoryapi.ErrorResponse{

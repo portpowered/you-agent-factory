@@ -30,6 +30,7 @@ import (
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/initsetup"
+	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
@@ -62,6 +63,12 @@ func provideStandardCLIHTTPProtocol() (standardCLIHTTPProtocol, error) {
 		return standardCLIHTTPProtocol{}, fmt.Errorf("build standard CLI HTTP protocol: %w", err)
 	}
 	return standardCLIHTTPProtocol{Protocol: protocol, timeout: standardCLIHTTPTimeout}, nil
+}
+
+func provideRemoteInvocationOperation(
+	transport standardCLIHTTPProtocol,
+) runcli.RemoteInvocationOperation {
+	return runcli.NewRemoteInvocation(transport.Protocol)
 }
 
 func provideExtendedCLIHTTPProtocol() (extendedCLIHTTPProtocol, error) {

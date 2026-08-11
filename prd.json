@@ -1,105 +1,95 @@
 {
-  "project": "Split Factory Sessions Fake-Service Runtime Tests into Focused Files",
-  "branchName": "thr-split-fake-service-runtime-tests",
-  "description": "Mechanically reorganize the two giant Factory Sessions execution test files into behavior-focused package-local files so maintainers and queued BTRC/WSE lanes can understand and extend coverage with less context, while preserving every test, assertion, runtime outcome, and coverage value exactly.",
+  "project": "DWRO S1 — Explicit Remote Placement and Listener Selection",
+  "branchName": "dwro-s1-remote-placement-flags",
+  "description": "Implement story S1 of Direct Worker and Remote Operations by adding persistent root --remote and authored command placement capabilities, dispatching one normalized request through either the local service or exactly the selected --server endpoint without fallback, introducing --listen for local binds with a warned legacy compatibility path, and rejecting documented conflicts with run --with-server and run --with-site.",
   "context": {
-    "customerAsk": "Land a move-only split of fake_service_runtime_test.go and fake_service_test.go before queued WSE lanes begin changing the package. Keep the tests in the same package, group them by observed behavior, centralize shared test helpers without duplication, preserve the identical test inventory and coverage, and keep every resulting file at or below approximately 1,200 lines.",
-    "problem": "The package's two largest test files contain more than 6,500 lines spanning unrelated execution behaviors. They consume maintainer and agent context, slow comprehension, increase bad-edit risk, and will create avoidable churn in the in-flight BTRC/WSE program.",
-    "solution": "Capture an authoritative test-list and coverage baseline, then move whole tests and unchanged helpers into focused construction/start/lifecycle/read, replay/dispatch, runtime start/result/persistence, and runtime control/checkpoint/event/recording files within the existing execution package. Rebase and redo the moves over authoritative main if a concurrent WSE change lands, without changing product code or test behavior."
+    "customerAsk": "Implement DWRO story S1: persistent root --remote, authored command placement capabilities, endpoint-only --server, new --listen for local listener binds, no silent local fallback, and documented conflicts with run --with-server and run --with-site.",
+    "problem": "The CLI has no explicit execution-placement input and its authored manifest cannot state whether a command is local-only, remote-only, or dual-placement. The global --server flag also selects both HTTP client endpoints and local listener binds, so customers and scripts cannot unambiguously distinguish calling an existing server from hosting one, and unsupported remote requests lack one centralized no-fallback rule.",
+    "solution": "Add persistent root --remote, a resolved local/remote placement value, and per-command placement capabilities to the authored CLI contract. Normalize command inputs once and select exactly one injected local-service or HTTP-client adapter, rejecting unsupported or failed remote placement without fallback. Make --server the remote endpoint selector, add --listen to listener-owning commands, preserve explicit legacy --server binding with a deprecation warning when --listen is absent, give --listen precedence, and enforce documented usage conflicts before side effects."
   },
   "acceptanceCriteria": [
-    "Existing tests are grouped into focused behavior files, shared test helpers have one package-local owner, and no resulting hand-maintained Go file in the package exceeds 1,200 lines.",
-    "Before-and-after output from go test -list '.*' ./pkg/services/factory_sessions/internal/execution/... contains no added, removed, or renamed test or example entry, with the comparison included as PR evidence.",
-    "go test ./pkg/services/factory_sessions/internal/execution/... passes with no test, subtest, assertion, fixture outcome, or observable runtime behavior changed.",
-    "Package coverage is captured with identical commands and options before and after, the reported value is unchanged, and both results are included as PR evidence.",
-    "The diff is dominated by mechanical moves and contains no production-code refactor, public-contract change, generated-file edit, assertion change, test addition/removal, or unrelated cleanup.",
-    "Typecheck and tests pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
-    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts are resolved against current main, and the PR is actually merged."
+    "The authored CLI manifest defines persistent root --remote, a resolved local/remote placement value, and local-only, remote-only, or dual-placement capabilities for affected commands; executable help and parsing match that contract.",
+    "A representative dual-placement operation produces the same normalized request locally without --remote and sends that request to exactly the --server <uri> HTTP endpoint with --remote, with equivalent domain intent across adapters.",
+    "Unsupported remote placement, an invalid or unavailable selected server, and remote transport failure return stable actionable errors and never invoke the local product operation, start a listener, or silently select another endpoint.",
+    "you server --listen, you run --with-server --listen, and you run --with-site --listen bind the requested local address; when --listen is absent, legacy listener use of an explicitly supplied --server remains functional for the compatibility window and warns, while explicit --listen takes precedence.",
+    "--remote with run --with-server or run --with-site is rejected as a documented stable usage conflict before listener, browser, Factory, or remote-operation side effects begin; reference docs and examples use the new placement vocabulary.",
+    "Quality gates pass with direct CLI and manifest, package, functional, help and reference, and compatibility evidence as applicable; Typecheck passes, Tests pass, and there are no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
+    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared or generated-file churn are resolved against current main, and the PR is actually merged."
   ],
   "userStories": [
     {
-      "id": "thr-split-fake-service-runtime-tests-001",
-      "title": "Freeze the behavioral baseline",
-      "description": "As a maintainer, I want an authoritative pre-move test inventory and coverage baseline so that every later mechanical slice can prove it preserved Factory Sessions execution behavior.",
+      "id": "dwro-s1-remote-placement-flags-001",
+      "title": "Declare explicit placement in the authored CLI contract",
+      "description": "As a CLI user and command implementer, I want root placement and each command's supported placements to be explicit so help, validation, and dispatch share one authoritative contract.",
       "acceptanceCriteria": [
-        "Capture the full output of go test -list '.*' ./pkg/services/factory_sessions/internal/execution/... from the unmodified baseline in a review artifact outside production sources.",
-        "Capture package coverage from the unmodified baseline using a recorded, repeatable command whose command and options will also be used after the split.",
-        "Record a behavior-based placement map for all tests in the two source files so every test has exactly one destination and shared fixtures have exactly one owner.",
-        "The baseline package suite passes and provides a trustworthy behavioral comparison point.",
+        "The authored CLI manifest exposes a visible persistent root --remote boolean whose documented meaning is to execute a supported operation through a running You server; it does not imply async, follow, continuous, or listener behavior.",
+        "The executable parser resolves the root input to explicit local placement by default and remote placement when --remote appears before or after the command path, consistent with other persistent flags.",
+        "A command can authoritatively declare local-only, remote-only, or dual-placement capability, and manifest validation rejects a runnable command whose placement declaration is missing or invalid where the placement contract applies.",
+        "Existing HTTP-only commands retain their historical remote-default compatibility for this window, accept explicit --remote, and do not gain a local implementation merely to satisfy the new vocabulary.",
+        "Root and representative command help show the placement meaning and supported usage without describing --remote as a waiting or server-start option.",
+        "Focused contract and parser tests prove manifest validation, persistent flag inheritance, before and after command parsing, default placement, and explicit remote placement through observable CLI inputs and help.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Captured the passing baseline suite, complete go test -list output, deterministic go test -covermode=atomic coverage output, and one-to-one behavior placement/helper ownership map in docs/internal/development/plans/factory-sessions-execution-test-split-baseline.md at source commit 947152348b235f3dd0ede47f233947fcadddcc6a."
+      "notes": ""
     },
     {
-      "id": "thr-split-fake-service-runtime-tests-002",
-      "title": "Preserve fixture-service execution and inspection behavior in focused groups",
-      "description": "As a Factory Sessions maintainer, I want fixture-backed fake-service construction, start, lifecycle, read, listing, event, and projection tests grouped by behavior so that I can understand those outcomes without navigating unrelated replay and runtime coverage.",
+      "id": "dwro-s1-remote-placement-flags-002",
+      "title": "Dispatch normalized operations without placement fallback",
+      "description": "As a customer, I want the same operation to run locally by default or on exactly my selected server with --remote so placement is predictable and cannot silently change during failure.",
       "acceptanceCriteria": [
-        "Existing fixture-service construction and synchronous/asynchronous start tests retain their names, bodies, assertions, fixture inputs, and observed outcomes in a focused construction/start test file.",
-        "Existing lifecycle-control, read, listing, event-cursor, result, artifact, and projection-validation tests retain their names, bodies, assertions, and observed outcomes in clearly named lifecycle and inspection-oriented files.",
-        "Helpers used only by one group move with that group; helpers shared across groups have one package-local definition and are not duplicated.",
-        "Comparison with the story 001 baseline shows no added, removed, or renamed test entry after this slice.",
-        "No touched test file exceeds 1,200 lines.",
+        "At least one representative supported dual-placement command normalizes customer inputs once before dispatch, calls its already-injected local service adapter without --remote, and calls its HTTP client adapter with --remote.",
+        "Behavioral parity coverage proves the local and remote adapters receive contract-equivalent normalized request values for the same customer input, allowing only transport metadata differences.",
+        "you --remote --server <uri> <dual-placement-command> sends the operation to exactly <uri> and does not invoke the local product operation, start or probe a local listener, or substitute the default endpoint.",
+        "A local-only command invoked with --remote exits with a stable actionable usage error that identifies the unsupported placement before command side effects occur.",
+        "Invalid endpoint configuration, connection refusal, timeout, and other remote transport failures remain remote failures and do not retry through the local adapter; diagnostics identify the selected endpoint without leaking credentials or sensitive request content.",
+        "Placement selection remains a CLI transport concern: domain services receive normalized operation requests and do not inspect CLI placement flags or discover alternate dependencies.",
+        "Focused package and public CLI behavioral tests cover local dispatch, exact remote dispatch, unsupported placement, and failed remote transport with zero local fallback.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 2,
       "passes": true,
-      "notes": "Moved the fixture-service construction/start and lifecycle/inspection tests from the two consolidated files into fake_service_construction_start_test.go and fake_service_lifecycle_inspection_test.go, with shared fixture/event helpers owned by execution_test_helpers_test.go. The full go test -list '.*' comparison remains 267 baseline entries versus 267 current entries with no differences, and exact baseline coverage remains 79.6% (execution), 80.0% (fixtures), 83.1% (recordingreplay), and 89.8% (runtimepersist). New focused files are 100, 557, and 748 lines; the legacy source files retain their staged-split suppressions for stories 003-005."
+      "notes": "Implemented dual-placement `you run` dispatch through one normalized invocation request and an injected local or exact-URI HTTP adapter, with stable unsupported-placement and no-fallback remote errors. Refreshed authored and published CLI contract artifacts and added focused package/public CLI behavioral coverage. Verified with `make contracts-validate`, `make cli-manifest-check`, `go test ./pkg/transports/cli/run ./pkg/transports/cli ./pkg/wire ./pkg/services/workers/internal/interface -count=1`, and `make test`. Review follow-up makes invalid remote endpoint labels fail closed for parse-success/base-invalid opaque and unsupported-scheme inputs, with credential-redaction regression coverage."
     },
     {
-      "id": "thr-split-fake-service-runtime-tests-003",
-      "title": "Preserve replay and dispatch behavior in focused groups",
-      "description": "As a Factory Sessions maintainer, I want replay, canonical event, dispatch projection, interruption, and pause/resume tests grouped by behavior so that historical and dispatch guarantees can be reviewed independently from fixture startup coverage.",
+      "id": "dwro-s1-remote-placement-flags-003",
+      "title": "Bind local servers with --listen and preserve legacy scripts",
+      "description": "As an operator, I want local listener addresses selected with --listen so --server can mean a remote endpoint while my existing listener scripts have a safe migration window.",
       "acceptanceCriteria": [
-        "Existing session replay, dispatch replay, canonical event-envelope, interrupted-dispatch, late-completion suppression, and pause/resume replay tests retain their names, bodies, assertions, event order, and observed outcomes in focused replay and dispatch test files.",
-        "fake_service_test.go is retired only after every original test and required helper has exactly one behavior-appropriate destination.",
-        "Comparison with the story 001 baseline shows no added, removed, or renamed test entry after the complete fake-service split.",
-        "The focused package suite continues to prove the same live-versus-replayed session, dispatch, result, artifact, lifecycle, and event projections.",
-        "No resulting test file exceeds 1,200 lines.",
+        "you server --listen <address>, you run --with-server --listen <address>, and you run --with-site --listen <address> bind the requested valid local address and report existing stable bind failures for invalid, non-local, or unavailable addresses.",
+        "Listener-owning commands use the existing default local bind when neither an explicit --listen nor an explicit legacy bind value is supplied.",
+        "During the compatibility window, an explicitly supplied legacy --server <local-uri> continues to select the listener bind only when --listen is absent and emits one actionable deprecation warning on stderr directing the user to --listen.",
+        "When both inputs are supplied to a listener-owning command, explicit --listen determines the bind address; --server does not override it, and compatibility diagnostics accurately explain any retained endpoint role.",
+        "Ordinary local commands and ordinary you run do not start a listener merely because --listen or the default server endpoint exists; invalid flag placement is rejected before runtime side effects.",
+        "CLI manifest relationships, help, and examples describe --listen as the local bind input and --server as the selected You server URI, including the legacy migration behavior.",
+        "Focused listener lifecycle tests use observable readiness and bind behavior and prove requested binding, precedence, warning, bind failure, and joined shutdown without arbitrary sleeps.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 3,
       "passes": true,
-      "notes": "Moved all 24 tests from fake_service_test.go into fake_service_replay_test.go (15 replay/projection tests) and fake_service_dispatch_test.go (9 interruption/dispatch-control tests), preserving declarations, bodies, assertions, event order, and outcomes; fake_service_test.go is retired. Shared helpers remain owned by execution_test_helpers_test.go and no helper was duplicated. The story 001 go test -list '.*' comparison is 269 baseline entries versus 269 current entries with zero differences, and go test -covermode=atomic remains 79.6% (execution), 80.0% (fixtures), 83.1% (recordingreplay), and 89.8% (runtimepersist). New focused files are 798 and 586 lines; fake_service_runtime_test.go remains the staged owner for stories 004-005."
+      "notes": "Implemented exact local listener selection through --listen for you server and server-enabled you run/you run --with-site flows, with loopback-only validation, explicit precedence over --server, one-time legacy local --server warnings, and preserved automatic legacy allocation. Ordinary runs reject misplaced --listen before the run handler, and listener lifecycle coverage proves exact readiness, unavailable-port errors, and shutdown. Refreshed authored/generated CLI contracts, command/help baselines, and reference guidance. Verified with make contracts-validate, make cli-manifest-check, make docs-reference-smoke, make test, go test ./pkg/transports/cli/... -count=1, focused CLI tests, full run-scoped-server functional tests, backend-size, pkg-maint, pkg-file-count, vet, and git diff --check; aggregate make lint is blocked by the pre-existing missing UI knip binary, and the backend-only continuation reaches existing package-boundary baseline violations; neither reports new violations."
     },
     {
-      "id": "thr-split-fake-service-runtime-tests-004",
-      "title": "Preserve runtime start, result, and persistence behavior in focused groups",
-      "description": "As a Factory Sessions maintainer, I want JavaScript runtime startup, result shaping, persistence policy, normalization, and validation tests grouped by behavior so that execution setup and result guarantees are understandable without loading control and checkpoint scenarios.",
+      "id": "dwro-s1-remote-placement-flags-004",
+      "title": "Reject remote and local-hosting conflicts and publish migration guidance",
+      "description": "As a customer, I want contradictory placement modes rejected with clear guidance so the CLI never both calls a remote server and hosts the same run locally.",
       "acceptanceCriteria": [
-        "Existing synchronous/asynchronous start, timeout, cancellation propagation, result projection, artifact shaping, persistence success/failure, source resolution, policy validation, normalization, and idempotency tests retain their names, bodies, assertions, and observed outcomes in focused files.",
-        "Existing fixture helpers for runtime construction, workflows, clocks, persistence, and common start requests are moved without logic changes and have a single definition when shared.",
-        "Comparison with the story 001 baseline shows no added, removed, or renamed test entry after this slice.",
-        "The focused package suite continues to prove identical start, result, persistence, validation, and failure-propagation behavior.",
-        "No touched test file exceeds 1,200 lines.",
+        "you --remote run --with-server and you --remote run --with-site each exit with the same stable usage classification and actionable conflict message, regardless of persistent-flag position.",
+        "Conflict validation occurs before Factory execution, HTTP dispatch, listener startup, browser launch, recording, or other run-owned side effects.",
+        "Authored CLI relationships, executable help, and packaged reference docs state that --remote selects a running server, --server selects its URI, and --listen selects a local bind; they document both run-mode conflicts and the legacy bind migration.",
+        "New customer-facing examples use you --remote --server <uri> for supported remote operations and --listen <address> for local server or server-enabled run binding; they do not present legacy --server listener syntax as the preferred form.",
+        "Behavioral CLI tests prove both conflicts, stable exit and error output, zero side effects, and help and reference guidance rather than relying on source or route inventories.",
+        "Documentation reference smoke checks pass",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 4,
       "passes": true,
-      "notes": "Moved the JavaScript runtime start, result, persistence, normalization, source-resolution, policy-validation, and idempotency tests from fake_service_runtime_test.go into focused runtime owners, preserving declarations, bodies, assertions, fixtures, and outcomes. Shared runtime construction, workflow, clock, recording, and adapter helpers have one package-local owner. The review follow-up mechanically consolidated adjacent same-package owners so the deletion-only execution file-count baseline remains 28; all resulting files pass the stricter 1,000-line maintainability gate. The story 001 go test -list '.*' comparison is 269 baseline entries versus 269 current entries with identical sorted SHA-256 09876A7E761EAB43E48DD3729153FCCAE52802F37CC95B424B706AAFA3869B51, and go test -covermode=atomic remains 79.6% (execution), 80.0% (fixtures), 83.1% (recordingreplay), and 89.8% (runtimepersist). Focused suite, full make test, vet, pkg-maint, backend-size, pkg-file-count, pkg-structure, and typecheck pass."
-    },
-    {
-      "id": "thr-split-fake-service-runtime-tests-005",
-      "title": "Preserve runtime control, checkpoint, event, and recording behavior in focused groups",
-      "description": "As a Factory Sessions maintainer, I want runtime lifecycle control, interruption, checkpoint, resume, event history, and recording tests grouped by behavior so that high-risk runtime guarantees remain complete and easier to review.",
-      "acceptanceCriteria": [
-        "Existing lifecycle status/control, interruption timing, checkpoint projection, partial result, pause persistence, resume, phase-event, observer, append-only history, recording, and workflow-policy tests retain their names, bodies, assertions, ordering, and observed outcomes in focused files.",
-        "fake_service_runtime_test.go is retired only after every original test and required helper has exactly one behavior-appropriate destination.",
-        "The final go test -list '.*' comparison with story 001 is empty for test and example entries, and final package coverage exactly matches the recorded baseline value.",
-        "go test ./pkg/services/factory_sessions/internal/execution/... passes and no resulting hand-maintained Go file in the package exceeds 1,200 lines.",
-        "The final diff contains no assertion changes, test additions/removals, production refactor, generated-file edit, or unrelated cleanup.",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 5,
-      "passes": true,
-      "notes": "Moved the remaining runtime control, interruption, checkpoint, resume, phase-event, observer, append-only-history, recording, and workflow-policy tests from fake_service_runtime_test.go into focused runtime control, checkpoint, validation/event, persistence, and dispatch owners; moved the fake-service interruption test into fake_service_dispatch_test.go; and retired fake_service_runtime_test.go. All original declarations and required helpers have exactly one behavior-appropriate destination, with the two review-identified whitespace differences restored byte-for-byte. The 269-entry story 001 inventory is unchanged as a sorted multiset, with matching SHA-256 09876A7E761EAB43E48DD3729153FCCAE52802F37CC95B424B706AAFA3869B51. Final go test -covermode=atomic coverage matches the baseline at 79.6% (execution), 80.0% (fixtures), 83.1% (recordingreplay), and 89.8% (runtimepersist). Focused suite, full make test, vet, backend-size, pkg-maint, pkg-file-count, pkg-structure, and typecheck pass; the execution package remains at the exact deletion-only baseline of 28 files and all resulting files are below 1,000 lines."
+      "notes": "Implemented stable REMOTE_LOCAL_HOSTING_CONFLICT validation before system initialization and again after custom run parsing, covering --remote before or after run with both --with-server and --with-site; behavioral tests prove no local, remote, browser, listener, or Factory side effects. Added authored conflict relationships, structured BAD_REQUEST output, executable help/examples, legacy --server migration guidance, and packaged reference documentation; regenerated published contracts and CLI baselines. Addressed review feedback by removing duplicate placement keys from authored/generated manifests, making manifest loading reject duplicate JSON object keys, redacting malformed credential-bearing endpoint diagnostics, keeping maintainability and package-file-count ratchets green, using worker-free listener functional cases, and removing marker-only docs assertions. Moved the generic strict decoder into the policy-free generated-artifact platform package and added loader/decoder coverage so the CLI manifest unit and functional floors remain intact. Verified with focused CLI tests, the full short Go suite, make verify-fast, make cli-manifest-check, make contracts-validate, make docs-reference-smoke, make pkg-maint, make pkg-file-count, backend-size, pkg-structure, vet, full run-scoped-server functional tests, and git diff --check."
     }
   ]
 }
