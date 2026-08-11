@@ -3,10 +3,10 @@
   "branchName": "e3-event-webhooks",
   "deliveryAudit": {
     "pullRequest": 1885,
-    "auditedHead": "954420d327ed917fdb058b16ab15f857cd703ec9",
-    "base": "b99c8b942b4a684491cede70cae7f0ebf920da8c",
-    "requiredChecks": "CI run 31500324289 passed all 18 required checks for exact head 954420d327ed917fdb058b16ab15f857cd703ec9 against current base b99c8b942b4a684491cede70cae7f0ebf920da8c; package-target-manifest-check, ownership-inventory-check, API smoke, and API package verification also pass locally",
-    "reviewThreads": "The superseded PR #1850 had zero review threads, zero unresolved inline threads, and zero formal reviews after all five historical conversation comments were addressed; fresh PR #1885 is open from the same validated head for review"
+    "auditedHead": "ba3811f22a8a8ac9a97e31a759bc0ad71b45a656",
+    "base": "635a43870ebc1e72a3c9ded2a2713df2fe8f8ec7",
+    "requiredChecks": "CI run 31502272501 passed all 18 required checks for exact head ba3811f22a8a8ac9a97e31a759bc0ad71b45a656 against current base 635a43870ebc1e72a3c9ded2a2713df2fe8f8ec7; package-target-manifest-check, ownership-inventory-check, API smoke, and API package verification also pass locally",
+    "reviewThreads": "Fresh PR #1885 is open, non-draft, mergeable, and has zero review threads, zero unresolved inline threads, zero formal reviews, and no conversation comments; all historical blocking feedback from superseded PR #1850 is addressed by the validated branch"
   },
   "description": "Add Factory-configured outbound webhooks that subscribe to the existing canonical Factory Event stream and POST signed Work state-transition and dispatch-failure envelopes with filtering, bounded retry/backoff, and durable dead-letter logging. The feature lets external monitors react without polling while preserving Recordings as the event authority and keeping delivery failure isolated from Factory Runtime state.",
   "context": {
