@@ -9554,3 +9554,19 @@
   - Repeated failed-job reruns separated transient packaged-loop/mock-worker failures from the stable current-main server-binding baseline; do not change P1 implementation code for those untouched packages.
   - The PR remains on a conflict-free head with no unresolved review threads, but required CI is not green until the unchanged server-binding assertion is resolved or accepted by the repository baseline.
 ---
+## [2026-08-11 01:04:09 -07:00] - btrc-p1-root-injection-006 latest-head delivery audit
+- What was implemented
+  - Audited the latest pushed P1 head `5a105e4f178e4d872c19d7b42f848d393fbff431` and refreshed the delivery record for CI run `31470964931`.
+  - Confirmed all six PRD stories remain `passes:true`, the PR has no inline review threads or formal reviews, and the branch remains clean and mergeable against base `3a0b571b234f70d68908e36669100d0ac9f66a9f`.
+  - Confirmed the two terminal CI failures are outside the P1 diff: the unchanged server-binding diagnostic assertion and the unchanged `chat_sessions/internal/responsebridge` unit-coverage ratchet.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - CI run `31470964931`: all frontend, API/package, UI-backend, local-inference, and other non-backend lanes passed; Backend Functional Coverage failed only at `TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput`; Backend Unit Coverage reported `86.9258%` versus the unchanged `87.20%` minimum for `pkg/services/chat_sessions/internal/responsebridge`.
+  - `git diff --name-only origin/main...HEAD` contains neither the server-binding test package nor `pkg/services/chat_sessions/internal/responsebridge`.
+  - `prd.json` parses with all six stories marked `passes:true`; `git diff --check` and the working-tree check pass.
+- **Learnings for future iterations:**
+  - Keep CI baseline failures separate from task regressions by checking both the failing package paths and their diff membership before making implementation changes.
+  - A bookkeeping-only head still needs a fresh CI run; do not claim the delivery gate is green from an earlier implementation head.
+---

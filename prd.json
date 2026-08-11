@@ -11,18 +11,19 @@
   },
   "deliveryAudit": {
     "pullRequest": 1857,
-    "head": "24faa7e1f9da44eda3db4563f81503c220600387",
+    "head": "5a105e4f178e4d872c19d7b42f848d393fbff431",
     "base": "3a0b571b234f70d68908e36669100d0ac9f66a9f",
     "reviewThreads": 0,
     "unresolvedReviewThreads": 0,
     "formalReviews": 0,
     "latestWorkflow": {
-      "run": 31469696120,
+      "run": 31470964931,
       "result": "failed",
-      "rerunResult": "failed",
+      "rerunResult": "not-run",
       "taskScopedFailures": [],
       "baselineFailures": [
-        "tests/functional/transport/server_binding: TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput"
+        "tests/functional/transport/server_binding: TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput",
+        "pkg/services/chat_sessions/internal/responsebridge: unit coverage 86.9258% below the 87.20% ratchet"
       ]
     }
   },
