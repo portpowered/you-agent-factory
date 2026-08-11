@@ -91,6 +91,53 @@ func TestNewAddsAndReplacesContributedDescriptors(t *testing.T) {
 	}
 }
 
+func TestNewAppliesCapabilityOverrideToPublishedDescriptor(t *testing.T) {
+	t.Parallel()
+
+	capabilities := []providers.Capability{providers.CapabilityPromptSubmission}
+	service, err := internalservice.New(internalservice.WithCapabilityOverrides(
+		catalog.CapabilityOverride{
+			Provider:     providers.IDCodex,
+			Capabilities: capabilities,
+		},
+	))
+	if err != nil {
+		t.Fatalf("New(WithCapabilityOverrides) = %v", err)
+	}
+
+	capabilities[0] = providers.CapabilityUsage
+	registered, err := service.RegistrationProvider(providers.IDCodex)
+	if err != nil {
+		t.Fatalf("RegistrationProvider(codex) = %v", err)
+	}
+	if !slices.Equal(registered.Capabilities, []providers.Capability{providers.CapabilityPromptSubmission}) {
+		t.Fatalf("overridden capabilities = %v, want prompt_submission only", registered.Capabilities)
+	}
+
+	registered.Capabilities[0] = providers.CapabilityUsage
+	reloaded, err := service.RegistrationProvider(providers.IDCodex)
+	if err != nil {
+		t.Fatalf("second RegistrationProvider(codex) = %v", err)
+	}
+	if !slices.Equal(reloaded.Capabilities, []providers.Capability{providers.CapabilityPromptSubmission}) {
+		t.Fatalf("reloaded capabilities = %v, want detached prompt_submission only", reloaded.Capabilities)
+	}
+}
+
+func TestNewRejectsCapabilityOverrideForUnknownPublishedProvider(t *testing.T) {
+	t.Parallel()
+
+	service, err := internalservice.New(internalservice.WithCapabilityOverrides(
+		catalog.CapabilityOverride{
+			Provider:     "not-published",
+			Capabilities: []providers.Capability{providers.CapabilityPromptSubmission},
+		},
+	))
+	if service != nil || err == nil || !strings.Contains(err.Error(), "unknown provider") {
+		t.Fatalf("New(unknown capability override) = (%#v, %v), want construction error", service, err)
+	}
+}
+
 func TestListProvidersIncludesExperimentalSelectableEntries(t *testing.T) {
 	t.Parallel()
 

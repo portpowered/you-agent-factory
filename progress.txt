@@ -53,6 +53,7 @@
 - When rebasing generated contract artifacts, resolve content-addressed manifest entries from the merged artifact bytes and rerun the canonical generator before drift checks.
 - When one request is translated through multiple execution compositions, assert the final provider-boundary request with true, false, and omitted cases; intermediate normalized structs can hide a dropped field.
 - Child-scoped permission overrides should be shape-validated first and applied only at the sandbox/approval policy boundary; routing, allowlists, budgets, and sibling state must remain on the shared validation path.
+- Functional capability-failure evidence can target an existing registered provider through an Edges catalog capability override while retaining the real provider adapter and command-runner effect; do not substitute an unknown provider or custom in-process integration.
 - OS-boundary functional tests may poll an isolated durable filesystem checkpoint only when the child exposes no parent-process event or injected edge; document that reason at each polling helper and keep the bound as a failure guard.
 - Git Worktree preparation treats a retained Git `*.lock` as indeterminate ownership: retry within a named bound, preserve the resource, and return its exact path with verify/remove/retry guidance.
 - Git's `.git/config.lock` has no trustworthy owner or PID evidence; after a bounded retry, report the exact lock with `owner_liveness=indeterminate` and require verification before removing only that file—never auto-delete it.
@@ -10717,4 +10718,26 @@
   - `git diff --check` — passed.
 - **Learnings for future iterations:**
   - Final PR readiness requires checking the latest head after every handoff commit; a pending Verification Policy job can keep the PR merge state blocked until the full CI run is terminal.
+---
+## [2026-08-11 04:43:04 -07:00] - js-skip-permissions-parity-003 registered incapable route review follow-up
+- What was implemented
+  - Replaced the stale unknown-provider functional case with a root-built scenario selecting the real published Codex route while an Edges catalog capability override supplies a narrower authoritative capability view.
+  - Kept the built-in Codex adapter and ProviderCommandRunner edge intact; the public dispatch response now proves the stable provider/capability diagnostic and the command edge receives zero calls.
+  - Added catalog validation/detachment coverage and Edges merge deep-copy coverage for the new construction seam.
+- Files changed
+  - `pkg/services/providers/internal/services/catalog/service.go`
+  - `pkg/services/providers/internal/services/catalog/internal/service/{options.go,service.go,service_test.go}`
+  - `pkg/services/providers/internal/services/catalog/wire/wire.go`
+  - `pkg/services/providers/wire/wire.go`
+  - `pkg/services/edges/{definition.go,definition_test.go}`
+  - `pkg/wire/session_runtime_providers.go`
+  - `tests/functional/providers/permission/permission_bypass_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/providers/permission ./pkg/services/providers/internal/services/catalog/internal/service ./pkg/services/providers/wire ./pkg/services/edges ./pkg/wire ./pkg/root -count=1 -timeout 300s` — passed.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - Batch `Process.Execute` can return nil for a terminal Work failure; use the root-built functional observer and public dispatch response when the contract is emitted as runtime state rather than a process error.
+  - `Edges.Merge` must clone both default and replacement slices when a construction seam contains nested capability facts; cloning only defaults leaves replacement mutations visible in the merged graph.
 ---

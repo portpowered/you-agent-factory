@@ -43,6 +43,23 @@ type AgyPTYPlatformDependencies struct {
 	Inspector platformfilesystem.PathInspector
 }
 
+// CatalogCapabilityOverride supplies an authoritative capability view for one
+// already-registered provider route during process construction. It is used by
+// hosts and functional tests whose selected route has narrower capabilities
+// than its static publication; it cannot register a new provider identity.
+type CatalogCapabilityOverride struct {
+	Provider     providers.ID
+	Capabilities []providers.Capability
+}
+
+// Clone returns detached override values for the construction boundary.
+func (override CatalogCapabilityOverride) Clone() CatalogCapabilityOverride {
+	return CatalogCapabilityOverride{
+		Provider:     override.Provider,
+		Capabilities: append([]providers.Capability(nil), override.Capabilities...),
+	}
+}
+
 // Option configures Providers root construction.
 type Option interface {
 	apply(*wireOptions)
@@ -120,6 +137,31 @@ func (o catalogOption) apply(opts *wireOptions) {
 // CatalogOption adapts a catalog subservice option for root construction.
 func CatalogOption(option catalogwire.Option) Option {
 	return catalogOption{value: option}
+}
+
+type catalogCapabilityOverridesOption struct {
+	overrides []CatalogCapabilityOverride
+}
+
+func (option catalogCapabilityOverridesOption) apply(config *wireOptions) {
+	overrides := make([]catalog.CapabilityOverride, 0, len(option.overrides))
+	for _, override := range option.overrides {
+		overrides = append(overrides, catalog.CapabilityOverride{
+			Provider:     override.Provider,
+			Capabilities: append([]providers.Capability(nil), override.Capabilities...),
+		})
+	}
+	config.catalog = append(config.catalog, catalogwire.WithCapabilityOverrides(overrides...))
+}
+
+// WithCatalogCapabilityOverrides supplies route-specific static capability
+// facts without adding or replacing a provider registration.
+func WithCatalogCapabilityOverrides(overrides ...CatalogCapabilityOverride) Option {
+	cloned := make([]CatalogCapabilityOverride, len(overrides))
+	for index, override := range overrides {
+		cloned[index] = override.Clone()
+	}
+	return catalogCapabilityOverridesOption{overrides: cloned}
 }
 
 type commandRunnerOption struct {
