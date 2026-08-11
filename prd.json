@@ -11,26 +11,53 @@
   },
   "deliveryAudit": {
     "pullRequest": 1857,
-    "head": "8771e452f534dd4be59cc83bd345a47f44c998a8",
+    "head": "aa2c72c3f7a56e0e7dd0532cc63b2c3c077ac4da",
     "base": "635a43870ebc1e72a3c9ded2a2713df2fe8f8ec7",
     "reviewThreads": 0,
     "unresolvedReviewThreads": 0,
     "formalReviews": 0,
     "latestWorkflow": {
-      "run": 31504194499,
-      "testedHead": "6ddb9bd13f0bcc79a1196b344a740b04a3cfdad4",
-      "result": "failure_after_failed_job_retry",
+      "run": 31506119975,
+      "testedHead": "aa2c72c3f7a56e0e7dd0532cc63b2c3c077ac4da",
+      "result": "failure_after_two_failed_job_retries",
       "functionalResult": "failure",
+      "unitResult": "success_after_failed_job_retry",
       "verificationPolicy": "failure",
       "currentHeadCheckRuns": "terminal_failure",
-      "rerunResult": "attempt_2_reproduced_only_untouched_server_binding_baseline_failure",
+      "rerunResult": "second_failed_job_retry_reproduced_only_untouched_server_binding_baseline_failure",
       "taskScopedFailures": [],
       "baselineFailures": [
         {
           "job": "Backend Functional Coverage",
           "package": "tests/functional/transport/server_binding",
           "test": "TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput",
-          "evidence": "Initial attempt also observed the untouched workers/mock continuous-idle test; the failed-job retry cleared that transient failure and reproduced only the unchanged server-binding assertion. Both the initial attempt and attempt 2 report the current structured API-server diagnostic before SERVER_BIND_FAILED, while the untouched test expects the legacy warning followed by one diagnostic line. The P1 diff is empty for this package, and the same mismatch reproduces locally on Windows."
+          "evidence": "The initial workflow and both failed-job retries reproduce the unchanged structured API-server diagnostic before SERVER_BIND_FAILED, while the untouched test expects the legacy warning followed by one diagnostic line. The P1 diff is empty for this package, and the same mismatch reproduces locally on Windows."
+        }
+      ],
+      "transientFailures": [
+        {
+          "job": "Backend Functional Coverage",
+          "package": "tests/functional/workers/mock",
+          "test": "TestPlainBatchDrainPreservesFiniteAndContinuousCounterexamples/continuous_idle",
+          "evidence": "Observed on the initial workflow, cleared on the first failed-job retry, and passed on the final retry; the P1 diff is empty for this package."
+        },
+        {
+          "job": "Backend Functional Coverage",
+          "package": "tests/functional/providers/acp",
+          "test": "TestYouRunUsesPinnedACPWireGoldensAndProjectsTerminalOutput",
+          "evidence": "Observed only on the first failed-job retry and cleared on the final retry; the P1 diff is empty for this package."
+        },
+        {
+          "job": "Backend Functional Coverage",
+          "package": "tests/functional/transport/cli/output",
+          "test": "TestCLIWriterFailureCancelsInvocation",
+          "evidence": "Observed only on the first failed-job retry and cleared on the final retry; the P1 diff is empty for this package."
+        },
+        {
+          "job": "Backend Unit Coverage",
+          "package": "pkg/services/chat_sessions/internal/responsebridge",
+          "test": "package coverage regression",
+          "evidence": "The initial workflow measured 86.9258% against the 87.20% minimum; the failed-job retry passed without source changes, and the P1 diff is empty for this package."
         }
       ]
     }

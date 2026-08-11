@@ -11938,3 +11938,18 @@
 - **Learnings for future iterations:**
   - After one failed-job retry reduces functional coverage to a deterministic failure in an untouched package, retain exact attempt evidence and stop widening the feature diff; do not “fix” an unrelated baseline assertion in a dependency-injection task.
 ---
+## [2026-08-11 09:22:17 -07:00] - btrc-p1-root-injection-006 final replacement-head CI audit
+- What was implemented
+  - Audited workflow `31506119975` for replacement head `aa2c72c3f7a56e0e7dd0532cc63b2c3c077ac4da` through the initial run and two failed-job retries.
+  - Made no product or unrelated-test changes; all six P1 stories remain complete and task-scoped failures remain empty.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Backend Unit Coverage passed on the failed-job retry after an initial transient package-threshold dip in untouched `pkg/services/chat_sessions/internal/responsebridge`.
+  - The initial functional run observed untouched `workers/mock` idle behavior; the first retry observed `providers/acp` and `transport/cli/output` failures; the final retry cleared all of those transient failures.
+  - The only remaining failure on the final retry is `TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput` in untouched `tests/functional/transport/server_binding`; the same structured API-server diagnostic mismatch reproduces locally on Windows.
+  - `git diff --name-only origin/main...HEAD` is empty for every failing package, and the thread-aware review audit remains at zero unresolved inline threads and zero formal reviews.
+- **Learnings for future iterations:**
+  - For broad hosted functional coverage, retry failed jobs only while recording which failures clear; once retries converge on one untouched deterministic assertion, preserve the evidence and do not widen a dependency-injection task to repair unrelated baseline behavior.
+---
