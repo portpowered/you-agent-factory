@@ -282,7 +282,20 @@ func parseInvocationArguments(
 			continue
 		}
 		if index+1 >= len(arguments) {
-			return nil, nil, false, fmt.Errorf("factory argument --%s requires a value", name)
+			return nil, nil, false, &ArgumentError{
+				Code:       ArgumentErrorCodeMissingValue,
+				Message:    fmt.Sprintf("factory argument --%s requires a value", name),
+				Argument:   name,
+				SourceKind: ArgumentSourceKindNamed,
+			}
+		}
+		if strings.HasPrefix(arguments[index+1], "--") {
+			return nil, nil, false, &ArgumentError{
+				Code:       ArgumentErrorCodeMissingValue,
+				Message:    fmt.Sprintf("factory argument --%s requires a value before %s", name, arguments[index+1]),
+				Argument:   name,
+				SourceKind: ArgumentSourceKindNamed,
+			}
 		}
 		index++
 		named = append(named, NamedArgumentInput{Key: name, Values: []string{arguments[index]}})

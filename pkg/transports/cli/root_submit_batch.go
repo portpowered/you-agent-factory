@@ -151,7 +151,11 @@ func parseRunCommandArgs(cmd *cobra.Command, args []string) ([]string, error) {
 			return nil, err
 		}
 		if err := flag.Value.Set(value); err != nil {
-			return nil, err
+			return nil, &runcli.InvocationError{
+				Code:    runcli.InvocationArgumentInvalidValueCode,
+				Message: fmt.Sprintf("invalid value for %s: %s", lookupToken, err),
+				Cause:   err,
+			}
 		}
 		flag.Changed = true
 		if consumedNext {
@@ -208,7 +212,10 @@ func resolveRunFlagValue(flag *pflag.Flag, args []string, index int, hasInlineVa
 	if flag.NoOptDefVal != "" {
 		return flag.NoOptDefVal, false, nil
 	}
-	return "", false, fmt.Errorf("flag needs an argument: %s", "--"+flag.Name)
+	return "", false, &runcli.InvocationError{
+		Code:    runcli.InvocationArgumentMissingValueCode,
+		Message: fmt.Sprintf("flag needs an argument: %s", "--"+flag.Name),
+	}
 }
 
 // runFlagValueLooksLikeFlag reports whether token would be parsed as a flag
