@@ -1,4 +1,6 @@
 ## Codebase Patterns
+- Treat a full functional-coverage failure in an untouched fixture as a characterization problem first: repeat the exact test locally, then rerun only the failed coverage and dependent-policy jobs if it passes.
+- When a backend-size violation names a long test function, split each failure mode into a focused test and share only request/setup plumbing so every observable assertion remains intact.
 - For concurrent single-flight state, keep the absent-to-loading election atomic with the observation; a separate precheck can let callers pass stale absent state and overwrite the shared completion signal.
 - For repeated concurrency package runs, synchronize cancellation tests on an injected launcher or process edge; a fixed sleep can cancel before startup under parallel stress and obscure the target regression.
 - Provider OpenAPI changes that feed the published model-provider package require `make interfaces-all`, `make provider-catalog-generate`, and `make model-provider-package-generate`; `api-smoke` checks generated REST artifacts against the committed tree, so commit generated output before relying on that smoke result.
@@ -77,6 +79,8 @@
 
 - Worker Session finite streams can use the injected Events `Read` contract with the first retained head as a snapshot boundary; replay-only paths must not call `Subscribe`.
 - Authored OpenAPI and CLI contracts generate their Go, TypeScript, published metadata, and family-manifest consumers; update the source contract first, then run the repository generators and drift checks.
+- Dashboard API-backed surfaces should consume generated OpenAPI types through a small API module and React Query server-state hook, leaving rendering components responsible for query states and pure projections.
+- Service-owned HTTP adapters should receive the opened domain root at the application edge; top-level generated-route composition forwards requests without reading package artifacts or constructing service state.
 - Provider-neutral output contracts belong on the workstation definition and are enforced after a successful worker response; provider process success or transport parsing alone must not satisfy a semantic report contract.
 - Stream transport dispatch stays below the package maintainability threshold by delegating lifecycle-specific frame handling to focused helpers.
 - Deterministic Worker Session lifecycle tests can combine the controlled workstation boundary with the real in-memory Events service to verify retained replay ordering without sleeps or cancellation.
@@ -172,6 +176,7 @@
 - **Learnings for future iterations:**
 - This checkout may have `ui/node_modules` without all lockfile dependencies; run the pinned Bun install before treating a typecheck failure as a source regression.
 ---
+
 
 ## 2026-08-10 04:32 -07:00 - sac-s0-2-pkg-boundary-ignores-001
 - What was implemented
@@ -7574,6 +7579,74 @@
 - **Learnings for future iterations:**
   - For broad functional-coverage flakes, isolate every named failing test and repeat it before changing untouched behavior; rerun only the failed CI jobs after the isolated characterization is clean.
 
+## [2026-08-10 20:04 -07:00] - ui-packaged-factories-decoupling-001
+- What was implemented
+  - Moved the packaged Factory catalog translation from the top-level Models handler into the Factory Definitions HTTP adapter, backed by the injected Definitions root.
+  - Preserved deterministic catalog ordering and exposed stable identity, customer-facing description, invocation examples, and backend-provided JSON/YAML artifacts through the existing generated contract.
+  - Added safe internal-error mapping and actionable, payload-free catalog diagnostics for load, resolution, identity, and artifact decode failures; empty catalogs return a non-nil empty collection.
+  - Wired the opened Factory Definitions root through application HTTP binding and updated the top-level server/test constructors.
+- Files changed
+  - `pkg/services/factory_definitions/transports/http/handlers_current_factory.go`
+  - `pkg/services/factory_definitions/transports/http/handlers_current_factory_test.go`
+  - `pkg/transports/http/application/handler.go`
+  - `pkg/transports/http/handlers_models.go`
+  - `pkg/transports/http/server.go` and HTTP route tests/support
+  - `prd.json`
+- Verification
+  - `make generate-api` and `make api-smoke` passed; authored OpenAPI, bundled OpenAPI, generated Go contracts, and generated UI types had no drift.
+  - Focused Factory Definitions, HTTP transport/contract/server, and Wire suites passed.
+  - `go test ./... -run '^$' -count=1` passed as a repository-wide compile sweep.
+  - `make backend-size`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, and `go vet ./...` passed.
+- **Learnings for future iterations:**
+  - The existing catalog route and generated contract can remain stable while ownership moves behind the Factory Definitions root; the top-level server should only compose the service-owned adapter.
+  - API generation requires the worktree UI dependencies; `bun install --frozen-lockfile --ignore-scripts` restored the missing generator without running lifecycle hooks.
+---
+
+## 2026-08-10 21:39 -07:00 - ui-packaged-factories-decoupling-002
+- What was implemented
+  - Replaced the dashboard's publication-package source with a typed `ui/src/api/packaged-factories` client built on generated OpenAPI catalog types and a React Query server-state hook.
+  - Moved catalog/detail rendering to API-shaped projections, preserving deterministic selection, localized metadata, invocation examples, JSON/YAML content, loading/empty/error/retry/success states, fail-closed selected-artifact handling, accessible keyboard selection, and responsive layout behavior.
+  - Converted component and Storybook fixtures to browser/API mocks, added API-boundary tests, expanded the hosted browser scenario for keyboard/recovery/responsive checks, and added the `/packaged-factories` Vite dev/preview proxy path.
+  - Removed the remaining dashboard package-data/public-contract readers and source coupling; the UI manifest, lockfile, and lifecycle workflow remain free of `@you-agent-factory/packaged-factories`.
+- Files changed
+  - `ui/src/api/packaged-factories/`
+  - `ui/src/App.tsx`
+  - `ui/src/features/packaged-factories/` API consumers, projections, tests, stories, messages, and retired package-boundary modules
+  - `ui/vite.config.ts` and `ui/vite.config.test.ts`
+  - `ui/integration/packaged-factories-hosted-route.integration.test.mjs`
+  - `prd.json` and `progress.txt`
+- Verification
+  - `bun install --frozen-lockfile --ignore-scripts`, `bun run tsc`, `bun run build`, `bun run lint`, `bun test vite.config.test.ts`, targeted Biome, and `git diff --check` passed.
+  - `bun run test:unit` passed on retry with 191 Bun tests and 2,956 Vitest tests.
+  - `bun run test:integration` passed on retry with 14 files and 35 tests, including both hosted packaged-factories scenarios; the first run had one unrelated durable-session timing flake, which passed in isolation.
+  - Focused API/projection/component suites passed 17 tests; direct browser verification passed catalog success, keyboard selection, recovery, and responsive assertions.
+  - The full component suite passed all 147 files/834 tests but exceeded the local 150-second runner budget at 330.59 seconds. Repository-wide `bun run check` still reports 269 pre-existing formatting diagnostics outside the changed files; targeted changed-file checks and `bun run lint` are clean.
+- **Learnings for future iterations:**
+  - Dashboard API-backed surfaces should consume generated OpenAPI types through a small API module and React Query hook, keeping rendering components focused on query states and pure projections.
+  - The shared browser preview uses a separate API port from the real backend; hosted browser scenarios need an explicit API route bridge while production Vite still needs the canonical proxy path.
+  - Live catalog ordering can change as built-in Factories evolve, so browser selection checks should use scoped first/nth controls and semantic state rather than hard-coded catalog positions or identities.
+---
+
+## [2026-08-10 21:48 -07:00] - ui-packaged-factories-decoupling-003
+- What was implemented
+  - Strengthened the dashboard packaged-factories boundary guard around explicit UI manifest and source roots.
+  - Added coverage for runtime, development, optional, peer, and bundled dependency declarations, plus static, dynamic, re-export, and CommonJS references to the package root or subpaths.
+  - Added an isolated CLI regression fixture proving useful non-zero failure output for synthetic manifest/source violations and a compliant fixture pass.
+- Files changed
+  - `ui/scripts/check-packaged-factories-boundary.mjs`
+  - `ui/scripts/check-packaged-factories-boundary.test.mjs`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Focused Vitest guard suite — 2 tests passed.
+  - Live `bun run check:packaged-factories-boundary` — passed.
+  - `bun run tsc` — passed.
+  - `bun run lint` — passed.
+  - Focused Biome and `git diff --check` — passed.
+  - `bun run check` remains blocked by 268 existing generated `packages/*/dist` and root `tsconfig.json` formatting diagnostics; no changed-file diagnostics remain.
+- **Learnings for future iterations:**
+  - Boundary guards should expose an injectable manifest/source-root inspection function so synthetic fixtures can exercise the real CLI path without scanning unrelated repository inventories.
+  - TypeScript AST inspection catches side-effect static imports and dynamic subpath imports more reliably than a `from`/`import()` regular expression, while keeping the guard limited to UI source files.
 ## 2026-08-10 19:12 -07:00 - wsr-001-opening-record latest-main synchronization follow-up
 - What was implemented
   - Merged the live `origin/main` head `72537e7f2` into the WSR branch after PR #1849 became conflicting during final handoff.
@@ -8004,6 +8077,38 @@
 - **Learnings for future iterations:**
   - When a functional coverage lane names an untouched ACP session-resume fixture and the exact test passes repeated local characterization, preserve task code and rerun only the failed coverage and policy jobs before recording the flake.
 ---
+## [2026-08-10 21:56 -07:00] - ui-packaged-factories-decoupling current-main synchronization
+- What was implemented
+  - Merged live `origin/main` at `7dbeb472a` before handoff after the base advanced during story implementation.
+  - Preserved the three-story dashboard PRD as authoritative and retained both branches' append-only progress histories while carrying current-main source and generated-artifact changes forward.
+- Files changed
+  - Current-main synchronization files.
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Merge index is resolved, `git ls-files -u` is empty, conflict markers are absent, and `git diff --check` passes.
+  - All three PRD stories parse with `passes:true`.
+  - Post-merge packaged-factories boundary guard and isolated 2-test suite passed.
+  - Post-merge `bun run tsc`, `bun run lint`, and `bun run build` passed.
+- **Learnings for future iterations:**
+  - Fetch the live base immediately before pushing and resolve shared PRD/progress conflicts before opening a PR; a task branch can be clean yet already stale against the hosting base.
+  - Keep the active task PRD authoritative during a shared-bookkeeping merge, while preserving unrelated current-main progress entries for auditability.
+---
+
+## [2026-08-10 22:11 -07:00] - ui-packaged-factories-decoupling backend coverage follow-up
+- What was implemented
+  - Investigated the first PR run's Backend Unit Coverage failure and reproduced the `pkg/services/factory_definitions/transports/http` package shortfall locally at 79.5% against the 79.67% ratchet.
+  - Added observable HTTP adapter tests for unavailable roots, resolution and identity mismatches, incomplete identity/artifact/discovery metadata, and typed root-error mapping.
+- Files changed
+  - `pkg/services/factory_definitions/transports/http/handlers_current_factory_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Focused Factory Definitions HTTP tests passed.
+  - Package coverage increased to 84.3%; the coverage baseline was not lowered.
+  - `gofmt`, `git diff --check`, and the exact failed CI job rerun were initiated; the rerun is still pending on GitHub.
+- **Learnings for future iterations:**
+  - When a new backend adapter causes a small package-coverage ratchet miss, inspect the coverage profile for the adapter's unexercised failure branches and add behavior assertions before changing the manifest threshold.
 ## 2026-08-10 22:02 -07:00 - pp-merge-context-bug latest-main synchronization follow-up
 - What was implemented
   - Fetched and merged the live `origin/main` head `7dbeb472a` into PR #1870 as merge commit `051c7bb4e` after the base advanced again.
@@ -8040,6 +8145,48 @@
   - Main can advance again while a targeted rerun is in flight; merge the latest hosting ref before the final push and combine the synchronization evidence with the merge commit so CI runs on the actual handoff head.
 ---
 
+## [2026-08-10 22:36 -07:00] - ui-packaged-factories-decoupling current-main conflict resolution and CI follow-up
+- What was implemented
+  - Investigated PR #1873 after `origin/main` advanced from `7dbeb472a` to `b68e4bf95` and GitHub reported the previously green PR as conflicting.
+  - Merged the latest `origin/main` into this branch as merge commit `717698495`, kept the dashboard `prd.json` authoritative, and unioned the append-only progress histories.
+  - Isolated the unrelated Backend Functional Coverage flakes: the runtime-log assertion passed on retry, a separate packaged-loop scheduling timeout failed on the next retry, and the third exact-job retry passed.
+- Files changed
+  - `progress.txt`
+  - Current-main synchronization changes, including `tests/functional/factory/packaged/plan_parallel/invocation_test.go`
+- Verification
+  - The CI run for head `8411a2cb7` is terminal and green after the third Backend Functional Coverage attempt, including Verification Policy; Backend Unit Coverage remains green with the 84.3% adapter coverage.
+  - PR #1873 has no comments or reviews. The merge conflict is resolved, `git ls-files -u` is empty, conflict markers are absent, `prd.json` parses with all stories passing, and `git diff --check` passes.
+- **Learnings for future iterations:**
+  - When a required functional job fails on changing timing-sensitive tests, inspect the exact test output and retry only that job; do not alter unrelated product code.
+  - A PR can become conflicting after its checks pass when `main` advances; synchronize again immediately before the final push and treat the replacement head as a new CI gate.
+---
+
+## [2026-08-10 22:47 -07:00] - ui-packaged-factories-decoupling latest-main reconciliation
+- What was implemented
+  - Fetched the next live `origin/main` head `ecd1d2487` after it advanced during the final PR audit and made PR #1873 conflicting again.
+  - Merged that current main into this branch as merge commit `5e4b645cd`, retained the dashboard `prd.json` as authoritative, and preserved the automatically merged append-only progress history.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+  - Current-main model-host synchronization files under `pkg/services/models/internal/services/runtime_host/internal/service/`
+- Verification
+  - The merge is resolved with no unmerged entries or conflict markers; `prd.json` remains valid and all three dashboard stories remain marked `passes:true`; `git diff --check` passes.
+  - The prior synchronized head `ec87a80c9` had terminal green required CI, but this replacement head needs its own CI run after push.
+- **Learnings for future iterations:**
+  - Main can advance while the final PR audit or CI run is in progress; fetch immediately before each handoff push and regard every replacement head as requiring fresh checks.
+---
+
+## [2026-08-10 22:58 -07:00] - ui-packaged-factories-decoupling final handoff audit
+- What was implemented
+  - Recorded the terminal PR handoff after the latest-main reconciliation and refreshed PR #1873's body from the canonical `prd.json`.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Head `be7038ef5` matches the pushed branch, targets current `origin/main` `ecd1d2487`, and CI run `31462842504` is terminal and fully green, including Verification Policy.
+  - PR #1873 is `CLEAN/MERGEABLE`; issue comments, review comments, and formal reviews are all zero.
+  - The PR body matches `prd.json` after newline normalization, all three stories parse with `passes:true`, the worktree is clean, no unmerged entries or conflict markers remain, and `git diff --check` passes.
+- **Learnings for future iterations:**
+  - If `gh pr edit --body-file` is blocked by a missing read-only scope, update only the pull-request body through the authenticated GitHub API using the canonical file content, then verify the returned body and head.
 ## [2026-08-10 22:52 -07:00] - provider-capability-contract current-main conflict resolution
 - What was implemented
   - Merged the newly advanced live `origin/main` at `ecd1d248a` into the provider capability contract branch after PR #1874 became conflicting during final CI observation.
@@ -8449,4 +8596,67 @@
   - Same-package deletion-only splits must be planned around the existing package-file baseline; moving declarations into existing cohesive owners keeps the file-count ratchet stable.
   - Cross-suite fixtures are easiest to audit when one helper file owns all shared fakes and setup, including fixtures that originated in a stream-specific suite.
   - A boundary-sensitive wire constructor can remain a single known finding when its construction is centralized in the shared test helper instead of repeated in behavioral files.
+---
+## [2026-08-10 23:55 -07:00] - ui-packaged-factories-decoupling PR review follow-up
+- What was implemented
+  - Split the reported 122-line `TestListPackagedFactories_CoversBoundaryFailures` into focused missing-root, resolve-failure, identity-mismatch, incomplete-definition, and typed-root-failure tests, using a shared request helper without reducing behavioral assertions.
+  - Merged live `origin/main` at `85619c087089e3ed6a04edad8b794de62785ee30`; kept this task's `prd.json` authoritative and retained both branches' append-only progress histories.
+- Files changed
+  - `pkg/services/factory_definitions/transports/http/handlers_current_factory_test.go`
+  - `prd.json`
+  - `progress.txt`
+  - Current-main merge files.
+- Verification
+  - `make backend-size` passed with all owned Go backend functions within the 100-line limit.
+  - `go test ./pkg/services/factory_definitions/transports/http -count=1` and `go test ./pkg/services/factory_definitions/... -count=1` passed.
+  - `prd.json` parses with all three stories marked `passes:true`; conflict-marker, unmerged-entry, and `git diff --check` audits passed.
+- **Learnings for future iterations:**
+  - Resolve shared `prd.json`/`progress.txt` merge conflicts by preserving the active task PRD and unioning both complete append-only histories; validate JSON, marker absence, and index state before committing.
+---
+## [2026-08-11 00:21 -07:00] - ui-packaged-factories-decoupling CI flake follow-up
+- What was implemented
+  - Investigated the first replacement-head Backend Functional Coverage failure, which named the untouched `TestProvidersACPSerializesConcurrentPromptsOnOneStdioConnection` ACP fixture and observed a transient failed session after a peer connection close.
+  - Made no product or test-code changes. Isolated the exact test locally for ten repetitions; all ten passed.
+  - Reran only the failed Backend Functional Coverage and dependent Verification Policy jobs on the same pushed head; both passed.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/providers/acp -run '^TestProvidersACPSerializesConcurrentPromptsOnOneStdioConnection$' -count=10 -v -timeout 600s` — all ten passed.
+  - Backend Functional Coverage rerun job `93705509715` — passed.
+  - Verification Policy rerun job `93706601140` — passed.
+  - All other replacement-head checks remained green; no task file was named by the failure.
+- **Learnings for future iterations:**
+  - For an untouched functional fixture that passes repeated local characterization, preserve task code and rerun only the failed coverage/policy jobs before widening the diff.
+---
+## [2026-08-11 00:22 -07:00] - ui-packaged-factories-decoupling latest-main synchronization
+- What was implemented
+  - Merged the newly advanced live `origin/main` head `3a0b571b234f70d68908e36669100d0ac9f66a9f` after the prior CI rerun became stale against the moving base.
+  - Preserved this task's authoritative `prd.json` and unioned the incoming provider-catalog API/generated-artifact history into the append-only `progress.txt` log.
+- Files changed
+  - Current-main provider catalog API, generated-contract, and package files.
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - The merge conflict set was limited to shared bookkeeping; no task-side product conflict required additional behavior changes.
+  - `prd.json` parses with all three stories marked `passes:true`; conflict-marker, unmerged-entry, and `git diff --check` audits passed.
+  - The previous replacement head's required CI rerun was terminal-green; this latest-base replacement needs a fresh run after push.
+- **Learnings for future iterations:**
+  - Fetch `origin/main` immediately before each final push because a moving base can invalidate a green replacement head; resolve shared PRD/progress files before starting the next CI gate.
+---
+## 2026-08-11 00:34:30 -07:00 - ui-packaged-factories-decoupling final PR handoff audit
+- What was implemented
+  - Audited PR #1873's only blocking conversation comment against the replacement head: the 122-line backend-size test was split, live `origin/main` is included, and no unresolved review threads remain.
+  - Confirmed all three PRD stories remain marked `passes:true`; no additional product or generated-contract changes were needed.
+  - Refreshed the PRD review metadata for the mergeable, non-draft replacement head.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `prd.json` parses and all three story pass flags are true.
+  - Live `origin/main` `3a0b571b2` is an ancestor of HEAD `37142ba1a`.
+  - PR #1873 is open, non-draft, mergeable, and all 18 reported checks are terminal-success.
+  - Thread-aware PR audit found one historical conversation comment and zero review threads; its requested test split/base synchronization are present on the current head.
+  - The PR body matched the pre-update `prd.json` byte-for-byte before this metadata refresh.
+- **Learnings for future iterations:**
+  - A prior blocking conversation comment can be treated as addressed only after the requested diff is present, the live base is an ancestor, and the replacement-head checks are terminal-success; verify all three together before final handoff.
 ---
