@@ -57,21 +57,34 @@ func TestFactoryRunRoutesExecutorProviderThroughACPAdapter(t *testing.T) {
 // fresh session only before it writes the failure marker, then accepts only
 // session/load with the original opaque id. A passing run therefore proves the
 // worker retry kept its Provider Session and called Providers.Continue rather
-// than silently opening a new ACP session.
+// than silently opening a new ACP session. The fixture uses an operator-
+// configured ACP integration because packaged ACP profiles may truthfully omit
+// session resume; packaged behavior is covered by the package conformance
+// matrix and capability tests.
 func TestFactoryRunRetriesACPProviderByResumingExactSession(t *testing.T) {
 	const sessionID = "acp-session-retry-resume"
+	const providerID = "retry-acp"
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"retry ACP through its prior session"}`))
-	writeACPWorker(t, dir, "cursor-acp")
+	writeACPWorker(t, dir, providerID)
 	t.Setenv(acpHelperEnvironment, "retry-resume")
 	t.Setenv(acpRetryMarkerEnvironment, filepath.Join(t.TempDir(), "first-prompt-failed"))
 	t.Setenv("YOU_TEST_ACP_SESSION_ID", sessionID)
 
 	var processStarts atomic.Int32
-	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
+	_, listed, events := support.RunFactoryToCompletionWithConfiguredHome(t, dir, serviceedges.Edges{
 		PlatformProcessCommandFactory: acpHelperCommandFactory(&processStarts),
 		ProvidersExecutableLocator:    availableExecutableLocator{},
-	}, 20*time.Second)
+	}, 20*time.Second, func(home string) {
+		configDir := filepath.Join(home, ".you-agent-factory")
+		if err := os.MkdirAll(configDir, 0o700); err != nil {
+			t.Fatalf("create operator config directory: %v", err)
+		}
+		config := []byte(`{"workers":{"acp":{"integrations":[{"id":"retry-entry","name":"retry-acp","transport":"stdio","command":"custom-agent acp"}]}}}`)
+		if err := os.WriteFile(filepath.Join(configDir, "config.json"), config, 0o600); err != nil {
+			t.Fatalf("write operator config: %v", err)
+		}
+	})
 
 	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {
 		t.Fatalf("completed work = %d, want 1; events=%#v", got, events)
@@ -82,7 +95,7 @@ func TestFactoryRunRetriesACPProviderByResumingExactSession(t *testing.T) {
 	if got := processStarts.Load(); got != 2 {
 		t.Fatalf("ACP process starts = %d, want 2 for the failed attempt and resumed retry", got)
 	}
-	assertProviderSessionID(t, events, "cursor-acp", sessionID)
+	assertProviderSessionID(t, events, providerID, sessionID)
 }
 
 func TestFactoryRunRetainsLegacyNamedExecutorProviderCompatibility(t *testing.T) {
