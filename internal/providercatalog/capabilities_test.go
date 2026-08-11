@@ -41,14 +41,16 @@ func TestCapabilitySchemaPublishesCompleteVocabulary(t *testing.T) {
 	}
 }
 
-func TestCapabilityValidationRejectsInvalidFacts(t *testing.T) {
+type capabilityValidationCase struct {
+	name    string
+	mutate  func(map[string]any)
+	wantErr string
+}
+
+func TestCapabilityValidationRejectsEvidenceAndSupportFacts(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name    string
-		mutate  func(map[string]any)
-		wantErr string
-	}{
+	assertCapabilityValidationRejects(t, []capabilityValidationCase{
 		{
 			name: "duplicate facts",
 			mutate: func(manifest map[string]any) {
@@ -117,6 +119,13 @@ func TestCapabilityValidationRejectsInvalidFacts(t *testing.T) {
 			},
 			wantErr: "unknown support cannot claim transport",
 		},
+	})
+}
+
+func TestCapabilityValidationRejectsRouteAndToolFacts(t *testing.T) {
+	t.Parallel()
+
+	assertCapabilityValidationRejects(t, []capabilityValidationCase{
 		{
 			name: "invalid route modality",
 			mutate: func(manifest map[string]any) {
@@ -192,7 +201,11 @@ func TestCapabilityValidationRejectsInvalidFacts(t *testing.T) {
 			},
 			wantErr: "unknown availability requires null defaultEnabled",
 		},
-	}
+	})
+}
+
+func assertCapabilityValidationRejects(t *testing.T, tests []capabilityValidationCase) {
+	t.Helper()
 	for _, test := range tests {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
