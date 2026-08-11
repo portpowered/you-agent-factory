@@ -323,11 +323,11 @@ function authoredWorkstationForGraphNode(
     return undefined;
   }
 
-  const authoredID = workstationKey.id?.trim();
+  const authoredID = workstationKey.id?.trim() || undefined;
   return (factoryDefinition?.workstations ?? workstations ?? []).find(
     (workstation) => {
-      const workstationID = workstation.id?.trim();
-      return authoredID !== undefined
+      const workstationID = workstation.id?.trim() || undefined;
+      return authoredID
         ? workstationID === authoredID
         : workstation.name === workstationKey.name;
     },
