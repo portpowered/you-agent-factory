@@ -8054,3 +8054,33 @@
 - **Learnings for future iterations:**
   - Once repeated fresh CI attempts converge on one reproducible failure outside the implementation diff, retain the scoped P1 result and hand off the baseline CI issue rather than changing unrelated runtime or test behavior.
 ---
+## [2026-08-10 23:14 -07:00] - btrc-p1-root-injection-006 current-head CI and review audit
+- What was implemented
+  - Made no product-code change because all six P1 stories remain complete and the branch is already synchronized with current `origin/main`.
+  - Audited the existing PR #1857 with the thread-aware GraphQL workflow: there are zero inline review threads and zero formal reviews requiring action. The historical blocking summaries are addressed by the later pushed implementation and verification follow-ups.
+  - Updated the story-006 handoff note with the current head and latest CI characterization while retaining every story's `passes:true` value.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `gh pr view 1857` — head `56cde5d019c781b8e5ffbb3cf1c793e304f74c04`, base `ecd1d248731c9108dbbc4dafe2f28c4120043346`, mergeable, open.
+  - Thread-aware PR audit — zero unresolved review threads and zero formal reviews.
+  - `go test ./tests/functional/transport/cli/process -run '^TestCLISuccessorAfterHardKillReportsPreRuntimeStagingContention$' -count=1 -v -timeout 300s` — passed in isolation.
+  - `go test ./tests/functional/transport/server_binding -run '^TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput$' -count=1 -v -timeout 300s` — reproduced the unchanged baseline assertion: the expected legacy warning plus one diagnostic line also includes the structured `API server error` log line.
+  - `git diff --name-only origin/main...HEAD` — contains no files under either failing functional-test package; `git diff --check` remains clean.
+  - CI run `31463668286` — all lanes passed except Backend Functional Coverage, which reported the two unchanged tests above; Verification Policy failed only because of that lane.
+- **Learnings for future iterations:**
+  - When a fresh functional-coverage run reports multiple untouched tests, isolate each exact test before editing task code; a passing retry-only test and a reproducible current-main assertion should be recorded separately.
+---
+## [2026-08-10 23:30 -07:00] - btrc-p1-root-injection-006 fast-verification timeout
+- What was implemented
+  - Made no product-code change; the PRD remains complete and the existing implementation diff is unchanged.
+  - Ran the repository fast verification on the bookkeeping-updated head. The wrapper reached its 904-second command limit while descendant Go/Bun test processes were still active, so the result is recorded as a timeout rather than a pass. No task-scoped assertion failure was emitted before the timeout.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `make verify-fast` — timed out after 904.299 seconds with active descendant test processes; no implementation or generated-file diff was produced.
+  - Earlier focused staging-contention and server-binding characterization results remain as recorded in the preceding entry.
+- **Learnings for future iterations:**
+  - Treat a wrapper timeout with live descendants as an environment/process-capacity issue until the exact child failure is observed; do not kill broad concurrent test trees or convert the timeout into a false green result.
+---
