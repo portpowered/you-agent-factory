@@ -9198,6 +9198,18 @@
 - **Learnings for future iterations:**
   - Final handoff evidence must be recorded on the exact pushed head after CI and mergeability are checked; a progress-only follow-up commit requires its own replacement-head CI run.
 ---
+## [2026-08-11 06:13:54 -07:00] - prose-standard-and-terms-002 hosted functional retry characterization
+- What was implemented
+  - Made no source or PRD changes in response to rotating failures from the untouched Backend Functional Coverage suite; isolated each named fixture and reran only the failed lane with its dependent policy check.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Focused local characterization passed the JavaScript parallel-dispatch test 10/10, CLI writer-cancellation test 10/10, hard-kill staging-contention test 5/5, and mock-worker continuous-idle counterexample 5/5; the Windows-only context-cancellation fixture produced its expected 10/10 skips.
+  - The ACP retry-resume fixture showed transient session-load failures under repetition (9/10, then 4/5); the hosted retry eventually passed.
+  - CI run `31491644438`, attempt 5, passed all 18 required lanes on exact head `5a071aecb967fbecc221b265063fa0b6a32139b3`, including Backend Functional Coverage and Verification Policy.
+- **Learnings for future iterations:**
+  - A broad functional lane can rotate among existing timing-sensitive fixtures across retries; isolate every named failure, preserve the task scope when focused runs pass or characterize expected skips, and rerun only the failed coverage/policy jobs until the exact head is green.
+---
 ## [2026-08-10 19:25 -07:00] - e2-structured-worker-results CI flake follow-up (mainline history)
 - What was implemented
   - Made no product or test-code changes. Investigated the final-head CI failure and reran only the failed Backend Functional Coverage job.
