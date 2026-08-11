@@ -24,6 +24,7 @@ export interface PackagedFactoryInventoryMessages {
   readonly loading: string;
   readonly noExamples: string;
   readonly projectLabel: string;
+  readonly retry: string;
   readonly selected: (stableName: string) => string;
   readonly unsupportedVersion: (version: string) => string;
 }
@@ -51,6 +52,7 @@ const packagedFactoryInventoryMessagesByLocale = {
     loading: "Loading Packaged Factories…",
     noExamples: "No invocation examples are available.",
     projectLabel: "Project",
+    retry: "Retry",
     selected: (stableName) => `${stableName} selected`,
     unsupportedVersion: (version) =>
       `This website does not support Packaged Factory catalog format ${version}.`,
@@ -76,6 +78,7 @@ const packagedFactoryInventoryMessagesByLocale = {
     loading: "正在加载打包工厂…",
     noExamples: "暂无调用示例。",
     projectLabel: "项目",
+    retry: "重试",
     selected: (stableName) => `已选择 ${stableName}`,
     unsupportedVersion: (version) =>
       `此网站不支持打包工厂目录格式 ${version}。`,
