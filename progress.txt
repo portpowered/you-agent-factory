@@ -4009,3 +4009,18 @@
   - Fetch the live base immediately before final handoff because a green run can become conflicted when another PR lands.
   - When `prd.json` and an append-only progress log conflict, keep the active task's PRD and concatenate both histories rather than dropping unrelated log entries.
 ---
+
+## [2026-08-10 19:18 -07:00] - thr-split-acp-stdio-tests post-merge CI completion
+- What was implemented
+  - Completed the post-merge CI follow-up for PR #1861 on head `45e43abbff81e552b51161f02048d0e00e2cac2c`.
+  - Retried only the failed Backend Functional Coverage job after the initial run exposed an unrelated `pkg/transports/cli` coverage-floor fluctuation and its dependent policy failure.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Local `go test -p 1 -vet=off ./pkg/transports/acp/internal/stdio` passed after the current-main merge.
+  - GitHub Actions run `31450791786`: the initial full matrix encountered the pre-existing CLI coverage floor (72.8180% vs 72.98%); the first targeted retry encountered the unrelated no-dependent-packages coverage-lane failure for `pkg/transports/mcp/discoverygen`; the second targeted retry passed Backend Functional Coverage and Verification Policy.
+  - The final post-merge run conclusion is successful, and no ACP-specific job or review feedback failed.
+- **Learnings for future iterations:**
+  - When a broad coverage job fails outside the changed package, preserve the implementation and retry only that job; the same job can surface different unrelated coverage-lane flakes across attempts.
+  - Record the final successful attempt separately from the initial failure so CI history remains auditable.
+---
