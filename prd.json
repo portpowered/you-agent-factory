@@ -3,10 +3,10 @@
   "branchName": "e3-event-webhooks",
   "deliveryAudit": {
     "pullRequest": 1850,
-    "auditedHead": "979ef432034931a99222e3c43baf4a7c17ce6f6a",
+    "auditedHead": "f952faa4e309520988375bd8b6abe19ea77a59d0",
     "base": "3521f0b0a2f313b22e2c79edcf90339a01b3bce7",
-    "requiredChecks": "Focused package-target-manifest-check and ownership-inventory-check pass locally; latest-main CI run 31489746968 identified a stale generated API manifest plus unrelated current-main staging-contention, Agy golden, and schema-staging flakes; canonical contract generation, API smoke/package verification, and all four focused reruns now pass locally, and replacement-head CI is pending",
-    "reviewThreads": "Thread-aware audit reports zero unresolved inline threads, zero formal reviews, and five historical conversation comments; the latest blocking inventory feedback is addressed by the latest-main merge and inventory gates pass"
+    "requiredChecks": "CI run 31490684188 passed all 18 required checks for exact head f952faa4e309520988375bd8b6abe19ea77a59d0 against base 3521f0b0a2f313b22e2c79edcf90339a01b3bce7; package-target-manifest-check, ownership-inventory-check, API smoke, and API package verification pass locally, while the earlier aggregate make lint reported only three unrelated current-main baseline findings outside Webhooks",
+    "reviewThreads": "Thread-aware audit reports zero unresolved inline threads, zero formal reviews, and five historical conversation comments; the latest blocking inventory feedback is addressed, all required CI is green, and the PR is mergeable and clean"
   },
   "description": "Add Factory-configured outbound webhooks that subscribe to the existing canonical Factory Event stream and POST signed Work state-transition and dispatch-failure envelopes with filtering, bounded retry/backoff, and durable dead-letter logging. The feature lets external monitors react without polling while preserving Recordings as the event authority and keeping delivery failure isolated from Factory Runtime state.",
   "context": {
