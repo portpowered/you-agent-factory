@@ -12440,3 +12440,18 @@
   - Delivery metadata and the PR body must be refreshed together after every bookkeeping commit so the checked-in PRD, exact pushed head, CI evidence, and hosted description remain synchronized.
   - Historical top-level blocking comments can remain visible after the fix; completion depends on explicit follow-up evidence, current head checks, and thread-aware state.
 ---
+## 2026-08-11 11:17:48 -07:00 - e3-event-webhooks-004 replacement-head CI audit
+- What was implemented
+  - Confirmed all four Webhooks stories remain marked `passes:true`; no product-code changes were required.
+  - Completed the replacement-head CI audit after the PR metadata synchronization commit: CI run `31521245282` passed all 18 required checks for exact head `059cdd1c7e58e4b1e2689af1aafb2284dd931789`.
+  - Confirmed PR #1885 is open, non-draft, mergeable, and clean against current base `650b701689fcbc467fa0e814478460b9c3316629`; the thread-aware audit still has zero review threads, zero unresolved inline threads, and zero formal reviews.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `gh pr checks 1885` reports all 18 required checks as `pass` on CI run `31521245282`.
+  - `prd.json` parses with all four stories marked `passes:true`; `git diff --check` passes; the PR body was previously synchronized and will be refreshed after this exact-head audit update.
+- **Learnings for future iterations:**
+  - A final delivery-audit commit creates a new CI head; update the audit only after that head’s checks finish, then refresh the PR body and run one final hosted-state audit.
+  - Keep the exact head SHA, base SHA, and CI run together so review handoff evidence cannot accidentally point to a predecessor commit.
+---
