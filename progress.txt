@@ -36,6 +36,7 @@
 - When moving a test with a pkgmaintcheck exemption, move the existing budget target with the test and retain legacy file suppressions until the remaining staged split retires the source file.
 - For broad functional coverage concurrency flakes, isolate the named test and rerun only the failed CI jobs before changing untouched behavior.
 - When resolving long append-only progress conflicts, read merge-stage files in bounded chunks and validate the reconstructed line count so tool-output truncation cannot drop history.
+- New durable service owners must be added to both the package-target and ownership-inventory checker vocabularies/specs before regenerating their committed manifests.
 - When splitting oversized same-package tests into focused files, remove stale file/maintainability exemptions and update the package file-count baseline for the intentional net increase; keep shared fixtures in one package-local helper file.
 - For final PR handoff, compare the PR body byte-for-byte with `prd.json` and use the thread-aware GraphQL review audit because flat PR comments do not expose inline-thread resolution state.
 - Treat repository-enforcement inventories and architecture guards as project-enabling PRD criteria when they have no runtime, API, CLI, UI, or emitted-event behavior; source scans support enforcement but are not customer-behavior evidence.
@@ -8507,4 +8508,29 @@
 - **Learnings for future iterations:**
   - Coverage failures in untouched packages can be timing-sensitive; retry only the failed jobs first and preserve the source diff when the rerun passes.
   - The audit metadata must follow the exact pushed head and the passing CI run, including rerun attempts.
+---
+
+## 2026-08-11 04:32 -07:00 - e3-event-webhooks-004 review follow-up
+- What was implemented
+  - Addressed the latest PR #1850 blocking feedback by registering the Webhooks service in the package-target and ownership-inventory closed vocabularies, top-level ownership maps, package mappings, and generated committed inventories.
+  - Regenerated the ownership rationale and cross-service edge records so the new service has explicit authority, state, lifecycle, consumer, transaction, and failure-recovery ownership evidence.
+- Files changed
+  - `cmd/packagetargetmanifestcheck/manifest.go`
+  - `cmd/packagetargetmanifestcheck/manifest_test.go`
+  - `cmd/packagetargetmanifestcheck/owner_top_level.go`
+  - `internal/ownershipinventory/destinations.go`
+  - `internal/ownershipinventory/map.go`
+  - `internal/ownershipinventory/owner_top_level.go`
+  - `internal/ownershipinventory/rationale.go`
+  - `internal/ownershipinventory/rationale_service_owners.go`
+  - `docs/internal/packaged-service-structure/package-target-manifest.json`
+  - `docs/internal/baselines/ownership-inventory.json`
+- Verification
+  - `make package-target-manifest-check` — passed with 549 inventory and package rows.
+  - `make ownership-inventory-check` — passed, including the path-lease freeze.
+  - `make lint` — the Webhooks-related inventory targets passed; the aggregate lane reported three pre-existing baseline findings in `pkg-boundary`, `packaged-factory-consumption-check`, and `deadcode` outside this change.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - A new durable service must be registered in the checker source vocabularies and top-level specs as well as both generated JSON ledgers; updating only the JSON leaves the gates unable to validate the owner.
+  - Full lint output is useful for separating a fixed branch-new inventory failure from unrelated baseline drift; record the named target results independently.
 ---

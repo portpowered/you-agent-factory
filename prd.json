@@ -3,10 +3,10 @@
   "branchName": "e3-event-webhooks",
   "deliveryAudit": {
     "pullRequest": 1850,
-    "auditedHead": "486b1e0e51b6a39b5a352ea6c3e352862cad14f8",
-    "base": "dd87fd04db20d755f9b44c369aa79b8c3e600f5f",
-    "requiredChecks": "All 18 required CI checks pass in run 31480623364 for head 486b1e0e51b6a39b5a352ea6c3e352862cad14f8; current-main ancestry and mergeability are clean",
-    "reviewThreads": "Thread-aware audit reports zero unresolved inline threads, zero formal reviews, and four historical conversation comments; the latest blocking feedback is addressed by a32b56a30 and current-main merge 20a2a0972"
+    "auditedHead": "81e5e25a764b78dc56568493f603becd2592d6d4",
+    "base": "012e98e0fbd1b6fcac106d90b1f3d335b8a3dce6",
+    "requiredChecks": "Focused package-target-manifest-check and ownership-inventory-check pass locally for head 81e5e25a764b78dc56568493f603becd2592d6d4; aggregate make lint reaches the Webhooks inventory targets but reports three unrelated baseline findings in pkg-boundary, packaged-factory-consumption-check, and deadcode; required CI is pending after push",
+    "reviewThreads": "Thread-aware audit reports zero unresolved inline threads, zero formal reviews, and five historical conversation comments; the latest blocking inventory feedback is addressed by 81e5e25a764b78dc56568493f603becd2592d6d4"
   },
   "description": "Add Factory-configured outbound webhooks that subscribe to the existing canonical Factory Event stream and POST signed Work state-transition and dispatch-failure envelopes with filtering, bounded retry/backoff, and durable dead-letter logging. The feature lets external monitors react without polling while preserving Recordings as the event authority and keeping delivery failure isolated from Factory Runtime state.",
   "context": {
