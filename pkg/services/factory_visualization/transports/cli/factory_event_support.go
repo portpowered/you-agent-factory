@@ -347,10 +347,9 @@ func (formatter *humanFactoryEventFormatter) format(event interfaces.FactoryEven
 	var ok bool
 	switch event.Type {
 	case interfaces.FactoryEventTypeDispatchWorkerSessionAssoc:
-		if !hasDetails || details.workerID == "" {
-			return nil, false
-		}
-		message, ok = formatHumanWorkerAssociated(event, details)
+		// Worker association is progress-only. The progress renderer owns its
+		// stderr presentation so active-worker state cannot contaminate stdout.
+		return nil, false
 	case interfaces.FactoryEventTypeDispatchInterrupted:
 		if hasDetails && (details.workstation != "" || len(details.workIDs) > 0) {
 			payload, _ := decodeFactoryEventPayload[interfaces.DispatchInterruptedEventPayload](event)

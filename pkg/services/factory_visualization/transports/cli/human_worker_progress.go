@@ -16,11 +16,13 @@ const humanWorkerProgressInterval = 120 * time.Millisecond
 
 var humanWorkerSpinnerFrames = [...]string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 
-// humanWorkerProgressRenderer owns the stderr-only, TTY-only worker spinner.
-// Its state is independent from the response stream so JSON/NDJSON output
-// remains byte-for-byte owned by the stream writer.
+// humanWorkerProgressRenderer owns stderr-only worker progress. Interactive
+// terminals receive a transient spinner; redirected output receives stable
+// status lines. Its state is independent from the response stream so
+// JSON/NDJSON output remains byte-for-byte owned by the stream writer.
 type humanWorkerProgressRenderer struct {
 	output           io.Writer
+	interactive      bool
 	ticks            <-chan time.Time
 	ticker           *time.Ticker
 	stop             chan struct{}
@@ -31,6 +33,7 @@ type humanWorkerProgressRenderer struct {
 	pending          map[string]humanWorkerProgressState
 	workerByDispatch map[string]string
 	colors           map[string]string
+	lastStable       string
 	frame            int
 	drawn            bool
 	stopped          bool
@@ -44,8 +47,15 @@ type humanWorkerProgressState struct {
 }
 
 func newHumanWorkerProgressRenderer(output io.Writer, isTTY bool, ticks <-chan time.Time) *humanWorkerProgressRenderer {
-	renderer := &humanWorkerProgressRenderer{}
-	if output == nil || !isTTY {
+	renderer := &humanWorkerProgressRenderer{output: output, interactive: isTTY}
+	if output == nil {
+		return renderer
+	}
+	renderer.active = make(map[string]humanWorkerProgressState)
+	renderer.pending = make(map[string]humanWorkerProgressState)
+	renderer.workerByDispatch = make(map[string]string)
+	renderer.colors = make(map[string]string)
+	if !isTTY {
 		return renderer
 	}
 	if ticks == nil {
@@ -53,14 +63,9 @@ func newHumanWorkerProgressRenderer(output io.Writer, isTTY bool, ticks <-chan t
 		ticks = ticker.C
 		renderer.ticker = ticker
 	}
-	renderer.output = output
 	renderer.ticks = ticks
 	renderer.stop = make(chan struct{})
 	renderer.done = make(chan struct{})
-	renderer.active = make(map[string]humanWorkerProgressState)
-	renderer.pending = make(map[string]humanWorkerProgressState)
-	renderer.workerByDispatch = make(map[string]string)
-	renderer.colors = make(map[string]string)
 	go renderer.run()
 	return renderer
 }
@@ -76,8 +81,13 @@ func (renderer *humanWorkerProgressRenderer) PresentFactoryEvents(events []inter
 	}
 	for _, event := range events {
 		renderer.applyEventLocked(event)
+		if !renderer.interactive {
+			renderer.drawLocked()
+		}
 	}
-	renderer.drawLocked()
+	if renderer.interactive {
+		renderer.drawLocked()
+	}
 	renderer.mu.Unlock()
 }
 
@@ -213,6 +223,16 @@ func (renderer *humanWorkerProgressRenderer) Stop() {
 		return
 	}
 	renderer.once.Do(func() {
+		if renderer.stop == nil {
+			renderer.mu.Lock()
+			renderer.stopped = true
+			renderer.active = nil
+			renderer.pending = nil
+			renderer.workerByDispatch = nil
+			renderer.colors = nil
+			renderer.mu.Unlock()
+			return
+		}
 		if renderer.ticker != nil {
 			renderer.ticker.Stop()
 		}
@@ -247,6 +267,10 @@ func (renderer *humanWorkerProgressRenderer) run() {
 }
 
 func (renderer *humanWorkerProgressRenderer) drawLocked() {
+	if !renderer.interactive {
+		renderer.drawStableLocked()
+		return
+	}
 	if len(renderer.active) == 0 {
 		renderer.clearLocked()
 		return
@@ -270,6 +294,28 @@ func (renderer *humanWorkerProgressRenderer) drawLocked() {
 	}
 	_, _ = fmt.Fprint(renderer.output, "\r\x1b[2K"+strings.Join(glyphs, " "))
 	renderer.drawn = true
+}
+
+func (renderer *humanWorkerProgressRenderer) drawStableLocked() {
+	if len(renderer.active) == 0 {
+		renderer.lastStable = ""
+		return
+	}
+	identities := make([]string, 0, len(renderer.active))
+	for identity := range renderer.active {
+		identities = append(identities, identity)
+	}
+	sort.Strings(identities)
+	lines := make([]string, 0, len(identities))
+	for _, identity := range identities {
+		lines = append(lines, formatHumanWorkerProgressLine("", renderer.active[identity]))
+	}
+	frame := strings.Join(lines, "\n")
+	if frame == renderer.lastStable {
+		return
+	}
+	_, _ = fmt.Fprintln(renderer.output, frame)
+	renderer.lastStable = frame
 }
 
 func (renderer *humanWorkerProgressRenderer) progressColorLocked(identity string) string {
@@ -305,7 +351,11 @@ func formatHumanWorkerProgressLine(frame string, state humanWorkerProgressState)
 	if state.workerID != "" {
 		label = "worker"
 	}
-	line := frame + " " + label + " " + identity + ": active"
+	prefix := ""
+	if frame != "" {
+		prefix = frame + " "
+	}
+	line := prefix + label + " " + identity + ": active"
 	if workstation := boundedHumanProgressPayload(state.workstation); workstation != "" {
 		line += " at " + workstation
 	}
@@ -319,6 +369,9 @@ func formatHumanWorkerProgressLine(frame string, state humanWorkerProgressState)
 }
 
 func (renderer *humanWorkerProgressRenderer) clearLocked() {
+	if !renderer.interactive {
+		return
+	}
 	if renderer.drawn {
 		_, _ = fmt.Fprint(renderer.output, "\r\x1b[2K")
 		renderer.drawn = false

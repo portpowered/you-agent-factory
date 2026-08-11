@@ -6866,3 +6866,26 @@
   - When a command has a quiet effective rendering policy but still emits an intentional one-shot response stream, keep progress gating tied to the explicit terminal policy so customer-visible response progress is not accidentally removed.
   - Assign concurrent worker colors with a deterministic collision resolver rather than relying only on a hash modulo palette size; this preserves stable identity while keeping simultaneous workers visually distinct.
 ---
+## 2026-08-10 21:54 -07:00 - cli-error-classification-and-run-output-004 CI correction
+- What was implemented
+  - Corrected the CI-found stdout contamination by making worker association events progress-only and routing active-worker state through the configured stderr channel.
+  - Added deterministic non-TTY progress lines without ANSI or cursor controls, preserving TTY spinner/color behavior and quiet-mode suppression.
+  - Updated functional process-boundary assertions so stdout remains canonical lifecycle/primary output while redirected worker progress is verified on stderr.
+- Files changed
+  - `pkg/services/factory_visualization/transports/cli/factory_event_renderer.go`
+  - `pkg/services/factory_visualization/transports/cli/factory_event_support.go`
+  - `pkg/services/factory_visualization/transports/cli/human_worker_progress.go`
+  - `pkg/services/factory_visualization/transports/cli/service_test.go`
+  - `tests/functional/cli/factory_run/output/output_test.go`
+  - `tests/functional/transport/cli/output/text_stream_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/factory_visualization/transports/cli -count=1` passed.
+  - `go test ./tests/functional/cli/factory_run/output ./tests/functional/transport/cli/output -count=1` passed.
+  - `go test -race ./pkg/services/factory_visualization/transports/cli ./pkg/transports/cli/run -count=1` passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure` passed; the unrelated ACP cancellation test passed on targeted rerun after one broad-package flake.
+- **Learnings for future iterations:**
+  - Keep worker association/state lines on the dedicated progress channel; response-stream stdout is reserved for canonical lifecycle records and the primary result.
+  - Non-TTY progress must render stable snapshots synchronously as events arrive, including intermediate active states before a batch also contains terminal events.
+---

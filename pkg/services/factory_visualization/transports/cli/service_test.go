@@ -283,9 +283,10 @@ func TestHumanFactoryEventRenderer_PresentsConcurrentWorkerLifecycle(t *testing.
 	interrupted := mustJSON(t, interfaces.DispatchInterruptedEventPayload{Reason: "operator cancelled"})
 
 	service := visualizationcli.New(nil, factoryvisualizationwire.NewResponsePresentation())
-	var output bytes.Buffer
+	var output, progress bytes.Buffer
 	renderer, err := service.OpenFactoryEventRenderer(visualizationcli.FactoryEventRendererConfig{
-		Output: &output, InvocationOutputMode: visualizationcli.InvocationOutputResponseStream,
+		Output: &output, ProgressOutput: &progress, ProgressIsTTY: false,
+		InvocationOutputMode: visualizationcli.InvocationOutputResponseStream,
 	})
 	if err != nil {
 		t.Fatalf("open renderer: %v", err)
@@ -306,16 +307,21 @@ func TestHumanFactoryEventRenderer_PresentsConcurrentWorkerLifecycle(t *testing.
 
 	want := "[0] workstation queued: build (work-one) [dispatch dispatch-one]\n" +
 		"[0] workstation started: build (work-one) [dispatch dispatch-one]\n" +
-		"[0] worker active: worker-one at build (work-one) [dispatch dispatch-one]\n" +
 		"[0] workstation started: test (work-two) [dispatch dispatch-two]\n" +
-		"[0] worker active: worker-two at test (work-two) [dispatch dispatch-two]\n" +
 		"[0] workstation failed: test (work-two) [dispatch dispatch-two] — tests failed\n" +
 		"[0] workstation started: deploy (work-three) [dispatch dispatch-three]\n" +
-		"[0] worker active: worker-three at deploy (work-three) [dispatch dispatch-three]\n" +
 		"[0] workstation interrupted: deploy (work-three) [dispatch dispatch-three] — operator cancelled\n" +
 		"[0] workstation completed: build (work-one) [dispatch dispatch-one]\n"
 	if got := output.String(); got != want {
 		t.Fatalf("concurrent worker output = %q, want %q", got, want)
+	}
+	for _, worker := range []string{"worker worker-one: active at build", "worker worker-two: active at test", "worker worker-three: active at deploy"} {
+		if !strings.Contains(progress.String(), worker) {
+			t.Fatalf("progress = %q, want %q", progress.String(), worker)
+		}
+	}
+	if strings.ContainsAny(progress.String(), "\x1b\r") {
+		t.Fatalf("non-TTY progress = %q, want no ANSI or cursor controls", progress.String())
 	}
 }
 

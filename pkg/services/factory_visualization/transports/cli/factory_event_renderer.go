@@ -73,8 +73,8 @@ func newHumanFactoryEventRenderer(
 
 func (renderer *humanFactoryEventRenderer) PresentFactoryEvents(events []interfaces.FactoryEvent) {
 	if renderer != nil {
-		renderer.stream.PresentFactoryEvents(events)
 		renderer.progress.PresentFactoryEvents(events)
+		renderer.stream.PresentFactoryEvents(events)
 	}
 }
 

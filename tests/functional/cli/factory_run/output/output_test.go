@@ -21,7 +21,8 @@ func TestSuccessfulInvocationOutputModes(t *testing.T) {
 	t.Run("human lifecycle followed by final response", func(t *testing.T) {
 		t.Parallel()
 
-		stdout := runGoalInvocation(t, nil, []string{"--output", "response-stream"})
+		stdout, stderr := runGoalInvocation(t, nil, []string{"--output", "response-stream"})
+		assertStableWorkerProgress(t, stderr)
 
 		lines := nonEmptyLines(stdout)
 		if len(lines) < 3 {
@@ -43,15 +44,18 @@ func TestSuccessfulInvocationOutputModes(t *testing.T) {
 	t.Run("quiet raw final result", func(t *testing.T) {
 		t.Parallel()
 
-		stdout := runGoalInvocation(t, nil, []string{"--quiet"})
+		stdout, stderr := runGoalInvocation(t, nil, []string{"--quiet"})
 
 		if stdout != primaryResult {
 			t.Fatalf("stdout = %q, want only raw final result %q", stdout, primaryResult)
 		}
+		if stderr != "" {
+			t.Fatalf("stderr = %q, want quiet mode to suppress progress", stderr)
+		}
 	})
 }
 
-func runGoalInvocation(t *testing.T, globalArgs, runArgs []string) string {
+func runGoalInvocation(t *testing.T, globalArgs, runArgs []string) (string, string) {
 	t.Helper()
 
 	homeDir := t.TempDir()
@@ -82,10 +86,17 @@ func runGoalInvocation(t *testing.T, globalArgs, runArgs []string) string {
 	if err := support.BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input); err != nil {
 		t.Fatalf("Process.Execute(%v) error = %v\nstdout:\n%s\nstderr:\n%s", args, err, inputs.Stdout(), inputs.Stderr())
 	}
-	if inputs.Stderr() != "" {
-		t.Fatalf("stderr = %q, want empty successful-run stderr", inputs.Stderr())
+	return inputs.Stdout(), inputs.Stderr()
+}
+
+func assertStableWorkerProgress(t *testing.T, stderr string) {
+	t.Helper()
+	if !strings.Contains(stderr, "worker ") || !strings.Contains(stderr, ": active") {
+		t.Fatalf("stderr = %q, want stable worker progress", stderr)
 	}
-	return inputs.Stdout()
+	if strings.ContainsAny(stderr, "\x1b\r") {
+		t.Fatalf("stderr = %q, want no ANSI or cursor controls for redirected output", stderr)
+	}
 }
 
 func nonEmptyLines(value string) []string {
@@ -107,7 +118,6 @@ func isFactoryLifecycleLine(line string) bool {
 	for _, prefix := range []string{
 		"work accepted", "work moved", "factory started", "factory completed",
 		"workstation queued", "workstation started", "workstation completed", "workstation failed", "workstation interrupted",
-		"worker active",
 		"inference started", "inference completed", "inference failed", "workflow phase", "workflow checkpoint written",
 		"final output updated",
 	} {
