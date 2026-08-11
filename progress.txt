@@ -10803,3 +10803,21 @@
 - **Learnings for future iterations:**
   - When main advances through another bookkeeping-heavy merge, retain the active task PRD, use current main as the progress-log base, append the task-only history, and rerun all hosted checks on the replacement ancestry.
 ---
+## [2026-08-11 07:40:54 -07:00] - thr-split-acp-stdio-tests current-main-reconciliation
+- What was implemented
+  - Synchronized the task branch with the newer live `origin/main` commit `635a43870` and retained the ACP-focused split as the task-side resolution for the overlapping test moves.
+  - Refreshed all three PRD evidence notes to the current-main baseline and recorded the replacement-head verification.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/transports/acp/internal/stdio -count=1 -timeout 300s` passed.
+  - `go test -race ./pkg/transports/acp/internal/stdio -count=1 -timeout 300s` passed; `gofmt -l` reported no files.
+  - Against detached `origin/main` `635a43870`, normalized inventory remained 222/222 with zero diff and SHA-256 `da83686cb68f0988570ca0ea0f429eabf40beb2bb47dba967874a33d46481bf1`; coverage remained 94.3% before and after.
+  - `make typecheck backend-size pkg-maint pkg-file-count pkg-structure vet` passed.
+  - `make pkg-boundary` reports no blocking package-boundary violations; its two ownership findings match the exact detached current-main baseline with zero diff.
+  - `prd.json` parses with all three stories marked `passes: true`, conflict markers are absent, and `git diff --check` passes.
+- **Learnings for future iterations:**
+  - The current-main ACP baseline already contains a different partial test split, so the task branch must preserve the complete focused-suite layout while proving the normalized inventory and coverage remain identical.
+  - Compare boundary-gate output against the detached current-main checkout when the aggregate gate reports existing ownership debt; identical findings are not new task regressions.
+---
