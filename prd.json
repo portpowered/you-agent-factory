@@ -1,74 +1,76 @@
 {
-  "project": "Additive CI Classifier and Focused Verification Targets",
-  "branchName": "ci-additive-classifier",
-  "description": "Replace the four-outcome exclusive CI classifier with deterministic additive verification-lane outputs derived from changed-path ownership, and add focused root Make verification targets so each lane can run only its owned scope. Factory-content-only changes select no lanes, mixed changes select exact unions, and CI/tooling or unknown paths conservatively select every lane, while workflow routing remains unchanged for the dependent project.",
+  "project": "WSR-001 Worker Opening Record Identifies the Execution",
+  "branchName": "wsr-001-opening-record",
+  "description": "Implement WSR-001 so every Worker event topic begins with an authoritative SESSION/STARTED record containing stable session, Factory, provider-selection, timing, Work, and attempt correlation before provider output, with synthesized lifecycle provenance and valid opening-to-terminal history even when no Provider Session reference exists.",
   "context": {
-    "customerAsk": "Rewrite cmd/ciclassify to emit additive path-ownership lane decisions, cover the governing plan's nine-case validation matrix with exact emitted-lane assertions, and add focused root Make verification targets including a narrow real-backend UI integration target. Keep Makefile changes limited to new targets, reconcile concurrent Makefile work through the mandatory contention protocol, and do not add job-level workflow routing in this lane.",
-    "problem": "The existing four-outcome exclusive classifier cannot express exact verification unions for mixed changes, so pull requests pay runner-queue and wall-clock costs for unrelated jobs. Broad Make entry points also combine independently owned checks, while an incomplete ownership policy could allow unknown paths to escape required verification.",
-    "solution": "Expose one focused root Make rerun command per verification lane, with UI-backend integration limited to browser tests that start or call a real backend; classify normalized changed paths through an explicit ownership policy; union all matched lanes; treat factory content as neutral; select every lane for empty, tooling, Go-toolchain, or unknown input; and prove the contract with exact table-driven fixtures for all nine governing validation cases without editing CI workflows."
+    "customerAsk": "Make SESSION/STARTED the first record on every Worker topic with stable session, provider-selection, timing, attempt, and Factory correlation before provider output; declare synthesized lifecycle provenance; and preserve valid opening and terminal history for providers with no Provider Session reference. Provide WSR-FT-001, WSR-FT-002, WSR-FT-003 plus focused unit, provider conformance, and Events ordering evidence.",
+    "problem": "Worker history does not yet guarantee that the first record carries every authoritative correlation and provenance fact needed to identify the execution. Provider identity may become observable too late, and consumers can incorrectly depend on an optional provider-native session reference, making live and replayed timelines ambiguous across providers.",
+    "solution": "Extend the provider-neutral Worker lifecycle contract and canonical Worker Sessions invocation path so an injected-clock timestamp and all known execution correlation are published in SESSION/STARTED at topic position 1. Bind actual provider identity before provider-authored output, retain optional Provider Session references without inference, and prove stable live/replay behavior across streaming, session-bearing, final-only, and no-session-reference providers without implementing later recording-persistence stories."
   },
   "acceptanceCriteria": [
-    "The root Makefile exposes a direct focused rerun command for every classifier lane; each command runs only its owned scope, and the UI-backend integration command runs real-backend browser coverage without Storybook-only checks.",
-    "cmd/ciclassify emits named Boolean lane outputs from changed-path ownership, selects exact unions for mixed inputs, and produces deterministic decisions independent of input order or duplicate paths.",
-    "factory/**-only input selects no verification lanes; factory content combined with an owned product path does not add or suppress that product path's lanes.",
-    "Empty input, .github/workflows/**, CI scripts, Makefile, go.mod, go.sum, and unknown paths select every verification lane conservatively.",
-    "Table-driven unit fixtures reproduce all nine cases in the governing validation matrix, with each case asserting the complete emitted lane set, and no .github/workflows/** file changes in this project.",
-    "Typecheck and focused tests pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
-    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared-file contention are resolved against current main, and the PR is actually merged."
+    "Every exercised Worker path publishes exactly one SESSION/STARTED as topic position 1 before provider-authored output and finishes with a legal terminal lifecycle record.",
+    "The opening exposes every known WSR lifecycle field while genuinely unknown optional facts remain absent rather than zero-filled, defaulted, or inferred.",
+    "Live and replay observations preserve the exact opening startedAt and known Worker, Factory, dispatch, turn, Work, and attempt identities, and lifecycle provenance is SYNTHESIZED, notification-shaped, and LIFECYCLE_ONLY.",
+    "Actual provider identity is present in the opening or established by a preceding provider-binding SESSION/UPDATED, so no provider-authored event is observable first.",
+    "Streaming, session-bearing, final-only, and no-Provider-Session-reference executions retain legal provider-neutral ordering, honest fidelity, and inspectable opening-to-terminal history, demonstrated by WSR-FT-001, WSR-FT-002, WSR-FT-003 and focused unit, conformance, and ordering tests.",
+    "Implementation respects service ownership and the single Events publication path, introduces no recording persistence barrier or dual write, and includes no broad unrelated cleanup.",
+    "Typecheck passes and tests pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
+    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared/generated-file churn are resolved against current main, and the PR is actually merged."
   ],
   "userStories": [
     {
-      "id": "ci-additive-classifier-001",
-      "title": "Run core product verification through focused commands",
-      "description": "As a CI maintainer, I want separate frontend, backend, and UI-backend integration commands so a selected product lane can be rerun without invoking unrelated verification.",
+      "id": "wsr-001-opening-record-001",
+      "title": "Publish a stable, correlated opening record",
+      "description": "As a customer inspecting a Worker Session, I want its first event to state which execution began and when so that I can interpret the stream without relying on later output.",
       "acceptanceCriteria": [
-        "A direct root Make command runs the complete frontend-owned scope: typecheck, frontend lint, frontend unit/coverage, browser verification, and applicable public UI-package verification, without backend verification.",
-        "A direct root Make command runs the backend-owned scope: backend build plus required backend unit and functional verification, without frontend coverage.",
-        "make ui-backend-integration runs only browser integration that starts or calls a real backend and proves a browser request against it; it does not run Storybook-only checks.",
-        "Existing broader verification commands retain their observable scope and can compose the focused commands without duplicating a selected check.",
-        "Makefile changes are scoped to new focused targets and their declarations; concurrent unit, functional, and lint target mechanics are preserved after rebasing onto current main.",
-        "Typecheck passes",
-        "Tests pass"
+        "Each Worker Session topic begins at position 1 with exactly one SESSION/STARTED, committed before provider handoff or provider-authored output.",
+        "The opening includes status, injected-clock startedAt, workerSessionId, and every known Factory Session, recording, dispatch, turn, Work, attempt, continuation, provider-selection, model, and capabilities value supplied through the canonical invocation path.",
+        "attemptReason uses INITIAL, RETRY, or RESUME as appropriate, and known correlation is preserved through the Petri and JavaScript paths that share Worker Sessions invocation.",
+        "Unknown optional metadata remains absent and is not replaced with zero values, empty provider facts, or reconstructed Provider Session data.",
+        "The opening timestamp and known Worker, Factory, dispatch, turn, Work, and attempt identities are identical in live observation and replay projection, covering WSR-FT-002.",
+        "Focused Worker Sessions unit and projection/replay tests pass.",
+        "Typecheck passes.",
+        "Tests pass."
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Added explicit root frontend-verification, backend-verification, and ui-backend-integration targets that compose existing checks without changing broader verification mechanics. The frontend lane covers typecheck, lint, component/unit coverage, browser and Storybook checks, and public UI-package verification without backend checks; the backend lane covers build plus unit and functional coverage; the integration lane is limited to the real-backend durable-session browser suite. Updated classifier rerun commands to emit these direct targets. Verified with make -n for all three targets, go test ./cmd/ciclassify -count=1, make typecheck, make ui-lint, make test, and git diff --check."
+      "notes": "Opening SESSION/STARTED now carries the injected-clock timestamp, stable Worker/Factory/recording/dispatch/turn/Work/attempt correlations, explicit provider/model/capability selections, and exact continuation metadata when supplied. Unknown optionals remain omitted. Runtime dispatch planning and JavaScript invocation both preserve the new request facts, and focused live/replay plus omission tests pass. WSR-FT-002 now verifies the exact opening timestamp across the public observation and replay stream. Terminal publication now also requires a committed opening, and a fail-first/succeed-second Events regression proves an opening append failure cannot create terminal-only history."
     },
     {
-      "id": "ci-additive-classifier-002",
-      "title": "Run supporting verification lanes through focused commands",
-      "description": "As a CI maintainer, I want one local command per documentation, package-family, and local-inference lane so future routing can select package self-verification and specialty checks independently.",
+      "id": "wsr-001-opening-record-002",
+      "title": "Establish lifecycle provenance and provider-before-output ordering",
+      "description": "As a customer reading a Worker timeline, I want to distinguish system-authored lifecycle facts from provider output and know the selected provider before its output so that provenance and attribution are unambiguous.",
       "acceptanceCriteria": [
-        "Documentation reference and root README lanes resolve to the existing focused make docs-reference-smoke and make readme-check behavior.",
-        "API Package, Packaged Factories Package, and Model Providers Package each resolve to a direct root Make command that runs that package family's self-verification; required backend or frontend consumer verification remains a separate classifier lane rather than being hidden inside package self-verification.",
-        "The Local Inference lane resolves to one Linux-capable focused Make command that executes the managed-runtime and real-inference regression once, with no duplicate real-inference invocation.",
-        "Every supporting lane has one documented direct local rerun command that can be emitted by the classifier.",
-        "Existing package publication policy and protected-main candidate prerequisites are unchanged.",
-        "Typecheck passes",
-        "Tests pass"
+        "Worker Sessions-owned opening and terminal lifecycle records declare DeliverySynthesized, RepresentationNotification, and FidelityLifecycleOnly without claiming provider-native authorship or fidelity.",
+        "The actual provider is present in SESSION/STARTED whenever resolved at opening.",
+        "When actual provider resolution genuinely occurs after opening, the first provider-bound record is SESSION/UPDATED and establishes actual provider identity before every dependent provider-authored event.",
+        "Events ordering integration evidence rejects provider output before the opening or required provider binding and proves the legal opening/provider-output/terminal sequence under streaming execution.",
+        "WSR-FT-001 proves opening-first, provider-identity-before-output, exactly-once live records in finalized history, and terminal-last behavior without adding a Worker Sessions-to-Recordings payload write.",
+        "Focused Worker Sessions unit and Events ordering integration tests pass.",
+        "Typecheck passes.",
+        "Tests pass."
       ],
       "priority": 2,
       "passes": true,
-      "notes": "Kept docs-reference-smoke, readme-check, api-package-verify, packaged-factory-package-verify, and model-provider-package-verify as the direct supporting-lane rerun commands. Added local-inference-verification, which composes long-tests-managed-runtime and exactly one pr-inference-approval execution without the broader specialty sweep, and updated classifier output to emit that command. Verified all five supporting commands, the managed-runtime regression, make -n command expansion, go test ./cmd/ciclassify -count=1, and make typecheck; the real-inference executable is Linux/runner-gated and was not available in this Windows worktree."
+      "notes": "Worker Sessions now stamps opening and terminal drafts with synthesized notification/lifecycle-only provenance and carries the resolved provider on the opening when known. The provider-output bridge resolves attempt dispatches to stable Worker Session topics, publishes canonical drafts through the same Events path, and emits one SESSION/UPDATED provider binding when provider identity is first learned after opening. Contradictory provider fragments are rejected before publication and forwarding. WSR-FT-001 proves the customer-visible opening/binding/output/terminal order. Focused publisher and real in-memory Events tests prove pre-opening rejection, opening/binding/output/terminal ordering, exactly-once binding, terminal-last history, and one downstream forwarding; Worker Sessions tests, factory-runtime tests, race tests, and vet pass."
     },
     {
-      "id": "ci-additive-classifier-003",
-      "title": "Emit additive path-ownership lane decisions",
-      "description": "As a pull-request contributor, I want changed paths to select the exact union of relevant verification lanes so my change receives complete but non-duplicative verification and unfamiliar changes remain safe.",
+      "id": "wsr-001-opening-record-003",
+      "title": "Preserve provider-independent opening and terminal history",
+      "description": "As a customer using any supported provider, I want a valid Worker lifecycle even when the provider has no native session identifier so that Worker history is not conditional on provider transcript capabilities.",
       "acceptanceCriteria": [
-        "The classifier emits named Boolean decisions and focused rerun commands for Documentation Reference, README, Frontend, Backend, UI Backend Integration, API Package, Packaged Factories Package, Model Providers Package, and Local Inference lanes.",
-        "Path ownership follows the governing classification contract, including API and generated contract surfaces, backend/CLI surfaces, each package family and its scripts, local-inference surfaces, docs, README, frontend, factory content, CI/tooling, and unknown paths.",
-        "Mixed paths select the set union of owned lanes; duplicate paths and changed-path input order do not alter the emitted decisions.",
-        "factory/**-only input emits every lane as false, while factory content mixed with another owned path yields exactly the other path's lanes.",
-        "Empty input, workflow or CI-script paths, Makefile, go.mod, go.sum, and an unknown root path emit every lane as true.",
-        "Table-driven fixtures cover the nine validation-matrix cases exactly: factory only; reference docs; root README; frontend; backend or CLI; API contract; each package family independently; mixed frontend/backend; and conservative full verification inputs. Each case asserts the complete emitted lane set.",
-        "Classifier summaries and GitHub-compatible outputs report the same lane decisions and remain usable by the later routing project, but no workflow consumes them in this project.",
-        "Typecheck passes",
-        "Tests pass"
+        "A provider that emits no providers.SessionRef still yields an inspectable SESSION/STARTED, normalized provider output when available, and a legal terminal lifecycle record; the reference remains absent rather than synthesized.",
+        "Shared provider conformance covers representative Claude tool lifecycle, Codex streaming, Cursor/ACP session-bearing, and Agy final-only fixtures through production registrations.",
+        "Each representative provider produces legal provider-neutral Kind/Phase pairs, actual provider provenance on provider-authored drafts, correct source-event idempotency, and terminal behavior.",
+        "Streaming providers report their actual delivery and fidelity, while final-only providers expose only minimal synthesized lifecycle plus final authoritative output and do not fabricate streaming capability.",
+        "WSR-FT-003 proves the same legal normalized protocol and honest fidelity across providers without requiring a provider-specific transcript reader for opening-to-terminal replay.",
+        "Functional evidence uses root.BuildProcess and Process.Execute, production registrations, ProviderCommandRunner with sanitized recorded fixtures, and deterministic event or terminal synchronization rather than Mock Workers or arbitrary sleeps.",
+        "Typecheck passes.",
+        "Tests pass."
       ],
       "priority": 3,
       "passes": true,
-      "notes": "Completed additive classification with normalized, deduplicated, order-independent changed paths; explicit ownership for API/service HTTP and generated contract surfaces, backend/release paths, package families, managed local runtime, OMNIVOICE, and dedicated local-inference tests; neutral factory content; and conservative CI/tooling or unknown fallback. Added exact lane-set assertions for the validation matrix, factory-mixed behavior, duplicate/order invariance, ownership boundaries, and stdout/GitHub-compatible Boolean outputs including run_everything. Verified with go test ./cmd/ciclassify -count=1, go vet ./cmd/ciclassify, make typecheck, make ui-lint, focused Make dry-runs, and git diff --check; no workflow files changed."
+      "notes": "Provider-independent provenance is now carried explicitly on Worker progress and response-stream events, separate from optional Provider Session references; no reference is synthesized. The public Worker Session-ID SSE route (/factory-sessions/{session_id}/worker-sessions/{worker_session_id}/events) exposes canonical retained history without requiring Provider Sessions transcript projection, while preserving any actual provider-session reference when one exists. Root-built conformance now captures and verifies opening position 1, stable correlation, source-event idempotency, provider binding before output, honest normalized fidelity, and terminal-last replay for Antigravity final-only, Claude full-stream, Codex partial-stream, and Cursor/ACP session-bearing executions. Named WSR-FT-003 uses root.BuildProcess/Process.Execute with the sanitized Antigravity fixture to prove final output without a fabricated Provider Session reference or streaming delta. Focused service, HTTP, generated-interface, provider conformance, and unavailable-owner route tests pass. The latest review follow-up keeps the normal unavailable-owner assertion in the owning HTTP transport tests and adds a root-built direct-JavaScript public route probe for the intentionally partial handler composition, leaving no new package-boundary violation beyond the known baseline. The branch is synchronized with the latest current main and regenerated public artifacts remain drift-free."
     }
   ]
 }
