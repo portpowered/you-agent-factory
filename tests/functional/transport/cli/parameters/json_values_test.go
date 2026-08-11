@@ -11,6 +11,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -143,6 +144,14 @@ func TestCLIInvalidJSONParameterNamesTheParameter(t *testing.T) {
 		if !strings.Contains(diagnostic, want) {
 			t.Fatalf("invalid JSON diagnostic missing %q:\n%s", want, diagnostic)
 		}
+	}
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal([]byte(strings.TrimSpace(inputs.Stderr())), &response); err != nil {
+		t.Fatalf("stderr is not one ErrorResponse: %v\nstderr:\n%s", err, inputs.Stderr())
+	}
+	if response.Code != factoryapi.ErrorResponseCode(work.ArgumentErrorCodeStringValidationMismatch) ||
+		response.Family != factoryapi.ErrorFamilyBadRequest {
+		t.Fatalf("ErrorResponse = %#v, want string-validation code and BAD_REQUEST", response)
 	}
 	if records := submissions.snapshot(); len(records) != 0 {
 		t.Fatalf("canonical submissions = %d, want 0; records=%#v", len(records), records)
