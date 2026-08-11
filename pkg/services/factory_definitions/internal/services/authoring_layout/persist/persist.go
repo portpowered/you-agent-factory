@@ -167,11 +167,19 @@ func replaceDirectory(
 	return ports.FileSystem.RemoveAll(backupDir)
 }
 
-func stagingPrefix(name string) string {
+// StagingDirectoryPrefix returns the exact temporary-directory prefix used
+// while creating or replacing one named Factory. Distribution uses the same
+// prefix to identify a pre-existing stage without broadening the persistence
+// filesystem contract or guessing at unrelated directories.
+func StagingDirectoryPrefix(name string) string {
 	safe := strings.NewReplacer("/", "--", `\`, "--", "@", "").
 		Replace(strings.TrimSpace(name))
 	if safe == "" {
 		safe = "factory"
 	}
 	return "." + safe + ".staging-"
+}
+
+func stagingPrefix(name string) string {
+	return StagingDirectoryPrefix(name)
 }

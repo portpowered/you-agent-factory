@@ -422,6 +422,7 @@ var (
 	ErrFactoryLayoutNotFound              = contracts.ErrFactoryLayoutNotFound
 	ErrNamedFactoryNotFound               = contracts.ErrNamedFactoryNotFound
 	ErrNamedFactoryIsCurrent              = contracts.ErrNamedFactoryIsCurrent
+	ErrFactoryInstallationContention      = contracts.ErrFactoryInstallationContention
 	NewBlockingFactoryLoadError           = contracts.NewBlockingFactoryLoadError
 	AsBlockingFactoryLoadError            = contracts.AsBlockingFactoryLoadError
 	NewValidationTopologyError            = contracts.NewValidationTopologyError
