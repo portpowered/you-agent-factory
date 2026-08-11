@@ -4297,3 +4297,17 @@
 - **Learnings for future iterations:**
   - Even a documentation-only main advancement must be included before handoff when the PR base has moved; recheck CI on the exact pushed head afterward.
 ---
+
+## [2026-08-10 19:50 -07:00] - thr-split-acp-stdio-tests final CI completion
+- What was implemented
+  - Completed final CI validation on the latest-base handoff head `3cf2de0f5e9d1d7fed36aae312e5ae4279f08a0c`.
+  - Retried only Backend Functional Coverage after the initial and first targeted attempts hit the unrelated no-dependent-packages coverage-lane condition.
+- Files changed
+  - `progress.txt`
+- Verification
+  - GitHub Actions run `31452536129`: the final targeted Backend Functional Coverage retry `93661800395` passed, and Verification Policy passed; all 18 required checks are successful.
+  - The ACP stdio focused package test passed locally on the synchronized tree.
+  - No ACP-specific test failure, review comment, formal review, or unresolved inline thread exists.
+- **Learnings for future iterations:**
+  - A successful functional-coverage retry must be recorded against the exact handoff head; broad coverage failures here are unrelated runner/package-selection failures rather than evidence against the move-only ACP split.
+---
