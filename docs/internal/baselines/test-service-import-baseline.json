@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "owner": "chat_sessions",
+      "importPath": "github.com/portpowered/infinite-you/pkg/services/chat_sessions/wire",
+      "filePath": "pkg/transports/acp/internal/stdio/session_test_helpers_test.go",
+      "targetRoot": "pkg/services/chat_sessions",
+      "stage": "wire-injection-full-blow",
+      "deletionGate": "replace the concrete service subpackage import with the owning service root contract, an owner-local test, or root.BuildProcess"
+    }
+  ]
+}
