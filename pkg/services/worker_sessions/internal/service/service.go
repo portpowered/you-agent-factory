@@ -130,6 +130,181 @@ func New(
 	return registry, nil
 }
 
+// startNotAcceptedError keeps the public Start error classification stable
+// without exposing an adapter's raw failure text to callers that only need to
+// know that the admission barrier was not reached.
+type startNotAcceptedError struct {
+	cause error
+}
+
+func (e *startNotAcceptedError) Error() string {
+	return workersessions.ErrStartNotAccepted.Error()
+}
+
+func (e *startNotAcceptedError) Unwrap() error {
+	if e.cause == nil {
+		return workersessions.ErrStartNotAccepted
+	}
+	return errors.Join(workersessions.ErrStartNotAccepted, e.cause)
+}
+
+func startNotAccepted(cause error) error {
+	return &startNotAcceptedError{cause: cause}
+}
+
+func serverOwnedContext(ctx context.Context) context.Context {
+	if ctx == nil {
+		return context.Background()
+	}
+	return context.WithoutCancel(ctx)
+}
+
+// Start establishes the Worker Session and returns at the exact Workers
+// admission barrier. The attempt driver owns serverOwnedContext and continues
+// independently of the request that initiated it; terminal completion is
+// observed through the existing supervision channels rather than by blocking
+// the Start call on Workers output.
+func (r *registry) Start(ctx context.Context, req workersessions.StartRequest) (workersessions.StartResult, error) {
+	attemptID := req.Execution.Execution.Dispatch.DispatchID
+	if err := req.Validate(); err != nil {
+		r.logger.Info("worker session start rejected", "sessionID", req.ID, "attemptID", attemptID, "outcome", "invalid")
+		return workersessions.StartResult{}, err
+	}
+	serverCtx := serverOwnedContext(ctx)
+	r.reserveIfAbsent(req.ID)
+	r.logger.Info("worker session start accepted", "sessionID", req.ID, "attemptID", attemptID, "outcome", "reserved", "state", string(workersessions.StateReserved))
+	if _, err := r.transitionToStarting(req.ID); err != nil {
+		if terminal, ok := r.preAdmissionControlTerminal(req.ID, attemptID); ok {
+			r.publishTerminalSnapshot(serverCtx, req.ID, attemptID, terminal)
+			return workersessions.StartResult{Session: terminal}, startNotAccepted(workersessions.ErrStartAdmissionFailed)
+		}
+		r.logger.Info("worker session start rejected", "sessionID", req.ID, "attemptID", attemptID, "outcome", "not_startable")
+		return workersessions.StartResult{}, err
+	}
+	r.ensureObservation(
+		req.ID,
+		attemptID,
+		req.Execution.Execution.Dispatch.Execution.RequestID,
+		req.Execution.Execution.Dispatch.Execution.WorkIDs,
+	)
+
+	if err := r.publishOpeningRecord(serverCtx, req.ID, attemptID); err != nil {
+		return r.rejectStartBeforeAdmission(serverCtx, req.ID, attemptID, workersessions.ErrStartOpeningPublication)
+	}
+	if err := r.ensureOpeningTopicReady(serverCtx, req.ID); err != nil {
+		return r.rejectStartBeforeAdmission(serverCtx, req.ID, attemptID, errors.Join(workersessions.ErrStartOpeningPublication, workersessions.ErrEventTopicUnavailable))
+	}
+	r.logger.Info("worker session start", "sessionID", req.ID, "attemptID", attemptID, "outcome", "event_ready", "state", string(workersessions.StateStarting))
+
+	supervision, canStart := r.registerSupervision(req.ID, attemptID, req.Execution.Execution.Dispatch.Execution.RequestID, req.Execution)
+	if !canStart {
+		final, _ := r.Get(context.Background(), workersessions.GetRequest{ID: req.ID})
+		r.publishTerminalSnapshot(serverCtx, req.ID, attemptID, final)
+		return workersessions.StartResult{Session: final}, startNotAccepted(workersessions.ErrStartAdmissionFailed)
+	}
+	supervision.mu.Lock()
+	supervision.serverOwned = true
+	supervision.retryBudget = req.Retry.Attempts()
+	supervision.mu.Unlock()
+	go func() {
+		r.driveRegisteredInvocation(serverCtx, req, supervision)
+	}()
+
+	select {
+	case <-supervision.admitted:
+		return r.startResult(req.ID), nil
+	case <-supervision.done:
+		select {
+		case <-supervision.admitted:
+			return r.startResult(req.ID), nil
+		default:
+			return r.startResult(req.ID), startNotAccepted(r.startAdmissionCause(supervision))
+		}
+	}
+}
+
+func (r *registry) startResult(id string) workersessions.StartResult {
+	session, _ := r.Get(context.Background(), workersessions.GetRequest{ID: id})
+	return workersessions.StartResult{Session: session}
+}
+
+func (r *registry) startAdmissionCause(supervision *supervision) error {
+	supervision.mu.Lock()
+	defer supervision.mu.Unlock()
+	if supervision.err != nil {
+		return errors.Join(workersessions.ErrStartAdmissionFailed, supervision.err)
+	}
+	return workersessions.ErrStartAdmissionFailed
+}
+
+func (r *registry) rejectStartBeforeAdmission(ctx context.Context, id, attemptID string, cause error) (workersessions.StartResult, error) {
+	terminal := failedTerminal(workersessions.FailureCauseEventPublicationFailure, safeDetail(workersessions.FailureCauseEventPublicationFailure, nil))
+	final, committed := r.commitTerminal(id, workersessions.StateFailed, terminal)
+	if committed {
+		r.logTerminal(id, attemptID, final)
+		r.publishTerminalRecordOrLog(ctx, id, attemptID, workersessions.StateFailed, *final.Result)
+	} else {
+		r.publishTerminalSnapshot(ctx, id, attemptID, final)
+	}
+	return workersessions.StartResult{Session: final}, startNotAccepted(cause)
+}
+
+func (r *registry) publishTerminalSnapshot(ctx context.Context, id, attemptID string, session workersessions.Session) {
+	if !session.Terminal() {
+		return
+	}
+	result := workersessions.TerminalResult{}
+	if session.Result != nil {
+		result = *session.Result
+	}
+	r.publishTerminalRecordOrLog(ctx, id, attemptID, session.State, result)
+}
+
+// ensureOpeningTopicReady proves both retained replay and live subscription
+// can observe the opening record before Start hands the execution to Workers.
+// The canceled cleanup call unregisters the short-lived readiness subscriber
+// without relying on timing or a store-specific Close operation.
+func (r *registry) ensureOpeningTopicReady(ctx context.Context, id string) error {
+	if r.retainedReader == nil || r.eventReader == nil {
+		return workersessions.ErrEventTopicUnavailable
+	}
+	topic := workersessions.Topic(id)
+	readResult, err := r.retainedReader.Read(ctx, events.ReadRequest{
+		Topic: topic,
+		From:  events.Cursor{Topic: topic},
+		Limit: 1,
+	})
+	if err != nil || readResult.Validate() != nil || readResult.Outcome != events.ReadOutcomeProgress || len(readResult.Records) == 0 || !openingRecordMatches(readResult.Records[0], id) {
+		return workersessions.ErrEventTopicUnavailable
+	}
+
+	subscription, err := r.eventReader.Subscribe(ctx, events.SubscribeRequest{
+		Topic: topic,
+		From:  events.Cursor{Topic: topic},
+		Limit: 1,
+	})
+	if err != nil || subscription == nil {
+		return workersessions.ErrEventTopicUnavailable
+	}
+	delivery := subscription.Next(ctx)
+	cleanupCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_ = subscription.Next(cleanupCtx)
+	if delivery.Validate() != nil || delivery.Kind != events.DeliveryRecord || !openingRecordMatches(delivery.Record, id) {
+		return workersessions.ErrEventTopicUnavailable
+	}
+	return nil
+}
+
+func openingRecordMatches(record events.Record, id string) bool {
+	return record.ID.Topic == workersessions.Topic(id) &&
+		record.SourceType == lifecycleSourceType &&
+		record.SourceID == events.SourceID(id) &&
+		record.SourceSequence == openingSourceSequence &&
+		record.SourceEventID == openingSourceEventID &&
+		record.SchemaID == workerDraftSchemaID
+}
+
 func (r *registry) Reserve(_ context.Context, req workersessions.ReserveRequest) (workersessions.Session, error) {
 	if err := req.Validate(); err != nil {
 		r.logger.Info("worker session reserve rejected", "sessionID", req.ID, "outcome", "invalid")

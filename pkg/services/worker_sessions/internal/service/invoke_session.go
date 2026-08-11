@@ -89,6 +89,10 @@ func (r *registry) driveInvocation(ctx context.Context, req workersessions.Invok
 		}
 		return workersessions.InvokeSessionResult{Session: final}, nil
 	}
+	return r.driveRegisteredInvocation(ctx, req, supervision)
+}
+
+func (r *registry) driveRegisteredInvocation(ctx context.Context, req workersessions.InvokeSessionRequest, supervision *supervision) (workersessions.InvokeSessionResult, error) {
 	supervision.mu.Lock()
 	supervision.retryBudget = req.Retry.Attempts()
 	supervision.mu.Unlock()

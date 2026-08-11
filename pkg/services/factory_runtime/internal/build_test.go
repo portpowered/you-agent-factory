@@ -305,6 +305,11 @@ func (s *stubWorkerSessionsService) InvokeSession(ctx context.Context, req worke
 	}, nil
 }
 
+func (s *stubWorkerSessionsService) Start(ctx context.Context, req workersessions.StartRequest) (workersessions.StartResult, error) {
+	result, err := s.InvokeSession(ctx, req)
+	return workersessions.StartResult{Session: result.Session}, err
+}
+
 func (s *stubWorkerSessionsService) PublishRecord(context.Context, workersessions.PublishRecordRequest) (workersessions.PublishRecordResult, error) {
 	return workersessions.PublishRecordResult{}, nil
 }

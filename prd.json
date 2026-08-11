@@ -1,95 +1,115 @@
 {
-  "project": "DWRO S1 — Explicit Remote Placement and Listener Selection",
-  "branchName": "dwro-s1-remote-placement-flags",
-  "description": "Implement story S1 of Direct Worker and Remote Operations by adding persistent root --remote and authored command placement capabilities, dispatching one normalized request through either the local service or exactly the selected --server endpoint without fallback, introducing --listen for local binds with a warned legacy compatibility path, and rejecting documented conflicts with run --with-server and run --with-site.",
+  "project": "DWRO S2 — Server-Owned Direct Worker Starts",
+  "branchName": "dwro-s2-server-owned-start",
+  "description": "Implement DWRO S2 so POST /worker-sessions returns 202 only after Worker Sessions has reserved identity, made the session event topic observable, and received Workers admission; admitted execution survives request or client disconnect under the server lifecycle, caller request IDs prevent duplicates, and synchronous InvokeSession remains compatible over the shared supervision implementation.",
   "context": {
-    "customerAsk": "Implement DWRO story S1: persistent root --remote, authored command placement capabilities, endpoint-only --server, new --listen for local listener binds, no silent local fallback, and documented conflicts with run --with-server and run --with-site.",
-    "problem": "The CLI has no explicit execution-placement input and its authored manifest cannot state whether a command is local-only, remote-only, or dual-placement. The global --server flag also selects both HTTP client endpoints and local listener binds, so customers and scripts cannot unambiguously distinguish calling an existing server from hosting one, and unsupported remote requests lack one centralized no-fallback rule.",
-    "solution": "Add persistent root --remote, a resolved local/remote placement value, and per-command placement capabilities to the authored CLI contract. Normalize command inputs once and select exactly one injected local-service or HTTP-client adapter, rejecting unsupported or failed remote placement without fallback. Make --server the remote endpoint selector, add --listen to listener-owning commands, preserve explicit legacy --server binding with a deprecation warning when --listen is absent, give --listen precedence, and enforce documented usage conflicts before side effects."
+    "customerAsk": "Deliver DWRO story S2: a Worker Sessions-owned asynchronous start operation, POST /worker-sessions returning 202 only after identity reservation, event-topic readiness, and Workers admission; execution owned by the server lifecycle rather than request cancellation; idempotency keys; and preservation of synchronous InvokeSession over the shared implementation.",
+    "problem": "The existing synchronous InvokeSession boundary cannot honestly acknowledge remote asynchronous work: transport cancellation can be confused with execution lifetime, acknowledgment can precede observability or admission, and client retries can create duplicate Worker/provider side effects.",
+    "solution": "Add one Worker Sessions-owned, race-safe asynchronous start state machine that reserves identity, commits the opening event, crosses Workers admission, supervises admitted work in the server lifecycle, and deduplicates by required caller requestId. Expose it through typed POST /worker-sessions and have synchronous InvokeSession use the same implementation while waiting for terminal completion."
   },
   "acceptanceCriteria": [
-    "The authored CLI manifest defines persistent root --remote, a resolved local/remote placement value, and local-only, remote-only, or dual-placement capabilities for affected commands; executable help and parsing match that contract.",
-    "A representative dual-placement operation produces the same normalized request locally without --remote and sends that request to exactly the --server <uri> HTTP endpoint with --remote, with equivalent domain intent across adapters.",
-    "Unsupported remote placement, an invalid or unavailable selected server, and remote transport failure return stable actionable errors and never invoke the local product operation, start a listener, or silently select another endpoint.",
-    "you server --listen, you run --with-server --listen, and you run --with-site --listen bind the requested local address; when --listen is absent, legacy listener use of an explicitly supplied --server remains functional for the compatibility window and warns, while explicit --listen takes precedence.",
-    "--remote with run --with-server or run --with-site is rejected as a documented stable usage conflict before listener, browser, Factory, or remote-operation side effects begin; reference docs and examples use the new placement vocabulary.",
-    "Quality gates pass with direct CLI and manifest, package, functional, help and reference, and compatibility evidence as applicable; Typecheck passes, Tests pass, and there are no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
+    "POST /worker-sessions accepts a valid resolved direct Worker request with a required requestId and returns 202 Accepted with the stable Worker Session identity only after reservation, the opening session record is readable/subscribable on Topic(sessionID), and Workers admission has succeeded.",
+    "An accepted execution is scoped to the running server/process lifecycle, not the HTTP request context: closing or canceling the submitting connection does not cancel or duplicate it, and its progress and terminal outcome remain observable through Worker Session reads/events.",
+    "Same-key retries, including concurrent retries, return the same Worker Session acceptance and cause exactly one Workers/provider execution; reuse of the key for a different normalized start request returns a stable conflict with no second side effect.",
+    "Validation, identity conflict, opening-event failure, and admission failure return a non-202 response with a stable safe classification; no response claims acceptance before all acceptance barriers have committed, and every reserved failure is left in an observable deterministic state rather than orphaned.",
+    "Server shutdown cancels or drains admitted direct Workers according to the existing lifecycle contract, waits for supervision callbacks and terminal publication, and leaves no Worker Session goroutine, event attachment, dispatch, or provider process running after shutdown completes.",
+    "Existing synchronous InvokeSession callers retain their terminal result, retry, event ordering, control-race, and error behavior while using the shared server-owned start/supervision implementation; authored and generated API contracts remain aligned.",
+    "Typecheck, lint, and tests satisfy the required quality gates: Typecheck passes, Tests pass, no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
     "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared or generated-file churn are resolved against current main, and the PR is actually merged."
   ],
   "userStories": [
     {
-      "id": "dwro-s1-remote-placement-flags-001",
-      "title": "Declare explicit placement in the authored CLI contract",
-      "description": "As a CLI user and command implementer, I want root placement and each command's supported placements to be explicit so help, validation, and dispatch share one authoritative contract.",
+      "id": "dwro-s2-server-owned-start-001",
+      "title": "Admit an asynchronous Worker Session at an honest readiness barrier",
+      "description": "As a remote operator, I want a direct Worker start to be acknowledged only when its identity, event stream, and execution are ready so I can safely observe or control the accepted session.",
       "acceptanceCriteria": [
-        "The authored CLI manifest exposes a visible persistent root --remote boolean whose documented meaning is to execute a supported operation through a running You server; it does not imply async, follow, continuous, or listener behavior.",
-        "The executable parser resolves the root input to explicit local placement by default and remote placement when --remote appears before or after the command path, consistent with other persistent flags.",
-        "A command can authoritatively declare local-only, remote-only, or dual-placement capability, and manifest validation rejects a runnable command whose placement declaration is missing or invalid where the placement contract applies.",
-        "Existing HTTP-only commands retain their historical remote-default compatibility for this window, accept explicit --remote, and do not gain a local implementation merely to satisfy the new vocabulary.",
-        "Root and representative command help show the placement meaning and supported usage without describing --remote as a waiting or server-start option.",
-        "Focused contract and parser tests prove manifest validation, persistent flag inheritance, before and after command parsing, default placement, and explicit remote placement through observable CLI inputs and help.",
+        "Worker Sessions exposes one asynchronous start operation for an already-resolved Workers execution and owns validation, identity reservation, lifecycle transitions, opening and terminal event publication, supervision, and acceptance without selecting provider or runner policy.",
+        "A successful start result is released only after the stable identity is reserved, the opening SESSION/STARTED record has committed to Topic(sessionID) and is retained-read/subscription ready, and the Workers boundary has invoked its admission callback.",
+        "The start result provides the stable Worker Session identity/snapshot for later reads and controls, while completion continues asynchronously through the existing exactly-once terminal path.",
+        "Invalid input has no registry, Events, or Workers side effects; opening publication or pre-admission dispatch failure never reports acceptance and leaves any reserved identity in the documented deterministic terminal state.",
+        "Cancel or terminate racing before admission cannot produce successful acceptance, start unknown work, or publish multiple terminal outcomes; post-admission controls use the explicit Workers cancellation boundary.",
+        "Structured logs distinguish rejected, reserved, event-ready, admitted, and terminal outcomes with safe identifiers and no sensitive execution content.",
+        "Focused deterministic package tests prove barrier ordering, failure handling, and control races without arbitrary sleeps.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 1,
       "passes": true,
-      "notes": ""
+      "notes": "Implemented Worker Sessions Start with retained/live Events readiness, server-owned supervision, admission-gated return, deterministic pre-admission terminal handling, safe outcome logs, and focused barrier/failure/control-race tests."
     },
     {
-      "id": "dwro-s1-remote-placement-flags-002",
-      "title": "Dispatch normalized operations without placement fallback",
-      "description": "As a customer, I want the same operation to run locally by default or on exactly my selected server with --remote so placement is predictable and cannot silently change during failure.",
+      "id": "dwro-s2-server-owned-start-002",
+      "title": "Deduplicate direct Worker starts by request identity",
+      "description": "As an automation author, I want retried start requests to resolve to the original Worker Session so network uncertainty cannot run the Worker twice.",
       "acceptanceCriteria": [
-        "At least one representative supported dual-placement command normalizes customer inputs once before dispatch, calls its already-injected local service adapter without --remote, and calls its HTTP client adapter with --remote.",
-        "Behavioral parity coverage proves the local and remote adapters receive contract-equivalent normalized request values for the same customer input, allowing only transport metadata differences.",
-        "you --remote --server <uri> <dual-placement-command> sends the operation to exactly <uri> and does not invoke the local product operation, start or probe a local listener, or substitute the default endpoint.",
-        "A local-only command invoked with --remote exits with a stable actionable usage error that identifies the unsupported placement before command side effects occur.",
-        "Invalid endpoint configuration, connection refusal, timeout, and other remote transport failures remain remote failures and do not retry through the local adapter; diagnostics identify the selected endpoint without leaking credentials or sensitive request content.",
-        "Placement selection remains a CLI transport concern: domain services receive normalized operation requests and do not inspect CLI placement flags or discover alternate dependencies.",
-        "Focused package and public CLI behavioral tests cover local dispatch, exact remote dispatch, unsupported placement, and failed remote transport with zero local fallback.",
+        "Every asynchronous start requires a non-empty caller requestId, and Worker Sessions atomically indexes it to the normalized immutable start tuple and stable Worker Session identity before execution admission.",
+        "Repeating the same requestId and normalized tuple before admission, after admission, or after terminal completion returns the original acceptance/session outcome without another opening event, Workers dispatch, provider invocation, or terminal transition.",
+        "Concurrent identical submissions converge on one reservation and one admitted execution, with every successful caller observing the same Worker Session identity.",
+        "Reusing requestId for a different normalized tuple returns a typed safe idempotency conflict and performs no new downstream side effect.",
+        "Validation failure does not consume the key; a reserved request that deterministically fails before admission replays that failure rather than starting replacement work.",
+        "Idempotency is owned by Worker Sessions and compares detached canonical request values rather than transport-owned or caller-mutable state.",
+        "Focused repeat, concurrent, and race-enabled tests prove replay, conflict, failure replay, and exactly one Workers/provider side effect.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 2,
-      "passes": true,
-      "notes": "Implemented dual-placement `you run` dispatch through one normalized invocation request and an injected local or exact-URI HTTP adapter, with stable unsupported-placement and no-fallback remote errors. Refreshed authored and published CLI contract artifacts and added focused package/public CLI behavioral coverage. Verified with `make contracts-validate`, `make cli-manifest-check`, `go test ./pkg/transports/cli/run ./pkg/transports/cli ./pkg/wire ./pkg/services/workers/internal/interface -count=1`, and `make test`. Review follow-up makes invalid remote endpoint labels fail closed for parse-success/base-invalid opaque and unsupported-scheme inputs, with credential-redaction regression coverage."
+      "passes": false,
+      "notes": ""
     },
     {
-      "id": "dwro-s1-remote-placement-flags-003",
-      "title": "Bind local servers with --listen and preserve legacy scripts",
-      "description": "As an operator, I want local listener addresses selected with --listen so --server can mean a remote endpoint while my existing listener scripts have a safe migration window.",
+      "id": "dwro-s2-server-owned-start-003",
+      "title": "Expose accepted starts through POST /worker-sessions",
+      "description": "As a remote client, I want a typed HTTP start endpoint with precise acceptance and failure responses so I can submit a direct Worker without holding the connection for completion.",
       "acceptanceCriteria": [
-        "you server --listen <address>, you run --with-server --listen <address>, and you run --with-site --listen <address> bind the requested valid local address and report existing stable bind failures for invalid, non-local, or unavailable addresses.",
-        "Listener-owning commands use the existing default local bind when neither an explicit --listen nor an explicit legacy bind value is supplied.",
-        "During the compatibility window, an explicitly supplied legacy --server <local-uri> continues to select the listener bind only when --listen is absent and emits one actionable deprecation warning on stderr directing the user to --listen.",
-        "When both inputs are supplied to a listener-owning command, explicit --listen determines the bind address; --server does not override it, and compatibility diagnostics accurately explain any retained endpoint role.",
-        "Ordinary local commands and ordinary you run do not start a listener merely because --listen or the default server endpoint exists; invalid flag placement is rejected before runtime side effects.",
-        "CLI manifest relationships, help, and examples describe --listen as the local bind input and --server as the selected You server URI, including the legacy migration behavior.",
-        "Focused listener lifecycle tests use observable readiness and bind behavior and prove requested binding, precedence, warning, bind failure, and joined shutdown without arbitrary sleeps.",
+        "The authored OpenAPI contract defines POST /worker-sessions with a typed request containing required requestId, stable Worker Session identity, resolved execution input, and bounded retry input, plus a typed accepted response identifying the Worker Session and its observation/event resources or equivalent identifiers.",
+        "The handler maps the request once, calls only Worker Sessions start, returns 202 only after the reservation/event-readiness/admission barrier, and does not wait for terminal Worker output.",
+        "Malformed or invalid input maps to 400, idempotency or incompatible existing-session reuse maps to 409, and event-readiness or admission unavailability maps to a stable non-202 server response with safe actionable errors.",
+        "Same-key accepted HTTP replays return the same Worker Session identity and never duplicate execution while the original is pending, running, or terminal.",
+        "Existing Worker Session read, detail, transcript, event-stream, and control routes can address the returned identity without an accepted-but-not-observable timing window.",
+        "Bundled OpenAPI, generated Go server/client contracts, generated TypeScript clients, handwritten mapping, and HTTP contract behavior are regenerated and aligned.",
+        "make generate-api and make api-smoke pass",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 3,
-      "passes": true,
-      "notes": "Implemented exact local listener selection through --listen for you server and server-enabled you run/you run --with-site flows, with loopback-only validation, explicit precedence over --server, one-time legacy local --server warnings, and preserved automatic legacy allocation. Ordinary runs reject misplaced --listen before the run handler, and listener lifecycle coverage proves exact readiness, unavailable-port errors, and shutdown. Refreshed authored/generated CLI contracts, command/help baselines, and reference guidance. Verified with make contracts-validate, make cli-manifest-check, make docs-reference-smoke, make test, go test ./pkg/transports/cli/... -count=1, focused CLI tests, full run-scoped-server functional tests, backend-size, pkg-maint, pkg-file-count, vet, and git diff --check; aggregate make lint is blocked by the pre-existing missing UI knip binary, and the backend-only continuation reaches existing package-boundary baseline violations; neither reports new violations."
+      "passes": false,
+      "notes": ""
     },
     {
-      "id": "dwro-s1-remote-placement-flags-004",
-      "title": "Reject remote and local-hosting conflicts and publish migration guidance",
-      "description": "As a customer, I want contradictory placement modes rejected with clear guidance so the CLI never both calls a remote server and hosts the same run locally.",
+      "id": "dwro-s2-server-owned-start-004",
+      "title": "Keep admitted Workers alive across disconnect and join them on shutdown",
+      "description": "As an operator, I want an admitted direct Worker to outlive the submitting connection but remain bounded by server shutdown so remote work is reliable without leaking execution.",
       "acceptanceCriteria": [
-        "you --remote run --with-server and you --remote run --with-site each exit with the same stable usage classification and actionable conflict message, regardless of persistent-flag position.",
-        "Conflict validation occurs before Factory execution, HTTP dispatch, listener startup, browser launch, recording, or other run-owned side effects.",
-        "Authored CLI relationships, executable help, and packaged reference docs state that --remote selects a running server, --server selects its URI, and --listen selects a local bind; they document both run-mode conflicts and the legacy bind migration.",
-        "New customer-facing examples use you --remote --server <uri> for supported remote operations and --listen <address> for local server or server-enabled run binding; they do not present legacy --server listener syntax as the preferred form.",
-        "Behavioral CLI tests prove both conflicts, stable exit and error output, zero side effects, and help and reference guidance rather than relying on source or route inventories.",
-        "Documentation reference smoke checks pass",
+        "Execution and terminal publication use a server/process lifecycle scope owned by canonical initialization/composition; the HTTP request context bounds transport work and admission waiting but is not the cancellation authority for admitted execution.",
+        "Closing or canceling the submitting connection after admission does not call Workers cancel, cancel the provider context, close the publication window, or change eventual terminal classification.",
+        "After disconnect, an independent client can observe the same session identity, one opening record, admitted progress, and exactly one terminal outcome.",
+        "Server shutdown rejects new starts, signals active asynchronous executions through existing supervision/control boundaries, waits for callbacks and terminal publication, and leaves no leaked goroutine, event attachment, dispatch, or provider process.",
+        "A disconnect before 202 delivery cannot create unsupervised or duplicate execution; same-requestId replay reveals the authoritative accepted or failed outcome.",
+        "Functional process-boundary tests use deterministic provider/admission signals to prove disconnect survival and joined shutdown, and repeat plus race evidence proves bounded concurrency without arbitrary sleeps.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 4,
-      "passes": true,
-      "notes": "Implemented stable REMOTE_LOCAL_HOSTING_CONFLICT validation before system initialization and again after custom run parsing, covering --remote before or after run with both --with-server and --with-site; behavioral tests prove no local, remote, browser, listener, or Factory side effects. Added authored conflict relationships, structured BAD_REQUEST output, executable help/examples, legacy --server migration guidance, and packaged reference documentation; regenerated published contracts and CLI baselines. Addressed review feedback by removing duplicate placement keys from authored/generated manifests, making manifest loading reject duplicate JSON object keys, redacting malformed credential-bearing endpoint diagnostics, keeping maintainability and package-file-count ratchets green, using worker-free listener functional cases, and removing marker-only docs assertions. Moved the generic strict decoder into the policy-free generated-artifact platform package and added loader/decoder coverage so the CLI manifest unit and functional floors remain intact. Verified with focused CLI tests, the full short Go suite, make verify-fast, make cli-manifest-check, make contracts-validate, make docs-reference-smoke, make pkg-maint, make pkg-file-count, backend-size, pkg-structure, vet, full run-scoped-server functional tests, and git diff --check."
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "dwro-s2-server-owned-start-005",
+      "title": "Preserve synchronous InvokeSession over shared supervision",
+      "description": "As an existing orchestrator, I want InvokeSession to keep its synchronous contract while sharing the new start implementation so direct and orchestrated Workers cannot drift in lifecycle behavior.",
+      "acceptanceCriteria": [
+        "InvokeSession uses the same validation, reservation, opening-event, Workers admission, retry, control-race, terminal classification, and terminal-publication implementation as asynchronous start and then waits for terminal completion.",
+        "Existing callers that omit asynchronous idempotency input retain established session-ID conflict rules and do not construct transport-specific values.",
+        "Equivalent synchronous and asynchronous executions produce matching state transitions, attempt counts, Workers result handling, provider association, and source-native event order; only caller return timing differs.",
+        "Synchronous caller cancellation retains documented current InvokeSession behavior and cannot redefine the server-owned lifecycle of asynchronous API starts.",
+        "Existing Factory Runtime, JavaScript workflow, Worker control, observation, retry, and event-order regression behavior remains passing without a parallel legacy execution path.",
+        "Focused compatibility tests compare success, retryable failure, pre-admission failure, cancel/terminate races, and terminal publication across both entry points.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
     }
   ]
 }

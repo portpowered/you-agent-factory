@@ -189,6 +189,11 @@ func (s *fakeWorkerSessionsService) InvokeSession(ctx context.Context, req worke
 	}, nil
 }
 
+func (s *fakeWorkerSessionsService) Start(ctx context.Context, req workersessions.StartRequest) (workersessions.StartResult, error) {
+	result, err := s.InvokeSession(ctx, req)
+	return workersessions.StartResult{Session: result.Session}, err
+}
+
 func (s *fakeWorkerSessionsService) PublishRecord(context.Context, workersessions.PublishRecordRequest) (workersessions.PublishRecordResult, error) {
 	return workersessions.PublishRecordResult{}, nil
 }

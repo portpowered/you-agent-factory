@@ -21,17 +21,19 @@ type supervision struct {
 	turnID     string
 	execution  workers.WorkstationDispatchRequest
 
-	mu              sync.Mutex
-	publishing      bool
-	accepted        bool
-	continuing      bool
-	resumeCount     uint
-	requestedAction workersessions.ControlAction
-	controlAction   workersessions.ControlAction
-	controlActive   bool
-	controlDone     chan struct{}
-	result          workers.WorkstationDispatchResult
-	err             error
+	mu                 sync.Mutex
+	publishing         bool
+	accepted           bool
+	serverOwned        bool
+	continuing         bool
+	resumeCount        uint
+	preAdmissionAction workersessions.ControlAction
+	requestedAction    workersessions.ControlAction
+	controlAction      workersessions.ControlAction
+	controlActive      bool
+	controlDone        chan struct{}
+	result             workers.WorkstationDispatchResult
+	err                error
 
 	// retryBudget is the total attempt allowance for this supervision and
 	// attemptsMade counts the attempts actually published. retryPending records
@@ -49,6 +51,8 @@ type supervision struct {
 	publishedOnce sync.Once
 	paused        chan struct{}
 	pausedOnce    sync.Once
+	admitted      chan struct{}
+	admittedOnce  sync.Once
 	done          chan struct{}
 	doneOnce      sync.Once
 }
@@ -80,6 +84,7 @@ func newSupervision(dispatchID, turnID string, executions ...workers.Workstation
 		retryBudget: 1,
 		published:   make(chan struct{}),
 		paused:      make(chan struct{}),
+		admitted:    make(chan struct{}),
 		done:        make(chan struct{}),
 	}
 }
@@ -126,6 +131,7 @@ func cloneWorkstationDispatchRequest(request workers.WorkstationDispatchRequest)
 
 func (s *supervision) signalPublished() { s.publishedOnce.Do(func() { close(s.published) }) }
 func (s *supervision) signalPaused()    { s.pausedOnce.Do(func() { close(s.paused) }) }
+func (s *supervision) signalAdmitted()  { s.admittedOnce.Do(func() { close(s.admitted) }) }
 
 // signalDone releases the session's terminal waiters, and releases any attempt
 // still in flight first. Every terminal path -- including the controls that
@@ -150,7 +156,18 @@ func (s *supervision) beginCancellation(action workersessions.ControlAction) can
 		return cancellationAttempt{kind: cancellationAttemptWait, wait: s.controlDone}
 	}
 	if s.publishing && !s.accepted {
+		if s.preAdmissionAction == "" {
+			s.preAdmissionAction = action
+		}
 		return cancellationAttempt{kind: cancellationAttemptWait, wait: s.published}
+	}
+	if s.preAdmissionAction != "" {
+		action = s.preAdmissionAction
+		s.preAdmissionAction = ""
+		s.controlActive = true
+		s.controlDone = make(chan struct{})
+		s.requestedAction = action
+		return cancellationAttempt{kind: cancellationAttemptBoundary, wait: s.controlDone, dispatchID: s.dispatchID}
 	}
 	if !s.accepted {
 		s.controlAction = action
@@ -207,12 +224,18 @@ func (s *supervision) lastResult() workers.WorkstationDispatchResult {
 // returns: synchronous Publish waits for terminal completion, but its admitted
 // dispatch must remain controllable throughout that wait.
 func (r *registry) acceptSupervision(id string, supervision *supervision) {
+	running := r.transitionToRunning(id)
 	supervision.mu.Lock()
-	supervision.accepted = true
+	supervision.accepted = running
+	serverOwned := supervision.serverOwned
+	preAdmissionControl := supervision.preAdmissionAction != ""
 	supervision.publishing = false
 	supervision.mu.Unlock()
 	supervision.signalPublished()
-	r.transitionToRunning(id)
+	if running && serverOwned && !preAdmissionControl {
+		supervision.signalAdmitted()
+		r.logger.Info("worker session start", "sessionID", id, "attemptID", supervision.dispatchID, "outcome", "admitted", "state", string(workersessions.StateRunning))
+	}
 }
 
 // finishSupervisionPublication releases any control waiting for a publish
@@ -256,15 +279,16 @@ func (r *registry) beginBoundaryPublish(id string, supervision *supervision) boo
 	return true
 }
 
-func (r *registry) transitionToRunning(id string) {
+func (r *registry) transitionToRunning(id string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	session, exists := r.sessions[id]
 	if !exists || session.State != workersessions.StateStarting {
-		return
+		return false
 	}
 	session.State = workersessions.StateRunning
 	r.sessions[id] = session
+	return true
 }
 
 func (r *registry) completeSupervision(id string, supervision *supervision, result workers.WorkstationDispatchResult, dispatchErr error) {

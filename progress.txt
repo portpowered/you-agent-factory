@@ -21,6 +21,7 @@
 - Treat repository-enforcement inventories and architecture guards as project-enabling PRD criteria when they have no runtime, API, CLI, UI, or emitted-event behavior; source scans support enforcement but are not customer-behavior evidence.
 - AST scanners must expand grouped Go field declarations before indexing parameter or result types; a field-count helper can exceed the AST field-list length and panic on valid source.
 - Asynchronous service characterizations should wait on observed edge/context signals rather than arbitrary `time.After` ceilings; the test context remains the failure escape hatch.
+- Server-owned async acceptance needs a distinct admission signal from publication and terminal completion; record pre-admission control intent before releasing that signal so a racing cancel cannot be acknowledged as accepted.
 - Continuous Petri service sessions intentionally remain `IDLE` after terminal Work; characterize the dispatch and Work/progress projection as the caller-visible result and assert the live-result route's typed unavailability instead of inventing a finite session result.
 - Use an authored capacity-one resource in a deterministic fixture to serialize multi-work dispatches when exact Factory Event order must be characterized; this avoids sleeps and preserves the real dispatch/resource boundary.
 - Correlate batch history from both sources: request/relationship and dispatch identity live in Factory Event context, while terminal per-work state is carried by dispatch-response outputWork.
@@ -3994,4 +3995,32 @@
   - `git diff --cached --check` passed before the merge commit.
 - **Learnings for future iterations:**
   - A clean merge against a stale remote-tracking base is not sufficient; compare the live hosting ref, fetch it, and resolve shared PRD/progress files again before pushing the replacement head.
+---
+
+## 2026-08-10 22:27 -07:00 - dwro-s2-server-owned-start-001
+- What was implemented
+  - Added the Worker Sessions `Start` operation for already-resolved Workers executions.
+  - Gated successful return on the opening SESSION/STARTED record being retained-readable and subscribable, followed by the Workers admission callback.
+  - Reused the existing retry, control, provider-association, and exactly-once terminal supervision path; asynchronous attempts run under a detached server-owned context while synchronous `InvokeSession` remains unchanged at its caller-facing boundary.
+  - Recorded pre-admission cancellation intent so a racing Cancel cannot be acknowledged as accepted, and added stable start/readiness/admission error classifications plus safe structured outcome logs.
+- Files changed
+  - `pkg/services/worker_sessions/contracts.go`
+  - `pkg/services/worker_sessions/doc.go`
+  - `pkg/services/worker_sessions/internal/service/service.go`
+  - `pkg/services/worker_sessions/internal/service/control.go`
+  - `pkg/services/worker_sessions/internal/service/invoke_session.go`
+  - `pkg/services/worker_sessions/internal/service/start_test.go`
+  - `pkg/services/worker_sessions/internal/service/start_side_effects_test.go`
+  - `pkg/services/worker_sessions/internal/service/fakes_test.go`
+  - Factory Runtime test service doubles updated for the expanded Worker Sessions contract.
+  - `prd.json`
+- Verification
+  - `go test ./pkg/services/worker_sessions/... -count=1` passed.
+  - `go test -race ./pkg/services/worker_sessions/... -count=1` passed before the final test relocation; focused race tests passed after relocation.
+  - Affected Factory Runtime package tests and compile-only coverage passed; `go vet` passed.
+  - `make backend-size` and `make pkg-maint` passed after keeping touched files within repository limits; `make pkg-file-count` passed.
+  - `make lint` remains blocked by the environment's missing `knip` binary in the UI deadcode target; the repository-wide package-boundary target reports pre-existing baseline violations unrelated to this change.
+- **Learnings for future iterations:**
+  - Keep the async start acceptance signal distinct from publication and terminal completion, and reserve the admission signal for starts with no queued pre-admission control.
+  - The Worker Sessions package is already at its file-count budget; move focused implementation or tests into existing responsibility-aligned files and rerun backend-size/pkg-maint after additions.
 ---

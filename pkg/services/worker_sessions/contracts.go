@@ -87,6 +87,16 @@ type Service interface {
 	// window, so one Worker remains one Worker on the wire across its attempts.
 	InvokeSession(ctx context.Context, req InvokeSessionRequest) (InvokeSessionResult, error)
 
+	// Start validates req, reserves the Worker Session identity, commits and
+	// verifies its opening Events record, and starts the already-resolved
+	// Workers execution under server-owned supervision. It returns only after
+	// the session has reached the Workers admission callback, so a nil error is
+	// an honest acceptance barrier rather than a promise that execution has
+	// completed. The server-owned attempt continues after the caller's context
+	// is canceled; Cancel and Terminate are the explicit control paths for an
+	// admitted execution.
+	Start(ctx context.Context, req StartRequest) (StartResult, error)
+
 	// AssociateProviderSession records the exact Providers-owned SessionRef
 	// observed by one currently supervised Worker Session attempt. The caller
 	// must name the session's exact dispatch identity; Worker Sessions derives
@@ -236,6 +246,19 @@ type InvokeSessionRequest struct {
 	// zero value is exactly one attempt, so a caller that says nothing about
 	// retry gets the single-attempt behavior Petri dispatch has always had.
 	Retry RetryPolicy
+}
+
+// StartRequest is the asynchronous form of InvokeSessionRequest. The
+// execution must already be resolved by Workers; Worker Sessions only owns
+// identity, lifecycle, Events visibility, and supervision.
+type StartRequest = InvokeSessionRequest
+
+// StartResult is the detached Worker Session snapshot returned after Workers
+// admission. The snapshot may already be terminal when a Workers boundary
+// admits and completes an execution in one callback turn; completion itself
+// is never made synchronous by Start.
+type StartResult struct {
+	Session Session
 }
 
 // RetryPolicy bounds the attempts one InvokeSession call may make.
@@ -456,6 +479,19 @@ var (
 	// paused, or terminal). No Workers call is made and the existing session
 	// is left unchanged.
 	ErrSessionNotStartable = errors.New("worker session: not startable")
+	// ErrStartNotAccepted reports that Start established the identity and
+	// lifecycle facts but did not reach the Workers admission callback.
+	ErrStartNotAccepted = errors.New("worker session: start not accepted")
+	// ErrStartOpeningPublication reports that Start could not commit or verify
+	// the opening Worker Session Events record before handing off to Workers.
+	ErrStartOpeningPublication = errors.New("worker session: opening publication failed")
+	// ErrEventTopicUnavailable reports that the opening record was not
+	// readable and subscribable through the Events contract required by Start's
+	// readiness barrier.
+	ErrEventTopicUnavailable = errors.New("worker session: event topic unavailable")
+	// ErrStartAdmissionFailed reports a Workers boundary failure before the
+	// admission callback became observable.
+	ErrStartAdmissionFailed = errors.New("worker session: admission failed")
 	// ErrPublicationNotOpen reports PublishRecord called for a session whose
 	// publication window is not open: the session was only ever reserved,
 	// its opening record has not yet committed, or its terminal record has
