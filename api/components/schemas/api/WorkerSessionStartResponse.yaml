@@ -1,0 +1,45 @@
+type: object
+additionalProperties: false
+required:
+  - requestId
+  - workerSessionId
+  - accepted
+  - state
+  - eventTopic
+description: >-
+  Admission acknowledgment for one Worker Session. A successful response is
+  emitted only after the opening event is readable/subscribable and Workers
+  has admitted the execution; terminal Worker output remains asynchronous.
+properties:
+  requestId:
+    type: string
+    description: Caller idempotency key echoed for correlation.
+  workerSessionId:
+    type: string
+    description: Stable Worker Session identity for subsequent inspection and control.
+  accepted:
+    type: boolean
+    description: Always true for a 202 response.
+  state:
+    type: string
+    enum:
+      - RESERVED
+      - STARTING
+      - RUNNING
+      - PAUSED
+      - COMPLETED
+      - FAILED
+      - CANCELED
+      - TERMINATED
+    x-enum-varnames:
+      - WorkerSessionStartResponseStateReserved
+      - WorkerSessionStartResponseStateStarting
+      - WorkerSessionStartResponseStateRunning
+      - WorkerSessionStartResponseStatePaused
+      - WorkerSessionStartResponseStateCompleted
+      - WorkerSessionStartResponseStateFailed
+      - WorkerSessionStartResponseStateCanceled
+      - WorkerSessionStartResponseStateTerminated
+  eventTopic:
+    type: string
+    description: Deterministic Events topic whose retained opening record is ready to read and subscribe.
