@@ -9,7 +9,7 @@
   },
   "acceptanceCriteria": [
     "A deterministic plan-parallel functional scenario runs N executor children with unique known outputs and proves that the merger's rendered input contains the original request and all N outputs exactly once.",
-    "The regression test is demonstrated failing on current main and passing after the fix, with the red output, green output, and exact root-cause mechanism recorded in the PR description.",
+    "The regression test is demonstrated failing on the exact pre-fix main revision that contained the recorded missing-output behavior and passing after the fix; when current main already contains that fix, the PR explicitly records the historical red revision, why a current-main red run is impossible, the green output, and the exact root-cause mechanism.",
     "Completed child results remain associated with the correct generated Work and are not lost, duplicated, replaced by task specifications, or reordered in a way that violates the Factory's deterministic input contract.",
     "Existing plan-parallel functional coverage and focused Factory Session/Work routing coverage remain green, and any new package-level tests follow the post-PR #1862 split test layout.",
     "The implementation stays within the identified fan-in result-routing, collection, or packaged Factory wiring fault surface and preserves explicit state, isolated side effects, service ownership, and existing public contracts.",

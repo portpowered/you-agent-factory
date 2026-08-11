@@ -6796,4 +6796,89 @@
 - **Learnings for future iterations:**
   - Before final publication, fetch the live base, inspect the three-way task diff, and audit GraphQL review threads even when the flat PR comment list is empty.
   - A completed task whose production correction is already on current main should retain its behavioral regression and evidence rather than duplicate the production fix.
+## 2026-08-10 19:25 -07:00 - ci-additive-classifier-001
+- What was implemented
+  - Added explicit root `frontend-verification`, `backend-verification`, and `ui-backend-integration` Make targets for direct classifier-lane reruns.
+  - Composed the frontend lane from typecheck, lint, component/unit coverage, browser, Storybook, and public UI-package checks without backend verification.
+  - Composed the backend lane from backend build plus the existing unit and functional coverage checks.
+  - Kept UI-backend integration narrow to the real-backend durable-session browser suite, with no Storybook-only checks.
+  - Updated classifier-emitted core lane commands to use the new direct targets and marked story 001 complete in `prd.json`.
+- Files changed
+  - `Makefile`
+  - `cmd/ciclassify/main.go`
+  - `cmd/ciclassify/main_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `make -n frontend-verification`, `make -n backend-verification`, and `make -n ui-backend-integration` show the expected owned command scopes.
+  - `go test ./cmd/ciclassify -count=1` passed.
+  - `make typecheck` passed after installing the declared UI dependencies with `make ui-deps`.
+  - `make ui-lint` passed.
+  - `make test` passed.
+  - `git diff --check` passed.
+- **Learnings for future iterations:**
+  - Focused Make lanes should compose existing user-facing targets with `$(MAKE)` so their dry-run expansion remains auditable and broad verification targets do not need to change.
+  - The real-backend browser proof already has a dedicated `ui-durable-session-real-backend-integration-test` target; use that seam for the focused UI-backend lane instead of the broader UI integration or Storybook targets.
+---
+
+## 2026-08-10 19:31 -07:00 - ci-additive-classifier-002
+- What was implemented
+  - Added the focused `local-inference-verification` root Make target.
+  - Composed that lane from the managed-runtime regression and exactly one real-inference approval regression, without invoking the broader specialty sweep.
+  - Kept the existing direct docs, README, API package, Packaged Factories package, and Model Providers package targets as the supporting lane commands and updated classifier output to emit the new local-inference command.
+  - Marked story `ci-additive-classifier-002` complete in `prd.json`.
+- Files changed
+  - `Makefile`
+  - `cmd/ciclassify/main.go`
+  - `cmd/ciclassify/main_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./cmd/ciclassify -count=1` passed.
+  - `make typecheck` passed.
+  - `make docs-reference-smoke`, `make readme-check`, `make api-package-verify`, `make packaged-factory-package-verify`, and `make model-provider-package-verify` passed.
+  - `make long-tests-managed-runtime` passed.
+  - `make -n docs-reference-smoke readme-check api-package-verify packaged-factory-package-verify model-provider-package-verify local-inference-verification` showed the expected direct scopes; the real-inference executable is Linux/runner-gated and unavailable in this Windows worktree.
+  - `git diff --check` passed.
+- **Learnings for future iterations:**
+  - Existing package-family targets can remain the canonical direct rerun commands when they already isolate self-verification; only add a new target where an existing aggregate omits or duplicates required work.
+  - The local-inference command should call `long-tests-managed-runtime` and `pr-inference-approval` directly so the single real-inference regression is visible in dry-run output.
+---
+
+## 2026-08-10 19:55 -07:00 - ci-additive-classifier-003
+- What was implemented
+  - Completed additive path ownership in `cmd/ciclassify`, including deterministic normalization, duplicate removal, path-order independence, neutral factory content, exact mixed-lane unions, and conservative full verification for empty, CI/tooling, Go-toolchain, and unknown inputs.
+  - Tightened local-inference ownership to managed model/runtime, OMNIVOICE, and dedicated local-inference surfaces so generic provider or UI paths containing “inference” do not select the specialty lane accidentally.
+  - Added API ownership for service HTTP adapters and generated UI client contracts, backend ownership for release scripts, and the `run_everything` fallback output while preserving existing lane outputs and commands.
+  - Replaced broad classifier fixtures with exact complete-lane assertions for the governing matrix, factory-mixed behavior, duplicate/order invariance, ownership boundaries, and stdout/GitHub-compatible Boolean outputs.
+- Files changed
+  - `cmd/ciclassify/main.go`
+  - `cmd/ciclassify/main_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./cmd/ciclassify -count=1` passed.
+  - `go vet ./cmd/ciclassify` passed.
+  - `make typecheck` and `make ui-lint` passed.
+  - Focused `make -n` expansion passed for frontend, backend, UI-backend integration, local inference, docs, README, and all package-family lanes; `git diff --check` passed.
+  - No `.github/workflows/**` files changed.
+- **Learnings for future iterations:**
+  - Keep the classifier ownership table explicit and narrow: generic filenames such as `inference` are not sufficient to identify the Linux local-inference specialty lane.
+  - Assert the complete emitted lane set—not only selected lanes—because an accidental extra lane is the central cost/regression risk this classifier is designed to prevent.
+---
+
+## 2026-08-10 20:45 -07:00 - ci-additive-classifier current-main conflict follow-up
+- What was implemented
+  - Resolved the blocking PR conflict against current `origin/main` while preserving the CI branch’s authoritative `prd.json` and the current-main append-only progress history.
+  - Reconciled the shared bookkeeping files without changing the classifier or focused Make implementation; the merge result retains the current-main structured-result changes already staged by the interrupted merge.
+- Files changed
+  - Current-main merge files.
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `prd.json` parses with all three CI stories marked `passes:true`.
+  - `progress.txt` contains the current-main and CI histories with no merge conflict markers.
+  - `git diff --check` passed.
+- **Learnings for future iterations:**
+  - For a shared task bookkeeping conflict, keep the branch-specific PRD authoritative and append the branch-specific progress entries after the current-main history; validate both parseability and marker-free output before staging.
 ---

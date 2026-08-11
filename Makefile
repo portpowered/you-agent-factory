@@ -121,6 +121,7 @@ endef
 .PHONY: test-ui-browser-integration test-ui-storybook-integration test-ui-durable-session-real-backend test-ui-performance ui-component-test
 .PHONY: test-unit-coverage test-functional-coverage test-backend-coverage test-coverage-go test-race
 .PHONY: test-backend-verification test-root-process-acceptance long-tests long-tests-managed-runtime long-tests-functional-runtime pr-inference-approval
+.PHONY: frontend-verification backend-verification ui-backend-integration local-inference-verification
 
 .PHONY: verify-fast verify-pr verify-pr-inference verify-extended verify-build verify-lint verify-api
 .PHONY: verify-build-contracts verify-tests run-concurrent-ui-verification-lanes verify test-ui-coverage
@@ -478,6 +479,34 @@ test-backend-verification:
 
 test-backend-functional:
 	$(MAKE) test-functional-coverage
+
+# Focused classifier lanes. Each target owns only its product verification
+# scope and composes the existing checks so broader verification entry points
+# retain their current behavior.
+frontend-verification:
+	$(MAKE) typecheck
+	$(MAKE) ui-lint
+	$(MAKE) ui-component-test
+	$(MAKE) test-ui-coverage
+	$(MAKE) test-ui-browser-integration
+	$(MAKE) test-ui-storybook-integration
+	$(MAKE) ui-public-package-release
+
+backend-verification:
+	$(MAKE) build
+	$(MAKE) test-backend-verification
+
+# This lane is intentionally narrower than the general UI browser lane: it
+# runs the browser coverage that starts and calls the real backend, without
+# Storybook-only checks.
+ui-backend-integration:
+	$(MAKE) ui-durable-session-real-backend-integration-test
+
+# This focused lane includes the managed-runtime regression and the single
+# real-inference approval regression without the broader specialty sweep.
+local-inference-verification:
+	$(MAKE) long-tests-managed-runtime
+	$(MAKE) pr-inference-approval
 
 ACP_BASELINE_DIR       ?= docs/internal/projects/acp-program/baselines
 ACP_BASELINE_ARTIFACTS ?= .artifacts/acp-baseline
