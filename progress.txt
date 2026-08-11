@@ -12455,3 +12455,23 @@
   - A final delivery-audit commit creates a new CI head; update the audit only after that head’s checks finish, then refresh the PR body and run one final hosted-state audit.
   - Keep the exact head SHA, base SHA, and CI run together so review handoff evidence cannot accidentally point to a predecessor commit.
 ---
+## 2026-08-11 12:24:00 -07:00 - e3-event-webhooks-004 final current-main CI audit
+- What was implemented
+  - Merged the live repository `main` tip `05db67124f6abc32b149f326533f126db2d78aa4` into the Webhooks branch, preserving the task-owned `prd.json` and append-only `progress.txt` after main untracked those lane-local files.
+  - Confirmed all four Webhooks stories remain marked `passes:true`; no product-code changes were required.
+  - Characterized alternating unrelated Backend Functional Coverage flakes with repeated local runs, then reran only the failed hosted coverage job until the exact merged head passed.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/transport/cli/process -run '^TestCLISuccessorAfterHardKillReportsPreRuntimeStagingContention$' -count=5` — passed.
+  - `go test ./tests/functional/transport/cli/process -run '^TestCLISuccessorAfterHardKillReportsPreRuntimeStagingContention$' -count=10` — passed.
+  - `go test ./tests/functional/runtime_api -run '^TestFunctionalAPIServer_RuntimeLogDirectoryIsAProcessInput$' -count=10` — passed.
+  - `go test ./tests/functional/orchestration/javascript/composition -run '^TestJavaScriptParallelDispatchesChildrenConcurrently$' -count=10` — passed.
+  - `go test ./tests/functional/providers/acp -run '^TestFactoryRunRoutesExecutorProviderThroughACPAdapter$' -count=10` — passed.
+  - CI run `31524475713` passed all 18 required checks for exact head `7536a83b6585ae6b2ff61a9963fb23f2b7e7ee7a`; Backend Functional Coverage passed on the final retry and Verification Policy passed.
+  - GitHub reports PR #1885 open, non-draft, mergeable, and clean against base `05db67124f6abc32b149f326533f126db2d78aa4`; `git diff --check` passes.
+- **Learnings for future iterations:**
+  - Main can advance through lane-scaffolding cleanup after a branch merge; fetch the actual remote branch tip explicitly and preserve task bookkeeping files when resolving modify/delete conflicts.
+  - Broad functional coverage can rotate among unrelated process, runtime-log, JavaScript, and ACP fixtures; isolate each exact failure repeatedly and rerun only the failed hosted job before changing feature code.
+---
