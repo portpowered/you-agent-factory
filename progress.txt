@@ -4013,3 +4013,21 @@
   - A cohort already merged to current `main` still needs direct focused Bun execution, retired-path absence, Vitest exclusion, lane-contract, and typecheck evidence before its batch PRD story can be marked complete.
   - A fresh worktree may contain only Bun’s temporary UI install directory; `bun install --frozen-lockfile` restores the pinned Vitest and TypeScript tools without tracked dependency changes.
 ---
+
+## 2026-08-10 19:43 -07:00 - bun-compat-batch-migration-002
+- What was implemented
+  - Verified the API-02 migration already present in the branch history: session routing, session scope, and prompt-template API contracts execute exclusively in the native Bun unit lane.
+  - Confirmed the three-file cohort preserves all 20 baseline cases, including default/selected session routing, pause-state scoping, typed prompt-template errors, network failures, and invalid-response handling.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `bun test src/api/session-factory/prompt-template/api.bun.unit.test.ts src/api/session-routing.bun.unit.test.ts src/api/session-scope.bun.unit.test.ts` — 3 files / 20 tests passed, 41 expect calls.
+  - `vitest run --config vitest.lanes.config.ts --project=dashboard-unit --maxWorkers=4 --retry=0` with all three `.bun.unit.test.ts` owners — `No test files found`.
+  - The same `dashboard-unit` selection with all three retired `.test.ts` paths — `No test files found`; the legacy paths are absent.
+  - `bun run check:test-lanes` — passed.
+  - `bun run typecheck` — passed.
+- **Learnings for future iterations:**
+  - The next API cohort was already migrated in the branch ancestry, so the required work was to reproduce the frozen focused/lane/typecheck evidence and record it rather than duplicate test owners.
+  - For Bun migrations, Vitest’s expected no-file exit is code 1; capture the output and treat `No test files found` as the zero-selection assertion.
+---

@@ -44,8 +44,8 @@
         "Typecheck passes"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Verified the API-02 migration already present on the current branch: session-routing, session-scope, and prompt-template API are the exclusive *.bun.unit.test.ts owners (3 files / 20 named and executable cases), with no legacy .test.ts paths remaining. Focused `bun test` passed 20/20 with 41 expect calls; dashboard-unit Vitest selection of both migrated and retired paths returned `No test files found`; `bun run check:test-lanes` and `bun run typecheck` passed. No product behavior, generated API artifact, coverage membership, or browser ownership changed."
     },
     {
       "id": "bun-compat-batch-migration-003",
