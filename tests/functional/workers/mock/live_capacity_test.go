@@ -189,6 +189,158 @@ func TestLiveResourceCapacityRejectsReductionBelowActiveUse(t *testing.T) {
 	assertNoLiveCapacityInterruptions(t, server.GetFactoryEvents(t))
 }
 
+// TestLiveResourceCapacityRecordingReplayAndCursor proves the public
+// recording contract for an admitted capacity change: the request and success
+// events are ordered and revision-correlated, an identical retry is replayed
+// without appending history, different-body reuse is rejected, exact no-op and
+// stale pre-admission requests append nothing, and retained history resumes
+// after an acknowledged event cursor.
+func TestLiveResourceCapacityRecordingReplayAndCursor(t *testing.T) {
+	runner := newLiveCapacityBarrierRunner(0)
+	dir := scaffoldLiveCapacityFactory(t, 1)
+	server := startLiveCapacityServer(t, dir, runner)
+
+	initialEvents := server.GetFactoryEvents(t)
+	applied := setLiveCapacityREST(t, server.URL(), "~default", liveCapacityResourceID, 2, 0, "recorded-capacity-raise")
+	if applied.Outcome != factoryapi.FactorySessionResourceCapacityOutcome("APPLIED") ||
+		applied.PreviousCapacity != 1 || applied.RequestedCapacity != 2 || applied.EffectiveCapacity != 2 ||
+		applied.Revision != 1 {
+		t.Fatalf("applied capacity response = %#v, want APPLIED revision 1", applied)
+	}
+
+	events := server.GetFactoryEvents(t)
+	requestIndex, requestEvent := findLiveCapacityEvent(t, events, factoryapi.FactoryEventTypeFactoryChangeRequest, "recorded-capacity-raise")
+	changeIndex, changeEvent := findLiveCapacityEvent(t, events, factoryapi.FactoryEventTypeFactoryChange, "recorded-capacity-raise")
+	if changeIndex <= requestIndex {
+		t.Fatalf("FactoryChange index %d did not follow request index %d", changeIndex, requestIndex)
+	}
+	if requestEvent.Context.SessionId == nil || changeEvent.Context.SessionId == nil ||
+		*requestEvent.Context.SessionId != *changeEvent.Context.SessionId {
+		t.Fatalf("live-change session correlation request=%#v success=%#v", requestEvent.Context, changeEvent.Context)
+	}
+	requestPayload, err := requestEvent.Payload.AsFactoryChangeRequestEventPayload()
+	if err != nil {
+		t.Fatalf("decode FACTORY_CHANGE_REQUEST payload: %v", err)
+	}
+	if requestPayload.ExpectedRevision != 0 || requestPayload.ChangeId == "" || requestPayload.TargetId != liveCapacityResourceID {
+		t.Fatalf("request payload = %#v, want revision 0 and reviewers target", requestPayload)
+	}
+	changePayload, err := changeEvent.Payload.AsFactoryChangeEventPayload()
+	if err != nil {
+		t.Fatalf("decode FACTORY_CHANGE payload: %v", err)
+	}
+	if changePayload.PreviousRevision == nil || *changePayload.PreviousRevision != 0 ||
+		changePayload.NewRevision == nil || *changePayload.NewRevision != 1 ||
+		changePayload.EffectiveSequence == nil || *changePayload.EffectiveSequence != changeEvent.Context.Sequence ||
+		changePayload.ResourceCapacity == nil {
+		t.Fatalf("success payload = %#v, want revision 0->1 with detached capacity accounting", changePayload)
+	}
+	accounting := changePayload.ResourceCapacity
+	if accounting.ResourceId != liveCapacityResourceID || accounting.PreviousCapacity != 1 ||
+		accounting.RequestedCapacity != 2 || accounting.EffectiveCapacity != 2 || accounting.InUseCount != 0 ||
+		accounting.AvailableCount != 2 || accounting.MinimumCapacity != 0 ||
+		accounting.Outcome != factoryapi.FactoryResourceCapacityChangeOutcome("APPLIED") {
+		t.Fatalf("success capacity accounting = %#v, want detached applied 1->2 accounting", accounting)
+	}
+
+	stableEvents := append([]factoryapi.FactoryEvent(nil), events...)
+	replayed := setLiveCapacityREST(t, server.URL(), "~default", liveCapacityResourceID, 2, 0, "recorded-capacity-raise")
+	if replayed.Outcome != factoryapi.FactorySessionResourceCapacityOutcome("REPLAYED") ||
+		replayed.ChangeId != applied.ChangeId || replayed.Revision != 1 || replayed.EffectiveCapacity != 2 {
+		t.Fatalf("replayed capacity response = %#v, want REPLAYED original outcome", replayed)
+	}
+	assertLiveCapacityEventIDsUnchanged(t, stableEvents, server.GetFactoryEvents(t), "same-body replay")
+
+	conflictStatus, conflictBody := postLiveCapacityREST(t, server.URL(), "~default", liveCapacityResourceID, 3, 0, "recorded-capacity-raise")
+	if conflictStatus != http.StatusConflict {
+		t.Fatalf("different-body request status = %d, want 409\n%s", conflictStatus, conflictBody)
+	}
+	var conflict factoryapi.ErrorResponse
+	if err := json.Unmarshal(conflictBody, &conflict); err != nil {
+		t.Fatalf("decode different-body conflict: %v\n%s", err, conflictBody)
+	}
+	if conflict.Code != factoryapi.ErrorResponseCodeBADREQUEST || !strings.Contains(conflict.Message, "different normalized body") {
+		t.Fatalf("different-body conflict = %#v, want typed bad-request conflict", conflict)
+	}
+	assertLiveCapacityEventIDsUnchanged(t, stableEvents, server.GetFactoryEvents(t), "different-body conflict")
+
+	noOpStatus, noOpBody := postLiveCapacityREST(t, server.URL(), "~default", liveCapacityResourceID, 2, 1, "recorded-capacity-noop")
+	if noOpStatus != http.StatusConflict {
+		t.Fatalf("exact no-op status = %d, want pre-admission conflict\n%s", noOpStatus, noOpBody)
+	}
+	var noOp factoryapi.ErrorResponse
+	if err := json.Unmarshal(noOpBody, &noOp); err != nil {
+		t.Fatalf("decode exact no-op response: %v\n%s", err, noOpBody)
+	}
+	if noOp.Code != factoryapi.ErrorResponseCodeBADREQUEST || !strings.Contains(noOp.Message, "would not alter") {
+		t.Fatalf("exact no-op response = %#v, want typed pre-admission no-op", noOp)
+	}
+	assertLiveCapacityEventIDsUnchanged(t, stableEvents, server.GetFactoryEvents(t), "exact no-op")
+
+	staleStatus, staleBody := postLiveCapacityREST(t, server.URL(), "~default", liveCapacityResourceID, 3, 0, "recorded-capacity-stale")
+	if staleStatus != http.StatusConflict {
+		t.Fatalf("stale request status = %d, want 409\n%s", staleStatus, staleBody)
+	}
+	var stale factoryapi.ErrorResponse
+	if err := json.Unmarshal(staleBody, &stale); err != nil {
+		t.Fatalf("decode stale revision response: %v\n%s", err, staleBody)
+	}
+	if stale.Code != factoryapi.ErrorResponseCodeREVISIONCONFLICT {
+		t.Fatalf("stale revision response = %#v, want REVISION_CONFLICT", stale)
+	}
+	assertLiveCapacityEventIDsUnchanged(t, stableEvents, server.GetFactoryEvents(t), "stale revision")
+
+	if len(events) <= len(initialEvents) {
+		t.Fatalf("recorded event count = %d, want request and success beyond initial %d", len(events), len(initialEvents))
+	}
+	cursorSequence := support.ReconnectSequenceForFactoryEvent(requestEvent)
+	afterCursor := server.GetFactoryEventsAfter(t, support.FactoryEventReadCursor{
+		AfterEventID:  requestEvent.Id,
+		AfterSequence: &cursorSequence,
+	})
+	wantAfterCursor := events[requestIndex+1:]
+	if len(afterCursor) != len(wantAfterCursor) {
+		t.Fatalf("cursor replay count = %d, want %d after request event", len(afterCursor), len(wantAfterCursor))
+	}
+	for index := range wantAfterCursor {
+		if afterCursor[index].Id != wantAfterCursor[index].Id {
+			t.Fatalf("cursor replay event %d = %q, want %q", index, afterCursor[index].Id, wantAfterCursor[index].Id)
+		}
+	}
+}
+
+func findLiveCapacityEvent(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+	typeName factoryapi.FactoryEventType,
+	requestID string,
+) (int, factoryapi.FactoryEvent) {
+	t.Helper()
+	for index, event := range events {
+		if event.Type == typeName && support.StringPointerValue(event.Context.RequestId) == requestID {
+			return index, event
+		}
+	}
+	t.Fatalf("event history has no %s for request %q", typeName, requestID)
+	return -1, factoryapi.FactoryEvent{}
+}
+
+func assertLiveCapacityEventIDsUnchanged(
+	t *testing.T,
+	want, got []factoryapi.FactoryEvent,
+	operation string,
+) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("event count after %s = %d, want unchanged %d", operation, len(got), len(want))
+	}
+	for index := range want {
+		if got[index].Id != want[index].Id {
+			t.Fatalf("event %d after %s = %q, want unchanged %q", index, operation, got[index].Id, want[index].Id)
+		}
+	}
+}
+
 func startLiveCapacityServer(t *testing.T, dir string, runner *liveCapacityBarrierRunner) *support.FunctionalAPIServer {
 	t.Helper()
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
