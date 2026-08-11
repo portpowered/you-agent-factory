@@ -8027,3 +8027,17 @@
 - **Learnings for future iterations:**
   - Retry-only functional failures can move between untouched packages; characterize each exact test locally and stop broad retries once the unchanged deterministic baseline failure remains and variable failures pass in isolation.
 ---
+## 2026-08-10 22:51 -07:00 - btrc-p1-root-injection-006 latest-main final synchronization
+- What was implemented
+  - Merged the newly advanced `origin/main` `ecd1d248731c9108dbbc4dafe2f28c4120043346` into the P1 branch as merge commit `1f039244a`, preserving the authoritative P1 PRD and append-only histories.
+  - Made no P1 product change; current-main Models runtime-host updates were carried forward.
+- Files changed
+  - Current-main Models runtime-host synchronization files.
+  - `prd.json` and `progress.txt` with the final-base handoff record.
+- Verification
+  - `go test ./pkg/services/models/internal/services/runtime_host/internal/service -count=1 -timeout 300s` passed.
+  - `prd.json` parses with six stories and zero incomplete stories; no conflict markers remain; `git diff --check` passes.
+  - The prior latest-head CI run `31462600259` was terminal except for the unchanged server-binding functional assertion; fresh CI is required after this final-base synchronization.
+- **Learnings for future iterations:**
+  - Do not treat a green mergeability calculation as final while the hosting branch is advancing; fetch and merge the newest `origin/main` immediately before the handoff push.
+---
