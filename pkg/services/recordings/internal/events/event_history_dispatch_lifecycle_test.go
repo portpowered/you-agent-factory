@@ -41,8 +41,7 @@ func recordDispatchLifecycleSequence(
 	t.Helper()
 	queuedAt := t0.Add(2 * time.Second)
 	interruptedAt := t0.Add(3 * time.Second)
-	reconciledAt := t0.Add(4 * time.Second)
-	artifactAt := t0.Add(5 * time.Second)
+	reconciledAt, artifactAt := t0.Add(4*time.Second), t0.Add(5*time.Second)
 	kind := interfaces.OrchestratorKindJavaScript
 	queuePosition := 0
 	hash := "sha256:result-body"
