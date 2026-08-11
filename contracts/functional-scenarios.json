@@ -386,10 +386,15 @@
       "name": "you session resource set",
       "interface": "cli",
       "classification": "runnable",
-      "status": "missing",
+      "status": "covered",
       "lane": "short",
       "executionClass": "deterministic",
-      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+      "evidence": [
+        {
+          "test": "tests/functional/workers/mock/live_capacity_test.go::TestLiveResourceCapacityIncreaseAdmitsWaitingMockDispatch",
+          "boundary": "cli"
+        }
+      ]
     },
     {
       "stableId": "cli/you.session.resume",
