@@ -10639,3 +10639,23 @@
   - The neutral provider contract has separate maximum and negotiated validation; adding a manifest field alone is insufficient, and built-in integration maxima must be updated or registry construction rejects the published catalog.
   - The current published bundled catalog has no known incapable provider variant, so functional root evidence uses the real unavailable route for zero command-edge proof while focused provider-root and neutral-registry tests cover registered incapable capability facts.
 ---
+## [2026-08-11 02:22:51 -07:00] - js-skip-permissions-parity-003 rebased verification
+- What was implemented
+  - Rebased the complete task branch onto the current `origin/main`, preserving the JavaScript task PRD and unioning the append-only progress history and reusable patterns.
+  - No additional product behavior was required after the capability-truth review correction; the rebased tree retains the real Codex command-runner functional path and registered incapable-route boundary regressions.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+  - Provider capability, generated contract, runtime, and functional-test files carried by the rebased task branch.
+- Verification
+  - `origin/main` is an ancestor of the rebased head; the tree has no unmerged entries or conflict markers.
+  - `go test ./pkg/services/providers/... -count=1 -timeout 240s` — passed.
+  - `go test ./tests/functional/providers/permission -count=1 -timeout 240s` — passed.
+  - `go test ./pkg/root ./pkg/wire ./pkg/services/edges -count=1 -timeout 240s` — passed.
+  - `make test` — passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` — passed.
+  - `make typecheck` — passed.
+  - `git diff --check` and PRD JSON/pass-state validation — passed.
+- **Learnings for future iterations:**
+  - When rebasing a long task branch onto a moving main, keep the active task PRD authoritative, merge both append-only log histories, deduplicate reusable patterns, and rerun the full backend lane on the resulting head before pushing.
+---
