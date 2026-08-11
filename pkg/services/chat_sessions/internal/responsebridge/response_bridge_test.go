@@ -70,6 +70,24 @@ func (t bridgeTarget) SubscribeFactoryEventsForSession(_ context.Context, _ stri
 	return t.factoryEvents, t.factoryEventsErr
 }
 
+func TestServiceRunFallsBackToInvokeWhenBridgeIsUnconfigured(t *testing.T) {
+	want := factorysessions.InvocationResult{RequestID: "turn-1", Status: factorysessions.InvocationTerminalStatusCompleted}
+	invoke := func(context.Context) (factorysessions.InvocationResult, error) {
+		return want, nil
+	}
+
+	var nilService *Service
+	got, err := nilService.Run(context.Background(), "chat-1", 1, "factory-1", nil, invoke)
+	if err != nil || !reflect.DeepEqual(got, want) {
+		t.Fatalf("nil Service.Run() = (%+v, %v), want (%+v, nil)", got, err, want)
+	}
+
+	got, err = New(nil, nil, nil, logging.NoopLogger{}).Run(context.Background(), "chat-1", 1, "factory-1", nil, invoke)
+	if err != nil || !reflect.DeepEqual(got, want) {
+		t.Fatalf("unconfigured Service.Run() = (%+v, %v), want (%+v, nil)", got, err, want)
+	}
+}
+
 func TestServiceRunSequencesFactoryEventsAndPreservesInvokeResult(t *testing.T) {
 	sequencer := &bridgeSequencer{didFirst: make(chan struct{})}
 	parent := factorysessions.FactoryResponseEvent{FactorySessionID: "factory-1", EventID: "parent", Sequence: 1, ItemID: "source-parent", Kind: workers.KindMessage, Phase: workers.PhaseCompleted, Payload: json.RawMessage(`{"role":"ASSISTANT"}`)}
