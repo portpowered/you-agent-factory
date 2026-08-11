@@ -11804,3 +11804,16 @@
 - **Learnings for future iterations:**
   - When identical progress headings carry different branch-local evidence, preserve both variants during an append-only merge and document the reconciliation instead of silently choosing one.
 ---
+## [2026-08-11 10:24 -07:00] - graph-workstation-semantics final CI characterization
+- What was implemented
+  - Investigated the final-head Backend Functional Coverage failure without changing product or test source: the first attempt named the untouched server-drain fixture, and its exact test passed 10 consecutive local repetitions.
+  - Reran only the failed coverage job; the next hosted attempt rotated to the untouched hard-kill successor contention fixture, whose prior focused local evidence is recorded in the retained mainline history. Reran the coverage job again and let the dependent policy job refresh.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Backend Functional Coverage rerun job `93862172980` passed after the second hosted-only fixture failure; Verification Policy job `93865636250` passed automatically afterward.
+  - All 18 required checks are terminal-successful on head `8e432c658`; GitHub reports PR #1877 `MERGEABLE` / `CLEAN`.
+  - No source change was warranted: the graph diff is unrelated to both rotating functional fixtures, and the exact server-drain test passed 10/10 locally.
+- **Learnings for future iterations:**
+  - When a broad functional lane rotates between untouched timing-sensitive fixtures across retries, characterize each named test, preserve the feature diff, and rerun only the failed lane plus its dependent policy check.
+---
