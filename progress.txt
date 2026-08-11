@@ -168,6 +168,18 @@
 - This checkout may have `ui/node_modules` without all lockfile dependencies; run the pinned Bun install before treating a typecheck failure as a source regression.
 ---
 
+## 2026-08-11 02:52 -07:00 - e3-event-webhooks-004 current-main resynchronization
+- What was implemented
+  - Merged the newly advanced `origin/main` `dd87fd04db20d755f9b44c369aa79b8c3e600f5f` into the webhook branch and preserved the task-owned PRD metadata during the expected merge conflict.
+  - Re-ran `make generate-wire`, `make contracts-check`, the Webhooks and Wire package tests, and `git diff --check`; all passed with no generated or working-tree changes.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- **Learnings for future iterations:**
+  - A passing PR can become unmergeable when `main` advances after synchronization; always compare against freshly fetched `origin/main` immediately before final handoff.
+  - Split long local verification commands when a combined target reaches the tool timeout; a timed-out aggregate command does not imply a source failure when its individual checks remain clean.
+---
+
 ## 2026-08-10 04:32 -07:00 - sac-s0-2-pkg-boundary-ignores-001
 - What was implemented
   - Centralized repository-root-relative pruning for `.artifacts`, `.artifacts/bootstrap/worktrees`, generated transient worktrees, and the supported root worktree locations.
