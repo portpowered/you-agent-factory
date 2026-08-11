@@ -13,7 +13,6 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	cliobservation "github.com/portpowered/infinite-you/pkg/transports/cli/observation"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -65,14 +64,6 @@ func TestRunAcceptsOnePositionalPrompt(t *testing.T) {
 func TestRunRejectsExtraPositionalValues(t *testing.T) {
 	factoryDir := scaffoldSinglePositionalInvocationFactory(t)
 	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
-	mockWorkersPath := support.WriteMockWorkersConfig(t, &workers.MockWorkersConfig{
-		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
-		MockWorkers: []workers.MockWorkerConfig{{
-			WorkerName:      "processor",
-			WorkstationName: "process",
-			RunType:         workers.MockWorkerRunTypeAccept,
-		}},
-	})
 
 	providerRunner := testutil.NewProviderCommandRunner()
 	process := support.BuildProcess(t, serviceedges.Edges{
@@ -82,7 +73,6 @@ func TestRunRejectsExtraPositionalValues(t *testing.T) {
 		"you", "run",
 		"--factory", factoryPath,
 		"--no-record",
-		"--with-mock-workers", mockWorkersPath,
 		"first prompt",
 		"second prompt",
 	})

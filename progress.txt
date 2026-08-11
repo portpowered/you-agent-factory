@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- When reconciling a task branch against a moving mainline, keep the active task's PRD and follow-up metadata authoritative while accepting unrelated source changes from main; validate the merged JSON and preserve the append-only progress history.
 - When a dispatch identity is upgraded to a Worker Session ID in a later event batch, migrate its progress color alias instead of allocating a second color; terminal cleanup must remove the canonical identity.
 - Functional CLI scenarios outside feature-owned workers/mock cells must replace provider execution through `serviceedges.Edges.ProviderCommandRunner`; use protocol-valid shaped Codex responses for packaged decision-envelope workflows.
 - CLI lifecycle adapters should render both local service results and remote HTTP responses through the shared Factory Session boundary mapper so placement changes preserve structured fields and outcome classifications.
