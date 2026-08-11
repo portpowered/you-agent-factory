@@ -8720,3 +8720,17 @@
 - **Learnings for future iterations:**
   - A terminal exact-head CI run plus current-base ancestry, clean mergeability, and synchronized PRD/body is the final review handoff evidence for this task.
 ---
+
+## 2026-08-11 07:34 -07:00 - e3-event-webhooks-004 PR resubmission
+- What was implemented
+  - Closed superseded PR #1850 after auditing and addressing all historical feedback, then submitted fresh PR #1885 from the unchanged `e3-event-webhooks` branch with the PRD as its description.
+  - Updated the task-owned PRD to identify PR #1885 as the active review surface; all four stories remain `passes:true`.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Fresh PR #1885 is open, non-draft, and targets current `main`; its body will be synchronized from the committed PRD after this metadata commit.
+  - The validated product/merge head `954420d327ed917fdb058b16ab15f857cd703ec9` has all 18 required CI jobs passing in run `31500324289`; this iteration adds only task metadata.
+- **Learnings for future iterations:**
+  - When a stale PR head cannot receive a replacement workflow run after review feedback is cleared, preserve the validated branch and resubmit a fresh PR so GitHub emits a new `opened` CI event; carry the old PR number only in the audit trail.
+---

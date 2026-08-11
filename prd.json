@@ -2,11 +2,11 @@
   "project": "E3 Outbound Event Webhooks",
   "branchName": "e3-event-webhooks",
   "deliveryAudit": {
-    "pullRequest": 1850,
+    "pullRequest": 1885,
     "auditedHead": "954420d327ed917fdb058b16ab15f857cd703ec9",
     "base": "b99c8b942b4a684491cede70cae7f0ebf920da8c",
     "requiredChecks": "CI run 31500324289 passed all 18 required checks for exact head 954420d327ed917fdb058b16ab15f857cd703ec9 against current base b99c8b942b4a684491cede70cae7f0ebf920da8c; package-target-manifest-check, ownership-inventory-check, API smoke, and API package verification also pass locally",
-    "reviewThreads": "Thread-aware GitHub audit reports zero review threads, zero unresolved inline threads, zero formal reviews, and five historical top-level comments; all blocking feedback is addressed by the current head, and PR #1850 is open, non-draft, mergeable, clean, and ready for review"
+    "reviewThreads": "The superseded PR #1850 had zero review threads, zero unresolved inline threads, and zero formal reviews after all five historical conversation comments were addressed; fresh PR #1885 is open from the same validated head for review"
   },
   "description": "Add Factory-configured outbound webhooks that subscribe to the existing canonical Factory Event stream and POST signed Work state-transition and dispatch-failure envelopes with filtering, bounded retry/backoff, and durable dead-letter logging. The feature lets external monitors react without polling while preserving Recordings as the event authority and keeping delivery failure isolated from Factory Runtime state.",
   "context": {
