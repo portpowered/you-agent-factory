@@ -12371,3 +12371,24 @@
 - **Learnings for future iterations:**
   - Treat the latest-main merge, final hosted run, PR-body parity, and thread-aware comment audit as one handoff bundle; a green workflow before the final progress update does not certify the new bookkeeping head.
 ---
+
+## [2026-08-11 09:40:53 -07:00] - e3-event-webhooks-001 current-main reconciliation
+- What was implemented
+  - Merged live `origin/main` at `650b701689fcbc467fa0e814478460b9c3316629` into the Webhooks branch after GitHub reported PR #1885 as conflicting.
+  - Preserved the Webhooks `prd.json` as authoritative and unioned both append-only progress histories; the incoming functional-lane source and test changes were carried through the merge.
+- Files changed
+  - `pkg/services/factory_definitions/internal/services/validation/impl/validate.go`
+  - `pkg/services/factory_definitions/internal/services/validation/impl/topology_guards_test.go`
+  - `prd.json`
+  - `progress.txt`
+  - Current-main functional-lane source and test files carried by the merge.
+- Verification
+  - `go test ./pkg/services/factory_definitions/internal/services/validation/impl -run 'TestWebhookTargets' -count=1` passed on merge head `fb75a211a`.
+  - `go test ./pkg/services/factory_definitions/... -count=1 -timeout 600s` passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` passed.
+  - `make test` and `make typecheck` passed.
+  - `git merge-base --is-ancestor origin/main HEAD`, `git diff --check`, and PRD all-pass validation passed.
+- **Learnings for future iterations:**
+  - Reconcile the live hosting base before final PR checks; a branch can be locally clean against a stale tracking ref while GitHub reports a conflict.
+  - For shared append-only metadata conflicts, retain the active PRD and preserve both complete pattern/history sides before staging the merge.
+---
