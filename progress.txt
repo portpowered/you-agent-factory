@@ -11799,3 +11799,17 @@
 - **Learnings for future iterations:**
   - Final handoff evidence must be attached to the exact post-merge head because a moving base can invalidate an otherwise green prior run.
 ---
+## [2026-08-11 11:08:23 -07:00] - wsr-0023-capture-replay final review-thread audit
+- What was implemented
+  - Re-read `prd.json` and the append-only progress log; all three WSR stories remain marked `passes:true`, so no additional story implementation was required.
+  - Audited existing PR #1876 on `wsr-0023-capture-replay` instead of opening a duplicate. The thread-aware GraphQL scan found zero reviews and zero inline review threads; the historical self-authored blocking audit is followed by evidence updates covering each finding.
+  - Confirmed the current branch head is pushed, based on current `main`, cleanly mergeable, and described by the exact contents of `prd.json`.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `prd.json` parses and all three WSR stories remain `passes:true`.
+  - `git diff --check` passes; current `HEAD` matches `origin/wsr-0023-capture-replay` and `origin/main` is an ancestor.
+  - PR #1876 reports `MERGEABLE` / `CLEAN`; all reported hosted checks are terminal-success; PR body and `prd.json` match byte-for-byte; thread-aware review data reports no unresolved inline threads.
+- **Learnings for future iterations:**
+  - For a completed task with an existing PR, verify story flags, exact PR-body parity, remote-head identity, current-base ancestry, mergeability, terminal checks, and thread-aware review state as one handoff bundle before creating any duplicate PR.
+---
