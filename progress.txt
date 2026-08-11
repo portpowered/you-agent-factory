@@ -8441,3 +8441,19 @@
   - The published CLI copy is refreshed by `make contracts-generate` after the authored contract changes; `make cli-manifest-generate` refreshes the family/runtime projections and the smoke check catches published drift.
   - When broad Go verification is run concurrently across worktrees on Windows, isolate the exact timed-out process tree before retrying a gate so other task verification remains undisturbed.
 ---
+## 2026-08-11 03:33 -07:00 - thr-functional-lane-speed-004 current-main replacement verification
+- What was implemented
+  - Merged live `origin/main` `dd87fd04d` into the task branch as merge commit `4edf60992`, preserving the four-story task PRD and unioning both append-only progress histories.
+  - Made no additional task product changes; the task diff against live `origin/main` remains limited to the functional-lane runner, coverage, wait, documentation, test-contract, PRD, and progress files.
+- Files changed
+  - Current-main source and generated files carried by the synchronization merge.
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `make test` passed in 594.2s.
+  - `make typecheck backend-size pkg-maint pkg-file-count pkg-structure vet` passed in 217.3s.
+  - The named failures from the first concurrent fresh-lane attempt passed three isolated repetitions: acceptance (27.445s), inference (14.941s), Codex (56.604s), mock-worker drain (3.276s), and script worker (6.590s).
+  - Two unchanged `make test-functional-fresh` attempts (1121.4s and 773.3s) were host-limited by concurrent Windows process/API-server startup and packaged-installation contention across unrelated packages; no task-touched package failed in either run. The previous complete fresh functional and coverage evidence remains recorded in story 004, and replacement-head authoritative confirmation is delegated to CI.
+- **Learnings for future iterations:**
+  - The maintained functional target's eight-job process/API-server workload can exceed this Windows host's concurrent listener and packaged-installation capacity even when every named failure passes in isolation; keep the target semantics unchanged and use the Linux CI coverage lane for replacement-head confirmation.
+---
