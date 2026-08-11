@@ -301,11 +301,6 @@ func (r *registry) startAdmissionCause(supervision *supervision) error {
 	return workersessions.ErrStartAdmissionFailed
 }
 
-func (r *registry) rejectStartBeforeAdmission(ctx context.Context, id, attemptID string, cause error) (workersessions.StartResult, error) {
-	final := r.terminalizeInvocationBeforeAdmission(ctx, id, attemptID)
-	return workersessions.StartResult{Session: final}, startNotAccepted(cause)
-}
-
 func (r *registry) publishTerminalSnapshot(ctx context.Context, id, attemptID string, session workersessions.Session) {
 	if !session.Terminal() {
 		return

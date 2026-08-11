@@ -73,7 +73,10 @@ type Service interface {
 	// the terminal outcome commits, InvokeSession also appends one terminal
 	// KindSession record (PhaseCompleted or PhaseFailed) to Topic(req.ID); a
 	// failure publishing that record is logged and never changes the
-	// returned, already-committed Session.
+	// returned, already-committed Session. Its reservation, opening
+	// publication, admission callback, retry, control-race, terminal
+	// classification, and terminal publication use the same supervision
+	// implementation as Start; only the caller-facing wait point differs.
 	//
 	// InvokeSession is the one operation every orchestrator uses to run a
 	// Worker. It carries no executor: req.Execution.WorkstationName selects an
