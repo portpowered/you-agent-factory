@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- Exact deletion-only backend package-count baselines must not be ratcheted upward for new behavioral tests; place coverage in a focused durable child test package when the owning package is at its recorded count.
 - Public UI package build and pack verification mutate sibling `dist` directories; run dependency preparation, package build, and pack verification serially to avoid transient missing-module or Windows file-lock failures.
 - Package-owned React Flow replay surfaces should set a mobile-safe minimum zoom below React Flow's default when fit-to-view must keep authored node controls inside narrow viewports.
 - Packaged catalog generation runs canonical Factory validation before publication-specific semantic-role checks; removing a referenced terminal state requires a real terminal route/bridge or a coordinated validator decision.
@@ -11816,4 +11817,21 @@
   - No source change was warranted: the graph diff is unrelated to both rotating functional fixtures, and the exact server-drain test passed 10/10 locally.
 - **Learnings for future iterations:**
   - When a broad functional lane rotates between untouched timing-sensitive fixtures across retries, characterize each named test, preserve the feature diff, and rerun only the failed lane plus its dependent policy check.
+---
+## [2026-08-11 11:27 -07:00] - graph-workstation-semantics-001 package-size review follow-up
+- What was implemented
+  - Addressed the blocking package-size feedback by moving the completion-outcome regression out of the implementation package into the focused `validation/internal/outcometests` test subpackage.
+  - Restored `validation/impl`'s exact deletion-only package baseline from 24 to 23 without removing the recurring-controller, composite-parent, or ordinary disconnected-outcome coverage.
+- Files changed
+  - `docs/internal/baselines/backend-package-file-count.json`
+  - `pkg/services/factory_definitions/internal/services/validation/impl/work_type_outcome_test.go` (moved)
+  - `pkg/services/factory_definitions/internal/services/validation/internal/outcometests/work_type_outcome_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/factory_definitions/internal/services/validation/...` passed, including the three focused outcome cases.
+  - `make pkg-file-count`, `make backend-size`, and `make pkg-maint` passed with no baseline expansion.
+  - `git diff --check` passed.
+- **Learnings for future iterations:**
+  - Exact deletion-only package-count baselines are hard policy: when a package is at its recorded count, use a durable focused child test package for new behavior coverage instead of raising the baseline.
 ---

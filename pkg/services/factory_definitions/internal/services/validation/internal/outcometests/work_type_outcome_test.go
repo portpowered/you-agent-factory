@@ -1,9 +1,10 @@
-package impl
+package outcometests
 
 import (
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl"
 )
 
 func TestValidate_RequiresCompletionForRecurringControllerShape(t *testing.T) {
@@ -52,7 +53,7 @@ func TestValidate_RequiresCompletionForRecurringControllerShape(t *testing.T) {
 		},
 	}
 
-	assertMissingCompletionTarget(t, Validate(cfg), "controller")
+	assertMissingCompletionTarget(t, factoryvalidation.Validate(cfg), "controller")
 }
 
 func TestValidate_RequiresCompletionForCompositeParentShape(t *testing.T) {
@@ -95,7 +96,7 @@ func TestValidate_RequiresCompletionForCompositeParentShape(t *testing.T) {
 		},
 	}
 
-	assertMissingCompletionTarget(t, Validate(cfg), "request")
+	assertMissingCompletionTarget(t, factoryvalidation.Validate(cfg), "request")
 }
 
 func TestValidate_RejectsNonTerminalWorkTypeWithoutDelegatedOutcome(t *testing.T) {
@@ -119,13 +120,13 @@ func TestValidate_RejectsNonTerminalWorkTypeWithoutDelegatedOutcome(t *testing.T
 		}},
 	}
 
-	assertMissingCompletionTarget(t, Validate(cfg), "task")
+	assertMissingCompletionTarget(t, factoryvalidation.Validate(cfg), "task")
 }
 
-func assertMissingCompletionTarget(t *testing.T, result Result, workType string) {
+func assertMissingCompletionTarget(t *testing.T, result factorydefinitions.ValidationResult, workType string) {
 	t.Helper()
 	for _, target := range result.BlockingTargets() {
-		if target.Code == CodeWorkTypeMissingCompletionState && target.Subject.ID == workType {
+		if target.Code == factoryvalidation.CodeWorkTypeMissingCompletionState && target.Subject.ID == workType {
 			return
 		}
 	}
