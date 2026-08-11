@@ -47,6 +47,75 @@ discovery:
     - kind: workspace
       name: writable-workspace
       description: Execution requires a writable workspace selected by the factory.
+harness:
+  kind: native_cli
+modelCatalogPosture: exact
+harnessRoutes:
+  - direction: input
+    modality: audio
+    support: unsupported
+    transport: none
+    evidenceRefs: [codex-docs, codex-conformance]
+  - direction: input
+    modality: image
+    support: supported
+    transport: file_path
+    evidenceRefs: [codex-docs, codex-conformance]
+  - direction: input
+    modality: text
+    support: supported
+    transport: inline
+    evidenceRefs: [codex-docs, codex-conformance]
+  - direction: input
+    modality: video
+    support: unsupported
+    transport: none
+    evidenceRefs: [codex-docs, codex-conformance]
+  - direction: output
+    modality: audio
+    support: unsupported
+    transport: none
+    evidenceRefs: [codex-docs, codex-conformance]
+  - direction: output
+    modality: image
+    support: unsupported
+    transport: none
+    evidenceRefs: [codex-docs]
+  - direction: output
+    modality: text
+    support: supported
+    transport: inline
+    evidenceRefs: [codex-docs, codex-conformance]
+  - direction: output
+    modality: video
+    support: unsupported
+    transport: none
+    evidenceRefs: [codex-docs, codex-conformance]
+evidence:
+  - id: codex-docs
+    kind: primary_documentation
+    verifiedOn: "2026-08-10"
+    url: https://developers.openai.com/codex/cli/reference/
+    factRefs:
+      - model_catalog
+      - harness/input/image
+      - harness/input/text
+      - harness/output/image
+      - harness/output/text
+  - id: codex-conformance
+    kind: conformance_fixture
+    verifiedOn: "2026-08-10"
+    factRefs:
+      - harness/input/audio
+      - harness/input/video
+      - harness/output/audio
+      - harness/output/video
+      - model/gpt-5.6/input/image
+      - model/gpt-5.6/input/text
+      - model/gpt-5.6/output/text
+      - tool/filesystem
+      - tool/shell
+      - tool/web_search
 models:
   - id: gpt-5.6
     efforts: &codexEfforts
@@ -61,34 +130,42 @@ models:
         modality: audio
         support: unsupported
         transport: none
+        evidenceRefs: [codex-docs, codex-conformance]
       - direction: input
         modality: image
         support: supported
         transport: file_path
+        evidenceRefs: [codex-docs, codex-conformance]
       - direction: input
         modality: text
         support: supported
         transport: inline
+        evidenceRefs: [codex-docs, codex-conformance]
       - direction: input
         modality: video
         support: unsupported
         transport: none
+        evidenceRefs: [codex-docs, codex-conformance]
       - direction: output
         modality: audio
         support: unsupported
         transport: none
+        evidenceRefs: [codex-docs, codex-conformance]
       - direction: output
         modality: image
-        support: supported
-        transport: file_path
+        support: unsupported
+        transport: none
+        evidenceRefs: [codex-docs]
       - direction: output
         modality: text
         support: supported
         transport: inline
+        evidenceRefs: [codex-docs, codex-conformance]
       - direction: output
         modality: video
         support: unsupported
         transport: none
+        evidenceRefs: [codex-docs, codex-conformance]
   - id: gpt-5.6-luna
     efforts: *codexEfforts
     modalities: *codexModalities
@@ -102,12 +179,21 @@ tools:
   - name: filesystem
     support: supported
     description: Read and modify files in the selected workspace.
+    evidenceRefs: [codex-conformance]
+    availability: built_in
+    defaultEnabled: true
   - name: shell
     support: supported
     description: Run bounded shell commands through the Codex tool runner.
+    evidenceRefs: [codex-conformance]
+    availability: built_in
+    defaultEnabled: true
   - name: web_search
     support: supported
     description: Use the provider web-search tool when enabled by the invocation.
+    evidenceRefs: [codex-docs, codex-conformance]
+    availability: optional
+    defaultEnabled: null
 knownLimits:
   - name: referenced_image_paths
     kind: maximum

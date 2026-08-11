@@ -57,6 +57,23 @@ properties:
     $ref: './ProviderResponseFidelityCapabilities.yaml'
   discovery:
     $ref: './ProviderDiscoveryPrerequisites.yaml'
+  harness:
+    $ref: './ProviderHarness.yaml'
+  modelCatalogPosture:
+    $ref: './ProviderModelCatalogPosture.yaml'
+  harnessRoutes:
+    type: array
+    maxItems: 32
+    description: Directional routes implemented by the provider harness, independent of any model catalog claim.
+    items:
+      $ref: './ProviderModality.yaml'
+  evidence:
+    type: array
+    maxItems: 64
+    uniqueItems: true
+    description: Bounded evidence records used to qualify capability facts in this manifest.
+    items:
+      $ref: './ProviderCapabilityEvidence.yaml'
   models:
     type: array
     description: Named provider models and their complete capability facts in canonical model-ID order.
