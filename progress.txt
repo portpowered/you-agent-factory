@@ -8806,3 +8806,20 @@
   - When a hosted package-coverage floor fails, preserve the floor and cover the observable failure contract through its injected acceptance or failure port before considering a baseline change.
   - Stable failure-code mappings are easiest to verify with a small writer edge that records the detached classification and identity, keeping the test independent of filesystem mechanics.
 ---
+
+## 2026-08-11 02:54:20 -07:00 - wsr-0023-capture-replay CI functional fixture follow-up
+- What was implemented
+  - Stabilized the existing Worker Sessions CLI functional fixture around its asynchronous public projections.
+  - The fixture now waits for the requested terminal state before asserting lifecycle fields and retries only transient `WORKER_SESSION_NOT_FOUND` stream lookups after the list projection exposes a session.
+  - Kept the PRD story pass state unchanged; this follow-up addresses the hosted functional-coverage characterization failure without changing product behavior.
+- Files changed
+  - `tests/functional/provider_sessions/cli/worker_sessions_cli_test.go`
+  - `progress.txt`
+- Verification
+  - The focused `TestWorkerSessionsCLI` passed 10 consecutive repetitions.
+  - The complete `tests/functional/provider_sessions/cli` package passed.
+  - `git diff --check` passed.
+- **Learnings for future iterations:**
+  - A Worker Session list observation and its provider-session stream lookup are separate asynchronous readiness boundaries; functional fixtures must synchronize each public operation they invoke.
+  - When an existing functional fixture fails only after a terminal stream frame, poll the authoritative terminal projection instead of adding a fixed sleep or weakening the lifecycle assertion.
+---
