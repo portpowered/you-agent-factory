@@ -492,6 +492,78 @@ func TestRunRemoteInvocationMapsCanonicalDurableFailuresToInvocationEnvelope(t *
 	}
 }
 
+func TestRunRemoteInvocationResultTransportAndMalformedFailuresStayDistinct(t *testing.T) {
+	for _, test := range []struct {
+		name          string
+		writeResult   func(http.ResponseWriter)
+		wantCode      string
+		wantBodyValue string
+	}{
+		{
+			name: "transport api failure",
+			writeResult: func(w http.ResponseWriter) {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				_, _ = io.WriteString(w, `{"code":"UNAVAILABLE","message":"result service unavailable","detail":"secret result payload"}`)
+			},
+			wantCode:      RemoteDurableResultCode,
+			wantBodyValue: "result service unavailable",
+		},
+		{
+			name: "malformed result",
+			writeResult: func(w http.ResponseWriter) {
+				_ = json.NewEncoder(w).Encode(factoryapi.FactorySessionResult{SessionId: "dur-sess-malformed"})
+			},
+			wantCode: RemoteDurableResponseInvalidCode,
+		},
+	} {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			const sessionID = "dur-sess-malformed"
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				if r.Method == http.MethodPost {
+					_ = json.NewEncoder(w).Encode(factoryapi.FactorySessionExecutionResponse{
+						SessionId: sessionID,
+						Status:    factoryapi.FactorySessionDurableLifecycleStatusQueued,
+					})
+					return
+				}
+				test.writeResult(w)
+			}))
+			defer server.Close()
+
+			transport, err := clihttp.NewProtocol(server.Client(), platformclock.Real{})
+			if err != nil {
+				t.Fatalf("NewProtocol: %v", err)
+			}
+			secret := "do not echo this remote input"
+			var output bytes.Buffer
+			err = RunRemoteInvocation(context.Background(), RunConfig{
+				Dir:                     "factory",
+				NamedFactoryName:        "@you/research",
+				PreparedInvocationInput: preparedRemoteArguments(secret),
+				JSONOutput:              true,
+				Output:                  &output,
+			}, server.URL, NewRemoteInvocation(transport))
+			if err == nil || !strings.Contains(err.Error(), test.wantCode) {
+				t.Fatalf("RunRemoteInvocation error = %v, want %s", err, test.wantCode)
+			}
+			if !strings.Contains(err.Error(), server.URL) {
+				t.Fatalf("error = %q, want safe selected endpoint", err)
+			}
+			if strings.Contains(err.Error(), secret) || strings.Contains(err.Error(), "secret result payload") {
+				t.Fatalf("error leaked request or response payload: %q", err)
+			}
+			if test.wantBodyValue != "" && !strings.Contains(err.Error(), test.wantBodyValue) {
+				t.Fatalf("error = %q, want customer-safe API message", err)
+			}
+			if output.Len() != 0 {
+				t.Fatalf("stdout = %q, want no terminal success or failure record", output.String())
+			}
+		})
+	}
+}
+
 func TestRunRemoteInvocationPassesPreparedArguments(t *testing.T) {
 	text := "local adapter must not run"
 	var got RemoteInvocationRequest
