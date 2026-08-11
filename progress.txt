@@ -7607,5 +7607,18 @@
   - `prd.json` parses, no conflict markers remain, and `git diff --check` passed before this append.
 - **Learnings for future iterations:**
   - A PR can become conflicting again after a successful retry because `main` advances asynchronously; fetch the hosting ref immediately before each final push and repeat the shared-file merge protocol.
-  - When parallel Go test processes produce a tool subprocess failure, rerun the named package serially before treating it as a source regression.
+- When parallel Go test processes produce a tool subprocess failure, rerun the named package serially before treating it as a source regression.
+---
+## [2026-08-10 22:24 -07:00] - provider-capability-contract latest-base refresh
+- What was implemented
+  - Merged the newly advanced live `origin/main` at `b68e4bf95` into the provider capability contract branch after the first pushed PR head became stale against main.
+  - Preserved the provider-specific PRD and append-only progress history, then regenerated all canonical API, contract, catalog, and model-provider package artifacts.
+- Files changed
+  - `prd.json` and `progress.txt` conflict resolution.
+  - Merge commit `2323dc0de`.
+- Verification
+  - `make interfaces-all`, `make provider-catalog-generate`, and `make model-provider-package-generate` — passed with a clean generated tree.
+  - `prd.json` parses with all three stories marked `passes:true`; no conflict markers remain; `git diff --check` passes.
+- **Learnings for future iterations:**
+  - Fetch the hosting `main` ref immediately before each PR push; concurrent mainline merges can invalidate an otherwise clean merge and require a fresh CI attempt.
 ---
