@@ -17,6 +17,8 @@ type Service struct {
 	durableexecution.Service
 }
 
+// liveChangeCapability is the optional durable-session boundary used by the
+// live-change coordinator without widening the root execution contract.
 type liveChangeCapability interface {
 	ApplyLiveChange(context.Context, string, factorysessions.LiveChangeRequest) (factorysessions.LiveChangeResult, error)
 	RecoverLiveChange(context.Context, string, string) (factorysessions.LiveChangeResult, error)
