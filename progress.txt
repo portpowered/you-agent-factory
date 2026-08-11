@@ -4092,3 +4092,19 @@
 - **Learnings for future iterations:**
   - Run the repository-wide gates after the final base synchronization; focused evidence from a pre-sync head is useful but not sufficient for PR handoff.
 ---
+
+## 2026-08-10 20:27 -07:00 - pp-merge-context-bug PR CI rerun
+- What was implemented
+  - Investigated the first hosted `Backend Functional Coverage` failure and confirmed it was unrelated to the plan-parallel diff: the existing ACP retry test failed with a transient cursor-ACP session/load internal error.
+  - Isolated the failed ACP test, then the two unrelated runtime/API tests exposed by the first rerun; each exact test passed 10/10 locally.
+  - Reran only the failed hosted jobs twice. The final rerun passed both `Backend Functional Coverage` and downstream `Verification Policy`.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Initial backend failure: `TestFactoryRunRetriesACPProviderByResumingExactSession` reported temporary cursor-ACP session/load unavailability; the required real-ACP evidence artifact was absent because the lane stopped on that failure.
+  - First rerun failures: `TestAPIEventReplaySmoke_PublicEventsAndSessionProjectionExposeActiveAndCompletedTimeline` and `TestAPIPartialResultIsAvailableBeforeTerminalCompletion`; both passed 10/10 in isolated local runs.
+  - Final hosted rerun on PR #1870 head `d165f5a1eb3bc6fbc1f2b8c47cd12e6466639ee8`: `Backend Functional Coverage` passed in 5m13s and `Verification Policy` passed; all 17 reported checks are terminal and successful.
+  - No source or PRD change was made in response to unrelated flaky failures.
+- **Learnings for future iterations:**
+  - For broad functional-coverage flakes, isolate every named failing test and repeat it before changing untouched behavior; rerun only the failed CI jobs after the isolated characterization is clean.
+---
