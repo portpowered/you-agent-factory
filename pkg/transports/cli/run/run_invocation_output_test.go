@@ -351,6 +351,64 @@ func TestRunRemoteInvocationMapsCanonicalDurableFailuresToInvocationEnvelope(t *
 	}
 }
 
+func TestWriteRemoteInvocationResultPreservesTerminalOutputModes(t *testing.T) {
+	completed := apisurface.FactoryInvocationResult{
+		RequestID:     "request-output",
+		Status:        interfaces.InvocationTerminalStatusCompleted,
+		PrimaryResult: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "remote complete"}},
+		SessionID:     "session-output",
+	}
+
+	t.Run("JSON response stream writes one terminal record", func(t *testing.T) {
+		var output bytes.Buffer
+		cfg := RunConfig{Output: &output, JSONOutput: true, InvocationOutputMode: InvocationOutputResponseStream}
+		if err := writeRemoteInvocationResult(cfg, completed); err != nil {
+			t.Fatalf("writeRemoteInvocationResult: %v", err)
+		}
+		var record remoteInvocationNDJSONRecord
+		if err := json.Unmarshal(bytes.TrimSpace(output.Bytes()), &record); err != nil {
+			t.Fatalf("decode terminal record: %v; output=%q", err, output.String())
+		}
+		if record.RecordType != "invocation_result" || record.Response.Status != factoryapi.InvocationTerminalStatusCompleted {
+			t.Fatalf("terminal record = %#v, want completed invocation_result", record)
+		}
+	})
+
+	t.Run("human response stream writes primary result", func(t *testing.T) {
+		var output bytes.Buffer
+		cfg := RunConfig{Output: &output, InvocationOutputMode: InvocationOutputResponseStream}
+		if err := writeRemoteInvocationResult(cfg, completed); err != nil {
+			t.Fatalf("writeRemoteInvocationResult: %v", err)
+		}
+		if got := output.String(); got != "remote complete" {
+			t.Fatalf("human output = %q, want primary result", got)
+		}
+	})
+
+	t.Run("human response stream failure keeps safe session context", func(t *testing.T) {
+		var output bytes.Buffer
+		cfg := RunConfig{Output: &output, InvocationOutputMode: InvocationOutputResponseStream}
+		failure := completed
+		failure.Status = interfaces.InvocationTerminalStatusFailed
+		failure.ErrorCode = "INVOCATION_RUNTIME_FAILURE"
+		failure.Message = "server-safe failure"
+		if err := writeRemoteInvocationResult(cfg, failure); err == nil {
+			t.Fatal("writeRemoteInvocationResult returned nil for terminal failure")
+		}
+		for _, want := range []string{"--- invocation outcome ---", "error: INVOCATION_RUNTIME_FAILURE", "message: server-safe failure", "session: session-output"} {
+			if !strings.Contains(output.String(), want) {
+				t.Fatalf("human failure output = %q, want %q", output.String(), want)
+			}
+		}
+	})
+
+	t.Run("nil output is rejected", func(t *testing.T) {
+		if err := writeRemoteInvocationResult(RunConfig{InvocationOutputMode: InvocationOutputResponseStream}, completed); err == nil {
+			t.Fatal("writeRemoteInvocationResult accepted missing output")
+		}
+	})
+}
+
 func remoteDurableFailureCases() []remoteDurableFailureCase {
 	return []remoteDurableFailureCase{
 		{

@@ -1,6 +1,7 @@
 package run
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -179,6 +180,147 @@ func TestRemoteInvocationClientFactoryEventsUsesCanonicalCursor(t *testing.T) {
 	}
 	if _, err := stream.Next(context.Background()); !errors.Is(err, io.EOF) {
 		t.Fatalf("event stream terminal read error = %v, want EOF", err)
+	}
+}
+
+func TestRemoteInvocationClientFactoryEventsRejectsInvalidResponses(t *testing.T) {
+	request := RemoteInvocationEventRequest{Server: "https://selected.test", SessionID: "durable-remote"}
+	client := remoteInvocationClient{}
+	if _, err := client.OpenFactorySessionEvents(nil, request); err == nil || !strings.Contains(err.Error(), "context is required") {
+		t.Fatalf("nil context error = %v, want required-context error", err)
+	}
+	if _, err := client.OpenFactorySessionEvents(context.Background(), request); err == nil || !strings.Contains(err.Error(), "CLI HTTP protocol is required") {
+		t.Fatalf("nil protocol error = %v, want required-protocol error", err)
+	}
+	if _, err := (remoteInvocationClient{transport: &remoteProtocolStub{}}).OpenFactorySessionEvents(
+		context.Background(), RemoteInvocationEventRequest{Server: "http://[::1", SessionID: "durable-remote"},
+	); err == nil || !strings.Contains(err.Error(), RemoteDurableResultCode) {
+		t.Fatalf("invalid endpoint error = %v, want durable-result classification", err)
+	}
+
+	for _, test := range []struct {
+		name     string
+		response clihttp.Response
+		want     string
+	}{
+		{name: "missing HTTP response", response: clihttp.Response{}, want: "HTTP response is unavailable"},
+		{
+			name: "server API error",
+			response: clihttp.Response{HTTP: &http.Response{
+				StatusCode: http.StatusServiceUnavailable,
+				Body:       io.NopCloser(strings.NewReader(`{"message":"server unavailable"}`)),
+			}},
+			want: "server unavailable",
+		},
+		{
+			name: "server status without API error",
+			response: clihttp.Response{HTTP: &http.Response{
+				StatusCode: http.StatusBadGateway,
+				Body:       io.NopCloser(strings.NewReader("not JSON")),
+			}},
+			want: "(502)",
+		},
+		{
+			name:     "missing event body",
+			response: clihttp.Response{HTTP: &http.Response{StatusCode: http.StatusOK}},
+			want:     "HTTP response has no body",
+		},
+		{
+			name: "wrong content type",
+			response: clihttp.Response{HTTP: &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader("{}")),
+			}},
+			want: "content type",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := (remoteInvocationClient{transport: &remoteProtocolStub{response: test.response}}).OpenFactorySessionEvents(
+				context.Background(), request,
+			)
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("error = %v, want %q", err, test.want)
+			}
+		})
+	}
+}
+
+func TestRemoteFactoryEventStreamParsesFramesAndGuardsReads(t *testing.T) {
+	var nilStream *remoteFactoryEventStream
+	if _, err := nilStream.Next(context.Background()); err == nil || !strings.Contains(err.Error(), "unavailable") {
+		t.Fatalf("nil stream Next error = %v, want unavailable error", err)
+	}
+	if err := nilStream.Close(); err != nil {
+		t.Fatalf("nil stream Close error = %v, want nil", err)
+	}
+
+	stream := &remoteFactoryEventStream{reader: bufio.NewReader(strings.NewReader("data: not used\n\n"))}
+	if _, err := stream.Next(nil); !errors.Is(err, context.Canceled) {
+		t.Fatalf("nil context error = %v, want context.Canceled", err)
+	}
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := stream.Next(canceled); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled context error = %v, want context.Canceled", err)
+	}
+
+	event := apiEventsFromDomain(t, canonicalJavaScriptFactoryEvents()[:1])[0]
+	payload := mustJSON(event)
+	split := bytes.IndexByte(payload, ',') + 1
+	if split <= 0 {
+		t.Fatal("canonical event JSON has no safe multiline split")
+	}
+	framed := ": heartbeat\n\n" + "data: " + string(payload[:split]) + "\n" + "data: " + string(payload[split:]) + "\n\n"
+	stream = &remoteFactoryEventStream{reader: bufio.NewReader(strings.NewReader(framed))}
+	got, err := stream.Next(context.Background())
+	if err != nil || got.Id != event.Id || got.Type != event.Type {
+		t.Fatalf("framed event = %#v/%v, want event %q", got, err, event.Id)
+	}
+	if _, err := stream.Next(context.Background()); !errors.Is(err, io.EOF) {
+		t.Fatalf("after-frame error = %v, want EOF", err)
+	}
+
+	for _, malformed := range []string{"data: {\"id\":\"event-only\"}\n\n", "data: {not-json}\n\n"} {
+		_, err := readRemoteFactoryEventSSE(bufio.NewReader(strings.NewReader(malformed)))
+		var malformedErr *remoteMalformedFactoryEventError
+		if !errors.As(err, &malformedErr) {
+			t.Fatalf("malformed SSE error = %v, want remote malformed event error", err)
+		}
+	}
+}
+
+func TestRemoteFactoryEventRetryClassificationAndReconnectCancellation(t *testing.T) {
+	transportError := func(status int) error {
+		return &remoteInvocationEventTransportError{status: status, message: "transport"}
+	}
+	for _, test := range []struct {
+		name      string
+		err       error
+		wantRetry bool
+	}{
+		{name: "nil", wantRetry: false},
+		{name: "EOF", err: io.EOF, wantRetry: false},
+		{name: "canceled", err: context.Canceled, wantRetry: false},
+		{name: "malformed", err: &remoteMalformedFactoryEventError{cause: errors.New("bad event")}, wantRetry: false},
+		{name: "gateway", err: transportError(http.StatusBadGateway), wantRetry: true},
+		{name: "client failure", err: transportError(http.StatusBadRequest), wantRetry: false},
+		{name: "unknown", err: errors.New("unknown stream failure"), wantRetry: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := remoteFactoryEventRetryable(test.err); got != test.wantRetry {
+				t.Fatalf("retryable(%v) = %t, want %t", test.err, got, test.wantRetry)
+			}
+		})
+	}
+
+	attempts := 0
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	err := retryRemoteFactoryEventStream(ctx, "https://selected.test", "durable-remote", &attempts, transportError(http.StatusInternalServerError))
+	var invocationErr *InvocationError
+	if !errors.As(err, &invocationErr) || !errors.Is(err, context.Canceled) || attempts != 1 {
+		t.Fatalf("canceled reconnect = %v/attempts=%d, want typed canceled error after one attempt", err, attempts)
 	}
 }
 
