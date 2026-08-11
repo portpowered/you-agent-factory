@@ -6782,3 +6782,18 @@
   - After resolving a generated-artifact conflict, regenerate the artifact and refresh any runtime-observation baseline from the merged authored contract before staging the merge.
   - Keep the task PRD authoritative while unioning append-only progress histories when multiple worktrees share the same base.
 ---
+## [2026-08-10 20:53 -07:00] - pp-merge-context-bug delivery handoff
+- What was implemented
+  - No additional product change was required; both task stories remain marked `passes:true` and the existing regression/fan-in correction is complete.
+  - Audited PR #1870 with the thread-aware GraphQL review workflow; there are no conversation comments, reviews, or unresolved review threads.
+  - Confirmed the local branch is synchronized with current `origin/main` and the task diff remains limited to the PRD, append-only progress log, and plan-parallel regression test.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/factory/packaged/plan_parallel -run '^TestPackagedPlanParallelMergerReceivesEveryUniqueCompletedChildResult$' -count=3 -v -timeout 600s` — passed all three runs.
+  - `prd.json` parses with every story marked `passes:true`; `git diff --check` passes.
+  - The existing PR body is semantically identical to the current `prd.json`; it will be refreshed from the checked-in PRD during handoff.
+- **Learnings for future iterations:**
+  - Before final publication, fetch the live base, inspect the three-way task diff, and audit GraphQL review threads even when the flat PR comment list is empty.
+  - A completed task whose production correction is already on current main should retain its behavioral regression and evidence rather than duplicate the production fix.
+---
