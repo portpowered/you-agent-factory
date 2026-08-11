@@ -141,7 +141,7 @@ func TestResourceCapacityRejectsMalformedAndMissingResourceRequests(t *testing.T
 	}
 }
 
-func TestResourceCapacityUnavailableEnginesAndDefaultContextsAreSafe(t *testing.T) {
+func TestResourceCapacityUnavailableNilEngineIsSafe(t *testing.T) {
 	var nilEngine *FactoryEngine
 	if release, err := nilEngine.AcquireResourceCapacityAdmission(context.Background()); release != nil || err == nil {
 		t.Fatalf("nil admission = (hasRelease=%t, err=%v), want unavailable error", release != nil, err)
@@ -166,6 +166,9 @@ func TestResourceCapacityUnavailableEnginesAndDefaultContextsAreSafe(t *testing.
 	if _, err := nilEngine.SetResourceCapacityAdmitted(context.Background(), factory.ResourceCapacityRequest{}); err == nil {
 		t.Fatal("nil admitted set error = nil, want unavailable error")
 	}
+}
+
+func TestResourceCapacityUnavailableStateAndPlacesAreSafe(t *testing.T) {
 	gateUnavailable := &FactoryEngine{}
 	gateUnavailable.releaseResourceCapacityLease("missing")
 	stateUnavailable := newResourceCapacityTestEngine(1)
@@ -199,7 +202,9 @@ func TestResourceCapacityUnavailableEnginesAndDefaultContextsAreSafe(t *testing.
 	}
 	stateUnavailable.releaseResourceCapacityLease("lease-1")
 	newResourceCapacityTestEngine(1).releaseResourceCapacityLease("missing")
+}
 
+func TestResourceCapacityDefaultContextsAndZeroCapacityAreSafe(t *testing.T) {
 	eng := newResourceCapacityTestEngine(1)
 	release, err := eng.AcquireResourceCapacityAdmission(nil)
 	if err != nil {

@@ -32,7 +32,16 @@ func TestNew_RequiresClock(t *testing.T) {
 	}
 }
 
-func TestResourceCapacityRuntimeDelegatesAndAttachesEffectiveFactory(t *testing.T) {
+type resourceCapacityRuntimeHarness struct {
+	capacity  factoryruntime.ResourceCapacityService
+	admitted  factoryruntime.AdmittedResourceCapacityService
+	admission factoryruntime.ResourceCapacityAdmission
+	leases    factoryruntime.ResourceCapacityLeaseAdmission
+	revision  factoryruntime.ResourceCapacityRevisionService
+}
+
+func newResourceCapacityRuntimeHarness(t *testing.T) resourceCapacityRuntimeHarness {
+	t.Helper()
 	net := buildSimpleNet()
 	net.Resources = map[string]*state.ResourceDef{
 		"gpu-slot": {ID: "gpu-slot", Name: "GPU slot", Capacity: 2},
@@ -59,35 +68,41 @@ func TestResourceCapacityRuntimeDelegatesAndAttachesEffectiveFactory(t *testing.
 		t.Fatalf("New: %v", err)
 	}
 
-	capacity, ok := f.(factoryruntime.ResourceCapacityService)
+	harness := resourceCapacityRuntimeHarness{}
+	var ok bool
+	harness.capacity, ok = f.(factoryruntime.ResourceCapacityService)
 	if !ok {
 		t.Fatal("Factory Runtime does not expose resource capacity service")
 	}
-	admitted, ok := f.(factoryruntime.AdmittedResourceCapacityService)
+	harness.admitted, ok = f.(factoryruntime.AdmittedResourceCapacityService)
 	if !ok {
 		t.Fatal("Factory Runtime does not expose admitted resource capacity service")
 	}
-	admission, ok := f.(factoryruntime.ResourceCapacityAdmission)
+	harness.admission, ok = f.(factoryruntime.ResourceCapacityAdmission)
 	if !ok {
 		t.Fatal("Factory Runtime does not expose resource capacity admission")
 	}
-	leases, ok := f.(factoryruntime.ResourceCapacityLeaseAdmission)
+	harness.leases, ok = f.(factoryruntime.ResourceCapacityLeaseAdmission)
 	if !ok {
 		t.Fatal("Factory Runtime does not expose resource capacity leases")
 	}
-	revision, ok := f.(factoryruntime.ResourceCapacityRevisionService)
+	harness.revision, ok = f.(factoryruntime.ResourceCapacityRevisionService)
 	if !ok {
 		t.Fatal("Factory Runtime does not expose resource capacity revision")
 	}
+	return harness
+}
 
-	revision.SetFactoryRevision(4)
-	revision.SetFactoryRevision(2)
-	if got := revision.CurrentFactoryRevision(); got != 4 {
+func TestResourceCapacityRuntimePreviewAttachesEffectiveFactory(t *testing.T) {
+	harness := newResourceCapacityRuntimeHarness(t)
+	harness.revision.SetFactoryRevision(4)
+	harness.revision.SetFactoryRevision(2)
+	if got := harness.revision.CurrentFactoryRevision(); got != 4 {
 		t.Fatalf("Factory Runtime revision = %d, want monotonic revision 4", got)
 	}
 
 	ctx := context.Background()
-	preview, err := capacity.PreviewResourceCapacity(ctx, factoryruntime.ResourceCapacityRequest{
+	preview, err := harness.capacity.PreviewResourceCapacity(ctx, factoryruntime.ResourceCapacityRequest{
 		ResourceID: "gpu-slot", RequestedCapacity: 2,
 	})
 	if err != nil {
@@ -98,12 +113,16 @@ func TestResourceCapacityRuntimeDelegatesAndAttachesEffectiveFactory(t *testing.
 	if previewConfig.Resources[0].Name != "GPU slot" {
 		t.Fatalf("preview resource name = %q, want runtime resource name", previewConfig.Resources[0].Name)
 	}
+}
 
-	releaseAdmission, err := admission.AcquireResourceCapacityAdmission(ctx)
+func TestResourceCapacityRuntimeAdmittedMutationAndNoOp(t *testing.T) {
+	harness := newResourceCapacityRuntimeHarness(t)
+	ctx := context.Background()
+	releaseAdmission, err := harness.admission.AcquireResourceCapacityAdmission(ctx)
 	if err != nil {
 		t.Fatalf("AcquireResourceCapacityAdmission: %v", err)
 	}
-	admittedPreview, err := admitted.PreviewResourceCapacityAdmitted(ctx, factoryruntime.ResourceCapacityRequest{
+	admittedPreview, err := harness.admitted.PreviewResourceCapacityAdmitted(ctx, factoryruntime.ResourceCapacityRequest{
 		ResourceID: "gpu-slot", RequestedCapacity: 3,
 	})
 	if err != nil {
@@ -114,7 +133,7 @@ func TestResourceCapacityRuntimeDelegatesAndAttachesEffectiveFactory(t *testing.
 		releaseAdmission()
 		t.Fatalf("admitted preview outcome = %q, want applied", admittedPreview.Outcome)
 	}
-	updated, err := admitted.SetResourceCapacityAdmitted(ctx, factoryruntime.ResourceCapacityRequest{
+	updated, err := harness.admitted.SetResourceCapacityAdmitted(ctx, factoryruntime.ResourceCapacityRequest{
 		ResourceID: "gpu-slot", RequestedCapacity: 3,
 	})
 	releaseAdmission()
@@ -123,14 +142,19 @@ func TestResourceCapacityRuntimeDelegatesAndAttachesEffectiveFactory(t *testing.
 	}
 	assertResourceCapacityFactorySnapshot(t, updated, 3, 1)
 
-	noOp, err := capacity.SetResourceCapacity(ctx, factoryruntime.ResourceCapacityRequest{
+	noOp, err := harness.capacity.SetResourceCapacity(ctx, factoryruntime.ResourceCapacityRequest{
 		ResourceID: "gpu-slot", RequestedCapacity: 3,
 	})
 	if err != nil || noOp.Outcome != factoryruntime.ResourceCapacityOutcomeNoOp {
 		t.Fatalf("SetResourceCapacity no-op = (%#v, %v), want NO_OP", noOp, err)
 	}
+}
 
-	orphan, err := capacity.SetResourceCapacity(ctx, factoryruntime.ResourceCapacityRequest{
+func TestResourceCapacityRuntimeOrphanMutationAndLease(t *testing.T) {
+	harness := newResourceCapacityRuntimeHarness(t)
+	harness.revision.SetFactoryRevision(4)
+	ctx := context.Background()
+	orphan, err := harness.capacity.SetResourceCapacity(ctx, factoryruntime.ResourceCapacityRequest{
 		ResourceID: "orphan", RequestedCapacity: 2,
 	})
 	if err != nil {
@@ -138,7 +162,7 @@ func TestResourceCapacityRuntimeDelegatesAndAttachesEffectiveFactory(t *testing.
 	}
 	assertResourceCapacityFactorySnapshot(t, orphan, 2, 2)
 
-	lease, err := leases.AcquireResourceCapacityLease(ctx, factoryruntime.ResourceCapacityLeaseRequest{ResourceID: "orphan"})
+	lease, err := harness.leases.AcquireResourceCapacityLease(ctx, factoryruntime.ResourceCapacityLeaseRequest{ResourceID: "orphan"})
 	if err != nil {
 		t.Fatalf("AcquireResourceCapacityLease: %v", err)
 	}

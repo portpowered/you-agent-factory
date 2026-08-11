@@ -430,14 +430,7 @@ func TestSessionResourceSetResolvedHandlerMapsStableInputs(t *testing.T) {
 	cmd := &cobra.Command{Use: "set"}
 	cmd.SetContext(ctx)
 	cmd.SetOut(&output)
-	inputs := resolvedTestInputs(t,
-		resolvedTestValue{id: "you.session.resource.set.arg.0", source: resolvedinput.SourcePositionalArgument, value: resolvedinput.StringValue("reviewers")},
-		resolvedTestValue{id: "you.session.resource.set.arg.1", source: resolvedinput.SourcePositionalArgument, value: resolvedinput.IntValue(8)},
-		resolvedTestValue{id: "you.session.resource.set.arg.2", source: resolvedinput.SourcePositionalArgument, value: resolvedinput.StringValue("session-beta")},
-		resolvedTestValue{id: "you.session.resource.set.flag.request-id", source: resolvedinput.SourceCLIFlag, value: resolvedinput.StringValue("raise-reviewers-001")},
-		resolvedTestValue{id: "you.session.resource.set.flag.expected-revision", source: resolvedinput.SourceCLIFlag, value: resolvedinput.IntValue(3)},
-		resolvedTestValue{id: "you.session.resource.set.flag.reason", source: resolvedinput.SourceCLIFlag, value: resolvedinput.StringValue("operator capacity increase")},
-	)
+	inputs := resolvedTestInputs(t, resourceSetResolvedInputValues(t)...)
 	inherited := resolvedFactoryGlobals(t, true, false, true)
 	if err := handlers.ResourceSet(cmd, inputs, inherited); err != nil {
 		t.Fatalf("ResourceSet() error = %v", err)
@@ -451,15 +444,17 @@ func TestSessionResourceSetResolvedHandlerMapsStableInputs(t *testing.T) {
 	if got.Diagnostics != &diagnostics {
 		t.Fatalf("diagnostics writer = %T, want injected writer", got.Diagnostics)
 	}
+}
 
-	base := []resolvedTestValue{
-		{id: "you.session.resource.set.arg.0", source: resolvedinput.SourcePositionalArgument, value: resolvedinput.StringValue("reviewers")},
-		{id: "you.session.resource.set.arg.1", source: resolvedinput.SourcePositionalArgument, value: resolvedinput.IntValue(8)},
-		{id: "you.session.resource.set.arg.2", source: resolvedinput.SourcePositionalArgument, value: resolvedinput.StringValue("session-beta")},
-		{id: "you.session.resource.set.flag.request-id", source: resolvedinput.SourceCLIFlag, value: resolvedinput.StringValue("raise-reviewers-001")},
-		{id: "you.session.resource.set.flag.expected-revision", source: resolvedinput.SourceCLIFlag, value: resolvedinput.IntValue(3)},
-		{id: "you.session.resource.set.flag.reason", source: resolvedinput.SourceCLIFlag, value: resolvedinput.StringValue("operator capacity increase")},
-	}
+func TestSessionResourceSetResolvedHandlerRejectsMissingInputs(t *testing.T) {
+	handlers := commandregistry.BindSessionResolvedHandlers(
+		commandregistry.SessionResolvedServicesFromOps(sessioncli.Operations{
+			SetResourceCapacity: func(sessioncli.ResourceCapacityConfig) error { return nil },
+		}, nil, func(*cobra.Command) io.Writer { return io.Discard }),
+	)
+	cmd := &cobra.Command{Use: "set"}
+	inherited := resolvedFactoryGlobals(t, true, false, true)
+	base := resourceSetResolvedInputValues(t)
 	for _, omitted := range []string{
 		"you.session.resource.set.arg.0",
 		"you.session.resource.set.arg.1",
@@ -470,6 +465,18 @@ func TestSessionResourceSetResolvedHandlerMapsStableInputs(t *testing.T) {
 		if err := handlers.ResourceSet(cmd, resolvedTestInputsWithout(t, base, omitted), inherited); err == nil {
 			t.Fatalf("ResourceSet() with %s omitted = nil, want stable input error", omitted)
 		}
+	}
+}
+
+func resourceSetResolvedInputValues(t *testing.T) []resolvedTestValue {
+	t.Helper()
+	return []resolvedTestValue{
+		{id: "you.session.resource.set.arg.0", source: resolvedinput.SourcePositionalArgument, value: resolvedinput.StringValue("reviewers")},
+		{id: "you.session.resource.set.arg.1", source: resolvedinput.SourcePositionalArgument, value: resolvedinput.IntValue(8)},
+		{id: "you.session.resource.set.arg.2", source: resolvedinput.SourcePositionalArgument, value: resolvedinput.StringValue("session-beta")},
+		{id: "you.session.resource.set.flag.request-id", source: resolvedinput.SourceCLIFlag, value: resolvedinput.StringValue("raise-reviewers-001")},
+		{id: "you.session.resource.set.flag.expected-revision", source: resolvedinput.SourceCLIFlag, value: resolvedinput.IntValue(3)},
+		{id: "you.session.resource.set.flag.reason", source: resolvedinput.SourceCLIFlag, value: resolvedinput.StringValue("operator capacity increase")},
 	}
 }
 
