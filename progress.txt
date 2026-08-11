@@ -13493,3 +13493,18 @@
 - **Learnings for future iterations:**
   - Once the latest-head retry converges on one deterministic untouched baseline assertion, preserve the evidence and hand off the complete task rather than altering unrelated behavior.
 ---
+## [2026-08-11 10:56:00 -07:00] - btrc-p1-root-injection-006 published-head baseline handoff
+- What was implemented
+  - Recorded the terminal workflow `31519388195` for the published audit head `5705eb219ba4b778c8ab5d404be1154995db5ffc`.
+  - Kept all six P1 stories marked `passes:true`; no product changes were made after the validated implementation head.
+  - Kept the PR body sourced from the updated PRD and retained the thread-aware review audit at zero unresolved threads and zero formal reviews.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Every current-head lane except Backend Functional Coverage passed, including Backend Unit Coverage, UI Backend Integration, frontend, API/package, provider, docs, and inference checks.
+  - The sole remaining failure is the unchanged `TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput`; its package is absent from the P1 diff and the same diagnostic mismatch reproduces locally on Windows.
+  - PR #1857 remains open and mergeable; the remaining red aggregate policy state is an unrelated current-main baseline blocker, so this iteration ends on the continue path.
+- **Learnings for future iterations:**
+  - A docs-only audit commit can trigger the full CI matrix; record that exact published-head result separately from the validated implementation head and keep baseline failures scoped to their untouched package.
+---
