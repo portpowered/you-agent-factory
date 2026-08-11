@@ -53,8 +53,8 @@
         "Tests pass"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented the shared pure Recordings reducer, durable cursor/status snapshots with reload, terminal-last and incomplete-history enforcement, exact duplicate handling, live/replay parity coverage, and focused race/vet/package-size verification."
     },
     {
       "id": "wsr-0023-capture-replay-003",

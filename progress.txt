@@ -1,5 +1,6 @@
 ## Codebase Patterns
 - Worker-topic capture belongs behind a narrow Recordings capability: Events remains the source stream, Worker Sessions publishes once, and an injected durable writer is the only recording-side acceptance port.
+- Live Worker capture and completed replay should invoke the same pure Recordings reducer; durable snapshots should carry explicit active/completed/failed status so only terminal-complete histories are replayable.
 - To gate handoff without a publication race, hold the Worker Session publication lock across the opening append and Recordings opening barrier; drain the terminal record before closing the capture subscription.
 - Source-native capture should subscribe from aggregate position zero, validate the canonical topic plus complete source identity, and persist detached Events records before acknowledging the barrier.
 - Terminal lifecycle publication must require the opening record's committed publication window; a failed opening must never be followed by a terminal append that becomes topic position 1.
@@ -7380,4 +7381,25 @@
   - `git diff --check` passed.
 - **Learnings for future iterations:**
   - Before adding a test file, check package file-count headroom; consolidate small focused tests into an existing test file when the package is at its enforced limit.
+---
+
+## 2026-08-11 00:16 -07:00 - wsr-0023-capture-replay-002
+- What was implemented
+  - Added the Recordings-owned pure Worker history reducer and used it for both incremental live capture and completed replay.
+  - Added durable active/completed/failed snapshot status, last-position cursor persistence, FileWriter reload, safe failure classification, and replay rejection for incomplete or failed histories.
+  - Enforced exact source-identity duplicate handling, contiguous topic order, terminal-last validation, provider-completion-without-terminal rejection, and cancellation classification.
+  - Added live-to-reloaded-durable-replay equality coverage and direct behavioral coverage for incomplete, skipped, post-terminal, duplicate, and canceled histories.
+- Files changed
+  - `pkg/services/recordings/worker_capture.go`
+  - `pkg/services/recordings/internal/services/worker_capture/reducer.go`
+  - `pkg/services/recordings/internal/services/worker_capture/internal/service/{service.go,file_writer.go,replay_test.go}`
+  - `prd.json`, `progress.txt`
+- Verification
+  - `go test ./pkg/services/recordings/internal/services/worker_capture/... ./pkg/services/recordings -count=1` passed.
+  - The same focused packages passed under `go test -race` and `go vet`.
+  - Worker Sessions, Factory Runtime internals, Wire, and Edges tests passed.
+  - `make pkg-file-count` and `git diff --check` passed.
+- **Learnings for future iterations:**
+  - Persist the accepted cursor and derived status in the same atomic snapshot as each record; replay can then validate the exact source history while treating interrupted snapshots as unavailable rather than guessing completion.
+  - A caller-canceled close must be classified before an empty pending-record read can race it into generic incomplete failure.
 ---
