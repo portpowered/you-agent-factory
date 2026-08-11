@@ -1,91 +1,74 @@
 {
-  "project": "E2 Structured JSON Worker Result Channel",
-  "branchName": "e2-structured-worker-results",
-  "description": "Add an event-first, schema-validated JSON result channel for workstations so validated worker output is stored as native structuredResult data on resulting Work, survives replay, is available to downstream prompt templates and Work list/watch output, and fails through a stable typed dispatch failure when invalid.",
+  "project": "Additive CI Classifier and Focused Verification Targets",
+  "branchName": "ci-additive-classifier",
+  "description": "Replace the four-outcome exclusive CI classifier with deterministic additive verification-lane outputs derived from changed-path ownership, and add focused root Make verification targets so each lane can run only its owned scope. Factory-content-only changes select no lanes, mixed changes select exact unions, and CI/tooling or unknown paths conservatively select every lane, while workflow routing remains unchanged for the dependent project.",
   "context": {
-    "customerAsk": "Provide an optional JSON result contract per workstation, authored as JSON Schema in workstation configuration. Require and validate a JSON final response when configured, persist the validated payload on Work, expose it to downstream prompt templates and you work list/watch, and route schema violations as typed dispatch failures. Prove schema-pass templating and schema-violation failure routing with functional tests.",
-    "problem": "The existing outputSchema path can validate raw model output but discards the parsed JSON value. Later stages still parse artifacts or text, replay and Work reads cannot reproduce the structured handoff, operators cannot inspect it through Work commands, and schema failures are not distinguishable from unrelated generic failures.",
-    "solution": "Reuse outputSchema as the optional authoring contract, validate and detach the worker's final JSON value at the Workers boundary, carry native structuredResult data through canonical dispatch events and resulting Work projections, rebuild it through recordings/replay, expose it at .Inputs[n].StructuredResult and in Work CLI/API output, and classify malformed or schema-invalid responses as terminal structured_output_schema_violation failures that follow normal onFailure routing."
+    "customerAsk": "Rewrite cmd/ciclassify to emit additive path-ownership lane decisions, cover the governing plan's nine-case validation matrix with exact emitted-lane assertions, and add focused root Make verification targets including a narrow real-backend UI integration target. Keep Makefile changes limited to new targets, reconcile concurrent Makefile work through the mandatory contention protocol, and do not add job-level workflow routing in this lane.",
+    "problem": "The existing four-outcome exclusive classifier cannot express exact verification unions for mixed changes, so pull requests pay runner-queue and wall-clock costs for unrelated jobs. Broad Make entry points also combine independently owned checks, while an incomplete ownership policy could allow unknown paths to escape required verification.",
+    "solution": "Expose one focused root Make rerun command per verification lane, with UI-backend integration limited to browser tests that start or call a real backend; classify normalized changed paths through an explicit ownership policy; union all matched lanes; treat factory content as neutral; select every lane for empty, tooling, Go-toolchain, or unknown input; and prove the contract with exact table-driven fixtures for all nine governing validation cases without editing CI workflows."
   },
   "acceptanceCriteria": [
-    "A workstation with a valid outputSchema accepts only a JSON final response satisfying that schema and records the validated value as native structuredResult data; a workstation without a schema behaves as it did before and omits the field.",
-    "Successful structured results survive canonical event serialization, live projection, persisted recording replay, and process/session recovery without type loss, mutation, or dependence on workstation artifacts.",
-    "A downstream workstation can render .Inputs[n].StructuredResult, including nested fields and arrays, and attempting to use an absent structured result fails prompt construction with a clear diagnostic rather than an accidental string parse.",
-    "you work list --json and relevant you work watch lines expose structuredResult as a native JSON value, human-readable Work list output uses deterministic compact JSON, and older records without a result remain readable.",
-    "Malformed JSON and schema-invalid JSON produce terminal structured_output_schema_violation dispatch failures with safe actionable detail, no propagated structured result, and configured onFailure routing; invalid schema configuration is rejected as a workstation misconfiguration.",
-    "Focused unit, projection/replay, contract, CLI, and functional tests directly prove storage/replay, downstream prompt rendering, Work observability, backward compatibility, and typed schema-violation routing, and generated interfaces remain synchronized.",
-    "Typecheck passes; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green; focused and required broader tests pass.",
-    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared/generated-file contention are resolved against current origin/main, and the PR is actually merged."
+    "The root Makefile exposes a direct focused rerun command for every classifier lane; each command runs only its owned scope, and the UI-backend integration command runs real-backend browser coverage without Storybook-only checks.",
+    "cmd/ciclassify emits named Boolean lane outputs from changed-path ownership, selects exact unions for mixed inputs, and produces deterministic decisions independent of input order or duplicate paths.",
+    "factory/**-only input selects no verification lanes; factory content combined with an owned product path does not add or suppress that product path's lanes.",
+    "Empty input, .github/workflows/**, CI scripts, Makefile, go.mod, go.sum, and unknown paths select every verification lane conservatively.",
+    "Table-driven unit fixtures reproduce all nine cases in the governing validation matrix, with each case asserting the complete emitted lane set, and no .github/workflows/** file changes in this project.",
+    "Typecheck and focused tests pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
+    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared-file contention are resolved against current main, and the PR is actually merged."
   ],
   "userStories": [
     {
-      "id": "e2-structured-worker-results-001",
-      "title": "Preserve a validated structured result on Work",
-      "description": "As a factory author, I want a schema-valid worker response stored as typed Work data so later behavior does not depend on reparsing raw text or files.",
+      "id": "ci-additive-classifier-001",
+      "title": "Run core product verification through focused commands",
+      "description": "As a CI maintainer, I want separate frontend, backend, and UI-backend integration commands so a selected product lane can be rerun without invoking unrelated verification.",
       "acceptanceCriteria": [
-        "Given a workstation whose outputSchema is a valid JSON Schema, a conforming object, array, scalar, boolean, or null final response is decoded once and returned from worker execution as detached native JSON in structuredResult while existing raw output remains available for diagnostics and compatibility.",
-        "The successful dispatch event records structuredResult, resulting Work receives the value, and live projection, persisted recording replay, and recovery reproduce the same JSON types and value; multiple resulting Work items receive independent equivalent values.",
-        "Workstations without outputSchema do not require JSON and omit structuredResult from events and Work projections, including replay of older events that lack the field.",
-        "Invalid JSON Schema configuration is rejected deterministically as a typed workstation misconfiguration before a worker response can be accepted.",
-        "Authored public contracts, generated outputs, handwritten mappings, and clone paths preserve the optional native JSON value and ownership boundaries.",
-        "Focused worker-execution, event serialization, projection, replay, and recovery tests pass.",
+        "A direct root Make command runs the complete frontend-owned scope: typecheck, frontend lint, frontend unit/coverage, browser verification, and applicable public UI-package verification, without backend verification.",
+        "A direct root Make command runs the backend-owned scope: backend build plus required backend unit and functional verification, without frontend coverage.",
+        "make ui-backend-integration runs only browser integration that starts or calls a real backend and proves a browser request against it; it does not run Storybook-only checks.",
+        "Existing broader verification commands retain their observable scope and can compose the focused commands without duplicating a selected check.",
+        "Makefile changes are scoped to new focused targets and their declarations; concurrent unit, functional, and lint target mechanics are preserved after rebasing onto current main.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 1,
       "passes": true,
-      "notes": ""
+      "notes": "Added explicit root frontend-verification, backend-verification, and ui-backend-integration targets that compose existing checks without changing broader verification mechanics. The frontend lane covers typecheck, lint, component/unit coverage, browser and Storybook checks, and public UI-package verification without backend checks; the backend lane covers build plus unit and functional coverage; the integration lane is limited to the real-backend durable-session browser suite. Updated classifier rerun commands to emit these direct targets. Verified with make -n for all three targets, go test ./cmd/ciclassify -count=1, make typecheck, make ui-lint, make test, and git diff --check."
     },
     {
-      "id": "e2-structured-worker-results-002",
-      "title": "Render upstream structured results in downstream prompts",
-      "description": "As a factory author, I want downstream workstation prompts to access an upstream JSON result directly so I can build reliable multi-stage factories without artifact-parsing handoffs.",
+      "id": "ci-additive-classifier-002",
+      "title": "Run supporting verification lanes through focused commands",
+      "description": "As a CI maintainer, I want one local command per documentation, package-family, and local-inference lane so future routing can select package self-verification and specialty checks independently.",
       "acceptanceCriteria": [
-        "A downstream prompt can access the complete upstream value at .Inputs[n].StructuredResult and render nested object fields and array elements with supported Go-template expressions.",
-        "The prompt-template contract advertises .Inputs[n].StructuredResult as optional for each available input, and runtime prompt construction returns a clear diagnostic when a template attempts to use a missing result; it does not substitute raw output, payload, an empty object, or artifact content.",
-        "Structured values supplied to prompt rendering are detached from canonical Work state so template execution cannot mutate the stored result.",
-        "A functional test built through root.BuildProcess and Process.Execute, using an allowed provider command-runner edge mock and deterministic synchronization, proves an upstream schema-valid response is stored and its nested value appears in the actual downstream provider prompt.",
+        "Documentation reference and root README lanes resolve to the existing focused make docs-reference-smoke and make readme-check behavior.",
+        "API Package, Packaged Factories Package, and Model Providers Package each resolve to a direct root Make command that runs that package family's self-verification; required backend or frontend consumer verification remains a separate classifier lane rather than being hidden inside package self-verification.",
+        "The Local Inference lane resolves to one Linux-capable focused Make command that executes the managed-runtime and real-inference regression once, with no duplicate real-inference invocation.",
+        "Every supporting lane has one documented direct local rerun command that can be emitted by the classifier.",
+        "Existing package publication policy and protected-main candidate prerequisites are unchanged.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 2,
       "passes": true,
-      "notes": "Implemented detached structured-result prompt rendering, optional prompt-contract metadata and absence diagnostics, plus root BuildProcess/Process.Execute functional coverage for nested objects and arrays."
+      "notes": "Kept docs-reference-smoke, readme-check, api-package-verify, packaged-factory-package-verify, and model-provider-package-verify as the direct supporting-lane rerun commands. Added local-inference-verification, which composes long-tests-managed-runtime and exactly one pr-inference-approval execution without the broader specialty sweep, and updated classifier output to emit that command. Verified all five supporting commands, the managed-runtime regression, make -n command expansion, go test ./cmd/ciclassify -count=1, and make typecheck; the real-inference executable is Linux/runner-gated and was not available in this Windows worktree."
     },
     {
-      "id": "e2-structured-worker-results-003",
-      "title": "Route schema violations as typed dispatch failures",
-      "description": "As a factory operator, I want invalid structured worker output to fail explicitly and follow factory failure routing so corrupt data never reaches a later stage.",
+      "id": "ci-additive-classifier-003",
+      "title": "Emit additive path-ownership lane decisions",
+      "description": "As a pull-request contributor, I want changed paths to select the exact union of relevant verification lanes so my change receives complete but non-duplicative verification and unfamiliar changes remain safe.",
       "acceptanceCriteria": [
-        "Malformed JSON and valid JSON that violates outputSchema complete the dispatch as failed with stable reason structured_output_schema_violation and terminal non-retryable normalized failure policy.",
-        "Failure detail contains an actionable customer-safe validation summary with instance or schema location when available, never reports an empty error, and does not copy the complete rejected payload into the message or logs.",
-        "The rejected value is absent from resulting Work, downstream prompt inputs, success, continue, and rejection outputs, and structured-result projections; configured onFailure Work is emitted through existing routing semantics.",
-        "The typed reason survives dispatch event serialization, recording replay, Factory Session and Work projections, and public failure mapping without transport reclassification.",
-        "A functional test built through root.BuildProcess and Process.Execute, using an allowed provider command-runner edge mock and no sleep-based synchronization, proves schema-invalid output reaches the configured failure state or route, exposes structured_output_schema_violation, and causes no success-stage dispatch.",
+        "The classifier emits named Boolean decisions and focused rerun commands for Documentation Reference, README, Frontend, Backend, UI Backend Integration, API Package, Packaged Factories Package, Model Providers Package, and Local Inference lanes.",
+        "Path ownership follows the governing classification contract, including API and generated contract surfaces, backend/CLI surfaces, each package family and its scripts, local-inference surfaces, docs, README, frontend, factory content, CI/tooling, and unknown paths.",
+        "Mixed paths select the set union of owned lanes; duplicate paths and changed-path input order do not alter the emitted decisions.",
+        "factory/**-only input emits every lane as false, while factory content mixed with another owned path yields exactly the other path's lanes.",
+        "Empty input, workflow or CI-script paths, Makefile, go.mod, go.sum, and an unknown root path emit every lane as true.",
+        "Table-driven fixtures cover the nine validation-matrix cases exactly: factory only; reference docs; root README; frontend; backend or CLI; API contract; each package family independently; mixed frontend/backend; and conservative full verification inputs. Each case asserts the complete emitted lane set.",
+        "Classifier summaries and GitHub-compatible outputs report the same lane decisions and remain usable by the later routing project, but no workflow consumes them in this project.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 3,
       "passes": true,
-      "notes": "Added terminal structured_output_schema_violation classification for malformed/schema-invalid output, safe validation diagnostics, onFailure routing, generated public enum/mappings, replay/session projection coverage, and root-built functional coverage proving no success-stage dispatch. Review follow-up now builds bounded instance/schema/keyword diagnostics without rejected values or host paths, with scalar pattern coverage at focused and functional boundaries; the pkg-boundary count is restored to the main baseline."
-    },
-    {
-      "id": "e2-structured-worker-results-004",
-      "title": "Inspect structured results through Work commands",
-      "description": "As a factory operator, I want Work list and watch output to show validated results so I can monitor stage handoffs without opening artifacts or decoding escaped JSON.",
-      "acceptanceCriteria": [
-        "you work list --json represents structuredResult as a native optional JSON value on each Work result, not an escaped string, and list/get transport contracts and mappings preserve the same shape.",
-        "you work watch includes structuredResult on the transition line where canonical Work first has the value and omits it from unrelated transitions, failures, unstructured Work, and older recordings.",
-        "Human-readable Work list output renders deterministic compact JSON for objects, arrays, scalars, booleans, and null; you work watch preserves one complete JSON object per line, and large values follow existing bounded-output conventions.",
-        "Focused CLI and contract tests exercise structured and unstructured Work, JSON type preservation, watch line framing and order, omission semantics, and replay-backed output.",
-        "Public workstation and Work command documentation explains outputSchema, .Inputs[n].StructuredResult, typed violation behavior, and list/watch visibility with an end-to-end example that has no artifact handoff.",
-        "Generated public interfaces are regenerated from authored sources after rebasing, and generated conflicts are resolved by regeneration rather than manual merging.",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 4,
-      "passes": true,
-      "notes": "Replaced the customer-representable watch null sentinel with raw event-payload presence handling. Reducer application restores only fields whose canonical raw value is JSON null, preserving the exact historical sentinel string as a string while keeping explicit null and omission distinct. Added focused decode/reducer/render coverage for both values; Work/CLI/functional suites, contract/docs checks, typecheck, test, vet, and repository quality gates pass. Review follow-up moved the recorded Work identity and structured-result projection helpers into the existing invocation-output owner so the transitioner stays within the backend-size and maintainability limits without changing behavior."
+      "notes": "Completed additive classification with normalized, deduplicated, order-independent changed paths; explicit ownership for API/service HTTP and generated contract surfaces, backend/release paths, package families, managed local runtime, OMNIVOICE, and dedicated local-inference tests; neutral factory content; and conservative CI/tooling or unknown fallback. Added exact lane-set assertions for the validation matrix, factory-mixed behavior, duplicate/order invariance, ownership boundaries, and stdout/GitHub-compatible Boolean outputs including run_everything. Verified with go test ./cmd/ciclassify -count=1, go vet ./cmd/ciclassify, make typecheck, make ui-lint, focused Make dry-runs, and git diff --check; no workflow files changed."
     }
   ]
 }
