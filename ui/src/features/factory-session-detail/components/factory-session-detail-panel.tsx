@@ -24,6 +24,7 @@ import {
   FACTORY_SESSION_DISPATCH_DETAIL_QUERY_KEY,
   useFactorySessionDispatchDetail,
 } from "../hooks/use-factory-session-dispatch-detail";
+import type { FactorySessionLifecycleControl } from "../hooks/use-factory-session-lifecycle-control";
 import { useFactorySessionLifecycleControl } from "../hooks/use-factory-session-lifecycle-control";
 import { resolveFactorySessionLifecycleActionAvailability } from "../lib/factory-session-lifecycle-controls";
 import { getFactorySessionDetailMessages } from "../messages/factory-session-detail";
@@ -43,12 +44,14 @@ type FactoryDispatch = components["schemas"]["FactoryDispatch"];
 
 export interface FactorySessionDetailPanelProps {
   detailState?: FactorySessionDetailViewState;
+  lifecycleControl?: FactorySessionLifecycleControl;
   locale?: string;
   sessionID: string | null;
 }
 
 export function FactorySessionDetailPanel({
   detailState,
+  lifecycleControl,
   locale,
   sessionID,
 }: FactorySessionDetailPanelProps) {
@@ -60,6 +63,7 @@ export function FactorySessionDetailPanel({
     return (
       <FactorySessionDetailPanelContent
         detailState={detailState}
+        lifecycleControl={lifecycleControl}
         locale={locale}
         sessionID={sessionID}
       />
@@ -67,14 +71,20 @@ export function FactorySessionDetailPanel({
   }
 
   return (
-    <FactorySessionDetailPanelWithQuery locale={locale} sessionID={sessionID} />
+    <FactorySessionDetailPanelWithQuery
+      lifecycleControl={lifecycleControl}
+      locale={locale}
+      sessionID={sessionID}
+    />
   );
 }
 
 function FactorySessionDetailPanelWithQuery({
+  lifecycleControl,
   locale,
   sessionID,
 }: {
+  lifecycleControl?: FactorySessionLifecycleControl;
   locale?: string;
   sessionID: string;
 }) {
@@ -83,6 +93,7 @@ function FactorySessionDetailPanelWithQuery({
   return (
     <FactorySessionDetailPanelContent
       detailState={detailState}
+      lifecycleControl={lifecycleControl}
       locale={locale}
       sessionID={sessionID}
     />
@@ -91,10 +102,12 @@ function FactorySessionDetailPanelWithQuery({
 
 function FactorySessionDetailPanelContent({
   detailState,
+  lifecycleControl,
   locale,
   sessionID,
 }: {
   detailState: FactorySessionDetailViewState;
+  lifecycleControl?: FactorySessionLifecycleControl;
   locale?: string;
   sessionID: string;
 }) {
@@ -125,6 +138,7 @@ function FactorySessionDetailPanelContent({
       {detailState.status === "success" ? (
         <FactorySessionRuntimeSections
           data={detailState.data}
+          lifecycleControl={lifecycleControl}
           locale={locale}
         />
       ) : null}
@@ -134,6 +148,7 @@ function FactorySessionDetailPanelContent({
 
 function FactorySessionRuntimeSections({
   data,
+  lifecycleControl,
   locale,
 }: {
   data: {
@@ -144,6 +159,7 @@ function FactorySessionRuntimeSections({
     result?: components["schemas"]["FactorySessionLiveResult"];
     session: components["schemas"]["FactorySession"];
   };
+  lifecycleControl?: FactorySessionLifecycleControl;
   locale?: string;
 }) {
   const messages = getFactorySessionDetailMessages(locale);
@@ -188,6 +204,7 @@ function FactorySessionRuntimeSections({
           artifacts={runtime.artifacts}
           durableLifecycleStatus={data.durableLifecycleStatus}
           dispatches={data.dispatches}
+          lifecycleControl={lifecycleControl}
           javascript={runtime.javascript}
           locale={locale}
           partialResult={data.partialResult}
@@ -318,6 +335,7 @@ function JavaScriptSessionProjection({
   artifacts,
   durableLifecycleStatus,
   dispatches,
+  lifecycleControl,
   javascript,
   locale,
   partialResult,
@@ -327,13 +345,13 @@ function JavaScriptSessionProjection({
   artifacts?: FactoryArtifact[];
   durableLifecycleStatus?: components["schemas"]["FactorySessionDurableLifecycleStatus"];
   dispatches?: FactoryDispatch[];
+  lifecycleControl?: FactorySessionLifecycleControl;
   javascript?: components["schemas"]["FactorySessionJavaScriptProjection"];
   locale?: string;
   partialResult?: components["schemas"]["FactorySessionPartialResult"];
   result?: components["schemas"]["FactorySessionLiveResult"];
   sessionID: string;
 }) {
-  const messages = getFactorySessionDetailMessages(locale);
   const [selectedDispatchID, setSelectedDispatchID] = useState<string | null>(
     null,
   );
@@ -349,11 +367,94 @@ function JavaScriptSessionProjection({
       isDurableSession,
       selectedDispatchID,
     });
+
+  const projectionProps = {
+    artifacts,
+    dispatches,
+    isDurableSession,
+    javascript,
+    lifecycleActionAvailability,
+    locale,
+    partialResult,
+    result,
+    selectedDispatchID,
+    sessionID,
+    setSelectedDispatchID,
+  };
+
+  if (lifecycleControl !== undefined) {
+    return (
+      <JavaScriptSessionProjectionContent
+        {...projectionProps}
+        lifecycleControl={lifecycleControl}
+      />
+    );
+  }
+
+  return (
+    <JavaScriptSessionProjectionWithQueryControl
+      {...projectionProps}
+      selectedDispatchIDForControl={
+        lifecycleActionAvailability.selectedDispatch?.id ?? null
+      }
+    />
+  );
+}
+
+function JavaScriptSessionProjectionWithQueryControl({
+  selectedDispatchIDForControl,
+  sessionID,
+  ...projectionProps
+}: Omit<JavaScriptSessionProjectionContentProps, "lifecycleControl"> & {
+  selectedDispatchIDForControl: string | null;
+}) {
   const lifecycleControl = useFactorySessionLifecycleControl({
-    selectedDispatchID:
-      lifecycleActionAvailability.selectedDispatch?.id ?? null,
+    selectedDispatchID: selectedDispatchIDForControl,
     sessionID,
   });
+
+  return (
+    <JavaScriptSessionProjectionContent
+      {...projectionProps}
+      lifecycleControl={lifecycleControl}
+      sessionID={sessionID}
+    />
+  );
+}
+
+interface JavaScriptSessionProjectionContentProps {
+  artifacts?: FactoryArtifact[];
+  dispatches?: FactoryDispatch[];
+  isDurableSession: boolean;
+  javascript?: components["schemas"]["FactorySessionJavaScriptProjection"];
+  lifecycleActionAvailability: ReturnType<
+    typeof resolveFactorySessionLifecycleActionAvailability
+  >;
+  locale?: string;
+  partialResult?: components["schemas"]["FactorySessionPartialResult"];
+  result?: components["schemas"]["FactorySessionLiveResult"];
+  selectedDispatchID: string | null;
+  sessionID: string;
+  setSelectedDispatchID: (dispatchID: string | null) => void;
+}
+
+function JavaScriptSessionProjectionContent({
+  artifacts,
+  dispatches,
+  isDurableSession,
+  javascript,
+  lifecycleActionAvailability,
+  lifecycleControl,
+  locale,
+  partialResult,
+  result,
+  selectedDispatchID,
+  sessionID,
+  setSelectedDispatchID,
+}: JavaScriptSessionProjectionContentProps & {
+  lifecycleControl: FactorySessionLifecycleControl;
+}) {
+  const messages = getFactorySessionDetailMessages(locale);
 
   if (!javascript) {
     return (
