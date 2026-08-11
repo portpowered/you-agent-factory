@@ -44,6 +44,117 @@
           "url": "https://agylabs.github.io/agy-demos/"
         }
       ],
+      "evidence": [
+        {
+          "factRefs": [
+            "model_catalog",
+            "harness/input/text",
+            "harness/output/text"
+          ],
+          "id": "agy-docs",
+          "kind": "primary_documentation",
+          "url": "https://agylabs.github.io/agy-demos/",
+          "verifiedOn": "2026-08-10"
+        },
+        {
+          "factRefs": [
+            "harness/input/audio",
+            "harness/input/image",
+            "harness/input/video",
+            "model/claude-opus-4-6-thinking/input/audio",
+            "model/claude-opus-4-6-thinking/input/image",
+            "model/claude-opus-4-6-thinking/input/video"
+          ],
+          "harnessVersion": "1.1.11",
+          "id": "agy-media-fixture",
+          "kind": "conformance_fixture",
+          "verifiedOn": "2026-08-10"
+        },
+        {
+          "factRefs": [
+            "harness/input/text",
+            "harness/output/text",
+            "tool/filesystem",
+            "tool/image_generation",
+            "tool/image_generation/output/image",
+            "tool/shell"
+          ],
+          "harnessVersion": "1.1.11",
+          "id": "agy-conformance",
+          "kind": "conformance_fixture",
+          "verifiedOn": "2026-08-10"
+        }
+      ],
+      "harness": {
+        "kind": "native_cli"
+      },
+      "harnessRoutes": [
+        {
+          "direction": "input",
+          "evidenceRefs": [
+            "agy-media-fixture"
+          ],
+          "modality": "audio",
+          "support": "supported",
+          "transport": "file_path"
+        },
+        {
+          "condition": "AGY can inspect an image file through its workspace route; no native image-token route is declared.",
+          "direction": "input",
+          "evidenceRefs": [
+            "agy-media-fixture"
+          ],
+          "modality": "image",
+          "support": "conditional",
+          "transport": "file_path"
+        },
+        {
+          "direction": "input",
+          "evidenceRefs": [
+            "agy-docs",
+            "agy-conformance"
+          ],
+          "modality": "text",
+          "support": "supported",
+          "transport": "inline"
+        },
+        {
+          "direction": "input",
+          "evidenceRefs": [
+            "agy-media-fixture"
+          ],
+          "modality": "video",
+          "support": "supported",
+          "transport": "file_path"
+        },
+        {
+          "direction": "output",
+          "modality": "audio",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "modality": "image",
+          "support": "unknown",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "evidenceRefs": [
+            "agy-conformance"
+          ],
+          "modality": "text",
+          "support": "supported",
+          "transport": "inline"
+        },
+        {
+          "direction": "output",
+          "modality": "video",
+          "support": "unknown",
+          "transport": "none"
+        }
+      ],
       "id": "antigravity",
       "implementationAvailability": "bundled",
       "knownLimits": [
@@ -91,6 +202,7 @@
         "toolOutputDeltas": false,
         "usage": false
       },
+      "modelCatalogPosture": "exact",
       "models": [
         {
           "efforts": [],
@@ -98,48 +210,73 @@
           "modalities": [
             {
               "direction": "input",
+              "evidenceRefs": [
+                "agy-media-fixture"
+              ],
               "modality": "audio",
               "support": "supported",
               "transport": "file_path"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "agy-media-fixture"
+              ],
               "modality": "image",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "agy-docs",
+                "agy-conformance"
+              ],
               "modality": "text",
               "support": "supported",
               "transport": "inline"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "agy-media-fixture"
+              ],
               "modality": "video",
               "support": "supported",
               "transport": "file_path"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "agy-docs"
+              ],
               "modality": "audio",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "agy-docs"
+              ],
               "modality": "image",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "agy-conformance"
+              ],
               "modality": "text",
               "support": "supported",
               "transport": "inline"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "agy-docs"
+              ],
               "modality": "video",
               "support": "unsupported",
               "transport": "none"
@@ -152,48 +289,73 @@
           "modalities": [
             {
               "direction": "input",
+              "evidenceRefs": [
+                "agy-media-fixture"
+              ],
               "modality": "audio",
               "support": "supported",
               "transport": "file_path"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "agy-media-fixture"
+              ],
               "modality": "image",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "agy-docs",
+                "agy-conformance"
+              ],
               "modality": "text",
               "support": "supported",
               "transport": "inline"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "agy-media-fixture"
+              ],
               "modality": "video",
               "support": "supported",
               "transport": "file_path"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "agy-docs"
+              ],
               "modality": "audio",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "agy-docs"
+              ],
               "modality": "image",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "agy-conformance"
+              ],
               "modality": "text",
               "support": "supported",
               "transport": "inline"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "agy-docs"
+              ],
               "modality": "video",
               "support": "unsupported",
               "transport": "none"
@@ -206,48 +368,73 @@
           "modalities": [
             {
               "direction": "input",
+              "evidenceRefs": [
+                "agy-media-fixture"
+              ],
               "modality": "audio",
               "support": "supported",
               "transport": "file_path"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "agy-media-fixture"
+              ],
               "modality": "image",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "agy-docs",
+                "agy-conformance"
+              ],
               "modality": "text",
               "support": "supported",
               "transport": "inline"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "agy-media-fixture"
+              ],
               "modality": "video",
               "support": "supported",
               "transport": "file_path"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "agy-docs"
+              ],
               "modality": "audio",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "agy-docs"
+              ],
               "modality": "image",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "agy-conformance"
+              ],
               "modality": "text",
               "support": "supported",
               "transport": "inline"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "agy-docs"
+              ],
               "modality": "video",
               "support": "unsupported",
               "transport": "none"
@@ -260,48 +447,73 @@
           "modalities": [
             {
               "direction": "input",
+              "evidenceRefs": [
+                "agy-media-fixture"
+              ],
               "modality": "audio",
               "support": "supported",
               "transport": "file_path"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "agy-media-fixture"
+              ],
               "modality": "image",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "agy-docs",
+                "agy-conformance"
+              ],
               "modality": "text",
               "support": "supported",
               "transport": "inline"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "agy-media-fixture"
+              ],
               "modality": "video",
               "support": "supported",
               "transport": "file_path"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "agy-docs"
+              ],
               "modality": "audio",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "agy-docs"
+              ],
               "modality": "image",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "agy-conformance"
+              ],
               "modality": "text",
               "support": "supported",
               "transport": "inline"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "agy-docs"
+              ],
               "modality": "video",
               "support": "unsupported",
               "transport": "none"
@@ -314,48 +526,73 @@
           "modalities": [
             {
               "direction": "input",
+              "evidenceRefs": [
+                "agy-media-fixture"
+              ],
               "modality": "audio",
               "support": "supported",
               "transport": "file_path"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "agy-media-fixture"
+              ],
               "modality": "image",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "agy-docs",
+                "agy-conformance"
+              ],
               "modality": "text",
               "support": "supported",
               "transport": "inline"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "agy-media-fixture"
+              ],
               "modality": "video",
               "support": "supported",
               "transport": "file_path"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "agy-docs"
+              ],
               "modality": "audio",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "agy-docs"
+              ],
               "modality": "image",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "agy-conformance"
+              ],
               "modality": "text",
               "support": "supported",
               "transport": "inline"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "agy-docs"
+              ],
               "modality": "video",
               "support": "unsupported",
               "transport": "none"
@@ -368,48 +605,73 @@
           "modalities": [
             {
               "direction": "input",
+              "evidenceRefs": [
+                "agy-media-fixture"
+              ],
               "modality": "audio",
               "support": "supported",
               "transport": "file_path"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "agy-media-fixture"
+              ],
               "modality": "image",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "agy-docs",
+                "agy-conformance"
+              ],
               "modality": "text",
               "support": "supported",
               "transport": "inline"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "agy-media-fixture"
+              ],
               "modality": "video",
               "support": "supported",
               "transport": "file_path"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "agy-docs"
+              ],
               "modality": "audio",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "agy-docs"
+              ],
               "modality": "image",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "agy-conformance"
+              ],
               "modality": "text",
               "support": "supported",
               "transport": "inline"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "agy-docs"
+              ],
               "modality": "video",
               "support": "unsupported",
               "transport": "none"
@@ -422,48 +684,73 @@
           "modalities": [
             {
               "direction": "input",
+              "evidenceRefs": [
+                "agy-media-fixture"
+              ],
               "modality": "audio",
               "support": "supported",
               "transport": "file_path"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "agy-media-fixture"
+              ],
               "modality": "image",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "agy-docs",
+                "agy-conformance"
+              ],
               "modality": "text",
               "support": "supported",
               "transport": "inline"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "agy-media-fixture"
+              ],
               "modality": "video",
               "support": "supported",
               "transport": "file_path"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "agy-docs"
+              ],
               "modality": "audio",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "agy-docs"
+              ],
               "modality": "image",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "agy-conformance"
+              ],
               "modality": "text",
               "support": "supported",
               "transport": "inline"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "agy-docs"
+              ],
               "modality": "video",
               "support": "unsupported",
               "transport": "none"
@@ -476,48 +763,73 @@
           "modalities": [
             {
               "direction": "input",
+              "evidenceRefs": [
+                "agy-media-fixture"
+              ],
               "modality": "audio",
               "support": "supported",
               "transport": "file_path"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "agy-media-fixture"
+              ],
               "modality": "image",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "agy-docs",
+                "agy-conformance"
+              ],
               "modality": "text",
               "support": "supported",
               "transport": "inline"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "agy-media-fixture"
+              ],
               "modality": "video",
               "support": "supported",
               "transport": "file_path"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "agy-docs"
+              ],
               "modality": "audio",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "agy-docs"
+              ],
               "modality": "image",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "agy-conformance"
+              ],
               "modality": "text",
               "support": "supported",
               "transport": "inline"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "agy-docs"
+              ],
               "modality": "video",
               "support": "unsupported",
               "transport": "none"
@@ -530,48 +842,73 @@
           "modalities": [
             {
               "direction": "input",
+              "evidenceRefs": [
+                "agy-media-fixture"
+              ],
               "modality": "audio",
               "support": "supported",
               "transport": "file_path"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "agy-media-fixture"
+              ],
               "modality": "image",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "agy-docs",
+                "agy-conformance"
+              ],
               "modality": "text",
               "support": "supported",
               "transport": "inline"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "agy-media-fixture"
+              ],
               "modality": "video",
               "support": "supported",
               "transport": "file_path"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "agy-docs"
+              ],
               "modality": "audio",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "agy-docs"
+              ],
               "modality": "image",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "agy-conformance"
+              ],
               "modality": "text",
               "support": "supported",
               "transport": "inline"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "agy-docs"
+              ],
               "modality": "video",
               "support": "unsupported",
               "transport": "none"
@@ -584,48 +921,73 @@
           "modalities": [
             {
               "direction": "input",
+              "evidenceRefs": [
+                "agy-media-fixture"
+              ],
               "modality": "audio",
               "support": "supported",
               "transport": "file_path"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "agy-media-fixture"
+              ],
               "modality": "image",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "agy-docs",
+                "agy-conformance"
+              ],
               "modality": "text",
               "support": "supported",
               "transport": "inline"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "agy-media-fixture"
+              ],
               "modality": "video",
               "support": "supported",
               "transport": "file_path"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "agy-docs"
+              ],
               "modality": "audio",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "agy-docs"
+              ],
               "modality": "image",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "agy-conformance"
+              ],
               "modality": "text",
               "support": "supported",
               "transport": "inline"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "agy-docs"
+              ],
               "modality": "video",
               "support": "unsupported",
               "transport": "none"
@@ -638,48 +1000,73 @@
           "modalities": [
             {
               "direction": "input",
+              "evidenceRefs": [
+                "agy-media-fixture"
+              ],
               "modality": "audio",
               "support": "supported",
               "transport": "file_path"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "agy-media-fixture"
+              ],
               "modality": "image",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "agy-docs",
+                "agy-conformance"
+              ],
               "modality": "text",
               "support": "supported",
               "transport": "inline"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "agy-media-fixture"
+              ],
               "modality": "video",
               "support": "supported",
               "transport": "file_path"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "agy-docs"
+              ],
               "modality": "audio",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "agy-docs"
+              ],
               "modality": "image",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "agy-conformance"
+              ],
               "modality": "text",
               "support": "supported",
               "transport": "inline"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "agy-docs"
+              ],
               "modality": "video",
               "support": "unsupported",
               "transport": "none"
@@ -690,12 +1077,42 @@
       "technicalSupportLevel": "experimental",
       "tools": [
         {
+          "availability": "built_in",
+          "defaultEnabled": true,
           "description": "Read and modify files in the selected AGY workspace.",
+          "evidenceRefs": [
+            "agy-conformance"
+          ],
           "name": "filesystem",
           "support": "supported"
         },
         {
+          "availability": "built_in",
+          "defaultEnabled": true,
+          "description": "Generate image output through the built-in AGY image-generation tool.",
+          "evidenceRefs": [
+            "agy-conformance"
+          ],
+          "name": "image_generation",
+          "outputModalities": [
+            {
+              "evidenceRefs": [
+                "agy-conformance"
+              ],
+              "modality": "image",
+              "support": "supported",
+              "transport": "tool_mediated"
+            }
+          ],
+          "support": "supported"
+        },
+        {
+          "availability": "built_in",
+          "defaultEnabled": true,
           "description": "Run bounded shell commands through the AGY tool runner.",
+          "evidenceRefs": [
+            "agy-conformance"
+          ],
           "name": "shell",
           "support": "supported"
         }
@@ -743,6 +1160,123 @@
           "url": "https://docs.anthropic.com/en/docs/claude-code/cli-usage"
         }
       ],
+      "evidence": [
+        {
+          "factRefs": [
+            "model_catalog",
+            "harness/input/text",
+            "harness/output/text"
+          ],
+          "id": "claude-docs",
+          "kind": "primary_documentation",
+          "url": "https://docs.anthropic.com/en/docs/claude-code/cli-usage",
+          "verifiedOn": "2026-08-10"
+        },
+        {
+          "factRefs": [
+            "harness/input/audio",
+            "harness/input/image",
+            "harness/input/text",
+            "harness/input/video",
+            "harness/output/audio",
+            "harness/output/image",
+            "harness/output/text",
+            "harness/output/video",
+            "model/claude-opus-4-6-thinking/input/text",
+            "tool/filesystem",
+            "tool/shell",
+            "tool/web_search"
+          ],
+          "id": "claude-conformance",
+          "kind": "conformance_fixture",
+          "verifiedOn": "2026-08-10"
+        }
+      ],
+      "harness": {
+        "kind": "native_cli"
+      },
+      "harnessRoutes": [
+        {
+          "direction": "input",
+          "evidenceRefs": [
+            "claude-docs",
+            "claude-conformance"
+          ],
+          "modality": "audio",
+          "support": "unsupported",
+          "transport": "none"
+        },
+        {
+          "direction": "input",
+          "evidenceRefs": [
+            "claude-docs",
+            "claude-conformance"
+          ],
+          "modality": "image",
+          "support": "unsupported",
+          "transport": "none"
+        },
+        {
+          "direction": "input",
+          "evidenceRefs": [
+            "claude-docs",
+            "claude-conformance"
+          ],
+          "modality": "text",
+          "support": "supported",
+          "transport": "inline"
+        },
+        {
+          "direction": "input",
+          "evidenceRefs": [
+            "claude-docs",
+            "claude-conformance"
+          ],
+          "modality": "video",
+          "support": "unsupported",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "evidenceRefs": [
+            "claude-docs",
+            "claude-conformance"
+          ],
+          "modality": "audio",
+          "support": "unsupported",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "evidenceRefs": [
+            "claude-docs",
+            "claude-conformance"
+          ],
+          "modality": "image",
+          "support": "unsupported",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "evidenceRefs": [
+            "claude-docs",
+            "claude-conformance"
+          ],
+          "modality": "text",
+          "support": "supported",
+          "transport": "inline"
+        },
+        {
+          "direction": "output",
+          "evidenceRefs": [
+            "claude-docs",
+            "claude-conformance"
+          ],
+          "modality": "video",
+          "support": "unsupported",
+          "transport": "none"
+        }
+      ],
       "id": "claude",
       "implementationAvailability": "bundled",
       "knownLimits": [],
@@ -768,6 +1302,7 @@
         "toolOutputDeltas": true,
         "usage": false
       },
+      "modelCatalogPosture": "exact",
       "models": [
         {
           "efforts": [
@@ -781,48 +1316,80 @@
           "modalities": [
             {
               "direction": "input",
+              "evidenceRefs": [
+                "claude-docs",
+                "claude-conformance"
+              ],
               "modality": "audio",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "claude-docs",
+                "claude-conformance"
+              ],
               "modality": "image",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "claude-docs",
+                "claude-conformance"
+              ],
               "modality": "text",
               "support": "supported",
               "transport": "inline"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "claude-docs",
+                "claude-conformance"
+              ],
               "modality": "video",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "claude-docs",
+                "claude-conformance"
+              ],
               "modality": "audio",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "claude-docs",
+                "claude-conformance"
+              ],
               "modality": "image",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "claude-docs",
+                "claude-conformance"
+              ],
               "modality": "text",
               "support": "supported",
               "transport": "inline"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "claude-docs",
+                "claude-conformance"
+              ],
               "modality": "video",
               "support": "unsupported",
               "transport": "none"
@@ -841,48 +1408,80 @@
           "modalities": [
             {
               "direction": "input",
+              "evidenceRefs": [
+                "claude-docs",
+                "claude-conformance"
+              ],
               "modality": "audio",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "claude-docs",
+                "claude-conformance"
+              ],
               "modality": "image",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "claude-docs",
+                "claude-conformance"
+              ],
               "modality": "text",
               "support": "supported",
               "transport": "inline"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "claude-docs",
+                "claude-conformance"
+              ],
               "modality": "video",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "claude-docs",
+                "claude-conformance"
+              ],
               "modality": "audio",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "claude-docs",
+                "claude-conformance"
+              ],
               "modality": "image",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "claude-docs",
+                "claude-conformance"
+              ],
               "modality": "text",
               "support": "supported",
               "transport": "inline"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "claude-docs",
+                "claude-conformance"
+              ],
               "modality": "video",
               "support": "unsupported",
               "transport": "none"
@@ -901,48 +1500,80 @@
           "modalities": [
             {
               "direction": "input",
+              "evidenceRefs": [
+                "claude-docs",
+                "claude-conformance"
+              ],
               "modality": "audio",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "claude-docs",
+                "claude-conformance"
+              ],
               "modality": "image",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "claude-docs",
+                "claude-conformance"
+              ],
               "modality": "text",
               "support": "supported",
               "transport": "inline"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "claude-docs",
+                "claude-conformance"
+              ],
               "modality": "video",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "claude-docs",
+                "claude-conformance"
+              ],
               "modality": "audio",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "claude-docs",
+                "claude-conformance"
+              ],
               "modality": "image",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "claude-docs",
+                "claude-conformance"
+              ],
               "modality": "text",
               "support": "supported",
               "transport": "inline"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "claude-docs",
+                "claude-conformance"
+              ],
               "modality": "video",
               "support": "unsupported",
               "transport": "none"
@@ -953,17 +1584,33 @@
       "technicalSupportLevel": "experimental",
       "tools": [
         {
+          "availability": "built_in",
+          "defaultEnabled": true,
           "description": "Read and modify files in the selected workspace.",
+          "evidenceRefs": [
+            "claude-conformance"
+          ],
           "name": "filesystem",
           "support": "supported"
         },
         {
+          "availability": "built_in",
+          "defaultEnabled": true,
           "description": "Run bounded shell commands through the Claude tool runner.",
+          "evidenceRefs": [
+            "claude-conformance"
+          ],
           "name": "shell",
           "support": "supported"
         },
         {
+          "availability": "optional",
+          "defaultEnabled": null,
           "description": "Use the provider web-search tool when enabled by the invocation.",
+          "evidenceRefs": [
+            "claude-docs",
+            "claude-conformance"
+          ],
           "name": "web_search",
           "support": "supported"
         }
@@ -1011,6 +1658,122 @@
           "url": "https://developers.openai.com/codex/cli/reference/"
         }
       ],
+      "evidence": [
+        {
+          "factRefs": [
+            "model_catalog",
+            "harness/input/image",
+            "harness/input/text",
+            "harness/output/image",
+            "harness/output/text"
+          ],
+          "id": "codex-docs",
+          "kind": "primary_documentation",
+          "url": "https://developers.openai.com/codex/cli/reference/",
+          "verifiedOn": "2026-08-10"
+        },
+        {
+          "factRefs": [
+            "harness/input/audio",
+            "harness/input/video",
+            "harness/output/audio",
+            "harness/output/video",
+            "model/gpt-5.6/input/image",
+            "model/gpt-5.6/input/text",
+            "model/gpt-5.6/output/text",
+            "tool/filesystem",
+            "tool/shell",
+            "tool/web_search"
+          ],
+          "id": "codex-conformance",
+          "kind": "conformance_fixture",
+          "verifiedOn": "2026-08-10"
+        }
+      ],
+      "harness": {
+        "kind": "native_cli"
+      },
+      "harnessRoutes": [
+        {
+          "direction": "input",
+          "evidenceRefs": [
+            "codex-docs",
+            "codex-conformance"
+          ],
+          "modality": "audio",
+          "support": "unsupported",
+          "transport": "none"
+        },
+        {
+          "direction": "input",
+          "evidenceRefs": [
+            "codex-docs",
+            "codex-conformance"
+          ],
+          "modality": "image",
+          "support": "supported",
+          "transport": "file_path"
+        },
+        {
+          "direction": "input",
+          "evidenceRefs": [
+            "codex-docs",
+            "codex-conformance"
+          ],
+          "modality": "text",
+          "support": "supported",
+          "transport": "inline"
+        },
+        {
+          "direction": "input",
+          "evidenceRefs": [
+            "codex-docs",
+            "codex-conformance"
+          ],
+          "modality": "video",
+          "support": "unsupported",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "evidenceRefs": [
+            "codex-docs",
+            "codex-conformance"
+          ],
+          "modality": "audio",
+          "support": "unsupported",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "evidenceRefs": [
+            "codex-docs"
+          ],
+          "modality": "image",
+          "support": "unsupported",
+          "transport": "none"
+        },
+        {
+          "direction": "output",
+          "evidenceRefs": [
+            "codex-docs",
+            "codex-conformance"
+          ],
+          "modality": "text",
+          "support": "supported",
+          "transport": "inline"
+        },
+        {
+          "direction": "output",
+          "evidenceRefs": [
+            "codex-docs",
+            "codex-conformance"
+          ],
+          "modality": "video",
+          "support": "unsupported",
+          "transport": "none"
+        }
+      ],
       "id": "codex",
       "implementationAvailability": "bundled",
       "knownLimits": [
@@ -1044,6 +1807,7 @@
         "toolOutputDeltas": true,
         "usage": true
       },
+      "modelCatalogPosture": "exact",
       "models": [
         {
           "efforts": [
@@ -1058,48 +1822,79 @@
           "modalities": [
             {
               "direction": "input",
+              "evidenceRefs": [
+                "codex-docs",
+                "codex-conformance"
+              ],
               "modality": "audio",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "codex-docs",
+                "codex-conformance"
+              ],
               "modality": "image",
               "support": "supported",
               "transport": "file_path"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "codex-docs",
+                "codex-conformance"
+              ],
               "modality": "text",
               "support": "supported",
               "transport": "inline"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "codex-docs",
+                "codex-conformance"
+              ],
               "modality": "video",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "codex-docs",
+                "codex-conformance"
+              ],
               "modality": "audio",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "codex-docs"
+              ],
               "modality": "image",
-              "support": "supported",
-              "transport": "file_path"
+              "support": "unsupported",
+              "transport": "none"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "codex-docs",
+                "codex-conformance"
+              ],
               "modality": "text",
               "support": "supported",
               "transport": "inline"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "codex-docs",
+                "codex-conformance"
+              ],
               "modality": "video",
               "support": "unsupported",
               "transport": "none"
@@ -1119,48 +1914,79 @@
           "modalities": [
             {
               "direction": "input",
+              "evidenceRefs": [
+                "codex-docs",
+                "codex-conformance"
+              ],
               "modality": "audio",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "codex-docs",
+                "codex-conformance"
+              ],
               "modality": "image",
               "support": "supported",
               "transport": "file_path"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "codex-docs",
+                "codex-conformance"
+              ],
               "modality": "text",
               "support": "supported",
               "transport": "inline"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "codex-docs",
+                "codex-conformance"
+              ],
               "modality": "video",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "codex-docs",
+                "codex-conformance"
+              ],
               "modality": "audio",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "codex-docs"
+              ],
               "modality": "image",
-              "support": "supported",
-              "transport": "file_path"
+              "support": "unsupported",
+              "transport": "none"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "codex-docs",
+                "codex-conformance"
+              ],
               "modality": "text",
               "support": "supported",
               "transport": "inline"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "codex-docs",
+                "codex-conformance"
+              ],
               "modality": "video",
               "support": "unsupported",
               "transport": "none"
@@ -1180,48 +2006,79 @@
           "modalities": [
             {
               "direction": "input",
+              "evidenceRefs": [
+                "codex-docs",
+                "codex-conformance"
+              ],
               "modality": "audio",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "codex-docs",
+                "codex-conformance"
+              ],
               "modality": "image",
               "support": "supported",
               "transport": "file_path"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "codex-docs",
+                "codex-conformance"
+              ],
               "modality": "text",
               "support": "supported",
               "transport": "inline"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "codex-docs",
+                "codex-conformance"
+              ],
               "modality": "video",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "codex-docs",
+                "codex-conformance"
+              ],
               "modality": "audio",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "codex-docs"
+              ],
               "modality": "image",
-              "support": "supported",
-              "transport": "file_path"
+              "support": "unsupported",
+              "transport": "none"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "codex-docs",
+                "codex-conformance"
+              ],
               "modality": "text",
               "support": "supported",
               "transport": "inline"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "codex-docs",
+                "codex-conformance"
+              ],
               "modality": "video",
               "support": "unsupported",
               "transport": "none"
@@ -1241,48 +2098,79 @@
           "modalities": [
             {
               "direction": "input",
+              "evidenceRefs": [
+                "codex-docs",
+                "codex-conformance"
+              ],
               "modality": "audio",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "codex-docs",
+                "codex-conformance"
+              ],
               "modality": "image",
               "support": "supported",
               "transport": "file_path"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "codex-docs",
+                "codex-conformance"
+              ],
               "modality": "text",
               "support": "supported",
               "transport": "inline"
             },
             {
               "direction": "input",
+              "evidenceRefs": [
+                "codex-docs",
+                "codex-conformance"
+              ],
               "modality": "video",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "codex-docs",
+                "codex-conformance"
+              ],
               "modality": "audio",
               "support": "unsupported",
               "transport": "none"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "codex-docs"
+              ],
               "modality": "image",
-              "support": "supported",
-              "transport": "file_path"
+              "support": "unsupported",
+              "transport": "none"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "codex-docs",
+                "codex-conformance"
+              ],
               "modality": "text",
               "support": "supported",
               "transport": "inline"
             },
             {
               "direction": "output",
+              "evidenceRefs": [
+                "codex-docs",
+                "codex-conformance"
+              ],
               "modality": "video",
               "support": "unsupported",
               "transport": "none"
@@ -1293,17 +2181,33 @@
       "technicalSupportLevel": "production",
       "tools": [
         {
+          "availability": "built_in",
+          "defaultEnabled": true,
           "description": "Read and modify files in the selected workspace.",
+          "evidenceRefs": [
+            "codex-conformance"
+          ],
           "name": "filesystem",
           "support": "supported"
         },
         {
+          "availability": "built_in",
+          "defaultEnabled": true,
           "description": "Run bounded shell commands through the Codex tool runner.",
+          "evidenceRefs": [
+            "codex-conformance"
+          ],
           "name": "shell",
           "support": "supported"
         },
         {
+          "availability": "optional",
+          "defaultEnabled": null,
           "description": "Use the provider web-search tool when enabled by the invocation.",
+          "evidenceRefs": [
+            "codex-docs",
+            "codex-conformance"
+          ],
           "name": "web_search",
           "support": "supported"
         }
