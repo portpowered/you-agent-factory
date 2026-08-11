@@ -397,6 +397,7 @@ func runSessionLifecycleCLIJSON(
 	t.Helper()
 
 	out, err := runYouCLI(ctx, processHarness, workingDir, serverURL,
+		"--remote",
 		"--json",
 		"session", operation, sessionID,
 	)
