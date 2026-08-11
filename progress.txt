@@ -131,6 +131,10 @@
 - Treat an absent PID as indeterminate unless the owner probe has stronger proof of orphanhood; compare the owner record again before any explicitly permitted orphan reclaim.
 - Atomic orphan reclaim must rename the exact revalidated lease to a distinct still-visible recovery path before publishing the new owner; never remove and reuse the same path across a delayed contender.
 - Cross-process lease probes must suspend before filesystem inspection and match the exact ownership-resource suffix; observe-then-suspend leaves a release race even when the path is re-stat'ed.
+- Native Bun UI unit owners use the `.bun.unit.test.ts` suffix and `bun:test`; the shared `bunVi` adapter is the compatibility seam for global stubs/spies while the lane contract excludes those owners from Vitest.
+- Aggregate UI-unit evidence must reconcile both runner outputs to the unchanged full workload; the leased Bun cohort can coexist with pre-existing Bun owners and the remaining Vitest files.
+- The component wrapper has a separate wall-clock budget from assertion correctness; report passing sublane counts and host-specific budget overruns separately rather than treating warnings as test failures.
+
 ## 2026-08-09 13:12 - wo-d1-packaged-factories-docs-001
 - What was implemented
   - Established the operator-facing discovery workflow and common seven-part entry contract in `docs/reference/packaged-factories.md`.
@@ -7717,4 +7721,247 @@
   - `git diff --cached --check` passed for the resolved merge, and the merge tree contains no unmerged entries.
 - **Learnings for future iterations:**
   - Main can advance again while a targeted rerun is in flight; merge the latest hosting ref before the final push and combine the synchronization evidence with the merge commit so CI runs on the actual handoff head.
+---
+
+## 2026-08-10 19:28 -07:00 - bun-compat-batch-migration-001
+- What was implemented
+  - Completed the API-01 cohort handoff using the five existing native Bun owners on current `main`: bundled-file preservation, layout preservation, lifecycle controls, generated session-factory OpenAPI types, and import discovery.
+  - Confirmed the retired Vitest `.test.ts` paths are absent and no product behavior, generated artifact, coverage membership, or browser-test ownership changed.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `bun test src/api/factory-definition/preserve-bundled-files.bun.unit.test.ts src/api/factory-definition/preserve-layout.bun.unit.test.ts src/api/factory-sessions/lifecycle-controls.bun.unit.test.ts src/api/generated/openapi.session-factory.bun.unit.test.ts src/api/session-factory/import-activation.discover.bun.unit.test.ts` — 5 files / 17 tests passed, 35 expect calls.
+  - Dashboard-unit Vitest selection of all five migrated paths and all five retired paths — `No test files found` in each selection, confirming zero Vitest execution.
+  - `bun run check:test-lanes` — passed.
+  - `bun run typecheck` — passed.
+- **Learnings for future iterations:**
+  - A cohort already merged to current `main` still needs direct focused Bun execution, retired-path absence, Vitest exclusion, lane-contract, and typecheck evidence before its batch PRD story can be marked complete.
+  - A fresh worktree may contain only Bun’s temporary UI install directory; `bun install --frozen-lockfile` restores the pinned Vitest and TypeScript tools without tracked dependency changes.
+---
+
+## 2026-08-10 19:43 -07:00 - bun-compat-batch-migration-002
+- What was implemented
+  - Verified the API-02 migration already present in the branch history: session routing, session scope, and prompt-template API contracts execute exclusively in the native Bun unit lane.
+  - Confirmed the three-file cohort preserves all 20 baseline cases, including default/selected session routing, pause-state scoping, typed prompt-template errors, network failures, and invalid-response handling.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `bun test src/api/session-factory/prompt-template/api.bun.unit.test.ts src/api/session-routing.bun.unit.test.ts src/api/session-scope.bun.unit.test.ts` — 3 files / 20 tests passed, 41 expect calls.
+  - `vitest run --config vitest.lanes.config.ts --project=dashboard-unit --maxWorkers=4 --retry=0` with all three `.bun.unit.test.ts` owners — `No test files found`.
+  - The same `dashboard-unit` selection with all three retired `.test.ts` paths — `No test files found`; the legacy paths are absent.
+  - `bun run check:test-lanes` — passed.
+  - `bun run typecheck` — passed.
+- **Learnings for future iterations:**
+  - The next API cohort was already migrated in the branch ancestry, so the required work was to reproduce the frozen focused/lane/typecheck evidence and record it rather than duplicate test owners.
+  - For Bun migrations, Vitest’s expected no-file exit is code 1; capture the output and treat `No test files found` as the zero-selection assertion.
+---
+
+## 2026-08-10 19:48 -07:00 - bun-compat-batch-migration-003
+- What was implemented
+  - Completed the dashboard components-01 cohort handoff using the four existing native Bun owners for fixture catalog exports, runtime overlay projections, dashboard test-fixture exports, and typography-role mappings.
+  - Preserved all 11 baseline named/executable cases and confirmed the retired Vitest owners are absent; no production or public contract behavior changed.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `bun test src/components/dashboard/fixtures/public-api.bun.unit.test.ts src/components/dashboard/fixtures/runtime.bun.unit.test.ts src/components/dashboard/test-fixtures.bun.unit.test.ts src/components/dashboard/typography.bun.unit.test.ts` — 4 files / 11 tests passed, 46 expect calls.
+  - Pinned `vitest.exe` dashboard-unit selection of all four migrated paths and all four retired `.test.ts` paths — `No test files found` in each selection, confirming zero Vitest execution and no fallback copies.
+  - `bun run check:test-lanes` — passed.
+  - `bun run typecheck` — passed.
+- **Learnings for future iterations:**
+  - When a cohort is already migrated in branch ancestry, reproduce its exact focused Bun count, both Vitest exclusion selections, lane-contract, and typecheck evidence before marking the batch story complete.
+  - On Windows PowerShell, use the repository-pinned `ui\\node_modules\\.bin\\vitest.exe` for direct lane checks when the bare `vitest` command is not on PATH.
+---
+
+## 2026-08-10 19:52 -07:00 - bun-compat-batch-migration-004
+- What was implemented
+  - Completed the current-factory-definition-01 cohort handoff using the seven existing native Bun owners for runner selection, default handling, worker/workstation taxonomy, editable document values, workstation guards, Go-duration parsing, and cron validation.
+  - Preserved all 39 source-level named cases and the cron descriptor parameterization's seven expanded cases for the exact 46-case executable total; the retired Vitest paths are absent.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Focused `bun test` — 7 files / 46 tests passed, 101 expect calls.
+  - Pinned `vitest.exe` `dashboard-unit` selection of all seven migrated paths and all seven retired `.test.ts` paths — `No test files found` in each selection, confirming zero Vitest execution and no fallback copies.
+  - `bun run check:test-lanes` — passed.
+  - `bun run typecheck` — passed.
+- **Learnings for future iterations:**
+  - A cohort already migrated in branch ancestry still needs direct focused Bun execution, exact source/expanded-case reconciliation, retired-path absence, both Vitest exclusion selections, lane-contract, and typecheck evidence before its batch story can be marked complete.
+---
+
+## 2026-08-10 19:58 -07:00 - bun-compat-batch-migration-005
+- What was implemented
+  - Verified the current-factory-definition-02 workstation-helper cohort already present in branch ancestry: progress/failure outcome routes, worker assignment, editable workstation resolution, model-invoke bindings, and workstation type conversion execute exclusively in the native Bun unit lane.
+  - Preserved all 41 frozen source-level named and executable cases; no legacy Vitest owner or fallback copy remains.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Focused `bun test` — 5 files / 41 tests passed, 76 expect calls.
+  - Pinned `vitest.exe` `dashboard-unit` selection of all five migrated `.bun.unit.test.ts` paths — `No test files found` with captured exit code 1.
+  - Pinned `vitest.exe` selection of all five retired `.test.ts` paths — `No test files found` with captured exit code 1; all legacy paths are absent.
+  - `bun run check:test-lanes` — passed.
+  - `bun run typecheck` — passed.
+- **Learnings for future iterations:**
+  - When a cohort’s source migration is already in branch ancestry, complete the story with direct focused execution, exact baseline reconciliation, both Vitest exclusion selections, lane-contract, and typecheck evidence rather than creating duplicate owners.
+  - The workstation-helper cohort has no parameterized cases, so its source-level and executable totals must remain identical at 41.
+---
+
+## 2026-08-10 20:03 -07:00 - bun-compat-batch-migration-006
+- What was implemented
+  - Verified the current-selection-04 request-helper cohort already present in branch ancestry: explicit-map/runtime-snapshot projection, provider-session filtering, request ordering, dispatch-attempt merging, and request-owned work-item behavior remain covered by the native Bun owner.
+  - Preserved all five frozen source-level named and executable cases; the retired Vitest owner is absent and no fallback copy remains.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `bun test src/features/current-selection/hooks/helpers/useCurrentSelection.request-helpers.bun.unit.test.ts` — 1 file / 5 tests passed, 19 expect calls.
+  - Pinned `vitest` `dashboard-unit` selection of the migrated `.bun.unit.test.ts` path — `No test files found` with exit code 1.
+  - Pinned `vitest` selection of the retired `.test.ts` path — `No test files found` with exit code 1; the legacy path is absent.
+  - `bun run check:test-lanes` — passed.
+  - `bun run typecheck` — passed.
+- **Learnings for future iterations:**
+  - A migration that predates the current batch still needs exact baseline-case reconciliation, focused Bun execution, both Vitest exclusion selections, lane-contract, and typecheck evidence before its story is marked complete.
+  - For this cohort, the source-level and executable totals are both five because no parameterized cases expand the baseline.
+---
+
+## 2026-08-10 20:08 -07:00 - bun-compat-batch-migration-007
+- What was implemented
+  - Verified the current-selection-06 selected-work relationship cohort already present in branch ancestry: graph construction and dashboard relation projection execute exclusively through four native Bun owners.
+  - Preserved the frozen connected, empty, unavailable, direct-relation, fallback-edge, and repeated `DEPENDS_ON` contracts without changing product code or test behavior.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Focused `bun test` passed 9/9 across 4 files with 26 expect calls, matching the nine baseline named cases.
+  - Pinned `vitest.exe` `dashboard-unit` selection of all four migrated `.bun.unit.test.ts` paths returned `No test files found` with expected exit code 1.
+  - The four retired `.test.ts` paths are absent; selecting them in `dashboard-unit` also returned `No test files found` with expected exit code 1.
+  - `bun run check:test-lanes` and `bun run typecheck` passed.
+- **Learnings for future iterations:**
+  - When a frozen cohort is already migrated in branch ancestry, complete the story by reconciling the baseline names/counts and reproducing focused Bun, both Vitest exclusion, lane-contract, and typecheck evidence before changing task metadata.
+  - The relationship cohort's nine source-level cases remain nine executable cases because it has no parameterized tests; the existing baseline report already contains the matched latency evidence for the later aggregate audit.
+---
+
+## 2026-08-10 20:13 -07:00 - bun-compat-batch-migration-008
+- What was implemented
+  - Completed the current-selection-08 workstation-selection cohort handoff using the four existing native Bun owners for workstation summary values, editable session-draft mutators, cron-draft transitions, and overwrite-field projection.
+  - Preserved all 34 frozen named/executable cases and confirmed the retired Vitest owners are absent; no product behavior or public contract behavior changed.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `bun test` passed 34/34 across 4 files with 46 expect calls.
+  - Pinned `vitest.exe` `dashboard-unit` selection of all four migrated `.bun.unit.test.ts` paths returned `No test files found` with exit code 1.
+  - The four retired `.test.ts` paths are absent; selecting them in `dashboard-unit` also returned `No test files found` with exit code 1.
+  - `bun run check:test-lanes` and `bun run typecheck` passed.
+- **Learnings for future iterations:**
+  - The final frozen cohort was already migrated in branch ancestry, so story completion required reproducing exact focused Bun counts, both Vitest exclusion selections, retired-path absence, lane-contract, and typecheck evidence before changing task metadata.
+  - The workstation-selection-08 cohort has no parameterized cases; its source-level and executable totals remain identical at 34.
+---
+
+## 2026-08-10 20:45 -07:00 - bun-compat-batch-migration-009
+- What was implemented
+  - Completed the final batch audit: all eight frozen cohorts reconcile to 33 unique native Bun files, 176 source-level named cases, and 183 executable cases; all retired Vitest owners are absent.
+  - Ran one focused Bun command over all 33 migrated files (183/183 passing, 390 expect calls) and pinned Vitest `dashboard-unit` selections for both migrated and retired paths; both selections returned `No test files found`.
+  - Recorded the frozen per-cohort warm focused medians and a matched aggregate `bun run test:unit -- --logHeapUsage --no-color` comparison in `prd.json`; the full workload remains 390 files / 3,161 tests, with current after median 82.935s versus 95.89s before (12.955s / 13.5% lower).
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `bun test <all 33 migrated cohort paths>` — passed 183/183 across 33 files with 390 expect calls.
+  - Pinned `vitest.exe` `dashboard-unit` selections of all migrated `.bun.unit.test.ts` paths and all retired `.test.ts` paths — both returned `No test files found` with exit code 1.
+  - `bun run test:unit -- --logHeapUsage --no-color` — three aggregate samples passed; current output was 35 Bun files / 191 tests plus 355 Vitest files / 2,970 tests, preserving 390 files / 3,161 tests overall; wrapper samples were 90.657s, 82.935s, and 55.186s.
+  - `bun run check:test-lanes`, `bun run typecheck`, and `bun run lint` — passed.
+  - Browserless component sublanes — 860 Bun tests and 829 Vitest tests passed with no assertion failures; the Windows wrapper measured 323.43s against the CI-configured 300s duration guard, so the host-only performance-budget overrun is recorded separately from test correctness.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` — passed.
+- **Learnings for future iterations:**
+  - The full unit wrapper's unchanged workload is the strongest aggregate parity check: sum Bun and remaining Vitest outputs before comparing wall time, because the leased cohort is only part of the native Bun inventory.
+  - `test:component` can report a nonzero result solely for its wall-clock budget after every component assertion passes; preserve the sublane pass counts and host/budget context in review evidence.
+## 2026-08-10 20:50 -07:00 - bun-compat-batch-migration-009 current-main synchronization follow-up
+- What was implemented
+  - Merged the live `origin/main` head `ee0023397` into the Bun migration branch after PR #1871 reported a dirty merge state.
+  - Preserved the Bun migration `prd.json` as authoritative and unioned the unrelated E2 synchronization entry into the append-only `progress.txt` history.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+  - Current-main merge files.
+- Verification
+  - The merge conflict set was limited to the shared `prd.json` and `progress.txt` bookkeeping files; no product or generated-file conflict required a task-side resolution.
+  - `prd.json` parses with all nine Bun migration stories marked `passes:true`.
+  - Conflict-marker scan and `git diff --check` passed.
+- **Learnings for future iterations:**
+  - When a task branch is behind current main, keep the active task PRD authoritative and merge unrelated progress entries into the append-only log before refreshing the PR body.
+---
+
+## 2026-08-10 21:27:58 -07:00 - bun-compat-batch-migration-009 current-main synchronization follow-up
+- What was implemented
+  - Merged the live `origin/main` head `469204421` into the Bun migration branch to clear PR #1871's current-base conflict.
+  - Preserved the Bun migration `prd.json` as authoritative and unioned the current-main CI-classifier history into the append-only `progress.txt` log.
+- Files changed
+  - `Makefile`
+  - `cmd/ciclassify/main.go`
+  - `cmd/ciclassify/main_test.go`
+  - `progress.txt`
+- Verification
+  - `bun run check:test-lanes` passed from `ui/`.
+  - `bun run typecheck` and `bun run lint` passed from `ui/`.
+  - `go test ./cmd/ciclassify -count=1` and `go vet ./cmd/ciclassify` passed.
+  - `prd.json` parses with all nine Bun migration stories marked `passes:true`; conflict-marker and whitespace checks passed.
+- **Learnings for future iterations:**
+  - Bun scripts are owned by `ui/package.json`; run lane, typecheck, and lint commands with `ui/` as the working directory.
+---
+## 2026-08-10 22:22:17 -07:00 - bun-compat-batch-migration-009 current-main synchronization follow-up
+- What was implemented
+  - Merged the live `origin/main` head `7dbeb472a` into the Bun migration branch after PR #1871 reported a dirty base.
+  - Preserved the Bun migration `prd.json` as authoritative and unioned the complete current-main history with all Bun migration entries in the append-only `progress.txt` log.
+  - No product or generated-file conflict required task-side changes; current-main implementation files remain the synchronized merge result.
+- Files changed
+  - Current-main synchronization files.
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Exact focused Bun cohort — 33 files / 183 tests / 390 expect calls passed.
+  - `bun run check:test-lanes` and `bun run typecheck` passed from `ui/`.
+  - `bun run lint` passed from `ui/`.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` passed.
+  - `prd.json` parses with all nine stories marked `passes:true`; conflict-marker and whitespace checks passed.
+- **Learnings for future iterations:**
+  - When a current-main merge conflicts only in shared bookkeeping, reconstruct the append-only log from complete merge stages in bounded chunks, validate object counts, and keep the active task PRD authoritative before staging.
+---
+## 2026-08-10 22:27:32 -07:00 - bun-compat-batch-migration-009 current-main synchronization follow-up
+- What was implemented
+  - Merged the newly advanced live `origin/main` head `b68e4bf956` into the Bun migration branch after the first replacement head became stale during verification.
+  - Preserved the Bun migration `prd.json` as authoritative and retained the complete append-only progress history, including the prior 7dbeb472a synchronization entry.
+  - Carried the unrelated current-main packaged-factory test change without adding task-specific product changes.
+- Files changed
+  - Current-main synchronization files.
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Exact focused Bun cohort — 33 files / 183 tests / 390 expect calls passed on the second synchronized tree.
+  - `bun run check:test-lanes` and `bun run typecheck` passed from `ui/`.
+  - `prd.json` parses with all nine stories marked `passes:true`; conflict-marker and whitespace checks passed.
+- **Learnings for future iterations:**
+- Fetch the live base immediately before pushing and again after local verification; another merged main commit can make a freshly synchronized PR dirty before its checks begin.
+---
+## 2026-08-10 22:49:55 -07:00 - bun-compat-batch-migration-009 current-main synchronization follow-up
+- What was implemented
+  - Fetched and merged the live `origin/main` head `ecd1d248731c9108dbbc4dafe2f28c4120043346` into the Bun migration branch as `c86a0c190` after the PR became dirty again.
+  - Preserved the Bun migration `prd.json` as authoritative and retained the append-only `progress.txt` history; the incoming implementation changes are the current-main runtime-host reuse/cancellation fixes.
+- Files changed
+  - `pkg/services/models/internal/services/runtime_host/internal/service/export_test.go`
+  - `pkg/services/models/internal/services/runtime_host/internal/service/failure_test.go`
+  - `pkg/services/models/internal/services/runtime_host/internal/service/service_test.go`
+  - `pkg/services/models/internal/services/runtime_host/internal/service/supervisor.go`
+  - `progress.txt`
+- Verification
+  - Exact focused Bun cohort — 33 files / 183 tests / 390 expect calls passed under Bun 1.3.12.
+  - `go test ./pkg/services/models/internal/services/runtime_host/internal/service -count=1 -timeout 300s` — passed.
+  - `bun run check:test-lanes`, `bun run typecheck`, and `bun run lint` — passed from `ui/`.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` — passed.
+  - `prd.json` parses with all nine stories marked `passes:true`; conflict-marker and whitespace checks passed.
+- **Learnings for future iterations:**
+  - A replacement PR head must be validated against the exact live base after merging; the required CI run and mergeability state belong to that replacement head, not the prior reviewed commit.
 ---

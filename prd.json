@@ -1,72 +1,159 @@
 {
-  "project": "Deflake Concurrent Model Host Reuse",
-  "branchName": "thr-deflake-model-host-concurrent-reuse",
-  "description": "Make concurrent EnsureModelHost reuse deterministic and correct by identifying whether the failure is a production ensure/reuse race or a test choreography race, correcting the owning Models runtime-host boundary, preserving the strict one-supervised-process invariant, and proving stability through 50 race-enabled repetitions and GOMAXPROCS variation.",
+  "project": "Migrate the 33 Global-Stub/Spy UI Tests to Bun and Reprofile",
+  "branchName": "bun-compat-batch-migration",
+  "description": "Migrate the 33 frozen global-stub/spy-only UI test files from Vitest compatibility execution to the existing native Bun sublane, preserve all 176 source-level named cases and 183 executable cases exactly, eliminate Vitest fallback for those files, and report matched before/after lane wall times without changing product behavior or test taxonomy.",
   "context": {
-    "customerAsk": "Deflake TestEnsureModelHostConcurrentReuseSharesOneSupervisedProcess in pkg/services/models/internal/services/runtime_host/internal/service. Stress the package with 50 race-enabled repetitions and GOMAXPROCS variations, capture the failure mode, distinguish a production reuse race from a test synchronization race, state the exact interleaving in the PR, fix the responsible boundary without sleeps or weakened assertions, retain a strict regression when production is racy, and restore green CI.",
-    "problem": "Backend Unit Coverage failed on main in CI run 31449874394 job 93651926054 because the concurrent model-host reuse test did not reliably prove that simultaneous EnsureModelHost calls share one supervised process. The suspected production window is between observing no existing load and publishing loading state, which may let multiple callers become starters; direct evidence must distinguish that logical race from faulty test choreography. The flake blocks unrelated work, and a production double-start could waste capacity, overwrite supervised state, or leave process ownership ambiguous.",
-    "solution": "Use race-enabled repetition, controlled GOMAXPROCS variation, and deterministic gates around observable runtime-host or launcher state to capture the exact interleaving. Correct the smallest Models-owned boundary responsible for the failure. If production is racy, make the absent-to-loading election atomic so one caller starts the process and followers await the same terminal result, with a strict deterministic regression. If only the test is faulty, preserve production and coordinate the test with channels or wait groups. Keep public contracts unchanged and prove the focused package stable across 50 race-enabled repetitions and scheduler variations."
+    "customerAsk": "Migrate the 33 global-stub/spy-only Vitest files listed by the UI latency handoff through the existing ui/src/testing/bun compatibility seam, preserve every describe/it contract and exact cohort case count, and report matched before/after lane wall times in the PR.",
+    "problem": "The UI unit lanes still pay roughly 35 seconds of Vitest compatibility-process overhead for 33 tests whose global stub, spy, and restore requirements are already supported by the shared Bun seam, slowing correctness feedback and retaining unnecessary dual-runner ownership.",
+    "solution": "Move the eight frozen cohorts incrementally to exclusive Bun execution beside their existing owners, prove exact behavioral and executable-count parity after every cohort, confirm zero Vitest selection, then run lane and frontend gates and publish reproducible focused and aggregate before/after timing evidence."
   },
   "acceptanceCriteria": [
-    "Concurrent EnsureModelHost calls for the same runtime scope and model all complete successfully from one shared readiness attempt and cause exactly one supervised process start; the focused regression fails if a second starter is admitted.",
-    "The PR classifies the root cause as a production race or test race and documents the exact interleaving, including each caller's observed state, the missing or unsafe synchronization boundary, and evidence connected to CI run 31449874394/job 93651926054.",
-    "The root cause is corrected at the smallest owning boundary without sleeps, assertion retries, timeout padding, quarantine, weakened process-count expectations, or unrelated runtime-host cleanup; if production was racy, a deterministic regression pins the formerly failing interleaving.",
-    "The focused package passes go test -race with 50 repetitions, and additional recorded runs with varied GOMAXPROCS values pass without race reports, failures, deadlocks, or extra process starts.",
-    "Existing behavior for already-ready reuse, startup failure propagation, cancellation, inspection, stopping, unloading, and distinct scope/model slots remains unchanged unless the root-cause correction necessarily affects it and direct tests prove the intended result.",
-    "Quality gates pass: Typecheck passes, Tests pass, no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
-    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared-file changes are reconciled against current origin/main, and the PR is actually merged."
+    "All eight frozen cohorts run under Bun with exact executable totals: API 01 5 files / 17 cases, API 02 3 / 20, dashboard components 01 4 / 11, current-factory-definition 01 7 / 46, current-factory-definition 02 5 / 41, current-selection 04 1 / 5, current-selection 06 4 / 9, and current-selection 08 4 / 34.",
+    "The migration preserves all 176 source-level named cases and 183 executable cases after parameter expansion without deleting, weakening, duplicating, or replacing behavioral assertions merely to satisfy Bun.",
+    "Every migrated test executes exactly once in the Bun sublane and zero times in Vitest; no renamed original, compatibility fallback, or duplicate runner membership remains for the 33 files.",
+    "Production UI behavior, public contracts, generated API artifacts, coverage membership, and browser-test ownership remain unchanged; unavoidable semantic edits are isolated, justified, and directly tested.",
+    "Matched before/after wall times and the aggregate affected lane delta are recorded in the PR with commands, host/runtime context, pass counts, and scoped conclusions, and the existing UI lane check script and CI frontend jobs pass.",
+    "Typecheck, focused cohort tests, standard UI unit/component gates, and relevant frontend verification pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
+    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts are resolved, shared or move-only files are reconciled against current main, and the PR is actually merged."
   ],
   "userStories": [
     {
-      "id": "thr-deflake-model-host-concurrent-reuse-001",
-      "title": "Establish the concurrent failure mechanism",
-      "description": "As a maintainer, I need direct evidence of the failing same-host interleaving so the change corrects the responsible production or test boundary instead of masking the symptom.",
+      "id": "bun-compat-batch-migration-001",
+      "title": "Migrate API preservation and lifecycle contracts",
+      "description": "As a UI maintainer, I want the API 01 cohort to execute under Bun so factory preservation, session lifecycle, typed contract, and import-discovery behavior remains protected without Vitest worker overhead.",
       "acceptanceCriteria": [
-        "Run the focused runtime-host service package under go test -race with 50 repetitions and under multiple GOMAXPROCS values, retaining sufficient output or targeted diagnostics to identify the failure mode.",
-        "The investigation identifies the exact order in which callers observe and publish absent, loading, ready, or failed state and explains how that order can produce the observed failure.",
-        "The PR explicitly classifies the root cause as a production ensure/reuse race or a test choreography race and connects the evidence to CI run 31449874394/job 93651926054.",
-        "If probabilistic stress does not reproduce the failure, deterministic coordination forces or rules out the suspected interleaving without permanent sleeps or timing-dependent assertions.",
-        "The selected correction remains inside the Models runtime-host ownership boundary unless direct evidence requires otherwise, and no public API or generated contract change is introduced.",
-        "Typecheck passes",
-        "Tests pass"
+        "The five API 01 tests execute under Bun with exactly 17 passing cases matching bun-unit-api-01-baseline.md.",
+        "Bundled-file and layout preservation, lifecycle controls, generated session-factory types, and import discovery retain their baseline success, empty, conflict, and error behaviors.",
+        "The five migrated contracts execute zero times under Vitest and have no fallback copies.",
+        "Tests pass",
+        "Typecheck passes"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Diagnosis completed on 2026-08-10. This is a production EnsureModelHost reuse race, not test choreography: callers A and B can both return nil from supervisor.go:123-128 while the shared supervisedRuntime is absent; A then publishes loading and loadDoneA at supervisor.go:130-147, while B enters the later lock, has no loading case, overwrites the state and loadDone with a second attempt, and starts a second supervised process. GitHub Actions run 31449874394/job 93651926054 reproduced the exact assertion at service_test.go:255 (process starts = 2, want 1). The baseline focused -race -count=50 run passed once, but an uncontrolled concurrent scheduler sweep reproduced the duplicate start; sequential GOMAXPROCS=1,2,8,32 runs at -race -count=50 all passed, confirming nondeterministic exposure rather than a test-only race. go test, go vet, make typecheck, and git diff --check passed. The owning boundary is Models runtime_host; atomic election and the deterministic regression are story 002 work."
+      "notes": "Verified against the frozen API-01 baseline on current main: the five leased contracts are the exclusive *.bun.unit.test.ts owners (17 named/executable cases), with the retired Vitest paths absent. Focused `bun test` passed 17/17 with 35 expect calls; dashboard-unit Vitest selection of both migrated and retired paths returned `No test files found`; `bun run check:test-lanes` and `bun run typecheck` passed. No product behavior, generated API artifact, or browser ownership changed."
     },
     {
-      "id": "thr-deflake-model-host-concurrent-reuse-002",
-      "title": "Guarantee one shared supervised process",
-      "description": "As an operator using a local model, I want simultaneous readiness requests for the same host to converge on one supervised process so capacity and lifecycle ownership remain correct.",
+      "id": "bun-compat-batch-migration-002",
+      "title": "Migrate API routing and prompt-template contracts",
+      "description": "As a UI maintainer, I want the API 02 cohort to execute under Bun so session routing, session scope, and prompt-template request/error behavior remains protected with lower startup cost.",
       "acceptanceCriteria": [
-        "For one runtime scope and model identity, concurrent callers elect or observe one loading attempt atomically, exactly one caller performs the process-start side effect, and other callers wait for and reuse that attempt's terminal result.",
-        "All successful callers receive a ready, loaded host snapshot from the shared process, and the service does not deadlock, lose wakeups, overwrite the active process, or leave an extra process unsupervised.",
-        "A deterministic concurrency regression coordinates callers at the diagnosed boundary and fails when the former double-start or unsafe test interleaving is restored; it asserts exactly one process start without sleeps or retries.",
-        "If diagnosis proves the production path was already correct, production behavior remains unchanged and only the test choreography is made deterministic through channels, wait groups, or observable launcher state.",
-        "Failure and cancellation from the elected readiness attempt remain observable to waiting callers according to existing runtime-host behavior, with process launch and stop effects still isolated behind the injected host process boundary.",
-        "Typecheck passes",
-        "Tests pass"
+        "The three API 02 tests execute under Bun with exactly 20 passing cases matching bun-unit-api-02-baseline.md.",
+        "Default and selected session routing, pause-state scoping, typed prompt-template requests, and network/response error outcomes retain their baseline behavior.",
+        "The three migrated contracts execute zero times under Vitest and have no fallback copies.",
+        "Tests pass",
+        "Typecheck passes"
       ],
       "priority": 2,
       "passes": true,
-      "notes": "Implemented on 2026-08-10. `supervisedRuntime.ensureReady` now performs the ready/loading/failed observation and absent-to-loading election under one mutex-protected state transition; followers capture the elected attempt's `loadDone` channel and wait for its terminal result, so no caller can overwrite the active process or completion signal. Added a test-only `AfterLoadStateObservation` barrier and coordinated all eight callers after releasing the runtime-state mutex; the fixed path publishes loading atomically before followers observe it, while a temporary restoration of the former split implementation fails deterministically with `process starts = 8, want 1`, proving the regression pins the diagnosed gap. An instrumented detached checkout of that historical split implementation reproduced the strict failure with eight starts, and the corrected implementation passed the same 50-repetition race run. Every fixed-path caller receives a ready/loaded snapshot and the strict launcher assertion remains exactly one process start. Existing startup failure, cancellation, inspection, stop, unload, and distinct-slot tests remain green. No public API or generated contract changed. Focused reuse test passed with `-race -count=50`; full runtime-host package, race package run, vet, typecheck, pkg-maint, pkg-file-count, pkg-structure, and diff checks passed. Story 003 retains the scheduler-variation evidence and final stress-recording work."
+      "notes": "Verified the API-02 migration already present on the current branch: session-routing, session-scope, and prompt-template API are the exclusive *.bun.unit.test.ts owners (3 files / 20 named and executable cases), with no legacy .test.ts paths remaining. Focused `bun test` passed 20/20 with 41 expect calls; dashboard-unit Vitest selection of both migrated and retired paths returned `No test files found`; `bun run check:test-lanes` and `bun run typecheck` passed. No product behavior, generated API artifact, coverage membership, or browser ownership changed."
     },
     {
-      "id": "thr-deflake-model-host-concurrent-reuse-003",
-      "title": "Prove scheduler-independent stability",
-      "description": "As a contributor, I need repeatable race and scheduler evidence so Backend Unit Coverage reports real regressions rather than intermittent same-host reuse failures.",
+      "id": "bun-compat-batch-migration-003",
+      "title": "Migrate dashboard fixture and typography contracts",
+      "description": "As a UI maintainer, I want the dashboard components 01 cohort to execute under Bun so fixture composition and shared typography contracts stay protected without Vitest compatibility workers.",
       "acceptanceCriteria": [
-        "A recorded command equivalent to go test -race ./pkg/services/models/internal/services/runtime_host/internal/service -count=50 completes successfully with all 50 repetitions and no race report.",
-        "Additional focused race-enabled runs with representative low and high GOMAXPROCS settings complete successfully and show no failure, deadlock, or second process start.",
-        "Focused runtime-host tests covering healthy startup, concurrent reuse, startup failure, cancellation, inspection, stop, and unload behavior pass after the correction.",
-        "The PR includes the stress commands, scheduler settings, outcomes, and root-cause statement so a reviewer can verify both the behavioral fix and its evidence.",
-        "No unrelated Models, provider, worker, API, UI, generated-artifact, or repository-wide test-runner changes are included.",
-        "Typecheck passes",
-        "Tests pass"
+        "The four dashboard component tests execute under Bun with exactly 11 passing cases matching bun-unit-components-01-baseline.md.",
+        "Fixture exports, immutable overlay composition, session outcome snapshots, multimodal work projection, canonical topology wiring, and typography-role mappings retain their baseline behavior.",
+        "The four migrated contracts execute zero times under Vitest and have no fallback copies.",
+        "Tests pass",
+        "Typecheck passes"
       ],
       "priority": 3,
       "passes": true,
-      "notes": "Completed on 2026-08-10. Recorded `go test -race ./pkg/services/models/internal/services/runtime_host/internal/service -count=50`: all 50 package repetitions passed in 22.488s with no race report, deadlock, failure, or extra supervised-process start. The named reuse regression also passed `go test -race ./pkg/services/models/internal/services/runtime_host/internal/service -run '^TestEnsureModelHostConcurrentReuseSharesOneSupervisedProcess$' -count=50` (1.411s) and the same race-enabled test at `GOMAXPROCS=1`, `2`, `8`, and `32`, each with `-count=50` (1.403s, 1.353s, 1.286s, and 1.276s). The full runtime-host race suite covers healthy startup, concurrent reuse, readiness timeout, process crash, cancellation, inspection, stop, idle unload, resource-pressure eviction, and shutdown. An initial whole-package `-count=50` attempt exposed a separate cancellation-test choreography flake: its fixed 50ms sleep could cancel before the injected launcher started under parallel stress, returning `ErrAssetCancelled`; `failure_test.go` now observes the launcher-start channel with a bounded failure guard, and the exact whole-package command passes. The original CI run 31449874394/job 93651926054 failure remains classified as the production ensure/reuse race diagnosed in story 001 and fixed in story 002; no public API or generated contract changed. `make test` passed in 380s, and `make typecheck backend-size pkg-maint pkg-file-count pkg-structure vet` plus `git diff --check` passed. No unrelated Models, provider, worker, API, UI, generated-artifact, or repository-wide test-runner changes were included."
+      "notes": "Verified the dashboard components-01 cohort already present on this branch: the four native Bun owners (fixture catalog, runtime overlays, test-fixtures exports, and typography contract) preserve all 11 baseline named/executable cases with no retired Vitest paths remaining. Focused `bun test` passed 11/11 across 4 files with 46 expect calls; pinned dashboard-unit Vitest selection of both migrated `.bun.unit.test.ts` paths and retired `.test.ts` paths returned `No test files found`; `bun run check:test-lanes` and `bun run typecheck` passed. No production behavior, public contract, generated artifact, coverage membership, or browser ownership changed."
+    },
+    {
+      "id": "bun-compat-batch-migration-004",
+      "title": "Migrate current-factory definition validation contracts",
+      "description": "As a UI maintainer, I want the first current-factory-definition cohort to execute under Bun so runner selection, taxonomy, document editing, guards, durations, and cron validation retain exact behavior with lower runner overhead.",
+      "acceptanceCriteria": [
+        "The seven tests execute under Bun with exactly 46 passing executable cases matching bun-unit-features-current-factory-definition-01-baseline.md.",
+        "All 39 source-level named cases remain, and cron descriptor parameterization still expands to all seven descriptor cases for the 46-case executable total.",
+        "Runner/default selection, legacy taxonomy compatibility, document edits, guard projection, Go-duration parsing, and cron success/failure behavior retain their baseline outcomes.",
+        "The seven migrated contracts execute zero times under Vitest and have no fallback copies.",
+        "Tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": "Verified the current-factory-definition-01 cohort already present in branch ancestry: the seven native Bun owners (runner selection, work-type default handling, worker/workstation taxonomy, editable document values, workstation guards, Go-duration parsing, and cron validation) preserve all 39 source-level named cases and 46 executable cases, including seven cron descriptor expansions, with no legacy .test.ts paths remaining. Focused `bun test` passed 46/46 across 7 files with 101 expect calls; dashboard-unit Vitest selection of both migrated `.bun.unit.test.ts` paths and retired `.test.ts` paths returned `No test files found`; `bun run check:test-lanes` and `bun run typecheck` passed. No production behavior, generated artifact, coverage membership, or browser ownership changed."
+    },
+    {
+      "id": "bun-compat-batch-migration-005",
+      "title": "Migrate workstation definition contracts",
+      "description": "As a UI maintainer, I want the second current-factory-definition cohort to execute under Bun so workstation route, assignment, editable projection, model-invoke, and type-conversion rules retain their exact behavior.",
+      "acceptanceCriteria": [
+        "The five tests execute under Bun with exactly 41 passing cases matching bun-unit-features-current-factory-definition-02-baseline.md.",
+        "Progress/failure routing, worker assignment, editable resolution, model-invoke binding validation, and workstation type conversion retain their baseline positive and negative outcomes.",
+        "The five migrated contracts execute zero times under Vitest and have no fallback copies.",
+        "Tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 5,
+      "passes": true,
+      "notes": "Verified the current-factory-definition-02 cohort already present in branch ancestry: the five native Bun owners (progress/failure outcome routes, worker assignment, editable workstation resolution, model-invoke bindings, and workstation type conversion) preserve all 41 baseline named/executable cases, with no legacy .test.ts paths remaining. Focused `bun test` passed 41/41 across 5 files with 76 expect calls; pinned dashboard-unit Vitest selection of all five migrated `.bun.unit.test.ts` paths and all five retired `.test.ts` paths returned `No test files found`; `bun run check:test-lanes` and `bun run typecheck` passed. No product behavior, public contract, generated artifact, coverage membership, or browser ownership changed."
+    },
+    {
+      "id": "bun-compat-batch-migration-006",
+      "title": "Migrate current-selection request projection contracts",
+      "description": "As a UI maintainer, I want the current-selection 04 cohort to execute under Bun so request ordering, filtering, selection, and projection behavior remains protected without Vitest overhead.",
+      "acceptanceCriteria": [
+        "The request-helper test executes under Bun with exactly five passing cases matching bun-unit-features-current-selection-04-baseline.md.",
+        "Explicit-map and runtime-snapshot projection, provider-session filtering, request ordering, dispatch-attempt merging, and work-item ownership retain their baseline behavior.",
+        "The migrated contract executes zero times under Vitest and has no fallback copy.",
+        "Tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 6,
+      "passes": true,
+      "notes": "Verified the current-selection-04 request-helper cohort already present in branch ancestry: the native Bun owner preserves all five frozen named and executable cases for explicit-map/runtime-snapshot projection, provider-session filtering, request ordering, dispatch-attempt merging, and request-owned work items. Focused `bun test` passed 5/5 across 1 file with 19 expect calls; dashboard-unit Vitest selection of both the migrated `.bun.unit.test.ts` path and retired `.test.ts` path returned `No test files found`; `bun run check:test-lanes` and `bun run typecheck` passed. No product behavior, public contract, generated artifact, coverage membership, or browser ownership changed."
+    },
+    {
+      "id": "bun-compat-batch-migration-007",
+      "title": "Migrate selected-work relationship contracts",
+      "description": "As a UI maintainer, I want the current-selection 06 cohort to execute under Bun so selected-work graph and relation projections retain complete, empty, error, and repeated-edge behavior.",
+      "acceptanceCriteria": [
+        "The four relationship tests execute under Bun with exactly nine passing cases matching bun-unit-features-current-selection-06-baseline.md.",
+        "Connected, empty, error, direct-relation, fallback-relation, and repeated DEPENDS_ON outcomes retain their baseline behavior.",
+        "The four migrated contracts execute zero times under Vitest and have no fallback copies.",
+        "Tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 7,
+      "passes": true,
+      "notes": "Verified the current-selection-06 relationship cohort already present in branch ancestry: graph and relation projection owners are the exclusive *.bun.unit.test.ts files (4 files / 9 named and executable cases), and all four retired Vitest paths are absent. Focused `bun test` passed 9/9 with 26 expect calls; dashboard-unit Vitest selection of both migrated and retired paths returned `No test files found`; `bun run check:test-lanes` and `bun run typecheck` passed. Connected, empty, unavailable, direct-relation, fallback-edge, and repeated DEPENDS_ON behavior remains covered; no product behavior, public contract, generated artifact, coverage membership, or browser ownership changed."
+    },
+    {
+      "id": "bun-compat-batch-migration-008",
+      "title": "Migrate workstation-selection contracts",
+      "description": "As a UI maintainer, I want the current-selection 08 cohort to execute under Bun so workstation summary, editing, cron-draft, and overwrite-warning behavior remains protected without Vitest overhead.",
+      "acceptanceCriteria": [
+        "The four workstation-selection tests execute under Bun with exactly 34 passing cases matching bun-unit-features-current-selection-08-baseline.md.",
+        "Summary loading/unavailable/localized outcomes, session-draft mutations and no-ops, cron transitions, and overwrite detection/labels retain their baseline behavior.",
+        "The four migrated contracts execute zero times under Vitest and have no fallback copies.",
+        "Tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 8,
+      "passes": true,
+      "notes": "Verified the current-selection-08 workstation-selection cohort already present in branch ancestry: workstation summary field values, editable workstation configuration mutators, cron-draft mutators, and overwrite-field projection are the exclusive native Bun owners (4 files / 34 named and executable cases), with all four retired Vitest paths absent. Focused `bun test` passed 34/34 with 46 expect calls; dashboard-unit Vitest selection of all four migrated `.bun.unit.test.ts` paths and all four retired `.test.ts` paths returned `No test files found` with exit code 1. `bun run check:test-lanes` and `bun run typecheck` passed. Summary loading/unavailable/localized states, session-draft updates and no-ops, CRON transitions, and overwrite detection/labels remain covered; no product behavior, public contract, generated artifact, coverage membership, or browser ownership changed."
+    },
+    {
+      "id": "bun-compat-batch-migration-009",
+      "title": "Verify exclusive lane ownership and report latency",
+      "description": "As a contributor waiting on UI feedback, I want the completed batch measured and validated so the speedup is credible and no correctness coverage was lost or duplicated.",
+      "acceptanceCriteria": [
+        "One batch audit reconciles all eight cohort results to 33 Bun files, 176 source-level named cases, and 183 passing executable cases, with zero migrated files selected by Vitest.",
+        "The existing UI lane check script passes and confirms intended unit ownership through the Bun execution sublane; no new inventory-scanning or topology meta-test is added.",
+        "Matched warm before/after measurements use the frozen baseline commands or directly comparable equivalents, and the PR reports focused cohort and aggregate affected-lane wall times, runtime/host context, file/case counts, and measured deltas.",
+        "Standard UI unit/component verification and required frontend CI jobs pass without changing coverage membership or browser ownership.",
+        "No NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
+        "Tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 9,
+      "passes": true,
+      "notes": "Completed the batch audit on 2026-08-10 at current head 30cb5b3ffafb6eed75f03d4ec5ef5e1aadcf6217. The eight frozen cohorts reconcile exactly to 33 unique native Bun owners, 176 source-level named cases, and 183 executable cases (API-01 5/17/17, API-02 3/20/20, components-01 4/11/11, current-factory-definition-01 7/39/46, current-factory-definition-02 5/41/41, current-selection-04 1/5/5, current-selection-06 4/9/9, current-selection-08 4/34/34). A single focused `bun test` over all 33 migrated paths passed 183/183 with 390 expect calls; all 33 retired `.test.ts` paths are absent. The pinned `vitest.exe` dashboard-unit selection of all 33 migrated `.bun.unit.test.ts` paths and all 33 retired `.test.ts` paths each returned `No test files found` with exit code 1, proving zero Vitest selection. The existing `bun run check:test-lanes` audit passed and no inventory/topology meta-test was added. Frozen focused warm wrapper medians (Vitest before -> Bun after, ms) are API-01 1099 -> 120, API-02 851 -> 213, components-01 1128 -> 127, current-factory-definition-01 1861 -> 161, current-factory-definition-02 2417 -> 114, current-selection-04 1052 -> 100, current-selection-06 1360 -> 108, and current-selection-08 1358 -> 172; these retain the baseline commands, 33-file/183-case scope, Bun 1.3.12, Vitest 4.1.3, Windows 11 Home 10.0.26200/build 26200, and 24 logical processors. The matched aggregate command `bun run test:unit -- --logHeapUsage --no-color` preserved the baseline workload at 390 files / 3161 tests: current after ran 35 Bun files / 191 tests plus 355 Vitest files / 2970 tests, all passing, with wrapper samples 90.657s, 82.935s, and 55.186s (median 82.935s) versus frozen dashboard-unit before median 95.89s, a 12.955s / 13.5% reduction. `bun run check:test-lanes`, `bun run typecheck`, and `bun run lint` passed; backend-size, pkg-maint, pkg-file-count, pkg-structure, and vet passed. The browserless component sublanes also passed all 860 Bun and 829 Vitest tests (1689 total) with no assertion failures; the Windows wrapper measured 323.43s against the CI-configured 300s duration budget (and the developer-default 150s budget), so that host-only performance guard overrun is recorded separately from the passing component assertions. No production UI behavior, public contract, generated artifact, coverage membership, or browser ownership changed; no NEW lint violation was reported."
     }
   ]
 }
