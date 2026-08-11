@@ -354,6 +354,50 @@ func TestRun_PolicyDeniedChildOperations_ReturnStableDiagnostics(t *testing.T) {
 	}
 }
 
+func TestRun_SkipPermissionsIsChildScopedAndDoesNotBypassRoutingPolicy(t *testing.T) {
+	policy := workflowpolicy.DefaultEffectivePolicy()
+	policy.MaxAgents = 4
+	policy.AllowedModels = []string{"gpt-allowed"}
+
+	var requests []factory.JavaScriptChildExecutionRequest
+	outcome, err := runtimeWorkflows.Run(t.Context(), factory.JavaScriptRuntimeRequest{
+		Source: `const autonomous = agent.run({
+    prompt: "autonomous review",
+    label: "autonomous-child",
+    model: "gpt-allowed",
+    skipPermissions: true,
+  });
+agent.run({
+    prompt: "ordinary review",
+    label: "ordinary-child",
+    model: "gpt-denied",
+  });
+return { autonomous };`,
+		SourceRef: "skip-permissions-policy-scope.workflow.js",
+		SessionID: "session-skip-permissions-policy-scope",
+		Policy:    policy,
+	}, factory.JavaScriptRuntimeHooks{
+		NewChildExecutor: func(string, factory.JavaScriptChildRecordSink, workflowpolicy.EffectivePolicy) factory.JavaScriptChildExecutor {
+			return childExecutorFunc(func(_ context.Context, req factory.JavaScriptChildExecutionRequest) (factory.JavaScriptChildExecutionResult, error) {
+				requests = append(requests, req)
+				return factory.JavaScriptChildExecutionResult{
+					Status:  factory.JavaScriptChildDispatchStatusCompleted,
+					Request: req,
+				}, nil
+			})
+		},
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if outcome.OK || !strings.Contains(outcome.Failure.Message, `policy denied: model "gpt-denied" is not listed in allowedModels`) {
+		t.Fatalf("Run() outcome = %#v, want ordinary sibling policy denial", outcome)
+	}
+	if len(requests) != 1 || !requests[0].SkipPermissions || requests[0].Label != "autonomous-child" {
+		t.Fatalf("provider requests = %#v, want only the first child with skipPermissions=true", requests)
+	}
+}
+
 func TestRun_PolicyDeniedMaxAgents_SecondChildFailsWithoutDispatchRecords(t *testing.T) {
 	policy := workflowpolicy.DefaultEffectivePolicy()
 	policy.MaxAgents = 1
