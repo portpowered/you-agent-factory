@@ -127,6 +127,42 @@ func TestProvidersRootWireBoundaryPublishesExternalRegistrationThroughService(t 
 	}
 }
 
+func TestProvidersRootWireBoundaryRejectsExternalBypassBeforeInvocation(t *testing.T) {
+	t.Parallel()
+
+	integration := providerswire.ProgressingExternalIntegration("sealed-incapable", "must not execute")
+	root, err := providerswire.NewService(providerswire.WithRegistrations(providerswire.Registration{
+		Manifest: providerswire.Manifest{
+			ID:                         "sealed-incapable",
+			ImplementationAvailability: providerswire.ImplementationExternallySupplied,
+			TechnicalSupportLevel:      providerswire.SupportProduction,
+			MaximumExecutionCapabilities: providerswire.ExecutionCapabilities{
+				PromptSubmission: true,
+			},
+		},
+		Integration: integration,
+	}))
+	if err != nil {
+		t.Fatalf("providers/wire.NewService() error = %v", err)
+	}
+
+	_, err = root.Execute(context.Background(), providers.ExecuteRequest{
+		Provider:        providers.ID("sealed-incapable"),
+		AttemptID:       "sealed-incapable-attempt",
+		SkipPermissions: true,
+	})
+	var failure providers.ExecuteFailure
+	if !errors.As(err, &failure) ||
+		failure.Kind != providers.ExecuteFailureKindCapabilityMismatch ||
+		!strings.Contains(failure.Message, `provider "sealed-incapable"`) ||
+		!strings.Contains(failure.Message, "permission_bypass") {
+		t.Fatalf("Execute(unsupported external bypass) error = %#v, want bounded capability mismatch", err)
+	}
+	if stats := integration.Stats(); stats.InvokeCalls != 0 || stats.ProgressWrites != 0 || stats.TerminalCloses != 0 {
+		t.Fatalf("external integration stats = %#v, want no execution side effects", stats)
+	}
+}
+
 func TestProvidersRootWireBoundaryPreservesTypedFailuresAndRegistrationValidation(t *testing.T) {
 	t.Parallel()
 

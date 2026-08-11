@@ -87,4 +87,7 @@ func TestInvocationRequestFromExecute_ForwardsEnvAndSkipPermissions(t *testing.T
 	if !execution.SkipPermissions {
 		t.Fatal("SkipPermissions = false, want true")
 	}
+	if !invocation.RequiredCapabilities().Has(inference.CapabilityPermissionBypass) {
+		t.Fatalf("RequiredCapabilities() = %v, want permission_bypass", invocation.RequiredCapabilities().Values())
+	}
 }

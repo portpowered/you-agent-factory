@@ -127,6 +127,31 @@ func TestExternalRegistrationAttemptMapsSuccessAndRejectsInvalidRegistration(t *
 	}
 }
 
+func TestNewServiceRejectsManifestIntegrationPermissionBypassMismatch(t *testing.T) {
+	t.Parallel()
+
+	manifest := Manifest{
+		ID:                         "mismatch-provider",
+		ImplementationAvailability: ImplementationExternallySupplied,
+		TechnicalSupportLevel:      SupportProduction,
+		MaximumExecutionCapabilities: ExecutionCapabilities{
+			PromptSubmission: true,
+			PermissionBypass: true,
+		},
+	}
+	integration := ProgressingExternalIntegration("mismatch-provider", "must not execute")
+	_, err := NewService(WithRegistrations(Registration{
+		Manifest:    manifest,
+		Integration: integration,
+	}))
+	if err == nil || !strings.Contains(err.Error(), `integration maximum capability "permission_bypass" contradicts`) {
+		t.Fatalf("NewService() error = %v, want manifest/integration permission-bypass mismatch", err)
+	}
+	if stats := integration.Stats(); stats.DiscoverCalls != 0 || stats.CapabilityCalls != 0 || stats.InvokeCalls != 0 {
+		t.Fatalf("mismatched integration stats = %#v, want no provider calls during rejected construction", stats)
+	}
+}
+
 type recordingResponseWriter struct {
 	events     int
 	completion *Completion

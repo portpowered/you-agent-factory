@@ -190,6 +190,7 @@ func canonicalCapabilities() []inference.Capability {
 		inference.CapabilityImageInput,
 		inference.CapabilitySessionResume,
 		inference.CapabilityStructuredOutput,
+		inference.CapabilityPermissionBypass,
 		inference.CapabilityNativeStreaming,
 		inference.CapabilityMessageDeltas,
 		inference.CapabilityMessageSnapshots,

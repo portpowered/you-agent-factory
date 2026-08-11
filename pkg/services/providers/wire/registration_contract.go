@@ -24,6 +24,10 @@ type Capability string
 
 const CapabilityPromptSubmission Capability = "prompt_submission"
 
+// CapabilityPermissionBypass means the integration has a provider-owned way
+// to honor a requested permission and sandbox bypass.
+const CapabilityPermissionBypass Capability = "permission_bypass"
+
 type CapabilitySet struct{ values []Capability }
 
 func NewCapabilitySet(values ...Capability) CapabilitySet {

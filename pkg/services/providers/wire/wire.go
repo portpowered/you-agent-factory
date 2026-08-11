@@ -293,6 +293,9 @@ func newRoot(
 				return nil, fmt.Errorf("provider registry validation failed for %q: identity collision", registration.Manifest.ID)
 			}
 		}
+		if err := validateExternalRegistrationCapabilities(registration); err != nil {
+			return nil, err
+		}
 		attempt, err := externalRegistrationAttempt(registration)
 		if err != nil {
 			return nil, err
@@ -313,6 +316,22 @@ func newRoot(
 		acpIntegrations,
 		logger,
 		acpService,
+	)
+}
+
+func validateExternalRegistrationCapabilities(registration Registration) error {
+	if registration.Integration == nil {
+		return nil
+	}
+	manifestSupportsBypass := registration.Manifest.MaximumExecutionCapabilities.PermissionBypass
+	integrationSupportsBypass := registration.Integration.MaximumCapabilities().Has(CapabilityPermissionBypass)
+	if manifestSupportsBypass == integrationSupportsBypass {
+		return nil
+	}
+	return fmt.Errorf(
+		"provider registry validation failed for %q: integration maximum capability %q contradicts manifest maximum execution capability permissionBypass",
+		registration.Manifest.ID,
+		CapabilityPermissionBypass,
 	)
 }
 

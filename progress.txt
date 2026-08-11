@@ -26,6 +26,7 @@
 - For concurrent single-flight state, keep the absent-to-loading election atomic with the observation; a separate precheck can let callers pass stale absent state and overwrite the shared completion signal.
 - For repeated concurrency package runs, synchronize cancellation tests on an injected launcher or process edge; a fixed sleep can cancel before startup under parallel stress and obscure the target regression.
 - Provider OpenAPI changes that feed the published model-provider package require `make interfaces-all`, `make provider-catalog-generate`, and `make model-provider-package-generate`; `api-smoke` checks generated REST artifacts against the committed tree, so commit generated output before relying on that smoke result.
+- Provider capability additions must stay synchronized across public manifest projection, neutral integration vocabulary and validation, registry maximum/negotiated checks, built-in declarations, and external registration validation.
 - When a provider manifest publishes a new capability, update every ordered catalog expectation for the affected provider fixtures; projection tests alone do not cover the service-level catalog characterization.
 - Provider evidence dates authored in YAML must be quoted ISO strings because yaml.v3 otherwise decodes calendar-looking values as `time.Time` before semantic validation.
 - For fan-in transitions, preserve a deterministic list of all matched input token IDs separately from the consume-only mutation list; OBSERVE-mode inputs must reach the worker dispatch without being consumed.
@@ -10611,4 +10612,30 @@
 - **Learnings for future iterations:**
   - Hosted Linux coverage exposed a stale ordered catalog fixture that focused projection tests did not catch; run the owning catalog package after changing provider capability manifests.
   - The current Windows checkout cannot complete the repository-wide coverage wrapper when its generated Go test command exceeds the Windows command-line limit; use focused package evidence locally and rely on the hosted Linux lane for the full matrix.
+---
+## [2026-08-11 02:04:51 -07:00] - js-skip-permissions-parity-003 review follow-up
+- What was implemented
+  - Added `permission_bypass` to the provider-neutral integration capability vocabulary, known-capability validation, canonical capability ordering, manifest projection, and built-in Claude/Codex/Agy integration maxima.
+  - Kept neutral registry construction and request-time negotiation truthful for built-in and external registrations; contradictory manifest/integration maxima now fail before provider I/O, and a negotiated response that omits a requested bypass fails closed.
+  - Added public external-registration maximum validation and root execution coverage so an incapable external descriptor returns the typed capability mismatch before its integration invokes.
+  - Preserved bypass through the dormant provider-root native and conductor request adapters, including the required capability on conductor requests and capability-mismatch mapping.
+  - Replaced the prohibited custom functional integration with the real Codex command-runner path. The functional test asserts the Codex dangerous bypass flag and separately verifies a real unavailable provider selection fails before the command edge is called; registered incapable-manifest coverage is asserted at provider-root and neutral-registry boundaries because every currently published bundled route advertises bypass support.
+- Files changed
+  - `prd.json`
+  - `pkg/services/providers/internal/services/execution/internal/provider/`
+  - `pkg/services/providers/wire/`
+  - `pkg/services/providers/root_catalog_delegation_test.go`
+  - `tests/functional/providers/permission/permission_bypass_test.go`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/providers/... -count=1 -timeout 240s` — passed.
+  - `go test ./tests/functional/providers/permission -count=1 -timeout 240s` — passed.
+  - `go test ./pkg/root ./pkg/wire ./pkg/services/edges -count=1 -timeout 240s` — passed.
+  - `make test` — passed, including the full backend unit lane.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` — passed.
+  - `make typecheck` — passed.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - The neutral provider contract has separate maximum and negotiated validation; adding a manifest field alone is insufficient, and built-in integration maxima must be updated or registry construction rejects the published catalog.
+  - The current published bundled catalog has no known incapable provider variant, so functional root evidence uses the real unavailable route for zero command-edge proof while focused provider-root and neutral-registry tests cover registered incapable capability facts.
 ---
