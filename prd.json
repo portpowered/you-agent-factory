@@ -1,115 +1,74 @@
 {
-  "project": "DWRO S2 — Server-Owned Direct Worker Starts",
-  "branchName": "dwro-s2-server-owned-start",
-  "description": "Implement DWRO S2 so POST /worker-sessions returns 202 only after Worker Sessions has reserved identity, made the session event topic observable, and received Workers admission; admitted execution survives request or client disconnect under the server lifecycle, caller request IDs prevent duplicates, and synchronous InvokeSession remains compatible over the shared supervision implementation.",
+  "project": "Customer Writing Standard and Terminology Register",
+  "branchName": "prose-standard-and-terms",
+  "description": "Implement the documentation-only foundation from Story 1 of the Customer Prose Standard and Enforcement Plan: publish an indexed normative customer technical-writing standard, a versioned and parseable YAML product terminology register, and a manual language-review checklist. The project gives authors and reviewers one contract for labels, procedures, descriptions, product terms, protected technical text, examples, exceptions, and ASD-STE100-aligned conformance language, without implementing prosecheck or rewriting the existing corpus.",
   "context": {
-    "customerAsk": "Deliver DWRO story S2: a Worker Sessions-owned asynchronous start operation, POST /worker-sessions returning 202 only after identity reservation, event-topic readiness, and Workers admission; execution owned by the server lifecycle rather than request cancellation; idempotency keys; and preservation of synchronous InvokeSession over the shared implementation.",
-    "problem": "The existing synchronous InvokeSession boundary cannot honestly acknowledge remote asynchronous work: transport cancellation can be confused with execution lifetime, acknowledgment can precede observability or admission, and client retries can create duplicate Worker/provider side effects.",
-    "solution": "Add one Worker Sessions-owned, race-safe asynchronous start state machine that reserves identity, commits the opening event, crosses Workers admission, supervises admitted work in the server lifecycle, and deduplicates by required caller requestId. Expose it through typed POST /worker-sessions and have synchronous InvokeSession use the same implementation while waiting for terminal completion."
+    "customerAsk": "Implement Story 1 of docs/internal/development/plans/customer-prose-standard-and-enforcement.md exactly within the documentation-only lane: add the normative customer technical-writing standard under docs/internal/standards/writing/, add the YAML terminology register, index the standard from docs/internal/standards/STANDARDS.md, and provide the required manual review checklist.",
+    "problem": "Five downstream prose and documentation plans are blocked because authors and reviewers have no normative repository writing contract, no structured product terminology register, and no explicit boundary between deterministic checks and human language review. Product vocabulary, technical-literal protection, exceptions, and conformance claims can therefore vary by reviewer or prior chat context.",
+    "solution": "Publish one repository-specific writing profile defining content classes, protected technical text, deterministic and human-review boundaries, suppression policy, ASD-STE100-aligned conformance limits, examples, and a manual checklist. Publish a versioned YAML register with canonical terms, definitions, approved forms, discouraged alternatives, examples, valid surfaces, and ownership references. Connect the artifacts through the standards index and cross-links so downstream checker and migration work can consume one authoritative contract."
   },
   "acceptanceCriteria": [
-    "POST /worker-sessions accepts a valid resolved direct Worker request with a required requestId and returns 202 Accepted with the stable Worker Session identity only after reservation, the opening session record is readable/subscribable on Topic(sessionID), and Workers admission has succeeded.",
-    "An accepted execution is scoped to the running server/process lifecycle, not the HTTP request context: closing or canceling the submitting connection does not cancel or duplicate it, and its progress and terminal outcome remain observable through Worker Session reads/events.",
-    "Same-key retries, including concurrent retries, return the same Worker Session acceptance and cause exactly one Workers/provider execution; reuse of the key for a different normalized start request returns a stable conflict with no second side effect.",
-    "Validation, identity conflict, opening-event failure, and admission failure return a non-202 response with a stable safe classification; no response claims acceptance before all acceptance barriers have committed, and every reserved failure is left in an observable deterministic state rather than orphaned.",
-    "Server shutdown cancels or drains admitted direct Workers according to the existing lifecycle contract, waits for supervision callbacks and terminal publication, and leaves no Worker Session goroutine, event attachment, dispatch, or provider process running after shutdown completes.",
-    "Existing synchronous InvokeSession callers retain their terminal result, retry, event ordering, control-race, and error behavior while using the shared server-owned start/supervision implementation; authored and generated API contracts remain aligned.",
-    "Typecheck, lint, and tests satisfy the required quality gates: Typecheck passes, Tests pass, no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
-    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared or generated-file churn are resolved against current main, and the PR is actually merged."
+    "An author can use the normative standard to determine how to write a label, procedure, description, command or code example, product term, and justified exception without relying on chat history or reviewer preference.",
+    "The standard defines required content classes, protected machine and technical text, deterministic automated-rule boundaries, human-review rules, suppression policy, repository-specific good and bad examples, and the approved ASD-STE100 conformance claim.",
+    "The versioned terminology register parses as YAML using the documented schema, covers all required initial public nouns plus customer-visible relationship and lifecycle names, and limits internal Petri-net terms to explicitly internal or implementation-focused contexts.",
+    "Architecture and data-model owners confirm the terminology definitions and owning references, with blocking terminology feedback resolved before merge.",
+    "Authors and reviewers can discover the standard, terminology register, and manual checklist from the standards index; Markdown renders legibly and document links resolve to the intended repository sources.",
+    "Typecheck and applicable docs-only tests pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
+    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared-file changes are resolved against current main, and the PR is actually merged."
   ],
   "userStories": [
     {
-      "id": "dwro-s2-server-owned-start-001",
-      "title": "Admit an asynchronous Worker Session at an honest readiness barrier",
-      "description": "As a remote operator, I want a direct Worker start to be acknowledged only when its identity, event stream, and execution are ready so I can safely observe or control the accepted session.",
+      "id": "prose-standard-and-terms-001",
+      "title": "Authors can apply one normative writing contract",
+      "description": "As an author, I want one repository writing standard for customer-facing prose so I can write clear labels, instructions, explanations, examples, and exceptions without depending on reviewer preference.",
       "acceptanceCriteria": [
-        "Worker Sessions exposes one asynchronous start operation for an already-resolved Workers execution and owns validation, identity reservation, lifecycle transitions, opening and terminal event publication, supervision, and acceptance without selecting provider or runner policy.",
-        "A successful start result is released only after the stable identity is reserved, the opening SESSION/STARTED record has committed to Topic(sessionID) and is retained-read/subscription ready, and the Workers boundary has invoked its admission callback.",
-        "The start result provides the stable Worker Session identity/snapshot for later reads and controls, while completion continues asynchronously through the existing exactly-once terminal path.",
-        "Invalid input has no registry, Events, or Workers side effects; opening publication or pre-admission dispatch failure never reports acceptance and leaves any reserved identity in the documented deterministic terminal state.",
-        "Cancel or terminate racing before admission cannot produce successful acceptance, start unknown work, or publish multiple terminal outcomes; post-admission controls use the explicit Workers cancellation boundary.",
-        "Structured logs distinguish rejected, reserved, event-ready, admitted, and terminal outcomes with safe identifiers and no sensitive execution content.",
-        "Focused deterministic package tests prove barrier ordering, failure handling, and control races without arbitrary sleeps.",
-        "Typecheck passes",
-        "Tests pass"
+        "The standard separately defines labels, procedural prose, descriptive prose, machine and technical text, and technical terms, including when each class applies.",
+        "Procedural rules require no more than 20 words per sentence, one instruction per sentence unless actions must occur simultaneously, an imperative verb, necessary conditions before the instruction, an observable expected result, and an ordered or vertical list when sequence matters.",
+        "Descriptive rules require no more than 25 words per sentence, gradual introduction of information, one topic per paragraph, no more than six sentences per paragraph, preferred active voice, and stable key words or phrases for related information.",
+        "Protected-text guidance covers code fences, inline code, commands and shell operators, JSON and YAML contract examples, API methods and routes, paths, URLs, package paths, identifiers, schema, event, status and error-code literals, model and provider names, quoted external output, and generated artifacts; safely identifiable natural-language comments remain reviewable.",
+        "The standard distinguishes blocking deterministic rules, advisory rules, and human-review rules using the governing plan's rule sets, and defines bounded rule-specific suppressions with reasons while rejecting suppressions for ordinary readability debt.",
+        "The standard says the repository profile is aligned with ASD-STE100, does not redistribute its controlled dictionary, does not claim checker certification or full ASD-STE100 conformance, and names the documented review, training, and dictionary conditions required before a stronger claim.",
+        "Repository-specific paired good and bad examples cover at least a command description, procedure, explanation, product term, protected technical example, and valid or invalid exception.",
+        "Typecheck passes"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Implemented Worker Sessions Start with retained/live Events readiness, server-owned supervision, admission-gated return, deterministic pre-admission terminal handling, safe outcome logs, and focused barrier/failure/control-race tests. Added deterministic lifecycle-fallback, readiness-reader, and pre-admission classification coverage after hosted verification identified the package floor regression; the internal service now clears its 98.72% unit coverage floor."
+      "notes": "Implemented the normative customer technical-writing standard at docs/internal/standards/writing/customer-technical-writing-standard.md. It defines labels, procedures, descriptions, machine and technical text, technical terms, the protected-literal boundary, the complete governing blocking and advisory rule sets, human review rules, bounded rule-specific exceptions, ASD-STE100-aligned claim limits, paired repository examples, and the manual review checklist. The review follow-up removed the nonexistent FACTORY_SESSION_OPENED example, verified SESSION_STARTED against api/components/schemas/events/FactoryEventType.yaml, and uses B-PROC-20 only for a genuine simultaneous-action constraint; exact protected literals are not B-LITERAL findings. The latest clarification says to align a stale documentation copy to a correct owning contract, escalate an incorrect contract to its owner, and treats suppression, baseline, and parse lifecycle rules as future-checker blocking rules in this documentation-only story. `git diff --check` passed, and make typecheck passed after the pinned UI dependencies were restored. No UI or runtime files changed in this story."
     },
     {
-      "id": "dwro-s2-server-owned-start-002",
-      "title": "Deduplicate direct Worker starts by request identity",
-      "description": "As an automation author, I want retried start requests to resolve to the original Worker Session so network uncertainty cannot run the Worker twice.",
+      "id": "prose-standard-and-terms-002",
+      "title": "Maintainers can consume the product terminology register as structured data",
+      "description": "As an author or future tooling maintainer, I want a versioned, parseable product terminology register so public nouns stay consistent and internal implementation vocabulary does not leak into customer prose.",
       "acceptanceCriteria": [
-        "Every asynchronous start requires a non-empty caller requestId, and Worker Sessions atomically indexes it to the normalized immutable start tuple and stable Worker Session identity before execution admission.",
-        "Repeating the same requestId and normalized tuple before admission, after admission, or after terminal completion returns the original acceptance/session outcome without another opening event, Workers dispatch, provider invocation, or terminal transition.",
-        "Concurrent identical submissions converge on one reservation and one admitted execution, with every successful caller observing the same Worker Session identity.",
-        "Reusing requestId for a different normalized tuple returns a typed safe idempotency conflict and performs no new downstream side effect.",
-        "Validation failure does not consume the key; a reserved request that deterministically fails before admission replays that failure rather than starting replacement work.",
-        "Idempotency is owned by Worker Sessions and compares detached canonical request values rather than transport-owned or caller-mutable state.",
-        "Focused repeat, concurrent, and race-enabled tests prove replay, conflict, failure replay, and exactly one Workers/provider side effect.",
-        "Typecheck passes",
-        "Tests pass"
+        "The YAML document has a top-level integer version set to 1 and a top-level terms sequence; every term record uses the same documented field schema.",
+        "Each term record contains non-empty canonical, definition, category, approvedForms, discouragedAlternatives, example, surfaces, and owner fields. approvedForms explicitly represents applicable plural or verb forms, and each discouraged alternative records its text, whether it is discouraged or prohibited, and the approved replacement.",
+        "category values are limited to product-term, technical-noun, technical-verb, acronym, command, or protected-literal; surfaces is a non-empty sequence that states where the term is valid; owner points to the architecture or contract source that owns the meaning.",
+        "The register covers at least Factory, Factory Session, Current Factory, Work, Work Request, Worker, Worker Session, Workstation, Provider, Provider Session, Model, Recording, Factory Event, and the customer-visible relationship and lifecycle names defined by the current data model and public contracts.",
+        "CPN, place, transition, marking, and token are registered as internal terms whose surfaces permit use only in explicitly internal or implementation-focused material.",
+        "Definitions and capitalization agree with docs/architecture/data-model.md and the owning public contracts; architecture and data-model owners record approval or resolve blocking corrections in the PR.",
+        "A standard YAML parser loads the complete register without errors, and a reviewer can identify each required field without relying on comments or implicit conventions.",
+        "Typecheck passes"
       ],
       "priority": 2,
       "passes": true,
-      "notes": "Implemented a required StartRequest.RequestID and Worker Sessions-owned atomic replay registry keyed by a detached normalized start tuple. Same-key submissions, concurrent retries, post-terminal retries, and deterministic pre-admission failures return the original outcome without duplicate opening/terminal events or Workers dispatch; tuple conflicts return ErrStartRequestIDConflict, while invalid requests do not consume keys. Added focused replay/conflict/failure/concurrency tests and updated Factory Runtime contract doubles. Verification: focused Worker Sessions tests, focused race test, affected Factory Runtime tests, full make test, make backend-size pkg-maint pkg-file-count pkg-structure, and go vet ./... pass; repository make typecheck remains environment-blocked by missing UI Bun type definitions."
+      "notes": "Added docs/internal/standards/writing/customer-technical-terms.yaml with version: 1, an explicit term-record schema, and 58 consistently shaped records. The register covers the required public nouns, customer-visible relationship names and protected literals, durable and live lifecycle names, and CPN/place/transition/marking/token with internal-only surfaces. Every owner reference resolves to an existing architecture or public-contract source. PyYAML loaded the complete register successfully, verified the required fields, allowed categories, alternative-record shape, and internal-term surface restrictions; `git diff --check` passed before the implementation commit. The review follow-up rechecked definitions and owner references against the current data model and public schemas; owner confirmation is recorded in the PR conversation. It replaces the five self-replacing internal alternatives with distinct expansions and documents the replacement invariants. The source-scanning test added during review was removed to keep this documentation-only story within scope. The latest terminology correction keeps one exact `FactoryResponseEvent` record and documents `Parent-Child` as child-set membership for parent-aware fan-in. `make typecheck` passed after dependencies were restored. No UI or runtime files changed in this story."
     },
     {
-      "id": "dwro-s2-server-owned-start-003",
-      "title": "Expose accepted starts through POST /worker-sessions",
-      "description": "As a remote client, I want a typed HTTP start endpoint with precise acceptance and failure responses so I can submit a direct Worker without holding the connection for completion.",
+      "id": "prose-standard-and-terms-003",
+      "title": "Reviewers can discover and apply the complete prose review contract",
+      "description": "As a reviewer, I want the writing standard, terminology register, and manual checklist connected through the standards index so I can evaluate prose consistently and direct authors to one authoritative source.",
       "acceptanceCriteria": [
-        "The authored OpenAPI contract defines POST /worker-sessions with a typed request containing required requestId, stable Worker Session identity, resolved execution input, and bounded retry input, plus a typed accepted response identifying the Worker Session and its observation/event resources or equivalent identifiers.",
-        "The handler maps the request once, calls only Worker Sessions start, returns 202 only after the reservation/event-readiness/admission barrier, and does not wait for terminal Worker output.",
-        "Malformed or invalid input maps to 400, idempotency or incompatible existing-session reuse maps to 409, and event-readiness or admission unavailability maps to a stable non-202 server response with safe actionable errors.",
-        "Same-key accepted HTTP replays return the same Worker Session identity and never duplicate execution while the original is pending, running, or terminal.",
-        "Existing Worker Session read, detail, transcript, event-stream, and control routes can address the returned identity without an accepted-but-not-observable timing window.",
-        "Bundled OpenAPI, generated Go server/client contracts, generated TypeScript clients, handwritten mapping, and HTTP contract behavior are regenerated and aligned.",
-        "make generate-api and make api-smoke pass",
-        "Typecheck passes",
-        "Tests pass"
+        "docs/internal/standards/STANDARDS.md lists the customer technical-writing standard as the normative entry point and identifies when authors and reviewers must use it.",
+        "The standard links to the terminology register, architecture data model, and official ASD-STE100 references used by the governing plan; the terminology register's ownership references identify the intended repository sources.",
+        "The manual checklist requires reviewers to confirm approved vocabulary and meaning, one subject or instruction per sentence, justified passive voice, logical single-topic paragraphs, preserved technical and contract meaning, examples matching shipped CLI and public schemas, and precise warnings, destructive instructions, and failure recovery.",
+        "The checklist makes clear which findings can be automated and which require language or subject-matter judgment, and it does not describe the future checker as already implemented.",
+        "The standard, examples, checklist, and index render as readable Markdown, and following their repository links reaches the intended standard, register, data-model, or external reference.",
+        "No code, prosecheck implementation, prose baseline, CI enforcement, generated artifact, CLI manifest change, or customer-corpus rewrite is included in this story.",
+        "Typecheck passes"
       ],
       "priority": 3,
       "passes": true,
-      "notes": "Implemented typed POST /worker-sessions across authored, bundled, packaged, generated Go, generated TypeScript, mapping, and HTTP layers. The handler strictly decodes and maps once, delegates only to Worker Sessions Start, and returns 202 after the service admission barrier with the stable Worker Session ID and deterministic Events topic. Stable 400/409/503 classifications cover malformed input, request/session conflicts, opening/event readiness failures, and admission failures; Worker Sessions replay semantics provide same-key HTTP deduplication. Verification: make generate-api, make interfaces-all, make api-smoke, make test, backend/package quality gates, and go vet ./... pass. Repository make typecheck remains blocked by pre-existing UI test-helper assertion typings unrelated to this story."
-    },
-    {
-      "id": "dwro-s2-server-owned-start-004",
-      "title": "Keep admitted Workers alive across disconnect and join them on shutdown",
-      "description": "As an operator, I want an admitted direct Worker to outlive the submitting connection but remain bounded by server shutdown so remote work is reliable without leaking execution.",
-      "acceptanceCriteria": [
-        "Execution and terminal publication use a server/process lifecycle scope owned by canonical initialization/composition; the HTTP request context bounds transport work and admission waiting but is not the cancellation authority for admitted execution.",
-        "Closing or canceling the submitting connection after admission does not call Workers cancel, cancel the provider context, close the publication window, or change eventual terminal classification.",
-        "After disconnect, an independent client can observe the same session identity, one opening record, admitted progress, and exactly one terminal outcome.",
-        "Server shutdown rejects new starts, signals active asynchronous executions through existing supervision/control boundaries, waits for callbacks and terminal publication, and leaves no leaked goroutine, event attachment, dispatch, or provider process.",
-        "A disconnect before 202 delivery cannot create unsupervised or duplicate execution; same-requestId replay reveals the authoritative accepted or failed outcome.",
-        "Functional process-boundary tests use deterministic provider/admission signals to prove disconnect survival and joined shutdown, and repeat plus race evidence proves bounded concurrency without arbitrary sleeps.",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 4,
-      "passes": true,
-        "notes": "Completed server-owned async lifecycle ownership and shutdown joining. Worker Sessions now creates a process-scoped lifecycle context, keeps accepted execution and terminal publication independent of the submitting request, bounds the caller/admission wait without closing the authoritative request replay, and records a driver completion barrier. Its structural Stop capability rejects new asynchronous starts, terminates only server-owned asynchronous supervisors through the existing Workers cancellation boundary, waits terminal callbacks/publication and driver completion, and preserves same-key replay after shutdown. Factory Runtime invokes this capability before dispatch-planner and Workers pool shutdown; synchronous InvokeSession supervision remains under its existing runtime control path. Added deterministic disconnect-before/after-acceptance, replay, terminal-event, shutdown-join, runtime shutdown-order, and root-built functional HTTP boundary assertions; the functional disconnect proof now uses an unread raw HTTP connection, an injected gated Codex ProviderCommandRunner, and an independent public Worker Session event stream, with only documented signal-timeout ceilings and no sleep-based synchronization. Verification: make test, make typecheck, focused functional `tests/functional/workers/transports/http` tests (including race), affected Factory Runtime tests, go vet, make ui-lint, backend-size, pkg-maint, pkg-file-count, pkg-structure, and git diff --check passed."
-    },
-    {
-      "id": "dwro-s2-server-owned-start-005",
-      "title": "Preserve synchronous InvokeSession over shared supervision",
-      "description": "As an existing orchestrator, I want InvokeSession to keep its synchronous contract while sharing the new start implementation so direct and orchestrated Workers cannot drift in lifecycle behavior.",
-      "acceptanceCriteria": [
-        "InvokeSession uses the same validation, reservation, opening-event, Workers admission, retry, control-race, terminal classification, and terminal-publication implementation as asynchronous start and then waits for terminal completion.",
-        "Existing callers that omit asynchronous idempotency input retain established session-ID conflict rules and do not construct transport-specific values.",
-        "Equivalent synchronous and asynchronous executions produce matching state transitions, attempt counts, Workers result handling, provider association, and source-native event order; only caller return timing differs.",
-        "Synchronous caller cancellation retains documented current InvokeSession behavior and cannot redefine the server-owned lifecycle of asynchronous API starts.",
-        "Existing Factory Runtime, JavaScript workflow, Worker control, observation, retry, and event-order regression behavior remains passing without a parallel legacy execution path.",
-        "Focused compatibility tests compare success, retryable failure, pre-admission failure, cancel/terminate races, and terminal publication across both entry points.",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 5,
-      "passes": true,
-      "notes": "Refactored synchronous InvokeSession and asynchronous Start to use one Worker Sessions preparation path for reservation, STARTING transition, observation capture, opening publication, supervision registration, retry budget, admission callback, control races, terminal classification, and terminal publication. InvokeSession retains its request-ID-free session conflict rules and synchronous terminal return behavior; Start retains the server-owned readiness barrier and returns at admission. Added deterministic compatibility tests proving synchronous terminal waiting versus asynchronous admission return and matching pre-admission failure classification/event history. Verification: full Worker Sessions package tests, focused race suite, affected Factory Runtime and HTTP transport suites, go vet on affected packages, make typecheck, make ui-lint, make backend-size, make pkg-maint, make pkg-file-count, make pkg-structure, and git diff --check pass. The aggregate make lint command was separately bounded at five minutes while unrelated concurrent unit-lane processes were active; its focused lint/static targets and affected vet checks pass."
+      "notes": "Connected the normative writing standard, versioned terminology register, and embedded manual review checklist from docs/internal/standards/STANDARDS.md. The standard now links directly to the register, architecture data model, the FactoryEventType contract, and official ASD-STE100 references; the checklist explicitly covers vocabulary and meaning, one subject or instruction per sentence, justified passive voice, single-topic paragraphs, technical and contract meaning, shipped CLI/public-schema examples, warnings, destructive instructions, failure recovery, exceptions, and the deterministic-versus-human review boundary. No checker, baseline, CI enforcement, generated artifact, CLI manifest change, or customer-corpus rewrite was added. The branch was synchronized with current main, ownership-inventory-check passed, and make typecheck passed after dependencies were restored."
     }
   ]
 }
