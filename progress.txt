@@ -9797,3 +9797,20 @@
   - Remote run fixtures must enter through `POST /factory-sessions/async` and poll the returned durable session result; compatibility `POST /factory-sessions/~default/invocations` is intentionally rejected for remote placement.
   - On this Windows host, broad functional tests can contend on packaged-factory staging ownership and time out before API readiness; characterize the named S7 test in isolation before changing runtime behavior.
 ---
+## [2026-08-11 03:48:00 -07:00] - dwro-s7-placement-grammar-005
+- What was implemented
+  - Completed the post-synchronization verification pass for the S7 branch.
+  - No additional source changes were required after the focused fixture and baseline updates.
+- Files changed
+  - No source files changed in this verification pass; the prior S7 implementation, fixtures, baselines, PRD, and progress log remain in the branch.
+- Verification
+  - `make vet` — passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure` — passed.
+  - `make cli-manifest-check cli-contract-smoke contracts-check docs-reference-smoke` — passed, including the reviewed functional-scenario check and CLI/docs test suites.
+  - `make typecheck` — blocked before project compilation by the checkout's missing Bun type definitions (`TS2688`, `@types/bun`); this is the known environment dependency recorded in the PRD.
+  - The broad `make test` unit process completed after a cold, heavily contended Windows build, but its original output handle expired before returning an exit code. Focused S7 suites remain captured as passing: factory sessions, CLI baseline/identity/input, explicit-remote lifecycle controls, and selected-server durable run behavior.
+  - `git diff --check` — passed; the worktree is clean.
+- **Learnings for future iterations:**
+  - Run broad Go verification serially on this host; concurrent worktrees can turn a cold package compile into a long-running process without useful output.
+  - Treat the Bun type-definition failure as an environment prerequisite, not a source regression, until `ui/node_modules/@types/bun` is available.
+---
