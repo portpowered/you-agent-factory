@@ -8792,6 +8792,19 @@
 - **Learnings for future iterations:**
   - After a moving-base merge, rerun the boundary functional and race evidence on the exact merged ancestry before pushing; prior-head green results do not prove the replacement head.
 ---
+## [2026-08-11 05:08:00 -07:00] - thr-functional-lane-speed-004 latest-head focused verification
+- What was implemented
+  - Completed focused verification on merged head `47ec0c30c` after restoring the deterministic fake-edge cancellation wait; no additional product changes were needed.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/internal/support ./cmd/functionallane -count=1 -timeout 180s` — passed.
+  - Focused `cmd/gocoveragecheck` timing-summary tests — passed.
+  - `go test ./tests/functional/sessions/execution -run '^TestAPIPartialResultIsAvailableBeforeTerminalCompletion$' -short -count=1 -timeout 600s` — passed.
+  - `go test ./tests/functional/work/relationships ./tests/functional/work/submission -short -count=1 -timeout 600s` — passed.
+- **Learnings for future iterations:**
+  - When broad Go verification is host-contended, the changed observer contract and each touched functional package can still be characterized with focused observable tests before handing the full merged head to hosted CI.
+---
 ## [2026-08-11 05:03:01 -07:00] - thr-functional-lane-speed-004 review follow-up
 - What was implemented
   - Restored `tests/functional/sessions/execution/helpers_test.go::waitForCanceledInfer` to its original deterministic in-process fake signal polling; the shared observer remains limited to public HTTP projection waits.
