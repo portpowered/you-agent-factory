@@ -10158,3 +10158,22 @@
   - When broad Go verification is run concurrently across worktrees on Windows, isolate the exact timed-out process tree before retrying a gate so other task verification remains undisturbed.
 ---
 ---
+## [2026-08-11 02:04:21 -07:00] - btrc-p1-root-injection-006 latest-main synchronization
+- What was implemented
+  - Fetched live `origin/main` at `0e7df069f80518287a7905558a525ac196b11bc0` after the PR base advanced again and became dirty.
+  - Merged the live base as `b024469767f321efacfdde747b9707046073c470`, preserved the P1 `prd.json`, and retained the incoming append-only progress history and current-main changes without a task-side product change.
+  - Refreshed the delivery audit for queued workflow `31476020462` on the synchronized replacement head.
+- Files changed
+  - Current-main implementation/generated files carried by the synchronization merge.
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `git merge-base --is-ancestor origin/main HEAD` — passed.
+  - `git ls-files -u` — no unmerged entries; conflict-marker scan over `prd.json` and `progress.txt` — clean.
+  - `prd.json` parses with all six P1 stories marked `passes:true`; `git diff --check` — passed.
+  - The last terminal workflow/reruns on the prior head retained only the unchanged server-binding assertion; the P1 diff is empty for that package.
+  - The thread-aware PR audit remains at zero review threads, zero unresolved threads, and zero formal reviews.
+- **Learnings for future iterations:**
+  - Fetching the live base immediately before each publish is essential while main is moving; resolve only shared bookkeeping conflicts and preserve the active task PRD.
+  - A fresh workflow is required after every current-main synchronization, even when the merge introduces no task-side behavior change.
+---
