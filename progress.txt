@@ -20,6 +20,18 @@
 - Shutdown should close new async admission before closing the Workers pool,
   route admitted server-owned work through its existing cancellation boundary,
   and join both terminal publication and the supervision driver's final tail.
+- When a dispatch identity is upgraded to a Worker Session ID in a later event batch, migrate its progress color alias instead of allocating a second color; terminal cleanup must remove the canonical identity.
+- Treat a full functional-coverage failure in an untouched fixture as a characterization problem first: repeat the exact test locally, then rerun only the failed coverage and dependent-policy jobs if it passes.
+- When a backend-size violation names a long test function, split each failure mode into a focused test and share only request/setup plumbing so every observable assertion remains intact.
+- For concurrent single-flight state, keep the absent-to-loading election atomic with the observation; a separate precheck can let callers pass stale absent state and overwrite the shared completion signal.
+- For repeated concurrency package runs, synchronize cancellation tests on an injected launcher or process edge; a fixed sleep can cancel before startup under parallel stress and obscure the target regression.
+- Provider OpenAPI changes that feed the published model-provider package require `make interfaces-all`, `make provider-catalog-generate`, and `make model-provider-package-generate`; `api-smoke` checks generated REST artifacts against the committed tree, so commit generated output before relying on that smoke result.
+- When a provider manifest publishes a new capability, update every ordered catalog expectation for the affected provider fixtures; projection tests alone do not cover the service-level catalog characterization.
+- Provider evidence dates authored in YAML must be quoted ISO strings because yaml.v3 otherwise decodes calendar-looking values as `time.Time` before semantic validation.
+- For fan-in transitions, preserve a deterministic list of all matched input token IDs separately from the consume-only mutation list; OBSERVE-mode inputs must reach the worker dispatch without being consumed.
+- Terminal lifecycle publication must require the opening record's committed publication window; a failed opening must never be followed by a terminal append that becomes topic position 1.
+- Root-built direct-JavaScript functional probes that do not invoke a worker can run without `--with-mock-workers`; keep Mock Workers usage inside the feature-owning test cells.
+- Cancellation-sensitive functional fixtures must signal provider-edge entry before issuing an interrupt; a published RUNNING status can precede provider handoff and otherwise makes context-cancellation assertions race.
 - Functional HTTP disconnect evidence should keep the request unread on a raw connection, gate a real provider command runner, and observe terminal state through an independent public SSE client; canceling a context after a completed response is not a disconnect proof.
 - This checkout may have `ui/node_modules` without all lockfile dependencies; run the pinned Bun install before treating a typecheck failure as a source regression.
 - When a package is constrained to one named root service interface, keep a
@@ -10584,4 +10596,19 @@
   - The thread-aware PR audit remains empty; the PR is open, non-draft, mergeable, and its description remains the canonical `prd.json`.
 - **Learnings for future iterations:**
   - When isolated reproduction passes and a hosted lane reports parallel-process startup or memory failures, rerun the failed lane before changing unrelated product code.
+---
+## [2026-08-11 00:57:29 -07:00] - js-skip-permissions-parity CI catalog expectation follow-up
+- What was implemented
+  - Addressed the hosted Backend Unit Coverage failure by adding the published `permission_bypass` capability to the ordered Codex, Agy, and Claude catalog expectations.
+  - Kept runtime behavior unchanged; the correction aligns service-level observable catalog tests with the provider capability manifests already carried by the completed story.
+- Files changed
+  - `pkg/services/providers/internal/services/catalog/internal/service/service_test.go`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/providers/internal/services/catalog/internal/service -count=1 -timeout 120s` — passed.
+  - `go test ./pkg/services/providers/... -count=1 -timeout 180s` — passed.
+  - `make test-unit-coverage` reached the repository's 10-minute coverage-test bound locally but could not start the final Windows command because the Go executable command line exceeded the OS filename/extension limit; this is an environment limitation, not a test assertion failure.
+- **Learnings for future iterations:**
+  - Hosted Linux coverage exposed a stale ordered catalog fixture that focused projection tests did not catch; run the owning catalog package after changing provider capability manifests.
+  - The current Windows checkout cannot complete the repository-wide coverage wrapper when its generated Go test command exceeds the Windows command-line limit; use focused package evidence locally and rely on the hosted Linux lane for the full matrix.
 ---

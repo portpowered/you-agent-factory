@@ -215,6 +215,7 @@ func assertCodexCatalogFacts(t *testing.T, codex providers.Descriptor) {
 		providers.CapabilityImageInput,
 		providers.CapabilitySessionResume,
 		providers.CapabilityStructuredOutput,
+		providers.CapabilityPermissionBypass,
 		providers.CapabilityNativeStreaming,
 		providers.CapabilityMessageSnapshots,
 		providers.CapabilityReasoningSummaries,
@@ -284,6 +285,7 @@ func assertAntigravityCatalogFacts(t *testing.T, agy providers.Descriptor) {
 	assertCapabilities(t, agy, []providers.Capability{
 		providers.CapabilityPromptSubmission,
 		providers.CapabilitySessionResume,
+		providers.CapabilityPermissionBypass,
 		providers.CapabilityMessageSnapshots,
 	})
 	assertAntigravityPrerequisites(t, agy)
@@ -337,6 +339,7 @@ func assertClaudeCatalogFacts(t *testing.T, claude providers.Descriptor) {
 	assertCapabilities(t, claude, []providers.Capability{
 		providers.CapabilityPromptSubmission,
 		providers.CapabilitySessionResume,
+		providers.CapabilityPermissionBypass,
 		providers.CapabilityNativeStreaming,
 		providers.CapabilityMessageDeltas,
 		providers.CapabilityMessageSnapshots,
