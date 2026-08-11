@@ -8971,3 +8971,15 @@
 - **Learnings for future iterations:**
   - For a coverage-lane failure naming an untouched persistent-ACP fixture, repeat the exact test locally and rerun the failed coverage/policy jobs on the same head before changing the move-only task diff.
 ---
+## [2026-08-11 02:28:05 -07:00] - thr-split-acp-stdio-tests PR handoff audit
+- What was implemented
+  - Confirmed the ACP task remains complete with no additional story or source changes required after the current-main reconciliation and targeted CI-flake characterization.
+- Files changed
+  - `progress.txt`
+- Verification
+  - On evidence head `ce5a8b3392aaff103d40ca34c67e655fbff4d441`, CI run `31477235397` completed with all 18 required checks terminal-successful, including Backend Functional Coverage and Verification Policy.
+  - PR #1861 is open, non-draft, `CLEAN/MERGEABLE`, targets live `origin/main` `0e7df069f80518287a7905558a525ac196b11bc0`, and its PR body is byte-identical to `prd.json` (SHA-256 `722f2ad470e1ff54916fa507485f91a325fe949c704085d09c7eaed0794c8c9c`).
+  - Thread-aware review audit found 3 historical conversation comments, 0 formal reviews, and 0 inline review threads; the current-main conflict request and earlier implementation blockers are addressed on the pushed tree.
+- **Learnings for future iterations:**
+  - Final handoff requires checking the exact pushed head, live-base ancestry, terminal CI, PRD/body identity, and thread-aware review state together; a clean local merge alone is insufficient.
+---
