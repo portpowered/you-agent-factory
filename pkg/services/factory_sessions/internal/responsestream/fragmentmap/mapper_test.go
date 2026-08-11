@@ -76,6 +76,29 @@ func TestMapFragment_ProgressFragmentEmitsProgressUpdated(t *testing.T) {
 	}
 }
 
+func TestMapFragment_UsesExplicitProviderWithoutSessionReference(t *testing.T) {
+	t.Parallel()
+
+	events, err := fragmentmap.MapFragment(fragmentmap.Context{
+		FactorySessionID: "factory-session-1",
+		RunID:            "run-1",
+	}, responsestream.Event{
+		Kind:     responsestream.EventKindProgressFragment,
+		Type:     responsestream.EventTypeProgress,
+		Provider: "antigravity",
+		Payload:  "final-only output",
+	})
+	if err != nil {
+		t.Fatalf("MapFragment() error = %v", err)
+	}
+	if len(events) != 1 || events[0].Provenance.Provider != "antigravity" {
+		t.Fatalf("mapped events = %#v, want one antigravity event", events)
+	}
+	if events[0].ProviderSessionRef != "" {
+		t.Fatalf("mapped ProviderSessionRef = %q, want empty", events[0].ProviderSessionRef)
+	}
+}
+
 func TestMapFragment_NativeToolProgressUsesObjectResultSummary(t *testing.T) {
 	t.Parallel()
 

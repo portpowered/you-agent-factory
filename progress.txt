@@ -1,5 +1,16 @@
 ## Codebase Patterns
 - Keep transport event consumers behind the process-scoped OpeningPresentationOwner: operation contracts carry only a typed scope ID, while the owner owns subscription lifecycle, final history reconciliation, and full-snapshot deduplication for mutable event IDs.
+- Terminal lifecycle publication must require the opening record's committed publication window; a failed opening must never be followed by a terminal append that becomes topic position 1.
+- Root-built direct-JavaScript functional probes that do not invoke a worker can run without `--with-mock-workers`; keep Mock Workers usage inside the feature-owning test cells.
+- Cancellation-sensitive functional fixtures must signal provider-edge entry before issuing an interrupt; a published RUNNING status can precede provider handoff and otherwise makes context-cancellation assertions race.
+- When a Windows coverage wrapper times out, inspect its exact process tree and terminate only that invocation's descendants; preserve concurrent test processes.
+- When splitting oversized same-package tests into focused files, remove stale file/maintainability exemptions and update the package file-count baseline for the intentional net increase; keep shared fixtures in one package-local helper file.
+- Public CLI manifest additions require regenerating family metadata and the published CLI contract, then updating command input/help/tree baselines.
+- Reviewed functional CLI coverage requires a sorted scenario declaration, an evidence-registry entry, a manifest mapping, and one literal `functionalevidence.Covers` marker.
+- Package-target discovery is the stable-sorted set of directories containing non-test Go sources; adding a durable service owner requires updating the checker vocabulary and its live top-level inventory before regenerating the manifest.
+- Boundary check compatibility bridges should be exact package/type exceptions with request-scoped rationale; broad service-prefix allowlists can hide new durable ownership claims.
+- Compatibility guard exceptions must match the reviewed method/field shape as well as the package and type name; name-only exemptions can hide ownership-expanding contract growth.
+- When an ownership burn-down ledger is corrected, regenerate it as an explicit empty array and reject retired rows so stale debt cannot silently return.
 - JSON Schema worker diagnostics must use `ErrorKind.KeywordPath()` and typed schema metadata; localized `ValidationError.Error()` text can leak rejected values and compiler-expanded host paths.
 - When an exact package file-count baseline blocks an oversized-file split, move the cohesive helpers into an existing appropriately owned file and verify both size and file-count gates.
 - Optional native JSON channels use an explicit presence bit plus custom JSON at durable boundaries to distinguish omitted values from JSON null; clone map/slice trees at projection and transport ownership boundaries.
@@ -6767,6 +6778,483 @@
   - The PR remains open, conflict-free, and mergeable against `origin/main` `0b9771fe8`; the P1 PRD has six of six stories passing and the PR body remains sourced from it.
 - **Learnings for future iterations:**
   - After current-main synchronization, a repeated failure in an untouched functional package should remain an explicit baseline blocker; stop retrying once the named test and changed-path comparison are deterministic, and keep the task scope unchanged.
+## 2026-08-10 18:03 -07:00 - wsr-001-opening-record-001
+- What was implemented
+  - Completed the post-push CI follow-up. The first run exposed a 0.162 percentage-point functional coverage fluctuation in `pkg/transports/cli` (72.8180% versus the 72.98% floor); the green current-main run and prior green WSR run both covered 883/1203 statements, while the failed run covered 876/1203.
+  - Re-ran only the failed GitHub Actions jobs after confirming no root CLI source changed in the WSR diff; the fresh Backend Functional Coverage and Verification Policy jobs passed.
+- Files changed
+  - `progress.txt`
+- Verification
+  - All 17 required PR checks for head `add05ef4d` are terminal and successful after the failed-job rerun.
+  - Downloaded CI coverage artifacts and confirmed the failing result was limited to five `root_factory.go` blocks; no WSR assertion or package test failure was reported.
+- **Learnings for future iterations:**
+  - For a tiny ratcheted coverage miss, compare the failed profile with current-main and the previous green profile before adding tests or changing a baseline; a failed run may be a measurement fluctuation when the changed source is outside the affected package.
+---
+
+## 2026-08-10 17:30 -07:00 - wsr-001-opening-record-001
+- What was implemented
+  - Completed the latest review follow-up for the opening-first invariant: the existing terminal publication guard requires a committed opening, and the fail-first/succeed-second Events regression verifies that an opening append failure cannot create terminal-only history.
+  - Merged the live `origin/main` (`e6797fd5e`) into the WSR branch, retained the WSR PRD while incorporating current-main progress, and resolved the shared `prd.json` conflict.
+- Files changed
+  - `Makefile` (current-main synchronization)
+  - `progress.txt`
+  - `prd.json` (merge resolution; WSR content retained)
+- Verification
+  - `make interfaces-all` — passed with no generated drift.
+  - Worker Sessions packages, WSR-FT-001/002/003, and stream-fidelity tests — passed.
+  - `make test` — passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` — passed.
+  - `git diff --check` and PRD JSON validation — passed; all three stories remain `passes:true`.
+- **Learnings for future iterations:**
+  - When a review comment is already fixed on the branch, verify its behavioral regression and then fetch/merge the live base before pushing; a clean earlier merge can become stale while CI and review are in flight.
+---
+
+## 2026-08-10 08:50 -0700 - wsr-001-opening-record coverage follow-up
+- What was implemented
+  - Addressed the first PR CI rerun's Worker Sessions unit coverage ratchet failure by adding focused behavioral coverage for provider binding validation, provider attribution conflicts and duplicates, publication-state failures, append failures/duplicates, dispatch lookup, and missing constructor dependencies.
+  - Kept the tests split into focused helpers so the backend maintainability limit remains satisfied.
+- Files changed
+  - `pkg/services/worker_sessions/internal/service/internal_test.go`
+  - `progress.txt`
+  - `prd.json` remains unchanged with all three stories marked `passes:true`.
+- Verification
+  - `make test` — passed.
+  - Package-scoped `gocoveragecheck` with the CI floor — passed at 99.1% against the 98.72% package minimum.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure` — passed.
+  - `go vet ./...` — passed.
+  - `git diff --check` — passed.
+  - The repository-wide coverage command remains host-limited on Windows because its default all-package process arguments exceed the Windows command-line limit; the equivalent scoped lane passed, and CI will validate the Linux-wide lane after push.
+- **Learnings for future iterations:**
+  - Coverage regressions can be isolated by reading the package manifest's uncovered functions, then testing their externally visible error/result contracts through the narrowest real service setup.
+  - Keep coverage-only edge tests in focused subtests/helpers; the package maintainability gate counts test complexity as well as production complexity.
+---
+
+## 2026-08-10 10:53 -0700 - wsr-001-opening-record CI follow-up
+- What was implemented
+  - Registered the provider-neutral Worker Session-ID REST/SSE operations in the reviewed functional-scenario manifest and evidence registry, and made the generic OpenAPI route-reachability fixture resolve `{worker_session_id}` with a deliberately invalid-but-routable value so the handler returns a structured response instead of a 404.
+  - Added focused service and HTTP handler coverage for invalid context/request inputs, missing sessions, public provider-neutral replay, subscription failures, and response-writer/adapter boundaries, restoring both package coverage ratchets.
+  - Repaired the current-main CLI dispatch functional test double to read prompts from the runtime’s argument-based Claude command shape and emit Claude-native JSONL; the root-composition functional package now passes.
+- Files changed
+  - `internal/functionalscenarios/manifest.go`
+  - `contracts/functional-scenarios.json`
+  - `contracts/functional-scenario-evidence.json`
+  - `pkg/services/worker_sessions/internal/service/internal_test.go`
+  - `pkg/services/worker_sessions/transports/http/handler_test.go`
+  - `tests/functional/workers/inference/opening_record_test.go`
+  - `tests/functional/transport/http/server/routing_safe_requests_test.go`
+  - `tests/functional/factory_runtime/root_composition/dispatch_worker_sessions_concurrency_activation_test.go`
+  - `progress.txt`
+- Verification
+  - Focused Worker Sessions service and HTTP tests — passed.
+  - Root-built WSR-FT-003, Claude full-stream, and Codex partial-stream tests — passed.
+  - OpenAPI route reachability, contract smoke, and root-composition functional package — passed.
+- **Learnings for future iterations:**
+  - The provider command seam may carry prompts in CLI arguments rather than stdin; test doubles should inspect the actual command contract and shape output for the selected provider.
+  - A reviewed functional operation with an SSE response may produce separate REST and SSE scenario records, so both must be declared and covered by the same observable test.
+---
+- Capture the Worker Session start timestamp once at the observation boundary and reuse that exact value in the lifecycle opening payload; calling the injected clock separately for projection and publication breaks live/replay identity.
+- Lifecycle metadata uses optional pointers/`omitempty` and exact typed continuation values; unknown provider, Factory, recording, and capability facts must stay absent instead of being inferred from runner or model defaults.
+- Authored OpenAPI and CLI contracts generate their Go, TypeScript, published metadata, and family-manifest consumers; update the source contract first, then run the repository generators and drift checks.
+- Provider-neutral output contracts belong on the workstation definition and are enforced after a successful worker response; provider process success or transport parsing alone must not satisfy a semantic report contract.
+- Stream transport dispatch stays below the package maintainability threshold by delegating lifecycle-specific frame handling to focused helpers.
+- Deterministic Worker Session lifecycle tests can combine the controlled workstation boundary with the real in-memory Events service to verify retained replay ordering without sleeps or cancellation.
+- Detached Cobra command families should project local-only flag relationships without eagerly merging parent persistent flags; otherwise the detached storage can shadow the production root flag when the family is attached.
+- Process-boundary CLI tests should build `./cmd/factory` only when proving OS-level behavior, keep the real server on a root-built process, and assign redirected stdout and diagnostics stderr separately.
+- Restore package coverage thresholds with focused behavioral tests for typed edge outcomes; do not lower baseline manifests for new branches.
+- Public CLI manifest additions require regenerating family metadata and the published CLI contract, then updating command input/help/tree baselines.
+- Reviewed functional CLI coverage requires a sorted scenario declaration, an evidence-registry entry, a manifest mapping, and one literal `functionalevidence.Covers` marker.
+- Replay completeness must be derived from a terminal lifecycle record inside the captured Events range, not from a separately synchronized terminal session state.
+- When a package has a strict file-count baseline, put a small refactor in an existing focused file before adding a new helper file or changing the baseline.
+- When broad functional coverage reports a cancellation-observation failure, rerun the failed lane and isolate the named test before changing an unrelated feature; parallel-suite failures can move between existing durability/restart tests while isolated runs pass.
+- When a functional coverage job reports a missing evidence artifact, inspect the earlier test output first; the missing artifact can be a secondary symptom of the primary test failure.
+- For cross-repository PRs, resolve review and CI state with an explicit owner/repository and compare local, fork-branch, and PR head SHAs; current-branch discovery may follow a different local origin.
+- New functional scenarios must use an allowed product-domain noun plus subsection path such as `tests/functional/factory/batch`; transport names like `cli` and internal implementation names like `factory_runtime` are not durable domain cells.
+- Ordered functional provider outcomes can use `support.NewShapedProviderCommandRunner` with queued provider-native `CommandResult` values, including a later non-zero result, while preserving the real command-runner edge and typed provider classification.
+
+## 2026-08-10 11:39 -07:00 - wsr-001-opening-record functional coverage follow-up
+- What was implemented
+  - Resolved the current-main merge conflict while preserving this WSR PRD and the append-only progress history; the branch now includes the current `origin/main` head.
+  - Added an observable functional transport regression for the public Worker Session history route when its optional Worker Sessions owner is unavailable. The test asserts the structured `500 INTERNAL_ERROR` response and covers the API-owned defensive branch without changing the canonical success path.
+  - Kept the WSR-003 PRD evidence current with the additional unavailable-owner route coverage.
+- Files changed
+  - `tests/functional/transport/http/server/routing_safe_requests_test.go`
+  - `pkg/services/worker_sessions/transports/http/handler_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `make test-functional-coverage` — passed; overall coverage 55.5% and `pkg/transports/http` 68.5%, above the 66.35% package floor.
+  - `TestWSRFT001OpeningRecordPrecedesProviderOutput` and `TestWSRFT002LiveAndReplayCorrelationRemainStable` — passed.
+  - `TestWSRFT003ProviderNeutralLifecycleWorksWithoutProviderSession` — passed.
+  - `TestAPIWorkerSessionHistoryRouteReportsUnavailableWithoutOwnerHandler` — passed.
+  - Targeted coverage profile — all three previously uncovered `pkg/transports/http/server.go` unavailable-owner statements executed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet functional-boundary-check api-smoke` — passed.
+  - `make verify-fast` — passed dashboard typecheck, MCP contract checks, UI unit tests, and the short Go suite.
+  - `git diff --check` and PRD JSON validation — passed.
+- **Learnings for future iterations:**
+  - When a package coverage floor falls after adding a defensive transport branch, cover the public error response through the generated route and assert its observable status and error code; this preserves meaningful functional evidence instead of changing the threshold.
+  - A root-built success-path test can cover transport delegation while leaving an optional-owner failure branch uncovered, so inspect the package profile before choosing the narrowest additional test.
+---
+
+## 2026-08-10 12:13 -07:00 - wsr-001-opening-record latest-main synchronization follow-up
+- What was implemented
+  - Merged the latest `origin/main` head `947152348` after the base advanced during PR verification, resolving the generated API conflicts through `make interfaces-all`.
+  - Preserved the WSR implementation and PRD while incorporating the current main artifact-contract changes; the local merge-tree is now conflict-free.
+- Files changed
+  - `packages/api/generated/manifest.json`
+  - `ui/packages/client/src/generated/openapi.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `make interfaces-all` — passed and produced no generated drift.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet functional-boundary-check api-smoke` — passed.
+  - `make verify-fast` — passed dashboard typecheck, MCP contract checks, UI unit tests, and the short Go suite.
+  - `make test-functional-coverage` — passed; overall coverage 55.7% and `pkg/transports/http` 68.5%, above the 66.35% package floor.
+  - WSR-FT-001, WSR-FT-002, WSR-FT-003, public unavailable-owner route, and provider-neutral replay transport tests — passed.
+  - `git merge-tree --write-tree origin/main HEAD`, `git diff --check`, and PRD JSON validation — passed.
+- **Learnings for future iterations:**
+  - A PR can become dirty immediately after a successful synchronization when main advances during CI; re-fetch the live base before final handoff and regenerate only the conflicted generated artifacts through the canonical interface workflow.
+---
+
+## 2026-08-10 12:29 -07:00 - wsr-001-opening-record final CI retry follow-up
+- What was implemented
+  - Investigated the only failure on the latest-main PR run and confirmed it was the existing timing-sensitive JavaScript cancellation observation, not a WSR or coverage regression.
+  - Reproduced `TestJavaScriptDurabilityDoesNotPersistSnapshotsByDefault` successfully for 10 consecutive local runs and reran only the failed GitHub jobs; no code change was needed.
+- Files changed
+  - `progress.txt`
+- Verification
+  - GitHub Actions run `31423097483` — all required checks pass after the failed-job retry, including Backend Functional Coverage and Verification Policy.
+  - PR #1849 head `7e0e04ddc` — base `947152348`, mergeable state `clean`, open and non-draft.
+  - Thread-aware PR audit — no inline review threads or formal reviews; the historical blocking conversation findings are addressed by the current head.
+  - PR description is synchronized with `prd.json`; `git diff --check` and PRD JSON validation pass.
+- **Learnings for future iterations:**
+  - When a broad coverage lane fails at an unchanged cancellation observation, isolate the exact test, repeat it locally, and retry only the failed CI jobs before modifying stable runtime behavior.
+---
+
+## 2026-08-10 13:16 -07:00 - wsr-001-opening-record package-boundary review follow-up
+- What was implemented
+  - Addressed the latest blocking PR feedback without changing product behavior: replaced the added internal Worker Sessions `eventswire.NewService` constructor helper with a local `EventsAppender` stub, and moved the unavailable-owner Worker Session route assertion from the functional suite into the owning HTTP transport tests.
+  - Kept the customer-facing WSR functional scenarios on the required `root.BuildProcess`/`Process.Execute` path while preserving structured `500 INTERNAL_ERROR` coverage for the transport-owned defensive branch.
+  - Updated the WSR-003 PRD note to record the boundary-safe test placement and committed the code/test fix as `e07f04edb`.
+- Files changed
+  - `pkg/services/worker_sessions/internal/service/internal_test.go`
+  - `pkg/transports/http/server_models_events_additional_test.go`
+  - `tests/functional/transport/http/server/routing_safe_requests_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Focused Worker Sessions and HTTP transport tests — passed.
+  - `make functional-boundary-check` — passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` — passed.
+  - `make test` — passed.
+  - `go run ./cmd/pkgboundarycheck -root .` — reports only the known 175-entry migration baseline; the removed functional construction no longer appears and the remaining Events construction is the exact pre-existing baseline entry.
+  - `make test-functional-coverage` — exceeded the local 15-minute command wrapper timeout while its Go coverage workers continued running; no result was returned by that invocation and terminal CI remains the authoritative follow-up.
+  - `git diff --check` — passed before bookkeeping changes.
+- **Learnings for future iterations:**
+  - API-owned defensive transport assertions belong in the owning transport package; functional coverage should reserve `root.BuildProcess` for customer-visible composition and behavior.
+  - A constructor-validation test that only needs a narrow port should use a local stub, even when a real in-memory peer service is convenient elsewhere in the same package.
+---
+
+## 2026-08-10 13:58 -07:00 - wsr-001-opening-record functional coverage follow-up
+- What was implemented
+  - Added a root-built direct JavaScript server test that sends a real public Worker Session-ID events request through the handler supplied by the process edge, then verifies the intentionally partial durable composition returns structured `500 INTERNAL_ERROR` with the internal-server error family.
+  - Kept the defensive owner-unavailable assertion out of the normal functional server's direct transport construction while restoring meaningful coverage for the root HTTP transport's unavailable Worker Sessions branch.
+  - Updated the WSR-003 PRD note to document both the owning transport test and the root-built direct-JavaScript exception.
+- Files changed
+  - `tests/functional/transport/run_scoped_server/run_scoped_server_test.go`
+  - `prd.json`
+- Verification
+  - Focused and full `tests/functional/transport/run_scoped_server` tests — passed.
+  - `make functional-boundary-check` — passed.
+  - Local `make test-functional-coverage` — exceeded the 20-minute command allowance without returning a result; its coverage process was terminated after the timeout, so GitHub Actions remains authoritative for the package-floor check.
+  - `git diff --check` — passed before bookkeeping; code commit `79f0c6ef3` is pushed to PR #1849.
+- **Learnings for future iterations:**
+  - Direct JavaScript hosting is a legitimate root-built HTTP composition with durable Factory Sessions but no live Worker Sessions owner; public route assertions there can cover composition-specific defensive behavior without importing or constructing the top-level transport in a functional test.
+  - Aggregate functional coverage can exceed the local execution budget on this Windows worktree; retain focused behavioral evidence and use the terminal GitHub coverage artifact for the final package-floor result.
+---
+
+## 2026-08-10 07:25 -0700 - wsr-001-opening-record current-main verification
+- What was implemented
+  - Merged the latest `origin/main` at `ccea14bf8` as merge commit `9bc01fdd1`, retaining the WSR task PRD, append-only progress history, current-main runtime changes, and functional coverage.
+  - Regenerated bundled, Go, package, and UI interface artifacts after synchronization; generation produced no tracked drift.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+  - Current-main orchestration engine and plain-batch functional changes were retained by the merge.
+- Verification
+  - `make interfaces-all` — passed with a clean working tree.
+  - `make verify-fast` — passed dashboard typecheck, MCP contract boundary, 355 UI files / 2,970 tests, 191 Bun checks, and the short Go suite.
+  - `make pkg-structure` — passed; 573 deletion-only baseline entries remain.
+  - `go test ./pkg/services/worker_sessions/... ./pkg/services/factory_runtime/... -count=1` — passed.
+  - WSR-FT-001/002 and WSR-FT-003 focused functional tests — passed on the merged head.
+  - `make lint` passed UI lint/dead-code, vet, backend-size, maintainability, and file-count stages, then stopped at the existing 176-entry `pkg-boundary` migration baseline; no changed WSR file was reported as a new violation.
+  - `git diff --check` — passed; `prd.json` parses with all three stories still marked `passes:true`.
+- **Learnings for future iterations:**
+  - A current-main merge can add unrelated product tests and runtime fixes while leaving the active PRD unchanged; preserve those files and rerun both the shared fast tier and task-specific functional cells.
+  - The repository lint aggregate reports the known package-boundary migration baseline after all preceding checks pass; use the focused boundary output to distinguish baseline debt from task regressions.
+---
+
+## 2026-08-10 08:28 -0700 - wsr-001-opening-record review follow-up
+- What was implemented
+  - Merged current `origin/main` at `11b34c073` as merge commit `c8f25ec73`; the active WSR PRD remains authoritative and current-main product/test changes are retained.
+  - Corrected the provider-output bridge so canonical and raw provider observations are suppressed when Worker Sessions cannot resolve the dispatch or detects a provider-binding conflict; pre-opening provider output can no longer be forwarded ahead of `SESSION/STARTED`.
+  - Split the Worker publisher identity regression into focused helpers so backend-size and maintainability gates remain within their limits.
+- Files changed
+  - `pkg/services/worker_sessions/publish.go`
+  - `pkg/services/worker_sessions/observation_test.go`
+  - `progress.txt`
+  - `prd.json` remains unchanged with all three stories marked `passes:true`.
+- Verification
+  - `make interfaces-all` — passed with no generated drift.
+  - Focused Worker Sessions, Factory Runtime, and WSR-FT-001/002/003 tests — passed.
+  - `make test` — passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` — passed.
+  - `make verify-fast` — passed dashboard typecheck, MCP contract checks, 355 UI files / 2,970 tests, 191 Bun checks, and the short Go suite.
+  - `make lint` passed all stages through backend, then stopped at the known 176-entry package-boundary migration baseline; no WSR change was reported as a new violation.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - Provider output that cannot be mapped to a supervised Worker Session is not safely recoverable at the response boundary; suppress it so the customer-visible stream cannot outrun the authoritative opening.
+  - Keep ordinary publication-failure forwarding behavior separate from typed dispatch-resolution failures: the former preserves downstream resilience, while the latter would violate lifecycle ordering.
+  - After current-main synchronization, rerun interface generation before interpreting contract or generated-artifact failures; a clean generator run is stronger evidence than comparing only the authored API fragments.
+---
+
+## 2026-08-10 09:40 -0700 - wsr-001-opening-record provider-history review follow-up
+- What was implemented
+  - Addressed the blocking PR feedback that WSR-FT-003 only checked Factory response events by adding a public canonical Worker Session-ID history route and draining it through the root-built functional support path.
+  - Made Worker-ID history projection provider-neutral: retained lifecycle/output records remain inspectable when Provider Sessions transcript projection is unavailable, while any real Provider Session reference is preserved without synthesis.
+  - Extended observable provider conformance evidence across Antigravity final-only, Claude full-stream, Codex partial-stream, and Cursor/ACP session-bearing executions. Each history asserts opening position 1, stable Work/Worker correlation, source-event idempotency and sequence, provider binding before output, provider provenance/fidelity, and terminal-last replay.
+  - Synchronized the branch with current `origin/main`, regenerated REST, Go, package, and UI contract artifacts, and updated the active PRD story notes and consolidated patterns.
+- Files changed
+  - `api/openapi-main.yaml`
+  - `api/openapi.yaml`
+  - `api/components/parameters/WorkerSessionID.yaml`
+  - `pkg/services/worker_sessions/`
+  - `pkg/transports/http/`
+  - `tests/functional/internal/support/`
+  - `tests/functional/workers/inference/`
+  - `tests/functional/providers/acp/acp_provider_events_test.go`
+  - `packages/api/generated/`
+  - `ui/src/api/generated/openapi.ts`
+  - `ui/packages/client/src/generated/openapi.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/worker_sessions/... -count=1` — passed.
+  - Root-built WSR-FT-003, Claude full-stream, and Codex partial-stream history tests — passed.
+  - Root-built Cursor/ACP Worker Session history conformance test — passed.
+  - `make interfaces-all` — passed.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - A public Worker Session history contract must expose the stable Worker ID directly; requiring a Provider Session transcript projection makes valid provider-neutral histories appear unavailable.
+  - Conformance is stronger when the same public history drain validates both no-reference and session-bearing providers, including source idempotency and terminal replay rather than only final response payloads.
+---
+
+## 2026-08-10 10:06 -0700 - wsr-001-opening-record final verification
+- What was implemented
+  - Kept the new conformance assertions within the repository backend-size and maintainability limits by moving focused observation edge helpers alongside the existing internal service coverage and splitting the Antigravity history assertion at its behavioral boundary.
+  - Updated existing Worker Sessions service doubles for the expanded observation contract so the full repository short suite continues to compile and run.
+- Files changed
+  - `pkg/services/worker_sessions/internal/service/internal_test.go`
+  - `pkg/services/worker_sessions/internal/service/invoke_observation_test.go`
+  - `tests/functional/workers/inference/opening_record_test.go`
+  - `pkg/services/factory_runtime/internal/build_test.go`
+  - `pkg/services/factory_runtime/internal/services/orchestration/runtime/factory_runtime_test_helpers_test.go`
+  - `pkg/services/factory_runtime/internal/services/orchestration/runtime/dispatch_worker_sessions_idempotency_test.go`
+  - `pkg/services/factory_runtime/internal/services/orchestration/runtime/dispatch_worker_sessions_terminal_semantics_test.go`
+  - `progress.txt`
+- Verification
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` — passed.
+  - `make verify-fast` — passed dashboard typecheck, MCP contract checks, 355 Vitest files / 2,970 tests, 191 Bun tests, and the short Go suite.
+  - `make api-smoke` — passed OpenAPI validation, generation/drift checks, contract alignment, and provider parity smoke.
+  - Focused Worker Sessions, WSR, Claude/Codex, and Cursor/ACP tests — passed.
+  - `git diff --check` — passed; worktree clean before publish.
+- **Learnings for future iterations:**
+  - The repository’s parallel short-suite lane can expose an intermittent 300-second Worker Sessions timeout even when the package passes in isolation; rerunning the complete lane after isolating the named package establishes whether it is a concurrency flake.
+  - Public interface additions require updating manually implemented service doubles across Runtime tests; embedding an existing root interface does not help doubles that implement methods explicitly.
+---
+
+## 2026-08-10 14:10 -07:00 - wsr-001-opening-record current-main synchronization follow-up
+- What was implemented
+  - Synchronized the branch with the current `origin/main` at `6e01bee68`, retaining the active WSR PRD and current-main CLI exit-code changes.
+  - Resolved the append-only `progress.txt` merge by preserving the complete current-main history, all WSR history entries, and the consolidated reusable patterns.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+  - Current-main CLI and functional test changes retained by the merge.
+- Verification
+  - `prd.json` parses with all three stories still marked `passes:true`.
+  - All current-main and WSR progress headings are present; no conflict markers or malformed escaped blocks remain.
+  - `git diff --check` — passed before staging.
+- **Learnings for future iterations:**
+  - When the default branch advances during review, resolve the task PRD as the active branch’s source of truth while preserving both histories in the append-only progress log.
+---
+
+## 2026-08-10 14:53 -07:00 - wsr-001-opening-record final review-state verification
+- What was implemented
+  - Re-audited PR #1849 with the thread-aware GitHub review workflow after the package-boundary follow-up; the historical blocking findings are covered by the current branch commits, with no unresolved inline threads or formal reviews remaining.
+  - Confirmed the current branch remains synchronized with `origin/main` at `6e01bee68`, has a clean merge tree, and retains the intentional 175-entry package-boundary migration baseline without the previously reported new violation.
+  - Confirmed the pushed PR head, exact `prd.json` PR description, all three `passes:true` stories, and terminal-success required checks are aligned.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Thread-aware PR audit — 5 historical conversation comments, 0 formal reviews, and 0 inline review threads; PR #1849 is open, non-draft, mergeable, and all required checks are successful.
+  - PRD/body equality and JSON validation — passed.
+  - `git diff --check` and `git merge-tree --write-tree origin/main HEAD` — passed.
+  - `go run ./cmd/pkgboundarycheck -root .` — reports only the known 175-entry baseline recorded on current main.
+- **Learnings for future iterations:**
+  - A remaining service-internal constructor can be an intentional baseline entry; compare the checker’s total against current main and inspect the changed call sites before treating any matching `rg` result as a new violation.
+  - After a review-fix commit, verify both the branch’s remote SHA and the PR body/check state so bookkeeping does not leave the handoff stale.
+---
+
+## 2026-08-10 14:56 -07:00 - wsr-001-opening-record latest-main synchronization follow-up
+- What was implemented
+  - Merged the newly advanced `origin/main` head `78584efb5`, retaining its unrelated CLI test-file split and baseline updates while preserving the WSR branch’s task-scoped `prd.json`.
+  - Resolved the `prd.json` merge by keeping the WSR PRD as the active branch source of truth and confirmed the append-only progress histories merged without conflict markers.
+- Files changed
+  - `docs/internal/baselines/backend-exemption-budget.json`
+  - `docs/internal/baselines/backend-package-file-count.json`
+  - `pkg/transports/cli/`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `prd.json` parses with all three stories still marked `passes:true`.
+  - The merged progress log has no conflict markers; staged merge content passes `git diff --cached --check`.
+- **Learnings for future iterations:**
+  - When current main advances during PR recomputation, preserve task-scoped PRD ownership, merge the append-only progress history, and update the synchronization record to the actual fetched base SHA before publishing.
+---
+
+## 2026-08-10 15:02 -07:00 - wsr-001-opening-record merged-head verification
+- What was implemented
+  - Completed the post-merge verification pass without additional product changes; regenerated interfaces remain drift-free and the WSR implementation is ready to publish from the conflict-free merged head.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet functional-boundary-check api-smoke` — passed.
+  - Worker Sessions/Factory Runtime package tests, WSR-FT-001/002/003, provider stream-fidelity, ACP session-bearing history, and unavailable-owner HTTP tests — passed.
+  - `make verify-fast` — passed dashboard typecheck, MCP contract checks, 355 UI files / 2,970 tests, 191 Bun tests, and the short Go suite.
+  - `make interfaces-all`, `git diff --check`, and `git merge-tree --write-tree origin/main HEAD` — passed with `origin/main` at `78584efb5`.
+- **Learnings for future iterations:**
+  - After reconciling a moving default branch, rerun both contract generation and the shared fast tier before pushing so unrelated merged test reorganizations are covered by the same handoff evidence.
+---
+
+## 2026-08-10 15:23 -07:00 - wsr-001-opening-record story-001 opening-failure review follow-up
+- What was implemented
+  - Addressed the latest blocking PR feedback by requiring `publishTerminalRecord` to observe an open Worker publication window, which exists only after `SESSION/STARTED` has committed; unknown session publications now return the typed not-found error.
+  - Added a fail-first/succeed-second Events regression proving an opening append failure leaves no terminal-only Worker topic, retains the typed `EVENT_PUBLICATION_FAILURE` session result, and never calls Workers.
+- Files changed
+  - `pkg/services/worker_sessions/internal/service/publish_record.go`
+  - `pkg/services/worker_sessions/internal/service/start_side_effects_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Focused opening/terminal publication failure tests — passed.
+  - `go test ./pkg/services/worker_sessions/... -count=1` — passed.
+  - `go test ./pkg/services/factory_runtime/... -count=1` — passed.
+  - `git diff --check` — passed before bookkeeping changes.
+- **Learnings for future iterations:**
+  - The publication `open` flag is the authoritative in-process proof that the topic has a valid opening; terminal callers must check it before closing or appending so a failed opening cannot manufacture position 1.
+---
+
+## 2026-08-10 15:49 -07:00 - wsr-001-opening-record current-main synchronization follow-up
+- What was implemented
+  - Merged the newly advanced `origin/main` head `e8c0a248a` into the task branch after the PR base changed during CI.
+  - Preserved the WSR task-scoped `prd.json`, retained the append-only progress history, and kept the current-main packaged-installation changes in the merge result.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+  - Current-main packaged-installation and CLI functional-test changes included by the synchronization merge.
+- Verification
+  - `prd.json` parses with all three stories still marked `passes:true`.
+  - No merge stages or conflict markers remain; staged `git diff --check` passed.
+- **Learnings for future iterations:**
+  - Fetch the live default branch again immediately before the final PR handoff; a clean earlier merge can become stale while CI is running.
+---
+
+## 2026-08-10 16:05 -07:00 - wsr-001-opening-record merged-head verification follow-up
+- What was implemented
+  - Completed the post-synchronization verification without further product changes; generated interfaces remain drift-free on the merged head.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `make interfaces-all` — passed with no generated diff.
+  - `make test` — passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure` — passed.
+  - Focused Worker Sessions race regression tests — passed.
+  - Scoped `go vet ./pkg/services/worker_sessions/... ./pkg/services/factory_runtime/...` — passed.
+  - Full `go vet ./...` was attempted but exceeded the local 180-second wrapper while unrelated Go jobs shared the build cache; no vet diagnostic was emitted.
+  - `git diff --check`, `git merge-tree --write-tree origin/main HEAD`, and PRD JSON validation — passed; all three stories remain `passes:true`.
+- **Learnings for future iterations:**
+  - When the shared local Go cache is busy, distinguish a wrapper timeout with no diagnostics from a vet finding; use scoped vet as local evidence and rely on isolated CI for the full repository sweep.
+---
+
+## 2026-08-10 16:57 -07:00 - wsr-001-opening-record CI deflake and current-main synchronization
+- What was implemented
+  - Stabilized the existing cancellation-sensitive functional fixtures by waiting for the injected provider edge to enter its blocking call before sending interrupt controls; production behavior and the WSR PRD remain unchanged.
+  - Synchronized with current `origin/main` at `acbd13fcc`; retained main's approved JavaScript durability `ProviderCommandRunner` deflake and its fixture provider selections while resolving the task-scoped PRD/progress conflicts.
+- Files changed
+  - `tests/functional/cli/mcp_resume/serve_runtime_resume_smoke_test.go`
+  - `tests/functional/cli/session_resume/resume_smoke_test.go`
+  - `tests/functional/orchestration/javascript/durability/resume_test.go`
+  - `tests/functional/sessions/execution/helpers_test.go`
+  - `tests/functional/sessions/restart/logical_identity_test.go`
+  - `tests/fixtures/javascript_runtime/resumable-two-step-fake-children.workflow.js`
+  - `progress.txt`
+- Verification
+  - Affected functional packages, Worker Sessions/Factory Runtime packages, WSR-FT-001/002/003 — passed.
+  - `make interfaces-all` — passed with no generated drift.
+  - `make test` — passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` — passed.
+  - `git diff --check` and `git merge-tree --write-tree origin/main HEAD` — passed.
+- **Learnings for future iterations:**
+  - Current main can carry a concurrent test-deflake implementation that supersedes a local fixture change; prefer the newer approved edge-based synchronization when resolving overlapping test conflicts.
+---
+
+## 2026-08-10 18:41 -07:00 - wsr-001-opening-record final PR audit and CI follow-up
+- What was implemented
+  - No product-code changes were needed: all three WSR stories remain marked `passes:true`, the branch is clean and conflict-free with `origin/main` at `e6797fd5d`, and PR #1849 still has the exact `prd.json` body.
+  - Re-audited the PR with the thread-aware GitHub workflow: six historical conversation comments, zero formal reviews, and zero inline review threads remain; no unresolved review feedback is outstanding.
+  - Reran the failed CI jobs. The functional tests completed on retry, but Backend Functional Coverage failed its existing `pkg/transports/cli` ratchet (`72.8180%` actual vs `72.98%` minimum), which also caused Verification Policy to fail.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Focused JavaScript parallel-dispatch and Codex golden tests passed five local repetitions each.
+  - `gh run rerun 31448113624 --failed` reached a terminal result, with the only retry coverage diagnostic being the unchanged `pkg/transports/cli` minimum.
+  - The local `make test-functional-coverage` attempt exceeded its 10-minute bound without a diagnostic; its exact descendant test processes were stopped without touching a concurrent `make test` process.
+- **Learnings for future iterations:**
+  - A clean PR diff and passing focused tests do not establish the shared functional coverage ratchet; inspect the package-level CI diagnostic before changing unrelated production code.
+- Verification Policy is an aggregate failure when Backend Functional Coverage misses its package minimum; address the underlying coverage lane first.
+---
+
+## 2026-08-10 18:52 -07:00 - wsr-001-opening-record current-main synchronization after PR push
+- What was implemented
+  - Merged the newly advanced `origin/main` at `0b9771fe8` (PR #1862) after the progress-only PR update made the default branch conflict visible.
+  - Kept the WSR task-scoped `prd.json`, retained current main’s Factory Sessions test split and history, and reassembled the append-only log with all 22 WSR sections preserved.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+  - Current-main Factory Sessions execution test-split files and baseline documentation from the synchronization merge.
+- Verification
+  - `prd.json` parses with all three stories marked `passes:true`.
+  - No conflict markers remain; the WSR-section line/hash audit matches the pre-merge task history, and `git diff --cached --check` passes.
+  - The merge is staged for a synchronization commit; generated WSR artifacts were not regenerated because the merge changed only current-main test organization and bookkeeping.
+- **Learnings for future iterations:**
+  - A progress-only push can race with default-branch advancement; fetch the live base again before handoff, use current main’s progress as the merge base, preserve task sections explicitly, and validate reconstructed history before committing.
+---
+
+## 2026-08-10 19:08 -07:00 - wsr-001-opening-record final PR handoff audit
+- What was implemented
+  - Completed the latest PR follow-up for PR #1849; all three PRD stories remain marked `passes:true` and no additional product-code change was required.
+  - Confirmed the opening-publication fix prevents a successful terminal append from creating terminal-only Worker history after a failed `SESSION/STARTED` append, while retaining the typed publication-failure result and skipping Workers handoff.
+  - Confirmed the existing PR body still matches `prd.json` byte-for-byte, the branch is clean and conflict-free with current `origin/main`, and the historical blocking findings are addressed by the current commits.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/worker_sessions/... -count=1 -run 'Test.*(Opening|Terminal|Publication|Provider|Record)'` — passed.
+  - `gh pr checks 1849` — all listed checks terminal and passing.
+  - Thread-aware GitHub review audit — 0 formal reviews and 0 inline review threads; the historical conversation findings are covered by the pushed fixes.
+  - `git merge-tree --write-tree origin/main HEAD`, `git diff --check`, PRD validation, and PRD/body byte equality — passed.
+- **Learnings for future iterations:**
+  - A final PR audit should verify both the latest review finding’s behavioral regression and the remote PR’s body, mergeability, base synchronization, and terminal check state before handoff.
+---
 ## 2026-08-10 18:48 -07:00 - e2-structured-worker-results current-main review follow-up
 - What was implemented
   - Merged current `origin/main` at `0b9771fe8` into the E2 branch after PR #1855 reported a stale merge base.
@@ -6872,6 +7360,68 @@
 - **Learnings for future iterations:**
   - When a broad functional retry adds different failures but a deterministic assertion remains in an untouched package, retain the scoped implementation and record the baseline blocker instead of modifying unrelated tests or runtime hosting.
   - Compare both the exact failing package paths and focused local repeats before treating a functional lane failure as a task regression.
+## 2026-08-10 19:12 -07:00 - wsr-001-opening-record latest-main synchronization follow-up
+- What was implemented
+  - Merged the live `origin/main` head `72537e7f2` into the WSR branch after PR #1849 became conflicting during final handoff.
+  - Preserved the WSR task-scoped `prd.json`, unioned both append-only progress histories, retained current-main CLI/generated-artifact changes, and resolved the import-only functional test conflict.
+- Files changed
+  - Current-main CLI contract, documentation, generated-artifact, and functional-test files carried forward by the synchronization merge.
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `prd.json` parses with all three WSR stories marked `passes:true`; no conflict markers remain.
+  - `make interfaces-all` — passed with no generated drift.
+  - Worker Sessions package tests and `tests/functional/transport/run_scoped_server` — passed.
+  - `git diff --cached --check` and `git diff --check` — passed before the merge commit.
+- **Learnings for future iterations:**
+  - A documentation-only PR update can still become conflicting when current main advances; fetch the live base immediately before handoff and validate the replacement merge head before pushing.
+---
+
+## 2026-08-10 19:38 -07:00 - wsr-001-opening-record final CI and handoff follow-up
+- What was implemented
+  - Re-audited PR #1849 with the thread-aware GitHub workflow; all historical conversation feedback is addressed, with zero formal reviews and zero unresolved or outdated inline threads.
+  - Investigated the failed Backend Functional Coverage retry as unrelated current-main functional-test flakiness, verified the WSR-specific focused test locally, and reran only the failed CI jobs until the complete required check set passed.
+  - Merged the live `origin/main` head `aac04248d` into the branch before final handoff; the merge contained only current-main development-plan documentation and had no conflicts.
+- Files changed
+  - `progress.txt`
+  - Current-main files under `docs/internal/development/plans/` carried by the synchronization merge.
+- Verification
+  - `go test ./tests/functional/transport/cli/process -run '^TestCLISuccessorAfterHardKillReportsPreRuntimeStagingContention$' -count=1 -v` — passed.
+  - CI run `31451707750` — all required checks, including Backend Functional Coverage and Verification Policy, passed after the failed-lane retries.
+  - `prd.json` JSON validation and all three `passes:true` stories — passed; PR #1849 body remains byte-for-byte identical to `prd.json`.
+  - Thread-aware PR audit — 7 conversation comments, 0 formal reviews, and 0 unresolved/outdated inline threads.
+  - `git merge-tree --write-tree origin/main HEAD` and `git diff --check` — passed with `origin/main` at `aac04248d`.
+- **Learnings for future iterations:**
+  - When a broad functional lane fails on different timing-sensitive tests across retries, inspect the exact failed test and rerun only the failed jobs before widening an unrelated feature diff; the repository already records this as the preferred flake-handling pattern.
+---
+
+## 2026-08-10 20:00 -07:00 - wsr-001-opening-record pushed-head CI confirmation
+- What was implemented
+  - Recorded the final pushed-head verification after the latest-main synchronization and progress handoff commit.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Head `4795b0d1c` — CI run `31453029741` is terminal and all required checks pass, including Backend Functional Coverage and Verification Policy.
+  - PR #1849 is open, non-draft, `CLEAN/MERGEABLE`, and targets `origin/main` at `aac04248d`.
+  - Thread-aware audit remains at 7 conversation comments, 0 formal reviews, and 0 unresolved/outdated inline threads; all three PRD stories remain `passes:true` and the PR body remains byte-identical to `prd.json`.
+- **Learnings for future iterations:**
+  - Treat the CI result on the pushed head, rather than the pre-push synchronization head, as the final handoff evidence.
+---
+
+## 2026-08-10 20:18 -07:00 - wsr-001-opening-record final iteration audit
+- What was implemented
+  - No remaining story work was required: all three WSR stories remain marked `passes:true`.
+  - Re-audited existing PR #1849 after reading the thread-aware review history; the historical blocking findings have corresponding fixes, with no formal reviews or unresolved inline threads.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `prd.json` parses successfully and the PR body remains byte-for-byte equal to it.
+  - `gh pr checks 1849` — all listed required checks pass, including Backend Functional Coverage and Verification Policy.
+  - `gh pr view 1849` — PR is open, non-draft, `CLEAN/MERGEABLE`, and targets current `origin/main` at `aac04248d`.
+  - `git merge-tree --write-tree origin/main HEAD` — passed; the worktree is clean and conflict-free.
+- **Learnings for future iterations:**
+  - When all stories are complete and a PR already exists, perform the thread-aware review, body/PRD, current-base, mergeability, and terminal-check audit before making only the required append-only progress update.
+---
 ## [2026-08-10 19:35 -07:00] - e2-structured-worker-results current-main synchronization follow-up
 - What was implemented
   - Merged the live `origin/main` head `aac04248d` into the E2 branch after PR #1855 reported the base had advanced again.
@@ -6892,6 +7442,24 @@
   - Keep the task PRD authoritative while unioning append-only progress histories when multiple worktrees share the same base.
 ---
 
+## 2026-08-10 21:00 -07:00 - wsr-001-opening-record review feedback and current-main synchronization
+- What was implemented
+  - Addressed the latest PR feedback by removing `--with-mock-workers` from the root-built direct-JavaScript unavailable-owner route probe; the workflow only returns JavaScript and does not invoke a worker.
+  - Merged the live `origin/main` head `ee0023397` while preserving the WSR PRD and combining both append-only progress histories, then regenerated public interfaces and package artifacts.
+- Files changed
+  - `tests/functional/transport/run_scoped_server/run_scoped_server_test.go`
+  - `progress.txt`
+  - Current-main synchronization and regenerated API/package files.
+- Verification
+  - `make interfaces-all` — passed.
+  - `go test ./tests/functional/transport/run_scoped_server -run '^TestRunScopedRawJavaScriptServerReportsUnavailableWorkerSessionOwner$' -count=1 -v` — passed.
+  - `go test ./pkg/services/worker_sessions/... -count=1` — passed.
+  - WSR-FT-001, WSR-FT-002, and WSR-FT-003 focused functional tests — passed.
+  - `prd.json` parses with all three stories marked `passes:true`; no conflict markers remain; `git diff --check` passed.
+- **Learnings for future iterations:**
+  - A root-built JavaScript workflow with no worker handoff does not need Mock Workers; removing the flag preserves the transport probe while satisfying the functional-test construction boundary.
+  - After merging current main, regenerate interfaces from the merged authored sources before staging generated artifacts.
+---
 ## 2026-08-10 19:25 -07:00 - ci-additive-classifier-001
 - What was implemented
   - Added explicit root `frontend-verification`, `backend-verification`, and `ui-backend-integration` Make targets for direct classifier-lane reruns.
@@ -7021,4 +7589,18 @@
   - The PR thread audit remains at zero unresolved review threads and zero formal reviews; the PR is open with all six stories still marked `passes:true`.
 - **Learnings for future iterations:**
   - When a CI failure is outside the implementation diff, rerun the exact test locally and record whether it reproduces before changing production behavior; isolated passes and a deterministic untouched baseline failure should remain a CI follow-up rather than an unrelated fix.
+
+## 2026-08-10 21:23 -07:00 - wsr-001-opening-record final pushed-head audit
+- What was implemented
+  - Recorded the final pushed-head audit after the live `origin/main` advanced to `469204421` and the current-main CI classifier merge was reconciled into the WSR branch.
+  - Confirmed the latest review feedback remains addressed by the root-built JavaScript probe running without `--with-mock-workers`.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Head `36686ef79` — CI run `31457898566` has all 18 listed checks terminal and successful, including Backend Functional Coverage, Backend Unit Coverage, and Verification Policy.
+  - PR #1849 is open, non-draft, `CLEAN/MERGEABLE`, targets `origin/main` at `469204421`, and its body remains byte-for-byte equal to `prd.json`.
+  - Thread-aware review audit reports 8 conversation comments, 0 formal reviews, and 0 unresolved/outdated inline threads.
+  - `prd.json` parses with all three stories marked `passes:true`; `git merge-tree --write-tree origin/main HEAD` and `git diff --check` pass; the worktree is clean.
+- **Learnings for future iterations:**
+  - A green PR run becomes stale when `origin/main` advances during local verification; fetch immediately before handoff, merge the new base, and wait for checks on the replacement head.
 ---
