@@ -11880,3 +11880,20 @@
 - **Learnings for future iterations:**
   - Treat the latest-main merge, final hosted run, PR-body parity, and thread-aware comment audit as one handoff bundle; a green workflow before the final progress update does not certify the new bookkeeping head.
 ---
+
+## [2026-08-11 09:39 -07:00] - dwro-s7-placement-grammar merged-head verification
+- What was implemented
+  - Merged the fresh `origin/main` head `650b701689fcbc467fa0e814478460b9c3316629` and retained the active S7 PRD while unioning the append-only progress history from main.
+  - Revalidated the remote canonical-event stream, explicit placement wiring, executable help, and root-built server/client lifecycle evidence on the merged head.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/transports/cli/run ./pkg/transports/cli/commandregistry ./pkg/transports/cli/climanifestcobra ./pkg/transports/cli ./tests/functional/workers/transports/cli/run/help ./tests/functional/workers/transports/cli/run/lifecycle -count=1 -timeout 600s` — passed.
+  - `go test ./pkg/services/factory_sessions/... ./pkg/wire/... -count=1 -timeout 600s` — passed.
+  - `make cli-manifest-check contracts-check docs-reference-smoke backend-size pkg-maint pkg-file-count pkg-structure vet` — passed.
+  - `git merge-base --is-ancestor origin/main HEAD`, PRD JSON parsing, merge-marker scan, and `git diff --check` — passed.
+  - `make pkg-boundary` remains limited to the two current-main ACP/chat-session ownership findings recorded above; no S7 violation was introduced.
+- **Learnings for future iterations:**
+  - Resolve a moving-base progress conflict by retaining both complete histories and append the task’s merged-head verification as the final entry; do not replace the active PRD with an unrelated mainline task contract.
+---
