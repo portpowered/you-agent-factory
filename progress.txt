@@ -9820,3 +9820,19 @@
   - A clean local branch can still be dirty on GitHub when the remote base advances; fetch the live ref immediately before publishing and preserve task PRD/history during shared-file conflict resolution.
   - Record the latest tested merge head and workflow separately from later bookkeeping commits so CI evidence remains tied to a real executable tree.
 ---
+## [2026-08-11 01:38:33 -07:00] - btrc-p1-root-injection-006 focused verification audit
+- What was implemented
+  - Ran the focused P1/root package suite after synchronizing current `origin/main`; all selected packages passed.
+  - Started `make verify-fast`; it exceeded the 360-second local tool bound without producing a result. Inspected the process tree and stopped only the eight descendants of this exact `make.exe verify-fast` invocation, leaving unrelated workspace processes untouched.
+  - Advanced the delivery audit to pushed head `8e0c8d4ccc0e776ed7c33a3702fe6284aa732019` and queued workflow `31473276748`.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/root ./pkg/wire ./pkg/services/factory_sessions/... ./pkg/services/factory_runtime/... ./pkg/transports/cli/run -count=1 -timeout 300s` — passed.
+  - `make verify-fast` — local execution timed out after 364 seconds before a result; this is recorded as pending rather than a pass.
+  - `git status` — clean after the process cleanup; the thread-aware PR audit remains at zero review threads, zero unresolved threads, and zero formal reviews.
+- **Learnings for future iterations:**
+  - On Windows, a timed-out verification wrapper can leave descendants running; identify the exact parent/child tree before stopping only that invocation's processes.
+  - Focused P1 coverage remains green after current-main synchronization, while final completion still depends on terminal CI and merge state.
+---

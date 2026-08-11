@@ -11,14 +11,14 @@
   },
   "deliveryAudit": {
     "pullRequest": 1857,
-    "head": "59b8b2e2c524f08509fa89a2ae063949ea53cbb5",
+    "head": "8e0c8d4ccc0e776ed7c33a3702fe6284aa732019",
     "base": "1b871e3a84125400ca3f04b2bdf9fd2658ac5c45",
     "reviewThreads": 0,
     "unresolvedReviewThreads": 0,
     "formalReviews": 0,
     "latestWorkflow": {
-      "run": 31471872028,
-      "result": "in_progress",
+      "run": 31473276748,
+      "result": "pending",
       "rerunResult": "not-run",
       "taskScopedFailures": [],
       "baselineFailures": []
