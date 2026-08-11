@@ -1,8 +1,7 @@
 type: object
 additionalProperties: false
-description: One explicit directional modality fact for a harness route or model.
+description: A modality produced by a tool, explicitly separate from direct model output.
 required:
-  - direction
   - modality
   - support
   - transport
@@ -28,12 +27,10 @@ oneOf:
           - unsupported
           - unknown
 properties:
-  direction:
-    $ref: './ProviderModalityDirection.yaml'
   modality:
     $ref: './ProviderModalityKind.yaml'
   support:
-    $ref: './ProviderModalitySupport.yaml'
+    $ref: './ProviderCapabilitySupport.yaml'
   transport:
     $ref: './ProviderModalityTransport.yaml'
   condition:
@@ -48,7 +45,7 @@ properties:
     minItems: 1
     maxItems: 16
     uniqueItems: true
-    description: Stable IDs of evidence records qualifying this fact.
+    description: Stable IDs of evidence records qualifying this tool output fact.
     items:
       type: string
       minLength: 1

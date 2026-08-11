@@ -30,6 +30,9 @@ test("generated declarations come from the explicit Provider Catalog schema", as
 		declarations,
 		/export type ProviderTechnicalSupportLevel = "production" \| "experimental" \| "not-supported"/,
 	);
+	assert.match(declarations, /readonly defaultEnabled\?: boolean \| null;/);
+	assert.match(declarations, /export type ProviderModality =[^]*readonly condition: string;/);
+	assert.match(declarations, /export type ProviderTool =[^]*readonly condition: string;/);
 });
 
 test("development manifest is commit-independent and records exact artifact hashes", async () => {

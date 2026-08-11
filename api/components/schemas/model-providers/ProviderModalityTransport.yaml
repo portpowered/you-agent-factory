@@ -3,4 +3,6 @@ description: How a supported modality is supplied or returned.
 enum:
   - inline
   - file_path
+  - acp_resource
+  - tool_mediated
   - none

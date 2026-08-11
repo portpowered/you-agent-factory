@@ -39,7 +39,7 @@
     "provider-catalog-schema": {
       "path": "generated/provider-catalog.schema.json",
       "family": "model-providers",
-      "artifactHash": "ebf6c80b78db3da28c5c63d9fc9db43aaaf51b48db2ee8255352c9085c4143a0",
+      "artifactHash": "ca244620486c4b0790a00a7dceb087a689f7c60045784729d07c06be5624046e",
       "documentation": {
         "formatVersion": "1.0.0",
         "itemId": "provider-catalog-schema",
@@ -57,7 +57,7 @@
           "generated/provider-catalog.schema.json"
         ],
         "visibility": "public",
-        "sourceHash": "ebf6c80b78db3da28c5c63d9fc9db43aaaf51b48db2ee8255352c9085c4143a0"
+        "sourceHash": "ca244620486c4b0790a00a7dceb087a689f7c60045784729d07c06be5624046e"
       },
       "lifecycle": {
         "formatVersion": "1.0.0",
@@ -69,7 +69,7 @@
     "provider-manifest-schema": {
       "path": "generated/provider-manifest.schema.json",
       "family": "model-providers",
-      "artifactHash": "874984f23a9f72caf135b12d43c9b9568c5832da051b510934670f5fc2e169ac",
+      "artifactHash": "36fecba1c443c5d9b2e4db8f3ca7cf02fdf2cf23f8c7876cc1f47ead04b5635b",
       "documentation": {
         "formatVersion": "1.0.0",
         "itemId": "provider-manifest-schema",
@@ -87,7 +87,7 @@
           "generated/provider-manifest.schema.json"
         ],
         "visibility": "public",
-        "sourceHash": "874984f23a9f72caf135b12d43c9b9568c5832da051b510934670f5fc2e169ac"
+        "sourceHash": "36fecba1c443c5d9b2e4db8f3ca7cf02fdf2cf23f8c7876cc1f47ead04b5635b"
       },
       "lifecycle": {
         "formatVersion": "1.0.0",
