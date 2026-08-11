@@ -9847,3 +9847,17 @@
   - The functional package minimum is sensitive to small command-handler additions; pair every new runnable lifecycle branch with an observable functional invocation, even when unit placement tests already cover the branch.
   - Quote dotted Go import-path flags in PowerShell; unquoted `-coverpkg=github.com/...` was parsed incorrectly on this host.
 ---
+## [2026-08-11 04:58:17 -07:00] - dwro-s7-placement-grammar-008
+- What was implemented
+  - Audited PR #1878 with no issue comments, submitted reviews, or unresolved inline review threads.
+  - Reproduced the first hosted Backend Unit Coverage failure (`TestFileWatcher_DuplicateLiveObservationSubmitsOnce`) ten times locally; the test passed every run, the package is unrelated to the S7 diff, and no source fix was warranted.
+  - Reran only the failed hosted jobs on the unchanged S7 head; all required CI lanes passed on attempt 2.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/services/automations/internal/services/filesystem_watchers/internal/service -run '^TestFileWatcher_DuplicateLiveObservationSubmitsOnce$' -count=10 -timeout 300s` — passed.
+  - Hosted CI run `31487868947`, attempt 2 — passed Backend Unit Coverage, Backend Functional Coverage, Verification Policy, and every other required lane.
+- **Learnings for future iterations:**
+  - When hosted coverage fails in an unchanged package, reproduce the named test locally before editing task code; a clean repeated run supports rerunning the failed jobs as a bounded flake response.
+  - A bookkeeping-only push still needs a replacement hosted run on its new head before final review readiness is declared.
+---
