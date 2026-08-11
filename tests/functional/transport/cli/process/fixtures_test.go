@@ -232,6 +232,20 @@ func interruptAndAssertCancellationExit(t testing.TB, command *builtcliacceptanc
 	}
 }
 
+func waitForScannerCompletion(t testing.TB, scanErr <-chan error, role string, timeout time.Duration) {
+	t.Helper()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case err := <-scanErr:
+		if err != nil {
+			t.Fatalf("%s stdout scanner failed: %v", role, err)
+		}
+	case <-timer.C:
+		t.Fatalf("%s stdout scanner did not finish within %s", role, timeout)
+	}
+}
+
 func startRootProcessServerCommand(
 	t testing.TB,
 	session *builtcliacceptance.Session,

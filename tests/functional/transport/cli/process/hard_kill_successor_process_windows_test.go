@@ -9,7 +9,7 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-func isRetryablePreRuntimeStagingObservationError(err error) bool {
+func isPreRuntimeStagingMetadataUnavailable(err error) bool {
 	return errors.Is(err, windows.ERROR_SHARING_VIOLATION) || errors.Is(err, windows.ERROR_LOCK_VIOLATION)
 }
 

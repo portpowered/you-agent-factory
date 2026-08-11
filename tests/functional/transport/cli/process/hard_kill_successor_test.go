@@ -57,10 +57,12 @@ func TestCLISuccessorAfterHardKillReportsPreRuntimeStagingContention(t *testing.
 	if err := predecessor.stop(); err != nil {
 		t.Fatalf("hard-kill predecessor: %v; stdout=%q stderr=%q process=%s", err, predecessor.stdoutText(), predecessor.stderrText(), predecessor.processState())
 	}
+	releasePredecessor()
 	t.Logf("predecessor acquired pre-runtime packaged-factory staging resource and was hard-killed: %s", stagingPath)
 	if _, err := os.Stat(stagingPath); err != nil {
 		t.Fatalf("hard-killed predecessor did not retain staged resource %s: %v", stagingPath, err)
 	}
+	ownershipResourcesBeforeSuccessor := listStagingOwnershipResources(t, session.HomeDir)
 	retainedFiles := listRegularFiles(t, session.HomeDir)
 	ownershipCandidates := make([]string, 0)
 	for _, path := range retainedFiles {
@@ -103,6 +105,13 @@ func TestCLISuccessorAfterHardKillReportsPreRuntimeStagingContention(t *testing.
 	if _, err := os.Stat(stagingPath); err != nil {
 		t.Fatalf("successor removed retained staging resource %s: %v", stagingPath, err)
 	}
+	if got := listStagingOwnershipResources(t, session.HomeDir); !sameStringSet(got, ownershipResourcesBeforeSuccessor) {
+		t.Fatalf(
+			"successor changed staging ownership resources: before=%v after=%v",
+			ownershipResourcesBeforeSuccessor,
+			got,
+		)
+	}
 }
 
 func hardKillSuccessorArgs(session *builtcliacceptance.Session) []string {
@@ -118,11 +127,17 @@ func hardKillSuccessorArgs(session *builtcliacceptance.Session) []string {
 }
 
 type hardKillCLIProcess struct {
-	command   *exec.Cmd
-	stdout    processOutput
-	stderr    processOutput
-	stdoutErr chan error
-	waited    bool
+	command *exec.Cmd
+	stdout  processOutput
+	stderr  processOutput
+
+	waitOnce sync.Once
+	waitDone chan struct{}
+	waitErr  error
+
+	scanDone chan struct{}
+	scanErr  error
+	mu       sync.Mutex
 }
 
 func startHardKillCLIProcess(t testing.TB, binaryPath string, session *builtcliacceptance.Session, args ...string) *hardKillCLIProcess {
@@ -136,8 +151,9 @@ func startHardKillCLIProcess(t testing.TB, binaryPath string, session *builtclia
 		t.Fatalf("open hard-kill predecessor stdout: %v", err)
 	}
 	process := &hardKillCLIProcess{
-		command:   command,
-		stdoutErr: make(chan error, 1),
+		command:  command,
+		waitDone: make(chan struct{}),
+		scanDone: make(chan struct{}),
 	}
 	command.Stderr = lockedProcessWriter{output: &process.stderr}
 	if err := command.Start(); err != nil {
@@ -149,36 +165,28 @@ func startHardKillCLIProcess(t testing.TB, binaryPath string, session *builtclia
 			line := scanner.Text()
 			process.stdout.append([]byte(line + "\n"))
 		}
-		process.stdoutErr <- scanner.Err()
+		process.mu.Lock()
+		process.scanErr = scanner.Err()
+		process.mu.Unlock()
+		close(process.scanDone)
 	}()
 	return process
 }
 
 func (process *hardKillCLIProcess) waitForBoundedFailure(t testing.TB, role string) error {
 	t.Helper()
-	waitResult := make(chan error, 1)
-	go func() { waitResult <- process.command.Wait() }()
-	timer := time.NewTimer(hardKillSuccessorReadinessTimeout)
-	defer timer.Stop()
-	var waitErr error
-	select {
-	case waitErr = <-waitResult:
-		process.waited = true
-	case <-timer.C:
-		if process.command.Process != nil && process.command.ProcessState == nil {
-			_ = process.command.Process.Kill()
-		}
-		waitErr = <-waitResult
-		process.waited = true
+	waitErr, exited := process.waitForExit(hardKillSuccessorReadinessTimeout)
+	if !exited {
+		_ = process.kill()
+		_, _ = process.waitForExit(hardKillProcessExitTimeout)
 		t.Fatalf("%s did not return a bounded failure: stdout=%q stderr=%q process=%s", role, process.stdoutText(), process.stderrText(), process.processState())
 	}
-	select {
-	case scanErr := <-process.stdoutErr:
-		if scanErr != nil {
-			t.Fatalf("%s stdout scanner failed: %v; stdout=%q stderr=%q process=%s", role, scanErr, process.stdoutText(), process.stderrText(), process.processState())
-		}
-	case <-time.After(hardKillProcessExitTimeout):
+	scanErr, scanned := process.waitForScanner(hardKillProcessExitTimeout)
+	if !scanned {
 		t.Fatalf("%s stdout scanner did not finish within %s: stdout=%q stderr=%q process=%s", role, hardKillProcessExitTimeout, process.stdoutText(), process.stderrText(), process.processState())
+	}
+	if scanErr != nil {
+		t.Fatalf("%s stdout scanner failed: %v; stdout=%q stderr=%q process=%s", role, scanErr, process.stdoutText(), process.stderrText(), process.processState())
 	}
 	if waitErr == nil {
 		t.Fatalf("%s returned success; stdout=%q stderr=%q process=%s", role, process.stdoutText(), process.stderrText(), process.processState())
@@ -190,30 +198,67 @@ func (process *hardKillCLIProcess) stop() error {
 	if process == nil || process.command == nil {
 		return nil
 	}
-	if process.waited {
-		return nil
+	if err := process.kill(); err != nil {
+		return err
 	}
-	if process.command.Process != nil && process.command.ProcessState == nil {
-		if err := process.command.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
-			return fmt.Errorf("kill process: %w", err)
-		}
-	}
-	waitResult := make(chan error, 1)
-	go func() { waitResult <- process.command.Wait() }()
-	timer := time.NewTimer(hardKillProcessExitTimeout)
-	defer timer.Stop()
-	select {
-	case <-waitResult:
-		process.waited = true
-	case <-timer.C:
+	if _, exited := process.waitForExit(hardKillProcessExitTimeout); !exited {
 		return fmt.Errorf("process did not exit within %s", hardKillProcessExitTimeout)
 	}
-	select {
-	case <-process.stdoutErr:
-	case <-time.After(hardKillProcessExitTimeout):
+	scanErr, scanned := process.waitForScanner(hardKillProcessExitTimeout)
+	if !scanned {
 		return fmt.Errorf("stdout scanner did not finish within %s", hardKillProcessExitTimeout)
 	}
+	if scanErr != nil {
+		return fmt.Errorf("stdout scanner: %w", scanErr)
+	}
 	return nil
+}
+
+func (process *hardKillCLIProcess) kill() error {
+	if process.command.Process == nil || process.command.ProcessState != nil {
+		return nil
+	}
+	if err := process.command.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
+		return fmt.Errorf("kill process: %w", err)
+	}
+	return nil
+}
+
+func (process *hardKillCLIProcess) waitForExit(timeout time.Duration) (error, bool) {
+	process.waitOnce.Do(func() {
+		go func() {
+			err := process.command.Wait()
+			process.mu.Lock()
+			process.waitErr = err
+			process.mu.Unlock()
+			close(process.waitDone)
+		}()
+	})
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-process.waitDone:
+		process.mu.Lock()
+		err := process.waitErr
+		process.mu.Unlock()
+		return err, true
+	case <-timer.C:
+		return nil, false
+	}
+}
+
+func (process *hardKillCLIProcess) waitForScanner(timeout time.Duration) (error, bool) {
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-process.scanDone:
+		process.mu.Lock()
+		err := process.scanErr
+		process.mu.Unlock()
+		return err, true
+	case <-timer.C:
+		return nil, false
+	}
 }
 
 func (process *hardKillCLIProcess) stdoutText() string { return process.stdout.String() }
@@ -309,39 +354,45 @@ func waitForPreRuntimeStagingPath(t testing.TB, session *builtcliacceptance.Sess
 	deadline := time.NewTimer(hardKillSuccessorReadinessTimeout)
 	defer deadline.Stop()
 	// The packaged installer and its exclusive directory reservation run in the
-	// child process and expose no parent-process event or injectable edge. Stop
-	// the child before inspecting the isolated filesystem. This is the
-	// acquisition barrier: once the owner directory is observed, the child
-	// cannot reach its normal release path before the parent hard-kills it. If
-	// no owner is present, resume the child and retry; the deadline is only a
-	// failure guard for a missing acquisition.
+	// child process and expose no parent-process event or injectable edge. First
+	// wait for the complete readable owner record. Then suspend the child and
+	// verify that exact ownership directory remains before returning the kill
+	// checkpoint; if the child released it in the suspend gap, resume and wait
+	// for the next complete record. A Windows writer can expose the directory
+	// while retaining the metadata handle, so a sharing violation is an
+	// incomplete checkpoint rather than a failed successor observation. Once the
+	// final path check succeeds, the child cannot reach its normal release path
+	// before the parent hard-kills it; the deadline is only a failure guard for a
+	// missing acquisition.
 	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
 	for {
-		resume, err := suspendHardKillProcess(predecessorPID)
+		path, err := findPreRuntimeStagingPath(root, predecessorPID)
 		if err != nil {
-			t.Fatalf("suspend predecessor before observing pre-runtime staging: %v", err)
-		}
-		path, err := findPreRuntimeStagingPath(root)
-		if err != nil {
-			if resumeErr := resume(); resumeErr != nil {
-				t.Fatalf("resume predecessor after staging observation error: %v; original error: %v", resumeErr, err)
+			if !isPreRuntimeStagingMetadataUnavailable(err) {
+				t.Fatalf("observe complete pre-runtime packaged-factory staging under %s: %v", root, err)
 			}
-			if !isRetryablePreRuntimeStagingObservationError(err) {
-				t.Fatalf("observe pre-runtime packaged-factory staging under %s: %v", root, err)
-			}
-			select {
-			case <-ticker.C:
-			case <-deadline.C:
-				t.Fatalf("timed out observing pre-runtime packaged-factory staging under %s after retryable observation error: %v", root, err)
-			}
-			continue
+			path = ""
 		}
 		if path != "" {
-			return path, func() { _ = resume() }
-		}
-		if err := resume(); err != nil {
-			t.Fatalf("resume predecessor after observing no pre-runtime staging: %v", err)
+			resume, err := suspendHardKillProcess(predecessorPID)
+			if err != nil {
+				t.Fatalf("suspend predecessor before observing pre-runtime staging: %v", err)
+			}
+			_, statErr := os.Stat(path)
+			if statErr == nil || isPreRuntimeStagingMetadataUnavailable(statErr) {
+				var releaseOnce sync.Once
+				return path, func() {
+					releaseOnce.Do(func() { _ = resume() })
+				}
+			}
+			if !errors.Is(statErr, os.ErrNotExist) {
+				_ = resume()
+				t.Fatalf("verify pre-runtime packaged-factory staging under %s: %v", root, statErr)
+			}
+			if err := resume(); err != nil {
+				t.Fatalf("resume predecessor after staging release before suspension: %v", err)
+			}
 		}
 		select {
 		case <-ticker.C:
@@ -351,36 +402,63 @@ func waitForPreRuntimeStagingPath(t testing.TB, session *builtcliacceptance.Sess
 	}
 }
 
-func findPreRuntimeStagingPath(root string) (string, error) {
-	var found string
+func findPreRuntimeStagingPath(root string, predecessorPID int) (string, error) {
+	entries, err := os.ReadDir(root)
+	if errors.Is(err, os.ErrNotExist) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() || !strings.HasPrefix(entry.Name(), ".") || !strings.HasSuffix(entry.Name(), ".staging-owner") {
+			continue
+		}
+		path := filepath.Join(root, entry.Name())
+		metadata, err := os.ReadFile(filepath.Join(path, preRuntimeStagingOwnerMetadata))
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return "", err
+		}
+		var owner struct {
+			PID int `json:"pid"`
+		}
+		if err := json.Unmarshal(metadata, &owner); err != nil {
+			return "", fmt.Errorf("decode staging owner metadata %s: %w", path, err)
+		}
+		if owner.PID != predecessorPID {
+			return "", fmt.Errorf("staging owner metadata %s has PID %d, want predecessor PID %d", path, owner.PID, predecessorPID)
+		}
+		return path, nil
+	}
+	return "", nil
+}
+
+func listStagingOwnershipResources(t testing.TB, root string) []string {
+	t.Helper()
+	var resources []string
 	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if path == root || !entry.IsDir() {
-			return nil
-		}
-		if strings.HasPrefix(entry.Name(), ".") && strings.HasSuffix(entry.Name(), ".staging-owner") {
-			if _, statErr := os.Stat(path); errors.Is(statErr, os.ErrNotExist) {
-				return filepath.SkipDir
-			} else if statErr != nil {
-				return statErr
+		name := strings.ToLower(entry.Name())
+		metadataName := strings.ToLower(preRuntimeStagingOwnerMetadata)
+		if (entry.IsDir() && strings.HasSuffix(name, ".staging-owner")) ||
+			(!entry.IsDir() && (name == metadataName || name == metadataName+".tmp")) {
+			relative, err := filepath.Rel(root, path)
+			if err != nil {
+				return err
 			}
-			ownerMetadataPath := filepath.Join(path, preRuntimeStagingOwnerMetadata)
-			if _, statErr := os.Stat(ownerMetadataPath); errors.Is(statErr, os.ErrNotExist) {
-				return filepath.SkipDir
-			} else if statErr != nil {
-				return statErr
-			}
-			found = path
-			return filepath.SkipDir
+			resources = append(resources, relative)
 		}
 		return nil
 	})
-	if errors.Is(err, os.ErrNotExist) {
-		return "", nil
+	if err != nil {
+		t.Fatalf("inventory staging ownership resources under %s: %v", root, err)
 	}
-	return found, err
+	return resources
 }
 
 func listRegularFiles(t testing.TB, root string) []string {
