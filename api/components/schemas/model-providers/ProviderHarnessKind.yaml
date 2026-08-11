@@ -1,0 +1,5 @@
+type: string
+description: Execution harness family represented by a provider manifest.
+enum:
+  - native_cli
+  - acp

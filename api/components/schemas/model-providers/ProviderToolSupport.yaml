@@ -1,5 +1,7 @@
 type: string
-description: Whether the provider exposes a named tool through its integration.
+description: Evidence state for a named provider tool fact.
 enum:
   - supported
   - unsupported
+  - conditional
+  - unknown

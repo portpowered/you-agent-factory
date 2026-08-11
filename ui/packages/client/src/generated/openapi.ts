@@ -4449,6 +4449,8 @@ export interface components {
       invocationSignature?: components["schemas"]["FactoryInvocationSignature"];
       /** @description Ordered runnable invocation examples. Canonical Factory documents write examples here; legacy invocationSignature.examples are accepted only by the Factory input compatibility mapper. */
       examples?: components["schemas"]["FactoryInvocationExample"][];
+      /** @description Optional outbound webhook subscriptions. Existing Factory definitions without this field do not start outbound delivery work. */
+      webhooks?: components["schemas"]["FactoryWebhook"][];
       /** @description Root-level guards that apply across the factory instead of one specific workstation or input. */
       guards?: components["schemas"]["FactoryGuard"][];
       /** @description Customer-authored work item categories and the lifecycle states each one can occupy. */
@@ -4463,6 +4465,50 @@ export interface components {
       workers?: components["schemas"]["Worker"][];
       /** @description Processing steps that consume work, invoke workers, and emit the next work states. */
       workstations?: components["schemas"]["Workstation"][];
+    };
+    /** @description One Factory-configured outbound webhook subscription. Secret material is represented only by a reference and is resolved at delivery time. */
+    FactoryWebhook: {
+      /** @description Unique customer-authored subscription name. */
+      name: string;
+      /** @description Whether this subscription is active for future canonical events. */
+      enabled: boolean;
+      /** @description Absolute HTTP or HTTPS destination URL. */
+      url: string;
+      /** @description Secret reference resolved by the delivery boundary; raw secret values are never part of Factory configuration. */
+      signingSecretRef: string;
+      filter: components["schemas"]["FactoryWebhookFilter"];
+      /** @description Optional bounded delivery policy. Omitted fields use the documented defaults. */
+      deliveryPolicy?: components["schemas"]["FactoryWebhookDeliveryPolicy"];
+    };
+    /** @description Canonical event filter for one outbound webhook subscription. */
+    FactoryWebhookFilter: {
+      /** @description Canonical event types selected for delivery. */
+      eventTypes: components["schemas"]["FactoryWebhookEventType"][];
+      /** @description Optional canonical dispatch statuses applied only to dispatch event types. */
+      dispatchStatuses?: components["schemas"]["FactoryWebhookDispatchStatus"][];
+    };
+    /**
+     * @description Canonical Factory Event types supported by outbound webhook filters.
+     * @enum {string}
+     */
+    FactoryWebhookEventType: FactoryWebhookEventType;
+    /**
+     * @description Canonical dispatch statuses supported by outbound webhook filters.
+     * @enum {string}
+     */
+    FactoryWebhookDispatchStatus: FactoryWebhookDispatchStatus;
+    /** @description Bounded outbound delivery policy. Durations use Go duration syntax. Omitted values resolve to a 10 second request timeout, 5 total attempts, 1 second initial backoff, 2.0 multiplier, and 30 second maximum backoff. */
+    FactoryWebhookDeliveryPolicy: {
+      /** @description Positive Go duration allowed for one HTTP request attempt. */
+      requestTimeout?: string;
+      /** @description Total delivery attempts including the initial request. */
+      maxAttempts?: number;
+      /** @description Positive Go duration before the first retry. */
+      initialBackoff?: string;
+      /** @description Exponential retry multiplier; values below 1 are not supported. */
+      backoffMultiplier?: number;
+      /** @description Positive Go duration cap for one retry delay; it must not be below initialBackoff. */
+      maxBackoff?: string;
     };
     /** @description Authored orchestrator identity for one factory. When omitted, existing Petri factories load through compatibility defaulting to orchestrator.kind = PETRI. */
     FactoryOrchestrator: {
@@ -4853,6 +4899,12 @@ export interface components {
       maximumExecutionCapabilities: components["schemas"]["ProviderExecutionCapabilities"];
       maximumResponseFidelityCapabilities: components["schemas"]["ProviderResponseFidelityCapabilities"];
       discovery: components["schemas"]["ProviderDiscoveryPrerequisites"];
+      harness?: components["schemas"]["ProviderHarness"];
+      modelCatalogPosture?: components["schemas"]["ProviderModelCatalogPosture"];
+      /** @description Directional routes implemented by the provider harness, independent of any model catalog claim. */
+      harnessRoutes?: components["schemas"]["ProviderModality"][];
+      /** @description Bounded evidence records used to qualify capability facts in this manifest. */
+      evidence?: components["schemas"]["ProviderCapabilityEvidence"][];
       /** @description Named provider models and their complete capability facts in canonical model-ID order. */
       models?: components["schemas"]["ProviderModel"][];
       /** @description Named provider tool facts in canonical tool-name order. */
@@ -4860,6 +4912,91 @@ export interface components {
       /** @description Named provider constraints and bounded behavior facts in canonical name order. */
       knownLimits?: components["schemas"]["ProviderKnownLimit"][];
       deprecation?: components["schemas"]["ProviderDeprecation"];
+    };
+    /**
+     * @description Evidence state shared by harness, modality, and tool capability facts.
+     * @enum {string}
+     */
+    ProviderCapabilitySupport: ProviderCapabilitySupport;
+    /** @description Bounded evidence record qualifying one or more published capability facts. */
+    ProviderCapabilityEvidence: {
+      /** @description Stable manifest-local evidence identifier. */
+      id: string;
+      kind: components["schemas"]["ProviderCapabilityEvidenceKind"];
+      /**
+       * Format: date
+       * @description UTC calendar date on which the evidence was checked.
+       */
+      verifiedOn: string;
+      /**
+       * Format: uri
+       * @description Optional public HTTPS source for the evidence.
+       */
+      url?: string;
+      /** @description Optional harness version used when the evidence was checked. */
+      harnessVersion?: string;
+      /** @description Optional bounded references to facts qualified by this record. */
+      factRefs?: string[];
+    };
+    /**
+     * @description Source class for evidence supporting a published capability fact.
+     * @enum {string}
+     */
+    ProviderCapabilityEvidenceKind: ProviderCapabilityEvidenceKind;
+    /**
+     * @description How a provider's model identifiers are known to the published catalog.
+     * @enum {string}
+     */
+    ProviderModelCatalogPosture: ProviderModelCatalogPosture;
+    /** @description Provider harness metadata, kept separate from model capability facts. */
+    ProviderHarness: {
+      kind: components["schemas"]["ProviderHarnessKind"];
+      acpSupport?: components["schemas"]["ProviderACPSupport"];
+    };
+    /**
+     * @description Execution harness family represented by a provider manifest.
+     * @enum {string}
+     */
+    ProviderHarnessKind: ProviderHarnessKind;
+    /** @description Typed ACP support metadata for a provider harness. */
+    ProviderACPSupport: {
+      support: components["schemas"]["ProviderCapabilitySupport"];
+      /** @description Bounded operator-visible condition required when ACP support is conditional. */
+      condition?: string;
+      /** @description ACP protocol version known to the manifest author. */
+      protocolVersion?: string;
+      resourceDelivery?: components["schemas"]["ProviderACPResourceDelivery"];
+      /** @description Stable IDs of evidence records qualifying ACP support. */
+      evidenceRefs?: string[];
+    } & (
+      | {
+          /** @enum {string} */
+          support?: ProviderACPSupportOneOf0Support;
+          condition: string;
+        }
+      | {
+          /** @enum {string} */
+          support?: ProviderACPSupportOneOf1Support;
+        }
+    );
+    /**
+     * @description Evidence state for delivering a resource through the ACP harness.
+     * @enum {string}
+     */
+    ProviderACPResourceDelivery: ProviderACPResourceDelivery;
+    /** @description Optional bounded media constraints for one modality route. */
+    ProviderMediaConstraints: {
+      /** @description Accepted or emitted media types, such as image/png or audio/wav. */
+      mediaTypes?: string[];
+      /**
+       * Format: int64
+       * @description Maximum payload size in bytes when documented.
+       */
+      maxBytes?: number;
+      /** @description Maximum media duration in seconds when documented. */
+      maxDurationSeconds?: number;
+      /** @description Maximum number of media items accepted or emitted in one route. */
+      maxItems?: number;
     };
     /**
      * @description Maintainer-verified technical support posture for a provider integration. This value does not describe whether the provider is installed or ready on the current machine.
@@ -4969,13 +5106,28 @@ export interface components {
       /** @description Complete directional modality facts, including unsupported values. */
       modalities: components["schemas"]["ProviderModality"][];
     };
-    /** @description One explicit supported or unsupported directional modality fact. */
+    /** @description One explicit directional modality fact for a harness route or model. */
     ProviderModality: {
       direction: components["schemas"]["ProviderModalityDirection"];
       modality: components["schemas"]["ProviderModalityKind"];
       support: components["schemas"]["ProviderModalitySupport"];
       transport: components["schemas"]["ProviderModalityTransport"];
-    };
+      /** @description Bounded operator-visible condition required when support is conditional. */
+      condition?: string;
+      mediaConstraints?: components["schemas"]["ProviderMediaConstraints"];
+      /** @description Stable IDs of evidence records qualifying this fact. */
+      evidenceRefs?: string[];
+    } & (
+      | {
+          /** @enum {string} */
+          support?: ProviderModalityOneOf0Support;
+          condition: string;
+        }
+      | {
+          /** @enum {string} */
+          support?: ProviderModalityOneOf1Support;
+        }
+    );
     /**
      * @description Direction in which a provider model accepts or emits a modality.
      * @enum {string}
@@ -4987,7 +5139,7 @@ export interface components {
      */
     ProviderModalityKind: ProviderModalityKind;
     /**
-     * @description Whether the provider model supports the modality in this direction.
+     * @description Evidence state for a directional harness or model modality fact.
      * @enum {string}
      */
     ProviderModalitySupport: ProviderModalitySupport;
@@ -5003,12 +5155,57 @@ export interface components {
       support: components["schemas"]["ProviderToolSupport"];
       /** @description Bounded explanation of the tool fact. */
       description: string;
-    };
+      /** @description Bounded operator-visible condition required when tool support is conditional. */
+      condition?: string;
+      /** @description Stable IDs of evidence records qualifying this tool fact. */
+      evidenceRefs?: string[];
+      availability?: components["schemas"]["ProviderToolAvailability"];
+      /** @description Whether the tool is enabled by default; null means the default is unknown or operator-defined. */
+      defaultEnabled?: boolean | null;
+      /** @description Tool-produced modalities, kept separate from direct model output modalities. */
+      outputModalities?: components["schemas"]["ProviderToolOutputModality"][];
+    } & (
+      | {
+          /** @enum {string} */
+          support?: ProviderToolOneOf0Support;
+          condition: string;
+        }
+      | {
+          /** @enum {string} */
+          support?: ProviderToolOneOf1Support;
+        }
+    );
     /**
-     * @description Whether the provider exposes a named tool through its integration.
+     * @description Evidence state for a named provider tool fact.
      * @enum {string}
      */
     ProviderToolSupport: ProviderToolSupport;
+    /**
+     * @description How a named tool becomes available to the provider harness.
+     * @enum {string}
+     */
+    ProviderToolAvailability: ProviderToolAvailability;
+    /** @description A modality produced by a tool, explicitly separate from direct model output. */
+    ProviderToolOutputModality: {
+      modality: components["schemas"]["ProviderModalityKind"];
+      support: components["schemas"]["ProviderCapabilitySupport"];
+      transport: components["schemas"]["ProviderModalityTransport"];
+      /** @description Bounded operator-visible condition required when support is conditional. */
+      condition?: string;
+      mediaConstraints?: components["schemas"]["ProviderMediaConstraints"];
+      /** @description Stable IDs of evidence records qualifying this tool output fact. */
+      evidenceRefs?: string[];
+    } & (
+      | {
+          /** @enum {string} */
+          support?: ProviderToolOutputModalityOneOf0Support;
+          condition: string;
+        }
+      | {
+          /** @enum {string} */
+          support?: ProviderToolOutputModalityOneOf1Support;
+        }
+    );
     /** @description Named bounded provider constraint or documented behavior. */
     ProviderKnownLimit: {
       /** @description Stable machine-readable limit name. */
@@ -8746,6 +8943,20 @@ export const FactorySaveMode = {
 } as const;
 export type FactorySaveMode =
   (typeof FactorySaveMode)[keyof typeof FactorySaveMode];
+export const FactoryWebhookEventType = {
+  WORK_STATE_CHANGE: "WORK_STATE_CHANGE",
+  DISPATCH_RESPONSE: "DISPATCH_RESPONSE",
+  DISPATCH_RECONCILED: "DISPATCH_RECONCILED",
+  DISPATCH_INTERRUPTED: "DISPATCH_INTERRUPTED",
+} as const;
+export type FactoryWebhookEventType =
+  (typeof FactoryWebhookEventType)[keyof typeof FactoryWebhookEventType];
+export const FactoryWebhookDispatchStatus = {
+  FAILED: "FAILED",
+  INTERRUPTED: "INTERRUPTED",
+} as const;
+export type FactoryWebhookDispatchStatus =
+  (typeof FactoryWebhookDispatchStatus)[keyof typeof FactoryWebhookDispatchStatus];
 export const FactoryOrchestratorKind = {
   PETRI: "PETRI",
   JAVASCRIPT: "JAVASCRIPT",
@@ -8867,6 +9078,56 @@ export const ProviderCatalogProviderSchema = {
 } as const;
 export type ProviderCatalogProviderSchema =
   (typeof ProviderCatalogProviderSchema)[keyof typeof ProviderCatalogProviderSchema];
+export const ProviderCapabilitySupport = {
+  supported: "supported",
+  unsupported: "unsupported",
+  conditional: "conditional",
+  unknown: "unknown",
+} as const;
+export type ProviderCapabilitySupport =
+  (typeof ProviderCapabilitySupport)[keyof typeof ProviderCapabilitySupport];
+export const ProviderCapabilityEvidenceKind = {
+  primary_documentation: "primary_documentation",
+  protocol_probe: "protocol_probe",
+  conformance_fixture: "conformance_fixture",
+  maintainer_assertion: "maintainer_assertion",
+} as const;
+export type ProviderCapabilityEvidenceKind =
+  (typeof ProviderCapabilityEvidenceKind)[keyof typeof ProviderCapabilityEvidenceKind];
+export const ProviderModelCatalogPosture = {
+  exact: "exact",
+  runtime_discovered: "runtime_discovered",
+  operator_selected: "operator_selected",
+  unknown: "unknown",
+} as const;
+export type ProviderModelCatalogPosture =
+  (typeof ProviderModelCatalogPosture)[keyof typeof ProviderModelCatalogPosture];
+export const ProviderHarnessKind = {
+  native_cli: "native_cli",
+  acp: "acp",
+} as const;
+export type ProviderHarnessKind =
+  (typeof ProviderHarnessKind)[keyof typeof ProviderHarnessKind];
+export const ProviderACPSupportOneOf0Support = {
+  conditional: "conditional",
+} as const;
+export type ProviderACPSupportOneOf0Support =
+  (typeof ProviderACPSupportOneOf0Support)[keyof typeof ProviderACPSupportOneOf0Support];
+export const ProviderACPSupportOneOf1Support = {
+  supported: "supported",
+  unsupported: "unsupported",
+  unknown: "unknown",
+} as const;
+export type ProviderACPSupportOneOf1Support =
+  (typeof ProviderACPSupportOneOf1Support)[keyof typeof ProviderACPSupportOneOf1Support];
+export const ProviderACPResourceDelivery = {
+  implemented: "implemented",
+  unsupported: "unsupported",
+  conditional: "conditional",
+  unknown: "unknown",
+} as const;
+export type ProviderACPResourceDelivery =
+  (typeof ProviderACPResourceDelivery)[keyof typeof ProviderACPResourceDelivery];
 export const ProviderTechnicalSupportLevel = {
   production: "production",
   experimental: "experimental",
@@ -8915,6 +9176,18 @@ export const ProviderEffort = {
 } as const;
 export type ProviderEffort =
   (typeof ProviderEffort)[keyof typeof ProviderEffort];
+export const ProviderModalityOneOf0Support = {
+  conditional: "conditional",
+} as const;
+export type ProviderModalityOneOf0Support =
+  (typeof ProviderModalityOneOf0Support)[keyof typeof ProviderModalityOneOf0Support];
+export const ProviderModalityOneOf1Support = {
+  supported: "supported",
+  unsupported: "unsupported",
+  unknown: "unknown",
+} as const;
+export type ProviderModalityOneOf1Support =
+  (typeof ProviderModalityOneOf1Support)[keyof typeof ProviderModalityOneOf1Support];
 export const ProviderModalityDirection = {
   input: "input",
   output: "output",
@@ -8932,22 +9205,61 @@ export type ProviderModalityKind =
 export const ProviderModalitySupport = {
   supported: "supported",
   unsupported: "unsupported",
+  conditional: "conditional",
+  unknown: "unknown",
 } as const;
 export type ProviderModalitySupport =
   (typeof ProviderModalitySupport)[keyof typeof ProviderModalitySupport];
 export const ProviderModalityTransport = {
   inline: "inline",
   file_path: "file_path",
+  acp_resource: "acp_resource",
+  tool_mediated: "tool_mediated",
   none: "none",
 } as const;
 export type ProviderModalityTransport =
   (typeof ProviderModalityTransport)[keyof typeof ProviderModalityTransport];
+export const ProviderToolOneOf0Support = {
+  conditional: "conditional",
+} as const;
+export type ProviderToolOneOf0Support =
+  (typeof ProviderToolOneOf0Support)[keyof typeof ProviderToolOneOf0Support];
+export const ProviderToolOneOf1Support = {
+  supported: "supported",
+  unsupported: "unsupported",
+  unknown: "unknown",
+} as const;
+export type ProviderToolOneOf1Support =
+  (typeof ProviderToolOneOf1Support)[keyof typeof ProviderToolOneOf1Support];
 export const ProviderToolSupport = {
   supported: "supported",
   unsupported: "unsupported",
+  conditional: "conditional",
+  unknown: "unknown",
 } as const;
 export type ProviderToolSupport =
   (typeof ProviderToolSupport)[keyof typeof ProviderToolSupport];
+export const ProviderToolAvailability = {
+  built_in: "built_in",
+  optional: "optional",
+  operator_configured: "operator_configured",
+  external: "external",
+  unknown: "unknown",
+} as const;
+export type ProviderToolAvailability =
+  (typeof ProviderToolAvailability)[keyof typeof ProviderToolAvailability];
+export const ProviderToolOutputModalityOneOf0Support = {
+  conditional: "conditional",
+} as const;
+export type ProviderToolOutputModalityOneOf0Support =
+  (typeof ProviderToolOutputModalityOneOf0Support)[keyof typeof ProviderToolOutputModalityOneOf0Support];
+export const ProviderToolOutputModalityOneOf1Support = {
+  supported: "supported",
+  unsupported: "unsupported",
+  unknown: "unknown",
+} as const;
+export type ProviderToolOutputModalityOneOf1Support =
+  (typeof ProviderToolOutputModalityOneOf1Support)[keyof typeof ProviderToolOutputModalityOneOf1Support];
 export const ProviderKnownLimitKind = {
   maximum: "maximum",
   default: "default",

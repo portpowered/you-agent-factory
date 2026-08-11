@@ -72,7 +72,31 @@ function referenceName(reference) {
 	return reference.slice(prefix.length);
 }
 
+function mergeOneOfVariant(base, variant) {
+	const merged = { ...variant };
+	if (base.properties || variant.properties) {
+		merged.properties = { ...base.properties, ...variant.properties };
+	}
+	return merged;
+}
+
 function renderType(schema, indentation = "") {
+	if (Array.isArray(schema.type)) {
+		return schema.type
+			.map((type) => (type === "null" ? "null" : renderType({ ...schema, type }, indentation)))
+			.join(" | ");
+	}
+	if (schema.oneOf) {
+		const base = { ...schema };
+		delete base.oneOf;
+		const variants = schema.oneOf
+			.map((variant) => renderType(mergeOneOfVariant(base, variant), indentation))
+			.join(" | ");
+		if (base.type || base.properties || base.$ref) {
+			return `(${renderType(base, indentation)}) & (${variants})`;
+		}
+		return variants;
+	}
 	if (schema.$ref) {
 		return referenceName(schema.$ref);
 	}
