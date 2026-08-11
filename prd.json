@@ -1,95 +1,74 @@
 {
-  "project": "DWRO S1 — Explicit Remote Placement and Listener Selection",
-  "branchName": "dwro-s1-remote-placement-flags",
-  "description": "Implement story S1 of Direct Worker and Remote Operations by adding persistent root --remote and authored command placement capabilities, dispatching one normalized request through either the local service or exactly the selected --server endpoint without fallback, introducing --listen for local binds with a warned legacy compatibility path, and rejecting documented conflicts with run --with-server and run --with-site.",
+  "project": "Truthful Provider Capability Manifest Contract",
+  "branchName": "provider-capability-contract",
+  "description": "Implement Story 1 of the Provider Harness Capability Catalog Plan by adding a truthful OpenAPI capability-manifest vocabulary, migrating the antigravity, claude, and codex manifests with evidence, regenerating derived contracts, and preserving existing provider discovery behavior.",
   "context": {
-    "customerAsk": "Implement DWRO story S1: persistent root --remote, authored command placement capabilities, endpoint-only --server, new --listen for local listener binds, no silent local fallback, and documented conflicts with run --with-server and run --with-site.",
-    "problem": "The CLI has no explicit execution-placement input and its authored manifest cannot state whether a command is local-only, remote-only, or dual-placement. The global --server flag also selects both HTTP client endpoints and local listener binds, so customers and scripts cannot unambiguously distinguish calling an existing server from hosting one, and unsupported remote requests lack one centralized no-fallback rule.",
-    "solution": "Add persistent root --remote, a resolved local/remote placement value, and per-command placement capabilities to the authored CLI contract. Normalize command inputs once and select exactly one injected local-service or HTTP-client adapter, rejecting unsupported or failed remote placement without fallback. Make --server the remote endpoint selector, add --listen to listener-owning commands, preserve explicit legacy --server binding with a deprecation warning when --listen is absent, give --listen precedence, and enforce documented usage conflicts before side effects."
+    "customerAsk": "Publish a truthful provider capability manifest contract so customers and automation can distinguish harness support from model support, understand ACP posture and modality routes, identify built-in versus configured tools, and trace non-unknown claims to evidence before work is dispatched.",
+    "problem": "Provider metadata cannot distinguish unsupported, conditional, and unknown facts; mixes harness routes with model capabilities; and does not qualify tool availability or evidence. This permits optimistic generic capability claims that can make incompatible harness/model pairs appear executable.",
+    "solution": "Extend the authored OpenAPI model-provider contract and offline semantic validation with explicit support states, evidence records, harness metadata, model-catalog posture, separate harness/model modality routes, and tool availability. Migrate the three native manifests without fact loss, regenerate every derived artifact, and prove discovery parity."
   },
   "acceptanceCriteria": [
-    "The authored CLI manifest defines persistent root --remote, a resolved local/remote placement value, and local-only, remote-only, or dual-placement capabilities for affected commands; executable help and parsing match that contract.",
-    "A representative dual-placement operation produces the same normalized request locally without --remote and sends that request to exactly the --server <uri> HTTP endpoint with --remote, with equivalent domain intent across adapters.",
-    "Unsupported remote placement, an invalid or unavailable selected server, and remote transport failure return stable actionable errors and never invoke the local product operation, start a listener, or silently select another endpoint.",
-    "you server --listen, you run --with-server --listen, and you run --with-site --listen bind the requested local address; when --listen is absent, legacy listener use of an explicitly supplied --server remains functional for the compatibility window and warns, while explicit --listen takes precedence.",
-    "--remote with run --with-server or run --with-site is rejected as a documented stable usage conflict before listener, browser, Factory, or remote-operation side effects begin; reference docs and examples use the new placement vocabulary.",
-    "Quality gates pass with direct CLI and manifest, package, functional, help and reference, and compatibility evidence as applicable; Typecheck passes, Tests pass, and there are no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
-    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared or generated-file churn are resolved against current main, and the PR is actually merged."
+    "The Provider Manifest and Provider Catalog schemas accept the complete new vocabulary and reject duplicate facts, dangling evidence references, unsupported route/support combinations, unqualified conditional facts, and direct/tool-mediated output contradictions.",
+    "antigravity, claude, and codex express truthful harness, model, modality, tool, and evidence states without losing current IDs, aliases, exact models, efforts, limits, prerequisites, execution capabilities, or response-fidelity facts.",
+    "Every supported, unsupported, or conditional modality fact and every supported tool references valid bounded evidence, while unknown remains explicit and requires no fabricated evidence.",
+    "Seed claims are published only with primary documentation or checked conformance evidence; unverified Grok/Qwen and later packaged-ACP facts remain unclaimed in this lane.",
+    "Existing provider discovery and projection behavior remains unchanged for established facts and deterministic ordering, with focused parity tests proving no fact loss.",
+    "Typecheck, focused schema/generator/package/projection tests, API generation and smoke checks pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
+    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts are resolved against current main, generated shared files are regenerated rather than hand-merged, and the PR is actually merged."
   ],
   "userStories": [
     {
-      "id": "dwro-s1-remote-placement-flags-001",
-      "title": "Declare explicit placement in the authored CLI contract",
-      "description": "As a CLI user and command implementer, I want root placement and each command's supported placements to be explicit so help, validation, and dispatch share one authoritative contract.",
+      "id": "provider-capability-contract-001",
+      "title": "Validate truthful capability facts",
+      "description": "As a catalog consumer, I want capability facts to carry an explicit state, scope, route, condition, and evidence so that absent or incompatible facts cannot be mistaken for support.",
       "acceptanceCriteria": [
-        "The authored CLI manifest exposes a visible persistent root --remote boolean whose documented meaning is to execute a supported operation through a running You server; it does not imply async, follow, continuous, or listener behavior.",
-        "The executable parser resolves the root input to explicit local placement by default and remote placement when --remote appears before or after the command path, consistent with other persistent flags.",
-        "A command can authoritatively declare local-only, remote-only, or dual-placement capability, and manifest validation rejects a runnable command whose placement declaration is missing or invalid where the placement contract applies.",
-        "Existing HTTP-only commands retain their historical remote-default compatibility for this window, accept explicit --remote, and do not gain a local implementation merely to satisfy the new vocabulary.",
-        "Root and representative command help show the placement meaning and supported usage without describing --remote as a waiting or server-start option.",
-        "Focused contract and parser tests prove manifest validation, persistent flag inheritance, before and after command parsing, default placement, and explicit remote placement through observable CLI inputs and help.",
+        "Authored OpenAPI components represent native_cli/acp harness kind, typed ACP support metadata, exact/runtime_discovered/operator_selected/unknown model-catalog posture, and supported/unsupported/conditional/unknown capability support.",
+        "Harness routes and model facts cover directional text, image, audio, and video and distinguish inline, file_path, implemented ACP resource delivery, tool_mediated, and none mechanisms with applicable media constraints.",
+        "Tool facts distinguish built_in, optional, operator_configured, external, and unknown availability and represent nullable default enablement and tool output modalities without treating tool output as direct model output.",
+        "Bounded evidence records support primary_documentation, protocol_probe, conformance_fixture, and maintainer_assertion with stable IDs, verification dates, optional URLs/harness versions, and fact references.",
+        "Validation rejects duplicate facts, dangling evidence references, out-of-bounds evidence, unqualified conditional facts, non-unknown claims lacking required evidence, invalid route/support combinations, and direct/tool-mediated output contradictions.",
+        "Schema and generator tests exercise every enum and representative valid and invalid combinations, including all four support states.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 1,
       "passes": true,
-      "notes": ""
+      "notes": "Implemented the additive capability vocabulary and offline semantic validator. Authored OpenAPI components now cover native_cli/acp harnesses, typed ACP support/resource delivery, model-catalog posture, directional modality routes, media constraints, tool availability/output modalities, four-state support, and bounded evidence. Validation covers duplicate and dangling/out-of-bounds facts, conditional qualification, evidence requirements, route/transport compatibility, ACP resource routing, tool-mediated output separation, and direct/tool-mediated output contradictions. Regenerated OpenAPI, Go/TypeScript, catalog schema, published package, and UI-package artifacts. Focused schema/generator/validation/package tests, make test, make typecheck, make api-smoke, provider-catalog-check, model-provider-package-smoke, contracts-check, backend-size, pkg-maint, pkg-file-count, pkg-structure, and vet pass. Native manifest migration is Story 002; discovery parity is Story 003."
     },
     {
-      "id": "dwro-s1-remote-placement-flags-002",
-      "title": "Dispatch normalized operations without placement fallback",
-      "description": "As a customer, I want the same operation to run locally by default or on exactly my selected server with --remote so placement is predictable and cannot silently change during failure.",
+      "id": "provider-capability-contract-002",
+      "title": "Publish truthful native manifests",
+      "description": "As a provider catalog user, I want each native provider manifest to distinguish harness and model truth with evidence so that I can interpret its capabilities without optimistic inference.",
       "acceptanceCriteria": [
-        "At least one representative supported dual-placement command normalizes customer inputs once before dispatch, calls its already-injected local service adapter without --remote, and calls its HTTP client adapter with --remote.",
-        "Behavioral parity coverage proves the local and remote adapters receive contract-equivalent normalized request values for the same customer input, allowing only transport metadata differences.",
-        "you --remote --server <uri> <dual-placement-command> sends the operation to exactly <uri> and does not invoke the local product operation, start or probe a local listener, or substitute the default endpoint.",
-        "A local-only command invoked with --remote exits with a stable actionable usage error that identifies the unsupported placement before command side effects occur.",
-        "Invalid endpoint configuration, connection refusal, timeout, and other remote transport failures remain remote failures and do not retry through the local adapter; diagnostics identify the selected endpoint without leaking credentials or sensitive request content.",
-        "Placement selection remains a CLI transport concern: domain services receive normalized operation requests and do not inspect CLI placement flags or discover alternate dependencies.",
-        "Focused package and public CLI behavioral tests cover local dispatch, exact remote dispatch, unsupported placement, and failed remote transport with zero local fallback.",
+        "antigravity, claude, and codex validate against the new contract and declare native harness posture, exact model-catalog posture, harness routes, model facts, qualified tools, and referenced evidence.",
+        "Migration preserves canonical IDs, aliases, exact model IDs, effort values, known limits, discovery prerequisites, maximum execution capabilities, and maximum response-fidelity capabilities.",
+        "Antigravity and Codex seed capability statements use supported, unsupported, or conditional only when primary documentation or a checked conformance fixture supports the claim; otherwise they use unknown.",
+        "Tool-mediated image or video generation does not create a false direct model-output claim.",
+        "Grok, Qwen, and packaged ACP inventory facts are not introduced or upgraded by inference in this story.",
+        "Golden catalog tests cover supported, unsupported, conditional, and unknown native modality/tool facts and evidence-reference closure.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 2,
-      "passes": true,
-      "notes": "Implemented dual-placement `you run` dispatch through one normalized invocation request and an injected local or exact-URI HTTP adapter, with stable unsupported-placement and no-fallback remote errors. Refreshed authored and published CLI contract artifacts and added focused package/public CLI behavioral coverage. Verified with `make contracts-validate`, `make cli-manifest-check`, `go test ./pkg/transports/cli/run ./pkg/transports/cli ./pkg/wire ./pkg/services/workers/internal/interface -count=1`, and `make test`. Review follow-up makes invalid remote endpoint labels fail closed for parse-success/base-invalid opaque and unsupported-scheme inputs, with credential-redaction regression coverage."
+      "passes": false,
+      "notes": ""
     },
     {
-      "id": "dwro-s1-remote-placement-flags-003",
-      "title": "Bind local servers with --listen and preserve legacy scripts",
-      "description": "As an operator, I want local listener addresses selected with --listen so --server can mean a remote endpoint while my existing listener scripts have a safe migration window.",
+      "id": "provider-capability-contract-003",
+      "title": "Preserve generated and discovery parity",
+      "description": "As an existing provider-discovery consumer, I want the expanded manifest contract to regenerate cleanly without losing established facts or changing discovery behavior.",
       "acceptanceCriteria": [
-        "you server --listen <address>, you run --with-server --listen <address>, and you run --with-site --listen <address> bind the requested valid local address and report existing stable bind failures for invalid, non-local, or unavailable addresses.",
-        "Listener-owning commands use the existing default local bind when neither an explicit --listen nor an explicit legacy bind value is supplied.",
-        "During the compatibility window, an explicitly supplied legacy --server <local-uri> continues to select the listener bind only when --listen is absent and emits one actionable deprecation warning on stderr directing the user to --listen.",
-        "When both inputs are supplied to a listener-owning command, explicit --listen determines the bind address; --server does not override it, and compatibility diagnostics accurately explain any retained endpoint role.",
-        "Ordinary local commands and ordinary you run do not start a listener merely because --listen or the default server endpoint exists; invalid flag placement is rejected before runtime side effects.",
-        "CLI manifest relationships, help, and examples describe --listen as the local bind input and --server as the selected You server URI, including the legacy migration behavior.",
-        "Focused listener lifecycle tests use observable readiness and bind behavior and prove requested binding, precedence, warning, bind failure, and joined shutdown without arbitrary sleeps.",
+        "Canonical OpenAPI changes deterministically regenerate bundled OpenAPI, Go and TypeScript types, manifest/catalog JSON Schemas, generated catalog, and published package artifacts without manual edits.",
+        "Generated schemas and language types preserve the authored enum values, required fields, nullability, and evidence-reference semantics.",
+        "Provider projection and CLI capability tests prove unchanged identity, deterministic ordering, models, efforts, limits, prerequisites, execution capabilities, and response fidelity while accepting additive metadata.",
+        "Static provider discovery stays offline and inert and does not launch providers, probe the filesystem, or access the network.",
+        "Focused generation drift checks and the applicable public API smoke check pass from a clean generated state.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 3,
-      "passes": true,
-      "notes": "Implemented exact local listener selection through --listen for you server and server-enabled you run/you run --with-site flows, with loopback-only validation, explicit precedence over --server, one-time legacy local --server warnings, and preserved automatic legacy allocation. Ordinary runs reject misplaced --listen before the run handler, and listener lifecycle coverage proves exact readiness, unavailable-port errors, and shutdown. Refreshed authored/generated CLI contracts, command/help baselines, and reference guidance. Verified with make contracts-validate, make cli-manifest-check, make docs-reference-smoke, make test, go test ./pkg/transports/cli/... -count=1, focused CLI tests, full run-scoped-server functional tests, backend-size, pkg-maint, pkg-file-count, vet, and git diff --check; aggregate make lint is blocked by the pre-existing missing UI knip binary, and the backend-only continuation reaches existing package-boundary baseline violations; neither reports new violations."
-    },
-    {
-      "id": "dwro-s1-remote-placement-flags-004",
-      "title": "Reject remote and local-hosting conflicts and publish migration guidance",
-      "description": "As a customer, I want contradictory placement modes rejected with clear guidance so the CLI never both calls a remote server and hosts the same run locally.",
-      "acceptanceCriteria": [
-        "you --remote run --with-server and you --remote run --with-site each exit with the same stable usage classification and actionable conflict message, regardless of persistent-flag position.",
-        "Conflict validation occurs before Factory execution, HTTP dispatch, listener startup, browser launch, recording, or other run-owned side effects.",
-        "Authored CLI relationships, executable help, and packaged reference docs state that --remote selects a running server, --server selects its URI, and --listen selects a local bind; they document both run-mode conflicts and the legacy bind migration.",
-        "New customer-facing examples use you --remote --server <uri> for supported remote operations and --listen <address> for local server or server-enabled run binding; they do not present legacy --server listener syntax as the preferred form.",
-        "Behavioral CLI tests prove both conflicts, stable exit and error output, zero side effects, and help and reference guidance rather than relying on source or route inventories.",
-        "Documentation reference smoke checks pass",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 4,
-      "passes": true,
-      "notes": "Implemented stable REMOTE_LOCAL_HOSTING_CONFLICT validation before system initialization and again after custom run parsing, covering --remote before or after run with both --with-server and --with-site; behavioral tests prove no local, remote, browser, listener, or Factory side effects. Added authored conflict relationships, structured BAD_REQUEST output, executable help/examples, legacy --server migration guidance, and packaged reference documentation; regenerated published contracts and CLI baselines. Addressed review feedback by removing duplicate placement keys from authored/generated manifests, making manifest loading reject duplicate JSON object keys, redacting malformed credential-bearing endpoint diagnostics, keeping maintainability and package-file-count ratchets green, using worker-free listener functional cases, and removing marker-only docs assertions. Moved the generic strict decoder into the policy-free generated-artifact platform package and added loader/decoder coverage so the CLI manifest unit and functional floors remain intact. Verified with focused CLI tests, the full short Go suite, make verify-fast, make cli-manifest-check, make contracts-validate, make docs-reference-smoke, make pkg-maint, make pkg-file-count, backend-size, pkg-structure, vet, full run-scoped-server functional tests, and git diff --check."
+      "passes": false,
+      "notes": ""
     }
   ]
 }

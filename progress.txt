@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- Provider OpenAPI changes that feed the published model-provider package require `make interfaces-all`, `make provider-catalog-generate`, and `make model-provider-package-generate`; `api-smoke` checks generated REST artifacts against the committed tree, so commit generated output before relying on that smoke result.
 - For final PR handoff, compare the PR body byte-for-byte with `prd.json` and use the thread-aware GraphQL review audit because flat PR comments do not expose inline-thread resolution state.
 - OS-boundary functional tests may poll an isolated durable filesystem checkpoint only when the child exposes no parent-process event or injected edge; document that reason at each polling helper and keep the bound as a failure guard.
 - Git Worktree preparation treats a retained Git `*.lock` as indeterminate ownership: retry within a named bound, preserve the resource, and return its exact path with verify/remove/retry guidance.
@@ -3993,5 +3994,26 @@
   - `progress.txt` and `prd.json` contain no merge conflict markers; the merge index is resolved.
   - `git diff --cached --check` passed before the merge commit.
 - **Learnings for future iterations:**
-  - A clean merge against a stale remote-tracking base is not sufficient; compare the live hosting ref, fetch it, and resolve shared PRD/progress files again before pushing the replacement head.
+- A clean merge against a stale remote-tracking base is not sufficient; compare the live hosting ref, fetch it, and resolve shared PRD/progress files again before pushing the replacement head.
+---
+
+## [2026-08-10 21:03 -07:00] - provider-capability-contract-001
+- What was implemented
+  - Added the truthful provider capability vocabulary to authored OpenAPI components: native CLI/ACP harness metadata, typed ACP resource delivery, model-catalog posture, four-state support, directional modality routes, modality transports and media constraints, tool availability/default enablement/tool outputs, and bounded evidence records.
+  - Added offline catalog semantic validation for duplicate facts, evidence-reference closure, qualified conditional claims, non-unknown evidence requirements, route/support compatibility, ACP resource routing, unknown tool availability defaults, and direct versus tool-mediated output contradictions.
+  - Preserved legacy manifests during the additive migration by requiring evidence as soon as a manifest opts into expanded capability metadata; native manifest migration is intentionally deferred to Story 002.
+  - Kept generated conditional requirements visible in the published TypeScript provider types and split the focused invalid-fact cases to satisfy backend-size and pkg-maint ratchets.
+- Files changed
+  - Authored provider OpenAPI schema components and `api/openapi-main.yaml`.
+  - `internal/providercatalog/capabilities.go`, `internal/providercatalog/capabilities_test.go`, and `internal/providercatalog/validation.go`.
+  - Regenerated bundled OpenAPI, Go/TypeScript HTTP clients, UI package client, provider catalog schemas, provider package types/metadata, and package generator tests.
+  - `prd.json` marks Story 001 passed; Stories 002 and 003 remain pending.
+- Verification
+  - `go test ./internal/providercatalog ./packages/model-providers ./pkg/services/providers/internal/services/catalog/internal/service -count=1` passed.
+  - `make test` passed; `make typecheck` passed; `make api-smoke` passed; `make provider-catalog-check`, `make model-provider-package-smoke`, and `make contracts-check` passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure` and `make vet` passed.
+  - Commits: `b89ad8392` capability contract implementation and `b6c640724` focused test-ratchet fix.
+- **Learnings for future iterations:**
+  - Expanded capability metadata must activate strict evidence validation without breaking the pre-migration manifests; the next story should add evidence to all three native manifests before turning that migration lane green.
+  - One-of conditional requirements need both authored schema requirements and generator support for parent properties so published TypeScript types retain the required condition field.
 ---
