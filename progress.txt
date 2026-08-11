@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- When reconciling a task branch against a moving mainline, keep the active task's PRD and follow-up metadata authoritative while accepting unrelated source changes from main; validate the merged JSON and preserve the append-only progress history.
 - Keep synchronous and asynchronous entry points on one domain-owned
   preparation/supervision path; parameterize lifecycle ownership and caller
   wait semantics instead of duplicating reservation, opening, and admission
@@ -8828,4 +8829,74 @@
   - `make backend-size pkg-maint pkg-file-count pkg-structure`, affected-package `go vet`, `make typecheck`, and `make ui-lint` — passed. Repository `make test` was attempted but exceeded the 650-second Windows command ceiling with no failure output while many other worktree verification processes were running; the targeted suites above were terminal-green.
 - **Learnings for future iterations:**
   - A true HTTP disconnect test must close an unread transport connection while the provider is held at a deterministic edge; a context cancellation after `http.Client.Do` returns only tests normal request completion.
+---
+## [2026-08-11 02:11:21 -07:00] - cli-error-classification-and-run-output review follow-up (mainline history)
+- What was implemented
+  - Addressed the post-merge blocking review comment by removing `--with-mock-workers` from the three changed invalid-input functional scenarios: invalid JSON, malformed key=value, and positional overflow.
+  - Kept each scenario on the canonical `root.BuildProcess` / `Process.Execute` path with an injected `edges.Edges.ProviderCommandRunner`, making the zero-provider-call assertions authoritative for the BAD_REQUEST boundary.
+- Files changed
+  - `tests/functional/transport/cli/parameters/json_values_test.go`
+  - `tests/functional/transport/cli/parameters/key_value_test.go`
+  - `tests/functional/transport/cli/parameters/positional_values_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/transport/cli/parameters -count=1 -timeout 600s` — passed.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - Functional validation scenarios that assert absence of provider side effects must not configure Mock Workers; inject the exact provider command-runner edge and assert its observations instead.
+---
+## [2026-08-11 02:56:56 -07:00] - cli-error-classification-and-run-output reconciliation (mainline history)
+- What was implemented
+  - Reconciled PR #1879 with live `origin/main` after the blocking review comment reported a real merge conflict.
+  - Preserved that task's authoritative `prd.json`, accepted incoming mainline lint-tooling and functional-test changes, and confirmed that generated CLI artifacts did not require hand-merging or unnecessary regeneration.
+- Files changed
+  - Current-main lint checker/lane and maintenance-gate files carried by the synchronization merge.
+  - `tests/functional/transport/cli/parameters/json_values_test.go`
+  - `tests/functional/transport/cli/parameters/key_value_test.go`
+  - `tests/functional/transport/cli/parameters/positional_values_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Focused CLI parameter, factory visualization, and functional output suites passed.
+  - `make typecheck`, `make cli-manifest-check`, `make backend-size pkg-maint pkg-file-count pkg-structure vet`, PRD all-pass, merge-marker, and `git diff --check` audits passed.
+- **Learnings for future iterations:**
+  - A shared PRD conflict can contain a different task's metadata after main advances; resolve it by retaining the active branch's complete PRD and follow-up note, then verify story flags and JSON before committing.
+  - A fresh replacement head needs new hosted CI even when the pre-conflict head was green; local focused gates establish the merge result while GitHub validates the pushed ancestry.
+---
+## [2026-08-11 03:16:31 -07:00] - cli-error-classification-and-run-output hosted CI follow-up (mainline history)
+- What was implemented
+  - Investigated a replacement-head Backend Functional Coverage failure in an untouched `tests/functional/workers/mock` scenario; repeated the exact test locally and reran the failed hosted lane without changing unrelated product code.
+- Files changed
+  - `progress.txt`
+- Verification
+  - The named test passed ten local repetitions; the hosted Backend Functional Coverage and dependent Verification Policy reruns passed.
+- **Learnings for future iterations:**
+  - When hosted functional coverage names an untouched fixture, repeat that exact test locally before widening the diff; a clean characterization supports rerunning the failed lane and dependent policy job without unrelated fixes.
+---
+## [2026-08-11 03:28:29 -07:00] - cli-error-classification-and-run-output final PR handoff audit (mainline history)
+- What was implemented
+  - Audited PR #1879 after its stories reached `passes:true`, confirming current-main ancestry, mergeability, terminal passing checks, synchronized PR body, and zero inline review threads.
+- Files changed
+  - `progress.txt`
+- Verification
+  - The PRD parsed with all stories passing, no conflict markers remained, and the replacement-head checks and thread-aware review audit were green.
+- **Learnings for future iterations:**
+  - Treat a prior blocking comment as addressed only after its requested base synchronization is present, the PR is cleanly mergeable, and replacement-head checks are terminal-success; keep the PR body byte-for-byte synchronized with `prd.json` when required by the task contract.
+---
+## [2026-08-11 04:20:59 -07:00] - dwro-s2-server-owned-start latest-main reconciliation
+- What was implemented
+  - Merged live `origin/main` at `012e98e0fbd1b6fcac106d90b1f3d335b8a3dce6` after PR #1880 reported a moving-base conflict.
+  - Preserved this task's authoritative five-story `prd.json`, unioned the incoming append-only progress history and reusable reconciliation pattern, and retained the incoming CLI parameter test changes from main.
+- Files changed
+  - `tests/functional/transport/cli/parameters/json_values_test.go`
+  - `tests/functional/transport/cli/parameters/key_value_test.go`
+  - `tests/functional/transport/cli/parameters/positional_values_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `prd.json` parses with all five stories marked `passes:true`; `progress.txt` and `prd.json` contain no merge markers.
+  - The live base is now included in the branch ancestry; focused Story 004 and affected package gates must be rerun on this merged head before the replacement push.
+- **Learnings for future iterations:**
+  - Resolve moving-base conflicts by keeping the active task PRD authoritative, unioning complete append-only progress histories, and rerunning the task-specific gates on the exact merged ancestry.
 ---
