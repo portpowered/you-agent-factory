@@ -135,8 +135,8 @@
         "Typecheck passes"
       ],
       "priority": 8,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Verified the current-selection-08 workstation-selection cohort already present in branch ancestry: workstation summary field values, editable workstation configuration mutators, cron-draft mutators, and overwrite-field projection are the exclusive native Bun owners (4 files / 34 named and executable cases), with all four retired Vitest paths absent. Focused `bun test` passed 34/34 with 46 expect calls; dashboard-unit Vitest selection of all four migrated `.bun.unit.test.ts` paths and all four retired `.test.ts` paths returned `No test files found` with exit code 1. `bun run check:test-lanes` and `bun run typecheck` passed. Summary loading/unavailable/localized states, session-draft updates and no-ops, CRON transitions, and overwrite detection/labels remain covered; no product behavior, public contract, generated artifact, coverage membership, or browser ownership changed."
     },
     {
       "id": "bun-compat-batch-migration-009",

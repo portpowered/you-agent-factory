@@ -4117,3 +4117,20 @@
   - When a frozen cohort is already migrated in branch ancestry, complete the story by reconciling the baseline names/counts and reproducing focused Bun, both Vitest exclusion, lane-contract, and typecheck evidence before changing task metadata.
   - The relationship cohort's nine source-level cases remain nine executable cases because it has no parameterized tests; the existing baseline report already contains the matched latency evidence for the later aggregate audit.
 ---
+
+## 2026-08-10 20:13 -07:00 - bun-compat-batch-migration-008
+- What was implemented
+  - Completed the current-selection-08 workstation-selection cohort handoff using the four existing native Bun owners for workstation summary values, editable session-draft mutators, cron-draft transitions, and overwrite-field projection.
+  - Preserved all 34 frozen named/executable cases and confirmed the retired Vitest owners are absent; no product behavior or public contract behavior changed.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `bun test` passed 34/34 across 4 files with 46 expect calls.
+  - Pinned `vitest.exe` `dashboard-unit` selection of all four migrated `.bun.unit.test.ts` paths returned `No test files found` with exit code 1.
+  - The four retired `.test.ts` paths are absent; selecting them in `dashboard-unit` also returned `No test files found` with exit code 1.
+  - `bun run check:test-lanes` and `bun run typecheck` passed.
+- **Learnings for future iterations:**
+  - The final frozen cohort was already migrated in branch ancestry, so story completion required reproducing exact focused Bun counts, both Vitest exclusion selections, retired-path absence, lane-contract, and typecheck evidence before changing task metadata.
+  - The workstation-selection-08 cohort has no parameterized cases; its source-level and executable totals remain identical at 34.
+---
