@@ -4668,4 +4668,48 @@
 - **Learnings for future iterations:**
   - When a moving-base merge conflicts in append-only progress, preserve every distinct section and pattern from both clean refs, then validate heading coverage before committing.
   - Compare ratcheted lint counts in a detached current-main worktree; the intentional non-zero `pkg-boundary` result is clean only when the exact baseline matches.
+
+## 2026-08-10 16:18 -07:00 - thr-worktree-build-cache-002 PR scope follow-up
+- What was implemented
+  - Reconciled `progress.txt` with the live `origin/main` after PR #1860 review identified unrelated merged-task history as out-of-scope churn.
+  - Retained the build-cache PRD and root Makefile change; appended only the task-specific review follow-up instead of restoring unrelated progress entries.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `git diff origin/main...HEAD --stat` is now limited to `Makefile`, `prd.json`, and this task-specific progress entry.
+  - The PR review's build-cache correctness, parity, throughput, and required-CI criteria remain satisfied; the blocking scope issue was the shared progress-file churn.
+  - `prd.json` still parses with both `thr-worktree-build-cache-001` and `thr-worktree-build-cache-002` marked `passes:true`.
+- **Learnings for future iterations:**
+  - When a shared append-only log is merged across task branches, reconcile it against the live base before handoff and preserve only entries owned by the current PR.
+---
+
+## 2026-08-10 16:46 -07:00 - thr-worktree-build-cache-002 merge follow-up
+- What was implemented
+  - Merged the current `origin/main` (`acbd13fcc`) into the build-cache branch after PR review identified a live `prd.json` conflict.
+  - Kept this branch's build-cache PRD, accepted current-main progress history, and retained only the task-scoped progress follow-up in the live-base diff.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+  - Current-main durability changes included by the synchronization merge.
+- Verification
+  - The merge conflict is resolved and `prd.json` parses with both build-cache stories marked `passes:true`.
+  - The live-base diff remains limited to `Makefile`, `prd.json`, and the task-specific `progress.txt` entry; current-main test changes are merge-base synchronization only.
+  - Focused final checks and the post-merge CI run remain to be completed before handoff.
+- **Learnings for future iterations:**
+  - After fetching a moving base, merge it before final review and preserve the active task PRD when the shared `prd.json` is owned by another task on main.
+---
+
+## 2026-08-10 16:49 -07:00 - thr-worktree-build-cache-002 verification follow-up
+- What was implemented
+  - Completed post-merge verification for the corrected cache policy and current-main synchronization.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `make test` passed.
+  - `make typecheck` passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` passed.
+  - Dry-run `make build` and `make install` omit `-a`; explicit `GO_BUILD_FLAGS=-a` retains the forced-rebuild control.
+  - The working tree remains clean before push, and the PRD still has both stories marked `passes:true`.
+- **Learnings for future iterations:**
+  - After a base-sync merge, rerun the repository gates locally before pushing so the new PR head has direct evidence in addition to the earlier green CI run.
 ---
