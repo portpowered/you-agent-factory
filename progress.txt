@@ -9124,3 +9124,18 @@
   - Treat a prior blocking comment as addressed only after its requested base synchronization is present, the PR is cleanly mergeable, and the replacement-head checks are terminal-success.
   - Keep the PR body byte-for-byte synchronized with `prd.json` when the PR description is defined by the task contract.
 ---
+## [2026-08-11 04:35:43 -07:00] - prose-standard-and-terms-002 replacement-head verification
+- What was implemented
+  - Merged live `origin/main` at `012e98e0fbd1b6fcac106d90b1f3d335b8a3dce6` into the prose branch, retained the authoritative prose PRD, and unioned the incoming append-only progress entries.
+  - Kept current-main functional-test changes in the merge; the task diff relative to current `main` remains limited to the writing standard, terminology register, standards index, PRD, and progress history.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+  - Current-main functional-test files carried by the synchronization merge.
+- Verification
+  - `make typecheck`, `make docs-reference-smoke`, `make ownership-inventory-check`, `make backend-size`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, and `make vet` passed sequentially.
+  - `git merge-base --is-ancestor origin/main HEAD`, `git merge-tree --write-tree origin/main HEAD`, conflict-marker scanning, PRD/YAML parsing, and `git diff --check` passed; all three stories remain `passes:true` and the register has 58 records.
+- **Learnings for future iterations:**
+  - Resolve moving-main conflicts by retaining the active task PRD and unioning both progress histories, then rerun the complete replacement-head gates before refreshing the PR body.
+  - On this Windows host, sequential Go gates avoid the contention that can make aggregate verification appear hung.
+---
