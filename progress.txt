@@ -8553,3 +8553,21 @@
   - After a review fix, synchronize with the live base before final CI; resolve shared task metadata in favor of the active task and carry unrelated source changes through the merge commit.
   - Update the delivery audit and PR body only after the final metadata head is pushed, because each bookkeeping commit starts a new CI head.
 ---
+## 2026-08-11 05:06 -07:00 - e3-event-webhooks-004 latest-main synchronization
+- What was implemented
+  - Merged the latest remote `main` `3521f0b0a2f313b22e2c79edcf90339a01b3bce7` into the Webhooks branch as `52c1a52e0f98af981d1d2cb56a06235f6320e2cd`.
+  - Resolved the generated API manifest conflict with the latest `main` copy and preserved the task-owned PRD and append-only progress history.
+- Files changed
+  - Merge commit `52c1a52e`
+  - Current-main API and Worker Sessions contract/generated files carried by the merge.
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `make package-target-manifest-check` — passed with 549 inventory and package rows.
+  - `make ownership-inventory-check` — passed, including the path-lease freeze.
+  - `git merge-base --is-ancestor origin/main HEAD` and `git diff --check` — passed.
+  - CI run `31487415177` attempt 2 passed all 18 required jobs for the prior head `7709f140`; the merged latest-main head requires its replacement-head CI before final audit.
+- **Learnings for future iterations:**
+  - Recheck the remote base immediately before final PR handoff because `main` can advance after a successful CI run and make the PR dirty again.
+  - For generated merge conflicts, keep the latest base artifact and rerun the owning generator/gate; keep task metadata on the active branch so progress remains append-only.
+---

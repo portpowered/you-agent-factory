@@ -3,10 +3,10 @@
   "branchName": "e3-event-webhooks",
   "deliveryAudit": {
     "pullRequest": 1850,
-    "auditedHead": "565b7029a2adaeb20573b1dfe26ed51786c34407",
-    "base": "012e98e0fbd1b6fcac106d90b1f3d335b8a3dce6",
-    "requiredChecks": "Focused package-target-manifest-check and ownership-inventory-check pass locally for replacement head 565b7029a2adaeb20573b1dfe26ed51786c34407; aggregate make lint reaches the Webhooks inventory targets but reports three unrelated baseline findings in pkg-boundary, packaged-factory-consumption-check, and deadcode; replacement-head required CI is pending",
-    "reviewThreads": "Thread-aware audit reports zero unresolved inline threads, zero formal reviews, and five historical conversation comments; the latest blocking inventory feedback is addressed by replacement head 565b7029a2adaeb20573b1dfe26ed51786c34407"
+    "auditedHead": "52c1a52e0f98af981d1d2cb56a06235f6320e2cd",
+    "base": "3521f0b0a2f313b22e2c79edcf90339a01b3bce7",
+    "requiredChecks": "Focused package-target-manifest-check and ownership-inventory-check pass locally for latest-main merge head 52c1a52e0f98af981d1d2cb56a06235f6320e2cd; aggregate make lint reaches the Webhooks inventory targets but reports three unrelated baseline findings in pkg-boundary, packaged-factory-consumption-check, and deadcode; CI run 31487415177 attempt 2 passed for prior head 7709f140b9eb9caacadc86942f9df8f292f3e8a9, and latest-main merge head CI is pending",
+    "reviewThreads": "Thread-aware audit reports zero unresolved inline threads, zero formal reviews, and five historical conversation comments; the latest blocking inventory feedback is addressed by the latest-main merge and inventory gates pass"
   },
   "description": "Add Factory-configured outbound webhooks that subscribe to the existing canonical Factory Event stream and POST signed Work state-transition and dispatch-failure envelopes with filtering, bounded retry/backoff, and durable dead-letter logging. The feature lets external monitors react without polling while preserving Recordings as the event authority and keeping delivery failure isolated from Factory Runtime state.",
   "context": {
