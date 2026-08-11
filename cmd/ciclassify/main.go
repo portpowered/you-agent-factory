@@ -142,7 +142,7 @@ func dedupeAndSortPaths(paths []string) []string {
 	seen := make(map[string]struct{}, len(paths))
 	result := make([]string, 0, len(paths))
 	for _, path := range paths {
-		path = filepath.ToSlash(strings.TrimSpace(path))
+		path = normalizeChangedPath(path)
 		if path == "" {
 			continue
 		}
@@ -156,6 +156,7 @@ func dedupeAndSortPaths(paths []string) []string {
 }
 
 func classifyPaths(paths []string) classificationResult {
+	paths = dedupeAndSortPaths(paths)
 	areas := map[string]bool{}
 	lanes := newLanePlans()
 	full := len(paths) == 0
@@ -208,7 +209,7 @@ func classifyPath(path string) (string, []string) {
 		return "documentation", nil
 	case strings.HasPrefix(path, "factory/"):
 		return "factory-content", nil
-	case strings.HasPrefix(path, "api/"), strings.HasPrefix(path, "contracts/"), strings.HasPrefix(path, "pkg/transports/http/"), strings.HasPrefix(path, "pkg/transports/mapping/"), strings.HasPrefix(path, "ui/src/api/generated/"):
+	case isAPIContractPath(path):
 		return "api-contract", []string{laneFrontend, laneBackend, laneUIBackendIntegration, laneAPIPackage}
 	case strings.HasPrefix(path, "packages/api/"), strings.HasPrefix(path, "scripts/api-package"):
 		return "api-package", []string{laneAPIPackage, laneFrontend, laneBackend, laneUIBackendIntegration}
@@ -220,15 +221,48 @@ func classifyPath(path string) (string, []string) {
 		return "local-inference", []string{laneBackend, laneLocalInference}
 	case strings.HasPrefix(path, "ui/"):
 		return "frontend", []string{laneFrontend}
-	case strings.HasPrefix(path, "pkg/"), strings.HasPrefix(path, "cmd/"), strings.HasPrefix(path, "internal/"), strings.HasPrefix(path, "tests/"):
+	case isBackendPath(path):
 		return "backend", []string{laneBackend, laneUIBackendIntegration}
 	default:
 		return "unknown", nil
 	}
 }
 
+func normalizeChangedPath(path string) string {
+	path = strings.TrimSpace(strings.ReplaceAll(path, "\\", "/"))
+	path = filepath.ToSlash(path)
+	for strings.HasPrefix(path, "./") {
+		path = strings.TrimPrefix(path, "./")
+	}
+	return path
+}
+
+func isAPIContractPath(path string) bool {
+	return strings.HasPrefix(path, "api/") ||
+		strings.HasPrefix(path, "contracts/") ||
+		strings.HasPrefix(path, "pkg/transports/http/") ||
+		strings.HasPrefix(path, "pkg/transports/mapping/") ||
+		strings.Contains(path, "/transports/http/") ||
+		strings.HasPrefix(path, "ui/src/api/generated/") ||
+		strings.HasPrefix(path, "ui/packages/client/src/generated/")
+}
+
+func isBackendPath(path string) bool {
+	return strings.HasPrefix(path, "pkg/") ||
+		strings.HasPrefix(path, "cmd/") ||
+		strings.HasPrefix(path, "internal/") ||
+		strings.HasPrefix(path, "tests/") ||
+		strings.HasPrefix(path, "scripts/release/")
+}
+
 func isLocalInferencePath(path string) bool {
-	return strings.Contains(path, "/local/") || strings.Contains(path, "inference") || strings.Contains(path, "omnivoice") || strings.HasPrefix(path, ".github/workflows/long-local-inference")
+	return strings.HasPrefix(path, "cmd/omnivoice-llamacpp/") ||
+		strings.HasPrefix(path, "pkg/services/models/local/") ||
+		strings.HasPrefix(path, "pkg/services/models/internal/") ||
+		path == "pkg/services/models/local_execution_contract.go" ||
+		path == "pkg/services/models/managed_runtime_contract.go" ||
+		strings.HasPrefix(path, "tests/functional/models/root_composition/inference_invoke") ||
+		strings.HasPrefix(path, "tests/functional/runtime_api/api_model_local_inference")
 }
 
 func newLanePlans() map[string]lanePlan {
@@ -255,7 +289,8 @@ func mapKeysSorted(values map[string]bool) []string {
 }
 
 func writeStdoutSummary(stdout io.Writer, result classificationResult) {
-	fmt.Fprintf(stdout, "classification=%s\nareas=%s\nchanged_files=%d\nreason=%s\n", result.Classification, strings.Join(result.Areas, ","), len(result.ChangedPaths), result.Reason)
+	runEverything := result.Classification == "full"
+	fmt.Fprintf(stdout, "classification=%s\nareas=%s\nchanged_files=%d\nreason=%s\nrun_everything=%t\n", result.Classification, strings.Join(result.Areas, ","), len(result.ChangedPaths), result.Reason, runEverything)
 	for _, name := range allLaneNames {
 		plan := result.Lanes[name]
 		fmt.Fprintf(stdout, "lane_%s=%t\n", githubOutputKey(plan.Name), plan.ShouldRun)
@@ -271,7 +306,8 @@ func writeGitHubOutput(result classificationResult) error {
 	if path == "" {
 		return nil
 	}
-	lines := []string{fmt.Sprintf("classification=%s", result.Classification), fmt.Sprintf("full_run_required=%t", result.Classification == "full"), fmt.Sprintf("full_run_command=%s", fullRunCommand), fmt.Sprintf("areas=%s", strings.Join(result.Areas, ",")), fmt.Sprintf("changed_files_count=%d", len(result.ChangedPaths)), fmt.Sprintf("reason=%s", sanitizeGitHubValue(result.Reason))}
+	runEverything := result.Classification == "full"
+	lines := []string{fmt.Sprintf("classification=%s", result.Classification), fmt.Sprintf("run_everything=%t", runEverything), fmt.Sprintf("full_run_required=%t", runEverything), fmt.Sprintf("full_run_command=%s", fullRunCommand), fmt.Sprintf("areas=%s", strings.Join(result.Areas, ",")), fmt.Sprintf("changed_files_count=%d", len(result.ChangedPaths)), fmt.Sprintf("reason=%s", sanitizeGitHubValue(result.Reason))}
 	for _, name := range allLaneNames {
 		plan := result.Lanes[name]
 		key := githubOutputKey(name)
@@ -285,7 +321,7 @@ func writeGitHubStepSummary(result classificationResult) error {
 	if path == "" {
 		return nil
 	}
-	lines := []string{"## Pull request impact classification", "", fmt.Sprintf("- Classification: `%s`", result.Classification), fmt.Sprintf("- Areas touched: `%s`", strings.Join(result.Areas, ", ")), fmt.Sprintf("- Changed files: `%d`", len(result.ChangedPaths)), fmt.Sprintf("- Reason: %s", result.Reason), fmt.Sprintf("- Full required rerun: `%s`", fullRunCommand), "", "### Verification policy"}
+	lines := []string{"## Pull request impact classification", "", fmt.Sprintf("- Classification: `%s`", result.Classification), fmt.Sprintf("- Areas touched: `%s`", strings.Join(result.Areas, ", ")), fmt.Sprintf("- Changed files: `%d`", len(result.ChangedPaths)), fmt.Sprintf("- Reason: %s", result.Reason), fmt.Sprintf("- Run everything: `%t` via `%s`", result.Classification == "full", fullRunCommand), "", "### Verification policy"}
 	for _, name := range allLaneNames {
 		plan := result.Lanes[name]
 		decision := "skip"
