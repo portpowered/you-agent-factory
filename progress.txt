@@ -1,5 +1,6 @@
 ## Codebase Patterns
 - Public UI package build and pack verification mutate sibling `dist` directories; run dependency preparation, package build, and pack verification serially to avoid transient missing-module or Windows file-lock failures.
+- Packaged catalog generation runs canonical Factory validation before publication-specific semantic-role checks; removing a referenced terminal state requires a real terminal route/bridge or a coordinated validator decision.
 - Cross-host graph semantics should enter React Flow nodes as a disposable package projection and render through the shared workstation node; host-specific activity metadata must remain decoration, not classification.
 - First-party packaged Factory semantic checks should consume parsed canonical definitions inside `internal/packagedfactorycatalog`; keep customer-authored and JavaScript Factory validation unchanged.
 - A lifecycle-only Work state is valid only through a named production bridge that matches the runtime contract and has direct behavioral test evidence; do not use comment-only allowlists.
@@ -4133,4 +4134,21 @@
 - **Learnings for future iterations:**
   - The semantic catalog rule and the general canonical completion-state rule must be reconciled before strict discovery validation is enabled; do not solve that mismatch with comment-only exceptions or fabricated routes.
   - A disconnected terminal declaration is as important to reject as an orphan processing state because terminal declarations can make speculative topology look operational in generated graph consumers.
+---
+
+## [2026-08-11 00:26 -07:00] - graph-workstation-semantics-002
+- What was implemented
+  - Audited the remaining packaged-Factory cleanup candidates against the canonical source and catalog-generation path.
+  - Attempted the definitively unreachable `loop-controller:stopped` removal, then reverted the partial edit when the canonical generator rejected the definition because `loop-controller` is a referenced Petri Work type without another completion state.
+  - Preserved the authored/generated catalog and runtime fixtures unchanged; the decision now requires either a real stop-to-terminal runtime bridge or an explicit canonical validation/topology change before cleanup can proceed.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `make packaged-factory-catalog-generate` — correctly failed at canonical validation with `work type "loop-controller" must declare a completion state`; no generated files were changed.
+  - `git diff --check` — passed after restoring the partial cleanup.
+  - `prd.json` parses successfully with both remaining stories still marked `passes:false`.
+- **Learnings for future iterations:**
+  - Catalog semantic reachability cannot be solved by deleting an unused terminal declaration in isolation; the general validator runs first and requires a real completion path for referenced Work types.
+  - Keep `loop-controller:stopped` and `quorum:task:complete` as explicit lifecycle/topology decisions until direct runtime behavior or a narrow, tested validator contract exists; do not add projection-only exceptions.
 ---
