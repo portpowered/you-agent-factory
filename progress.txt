@@ -4730,3 +4730,20 @@
 - **Learnings for future iterations:**
   - Re-fetch `origin/main` immediately before pushing: a PR can be clean against one base and become stale again while waiting for GitHub checks.
 ---
+
+## 2026-08-10 18:07 -07:00 - e2-structured-worker-results review and CI follow-up
+- What was implemented
+  - Audited PR #1855's latest blocking review feedback; the reported transitioner size regression is cleared on the current head (`subsystem_transitioner.go` is 959 lines), and no unresolved review threads remain.
+  - Confirmed the existing PR body is an exact byte-for-byte match for the task-scoped `prd.json`; all four stories remain `passes:true`, so no PRD change was required.
+  - Diagnosed the newest Backend Functional Coverage failure as the unchanged Linux process-boundary test `TestBuiltCLIDeclaredCancellationExitCodes/continuous_run`; the PR has no diff in that test package and the focused test is skipped on this Windows checkout.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `make test` — passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` — passed.
+  - `make lint` — all prerequisite checks passed; it reached only the known 175-entry `pkg-boundary` baseline, matching current `origin/main`.
+  - Focused cancellation test — passed repeatedly locally (skipped on Windows because child-process `os.Interrupt` is unsupported).
+  - `git diff --check` — passed; `origin/main` is the current branch base and the worktree was clean before this log entry.
+- **Learnings for future iterations:**
+  - When a required CI lane fails in an unchanged process-boundary package, isolate the named test and retry the failed GitHub lanes before altering feature code.
+---
