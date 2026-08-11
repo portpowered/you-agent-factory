@@ -249,64 +249,40 @@ func (r *registry) reserveStart(req workersessions.StartRequest) (*startReplay, 
 // startReserved runs the original Start state machine after reserveStart has
 // atomically installed the request replay and RESERVED session records.
 func (r *registry) startReserved(ctx context.Context, req workersessions.StartRequest) (workersessions.StartResult, error) {
-	attemptID := req.Execution.Execution.Dispatch.DispatchID
 	serverCtx := r.serverOwnedContext()
-	if _, err := r.transitionToStarting(req.ID); err != nil {
-		if terminal, ok := r.preAdmissionControlTerminal(req.ID, attemptID); ok {
-			r.publishTerminalSnapshot(serverCtx, req.ID, attemptID, terminal)
-			return workersessions.StartResult{Session: terminal}, startNotAccepted(workersessions.ErrStartAdmissionFailed)
-		}
-		r.logger.Info("worker session start rejected", "sessionID", req.ID, "attemptID", attemptID, "requestID", req.RequestID, "outcome", "not_startable")
+	prepared, err := r.prepareInvocation(
+		serverCtx,
+		workersessions.InvokeSessionRequest{ID: req.ID, Execution: req.Execution, Retry: req.Retry},
+		invocationPreparationOptions{
+			serverOwned:      true,
+			requestID:        req.RequestID,
+			verifyTopicReady: true,
+		},
+	)
+	if err != nil {
 		return workersessions.StartResult{}, err
 	}
-	r.ensureObservation(
-		req.ID,
-		attemptID,
-		req.Execution.Execution.Dispatch.Execution.RequestID,
-		req.Execution.Execution.Dispatch.Execution.WorkIDs,
-	)
-
-	if err := r.publishOpeningRecord(serverCtx, req.ID, attemptID); err != nil {
-		return r.rejectStartBeforeAdmission(serverCtx, req.ID, attemptID, workersessions.ErrStartOpeningPublication)
+	if prepared.terminal {
+		return workersessions.StartResult{Session: prepared.session}, startNotAccepted(prepared.failure)
 	}
-	if err := r.ensureOpeningTopicReady(serverCtx, req.ID); err != nil {
-		return r.rejectStartBeforeAdmission(serverCtx, req.ID, attemptID, errors.Join(workersessions.ErrStartOpeningPublication, workersessions.ErrEventTopicUnavailable))
-	}
-	if r.isStopping() {
-		return r.rejectStartBeforeAdmission(serverCtx, req.ID, attemptID, workersessions.ErrStartServerStopping)
-	}
-	r.logger.Info("worker session start", "sessionID", req.ID, "attemptID", attemptID, "requestID", req.RequestID, "outcome", "event_ready", "state", string(workersessions.StateStarting))
-
-	supervision, canStart := r.registerServerOwnedSupervision(req.ID, attemptID, req.Execution.Execution.Dispatch.Execution.RequestID, req.Execution)
-	if !canStart {
-		final, _ := r.Get(context.Background(), workersessions.GetRequest{ID: req.ID})
-		if r.isStopping() && !final.Terminal() {
-			return r.rejectStartBeforeAdmission(serverCtx, req.ID, attemptID, workersessions.ErrStartServerStopping)
-		}
-		r.publishTerminalSnapshot(serverCtx, req.ID, attemptID, final)
-		return workersessions.StartResult{Session: final}, startNotAccepted(workersessions.ErrStartAdmissionFailed)
-	}
-	supervision.mu.Lock()
-	supervision.retryBudget = req.Retry.Attempts()
-	supervision.mu.Unlock()
 	invokeReq := workersessions.InvokeSessionRequest{
 		ID:        req.ID,
 		Execution: req.Execution,
 		Retry:     req.Retry,
 	}
 	go func() {
-		r.driveRegisteredInvocation(serverCtx, invokeReq, supervision)
+		r.driveRegisteredInvocation(serverCtx, invokeReq, prepared.supervision)
 	}()
 
 	select {
-	case <-supervision.admitted:
+	case <-prepared.supervision.admitted:
 		return r.startResult(req.ID), nil
-	case <-supervision.done:
+	case <-prepared.supervision.done:
 		select {
-		case <-supervision.admitted:
+		case <-prepared.supervision.admitted:
 			return r.startResult(req.ID), nil
 		default:
-			return r.startResult(req.ID), startNotAccepted(r.startAdmissionCause(supervision))
+			return r.startResult(req.ID), startNotAccepted(r.startAdmissionCause(prepared.supervision))
 		}
 	}
 }
@@ -326,14 +302,7 @@ func (r *registry) startAdmissionCause(supervision *supervision) error {
 }
 
 func (r *registry) rejectStartBeforeAdmission(ctx context.Context, id, attemptID string, cause error) (workersessions.StartResult, error) {
-	terminal := failedTerminal(workersessions.FailureCauseEventPublicationFailure, safeDetail(workersessions.FailureCauseEventPublicationFailure, nil))
-	final, committed := r.commitTerminal(id, workersessions.StateFailed, terminal)
-	if committed {
-		r.logTerminal(id, attemptID, final)
-		r.publishTerminalRecordOrLog(ctx, id, attemptID, workersessions.StateFailed, *final.Result)
-	} else {
-		r.publishTerminalSnapshot(ctx, id, attemptID, final)
-	}
+	final := r.terminalizeInvocationBeforeAdmission(ctx, id, attemptID)
 	return workersessions.StartResult{Session: final}, startNotAccepted(cause)
 }
 

@@ -177,6 +177,164 @@ func (r *registry) waitForSupervisionDriver(ctx context.Context, id string) erro
 	}
 }
 
+// invocationPreparationOptions select the ownership and acceptance behavior
+// around the shared invocation setup. The synchronous path intentionally
+// keeps its historical EventsAppender-only dependency and caller-visible
+// terminal return contract; asynchronous Start adds the retained/live topic
+// readiness barrier and server-owned lifecycle admission around this same
+// preparation and supervision state machine.
+type invocationPreparationOptions struct {
+	serverOwned      bool
+	requestID        string
+	verifyTopicReady bool
+}
+
+type invocationPreparation struct {
+	supervision  *supervision
+	session      workersessions.Session
+	terminal     bool
+	preAdmission bool
+	failure      error
+}
+
+// prepareInvocation owns the setup shared by synchronous InvokeSession and
+// asynchronous Start: identity reservation, STARTING transition, observation
+// capture, opening publication, and supervision registration. It is the only
+// path allowed to move a resolved invocation from RESERVED to a Workers
+// handoff. Terminal setup failures are committed and published here so the
+// two entry points cannot drift in event ordering or terminal classification;
+// callers choose only whether that deterministic failure is returned as an
+// InvokeSession result or as Start's not-accepted error.
+func (r *registry) prepareInvocation(
+	ctx context.Context,
+	req workersessions.InvokeSessionRequest,
+	options invocationPreparationOptions,
+) (invocationPreparation, error) {
+	attemptID := req.Execution.Execution.Dispatch.DispatchID
+	r.reserveIfAbsent(req.ID)
+	acceptedFields := []any{
+		"sessionID", req.ID,
+		"attemptID", attemptID,
+		"outcome", "reserved",
+		"state", string(workersessions.StateReserved),
+	}
+	if options.requestID != "" {
+		acceptedFields = append(acceptedFields, "requestID", options.requestID)
+	}
+	r.logger.Info("worker session start accepted", acceptedFields...)
+
+	if _, err := r.transitionToStarting(req.ID); err != nil {
+		if terminal, ok := r.preAdmissionControlTerminal(req.ID, attemptID); ok {
+			r.publishTerminalSnapshot(ctx, req.ID, attemptID, terminal)
+			return invocationPreparation{
+				session:      terminal,
+				terminal:     true,
+				preAdmission: true,
+				failure:      workersessions.ErrStartAdmissionFailed,
+			}, nil
+		}
+		fields := []any{"sessionID", req.ID, "attemptID", attemptID, "outcome", "not_startable"}
+		if options.requestID != "" {
+			fields = append(fields, "requestID", options.requestID)
+		}
+		r.logger.Info("worker session start rejected", fields...)
+		return invocationPreparation{}, err
+	}
+	r.ensureObservation(
+		req.ID,
+		attemptID,
+		req.Execution.Execution.Dispatch.Execution.RequestID,
+		req.Execution.Execution.Dispatch.Execution.WorkIDs,
+	)
+
+	if err := r.publishOpeningRecord(ctx, req.ID, attemptID); err != nil {
+		final := r.terminalizeInvocationBeforeAdmission(ctx, req.ID, attemptID)
+		return invocationPreparation{
+			session:  final,
+			terminal: true,
+			failure:  workersessions.ErrStartOpeningPublication,
+		}, nil
+	}
+	if options.verifyTopicReady {
+		if err := r.ensureOpeningTopicReady(ctx, req.ID); err != nil {
+			final := r.terminalizeInvocationBeforeAdmission(ctx, req.ID, attemptID)
+			return invocationPreparation{
+				session:  final,
+				terminal: true,
+				failure:  errors.Join(workersessions.ErrStartOpeningPublication, workersessions.ErrEventTopicUnavailable),
+			}, nil
+		}
+	}
+	if options.serverOwned && r.isStopping() {
+		final := r.terminalizeInvocationBeforeAdmission(ctx, req.ID, attemptID)
+		return invocationPreparation{
+			session:  final,
+			terminal: true,
+			failure:  workersessions.ErrStartServerStopping,
+		}, nil
+	}
+
+	return r.registerInvocationSupervision(ctx, req, options)
+}
+
+func (r *registry) registerInvocationSupervision(
+	ctx context.Context,
+	req workersessions.InvokeSessionRequest,
+	options invocationPreparationOptions,
+) (invocationPreparation, error) {
+	attemptID := req.Execution.Execution.Dispatch.DispatchID
+	if options.verifyTopicReady {
+		eventReadyFields := []any{"sessionID", req.ID, "attemptID", attemptID, "outcome", "event_ready", "state", string(workersessions.StateStarting)}
+		if options.requestID != "" {
+			eventReadyFields = append(eventReadyFields, "requestID", options.requestID)
+		}
+		r.logger.Info("worker session start", eventReadyFields...)
+	}
+	supervision, canStart := r.registerSupervisionOwned(
+		options.serverOwned,
+		req.ID,
+		attemptID,
+		req.Execution.Execution.Dispatch.Execution.RequestID,
+		req.Execution,
+	)
+	if !canStart {
+		final, _ := r.Get(context.Background(), workersessions.GetRequest{ID: req.ID})
+		if options.serverOwned && r.isStopping() && !final.Terminal() {
+			final = r.terminalizeInvocationBeforeAdmission(ctx, req.ID, attemptID)
+			return invocationPreparation{
+				session:  final,
+				terminal: true,
+				failure:  workersessions.ErrStartServerStopping,
+			}, nil
+		}
+		if final.Terminal() {
+			r.publishTerminalSnapshot(ctx, req.ID, attemptID, final)
+			return invocationPreparation{
+				session:  final,
+				terminal: true,
+				failure:  workersessions.ErrStartAdmissionFailed,
+			}, nil
+		}
+		return invocationPreparation{}, startNotAccepted(workersessions.ErrStartAdmissionFailed)
+	}
+	supervision.mu.Lock()
+	supervision.retryBudget = req.Retry.Attempts()
+	supervision.mu.Unlock()
+	return invocationPreparation{supervision: supervision}, nil
+}
+
+func (r *registry) terminalizeInvocationBeforeAdmission(ctx context.Context, id, attemptID string) workersessions.Session {
+	terminal := failedTerminal(workersessions.FailureCauseEventPublicationFailure, safeDetail(workersessions.FailureCauseEventPublicationFailure, nil))
+	final, committed := r.commitTerminal(id, workersessions.StateFailed, terminal)
+	if committed {
+		r.logTerminal(id, attemptID, final)
+		r.publishTerminalRecordOrLog(ctx, id, attemptID, workersessions.StateFailed, *final.Result)
+	} else {
+		r.publishTerminalSnapshot(ctx, id, attemptID, final)
+	}
+	return final
+}
+
 // sourceKey narrows the four-part Events idempotency identity down to the
 // (SourceType, SourceID) pair PublishRecord tracks ordering against: every
 // record sharing one sourceKey is one source's own observation stream, and
