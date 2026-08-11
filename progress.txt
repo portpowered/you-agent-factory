@@ -7915,3 +7915,16 @@
   - When an aggregate Go test lane reports only one package failure, rerun that package serially with verbose output before changing source; package-level success can distinguish a scheduler/resource flake from a behavioral regression.
   - For GitHub Actions failures in a multi-job run, fetch the exact failing job log rather than the whole run log so downstream policy failures do not obscure the first failing test.
 ---
+## [2026-08-10 23:25 -07:00] - cli-error-classification-and-run-output hosted CI handoff
+- What was implemented
+  - Pushed the reconciled branch head `55eebb269` to PR #1872 after the current-main merge and final manifest/check verification.
+  - Completed the fresh hosted CI run and confirmed the PR is ready for review with no blocking review feedback.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Hosted run `31464542975` passed all required jobs, including Classify Verification, Backend Unit Coverage, Backend Functional Coverage, Verification Policy, typecheck/frontend, API/contract, packaged-factory, local-inference, and UI-backend lanes.
+  - PR #1872 is open, non-draft, `MERGEABLE`, points at `55eebb269`, and its description matches `prd.json` byte-for-byte.
+  - Thread-aware GraphQL audit reports zero conversation comments, review submissions, and inline review threads.
+- **Learnings for future iterations:**
+  - After a final bookkeeping-only push, wait for the replacement hosted run instead of relying on the previous head’s green checks; review readiness is a property of the exact pushed SHA.
+---
