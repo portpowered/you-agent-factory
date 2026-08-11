@@ -180,9 +180,7 @@ func TestProjectManifestCapabilityFactsAreCanonicalAndCloneable(t *testing.T) {
 	if got.TechnicalSupportLevel != providers.TechnicalSupportProduction || got.ImplementationAvailability != providers.ImplementationBundled {
 		t.Fatalf("publication posture = %q/%q, want production/bundled", got.TechnicalSupportLevel, got.ImplementationAvailability)
 	}
-	if !slices.Contains(got.Capabilities, providers.CapabilityPermissionBypass) {
-		t.Fatalf("capabilities = %v, want permission bypass", got.Capabilities)
-	}
+	assertProjectedPermissionBypass(t, got)
 	if got.Models[0].ID != "gpt-5.6" {
 		t.Fatalf("model ID = %q, want gpt-5.6", got.Models[0].ID)
 	}
@@ -211,6 +209,13 @@ func TestProjectManifestCapabilityFactsAreCanonicalAndCloneable(t *testing.T) {
 	*cloned.KnownLimits[1].Maximum = 99
 	if got.Models[0].Efforts[0] == "mutated" || got.Models[0].Modalities[0].Kind == providers.ModalityAudio || got.Tools[0].Name == "mutated" || *got.KnownLimits[1].Maximum != 5 {
 		t.Fatal("descriptor clone shares nested capability facts")
+	}
+}
+
+func assertProjectedPermissionBypass(t *testing.T, descriptor providers.Descriptor) {
+	t.Helper()
+	if !slices.Contains(descriptor.Capabilities, providers.CapabilityPermissionBypass) {
+		t.Fatalf("capabilities = %v, want permission bypass", descriptor.Capabilities)
 	}
 }
 
