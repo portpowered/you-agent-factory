@@ -12,7 +12,6 @@ import (
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
 	"github.com/spf13/cobra"
 	"io"
 	"os"
@@ -522,9 +521,9 @@ func TestRemoteRunRejectsLocalHostingBeforeRunSideEffects(t *testing.T) {
 			localRunCalls := 0
 			browserCalls := 0
 			factory := withTestInjectedPlatformRoles(CommandFactory{
-				remoteInvocation: rootRemoteInvocationFunc(func(context.Context, runcli.RemoteInvocationRequest) (factoryapi.InvocationResponse, error) {
+				remoteInvocation: rootRemoteInvocationFunc(func(context.Context, runcli.RemoteInvocationRequest) (factoryapi.FactorySessionExecutionResponse, error) {
 					remoteCalls++
-					return factoryapi.InvocationResponse{}, nil
+					return factoryapi.FactorySessionExecutionResponse{}, nil
 				}),
 			})
 			factory.browserOpener = func(context.Context, string) error {
@@ -603,18 +602,14 @@ func TestRunHelpDocumentsRemotePlacementAndLocalHosting(t *testing.T) {
 
 func TestRemoteRunDispatchesExactNormalizedRequestWithoutOpeningLocalRun(t *testing.T) {
 	var got runcli.RemoteInvocationRequest
-	remote := rootRemoteInvocationFunc(func(_ context.Context, request runcli.RemoteInvocationRequest) (factoryapi.InvocationResponse, error) {
+	remote := rootRemoteInvocationFunc(func(_ context.Context, request runcli.RemoteInvocationRequest) (factoryapi.FactorySessionExecutionResponse, error) {
 		got = request
-		return factoryapi.InvocationResponse{
-			RequestId: "remote-request", TraceId: "remote-trace",
-			Status: factoryapi.InvocationTerminalStatusCompleted,
-			PrimaryResult: contentcontract.GeneratedPtrFromParts([]work.WorkContentPart{{
-				Type: work.WorkContentPartTypeText, Text: "remote result",
-			}}),
+		return factoryapi.FactorySessionExecutionResponse{
+			SessionId: "dur-sess-root", Status: factoryapi.FactorySessionDurableLifecycleStatusQueued,
 		}, nil
 	})
 	factory := withTestInjectedPlatformRoles(CommandFactory{remoteInvocation: remote})
-	factory.prepareInvocationInput = programmedTextInvocationInput(work.InputSourcePositionalText, "same request")
+	factory.prepareInvocationInput = programmedRemoteArgumentsInput("same request")
 
 	localRunCalls := 0
 	root := factory.NewCommand(os.UserHomeDir, os.LookupEnv, startupcli.Functions{
@@ -644,12 +639,14 @@ func TestRemoteRunDispatchesExactNormalizedRequestWithoutOpeningLocalRun(t *test
 	if got.Server != selectedServer {
 		t.Fatalf("remote server = %q, want %q", got.Server, selectedServer)
 	}
-	parts := contentcontract.PartsFromGenerated(got.Request.Content)
-	if len(parts) != 1 || parts[0].Text != "same request" {
-		t.Fatalf("normalized remote request = %#v, want same request", got.Request.Content)
+	if got.Request.Args == nil || (*got.Request.Args)["prompt"] != "same request" {
+		t.Fatalf("normalized remote request args = %#v, want same request", got.Request.Args)
 	}
-	if stdout.String() != "remote result" {
-		t.Fatalf("stdout = %q, want remote result", stdout.String())
+	if got.Request.Source.Kind != factoryapi.FactorySessionExecutionSourceKindFactoryInline {
+		t.Fatalf("remote source kind = %q, want inline Factory source", got.Request.Source.Kind)
+	}
+	if stdout.String() != "Factory session dur-sess-root accepted (QUEUED).\n" {
+		t.Fatalf("stdout = %q, want durable acceptance", stdout.String())
 	}
 }
 
@@ -678,11 +675,11 @@ func TestRunServerPlacementRejectsRemoteLocalOnlyCommandBeforeRun(t *testing.T) 
 }
 
 func TestRemoteRunFailureDoesNotFallBackToLocalRun(t *testing.T) {
-	remote := rootRemoteInvocationFunc(func(context.Context, runcli.RemoteInvocationRequest) (factoryapi.InvocationResponse, error) {
-		return factoryapi.InvocationResponse{}, errors.New("selected remote failed")
+	remote := rootRemoteInvocationFunc(func(context.Context, runcli.RemoteInvocationRequest) (factoryapi.FactorySessionExecutionResponse, error) {
+		return factoryapi.FactorySessionExecutionResponse{}, errors.New("selected remote failed")
 	})
 	factory := withTestInjectedPlatformRoles(CommandFactory{remoteInvocation: remote})
-	factory.prepareInvocationInput = programmedTextInvocationInput(work.InputSourcePositionalText, "same request")
+	factory.prepareInvocationInput = programmedRemoteArgumentsInput("same request")
 	localRunCalls := 0
 	root := factory.NewCommand(os.UserHomeDir, os.LookupEnv, startupcli.Functions{
 		RunFunc: func(context.Context, startupcli.RunIntent, startupcli.RunSelection) error {
@@ -708,8 +705,24 @@ func TestRemoteRunFailureDoesNotFallBackToLocalRun(t *testing.T) {
 	}
 }
 
-type rootRemoteInvocationFunc func(context.Context, runcli.RemoteInvocationRequest) (factoryapi.InvocationResponse, error)
+func programmedRemoteArgumentsInput(text string) rootInvocationInputScript {
+	return programmedInvocationInput(work.PreparedInvocationInput{
+		Source: work.InputSourcePositionalText,
+		ResolvedInput: &work.ResolvedInput{
+			Source:  work.InputSourcePositionalText,
+			Text:    text,
+			Content: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: text}},
+		},
+		NormalizedArguments: &work.NormalizedArguments{
+			Arguments: map[string]work.NormalizedArgument{
+				"prompt": {Values: []string{text}},
+			},
+		},
+	}, nil)
+}
 
-func (fn rootRemoteInvocationFunc) InvokeFactory(ctx context.Context, request runcli.RemoteInvocationRequest) (factoryapi.InvocationResponse, error) {
+type rootRemoteInvocationFunc func(context.Context, runcli.RemoteInvocationRequest) (factoryapi.FactorySessionExecutionResponse, error)
+
+func (fn rootRemoteInvocationFunc) StartFactorySession(ctx context.Context, request runcli.RemoteInvocationRequest) (factoryapi.FactorySessionExecutionResponse, error) {
 	return fn(ctx, request)
 }

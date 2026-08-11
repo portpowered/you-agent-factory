@@ -12,7 +12,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
-	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 	"io"
@@ -277,24 +276,21 @@ func TestRun_FactoryInvocationFailureKeepsStdoutEmpty(t *testing.T) {
 }
 
 func TestRunRemoteInvocationUsesSelectedEndpointAndNormalizedRequest(t *testing.T) {
-	var gotRequest factoryapi.InvocationRequest
+	var gotRequest factoryapi.FactorySessionExecutionRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			t.Fatalf("method = %s, want POST", r.Method)
 		}
-		if r.URL.Path != "/selected/factory-sessions/~default/invocations" {
-			t.Fatalf("path = %q, want selected invocation endpoint", r.URL.Path)
+		if r.URL.Path != "/selected/factory-sessions/async" {
+			t.Fatalf("path = %q, want selected durable start endpoint", r.URL.Path)
 		}
 		if err := json.NewDecoder(r.Body).Decode(&gotRequest); err != nil {
 			t.Fatalf("decode request: %v", err)
 		}
-		response := factoryapi.InvocationResponse{
-			RequestId: "request-remote",
-			TraceId:   "trace-remote",
-			Status:    factoryapi.InvocationTerminalStatusCompleted,
-			PrimaryResult: contentcontract.GeneratedPtrFromParts([]work.WorkContentPart{{
-				Type: work.WorkContentPartTypeText, Text: "remote result",
-			}}),
+		response := factoryapi.FactorySessionExecutionResponse{
+			SessionId:        "dur-sess-remote",
+			Status:           factoryapi.FactorySessionDurableLifecycleStatusQueued,
+			OrchestratorKind: factoryapi.JAVASCRIPT,
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(response)
@@ -308,55 +304,49 @@ func TestRunRemoteInvocationUsesSelectedEndpointAndNormalizedRequest(t *testing.
 	text := "same normalized prompt"
 	var output bytes.Buffer
 	err = RunRemoteInvocation(context.Background(), RunConfig{
-		Dir:                      "factory",
-		InvocationPositionalText: &text,
-		JSONOutput:               true,
-		InvocationOutputMode:     InvocationOutputPrimaryResult,
-		Output:                   &output,
+		Dir:                     "factory",
+		NamedFactoryName:        "@you/research",
+		PreparedInvocationInput: preparedRemoteArguments(text),
+		JSONOutput:              true,
+		Output:                  &output,
 	}, server.URL+"/selected", NewRemoteInvocation(transport))
 	if err != nil {
 		t.Fatalf("RunRemoteInvocation: %v", err)
 	}
-	parts := contentcontract.PartsFromGenerated(gotRequest.Content)
-	if len(parts) != 1 || parts[0].Text != text {
-		t.Fatalf("remote request content = %#v, want normalized prompt", gotRequest.Content)
+	if gotRequest.Source.Kind != factoryapi.FactorySessionExecutionSourceKindFactoryId ||
+		gotRequest.Source.FactoryId == nil || *gotRequest.Source.FactoryId != "@you/research" {
+		t.Fatalf("remote request source = %#v, want selected Factory ID", gotRequest.Source)
 	}
-	var gotResponse factoryapi.InvocationResponse
+	if gotRequest.Args == nil || (*gotRequest.Args)["prompt"] != text {
+		t.Fatalf("remote request args = %#v, want normalized prompt", gotRequest.Args)
+	}
+	if gotRequest.RequestId == "" {
+		t.Fatal("remote request ID is empty")
+	}
+	var gotResponse factoryapi.FactorySessionExecutionResponse
 	if err := json.Unmarshal(bytes.TrimSpace(output.Bytes()), &gotResponse); err != nil {
 		t.Fatalf("decode CLI response: %v; output=%q", err, output.String())
 	}
-	if gotResponse.RequestId != "request-remote" || gotResponse.TraceId != "trace-remote" {
-		t.Fatalf("CLI response identity = (%q, %q)", gotResponse.RequestId, gotResponse.TraceId)
+	if gotResponse.SessionId != "dur-sess-remote" || gotResponse.Status != factoryapi.FactorySessionDurableLifecycleStatusQueued {
+		t.Fatalf("CLI response identity = (%q, %q)", gotResponse.SessionId, gotResponse.Status)
 	}
 }
 
 func TestRunRemoteInvocationPassesPreparedArguments(t *testing.T) {
 	text := "local adapter must not run"
-	prepared := work.PreparedInvocationInput{
-		NormalizedArguments: &work.NormalizedArguments{
-			Arguments: map[string]work.NormalizedArgument{
-				"prompt": {Values: []string{text}},
-			},
-		},
-	}
 	var got RemoteInvocationRequest
-	remote := remoteInvocationOperationFunc(func(_ context.Context, request RemoteInvocationRequest) (factoryapi.InvocationResponse, error) {
+	remote := remoteInvocationOperationFunc(func(_ context.Context, request RemoteInvocationRequest) (factoryapi.FactorySessionExecutionResponse, error) {
 		got = request
-		return factoryapi.InvocationResponse{
-			RequestId: "request-arguments", TraceId: "trace-arguments",
-			Status: factoryapi.InvocationTerminalStatusCompleted,
-			PrimaryResult: contentcontract.GeneratedPtrFromParts([]work.WorkContentPart{{
-				Type: work.WorkContentPartTypeText, Text: "ok",
-			}}),
+		return factoryapi.FactorySessionExecutionResponse{
+			SessionId: "dur-sess-arguments", Status: factoryapi.FactorySessionDurableLifecycleStatusRunning,
 		}, nil
 	})
 	var output bytes.Buffer
 	err := RunRemoteInvocation(context.Background(), RunConfig{
-		Dir:                      "factory",
-		PreparedInvocationInput:  &prepared,
-		InvocationOutputMode:     InvocationOutputPrimaryResult,
-		InvocationOutputExplicit: true,
-		Output:                   &output,
+		Dir:                     "factory",
+		NamedFactoryName:        "@you/research",
+		PreparedInvocationInput: preparedRemoteArguments(text),
+		Output:                  &output,
 	}, "http://selected.test", remote)
 	if err != nil {
 		t.Fatalf("RunRemoteInvocation: %v", err)
@@ -366,6 +356,68 @@ func TestRunRemoteInvocationPassesPreparedArguments(t *testing.T) {
 	}
 	if got.Request.Args == nil || (*got.Request.Args)["prompt"] != text {
 		t.Fatalf("remote normalized arguments = %#v, want prompt=%q", got.Request.Args, text)
+	}
+	if got.Request.RequestId == "" {
+		t.Fatal("remote request identity is empty")
+	}
+	if output.String() != "Factory session dur-sess-arguments accepted (RUNNING).\n" {
+		t.Fatalf("stdout = %q, want durable acceptance", output.String())
+	}
+}
+
+func TestRemoteDurableRequestMapsPolicyWaitAndStableIdentity(t *testing.T) {
+	timeout := int64(1750)
+	requestID := "caller-request-1"
+	args := map[string]any{"prompt": "ship it", "count": 2}
+	definition := &interfaces.FactoryConfig{
+		Name: "remote-inline",
+		Orchestrator: &interfaces.FactoryOrchestratorConfig{
+			Kind: interfaces.OrchestratorKindJavaScript,
+			JavaScript: &interfaces.FactoryOrchestratorJavaScriptConfig{
+				DefaultPolicy: json.RawMessage(`{"mode":"READ_ONLY"}`),
+			},
+		},
+	}
+	load := func(string) (*interfaces.FactoryConfig, error) { return definition, nil }
+	cfg := RunConfig{
+		FactoryConfigPath:     "remote-factory.json",
+		LoadFactoryConfigFile: load,
+	}
+	first, err := remoteDurableRequestFromRunConfig(cfg, factoryapi.InvocationRequest{
+		Args:          &args,
+		RequestId:     &requestID,
+		TimeoutMillis: &timeout,
+	})
+	if err != nil {
+		t.Fatalf("remoteDurableRequestFromRunConfig: %v", err)
+	}
+	if first.Source.Kind != factoryapi.FactorySessionExecutionSourceKindFactoryInline || first.Source.FactoryInline == nil {
+		t.Fatalf("source = %#v, want inline Factory source", first.Source)
+	}
+	if first.Args == nil || (*first.Args)["prompt"] != "ship it" || (*first.Args)["count"] != 2 {
+		t.Fatalf("args = %#v, want normalized values", first.Args)
+	}
+	if first.RequestedPolicy == nil || first.RequestedPolicy.AdditionalProperties["mode"] != "READ_ONLY" {
+		t.Fatalf("requested policy = %#v, want authored policy", first.RequestedPolicy)
+	}
+	if first.Wait == nil || first.Wait.TimeoutMillis == nil || *first.Wait.TimeoutMillis != timeout {
+		t.Fatalf("wait = %#v, want timeout %d", first.Wait, timeout)
+	}
+	if first.RequestId != requestID {
+		t.Fatalf("request ID = %q, want caller identity", first.RequestId)
+	}
+
+	first.RequestId = ""
+	second, err := remoteDurableRequestFromRunConfig(cfg, factoryapi.InvocationRequest{Args: &args})
+	if err != nil {
+		t.Fatalf("remoteDurableRequestFromRunConfig retry: %v", err)
+	}
+	retry, err := remoteDurableRequestFromRunConfig(cfg, factoryapi.InvocationRequest{Args: &args})
+	if err != nil {
+		t.Fatalf("remoteDurableRequestFromRunConfig second retry: %v", err)
+	}
+	if second.RequestId == "" || second.RequestId != retry.RequestId {
+		t.Fatalf("derived request IDs = %q/%q, want stable retry identity", second.RequestId, retry.RequestId)
 	}
 }
 
@@ -381,11 +433,11 @@ func TestRemoteInvocationFailureDoesNotLeakRequestOrRetryLocally(t *testing.T) {
 		t.Fatalf("NewProtocol: %v", err)
 	}
 	secret := "do not echo this payload"
-	text := secret
 	err = RunRemoteInvocation(context.Background(), RunConfig{
-		Dir:                      "factory",
-		InvocationPositionalText: &text,
-		Output:                   io.Discard,
+		Dir:                     "factory",
+		NamedFactoryName:        "@you/research",
+		PreparedInvocationInput: preparedRemoteArguments(secret),
+		Output:                  io.Discard,
 	}, server.URL, NewRemoteInvocation(transport))
 	if err == nil {
 		t.Fatal("RunRemoteInvocation error = nil, want remote failure")
@@ -408,18 +460,18 @@ func TestRemoteInvocationClientRejectsInvalidInputsAndResponses(t *testing.T) {
 	t.Run("request must be JSON encodable", testRemoteInvocationRejectsUnencodableRequest)
 	t.Run("nil HTTP response is rejected", testRemoteInvocationRejectsMissingResponse)
 	t.Run("non API error status remains actionable", testRemoteInvocationReportsNonAPIError)
-	t.Run("success does not require a response body", testRemoteInvocationAcceptsEmptySuccessBody)
+	t.Run("successful response requires a durable identity", testRemoteInvocationRejectsEmptySuccessBody)
 }
 
 func testRemoteInvocationRequiresContext(t *testing.T) {
-	_, err := remoteInvocationClient{transport: &remoteProtocolStub{}}.InvokeFactory(nil, RemoteInvocationRequest{})
+	_, err := remoteInvocationClient{transport: &remoteProtocolStub{}}.StartFactorySession(nil, RemoteInvocationRequest{})
 	if err == nil || !strings.Contains(err.Error(), "context is required") {
 		t.Fatalf("error = %v, want required-context error", err)
 	}
 }
 
 func testRemoteInvocationRequiresProtocol(t *testing.T) {
-	_, err := remoteInvocationClient{}.InvokeFactory(context.Background(), RemoteInvocationRequest{})
+	_, err := remoteInvocationClient{}.StartFactorySession(context.Background(), RemoteInvocationRequest{})
 	if err == nil || !strings.Contains(err.Error(), "CLI HTTP protocol is required") {
 		t.Fatalf("error = %v, want required-protocol error", err)
 	}
@@ -427,7 +479,7 @@ func testRemoteInvocationRequiresProtocol(t *testing.T) {
 
 func testRemoteInvocationRejectsInvalidEndpoint(t *testing.T) {
 	stub := &remoteProtocolStub{}
-	_, err := remoteInvocationClient{transport: stub}.InvokeFactory(context.Background(), RemoteInvocationRequest{
+	_, err := remoteInvocationClient{transport: stub}.StartFactorySession(context.Background(), RemoteInvocationRequest{
 		Server: "http://[::1",
 	})
 	if err == nil || !strings.Contains(err.Error(), "endpoint") {
@@ -440,11 +492,11 @@ func testRemoteInvocationRejectsInvalidEndpoint(t *testing.T) {
 
 func testRemoteInvocationRejectsUnencodableRequest(t *testing.T) {
 	bad := map[string]any{"function": func() {}}
-	_, err := remoteInvocationClient{transport: &remoteProtocolStub{}}.InvokeFactory(context.Background(), RemoteInvocationRequest{
+	_, err := remoteInvocationClient{transport: &remoteProtocolStub{}}.StartFactorySession(context.Background(), RemoteInvocationRequest{
 		Server:  "http://selected.test",
-		Request: factoryapi.InvocationRequest{Args: &bad},
+		Request: factoryapi.FactorySessionExecutionRequest{Args: &bad},
 	})
-	if err == nil || !strings.Contains(err.Error(), "marshal remote invocation request") {
+	if err == nil || !strings.Contains(err.Error(), "marshal remote durable start request") {
 		t.Fatalf("error = %v, want marshal error", err)
 	}
 }
@@ -452,7 +504,7 @@ func testRemoteInvocationRejectsUnencodableRequest(t *testing.T) {
 func testRemoteInvocationRejectsMissingResponse(t *testing.T) {
 	_, err := remoteInvocationClient{transport: &remoteProtocolStub{
 		response: clihttp.Response{},
-	}}.InvokeFactory(context.Background(), RemoteInvocationRequest{Server: "http://selected.test"})
+	}}.StartFactorySession(context.Background(), RemoteInvocationRequest{Server: "http://selected.test"})
 	if err == nil || !strings.Contains(err.Error(), "HTTP response is unavailable") {
 		t.Fatalf("error = %v, want missing-response error", err)
 	}
@@ -464,43 +516,32 @@ func testRemoteInvocationReportsNonAPIError(t *testing.T) {
 			StatusCode: http.StatusBadGateway,
 			Body:       io.NopCloser(strings.NewReader("not an API error")),
 		}},
-	}}.InvokeFactory(context.Background(), RemoteInvocationRequest{Server: "http://selected.test"})
+	}}.StartFactorySession(context.Background(), RemoteInvocationRequest{Server: "http://selected.test"})
 	if err == nil || !strings.Contains(err.Error(), "(502)") {
 		t.Fatalf("error = %v, want HTTP status error", err)
 	}
 }
 
-func testRemoteInvocationAcceptsEmptySuccessBody(t *testing.T) {
-	stub := &remoteProtocolStub{response: clihttp.Response{HTTP: &http.Response{StatusCode: http.StatusOK}}}
-	response, err := remoteInvocationClient{transport: stub}.InvokeFactory(context.Background(), RemoteInvocationRequest{
-		Server:    "https://selected.test",
-		SessionID: " session-beta ",
+func testRemoteInvocationRejectsEmptySuccessBody(t *testing.T) {
+	stub := &remoteProtocolStub{response: clihttp.Response{HTTP: &http.Response{
+		StatusCode: http.StatusAccepted,
+		Body:       io.NopCloser(strings.NewReader("")),
+	}}}
+	response, err := remoteInvocationClient{transport: stub}.StartFactorySession(context.Background(), RemoteInvocationRequest{
+		Server: "https://selected.test",
 	})
-	if err != nil {
-		t.Fatalf("InvokeFactory: %v", err)
+	if err == nil {
+		t.Fatalf("StartFactorySession: nil error, want malformed response")
 	}
-	if response.Status != "" || !strings.HasSuffix(stub.url, "/factory-sessions/session-beta/invocations") {
-		t.Fatalf("response/url = %#v/%q, want empty response and scoped session URL", response, stub.url)
+	if response.SessionId != "" || !strings.Contains(err.Error(), RemoteDurableResponseInvalidCode) {
+		t.Fatalf("response/error = %#v/%v, want malformed durable response", response, err)
+	}
+	if !strings.HasSuffix(stub.url, "/factory-sessions/async") {
+		t.Fatalf("request URL = %q, want durable start endpoint", stub.url)
 	}
 }
 
-func TestRunRemoteInvocationReportsTerminalStatesAndInputErrors(t *testing.T) {
-	text := "remote terminal state"
-	failedCode := factoryapi.InvocationResponseErrorCode("REMOTE_FAILED")
-	sessionID, workID, workName, workState := "session-1", "work-1", "work name", "failed"
-	message := "remote terminal failure"
-	response := factoryapi.InvocationResponse{
-		ErrorCode: &failedCode,
-		Message:   &message,
-		RequestId: "request-1",
-		SessionId: &sessionID,
-		Status:    factoryapi.InvocationTerminalStatusFailed,
-		TraceId:   "trace-1",
-		WorkId:    &workID,
-		WorkName:  &workName,
-		WorkState: &workState,
-	}
-
+func TestRunRemoteInvocationReportsDurableInputAndResponseErrors(t *testing.T) {
 	t.Run("nil operation is rejected", func(t *testing.T) {
 		err := RunRemoteInvocation(context.Background(), RunConfig{}, "", nil)
 		if err == nil || !strings.Contains(err.Error(), "operation is required") {
@@ -509,9 +550,9 @@ func TestRunRemoteInvocationReportsTerminalStatesAndInputErrors(t *testing.T) {
 	})
 
 	t.Run("missing invocation input has stable code", func(t *testing.T) {
-		err := RunRemoteInvocation(context.Background(), RunConfig{Dir: "factory"}, "", remoteInvocationOperationFunc(func(context.Context, RemoteInvocationRequest) (factoryapi.InvocationResponse, error) {
+		err := RunRemoteInvocation(context.Background(), RunConfig{Dir: "factory"}, "", remoteInvocationOperationFunc(func(context.Context, RemoteInvocationRequest) (factoryapi.FactorySessionExecutionResponse, error) {
 			t.Fatal("remote operation called without invocation input")
-			return factoryapi.InvocationResponse{}, nil
+			return factoryapi.FactorySessionExecutionResponse{}, nil
 		}))
 		var invocationErr *InvocationError
 		if !errors.As(err, &invocationErr) || invocationErr.Code != RemoteInvocationInputRequiredCode {
@@ -519,31 +560,29 @@ func TestRunRemoteInvocationReportsTerminalStatesAndInputErrors(t *testing.T) {
 		}
 	})
 
-	t.Run("missing terminal status is rejected", func(t *testing.T) {
-		err := RunRemoteInvocation(context.Background(), RunConfig{Dir: "factory", InvocationPositionalText: &text}, "", remoteInvocationOperationFunc(func(context.Context, RemoteInvocationRequest) (factoryapi.InvocationResponse, error) {
-			return factoryapi.InvocationResponse{}, nil
+	t.Run("compatibility content is rejected", func(t *testing.T) {
+		text := "remote compatibility content"
+		err := RunRemoteInvocation(context.Background(), RunConfig{
+			Dir: "factory", NamedFactoryName: "@you/research", InvocationPositionalText: &text,
+		}, "", remoteInvocationOperationFunc(func(context.Context, RemoteInvocationRequest) (factoryapi.FactorySessionExecutionResponse, error) {
+			return factoryapi.FactorySessionExecutionResponse{}, nil
 		}))
-		if err == nil || !strings.Contains(err.Error(), "no terminal status") {
-			t.Fatalf("error = %v, want missing-status error", err)
+		var invocationErr *InvocationError
+		if !errors.As(err, &invocationErr) || invocationErr.Code != RemoteDurableRequestInvalidCode {
+			t.Fatalf("error = %v, want %s", err, RemoteDurableRequestInvalidCode)
 		}
 	})
 
-	t.Run("terminal failure preserves response fields", func(t *testing.T) {
-		got := invocationResultFromRemoteResponse(response)
-		if got.ErrorCode != string(failedCode) || got.Message != message || got.SessionID != sessionID || got.WorkID != workID || got.WorkName != workName || got.WorkState != workState {
-			t.Fatalf("mapped response = %#v, want response metadata", got)
-		}
-		var output bytes.Buffer
+	t.Run("missing durable identity is rejected", func(t *testing.T) {
+		text := "remote normalized input"
 		err := RunRemoteInvocation(context.Background(), RunConfig{
-			Dir:                      "factory",
-			InvocationPositionalText: &text,
-			JSONOutput:               true,
-			Output:                   &output,
-		}, "", remoteInvocationOperationFunc(func(context.Context, RemoteInvocationRequest) (factoryapi.InvocationResponse, error) {
-			return response, nil
+			Dir: "factory", NamedFactoryName: "@you/research", PreparedInvocationInput: preparedRemoteArguments(text),
+		}, "", remoteInvocationOperationFunc(func(context.Context, RemoteInvocationRequest) (factoryapi.FactorySessionExecutionResponse, error) {
+			return factoryapi.FactorySessionExecutionResponse{}, nil
 		}))
-		if err == nil || output.Len() == 0 {
-			t.Fatalf("error/output = %v/%q, want terminal failure and rendered JSON", err, output.String())
+		var invocationErr *InvocationError
+		if !errors.As(err, &invocationErr) || invocationErr.Code != RemoteDurableResponseInvalidCode {
+			t.Fatalf("error = %v, want %s", err, RemoteDurableResponseInvalidCode)
 		}
 	})
 }
@@ -580,7 +619,11 @@ type remoteProtocolStub struct {
 	url      string
 }
 
-func (stub *remoteProtocolStub) Execute(*http.Request) (clihttp.Response, error) {
+func (stub *remoteProtocolStub) Execute(request *http.Request) (clihttp.Response, error) {
+	stub.called = true
+	if request != nil && request.URL != nil {
+		stub.url = request.URL.String()
+	}
 	return stub.response, stub.err
 }
 
@@ -606,8 +649,18 @@ func (stub *remoteProtocolStub) PutJSONCreated(context.Context, string, io.Reade
 	return stub.response, stub.err
 }
 
-type remoteInvocationOperationFunc func(context.Context, RemoteInvocationRequest) (factoryapi.InvocationResponse, error)
+func preparedRemoteArguments(prompt string) *work.PreparedInvocationInput {
+	return &work.PreparedInvocationInput{
+		NormalizedArguments: &work.NormalizedArguments{
+			Arguments: map[string]work.NormalizedArgument{
+				"prompt": {Values: []string{prompt}},
+			},
+		},
+	}
+}
 
-func (fn remoteInvocationOperationFunc) InvokeFactory(ctx context.Context, request RemoteInvocationRequest) (factoryapi.InvocationResponse, error) {
+type remoteInvocationOperationFunc func(context.Context, RemoteInvocationRequest) (factoryapi.FactorySessionExecutionResponse, error)
+
+func (fn remoteInvocationOperationFunc) StartFactorySession(ctx context.Context, request RemoteInvocationRequest) (factoryapi.FactorySessionExecutionResponse, error) {
 	return fn(ctx, request)
 }

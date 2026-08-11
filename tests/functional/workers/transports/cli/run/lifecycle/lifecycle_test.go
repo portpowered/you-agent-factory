@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -80,6 +81,74 @@ func TestCLIRunCleanInvocationCompletesWithoutDashboardStartup(t *testing.T) {
 	assertCleanInvocationStdoutFreeOfOperatorChatter(t, stdout)
 	if inputs.Stderr() != "" {
 		t.Fatalf("stderr = %q, want empty successful-run stderr", inputs.Stderr())
+	}
+}
+
+// TestCLIRemoteRunStartsDurableSessionOnSelectedServer proves the public
+// root.BuildProcess/Process.Execute path sends one normalized run to the
+// selected durable-session endpoint and returns the server-owned identity
+// without opening a local worker/provider runtime.
+func TestCLIRemoteRunStartsDurableSessionOnSelectedServer(t *testing.T) {
+	factoryDir := support.ScaffoldFactory(t, map[string]any{
+		"name": "remote-placement",
+		"invocationSignature": map[string]any{
+			"parameters": []any{map[string]any{
+				"name":     "prompt",
+				"required": true,
+				"bindings": []any{map[string]any{"kind": "POSITIONAL", "position": 1}},
+			}},
+		},
+	})
+	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
+	var got factoryapi.FactorySessionExecutionRequest
+	serverCalls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		serverCalls++
+		if r.Method != http.MethodPost || r.URL.Path != "/selected/factory-sessions/async" {
+			t.Errorf("remote request = %s %s, want POST /selected/factory-sessions/async", r.Method, r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Errorf("decode durable start request: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(factoryapi.FactorySessionExecutionResponse{
+			SessionId:        "dur-sess-functional-remote",
+			Status:           factoryapi.FactorySessionDurableLifecycleStatusQueued,
+			OrchestratorKind: factoryapi.JAVASCRIPT,
+		})
+	}))
+	defer server.Close()
+
+	args := []string{
+		"you", "--remote", "--server", server.URL + "/selected", "run",
+		"--factory", factoryPath, "--json", "--no-record", "same request",
+	}
+	inputs := support.FakeInputs(t.Context(), args)
+	inputs.Input.WorkingDirectory = factoryDir
+	if err := support.BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input); err != nil {
+		t.Fatalf("Process.Execute(%v) error = %v\nstdout:\n%s\nstderr:\n%s", args, err, inputs.Stdout(), inputs.Stderr())
+	}
+	if serverCalls != 1 {
+		t.Fatalf("durable start calls = %d, want exactly one selected-server request", serverCalls)
+	}
+	if got.Source.Kind != factoryapi.FactorySessionExecutionSourceKindFactoryInline || got.Source.FactoryInline == nil {
+		t.Fatalf("source = %#v, want inline Factory target", got.Source)
+	}
+	if got.Args == nil || (*got.Args)["prompt"] != "same request" {
+		t.Fatalf("args = %#v, want normalized prompt", got.Args)
+	}
+	if got.RequestId == "" {
+		t.Fatal("durable request ID is empty")
+	}
+	var response factoryapi.FactorySessionExecutionResponse
+	if err := json.Unmarshal([]byte(inputs.Stdout()), &response); err != nil {
+		t.Fatalf("decode remote run response: %v; stdout=%q", err, inputs.Stdout())
+	}
+	if response.SessionId != "dur-sess-functional-remote" || response.Status != factoryapi.FactorySessionDurableLifecycleStatusQueued {
+		t.Fatalf("response = %#v, want accepted durable session identity", response)
+	}
+	if inputs.Stderr() != "" {
+		t.Fatalf("stderr = %q, want no local runtime diagnostics", inputs.Stderr())
 	}
 }
 
