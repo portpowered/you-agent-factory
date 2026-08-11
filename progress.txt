@@ -12401,7 +12401,7 @@
   - `prd.json`
   - `progress.txt`
 - Verification
-  - GitHub Actions run `31513733456` passed all 18 required checks after rerunning only the failed jobs, including Backend Functional Coverage and Verification Policy; the pinned real ACP evidence artifact was produced.
+  - GitHub Actions run `31516314820` passed all 18 required checks on implementation head `b11a7f6e7874c2a63c2744c47ab71b6bf1203f5e` after rerunning only the failed jobs, including Backend Functional Coverage and Verification Policy; the pinned real ACP evidence artifact was produced.
   - PR #1885 is open, non-draft, mergeable, and clean with zero review threads, zero unresolved inline threads, and zero formal reviews.
   - The PRD records all four stories as `passes:true`, and its delivery audit is synchronized to the merged current-main base and green hosted run.
 - **Learnings for future iterations:**
