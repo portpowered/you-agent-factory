@@ -11785,3 +11785,17 @@
 - **Learnings for future iterations:**
   - A PR can become dirty after a green replacement run when `main` advances during bookkeeping; fetch again immediately before handoff, resolve shared logs from the merge-base deltas, and attach fresh CI evidence to the resulting merge head.
 ---
+## [2026-08-11 09:53:41 -07:00] - wsr-0023-capture-replay final hosted handoff
+- What was implemented
+  - Completed the final current-main PR handoff audit after the synchronization merge.
+  - Confirmed the isolated Backend Functional Coverage rerun passed, clearing the only transient failure in the replacement verification run.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Replacement run `31513221688` is terminal-success for all reported checks, including Backend Functional Coverage and Verification Policy.
+  - PR #1876 is open and mergeable with a clean state; `origin/main` is an ancestor of the branch head.
+  - All three `prd.json` stories have `passes:true`; the PR body matches `prd.json` byte-for-byte; `git diff --check` passes.
+  - The thread-aware PR review scan reports no review threads or reviews requiring action; historical blocking comments are followed by updates documenting their resolution.
+- **Learnings for future iterations:**
+  - Final handoff evidence must be attached to the exact post-merge head because a moving base can invalidate an otherwise green prior run.
+---
