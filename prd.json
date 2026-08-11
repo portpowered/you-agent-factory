@@ -1,95 +1,74 @@
 {
-  "project": "DWRO S1 — Explicit Remote Placement and Listener Selection",
-  "branchName": "dwro-s1-remote-placement-flags",
-  "description": "Implement story S1 of Direct Worker and Remote Operations by adding persistent root --remote and authored command placement capabilities, dispatching one normalized request through either the local service or exactly the selected --server endpoint without fallback, introducing --listen for local binds with a warned legacy compatibility path, and rejecting documented conflicts with run --with-server and run --with-site.",
+  "project": "Customer Writing Standard and Terminology Register",
+  "branchName": "prose-standard-and-terms",
+  "description": "Implement the documentation-only foundation from Story 1 of the Customer Prose Standard and Enforcement Plan: publish an indexed normative customer technical-writing standard, a versioned and parseable YAML product terminology register, and a manual language-review checklist. The project gives authors and reviewers one contract for labels, procedures, descriptions, product terms, protected technical text, examples, exceptions, and ASD-STE100-aligned conformance language, without implementing prosecheck or rewriting the existing corpus.",
   "context": {
-    "customerAsk": "Implement DWRO story S1: persistent root --remote, authored command placement capabilities, endpoint-only --server, new --listen for local listener binds, no silent local fallback, and documented conflicts with run --with-server and run --with-site.",
-    "problem": "The CLI has no explicit execution-placement input and its authored manifest cannot state whether a command is local-only, remote-only, or dual-placement. The global --server flag also selects both HTTP client endpoints and local listener binds, so customers and scripts cannot unambiguously distinguish calling an existing server from hosting one, and unsupported remote requests lack one centralized no-fallback rule.",
-    "solution": "Add persistent root --remote, a resolved local/remote placement value, and per-command placement capabilities to the authored CLI contract. Normalize command inputs once and select exactly one injected local-service or HTTP-client adapter, rejecting unsupported or failed remote placement without fallback. Make --server the remote endpoint selector, add --listen to listener-owning commands, preserve explicit legacy --server binding with a deprecation warning when --listen is absent, give --listen precedence, and enforce documented usage conflicts before side effects."
+    "customerAsk": "Implement Story 1 of docs/internal/development/plans/customer-prose-standard-and-enforcement.md exactly within the documentation-only lane: add the normative customer technical-writing standard under docs/internal/standards/writing/, add the YAML terminology register, index the standard from docs/internal/standards/STANDARDS.md, and provide the required manual review checklist.",
+    "problem": "Five downstream prose and documentation plans are blocked because authors and reviewers have no normative repository writing contract, no structured product terminology register, and no explicit boundary between deterministic checks and human language review. Product vocabulary, technical-literal protection, exceptions, and conformance claims can therefore vary by reviewer or prior chat context.",
+    "solution": "Publish one repository-specific writing profile defining content classes, protected technical text, deterministic and human-review boundaries, suppression policy, ASD-STE100-aligned conformance limits, examples, and a manual checklist. Publish a versioned YAML register with canonical terms, definitions, approved forms, discouraged alternatives, examples, valid surfaces, and ownership references. Connect the artifacts through the standards index and cross-links so downstream checker and migration work can consume one authoritative contract."
   },
   "acceptanceCriteria": [
-    "The authored CLI manifest defines persistent root --remote, a resolved local/remote placement value, and local-only, remote-only, or dual-placement capabilities for affected commands; executable help and parsing match that contract.",
-    "A representative dual-placement operation produces the same normalized request locally without --remote and sends that request to exactly the --server <uri> HTTP endpoint with --remote, with equivalent domain intent across adapters.",
-    "Unsupported remote placement, an invalid or unavailable selected server, and remote transport failure return stable actionable errors and never invoke the local product operation, start a listener, or silently select another endpoint.",
-    "you server --listen, you run --with-server --listen, and you run --with-site --listen bind the requested local address; when --listen is absent, legacy listener use of an explicitly supplied --server remains functional for the compatibility window and warns, while explicit --listen takes precedence.",
-    "--remote with run --with-server or run --with-site is rejected as a documented stable usage conflict before listener, browser, Factory, or remote-operation side effects begin; reference docs and examples use the new placement vocabulary.",
-    "Quality gates pass with direct CLI and manifest, package, functional, help and reference, and compatibility evidence as applicable; Typecheck passes, Tests pass, and there are no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
-    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared or generated-file churn are resolved against current main, and the PR is actually merged."
+    "An author can use the normative standard to determine how to write a label, procedure, description, command or code example, product term, and justified exception without relying on chat history or reviewer preference.",
+    "The standard defines required content classes, protected machine and technical text, deterministic automated-rule boundaries, human-review rules, suppression policy, repository-specific good and bad examples, and the approved ASD-STE100 conformance claim.",
+    "The versioned terminology register parses as YAML using the documented schema, covers all required initial public nouns plus customer-visible relationship and lifecycle names, and limits internal Petri-net terms to explicitly internal or implementation-focused contexts.",
+    "Architecture and data-model owners confirm the terminology definitions and owning references, with blocking terminology feedback resolved before merge.",
+    "Authors and reviewers can discover the standard, terminology register, and manual checklist from the standards index; Markdown renders legibly and document links resolve to the intended repository sources.",
+    "Typecheck and applicable docs-only tests pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
+    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared-file changes are resolved against current main, and the PR is actually merged."
   ],
   "userStories": [
     {
-      "id": "dwro-s1-remote-placement-flags-001",
-      "title": "Declare explicit placement in the authored CLI contract",
-      "description": "As a CLI user and command implementer, I want root placement and each command's supported placements to be explicit so help, validation, and dispatch share one authoritative contract.",
+      "id": "prose-standard-and-terms-001",
+      "title": "Authors can apply one normative writing contract",
+      "description": "As an author, I want one repository writing standard for customer-facing prose so I can write clear labels, instructions, explanations, examples, and exceptions without depending on reviewer preference.",
       "acceptanceCriteria": [
-        "The authored CLI manifest exposes a visible persistent root --remote boolean whose documented meaning is to execute a supported operation through a running You server; it does not imply async, follow, continuous, or listener behavior.",
-        "The executable parser resolves the root input to explicit local placement by default and remote placement when --remote appears before or after the command path, consistent with other persistent flags.",
-        "A command can authoritatively declare local-only, remote-only, or dual-placement capability, and manifest validation rejects a runnable command whose placement declaration is missing or invalid where the placement contract applies.",
-        "Existing HTTP-only commands retain their historical remote-default compatibility for this window, accept explicit --remote, and do not gain a local implementation merely to satisfy the new vocabulary.",
-        "Root and representative command help show the placement meaning and supported usage without describing --remote as a waiting or server-start option.",
-        "Focused contract and parser tests prove manifest validation, persistent flag inheritance, before and after command parsing, default placement, and explicit remote placement through observable CLI inputs and help.",
-        "Typecheck passes",
-        "Tests pass"
+        "The standard separately defines labels, procedural prose, descriptive prose, machine and technical text, and technical terms, including when each class applies.",
+        "Procedural rules require no more than 20 words per sentence, one instruction per sentence unless actions must occur simultaneously, an imperative verb, necessary conditions before the instruction, an observable expected result, and an ordered or vertical list when sequence matters.",
+        "Descriptive rules require no more than 25 words per sentence, gradual introduction of information, one topic per paragraph, no more than six sentences per paragraph, preferred active voice, and stable key words or phrases for related information.",
+        "Protected-text guidance covers code fences, inline code, commands and shell operators, JSON and YAML contract examples, API methods and routes, paths, URLs, package paths, identifiers, schema, event, status and error-code literals, model and provider names, quoted external output, and generated artifacts; safely identifiable natural-language comments remain reviewable.",
+        "The standard distinguishes blocking deterministic rules, advisory rules, and human-review rules using the governing plan's rule sets, and defines bounded rule-specific suppressions with reasons while rejecting suppressions for ordinary readability debt.",
+        "The standard says the repository profile is aligned with ASD-STE100, does not redistribute its controlled dictionary, does not claim checker certification or full ASD-STE100 conformance, and names the documented review, training, and dictionary conditions required before a stronger claim.",
+        "Repository-specific paired good and bad examples cover at least a command description, procedure, explanation, product term, protected technical example, and valid or invalid exception.",
+        "Typecheck passes"
       ],
       "priority": 1,
       "passes": true,
+      "notes": "Implemented the normative customer technical-writing standard at docs/internal/standards/writing/customer-technical-writing-standard.md. It defines labels, procedures, descriptions, machine and technical text, technical terms, the protected-literal boundary, blocking/advisory/human review rules, bounded rule-specific exceptions, ASD-STE100-aligned claim limits, paired repository examples, and the manual review checklist. `git diff --cached --check` passed before commit. `make typecheck` reaches TypeScript but remains blocked by pre-existing Assertion.not errors in untouched UI test helpers; no UI or runtime files changed in this story. Stories 002 and 003 remain open."
+    },
+    {
+      "id": "prose-standard-and-terms-002",
+      "title": "Maintainers can consume the product terminology register as structured data",
+      "description": "As an author or future tooling maintainer, I want a versioned, parseable product terminology register so public nouns stay consistent and internal implementation vocabulary does not leak into customer prose.",
+      "acceptanceCriteria": [
+        "The YAML document has a top-level integer version set to 1 and a top-level terms sequence; every term record uses the same documented field schema.",
+        "Each term record contains non-empty canonical, definition, category, approvedForms, discouragedAlternatives, example, surfaces, and owner fields. approvedForms explicitly represents applicable plural or verb forms, and each discouraged alternative records its text, whether it is discouraged or prohibited, and the approved replacement.",
+        "category values are limited to product-term, technical-noun, technical-verb, acronym, command, or protected-literal; surfaces is a non-empty sequence that states where the term is valid; owner points to the architecture or contract source that owns the meaning.",
+        "The register covers at least Factory, Factory Session, Current Factory, Work, Work Request, Worker, Worker Session, Workstation, Provider, Provider Session, Model, Recording, Factory Event, and the customer-visible relationship and lifecycle names defined by the current data model and public contracts.",
+        "CPN, place, transition, marking, and token are registered as internal terms whose surfaces permit use only in explicitly internal or implementation-focused material.",
+        "Definitions and capitalization agree with docs/architecture/data-model.md and the owning public contracts; architecture and data-model owners record approval or resolve blocking corrections in the PR.",
+        "A standard YAML parser loads the complete register without errors, and a reviewer can identify each required field without relying on comments or implicit conventions.",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": false,
       "notes": ""
     },
     {
-      "id": "dwro-s1-remote-placement-flags-002",
-      "title": "Dispatch normalized operations without placement fallback",
-      "description": "As a customer, I want the same operation to run locally by default or on exactly my selected server with --remote so placement is predictable and cannot silently change during failure.",
+      "id": "prose-standard-and-terms-003",
+      "title": "Reviewers can discover and apply the complete prose review contract",
+      "description": "As a reviewer, I want the writing standard, terminology register, and manual checklist connected through the standards index so I can evaluate prose consistently and direct authors to one authoritative source.",
       "acceptanceCriteria": [
-        "At least one representative supported dual-placement command normalizes customer inputs once before dispatch, calls its already-injected local service adapter without --remote, and calls its HTTP client adapter with --remote.",
-        "Behavioral parity coverage proves the local and remote adapters receive contract-equivalent normalized request values for the same customer input, allowing only transport metadata differences.",
-        "you --remote --server <uri> <dual-placement-command> sends the operation to exactly <uri> and does not invoke the local product operation, start or probe a local listener, or substitute the default endpoint.",
-        "A local-only command invoked with --remote exits with a stable actionable usage error that identifies the unsupported placement before command side effects occur.",
-        "Invalid endpoint configuration, connection refusal, timeout, and other remote transport failures remain remote failures and do not retry through the local adapter; diagnostics identify the selected endpoint without leaking credentials or sensitive request content.",
-        "Placement selection remains a CLI transport concern: domain services receive normalized operation requests and do not inspect CLI placement flags or discover alternate dependencies.",
-        "Focused package and public CLI behavioral tests cover local dispatch, exact remote dispatch, unsupported placement, and failed remote transport with zero local fallback.",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 2,
-      "passes": true,
-      "notes": "Implemented dual-placement `you run` dispatch through one normalized invocation request and an injected local or exact-URI HTTP adapter, with stable unsupported-placement and no-fallback remote errors. Refreshed authored and published CLI contract artifacts and added focused package/public CLI behavioral coverage. Verified with `make contracts-validate`, `make cli-manifest-check`, `go test ./pkg/transports/cli/run ./pkg/transports/cli ./pkg/wire ./pkg/services/workers/internal/interface -count=1`, and `make test`. Review follow-up makes invalid remote endpoint labels fail closed for parse-success/base-invalid opaque and unsupported-scheme inputs, with credential-redaction regression coverage."
-    },
-    {
-      "id": "dwro-s1-remote-placement-flags-003",
-      "title": "Bind local servers with --listen and preserve legacy scripts",
-      "description": "As an operator, I want local listener addresses selected with --listen so --server can mean a remote endpoint while my existing listener scripts have a safe migration window.",
-      "acceptanceCriteria": [
-        "you server --listen <address>, you run --with-server --listen <address>, and you run --with-site --listen <address> bind the requested valid local address and report existing stable bind failures for invalid, non-local, or unavailable addresses.",
-        "Listener-owning commands use the existing default local bind when neither an explicit --listen nor an explicit legacy bind value is supplied.",
-        "During the compatibility window, an explicitly supplied legacy --server <local-uri> continues to select the listener bind only when --listen is absent and emits one actionable deprecation warning on stderr directing the user to --listen.",
-        "When both inputs are supplied to a listener-owning command, explicit --listen determines the bind address; --server does not override it, and compatibility diagnostics accurately explain any retained endpoint role.",
-        "Ordinary local commands and ordinary you run do not start a listener merely because --listen or the default server endpoint exists; invalid flag placement is rejected before runtime side effects.",
-        "CLI manifest relationships, help, and examples describe --listen as the local bind input and --server as the selected You server URI, including the legacy migration behavior.",
-        "Focused listener lifecycle tests use observable readiness and bind behavior and prove requested binding, precedence, warning, bind failure, and joined shutdown without arbitrary sleeps.",
-        "Typecheck passes",
-        "Tests pass"
+        "docs/internal/standards/STANDARDS.md lists the customer technical-writing standard as the normative entry point and identifies when authors and reviewers must use it.",
+        "The standard links to the terminology register, architecture data model, and official ASD-STE100 references used by the governing plan; the terminology register's ownership references identify the intended repository sources.",
+        "The manual checklist requires reviewers to confirm approved vocabulary and meaning, one subject or instruction per sentence, justified passive voice, logical single-topic paragraphs, preserved technical and contract meaning, examples matching shipped CLI and public schemas, and precise warnings, destructive instructions, and failure recovery.",
+        "The checklist makes clear which findings can be automated and which require language or subject-matter judgment, and it does not describe the future checker as already implemented.",
+        "The standard, examples, checklist, and index render as readable Markdown, and following their repository links reaches the intended standard, register, data-model, or external reference.",
+        "No code, prosecheck implementation, prose baseline, CI enforcement, generated artifact, CLI manifest change, or customer-corpus rewrite is included in this story.",
+        "Typecheck passes"
       ],
       "priority": 3,
-      "passes": true,
-      "notes": "Implemented exact local listener selection through --listen for you server and server-enabled you run/you run --with-site flows, with loopback-only validation, explicit precedence over --server, one-time legacy local --server warnings, and preserved automatic legacy allocation. Ordinary runs reject misplaced --listen before the run handler, and listener lifecycle coverage proves exact readiness, unavailable-port errors, and shutdown. Refreshed authored/generated CLI contracts, command/help baselines, and reference guidance. Verified with make contracts-validate, make cli-manifest-check, make docs-reference-smoke, make test, go test ./pkg/transports/cli/... -count=1, focused CLI tests, full run-scoped-server functional tests, backend-size, pkg-maint, pkg-file-count, vet, and git diff --check; aggregate make lint is blocked by the pre-existing missing UI knip binary, and the backend-only continuation reaches existing package-boundary baseline violations; neither reports new violations."
-    },
-    {
-      "id": "dwro-s1-remote-placement-flags-004",
-      "title": "Reject remote and local-hosting conflicts and publish migration guidance",
-      "description": "As a customer, I want contradictory placement modes rejected with clear guidance so the CLI never both calls a remote server and hosts the same run locally.",
-      "acceptanceCriteria": [
-        "you --remote run --with-server and you --remote run --with-site each exit with the same stable usage classification and actionable conflict message, regardless of persistent-flag position.",
-        "Conflict validation occurs before Factory execution, HTTP dispatch, listener startup, browser launch, recording, or other run-owned side effects.",
-        "Authored CLI relationships, executable help, and packaged reference docs state that --remote selects a running server, --server selects its URI, and --listen selects a local bind; they document both run-mode conflicts and the legacy bind migration.",
-        "New customer-facing examples use you --remote --server <uri> for supported remote operations and --listen <address> for local server or server-enabled run binding; they do not present legacy --server listener syntax as the preferred form.",
-        "Behavioral CLI tests prove both conflicts, stable exit and error output, zero side effects, and help and reference guidance rather than relying on source or route inventories.",
-        "Documentation reference smoke checks pass",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 4,
-      "passes": true,
-      "notes": "Implemented stable REMOTE_LOCAL_HOSTING_CONFLICT validation before system initialization and again after custom run parsing, covering --remote before or after run with both --with-server and --with-site; behavioral tests prove no local, remote, browser, listener, or Factory side effects. Added authored conflict relationships, structured BAD_REQUEST output, executable help/examples, legacy --server migration guidance, and packaged reference documentation; regenerated published contracts and CLI baselines. Addressed review feedback by removing duplicate placement keys from authored/generated manifests, making manifest loading reject duplicate JSON object keys, redacting malformed credential-bearing endpoint diagnostics, keeping maintainability and package-file-count ratchets green, using worker-free listener functional cases, and removing marker-only docs assertions. Moved the generic strict decoder into the policy-free generated-artifact platform package and added loader/decoder coverage so the CLI manifest unit and functional floors remain intact. Verified with focused CLI tests, the full short Go suite, make verify-fast, make cli-manifest-check, make contracts-validate, make docs-reference-smoke, make pkg-maint, make pkg-file-count, backend-size, pkg-structure, vet, full run-scoped-server functional tests, and git diff --check."
+      "passes": false,
+      "notes": ""
     }
   ]
 }
