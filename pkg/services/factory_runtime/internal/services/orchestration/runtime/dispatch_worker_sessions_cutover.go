@@ -38,6 +38,9 @@ func startThroughWorkerSessions(
 	request workers.WorkstationDispatchRequest,
 	accept workers.WorkstationDispatchAcceptFunc,
 ) error {
+	if strings.TrimSpace(request.Execution.RecordingID) == "" && cfg != nil {
+		request.Execution.RecordingID = strings.TrimSpace(cfg.recordingID)
+	}
 	if err := workersBoundary.Start(ctx); err != nil {
 		return err
 	}

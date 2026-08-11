@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -58,6 +59,17 @@ func (r *registry) InvokeSession(ctx context.Context, req workersessions.InvokeS
 		req.Execution.Execution.Dispatch.Execution.RequestID,
 		req.Execution.Execution.Dispatch.Execution.WorkIDs,
 	)
+	workerRecording, err := r.startWorkerRecording(ctx, req)
+	if err != nil {
+		r.logger.Info("worker session recording opening rejected", "sessionID", req.ID, "attemptID", attemptID, "outcome", "failed", "error", err.Error())
+		terminal := failedTerminal(workersessions.FailureCauseEventPublicationFailure, safeDetail(workersessions.FailureCauseEventPublicationFailure, nil))
+		final, committed := r.commitTerminal(req.ID, workersessions.StateFailed, terminal)
+		if committed {
+			r.logTerminal(req.ID, attemptID, final)
+			r.publishTerminalRecordOrLog(ctx, req.ID, attemptID, workersessions.StateFailed, *final.Result)
+		}
+		return workersessions.InvokeSessionResult{Session: final}, nil
+	}
 
 	if err := r.publishOpeningRecord(
 		ctx,
@@ -65,6 +77,7 @@ func (r *registry) InvokeSession(ctx context.Context, req workersessions.InvokeS
 		attemptID,
 		openingSessionPayload(req.ID, attemptID, startedAt, req.Execution.Execution),
 		providerIdentityForExecution(req.Execution.Execution),
+		workerRecording,
 	); err != nil {
 		terminal := failedTerminal(workersessions.FailureCauseEventPublicationFailure, safeDetail(workersessions.FailureCauseEventPublicationFailure, nil))
 		final, committed := r.commitTerminal(req.ID, workersessions.StateFailed, terminal)
@@ -75,6 +88,23 @@ func (r *registry) InvokeSession(ctx context.Context, req workersessions.InvokeS
 		return workersessions.InvokeSessionResult{Session: final}, nil
 	}
 	return r.driveInvocation(ctx, req, attemptID)
+}
+
+func (r *registry) startWorkerRecording(
+	ctx context.Context,
+	req workersessions.InvokeSessionRequest,
+) (recordings.WorkerSessionRecording, error) {
+	if r.recording == nil {
+		return nil, nil
+	}
+	if strings.TrimSpace(req.Execution.Execution.RecordingID) == "" {
+		return nil, nil
+	}
+	return r.recording.StartWorkerSessionRecording(ctx, recordings.WorkerSessionRecordingRequest{
+		RecordingID:     strings.TrimSpace(req.Execution.Execution.RecordingID),
+		WorkerSessionID: req.ID,
+		Topic:           workersessions.Topic(req.ID),
+	})
 }
 
 // driveInvocation begins boundary supervision only after the opening Worker

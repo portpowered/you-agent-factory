@@ -1,4 +1,7 @@
 ## Codebase Patterns
+- Worker-topic capture belongs behind a narrow Recordings capability: Events remains the source stream, Worker Sessions publishes once, and an injected durable writer is the only recording-side acceptance port.
+- To gate handoff without a publication race, hold the Worker Session publication lock across the opening append and Recordings opening barrier; drain the terminal record before closing the capture subscription.
+- Source-native capture should subscribe from aggregate position zero, validate the canonical topic plus complete source identity, and persist detached Events records before acknowledging the barrier.
 - Terminal lifecycle publication must require the opening record's committed publication window; a failed opening must never be followed by a terminal append that becomes topic position 1.
 - Root-built direct-JavaScript functional probes that do not invoke a worker can run without `--with-mock-workers`; keep Mock Workers usage inside the feature-owning test cells.
 - Cancellation-sensitive functional fixtures must signal provider-edge entry before issuing an interrupt; a published RUNNING status can precede provider handoff and otherwise makes context-cancellation assertions race.
@@ -7340,4 +7343,26 @@
   - `prd.json` parses with all three stories marked `passes:true`; `git merge-tree --write-tree origin/main HEAD` and `git diff --check` pass; the worktree is clean.
 - **Learnings for future iterations:**
   - A green PR run becomes stale when `origin/main` advances during local verification; fetch immediately before handoff, merge the new base, and wait for checks on the replacement head.
+---
+
+## 2026-08-10 23:24 -07:00 - wsr-0023-capture-replay-001
+- What was implemented
+  - Added a Recordings-owned Worker capture capability that subscribes from aggregate position zero, validates the canonical correlated SESSION/STARTED opening, persists detached source-native records through a durable writer, and classifies subscription, gap, close, cancellation, backpressure, ordering, duplicate, and persistence failures.
+  - Gated Worker Sessions provider handoff on the durable opening while holding the per-session publication lock; failed barriers produce zero provider dispatches and do not publish a terminal-only Worker history.
+  - Kept capture alive through the terminal record, drained that record before close, propagated the runtime recording target, added an injectable `WorkerRecordingWriter` edge, and supplied an atomic local sidecar writer for production composition.
+- Files changed
+  - `pkg/services/recordings/worker_capture.go`
+  - `pkg/services/recordings/internal/services/worker_capture/`
+  - `pkg/services/recordings/wire/worker_capture.go`
+  - `pkg/services/worker_sessions/internal/service/{invoke_session.go,publish_record.go,service.go}`
+  - `pkg/services/worker_sessions/wire/wire.go`
+  - `pkg/services/edges/definition.go`
+  - `pkg/services/factory_runtime/internal/{build.go,services/orchestration/runtime/{factory.go,dispatch_worker_sessions_cutover.go}}`
+  - `pkg/wire/{worker_sessions_providers.go,wire.go,wire_gen.go}`
+  - `prd.json`, `progress.txt`
+- Verification
+  - Focused Recordings and Worker Sessions tests passed, including `go test -race` for both capture and Worker Sessions packages.
+  - Recordings, Worker Sessions, Factory Runtime internals, Wire, and Edges test suites passed.
+- **Learnings for future iterations:**
+  - A durable Worker sidecar can preserve exact Events records without widening the Worker Sessions contract; the next story should add loading/replay over this source-native snapshot and unify it with the existing canonical recording lifecycle.
 ---

@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/portpowered/infinite-you/pkg/services/events"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -60,6 +61,9 @@ type publication struct {
 	// turnID is retained only to correlate a provider-bound SESSION/UPDATED
 	// record when the opening did not yet know the provider.
 	turnID string
+	// recording is the Recordings-owned capture that must remain live until
+	// the terminal Worker record has been durably consumed.
+	recording recordings.WorkerSessionRecording
 }
 
 // publicationFor returns the publication registered for id, or nil if id was
@@ -386,10 +390,17 @@ func isTerminalLifecycleRecord(record events.Record) bool {
 // the append itself has committed: no PublishRecord call can be accepted for
 // id until this succeeds. A non-nil return means no record was committed and
 // the window stays closed: Start must not proceed to Workers handoff.
-func (r *registry) publishOpeningRecord(ctx context.Context, id, attemptID string, payload workers.SessionPayload, provider string) error {
+func (r *registry) publishOpeningRecord(
+	ctx context.Context,
+	id,
+	attemptID string,
+	payload workers.SessionPayload,
+	provider string,
+	recordingsForSession ...recordings.WorkerSessionRecording,
+) error {
 	pub := r.publicationFor(id)
 	pub.mu.Lock()
-	defer pub.mu.Unlock()
+	recording := firstWorkerRecording(recordingsForSession)
 
 	// SessionPayload contains only JSON value fields, so json.Marshal cannot
 	// fail here; the error is intentionally discarded rather than defended
@@ -410,14 +421,31 @@ func (r *registry) publishOpeningRecord(ctx context.Context, id, attemptID strin
 		SourceEventID:  openingSourceEventID,
 	}
 	if _, err := r.appendDraft(ctx, workersessions.Topic(id), identity, workerDraftSchemaID, draft); err != nil {
+		pub.mu.Unlock()
 		return err
 	}
+	if recording != nil {
+		if err := recording.AwaitOpening(ctx); err != nil {
+			pub.mu.Unlock()
+			_ = recording.Close(context.WithoutCancel(ctx))
+			return err
+		}
+	}
 	pub.open = true
+	pub.recording = recording
 	pub.provider = workers.CanonicalProviderSessionProvider(provider)
 	pub.turnID = strings.TrimSpace(payload.TurnID)
 	pub.lastSequence = make(map[sourceKey]events.SourceSequence)
 	pub.accepted = make(map[events.AppendIdentity]struct{})
+	pub.mu.Unlock()
 	return nil
+}
+
+func firstWorkerRecording(recordingsForSession []recordings.WorkerSessionRecording) recordings.WorkerSessionRecording {
+	if len(recordingsForSession) == 0 {
+		return nil
+	}
+	return recordingsForSession[0]
 }
 
 // terminalSessionPayload is the SESSION KindSession payload committed for
@@ -507,11 +535,13 @@ func (r *registry) publishTerminalRecord(ctx context.Context, id, attemptID stri
 		return workersessions.ErrSessionNotFound
 	}
 	pub.mu.Lock()
-	defer pub.mu.Unlock()
 	if !pub.open {
+		pub.mu.Unlock()
 		return workersessions.ErrPublicationNotOpen
 	}
 	pub.open = false
+	recording := pub.recording
+	pub.recording = nil
 	draft.Provenance = lifecycleProvenance(pub.provider)
 
 	identity := events.AppendIdentity{
@@ -521,6 +551,12 @@ func (r *registry) publishTerminalRecord(ctx context.Context, id, attemptID stri
 		SourceEventID:  terminalSourceEventID,
 	}
 	_, err = r.appendDraft(ctx, workersessions.Topic(id), identity, workerDraftSchemaID, draft)
+	pub.mu.Unlock()
+	if recording != nil {
+		if closeErr := recording.Close(context.WithoutCancel(ctx)); err == nil {
+			err = closeErr
+		}
+	}
 	return err
 }
 

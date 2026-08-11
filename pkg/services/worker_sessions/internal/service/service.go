@@ -19,6 +19,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -79,6 +80,7 @@ type registry struct {
 	eventReader      EventsReader
 	retainedReader   EventsRetainedReader
 	providerSessions providersessions.Service
+	recording        recordings.WorkerSessionRecordingService
 	clock            platformclock.Source
 	logger           logging.Logger
 }
@@ -99,6 +101,7 @@ func New(
 	logger logging.Logger,
 	clock platformclock.Source,
 	providerSessions providersessions.Service,
+	recorders ...recordings.WorkerSessionRecordingService,
 ) (workersessions.Service, error) {
 	if boundary == nil {
 		return nil, ErrMissingExecution
@@ -123,6 +126,9 @@ func New(
 		clock:            clock,
 		providerSessions: providerSessions,
 		logger:           logging.EnsureLogger(logger),
+	}
+	if len(recorders) > 0 {
+		registry.recording = recorders[0]
 	}
 	if reader, ok := eventsAppender.(EventsReader); ok {
 		registry.eventReader = reader

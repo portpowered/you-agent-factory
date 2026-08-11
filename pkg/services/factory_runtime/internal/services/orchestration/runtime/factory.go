@@ -77,20 +77,23 @@ type appliedOperatorMove struct {
 }
 
 type runtimeConfig struct {
-	net                       *state.Net
-	scheduler                 scheduler.Scheduler
-	workerExecutors           map[string]workers.WorkerExecutor
-	workerService             workers.WorkstationExecutionService
-	providerInvocation        workers.WorkstationRequestExecutor
-	workerSessionsFactory     factory.WorkerSessionsFactory
-	workerSessions            workersessions.Service
-	runtimeConfig             interfaces.RuntimeDefinitionLookup
-	workflowContext           *factory_context.FactoryContext
-	runtimeMode               interfaces.RuntimeMode
-	logger                    logging.Logger
-	clock                     factory.Clock
-	workRequestIDs            work.RequestIDGenerator
-	eventHistory              recordings.RuntimeLedger
+	net                   *state.Net
+	scheduler             scheduler.Scheduler
+	workerExecutors       map[string]workers.WorkerExecutor
+	workerService         workers.WorkstationExecutionService
+	providerInvocation    workers.WorkstationRequestExecutor
+	workerSessionsFactory factory.WorkerSessionsFactory
+	workerSessions        workersessions.Service
+	runtimeConfig         interfaces.RuntimeDefinitionLookup
+	workflowContext       *factory_context.FactoryContext
+	runtimeMode           interfaces.RuntimeMode
+	logger                logging.Logger
+	clock                 factory.Clock
+	workRequestIDs        work.RequestIDGenerator
+	eventHistory          recordings.RuntimeLedger
+	// recordingID is the runtime recording target propagated to Worker
+	// Sessions when a caller did not supply a narrower recording identity.
+	recordingID               string
 	worldStateProjector       factory.WorldStateProjector
 	providerSessions          providersessions.Service
 	submissionRecorder        recordings.SubmissionRecorder
@@ -264,6 +267,17 @@ func New(
 	}
 	impl.engine = runtimeEngine
 	return impl, nil
+}
+
+// SetRecordingID binds the runtime recording target after construction and
+// before dispatch begins. The target is an internal runtime fact; Worker
+// Sessions receives it only through its already-resolved execution request.
+func SetRecordingID(target factory.Factory, recordingID string) {
+	implementation, ok := target.(*factoryImpl)
+	if !ok || implementation == nil || implementation.cfg == nil {
+		return
+	}
+	implementation.cfg.recordingID = strings.TrimSpace(recordingID)
 }
 
 func buildRuntimeScheduler(cfg *runtimeConfig) scheduler.Scheduler {

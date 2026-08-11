@@ -166,6 +166,7 @@ type Edges struct {
 	Clock                            platformclock.Source
 	SubmissionRecorder               recordings.SubmissionRecorder
 	DispatchRecorder                 recordings.DispatchRecorder
+	WorkerRecordingWriter            recordings.WorkerRecordingWriter
 	RecordingMakeDirectories         recordings.RecordingMakeDirectories
 	RecordingCreateTempFile          recordings.RecordingCreateTemporaryFile
 	RecordingRemovePath              recordings.RecordingRemovePath
@@ -498,6 +499,9 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.DispatchRecorder != nil {
 		defaults.DispatchRecorder = replacements.DispatchRecorder
+	}
+	if replacements.WorkerRecordingWriter != nil {
+		defaults.WorkerRecordingWriter = replacements.WorkerRecordingWriter
 	}
 	if replacements.RecordingMakeDirectories != nil {
 		defaults.RecordingMakeDirectories = replacements.RecordingMakeDirectories

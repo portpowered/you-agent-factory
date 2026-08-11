@@ -1,76 +1,79 @@
 {
-  "project": "WSR-001 Worker Opening Record Identifies the Execution",
-  "branchName": "wsr-001-opening-record",
-  "description": "Implement WSR-001 so every Worker event topic begins with an authoritative SESSION/STARTED record containing stable session, Factory, provider-selection, timing, Work, and attempt correlation before provider output, with synthesized lifecycle provenance and valid opening-to-terminal history even when no Provider Session reference exists.",
+  "project": "WSR-002+003 durable Worker capture and replay-parity recording",
+  "branchName": "wsr-0023-capture-replay",
+  "description": "Implement WSR-002 and WSR-003 as one coherent delivery: Recordings subscribes to each recorded Worker topic, durably accepts the authoritative opening before provider handoff, captures the complete ordered Worker history, replays it through the same deterministic reducer, and validates portable recordings with truthful streaming, snapshot, and final-only provider fidelity.",
   "context": {
-    "customerAsk": "Make SESSION/STARTED the first record on every Worker topic with stable session, provider-selection, timing, attempt, and Factory correlation before provider output; declare synthesized lifecycle provenance; and preserve valid opening and terminal history for providers with no Provider Session reference. Provide WSR-FT-001, WSR-FT-002, WSR-FT-003 plus focused unit, provider conformance, and Events ordering evidence.",
-    "problem": "Worker history does not yet guarantee that the first record carries every authoritative correlation and provenance fact needed to identify the execution. Provider identity may become observable too late, and consumers can incorrectly depend on an optional provider-native session reference, making live and replayed timelines ambiguous across providers.",
-    "solution": "Extend the provider-neutral Worker lifecycle contract and canonical Worker Sessions invocation path so an injected-clock timestamp and all known execution correlation are published in SESSION/STARTED at topic position 1. Bind actual provider identity before provider-authored output, retain optional Provider Session references without inference, and prove stable live/replay behavior across streaming, session-bearing, final-only, and no-session-reference providers without implementing later recording-persistence stories."
+    "customerAsk": "Implement WSR-002 and WSR-003 of the Worker Session Recordings plan as one coherent PR. Recordings must subscribe to the Worker topic through events.Service.Subscribe with a durable opening barrier gating provider handoff; a completed recording must reproduce live history exactly through the same reducer, preserve honest streaming, snapshot, and final-only fidelity, pass portable validation, and provide WSR-FT-001 through WSR-FT-006 evidence.",
+    "problem": "The WSR-001 Worker topic is provider-neutral, opening-first, and replay-readable, but Events is process-local and does not make that history durable. Provider execution can escape capture unless handoff waits for a durably recorded opening, and separate live, replay, or portable reduction paths can disagree or fabricate fidelity for providers that do not stream.",
+    "solution": "Recordings owns one Worker-recording lifecycle that subscribes to the canonical Worker topic, durably validates and persists SESSION/STARTED before releasing provider handoff, consumes every record once through terminal, and uses one pure reducer for live capture and both completed and portable replay. A strict portable contract preserves provider-neutral provenance and actual delivery fidelity while rejecting invalid identity, order, lifecycle, integrity, idempotency, terminal, or fidelity claims without introducing a Worker Sessions-to-Recordings dual write."
   },
   "acceptanceCriteria": [
-    "Every exercised Worker path publishes exactly one SESSION/STARTED as topic position 1 before provider-authored output and finishes with a legal terminal lifecycle record.",
-    "The opening exposes every known WSR lifecycle field while genuinely unknown optional facts remain absent rather than zero-filled, defaulted, or inferred.",
-    "Live and replay observations preserve the exact opening startedAt and known Worker, Factory, dispatch, turn, Work, and attempt identities, and lifecycle provenance is SYNTHESIZED, notification-shaped, and LIFECYCLE_ONLY.",
-    "Actual provider identity is present in the opening or established by a preceding provider-binding SESSION/UPDATED, so no provider-authored event is observable first.",
-    "Streaming, session-bearing, final-only, and no-Provider-Session-reference executions retain legal provider-neutral ordering, honest fidelity, and inspectable opening-to-terminal history, demonstrated by WSR-FT-001, WSR-FT-002, WSR-FT-003 and focused unit, conformance, and ordering tests.",
-    "Implementation respects service ownership and the single Events publication path, introduces no recording persistence barrier or dual write, and includes no broad unrelated cleanup.",
-    "Typecheck passes and tests pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
-    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared/generated-file churn are resolved against current main, and the PR is actually merged."
+    "Recordings consumes every recorded Worker Session through events.Service.Subscribe on the canonical Worker topic; Worker Sessions publishes once to Events and does not directly write Worker payloads into Recordings.",
+    "Provider handoff occurs only after Recordings durably persists and acknowledges the authoritative position-1 SESSION/STARTED; opening, subscription, persistence, gap, cancellation, close, and backpressure failures prevent handoff and cannot expose terminal-only or silently incomplete history.",
+    "A completed recording contains every accepted Worker record exactly once in topic order from opening through one legal durable terminal record, and completion is not observable before all preceding records are durable.",
+    "Live capture, completed-recording replay, and portable-import replay use the same deterministic reducer, reproduce equal observable history and fidelity, and invoke no Workers or Providers during replay.",
+    "Portable validation accepts truthful streaming, snapshot, final-only, and no-Provider-Session-reference histories; rejects malformed identity, ordering, lifecycle, duplicate source identity, integrity, terminal, provenance, or unsupported fidelity claims; and WSR-FT-001 through WSR-FT-006 pass.",
+    "Typecheck and tests pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
+    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and concurrent shared/generated-file changes are resolved against current main, and the PR is actually merged; an opened, green, approved, or ready-to-merge PR is not complete."
   ],
   "userStories": [
     {
-      "id": "wsr-001-opening-record-001",
-      "title": "Publish a stable, correlated opening record",
-      "description": "As a customer inspecting a Worker Session, I want its first event to state which execution began and when so that I can interpret the stream without relying on later output.",
+      "id": "wsr-0023-capture-replay-001",
+      "title": "Gate provider handoff on a durable recorded opening",
+      "description": "As a customer who enables Worker recording, I want the recording to be durably open before provider execution starts so a fast or failing provider cannot escape capture.",
       "acceptanceCriteria": [
-        "Each Worker Session topic begins at position 1 with exactly one SESSION/STARTED, committed before provider handoff or provider-authored output.",
-        "The opening includes status, injected-clock startedAt, workerSessionId, and every known Factory Session, recording, dispatch, turn, Work, attempt, continuation, provider-selection, model, and capabilities value supplied through the canonical invocation path.",
-        "attemptReason uses INITIAL, RETRY, or RESUME as appropriate, and known correlation is preserved through the Petri and JavaScript paths that share Worker Sessions invocation.",
-        "Unknown optional metadata remains absent and is not replaced with zero values, empty provider facts, or reconstructed Provider Session data.",
-        "The opening timestamp and known Worker, Factory, dispatch, turn, Work, and attempt identities are identical in live observation and replay projection, covering WSR-FT-002.",
-        "Focused Worker Sessions unit and projection/replay tests pass.",
-        "Typecheck passes.",
-        "Tests pass."
+        "Recordings opens an events.Service.Subscribe subscription for the exact Worker Session topic from the beginning of history before provider handoff is eligible to run.",
+        "The barrier releases provider handoff only after position 1 is verified as the authoritative correlated SESSION/STARTED and that exact record, topic position, and source identity are durably persisted.",
+        "A duplicate opening is idempotent only when identity and payload agree; a missing, non-position-1, contradictory, or malformed opening fails recording and does not invoke the provider.",
+        "Subscribe, durable-write, retention-gap, closed-source, cancellation, and backpressure outcomes before barrier release produce explicit classified failure, no false completion or terminal-only recording, and zero provider calls.",
+        "Concurrent opening and scheduling cannot cross the barrier out of order, cancellation cannot release a blocked handoff, and focused race tests pass.",
+        "WSR-FT-004 proves through the canonical root-built path that opening durability precedes the first provider call and an opening failure yields zero provider calls.",
+        "WSR-FT-001, WSR-FT-002, and WSR-FT-003 remain green for opening-first ordering, stable correlation, provider attribution, provider-neutral lifecycle, and honest pre-recording fidelity.",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Opening SESSION/STARTED now carries the injected-clock timestamp, stable Worker/Factory/recording/dispatch/turn/Work/attempt correlations, explicit provider/model/capability selections, and exact continuation metadata when supplied. Unknown optionals remain omitted. Runtime dispatch planning and JavaScript invocation both preserve the new request facts, and focused live/replay plus omission tests pass. WSR-FT-002 now verifies the exact opening timestamp across the public observation and replay stream. Terminal publication now also requires a committed opening, and a fail-first/succeed-second Events regression proves an opening append failure cannot create terminal-only history."
+      "notes": "Implemented Recordings-owned Worker topic capture with position-zero subscription, correlated position-one opening validation, atomic durable sidecar acceptance, classified delivery/persistence failures, publication-lock handoff gating, terminal drain, runtime recording-target propagation, injectable writer edge, and focused barrier/race coverage."
     },
     {
-      "id": "wsr-001-opening-record-002",
-      "title": "Establish lifecycle provenance and provider-before-output ordering",
-      "description": "As a customer reading a Worker timeline, I want to distinguish system-authored lifecycle facts from provider output and know the selected provider before its output so that provenance and attribution are unambiguous.",
+      "id": "wsr-0023-capture-replay-002",
+      "title": "Finalize and replay the exact captured Worker history",
+      "description": "As a customer inspecting completed work, I want replay to reproduce exactly what was observed live so historical inspection has no alternate interpretation of the Worker Session.",
       "acceptanceCriteria": [
-        "Worker Sessions-owned opening and terminal lifecycle records declare DeliverySynthesized, RepresentationNotification, and FidelityLifecycleOnly without claiming provider-native authorship or fidelity.",
-        "The actual provider is present in SESSION/STARTED whenever resolved at opening.",
-        "When actual provider resolution genuinely occurs after opening, the first provider-bound record is SESSION/UPDATED and establishes actual provider identity before every dependent provider-authored event.",
-        "Events ordering integration evidence rejects provider output before the opening or required provider binding and proves the legal opening/provider-output/terminal sequence under streaming execution.",
-        "WSR-FT-001 proves opening-first, provider-identity-before-output, exactly-once live records in finalized history, and terminal-last behavior without adding a Worker Sessions-to-Recordings payload write.",
-        "Focused Worker Sessions unit and Events ordering integration tests pass.",
-        "Typecheck passes.",
-        "Tests pass."
+        "After the opening barrier, Recordings consumes each Worker-topic record exactly once in ascending aggregate position and advances its durable cursor only with the accepted record.",
+        "Conflicting duplicates, skipped positions, retention gaps, unexpected close or backpressure, records after terminal, or multiple terminals fail completion; an identical redelivery is idempotent.",
+        "Recording completion becomes observable only after one legal terminal Worker lifecycle record and every preceding accepted record are durable; provider completion alone cannot finalize early.",
+        "Live capture and completed replay call the same pure deterministic reducer over the same canonical Worker record values, and replay invokes no Workers, Providers, provider transcript readers, clocks, or process/network effects.",
+        "Replay history equals the live finalized history in order, topic positions, opening timestamp and correlations, provider binding, normalized records, provenance, delivery, representation, fidelity, source identity, and terminal outcome.",
+        "Incomplete or failed capture cannot be presented as completed replay parity.",
+        "WSR-FT-005 proves exact live-to-replay equality, terminal-last behavior, no duplicates, and zero provider invocations during replay.",
+        "Focused Recordings lifecycle, reducer, subscription, replay, and race tests pass.",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 2,
-      "passes": true,
-      "notes": "Worker Sessions now stamps opening and terminal drafts with synthesized notification/lifecycle-only provenance and carries the resolved provider on the opening when known. The provider-output bridge resolves attempt dispatches to stable Worker Session topics, publishes canonical drafts through the same Events path, and emits one SESSION/UPDATED provider binding when provider identity is first learned after opening. Contradictory provider fragments are rejected before publication and forwarding. WSR-FT-001 proves the customer-visible opening/binding/output/terminal order. Focused publisher and real in-memory Events tests prove pre-opening rejection, opening/binding/output/terminal ordering, exactly-once binding, terminal-last history, and one downstream forwarding; Worker Sessions tests, factory-runtime tests, race tests, and vet pass."
+      "passes": false,
+      "notes": ""
     },
     {
-      "id": "wsr-001-opening-record-003",
-      "title": "Preserve provider-independent opening and terminal history",
-      "description": "As a customer using any supported provider, I want a valid Worker lifecycle even when the provider has no native session identifier so that Worker history is not conditional on provider transcript capabilities.",
+      "id": "wsr-0023-capture-replay-003",
+      "title": "Preserve honest provider fidelity in portable recordings",
+      "description": "As a customer moving a completed recording between installations, I want portable replay to preserve exactly what the provider supplied and clearly state its fidelity so I can trust the history without provider-specific access.",
       "acceptanceCriteria": [
-        "A provider that emits no providers.SessionRef still yields an inspectable SESSION/STARTED, normalized provider output when available, and a legal terminal lifecycle record; the reference remains absent rather than synthesized.",
-        "Shared provider conformance covers representative Claude tool lifecycle, Codex streaming, Cursor/ACP session-bearing, and Agy final-only fixtures through production registrations.",
-        "Each representative provider produces legal provider-neutral Kind/Phase pairs, actual provider provenance on provider-authored drafts, correct source-event idempotency, and terminal behavior.",
-        "Streaming providers report their actual delivery and fidelity, while final-only providers expose only minimal synthesized lifecycle plus final authoritative output and do not fabricate streaming capability.",
-        "WSR-FT-003 proves the same legal normalized protocol and honest fidelity across providers without requiring a provider-specific transcript reader for opening-to-terminal replay.",
-        "Functional evidence uses root.BuildProcess and Process.Execute, production registrations, ProviderCommandRunner with sanitized recorded fixtures, and deterministic event or terminal synchronization rather than Mock Workers or arbitrary sleeps.",
-        "Typecheck passes.",
-        "Tests pass."
+        "A completed portable Worker recording contains the ordered canonical Worker records and detached identity, lifecycle, correlation, provider attribution, provenance, delivery, representation, fidelity, source-idempotency, terminal, compatibility, and integrity facts required by the shared reducer.",
+        "Streaming histories preserve actual incremental records, snapshot histories preserve authoritative snapshots without invented deltas, and final-only histories preserve synthesized lifecycle plus final authoritative output without claiming streaming capability.",
+        "Export, decode, validate, and replay produce the same reducer result as the completed live recording for representative streaming, snapshot, final-only, and no-Provider-Session-reference fixtures.",
+        "Portable validation rejects unsupported compatibility, unknown fields, malformed or mismatched identity, non-opening position 1, gaps or reordering, contradictory duplicates, invalid lifecycle or provenance, provider output before binding, records after terminal, missing or multiple terminals, integrity mismatch, and fidelity claims unsupported by the contained history.",
+        "Validation failure returns a stable actionable diagnostic and exposes neither a usable completed replay nor a partially published portable artifact.",
+        "WSR-FT-006 proves portable round-trip parity across the provider fidelity matrix and rejects tampered ordering and overstated fidelity.",
+        "Provider conformance uses production registrations, sanitized recorded command-runner fixtures, and deterministic synchronization; WSR-FT-001 through WSR-FT-006 pass without Mock Workers, arbitrary sleeps, or live provider calls.",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 3,
-      "passes": true,
-      "notes": "Provider-independent provenance is now carried explicitly on Worker progress and response-stream events, separate from optional Provider Session references; no reference is synthesized. The public Worker Session-ID SSE route (/factory-sessions/{session_id}/worker-sessions/{worker_session_id}/events) exposes canonical retained history without requiring Provider Sessions transcript projection, while preserving any actual provider-session reference when one exists. Root-built conformance now captures and verifies opening position 1, stable correlation, source-event idempotency, provider binding before output, honest normalized fidelity, and terminal-last replay for Antigravity final-only, Claude full-stream, Codex partial-stream, and Cursor/ACP session-bearing executions. Named WSR-FT-003 uses root.BuildProcess/Process.Execute with the sanitized Antigravity fixture to prove final output without a fabricated Provider Session reference or streaming delta. Focused service, HTTP, generated-interface, provider conformance, and unavailable-owner route tests pass. The latest review follow-up keeps the normal unavailable-owner assertion in the owning HTTP transport tests and adds a root-built direct-JavaScript public route probe for the intentionally partial handler composition, leaving no new package-boundary violation beyond the known baseline. The branch is synchronized with the latest current main and regenerated public artifacts remain drift-free."
+      "passes": false,
+      "notes": ""
     }
   ]
 }
