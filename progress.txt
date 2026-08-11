@@ -11560,3 +11560,19 @@
 - **Learnings for future iterations:**
   - Broad functional coverage can expose unrelated concurrency flakes one test at a time; characterize each exact failure locally and rerun only the failed job before changing an unrelated product or test surface.
 ---
+## [2026-08-11 11:48:28 -07:00] - thr-deflake-cli-process-package current-main reconciliation
+- What was implemented
+  - Merged current `origin/main` at `05db67124f6abc32b149f326533f126db2d78aa4` into the task branch as merge commit `bd85341b1` after GitHub reported the prior PR head conflicting.
+  - Kept this task's `prd.json` and complete append-only `progress.txt` because current main deletes those task-worktree artifacts; accepted the unrelated current-main `factory/scripts/setup-workspace.py` change.
+  - Refreshed the replacement-head review metadata and recorded the focused verification results.
+- Files changed
+  - `factory/scripts/setup-workspace.py`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/platform/rollingfile -count=20 -timeout 300s`, `go test ./tests/functional/transport/cli/process -count=1 -timeout 10m`, and `go vet ./tests/functional/transport/cli/process` passed.
+  - `make verify-fast` passed typecheck, MCP contract checks, 355 Vitest files/2,964 tests, 196 Bun tests, and the short Go suite.
+  - The merged replacement head is clean locally; fresh hosted verification and final PR mergeability audit remain pending after publication.
+- **Learnings for future iterations:**
+  - When current main deletes task-local PRD/progress artifacts, resolve the merge by retaining the active task files and explicitly record the deletion conflict; do not silently drop the task handoff history.
+---
