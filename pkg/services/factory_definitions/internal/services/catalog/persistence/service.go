@@ -43,7 +43,7 @@ func New(
 	fileSystem factorydefinitions.PersistenceFileSystem,
 	requireDefinitionDir factorydefinitions.DefinitionDirectoryRequirer,
 	directories factorydefinitions.DirectoryReplacementStore,
-) (factorydefinitions.Persistence, error) {
+) (factorydefinitions.PackagedFactoryPersistence, error) {
 	if fileSystem == nil {
 		return nil, fmt.Errorf("Factory Definitions persistence filesystem is required")
 	}
@@ -329,3 +329,4 @@ func (s *service) persistNamedFactory(
 }
 
 var _ factorydefinitions.Persistence = (*service)(nil)
+var _ factorydefinitions.PackagedFactoryPersistence = (*service)(nil)

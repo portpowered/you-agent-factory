@@ -395,7 +395,7 @@ func provideFactoryDefinitionPersistence(
 	persistenceFileSystem factorydefinitions.PersistenceFileSystem,
 	namedPaths factorydefinitions.NamedPathResolver,
 	directoryReplacementStore factorydefinitions.DirectoryReplacementStore,
-) (factorydefinitions.Persistence, error) {
+) (factorydefinitions.PackagedFactoryPersistence, error) {
 	return factorydefinitionswire.Persistence(
 		validator,
 		func(payload []byte) (factorydefinitions.DefinitionValidationRequest, error) {

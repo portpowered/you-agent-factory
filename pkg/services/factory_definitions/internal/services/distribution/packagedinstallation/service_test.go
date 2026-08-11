@@ -29,7 +29,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
 )
 
-func packagedInstallationTestPersistence() factorydefinitions.Persistence {
+func packagedInstallationTestPersistence() factorydefinitions.PackagedFactoryPersistence {
 	validator := factoryvalidation.New(nil)
 	mapper := factorymapping.NewFactoryConfigMapper()
 	fileSystem := platformfilesystem.Local{}
@@ -348,13 +348,13 @@ func TestInstallPackagedFactory_AcquisitionRacePreservesWinnerLease(t *testing.T
 }
 
 type blockingPackagedInstallationPersistence struct {
-	factorydefinitions.Persistence
+	factorydefinitions.PackagedFactoryPersistence
 	prepareStarted chan struct{}
 	allowPrepare   chan struct{}
 	prepareOnce    sync.Once
 }
 
-func (p *blockingPackagedInstallationPersistence) PrepareFactoryLayout(
+func (p *blockingPackagedInstallationPersistence) PreparePackagedFactoryLayout(
 	context.Context,
 	string,
 	[]byte,
@@ -478,6 +478,73 @@ func (fileSystem *failingPackagedInstallationFileSystem) Rename(oldPath, newPath
 		return fileSystem.renameErr
 	}
 	return fileSystem.Local.Rename(oldPath, newPath)
+}
+
+type recordingPackagedFactoryPersistence struct {
+	factorydefinitions.PackagedFactoryPersistence
+	packagedPrepareCalls int
+	ordinaryPrepareCalls int
+}
+
+func (persistence *recordingPackagedFactoryPersistence) PreparePackagedFactoryLayout(
+	ctx context.Context,
+	name string,
+	payload []byte,
+) (*factorydefinitions.PreparedFactoryLayoutPayload, error) {
+	persistence.packagedPrepareCalls++
+	return persistence.PackagedFactoryPersistence.PreparePackagedFactoryLayout(ctx, name, payload)
+}
+
+func (persistence *recordingPackagedFactoryPersistence) PrepareFactoryLayout(
+	context.Context,
+	string,
+	[]byte,
+) (*factorydefinitions.PreparedFactoryLayoutPayload, error) {
+	persistence.ordinaryPrepareCalls++
+	return nil, fmt.Errorf("ordinary Factory preparation must not be used for packaged installation")
+}
+
+func TestInstallPackagedFactory_CreateAndReplaceUseExplicitPackagedPreparation(t *testing.T) {
+	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
+	if err != nil {
+		t.Fatalf("LoadPublishedDefinitionCatalog() error = %v", err)
+	}
+	definition, ok := catalog.Lookup("@you/goal")
+	if !ok {
+		t.Fatal("published catalog is missing @you/goal")
+	}
+	persistence := &recordingPackagedFactoryPersistence{
+		PackagedFactoryPersistence: packagedInstallationTestPersistence(),
+	}
+	installer := New(persistence, platformfilesystem.Local{}, os.Mkdir)
+	root := t.TempDir()
+	params := factorydefinitions.PackagedFactoryInstallParams{
+		NamedFactoriesRoot: root,
+		Definition:         definition,
+		Format:             factorydefinitions.PackagedFactoryFormatJSON,
+	}
+	created, err := installer.InstallPackagedFactory(t.Context(), params)
+	if err != nil {
+		t.Fatalf("create InstallPackagedFactory() error = %v", err)
+	}
+	if created.Outcome != factorydefinitions.PackagedFactoryInstallCreated {
+		t.Fatalf("create outcome = %q, want created", created.Outcome)
+	}
+
+	params.Replace = true
+	replaced, err := installer.InstallPackagedFactory(t.Context(), params)
+	if err != nil {
+		t.Fatalf("replace InstallPackagedFactory() error = %v", err)
+	}
+	if replaced.Outcome != factorydefinitions.PackagedFactoryInstallReplaced {
+		t.Fatalf("replace outcome = %q, want replaced", replaced.Outcome)
+	}
+	if persistence.packagedPrepareCalls != 2 {
+		t.Fatalf("packaged preparation calls = %d, want one for create and replace", persistence.packagedPrepareCalls)
+	}
+	if persistence.ordinaryPrepareCalls != 0 {
+		t.Fatalf("ordinary preparation calls = %d, want zero", persistence.ordinaryPrepareCalls)
+	}
 }
 
 func TestInstallPackagedFactory_MaterializesPortableEditableFormats(t *testing.T) {

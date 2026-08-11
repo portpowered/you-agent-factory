@@ -282,10 +282,10 @@ func TestInstallPackagedFactory_ReportsLeaseReleaseFailures(t *testing.T) {
 }
 
 type successfulPackagedInstallationPersistence struct {
-	factorydefinitions.Persistence
+	factorydefinitions.PackagedFactoryPersistence
 }
 
-func (persistence *successfulPackagedInstallationPersistence) PrepareFactoryLayout(
+func (persistence *successfulPackagedInstallationPersistence) PreparePackagedFactoryLayout(
 	context.Context,
 	string,
 	[]byte,
