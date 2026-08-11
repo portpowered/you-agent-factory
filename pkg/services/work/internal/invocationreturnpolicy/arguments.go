@@ -102,6 +102,7 @@ type ArgumentErrorCode string
 const (
 	ArgumentErrorCodeInvalidActiveSignature   ArgumentErrorCode = "INVOCATION_ARGUMENT_INVALID_ACTIVE_SIGNATURE"
 	ArgumentErrorCodeMissingRequiredInput     ArgumentErrorCode = "INVOCATION_ARGUMENT_MISSING_REQUIRED_INPUT"
+	ArgumentErrorCodeMissingValue             ArgumentErrorCode = "INVOCATION_ARGUMENT_MISSING_VALUE"
 	ArgumentErrorCodeUnknownArgument          ArgumentErrorCode = "INVOCATION_ARGUMENT_UNKNOWN_ARGUMENT"
 	ArgumentErrorCodeSourceConflict           ArgumentErrorCode = "INVOCATION_ARGUMENT_SOURCE_CONFLICT"
 	ArgumentErrorCodeStringValidationMismatch ArgumentErrorCode = "INVOCATION_ARGUMENT_STRING_VALIDATION_MISMATCH"

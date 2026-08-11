@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -82,6 +83,75 @@ func TestCLIJSONFailureRemainsValidJSON(t *testing.T) {
 			t.Fatalf("ErrorResponse = %#v, want code %s and message prefix %q", errorResponse, *response.ErrorCode, *response.Message)
 		}
 	})
+}
+
+// TestCLIInvocationArgumentFailuresAreBadRequest proves malformed Factory
+// invocation arguments produce one standard client-error response in both
+// normal and quiet modes, before provider execution or runtime activation.
+func TestCLIInvocationArgumentFailuresAreBadRequest(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []string
+		wantCode factoryapi.ErrorResponseCode
+	}{
+		{
+			name: "unknown argument in normal JSON mode",
+			args: []string{
+				"you", "--json", "run", "--named", "@you/plan-parallel", "--no-record",
+				"--planer-model", "bad-model", "--to", "reproduce the typo",
+			},
+			wantCode: factoryapi.ErrorResponseCode("INVOCATION_ARGUMENT_UNKNOWN_ARGUMENT"),
+		},
+		{
+			name: "unknown argument in quiet mode",
+			args: []string{
+				"you", "run", "--named", "@you/plan-parallel", "--quiet", "--no-record",
+				"--planer-model", "bad-model", "--to", "reproduce the typo",
+			},
+			wantCode: factoryapi.ErrorResponseCode("INVOCATION_ARGUMENT_UNKNOWN_ARGUMENT"),
+		},
+		{
+			name: "missing value before next invocation flag",
+			args: []string{
+				"you", "run", "--named", "@you/plan-parallel", "--quiet", "--no-record",
+				"--planner-model", "--to", "request without a planner model",
+			},
+			wantCode: factoryapi.ErrorResponseCode("INVOCATION_ARGUMENT_MISSING_VALUE"),
+		},
+		{
+			name:     "missing value for run flag",
+			args:     []string{"you", "run", "--quiet", "--factory", "--no-record"},
+			wantCode: factoryapi.ErrorResponseCode("INVOCATION_ARGUMENT_MISSING_VALUE"),
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			homeDir := t.TempDir()
+			support.InstallPackagedFactory(t, homeDir, "@you/plan-parallel")
+			providerRunner := testutil.NewProviderCommandRunner()
+			inputs := support.FakeInputs(t.Context(), test.args)
+			inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+			inputs.Input.WorkingDirectory = t.TempDir()
+
+			err := support.BuildProcess(t, serviceedges.Edges{
+				ProviderCommandRunner: providerRunner,
+			}).Execute(inputs.Input)
+			if err == nil {
+				t.Fatalf("Process.Execute(%v) succeeded; stdout=%q stderr=%q", test.args, inputs.Stdout(), inputs.Stderr())
+			}
+			if inputs.Stdout() != "" {
+				t.Fatalf("stdout = %q, want empty for usage failure", inputs.Stdout())
+			}
+			response := decodeSingleJSONErrorResponse(t, inputs.Stderr())
+			if response.Code != test.wantCode || response.Family != factoryapi.ErrorFamilyBadRequest {
+				t.Fatalf("ErrorResponse = %#v, want code %s and family BAD_REQUEST", response, test.wantCode)
+			}
+			if providerRunner.CallCount() != 0 {
+				t.Fatalf("provider dispatch calls = %d, want 0", providerRunner.CallCount())
+			}
+		})
+	}
 }
 
 // TestCLIJSONContainsNoPrivateRuntimeFields proves terminal JSON success and

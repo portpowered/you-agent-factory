@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -238,10 +239,168 @@ func TestHumanFactoryEventRenderer_PresentsBatchWorkAndDispatchWorkIDs(t *testin
 	})
 	renderer.StopProgressRendering()
 	want := "[0] work accepted: 2 items\n- work-1 (first): first task\n- work-2 (second): second task\n- second depends on -> work-1\n" +
-		"[0] workstation started: execute (work-1, work-2)\n[0] workstation completed: execute (work-1, work-2)\n"
+		"[0] workstation started: execute (work-1, work-2) [dispatch dispatch-1]\n" +
+		"[0] workstation completed: execute (work-1, work-2) [dispatch dispatch-1]\n"
 	if got := output.String(); got != want {
 		t.Fatalf("output = %q, want %q", got, want)
 	}
+}
+
+func TestHumanFactoryEventRenderer_PresentsConcurrentWorkerLifecycle(t *testing.T) {
+	t.Parallel()
+
+	dispatchOne := "dispatch-one"
+	dispatchTwo := "dispatch-two"
+	dispatchThree := "dispatch-three"
+	workOne := []string{"work-one"}
+	workTwo := []string{"work-two"}
+	workThree := []string{"work-three"}
+	queuedLabel := "build"
+	queuedOne := mustJSON(t, interfaces.DispatchQueuedEventPayload{
+		Label: &queuedLabel, InputWorkIDs: &workOne,
+	})
+	requestOne := mustJSON(t, interfaces.DispatchRequestEventPayload{
+		TransitionID: "build",
+		Inputs:       []interfaces.DispatchConsumedWorkRef{{WorkID: workOne[0]}},
+	})
+	requestTwo := mustJSON(t, interfaces.DispatchRequestEventPayload{
+		TransitionID: "test",
+		Inputs:       []interfaces.DispatchConsumedWorkRef{{WorkID: workTwo[0]}},
+	})
+	requestThree := mustJSON(t, interfaces.DispatchRequestEventPayload{
+		TransitionID: "deploy",
+		Inputs:       []interfaces.DispatchConsumedWorkRef{{WorkID: workThree[0]}},
+	})
+	workerOne := mustJSON(t, interfaces.DispatchWorkerSessionAssociationEventPayload{WorkerSessionID: "worker-one"})
+	workerTwo := mustJSON(t, interfaces.DispatchWorkerSessionAssociationEventPayload{WorkerSessionID: "worker-two"})
+	workerThree := mustJSON(t, interfaces.DispatchWorkerSessionAssociationEventPayload{WorkerSessionID: "worker-three"})
+	failedDetail := &workerexecution.FailureDetail{Message: "tests failed"}
+	failedResponse := mustJSON(t, workerexecution.DispatchResponseEventPayload{
+		TransitionID: "test", Outcome: workerexecution.OutcomeFailed, FailureDetail: failedDetail,
+	})
+	acceptedResponse := mustJSON(t, workerexecution.DispatchResponseEventPayload{
+		TransitionID: "build", Outcome: workerexecution.OutcomeAccepted,
+	})
+	interrupted := mustJSON(t, interfaces.DispatchInterruptedEventPayload{Reason: "operator cancelled"})
+
+	service := visualizationcli.New(nil, factoryvisualizationwire.NewResponsePresentation())
+	var output, progress bytes.Buffer
+	renderer, err := service.OpenFactoryEventRenderer(visualizationcli.FactoryEventRendererConfig{
+		Output: &output, ProgressOutput: &progress, ProgressIsTTY: false,
+		InvocationOutputMode: visualizationcli.InvocationOutputResponseStream,
+	})
+	if err != nil {
+		t.Fatalf("open renderer: %v", err)
+	}
+	renderer.PresentFactoryEvents([]interfaces.FactoryEvent{
+		{Type: interfaces.FactoryEventTypeDispatchQueued, Payload: queuedOne, Context: interfaces.FactoryEventContext{DispatchID: &dispatchOne}},
+		{Type: interfaces.FactoryEventTypeDispatchRequest, Payload: requestOne, Context: interfaces.FactoryEventContext{DispatchID: &dispatchOne}},
+		{Type: interfaces.FactoryEventTypeDispatchWorkerSessionAssoc, Payload: workerOne, Context: interfaces.FactoryEventContext{DispatchID: &dispatchOne}},
+		{Type: interfaces.FactoryEventTypeDispatchRequest, Payload: requestTwo, Context: interfaces.FactoryEventContext{DispatchID: &dispatchTwo}},
+		{Type: interfaces.FactoryEventTypeDispatchWorkerSessionAssoc, Payload: workerTwo, Context: interfaces.FactoryEventContext{DispatchID: &dispatchTwo}},
+		{Type: interfaces.FactoryEventTypeDispatchResponse, Payload: failedResponse, Context: interfaces.FactoryEventContext{DispatchID: &dispatchTwo, WorkIDs: &workTwo}},
+		{Type: interfaces.FactoryEventTypeDispatchRequest, Payload: requestThree, Context: interfaces.FactoryEventContext{DispatchID: &dispatchThree}},
+		{Type: interfaces.FactoryEventTypeDispatchWorkerSessionAssoc, Payload: workerThree, Context: interfaces.FactoryEventContext{DispatchID: &dispatchThree}},
+		{Type: interfaces.FactoryEventTypeDispatchInterrupted, Payload: interrupted, Context: interfaces.FactoryEventContext{DispatchID: &dispatchThree}},
+		{Type: interfaces.FactoryEventTypeDispatchResponse, Payload: acceptedResponse, Context: interfaces.FactoryEventContext{DispatchID: &dispatchOne, WorkIDs: &workOne}},
+	})
+	renderer.StopProgressRendering()
+
+	want := "[0] workstation queued: build (work-one) [dispatch dispatch-one]\n" +
+		"[0] workstation started: build (work-one) [dispatch dispatch-one]\n" +
+		"[0] workstation started: test (work-two) [dispatch dispatch-two]\n" +
+		"[0] workstation failed: test (work-two) [dispatch dispatch-two] — tests failed\n" +
+		"[0] workstation started: deploy (work-three) [dispatch dispatch-three]\n" +
+		"[0] workstation interrupted: deploy (work-three) [dispatch dispatch-three] — operator cancelled\n" +
+		"[0] workstation completed: build (work-one) [dispatch dispatch-one]\n"
+	if got := output.String(); got != want {
+		t.Fatalf("concurrent worker output = %q, want %q", got, want)
+	}
+	for _, worker := range []string{"worker worker-one: active at build", "worker worker-two: active at test", "worker worker-three: active at deploy"} {
+		if !strings.Contains(progress.String(), worker) {
+			t.Fatalf("progress = %q, want %q", progress.String(), worker)
+		}
+	}
+	if strings.ContainsAny(progress.String(), "\x1b\r") {
+		t.Fatalf("non-TTY progress = %q, want no ANSI or cursor controls", progress.String())
+	}
+}
+
+func TestFormatHumanWorkAccepted_PresentsPartialBatchWithoutFabricatedEdges(t *testing.T) {
+	t.Parallel()
+
+	payload, err := json.Marshal(work.WorkRequestEventPayload{
+		Works: []work.WorkRequestEventWork{
+			{WorkID: "work-1", Name: "first"},
+			{WorkID: "work-2", Name: "second", Content: []work.WorkContentPart{{
+				Type: work.WorkContentPartTypeJSON,
+				JSON: json.RawMessage(`{"private":"provider payload"}`),
+			}}},
+			{Name: "independent"},
+			{},
+		},
+		Relations: []work.WorkRequestEventRelation{
+			{Type: work.WorkRelationDependsOn, SourceWorkName: "second", TargetWorkName: "first"},
+			{Type: work.WorkRelationDependsOn, TargetWorkName: "independent"},
+			{SourceWorkName: "independent", TargetWorkName: "first"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal partial batch payload: %v", err)
+	}
+
+	got := renderHumanWorkAcceptedEvent(t, payload)
+	want := "[0] work accepted: 4 items\n" +
+		"- work-1 (first)\n" +
+		"- work-2 (second)\n" +
+		"- independent\n" +
+		"- (unnamed work)\n" +
+		"- second depends on -> first"
+	if got != want {
+		t.Fatalf("partial batch output = %q, want %q", got, want)
+	}
+	if strings.Contains(got, "private") || strings.Contains(got, "independent depends") {
+		t.Fatalf("partial batch output = %q, contains private payload or fabricated edge", got)
+	}
+}
+
+func TestFormatHumanWorkAccepted_PresentsSingleItemRelationPayload(t *testing.T) {
+	t.Parallel()
+
+	payload, err := json.Marshal(work.WorkRequestEventPayload{
+		Works: []work.WorkRequestEventWork{{WorkID: "work-1", Name: "only"}},
+		Relations: []work.WorkRequestEventRelation{{
+			Type: work.WorkRelationDependsOn, SourceWorkName: "only", TargetWorkID: "work-0",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("marshal single-item payload: %v", err)
+	}
+
+	got := renderHumanWorkAcceptedEvent(t, payload)
+	want := "[0] work accepted: 1 item\n- work-1 (only)\n- only depends on -> work-0"
+	if got != want {
+		t.Fatalf("single-item output = %q, want %q", got, want)
+	}
+}
+
+func renderHumanWorkAcceptedEvent(t *testing.T, payload []byte) string {
+	t.Helper()
+
+	service := visualizationcli.New(nil, factoryvisualizationwire.NewResponsePresentation())
+	var output bytes.Buffer
+	renderer, err := service.OpenFactoryEventRenderer(visualizationcli.FactoryEventRendererConfig{
+		Output: &output, InvocationOutputMode: visualizationcli.InvocationOutputResponseStream,
+	})
+	if err != nil {
+		t.Fatalf("open renderer: %v", err)
+	}
+	renderer.PresentFactoryEvents([]interfaces.FactoryEvent{{
+		Type:    interfaces.FactoryEventTypeWorkRequest,
+		Payload: payload,
+	}})
+	renderer.StopProgressRendering()
+	return strings.TrimSpace(output.String())
 }
 
 func TestHumanFactoryEventRenderer_TTYProgressUsesInjectedTicksAndStops(t *testing.T) {
@@ -258,17 +417,288 @@ func TestHumanFactoryEventRenderer_TTYProgressUsesInjectedTicksAndStops(t *testi
 		t.Fatalf("open renderer: %v", err)
 	}
 	dispatchID := "worker-a"
+	workIDs := []string{"work-a"}
+	queuedLabel := "execute"
+	queuedPayload, err := json.Marshal(interfaces.DispatchQueuedEventPayload{
+		Label: &queuedLabel, InputWorkIDs: &workIDs,
+	})
+	if err != nil {
+		t.Fatalf("marshal queued payload: %v", err)
+	}
+	requestPayload, err := json.Marshal(interfaces.DispatchRequestEventPayload{
+		TransitionID: "execute",
+	})
+	if err != nil {
+		t.Fatalf("marshal request payload: %v", err)
+	}
+	workerPayload, err := json.Marshal(interfaces.DispatchWorkerSessionAssociationEventPayload{WorkerSessionID: "worker-session-a"})
+	if err != nil {
+		t.Fatalf("marshal worker association payload: %v", err)
+	}
 	renderer.PresentFactoryEvents([]interfaces.FactoryEvent{{
-		Type: interfaces.FactoryEventTypeDispatchRequest, Context: interfaces.FactoryEventContext{DispatchID: &dispatchID},
+		Type: interfaces.FactoryEventTypeDispatchQueued, Payload: queuedPayload,
+		Context: interfaces.FactoryEventContext{DispatchID: &dispatchID},
+	}, {
+		Type: interfaces.FactoryEventTypeDispatchRequest, Payload: requestPayload,
+		Context: interfaces.FactoryEventContext{DispatchID: &dispatchID},
+	}, {
+		Type: interfaces.FactoryEventTypeDispatchWorkerSessionAssoc, Payload: workerPayload,
+		Context: interfaces.FactoryEventContext{DispatchID: &dispatchID},
 	}})
 	ticks <- time.Unix(1, 0)
 	renderer.PresentFactoryEvents([]interfaces.FactoryEvent{{
-		Type: interfaces.FactoryEventTypeDispatchResponse, Context: interfaces.FactoryEventContext{DispatchID: &dispatchID},
+		Type:    interfaces.FactoryEventTypeDispatchResponse,
+		Context: interfaces.FactoryEventContext{DispatchID: &dispatchID},
 	}})
 	renderer.StopProgressRendering()
-	if got := progress.String(); !strings.Contains(got, "\x1b[") || !strings.Contains(got, "⠋") || !strings.HasSuffix(got, "\r\x1b[2K") {
-		t.Fatalf("progress = %q, want colored spinner and terminal clear", got)
+	got := progress.String()
+	for _, want := range []string{"\x1b[", "⠋", "worker-session-a", "execute", "work-a", "[dispatch worker-a]"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("progress = %q, want %q", got, want)
+		}
 	}
+	if !strings.HasSuffix(got, "\r\x1b[2K") {
+		t.Fatalf("progress = %q, want terminal clear", got)
+	}
+}
+
+func TestHumanFactoryEventRenderer_TTYProgressRemovesOnlyTerminalWorker(t *testing.T) {
+	t.Parallel()
+
+	service := visualizationcli.New(nil, factoryvisualizationwire.NewResponsePresentation())
+	var output, progress bytes.Buffer
+	ticks := make(chan time.Time)
+	renderer, err := service.OpenFactoryEventRenderer(visualizationcli.FactoryEventRendererConfig{
+		Output: &output, ProgressOutput: &progress, ProgressIsTTY: true, ProgressTicks: ticks,
+		InvocationOutputMode: visualizationcli.InvocationOutputResponseStream,
+	})
+	if err != nil {
+		t.Fatalf("open renderer: %v", err)
+	}
+	request := func(dispatchID, workstation, workID string) interfaces.FactoryEvent {
+		payload, marshalErr := json.Marshal(interfaces.DispatchRequestEventPayload{
+			TransitionID: workstation, Inputs: []interfaces.DispatchConsumedWorkRef{{WorkID: workID}},
+		})
+		if marshalErr != nil {
+			t.Fatalf("marshal request %s: %v", dispatchID, marshalErr)
+		}
+		return interfaces.FactoryEvent{Type: interfaces.FactoryEventTypeDispatchRequest, Payload: payload,
+			Context: interfaces.FactoryEventContext{DispatchID: &dispatchID}}
+	}
+	associate := func(dispatchID, workerID string) interfaces.FactoryEvent {
+		payload, marshalErr := json.Marshal(interfaces.DispatchWorkerSessionAssociationEventPayload{WorkerSessionID: workerID})
+		if marshalErr != nil {
+			t.Fatalf("marshal association %s: %v", dispatchID, marshalErr)
+		}
+		return interfaces.FactoryEvent{Type: interfaces.FactoryEventTypeDispatchWorkerSessionAssoc, Payload: payload,
+			Context: interfaces.FactoryEventContext{DispatchID: &dispatchID}}
+	}
+	firstDispatch, secondDispatch := "dispatch-first", "dispatch-second"
+	renderer.PresentFactoryEvents([]interfaces.FactoryEvent{request(firstDispatch, "compile", "work-first"), associate(firstDispatch, "worker-first")})
+	renderer.PresentFactoryEvents([]interfaces.FactoryEvent{request(secondDispatch, "verify", "work-second"), associate(secondDispatch, "worker-second")})
+	combined := progress.String()
+	for _, want := range []string{"worker-first", "compile", "work-first", "worker-second", "verify", "work-second"} {
+		if !strings.Contains(combined, want) {
+			t.Fatalf("combined progress = %q, want %q", combined, want)
+		}
+	}
+	workFirst := []string{"work-first"}
+	renderer.PresentFactoryEvents([]interfaces.FactoryEvent{{
+		Type:    interfaces.FactoryEventTypeDispatchResponse,
+		Context: interfaces.FactoryEventContext{DispatchID: &firstDispatch, WorkIDs: &workFirst},
+	}})
+	lastFrame := progress.String()[strings.LastIndex(progress.String(), "\r\x1b[2K"):]
+	if !strings.Contains(lastFrame, "worker-second") || strings.Contains(lastFrame, "worker-first") {
+		t.Fatalf("last progress frame = %q, want only second worker", lastFrame)
+	}
+	renderer.StopProgressRendering()
+}
+
+func TestHumanFactoryEventRenderer_TTYProgressUsesStableDistinctWorkerColors(t *testing.T) {
+	t.Parallel()
+
+	events := func() []interfaces.FactoryEvent {
+		request := func(dispatchID, workstation, workID string) interfaces.FactoryEvent {
+			payload, err := json.Marshal(interfaces.DispatchRequestEventPayload{
+				TransitionID: workstation,
+				Inputs:       []interfaces.DispatchConsumedWorkRef{{WorkID: workID}},
+			})
+			if err != nil {
+				t.Fatalf("marshal request %s: %v", dispatchID, err)
+			}
+			return interfaces.FactoryEvent{
+				Type: interfaces.FactoryEventTypeDispatchRequest, Payload: payload,
+				Context: interfaces.FactoryEventContext{DispatchID: &dispatchID},
+			}
+		}
+		associate := func(dispatchID, workerID string) interfaces.FactoryEvent {
+			payload, err := json.Marshal(interfaces.DispatchWorkerSessionAssociationEventPayload{
+				WorkerSessionID: workerID,
+			})
+			if err != nil {
+				t.Fatalf("marshal association %s: %v", dispatchID, err)
+			}
+			return interfaces.FactoryEvent{
+				Type: interfaces.FactoryEventTypeDispatchWorkerSessionAssoc, Payload: payload,
+				Context: interfaces.FactoryEventContext{DispatchID: &dispatchID},
+			}
+		}
+		return []interfaces.FactoryEvent{
+			request("dispatch-a", "compile", "work-a"),
+			associate("dispatch-a", "worker-a"),
+			request("dispatch-b", "verify", "work-b"),
+			associate("dispatch-b", "worker-b"),
+		}
+	}
+
+	render := func() string {
+		service := visualizationcli.New(nil, factoryvisualizationwire.NewResponsePresentation())
+		var output, progress bytes.Buffer
+		renderer, err := service.OpenFactoryEventRenderer(visualizationcli.FactoryEventRendererConfig{
+			Output: &output, ProgressOutput: &progress, ProgressIsTTY: true,
+			InvocationOutputMode: visualizationcli.InvocationOutputResponseStream,
+		})
+		if err != nil {
+			t.Fatalf("open renderer: %v", err)
+		}
+		renderer.PresentFactoryEvents(events())
+		renderer.StopProgressRendering()
+		return progress.String()
+	}
+
+	first, second := render(), render()
+	if first != second {
+		t.Fatalf("progress colors are not deterministic:\nfirst=%q\nsecond=%q", first, second)
+	}
+	workerAColor := progressColorForWorker(first, "worker-a")
+	workerBColor := progressColorForWorker(first, "worker-b")
+	if workerAColor == "" || workerBColor == "" {
+		t.Fatalf("progress = %q, want color escapes for both workers", first)
+	}
+	if workerAColor == workerBColor {
+		t.Fatalf("worker colors = %q and %q, want distinct colors", workerAColor, workerBColor)
+	}
+}
+
+func TestHumanFactoryEventRenderer_TTYProgressMigratesSplitBatchColorsAndCleansUp(t *testing.T) {
+	t.Parallel()
+
+	const workerCapacity = 12 // humanWorkerProgressColors contains the supported palette.
+	service := visualizationcli.New(nil, factoryvisualizationwire.NewResponsePresentation())
+	var output, progress bytes.Buffer
+	renderer, err := service.OpenFactoryEventRenderer(visualizationcli.FactoryEventRendererConfig{
+		Output: &output, ProgressOutput: &progress, ProgressIsTTY: true,
+		ProgressTicks:        make(chan time.Time),
+		InvocationOutputMode: visualizationcli.InvocationOutputResponseStream,
+	})
+	if err != nil {
+		t.Fatalf("open renderer: %v", err)
+	}
+
+	request := func(index int) interfaces.FactoryEvent {
+		dispatchID := fmt.Sprintf("dispatch-%02d", index)
+		workID := fmt.Sprintf("work-%02d", index)
+		workstation := fmt.Sprintf("station-%02d", index)
+		payload, marshalErr := json.Marshal(interfaces.DispatchRequestEventPayload{
+			TransitionID: workstation,
+			Inputs:       []interfaces.DispatchConsumedWorkRef{{WorkID: workID}},
+		})
+		if marshalErr != nil {
+			t.Fatalf("marshal request %s: %v", dispatchID, marshalErr)
+		}
+		return interfaces.FactoryEvent{Type: interfaces.FactoryEventTypeDispatchRequest, Payload: payload,
+			Context: interfaces.FactoryEventContext{DispatchID: &dispatchID}}
+	}
+	associate := func(index int) interfaces.FactoryEvent {
+		dispatchID := fmt.Sprintf("dispatch-%02d", index)
+		workerID := fmt.Sprintf("worker-%02d", index)
+		payload, marshalErr := json.Marshal(interfaces.DispatchWorkerSessionAssociationEventPayload{
+			WorkerSessionID: workerID,
+		})
+		if marshalErr != nil {
+			t.Fatalf("marshal association %s: %v", dispatchID, marshalErr)
+		}
+		return interfaces.FactoryEvent{Type: interfaces.FactoryEventTypeDispatchWorkerSessionAssoc, Payload: payload,
+			Context: interfaces.FactoryEventContext{DispatchID: &dispatchID}}
+	}
+	presentSplitBatch := func(index int) {
+		renderer.PresentFactoryEvents([]interfaces.FactoryEvent{request(index)})
+		renderer.PresentFactoryEvents([]interfaces.FactoryEvent{associate(index)})
+	}
+
+	for index := 0; index < workerCapacity; index++ {
+		presentSplitBatch(index)
+	}
+	frame := latestTTYProgressFrame(progress.String())
+	colors := make(map[string]string, workerCapacity)
+	for index := 0; index < workerCapacity; index++ {
+		workerID := fmt.Sprintf("worker-%02d", index)
+		color := progressColorForWorker(frame, workerID)
+		if color == "" {
+			t.Fatalf("progress frame = %q, missing color for %s", frame, workerID)
+		}
+		if previous := colors[color]; previous != "" {
+			t.Fatalf("progress frame = %q, workers %s and %s share color %s", frame, previous, workerID, color)
+		}
+		colors[color] = workerID
+	}
+
+	for index := 0; index < workerCapacity/2; index++ {
+		dispatchID := fmt.Sprintf("dispatch-%02d", index)
+		renderer.PresentFactoryEvents([]interfaces.FactoryEvent{{
+			Type:    interfaces.FactoryEventTypeDispatchResponse,
+			Context: interfaces.FactoryEventContext{DispatchID: &dispatchID},
+		}})
+	}
+	for index := workerCapacity; index < workerCapacity+workerCapacity/2; index++ {
+		presentSplitBatch(index)
+	}
+	frame = latestTTYProgressFrame(progress.String())
+	colors = make(map[string]string, workerCapacity)
+	for index := 0; index < workerCapacity/2; index++ {
+		workerID := fmt.Sprintf("worker-%02d", index)
+		if strings.Contains(frame, "worker "+workerID) {
+			t.Fatalf("progress frame = %q, terminal worker %s remains active", frame, workerID)
+		}
+	}
+	for index := workerCapacity / 2; index < workerCapacity+workerCapacity/2; index++ {
+		workerID := fmt.Sprintf("worker-%02d", index)
+		color := progressColorForWorker(frame, workerID)
+		if color == "" {
+			t.Fatalf("progress frame = %q, missing color for active %s", frame, workerID)
+		}
+		if previous := colors[color]; previous != "" {
+			t.Fatalf("progress frame = %q, workers %s and %s share color %s after cleanup", frame, previous, workerID, color)
+		}
+		colors[color] = workerID
+	}
+	renderer.StopProgressRendering()
+}
+
+func progressColorForWorker(progress, workerID string) string {
+	workerIndex := strings.Index(progress, "worker "+workerID)
+	if workerIndex < 0 {
+		return ""
+	}
+	prefix := progress[:workerIndex]
+	start := strings.LastIndex(prefix, "\x1b[")
+	if start < 0 {
+		return ""
+	}
+	end := strings.Index(prefix[start:], "m")
+	if end < 0 {
+		return ""
+	}
+	return prefix[start+2 : start+end]
+}
+
+func latestTTYProgressFrame(progress string) string {
+	const prefix = "\r\x1b[2K"
+	start := strings.LastIndex(progress, prefix)
+	if start < 0 {
+		return progress
+	}
+	return progress[start+len(prefix):]
 }
 
 func TestOpenFactoryEventRenderer_JSONStreamUsesLosslessPresentation(t *testing.T) {
@@ -349,6 +779,15 @@ func newTestService() visualizationcli.Service {
 
 func intPtr(value int) *int {
 	return &value
+}
+
+func mustJSON(t *testing.T, value any) []byte {
+	t.Helper()
+	payload, err := json.Marshal(value)
+	if err != nil {
+		t.Fatalf("marshal test payload: %v", err)
+	}
+	return payload
 }
 
 type fakeRootPeer struct {

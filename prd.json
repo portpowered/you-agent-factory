@@ -1,77 +1,87 @@
 {
-  "project": "Sever Dashboard Packaged-Factories Dependency Through a Backend Catalog Contract",
-  "branchName": "ui-packaged-factories-decoupling",
-  "description": "Decouple dashboard verification from the Packaged Factories publication package by serving the catalog and selected artifact data through a minimal backend OpenAPI contract, consuming it through typed dashboard API/state boundaries, removing UI package and lifecycle coupling, and enforcing the boundary against future direct dependencies or imports.",
+  "project": "CLI BAD_REQUEST Classification and Honest Run Progress",
+  "branchName": "cli-error-classification-and-run-output",
+  "description": "Make you run classify customer invocation-argument mistakes as BAD_REQUEST failures and provide truthful non-JSON progress showing accepted work, dependency edges, active workers, and workstation/work details while preserving clean machine-readable modes.",
   "context": {
-    "customerAsk": "Sever the dashboard's direct dependency on @you-agent-factory/packaged-factories by exposing the required catalog through a minimal backend API contract, moving the dashboard to that contract, removing package and lifecycle coupling, and adding a guard that prevents the dependency from returning. Keep the OpenAPI addition minimal, regenerate derived outputs rather than hand-merging them, and complete the full implementation, review, CI, conflict-resolution, and merge loop.",
-    "problem": "The UI manifest, lockfile, lifecycle hooks, and catalog code make the dashboard a build-time consumer of the Packaged Factories publication package. Factory-only edits can therefore invalidate or trigger frontend verification, coupling unrelated ownership lanes and preventing the planned CI classifier from safely treating Packaged Factories changes independently from dashboard changes.",
-    "solution": "Expose a read-only backend catalog endpoint with stable identity, customer-facing metadata, invocation examples, and only the JSON/YAML artifact data the dashboard needs; regenerate all clients from authored OpenAPI; route dashboard access through typed API and server-state modules with explicit UI states; remove the package dependency, lockfile entry, lifecycle hooks, asset imports, and dashboard consumer checks; and add a focused boundary guard with a synthetic failing regression case."
+    "customerAsk": "Correct invocation-argument failures across the CLI surface so typos are reported as client errors, and add truthful you run progress showing active workers, accepted work and dependency edges, and workstation details with more useful color differentiation.",
+    "problem": "Unknown or invalid Factory invocation arguments can be rendered as INTERNAL_SERVER_ERROR, causing operators and agents to misdiagnose their own input. Human run output also hides generated work details, dependency edges, active worker state, and workstation/work associations, and its colors do not distinguish concurrent workers well.",
+    "solution": "Classify customer-correctable invocation parse and validation failures at the CLI boundary as BAD_REQUEST while preserving stable codes and exit 1. Extend the human Factory Event projection with deterministic work/dependency and worker/workstation progress, gate animation and color through terminal policy, and regenerate the authored CLI manifest contract after rebasing."
   },
   "acceptanceCriteria": [
-    "A read-only backend API returns the stable packaged Factory catalog metadata and selected artifact data required by the dashboard, with deterministic results and an explicit error response when the backend cannot load or translate the catalog.",
-    "Authored OpenAPI components are the source of the minimal catalog contract, and the bundled OpenAPI plus generated Go and TypeScript clients are regenerated together; generated files are never hand-edited or hand-merged.",
-    "The dashboard renders catalog data obtained through the typed API boundary and exposes intentional loading, empty, error, and success states while preserving accessible semantics, keyboard selection, and responsive mobile/desktop behavior.",
-    "ui/package.json and the UI lockfile contain no @you-agent-factory/packaged-factories dependency, and ordinary UI build, lint, and test commands do not prepare, install, resolve, or validate a packaged-factories candidate.",
-    "A focused dependency-boundary guard rejects both a manifest dependency and a source import of @you-agent-factory/packaged-factories; its automated test proves at least one synthetic violation fails and the repository remains green without a violation.",
-    "Focused backend/API contract tests, dashboard component or integration tests, and direct browser verification prove the catalog path without relying on publication-package imports or bundled asset internals.",
-    "Quality gates pass: TypeScript typecheck, focused Go and UI tests, API generation/smoke verification, UI build, and no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
-    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared/generated-file churn are resolved against current main, and the PR is actually merged."
+    "Unknown and invalid invocation arguments across you run render one standard stderr error response with family BAD_REQUEST, retain the specific invocation error code, never claim INTERNAL_SERVER_ERROR, and exit with code 1.",
+    "A recorded non-JSON run rendering lists accepted work items with identifiers/descriptions and renders every available DEPENDS_ON edge in an unambiguous direction.",
+    "A recorded concurrent run rendering shows one status line per active worker and names each workstation together with associated work IDs when those IDs are present in canonical events.",
+    "Quiet, redirected/non-interactive, JSON, and NDJSON modes remain valid: no animation or ANSI bytes enter structured output, quiet suppresses progress, and redirected human output is deterministic.",
+    "contracts/cli/commands.json describes the resulting you run errors and output behavior; make cli-manifest-generate is run after rebasing, generated CLI manifests are never hand-merged, and every intentional golden diff is explained in the PR.",
+    "no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green; typecheck, focused CLI tests, CLI contract checks, and affected functional/golden tests pass.",
+    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared-file changes are reconciled against current main, and the PR is actually merged."
   ],
   "userStories": [
     {
-      "id": "ui-packaged-factories-decoupling-001",
-      "title": "Serve the dashboard catalog through a minimal backend contract",
-      "description": "As a dashboard client, I need the backend to expose the packaged Factory catalog and selected artifact data so I can discover built-in Factories without importing their publication package.",
+      "id": "cli-error-classification-and-run-output-001",
+      "title": "Classify invocation mistakes as client errors",
+      "description": "As a CLI user, I want invalid invocation arguments identified as my request error so that I can correct the command instead of investigating a false server failure.",
       "acceptanceCriteria": [
-        "A successful catalog request returns deterministically ordered entries with stable identity, customer-facing metadata, invocation examples, and the JSON/YAML artifact representations required by the existing dashboard catalog and detail experience.",
-        "An empty backend catalog produces a valid response with an empty entries collection rather than a transport or decoding failure.",
-        "Catalog load, decode, or mapping failure returns the documented non-success response and emits actionable, sensitive-safe backend diagnostics without exposing raw Factory contents.",
-        "The catalog read operation remains read-only and owned behind the Factory Definitions/backend boundary; the HTTP transport maps a public service result and does not give the dashboard filesystem or publication-package access.",
-        "The authored OpenAPI entrypoint and component schemas define only the dashboard-required response, and make generate-api regenerates the bundle, Go server/client types, and dashboard TypeScript types without manual edits to generated files.",
-        "Focused service/transport tests prove success, empty, and failure behavior, and API contract or smoke coverage proves that runtime JSON conforms to the generated contract.",
+        "An unknown Factory invocation flag produces one stderr error response with its specific INVOCATION_ARGUMENT_* code and family BAD_REQUEST, not INTERNAL_SERVER_ERROR.",
+        "Missing values, positional overflow, invalid values, and other invocation parse/validation failures that represent customer input use the BAD_REQUEST family; genuine runtime failures retain their existing non-client classification.",
+        "These usage failures exit with code 1 in normal and quiet modes and do not start worker execution or other runtime side effects.",
+        "Focused CLI and process-boundary regression tests cover the reported unknown-argument reproduction and representative validation paths using the post-PR-#1859 test layout.",
+        "The authored you run error contract records the invocation client-error behavior and generated artifacts are refreshed with make cli-manifest-generate rather than edited manually.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Moved catalog loading and artifact mapping behind the Factory Definitions HTTP adapter and injected root; top-level HTTP composition now forwards the generated route without publication-package access. Added deterministic ordering, stable metadata/artifact mapping, empty-catalog handling, payload-free failure responses and diagnostics, plus service and top-level route coverage. Added focused adapter tests for typed root failures, resolution and identity mismatches, incomplete identity/artifacts/metadata, and unavailable-root behavior; the owning HTTP package now measures 84.3% coverage against its 79.67% minimum. Verified with make generate-api, make api-smoke, focused Factory Definitions/HTTP/Wire suites, go test ./... -run '^$' -count=1, make backend-size, make pkg-maint, make pkg-file-count, make pkg-structure, and go vet ./.... Review follow-up: PR #1873 replacement head 37142ba1a is based on live origin/main 3a0b571b2, the reported oversized test is split, and all replacement-head checks are terminal-success with the PR mergeable."
+      "notes": "Implemented typed invocation-argument missing-value and static-flag parse errors, preserving existing stable ArgumentError codes and BAD_REQUEST classification. Added process-boundary coverage for the reported --planer-model typo in normal and quiet modes, dynamic/static missing values, positional overflow, and invalid JSON validation; all assert one stderr ErrorResponse, empty stdout, and zero provider calls. Updated authored CLI errors and regenerated family/published manifests with make cli-manifest-generate and make contracts-generate. Verification: focused Work/CLI packages, focused functional parameter/output tests, make cli-manifest-check, make typecheck, and git diff --check passed. The broad make test command reached its six-minute command timeout without emitting a test failure; no source failure was reported."
     },
     {
-      "id": "ui-packaged-factories-decoupling-002",
-      "title": "Render the catalog from the API without package lifecycle coupling",
-      "description": "As a dashboard user, I want the built-in Factory catalog to load from the running backend so I can browse and inspect Factories with the same usable experience independent of publication-package installation.",
+      "id": "cli-error-classification-and-run-output-002",
+      "title": "List accepted work and dependency edges",
+      "description": "As an operator watching a run, I want to see the work admitted by a generated batch and how items depend on one another so that I understand the execution plan behind the count.",
       "acceptanceCriteria": [
-        "Dashboard catalog network access is centralized in a typed API module and server-state hook that consumes generated catalog types; rendering components do not issue ad hoc fetches or import package assets.",
-        "The catalog surface displays explicit loading, empty, recoverable error, and populated success states, and a failed selected-artifact load does not silently render stale or mismatched detail.",
-        "On success, API-shaped fixture data renders the expected catalog items and selected Factory metadata, examples, JSON, and YAML detail; changing selection renders the matching API-provided detail.",
-        "Catalog selection remains semantic and keyboard operable with visible focus and accessible state announcements, and the layout remains usable without unintended horizontal scrolling at representative mobile and desktop viewports.",
-        "@you-agent-factory/packaged-factories is absent from UI dependencies and the lockfile; its prepare/install lifecycle hooks, candidate resolver, direct artifact imports, and dashboard package-consumer release checks are removed without changing unrelated public-package workflows.",
-        "Standard UI install, typecheck, build, lint, unit/component, and relevant integration commands run without building, packing, installing, or reading a Packaged Factories candidate.",
-        "A focused dashboard component or integration test proves catalog rendering from an API-shaped response, including loading and failure behavior.",
-        "Direct browser verification confirms successful catalog rendering, keyboard selection, error recovery presentation, and responsive behavior against the runtime API or a browser-level API fixture.",
+        "A multi-item work-accepted event renders the accepted count followed by one stable, readable entry for every canonical work item, including its ID/name and available task description without exposing private provider payloads.",
+        "Every canonical DEPENDS_ON relationship in the accepted batch is rendered once with an unambiguous source-to-prerequisite direction; independent items do not gain fabricated edges.",
+        "Single-item and empty or partially populated payloads remain readable and do not panic; absent optional descriptions or relations are omitted cleanly.",
+        "A deterministic recorded/golden rendering proves the item listing and dependency graph for a representative generated batch.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 2,
       "passes": true,
-      "notes": "Moved the dashboard catalog to generated OpenAPI types consumed by ui/src/api/packaged-factories and a React Query server-state hook; rendering now uses API projections only, with no publication-package source prop or direct artifact imports. Added explicit loading, empty, recoverable error/retry, success, and fail-closed selected-artifact states, semantic keyboard selection/focus behavior, localized API-shaped fixtures, and responsive hosted-route/browser coverage. Added the packaged-factories Vite API proxy path for dev/preview. Removed the remaining package-boundary source contracts and package-data readers; the UI manifest/lockfile and lifecycle hooks remain free of @you-agent-factory/packaged-factories. Verified with bun install --frozen-lockfile --ignore-scripts, bun run tsc, bun run build, bun run lint, bun run test:unit (191 Bun tests plus 2,956 Vitest tests), bun run test:integration (14 files, 35 tests), bun test vite.config.test.ts, focused API/projection/component suites (17 tests), the direct hosted browser scenarios, targeted Biome, and git diff --check. The full component suite also passed all 147 files/834 tests but exceeded the local 150-second runner budget (330.59s); repository-wide bun run check still reports 269 pre-existing formatting diagnostics outside the changed files."
+      "notes": "Extended the human accepted-work renderer to use singular labels for one-item payloads, preserve readable fallbacks for partially populated work items, and omit malformed relation records rather than presenting ambiguous edges. Added exact renderer coverage for a deterministic four-item batch with IDs, names, an available JSON payload that is not exposed, a name-based DEPENDS_ON edge, an independent item, and a single-item relation payload. Verification: go test ./pkg/services/factory_visualization/... -count=1, go test ./tests/functional/cli/factory_run/output -count=1, make typecheck, and git diff --check passed."
     },
     {
-      "id": "ui-packaged-factories-decoupling-003",
-      "title": "Prevent the direct packaged-factories dependency from returning",
-      "description": "As a maintainer, I need an automated dependency boundary so future dashboard changes cannot silently restore build-time coupling to the Packaged Factories publication package.",
+      "id": "cli-error-classification-and-run-output-003",
+      "title": "Show active workers and workstation work details",
+      "description": "As an operator watching concurrent execution, I want one current state line per active worker and work-aware workstation transitions so that I can tell what is running and what completed.",
       "acceptanceCriteria": [
-        "The normal UI check/lint path runs a focused guard that fails when @you-agent-factory/packaged-factories is declared in UI runtime, development, optional, or other supported manifest dependency sections.",
-        "The guard fails when production or testable UI source imports the package root or any package subpath through supported static or dynamic import syntax.",
-        "An automated guard test creates or supplies an isolated synthetic manifest or source violation, observes a non-zero failure with a useful path/reason, and also proves a compliant fixture passes.",
-        "The guard operates on explicit UI inputs and does not validate unrelated route, command, registration, documentation-link, or generated-asset inventories.",
-        "Repository UI checks stay green with catalog access exclusively through the backend API boundary.",
+        "Each concurrent active worker or dispatch has a distinct progress line that identifies its current state and remains associated with the same worker until a terminal outcome.",
+        "Workstation queued, started, completed, failed, and interrupted output names the workstation and includes canonical work IDs consumed or completed when the event provides them.",
+        "Terminal worker outcomes stop or replace the corresponding active indication without leaving stale workers displayed, including interleaved concurrent event sequences.",
+        "A deterministic recorded/golden run proves multiple simultaneous workers and their workstation/work associations without depending on timing sleeps.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 3,
       "passes": true,
-      "notes": "Hardened the UI boundary guard around explicit UI manifest/source inputs. It rejects dependencies, devDependencies, optionalDependencies, peerDependencies, bundledDependencies, and bundleDependencies declarations, plus static, dynamic, re-export, and CommonJS source references to the package root or subpaths. Added a CLI regression test with isolated violating and compliant fixtures that proves actionable non-zero failure output and a clean pass. Verified with the focused Vitest guard suite (2 tests), the live packaged-factories guard, bun run tsc, and bun run lint. The broader bun run check remains blocked only by the repository's existing generated dist/formatting diagnostics outside this story."
+      "notes": "Extended the human Factory Event renderer and TTY progress projection to correlate dispatches with Worker Session IDs, workstation names, and canonical Work IDs across queued, started, active, completed, failed, and interrupted lifecycle events. Terminal outcomes remove the corresponding active state, including interleaved concurrent dispatches; queued Work IDs are retained when a later request payload is sparse. Added exact renderer coverage for three interleaved workers and TTY cleanup/correlation, plus functional lifecycle compatibility coverage. Verification: go test ./pkg/services/factory_visualization/transports/cli -count=1, go test -race ./pkg/services/factory_visualization/transports/cli -count=1, go test ./pkg/services/factory_visualization/... -count=1, go test ./tests/functional/cli/factory_run/output -count=1, make typecheck, make backend-size pkg-maint pkg-file-count pkg-structure vet, and git diff --check passed. Commit 303be54cf."
+    },
+    {
+      "id": "cli-error-classification-and-run-output-004",
+      "title": "Respect terminal policy while improving progress distinction",
+      "description": "As a CLI user, I want rich progress in an interactive terminal and clean deterministic output everywhere else so that the same command works for humans, logs, and automation.",
+      "acceptanceCriteria": [
+        "In an eligible interactive non-JSON run, each active worker advances through the approved spinner frames and simultaneous workers receive visibly distinguishable colors from a varied, deterministic palette.",
+        "Progress rendering uses the existing terminal-policy decision for capabilities and channels; worker progress is sent to stderr and does not overwrite or contaminate the primary result on stdout.",
+        "Redirected or non-interactive human output uses stable status lines without cursor-control sequences, animation artifacts, or ANSI escapes, and --quiet suppresses progress.",
+        "JSON and NDJSON output remain parseable record-for-record and contain no spinner frames, ANSI escapes, or human-only workstation prose.",
+        "Existing unchanged CLI goldens remain unchanged; intentionally changed run goldens and CLI manifest artifacts are regenerated after the final rebase and each diff is explained in the PR.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": "Wired the stderr progress channel through the explicit terminal policy, preserving interactive response-stream progress for ordinary one-shot invocations while suppressing quiet-mode progress. Added deterministic collision-resolved worker colors over the varied ANSI palette, moved active-worker association out of the stdout response stream, and added stable ANSI-free status lines for redirected/non-interactive stderr. Documented the spinner/color/channel behavior in the packaged run guide and added root policy, renderer, concurrent-color, non-TTY, and process-boundary regression coverage. Verification after the final base synchronization: focused CLI and functional output tests, make test, make typecheck, make backend-size, make pkg-maint, make pkg-file-count, make pkg-structure, make vet, make cli-manifest-check, make docs-reference-smoke, and git diff --check passed; one unrelated ACP cancellation test was flaky in the broad package sweep and passed on targeted rerun. Review follow-up reconciled live main and converted the changed CLI output functional scenarios to injected edges.Edges.ProviderCommandRunner with shaped Codex responses; unrelated Mock Workers feature tests remain unchanged. Review follow-up: merged origin/main at 1b871e3a8, expanded the authored you run manifest copy and regenerated published/family artifacts, migrated split-batch dispatch colors, and added a 12-worker capacity/cleanup regression. Focused and race tests plus static gates pass; repository-wide vet reached the host timeout under concurrent verification without emitting a source failure."
     }
   ]
 }

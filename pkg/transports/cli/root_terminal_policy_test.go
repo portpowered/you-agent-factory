@@ -100,6 +100,9 @@ func TestRootCommand_ResolvesQuietRunPolicyForDiagnosticsAndLogger(t *testing.T)
 	if got.Diagnostics != nil {
 		t.Fatal("expected quiet run policy to suppress diagnostics writer")
 	}
+	if got.ProgressOutput != nil || got.ProgressIsTTY {
+		t.Fatalf("quiet progress channel = (%T, %t), want (nil, false)", got.ProgressOutput, got.ProgressIsTTY)
+	}
 	if got.Verbose {
 		t.Fatal("expected quiet run policy to disable verbose runtime logging")
 	}
@@ -271,6 +274,9 @@ func TestRootCommand_NormalModeRunWiresTerminalMutedLogger(t *testing.T) {
 	}
 	if got.Diagnostics != nil {
 		t.Fatal("expected normal run policy to suppress diagnostics writer")
+	}
+	if got.ProgressOutput == nil {
+		t.Fatal("expected normal run policy to wire the stderr progress channel")
 	}
 }
 
