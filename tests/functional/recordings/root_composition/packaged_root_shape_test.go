@@ -20,6 +20,7 @@ var recordingsInternalSubservices = []string{
 	"projection_query",
 	"recording_lifecycle",
 	"replay",
+	"worker_capture",
 }
 
 var recordingsDeletedTransitionalTopLevel = []string{

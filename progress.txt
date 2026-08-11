@@ -19,6 +19,7 @@
 - Public CLI manifest additions require regenerating family metadata and the published CLI contract, then updating command input/help/tree baselines.
 - Reviewed functional CLI coverage requires a sorted scenario declaration, an evidence-registry entry, a manifest mapping, and one literal `functionalevidence.Covers` marker.
 - Package-target discovery is the stable-sorted set of directories containing non-test Go sources; adding a durable service owner requires updating the checker vocabulary and its live top-level inventory before regenerating the manifest.
+- Adding a new Go production package requires synchronized unit and functional coverage-manifest entries plus any functional packaged-root shape inventory; CI discovers omissions only after the suite reaches those gates.
 - Boundary check compatibility bridges should be exact package/type exceptions with request-scoped rationale; broad service-prefix allowlists can hide new durable ownership claims.
 - Compatibility guard exceptions must match the reviewed method/field shape as well as the package and type name; name-only exemptions can hide ownership-expanding contract growth.
 - When an ownership burn-down ledger is corrected, regenerate it as an explicit empty array and reject retired rows so stale debt cannot silently return.
@@ -8442,4 +8443,22 @@
   - `make backend-size`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, and `git diff --check` passed.
 - **Learnings for future iterations:**
   - Once a replacement PR becomes mergeable, keep the final audit on the exact pushed head; a later bookkeeping commit resets CI and must be checked again before declaring review readiness.
+---
+
+## 2026-08-11 01:42:46 -07:00 - wsr-0023-capture-replay CI follow-up
+- What was implemented
+  - Addressed the latest PR CI failures by registering the new `worker_capture` production package in both Go coverage manifests and adding it to the functional Recordings packaged-root service inventory.
+  - Preserved the ratcheted coverage floors from local profiles: unit `69.39%` (331/477 statements) and functional `13.41%` (64/477 statements).
+- Files changed
+  - `docs/internal/baselines/go-unit-coverage-package-minimums.json`
+  - `docs/internal/baselines/go-functional-coverage-package-minimums.json`
+  - `tests/functional/recordings/root_composition/packaged_root_shape_test.go`
+  - `progress.txt`
+- Verification
+  - Focused Recordings root-composition functional tests passed.
+  - Focused Worker capture unit coverage measured `69.4%`; the functional root-composition profile measured `13.4%` for the new package.
+  - `git diff --check` passed.
+  - The full `make test-unit-coverage` command could not complete on this Windows host because its generated Go test command exceeded the Windows process filename/argument limit; CI's Linux failure was specifically the missing manifest entry, not a test failure.
+- **Learnings for future iterations:**
+  - Coverage-gate failures can be separated from test failures by inspecting the job's final diagnostic: a missing measured-package entry should be fixed in the lane manifest, while the dependent verification-policy failure needs no separate code change.
 ---
