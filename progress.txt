@@ -4082,3 +4082,21 @@
   - When a cohort’s source migration is already in branch ancestry, complete the story with direct focused execution, exact baseline reconciliation, both Vitest exclusion selections, lane-contract, and typecheck evidence rather than creating duplicate owners.
   - The workstation-helper cohort has no parameterized cases, so its source-level and executable totals must remain identical at 41.
 ---
+
+## 2026-08-10 20:03 -07:00 - bun-compat-batch-migration-006
+- What was implemented
+  - Verified the current-selection-04 request-helper cohort already present in branch ancestry: explicit-map/runtime-snapshot projection, provider-session filtering, request ordering, dispatch-attempt merging, and request-owned work-item behavior remain covered by the native Bun owner.
+  - Preserved all five frozen source-level named and executable cases; the retired Vitest owner is absent and no fallback copy remains.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `bun test src/features/current-selection/hooks/helpers/useCurrentSelection.request-helpers.bun.unit.test.ts` — 1 file / 5 tests passed, 19 expect calls.
+  - Pinned `vitest` `dashboard-unit` selection of the migrated `.bun.unit.test.ts` path — `No test files found` with exit code 1.
+  - Pinned `vitest` selection of the retired `.test.ts` path — `No test files found` with exit code 1; the legacy path is absent.
+  - `bun run check:test-lanes` — passed.
+  - `bun run typecheck` — passed.
+- **Learnings for future iterations:**
+  - A migration that predates the current batch still needs exact baseline-case reconciliation, focused Bun execution, both Vitest exclusion selections, lane-contract, and typecheck evidence before its story is marked complete.
+  - For this cohort, the source-level and executable totals are both five because no parameterized cases expand the baseline.
+---

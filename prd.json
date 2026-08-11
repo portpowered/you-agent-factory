@@ -105,8 +105,8 @@
         "Typecheck passes"
       ],
       "priority": 6,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Verified the current-selection-04 request-helper cohort already present in branch ancestry: the native Bun owner preserves all five frozen named and executable cases for explicit-map/runtime-snapshot projection, provider-session filtering, request ordering, dispatch-attempt merging, and request-owned work items. Focused `bun test` passed 5/5 across 1 file with 19 expect calls; dashboard-unit Vitest selection of both the migrated `.bun.unit.test.ts` path and retired `.test.ts` path returned `No test files found`; `bun run check:test-lanes` and `bun run typecheck` passed. No product behavior, public contract, generated artifact, coverage membership, or browser ownership changed."
     },
     {
       "id": "bun-compat-batch-migration-007",
