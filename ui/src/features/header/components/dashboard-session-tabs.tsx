@@ -2,14 +2,12 @@ import { Dialog } from "@you-agent-factory/components/overlays";
 import { Button, Text } from "@you-agent-factory/components/primitives";
 import {
   type DragEvent as ReactDragEvent,
-  useEffect,
   useId,
   useRef,
   useState,
 } from "react";
 import type { DashboardStreamState } from "../../../api/dashboard/types";
 import type { FactorySessionSummary } from "../../../api/factory-sessions";
-import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import { AlertPanel } from "../../../components/ui/alert-panel";
 import { useDashboardStreamStore } from "../../dashboard/state/dashboardStreamStore";
 import {
@@ -22,7 +20,11 @@ import {
   sessionTabID,
 } from "../lib/dashboard-session-tabs-utils";
 import { getHeaderControlsMessages } from "../messages/header-controls";
-import { OpenSessionButton, SessionTabButton } from "./dashboard-session-tab";
+import {
+  NewFactoryButton,
+  OpenSessionButton,
+  SessionTabButton,
+} from "./dashboard-session-tab";
 import { OpenSessionDialog } from "./dashboard-session-tabs-open-dialog";
 
 export function DashboardSessionTabs({
@@ -46,14 +48,15 @@ function DashboardSessionTabsView({
   state: DashboardSessionTabsState;
 }) {
   const messages = getHeaderControlsMessages(locale);
+  const dialogTriggerRef = useRef<HTMLButtonElement | null>(null);
   const streamStatus = useDashboardStreamStore(
     (storeState) => storeState.streamState.status,
   );
   const {
     activeSession,
-    activeSessionID,
     closeError,
     closeSessionMutation,
+    completedJourney,
     dialogError,
     dialogOpen,
     discoveredTargets,
@@ -65,28 +68,21 @@ function DashboardSessionTabsView({
     handleCreateNewFactory,
     handleInspectFolder,
     handleOpenTarget,
+    isRefreshingSessions,
+    journey,
     moveSessionTab,
+    newFactoryDialog,
     openSessionMutation,
+    openFactoryDialog,
     resetDialogState,
     selectedTargetValue,
     sessions,
     sessionsQuery,
     setActiveSessionID,
     setDialogOpen,
+    setSelectedTargetValue,
     validateFolderMutation,
   } = state;
-
-  useEffect(() => {
-    if (sessions.length === 0) {
-      return;
-    }
-    if (
-      activeSessionID === "" ||
-      !sessions.some((session) => session.id === activeSessionID)
-    ) {
-      setActiveSessionID(sessions[0]?.id ?? DEFAULT_FACTORY_SESSION_ID);
-    }
-  }, [activeSessionID, sessions, setActiveSessionID]);
 
   return (
     <>
@@ -100,14 +96,20 @@ function DashboardSessionTabsView({
                 : null
             }
             error={sessionsQuery.isError ? sessionsQuery.error : null}
+            isRefreshing={isRefreshingSessions}
             isPending={sessionsQuery.isPending}
             messages={messages}
             onCloseSession={handleCloseSession}
+            onNewFactory={(trigger) => {
+              dialogTriggerRef.current = trigger;
+              newFactoryDialog();
+            }}
+            onOpenFactory={(trigger) => {
+              dialogTriggerRef.current = trigger;
+              openFactoryDialog();
+            }}
             onRetry={() => {
               void sessionsQuery.refetch();
-            }}
-            onOpenSession={() => {
-              setDialogOpen(true);
             }}
             onReorderSession={moveSessionTab}
             onSelectSession={setActiveSessionID}
@@ -115,6 +117,13 @@ function DashboardSessionTabsView({
             streamStatus={streamStatus}
           />
         </div>
+        {completedJourney ? (
+          <AlertPanel aria-live="polite" role="status" tone="success">
+            {completedJourney === "new"
+              ? messages.newFactorySuccessLabel
+              : messages.openFactorySuccessLabel}
+          </AlertPanel>
+        ) : null}
         {closeError ? (
           <AlertPanel role="alert" tone="danger">
             {closeError.message}
@@ -137,14 +146,21 @@ function DashboardSessionTabsView({
           folderPath={folderPath}
           isPending={openSessionMutation.isPending}
           isValidatePending={validateFolderMutation.isPending}
+          journey={journey}
           messages={messages}
           onCancelInitConfirmation={handleCancelInitConfirmation}
           onChangeFolderPath={handleChangeFolderPath}
           onCreateNewFactory={() => {
             void handleCreateNewFactory();
           }}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            dialogTriggerRef.current?.focus();
+            dialogTriggerRef.current = null;
+          }}
           onInspectFolder={handleInspectFolder}
           onOpenTarget={handleOpenTarget}
+          onSelectTarget={setSelectedTargetValue}
           selectedTargetValue={selectedTargetValue}
         />
       </Dialog>
@@ -158,9 +174,11 @@ function SessionTabsContent({
   closingSessionID,
   error,
   isPending,
+  isRefreshing,
   messages,
+  onNewFactory,
+  onOpenFactory,
   onCloseSession,
-  onOpenSession,
   onReorderSession,
   onRetry,
   onSelectSession,
@@ -171,9 +189,11 @@ function SessionTabsContent({
   closingSessionID: string | null;
   error: unknown;
   isPending: boolean;
+  isRefreshing: boolean;
   messages: ReturnType<typeof getHeaderControlsMessages>;
   onCloseSession: (sessionID: string) => void;
-  onOpenSession: () => void;
+  onNewFactory: (trigger: HTMLButtonElement) => void;
+  onOpenFactory: (trigger: HTMLButtonElement) => void;
   onReorderSession: (sessionID: string, targetIndex: number) => void;
   onRetry: () => void;
   onSelectSession: (sessionID: string) => void;
@@ -194,17 +214,19 @@ function SessionTabsContent({
   }
   if (error) {
     const sessionError = normalizeFactorySessionsError(error);
-    return (
-      <SessionErrorState
-        label={
-          sessionError.code === "NETWORK_ERROR"
-            ? messages.sessionsOfflineTitle
-            : messages.sessionsErrorTitle
-        }
-        messages={messages}
-        onRetry={onRetry}
-      />
-    );
+    if (sessions.length === 0) {
+      return (
+        <SessionErrorState
+          label={
+            sessionError.code === "NETWORK_ERROR"
+              ? messages.sessionsOfflineTitle
+              : messages.sessionsErrorTitle
+          }
+          messages={messages}
+          onRetry={onRetry}
+        />
+      );
+    }
   }
   if (sessions.length === 0) {
     return (
@@ -214,7 +236,15 @@ function SessionTabsContent({
         </Text>
         <OpenSessionButton
           label={messages.openSessionButtonLabel}
-          onClick={onOpenSession}
+          onClick={(event) => {
+            onOpenFactory(event.currentTarget);
+          }}
+        />
+        <NewFactoryButton
+          label={messages.newFactoryButtonLabel}
+          onClick={(event) => {
+            onNewFactory(event.currentTarget);
+          }}
         />
       </>
     );
@@ -245,8 +275,29 @@ function SessionTabsContent({
 
   return (
     <>
+      {isRefreshing ? (
+        <Text
+          aria-live="polite"
+          className="text-sm text-on-surface-variant"
+          role="status"
+        >
+          {messages.refreshingSessionsLabel}
+        </Text>
+      ) : null}
+      {error ? (
+        <SessionErrorState
+          label={
+            normalizeFactorySessionsError(error).code === "NETWORK_ERROR"
+              ? messages.sessionsOfflineTitle
+              : messages.sessionsErrorTitle
+          }
+          messages={messages}
+          onRetry={onRetry}
+        />
+      ) : null}
       <nav
         aria-label={messages.sessionTabsLabel}
+        aria-busy={isRefreshing}
         className="min-w-0 overflow-x-auto overscroll-x-contain"
       >
         <div
@@ -345,10 +396,20 @@ function SessionTabsContent({
           ))}
         </div>
       </nav>
-      <OpenSessionButton
-        label={messages.openSessionButtonLabel}
-        onClick={onOpenSession}
-      />
+      <div className="flex min-w-0 flex-wrap items-center gap-1">
+        <OpenSessionButton
+          label={messages.openSessionButtonLabel}
+          onClick={(event) => {
+            onOpenFactory(event.currentTarget);
+          }}
+        />
+        <NewFactoryButton
+          label={messages.newFactoryButtonLabel}
+          onClick={(event) => {
+            onNewFactory(event.currentTarget);
+          }}
+        />
+      </div>
       {activeSession ? (
         <div
           aria-labelledby={sessionTabID(sessionTabsID, activeSession.id)}

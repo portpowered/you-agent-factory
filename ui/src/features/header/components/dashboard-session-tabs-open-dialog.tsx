@@ -1,15 +1,16 @@
+import { SurfacePanel } from "@you-agent-factory/components/layout";
 import {
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@you-agent-factory/components/overlays";
+import { Button, Text } from "@you-agent-factory/components/primitives";
 import { type FormEvent, useId } from "react";
 import type {
   FactorySessionsAPIError,
   FactorySessionTarget,
 } from "../../../api/factory-sessions";
-import { SurfacePanel } from "@you-agent-factory/components/layout";
-import { Button, Text } from "@you-agent-factory/components/primitives";
 import { AlertPanel, AlertPanelText } from "../../../components/ui/alert-panel";
 import { Input } from "../../../components/ui/input";
 import {
@@ -17,6 +18,7 @@ import {
   StandardListSelectionItem,
 } from "../../../components/ui/standard-list-selection";
 import {
+  type FactorySessionJourney,
   type FolderValidationState,
   factorySessionTargetOptionValue,
   folderValidationStatusMessage,
@@ -25,6 +27,7 @@ import {
 } from "../lib/dashboard-session-tabs-utils";
 import type { getHeaderControlsMessages } from "../messages/header-controls";
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: keeps the localized folder form and its mutually exclusive validation panels together.
 export function OpenSessionDialog({
   dialogError,
   discoveredTargets,
@@ -32,12 +35,15 @@ export function OpenSessionDialog({
   folderPath,
   isPending,
   isValidatePending,
+  journey,
   messages,
   onCancelInitConfirmation,
   onChangeFolderPath,
+  onCloseAutoFocus,
   onCreateNewFactory,
   onInspectFolder,
   onOpenTarget,
+  onSelectTarget,
   selectedTargetValue,
 }: {
   dialogError: FactorySessionsAPIError | null;
@@ -46,17 +52,22 @@ export function OpenSessionDialog({
   folderPath: string;
   isPending: boolean;
   isValidatePending: boolean;
+  journey: FactorySessionJourney;
   messages: ReturnType<typeof getHeaderControlsMessages>;
   onCancelInitConfirmation: () => void;
   onChangeFolderPath: (value: string) => void;
+  onCloseAutoFocus: (event: Event) => void;
   onCreateNewFactory: () => void;
   onInspectFolder: (event: FormEvent<HTMLFormElement>) => void;
   onOpenTarget: (targetValue?: string) => void;
+  onSelectTarget: (targetValue: string) => void;
   selectedTargetValue: string;
 }) {
   const folderFieldID = useId();
   const folderHelperTextID = useId();
+  const folderErrorTextID = useId();
   const dialogDescriptionID = useId();
+  const isNewJourney = journey === "new";
   const hasFolderCandidate = folderPath.trim().length > 0;
   const showInspectSubmit =
     folderValidation.status !== "ready" &&
@@ -70,20 +81,37 @@ export function OpenSessionDialog({
     folderValidation.status === "init_ready"
       ? null
       : folderValidationStatusMessage(folderValidation, messages);
+  const folderLabel = isNewJourney
+    ? messages.newFactoryFolderFieldLabel
+    : messages.sessionFolderFieldLabel;
+  const folderPlaceholder = isNewJourney
+    ? messages.newFactoryFolderFieldPlaceholder
+    : messages.sessionFolderFieldPlaceholder;
+  const folderHelperText = isNewJourney
+    ? messages.newFactoryFolderHelperText
+    : messages.sessionFolderHelperText;
 
   return (
     <DialogContent
       aria-describedby={dialogDescriptionID}
+      closeLabel={messages.closeDialogLabel}
       closeDisabled={isPending}
+      onCloseAutoFocus={onCloseAutoFocus}
     >
       <DialogHeader>
-        <DialogTitle>{messages.openSessionDialogTitle}</DialogTitle>
-        <Text
+        <DialogTitle>
+          {isNewJourney
+            ? messages.newFactoryDialogTitle
+            : messages.openSessionDialogTitle}
+        </DialogTitle>
+        <DialogDescription
           className="text-sm leading-6 text-on-surface-variant"
           id={dialogDescriptionID}
         >
-          {messages.openSessionDialogDescription}
-        </Text>
+          {isNewJourney
+            ? messages.newFactoryDialogDescription
+            : messages.openSessionDialogDescription}
+        </DialogDescription>
       </DialogHeader>
       <form className="grid gap-4" onSubmit={onInspectFolder}>
         <div className="grid gap-2">
@@ -91,7 +119,7 @@ export function OpenSessionDialog({
             className="text-xs uppercase tracking-[0.18em] text-on-surface-subtle"
             htmlFor={folderFieldID}
           >
-            {messages.sessionFolderFieldLabel}
+            {folderLabel}
           </label>
           <div className="flex flex-col gap-2 sm:flex-row">
             <Input
@@ -100,10 +128,16 @@ export function OpenSessionDialog({
               disabled={isPending || isValidatePending}
               id={folderFieldID}
               aria-describedby={folderHelperTextID}
+              aria-errormessage={
+                folderValidation.status === "error"
+                  ? folderErrorTextID
+                  : undefined
+              }
+              aria-invalid={folderValidation.status === "error"}
               onChange={(event) => {
                 onChangeFolderPath(event.target.value);
               }}
-              placeholder={messages.sessionFolderFieldPlaceholder}
+              placeholder={folderPlaceholder}
               value={folderPath}
             />
           </div>
@@ -111,12 +145,17 @@ export function OpenSessionDialog({
             className="text-sm text-on-surface-variant"
             id={folderHelperTextID}
           >
-            {messages.sessionFolderHelperText}
+            {folderHelperText}
           </Text>
         </div>
         {validationStatusMessage ? (
           <AlertPanel
             aria-live="polite"
+            id={
+              folderValidation.status === "error"
+                ? folderErrorTextID
+                : undefined
+            }
             role={folderValidation.status === "error" ? "alert" : "status"}
             tone={folderValidation.status === "error" ? "danger" : "info"}
           >
@@ -147,7 +186,7 @@ export function OpenSessionDialog({
         ) : null}
       </form>
       {folderValidation.status === "init_ready" ? (
-        <InitNewFactoryConfirmation
+        <NewFactoryConfirmation
           folderPath={folderValidation.folderPath}
           isPending={isPending}
           messages={messages}
@@ -158,7 +197,9 @@ export function OpenSessionDialog({
       {folderValidation.status === "ready" && discoveredTargets.length > 0 ? (
         <SessionTargetPicker
           isPending={isPending}
+          messages={messages}
           onOpenTarget={onOpenTarget}
+          onSelectTarget={onSelectTarget}
           selectedTargetValue={selectedTargetValue}
           targets={discoveredTargets}
         />
@@ -184,7 +225,7 @@ function ConfigLoadFailedPanel({ error }: { error: FactorySessionsAPIError }) {
   );
 }
 
-function InitNewFactoryConfirmation({
+function NewFactoryConfirmation({
   folderPath,
   isPending,
   messages,
@@ -198,27 +239,28 @@ function InitNewFactoryConfirmation({
   onConfirm: () => void;
 }) {
   const nestedFactoryPath = initNewFactoryNestedPath(folderPath);
-  const description =
-    messages.openSessionInitNewFactoryDescriptionTemplate.replaceAll(
-      "{{folderPath}}",
-      folderPath,
-    );
+  const description = messages.newFactoryPreviewDescriptionTemplate.replaceAll(
+    "{{folderPath}}",
+    folderPath,
+  );
+  const previewTitleID = useId();
 
   return (
     <SurfacePanel
-      aria-labelledby="init-new-factory-confirmation-title"
+      aria-labelledby={previewTitleID}
       asChild
       radius="2xl"
       surface="low"
     >
       <section className="grid gap-3">
-        <Text
-          className="text-sm leading-6 text-on-surface"
-          id="init-new-factory-confirmation-title"
-        >
-          {description}
+        <Text className="font-semibold text-on-surface" id={previewTitleID}>
+          {messages.newFactoryPreviewTitle}
         </Text>
-        <Text className="break-all font-mono text-xs text-on-surface-subtle">
+        <Text className="text-sm leading-6 text-on-surface">{description}</Text>
+        <Text
+          className="break-all rounded-lg border border-outline-variant bg-surface-container-highest px-3 py-2 font-mono text-xs text-on-surface"
+          data-factory-preview-target
+        >
           {nestedFactoryPath}
         </Text>
         <div className="flex flex-col-reverse justify-end gap-2 sm:flex-row">
@@ -228,7 +270,7 @@ function InitNewFactoryConfirmation({
             tone="outline"
             type="button"
           >
-            {messages.openSessionCancelCreateFactoryLabel}
+            {messages.newFactoryCancelLabel}
           </Button>
           <Button
             aria-busy={isPending}
@@ -237,8 +279,8 @@ function InitNewFactoryConfirmation({
             type="button"
           >
             {isPending
-              ? messages.openSessionCreateFactoryPendingLabel
-              : messages.openSessionCreateFactoryLabel}
+              ? messages.newFactoryConfirmPendingLabel
+              : messages.newFactoryConfirmLabel}
           </Button>
         </div>
       </section>
@@ -248,22 +290,34 @@ function InitNewFactoryConfirmation({
 
 function SessionTargetPicker({
   isPending,
+  messages,
   onOpenTarget,
+  onSelectTarget,
   selectedTargetValue,
   targets,
 }: {
   isPending: boolean;
+  messages: ReturnType<typeof getHeaderControlsMessages>;
   onOpenTarget: (targetValue?: string) => void;
+  onSelectTarget: (targetValue: string) => void;
   selectedTargetValue: string;
   targets: FactorySessionTarget[];
 }) {
-  const selectedTarget =
-    selectedFactorySessionTarget(targets, selectedTargetValue) ??
-    (targets.length === 1 ? targets[0] : null);
+  const selectedTarget = selectedFactorySessionTarget(
+    targets,
+    selectedTargetValue,
+  );
+  const pickerTitleID = useId();
 
   return (
     <SurfacePanel asChild className="grid gap-3" radius="2xl" surface="low">
-      <section>
+      <section aria-labelledby={pickerTitleID}>
+        <Text className="font-semibold text-on-surface" id={pickerTitleID}>
+          {messages.targetPickerTitle}
+        </Text>
+        <Text className="mt-1 text-sm text-on-surface-variant">
+          {messages.targetPickerHint}
+        </Text>
         <StandardListSelection
           disabled={isPending}
           selectionAnnouncement={selectedTarget?.label}
@@ -278,7 +332,7 @@ function SessionTargetPicker({
               <StandardListSelectionItem
                 key={`${target.ref.kind}:${target.ref.name ?? ""}:${target.factoryDir}`}
                 onClick={() => {
-                  onOpenTarget(targetValue);
+                  onSelectTarget(targetValue);
                 }}
                 selected={isSelected}
               >
@@ -294,6 +348,20 @@ function SessionTargetPicker({
             );
           })}
         </StandardListSelection>
+        <div className="mt-3 flex justify-end">
+          <Button
+            aria-busy={isPending}
+            disabled={isPending || selectedTarget == null}
+            onClick={() => {
+              onOpenTarget();
+            }}
+            type="button"
+          >
+            {isPending
+              ? messages.openSessionTargetPendingLabel
+              : messages.openSessionTargetLabel}
+          </Button>
+        </div>
       </section>
     </SurfacePanel>
   );

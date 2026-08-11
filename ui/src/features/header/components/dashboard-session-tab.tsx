@@ -1,6 +1,8 @@
+import { Button } from "@you-agent-factory/components/primitives";
 import type {
   DragEvent as ReactDragEvent,
   KeyboardEvent as ReactKeyboardEvent,
+  MouseEvent as ReactMouseEvent,
 } from "react";
 
 import type { DashboardStreamState } from "../../../api/dashboard/types";
@@ -43,24 +45,26 @@ export function OpenSessionButton({
   onClick,
 }: {
   label: string;
-  onClick: () => void;
+  onClick: (event: ReactMouseEvent<HTMLButtonElement>) => void;
 }) {
   return (
-    <button
-      aria-haspopup="dialog"
-      aria-label={label}
-      className={cn(
-        "flex min-h-10 min-w-10 shrink-0 self-stretch items-center rounded-xl bg-transparent px-3 py-2 text-on-surface-variant transition-colors",
-        "hover:bg-af-overlay-subtle hover:text-on-surface",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring",
-      )}
-      onClick={onClick}
-      type="button"
-    >
-      <span aria-hidden="true" className="text-lg leading-none">
-        +
-      </span>
-    </button>
+    <Button aria-haspopup="dialog" onClick={onClick} size="sm" tone="outline">
+      {label}
+    </Button>
+  );
+}
+
+export function NewFactoryButton({
+  label,
+  onClick,
+}: {
+  label: string;
+  onClick: (event: ReactMouseEvent<HTMLButtonElement>) => void;
+}) {
+  return (
+    <Button aria-haspopup="dialog" onClick={onClick} size="sm" tone="secondary">
+      {label}
+    </Button>
   );
 }
 

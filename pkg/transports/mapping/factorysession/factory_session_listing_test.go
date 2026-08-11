@@ -244,6 +244,58 @@ func TestReadProjectionsToAPI_PreservesRuntimeAvailability(t *testing.T) {
 	}
 }
 
+func TestScopedSessionListResponseToAPI_DropsDefaultSelectorAlias(t *testing.T) {
+	t.Parallel()
+
+	response := factorysession.ScopedSessionListResponseToAPI(factorysessions.ScopedSessionListResult{
+		Scope: factorysessions.SessionListScopeLive,
+		LiveSessions: []factorysessions.ScopedLiveSessionSummary{
+			{
+				ID: factorysessions.DefaultSessionID, IsDefault: true,
+				Target: factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
+			},
+			{
+				ID: "019e0000-0000-7000-8000-000000000042", IsDefault: true,
+				Target: factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
+			},
+			{
+				ID:     "019e0000-0000-7000-8000-000000000043",
+				Target: factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: "secondary"},
+			},
+		},
+	})
+
+	if len(response.Sessions) != 2 {
+		t.Fatalf("sessions = %#v, want canonical default and secondary rows", response.Sessions)
+	}
+	if response.Sessions[0].Id == factorysessions.DefaultSessionID || response.Sessions[1].Id == factorysessions.DefaultSessionID {
+		t.Fatalf("sessions = %#v, must not expose the default selector alias", response.Sessions)
+	}
+}
+
+func TestReadProjectionsToAPI_DeduplicatesCanonicalIDs(t *testing.T) {
+	t.Parallel()
+
+	defaultSession := &factorysessions.ScopedLiveSessionSummary{
+		ID: "019e0000-0000-7000-8000-000000000042", IsDefault: true,
+		Target: factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
+	}
+	response := factorysession.ReadProjectionsToAPI([]factorysessions.ReadProjection{
+		{Context: factorysessions.ProjectionContext{
+			Session: &factorysessions.ScopedLiveSessionSummary{
+				ID: factorysessions.DefaultSessionID, IsDefault: true,
+				Target: factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
+			},
+			FactorySessionID: factorysessions.DefaultSessionID,
+		}},
+		{Context: factorysessions.ProjectionContext{Session: defaultSession, FactorySessionID: defaultSession.ID}},
+	})
+
+	if len(response.Sessions) != 1 || response.Sessions[0].Id != defaultSession.ID {
+		t.Fatalf("sessions = %#v, want one canonical UUID row", response.Sessions)
+	}
+}
+
 func TestLogicalTargetFromSession_NilNamedAndInvalid(t *testing.T) {
 	t.Parallel()
 
