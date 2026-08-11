@@ -1,6 +1,7 @@
 ## Codebase Patterns
 - First-party packaged Factory semantic checks should consume parsed canonical definitions inside `internal/packagedfactorycatalog`; keep customer-authored and JavaScript Factory validation unchanged.
 - A lifecycle-only Work state is valid only through a named production bridge that matches the runtime contract and has direct behavioral test evidence; do not use comment-only allowlists.
+- When a catalog audit finds a lifecycle state that the current runtime does not emit, leave it as explicit follow-up work rather than relaxing validation with a guessed bridge; source comments and stale diagrams are not behavioral evidence.
 - For final PR handoff, compare the PR body byte-for-byte with `prd.json` and use the thread-aware GraphQL review audit because flat PR comments do not expose inline-thread resolution state.
 - OS-boundary functional tests may poll an isolated durable filesystem checkpoint only when the child exposes no parent-process event or injected edge; document that reason at each polling helper and keep the bound as a failure guard.
 - Git Worktree preparation treats a retained Git `*.lock` as indeterminate ownership: retry within a named bound, preserve the resource, and return its exact path with verify/remove/retry guidance.
@@ -4015,4 +4016,33 @@
   - Keep first-party semantic reachability separate from customer Factory validation; the package catalog can enforce publication-specific role completeness without tightening the general Factory validator.
   - Lifecycle-only states need a named production bridge plus direct runtime behavior evidence; a comment-only state allowlist is not sufficient.
   - Enable the new catalog gate only after story 002 removes `goal:execute` and reconciles all authored/generated catalog inventory, otherwise the existing catalog check cannot stay green.
+---
+
+## [2026-08-10 20:04 -07:00] - graph-workstation-semantics-002
+- What was implemented
+  - Removed the unreachable `goal:execute` state from the canonical `@you/goal` Factory while preserving its repeater, loop-breaker, accepted, continue, blocked, and failed paths.
+  - Regenerated the goal JSON/YAML artifacts and catalog manifest hashes from the authored source.
+  - Updated the canonical authoring reference and CLI docs smoke expectations so the shipped goal state inventory no longer advertises `goal:execute`.
+  - Added a published-catalog regression assertion for the exact goal state list and reconciled catalog tests/validation ledger with the current first-party inventory, including the two AGY entries already present on the current base.
+  - Audited the remaining candidates and deliberately left `loop-controller:stopped` and `quorum task:complete` unresolved because current runtime code and direct tests do not prove those states are emitted; they remain follow-up lifecycle work rather than guessed catalog exceptions.
+- Files changed
+  - `packages/packaged-factories/factories/goal/factory.yaml`
+  - `packages/packaged-factories/generated/factories/goal/factory.json`
+  - `packages/packaged-factories/generated/factories/goal/factory.yaml`
+  - `packages/packaged-factories/generated/manifest.json`
+  - `internal/packagedfactorycatalog/definition_catalog_test.go` and catalog inventory/integrity tests
+  - `docs/reference/authoring-factories.md`
+  - `tests/functional/smoke/cli_docs_smoke_test.go`
+  - `docs/internal/packaged-factory-validation/ledger.json`
+  - `prd.json`
+- Verification
+  - `go test ./internal/packagedfactorycatalog -count=1` — passed.
+  - `make packaged-factory-catalog-check` — passed; generated catalog is current.
+  - `go test ./tests/functional/factory/packaged/goal -count=1 -timeout 300s` — passed.
+  - `go test ./tests/functional/factory/packaged/loop ./tests/functional/factory/packaged/quorum -count=1 -timeout 300s` — passed serially; the initial parallel run hit shared packaged-installation contention and was rerun successfully in isolation.
+  - `make docs-reference-smoke`, `git diff --check`, and `prd.json` parsing — passed.
+- **Learnings for future iterations:**
+  - A generated-artifact regression test proves the published catalog inventory, but the story still needs a graph-package projection or browser fixture to prove downstream graph consumers omit the removed state.
+  - The catalog gate should be enabled only after the unresolved loop-controller and quorum parent lifecycle semantics are either implemented with direct evidence or removed from their canonical definitions.
+  - Current-main catalog inventory and validation-ledger expectations must be reconciled together when first-party entries arrive on the base branch, or focused catalog tests fail before feature assertions run.
 ---

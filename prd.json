@@ -32,7 +32,7 @@
       ],
       "priority": 1,
       "passes": false,
-      "notes": "Implemented the package-owned semantic role validator and focused tests for canonical initial, routed, classification, failure, rejection, continuation, explicit-return, JavaScript-scope, and invocation-schedule overlap states. The repository-wide catalog gate is intentionally not enabled in this iteration because the current authored catalog still contains goal:execute, which is the separate cleanup target of story graph-workstation-semantics-002; enabling the gate before that cleanup would leave the existing catalog check red."
+      "notes": "Implemented the package-owned semantic role validator and focused tests for canonical initial, routed, classification, failure, rejection, continuation, explicit-return, JavaScript-scope, and invocation-schedule overlap states. The repository-wide catalog gate remains deferred because the audit still identifies loop-controller:stopped and quorum task:complete as authored states without direct current runtime routes; they need an explicit lifecycle decision rather than a projection allowlist."
     },
     {
       "id": "graph-workstation-semantics-002",
@@ -50,7 +50,7 @@
       ],
       "priority": 2,
       "passes": false,
-      "notes": ""
+      "notes": "Removed goal:execute from the canonical authored Factory, regenerated the flattened JSON/YAML artifacts and manifest hashes, aligned the authoring reference and docs smoke expectations, and added a published-catalog regression assertion for the exact goal state inventory. Existing @you/goal, @you/loop, and @you/quorum focused functional suites pass serially. The catalog audit also exposed loop-controller:stopped and quorum task:complete as unresolved candidates: current source/tests do not prove those states are emitted, so they remain deferred instead of being treated as lifecycle bridges. The graph projection/browser fixture required by this story and the repository-wide semantic gate remain for a follow-up iteration."
     },
     {
       "id": "graph-workstation-semantics-003",
