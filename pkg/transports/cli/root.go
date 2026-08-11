@@ -21,6 +21,7 @@ import (
 	factorydefinitionscli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
+	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	providerscli "github.com/portpowered/infinite-you/pkg/services/providers/transports/cli"
@@ -163,6 +164,7 @@ type CommandOperations struct {
 	StreamWorkerSession               StreamWorkerSessionOperation
 	OpenRunSelection                  runcli.SelectionFactory
 	RemoteInvocation                  runcli.RemoteInvocationOperation
+	ResponsePresentation              factoryvisualization.ResponsePresentation
 	ACP                               acpcli.Service
 	ACPServer                         acp.Server
 }
@@ -223,6 +225,7 @@ type CommandFactory struct {
 	StreamWorkerSession    workersessionscli.StreamOperation
 	openRunSelection       runcli.SelectionFactory
 	remoteInvocation       runcli.RemoteInvocationOperation
+	responsePresentation   factoryvisualization.ResponsePresentation
 	acp                    acpcli.Service
 	acpServer              acp.Server
 }
@@ -279,6 +282,7 @@ func NewCommandFactory(operations CommandOperations) CommandFactory {
 		StreamWorkerSession:               operations.StreamWorkerSession,
 		openRunSelection:                  operations.OpenRunSelection,
 		remoteInvocation:                  operations.RemoteInvocation,
+		responsePresentation:              operations.ResponsePresentation,
 		acp:                               operations.ACP,
 		acpServer:                         operations.ACPServer,
 	}
@@ -529,7 +533,7 @@ func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs 
 	cfg.JSONOutput = globals.json
 	if remotePlacementSelected(globals) {
 		return runcli.RunRemoteInvocation(
-			cmd.Context(), cfg, globals.server, rootOptions.remoteInvocation,
+			cmd.Context(), cfg, globals.server, rootOptions.remoteInvocation, rootOptions.responsePresentation,
 		)
 	}
 	if rootOptions.initializer == nil {

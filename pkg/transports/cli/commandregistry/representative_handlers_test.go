@@ -333,21 +333,20 @@ func TestSessionLifecyclePlacementFallbackAndMissingServiceAreExplicit(t *testin
 			return nil
 		},
 	})
-	registry, err := commandregistry.NewSessionResolvedRegistry(manifest, commandregistry.SessionResolvedServices{Sessions: compatibility})
+	registry, err := commandregistry.NewSessionResolvedRegistry(manifest, commandregistry.SessionResolvedServices{LocalSessions: compatibility})
 	if err != nil {
-		t.Fatalf("NewSessionResolvedRegistry(compatibility) error = %v", err)
+		t.Fatalf("NewSessionResolvedRegistry(explicit local service) error = %v", err)
 	}
 	handlers, err := registry.LookupHandlers("you.session.pause.handler")
 	if err != nil {
 		t.Fatalf("LookupHandlers() error = %v", err)
 	}
 	if err := handlers.ResolvedRunE(&cobra.Command{Use: "pause"}, inputs, globalsWithoutRemote); err != nil {
-		t.Fatalf("compatibility placement handler: %v", err)
+		t.Fatalf("explicit local placement handler: %v", err)
 	}
 	if !called {
-		t.Fatal("compatibility Sessions fallback did not receive local pause")
+		t.Fatal("explicit local service did not receive local pause")
 	}
-
 	missingRegistry, err := commandregistry.NewSessionResolvedRegistry(manifest, commandregistry.SessionResolvedServices{})
 	if err != nil {
 		t.Fatalf("NewSessionResolvedRegistry(missing) error = %v", err)
@@ -380,6 +379,37 @@ func TestSessionLifecyclePlacementFallbackAndMissingServiceAreExplicit(t *testin
 				t.Fatalf("placement error = %v, want %q", err, test.want)
 			}
 		})
+	}
+}
+
+func TestSessionLifecycleRemotePlacementDoesNotUseLocalFallback(t *testing.T) {
+	manifest, err := generated.SessionFamilyManifest()
+	if err != nil {
+		t.Fatalf("SessionFamilyManifest() error = %v", err)
+	}
+	inputs := resolvedTestInputs(t,
+		resolvedTestValue{id: "you.session.pause.arg.0", source: resolvedinput.SourcePositionalArgument, value: resolvedinput.StringValue("dur-session-placement-002")},
+	)
+	compatibility := sessioncli.Bind(sessioncli.Operations{
+		Pause: func(sessioncli.LifecycleControlConfig) error { return nil },
+	})
+	registry, err := commandregistry.NewSessionResolvedRegistry(manifest, commandregistry.SessionResolvedServices{LocalSessions: compatibility})
+	if err != nil {
+		t.Fatalf("NewSessionResolvedRegistry() error = %v", err)
+	}
+	handlers, err := registry.LookupHandlers("you.session.pause.handler")
+	if err != nil {
+		t.Fatalf("LookupHandlers() error = %v", err)
+	}
+	remoteGlobals := resolvedTestInputs(t,
+		resolvedTestValue{id: "you.flag.server", source: resolvedinput.SourceCLIFlag, value: resolvedinput.StringValue("http://remote-only.test")},
+		resolvedTestValue{id: "you.flag.remote", source: resolvedinput.SourceCLIFlag, value: resolvedinput.BoolValue(true)},
+		resolvedTestValue{id: "you.flag.json", source: resolvedinput.SourceManifestDefault, value: resolvedinput.BoolValue(false)},
+		resolvedTestValue{id: "you.flag.verbose", source: resolvedinput.SourceManifestDefault, value: resolvedinput.BoolValue(false)},
+		resolvedTestValue{id: "you.flag.debug", source: resolvedinput.SourceManifestDefault, value: resolvedinput.BoolValue(false)},
+	)
+	if err := handlers.ResolvedRunE(&cobra.Command{Use: "pause"}, inputs, remoteGlobals); err == nil || err.Error() != "session pause service is required for remote placement" {
+		t.Fatalf("remote placement with only local service error = %v, want explicit missing remote service", err)
 	}
 }
 

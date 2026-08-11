@@ -342,9 +342,10 @@ POST /factory-sessions/{session_id}/terminate
 Local placement is the default for these four controls. Use persistent
 `--remote --server <uri>` to select exactly one already-running You server;
 the same placement grammar is accepted before or after the command path. The
-placement choice selects the local or HTTP adapter. It is independent from
-run waiting/following (`--wait`, `--follow`) and local hosting
-(`--with-server`, `--with-site`, `--listen`).
+placement choice selects the local or HTTP adapter. Run waits for its selected
+invocation result by default; use the run-level `--output primary` or
+`--output response-stream` selector for stdout behavior. Local hosting remains
+separate (`--with-server`, `--with-site`, `--listen`).
 
 Pausing stops automatic progression while the service keeps accepting inbound
 work and worker results. Resume records the lifecycle transition, wakes the

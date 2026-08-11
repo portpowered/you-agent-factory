@@ -602,7 +602,7 @@ func TestSessionResolvedInspectionRejectsInvalidInputsBeforeSideEffects(t *testi
 		PrepareList: func(context.Context, *sessioncli.ListConfig) error {
 			return errors.New("scope must be live, persisted, or all")
 		},
-		Sessions: sessioncli.Bind(sessioncli.Operations{
+		LocalSessions: sessioncli.Bind(sessioncli.Operations{
 			List: func(sessioncli.ListConfig) error {
 				listCalls++
 				return nil

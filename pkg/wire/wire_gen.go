@@ -614,6 +614,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		StreamWorkerSession:               v73,
 		OpenRunSelection:                  selectionFactory,
 		RemoteInvocation:                  remoteInvocationOperation,
+		ResponsePresentation:              v78,
 		ACP:                               acpService,
 		ACPServer:                         server,
 	}

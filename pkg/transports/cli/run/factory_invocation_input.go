@@ -8,7 +8,6 @@ import (
 	"io"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
@@ -19,6 +18,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factorysessionscli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	visualizationcli "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -571,54 +571,56 @@ func waitForRemoteInvocationResult(
 			Message: "wait for remote durable result: operation is required",
 		}
 	}
-	for {
-		result, err := operation.GetFactorySessionResult(ctx, RemoteInvocationResultRequest{
-			Server:      server,
-			SessionID:   start.SessionId,
-			Diagnostics: cfg.Diagnostics,
-			Verbose:     cfg.Verbose,
-		})
-		if err != nil {
-			return apisurface.FactoryInvocationResult{}, err
-		}
-		invocationResult, ready, poll, err := remoteInvocationResultFromDurable(
-
-			result,
-			start.SessionId,
-			requestID,
-		)
-		if err != nil {
-			return apisurface.FactoryInvocationResult{}, err
-		}
-		if ready {
-			return invocationResult, nil
-		}
-		if !poll {
-			return apisurface.FactoryInvocationResult{}, &InvocationError{
-				Code:    RemoteDurableResponseInvalidCode,
-				Message: "remote durable result ended without a terminal classification",
+	var invocationResult apisurface.FactoryInvocationResult
+	_, err := factorysessionscli.Poll(
+		ctx,
+		remoteDurableResultPollInterval,
+		func(readCtx context.Context) (factoryapi.FactorySessionResult, error) {
+			return operation.GetFactorySessionResult(readCtx, RemoteInvocationResultRequest{
+				Server:      server,
+				SessionID:   start.SessionId,
+				Diagnostics: cfg.Diagnostics,
+				Verbose:     cfg.Verbose,
+			})
+		},
+		func(result factoryapi.FactorySessionResult) (bool, error) {
+			mapped, ready, poll, mapErr := remoteInvocationResultFromDurable(
+				result,
+				start.SessionId,
+				requestID,
+			)
+			if mapErr != nil {
+				return false, mapErr
 			}
-		}
-
-		timer := time.NewTimer(remoteDurableResultPollInterval)
-		select {
-		case <-ctx.Done():
-			if !timer.Stop() {
-				<-timer.C
+			if ready {
+				invocationResult = mapped
+				return true, nil
 			}
+			if !poll {
+				return false, &InvocationError{
+					Code:    RemoteDurableResponseInvalidCode,
+					Message: "remote durable result ended without a terminal classification",
+				}
+			}
+			return false, nil
+		},
+	)
+	if err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			endpoint := safeRemoteEndpoint(server)
 			return apisurface.FactoryInvocationResult{}, &InvocationError{
 				Code: RemoteDurableResultCode,
 				Message: fmt.Sprintf(
 					"remote durable result wait canceled at %s: %v",
 					endpoint,
-					ctx.Err(),
+					err,
 				),
-				Cause: ctx.Err(),
+				Cause: err,
 			}
-		case <-timer.C:
 		}
+		return apisurface.FactoryInvocationResult{}, err
 	}
+	return invocationResult, nil
 }
 
 func remoteInvocationResultFromDurable(

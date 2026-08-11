@@ -6,6 +6,7 @@ import (
 	"errors"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -534,12 +535,12 @@ func TestRemoteInvocationWaitAndOutputModesPreserveTerminalBoundary(t *testing.T
 	streamConfig := baseConfig(&streamOutput)
 	streamConfig.JSONOutput = true
 	streamConfig.InvocationOutputMode = InvocationOutputResponseStream
-	output, err = runRemoteInvocationWithOperation(t, streamConfig, newOperation(factoryapi.FactorySessionResult{
+	output, err = runRemoteInvocationWithOperation(t, streamConfig, newResponseStreamFailureOperation(factoryapi.FactorySessionResult{
 		SessionId:     "dur-sess-boundary",
 		ResultStatus:  factoryapi.FactorySessionResultStatusFailedWithPartial,
 		SessionStatus: &statusFailed,
 		FailureDetail: &factoryapi.FailureDetail{Message: "remote terminal failure"},
-	}))
+	}), testResponsePresentation())
 	if err == nil || !strings.Contains(err.Error(), "INVOCATION_RUNTIME_FAILURE") || output == "" || !strings.Contains(output, `"recordType":"invocation_result"`) {
 		t.Fatalf("JSON response stream = %v/output=%q, want terminal record and failure", err, output)
 	}
@@ -547,14 +548,22 @@ func TestRemoteInvocationWaitAndOutputModesPreserveTerminalBoundary(t *testing.T
 	var humanOutput bytes.Buffer
 	humanConfig := baseConfig(&humanOutput)
 	humanConfig.InvocationOutputMode = InvocationOutputResponseStream
-	output, err = runRemoteInvocationWithOperation(t, humanConfig, newOperation(factoryapi.FactorySessionResult{
+	output, err = runRemoteInvocationWithOperation(t, humanConfig, newResponseStreamFailureOperation(factoryapi.FactorySessionResult{
 		SessionId:     "dur-sess-boundary",
 		ResultStatus:  factoryapi.FactorySessionResultStatusFailedWithPartial,
 		SessionStatus: &statusFailed,
 		FailureDetail: &factoryapi.FailureDetail{Message: "remote terminal failure"},
-	}))
+	}), testResponsePresentation())
 	if err == nil || !strings.Contains(err.Error(), "INVOCATION_RUNTIME_FAILURE") || output != humanOutput.String() || !strings.Contains(output, "--- invocation outcome ---") {
 		t.Fatalf("human response stream = %v/output=%q, want human terminal outcome", err, output)
+	}
+}
+
+func newResponseStreamFailureOperation(result factoryapi.FactorySessionResult) *scriptedRemoteResponseOperation {
+	result.SessionId = "dur-sess-remote-stream"
+	return &scriptedRemoteResponseOperation{
+		streams: []scriptedRemoteEventStream{{}},
+		result:  result,
 	}
 }
 
@@ -598,9 +607,14 @@ func (fn remoteInvocationResultOperationFunc) GetFactorySessionResult(ctx contex
 	return fn.result(ctx, request)
 }
 
-func runRemoteInvocationWithOperation(t *testing.T, cfg RunConfig, operation remoteInvocationResultOperationFunc) (string, error) {
+func runRemoteInvocationWithOperation(
+	t *testing.T,
+	cfg RunConfig,
+	operation RemoteInvocationOperation,
+	presentations ...factoryvisualization.ResponsePresentation,
+) (string, error) {
 	t.Helper()
-	err := RunRemoteInvocation(context.Background(), cfg, "http://selected.test", operation)
+	err := RunRemoteInvocation(context.Background(), cfg, "http://selected.test", operation, presentations...)
 	if output, ok := cfg.Output.(*bytes.Buffer); ok {
 		return output.String(), err
 	}

@@ -894,6 +894,12 @@ func TestShowSessionUsesInjectedService(t *testing.T) {
 				return nil
 			},
 		}),
+		LocalSessionsCLI: session.Bind(session.Operations{
+			Show: func(cfg session.ShowConfig) error {
+				called = true
+				return nil
+			},
+		}),
 	}).NewCommand(nil, nil, nil)
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)

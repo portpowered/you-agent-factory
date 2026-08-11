@@ -17,6 +17,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimecli "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/cli"
+	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
@@ -698,6 +699,7 @@ func RunRemoteInvocation(
 	cfg RunConfig,
 	server string,
 	remote RemoteInvocationOperation,
+	presentations ...factoryvisualization.ResponsePresentation,
 ) error {
 	if remote == nil {
 		return fmt.Errorf("run remote durable start: operation is required")
@@ -728,12 +730,21 @@ func RunRemoteInvocation(
 			Message: "remote durable start returned no canonical session identity",
 		}
 	}
+	var presentation factoryvisualization.ResponsePresentation
+	if len(presentations) > 0 {
+		presentation = presentations[0]
+	}
 	resultOperation, ok := remote.(RemoteInvocationResultOperation)
 	if !ok {
 		// Keep the narrow injected start seam usable for placement-only callers;
 		// the production HTTP adapter implements result retrieval and therefore
 		// always follows the accepted session to an authoritative terminal fact.
 		return writeRemoteDurableStartResult(cfg, response)
+	}
+	if isResponseStreamOutputMode(cfg.InvocationOutputMode) {
+		return runRemoteResponseStreamInvocation(
+			ctx, cfg, server, response, executionRequest.RequestId, remote, resultOperation, presentation,
+		)
 	}
 	result, err := waitForRemoteInvocationResult(
 		ctx,
@@ -747,6 +758,47 @@ func RunRemoteInvocation(
 		return err
 	}
 	return writeRemoteInvocationResult(cfg, result)
+}
+
+func runRemoteResponseStreamInvocation(
+	ctx context.Context,
+	cfg RunConfig,
+	server string,
+	response factoryapi.FactorySessionExecutionResponse,
+	requestID string,
+	remote RemoteInvocationOperation,
+	results RemoteInvocationResultOperation,
+	presentation factoryvisualization.ResponsePresentation,
+) error {
+	events, ok := remote.(RemoteInvocationEventOperation)
+	if !ok {
+		return &InvocationError{
+			Code:    RemoteDurableResponseInvalidCode,
+			Message: "remote response-stream output requires the canonical Factory Event operation",
+		}
+	}
+	result, renderer, streamErr := runRemoteResponseStream(
+		ctx, cfg, server, response, requestID, events, results, presentation,
+	)
+	if renderer == nil {
+		return streamErr
+	}
+	defer renderer.StopProgressRendering()
+	if streamErr != nil {
+		failure := remoteResponseStreamFailureResult(requestID, response.SessionId, streamErr)
+		writeErr := renderer.WriteFinalInvocationResult(failure)
+		if writeErr != nil {
+			return errors.Join(streamErr, writeErr)
+		}
+		return streamErr
+	}
+	if err := renderer.WriteFinalInvocationResult(result); err != nil {
+		return err
+	}
+	if result.Status != interfaces.InvocationTerminalStatusCompleted {
+		return invocationResultFailure(result)
+	}
+	return nil
 }
 
 func safeRemoteEndpoint(raw string) string {

@@ -1,7 +1,15 @@
 package run
 
 import (
+	"bufio"
+	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -10,8 +18,14 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	state "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factorysessionscli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/runconfig"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/sessionpath"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
 )
 
@@ -29,6 +43,281 @@ const (
 
 type runtimeLogDiagnosticsProvider interface {
 	RuntimeLogDiagnostics() runtimeartifact.Diagnostics
+}
+
+const (
+	remoteFactoryEventMaxReconnectAttempts = 5
+	remoteFactoryEventReconnectInterval    = remoteDurableResultPollInterval
+)
+
+// RemoteInvocationEventCursor identifies the last canonical Factory Event
+// rendered by a remote invocation response stream. Both fields are sent on a
+// reconnect so the server can resume after the last accepted event.
+type RemoteInvocationEventCursor struct {
+	EventID  string
+	Sequence *int
+}
+
+// RemoteInvocationEventRequest identifies one cursor-aware canonical event
+// stream read for an accepted durable Factory Session.
+type RemoteInvocationEventRequest struct {
+	Server        string
+	SessionID     string
+	AfterEventID  string
+	AfterSequence *int
+	Diagnostics   io.Writer
+	Verbose       bool
+}
+
+// RemoteInvocationEventStream is the finite retained-event stream returned by
+// the canonical Factory Session events endpoint.
+type RemoteInvocationEventStream interface {
+	Next(context.Context) (factoryapi.FactoryEvent, error)
+	Close() error
+}
+
+// RemoteInvocationEventOperation opens the server-owned canonical event lane.
+type RemoteInvocationEventOperation interface {
+	OpenFactorySessionEvents(context.Context, RemoteInvocationEventRequest) (RemoteInvocationEventStream, error)
+}
+
+type remoteFactoryEventStream struct {
+	reader *bufio.Reader
+	body   io.ReadCloser
+}
+
+func (client remoteInvocationClient) OpenFactorySessionEvents(
+	ctx context.Context,
+	cfg RemoteInvocationEventRequest,
+) (RemoteInvocationEventStream, error) {
+	if ctx == nil {
+		return nil, &InvocationError{Code: RemoteDurableResultCode, Message: "remote Factory Event stream: context is required"}
+	}
+	if client.transport == nil {
+		return nil, &InvocationError{Code: RemoteDurableResultCode, Message: "remote Factory Event stream: CLI HTTP protocol is required"}
+	}
+	endpointURL, err := cliserver.RequestURL(cfg.Server, sessionpath.FactoryEventsPath(cfg.SessionID))
+	if err != nil {
+		return nil, &InvocationError{
+			Code:    RemoteDurableResultCode,
+			Message: fmt.Sprintf("remote Factory Event stream endpoint %q is invalid", safeRemoteEndpoint(cfg.Server)),
+			Cause:   err,
+		}
+	}
+	parsed, err := url.Parse(endpointURL)
+	if err != nil {
+		return nil, &InvocationError{
+			Code:    RemoteDurableResultCode,
+			Message: fmt.Sprintf("remote Factory Event stream endpoint %q is invalid", safeRemoteEndpoint(cfg.Server)),
+			Cause:   err,
+		}
+	}
+	query := parsed.Query()
+	if eventID := strings.TrimSpace(cfg.AfterEventID); eventID != "" {
+		query.Set("after_event_id", eventID)
+	}
+	if cfg.AfterSequence != nil {
+		query.Set("after_sequence", strconv.Itoa(*cfg.AfterSequence))
+	}
+	parsed.RawQuery = query.Encode()
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, parsed.String(), nil)
+	if err != nil {
+		return nil, &InvocationError{Code: RemoteDurableResultCode, Message: fmt.Sprintf("build remote Factory Event stream request: %v", err), Cause: err}
+	}
+	request.Header.Set("Accept", "text/event-stream")
+	clidiag.Printf(
+		cfg.Diagnostics,
+		cfg.Verbose,
+		"remote Factory Event stream open endpointPath=%s endpoint=%s sessionId=%s afterEventId=%s afterSequence=%s",
+		parsed.Path,
+		parsed.String(),
+		strings.TrimSpace(cfg.SessionID),
+		strings.TrimSpace(cfg.AfterEventID),
+		formatRemoteEventSequence(cfg.AfterSequence),
+	)
+	response, err := client.transport.Execute(request)
+	if err != nil {
+		return nil, &remoteInvocationEventTransportError{
+			status:  0,
+			message: fmt.Sprintf("remote Factory Event stream failed at %s: %v", safeRemoteEndpoint(endpointURL), err),
+			cause:   err,
+		}
+	}
+	if response.HTTP == nil {
+		return nil, &remoteInvocationEventTransportError{
+			status:  0,
+			message: fmt.Sprintf("remote Factory Event stream failed at %s: HTTP response is unavailable", safeRemoteEndpoint(endpointURL)),
+		}
+	}
+	if response.HTTP.StatusCode != http.StatusOK {
+		if response.HTTP.Body != nil {
+			defer response.HTTP.Body.Close()
+		}
+		message := fmt.Sprintf("remote Factory Event stream failed at %s (%d)", safeRemoteEndpoint(endpointURL), response.HTTP.StatusCode)
+		if apiError, ok := clihttp.DecodeAPIError(response.HTTP); ok {
+			message = fmt.Sprintf("remote Factory Event stream failed at %s (%d): %s", safeRemoteEndpoint(endpointURL), response.HTTP.StatusCode, apiError.Message)
+		}
+		return nil, &remoteInvocationEventTransportError{status: response.HTTP.StatusCode, message: message}
+	}
+	if response.HTTP.Body == nil {
+		return nil, &remoteInvocationEventTransportError{
+			status:  0,
+			message: fmt.Sprintf("remote Factory Event stream failed at %s: HTTP response has no body", safeRemoteEndpoint(endpointURL)),
+		}
+	}
+	if !strings.Contains(strings.ToLower(response.HTTP.Header.Get("Content-Type")), "text/event-stream") {
+		defer response.HTTP.Body.Close()
+		return nil, &remoteInvocationEventTransportError{
+			status:  0,
+			message: fmt.Sprintf("remote Factory Event stream at %s returned content type %q", safeRemoteEndpoint(endpointURL), response.HTTP.Header.Get("Content-Type")),
+		}
+	}
+	return &remoteFactoryEventStream{reader: bufio.NewReader(response.HTTP.Body), body: response.HTTP.Body}, nil
+}
+
+func formatRemoteEventSequence(sequence *int) string {
+	if sequence == nil {
+		return ""
+	}
+	return strconv.Itoa(*sequence)
+}
+
+func (stream *remoteFactoryEventStream) Next(ctx context.Context) (factoryapi.FactoryEvent, error) {
+	if stream == nil || stream.reader == nil {
+		return factoryapi.FactoryEvent{}, errors.New("remote Factory Event stream is unavailable")
+	}
+	if ctx == nil {
+		return factoryapi.FactoryEvent{}, context.Canceled
+	}
+	if err := ctx.Err(); err != nil {
+		return factoryapi.FactoryEvent{}, err
+	}
+	return readRemoteFactoryEventSSE(stream.reader)
+}
+
+func (stream *remoteFactoryEventStream) Close() error {
+	if stream == nil || stream.body == nil {
+		return nil
+	}
+	return stream.body.Close()
+}
+
+func readRemoteFactoryEventSSE(reader *bufio.Reader) (factoryapi.FactoryEvent, error) {
+	var data []string
+	for {
+		line, err := reader.ReadString('\n')
+		line = strings.TrimSuffix(line, "\n")
+		line = strings.TrimSuffix(line, "\r")
+		if err != nil && len(line) == 0 && len(data) == 0 {
+			return factoryapi.FactoryEvent{}, err
+		}
+		if line == "" {
+			if len(data) == 0 {
+				if err != nil {
+					return factoryapi.FactoryEvent{}, err
+				}
+				continue
+			}
+			return decodeRemoteFactoryEventSSE(data)
+		}
+		if strings.HasPrefix(line, ":") {
+			if err != nil {
+				return factoryapi.FactoryEvent{}, err
+			}
+			continue
+		}
+		if strings.HasPrefix(line, "data:") {
+			value := strings.TrimPrefix(line, "data:")
+			value = strings.TrimPrefix(value, " ")
+			data = append(data, value)
+		}
+		if err != nil {
+			if len(data) == 0 {
+				return factoryapi.FactoryEvent{}, err
+			}
+			return decodeRemoteFactoryEventSSE(data)
+		}
+	}
+}
+
+func decodeRemoteFactoryEventSSE(data []string) (factoryapi.FactoryEvent, error) {
+	var event factoryapi.FactoryEvent
+	if err := json.Unmarshal([]byte(strings.Join(data, "\n")), &event); err != nil {
+		return factoryapi.FactoryEvent{}, &remoteMalformedFactoryEventError{cause: err}
+	}
+	if strings.TrimSpace(event.Id) == "" || strings.TrimSpace(string(event.Type)) == "" {
+		return factoryapi.FactoryEvent{}, &remoteMalformedFactoryEventError{cause: errors.New("canonical Factory Event has no id or type")}
+	}
+	return event, nil
+}
+
+type remoteInvocationEventTransportError struct {
+	status  int
+	message string
+	cause   error
+}
+
+func (err *remoteInvocationEventTransportError) Error() string {
+	if err == nil {
+		return ""
+	}
+	return err.message
+}
+
+func (err *remoteInvocationEventTransportError) Unwrap() error {
+	if err == nil {
+		return nil
+	}
+	return err.cause
+}
+
+func (err *remoteInvocationEventTransportError) retryable() bool {
+	return err != nil && (err.status == 0 || err.status == http.StatusRequestTimeout || err.status == http.StatusTooManyRequests || err.status >= http.StatusInternalServerError)
+}
+
+type remoteMalformedFactoryEventError struct {
+	cause error
+}
+
+func (err *remoteMalformedFactoryEventError) Error() string {
+	if err == nil || err.cause == nil {
+		return "decode canonical Factory Event SSE data"
+	}
+	return fmt.Sprintf("decode canonical Factory Event SSE data: %v", err.cause)
+}
+
+func (err *remoteMalformedFactoryEventError) Unwrap() error {
+	if err == nil {
+		return nil
+	}
+	return err.cause
+}
+
+func remoteFactoryEventCursor(event factoryapi.FactoryEvent) RemoteInvocationEventCursor {
+	sequence := event.Context.Sequence
+	if event.Context.SessionSequence != nil {
+		sequence = *event.Context.SessionSequence
+	}
+	return RemoteInvocationEventCursor{EventID: strings.TrimSpace(event.Id), Sequence: &sequence}
+}
+
+func remoteFactoryEventRetryable(err error) bool {
+	if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, io.EOF) {
+		return false
+	}
+	var malformed *remoteMalformedFactoryEventError
+	if errors.As(err, &malformed) {
+		return false
+	}
+	var transport *remoteInvocationEventTransportError
+	if errors.As(err, &transport) {
+		return transport.retryable()
+	}
+	return true
+}
+
+func waitForRemoteEventReconnect(ctx context.Context) error {
+	return factorysessionscli.Wait(ctx, remoteFactoryEventReconnectInterval)
 }
 
 func runtimeLogDiagnosticsForRunner(runner factoryServiceRunner) runtimeartifact.Diagnostics {

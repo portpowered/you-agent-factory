@@ -4126,7 +4126,7 @@
       "path": "you session",
       "runnable": false,
       "usage": {
-        "example": "  # Inspect live sessions through the selected server.\n  you session list\n  you session show session-beta\n\n  # Lifecycle controls are local by default.\n  you session pause\n  you session resume\n  you session cancel session-beta\n  you session terminate session-beta\n\n  # Select an exact already-running server explicitly.\n  you --remote --server http://factory.example:7437 session pause session-beta\n  you session resume session-beta --remote --server http://factory.example:7437\n\n  # Waiting/following and hosting are separate from placement.\n  you run --wait --remote --server http://factory.example:7437\n\n  # Emit API-shaped JSON for automation.\n  you session list --json\n\n  # Open and close sessions on a non-default port.\n  you session create --dir /workspace/fleet --port 9090\n  you session delete session-beta --port 9090 --json\n\n  # Target a different service port for list output.\n  you session list --port 9090",
+        "example": "  # Inspect live sessions through the selected server.\n  you session list\n  you session show session-beta\n\n  # Lifecycle controls are local by default.\n  you session pause\n  you session resume\n  you session cancel session-beta\n  you session terminate session-beta\n\n  # Select an exact already-running server explicitly.\n  you --remote --server http://factory.example:7437 session pause session-beta\n  you session resume session-beta --remote --server http://factory.example:7437\n\n  # Run output selection and local hosting are separate from placement.\n  you --remote --server http://factory.example:7437 run --named @you/research --output primary \"Review the current plan\"\n\n  # Emit API-shaped JSON for automation.\n  you session list --json\n\n  # Open and close sessions on a non-default port.\n  you session create --dir /workspace/fleet --port 9090\n  you session delete session-beta --port 9090 --json\n\n  # Target a different service port for list output.\n  you session list --port 9090",
         "line": "session"
       },
       "visibility": "visible"
@@ -5753,7 +5753,7 @@
         }
       },
       "usage": {
-        "example": "  # Pause the default compatibility Factory Session locally.\n  you session pause\n\n  # Select an exact already-running server explicitly.\n  you --remote --server http://factory.example:7437 session pause session-beta\n  you session pause session-beta --remote --server http://factory.example:7437\n\n  # Placement is independent from waiting/following and local hosting.\n  you run --wait --remote --server http://factory.example:7437",
+        "example": "  # Pause the default compatibility Factory Session locally.\n  you session pause\n\n  # Select an exact already-running server explicitly.\n  you --remote --server http://factory.example:7437 session pause session-beta\n  you session pause session-beta --remote --server http://factory.example:7437\n\n  # Run output selection and local hosting are separate from placement.\n  you --remote --server http://factory.example:7437 run --named @you/research --output primary \"Review the current plan\"",
         "line": "pause [session-id]"
       },
       "visibility": "visible"
@@ -6039,7 +6039,7 @@
         }
       },
       "usage": {
-        "example": "  # Resume the default compatibility Factory Session locally.\n  you session resume\n\n  # Select an exact already-running server explicitly.\n  you --remote --server http://factory.example:7437 session resume session-beta\n  you session resume session-beta --remote --server http://factory.example:7437\n\n  # Placement is independent from waiting/following and local hosting.\n  you run --wait --remote --server http://factory.example:7437",
+        "example": "  # Resume the default compatibility Factory Session locally.\n  you session resume\n\n  # Select an exact already-running server explicitly.\n  you --remote --server http://factory.example:7437 session resume session-beta\n  you session resume session-beta --remote --server http://factory.example:7437\n\n  # Run output selection and local hosting are separate from placement.\n  you --remote --server http://factory.example:7437 run --named @you/research --output primary \"Review the current plan\"",
         "line": "resume [session-id]"
       },
       "visibility": "visible"

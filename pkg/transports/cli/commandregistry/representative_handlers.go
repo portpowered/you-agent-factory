@@ -174,45 +174,45 @@ const (
 	sessionTerminatePortInputID    = "you.session.terminate.flag.port"
 )
 
-// SessionResolvedServices are the injected Factory Session CLI adapter and
-// invocation-local collaborators consumed by stable-input transport adapters.
+// SessionResolvedServices are the explicit local and remote Factory Session
+// CLI adapters and invocation-local collaborators consumed by stable-input
+// transport adapters. A placement never falls back to the other adapter.
 type SessionResolvedServices struct {
-	// Sessions is retained as the historical remote adapter field. Callers
-	// should provide RemoteSessions and LocalSessions for dual-placement
-	// lifecycle controls; when either is absent, this field is the compatibility
-	// fallback used by existing injected command graphs.
-	Sessions       sessioncli.Service
 	LocalSessions  sessioncli.Service
 	RemoteSessions sessioncli.Service
 	PrepareList    func(context.Context, *sessioncli.ListConfig) error
 	Diagnostics    func(*cobra.Command) io.Writer
 }
 
-// SessionResolvedServicesFromOps binds accepted session operations into registry services.
+// SessionResolvedServicesFromOps binds accepted remote and, when supplied,
+// local session operations into registry services. Omitted local operations
+// remain absent so local lifecycle placement fails explicitly instead of using
+// remote behavior.
 func SessionResolvedServicesFromOps(
-	ops sessioncli.Operations,
+	remoteOps sessioncli.Operations,
 	prepareList func(context.Context, *sessioncli.ListConfig) error,
 	diagnostics func(*cobra.Command) io.Writer,
+	localOps ...sessioncli.Operations,
 ) SessionResolvedServices {
+	remote := sessioncli.Bind(remoteOps)
+	var local sessioncli.Service
+	if len(localOps) > 0 {
+		local = sessioncli.Bind(localOps[0])
+	}
 	return SessionResolvedServices{
-		Sessions:    sessioncli.Bind(ops),
-		PrepareList: prepareList,
-		Diagnostics: diagnostics,
+		LocalSessions:  local,
+		RemoteSessions: remote,
+		PrepareList:    prepareList,
+		Diagnostics:    diagnostics,
 	}
 }
 
 func (services SessionResolvedServices) remote() sessioncli.Service {
-	if services.RemoteSessions != nil {
-		return services.RemoteSessions
-	}
-	return services.Sessions
+	return services.RemoteSessions
 }
 
 func (services SessionResolvedServices) local() sessioncli.Service {
-	if services.LocalSessions != nil {
-		return services.LocalSessions
-	}
-	return services.Sessions
+	return services.LocalSessions
 }
 
 func (services SessionResolvedServices) forPlacement(remote bool) sessioncli.Service {
