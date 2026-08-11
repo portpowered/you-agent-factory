@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- For long real-process race baselines, record the ordinary `-count=20` result separately from a `-failfast` rerun; capture output in an out-of-tree temporary log when console truncation could hide the first failing test, and never commit the generated log.
 - For final PR handoff, compare the PR body byte-for-byte with `prd.json` and use the thread-aware GraphQL review audit because flat PR comments do not expose inline-thread resolution state.
 - OS-boundary functional tests may poll an isolated durable filesystem checkpoint only when the child exposes no parent-process event or injected edge; document that reason at each polling helper and keep the bound as a failure guard.
 - Git Worktree preparation treats a retained Git `*.lock` as indeterminate ownership: retry within a named bound, preserve the resource, and return its exact path with verify/remove/retry guidance.
@@ -3745,4 +3746,26 @@
 - **Learnings for future iterations:**
   - Treat the package file-count baseline as a deletion-only ratchet even when a split is mechanically correct; use existing responsibility-aligned test owners and verify both the 1,000-line maintainability gate and the broader 1,200-line task cap.
   - When review identifies whitespace drift in a move-only split, compare the named declarations directly against the unmodified source and restore the exact text before rerunning inventory and coverage.
+---
+
+## 2026-08-10 20:29 -07:00 - thr-deflake-cli-process-package-001
+- What was implemented
+  - Established the pre-change causal and performance baseline for the CLI process functional package without changing production behavior or an out-of-scope functional package.
+  - Repeated the full real-process package, the hard-kill successor regression, and the merged-main JSON failure regression under the requested stress conditions; recorded the historical CI JSON failure and the exact hard-kill producer/observer interleaving in `prd.json` story 001 notes.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Environment: Windows/amd64, go1.25.0.
+  - Pre-change `go test ./tests/functional/transport/cli/process -count=20 -timeout 20m` — passed 20/20 in 686.803s.
+  - First pre-change `go test -race ./tests/functional/transport/cli/process -count=20 -timeout 30m` — intermittent package-level failure after 1,447.832s; the runner tail was truncated before a stable individual test name was recoverable.
+  - Second pre-change `go test -race ./tests/functional/transport/cli/process -count=20 -failfast -timeout 30m` — passed 20/20 in 1,215.955s.
+  - Focused `go test -race ./tests/functional/transport/cli/process -run '^TestCLISuccessorAfterHardKillReportsPreRuntimeStagingContention$' -count=20 -timeout 20m` — passed 20/20 in 200.943s.
+  - Merged-main `go test ./tests/functional/transport/cli/output -run '^TestCLIJSONFailureRemainsValidJSON$' -count=20 -timeout 10m` — passed 20/20 in 140.706s. Historical CI failure was recovered from the failed Backend Functional Coverage log: terminal stdout carried `INVOCATION_RUNTIME_FAILURE`, while stderr carried `RUN_INVOCATION_FAILED` with `terminate live factory session: Workers workstation dispatch is unknown`.
+  - Five separate warm-cache pre-change `-count=1` runs: 44.076s, 109.285s, 67.205s, 44.840s, 45.211s; median 45.211s.
+  - Initial `make typecheck` hit missing `@types/bun`; after `bun install --frozen-lockfile`, `make typecheck` passed.
+- **Learnings for future iterations:**
+  - The hard-kill test’s exact shared resource is the packaged-factory `.<factory>.staging-owner` lease and its atomically published `.owner.json`, not persisted `backendScopeID`; an observer that inspects before suspending leaves a release race even if it re-stats the path.
+  - The JSON failure is a lifecycle/output ordering symptom: a terminal failed response is already emitted, then teardown races against removed dispatch state and emits a mismatched command diagnostic. Preserve the existing stdout/stderr contract while making process/session teardown observe a complete terminal lifecycle.
+  - A clean focused race repetition does not clear a full-package race failure; retain both aggregate outcomes and isolate the named hard-kill/JSON scenarios before changing code.
 ---

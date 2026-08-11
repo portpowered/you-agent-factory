@@ -1,105 +1,74 @@
 {
-  "project": "Split Factory Sessions Fake-Service Runtime Tests into Focused Files",
-  "branchName": "thr-split-fake-service-runtime-tests",
-  "description": "Mechanically reorganize the two giant Factory Sessions execution test files into behavior-focused package-local files so maintainers and queued BTRC/WSE lanes can understand and extend coverage with less context, while preserving every test, assertion, runtime outcome, and coverage value exactly.",
+  "project": "Root-Cause and Deflake the CLI Process Functional Package",
+  "branchName": "thr-deflake-cli-process-package",
+  "description": "Eliminate chronic flakes in the CLI process functional package by identifying the exact shared process/filesystem race, replacing timing-sensitive observations with deterministic isolated lifecycle checkpoints, removing safe-to-remove retry band-aids, and proving sustained stress and race stability without materially regressing wall time or changing CLI contracts.",
   "context": {
-    "customerAsk": "Land a move-only split of fake_service_runtime_test.go and fake_service_test.go before queued WSE lanes begin changing the package. Keep the tests in the same package, group them by observed behavior, centralize shared test helpers without duplication, preserve the identical test inventory and coverage, and keep every resulting file at or below approximately 1,200 lines.",
-    "problem": "The package's two largest test files contain more than 6,500 lines spanning unrelated execution behaviors. They consume maintainer and agent context, slow comprehension, increase bad-edit risk, and will create avoidable churn in the in-flight BTRC/WSE program.",
-    "solution": "Capture an authoritative test-list and coverage baseline, then move whole tests and unchanged helpers into focused construction/start/lifecycle/read, replay/dispatch, runtime start/result/persistence, and runtime control/checkpoint/event/recording files within the existing execution package. Rebase and redo the moves over authoritative main if a concurrent WSE change lands, without changing product code or test behavior."
+    "customerAsk": "Stress-reproduce tests/functional/transport/cli/process, explain the exact race behind the cited hard-kill and JSON failures, structurally fix process lifecycle and staging observation with deterministic condition-based synchronization and per-test isolation, remove masking retries where safe, and demonstrate repeated, race-clean, performance-neutral CI stability.",
+    "problem": "The package is breaking main and unrelated PRs despite eight prior stabilization commits. Real CLI subprocesses, hard kills, filesystem staging observations, and time-bounded waits can expose partial state, kill-signal races, shared mutable roots, or incomplete cleanup. Historical CI failed two different behaviors, showing that symptom-specific retries have not made the shared mechanism reliable.",
+    "solution": "Capture stress and race evidence plus an exact causal timeline, then give each scenario isolated mutable resources and synchronize readiness, hard kill, process exit, and successor observation on complete observable conditions. Reap all subprocess resources deterministically, remove obsolete observation retries, retain existing CLI assertions, and verify the package and moved historical JSON regression repeatedly with race and wall-time evidence."
   },
   "acceptanceCriteria": [
-    "Existing tests are grouped into focused behavior files, shared test helpers have one package-local owner, and no resulting hand-maintained Go file in the package exceeds 1,200 lines.",
-    "Before-and-after output from go test -list '.*' ./pkg/services/factory_sessions/internal/execution/... contains no added, removed, or renamed test or example entry, with the comparison included as PR evidence.",
-    "go test ./pkg/services/factory_sessions/internal/execution/... passes with no test, subtest, assertion, fixture outcome, or observable runtime behavior changed.",
-    "Package coverage is captured with identical commands and options before and after, the reported value is unchanged, and both results are included as PR evidence.",
-    "The diff is dominated by mechanical moves and contains no production-code refactor, public-contract change, generated-file edit, assertion change, test addition/removal, or unrelated cleanup.",
-    "Typecheck and tests pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
-    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts are resolved against current main, and the PR is actually merged."
+    "The PR description records pre-change stress evidence and an exact causal timeline naming the competing actors, shared state, losing interleaving, and why the fix makes that interleaving impossible rather than merely less likely.",
+    "Affected CLI process tests use complete observable lifecycle or filesystem conditions, deterministic hard-kill checkpoints, and isolated per-test mutable resources without adding sleeps, observation retries, or timeout padding as readiness mechanisms.",
+    "Existing CLI success, failure, cancellation, JSON, exit-code, and staging-contention outcomes remain fully asserted, with subprocesses, readers, handles, listeners, and staging resources deterministically cleaned up.",
+    "The full process package passes go test ./tests/functional/transport/cli/process -count=20, 20 separately logged consecutive -count=1 runs, and go test -race ./tests/functional/transport/cli/process -count=20; TestCLIJSONFailureRemainsValidJSON also passes repeatedly in its merged-main package location.",
+    "The post-change warm-cache median of five full-package -count=1 runs is no more than 10% or two seconds, whichever allowance is larger, slower than the recorded pre-change median.",
+    "Typecheck passes; tests pass; no NEW lint violations relative to current main, and the gates green on main (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green.",
+    "The implementation/review loop continues until required CI is terminal and passing, all blocking PR conversation feedback is explicitly addressed, merge conflicts and shared-file ownership are resolved against current main, and the PR is actually merged."
   ],
   "userStories": [
     {
-      "id": "thr-split-fake-service-runtime-tests-001",
-      "title": "Freeze the behavioral baseline",
-      "description": "As a maintainer, I want an authoritative pre-move test inventory and coverage baseline so that every later mechanical slice can prove it preserved Factory Sessions execution behavior.",
+      "id": "thr-deflake-cli-process-package-001",
+      "title": "Establish the causal stress baseline",
+      "description": "As a maintainer, I want a repeatable failure trace and explicit race timeline so that the implementation fixes the shared cause instead of applying another test-specific band-aid.",
       "acceptanceCriteria": [
-        "Capture the full output of go test -list '.*' ./pkg/services/factory_sessions/internal/execution/... from the unmodified baseline in a review artifact outside production sources.",
-        "Capture package coverage from the unmodified baseline using a recorded, repeatable command whose command and options will also be used after the split.",
-        "Record a behavior-based placement map for all tests in the two source files so every test has exactly one destination and shared fixtures have exactly one owner.",
-        "The baseline package suite passes and provides a trustworthy behavioral comparison point.",
+        "Run and retain results for go test ./tests/functional/transport/cli/process -count=20 and go test -race ./tests/functional/transport/cli/process -count=20, plus targeted repetitions needed to capture failures, recording command, OS, result, failing test, and relevant process/filesystem observations without committing generated one-off logs.",
+        "Record a warm-cache pre-change wall-time baseline as the median of five full-package -count=1 runs on the same machine used for the post-change comparison.",
+        "For each reproduced failure, or the cited CI failures when local reproduction does not occur, identify the exact producer, observer, mutable resource, and losing event order; a generic timing or platform label is insufficient.",
+        "Tie the proposed synchronization point to an observable completed state or explicit process checkpoint and explain why existing observation retries or timing windows do not establish it.",
+        "Do not change production behavior or an out-of-scope functional package during baseline diagnosis.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Captured the passing baseline suite, complete go test -list output, deterministic go test -covermode=atomic coverage output, and one-to-one behavior placement/helper ownership map in docs/internal/development/plans/factory-sessions-execution-test-split-baseline.md at source commit 947152348b235f3dd0ede47f233947fcadddcc6a."
+      "notes": "Completed 2026-08-10 on Windows/amd64 with go1.25.0 before any task source change. Warm-cache pre-change timings for five separate `go test ./tests/functional/transport/cli/process -count=1 -timeout 10m` invocations were 44.076s, 109.285s, 67.205s, 44.840s, and 45.211s; median 45.211s. `go test ./tests/functional/transport/cli/process -count=20 -timeout 20m` passed 20/20 in 686.803s. The first `go test -race ./tests/functional/transport/cli/process -count=20 -timeout 30m` reproduced the intermittent package-level failure after 1,447.832s; its console tail was truncated before a stable individual test name was available. A second `-failfast` race run passed 20/20 in 1,215.955s, and the focused hard-kill regression passed 20/20 under race in 200.943s. The merged-main `TestCLIJSONFailureRemainsValidJSON` repetition passed 20/20 in 140.706s. Historical CI evidence identifies the JSON failure exactly: the rejecting worker produced the terminal stdout `InvocationResponse` with `INVOCATION_RUNTIME_FAILURE`, then live-session teardown observed an already-removed/unknown workstation dispatch and wrote a second stderr `RUN_INVOCATION_FAILED` diagnostic (`terminate live factory session: Workers workstation dispatch is unknown`) instead of the response code/message. The hard-kill producer/observer timeline is: the predecessor `you` child creates the packaged-factory `.<factory>.staging-owner` directory, publishes `.owner.json`, and normally removes that lease on release; the parent observer first walked/statted the isolated staging root and only then suspended the child, so the child could run its normal release path in the observe-to-suspend gap (or expose a transient Windows sharing/partial-metadata state), leaving the parent to kill a process without the owned lease and letting the successor observe the wrong startup state. The deterministic synchronization point is complete published owner metadata while the child is suspended before inspection; existing retries and timing windows cannot prove the lease remains held. No production or out-of-scope source was changed in this diagnosis story. `make typecheck` passed after restoring the lockfile-pinned UI dependencies with `bun install --frozen-lockfile`."
     },
     {
-      "id": "thr-split-fake-service-runtime-tests-002",
-      "title": "Preserve fixture-service execution and inspection behavior in focused groups",
-      "description": "As a Factory Sessions maintainer, I want fixture-backed fake-service construction, start, lifecycle, read, listing, event, and projection tests grouped by behavior so that I can understand those outcomes without navigating unrelated replay and runtime coverage.",
+      "id": "thr-deflake-cli-process-package-002",
+      "title": "Make CLI process lifecycle checkpoints deterministic and isolated",
+      "description": "As a contributor, I want process-boundary scenarios to observe test-owned readiness, kill, exit, and staging states deterministically so that OS scheduling and load cannot change their asserted CLI outcomes.",
       "acceptanceCriteria": [
-        "Existing fixture-service construction and synchronous/asynchronous start tests retain their names, bodies, assertions, fixture inputs, and observed outcomes in a focused construction/start test file.",
-        "Existing lifecycle-control, read, listing, event-cursor, result, artifact, and projection-validation tests retain their names, bodies, assertions, and observed outcomes in clearly named lifecycle and inspection-oriented files.",
-        "Helpers used only by one group move with that group; helpers shared across groups have one package-local definition and are not duplicated.",
-        "Comparison with the story 001 baseline shows no added, removed, or renamed test entry after this slice.",
-        "No touched test file exceeds 1,200 lines.",
+        "Each affected real-CLI scenario uses its own mutable home, staging, working, runtime-log, port/listener, and artifact scope as applicable, so concurrent or repeated executions cannot observe another test's state.",
+        "The hard-kill predecessor is stopped only after complete staging ownership is observable, cannot run its normal release path between that checkpoint and the kill, and is fully reaped before the successor assertion starts.",
+        "The successor deterministically reports the existing full pre-runtime contention diagnostic, does not reach runtime, preserves the backend scope and retained staging resource, and does not invent ownership files.",
+        "Cancellation, interrupt, stdin, stdout/stderr, exit-code, help/version, unknown-command, and watch-abort scenarios wait on relevant observable readiness or terminal state and clean up only their own resources.",
+        "Remove observation-retry band-aids made unnecessary by the causal fix; add no sleep, failed-observation retry, or larger timeout as readiness, while retaining deadlines only as bounded failure guards.",
+        "Windows and non-Windows executions close or reap OS handles, scanners, goroutines, and child processes deterministically.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 2,
-      "passes": true,
-      "notes": "Moved the fixture-service construction/start and lifecycle/inspection tests from the two consolidated files into fake_service_construction_start_test.go and fake_service_lifecycle_inspection_test.go, with shared fixture/event helpers owned by execution_test_helpers_test.go. The full go test -list '.*' comparison remains 267 baseline entries versus 267 current entries with no differences, and exact baseline coverage remains 79.6% (execution), 80.0% (fixtures), 83.1% (recordingreplay), and 89.8% (runtimepersist). New focused files are 100, 557, and 748 lines; the legacy source files retain their staged-split suppressions for stories 003-005."
+      "passes": false,
+      "notes": ""
     },
     {
-      "id": "thr-split-fake-service-runtime-tests-003",
-      "title": "Preserve replay and dispatch behavior in focused groups",
-      "description": "As a Factory Sessions maintainer, I want replay, canonical event, dispatch projection, interruption, and pause/resume tests grouped by behavior so that historical and dispatch guarantees can be reviewed independently from fixture startup coverage.",
+      "id": "thr-deflake-cli-process-package-003",
+      "title": "Prove sustained stability, contract preservation, and throughput",
+      "description": "As a maintainer, I want repeatable stress, race, historical-regression, and wall-time evidence so that the package stops blocking unrelated changes without weakening assertions or becoming slower.",
       "acceptanceCriteria": [
-        "Existing session replay, dispatch replay, canonical event-envelope, interrupted-dispatch, late-completion suppression, and pause/resume replay tests retain their names, bodies, assertions, event order, and observed outcomes in focused replay and dispatch test files.",
-        "fake_service_test.go is retired only after every original test and required helper has exactly one behavior-appropriate destination.",
-        "Comparison with the story 001 baseline shows no added, removed, or renamed test entry after the complete fake-service split.",
-        "The focused package suite continues to prove the same live-versus-replayed session, dispatch, result, artifact, lifecycle, and event projections.",
-        "No resulting test file exceeds 1,200 lines.",
+        "go test ./tests/functional/transport/cli/process -count=20 passes and a logged loop of 20 separate go test ./tests/functional/transport/cli/process -count=1 invocations records 20 consecutive successes.",
+        "go test -race ./tests/functional/transport/cli/process -count=20 passes without data races, leaked-process failures, or intermittent observation errors.",
+        "TestCLISuccessorAfterHardKillReportsPreRuntimeStagingContention repeatedly proves the full contention diagnostic and retained-resource behavior rather than only a non-zero exit.",
+        "TestCLIJSONFailureRemainsValidJSON passes repeatedly in its current merged-main package, preserving machine-parseable failure output without expanding this lane's semantic ownership.",
+        "The post-change median of five warm-cache full-package -count=1 runs meets the project threshold and is reported beside the pre-change median.",
+        "Focused verification and required CI leave no orphaned CLI process, locked staging resource, listener collision, or test-owned resource leak.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 3,
-      "passes": true,
-      "notes": "Moved all 24 tests from fake_service_test.go into fake_service_replay_test.go (15 replay/projection tests) and fake_service_dispatch_test.go (9 interruption/dispatch-control tests), preserving declarations, bodies, assertions, event order, and outcomes; fake_service_test.go is retired. Shared helpers remain owned by execution_test_helpers_test.go and no helper was duplicated. The story 001 go test -list '.*' comparison is 269 baseline entries versus 269 current entries with zero differences, and go test -covermode=atomic remains 79.6% (execution), 80.0% (fixtures), 83.1% (recordingreplay), and 89.8% (runtimepersist). New focused files are 798 and 586 lines; fake_service_runtime_test.go remains the staged owner for stories 004-005."
-    },
-    {
-      "id": "thr-split-fake-service-runtime-tests-004",
-      "title": "Preserve runtime start, result, and persistence behavior in focused groups",
-      "description": "As a Factory Sessions maintainer, I want JavaScript runtime startup, result shaping, persistence policy, normalization, and validation tests grouped by behavior so that execution setup and result guarantees are understandable without loading control and checkpoint scenarios.",
-      "acceptanceCriteria": [
-        "Existing synchronous/asynchronous start, timeout, cancellation propagation, result projection, artifact shaping, persistence success/failure, source resolution, policy validation, normalization, and idempotency tests retain their names, bodies, assertions, and observed outcomes in focused files.",
-        "Existing fixture helpers for runtime construction, workflows, clocks, persistence, and common start requests are moved without logic changes and have a single definition when shared.",
-        "Comparison with the story 001 baseline shows no added, removed, or renamed test entry after this slice.",
-        "The focused package suite continues to prove identical start, result, persistence, validation, and failure-propagation behavior.",
-        "No touched test file exceeds 1,200 lines.",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 4,
-      "passes": true,
-      "notes": "Moved the JavaScript runtime start, result, persistence, normalization, source-resolution, policy-validation, and idempotency tests from fake_service_runtime_test.go into focused runtime owners, preserving declarations, bodies, assertions, fixtures, and outcomes. Shared runtime construction, workflow, clock, recording, and adapter helpers have one package-local owner. The review follow-up mechanically consolidated adjacent same-package owners so the deletion-only execution file-count baseline remains 28; all resulting files pass the stricter 1,000-line maintainability gate. The story 001 go test -list '.*' comparison is 269 baseline entries versus 269 current entries with identical sorted SHA-256 09876A7E761EAB43E48DD3729153FCCAE52802F37CC95B424B706AAFA3869B51, and go test -covermode=atomic remains 79.6% (execution), 80.0% (fixtures), 83.1% (recordingreplay), and 89.8% (runtimepersist). Focused suite, full make test, vet, pkg-maint, backend-size, pkg-file-count, pkg-structure, and typecheck pass."
-    },
-    {
-      "id": "thr-split-fake-service-runtime-tests-005",
-      "title": "Preserve runtime control, checkpoint, event, and recording behavior in focused groups",
-      "description": "As a Factory Sessions maintainer, I want runtime lifecycle control, interruption, checkpoint, resume, event history, and recording tests grouped by behavior so that high-risk runtime guarantees remain complete and easier to review.",
-      "acceptanceCriteria": [
-        "Existing lifecycle status/control, interruption timing, checkpoint projection, partial result, pause persistence, resume, phase-event, observer, append-only history, recording, and workflow-policy tests retain their names, bodies, assertions, ordering, and observed outcomes in focused files.",
-        "fake_service_runtime_test.go is retired only after every original test and required helper has exactly one behavior-appropriate destination.",
-        "The final go test -list '.*' comparison with story 001 is empty for test and example entries, and final package coverage exactly matches the recorded baseline value.",
-        "go test ./pkg/services/factory_sessions/internal/execution/... passes and no resulting hand-maintained Go file in the package exceeds 1,200 lines.",
-        "The final diff contains no assertion changes, test additions/removals, production refactor, generated-file edit, or unrelated cleanup.",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 5,
-      "passes": true,
-      "notes": "Moved the remaining runtime control, interruption, checkpoint, resume, phase-event, observer, append-only-history, recording, and workflow-policy tests from fake_service_runtime_test.go into focused runtime control, checkpoint, validation/event, persistence, and dispatch owners; moved the fake-service interruption test into fake_service_dispatch_test.go; and retired fake_service_runtime_test.go. All original declarations and required helpers have exactly one behavior-appropriate destination, with the two review-identified whitespace differences restored byte-for-byte. The 269-entry story 001 inventory is unchanged as a sorted multiset, with matching SHA-256 09876A7E761EAB43E48DD3729153FCCAE52802F37CC95B424B706AAFA3869B51. Final go test -covermode=atomic coverage matches the baseline at 79.6% (execution), 80.0% (fixtures), 83.1% (recordingreplay), and 89.8% (runtimepersist). Focused suite, full make test, vet, backend-size, pkg-maint, pkg-file-count, pkg-structure, and typecheck pass; the execution package remains at the exact deletion-only baseline of 28 files and all resulting files are below 1,000 lines."
+      "passes": false,
+      "notes": ""
     }
   ]
 }
