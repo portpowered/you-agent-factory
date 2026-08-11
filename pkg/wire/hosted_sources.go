@@ -54,7 +54,7 @@ func provideFactoryWebhooksService(
 ) webhooks.Service {
 	httpClient := edges.FactoryWebhookHTTPClient
 	if httpClient == nil {
-		httpClient = &http.Client{}
+		httpClient = newFactoryWebhookHTTPClient()
 	}
 	secretResolver := edges.FactoryWebhookSecretResolver
 	if secretResolver == nil {
@@ -82,4 +82,12 @@ func provideFactoryWebhooksService(
 		deadLetterAppender,
 		logger,
 	)
+}
+
+func newFactoryWebhookHTTPClient() *http.Client {
+	return &http.Client{
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
 }

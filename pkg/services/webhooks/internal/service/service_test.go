@@ -607,6 +607,61 @@ func TestServiceRetriesWithBoundedRetryAfterAndFreshSignedTimestamp(t *testing.T
 	}
 }
 
+func TestServiceUsesRetryAfterHTTPDateFromResponseReceipt(t *testing.T) {
+	root := newRecordingRootStub()
+	start := time.Date(2026, time.August, 10, 13, 30, 0, 0, time.UTC)
+	retryAt := start.Add(5 * time.Second)
+	clock := clockwork.NewFakeClockAt(start)
+	attempts := make(chan receivedRequest, 2)
+	var calls int
+	client := roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		body, err := io.ReadAll(request.Body)
+		if err != nil {
+			return nil, err
+		}
+		attempts <- receivedRequest{body: body, headers: request.Header.Clone()}
+		calls++
+		if calls == 1 {
+			// Model a slow receiver: the injected clock advances before the
+			// response with an absolute Retry-After deadline is returned.
+			clock.Advance(4 * time.Second)
+			return &http.Response{
+				StatusCode: http.StatusServiceUnavailable,
+				Header:     http.Header{"Retry-After": []string{retryAt.Format(http.TimeFormat)}},
+				Body:       io.NopCloser(strings.NewReader("retry later")),
+			}, nil
+		}
+		return &http.Response{StatusCode: http.StatusNoContent, Body: io.NopCloser(strings.NewReader("ok"))}, nil
+	})
+	service := New(client, testSecretResolver, clock, logging.NoopLogger{})
+	subscription, err := service.Start(context.Background(), webhooks.StartRequest{
+		Definitions: []factorydefinitions.FactoryWebhookConfig{retryWebhookDefinition(
+			"retry-after-date",
+			"https://monitor.example/events",
+			webhookDeliveryPolicy(2, time.Second, 30*time.Second, 2),
+		)},
+		Events:        root,
+		RuntimeSource: testLoadedFactorySource{},
+	})
+	if err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	defer subscription(context.Background())
+	waitForSubscriptions(t, root, 1)
+	root.Publish(recordings.SubscriptionOutcome{Kind: recordings.SubscriptionEvent, Event: testWorkEvent(t)})
+	first := receiveRequest(t, attempts)
+	clock.BlockUntil(1)
+	clock.Advance(time.Second)
+	second := receiveRequest(t, attempts)
+
+	if first.headers.Get(webhooks.TimestampHeader) != strconv.FormatInt(start.Unix(), 10) {
+		t.Fatalf("initial timestamp = %q, want %d", first.headers.Get(webhooks.TimestampHeader), start.Unix())
+	}
+	if second.headers.Get(webhooks.TimestampHeader) != strconv.FormatInt(retryAt.Unix(), 10) {
+		t.Fatalf("retry timestamp = %q, want response deadline %d", second.headers.Get(webhooks.TimestampHeader), retryAt.Unix())
+	}
+}
+
 func TestServiceExhaustionAppendsOneRedactedDeadLetter(t *testing.T) {
 	root := newRecordingRootStub()
 	secret := "must-not-be-written"

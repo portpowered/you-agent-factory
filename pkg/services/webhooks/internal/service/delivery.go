@@ -147,7 +147,8 @@ func (service *Service) sendAttempt(
 		return deliveryAttempt{retryable: true, reason: "empty_http_response"}
 	}
 	statusCode := response.StatusCode
-	retryAfter, hasRetryAfter := parseRetryAfter(response, attemptAt)
+	responseAt := service.clock.Now()
+	retryAfter, hasRetryAfter := parseRetryAfter(response, responseAt)
 	consumeResponseBody(response)
 	if statusCode >= http.StatusOK && statusCode < http.StatusMultipleChoices {
 		return deliveryAttempt{success: true, statusCode: statusCode}
