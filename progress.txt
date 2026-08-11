@@ -249,6 +249,21 @@
   - Static manifest maxima and request-time negotiated capabilities are separate truth surfaces; execution must re-negotiate before `Invoke` even when preflight accepted the request.
   - Preserve the provider name and missing capability in the bounded mismatch error, but never forward a provider negotiation error or returned capability payload as a customer diagnostic.
 ---
+## [2026-08-11 06:54:46 -07:00] - js-skip-permissions-parity-003 hosted CI retry and final review audit
+- What was implemented
+  - No further product changes; completed the hosted verification follow-up for the negotiated-capability fix and posted the re-review update on PR #1875.
+  - The first hosted functional attempt exposed an unrelated ACP event-order flake (`TestACPUpdatesPublishExistingFactorySessionResponseEventsInOrder`, completed work `0`, want `1`); reran only the failed jobs after confirming the changed provider-permission paths were green.
+- Files changed
+  - `progress.txt`
+- Verification
+  - Hosted Backend Functional Coverage rerun job `93800621949` — passed.
+  - Hosted Verification Policy rerun job `93802456096` — passed; all checks for workflow run `31496821703` are terminal-success.
+  - PR #1875 head is `c1459d0aeadc4604aa8544dcf897b7e032d05332`, mergeable and clean against `origin/main` `3521f0b0a2f313b22e2c79edcf90339a01b3bce7`.
+  - Thread-aware review audit has no inline review threads or review submissions requiring action; the latest top-level blocker is answered by the follow-up comment, and the hosted head/body audit confirms `prd.json` matches the PR body exactly.
+  - `prd.json` parses with all four stories `passes:true`; worktree is clean and `git diff --check` passes.
+- **Learnings for future iterations:**
+  - When a broad hosted functional lane fails in an unrelated timing-sensitive ACP test while focused changed-path evidence is green, rerun only failed jobs and preserve the task head; the terminal rerun is the authoritative handoff evidence.
+---
 - Run-level `--quiet` cannot be combined with structured `--json` or `--output`; verify output-mode combinations against the live CLI before documenting them.
 - For direct named packaged Factory invocations, bind inputs in authored workstation bodies with `${parameter}` interpolation; `.Inputs` payload can be empty even when the named CLI argument is present.
 - Multi-input packaged Factories must give required parameters non-ambiguous invocation bindings; the ACP reachability guard requires each required parameter to expose a text-carrying route, while authored validation rejects routing stdin to multiple parameters.
