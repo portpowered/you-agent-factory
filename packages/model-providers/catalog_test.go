@@ -3,6 +3,7 @@ package modelproviders_test
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"testing"
 
@@ -153,6 +154,156 @@ func TestCatalogPublishesCanonicalCapabilityFacts(t *testing.T) {
 			t.Fatalf("claude %s text input = %#v, want supported/inline", model.Id, modality)
 		}
 	}
+}
+
+func TestCatalogPublishesEvidencedNativeCapabilityFacts(t *testing.T) {
+	t.Parallel()
+
+	catalog, err := modelproviders.Catalog()
+	if err != nil {
+		t.Fatalf("Catalog() error = %v", err)
+	}
+
+	observedSupport := make(map[string]bool)
+	for _, provider := range catalog.Providers {
+		if provider.Harness == nil || provider.Harness.Kind != generated.NativeCli {
+			t.Fatalf("provider %q harness = %#v, want native_cli", provider.Id, provider.Harness)
+		}
+		if provider.ModelCatalogPosture == nil || *provider.ModelCatalogPosture != generated.ProviderModelCatalogPostureExact {
+			t.Fatalf("provider %q model catalog posture = %#v, want exact", provider.Id, provider.ModelCatalogPosture)
+		}
+
+		evidence := make(map[string]generated.ProviderCapabilityEvidence)
+		for _, record := range derefSlice(provider.Evidence) {
+			if _, exists := evidence[record.Id]; exists {
+				t.Fatalf("provider %q has duplicate evidence ID %q", provider.Id, record.Id)
+			}
+			evidence[record.Id] = record
+		}
+		if len(evidence) == 0 {
+			t.Fatalf("provider %q publishes no capability evidence", provider.Id)
+		}
+
+		knownFacts := map[string]bool{"model_catalog": true}
+		routes := derefSlice(provider.HarnessRoutes)
+		if len(routes) != 8 {
+			t.Fatalf("provider %q harness route count = %d, want all eight direction/modality facts", provider.Id, len(routes))
+		}
+		for _, route := range routes {
+			factRef := fmt.Sprintf("harness/%s/%s", route.Direction, route.Modality)
+			knownFacts[factRef] = true
+			assertCapabilityEvidence(t, provider.Id, factRef, string(route.Support), route.Condition, route.EvidenceRefs, evidence, observedSupport)
+		}
+
+		for _, model := range derefSlice(provider.Models) {
+			modalities := model.Modalities
+			if len(modalities) != 8 {
+				t.Fatalf("provider %q model %q modality count = %d, want all eight direction/modality facts", provider.Id, model.Id, len(modalities))
+			}
+			for _, modality := range modalities {
+				factRef := fmt.Sprintf("model/%s/%s/%s", model.Id, modality.Direction, modality.Modality)
+				knownFacts[factRef] = true
+				assertCapabilityEvidence(t, provider.Id, factRef, string(modality.Support), modality.Condition, modality.EvidenceRefs, evidence, observedSupport)
+			}
+		}
+
+		for _, tool := range derefSlice(provider.Tools) {
+			factRef := fmt.Sprintf("tool/%s", tool.Name)
+			knownFacts[factRef] = true
+			assertCapabilityEvidence(t, provider.Id, factRef, string(tool.Support), tool.Condition, tool.EvidenceRefs, evidence, observedSupport)
+			if tool.Availability == nil {
+				t.Fatalf("provider %q tool %q has no availability posture", provider.Id, tool.Name)
+			}
+			switch *tool.Availability {
+			case generated.ProviderToolAvailabilityBuiltIn:
+				if tool.DefaultEnabled == nil || !*tool.DefaultEnabled {
+					t.Fatalf("provider %q built-in tool %q defaultEnabled = %#v, want true", provider.Id, tool.Name, tool.DefaultEnabled)
+				}
+			case generated.ProviderToolAvailabilityOptional:
+				if tool.DefaultEnabled != nil {
+					t.Fatalf("provider %q optional tool %q defaultEnabled = %#v, want null", provider.Id, tool.Name, tool.DefaultEnabled)
+				}
+			}
+			for _, output := range derefSlice(tool.OutputModalities) {
+				outputFactRef := fmt.Sprintf("tool/%s/output/%s", tool.Name, output.Modality)
+				knownFacts[outputFactRef] = true
+				assertCapabilityEvidence(t, provider.Id, outputFactRef, string(output.Support), output.Condition, output.EvidenceRefs, evidence, observedSupport)
+			}
+		}
+
+		for _, record := range evidence {
+			if len(derefSlice(record.FactRefs)) == 0 {
+				t.Fatalf("provider %q evidence %q has no fact references", provider.Id, record.Id)
+			}
+			for _, factRef := range derefSlice(record.FactRefs) {
+				if !knownFacts[factRef] {
+					t.Fatalf("provider %q evidence %q references unknown fact %q", provider.Id, record.Id, factRef)
+				}
+			}
+		}
+	}
+
+	for _, support := range []string{"supported", "unsupported", "conditional", "unknown"} {
+		if !observedSupport[support] {
+			t.Fatalf("catalog did not publish a %q native capability fact", support)
+		}
+	}
+
+	byID := make(map[string]generated.ProviderManifest, len(catalog.Providers))
+	for _, provider := range catalog.Providers {
+		byID[provider.Id] = provider
+	}
+
+	agy := byID["antigravity"]
+	if route := findModality(derefSlice(agy.HarnessRoutes), "input", "image"); route == nil || route.Support != generated.ProviderModalitySupportConditional || route.Condition == nil {
+		t.Fatalf("AGY image harness route = %#v, want conditional route with a condition", route)
+	}
+	if route := findModality(derefSlice(agy.HarnessRoutes), "output", "image"); route == nil || route.Support != generated.ProviderModalitySupportUnknown || route.Transport != generated.None {
+		t.Fatalf("AGY image output route = %#v, want unknown/none", route)
+	}
+	if tool := findTool(derefSlice(agy.Tools), "image_generation"); tool == nil || len(derefSlice(tool.OutputModalities)) != 1 || derefSlice(tool.OutputModalities)[0].Support != generated.ProviderCapabilitySupportSupported || derefSlice(tool.OutputModalities)[0].Transport != generated.ToolMediated {
+		t.Fatalf("AGY image-generation tool output = %#v, want supported/tool_mediated", tool)
+	}
+	for _, model := range derefSlice(agy.Models) {
+		if modality := findModality(model.Modalities, "output", "image"); modality == nil || modality.Support != generated.ProviderModalitySupportUnsupported || modality.Transport != generated.None {
+			t.Fatalf("AGY %s direct image output = %#v, want explicitly unsupported/none", model.Id, modality)
+		}
+	}
+
+	codex := byID["codex"]
+	for _, model := range derefSlice(codex.Models) {
+		if modality := findModality(model.Modalities, "output", "image"); modality == nil || modality.Support != generated.ProviderModalitySupportUnsupported || modality.Transport != generated.None {
+			t.Fatalf("Codex %s direct image output = %#v, want explicitly unsupported/none", model.Id, modality)
+		}
+	}
+}
+
+func assertCapabilityEvidence(t *testing.T, providerID, factRef, support string, condition *string, refs *[]string, evidence map[string]generated.ProviderCapabilityEvidence, observedSupport map[string]bool) {
+	t.Helper()
+	observedSupport[support] = true
+	if support == "conditional" && (condition == nil || *condition == "") {
+		t.Fatalf("provider %q fact %q is conditional without a condition", providerID, factRef)
+	}
+	if support == "unknown" && len(derefSlice(refs)) != 0 {
+		t.Fatalf("provider %q fact %q is unknown but has evidence references %v", providerID, factRef, derefSlice(refs))
+	}
+	if support != "unknown" && len(derefSlice(refs)) == 0 {
+		t.Fatalf("provider %q fact %q has support %q but no evidence references", providerID, factRef, support)
+	}
+	for _, evidenceID := range derefSlice(refs) {
+		if _, ok := evidence[evidenceID]; !ok {
+			t.Fatalf("provider %q fact %q references missing evidence %q", providerID, factRef, evidenceID)
+		}
+	}
+}
+
+func findTool(values []generated.ProviderTool, name string) *generated.ProviderTool {
+	for index := range values {
+		if values[index].Name == name {
+			return &values[index]
+		}
+	}
+	return nil
 }
 
 func derefSlice[T any](value *[]T) []T {

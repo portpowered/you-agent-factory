@@ -402,8 +402,12 @@ again:
 
 `you work list` also supports `--state-name`, `--state-type`, `--sort-by`,
 `--max-results`, and `--session` for broader inspection. Human-mode list output
-is tabular (`WORK ID`, `NAME`, `STATE NAME`, `STATE TYPE`, `RELATIONS`); use
-`you --json work list` when scripts need the API-shaped `ListWorkResponse`.
+is tabular (`WORK ID`, `NAME`, `WORK TYPE`, `STATE NAME`, `STATE TYPE`,
+`STRUCTURED RESULT`, `RELATIONS`). The structured-result column contains one
+deterministic compact JSON value when a workstation validated one, including
+the literal `null`; it is blank when the Work has no structured result. Use
+`you --json work list` when scripts need the API-shaped `ListWorkResponse` with
+native `structuredResult` values.
 
 ## Watch Work state transitions
 
@@ -420,9 +424,13 @@ The command targets `~default` when `--session` is omitted. An explicit
 line is one `you.work.watch.v1` object for a canonical Work state transition.
 Required fields are `schemaVersion`, `sessionId`, `eventId`, `sequence`,
 `eventTime`, `workId`, `workTypeName`, `fromState`, `toState`, `source`, and
-`terminal`; `triggerWorkId` and `reason` are omitted when they are absent.
-Lines remain in strictly increasing canonical event sequence order, and other
-Factory Events do not become output lines. Diagnostics stay on stderr.
+`terminal`; `triggerWorkId`, `reason`, and `structuredResult` are omitted when
+they are absent. When a workstation result first enters canonical Work state,
+`structuredResult` appears on the first following transition line only. It is
+native JSON, including explicit `null`; failed or unstructured Work, unrelated
+transitions, and older recordings without the field omit it. Lines remain in
+strictly increasing canonical event sequence order, and other Factory Events do
+not become output lines. Diagnostics stay on stderr.
 
 Finite mode (the default) flushes the terminal transition and exits `0` after
 every Work in the observed cohort is terminal or failed. `--follow` emits
@@ -450,6 +458,34 @@ you --server http://localhost:7437 work watch --session session-beta |
 
 Press Ctrl-C to stop a follow stream. The command closes its active stream and
 does not write a partial JSON line.
+
+## Structured result handoffs
+
+Workstation `outputSchema` turns a successful worker response into a native
+JSON `structuredResult` on the resulting Work. The value is available to
+downstream workstation prompt templates without writing or passing an artifact
+file:
+
+```yaml
+workstations:
+  - name: classify
+    type: AGENT_RUN
+    outputSchema: '{"type":"object","properties":{"decision":{"type":"string"}},"required":["decision"],"additionalProperties":false}'
+    body: |
+      Return only JSON with a decision of "accept" or "reject".
+
+  - name: route
+    type: AGENT_RUN
+    body: |
+      Route this Work using the validated decision:
+      {{ (index .Inputs 0).StructuredResult.decision }}
+```
+
+After the first workstation completes, inspect the native value with
+`you --json work list` or observe it on the next `you work watch` transition.
+If the worker output does not satisfy `outputSchema`, the Work fails with the
+typed `structured_output_schema_violation` dispatch failure and no
+`structuredResult` is published.
 
 ## Tags And Prompt Templates
 

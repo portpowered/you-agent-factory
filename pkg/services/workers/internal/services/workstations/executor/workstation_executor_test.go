@@ -1052,7 +1052,7 @@ func interpolatedProviderDispatch() work.WorkDispatch {
 func TestWorkstationExecutor_ModelWorkstationUsesCanonicalWorkstationRuntimeFields(t *testing.T) {
 	projectRoot := t.TempDir()
 
-	mock := &dispatchCapturingExecutor{result: workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted, Output: "done"}}
+	mock := &dispatchCapturingExecutor{result: workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted, Output: `{"status":"done"}`}}
 	we := newTestWorkstationExecutor(canonicalWorkstationRuntimeConfig(projectRoot), mock)
 
 	start := time.Now()

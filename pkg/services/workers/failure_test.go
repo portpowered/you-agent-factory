@@ -104,3 +104,13 @@ func TestNormalizeProviderExecutionError_ClassifiesBareProviderSessionCancellati
 		t.Fatalf("normalized.Diagnostics = %#v, want canceled inspection classification", normalized.Diagnostics)
 	}
 }
+
+func TestFailureDecisionFromMetadata_ClassifiesStructuredSchemaViolationAsTerminal(t *testing.T) {
+	decision := FailureDecisionFromMetadata(&WorkFailureMetadata{
+		Family: WorkFailureFamilyTerminal,
+		Type:   WorkFailureTypeStructuredOutputSchemaViolation,
+	})
+	if decision.Retryable || !decision.Terminal || decision.TriggersThrottlePause {
+		t.Fatalf("FailureDecisionFromMetadata() = %#v, want terminal non-retryable non-throttle", decision)
+	}
+}

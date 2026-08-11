@@ -133,6 +133,10 @@ type Event struct {
 	// DispatchID correlates one stream record with a workstation dispatch when set.
 	DispatchID string
 
+	// Provider carries the provider identity selected for the dispatch even when
+	// the provider exposes no native session reference.
+	Provider string
+
 	// ProviderSessionRef correlates one stream record with a Provider Session
 	// identity without promoting the record into canonical factory history.
 	ProviderSessionRef *workerexecution.ProviderSessionMetadata

@@ -96,6 +96,13 @@
       ]
     },
     {
+      "test": "tests/functional/workers/inference/opening_record_test.go::TestWSRFT003ProviderNeutralLifecycleWorksWithoutProviderSession",
+      "stableIds": [
+        "rest/streamWorkerSessionEventsByWorkerSessionId",
+        "sse/streamWorkerSessionEventsByWorkerSessionId"
+      ]
+    },
+    {
       "test": "tests/release/release_smoke_test.go::TestGoInstallSmoke_InstallsCmdFactoryBinaryIntoCleanGOBIN",
       "stableIds": [
         "cli/you.docs"

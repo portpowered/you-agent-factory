@@ -23,9 +23,10 @@ import (
 )
 
 const (
-	routingReachabilityRequestTimeout = 15 * time.Second
-	routingReachabilityModelName      = "OMNIVOICE_Q4_K_M"
-	routingReachabilityWorkstation    = "process"
+	routingReachabilityRequestTimeout  = 15 * time.Second
+	routingReachabilityModelName       = "OMNIVOICE_Q4_K_M"
+	routingReachabilityWorkstation     = "process"
+	routingReachabilityWorkerSessionID = "%20"
 )
 
 const routingLiveJavaScriptWorkflowSource = `phase("plan");
@@ -186,13 +187,14 @@ func (ctx *routingReachabilityContext) safeRequest(operation contractinventory.O
 
 func (ctx *routingReachabilityContext) resolveOperationPath(operation contractinventory.Operation) (string, error) {
 	replacements := map[string]string{
-		"{session_id}":       ctx.sessionIDFor(operation),
-		"{model_name}":       routingReachabilityModelName,
-		"{workstation_name}": routingReachabilityWorkstation,
-		"{request_id}":       "routing-reachability",
-		"{id}":               ctx.workID,
-		"{dispatch_id}":      ctx.durable.dispatchID,
-		"{artifact_id}":      ctx.durable.artifactID,
+		"{session_id}":        ctx.sessionIDFor(operation),
+		"{worker_session_id}": routingReachabilityWorkerSessionID,
+		"{model_name}":        routingReachabilityModelName,
+		"{workstation_name}":  routingReachabilityWorkstation,
+		"{request_id}":        "routing-reachability",
+		"{id}":                ctx.workID,
+		"{dispatch_id}":       ctx.durable.dispatchID,
+		"{artifact_id}":       ctx.durable.artifactID,
 	}
 	path := operation.Path
 	for placeholder, value := range replacements {

@@ -43,6 +43,164 @@
       ],
       "type": "object"
     },
+    "ProviderACPResourceDelivery": {
+      "description": "Evidence state for delivering a resource through the ACP harness.",
+      "enum": [
+        "implemented",
+        "unsupported",
+        "conditional",
+        "unknown"
+      ],
+      "type": "string"
+    },
+    "ProviderACPSupport": {
+      "additionalProperties": false,
+      "description": "Typed ACP support metadata for a provider harness.",
+      "oneOf": [
+        {
+          "properties": {
+            "condition": {
+              "maxLength": 512,
+              "minLength": 1,
+              "type": "string"
+            },
+            "support": {
+              "enum": [
+                "conditional"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "condition"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "support": {
+              "enum": [
+                "supported",
+                "unsupported",
+                "unknown"
+              ],
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      ],
+      "properties": {
+        "condition": {
+          "description": "Bounded operator-visible condition required when ACP support is conditional.",
+          "maxLength": 512,
+          "minLength": 1,
+          "type": "string"
+        },
+        "evidenceRefs": {
+          "description": "Stable IDs of evidence records qualifying ACP support.",
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9._-]*$",
+            "type": "string"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "protocolVersion": {
+          "description": "ACP protocol version known to the manifest author.",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]*$",
+          "type": "string"
+        },
+        "resourceDelivery": {
+          "$ref": "#/$defs/ProviderACPResourceDelivery"
+        },
+        "support": {
+          "$ref": "#/$defs/ProviderCapabilitySupport"
+        }
+      },
+      "required": [
+        "support"
+      ],
+      "type": "object"
+    },
+    "ProviderCapabilityEvidence": {
+      "additionalProperties": false,
+      "description": "Bounded evidence record qualifying one or more published capability facts.",
+      "properties": {
+        "factRefs": {
+          "description": "Optional bounded references to facts qualified by this record.",
+          "items": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 64,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "harnessVersion": {
+          "description": "Optional harness version used when the evidence was checked.",
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "id": {
+          "description": "Stable manifest-local evidence identifier.",
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9._-]*$",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/ProviderCapabilityEvidenceKind"
+        },
+        "url": {
+          "description": "Optional public HTTPS source for the evidence.",
+          "format": "uri",
+          "maxLength": 2048,
+          "minLength": 1,
+          "pattern": "^https://(?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\\.)+[A-Za-z]{2,}(?::[0-9]+)?(?:[/?#].*)?$",
+          "type": "string"
+        },
+        "verifiedOn": {
+          "description": "UTC calendar date on which the evidence was checked.",
+          "format": "date",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "verifiedOn"
+      ],
+      "type": "object"
+    },
+    "ProviderCapabilityEvidenceKind": {
+      "description": "Source class for evidence supporting a published capability fact.",
+      "enum": [
+        "primary_documentation",
+        "protocol_probe",
+        "conformance_fixture",
+        "maintainer_assertion"
+      ],
+      "type": "string"
+    },
+    "ProviderCapabilitySupport": {
+      "description": "Evidence state shared by harness, modality, and tool capability facts.",
+      "enum": [
+        "supported",
+        "unsupported",
+        "conditional",
+        "unknown"
+      ],
+      "type": "string"
+    },
     "ProviderDeprecation": {
       "additionalProperties": false,
       "description": "Coherent metadata for a deprecated provider entry. Presence of this object means the provider is deprecated. replacementProviderId, when present, must name a different canonical provider in the same catalog; it cannot identify the deprecated provider itself.",
@@ -256,6 +414,30 @@
       ],
       "type": "object"
     },
+    "ProviderHarness": {
+      "additionalProperties": false,
+      "description": "Provider harness metadata, kept separate from model capability facts.",
+      "properties": {
+        "acpSupport": {
+          "$ref": "#/$defs/ProviderACPSupport"
+        },
+        "kind": {
+          "$ref": "#/$defs/ProviderHarnessKind"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "type": "object"
+    },
+    "ProviderHarnessKind": {
+      "description": "Execution harness family represented by a provider manifest.",
+      "enum": [
+        "native_cli",
+        "acp"
+      ],
+      "type": "string"
+    },
     "ProviderImplementationAvailability": {
       "description": "How an implementation is supplied. Availability is publication metadata, not a live readiness or installation result.",
       "enum": [
@@ -373,6 +555,26 @@
           "type": "array",
           "uniqueItems": true
         },
+        "evidence": {
+          "description": "Bounded evidence records used to qualify capability facts in this manifest.",
+          "items": {
+            "$ref": "#/$defs/ProviderCapabilityEvidence"
+          },
+          "maxItems": 64,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "harness": {
+          "$ref": "#/$defs/ProviderHarness"
+        },
+        "harnessRoutes": {
+          "description": "Directional routes implemented by the provider harness, independent of any model catalog claim.",
+          "items": {
+            "$ref": "#/$defs/ProviderModality"
+          },
+          "maxItems": 32,
+          "type": "array"
+        },
         "id": {
           "description": "Stable canonical lowercase provider identifier.",
           "maxLength": 128,
@@ -395,6 +597,9 @@
         },
         "maximumResponseFidelityCapabilities": {
           "$ref": "#/$defs/ProviderResponseFidelityCapabilities"
+        },
+        "modelCatalogPosture": {
+          "$ref": "#/$defs/ProviderModelCatalogPosture"
         },
         "models": {
           "description": "Named provider models and their complete capability facts in canonical model-ID order.",
@@ -428,12 +633,104 @@
       ],
       "type": "object"
     },
+    "ProviderMediaConstraints": {
+      "additionalProperties": false,
+      "description": "Optional bounded media constraints for one modality route.",
+      "properties": {
+        "maxBytes": {
+          "description": "Maximum payload size in bytes when documented.",
+          "format": "int64",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "maxDurationSeconds": {
+          "description": "Maximum media duration in seconds when documented.",
+          "minimum": 0,
+          "type": "number"
+        },
+        "maxItems": {
+          "description": "Maximum number of media items accepted or emitted in one route.",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "mediaTypes": {
+          "description": "Accepted or emitted media types, such as image/png or audio/wav.",
+          "items": {
+            "maxLength": 128,
+            "minLength": 3,
+            "pattern": "^[A-Za-z0-9!#$\u0026^_.+-]+/[A-Za-z0-9!#$\u0026^_.+-]+$",
+            "type": "string"
+          },
+          "maxItems": 32,
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "type": "object"
+    },
     "ProviderModality": {
       "additionalProperties": false,
-      "description": "One explicit supported or unsupported directional modality fact.",
+      "description": "One explicit directional modality fact for a harness route or model.",
+      "oneOf": [
+        {
+          "properties": {
+            "condition": {
+              "maxLength": 512,
+              "minLength": 1,
+              "type": "string"
+            },
+            "support": {
+              "enum": [
+                "conditional"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "condition"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "support": {
+              "enum": [
+                "supported",
+                "unsupported",
+                "unknown"
+              ],
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      ],
       "properties": {
+        "condition": {
+          "description": "Bounded operator-visible condition required when support is conditional.",
+          "maxLength": 512,
+          "minLength": 1,
+          "type": "string"
+        },
         "direction": {
           "$ref": "#/$defs/ProviderModalityDirection"
+        },
+        "evidenceRefs": {
+          "description": "Stable IDs of evidence records qualifying this fact.",
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9._-]*$",
+            "type": "string"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "mediaConstraints": {
+          "$ref": "#/$defs/ProviderMediaConstraints"
         },
         "modality": {
           "$ref": "#/$defs/ProviderModalityKind"
@@ -472,10 +769,12 @@
       "type": "string"
     },
     "ProviderModalitySupport": {
-      "description": "Whether the provider model supports the modality in this direction.",
+      "description": "Evidence state for a directional harness or model modality fact.",
       "enum": [
         "supported",
-        "unsupported"
+        "unsupported",
+        "conditional",
+        "unknown"
       ],
       "type": "string"
     },
@@ -484,6 +783,8 @@
       "enum": [
         "inline",
         "file_path",
+        "acp_resource",
+        "tool_mediated",
         "none"
       ],
       "type": "string"
@@ -522,6 +823,16 @@
         "modalities"
       ],
       "type": "object"
+    },
+    "ProviderModelCatalogPosture": {
+      "description": "How a provider's model identifiers are known to the published catalog.",
+      "enum": [
+        "exact",
+        "runtime_discovered",
+        "operator_selected",
+        "unknown"
+      ],
+      "type": "string"
     },
     "ProviderResponseFidelityCapabilities": {
       "additionalProperties": false,
@@ -599,12 +910,75 @@
     "ProviderTool": {
       "additionalProperties": false,
       "description": "One named provider tool fact used for execution planning.",
+      "oneOf": [
+        {
+          "properties": {
+            "condition": {
+              "maxLength": 512,
+              "minLength": 1,
+              "type": "string"
+            },
+            "support": {
+              "enum": [
+                "conditional"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "condition"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "support": {
+              "enum": [
+                "supported",
+                "unsupported",
+                "unknown"
+              ],
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      ],
       "properties": {
+        "availability": {
+          "$ref": "#/$defs/ProviderToolAvailability"
+        },
+        "condition": {
+          "description": "Bounded operator-visible condition required when tool support is conditional.",
+          "maxLength": 512,
+          "minLength": 1,
+          "type": "string"
+        },
+        "defaultEnabled": {
+          "description": "Whether the tool is enabled by default; null means the default is unknown or operator-defined.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
         "description": {
           "description": "Bounded explanation of the tool fact.",
           "maxLength": 256,
           "minLength": 1,
           "type": "string"
+        },
+        "evidenceRefs": {
+          "description": "Stable IDs of evidence records qualifying this tool fact.",
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9._-]*$",
+            "type": "string"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
         },
         "name": {
           "description": "Stable provider-neutral tool name.",
@@ -612,6 +986,15 @@
           "minLength": 1,
           "pattern": "^[a-z][a-z0-9._-]*$",
           "type": "string"
+        },
+        "outputModalities": {
+          "description": "Tool-produced modalities, kept separate from direct model output modalities.",
+          "items": {
+            "$ref": "#/$defs/ProviderToolOutputModality"
+          },
+          "maxItems": 16,
+          "type": "array",
+          "uniqueItems": true
         },
         "support": {
           "$ref": "#/$defs/ProviderToolSupport"
@@ -624,11 +1007,101 @@
       ],
       "type": "object"
     },
+    "ProviderToolAvailability": {
+      "description": "How a named tool becomes available to the provider harness.",
+      "enum": [
+        "built_in",
+        "optional",
+        "operator_configured",
+        "external",
+        "unknown"
+      ],
+      "type": "string"
+    },
+    "ProviderToolOutputModality": {
+      "additionalProperties": false,
+      "description": "A modality produced by a tool, explicitly separate from direct model output.",
+      "oneOf": [
+        {
+          "properties": {
+            "condition": {
+              "maxLength": 512,
+              "minLength": 1,
+              "type": "string"
+            },
+            "support": {
+              "enum": [
+                "conditional"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "condition"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "support": {
+              "enum": [
+                "supported",
+                "unsupported",
+                "unknown"
+              ],
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      ],
+      "properties": {
+        "condition": {
+          "description": "Bounded operator-visible condition required when support is conditional.",
+          "maxLength": 512,
+          "minLength": 1,
+          "type": "string"
+        },
+        "evidenceRefs": {
+          "description": "Stable IDs of evidence records qualifying this tool output fact.",
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9._-]*$",
+            "type": "string"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "mediaConstraints": {
+          "$ref": "#/$defs/ProviderMediaConstraints"
+        },
+        "modality": {
+          "$ref": "#/$defs/ProviderModalityKind"
+        },
+        "support": {
+          "$ref": "#/$defs/ProviderCapabilitySupport"
+        },
+        "transport": {
+          "$ref": "#/$defs/ProviderModalityTransport"
+        }
+      },
+      "required": [
+        "modality",
+        "support",
+        "transport"
+      ],
+      "type": "object"
+    },
     "ProviderToolSupport": {
-      "description": "Whether the provider exposes a named tool through its integration.",
+      "description": "Evidence state for a named provider tool fact.",
       "enum": [
         "supported",
-        "unsupported"
+        "unsupported",
+        "conditional",
+        "unknown"
       ],
       "type": "string"
     }

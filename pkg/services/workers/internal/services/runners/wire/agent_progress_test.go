@@ -59,6 +59,7 @@ func TestAgentRunnerPublishesDetachedProviderProgressBeforeSuccess(t *testing.T)
 			Kind:       workers.ProgressFragmentKind,
 			Type:       "planning",
 			Payload:    "first",
+			Provider:   string(providers.IDCodex),
 			ProviderSessionReference: &providers.SessionRef{
 				Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-session-1",
 			},
@@ -74,6 +75,7 @@ func TestAgentRunnerPublishesDetachedProviderProgressBeforeSuccess(t *testing.T)
 			Kind:       workers.ProgressFragmentKind,
 			Type:       "responding",
 			Payload:    "second",
+			Provider:   string(providers.IDCodex),
 			ProviderSessionReference: &providers.SessionRef{
 				Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-session-1",
 			},
@@ -89,6 +91,7 @@ func TestAgentRunnerPublishesDetachedProviderProgressBeforeSuccess(t *testing.T)
 			Kind:       workers.ProgressFragmentKind,
 			Type:       "message.completed",
 			Payload:    "fixture output",
+			Provider:   string(providers.IDCodex),
 			ProviderSessionReference: &providers.SessionRef{
 				Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-session-1",
 			},
@@ -102,6 +105,7 @@ func TestAgentRunnerPublishesDetachedProviderProgressBeforeSuccess(t *testing.T)
 			DispatchID: "dispatch-agent-1",
 			Kind:       workers.CompletedFragmentKind,
 			Type:       "COMPLETED",
+			Provider:   string(providers.IDCodex),
 			ProviderSessionReference: &providers.SessionRef{
 				Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-session-1",
 			},

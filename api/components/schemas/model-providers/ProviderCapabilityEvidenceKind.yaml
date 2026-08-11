@@ -1,0 +1,7 @@
+type: string
+description: Source class for evidence supporting a published capability fact.
+enum:
+  - primary_documentation
+  - protocol_probe
+  - conformance_fixture
+  - maintainer_assertion

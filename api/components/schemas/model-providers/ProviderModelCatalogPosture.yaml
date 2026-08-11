@@ -1,0 +1,7 @@
+type: string
+description: How a provider's model identifiers are known to the published catalog.
+enum:
+  - exact
+  - runtime_discovered
+  - operator_selected
+  - unknown
