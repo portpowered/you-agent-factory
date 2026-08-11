@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- When a full functional lane fails in an unrelated package and the exact test passes repeatedly against the task head, rerun only the failed CI jobs before changing feature code.
 - Production outbound HTTP clients must disable redirects when configured endpoint boundaries are part of the contract; preserve injected clients for deterministic tests.
 - Parse absolute `Retry-After` timestamps against the injected clock at response receipt so receiver latency is not counted twice in retry scheduling.
 - When merging a moving main into a task branch, preserve the active task PRD and progress history, regenerate derived artifacts through canonical targets, and validate the merge tree before pushing.
@@ -8638,4 +8639,20 @@
 - **Learnings for future iterations:**
   - When a full CI run has one isolated current-main functional race, inspect the exact failing test and rerun only failed jobs; do not alter feature code without a reproducible feature failure.
   - Updating delivery metadata creates a new PR head, so the final metadata commit requires its own terminal CI audit and PR-body synchronization.
+---
+
+## 2026-08-11 06:19 -07:00 - e3-event-webhooks-004 PR follow-up rerun
+- What was implemented
+  - Audited the existing PR #1850's conversation and thread state; no unresolved inline threads or formal reviews remain, and the latest blocking inventory feedback is already addressed.
+  - Confirmed the only failing required check was the unrelated ACP functional test `TestFactoryMixesACPAndScriptWrapWorkersWithoutCrossRouting`; the exact test passed twice locally without Webhooks changes.
+  - Reran the failed GitHub Actions jobs and recorded the successful terminal result for the current PR head.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - CI run `31494017499` attempt 2 passed all 18 required checks for exact head `50c0dcf8f6896f884a33cf6b2f549028a1d32e3a` against base `3521f0b0a2f313b22e2c79edcf90339a01b3bce7`.
+  - The exact ACP functional test passed twice locally; the PR remains open, non-draft, clean, mergeable, and ready for review.
+- **Learnings for future iterations:**
+  - A rerun of only failed jobs is appropriate when the failed test is outside the task diff and repeated local execution passes; changing feature code would add unrelated risk.
+  - The PR description must be synchronized from the updated `prd.json` after recording the final CI head.
 ---

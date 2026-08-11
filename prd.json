@@ -3,10 +3,10 @@
   "branchName": "e3-event-webhooks",
   "deliveryAudit": {
     "pullRequest": 1850,
-    "auditedHead": "4434d49ec3a7575cbc7375e0af8d1edb81e79691",
+    "auditedHead": "50c0dcf8f6896f884a33cf6b2f549028a1d32e3a",
     "base": "3521f0b0a2f313b22e2c79edcf90339a01b3bce7",
-    "requiredChecks": "CI run 31492631536 attempt 2 passed all 18 required checks for exact head 4434d49ec3a7575cbc7375e0af8d1edb81e79691 against base 3521f0b0a2f313b22e2c79edcf90339a01b3bce7; package-target-manifest-check, ownership-inventory-check, API smoke, and API package verification pass locally, while the earlier aggregate make lint reported only three unrelated current-main baseline findings outside Webhooks",
-    "reviewThreads": "Thread-aware GraphQL audit reports zero review threads, zero unresolved inline threads, zero formal reviews, and five historical top-level comments; the latest blocking inventory feedback is addressed by the current head, and the PR is open, non-draft, mergeable, and clean"
+    "requiredChecks": "CI run 31494017499 attempt 2 passed all 18 required checks for exact head 50c0dcf8f6896f884a33cf6b2f549028a1d32e3a against base 3521f0b0a2f313b22e2c79edcf90339a01b3bce7; the rerun cleared the unrelated ACP functional-test failure, while package-target-manifest-check, ownership-inventory-check, API smoke, and API package verification remain green locally",
+    "reviewThreads": "Thread-aware GitHub audit reports zero review threads, zero unresolved inline threads, zero formal reviews, and five historical top-level comments; all blocking feedback is addressed by the current head, and PR #1850 is open, non-draft, mergeable, clean, and ready for review"
   },
   "description": "Add Factory-configured outbound webhooks that subscribe to the existing canonical Factory Event stream and POST signed Work state-transition and dispatch-failure envelopes with filtering, bounded retry/backoff, and durable dead-letter logging. The feature lets external monitors react without polling while preserving Recordings as the event authority and keeping delivery failure isolated from Factory Runtime state.",
   "context": {
