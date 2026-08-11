@@ -63,7 +63,7 @@
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/validation/impl",
-      "fileCount": 23,
+      "fileCount": 24,
       "owner": "factory-definition-maintainers",
       "removalReason": "Partition validation rules by definition concern."
     },
