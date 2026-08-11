@@ -220,6 +220,7 @@
  - Dashboard API-backed surfaces should consume generated OpenAPI types through a small API module and React Query server-state hook, leaving rendering components responsible for query states and pure projections.
  - Service-owned HTTP adapters should receive the opened domain root at the application edge; top-level generated-route composition forwards requests without reading package artifacts or constructing service state.
  - Provider capability truth should be projected from authored manifests into the public catalog and checked before live-attempt binding; integrations, subprocesses, and ACP prompts are reached only after the capability guard passes.
+ - Use pointer booleans in canonical event payloads when replay must distinguish an explicit `false` from an older recording that omitted the field.
 - Provider-neutral output contracts belong on the workstation definition and are enforced after a successful worker response; provider process success or transport parsing alone must not satisfy a semantic report contract.
 - Stream transport dispatch stays below the package maintainability threshold by delegating lifecycle-specific frame handling to focused helpers.
 - Deterministic Worker Session lifecycle tests can combine the controlled workstation boundary with the real in-memory Events service to verify retained replay ordering without sleeps or cancellation.
@@ -10458,7 +10459,32 @@
   - `make interfaces-all`, `make typecheck`, `make backend-size pkg-maint pkg-file-count pkg-structure`, `go vet ./...`, `make provider-catalog-check`, generated-API drift, and `git diff --check` — passed.
 - **Learnings for future iterations:**
   - Capability mismatch is a Providers-owned typed failure; keep the exact provider/capability diagnostic in service tests and verify the public functional boundary by observing failed Work plus zero integration-edge invocations.
-  - New functional scenarios must live under a domain subsection such as `tests/functional/providers/permission/` to satisfy the package-structure gate.
+- New functional scenarios must live under a domain subsection such as `tests/functional/providers/permission/` to satisfy the package-structure gate.
+---
+## [2026-08-10 22:38 -07:00] - js-skip-permissions-parity-004
+- What was implemented
+  - Published `skipPermissions` as an optional boolean in the authored JavaScript runtime catalog/schema, installed call-behavior descriptor and baseline, generated package projection, OpenAPI dispatch/event projections, and customer reference documentation.
+  - Added the typed non-boolean validation diagnostic, an observable call-behavior inventory assertion, and preview coverage proving literal `true` is accepted without a policy-mode rejection.
+  - Propagated the child-scoped boolean into runtime-backed Dispatch projections and canonical `DISPATCH_QUEUED` events, recording/world-state projections, resume snapshots, and `ReplayDispatchProjection`; explicit event payload pointers retain both `true` and `false` for JavaScript children while keeping sensitive prompt/command material out of public records.
+  - Added Factory Session live/replay, canonical recording/reducer, transport mapping, and API contract assertions for the retained value.
+- Files changed
+  - `contracts/javascript/runtime-api.json`
+  - `packages/api/generated/javascript/runtime-api.json`
+  - `pkg/services/factory_runtime/internal/services/orchestration/tooling/javascript/callbehavior/descriptor.go`
+  - `pkg/services/factory_runtime/internal/services/orchestration/javascript/runtime/callbehavior_inventory_test.go`
+  - `pkg/services/factory_sessions/execution_contract.go`
+  - `pkg/services/factory_sessions/internal/execution/{lifecycle.go,prepare_start.go,service.go}` and projection fixtures
+  - `pkg/services/factory_definitions/internal/contracts/{factory_events.go,work_dispatch.go}`
+  - `pkg/services/recordings/internal/{events,projections}`
+  - `api/components/schemas/{data-models/FactoryDispatchJavaScriptProjection.yaml,events/payloads/DispatchQueuedEventPayload.yaml}` and generated API clients
+  - `docs/reference/{javascript-workflows.md,orchestrators.md}`
+- Verification
+  - Focused Factory Runtime, Factory Sessions, recordings/replay, transport mapping, call-behavior, preview, API contract, and docs smoke tests passed.
+  - `make contracts-validate`, `make contracts-check`, `make interfaces-all`, `make docs-reference-smoke`, `make verify-fast`, `make backend-size`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, and `make vet` passed.
+  - `git diff --check` passed; story 004 is marked `passes:true` and all four stories are now complete in `prd.json`.
+- **Learnings for future iterations:**
+  - Public JavaScript dispatch metadata has separate runtime-session and canonical-recording owners; update both projections and their generated transport schemas when adding a child field.
+  - Contract generation is intentionally staged: update the authored JSON/OpenAPI fragments first, then run `make contracts-generate`, `make generate-api`, and `make interfaces-all` before drift checks.
 ---
 ## [2026-08-11 08:25:23 -07:00] - thr-functional-lane-speed-004 latest-main reconciliation
 - What was implemented
