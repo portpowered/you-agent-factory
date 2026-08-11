@@ -7944,5 +7944,24 @@
   - `bun run check:test-lanes` and `bun run typecheck` passed from `ui/`.
   - `prd.json` parses with all nine stories marked `passes:true`; conflict-marker and whitespace checks passed.
 - **Learnings for future iterations:**
-  - Fetch the live base immediately before pushing and again after local verification; another merged main commit can make a freshly synchronized PR dirty before its checks begin.
+- Fetch the live base immediately before pushing and again after local verification; another merged main commit can make a freshly synchronized PR dirty before its checks begin.
+---
+## 2026-08-10 22:49:55 -07:00 - bun-compat-batch-migration-009 current-main synchronization follow-up
+- What was implemented
+  - Fetched and merged the live `origin/main` head `ecd1d248731c9108dbbc4dafe2f28c4120043346` into the Bun migration branch as `c86a0c190` after the PR became dirty again.
+  - Preserved the Bun migration `prd.json` as authoritative and retained the append-only `progress.txt` history; the incoming implementation changes are the current-main runtime-host reuse/cancellation fixes.
+- Files changed
+  - `pkg/services/models/internal/services/runtime_host/internal/service/export_test.go`
+  - `pkg/services/models/internal/services/runtime_host/internal/service/failure_test.go`
+  - `pkg/services/models/internal/services/runtime_host/internal/service/service_test.go`
+  - `pkg/services/models/internal/services/runtime_host/internal/service/supervisor.go`
+  - `progress.txt`
+- Verification
+  - Exact focused Bun cohort — 33 files / 183 tests / 390 expect calls passed under Bun 1.3.12.
+  - `go test ./pkg/services/models/internal/services/runtime_host/internal/service -count=1 -timeout 300s` — passed.
+  - `bun run check:test-lanes`, `bun run typecheck`, and `bun run lint` — passed from `ui/`.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` — passed.
+  - `prd.json` parses with all nine stories marked `passes:true`; conflict-marker and whitespace checks passed.
+- **Learnings for future iterations:**
+  - A replacement PR head must be validated against the exact live base after merging; the required CI run and mergeability state belong to that replacement head, not the prior reviewed commit.
 ---
