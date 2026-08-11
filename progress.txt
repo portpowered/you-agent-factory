@@ -4481,3 +4481,20 @@
 - **Learnings for future iterations:**
   - A clean merge against a stale remote-tracking base is not sufficient; compare the live hosting ref, fetch it, and resolve shared PRD/progress files again before pushing the replacement head.
 ---
+
+## 2026-08-10 19:12 -07:00 - wsr-001-opening-record latest-main synchronization follow-up
+- What was implemented
+  - Merged the live `origin/main` head `72537e7f2` into the WSR branch after PR #1849 became conflicting during final handoff.
+  - Preserved the WSR task-scoped `prd.json`, unioned both append-only progress histories, retained current-main CLI/generated-artifact changes, and resolved the import-only functional test conflict.
+- Files changed
+  - Current-main CLI contract, documentation, generated-artifact, and functional-test files carried forward by the synchronization merge.
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `prd.json` parses with all three WSR stories marked `passes:true`; no conflict markers remain.
+  - `make interfaces-all` — passed with no generated drift.
+  - Worker Sessions package tests and `tests/functional/transport/run_scoped_server` — passed.
+  - `git diff --cached --check` and `git diff --check` — passed before the merge commit.
+- **Learnings for future iterations:**
+  - A documentation-only PR update can still become conflicting when current main advances; fetch the live base immediately before handoff and validate the replacement merge head before pushing.
+---
