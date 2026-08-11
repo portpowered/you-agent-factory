@@ -2,6 +2,7 @@
 ---
 - Keep transport event consumers behind the process-scoped OpeningPresentationOwner: operation contracts carry only a typed scope ID, while the owner owns subscription lifecycle, final history reconciliation, and full-snapshot deduplication for mutable event IDs.
 ---
+- When reconciling a task branch against a moving mainline, keep the active task's PRD and follow-up metadata authoritative while accepting unrelated source changes from main; validate the merged JSON and preserve the append-only progress history.
 - When a dispatch identity is upgraded to a Worker Session ID in a later event batch, migrate its progress color alias instead of allocating a second color; terminal cleanup must remove the canonical identity.
 ---
 - Treat a full functional-coverage failure in an untouched fixture as a characterization problem first: repeat the exact test locally, then rerun only the failed coverage and dependent-policy jobs if it passes.
@@ -10157,7 +10158,6 @@
   - The published CLI copy is refreshed by `make contracts-generate` after the authored contract changes; `make cli-manifest-generate` refreshes the family/runtime projections and the smoke check catches published drift.
   - When broad Go verification is run concurrently across worktrees on Windows, isolate the exact timed-out process tree before retrying a gate so other task verification remains undisturbed.
 ---
----
 ## [2026-08-11 02:04:21 -07:00] - btrc-p1-root-injection-006 latest-main synchronization
 - What was implemented
   - Fetched live `origin/main` at `0e7df069f80518287a7905558a525ac196b11bc0` after the PR base advanced again and became dirty.
@@ -10318,4 +10318,89 @@
 - **Learnings for future iterations:**
   - A failed functional retry that clears one flaky test but surfaces another untouched intermittent should be classified by package diff membership and focused local repeatability before any implementation change.
   - Preserve terminal CI evidence in the PRD even when the remaining failure is an existing main-baseline mismatch; this keeps the final handoff honest and avoids unrelated test churn.
+---
+## [2026-08-11 02:11:21 -07:00] - cli-error-classification-and-run-output review follow-up
+- What was implemented
+  - Addressed the post-merge blocking review comment by removing `--with-mock-workers` from the three changed invalid-input functional scenarios: invalid JSON, malformed key=value, and positional overflow.
+  - Kept each scenario on the canonical `root.BuildProcess` / `Process.Execute` path with an injected `edges.Edges.ProviderCommandRunner`, making the zero-provider-call assertions authoritative for the BAD_REQUEST boundary.
+- Files changed
+  - `tests/functional/transport/cli/parameters/json_values_test.go`
+  - `tests/functional/transport/cli/parameters/key_value_test.go`
+  - `tests/functional/transport/cli/parameters/positional_values_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/transport/cli/parameters -count=1 -timeout 600s` — passed.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - Functional validation scenarios that assert absence of provider side effects must not configure Mock Workers; inject the exact provider command-runner edge and assert its observations instead.
+---
+## [2026-08-11 02:56:56 -07:00] - cli-error-classification-and-run-output review follow-up
+- What was implemented
+  - Reconciled PR #1879 with live `origin/main` at `dd87fd04db20d755f9b44c369aa79b8c3e600f5f` after the blocking review comment reported a real merge conflict.
+  - Preserved this task's authoritative `prd.json`, including the `reviewFollowUp` note, while accepting the incoming mainline lint-tooling and functional-test changes; `progress.txt` merged cleanly.
+  - Confirmed that the merge did not change authored CLI contract inputs, so generated CLI artifacts were not hand-merged or regenerated unnecessarily.
+- Files changed
+  - Current-main lint checker/lane and maintenance-gate files carried by the synchronization merge.
+  - `tests/functional/transport/cli/parameters/json_values_test.go`
+  - `tests/functional/transport/cli/parameters/key_value_test.go`
+  - `tests/functional/transport/cli/parameters/positional_values_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/transport/cli/parameters -count=1 -timeout 600s` — passed.
+  - `go test ./pkg/services/factory_visualization/... -count=1 -timeout 600s` — passed.
+  - `go test ./tests/functional/cli/factory_run/output ./tests/functional/transport/cli/output ./tests/functional/transport/run_scoped_server -count=1 -timeout 600s` — passed.
+  - `make typecheck` and `make cli-manifest-check` — passed.
+  - `make backend-size pkg-maint pkg-file-count pkg-structure vet` — passed.
+  - PRD all-pass, merge-marker, and `git diff --check` audits — passed.
+- **Learnings for future iterations:**
+  - A shared PRD conflict can contain a different task's metadata after main advances; resolve it by retaining the active branch's complete PRD and follow-up note, then verify story flags and JSON before committing.
+  - A fresh replacement head needs new hosted CI even when the pre-conflict head was green; local focused gates establish the merge result while GitHub validates the pushed ancestry.
+---
+## [2026-08-11 03:16:31 -07:00] - cli-error-classification-and-run-output hosted CI follow-up
+- What was implemented
+  - Investigated the replacement-head Backend Functional Coverage failure and identified the untouched `tests/functional/workers/mock` scenario `TestPlainBatchDrainPreservesFiniteAndContinuousCounterexamples/continuous_idle`; the failure was a post-shutdown timing/ordering characterization, not a file in this PR's diff.
+  - Repeated the exact failing test locally ten times with no failures and reran only the failed hosted backend job; the dependent Verification Policy rerun then passed without changing product or test code.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/workers/mock -run '^TestPlainBatchDrainPreservesFiniteAndContinuousCounterexamples/continuous_idle$' -count=10 -v -timeout 600s` — passed all ten repetitions.
+  - Hosted run `31480072598` replacement Backend Functional Coverage job `93745975060` — passed.
+  - Hosted Verification Policy job `93747061691` — passed.
+  - All other replacement-head checks remained passing; the PR head remains `f259db6c4a91814b57d427d1bf889c76835d93a4`.
+- **Learnings for future iterations:**
+  - When hosted functional coverage names an untouched fixture, repeat that exact test locally before widening the diff; a clean characterization supports rerunning the failed lane and dependent policy job without unrelated fixes.
+---
+## [2026-08-11 03:28:29 -07:00] - cli-error-classification-and-run-output final PR handoff audit
+- What was implemented
+  - Audited PR #1879 after the four implementation stories reached `passes:true`.
+  - Confirmed the historical blocking feedback is addressed: the branch contains current `origin/main`, the PR is mergeable and clean, and the replacement-head checks are terminal and passing.
+  - Confirmed the PR body matches the current `prd.json` byte-for-byte and the thread-aware review audit reports zero inline review threads and zero unresolved threads.
+- Files changed
+  - `progress.txt`
+- Verification
+  - PRD parses with all four stories marked `passes:true`; no conflict markers remain.
+  - `origin/main` is an ancestor of `HEAD`.
+  - PR #1879 is open, non-draft, `MERGEABLE`/`CLEAN`, with all 18 reported checks passing on the reconciled head.
+  - `gh pr checks 1879`, the thread-aware `fetch_comments.py` audit, the PR-body comparison, and `git status` all passed.
+- **Learnings for future iterations:**
+  - Treat a prior blocking comment as addressed only after its requested base synchronization is present, the PR is cleanly mergeable, and the replacement-head checks are terminal-success.
+  - Keep the PR body byte-for-byte synchronized with `prd.json` when the PR description is defined by the task contract.
+---
+## [2026-08-11 04:29:48 -07:00] - btrc-p1-root-injection-006 current-main reconciliation
+- What was implemented
+  - Fetched live `origin/main` at `012e98e0fbd1b6fcac106d90b1f3d335b8a3dce6` after GitHub reported the PR conflicting with the newly advanced base.
+  - Merged the current mainline into the P1 branch, retained the active P1 `prd.json`, and unioned the incoming append-only CLI progress history with the P1 log without conflict markers.
+  - Updated the P1 delivery audit base to the live mainline; incoming current-main implementation and generated changes remain part of the merge result.
+- Files changed
+  - Current-main implementation/generated files carried by the synchronization merge.
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Merge conflict scope was limited to `prd.json` and `progress.txt`; the active P1 PRD was retained and the incoming progress entries were preserved.
+  - `git diff --check` — passed; `prd.json` parses; conflict-marker scan — clean.
+  - `git merge-base --is-ancestor origin/main HEAD` will be verified after the merge commit is created.
+- **Learnings for future iterations:**
+  - When main advances between CI and PR handoff, merge the live ref before refreshing the PR body or requesting final checks; shared PRD files require retaining the active task metadata while unioning append-only progress history.
 ---

@@ -12,7 +12,7 @@
   "deliveryAudit": {
     "pullRequest": 1857,
     "head": "be80d644fd6f258325d98ee0708039d8ced7d12d",
-    "base": "dd87fd04db20d755f9b44c369aa79b8c3e600f5f",
+    "base": "012e98e0fbd1b6fcac106d90b1f3d335b8a3dce6",
     "reviewThreads": 0,
     "unresolvedReviewThreads": 0,
     "formalReviews": 0,
@@ -154,7 +154,7 @@
       ],
       "priority": 6,
       "passes": true,
-      "notes": "Completed the review follow-up for the reusable root-process proof and the final value-only invocation cutover. Both representative success and provider-failure invocations enter through the public `you --json run` CLI on one root.BuildProcess/Process.Execute instance; the injected API server is observation-only for public session and Factory Event streams. The current audited head is `be80d644fd6f258325d98ee0708039d8ced7d12d`, based on synchronized origin/main `dd87fd04db20d755f9b44c369aa79b8c3e600f5f`; workflow `31485203874` reached terminal failure after its failed-job retry, which cleared the non-reproducing AGY failure and retained only the untouched server-binding assertion plus one intermittent workers/mock failure. The P1 diff is empty for both failing packages, focused AGY coverage passes three times locally, focused workers/mock coverage passes five times locally, and the server-binding mismatch reproduces locally. The thread-aware audit has zero unresolved review threads and zero formal reviews. All six P1 stories remain marked `passes:true`; the remaining follow-up is baseline CI policy and final PR handoff."
+      "notes": "Completed the review follow-up for the reusable root-process proof and the final value-only invocation cutover. Both representative success and provider-failure invocations enter through the public `you --json run` CLI on one root.BuildProcess/Process.Execute instance; the injected API server is observation-only for public session and Factory Event streams. The current audited head is `be80d644fd6f258325d98ee0708039d8ced7d12d`, based on synchronized origin/main `012e98e0fbd1b6fcac106d90b1f3d335b8a3dce6`; workflow `31485203874` reached terminal failure after its failed-job retry, which cleared the non-reproducing AGY failure and retained only the untouched server-binding assertion plus one intermittent workers/mock failure. The P1 diff is empty for both failing packages, focused AGY coverage passes three times locally, focused workers/mock coverage passes five times locally, and the server-binding mismatch reproduces locally. The thread-aware audit has zero unresolved review threads and zero formal reviews. All six P1 stories remain marked `passes:true`; the remaining follow-up is baseline CI policy and final PR handoff."
     }
   ]
 }
