@@ -31,8 +31,8 @@
         "Tests pass"
       ],
       "priority": 1,
-      "passes": false,
-      "notes": "Implemented the package-owned semantic role validator and focused tests for canonical initial, routed, classification, failure, rejection, continuation, explicit-return, JavaScript-scope, and invocation-schedule overlap states. The first-party catalog gate is now wired to the real BuildCatalog path, with route-proven canonical exceptions for the recurring controller and composite-parent lifecycle shapes; ordinary nonterminal Work types remain rejected. Added regression coverage proving disconnected declarations are rejected with the Factory slug and exact workType:state identities. The story remains unmarked for the next one-story acceptance audit."
+      "passes": true,
+      "notes": "Implemented the package-owned semantic role validator and focused tests for canonical initial, routed, classification, failure, rejection, continuation, explicit-return, JavaScript-scope, and invocation-schedule overlap states. The first-party catalog gate is wired to the real BuildCatalog path, with route-proven canonical exceptions for the recurring controller and composite-parent lifecycle shapes; ordinary nonterminal Work types remain rejected. Added regression coverage proving disconnected declarations are rejected with the Factory slug and exact workType:state identities. Acceptance audit completed with the focused catalog, canonical-validator, automation, generated-catalog drift, and diff checks passing."
     },
     {
       "id": "graph-workstation-semantics-002",

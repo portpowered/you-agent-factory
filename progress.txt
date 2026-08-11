@@ -4184,3 +4184,20 @@
   - A Work type may omit a terminal state only when route topology proves a recurring self-loop or a composite terminal outcome; ordinary nonterminal loops remain rejected.
   - Removing speculative states requires a coordinated canonical-validator decision before regeneration; regenerate published manifest hashes from authored sources.
 ---
+
+## [2026-08-11 01:08 -07:00] - graph-workstation-semantics-001 acceptance audit
+- What was implemented
+  - Completed the one-story acceptance audit for the first-party packaged Factory disconnected-state rule.
+  - Confirmed the parsed-definition validator is enforced by `BuildCatalog`, accounts for initial admission, workstation routes and lifecycle outputs, classification outputs, explicit invocation returns, and the named scheduler overlap bridge, and remains out of scope for JavaScript/customer-authored Factories.
+  - Confirmed focused regression coverage rejects synthetic processing and terminal disconnected states with the Factory slug and exact `workType:state` identities.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./internal/packagedfactorycatalog -count=1` — passed.
+  - `make packaged-factory-catalog-check` — passed; generated catalog is current.
+  - `go test ./pkg/services/factory_definitions/internal/services/validation/impl ./pkg/services/automations/internal -count=1` — passed.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - A story can be marked complete only after its focused behavior, publication integration, scope exclusions, and generated-output checks are all re-run in the same acceptance audit.
+---
