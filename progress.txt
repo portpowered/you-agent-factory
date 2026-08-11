@@ -6887,3 +6887,19 @@
 - **Learnings for future iterations:**
   - For long append-only conflict files, resolve from full Git objects or bounded patches; never reconstruct a large file from truncated shell output, and validate line count plus both branch histories before staging.
 ---
+
+## [2026-08-10 21:43 -07:00] - thr-deflake-model-host-concurrent-reuse-003 CI flake follow-up
+- What was implemented
+  - Investigated the first post-reconciliation CI failure in run `31458338809`. Backend Functional Coverage failed only at the unrelated `tests/functional/workers/inference/codex:TestCodexGoldenTextAndToolSuccess`, whose fixture transcript omitted the expected tool lifecycle; the required real-ACP evidence artifact was consequently absent and Verification Policy failed downstream.
+  - Made no production or test-code changes. Downloaded the functional diagnostics, isolated the named test locally for ten repetitions, and confirmed it passed every run.
+  - Reran only the failed GitHub Actions jobs with `gh run rerun 31458338809 --failed`; the backend functional rerun and dependent Verification Policy both passed.
+- Files changed
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/workers/inference/codex -run '^TestCodexGoldenTextAndToolSuccess$' -count=10 -v -timeout 300s` — all ten passed in 9.537s.
+  - Backend Functional Coverage rerun job `93678695912` — passed.
+  - Verification Policy rerun job `93679483557` — passed.
+  - All other required checks on the replacement head remained passing; the Models runtime-host focused race regression was unaffected.
+- **Learnings for future iterations:**
+  - When functional diagnostics name an untouched Codex or worker fixture failure, isolate that exact test before changing task code; rerun only the failed coverage and policy jobs after the characterization passes.
+---
