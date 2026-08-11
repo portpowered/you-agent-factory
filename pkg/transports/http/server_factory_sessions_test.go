@@ -879,13 +879,14 @@ func TestSessionScopedAPI_UnknownSessionReturnsNotFound(t *testing.T) {
 }
 
 func TestFactorySessionsAPI_ListFactorySessions(t *testing.T) {
+	const canonicalDefaultSessionID = "019e0000-0000-7000-8000-000000000042"
 	srv := newLiveSessionTestServer(strictLiveSessionAPIFake{list: func(context.Context) (factoryapi.ListFactorySessionsResponse, error) {
 		return factoryapi.ListFactorySessionsResponse{
 			Sessions: []factoryapi.FactorySessionSummary{
 				{
 					FactoryDir: "/workspace/root",
 					FolderPath: "/workspace/root",
-					Id:         "~default",
+					Id:         canonicalDefaultSessionID,
 					IsDefault:  true,
 					Project:    "root",
 					Target: factoryapi.FactorySessionTargetRef{
@@ -925,8 +926,8 @@ func TestFactorySessionsAPI_ListFactorySessions(t *testing.T) {
 	for _, session := range response.Sessions {
 		ids[session.Id] = true
 	}
-	if !ids["~default"] || !ids["session-beta"] {
-		t.Fatalf("factory session ids = %#v, want ~default and session-beta", ids)
+	if !ids[canonicalDefaultSessionID] || !ids["session-beta"] {
+		t.Fatalf("factory session ids = %#v, want canonical default and session-beta", ids)
 	}
 }
 

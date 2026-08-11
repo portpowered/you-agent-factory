@@ -110,7 +110,9 @@ func ReadProjectionsToAPI(reads []factorysessions.ReadProjection) factoryapi.Lis
 		}
 		summaries = append(summaries, SessionSummaryToAPI(read.Context.Session, read.Context.FactorySessionID))
 	}
-	return factoryapi.ListFactorySessionsResponse{Sessions: summaries}
+	return factoryapi.ListFactorySessionsResponse{
+		Sessions: canonicalAPILiveSessionSummaries(summaries),
+	}
 }
 
 // RuntimeProjectionToAPI maps the Factory Session-owned runtime projection to
@@ -426,6 +428,7 @@ func ListSessionsResponseToAPI(result factorysessionexecution.ListSessionsResult
 		}
 		response.DurableSessions = &durable
 	}
+	response.Sessions = canonicalAPILiveSessionSummaries(response.Sessions)
 	return response
 }
 
@@ -434,9 +437,10 @@ func ListSessionsResponseToAPI(result factorysessionexecution.ListSessionsResult
 func ScopedSessionListResponseToAPI(result factorysessions.ScopedSessionListResult) factoryapi.ListFactorySessionsResponse {
 	scope := factoryapi.FactorySessionListScope(result.Scope)
 	response := factoryapi.ListFactorySessionsResponse{
-		Scope: &scope, Sessions: make([]factoryapi.FactorySessionSummary, 0, len(result.LiveSessions)),
+		Scope:    &scope,
+		Sessions: make([]factoryapi.FactorySessionSummary, 0, len(result.LiveSessions)),
 	}
-	for _, session := range result.LiveSessions {
+	for _, session := range canonicalScopedLiveSessionSummaries(result.LiveSessions) {
 		summary := ScopedLiveSessionSummaryToAPI(session)
 		if session.Runtime != nil {
 			runtime := RuntimeProjectionToAPI(*session.Runtime, session.NormalizedTarget)
@@ -465,6 +469,49 @@ func ScopedLiveSessionSummaryToAPI(session factorysessions.ScopedLiveSessionSumm
 			Name: optionalTrimmedString(session.Target.Name),
 		},
 	}
+}
+
+// canonicalAPILiveSessionSummaries keeps the selector alias out of the public
+// listing while retaining the server-resolved UUID row. IDs are the only
+// identity key; labels, ordering, and paths are presentation data.
+func canonicalAPILiveSessionSummaries(
+	sessions []factoryapi.FactorySessionSummary,
+) []factoryapi.FactorySessionSummary {
+	canonical := make([]factoryapi.FactorySessionSummary, 0, len(sessions))
+	seen := make(map[string]struct{}, len(sessions))
+	for _, session := range sessions {
+		id := strings.TrimSpace(session.Id)
+		if id == "" || id == factorysessions.DefaultSessionID {
+			continue
+		}
+		if _, exists := seen[id]; exists {
+			continue
+		}
+		seen[id] = struct{}{}
+		session.Id = id
+		canonical = append(canonical, session)
+	}
+	return canonical
+}
+
+func canonicalScopedLiveSessionSummaries(
+	sessions []factorysessions.ScopedLiveSessionSummary,
+) []factorysessions.ScopedLiveSessionSummary {
+	canonical := make([]factorysessions.ScopedLiveSessionSummary, 0, len(sessions))
+	seen := make(map[string]struct{}, len(sessions))
+	for _, session := range sessions {
+		id := strings.TrimSpace(session.ID)
+		if id == "" || id == factorysessions.DefaultSessionID {
+			continue
+		}
+		if _, exists := seen[id]; exists {
+			continue
+		}
+		seen[id] = struct{}{}
+		session.ID = id
+		canonical = append(canonical, session)
+	}
+	return canonical
 }
 
 // LiveSessionSummaryToAPI maps one live workspace session row to the public summary shape.

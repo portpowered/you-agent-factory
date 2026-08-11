@@ -1,10 +1,9 @@
-import { useMutation } from "@tanstack/react-query";
-import { type ReactNode, useState } from "react";
+import type { ReactNode } from "react";
 
 import type { DashboardSubmitWorkType } from "../../../api/dashboard/types";
-import { submitWork } from "../../../api/work";
 import { useCurrentFactoryDefinition } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { useDashboardSession } from "../../dashboard/session/dashboard-session-provider";
+import { useSessionScopedSimpleSubmission } from "../hooks/use-session-scoped-simple-submission";
 import { useSubmitWorkWidget } from "../hooks/use-submit-work-widget";
 import { adaptFactorySimpleSubmissionHost } from "../lib/factory-simple-submission-host-adapter";
 import { getSubmitWorkMessages } from "../messages/submit-work";
@@ -30,20 +29,11 @@ export function SubmitWorkWidget({
   const { sessionID } = useDashboardSession();
   const messages = getSubmitWorkMessages(locale);
   const currentFactory = useCurrentFactoryDefinition();
-  const [simpleDraft, setSimpleDraft] = useState("");
-  const simpleMutation = useMutation({
-    mutationFn: (submission: {
-      content: readonly [{ text: string; type: "text" }];
-      workTypeName: string;
-    }) =>
-      submitWork(
-        {
-          content: [...submission.content],
-          workTypeName: submission.workTypeName,
-        },
-        { sessionID },
-      ),
-  });
+  const simpleSubmission = useSessionScopedSimpleSubmission(
+    sessionID,
+    messages,
+  );
+
   const {
     draft,
     isSubmitting,
@@ -83,21 +73,14 @@ export function SubmitWorkWidget({
     return (
       <FactorySimpleSubmissionComposer
         {...simpleHost}
-        draft={simpleDraft}
-        isSubmitting={simpleMutation.isPending}
+        draft={simpleSubmission.draft}
+        isSubmitting={simpleSubmission.isSubmitting}
         locale={locale}
-        onDraftChange={(value) => {
-          simpleMutation.reset();
-          setSimpleDraft(value);
-        }}
-        onSubmit={async (submission) => {
-          await simpleMutation.mutateAsync(submission);
-        }}
-        submissionError={
-          simpleMutation.isError && simpleMutation.error instanceof Error
-            ? simpleMutation.error.message
-            : undefined
-        }
+        onDraftChange={simpleSubmission.onDraftChange}
+        onSubmit={simpleSubmission.onSubmit}
+        sessionID={sessionID}
+        submissionError={simpleSubmission.submissionError}
+        submissionSuccess={simpleSubmission.submissionSuccess}
       />
     );
   }
@@ -115,6 +98,7 @@ export function SubmitWorkWidget({
       onStageFileItems={onStageFileItems}
       onSubmit={onSubmit}
       onWorkTypeNameChange={onWorkTypeNameChange}
+      sessionID={sessionID}
       status={status}
       submitWorkTypeNames={submitWorkTypeNames}
       validationErrors={validationErrors}
