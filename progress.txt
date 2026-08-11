@@ -10703,3 +10703,18 @@
 - **Learnings for future iterations:**
   - Broad functional coverage can surface independent process-contention and timing flakes in successive retries; preserve the task diff, characterize each named test serially, and record the terminal retry evidence on the final handoff head.
 ---
+## [2026-08-11 03:28:46 -07:00] - js-skip-permissions-parity-004 final PR review audit
+- What was implemented
+  - No product changes; completed the final review follow-up for PR #1875 after the capability-truth and sanctioned functional-test corrections were already present on the branch.
+  - Rechecked the thread-aware PR conversation, confirmed the earlier blocking feedback is addressed, and verified that the PR description remains byte-for-byte equal to `prd.json`.
+- Files changed
+  - `progress.txt`
+- Verification
+  - PRD parsing confirms all four stories remain `passes:true`.
+  - Thread-aware GraphQL review audit reports no unresolved or new review threads.
+  - Latest CI run `31481824655` — all required checks terminal-success, including Verification Policy.
+  - `gh pr checks 1875` — passed.
+  - `git diff --check` — passed.
+- **Learnings for future iterations:**
+  - Final PR readiness requires checking the latest head after every handoff commit; a pending Verification Policy job can keep the PR merge state blocked until the full CI run is terminal.
+---
