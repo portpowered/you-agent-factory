@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -63,6 +64,216 @@ func TestResourceCapacityDecisionMatrix(t *testing.T) {
 				t.Fatalf("effective capacity = %d, want %d", got, test.requested)
 			}
 		})
+	}
+}
+
+func TestWakeForResourceCapacitySignalsPendingEngineWork(t *testing.T) {
+	eng := newResourceCapacityTestEngine(1)
+
+	eng.WakeForResourceCapacity()
+
+	if !eng.capacityWakePending {
+		t.Fatal("capacity wake did not mark pending work")
+	}
+	if !eng.hasBufferedInputs() {
+		t.Fatal("capacity wake did not report buffered engine work")
+	}
+	eng.wakeForPendingProcessing()
+	select {
+	case <-eng.submitSignal:
+	default:
+		t.Fatal("capacity wake did not signal the engine")
+	}
+}
+
+func TestResourceCapacityAdmissionAndLeaseRejectCancelledContext(t *testing.T) {
+	eng := newResourceCapacityTestEngine(1)
+	blockRelease, err := eng.AcquireResourceCapacityAdmission(context.Background())
+	if err != nil {
+		t.Fatalf("hold admission: %v", err)
+	}
+	defer blockRelease()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if release, err := eng.AcquireResourceCapacityAdmission(ctx); release != nil || !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled admission = (hasRelease=%t, err=%v), want no release and context cancellation", release != nil, err)
+	}
+	if lease, err := eng.AcquireResourceCapacityLease(ctx, factory.ResourceCapacityLeaseRequest{ResourceID: "gpu-slot"}); lease != nil || !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled lease = (lease=%v, err=%v), want no lease and context cancellation", lease, err)
+	}
+}
+
+func TestResourceCapacityRejectsMalformedAndMissingResourceRequests(t *testing.T) {
+	tests := []struct {
+		name        string
+		resource    string
+		removePlace bool
+		wantErr     error
+	}{
+		{name: "empty resource id", resource: " ", wantErr: factory.ErrResourceCapacityValidation},
+		{name: "unknown resource", resource: "missing", wantErr: factory.ErrResourceCapacityNotFound},
+		{name: "missing availability place", resource: "gpu-slot", removePlace: true, wantErr: factory.ErrResourceCapacityNotFound},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			eng := newResourceCapacityTestEngine(1)
+			if test.removePlace {
+				delete(eng.state.Places, "gpu-slot:available")
+			}
+			_, err := eng.PreviewResourceCapacity(context.Background(), factory.ResourceCapacityRequest{
+				ResourceID: test.resource, RequestedCapacity: 2,
+			})
+			if !errors.Is(err, test.wantErr) {
+				t.Fatalf("PreviewResourceCapacity error = %v, want %v", err, test.wantErr)
+			}
+		})
+	}
+
+	eng := newResourceCapacityTestEngine(1)
+	if _, err := eng.AcquireResourceCapacityLease(context.Background(), factory.ResourceCapacityLeaseRequest{ResourceID: "missing"}); !errors.Is(err, factory.ErrResourceCapacityNotFound) {
+		t.Fatalf("unknown resource lease error = %v, want not-found error", err)
+	}
+	eng = newResourceCapacityTestEngine(1)
+	delete(eng.state.Places, "gpu-slot:available")
+	if _, err := eng.AcquireResourceCapacityLease(context.Background(), factory.ResourceCapacityLeaseRequest{ResourceID: "gpu-slot"}); !errors.Is(err, factory.ErrResourceCapacityNotFound) {
+		t.Fatalf("missing resource availability lease error = %v, want not-found error", err)
+	}
+}
+
+func TestResourceCapacityUnavailableEnginesAndDefaultContextsAreSafe(t *testing.T) {
+	var nilEngine *FactoryEngine
+	if release, err := nilEngine.AcquireResourceCapacityAdmission(context.Background()); release != nil || err == nil {
+		t.Fatalf("nil admission = (hasRelease=%t, err=%v), want unavailable error", release != nil, err)
+	}
+	if lease, err := nilEngine.AcquireResourceCapacityLease(context.Background(), factory.ResourceCapacityLeaseRequest{}); lease != nil || err == nil {
+		t.Fatalf("nil lease = (hasLease=%t, err=%v), want unavailable error", lease != nil, err)
+	}
+	if got := nilEngine.CurrentFactoryRevision(); got != 0 {
+		t.Fatalf("nil revision = %d, want 0", got)
+	}
+	nilEngine.SetFactoryRevision(3)
+	nilEngine.releaseResourceCapacityLease("missing")
+	if _, err := nilEngine.PreviewResourceCapacity(context.Background(), factory.ResourceCapacityRequest{}); err == nil {
+		t.Fatal("nil preview error = nil, want unavailable error")
+	}
+	if _, err := nilEngine.PreviewResourceCapacityAdmitted(context.Background(), factory.ResourceCapacityRequest{}); err == nil {
+		t.Fatal("nil admitted preview error = nil, want unavailable error")
+	}
+	if _, err := nilEngine.SetResourceCapacity(context.Background(), factory.ResourceCapacityRequest{}); err == nil {
+		t.Fatal("nil set error = nil, want unavailable error")
+	}
+	if _, err := nilEngine.SetResourceCapacityAdmitted(context.Background(), factory.ResourceCapacityRequest{}); err == nil {
+		t.Fatal("nil admitted set error = nil, want unavailable error")
+	}
+	gateUnavailable := &FactoryEngine{}
+	gateUnavailable.releaseResourceCapacityLease("missing")
+	stateUnavailable := newResourceCapacityTestEngine(1)
+	stateUnavailable.state = nil
+	if _, _, _, err := stateUnavailable.reserveResourceCapacityLease("gpu-slot"); err == nil {
+		t.Fatal("nil engine state lease error = nil, want unavailable error")
+	}
+	resourceUnavailable := newResourceCapacityTestEngine(1)
+	resourceUnavailable.state.Resources["gpu-slot"] = nil
+	if _, err := resourceUnavailable.AcquireResourceCapacityLease(context.Background(), factory.ResourceCapacityLeaseRequest{ResourceID: "gpu-slot"}); !errors.Is(err, factory.ErrResourceCapacityNotFound) {
+		t.Fatalf("nil resource lease error = %v, want not-found error", err)
+	}
+	placeUnavailable := newResourceCapacityTestEngine(1)
+	delete(placeUnavailable.state.Places, "gpu-slot:available")
+	if _, _, _, err := placeUnavailable.reserveResourceCapacityLease("gpu-slot"); !errors.Is(err, factory.ErrResourceCapacityNotFound) {
+		t.Fatalf("missing resource place error = %v, want not-found error", err)
+	}
+	changedChannel := newResourceCapacityTestEngine(0)
+	changedChannel.capacityChanged = nil
+	if leaseID, _, changed, err := changedChannel.reserveResourceCapacityLease("gpu-slot"); err != nil || leaseID != "" || changed == nil {
+		t.Fatalf("empty resource lease reservation = (%q, %v, %v), want a wait channel", leaseID, err, changed)
+	}
+	changedChannel.mu.Lock()
+	changedChannel.signalResourceCapacityChangedLocked()
+	changedChannel.mu.Unlock()
+
+	stateUnavailable = newResourceCapacityTestEngine(1)
+	stateUnavailable.runtimeState = nil
+	stateUnavailable.resourceLeases = map[string]resourceCapacityLease{
+		"lease-1": {resourceID: "gpu-slot"},
+	}
+	stateUnavailable.releaseResourceCapacityLease("lease-1")
+	newResourceCapacityTestEngine(1).releaseResourceCapacityLease("missing")
+
+	eng := newResourceCapacityTestEngine(1)
+	release, err := eng.AcquireResourceCapacityAdmission(nil)
+	if err != nil {
+		t.Fatalf("nil-context admission: %v", err)
+	}
+	release()
+	lease, err := eng.AcquireResourceCapacityLease(nil, factory.ResourceCapacityLeaseRequest{ResourceID: "gpu-slot"})
+	if err != nil {
+		t.Fatalf("nil-context lease: %v", err)
+	}
+	lease.Release()
+
+	eng = newResourceCapacityTestEngine(1)
+	if _, err := eng.SetResourceCapacity(context.Background(), factory.ResourceCapacityRequest{ResourceID: "gpu-slot", RequestedCapacity: 0}); err != nil {
+		t.Fatalf("set zero capacity: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if lease, err := eng.AcquireResourceCapacityLease(ctx, factory.ResourceCapacityLeaseRequest{ResourceID: "gpu-slot"}); lease != nil || !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled waiting lease = (hasLease=%t, err=%v), want context cancellation", lease != nil, err)
+	}
+}
+
+func TestResourceCapacityReportsInconsistentAvailableMarking(t *testing.T) {
+	eng := newResourceCapacityTestEngine(2)
+	eng.mu.Lock()
+	for _, token := range eng.runtimeState.Marking.TokensInPlace("gpu-slot:available") {
+		eng.runtimeState.Marking.RemoveToken(token.ID)
+	}
+	eng.mu.Unlock()
+
+	if _, err := eng.SetResourceCapacity(context.Background(), factory.ResourceCapacityRequest{
+		ResourceID: "gpu-slot", RequestedCapacity: 1,
+	}); err == nil || !strings.Contains(err.Error(), "available marking is inconsistent") {
+		t.Fatalf("inconsistent marking error = %v, want explicit consistency failure", err)
+	}
+}
+
+func TestResourceIDForTokenFallsBackToPlaceIdentity(t *testing.T) {
+	if got := resourceIDForToken(factorytoken.Token{PlaceID: "gpu-slot:available"}); got != "gpu-slot" {
+		t.Fatalf("resourceIDForToken fallback = %q, want gpu-slot", got)
+	}
+}
+
+func TestResourceCapacityAccountingSkipsUnrelatedAndDuplicateTokens(t *testing.T) {
+	eng := newResourceCapacityTestEngine(1)
+	eng.mu.Lock()
+	eng.runtimeState.Marking.Tokens["nil-token"] = nil
+	eng.runtimeState.Marking.Tokens["unrelated-token"] = &factorytoken.Token{
+		ID:      "unrelated-token",
+		PlaceID: "other:held",
+		Color:   factorytoken.Color{DataType: "work", WorkTypeID: "other"},
+	}
+	duplicate := factorytoken.Token{
+		ID:      "duplicate-token",
+		PlaceID: "gpu-slot:held",
+		Color:   factorytoken.Color{DataType: factorytoken.DataTypeResource, WorkTypeID: "gpu-slot"},
+	}
+	eng.runtimeState.Marking.Tokens[duplicate.ID] = &duplicate
+	eng.runtimeState.Dispatches["nil-dispatch"] = nil
+	eng.runtimeState.Dispatches["related-dispatch"] = &interfaces.DispatchEntry{
+		ConsumedTokens: []factorytoken.Token{
+			duplicate,
+			{ID: "dispatch-token", PlaceID: "gpu-slot:held", Color: factorytoken.Color{DataType: factorytoken.DataTypeResource, WorkTypeID: "gpu-slot"}},
+			{ID: "unrelated-dispatch-token", PlaceID: "other:held", Color: factorytoken.Color{DataType: factorytoken.DataTypeResource, WorkTypeID: "other"}},
+		},
+	}
+	inUse := resourceInUseCountLocked(eng.runtimeState, "gpu-slot")
+	eng.mu.Unlock()
+	if inUse != 2 {
+		t.Fatalf("resource in-use accounting = %d, want duplicate-safe count 2", inUse)
+	}
+	if eng.resourceTokenIDInUseLocked("gpu-slot", "missing-token") {
+		t.Fatal("unrelated resource token unexpectedly matched")
 	}
 }
 

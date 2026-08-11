@@ -12,7 +12,9 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -28,6 +30,151 @@ func TestNew_RequiresClock(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "Factory Runtime clock is required") {
 		t.Fatalf("New() error = %v, want required clock error", err)
 	}
+}
+
+func TestResourceCapacityRuntimeDelegatesAndAttachesEffectiveFactory(t *testing.T) {
+	net := buildSimpleNet()
+	net.Resources = map[string]*state.ResourceDef{
+		"gpu-slot": {ID: "gpu-slot", Name: "GPU slot", Capacity: 2},
+		"orphan":   {ID: "orphan", Name: "Orphan pool", Capacity: 1},
+	}
+	for _, resource := range net.Resources {
+		place, _ := state.GenerateResourcePlaces(resource, time.Unix(0, 0))
+		net.Places[place.ID] = place
+	}
+
+	f, err := newTestFactory(
+		withNet(net),
+		withRuntimeConfig(runtimefixtures.RuntimeDefinitionLookupFixture{
+			Factory: &interfaces.FactoryConfig{
+				Name: "capacity-factory",
+				Resources: []interfaces.ResourceConfig{{
+					ID:       "gpu-slot",
+					Capacity: 2,
+				}},
+			},
+		}),
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	capacity, ok := f.(factoryruntime.ResourceCapacityService)
+	if !ok {
+		t.Fatal("Factory Runtime does not expose resource capacity service")
+	}
+	admitted, ok := f.(factoryruntime.AdmittedResourceCapacityService)
+	if !ok {
+		t.Fatal("Factory Runtime does not expose admitted resource capacity service")
+	}
+	admission, ok := f.(factoryruntime.ResourceCapacityAdmission)
+	if !ok {
+		t.Fatal("Factory Runtime does not expose resource capacity admission")
+	}
+	leases, ok := f.(factoryruntime.ResourceCapacityLeaseAdmission)
+	if !ok {
+		t.Fatal("Factory Runtime does not expose resource capacity leases")
+	}
+	revision, ok := f.(factoryruntime.ResourceCapacityRevisionService)
+	if !ok {
+		t.Fatal("Factory Runtime does not expose resource capacity revision")
+	}
+
+	revision.SetFactoryRevision(4)
+	revision.SetFactoryRevision(2)
+	if got := revision.CurrentFactoryRevision(); got != 4 {
+		t.Fatalf("Factory Runtime revision = %d, want monotonic revision 4", got)
+	}
+
+	ctx := context.Background()
+	preview, err := capacity.PreviewResourceCapacity(ctx, factoryruntime.ResourceCapacityRequest{
+		ResourceID: "gpu-slot", RequestedCapacity: 2,
+	})
+	if err != nil {
+		t.Fatalf("PreviewResourceCapacity: %v", err)
+	}
+	assertResourceCapacityFactorySnapshot(t, preview, 2, 1)
+	previewConfig := decodeResourceCapacityFactorySnapshot(t, preview)
+	if previewConfig.Resources[0].Name != "GPU slot" {
+		t.Fatalf("preview resource name = %q, want runtime resource name", previewConfig.Resources[0].Name)
+	}
+
+	releaseAdmission, err := admission.AcquireResourceCapacityAdmission(ctx)
+	if err != nil {
+		t.Fatalf("AcquireResourceCapacityAdmission: %v", err)
+	}
+	admittedPreview, err := admitted.PreviewResourceCapacityAdmitted(ctx, factoryruntime.ResourceCapacityRequest{
+		ResourceID: "gpu-slot", RequestedCapacity: 3,
+	})
+	if err != nil {
+		releaseAdmission()
+		t.Fatalf("PreviewResourceCapacityAdmitted: %v", err)
+	}
+	if admittedPreview.Outcome != factoryruntime.ResourceCapacityOutcomeApplied {
+		releaseAdmission()
+		t.Fatalf("admitted preview outcome = %q, want applied", admittedPreview.Outcome)
+	}
+	updated, err := admitted.SetResourceCapacityAdmitted(ctx, factoryruntime.ResourceCapacityRequest{
+		ResourceID: "gpu-slot", RequestedCapacity: 3,
+	})
+	releaseAdmission()
+	if err != nil {
+		t.Fatalf("SetResourceCapacityAdmitted: %v", err)
+	}
+	assertResourceCapacityFactorySnapshot(t, updated, 3, 1)
+
+	noOp, err := capacity.SetResourceCapacity(ctx, factoryruntime.ResourceCapacityRequest{
+		ResourceID: "gpu-slot", RequestedCapacity: 3,
+	})
+	if err != nil || noOp.Outcome != factoryruntime.ResourceCapacityOutcomeNoOp {
+		t.Fatalf("SetResourceCapacity no-op = (%#v, %v), want NO_OP", noOp, err)
+	}
+
+	orphan, err := capacity.SetResourceCapacity(ctx, factoryruntime.ResourceCapacityRequest{
+		ResourceID: "orphan", RequestedCapacity: 2,
+	})
+	if err != nil {
+		t.Fatalf("SetResourceCapacity append: %v", err)
+	}
+	assertResourceCapacityFactorySnapshot(t, orphan, 2, 2)
+
+	lease, err := leases.AcquireResourceCapacityLease(ctx, factoryruntime.ResourceCapacityLeaseRequest{ResourceID: "orphan"})
+	if err != nil {
+		t.Fatalf("AcquireResourceCapacityLease: %v", err)
+	}
+	if lease.FactoryRevision != 4 {
+		t.Fatalf("resource lease revision = %d, want 4", lease.FactoryRevision)
+	}
+	lease.Release()
+	lease.Release()
+}
+
+func assertResourceCapacityFactorySnapshot(t *testing.T, result factoryruntime.ResourceCapacityResult, capacity, resourceCount int) {
+	t.Helper()
+	if result.Outcome == "" {
+		t.Fatalf("resource capacity result has no outcome: %#v", result)
+	}
+	if result.Factory == nil {
+		t.Fatal("resource capacity result has no effective Factory snapshot")
+	}
+	config := decodeResourceCapacityFactorySnapshot(t, result)
+	if len(config.Resources) != resourceCount {
+		t.Fatalf("effective Factory resources = %d, want %d", len(config.Resources), resourceCount)
+	}
+	for _, resource := range config.Resources {
+		if resource.ID == result.ResourceID && resource.Capacity != capacity {
+			t.Fatalf("effective %s capacity = %d, want %d", result.ResourceID, resource.Capacity, capacity)
+		}
+	}
+}
+
+func decodeResourceCapacityFactorySnapshot(t *testing.T, result factoryruntime.ResourceCapacityResult) interfaces.FactoryConfig {
+	t.Helper()
+	var config interfaces.FactoryConfig
+	if err := result.Factory.Decode(&config); err != nil {
+		t.Fatalf("decode effective Factory snapshot: %v", err)
+	}
+	return config
 }
 
 func TestNew_ConfiguresProvidedRuntimeAwareScheduler(t *testing.T) {

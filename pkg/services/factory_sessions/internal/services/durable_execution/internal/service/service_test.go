@@ -6,8 +6,10 @@ import (
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func TestNewRequiresExecutionAndStaysInert(t *testing.T) {
@@ -123,4 +125,101 @@ func TestRecordPetriTokenMutationsRejectsUnsupportedExecution(t *testing.T) {
 
 type executionWithoutMutation struct {
 	durableexecution.Service
+}
+
+func TestServiceForwardsOptionalLiveChangeAndWorkerCapabilities(t *testing.T) {
+	t.Parallel()
+
+	stub := &executionCapabilitiesStub{}
+	service, err := New(stub)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	service.BindWorkerInvoker(func(string) factoryruntime.Service { return nil })
+	cursor, err := service.SubscribeResponseEvents(
+		context.Background(),
+		"session-1",
+		factorysessions.ResponseEventSubscriptionRequest{SessionID: "session-1", AfterSequence: 7},
+	)
+	if err != nil || cursor != stub.cursor {
+		t.Fatalf("SubscribeResponseEvents = (%#v, %v), want delegated cursor", cursor, err)
+	}
+	applied, err := service.ApplyLiveChange(context.Background(), "session-1", factorysessions.LiveChangeRequest{RequestID: "request-1"})
+	if err != nil || applied.RequestID != "request-1" {
+		t.Fatalf("ApplyLiveChange = (%#v, %v)", applied, err)
+	}
+	recovered, err := service.RecoverLiveChange(context.Background(), "session-1", "request-1")
+	if err != nil || recovered.RequestID != "request-1" {
+		t.Fatalf("RecoverLiveChange = (%#v, %v)", recovered, err)
+	}
+	service.PublishWorkerProgress(workers.ProgressFragment{DispatchID: "dispatch-1", Kind: workers.ProgressFragmentKind})
+
+	if stub.bindCalls != 1 || stub.subscribeCalls != 1 || stub.applyCalls != 1 || stub.recoverCalls != 1 || stub.progressCalls != 1 {
+		t.Fatalf("optional capability calls = %#v, want one call each", stub)
+	}
+}
+
+func TestServiceOptionalCapabilitiesReturnUnavailableWhenUnsupported(t *testing.T) {
+	t.Parallel()
+
+	service, err := New(&executionWithoutMutation{})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	service.BindWorkerInvoker(nil)
+	service.PublishWorkerProgress(workers.ProgressFragment{})
+	if _, err := service.SubscribeResponseEvents(context.Background(), "session-1", factorysessions.ResponseEventSubscriptionRequest{}); !errors.Is(err, factorysessions.ErrRuntimeNotAvailable) {
+		t.Fatalf("SubscribeResponseEvents error = %v, want ErrRuntimeNotAvailable", err)
+	}
+	if _, err := service.ApplyLiveChange(context.Background(), "session-1", factorysessions.LiveChangeRequest{}); !errors.Is(err, factorysessions.ErrRuntimeNotAvailable) {
+		t.Fatalf("ApplyLiveChange error = %v, want ErrRuntimeNotAvailable", err)
+	}
+	if _, err := service.RecoverLiveChange(context.Background(), "session-1", "request-1"); !errors.Is(err, factorysessions.ErrRuntimeNotAvailable) {
+		t.Fatalf("RecoverLiveChange error = %v, want ErrRuntimeNotAvailable", err)
+	}
+
+	var nilService *Service
+	if nilService.IsNonLiveReplay() {
+		t.Fatal("nil Service IsNonLiveReplay = true, want false")
+	}
+	if _, err := nilService.SubscribeResponseEvents(context.Background(), "session-1", factorysessions.ResponseEventSubscriptionRequest{}); !errors.Is(err, factorysessions.ErrRuntimeNotAvailable) {
+		t.Fatalf("nil Service SubscribeResponseEvents error = %v, want ErrRuntimeNotAvailable", err)
+	}
+}
+
+type executionCapabilitiesStub struct {
+	durableexecution.Service
+	cursor         *factorysessions.ResponseEventCursor
+	bindCalls      int
+	subscribeCalls int
+	applyCalls     int
+	recoverCalls   int
+	progressCalls  int
+}
+
+func (s *executionCapabilitiesStub) BindWorkerInvoker(func(string) factoryruntime.Service) {
+	s.bindCalls++
+}
+
+func (s *executionCapabilitiesStub) SubscribeResponseEvents(context.Context, string, factorysessions.ResponseEventSubscriptionRequest) (*factorysessions.ResponseEventCursor, error) {
+	s.subscribeCalls++
+	if s.cursor == nil {
+		s.cursor = &factorysessions.ResponseEventCursor{}
+	}
+	return s.cursor, nil
+}
+
+func (s *executionCapabilitiesStub) ApplyLiveChange(_ context.Context, _ string, request factorysessions.LiveChangeRequest) (factorysessions.LiveChangeResult, error) {
+	s.applyCalls++
+	return factorysessions.LiveChangeResult{RequestID: request.RequestID}, nil
+}
+
+func (s *executionCapabilitiesStub) RecoverLiveChange(_ context.Context, _ string, requestID string) (factorysessions.LiveChangeResult, error) {
+	s.recoverCalls++
+	return factorysessions.LiveChangeResult{RequestID: requestID}, nil
+}
+
+func (s *executionCapabilitiesStub) PublishWorkerProgress(workers.ProgressFragment) {
+	s.progressCalls++
 }
