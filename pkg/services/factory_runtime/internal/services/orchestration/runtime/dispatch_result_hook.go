@@ -584,6 +584,10 @@ func mergeRecordedObservations(recorded, live []workersessions.Observation) []wo
 		if !ok {
 			continue
 		}
+		if liveObservation.StartedAt != nil {
+			started := *liveObservation.StartedAt
+			recorded[index].StartedAt = &started
+		}
 		if liveObservation.ProviderSessionAvailable {
 			recorded[index].ProviderSession = liveObservation.ProviderSession.Clone()
 			recorded[index].ProviderSessionAvailable = true

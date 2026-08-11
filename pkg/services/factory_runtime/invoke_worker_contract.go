@@ -3,6 +3,8 @@ package factory
 import (
 	"errors"
 	"strings"
+
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // InvokeWorkerRequest names one Worker an orchestrator has already resolved.
@@ -50,6 +52,11 @@ type InvokeWorkerRequest struct {
 	// MaxAttempts bounds provider attempts, not retries after the first. Zero
 	// and one are both a single attempt.
 	MaxAttempts int
+	// RecordingID and Capabilities are optional facts already resolved by the
+	// caller. Runtime forwards them unchanged when present; it does not invent
+	// a recording identity or provider capability matrix.
+	RecordingID  string
+	Capabilities *workers.Capabilities
 }
 
 // Validate reports whether req names a runnable Worker. Validate is pure and

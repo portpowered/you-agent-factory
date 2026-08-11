@@ -47,6 +47,7 @@ func (s *service) Execute(
 	if err := validateRequest(request); err != nil {
 		return workers.RunnerExecutionResult{}, err
 	}
+	provider := providerIDForRunner(request.RunnerID).String()
 	result, err := s.executeProviderAttempt(ctx, request)
 	if err != nil {
 		if response, normalizedErr, handled := continuationFailureResult(ctx, request, err); handled {
@@ -56,6 +57,7 @@ func (s *service) Execute(
 				response.ProviderSession,
 				request.ResumeSession,
 				"",
+				provider,
 			)
 			return response, normalizedErr
 		}
@@ -66,6 +68,7 @@ func (s *service) Execute(
 				request.Dispatch.DispatchID,
 				failure,
 				response.ProviderSession,
+				provider,
 			)
 			s.publishTerminalFailure(
 				request.Dispatch.DispatchID,
@@ -73,11 +76,12 @@ func (s *service) Execute(
 				response.ProviderSession,
 				failure.SessionRef,
 				failure.Message,
+				provider,
 			)
 			return response, normalizedErr
 		}
 		normalizedErr := normalizeExecutionError(ctx, err)
-		s.publishTerminalFailure(request.Dispatch.DispatchID, normalizedErr, nil, nil, "")
+		s.publishTerminalFailure(request.Dispatch.DispatchID, normalizedErr, nil, nil, "", provider)
 		return workers.RunnerExecutionResult{}, normalizedErr
 	}
 	result = result.Clone()
@@ -89,12 +93,13 @@ func (s *service) Execute(
 			ID:       request.SessionID,
 		}
 	}
-	s.publishProgress(request.Dispatch.DispatchID, result, response.ProviderSession)
+	s.publishProgress(request.Dispatch.DispatchID, result, response.ProviderSession, provider)
 	if !hasTerminalRunProgress(result.Diagnostics) {
 		s.publish(workers.ProgressFragment{
 			DispatchID:               request.Dispatch.DispatchID,
 			Kind:                     workers.CompletedFragmentKind,
 			Type:                     "COMPLETED",
+			Provider:                 provider,
 			ProviderSessionReference: workers.CloneProviderSessionReference(result.SessionRef),
 			ProviderSessionRef:       workers.CloneProviderSessionMetadata(response.ProviderSession),
 			ExternalEventType:        "STREAM_COMPLETED",
@@ -122,6 +127,7 @@ func (s *service) publishTerminalFailure(
 	session *workers.ProviderSessionMetadata,
 	reference *providers.SessionRef,
 	providerMessage string,
+	provider string,
 ) {
 	eventType := "FAILED"
 	message := "provider invocation failed"
@@ -151,6 +157,7 @@ func (s *service) publishTerminalFailure(
 		Kind:                     workers.FailedFragmentKind,
 		Type:                     eventType,
 		Payload:                  boundedFailureMessage(message),
+		Provider:                 provider,
 		ProviderSessionReference: workers.CloneProviderSessionReference(reference),
 		ProviderSessionRef:       workers.CloneProviderSessionMetadata(session),
 		ExternalEventType:        "STREAM_FAILED",
@@ -162,6 +169,7 @@ func (s *service) publishFailureProgress(
 	dispatchID string,
 	failure providers.ExecuteFailure,
 	session *workers.ProviderSessionMetadata,
+	provider string,
 ) {
 	if failure.Diagnostics == nil {
 		return
@@ -169,13 +177,14 @@ func (s *service) publishFailureProgress(
 	s.publishProgress(dispatchID, providers.ExecuteResult{
 		SessionRef:  workers.CloneProviderSessionReference(failure.SessionRef),
 		Diagnostics: failure.Diagnostics,
-	}, session)
+	}, session, provider)
 }
 
 func (s *service) publishProgress(
 	dispatchID string,
 	result providers.ExecuteResult,
 	session *workers.ProviderSessionMetadata,
+	provider string,
 ) {
 	var terminalMessages []providers.ExecuteProgress
 	// A provider that streamed its facts live has already delivered every
@@ -194,7 +203,7 @@ func (s *service) publishProgress(
 				terminalMessages = append(terminalMessages, progress)
 				continue
 			}
-			s.publishProviderProgress(dispatchID, progress, session, result.SessionRef)
+			s.publishProviderProgress(dispatchID, progress, session, result.SessionRef, provider)
 		}
 	}
 	if len(terminalMessages) == 0 && strings.TrimSpace(result.Content) != "" {
@@ -206,7 +215,7 @@ func (s *service) publishProgress(
 	// Publish authoritative completed messages after provider run/turn lifecycle
 	// completion so all transports observe the same terminal ordering.
 	for _, progress := range terminalMessages {
-		s.publishProviderProgress(dispatchID, progress, session, result.SessionRef)
+		s.publishProviderProgress(dispatchID, progress, session, result.SessionRef, provider)
 	}
 }
 
@@ -215,12 +224,14 @@ func (s *service) publishProviderProgress(
 	progress providers.ExecuteProgress,
 	session *workers.ProviderSessionMetadata,
 	reference *providers.SessionRef,
+	provider string,
 ) {
 	s.publish(workers.ProgressFragment{
 		DispatchID:               dispatchID,
 		Kind:                     workers.ProgressFragmentKind,
 		Type:                     progress.Phase,
 		Payload:                  progress.Detail,
+		Provider:                 provider,
 		ProviderSessionReference: workers.CloneProviderSessionReference(reference),
 		ProviderSessionRef:       workers.CloneProviderSessionMetadata(session),
 		Metadata:                 cloneMetadata(progress.Metadata),
@@ -256,7 +267,11 @@ func (s *service) executeProviderAttempt(
 	// the same provider-authored session the association fragment committed.
 	live := &liveProviderSession{}
 	attempt.SessionObserver = s.observeProviderSession(request.Dispatch.DispatchID, live)
-	attempt.ProgressObserver = s.observeProviderProgress(request.Dispatch.DispatchID, live)
+	attempt.ProgressObserver = s.observeProviderProgress(
+		request.Dispatch.DispatchID,
+		live,
+		providerIDForRunner(request.RunnerID).String(),
+	)
 	if request.ResumeSession != nil {
 		reference := request.ResumeSession.Clone()
 		continued, err := s.providers.Continue(ctx, providers.ContinueRequest{
@@ -328,10 +343,11 @@ func (s *service) observeProviderSession(
 func (s *service) observeProviderProgress(
 	dispatchID string,
 	live *liveProviderSession,
+	provider string,
 ) providers.ProgressObserver {
 	return func(progress providers.ExecuteProgress) {
 		reference, session := live.snapshot()
-		s.publishProviderProgress(dispatchID, progress, session, reference)
+		s.publishProviderProgress(dispatchID, progress, session, reference, provider)
 	}
 }
 

@@ -300,7 +300,7 @@ func canCoalesceEvents(left, right Event) bool {
 	if left.Kind != right.Kind || left.DispatchID != right.DispatchID {
 		return false
 	}
-	if left.Type != right.Type || left.ExternalEventType != right.ExternalEventType {
+	if left.Type != right.Type || left.Provider != right.Provider || left.ExternalEventType != right.ExternalEventType {
 		return false
 	}
 	if !stringMapEqual(left.Metadata, right.Metadata) {

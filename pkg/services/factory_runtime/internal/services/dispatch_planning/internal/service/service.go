@@ -370,6 +370,8 @@ func executionRequest(decision dispatchplanning.RunnableDecision) workers.Workst
 		RunnerSelectionSource:    facts.RunnerSelectionSource,
 		ProjectID:                facts.ProjectID,
 		FactorySessionID:         facts.FactorySessionID,
+		RecordingID:              facts.RecordingID,
+		Capabilities:             facts.Capabilities,
 		InputTokens:              facts.InputPayload,
 		ModelOperation:           facts.ModelOperation,
 		ModelBindings:            facts.ModelBindings,
