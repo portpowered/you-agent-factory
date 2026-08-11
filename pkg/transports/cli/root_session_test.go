@@ -39,6 +39,8 @@ func TestSessionCommand_RegistersSubcommands(t *testing.T) {
 		{"session", "dispatches"},
 		{"session", "pause"},
 		{"session", "resume"},
+		{"session", "cancel"},
+		{"session", "terminate"},
 		{"session", "create"},
 		{"session", "delete"},
 	} {
@@ -66,12 +68,16 @@ func TestSessionCommand_HelpDocumentsSubcommandsAndExamples(t *testing.T) {
 		"dispatches",
 		"pause",
 		"resume",
+		"cancel",
+		"terminate",
 		"create",
 		"delete",
 		"you session list",
 		"you session show",
 		"you session pause",
 		"you session resume",
+		"you --remote --server http://factory.example:7437 session pause",
+		"you session resume session-beta --remote --server http://factory.example:7437",
 		"you session list --json",
 		"you session create --dir /workspace/fleet --port 9090",
 		"you session delete session-beta --port 9090 --json",
@@ -859,10 +865,10 @@ func TestProductionRootUsesGeneratedSessionFamilyCutover(t *testing.T) {
 	if session.RunE != nil {
 		t.Fatal("session parent must remain non-runnable through generated cutover")
 	}
-	if len(session.Commands()) != 7 {
-		t.Fatalf("session child count = %d, want exactly 7 generated leaves", len(session.Commands()))
+	if len(session.Commands()) != 9 {
+		t.Fatalf("session child count = %d, want exactly 9 generated leaves", len(session.Commands()))
 	}
-	for _, name := range []string{"create", "list", "show", "delete", "pause", "resume", "dispatches"} {
+	for _, name := range []string{"create", "list", "show", "delete", "pause", "resume", "cancel", "terminate", "dispatches"} {
 		command, _, findErr := root.Find([]string{"session", name})
 		if findErr != nil {
 			t.Fatalf("Find(session %s) error = %v", name, findErr)

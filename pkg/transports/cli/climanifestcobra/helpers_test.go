@@ -84,6 +84,88 @@ func TestSessionResolvedLifecyclePreservesTargetingOutputAndDiagnostics(t *testi
 	}
 }
 
+func TestSessionResolvedLifecycleSelectsExactlyOnePlacementAdapter(t *testing.T) {
+	operations := []string{"pause", "resume", "cancel", "terminate"}
+	placements := []struct {
+		name       string
+		args       func(string) []string
+		wantRemote bool
+	}{
+		{
+			name: "local default",
+			args: func(operation string) []string {
+				return []string{"session", operation, "session-local"}
+			},
+		},
+		{
+			name: "remote before command path",
+			args: func(operation string) []string {
+				return []string{"--remote", "--server", "http://factory.example:7437", "session", operation, "session-remote"}
+			},
+			wantRemote: true,
+		},
+		{
+			name: "remote after command path",
+			args: func(operation string) []string {
+				return []string{"session", operation, "session-remote", "--remote", "--server", "http://factory.example:7437"}
+			},
+			wantRemote: true,
+		},
+	}
+
+	for _, operation := range operations {
+		for _, placement := range placements {
+			t.Run(operation+"/"+placement.name, func(t *testing.T) {
+				localCalls, remoteCalls := 0, 0
+				localServer, remoteServer := "", ""
+				localOps := lifecycleOperationForTest(operation, &localCalls, &localServer)
+				remoteOps := lifecycleOperationForTest(operation, &remoteCalls, &remoteServer)
+				local := sessioncli.Bind(localOps)
+				remote := sessioncli.Bind(remoteOps)
+
+				services := commandregistry.SessionResolvedServices{
+					LocalSessions:  local,
+					RemoteSessions: remote,
+				}
+				_, _, err := executeResolvedSessionWithOutput(t, services, placement.args(operation)...)
+				if err != nil {
+					t.Fatalf("Execute(%v) error = %v", placement.args(operation), err)
+				}
+				if placement.wantRemote {
+					if localCalls != 0 || remoteCalls != 1 {
+						t.Fatalf("adapter calls = local %d, remote %d; want local 0, remote 1", localCalls, remoteCalls)
+					}
+					if remoteServer != "http://factory.example:7437" {
+						t.Fatalf("remote server = %q, want exact selected server", remoteServer)
+					}
+				} else if localCalls != 1 || remoteCalls != 0 {
+					t.Fatalf("adapter calls = local %d, remote %d; want local 1, remote 0", localCalls, remoteCalls)
+				}
+			})
+		}
+	}
+}
+
+func lifecycleOperationForTest(operation string, calls *int, server *string) sessioncli.Operations {
+	control := func(cfg sessioncli.LifecycleControlConfig) error {
+		*server = cfg.Server
+		(*calls)++
+		return nil
+	}
+	result := sessioncli.Operations{}
+	switch operation {
+	case "pause":
+		result.Pause = control
+	case "resume":
+		result.Resume = control
+	case "cancel":
+		result.Cancel = control
+	case "terminate":
+		result.Terminate = control
+	}
+	return result
+}
+
 func TestSessionResolvedLifecycleRejectsCardinalityAndPreservesFailures(t *testing.T) {
 	calls := 0
 	services := commandregistry.SessionResolvedServicesFromOps(sessioncli.Operations{

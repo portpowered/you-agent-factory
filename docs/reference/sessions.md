@@ -77,7 +77,7 @@ dispatch and artifact inspection, event replay, and result retrieval.
 Choose canonical Factory Session surfaces first. The CLI does not yet provide a
 canonical `session start` spelling, so API or MCP is the canonical start path;
 the `you session` commands are canonical for CLI discovery, inspection, and the
-currently shipped pause and resume controls.
+currently shipped pause, resume, cancel, and terminate controls.
 
 | Goal | API | CLI | MCP | Dashboard |
 |------|-----|-----|-----|-----------|
@@ -90,7 +90,7 @@ currently shipped pause and resume controls.
 | Inspect artifacts | `GET /factory-sessions/{session_id}/artifacts` | `you session show {session_id}` exposes artifact refs | `you.factory_session.list_artifacts` | Factory Session detail artifacts |
 | Read ordered events | `GET /factory-sessions/{session_id}/events` | No Factory Session-named spelling; use the API or MCP path | `you.factory_session.read_events` | Factory Session detail live updates and history |
 | Observe ephemeral response events | `GET /factory-sessions/{session_id}/response-events` | No Factory Session-named spelling; use the API path | No Factory Session-named spelling; use the API path | No dashboard-owned response-event stream today |
-| Control lifecycle | `POST /factory-sessions/{session_id}/{pause\|resume\|cancel\|terminate}` | `you session pause {session_id}`, `you session resume {session_id}` | `you.factory_session.control` | Available actions on Factory Session detail |
+| Control lifecycle | `POST /factory-sessions/{session_id}/{pause\|resume\|cancel\|terminate}` | `you session pause\|resume\|cancel\|terminate {session_id}` | `you.factory_session.control` | Available actions on Factory Session detail |
 
 The start response supplies `{session_id}`. Keep that exact id for every later
 call. `Dispatch`, `FactoryArtifact`, and `FactoryEvent` are session-owned facts:
@@ -327,21 +327,30 @@ surfaces.
 For named-Factory inputs and output modes, use `you docs run`. The inspection
 and recovery controls remain on this page.
 
-## Session pause and resume
+## Session lifecycle controls
 
-`you session pause` and `you session resume` control one live `FactorySession`
-through the existing lifecycle routes:
+`you session pause`, `resume`, `cancel`, and `terminate` control one
+`FactorySession` through the lifecycle routes:
 
 ```http
 POST /factory-sessions/{session_id}/pause
 POST /factory-sessions/{session_id}/resume
+POST /factory-sessions/{session_id}/cancel
+POST /factory-sessions/{session_id}/terminate
 ```
+
+Local placement is the default for these four controls. Use persistent
+`--remote --server <uri>` to select exactly one already-running You server;
+the same placement grammar is accepted before or after the command path. The
+placement choice selects the local or HTTP adapter. It is independent from
+run waiting/following (`--wait`, `--follow`) and local hosting
+(`--with-server`, `--with-site`, `--listen`).
 
 Pausing stops automatic progression while the service keeps accepting inbound
 work and worker results. Resume records the lifecycle transition, wakes the
 runtime internally, and drains ready buffered submissions and completed worker
-results through the normal engine path. You do **not** need another submission,
-worker result, or dispatch signal after resume to restart processing.
+results through the normal engine path. Cancel and terminate preserve the same
+session identity and return the typed lifecycle outcome.
 
 ### Copy-paste examples
 
@@ -352,6 +361,14 @@ you session pause
 # Pause or resume a named live session.
 you session pause session-beta
 you session resume session-beta
+
+# Cancel or terminate the same session.
+you session cancel session-beta
+you session terminate session-beta
+
+# Select an exact already-running server; both flag positions are valid.
+you --remote --server http://factory.example:7437 session pause session-beta
+you session resume session-beta --remote --server http://factory.example:7437
 
 # API-shaped JSON for automation (place global flags before the subcommand).
 you --json session pause
@@ -375,7 +392,8 @@ Rejected controls return a non-zero exit code with an error message such as
 `factory sessions endpoint not reachable at <url>`.
 
 With `--json`, stdout is the API-shaped `FactorySessionLifecycleControlResponse`
-(`sessionId`, `operation`, `outcome`, `status`, and optional `detail`).
+(`sessionId`, `operation`, `outcome`, `status`, and optional `detail`) for all
+four controls.
 
 ### Buffered work while paused
 

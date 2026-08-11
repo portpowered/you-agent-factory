@@ -51,6 +51,8 @@
 
 - Worker Session finite streams can use the injected Events `Read` contract with the first retained head as a snapshot boundary; replay-only paths must not call `Subscribe`.
 - Authored OpenAPI and CLI contracts generate their Go, TypeScript, published metadata, and family-manifest consumers; update the source contract first, then run the repository generators and drift checks.
+- Adding an authored runnable CLI command also requires a reviewed functional-scenario record plus refreshed command identity, command-input, command-tree, and published-contract baselines; `make contracts-check` identifies any missed projection.
+- When Wire must inject two adapters implementing the same interface, publish a distinct named composition type for one binding so the generated graph cannot confuse local and remote services.
 - Provider-neutral output contracts belong on the workstation definition and are enforced after a successful worker response; provider process success or transport parsing alone must not satisfy a semantic report contract.
 - Stream transport dispatch stays below the package maintainability threshold by delegating lifecycle-specific frame handling to focused helpers.
 - Deterministic Worker Session lifecycle tests can combine the controlled workstation boundary with the real in-memory Events service to verify retained replay ordering without sleeps or cancellation.
@@ -3994,4 +3996,56 @@
   - `git diff --cached --check` passed before the merge commit.
 - **Learnings for future iterations:**
   - A clean merge against a stale remote-tracking base is not sufficient; compare the live hosting ref, fetch it, and resolve shared PRD/progress files again before pushing the replacement head.
+---
+
+## [2026-08-10 20:30 -07:00] - dwro-s7-placement-grammar-001
+- What was implemented
+  - Marked story `dwro-s7-placement-grammar-001` complete in `prd.json`.
+  - Declared `you session pause|resume|cancel|terminate` as dual-placement commands with local-default and explicit remote-exact-server help; added authored cancel and terminate command records and generated CLI family metadata.
+  - Added explicit local and remote Factory Session CLI adapters. The resolved session registry selects the injected local Factory Sessions service without `--remote`, and only the injected HTTP service with the exact resolved `--server` when `--remote` is present.
+  - Added cancel/terminate lifecycle transport operations and shared human/JSON rendering, wired the local adapter through Wire, and refreshed published CLI, functional-scenario, command identity, command input, and command-tree artifacts.
+  - Updated packaged session reference guidance and observable dispatch tests for local default, remote flag before the command path, remote flag after the command path, exact server propagation, and exactly one selected adapter.
+- Files changed
+  - `contracts/cli/commands.json`
+  - `contracts/functional-scenarios.json`
+  - `docs/reference/sessions.md`
+  - `packages/api/generated/cli/commands.json`
+  - `packages/api/generated/manifest.json`
+  - `pkg/services/factory_sessions/transports/cli/session/lifecycle_control.go`
+  - `pkg/services/factory_sessions/transports/cli/session/lifecycle_control_human.go`
+  - `pkg/transports/cli/climanifestcobra/helpers_test.go`
+  - `pkg/transports/cli/climanifestgen/family.go`
+  - `pkg/transports/cli/commandregistry/representative_handlers.go`
+  - `pkg/transports/cli/generated/family_manifests_gen.go`
+  - `pkg/transports/cli/generated/session_command_ids_gen.go`
+  - `pkg/transports/cli/root.go`
+  - `pkg/transports/cli/root_session_test.go`
+  - `pkg/transports/cli/root_workflow.go`
+  - `pkg/transports/cli/baseline/testdata/command_tree.txt`
+  - `contracts/testdata/baseline/cli-commands.json`
+  - `contracts/testdata/baseline/cli-command-inputs.json`
+  - `pkg/wire/cli_commands.go`
+  - `pkg/wire/wire.go`
+  - `pkg/wire/wire_gen.go`
+  - `prd.json`
+- Verification
+  - `go test ./pkg/services/factory_sessions/transports/cli/... ./pkg/transports/cli/... ./pkg/wire/... -count=1` passed.
+  - `go run ./cmd/climanifestgen -root . -check`, `make contracts-check`, and `make docs-reference-smoke` passed.
+  - `git diff --check` passed.
+- **Learnings for future iterations:**
+  - Adding an authored runnable CLI command requires updating the functional-scenario manifest and all reviewed command/input/tree/identity/published baselines; `make contracts-check` and the CLI package suite expose each missing projection.
+  - Wire needs a distinct named composition type when two fields embed the same service interface; use a named local binding so placement adapters cannot be confused during graph generation.
+---
+
+## [2026-08-10 23:18 -07:00] - dwro-s7-placement-grammar-001
+- What was implemented
+  - Normalized the authored cancel/terminate command input-channel metadata with the existing session command family and regenerated the published contract projections.
+  - Re-ran the broad CLI, Factory Sessions CLI, and Wire Go suite successfully after regeneration; the isolated ACP cancellation retry also passed.
+  - Ran `make contracts-check`, `make docs-reference-smoke`, `make vet`, and `git diff --check` successfully.
+- Files changed
+  - Regenerated contract and CLI manifest projections from the authored command contract.
+  - Appended this verification follow-up to `progress.txt`.
+- **Learnings for future iterations:**
+  - The repository Go gates are available without the UI toolchain; `make typecheck` currently fails before compilation because the checkout lacks Bun's type definitions (`TS2688: Cannot find type definition file for 'bun'`).
+  - The full CLI suite contains a timing-sensitive ACP cancellation test; if it flakes in a concurrent run, rerun the named test in isolation before attributing the failure to CLI placement changes.
 ---

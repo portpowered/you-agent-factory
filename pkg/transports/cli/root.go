@@ -73,6 +73,13 @@ type cliOperatorDefaultsOptions struct {
 type SubmitWorkOperation func(submitcli.SubmitConfig) error
 type SubmitBatchOperation func(submitcli.BatchConfig) error
 
+// LocalSessionsCLIService is the distinct Wire binding for local lifecycle
+// controls. It embeds the CLI service contract while keeping the local and
+// remote adapters distinguishable in the inert command-operation graph.
+type LocalSessionsCLIService interface {
+	sessioncli.Service
+}
+
 // OwnedExecutionService adds execution-local cleanup to the Factory
 // Sessions-owned durable execution and scoped inventory capabilities. The CLI
 // builder owns this cleanup boundary, while the Factory Sessions root remains
@@ -130,6 +137,7 @@ type CommandOperations struct {
 	ModelsCLI                         modelscli.Service
 	ProvidersCLI                      providerscli.Service
 	SessionsCLI                       sessioncli.Service
+	LocalSessionsCLI                  LocalSessionsCLIService
 	SubmitWork                        SubmitWorkOperation
 	SubmitBatch                       SubmitBatchOperation
 	FlattenFactoryConfig              FlattenFactoryConfigOperation
@@ -188,6 +196,7 @@ type CommandFactory struct {
 	SubmitWork             func(submitcli.SubmitConfig) error
 	SubmitBatch            func(submitcli.BatchConfig) error
 	SessionsCLI            sessioncli.Service
+	LocalSessionsCLI       sessioncli.Service
 	BuildExecution         ExecutionServiceBuilder
 	ModelsCLI              modelscli.Service
 	ProvidersCLI           providerscli.Service
@@ -243,6 +252,7 @@ func NewCommandFactory(operations CommandOperations) CommandFactory {
 		SubmitWork:                        operations.SubmitWork,
 		SubmitBatch:                       operations.SubmitBatch,
 		SessionsCLI:                       operations.SessionsCLI,
+		LocalSessionsCLI:                  operations.LocalSessionsCLI,
 		BuildExecution:                    operations.BuildExecution,
 		ModelsCLI:                         operations.ModelsCLI,
 		ProvidersCLI:                      operations.ProvidersCLI,

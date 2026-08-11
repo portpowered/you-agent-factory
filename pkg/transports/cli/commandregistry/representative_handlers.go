@@ -144,6 +144,7 @@ const (
 
 	sessionServerInputID  = "you.flag.server"
 	sessionJSONInputID    = "you.flag.json"
+	sessionRemoteInputID  = "you.flag.remote"
 	sessionVerboseInputID = "you.flag.verbose"
 	sessionDebugInputID   = "you.flag.debug"
 
@@ -167,14 +168,24 @@ const (
 	sessionPausePortInputID        = "you.session.pause.flag.port"
 	sessionResumeIDInputID         = "you.session.resume.arg.0"
 	sessionResumePortInputID       = "you.session.resume.flag.port"
+	sessionCancelIDInputID         = "you.session.cancel.arg.0"
+	sessionCancelPortInputID       = "you.session.cancel.flag.port"
+	sessionTerminateIDInputID      = "you.session.terminate.arg.0"
+	sessionTerminatePortInputID    = "you.session.terminate.flag.port"
 )
 
 // SessionResolvedServices are the injected Factory Session CLI adapter and
 // invocation-local collaborators consumed by stable-input transport adapters.
 type SessionResolvedServices struct {
-	Sessions    sessioncli.Service
-	PrepareList func(context.Context, *sessioncli.ListConfig) error
-	Diagnostics func(*cobra.Command) io.Writer
+	// Sessions is retained as the historical remote adapter field. Callers
+	// should provide RemoteSessions and LocalSessions for dual-placement
+	// lifecycle controls; when either is absent, this field is the compatibility
+	// fallback used by existing injected command graphs.
+	Sessions       sessioncli.Service
+	LocalSessions  sessioncli.Service
+	RemoteSessions sessioncli.Service
+	PrepareList    func(context.Context, *sessioncli.ListConfig) error
+	Diagnostics    func(*cobra.Command) io.Writer
 }
 
 // SessionResolvedServicesFromOps binds accepted session operations into registry services.
@@ -188,6 +199,27 @@ func SessionResolvedServicesFromOps(
 		PrepareList: prepareList,
 		Diagnostics: diagnostics,
 	}
+}
+
+func (services SessionResolvedServices) remote() sessioncli.Service {
+	if services.RemoteSessions != nil {
+		return services.RemoteSessions
+	}
+	return services.Sessions
+}
+
+func (services SessionResolvedServices) local() sessioncli.Service {
+	if services.LocalSessions != nil {
+		return services.LocalSessions
+	}
+	return services.Sessions
+}
+
+func (services SessionResolvedServices) forPlacement(remote bool) sessioncli.Service {
+	if remote {
+		return services.remote()
+	}
+	return services.local()
 }
 
 // SessionResolvedHandler translates stable resolved inputs into the existing
@@ -206,6 +238,8 @@ type SessionResolvedHandlers struct {
 	Dispatches ResolvedRunE
 	Pause      ResolvedRunE
 	Resume     ResolvedRunE
+	Cancel     ResolvedRunE
+	Terminate  ResolvedRunE
 }
 
 // BindSessionResolvedHandlers adapts the injected Factory Session operations
@@ -216,6 +250,7 @@ func BindSessionResolvedHandlers(services SessionResolvedServices) SessionResolv
 		Create: handler.Create, Delete: handler.Delete, List: handler.List,
 		Show: handler.Show, Dispatches: handler.Dispatches,
 		Pause: handler.Pause, Resume: handler.Resume,
+		Cancel: handler.Cancel, Terminate: handler.Terminate,
 	}
 }
 
@@ -233,6 +268,8 @@ func NewSessionResolvedRegistry(
 		"you.session.dispatches": handlers.Dispatches,
 		"you.session.pause":      handlers.Pause,
 		"you.session.resume":     handlers.Resume,
+		"you.session.cancel":     handlers.Cancel,
+		"you.session.terminate":  handlers.Terminate,
 	}
 	registry := NewRegistry()
 	for commandID, binding := range bindings {
@@ -256,6 +293,7 @@ func NewSessionResolvedRegistry(
 type sessionResolvedGlobals struct {
 	server  string
 	json    bool
+	remote  bool
 	verbose bool
 	debug   bool
 }
@@ -269,6 +307,15 @@ func readSessionResolvedGlobals(inputs resolvedinput.Inputs) (sessionResolvedGlo
 	if err != nil {
 		return sessionResolvedGlobals{}, err
 	}
+	remote, err := inputs.Bool(sessionRemoteInputID)
+	if err != nil {
+		// Older unit-level callers resolved session inputs without the root
+		// placement flag. The authored command contract defaults it to local.
+		if _, present := inputs.State(sessionRemoteInputID); present {
+			return sessionResolvedGlobals{}, err
+		}
+		remote = false
+	}
 	verbose, err := inputs.Bool(sessionVerboseInputID)
 	if err != nil {
 		return sessionResolvedGlobals{}, err
@@ -278,7 +325,7 @@ func readSessionResolvedGlobals(inputs resolvedinput.Inputs) (sessionResolvedGlo
 		return sessionResolvedGlobals{}, err
 	}
 	return sessionResolvedGlobals{
-		server: server, json: jsonOutput, verbose: verbose || debug, debug: debug,
+		server: server, json: jsonOutput, remote: remote, verbose: verbose || debug, debug: debug,
 	}, nil
 }
 
@@ -317,7 +364,7 @@ func (h *SessionResolvedHandler) Create(
 	inputs resolvedinput.Inputs,
 	inherited resolvedinput.Inputs,
 ) error {
-	if h == nil || h.services.Sessions == nil {
+	if h == nil || h.services.remote() == nil {
 		return fmt.Errorf("session create service is required")
 	}
 	dir, err := inputs.String(sessionCreateDirInputID)
@@ -349,7 +396,7 @@ func (h *SessionResolvedHandler) Create(
 		return fmt.Errorf("resolve session create inputs: %w", err)
 	}
 	portState, _ := inputs.State(sessionCreatePortInputID)
-	return h.services.Sessions.Create(sessioncli.CreateConfig{
+	return h.services.remote().Create(sessioncli.CreateConfig{
 		Server: globals.server, Port: port, PortExplicit: portState.Changed,
 		Dir: dir, InitNewFactory: initNew, ValidateOnly: validateOnly,
 		TargetKind: targetKind, TargetName: targetName, JSON: globals.json,
@@ -363,7 +410,7 @@ func (h *SessionResolvedHandler) Delete(
 	inputs resolvedinput.Inputs,
 	inherited resolvedinput.Inputs,
 ) error {
-	if h == nil || h.services.Sessions == nil {
+	if h == nil || h.services.remote() == nil {
 		return fmt.Errorf("session delete service is required")
 	}
 	sessionID, err := inputs.String(sessionDeleteIDInputID)
@@ -378,7 +425,7 @@ func (h *SessionResolvedHandler) Delete(
 	if err != nil {
 		return fmt.Errorf("resolve session delete inputs: %w", err)
 	}
-	return h.services.Sessions.Delete(sessioncli.DeleteConfig{
+	return h.services.remote().Delete(sessioncli.DeleteConfig{
 		Port: port, SessionID: sessionID, JSON: globals.json,
 		Verbose: globals.verbose, Debug: globals.debug,
 		Output: cmd.OutOrStdout(), Diagnostics: diagnostics,
@@ -390,7 +437,7 @@ func (h *SessionResolvedHandler) List(
 	inputs resolvedinput.Inputs,
 	inherited resolvedinput.Inputs,
 ) error {
-	if h == nil || h.services.Sessions == nil {
+	if h == nil || h.services.remote() == nil {
 		return fmt.Errorf("session list service is required")
 	}
 	port, err := inputs.Int(sessionListPortInputID)
@@ -418,7 +465,7 @@ func (h *SessionResolvedHandler) List(
 			return err
 		}
 	}
-	return h.services.Sessions.List(cfg)
+	return h.services.remote().List(cfg)
 }
 
 func (h *SessionResolvedHandler) Show(
@@ -426,7 +473,7 @@ func (h *SessionResolvedHandler) Show(
 	inputs resolvedinput.Inputs,
 	inherited resolvedinput.Inputs,
 ) error {
-	if h == nil || h.services.Sessions == nil {
+	if h == nil || h.services.remote() == nil {
 		return fmt.Errorf("session show service is required")
 	}
 	if err := rejectDeprecatedSessionPort(inputs, sessionShowPortInputID); err != nil {
@@ -440,7 +487,7 @@ func (h *SessionResolvedHandler) Show(
 	if err != nil {
 		return fmt.Errorf("resolve session show inputs: %w", err)
 	}
-	return h.services.Sessions.Show(sessioncli.ShowConfig{
+	return h.services.remote().Show(sessioncli.ShowConfig{
 		Context: cmd.Context(), Server: globals.server, SessionID: sessionID,
 		JSON: globals.json, Verbose: globals.verbose, Debug: globals.debug,
 		Output: cmd.OutOrStdout(), Diagnostics: diagnostics,
@@ -452,7 +499,7 @@ func (h *SessionResolvedHandler) Dispatches(
 	inputs resolvedinput.Inputs,
 	inherited resolvedinput.Inputs,
 ) error {
-	if h == nil || h.services.Sessions == nil {
+	if h == nil || h.services.remote() == nil {
 		return fmt.Errorf("session dispatches service is required")
 	}
 	if err := rejectDeprecatedSessionPort(inputs, sessionDispatchesPortInputID); err != nil {
@@ -474,7 +521,7 @@ func (h *SessionResolvedHandler) Dispatches(
 	if err != nil {
 		return fmt.Errorf("resolve session dispatches inputs: %w", err)
 	}
-	return h.services.Sessions.ListDispatches(sessioncli.DispatchesConfig{
+	return h.services.remote().ListDispatches(sessioncli.DispatchesConfig{
 		Context: cmd.Context(), Server: globals.server, SessionID: sessionID,
 		Phase: phase, Status: status, JSON: globals.json,
 		Verbose: globals.verbose, Debug: globals.debug,
@@ -488,11 +535,8 @@ func (h *SessionResolvedHandler) lifecycle(
 	inherited resolvedinput.Inputs,
 	inputID string,
 	portInputID string,
-	control func(sessioncli.LifecycleControlConfig) error,
+	operation string,
 ) error {
-	if control == nil {
-		return fmt.Errorf("session lifecycle control handler is required")
-	}
 	if err := rejectDeprecatedSessionPort(inputs, portInputID); err != nil {
 		return err
 	}
@@ -503,6 +547,26 @@ func (h *SessionResolvedHandler) lifecycle(
 	globals, diagnostics, err := h.base(cmd, inherited)
 	if err != nil {
 		return fmt.Errorf("resolve session lifecycle inputs: %w", err)
+	}
+	service := h.services.forPlacement(globals.remote)
+	if service == nil {
+		return fmt.Errorf("session %s service is required for %s placement", operation, map[bool]string{true: "remote", false: "local"}[globals.remote])
+	}
+	var control func(sessioncli.LifecycleControlConfig) error
+	switch operation {
+	case "pause":
+		control = service.Pause
+	case "resume":
+		control = service.Resume
+	case "cancel":
+		control = service.Cancel
+	case "terminate":
+		control = service.Terminate
+	default:
+		return fmt.Errorf("unsupported session lifecycle operation %q", operation)
+	}
+	if control == nil {
+		return fmt.Errorf("session %s service is required for %s placement", operation, map[bool]string{true: "remote", false: "local"}[globals.remote])
 	}
 	return control(sessioncli.LifecycleControlConfig{
 		Context: cmd.Context(), Server: globals.server, SessionID: sessionID,
@@ -519,13 +583,10 @@ func (h *SessionResolvedHandler) Pause(
 	if h == nil {
 		return fmt.Errorf("session pause handler is required")
 	}
-	if h == nil || h.services.Sessions == nil {
-		return fmt.Errorf("session pause service is required")
-	}
 	return h.lifecycle(
 		cmd, inputs, inherited,
 		sessionPauseIDInputID, sessionPausePortInputID,
-		h.services.Sessions.Pause,
+		"pause",
 	)
 }
 
@@ -537,13 +598,40 @@ func (h *SessionResolvedHandler) Resume(
 	if h == nil {
 		return fmt.Errorf("session resume handler is required")
 	}
-	if h == nil || h.services.Sessions == nil {
-		return fmt.Errorf("session resume service is required")
-	}
 	return h.lifecycle(
 		cmd, inputs, inherited,
 		sessionResumeIDInputID, sessionResumePortInputID,
-		h.services.Sessions.Resume,
+		"resume",
+	)
+}
+
+func (h *SessionResolvedHandler) Cancel(
+	cmd *cobra.Command,
+	inputs resolvedinput.Inputs,
+	inherited resolvedinput.Inputs,
+) error {
+	if h == nil {
+		return fmt.Errorf("session cancel handler is required")
+	}
+	return h.lifecycle(
+		cmd, inputs, inherited,
+		sessionCancelIDInputID, sessionCancelPortInputID,
+		"cancel",
+	)
+}
+
+func (h *SessionResolvedHandler) Terminate(
+	cmd *cobra.Command,
+	inputs resolvedinput.Inputs,
+	inherited resolvedinput.Inputs,
+) error {
+	if h == nil {
+		return fmt.Errorf("session terminate handler is required")
+	}
+	return h.lifecycle(
+		cmd, inputs, inherited,
+		sessionTerminateIDInputID, sessionTerminatePortInputID,
+		"terminate",
 	)
 }
 

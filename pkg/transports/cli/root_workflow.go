@@ -19,9 +19,11 @@ func newSessionHandlerRegistry(
 		return nil, err
 	}
 	return commandregistry.NewSessionResolvedRegistry(manifest, commandregistry.SessionResolvedServices{
-		Sessions:    options.SessionsCLI,
-		PrepareList: sessionListPrepare(options),
-		Diagnostics: diagnostics.writer,
+		Sessions:       options.SessionsCLI,
+		RemoteSessions: options.SessionsCLI,
+		LocalSessions:  options.LocalSessionsCLI,
+		PrepareList:    sessionListPrepare(options),
+		Diagnostics:    diagnostics.writer,
 	})
 }
 

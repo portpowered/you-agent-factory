@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"strings"
 
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
@@ -18,7 +19,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
-// LifecycleControlConfig holds parameters for session pause and resume commands.
+// LifecycleControlConfig holds parameters for session lifecycle controls.
 type LifecycleControlConfig struct {
 	Context     context.Context
 	Server      string
@@ -39,6 +40,8 @@ type Service interface {
 	Show(ShowConfig) error
 	Pause(LifecycleControlConfig) error
 	Resume(LifecycleControlConfig) error
+	Cancel(LifecycleControlConfig) error
+	Terminate(LifecycleControlConfig) error
 	ListDispatches(DispatchesConfig) error
 	Create(CreateConfig) error
 	Delete(DeleteConfig) error
@@ -50,6 +53,8 @@ type Operations struct {
 	Show           func(ShowConfig) error
 	Pause          func(LifecycleControlConfig) error
 	Resume         func(LifecycleControlConfig) error
+	Cancel         func(LifecycleControlConfig) error
+	Terminate      func(LifecycleControlConfig) error
 	ListDispatches func(DispatchesConfig) error
 	Create         func(CreateConfig) error
 	Delete         func(DeleteConfig) error
@@ -65,6 +70,8 @@ type boundService struct {
 	show           func(ShowConfig) error
 	pause          func(LifecycleControlConfig) error
 	resume         func(LifecycleControlConfig) error
+	cancel         func(LifecycleControlConfig) error
+	terminate      func(LifecycleControlConfig) error
 	listDispatches func(DispatchesConfig) error
 	create         func(CreateConfig) error
 	delete         func(DeleteConfig) error
@@ -86,6 +93,8 @@ func Bind(ops Operations) Service {
 		show:           ops.Show,
 		pause:          ops.Pause,
 		resume:         ops.Resume,
+		cancel:         ops.Cancel,
+		terminate:      ops.Terminate,
 		listDispatches: ops.ListDispatches,
 		create:         ops.Create,
 		delete:         ops.Delete,
@@ -111,6 +120,16 @@ func (service *service) Pause(cfg LifecycleControlConfig) error {
 func (service *service) Resume(cfg LifecycleControlConfig) error {
 	cfg.HTTP = service.http
 	return Resume(cfg)
+}
+
+func (service *service) Cancel(cfg LifecycleControlConfig) error {
+	cfg.HTTP = service.http
+	return Cancel(cfg)
+}
+
+func (service *service) Terminate(cfg LifecycleControlConfig) error {
+	cfg.HTTP = service.http
+	return Terminate(cfg)
 }
 
 func (service *service) ListDispatches(cfg DispatchesConfig) error {
@@ -156,6 +175,20 @@ func (service *boundService) Resume(cfg LifecycleControlConfig) error {
 	return service.resume(cfg)
 }
 
+func (service *boundService) Cancel(cfg LifecycleControlConfig) error {
+	if service == nil || service.cancel == nil {
+		return fmt.Errorf("session cancel service is required")
+	}
+	return service.cancel(cfg)
+}
+
+func (service *boundService) Terminate(cfg LifecycleControlConfig) error {
+	if service == nil || service.terminate == nil {
+		return fmt.Errorf("session terminate service is required")
+	}
+	return service.terminate(cfg)
+}
+
 func (service *boundService) ListDispatches(cfg DispatchesConfig) error {
 	if service == nil || service.listDispatches == nil {
 		return fmt.Errorf("session dispatches service is required")
@@ -183,6 +216,83 @@ func NewPause(transport clihttp.Protocol) func(LifecycleControlConfig) error {
 
 func NewResume(transport clihttp.Protocol) func(LifecycleControlConfig) error {
 	return func(cfg LifecycleControlConfig) error { cfg.HTTP = transport; return Resume(cfg) }
+}
+
+func NewCancel(transport clihttp.Protocol) func(LifecycleControlConfig) error {
+	return func(cfg LifecycleControlConfig) error { cfg.HTTP = transport; return Cancel(cfg) }
+}
+
+func NewTerminate(transport clihttp.Protocol) func(LifecycleControlConfig) error {
+	return func(cfg LifecycleControlConfig) error { cfg.HTTP = transport; return Terminate(cfg) }
+}
+
+// NewLocalLifecycleControls binds the local Factory Sessions service to the
+// same CLI lifecycle-control renderer used by the HTTP adapter. The returned
+// service intentionally exposes only lifecycle controls; remote-only session
+// inspection and session-hosting commands remain on the HTTP adapter.
+func NewLocalLifecycleControls(service factorysessions.Service) Service {
+	if service == nil {
+		return nil
+	}
+	return Bind(Operations{
+		Pause:     NewLocalPause(service.Pause),
+		Resume:    NewLocalResume(service.Resume),
+		Cancel:    NewLocalCancel(service.Cancel),
+		Terminate: NewLocalTerminate(service.Terminate),
+	})
+}
+
+type localLifecycleOperation func(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
+
+func newLocalLifecycleControl(operation localLifecycleOperation) func(LifecycleControlConfig) error {
+	return func(cfg LifecycleControlConfig) error {
+		if operation == nil {
+			return fmt.Errorf("local Factory Session lifecycle operation is required")
+		}
+		if cfg.Context == nil {
+			return fmt.Errorf("context is required")
+		}
+		if cfg.Output == nil {
+			return fmt.Errorf("output writer is required")
+		}
+		result, err := operation(cfg.Context, resolvedLifecycleControlSessionID(cfg.SessionID), factorysessions.ControlRequest{
+			RequestID: cfg.RequestID,
+			Reason:    cfg.Reason,
+		})
+		if err != nil {
+			return err
+		}
+		return renderLifecycleControlOutcome(cfg, localLifecycleControlResponse(result))
+	}
+}
+
+func NewLocalPause(operation localLifecycleOperation) func(LifecycleControlConfig) error {
+	return newLocalLifecycleControl(operation)
+}
+
+func NewLocalResume(operation localLifecycleOperation) func(LifecycleControlConfig) error {
+	return newLocalLifecycleControl(operation)
+}
+
+func NewLocalCancel(operation localLifecycleOperation) func(LifecycleControlConfig) error {
+	return newLocalLifecycleControl(operation)
+}
+
+func NewLocalTerminate(operation localLifecycleOperation) func(LifecycleControlConfig) error {
+	return newLocalLifecycleControl(operation)
+}
+
+func localLifecycleControlResponse(result factorysessions.LifecycleControlResult) factoryapi.FactorySessionLifecycleControlResponse {
+	response := factoryapi.FactorySessionLifecycleControlResponse{
+		SessionId: result.SessionID,
+		Operation: factoryapi.FactorySessionLifecycleControlKind(result.Operation),
+		Outcome:   factoryapi.FactorySessionLifecycleControlOutcome(result.Outcome),
+		Status:    factoryapi.FactorySessionDurableLifecycleStatus(result.Status),
+	}
+	if detail := strings.TrimSpace(result.Detail); detail != "" {
+		response.Detail = &detail
+	}
+	return response
 }
 
 // LifecycleControlRejectedError reports a typed lifecycle-control rejection returned
@@ -216,6 +326,18 @@ func Pause(cfg LifecycleControlConfig) error {
 // Resume requests resume for one factory session through POST /factory-sessions/{session_id}/resume.
 func Resume(cfg LifecycleControlConfig) error {
 	return invokeLifecycleControl(cfg, factoryapi.FactorySessionLifecycleControlKindResume, "resume")
+}
+
+// Cancel requests cancellation for one Factory Session through POST
+// /factory-sessions/{session_id}/cancel.
+func Cancel(cfg LifecycleControlConfig) error {
+	return invokeLifecycleControl(cfg, factoryapi.FactorySessionLifecycleControlKindCancel, "cancel")
+}
+
+// Terminate requests termination for one Factory Session through POST
+// /factory-sessions/{session_id}/terminate.
+func Terminate(cfg LifecycleControlConfig) error {
+	return invokeLifecycleControl(cfg, factoryapi.FactorySessionLifecycleControlKindTerminate, "terminate")
 }
 
 // pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.

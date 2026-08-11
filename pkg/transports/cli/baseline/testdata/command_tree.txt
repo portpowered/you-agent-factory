@@ -27,6 +27,7 @@ you serve	serve	you
 you serve acp	acp	you serve
 you server	server	you
 you session	session	you
+you session cancel	cancel [session-id]	you session
 you session create	create [arg0...]	you session
 you session delete	delete <session-id>	you session
 you session dispatches	dispatches <session-id>	you session
@@ -34,6 +35,7 @@ you session list	list [arg0...]	you session
 you session pause	pause [session-id]	you session
 you session resume	resume [session-id]	you session
 you session show	show [session-id]	you session
+you session terminate	terminate [session-id]	you session
 you submit	submit	you
 you submit batch	batch [path|-|<inline-json>]	you submit
 you work	work	you
