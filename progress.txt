@@ -8024,3 +8024,17 @@
 - **Learnings for future iterations:**
   - When a hosted coverage ratchet misses its package minimum by a small amount, compare the exact base commit, inspect the named package, and rerun only the failed coverage and dependent policy jobs before changing baselines or product code.
 ---
+
+## 2026-08-10 23:24 -07:00 - prose-standard-and-terms final handoff audit
+- What was implemented
+  - Corrected the final handoff record to identify the pushed bookkeeping head `82ddeb66d`.
+  - Recorded the thread-aware review audit and final mergeability state after the green replacement CI run.
+- Files changed
+  - `progress.txt`
+- Verification
+  - CI run `31464508923` is terminal and green across every required lane, including Backend Unit Coverage, Backend Functional Coverage, Verification Policy, and all docs, frontend, API/package, packaged-factory, model-provider, UI-integration, and local-inference lanes.
+  - The PR head is `82ddeb66d`, the base is `ecd1d2487`, `git merge-tree --write-tree origin/main HEAD` is clean, the worktree is clean, and GitHub reports the PR mergeable.
+  - The PR body matches `prd.json` byte-for-byte. The thread-aware GraphQL audit reports 8 conversation comments, 0 formal reviews, 0 inline review threads, 0 unresolved threads, and 0 outdated threads; the latest blocking feedback is addressed by the scoped test removal, current-main synchronization, targeted coverage rerun, and green final CI.
+- **Learnings for future iterations:**
+  - Treat the final pushed head, current base, PR body/PRD equality, hosted checks, and thread state as one audit bundle; append a correction if bookkeeping is committed after an earlier handoff record.
+---
