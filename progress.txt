@@ -11591,3 +11591,17 @@
 - **Learnings for future iterations:**
   - After a moving-base merge, treat the first green source verification as provisional until the replacement head’s full hosted run, targeted reruns, mergeability, and review-thread audit all agree.
 ---
+## [2026-08-11 12:12:07 -07:00] - thr-deflake-cli-process-package final PR handoff audit
+- What was implemented
+  - Rechecked the final published handoff head `6465d9d2404daf79113fc84c8d3f882e3316032b` instead of opening a duplicate PR.
+  - Refreshed `prd.json` with the final hosted run and live review state; all three stories remain marked `passes:true`.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Hosted run `31526053321` is terminal-success across all 18 required checks, including Backend Functional Coverage and Verification Policy.
+  - GitHub reports PR #1884 `MERGEABLE` / `CLEAN` against `origin/main` `05db67124f6abc32b149f326533f126db2d78aa4`; the branch contains current main and the working tree is clean before this metadata commit.
+  - The thread-aware GraphQL audit found 7 top-level conversation comments, 0 submitted reviews, 0 inline review threads, and 0 unresolved threads; the PR body matches `prd.json` before this metadata commit.
+- **Learnings for future iterations:**
+  - Final handoff evidence must identify the exact published head and its terminal hosted run; historical green runs are not sufficient after metadata or base-reconciliation commits advance the branch.
+---
