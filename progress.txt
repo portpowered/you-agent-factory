@@ -2,6 +2,7 @@
 - Public UI package build and pack verification mutate sibling `dist` directories; run dependency preparation, package build, and pack verification serially to avoid transient missing-module or Windows file-lock failures.
 - Packaged catalog generation runs canonical Factory validation before publication-specific semantic-role checks; removing a referenced terminal state requires a real terminal route/bridge or a coordinated validator decision.
 - Cross-host graph semantics should enter React Flow nodes as a disposable package projection and render through the shared workstation node; host-specific activity metadata must remain decoration, not classification.
+- Normalize trimmed blank durable identifiers to absent before authored-versus-runtime joins; only non-empty IDs select identity, otherwise use the documented legacy-name fallback.
 - First-party packaged Factory semantic checks should consume parsed canonical definitions inside `internal/packagedfactorycatalog`; keep customer-authored and JavaScript Factory validation unchanged.
 - A lifecycle-only Work state is valid only through a named production bridge that matches the runtime contract and has direct behavioral test evidence; do not use comment-only allowlists.
 - When a catalog audit finds a lifecycle state that the current runtime does not emit, leave it as explicit follow-up work rather than relaxing validation with a guessed bridge; source comments and stale diagrams are not behavioral evidence.
@@ -4200,4 +4201,25 @@
   - `git diff --check` — passed.
 - **Learnings for future iterations:**
   - A story can be marked complete only after its focused behavior, publication integration, scope exclusions, and generated-output checks are all re-run in the same acceptance audit.
+---
+
+## [2026-08-11 01:31 -07:00] - graph-workstation-semantics-004 review follow-up
+- What was implemented
+  - Normalized trimmed blank workstation IDs to absent in the Factory graph editor’s authored-semantics join, restoring the name fallback for legacy topology nodes whose ID field is empty.
+  - Added an editor-flow regression that renders a legacy blank-ID topology with authored agent-run and repeater semantics and asserts both visible labels survive the join.
+  - Updated the existing missing-metadata editor assertion to require the documented neutral unknown presentation rather than the removed generic workstation label.
+- Files changed
+  - `ui/src/features/factory-graph-editor/lib/projection/factory-graph-react-flow-projection.ts`
+  - `ui/src/features/factory-graph-editor/components/flow/factory-graph-editor-flow.test.tsx`
+  - `progress.txt`
+  - `prd.json`
+- Verification
+  - Focused Biome check for the projection and editor-flow test — passed.
+  - Focused editor component lane — passed: 1 file, 11 tests.
+  - Focused React Flow projection unit lane — passed: 1 file, 25 tests.
+  - `git diff --check` — passed.
+  - Committed as `6498ef3c2` (`fix(graph-editor): normalize blank workstation ids`).
+- **Learnings for future iterations:**
+  - Legacy graph topology can preserve an empty ID even when the authored definition omits it; normalize both join inputs before deciding whether durable identity or name fallback applies.
+  - Component tests that render React Flow nodes catch stale neutral-fallback expectations that pure projection tests do not expose.
 ---
