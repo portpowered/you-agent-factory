@@ -10177,6 +10177,25 @@
   - Fetching the live base immediately before each publish is essential while main is moving; resolve only shared bookkeeping conflicts and preserve the active task PRD.
   - A fresh workflow is required after every current-main synchronization, even when the merge introduces no task-side behavior change.
 ---
+## [2026-08-11 03:03:00 -07:00] - btrc-p1-root-injection-006 current-main merge and terminal CI audit
+- What was implemented
+  - Merged live `origin/main` `dd87fd04db20d755f9b44c369aa79b8c3e600f5f` into the P1 branch as `bfb2a2e8fd1170461d36b98b32de8d70119ae4b1`; the only merge conflict was the shared `prd.json`, which was resolved by retaining the active P1 PRD while carrying all current-main implementation and lint-gate changes.
+  - Audited workflow `31479393484` on the synchronized merge head and reran its failed jobs once.
+  - Updated the delivery audit to the terminal synchronized result: the browser integration timeout cleared on rerun, while the untouched server-binding diagnostic assertion remained the sole baseline failure.
+- Files changed
+  - Current-main implementation, lint-gate, and baseline files carried by the merge.
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `git merge-base --is-ancestor origin/main HEAD` — passed after the merge; GitHub reports the PR conflict-free and mergeable.
+  - Initial workflow `31479393484` — all lanes passed except Backend Functional Coverage's server-binding assertion and a transient Frontend Browser node-placement timeout.
+  - Failed-job rerun — Frontend Browser passed; Backend Functional Coverage reproduced only `TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput`.
+  - `git diff --name-only origin/main...HEAD -- tests/functional/transport/server_binding` — empty.
+  - All six P1 stories remain `passes:true`; the thread-aware audit remains at zero review threads, zero unresolved review threads, and zero formal reviews.
+- **Learnings for future iterations:**
+  - Recheck the live main ref after every long CI cycle; a moving base can make a previously clean PR dirty before the workflow completes.
+  - Rerun only the failed jobs when a synchronized workflow contains mixed transient and deterministic failures, and keep the final audit limited to failures that reproduce outside the task diff.
+---
 ## [2026-08-11 02:26:00 -07:00] - btrc-p1-root-injection-006 terminal rerun baseline audit
 - What was implemented
   - Audited workflow `31476115214` for pushed head `c956c59875f8e391ee61049534f8da89afbcd48c` and reran its failed jobs once.
@@ -10194,4 +10213,19 @@
 - **Learnings for future iterations:**
   - A failed-job rerun can reproduce a stable baseline assertion and independently surface an intermittent untouched test; record both package paths and diff membership before changing task code.
   - Keep `prd.json`'s delivery audit tied to the exact tested head and workflow, and refresh the PR body after every bookkeeping commit.
+---
+## [2026-08-11 03:05:00 -07:00] - btrc-p1-root-injection-006 final synchronized delivery record
+- What was implemented
+  - Appended the terminal record for merge head `bfb2a2e8fd1170461d36b98b32de8d70119ae4b1` after synchronizing with `origin/main` `dd87fd04db20d755f9b44c369aa79b8c3e600f5f`.
+  - Confirmed the only reproducible failure after the retry-only rerun is the untouched server-binding baseline assertion; no task-scoped implementation change is pending.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Workflow `31479393484` and its failed-job rerun: all non-baseline lanes pass; Frontend Browser cleared its transient node-placement timeout.
+  - `git merge-base --is-ancestor origin/main HEAD` — passed; `git diff --name-only origin/main...HEAD -- tests/functional/transport/server_binding` — empty.
+  - PR #1857 has zero review threads, zero unresolved review threads, and zero formal reviews.
+- **Learnings for future iterations:**
+  - Keep the final progress entry physically at EOF when shared-file merges add incoming history; append-only logs are easiest to audit from their tail.
+  - A clean, conflict-free merge head can still remain review-blocked by an unchanged repository baseline test, so preserve the evidence and return `<CONTINUE>` rather than altering unrelated code.
 ---
