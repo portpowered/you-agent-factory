@@ -40,6 +40,7 @@ export function FactoryGraphReplaySurface({
         edgesFocusable={false}
         fitView
         fitViewOptions={{ padding: 0.12 }}
+        minZoom={0.25}
         nodes={flow.nodes}
         nodesConnectable={false}
         nodesDraggable={false}

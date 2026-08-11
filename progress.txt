@@ -1,5 +1,6 @@
 ## Codebase Patterns
 - Public UI package build and pack verification mutate sibling `dist` directories; run dependency preparation, package build, and pack verification serially to avoid transient missing-module or Windows file-lock failures.
+- Package-owned React Flow replay surfaces should set a mobile-safe minimum zoom below React Flow's default when fit-to-view must keep authored node controls inside narrow viewports.
 - Packaged catalog generation runs canonical Factory validation before publication-specific semantic-role checks; removing a referenced terminal state requires a real terminal route/bridge or a coordinated validator decision.
 - Cross-host graph semantics should enter React Flow nodes as a disposable package projection and render through the shared workstation node; host-specific activity metadata must remain decoration, not classification.
 - Normalize trimmed blank durable identifiers to absent before authored-versus-runtime joins; only non-empty IDs select identity, otherwise use the documented legacy-name fallback.
@@ -8905,4 +8906,22 @@
   - Thread-aware PR audit — one historical blocking conversation comment, zero review threads; requested validator scope, editor join, file split, current-main synchronization, and test-gate fixes are present locally.
 - **Learnings for future iterations:**
   - For long unit lanes that can exceed tool output limits, capture output to a temporary log and report the terminal exit code plus a bounded tail before treating the gate as verified.
+---
+## [2026-08-11 04:08 -07:00] - graph-workstation-semantics PR browser-gate follow-up
+- What was implemented
+  - Reproduced the hosted `Frontend Storybook` failure twice: the customer emulator's replay graph placed the `Review` workstation button at x=-82 on the 390px viewport after the new authored runtime/scheduling labels widened semantic nodes.
+  - Lowered the canonical Factory graph replay surface minimum fit-to-view zoom from React Flow's default to `0.25`, allowing narrow graphs to keep all semantic workstation controls inside the viewport without changing authored topology or interaction behavior.
+  - Regenerated the checked-in Factory graph distribution and recorded the completed Story 004 review follow-up in the PRD.
+- Files changed
+  - `ui/packages/factory-graph/src/factory-graph-replay-surface.tsx`
+  - `ui/packages/factory-graph/dist/factory-graph-replay-surface.js`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `ui/packages/factory-graph`: typecheck passed; 54 tests passed.
+  - `bun run storybook:customer-factory-emulator-demos-check` passed at the 390px and 1440px viewports.
+  - `bun run storybook:factory-graph-touch-check` passed for touch pan and desktop selection-drag.
+  - The in-app browser was unavailable (`agent.browsers.list()` returned no browser surfaces); the repository's Playwright Storybook check provided the available browser evidence.
+- **Learnings for future iterations:**
+  - Fit-to-view can stop at React Flow's default `minZoom` before all authored nodes fit on touch-sized replay surfaces; tune the package-owned surface rather than reconstructing topology or weakening the browser assertion.
 ---
