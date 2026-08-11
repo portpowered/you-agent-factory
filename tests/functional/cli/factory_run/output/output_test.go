@@ -107,6 +107,7 @@ func isFactoryLifecycleLine(line string) bool {
 	for _, prefix := range []string{
 		"work accepted", "work moved", "factory started", "factory completed",
 		"workstation queued", "workstation started", "workstation completed", "workstation failed", "workstation interrupted",
+		"worker active",
 		"inference started", "inference completed", "inference failed", "workflow phase", "workflow checkpoint written",
 		"final output updated",
 	} {
