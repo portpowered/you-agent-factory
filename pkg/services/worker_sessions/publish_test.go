@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -238,6 +239,7 @@ func TestProviderSessionObservationRequest_Validate(t *testing.T) {
 type workerRecordSpy struct {
 	workersessions.Service
 	published []workersessions.PublishRecordRequest
+	bindings  []workersessions.ProviderBindingRequest
 }
 
 func (s *workerRecordSpy) ObserveProviderSession(
@@ -251,6 +253,90 @@ func (s *workerRecordSpy) PublishRecord(
 ) (workersessions.PublishRecordResult, error) {
 	s.published = append(s.published, req)
 	return workersessions.PublishRecordResult{}, nil
+}
+
+func (s *workerRecordSpy) EnsureProviderBinding(
+	_ context.Context,
+	req workersessions.ProviderBindingRequest,
+) (workersessions.ProviderBindingResult, error) {
+	s.bindings = append(s.bindings, req)
+	return workersessions.ProviderBindingResult{
+		WorkerSessionID: "worker-1",
+		DispatchID:      req.DispatchID,
+		Provider:        req.Provider,
+		Outcome:         workersessions.ProviderBindingOutcomeAccepted,
+	}, nil
+}
+
+func (s *workerRecordSpy) WorkerSessionIDForDispatch(
+	_ context.Context,
+	dispatchID string,
+) (string, error) {
+	return dispatchID, nil
+}
+
+// TestPublish_CanonicalDraftBindsBeforeWorkerOutput proves canonical provider
+// drafts use the Worker Sessions-owned binding capability before the draft is
+// committed and still reach the downstream response publisher exactly once.
+func TestPublish_CanonicalDraftBindsBeforeWorkerOutput(t *testing.T) {
+	spy := &workerRecordSpy{}
+	forwarded := 0
+	publisher := workersessions.NewProviderSessionObservationPublisher(func(workers.ProgressFragment) {
+		forwarded++
+	})
+	publisher.Bind(spy)
+	publisher.Publish(workers.CanonicalDraftFragment("worker-1", workers.Draft{
+		Kind:       workers.KindMessage,
+		Phase:      workers.PhaseCompleted,
+		DispatchID: "worker-1",
+		Provenance: workers.Provenance{Provider: "codex", NativeEventType: "message.completed", Delivery: workers.DeliveryNativeFinal, Representation: workers.RepresentationSnapshot, Fidelity: workers.FidelityFinalOnly},
+		Payload:    []byte(`{"role":"assistant","contentBlocks":[{"kind":"TEXT","text":"done"}]}`),
+	}))
+
+	if len(spy.bindings) != 1 || spy.bindings[0].Provider != "codex" || spy.bindings[0].DispatchID != "worker-1" {
+		t.Fatalf("provider bindings = %#v, want one codex binding before output", spy.bindings)
+	}
+	if len(spy.published) != 1 || spy.published[0].Draft.Kind != workers.KindMessage || spy.published[0].Draft.Provenance.Provider != "codex" {
+		t.Fatalf("published canonical records = %#v, want one codex MESSAGE record", spy.published)
+	}
+	if forwarded != 1 {
+		t.Fatalf("forwarded canonical fragments = %d, want exactly one", forwarded)
+	}
+}
+
+// TestPublish_NoProviderSessionReferenceStillBindsAndPreservesProvenance
+// proves provider identity is sufficient to attribute a raw provider output
+// even when the provider has no resumable native session reference to share.
+func TestPublish_NoProviderSessionReferenceStillBindsAndPreservesProvenance(t *testing.T) {
+	spy := &workerRecordSpy{}
+	var forwarded []workers.ProgressFragment
+	publisher := workersessions.NewProviderSessionObservationPublisher(func(fragment workers.ProgressFragment) {
+		forwarded = append(forwarded, fragment)
+	})
+	publisher.Bind(spy)
+	publisher.Publish(workers.ProgressFragment{
+		DispatchID: "worker-1",
+		Kind:       workers.ProgressFragmentKind,
+		Type:       "message.completed",
+		Payload:    "final-only output",
+		Provider:   "antigravity",
+		Metadata:   map[string]string{"item_id": "message-1"},
+	})
+
+	if len(spy.bindings) != 1 || spy.bindings[0].Provider != "antigravity" {
+		t.Fatalf("provider bindings = %#v, want one antigravity binding", spy.bindings)
+	}
+	if len(spy.published) != 1 {
+		t.Fatalf("published records = %#v, want one output record", spy.published)
+	}
+	output := spy.published[0].Draft
+	if output.Provenance.Provider != "antigravity" || output.Kind != workers.KindMessage || output.Phase != workers.PhaseCompleted {
+		t.Fatalf("output draft = %#v, want antigravity MESSAGE/COMPLETED provenance", output)
+	}
+	if len(forwarded) != 1 || forwarded[0].Provider != "antigravity" ||
+		forwarded[0].ProviderSessionReference != nil || forwarded[0].ProviderSessionRef != nil {
+		t.Fatalf("forwarded output = %#v, want provider identity without a synthesized session", forwarded)
+	}
 }
 
 // TestPublish_CommitsWorkerOutputAsValidRecordsAndStillForwards pins both
@@ -433,7 +519,17 @@ func (s *rejectingWorkerRecordSpy) PublishRecord(
 	return workersessions.PublishRecordResult{}, s.err
 }
 
-type recordingLogger struct{ messages []string }
+func (s *rejectingWorkerRecordSpy) WorkerSessionIDForDispatch(
+	_ context.Context,
+	dispatchID string,
+) (string, error) {
+	return dispatchID, nil
+}
+
+type recordingLogger struct {
+	logging.NoopLogger
+	messages []string
+}
 
 func (l *recordingLogger) Warn(msg string, args ...any) {
 	entry := msg

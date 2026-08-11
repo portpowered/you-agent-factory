@@ -130,6 +130,22 @@ func (s *Server) StreamWorkerSessionEventsBySessionId(
 	s.workerSessionsHTTP.StreamWorkerSessionEventsBySessionId(w, r, sessionID, params)
 }
 
+// StreamWorkerSessionEventsByWorkerSessionId forwards the provider-neutral
+// Worker Session identity stream to the Worker Sessions owner handler.
+func (s *Server) StreamWorkerSessionEventsByWorkerSessionId(
+	w http.ResponseWriter,
+	r *http.Request,
+	sessionID factoryapi.SessionID,
+	workerSessionID factoryapi.WorkerSessionID,
+	params factoryapi.StreamWorkerSessionEventsByWorkerSessionIdParams,
+) {
+	if s.workerSessionsHTTP == nil {
+		s.writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
+		return
+	}
+	s.workerSessionsHTTP.StreamWorkerSessionEventsByWorkerSessionId(w, r, sessionID, workerSessionID, params)
+}
+
 var noModTime = time.Time{}
 
 // Handler returns the http.Handler for testing and composition.

@@ -167,6 +167,38 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/worker-sessions/{worker_session_id}/events:
+    get:
+      tags:
+        - Worker Sessions
+      operationId: streamWorkerSessionEventsByWorkerSessionId
+      summary: Stream retained and live Worker Session events by Worker Session identity
+      description: Streams the canonical Worker Session Events topic for the stable Worker Session identity returned by the Worker Sessions list operation. This provider-neutral path remains available when the provider did not emit a native Provider Session reference. Retained records are emitted first in aggregate order, followed by live records unless replayOnly is true. In replay-only mode the retained head is captured before delivery, no live follower is registered, and one REPLAY_SUMMARY frame closes the stream after the retained drain.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - $ref: '#/components/parameters/WorkerSessionID'
+        - name: replayOnly
+          in: query
+          required: false
+          description: Drain the retained history through a captured Events head without registering a live follower.
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Retained then live Worker Session event frames, or a finite retained replay ending in REPLAY_SUMMARY.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: Server-Sent Events where each data frame is serialized JSON matching WorkerSessionEvent.
+              x-event-schema: '#/components/schemas/WorkerSessionEvent'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /factory-sessions/{session_id}/worker-sessions/detail:
     get:
       tags:
@@ -1467,6 +1499,14 @@ components:
       description: Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly.
       schema:
         type: string
+    WorkerSessionID:
+      name: worker_session_id
+      in: path
+      required: true
+      description: Stable Worker Session identity returned by the Worker Sessions list operation.
+      schema:
+        type: string
+        minLength: 1
     MaxResults:
       name: maxResults
       in: query
@@ -7723,6 +7763,8 @@ components:
           $ref: '#/components/schemas/WorkOutcome'
         output:
           type: string
+        structuredResult:
+          description: Optional native JSON value produced when the workstation outputSchema validates the worker response. JSON null is distinct from an omitted value.
         error:
           type: string
         feedback:
@@ -7920,6 +7962,7 @@ components:
         - WorkFailureTypeMisconfigured
         - WorkFailureTypeMissingExecutable
         - WorkFailureTypeCommandLineTooLong
+        - WorkFailureTypeStructuredOutputSchemaViolation
         - WorkFailureTypeExpectedArtifactsUnsatisfied
       enum:
         - auth_failure
@@ -7931,6 +7974,7 @@ components:
         - misconfigured
         - missing_executable
         - command_line_too_long
+        - structured_output_schema_violation
         - EXPECTED_ARTIFACTS_UNSATISFIED
       x-enum-descriptions:
         - Authentication or authorization failed and operator action is required.
@@ -7942,6 +7986,7 @@ components:
         - The worker or runtime was misconfigured and requires operator intervention.
         - The configured provider executable could not be found.
         - The provider command exceeded the operating system command-line size limit.
+        - The worker response was malformed JSON or did not satisfy the workstation output schema.
         - A successful worker did not satisfy its expected artifact declarations.
     ExpectedArtifactVerificationReason:
       type: string
@@ -8610,6 +8655,92 @@ components:
         status:
           type: string
           description: Session lifecycle status when applicable.
+        startedAt:
+          type: string
+          format: date-time
+          description: Injected-clock timestamp at which the Worker Session opened.
+        workerSessionId:
+          type: string
+          description: Stable Worker Session identity for the execution.
+        workerType:
+          type: string
+          description: Authored Worker identity when the invocation supplied one.
+        factorySessionId:
+          type: string
+          description: Factory Session identity when the invocation supplied one.
+        recordingId:
+          type: string
+          description: Recording identity when the invocation supplied one.
+        projectId:
+          type: string
+          description: Project identity when the invocation supplied one.
+        dispatchId:
+          type: string
+          description: Stable dispatch identity for the execution attempt.
+        transitionId:
+          type: string
+          description: Runtime transition identity when the dispatch supplied one.
+        workstationName:
+          type: string
+          description: Workstation route used by the canonical invocation.
+        turnId:
+          type: string
+          description: Turn or request identity when the dispatch supplied one.
+        traceId:
+          type: string
+          description: Work trace identity when the dispatch supplied one.
+        replayKey:
+          type: string
+          description: Replay correlation key when the dispatch supplied one.
+        workIds:
+          type: array
+          items:
+            type: string
+          description: Work identities carried by the canonical dispatch.
+        attemptId:
+          type: string
+          description: Stable identity of the opening attempt.
+        attempt:
+          type: integer
+          minimum: 1
+          description: One-based attempt number when known.
+        attemptReason:
+          type: string
+          enum:
+            - INITIAL
+            - RETRY
+            - RESUME
+          description: Bounded reason for the attempt lifecycle.
+        continuation:
+          type: object
+          additionalProperties: false
+          description: Exact provider continuation identity when supplied.
+          properties:
+            provider:
+              type: string
+            kind:
+              type: string
+            id:
+              type: string
+        providerSelection:
+          type: object
+          additionalProperties: false
+          description: Explicit provider and runner selection facts.
+          properties:
+            runnerId:
+              type: string
+            source:
+              $ref: '#/components/schemas/RunnerSelectionSource'
+            executorProvider:
+              type: string
+            modelProvider:
+              type: string
+        model:
+          type: string
+          description: Explicit model selection when supplied.
+        reasoningEffort:
+          type: string
+          description: Explicit reasoning-effort selection when supplied.
         capabilities:
           $ref: '#/components/schemas/FactoryResponseEventCapabilities'
     FactoryResponseEventRunPayload:
@@ -11211,6 +11342,8 @@ components:
           description: Optional canonical ordered work content parts for this work item.
         payload:
           description: Opaque work payload forwarded as raw JSON, or a binary data, or whatever else.
+        structuredResult:
+          description: Optional JSON value produced by a workstation whose outputSchema validated the worker response. JSON null is distinct from an omitted value.
         tags:
           $ref: '#/components/schemas/StringMap'
           description: Key-value pairs for storing arbitrary metadata about the work. Both keys and values are strings.

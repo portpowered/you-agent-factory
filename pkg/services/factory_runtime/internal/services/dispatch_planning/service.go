@@ -42,6 +42,8 @@ type ExecutionFacts struct {
 	RunnerSelectionSource    workers.RunnerSelectionSource
 	ProjectID                string
 	FactorySessionID         string
+	RecordingID              string
+	Capabilities             *workers.Capabilities
 	InputPayload             []any
 	ModelOperation           string
 	ModelBindings            []workers.ResolvedModelOperationBinding

@@ -1,6 +1,7 @@
 package projections
 
 import (
+	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
@@ -71,7 +72,9 @@ func factoryWorkItemFromEventWork(eventWork work.WorkRequestEventWork) work.Fact
 		PreviousChainingTraceIDs: cloneStringSlice(eventWork.PreviousChainingTraceIDs),
 		TraceID:                  eventWork.TraceID,
 		Content:                  content,
+		StructuredResult:         jsonvalue.Clone(eventWork.StructuredResult),
 		Tags:                     cloneStringMap(eventWork.Tags),
+		StructuredResultPresent:  jsonvalue.Present(eventWork.StructuredResult, eventWork.StructuredResultPresent),
 	}
 	if item.CurrentChainingTraceID == "" {
 		item.CurrentChainingTraceID = item.TraceID

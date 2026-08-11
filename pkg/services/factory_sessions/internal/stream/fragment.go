@@ -33,6 +33,7 @@ func MapProgressFragment(fragment factorysessions.ProgressFragment) responsestre
 		Kind:               kind,
 		Type:               eventType,
 		DispatchID:         strings.TrimSpace(fragment.DispatchID),
+		Provider:           strings.TrimSpace(fragment.Provider),
 		ProviderSessionRef: workerexecution.CloneProviderSessionMetadata(fragment.ProviderSessionRef),
 		Payload:            fragment.Payload,
 		ExternalEventType:  firstNonEmpty(fragment.ExternalEventType, nativeType),

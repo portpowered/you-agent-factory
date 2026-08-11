@@ -478,6 +478,7 @@ func startMCPRuntimeResumeSmokeInterruptedSession(
 	)
 
 	interruptReason := "mcp runtime resume smoke interrupt"
+	harness.provider.waitForInferBlocked(t, 5*time.Second)
 	interrupted := decodeToolResponse[factoryapi.FactorySessionLifecycleControlResponse](
 		t,
 		client.callTool(mcpfactorysession.ToolControl, map[string]any{
@@ -785,11 +786,27 @@ type mcpRuntimeResumeSmokeBlockingProvider struct {
 	calls           int
 	blockedOnce     bool
 	contextCanceled int
+	inferBlocked    chan struct{}
 	workflowName    string
 }
 
 func newMCPRuntimeResumeSmokeBlockingProvider(workflowName string) *mcpRuntimeResumeSmokeBlockingProvider {
-	return &mcpRuntimeResumeSmokeBlockingProvider{workflowName: workflowName}
+	return &mcpRuntimeResumeSmokeBlockingProvider{
+		inferBlocked: make(chan struct{}),
+		workflowName: workflowName,
+	}
+}
+
+func (p *mcpRuntimeResumeSmokeBlockingProvider) waitForInferBlocked(t *testing.T, timeout time.Duration) {
+	t.Helper()
+
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-p.inferBlocked:
+	case <-timer.C:
+		t.Fatal("provider Infer did not enter its cancellable wait")
+	}
 }
 
 func (p *mcpRuntimeResumeSmokeBlockingProvider) callCount() int {
@@ -819,6 +836,7 @@ func (p *mcpRuntimeResumeSmokeBlockingProvider) Infer(ctx context.Context, _ wor
 	if !alreadyBlocked {
 		p.mu.Lock()
 		p.blockedOnce = true
+		close(p.inferBlocked)
 		p.mu.Unlock()
 
 		<-ctx.Done()
