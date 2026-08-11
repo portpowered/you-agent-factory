@@ -647,9 +647,11 @@ the dashboard URL reported after readiness. The preferred default is:
 
 **`http://localhost:7437/dashboard/ui`**
 
-Use the actual host and port reported by the process. Global `--server` selects
-the preferred loopback endpoint; a collision advances to the next available
-port. Ordinary `you run` and `you run --with-server` do not open a browser, and
+Use the actual host and port reported by the process. `--listen <host:port>`
+selects an exact loopback endpoint for `you server` and server-enabled runs.
+When omitted, the commands use the default local bind; an explicit local
+global `--server` remains a warned compatibility selector and can advance to
+the next available port on collision. Ordinary `you run` and `you run --with-server` do not open a browser, and
 bare `you` prints help without starting a service. The dashboard shows live session selection,
 work position, factory activity, and Factory Session lifecycle control status
 alongside CLI inspection. Paused and running lifecycle copy in the session
@@ -675,9 +677,19 @@ you --server http://localhost:9090 --json work list
 | `you session list` / `create` / `delete` | `--port` (default `7437`) | Session id is a subcommand argument on `create` / `delete` |
 | `you session show`, `you session pause`, `you session resume` | Global `--server` | Session UUID is an optional subcommand argument; omission accepts the `~default` compatibility selector |
 | `you factory query`, `you submit`, `you work …` | Global `--server` | `--session` on submit, batch submit, and work commands |
-| `you server` | Binds the Current Factory continuously to the loopback host/port preferred by `--server` | N/A — starts a runtime |
-| `you run --with-server` / `--with-site` | Binds only for the run lifetime to the loopback host/port preferred by `--server` | N/A — starts a runtime |
+| `you server --listen <host:port>` | Binds the Current Factory continuously to the exact loopback host/port | N/A — starts a runtime |
+| `you run --with-server --listen <host:port>` / `--with-site` | Binds only for the run lifetime to the exact loopback host/port | N/A — starts a runtime |
 | Ordinary `you run` | Does not bind an HTTP listener | N/A — starts a runtime |
+
+For a server that is already running, use remote placement explicitly:
+
+```bash
+you --remote --server <uri> run "Review the release notes"
+```
+
+`--remote` selects the running API endpoint and never starts local hosting.
+It conflicts with `--with-server` and `--with-site`; use `--listen
+<host:port>` on those local server-enabled forms instead.
 
 When `--session` is omitted on submit and work commands, the CLI accepts the
 `~default` compatibility selector. A list row's `SESSION ID` may itself remain

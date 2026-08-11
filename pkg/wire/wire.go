@@ -299,6 +299,7 @@ var cliCommandOperationsSet = wire.NewSet(
 	provideSubmitPayloadReader,
 	provideOperatorDefaultsResolver,
 	provideStandardCLIHTTPProtocol,
+	provideRemoteInvocationOperation,
 	provideExtendedCLIHTTPProtocol,
 	provideWatchCLIHTTPProtocol,
 	provideStreamingCLIHTTPProtocol,
