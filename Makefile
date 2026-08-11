@@ -130,7 +130,7 @@ endef
 .PHONY: fmt vet deps deps-tidy clean init typecheck release lint
 
 .PHONY: test test-full test-unit test-unit-fresh test-lane-audit test-maintenance test-integration test-contract test-stress test-release
-.PHONY: test-functional test-functional-long test-backend-functional functional-boundary-check functional-test-viz
+.PHONY: test-functional test-functional-fresh test-functional-long test-backend-functional functional-boundary-check functional-test-viz
 .PHONY: test-ui-browser-integration test-ui-storybook-integration test-ui-durable-session-real-backend test-ui-performance ui-component-test
 .PHONY: test-unit-coverage test-functional-coverage test-backend-coverage test-coverage-go test-race
 .PHONY: test-backend-verification test-root-process-acceptance long-tests long-tests-managed-runtime long-tests-functional-runtime pr-inference-approval
@@ -399,15 +399,22 @@ test-integration:
 test-contract:
 	$(GO) test -short -p=$(UNIT_DEFAULT_JOBS) ./contracts ./pkg/services/factory_definitions/contracts/contracttests ./pkg/services/providers/internal/services/execution/internal/provider/functionaltests ./pkg/services/providers/internal/services/execution/internal/provider/paritytests ./pkg/transports/http/contracttests ./pkg/transports/cli/baseline ./pkg/transports/cli/clicontract ./pkg/transports/cli/cliinputs ./pkg/transports/cli/climanifestgen ./pkg/transports/cli/commandidentity -count=1 -timeout $(GO_TEST_TIMEOUT)
 
+# Cache-aware developer feedback; use test-functional-fresh for an
+# unconditional rerun.
 test-functional:
+	$(MAKE) functional-boundary-check
+	$(GO) run ./cmd/functionallane -jobs $(FUNCTIONAL_DEFAULT_JOBS) -timeout $(GO_TEST_TIMEOUT)
+
+# CI-equivalent and flake-investigation path: force every package to execute.
+test-functional-fresh:
 	$(MAKE) functional-boundary-check
 	$(GO) run ./cmd/functionallane -jobs $(FUNCTIONAL_DEFAULT_JOBS) -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 functional-boundary-check:
 	$(GO) run ./cmd/functionalboundarycheck
 
-# functional-test-viz runs the boundary check, then the required short functional
-# coverage lane exactly once (profile + gocoveragecheck -json-output), then the
+# functional-test-viz runs the boundary check, then the required fresh short
+# functional coverage lane exactly once (profile + gocoveragecheck -json-output), then the
 # FND-004 Markdown catalog generator. Artifacts land under
 # .artifacts/functional-test-viz/.
 #
@@ -574,8 +581,10 @@ test-unit-coverage:
 
 # test-functional-coverage always runs functional-boundary-check first so the
 # required CI Backend Functional Coverage lane (and any local/alias caller of
-# this target) cannot succeed without a successful boundary check. Boundary
-# failures exit non-zero before gocoveragecheck starts.
+# this target) cannot succeed without a successful boundary check. gocoveragecheck
+# forces -count=1 for its instrumented run, so this target remains fresh even
+# though the ordinary developer lane is cache-aware. Boundary failures exit
+# non-zero before gocoveragecheck starts.
 test-functional-coverage:
 	$(MAKE) functional-boundary-check
 	$(GO) run ./cmd/gocoveragecheck -suite functional -jobs $(FUNCTIONAL_DEFAULT_JOBS) -min $(GO_FUNCTIONAL_COVERAGE_MIN) -package-manifest $(GO_FUNCTIONAL_COVERAGE_MANIFEST) -timeout $(GO_COVERAGE_TIMEOUT) $(if $(GO_FUNCTIONAL_COVERAGE_PROFILE),-profile $(GO_FUNCTIONAL_COVERAGE_PROFILE),) $(if $(GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT),-json-output $(GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT),) $(if $(GO_FUNCTIONAL_COVERAGE_TIMING_OUTPUT),-timing-output $(GO_FUNCTIONAL_COVERAGE_TIMING_OUTPUT),)
