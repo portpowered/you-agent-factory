@@ -59,8 +59,8 @@
         "Typecheck passes"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Verified the dashboard components-01 cohort already present on this branch: the four native Bun owners (fixture catalog, runtime overlays, test-fixtures exports, and typography contract) preserve all 11 baseline named/executable cases with no retired Vitest paths remaining. Focused `bun test` passed 11/11 across 4 files with 46 expect calls; pinned dashboard-unit Vitest selection of both migrated `.bun.unit.test.ts` paths and retired `.test.ts` paths returned `No test files found`; `bun run check:test-lanes` and `bun run typecheck` passed. No production behavior, public contract, generated artifact, coverage membership, or browser ownership changed."
     },
     {
       "id": "bun-compat-batch-migration-004",

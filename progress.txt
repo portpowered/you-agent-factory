@@ -4031,3 +4031,20 @@
   - The next API cohort was already migrated in the branch ancestry, so the required work was to reproduce the frozen focused/lane/typecheck evidence and record it rather than duplicate test owners.
   - For Bun migrations, Vitest’s expected no-file exit is code 1; capture the output and treat `No test files found` as the zero-selection assertion.
 ---
+
+## 2026-08-10 19:48 -07:00 - bun-compat-batch-migration-003
+- What was implemented
+  - Completed the dashboard components-01 cohort handoff using the four existing native Bun owners for fixture catalog exports, runtime overlay projections, dashboard test-fixture exports, and typography-role mappings.
+  - Preserved all 11 baseline named/executable cases and confirmed the retired Vitest owners are absent; no production or public contract behavior changed.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `bun test src/components/dashboard/fixtures/public-api.bun.unit.test.ts src/components/dashboard/fixtures/runtime.bun.unit.test.ts src/components/dashboard/test-fixtures.bun.unit.test.ts src/components/dashboard/typography.bun.unit.test.ts` — 4 files / 11 tests passed, 46 expect calls.
+  - Pinned `vitest.exe` dashboard-unit selection of all four migrated paths and all four retired `.test.ts` paths — `No test files found` in each selection, confirming zero Vitest execution and no fallback copies.
+  - `bun run check:test-lanes` — passed.
+  - `bun run typecheck` — passed.
+- **Learnings for future iterations:**
+  - When a cohort is already migrated in branch ancestry, reproduce its exact focused Bun count, both Vitest exclusion selections, lane-contract, and typecheck evidence before marking the batch story complete.
+  - On Windows PowerShell, use the repository-pinned `ui\\node_modules\\.bin\\vitest.exe` for direct lane checks when the bare `vitest` command is not on PATH.
+---
