@@ -4713,3 +4713,20 @@
 - **Learnings for future iterations:**
   - After a base-sync merge, rerun the repository gates locally before pushing so the new PR head has direct evidence in addition to the earlier green CI run.
 ---
+
+## 2026-08-10 17:21 -07:00 - e2-structured-worker-results current-main synchronization follow-up
+- What was implemented
+  - Merged the newly live `origin/main` at `e6797fd5d` after the base advanced through the build-cache PR, preserving the E2 `prd.json`, all append-only histories, and the current-main `Makefile` change.
+  - No additional structured-result product implementation was required; all four E2 stories remain `passes:true`.
+- Files changed
+  - `Makefile`
+  - `progress.txt`
+  - `prd.json` conflict resolution retained the E2 task PRD
+- Verification
+  - `make test` — passed.
+  - `make typecheck backend-size pkg-maint pkg-file-count pkg-structure vet` — passed.
+  - `make pkg-boundary` reports the unchanged 175-entry known baseline.
+  - `prd.json` parses with four passing stories; conflict-marker scan and `git diff --check` passed.
+- **Learnings for future iterations:**
+  - Re-fetch `origin/main` immediately before pushing: a PR can be clean against one base and become stale again while waiting for GitHub checks.
+---
