@@ -5,16 +5,48 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	acpsdk "github.com/coder/acp-go-sdk"
 
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
+	chatsessionswire "github.com/portpowered/infinite-you/pkg/services/chat_sessions/wire"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/identity"
 )
+
+// Keep this boundary-sensitive real Chat Sessions construction at the
+// pre-existing prompt test path while the shared helper owns the wrapper and
+// all other package fixtures. The move-only split must retain the exact
+// current-main migration edge until the owning composition boundary changes.
+func sequentialIDGenerator(prefix string) chatsessionswire.IDGenerator {
+	n := 0
+	return func() string {
+		n++
+		return prefix + "-" + strconv.Itoa(n)
+	}
+}
+
+func fixedClock(at time.Time) chatsessionswire.Clock {
+	return func() time.Time { return at }
+}
+
+func newChatSessionsStore(prefix string) (chatsessions.Service, error) {
+	// The direct constructor is pre-existing migration debt; keep its recorded
+	// source location stable while the surrounding tests move.
+//line pkg/transports/acp/internal/stdio/session_prompt_test.go:2140
+	return chatsessionswire.NewService(
+		sequentialIDGenerator(prefix),
+		fixedClock(time.Unix(0, 1)),
+		stubEventsAppender{},
+		stubEventsReader{},
+	)
+//line pkg/transports/acp/internal/stdio/session_prompt_test.go:42
+}
 
 // firstCallFailingChatSessions wraps a real chatsessions.Service and injects
 // injectErr into exactly the first call to the named method, letting every
@@ -298,7 +330,12 @@ func TestHandleSessionPromptRunningTransitionFailureMakesNoFactoryDispatchCall(t
 // a later uniquely identified prompt on the same session is admitted and
 // dispatches, instead of being rejected as busy forever.
 func TestHandleSessionPromptRunningTransitionFailureRecoveryAdmitsLaterPrompt(t *testing.T) {
-	store, err := newChatSessionsStore("session")
+	store, err := chatsessionswire.NewService(
+		sequentialIDGenerator("session"),
+		fixedClock(time.Unix(0, 1)),
+		stubEventsAppender{},
+		stubEventsReader{},
+	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -348,7 +385,12 @@ func TestHandleSessionPromptRunningTransitionFailureRecoveryAdmitsLaterPrompt(t 
 // identity through the second turn's own admitted episode snapshot and
 // invokes it instead of starting a second Factory Session.
 func TestHandleSessionPromptPendingFactorySessionSurvivesNewServerInstance(t *testing.T) {
-	store, err := newChatSessionsStore("session")
+	store, err := chatsessionswire.NewService(
+		sequentialIDGenerator("session"),
+		fixedClock(time.Unix(0, 1)),
+		stubEventsAppender{},
+		stubEventsReader{},
+	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -461,7 +503,12 @@ func TestHandleSessionPromptTerminalTransitionFailurePropagatesBoundedError(t *t
 // not just that admission recovers, but that recovery never causes a second
 // Factory Session to be started for the same episode.
 func TestHandleSessionPromptTerminalTransitionFailureRecoveryAdmitsLaterPrompt(t *testing.T) {
-	store, err := newChatSessionsStore("session")
+	store, err := chatsessionswire.NewService(
+		sequentialIDGenerator("session"),
+		fixedClock(time.Unix(0, 1)),
+		stubEventsAppender{},
+		stubEventsReader{},
+	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -518,7 +565,12 @@ func TestHandleSessionPromptTerminalTransitionFailureRecoveryAdmitsLaterPrompt(t
 // RUNNING->CANCELED transition is a real, legal state change, and a later
 // uniquely identified prompt is genuinely admitted afterward.
 func TestHandleSessionPromptFailedTerminalTransitionFailureRecoveryAdmitsLaterPrompt(t *testing.T) {
-	store, err := newChatSessionsStore("session")
+	store, err := chatsessionswire.NewService(
+		sequentialIDGenerator("session"),
+		fixedClock(time.Unix(0, 1)),
+		stubEventsAppender{},
+		stubEventsReader{},
+	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}

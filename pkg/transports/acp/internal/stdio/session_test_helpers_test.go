@@ -6,12 +6,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"sync"
 	"testing"
 	"time"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
-	chatsessionswire "github.com/portpowered/infinite-you/pkg/services/chat_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
@@ -507,24 +505,6 @@ func (f *fakeFactoryTargetService) SubscribeFactoryResponseEvents(
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.responseCursor, f.responseErr
-}
-func sequentialIDGenerator(prefix string) chatsessionswire.IDGenerator {
-	n := 0
-	return func() string {
-		n++
-		return prefix + "-" + strconv.Itoa(n)
-	}
-}
-func fixedClock(at time.Time) chatsessionswire.Clock {
-	return func() time.Time { return at }
-}
-func newChatSessionsStore(prefix string) (chatsessions.Service, error) {
-	return chatsessionswire.NewService(
-		sequentialIDGenerator(prefix),
-		fixedClock(time.Unix(0, 1)),
-		stubEventsAppender{},
-		stubEventsReader{},
-	)
 }
 type stubEventsAppender struct{}
 func (stubEventsAppender) Append(context.Context, events.AppendRequest) (events.AppendResult, error) {
