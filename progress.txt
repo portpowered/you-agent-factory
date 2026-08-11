@@ -258,7 +258,6 @@
   - After `bun install --frozen-lockfile` in `ui/`, `make verify-fast` passed: dashboard typecheck, MCP contract boundary, 355 UI files / 2,970 tests, and the short Go suite.
 - **Learnings for future iterations:**
 - This checkout may have `ui/node_modules` without all lockfile dependencies; run the pinned Bun install before treating a typecheck failure as a source regression.
----
 
 ## 2026-08-10 15:08 -07:00 - dwro-s1-remote-placement-flags current-main test-split reconciliation
 - What was implemented
@@ -12422,6 +12421,22 @@
   - PR #1885 is open, non-draft, mergeable, and clean; thread-aware audit found zero inline review threads and zero formal reviews, with the historical blocking conversation addressed by the pushed validator and focused tests.
   - All four PRD stories remain marked `passes:true`.
 - **Learnings for future iterations:**
-  - Keep the final delivery audit pinned to the exact pushed head and its terminal CI run; a green predecessor head is not sufficient evidence for handoff.
-  - Top-level conversation comments do not expose inline resolution state, so retain explicit behavioral and test evidence in the PRD audit and handoff comment.
+- Keep the final delivery audit pinned to the exact pushed head and its terminal CI run; a green predecessor head is not sufficient evidence for handoff.
+- Top-level conversation comments do not expose inline resolution state, so retain explicit behavioral and test evidence in the PRD audit and handoff comment.
+---
+## 2026-08-11 11:07:40 -07:00 - e3-event-webhooks-004 final PR handoff synchronization
+- What was implemented
+  - Re-read `prd.json` and confirmed all four Webhooks stories remain marked `passes:true`; no additional product implementation was required.
+  - Audited PR #1885 with the thread-aware GitHub workflow: the PR is open, non-draft, mergeable, and clean, with zero inline review threads, zero unresolved threads, and zero formal reviews. The historical blocking conversation is followed by explicit validation-fix evidence and a green final-head audit.
+  - Synchronized the delivery audit to the latest pushed head `2b1306a2ca33812240aa8de3a66ae461cc3d3747` and terminal CI run `31520160935` before refreshing the PR description from the checked-in PRD.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - All 18 required checks are terminal-success in CI run `31520160935` for the exact pushed head `2b1306a2ca33812240aa8de3a66ae461cc3d3747`.
+  - `prd.json` parses with all four stories marked `passes:true`; the local branch matches `origin/e3-event-webhooks`, and `origin/main` is the recorded current base.
+  - Thread-aware review audit reports zero unresolved inline threads and zero formal reviews.
+- **Learnings for future iterations:**
+  - Delivery metadata and the PR body must be refreshed together after every bookkeeping commit so the checked-in PRD, exact pushed head, CI evidence, and hosted description remain synchronized.
+  - Historical top-level blocking comments can remain visible after the fix; completion depends on explicit follow-up evidence, current head checks, and thread-aware state.
 ---
