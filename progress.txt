@@ -4016,3 +4016,13 @@
   - The existing three-child test's identical executor output marker can pass without proving child-result identity; fan-in coverage must derive unique result markers from each assigned payload and assert section-level association.
   - A green strengthened regression on the current base is evidence against the recorded omission in this exact scenario; do not mark the story complete or claim a red run until the failing mechanism is reproduced or a distinct current-base gap is proven.
 ---
+
+## 2026-08-10 19:35 -07:00 - pp-merge-context-bug-001 verification follow-up
+- What was implemented
+  - Restored the frozen UI dependencies required by the repository typecheck; no tracked dependency files changed.
+  - Confirmed the focused Go regression, Go orchestration package tests, backend structural checks, `go vet ./...`, and `make typecheck` all pass.
+- Files changed
+  - `progress.txt`
+- **Learnings for future iterations:**
+  - A fresh checkout may need `bun install --frozen-lockfile` before `make typecheck`; the configured Bun version and lockfile restore the missing `@types/bun` package.
+---
