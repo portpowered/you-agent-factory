@@ -507,6 +507,89 @@ func TestHumanFactoryEventRenderer_TTYProgressRemovesOnlyTerminalWorker(t *testi
 	renderer.StopProgressRendering()
 }
 
+func TestHumanFactoryEventRenderer_TTYProgressUsesStableDistinctWorkerColors(t *testing.T) {
+	t.Parallel()
+
+	events := func() []interfaces.FactoryEvent {
+		request := func(dispatchID, workstation, workID string) interfaces.FactoryEvent {
+			payload, err := json.Marshal(interfaces.DispatchRequestEventPayload{
+				TransitionID: workstation,
+				Inputs:       []interfaces.DispatchConsumedWorkRef{{WorkID: workID}},
+			})
+			if err != nil {
+				t.Fatalf("marshal request %s: %v", dispatchID, err)
+			}
+			return interfaces.FactoryEvent{
+				Type: interfaces.FactoryEventTypeDispatchRequest, Payload: payload,
+				Context: interfaces.FactoryEventContext{DispatchID: &dispatchID},
+			}
+		}
+		associate := func(dispatchID, workerID string) interfaces.FactoryEvent {
+			payload, err := json.Marshal(interfaces.DispatchWorkerSessionAssociationEventPayload{
+				WorkerSessionID: workerID,
+			})
+			if err != nil {
+				t.Fatalf("marshal association %s: %v", dispatchID, err)
+			}
+			return interfaces.FactoryEvent{
+				Type: interfaces.FactoryEventTypeDispatchWorkerSessionAssoc, Payload: payload,
+				Context: interfaces.FactoryEventContext{DispatchID: &dispatchID},
+			}
+		}
+		return []interfaces.FactoryEvent{
+			request("dispatch-a", "compile", "work-a"),
+			associate("dispatch-a", "worker-a"),
+			request("dispatch-b", "verify", "work-b"),
+			associate("dispatch-b", "worker-b"),
+		}
+	}
+
+	render := func() string {
+		service := visualizationcli.New(nil, factoryvisualizationwire.NewResponsePresentation())
+		var output, progress bytes.Buffer
+		renderer, err := service.OpenFactoryEventRenderer(visualizationcli.FactoryEventRendererConfig{
+			Output: &output, ProgressOutput: &progress, ProgressIsTTY: true,
+			InvocationOutputMode: visualizationcli.InvocationOutputResponseStream,
+		})
+		if err != nil {
+			t.Fatalf("open renderer: %v", err)
+		}
+		renderer.PresentFactoryEvents(events())
+		renderer.StopProgressRendering()
+		return progress.String()
+	}
+
+	first, second := render(), render()
+	if first != second {
+		t.Fatalf("progress colors are not deterministic:\nfirst=%q\nsecond=%q", first, second)
+	}
+	workerAColor := progressColorForWorker(first, "worker-a")
+	workerBColor := progressColorForWorker(first, "worker-b")
+	if workerAColor == "" || workerBColor == "" {
+		t.Fatalf("progress = %q, want color escapes for both workers", first)
+	}
+	if workerAColor == workerBColor {
+		t.Fatalf("worker colors = %q and %q, want distinct colors", workerAColor, workerBColor)
+	}
+}
+
+func progressColorForWorker(progress, workerID string) string {
+	workerIndex := strings.Index(progress, "worker "+workerID)
+	if workerIndex < 0 {
+		return ""
+	}
+	prefix := progress[:workerIndex]
+	start := strings.LastIndex(prefix, "\x1b[")
+	if start < 0 {
+		return ""
+	}
+	end := strings.Index(prefix[start:], "m")
+	if end < 0 {
+		return ""
+	}
+	return prefix[start+2 : start+end]
+}
+
 func TestOpenFactoryEventRenderer_JSONStreamUsesLosslessPresentation(t *testing.T) {
 	t.Parallel()
 

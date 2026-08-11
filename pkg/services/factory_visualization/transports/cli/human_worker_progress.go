@@ -30,6 +30,7 @@ type humanWorkerProgressRenderer struct {
 	active           map[string]humanWorkerProgressState
 	pending          map[string]humanWorkerProgressState
 	workerByDispatch map[string]string
+	colors           map[string]string
 	frame            int
 	drawn            bool
 	stopped          bool
@@ -59,6 +60,7 @@ func newHumanWorkerProgressRenderer(output io.Writer, isTTY bool, ticks <-chan t
 	renderer.active = make(map[string]humanWorkerProgressState)
 	renderer.pending = make(map[string]humanWorkerProgressState)
 	renderer.workerByDispatch = make(map[string]string)
+	renderer.colors = make(map[string]string)
 	go renderer.run()
 	return renderer
 }
@@ -176,6 +178,14 @@ func (renderer *humanWorkerProgressRenderer) removeTerminalDispatchLocked(event 
 	if identity == "" {
 		return
 	}
+	if state, exists := renderer.active[identity]; exists {
+		colorIdentity := state.workerID
+		if colorIdentity == "" {
+			colorIdentity = identity
+		}
+		delete(renderer.colors, colorIdentity)
+		delete(renderer.colors, state.dispatchID)
+	}
 	delete(renderer.active, identity)
 	delete(renderer.pending, dispatchID)
 	delete(renderer.workerByDispatch, dispatchID)
@@ -221,6 +231,7 @@ func (renderer *humanWorkerProgressRenderer) run() {
 			renderer.active = nil
 			renderer.pending = nil
 			renderer.workerByDispatch = nil
+			renderer.colors = nil
 			renderer.clearLocked()
 			renderer.mu.Unlock()
 			return
@@ -254,10 +265,35 @@ func (renderer *humanWorkerProgressRenderer) drawLocked() {
 		if colorIdentity == "" {
 			colorIdentity = identity
 		}
-		glyphs = append(glyphs, "\x1b["+stableWorkstationColor(colorIdentity)+"m"+line+"\x1b[0m")
+		color := renderer.progressColorLocked(colorIdentity)
+		glyphs = append(glyphs, "\x1b["+color+"m"+line+"\x1b[0m")
 	}
 	_, _ = fmt.Fprint(renderer.output, "\r\x1b[2K"+strings.Join(glyphs, " "))
 	renderer.drawn = true
+}
+
+func (renderer *humanWorkerProgressRenderer) progressColorLocked(identity string) string {
+	if color := renderer.colors[identity]; color != "" {
+		return color
+	}
+	start := stableWorkstationColorIndex(identity)
+	for offset := 0; offset < len(humanWorkerProgressColors); offset++ {
+		color := humanWorkerProgressColors[(start+offset)%len(humanWorkerProgressColors)]
+		used := false
+		for _, assigned := range renderer.colors {
+			if assigned == color {
+				used = true
+				break
+			}
+		}
+		if !used {
+			renderer.colors[identity] = color
+			return color
+		}
+	}
+	color := humanWorkerProgressColors[start%len(humanWorkerProgressColors)]
+	renderer.colors[identity] = color
+	return color
 }
 
 func formatHumanWorkerProgressLine(frame string, state humanWorkerProgressState) string {

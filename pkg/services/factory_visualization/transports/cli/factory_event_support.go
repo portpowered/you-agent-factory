@@ -567,13 +567,18 @@ func humanFactoryEventColor(event interfaces.FactoryEvent) string {
 }
 
 func stableWorkstationColor(identity string) string {
-	palette := [...]string{"31", "32", "33", "34", "35", "36", "91", "92", "93", "94", "95", "96"}
+	return humanWorkerProgressColors[stableWorkstationColorIndex(identity)]
+}
+
+var humanWorkerProgressColors = [...]string{"31", "32", "33", "34", "35", "36", "91", "92", "93", "94", "95", "96"}
+
+func stableWorkstationColorIndex(identity string) int {
 	var hash uint32 = 2166136261
 	for _, value := range []byte(identity) {
 		hash ^= uint32(value)
 		hash *= 16777619
 	}
-	return palette[hash%uint32(len(palette))]
+	return int(hash % uint32(len(humanWorkerProgressColors)))
 }
 
 func formatHumanWorkAccepted(event interfaces.FactoryEvent) string {
