@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, mock } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 
 import { bunVi as vi } from "../../testing/bun/vi-compat";
 
@@ -9,6 +9,10 @@ mock.module("../factory-sessions", () => ({
   listFactorySessions: (...args: unknown[]) => listFactorySessions(...args),
   openFactorySession: (...args: unknown[]) => openFactorySession(...args),
 }));
+
+afterEach(() => {
+  mock.restore();
+});
 
 const { discoverSessionNamedFactoryNames } = await import("./import-activation");
 
