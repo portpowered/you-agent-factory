@@ -1,4 +1,7 @@
 ## Codebase Patterns
+- OS-boundary functional scenarios should allocate a fresh `builtcliacceptance.Session` for each concurrent case so HOME, work/runtime-log roots, ports, Factory fixtures, and mock-worker artifacts cannot cross-contaminate.
+- For process-package stress evidence, retain exact command, per-run timing, and terminal failure output; concurrent repository-wide Go jobs can hold build/cache or Windows filesystem resources long enough to mimic a lifecycle failure.
+- `go test -count=N` still exercises the package's internal `t.Parallel` scheduling on every repetition; focused race repetitions are useful diagnosis but do not substitute for the exact aggregate race command.
 - For cross-process Windows checkpoints, wait for atomically published metadata to be readable before suspension, then verify the exact resource survives the suspend gap; treat a sharing violation during publication as an incomplete checkpoint, not as a failed assertion retry.
 - For long real-process race baselines, record the ordinary `-count=20` result separately from a `-failfast` rerun; capture output in an out-of-tree temporary log when console truncation could hide the first failing test, and never commit the generated log.
 - For final PR handoff, compare the PR body byte-for-byte with `prd.json` and use the thread-aware GraphQL review audit because flat PR comments do not expose inline-thread resolution state.
@@ -3800,4 +3803,24 @@
   - A visible ownership directory is not a sufficient Windows checkpoint: the writer can still hold `.owner.json` while the directory is enumerated. Read the atomically published metadata first, then suspend and verify the exact directory before treating it as a kill barrier.
   - Process-boundary tests need to join both `Cmd.Wait` and every stdout scanner; a successful process assertion can still leave a pipe-reading goroutine unjoined.
   - Story 003 still owns aggregate `-count=20`, 20 separate `-count=1` runs, merged-main JSON regression, and warm-cache median evidence; do not mark it complete from focused story-002 repetitions.
+---
+## 2026-08-11 01:10 -07:00 - thr-deflake-cli-process-package-003
+- What was implemented
+  - Completed the story-003 stress, regression, and throughput evidence pass without adding another timing retry, sleep, timeout pad, or unrelated source change.
+  - Confirmed the normal aggregate package run, 20 separate package runs, focused hard-kill repetitions, merged-main JSON regression, and focused race staging checks; retained the exact aggregate race timeout and warm-cache contention evidence for the next iteration.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/transport/cli/process -count=20 -timeout 20m` — passed 20/20 in 921.960s test time / 925.043s wall time.
+  - Twenty separately logged `go test ./tests/functional/transport/cli/process -count=1 -timeout 10m` runs — passed 20/20 in 17m26.986s; wall-time samples ranged from 27.247s to 110.367s.
+  - `go test ./tests/functional/transport/cli/output -run '^TestCLIJSONFailureRemainsValidJSON$' -count=20 -timeout 10m` — passed 20/20 in 128.157s test time / 130.967s wall time.
+  - `TestCLISuccessorAfterHardKillReportsPreRuntimeStagingContention` — passed 5/5 normally and 10/10 under race; the focused validation/staging scenario passed 5/5 under race.
+  - Focused platform tests, focused `go vet`, and gofmt checks — passed.
+  - Exact `go test -race ./tests/functional/transport/cli/process -count=20 -timeout 30m` — failed at the 30-minute deadline (1,801.727s test time / 1,815.848s wall time); the dump showed Windows `os.Rename` blocked during packaged-factory staging persistence. Focused race checks passed, and no test-owned process/listener remained afterward.
+  - Dedicated five-run warm-cache sample — all passed, but median 107.121s versus pre-change 45.211s / 49.732s threshold while unrelated Go jobs contended for build/cache resources; stable runs 16-20 from the separate loop had median 35.360s and are retained as supporting evidence, not a replacement for a clean dedicated sample.
+- **Learnings for future iterations:**
+  - A passing normal aggregate and focused race scenario do not clear a failed full race aggregate; rerun the exact command on a quiescent host before marking the story complete.
+  - Inspect active process ancestry when a Windows stress lane times out: a test can be waiting in `os.Rename` or an internal `go build` while the apparent `os/exec.watchCtx` goroutines are deadline fallout.
+  - Keep performance samples separate from build/cache-contended runs; report both the dedicated sample and any stable tail rather than silently selecting the faster subset.
 ---
