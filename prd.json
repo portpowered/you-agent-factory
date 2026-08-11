@@ -51,8 +51,8 @@
         "Tests pass"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Remote run now maps normalized target, arguments, authored policy, wait options, and caller-or-derived stable request identity into POST /factory-sessions/async at exactly the selected server. The response returns the canonical server-owned session identity and lifecycle status; the path never invokes ~default or initializes a local runtime, rejects compatibility-only input, and preserves actionable no-fallback errors. Added root BuildProcess/Process.Execute functional coverage, durable HTTP contract coverage, exact endpoint assertions, request identity/policy/wait mapping tests, malformed-response and transport-failure tests, and verified package maintainability, structure, file-count, vet, CLI, and lifecycle gates."
     },
     {
       "id": "dwro-s7-placement-grammar-003",

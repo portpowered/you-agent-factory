@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- Remote CLI execution adapters should map prepared normalized input into the canonical durable start request, derive deterministic request identities from the request tuple, and never forward compatibility content or `~default`.
 - For final PR handoff, compare the PR body byte-for-byte with `prd.json` and use the thread-aware GraphQL review audit because flat PR comments do not expose inline-thread resolution state.
 - OS-boundary functional tests may poll an isolated durable filesystem checkpoint only when the child exposes no parent-process event or injected edge; document that reason at each polling helper and keep the bound as a failure guard.
 - Git Worktree preparation treats a retained Git `*.lock` as indeterminate ownership: retry within a named bound, preserve the resource, and return its exact path with verify/remove/retry guidance.
@@ -4048,4 +4049,28 @@
 - **Learnings for future iterations:**
   - The repository Go gates are available without the UI toolchain; `make typecheck` currently fails before compilation because the checkout lacks Bun's type definitions (`TS2688: Cannot find type definition file for 'bun'`).
   - The full CLI suite contains a timing-sensitive ACP cancellation test; if it flakes in a concurrent run, rerun the named test in isolation before attributing the failure to CLI placement changes.
+---
+
+## 2026-08-11 00:01 -07:00 - dwro-s7-placement-grammar-002
+- What was implemented
+  - Replaced remote `you run` live-session compatibility invocation with the canonical `POST /factory-sessions/async` durable Factory Session contract at the exact selected server endpoint.
+  - Mapped normalized invocation arguments, Factory/workflow target source, authored JavaScript requested policy, caller or deterministic retry request identity, and wait timeout into the durable request; accepted responses now return the canonical session identity and lifecycle status.
+  - Preserved server-owned execution semantics by keeping the remote path independent of local runtime initialization and by rejecting compatibility-only content input instead of silently dropping it; transport, malformed-response, and admission failures do not fall back locally.
+  - Added root `BuildProcess`/`Process.Execute` functional coverage plus focused request-mapping, endpoint, response, error, policy, timeout, and retry-identity tests.
+- Files changed
+  - `pkg/transports/cli/run/invocation_error.go`
+  - `pkg/transports/cli/run/run_invocation_output_test.go`
+  - `pkg/transports/cli/root_run_flags_test.go`
+  - `tests/functional/workers/transports/cli/run/lifecycle/lifecycle_test.go`
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - `go test ./pkg/transports/cli/run -count=1` passed.
+  - `go test ./pkg/transports/cli -count=1` passed.
+  - Durable HTTP contract, focused CLI routing, and full remote lifecycle functional tests passed.
+  - `go vet ./pkg/transports/cli/run ./pkg/transports/cli ./tests/functional/workers/transports/cli/run/lifecycle` passed.
+  - `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, and `git diff --check` passed.
+- **Learnings for future iterations:**
+  - The durable start endpoint currently responds with HTTP 200 in the server transport even though the public contract also permits 202; the CLI adapter accepts both while requiring the canonical response identity and status.
+  - Remote run request identity must be derived after source, arguments, policy, and wait normalization so equivalent retries deduplicate without including the caller-supplied request ID in the digest.
 ---
