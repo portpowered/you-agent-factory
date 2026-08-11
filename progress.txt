@@ -10732,3 +10732,19 @@
   - When a failed-job retry reproduces one deterministic failure in an untouched baseline package, preserve the exact run/head evidence and keep unrelated test behavior outside the task diff.
   - A terminal baseline CI failure still requires PR follow-up even when all story implementation criteria and review threads are clear.
 ---
+## [2026-08-11 06:04:59 -07:00] - btrc-p1-root-injection-006 current-head CI retry audit
+- What was implemented
+  - Audited fresh workflow `31493186715` on the pushed P1 head `e7f5f8330f2cc065c8ae3ce125ab0742938818f0` and reran only its failed Backend Functional Coverage and Verification Policy jobs.
+  - Confirmed the root-reuse, AGY, workers/mock, and workers/inference P1 coverage passed on both attempts; no product-code or unrelated baseline-test change was justified.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Workflow `31493186715`, attempt 2 — terminal failure only for `TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput` in untouched `tests/functional/transport/server_binding`; all other required lanes passed.
+  - The retry reproduced the structured API-server diagnostic mismatch; the P1 diff is empty for that package.
+  - Thread-aware GraphQL review audit — zero review threads, zero unresolved review threads, and zero formal reviews.
+  - `prd.json` parses with all six stories marked `passes:true`.
+- **Learnings for future iterations:**
+  - Keep retry evidence tied to the exact pushed head and classify the failure by package diff membership before changing source; repeated success in all P1 paths does not justify altering an untouched baseline assertion.
+  - Updating the audit after a metadata push creates a new CI head; synchronize the PR body again and treat the new run as the next delivery gate.
+---
