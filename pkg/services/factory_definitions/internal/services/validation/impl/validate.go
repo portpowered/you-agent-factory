@@ -207,6 +207,17 @@ func webhookFilterTargets(filter factorydefinitions.FactoryWebhookFilterConfig, 
 			targets = append(targets, webhookTarget(CodeWebhookEventTypeUnsupported, path, fmt.Sprintf("unsupported webhook event type %q", eventType), subjectID))
 		}
 	}
+	targets = append(targets, webhookDispatchStatusTargets(filter, basePath, subjectID, dispatchEventTypes)...)
+	return targets
+}
+
+func webhookDispatchStatusTargets(
+	filter factorydefinitions.FactoryWebhookFilterConfig,
+	basePath string,
+	subjectID string,
+	dispatchEventTypes bool,
+) []Target {
+	var targets []Target
 	seenStatuses := make(map[string]int, len(filter.DispatchStatuses))
 	if filter.DispatchStatuses != nil && len(filter.DispatchStatuses) == 0 {
 		targets = append(targets, webhookTarget(
@@ -227,14 +238,17 @@ func webhookFilterTargets(filter factorydefinitions.FactoryWebhookFilterConfig, 
 			targets = append(targets, webhookTarget(CodeWebhookDispatchStatusUnsupported, path, fmt.Sprintf("unsupported webhook dispatch status %q", status), subjectID))
 		}
 	}
-	if len(filter.DispatchStatuses) > 0 && !dispatchEventTypes {
+	if len(filter.DispatchStatuses) == 0 {
+		return targets
+	}
+	if !dispatchEventTypes {
 		targets = append(targets, webhookTarget(
 			CodeWebhookDispatchStatusIncompatible,
 			basePath+".filter.dispatchStatuses",
 			"webhook filter.dispatchStatuses requires at least one dispatch event type",
 			subjectID,
 		))
-	} else if len(filter.DispatchStatuses) > 0 && !webhookDispatchFilterHasCompatibleStatus(filter.EventTypes, filter.DispatchStatuses) {
+	} else if !webhookDispatchFilterHasCompatibleStatus(filter.EventTypes, filter.DispatchStatuses) {
 		targets = append(targets, webhookTarget(
 			CodeWebhookDispatchStatusIncompatible,
 			basePath+".filter.dispatchStatuses",
