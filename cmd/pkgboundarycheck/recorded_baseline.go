@@ -205,7 +205,16 @@ func splitRecordedFindings[T any](findings []T, fingerprint func(T) string, base
 
 func filterRecordedScanResult(result scanResult, baseline recordedBoundaryBaseline) (scanResult, scanResult) {
 	visible := result
-	recorded := scanResult{
+	recorded := newRecordedScanResult(result)
+	filterRecordedPackageFindings(&visible, &recorded, baseline)
+	filterRecordedServiceFindings(&visible, &recorded, baseline)
+	filterRecordedRuntimeFindings(&visible, &recorded, baseline)
+	clearVisibleRecordedFindings(&visible)
+	return visible, recorded
+}
+
+func newRecordedScanResult(result scanResult) scanResult {
+	return scanResult{
 		peerServiceBaselineCount:             result.peerServiceBaselineCount,
 		testServiceBaselineCount:             result.testServiceBaselineCount,
 		supportServiceBaselineCount:          result.supportServiceBaselineCount,
@@ -225,70 +234,82 @@ func filterRecordedScanResult(result scanResult, baseline recordedBoundaryBaseli
 		recordedTestBehaviorFindings:         append([]testBehaviorFinding(nil), result.recordedTestBehaviorFindings...),
 		recordedPetriPublicSurfaceFindings:   append([]petriPublicSurfaceFinding(nil), result.recordedPetriPublicSurfaceFindings...),
 	}
-	visible.rootPackageFindings, recorded.rootPackageFindings = splitRecordedFindings(result.rootPackageFindings, func(finding rootPackageFinding) string {
+}
+
+func filterRecordedPackageFindings(visible, recorded *scanResult, baseline recordedBoundaryBaseline) {
+	visible.rootPackageFindings, recorded.rootPackageFindings = splitRecordedFindings(visible.rootPackageFindings, func(finding rootPackageFinding) string {
 		return boundaryFindingFingerprint("root-package", finding)
 	}, baseline)
-	visible.retiredPackageRootFindings, recorded.retiredPackageRootFindings = splitRecordedFindings(result.retiredPackageRootFindings, func(finding retiredPackageRootFinding) string {
+	visible.retiredPackageRootFindings, recorded.retiredPackageRootFindings = splitRecordedFindings(visible.retiredPackageRootFindings, func(finding retiredPackageRootFinding) string {
 		return boundaryFindingFingerprint("retired-package-root", finding)
 	}, baseline)
-	visible.migrationShimFindings, recorded.migrationShimFindings = splitRecordedFindings(result.migrationShimFindings, func(finding migrationShimFinding) string {
+	visible.migrationShimFindings, recorded.migrationShimFindings = splitRecordedFindings(visible.migrationShimFindings, func(finding migrationShimFinding) string {
 		return boundaryFindingFingerprint("migration-shim", finding)
 	}, baseline)
-	visible.retiredPackageImportFindings, recorded.retiredPackageImportFindings = splitRecordedFindings(result.retiredPackageImportFindings, func(finding retiredPackageImportFinding) string {
+	visible.retiredPackageImportFindings, recorded.retiredPackageImportFindings = splitRecordedFindings(visible.retiredPackageImportFindings, func(finding retiredPackageImportFinding) string {
 		return boundaryFindingFingerprint("retired-package-import", finding)
 	}, baseline)
-	visible.applicationGraphImportFindings, recorded.applicationGraphImportFindings = splitRecordedFindings(result.applicationGraphImportFindings, func(finding applicationGraphImportFinding) string {
+	visible.applicationGraphImportFindings, recorded.applicationGraphImportFindings = splitRecordedFindings(visible.applicationGraphImportFindings, func(finding applicationGraphImportFinding) string {
 		return boundaryFindingFingerprint("application-graph-import", finding)
 	}, baseline)
-	visible.handwrittenGeneratedFindings, recorded.handwrittenGeneratedFindings = splitRecordedFindings(result.handwrittenGeneratedFindings, func(finding handwrittenGeneratedFinding) string {
+	visible.handwrittenGeneratedFindings, recorded.handwrittenGeneratedFindings = splitRecordedFindings(visible.handwrittenGeneratedFindings, func(finding handwrittenGeneratedFinding) string {
 		return boundaryFindingFingerprint("handwritten-generated", finding)
 	}, baseline)
-	visible.domainTransportFindings, recorded.domainTransportFindings = splitRecordedFindings(result.domainTransportFindings, func(finding domainTransportImportFinding) string {
+	visible.domainTransportFindings, recorded.domainTransportFindings = splitRecordedFindings(visible.domainTransportFindings, func(finding domainTransportImportFinding) string {
 		return boundaryFindingFingerprint("domain-transport-import", finding)
 	}, baseline)
-	visible.peerServiceImportFindings, recorded.peerServiceImportFindings = splitRecordedFindings(result.peerServiceImportFindings, func(finding peerServiceImportFinding) string {
+}
+
+func filterRecordedServiceFindings(visible, recorded *scanResult, baseline recordedBoundaryBaseline) {
+	visible.peerServiceImportFindings, recorded.peerServiceImportFindings = splitRecordedFindings(visible.peerServiceImportFindings, func(finding peerServiceImportFinding) string {
 		return boundaryFindingFingerprint("peer-service-import", finding)
 	}, baseline)
-	visible.testServiceImportFindings, recorded.testServiceImportFindings = splitRecordedFindings(result.testServiceImportFindings, func(finding testServiceImportFinding) string {
+	visible.testServiceImportFindings, recorded.testServiceImportFindings = splitRecordedFindings(visible.testServiceImportFindings, func(finding testServiceImportFinding) string {
 		return boundaryFindingFingerprint("test-service-import", finding)
 	}, baseline)
-	visible.supportServiceImportFindings, recorded.supportServiceImportFindings = splitRecordedFindings(result.supportServiceImportFindings, func(finding supportServiceImportFinding) string {
+	visible.supportServiceImportFindings, recorded.supportServiceImportFindings = splitRecordedFindings(visible.supportServiceImportFindings, func(finding supportServiceImportFinding) string {
 		return boundaryFindingFingerprint("support-service-import", finding)
 	}, baseline)
-	visible.serviceConstructionFindings, recorded.serviceConstructionFindings = splitRecordedFindings(result.serviceConstructionFindings, func(finding serviceConstructionFinding) string {
+	visible.serviceConstructionFindings, recorded.serviceConstructionFindings = splitRecordedFindings(visible.serviceConstructionFindings, func(finding serviceConstructionFinding) string {
 		return boundaryFindingFingerprint("service-construction", finding)
 	}, baseline)
-	visible.transportImplementationFindings, recorded.transportImplementationFindings = splitRecordedFindings(result.transportImplementationFindings, func(finding transportServiceImplementationFinding) string {
+	visible.transportImplementationFindings, recorded.transportImplementationFindings = splitRecordedFindings(visible.transportImplementationFindings, func(finding transportServiceImplementationFinding) string {
 		return boundaryFindingFingerprint("transport-implementation", finding)
 	}, baseline)
-	visible.externalImplementationFindings, recorded.externalImplementationFindings = splitRecordedFindings(result.externalImplementationFindings, func(finding transportServiceImplementationFinding) string {
+	visible.externalImplementationFindings, recorded.externalImplementationFindings = splitRecordedFindings(visible.externalImplementationFindings, func(finding transportServiceImplementationFinding) string {
 		return boundaryFindingFingerprint("external-implementation", finding)
 	}, baseline)
-	visible.transportBehaviorFindings, recorded.transportBehaviorFindings = splitRecordedFindings(result.transportBehaviorFindings, func(finding transportBehaviorFinding) string {
+}
+
+func filterRecordedRuntimeFindings(visible, recorded *scanResult, baseline recordedBoundaryBaseline) {
+	visible.transportBehaviorFindings, recorded.transportBehaviorFindings = splitRecordedFindings(visible.transportBehaviorFindings, func(finding transportBehaviorFinding) string {
 		return boundaryFindingFingerprint("transport-behavior", finding)
 	}, baseline)
-	visible.functionalProcessEdgeFindings, recorded.functionalProcessEdgeFindings = splitRecordedFindings(result.functionalProcessEdgeFindings, func(finding functionalProcessEdgeFinding) string {
+	visible.functionalProcessEdgeFindings, recorded.functionalProcessEdgeFindings = splitRecordedFindings(visible.functionalProcessEdgeFindings, func(finding functionalProcessEdgeFinding) string {
 		return boundaryFindingFingerprint("functional-process-edge", finding)
 	}, baseline)
-	visible.constructedServiceEdgesFindings, recorded.constructedServiceEdgesFindings = splitRecordedFindings(result.constructedServiceEdgesFindings, func(finding constructedServiceEdgesFinding) string {
+	visible.constructedServiceEdgesFindings, recorded.constructedServiceEdgesFindings = splitRecordedFindings(visible.constructedServiceEdgesFindings, func(finding constructedServiceEdgesFinding) string {
 		return boundaryFindingFingerprint("constructed-service-edge", finding)
 	}, baseline)
-	visible.testWorkNormalizationFindings, recorded.testWorkNormalizationFindings = splitRecordedFindings(result.testWorkNormalizationFindings, func(finding testWorkNormalizationFinding) string {
+	visible.testWorkNormalizationFindings, recorded.testWorkNormalizationFindings = splitRecordedFindings(visible.testWorkNormalizationFindings, func(finding testWorkNormalizationFinding) string {
 		return boundaryFindingFingerprint("test-work-normalization", finding)
 	}, baseline)
-	visible.productionDefaultFindings, recorded.productionDefaultFindings = splitRecordedFindings(result.productionDefaultFindings, func(finding productionDefaultFinding) string {
+	visible.productionDefaultFindings, recorded.productionDefaultFindings = splitRecordedFindings(visible.productionDefaultFindings, func(finding productionDefaultFinding) string {
 		return boundaryFindingFingerprint("production-default", finding)
 	}, baseline)
-	visible.initializerBehaviorFindings, recorded.initializerBehaviorFindings = splitRecordedFindings(result.initializerBehaviorFindings, func(finding initializerBehaviorFinding) string {
+	visible.initializerBehaviorFindings, recorded.initializerBehaviorFindings = splitRecordedFindings(visible.initializerBehaviorFindings, func(finding initializerBehaviorFinding) string {
 		return boundaryFindingFingerprint("initializer-behavior", finding)
 	}, baseline)
-	visible.testBehaviorFindings, recorded.testBehaviorFindings = splitRecordedFindings(result.testBehaviorFindings, func(finding testBehaviorFinding) string { return boundaryFindingFingerprint("test-behavior", finding) }, baseline)
-	visible.petriPublicSurfaceFindings, recorded.petriPublicSurfaceFindings = splitRecordedFindings(result.petriPublicSurfaceFindings, func(finding petriPublicSurfaceFinding) string {
+	visible.testBehaviorFindings, recorded.testBehaviorFindings = splitRecordedFindings(visible.testBehaviorFindings, func(finding testBehaviorFinding) string { return boundaryFindingFingerprint("test-behavior", finding) }, baseline)
+	visible.petriPublicSurfaceFindings, recorded.petriPublicSurfaceFindings = splitRecordedFindings(visible.petriPublicSurfaceFindings, func(finding petriPublicSurfaceFinding) string {
 		return boundaryFindingFingerprint("petri-public-surface", finding)
 	}, baseline)
-	visible.providerEffectOwnershipFindings, recorded.providerEffectOwnershipFindings = splitRecordedFindings(result.providerEffectOwnershipFindings, func(finding providerEffectOwnershipFinding) string {
+	visible.providerEffectOwnershipFindings, recorded.providerEffectOwnershipFindings = splitRecordedFindings(visible.providerEffectOwnershipFindings, func(finding providerEffectOwnershipFinding) string {
 		return boundaryFindingFingerprint("provider-effect-ownership", finding)
 	}, baseline)
+}
+
+func clearVisibleRecordedFindings(visible *scanResult) {
 	visible.recordedPeerServiceImportFindings = nil
 	visible.recordedTestServiceImportFindings = nil
 	visible.recordedSupportServiceImportFindings = nil
@@ -298,7 +319,6 @@ func filterRecordedScanResult(result scanResult, baseline recordedBoundaryBaseli
 	visible.recordedInitializerBehaviorFindings = nil
 	visible.recordedTestBehaviorFindings = nil
 	visible.recordedPetriPublicSurfaceFindings = nil
-	return visible, recorded
 }
 
 func boundaryFindingFingerprint(category string, finding any) string {
