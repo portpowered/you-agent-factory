@@ -1,0 +1,41 @@
+type: object
+additionalProperties: false
+description: Bounded evidence record qualifying one or more published capability facts.
+required:
+  - id
+  - kind
+  - verifiedOn
+properties:
+  id:
+    type: string
+    minLength: 1
+    maxLength: 128
+    pattern: '^[a-z][a-z0-9._-]*$'
+    description: Stable manifest-local evidence identifier.
+  kind:
+    $ref: './ProviderCapabilityEvidenceKind.yaml'
+  verifiedOn:
+    type: string
+    format: date
+    description: UTC calendar date on which the evidence was checked.
+  url:
+    type: string
+    format: uri
+    minLength: 1
+    maxLength: 2048
+    pattern: '^https://(?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\.)+[A-Za-z]{2,}(?::[0-9]+)?(?:[/?#].*)?$'
+    description: Optional public HTTPS source for the evidence.
+  harnessVersion:
+    type: string
+    minLength: 1
+    maxLength: 128
+    description: Optional harness version used when the evidence was checked.
+  factRefs:
+    type: array
+    maxItems: 64
+    uniqueItems: true
+    description: Optional bounded references to facts qualified by this record.
+    items:
+      type: string
+      minLength: 1
+      maxLength: 256

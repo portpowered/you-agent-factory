@@ -1,0 +1,10 @@
+type: object
+additionalProperties: false
+description: Provider harness metadata, kept separate from model capability facts.
+required:
+  - kind
+properties:
+  kind:
+    $ref: './ProviderHarnessKind.yaml'
+  acpSupport:
+    $ref: './ProviderACPSupport.yaml'

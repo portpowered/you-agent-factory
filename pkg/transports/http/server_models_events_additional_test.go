@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionshttp "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/http"
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
@@ -24,30 +25,88 @@ import (
 	"go.uber.org/zap"
 )
 
-func TestListPackagedFactoriesReturnsPublishedCatalog(t *testing.T) {
-	srv := NewServer(nil, nil, nil, nil, zap.NewNop())
+func TestListPackagedFactoriesReturnsUnavailableErrorWithoutDefinitionsHandler(t *testing.T) {
+	srv := NewServer(nil, nil, nil, nil, nil, zap.NewNop())
+	recorder := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/packaged-factories", nil))
+
+	if recorder.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d: %s", recorder.Code, http.StatusInternalServerError, recorder.Body.String())
+	}
+	var response factoryapi.ErrorResponse
+	if err := json.NewDecoder(recorder.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response.Code != factoryapi.ErrorResponseCodeINTERNALERROR {
+		t.Fatalf("error code = %q, want %q", response.Code, factoryapi.ErrorResponseCodeINTERNALERROR)
+	}
+}
+
+func TestListPackagedFactoriesRoutesThroughDefinitionsHandler(t *testing.T) {
+	root := &packagedFactoryCatalogServiceFake{
+		listed: interfaces.ListBuiltInPackagedFactoriesResult{
+			Entries: []interfaces.BuiltInPackagedFactoryEntry{{
+				Name: "@you/alpha", Project: "builtin-alpha",
+			}},
+		},
+		definitions: map[string]interfaces.PackagedDefinition{
+			"@you/alpha": {
+				Name:    "@you/alpha",
+				Project: "builtin-alpha",
+				JSON:    []byte(`{"name":"@you/alpha","description":{"type":"LOCALIZABLE_ASSET","value":"Alpha"},"examples":[{"name":"run-alpha","description":{"type":"LOCALIZABLE_ASSET","value":"Run alpha"},"args":{"input":"sample"}}]}`),
+				YAML:    []byte("name: alpha\n"),
+			},
+		},
+	}
+	factoryDefinitionsHandler := factorydefinitionshttp.NewHandlerFromRoot(
+		factorydefinitionshttp.RootBinding{Definitions: root},
+		zap.NewNop(),
+	)
+	srv := NewServer(nil, nil, nil, nil, factoryDefinitionsHandler, zap.NewNop())
 	recorder := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/packaged-factories", nil))
 
 	if recorder.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d: %s", recorder.Code, http.StatusOK, recorder.Body.String())
+		t.Fatalf("status = %d, want 200: %s", recorder.Code, recorder.Body.String())
 	}
 	var response factoryapi.PackagedFactoryCatalogResponse
 	if err := json.NewDecoder(recorder.Body).Decode(&response); err != nil {
-		t.Fatalf("decode response: %v", err)
+		t.Fatalf("decode catalog response: %v", err)
 	}
-	if len(response.Factories) == 0 {
-		t.Fatal("catalog response contained no factories")
+	if len(response.Factories) != 1 || response.Factories[0].Name != "@you/alpha" {
+		t.Fatalf("catalog response = %#v, want one API-shaped alpha entry", response.Factories)
 	}
-	for _, factory := range response.Factories {
-		if factory.Name == "" || factory.Project == "" || factory.Slug == "" || len(factory.Json) == 0 || factory.Yaml == "" {
-			t.Fatalf("catalog entry is incomplete: %#v", factory)
-		}
+	if response.Factories[0].Yaml != "name: alpha\n" || response.Factories[0].Json["name"] != "@you/alpha" {
+		t.Fatalf("catalog artifacts = %#v, want backend-provided JSON/YAML", response.Factories[0])
 	}
 }
 
+type packagedFactoryCatalogServiceFake struct {
+	interfaces.Service
+	listed      interfaces.ListBuiltInPackagedFactoriesResult
+	definitions map[string]interfaces.PackagedDefinition
+}
+
+func (fake *packagedFactoryCatalogServiceFake) ListBuiltInPackagedFactories(
+	context.Context,
+	interfaces.ListBuiltInPackagedFactoriesRequest,
+) (interfaces.ListBuiltInPackagedFactoriesResult, error) {
+	return fake.listed, nil
+}
+
+func (fake *packagedFactoryCatalogServiceFake) ResolveBuiltInPackagedFactory(
+	_ context.Context,
+	request interfaces.ResolveBuiltInPackagedFactoryRequest,
+) (interfaces.ResolveBuiltInPackagedFactoryResult, error) {
+	definition, ok := fake.definitions[request.Name]
+	if !ok {
+		return interfaces.ResolveBuiltInPackagedFactoryResult{}, interfaces.ErrUnknownPackagedFactoryIdentity
+	}
+	return interfaces.ResolveBuiltInPackagedFactoryResult{Definition: definition, Formats: definition.Formats}, nil
+}
+
 func TestWorkerSessionOperationsReturnStructuredErrorWhenHandlerIsUnavailable(t *testing.T) {
-	srv := NewServer(nil, nil, nil, nil, zap.NewNop())
+	srv := NewServer(nil, nil, nil, nil, nil, zap.NewNop())
 	sessionID := factoryapi.SessionID("missing")
 	cases := []struct {
 		name string
@@ -77,6 +136,18 @@ func TestWorkerSessionOperationsReturnStructuredErrorWhenHandlerIsUnavailable(t 
 				srv.StreamWorkerSessionEventsBySessionId(recorder, httptest.NewRequest(http.MethodGet, "/", nil), sessionID, factoryapi.StreamWorkerSessionEventsBySessionIdParams{})
 			},
 		},
+		{
+			name: "stream by worker session id",
+			call: func(recorder *httptest.ResponseRecorder) {
+				srv.StreamWorkerSessionEventsByWorkerSessionId(
+					recorder,
+					httptest.NewRequest(http.MethodGet, "/", nil),
+					sessionID,
+					factoryapi.WorkerSessionID("worker-missing"),
+					factoryapi.StreamWorkerSessionEventsByWorkerSessionIdParams{},
+				)
+			},
+		},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
@@ -97,7 +168,7 @@ func TestWorkerSessionOperationsReturnStructuredErrorWhenHandlerIsUnavailable(t 
 }
 
 func TestDashboardRoutesServeEmbeddedShellAssetsAndFallback(t *testing.T) {
-	srv := NewServer(nil, nil, nil, nil, zap.NewNop())
+	srv := NewServer(nil, nil, nil, nil, nil, zap.NewNop())
 
 	shell := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(shell, httptest.NewRequest(http.MethodGet, "/dashboard/ui", nil))

@@ -20,8 +20,10 @@ import (
 type observationService interface {
 	ListObservations(context.Context, workersessions.ListObservationsRequest) (workersessions.ListObservationsResult, error)
 	GetObservation(context.Context, workersessions.GetObservationRequest) (workersessions.Observation, error)
+	GetObservationByWorkerSessionID(context.Context, workersessions.GetObservationByWorkerSessionIDRequest) (workersessions.Observation, error)
 	ReadTranscript(context.Context, workersessions.ReadTranscriptRequest) (workersessions.ReadTranscriptResult, error)
 	StreamObservations(context.Context, workersessions.StreamObservationsRequest) (workersessions.ObservationSubscription, error)
+	StreamObservationsByWorkerSessionID(context.Context, workersessions.StreamObservationsByWorkerSessionIDRequest) (workersessions.ObservationSubscription, error)
 }
 
 type Adapter struct {
@@ -135,6 +137,50 @@ func (a *Adapter) StreamWorkerSessionEvents(
 		// receives the bounded stream policy at the transport boundary.
 		Limit:      workersessions.DefaultObservationStreamLimit,
 		ReplayOnly: replayOnly,
+	})
+	if err != nil {
+		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, fmt.Errorf("stream Worker Session events: %w", err)
+	}
+	if subscription.NextFunc == nil {
+		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, workersessions.ErrObservationSourceUnavailable
+	}
+	return WorkerSessionObservationToAPI(observation), subscription, nil
+}
+
+// StreamWorkerSessionEventsByWorkerSessionID returns the detached identity
+// envelope together with the canonical retained/live subscription for a
+// Worker Session that may not have a Provider Session reference.
+func (a *Adapter) StreamWorkerSessionEventsByWorkerSessionID(
+	ctx context.Context,
+	sessionID, workerSessionID string,
+	replayOnly bool,
+) (factoryapi.WorkerSessionObservation, workersessions.ObservationSubscription, error) {
+	if a == nil || a.observations == nil {
+		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, errors.New("Worker Sessions service is required")
+	}
+	if strings.TrimSpace(sessionID) == "" {
+		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, errors.New("session id is required")
+	}
+	workerSessionID = strings.TrimSpace(workerSessionID)
+	if workerSessionID == "" {
+		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, errors.New("worker session id is required")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, err
+	}
+	observation, err := a.observations.GetObservationByWorkerSessionID(ctx, workersessions.GetObservationByWorkerSessionIDRequest{
+		WorkerSessionID: workerSessionID,
+	})
+	if err != nil {
+		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, fmt.Errorf("get Worker Session observation: %w", err)
+	}
+	subscription, err := a.observations.StreamObservationsByWorkerSessionID(ctx, workersessions.StreamObservationsByWorkerSessionIDRequest{
+		WorkerSessionID: workerSessionID,
+		Limit:           workersessions.DefaultObservationStreamLimit,
+		ReplayOnly:      replayOnly,
 	})
 	if err != nil {
 		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, fmt.Errorf("stream Worker Session events: %w", err)

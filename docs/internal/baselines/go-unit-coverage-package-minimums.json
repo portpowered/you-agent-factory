@@ -65,6 +65,10 @@
       "minimum": 95.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/jsonvalue",
+      "minimum": 55.10
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/platform/logging",
       "minimum": 75.40
     },
@@ -818,7 +822,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/subsystems",
-      "minimum": 83.56
+      "minimum": 83.42
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/throttle",

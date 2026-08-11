@@ -58,6 +58,30 @@ func TestProjectFactorySessionStopSummaryAppliesCanonicalPrecedence(t *testing.T
 	}
 }
 
+func TestProjectFactorySessionStopSummaryPreservesStructuredSchemaViolationReason(t *testing.T) {
+	now := time.Date(2026, 7, 20, 12, 30, 0, 0, time.UTC)
+	snapshot, token := stoppedWorkSnapshot(now, "blocked")
+	snapshot.DispatchHistory = []interfaces.CompletedDispatch{{
+		DispatchID: "dispatch-schema-violation",
+		Outcome:    workerexecution.OutcomeFailed,
+		Reason:     "structured output schema violation: missing property summary",
+		FailureMetadata: &workerexecution.WorkFailureMetadata{
+			Family: workerexecution.WorkFailureFamilyTerminal,
+			Type:   workerexecution.WorkFailureTypeStructuredOutputSchemaViolation,
+		},
+		EndTime:        now,
+		ConsumedTokens: []workerexecution.Token{*token},
+	}}
+
+	summary := sessionprojection.ProjectFactorySessionStopSummary("session-1", snapshot, nil)
+	if summary == nil || summary.LatestDispatch == nil || summary.LatestDispatch.FailureDetail == nil {
+		t.Fatalf("stop summary = %#v, want dispatch failure detail", summary)
+	}
+	if summary.LatestDispatch.FailureDetail.Reason != StopFailureType("structured_output_schema_violation") {
+		t.Fatalf("failure reason = %q, want structured_output_schema_violation", summary.LatestDispatch.FailureDetail.Reason)
+	}
+}
+
 func stoppedWorkSnapshot(now time.Time, stateName string) (*legacysnapshot.Snapshot, *factoryruntime.RuntimeToken) {
 	placeID := "goal:" + stateName
 	token := &factoryruntime.RuntimeToken{ID: "token-1", PlaceID: placeID, EnteredAt: now, Color: factoryruntime.RuntimeTokenColor{WorkID: "work-1", WorkTypeID: "goal", Name: "Goal"}}

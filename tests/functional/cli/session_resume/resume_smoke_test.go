@@ -585,6 +585,7 @@ func (h *cliResumeSmokeHarness) startInterruptedSession(t *testing.T) string {
 	)
 
 	reason := "cli resume smoke interrupt"
+	h.provider.waitForInferBlocked(t, 5*time.Second)
 	postCLIResumeJSON(t, h.serverURL+"/factory-sessions/"+sessionID+"/interrupt-dispatch",
 		factoryapi.FactorySessionInterruptDispatchRequest{
 			DispatchId: "dispatch-2",
@@ -727,11 +728,27 @@ type cliResumeSmokeBlockingProvider struct {
 	calls           int
 	blockedOnce     bool
 	contextCanceled int
+	inferBlocked    chan struct{}
 	workflowName    string
 }
 
 func newCLIResumeSmokeBlockingProvider(workflowName string) *cliResumeSmokeBlockingProvider {
-	return &cliResumeSmokeBlockingProvider{workflowName: workflowName}
+	return &cliResumeSmokeBlockingProvider{
+		inferBlocked: make(chan struct{}),
+		workflowName: workflowName,
+	}
+}
+
+func (p *cliResumeSmokeBlockingProvider) waitForInferBlocked(t *testing.T, timeout time.Duration) {
+	t.Helper()
+
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-p.inferBlocked:
+	case <-timer.C:
+		t.Fatal("provider Infer did not enter its cancellable wait")
+	}
 }
 
 func (p *cliResumeSmokeBlockingProvider) callCount() int {
@@ -761,6 +778,7 @@ func (p *cliResumeSmokeBlockingProvider) Infer(ctx context.Context, _ workerexec
 	if !alreadyBlocked {
 		p.mu.Lock()
 		p.blockedOnce = true
+		close(p.inferBlocked)
 		p.mu.Unlock()
 
 		<-ctx.Done()

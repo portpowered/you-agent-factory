@@ -6,6 +6,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -32,6 +33,13 @@ type TokenData struct {
 	Payload    string
 	Relations  []work.Relation
 	Content    []work.WorkContentPart
+
+	// StructuredResult is the detached native JSON value produced by an
+	// upstream schema-bound workstation. It is optional: a missing value is
+	// rejected when a template attempts to use it rather than falling back to
+	// Payload or artifact content.
+	StructuredResult        any
+	structuredResultPresent bool
 
 	PreviousOutput    string
 	RejectionFeedback string
@@ -93,6 +101,9 @@ func (r *DefaultPromptRenderer) Render(tmpl string, tokens []workerexecution.Tok
 	t, err := template.New("prompt").Parse(tmpl)
 	if err != nil {
 		return "", err
+	}
+	if diagnostics := validateStructuredResultAvailability(t, structuredResultPresence(data.Inputs)); len(diagnostics) > 0 {
+		return "", fmt.Errorf("render Worker prompt: %s", diagnostics[0].Message)
 	}
 
 	var buf bytes.Buffer
@@ -185,6 +196,8 @@ func buildTokenData(token workerexecution.Token, wfCtx *workerexecution.Context)
 	td.Payload = string(color.Payload)
 	td.Relations = color.Relations
 	td.Content = append([]work.WorkContentPart(nil), color.Content...)
+	td.StructuredResult = jsonvalue.Clone(color.StructuredResult)
+	td.structuredResultPresent = jsonvalue.Present(color.StructuredResult, color.StructuredResultPresent)
 
 	if color.Tags != nil {
 		td.Tags = color.Tags
@@ -208,6 +221,14 @@ func buildTokenData(token workerexecution.Token, wfCtx *workerexecution.Context)
 	td.History.AttemptNumber = totalVisits + 1
 
 	return td
+}
+
+func structuredResultPresence(inputs []TokenData) []bool {
+	present := make([]bool, len(inputs))
+	for index, input := range inputs {
+		present[index] = input.structuredResultPresent
+	}
+	return present
 }
 
 func promptContextProject(tokens []workerexecution.Token, wfCtx *workerexecution.Context) string {
