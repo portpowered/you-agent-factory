@@ -7366,3 +7366,18 @@
 - **Learnings for future iterations:**
   - A durable Worker sidecar can preserve exact Events records without widening the Worker Sessions contract; the next story should add loading/replay over this source-native snapshot and unify it with the existing canonical recording lifecycle.
 ---
+
+## 2026-08-10 23:34 -07:00 - wsr-0023-capture-replay-001
+- What was implemented
+  - Consolidated the durable-opening barrier tests into the existing Worker Sessions start-test unit so the repository package-file-count gate remains within its baseline limit.
+- Files changed
+  - `pkg/services/worker_sessions/internal/service/start_test.go`
+  - Removed the now-consolidated `pkg/services/worker_sessions/internal/service/capture_barrier_test.go`
+  - `progress.txt`
+- Verification
+  - `make pkg-file-count` passed.
+  - Focused Worker Sessions and Worker capture tests passed.
+  - `git diff --check` passed.
+- **Learnings for future iterations:**
+  - Before adding a test file, check package file-count headroom; consolidate small focused tests into an existing test file when the package is at its enforced limit.
+---
