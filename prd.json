@@ -12,7 +12,7 @@
   "deliveryAudit": {
     "pullRequest": 1857,
     "head": "aeecd983102b8e9500ca577e74890858858bcc53",
-    "base": "1b871e3a84125400ca3f04b2bdf9fd2658ac5c45",
+    "base": "0e7df069f80518287a7905558a525ac196b11bc0",
     "reviewThreads": 0,
     "unresolvedReviewThreads": 0,
     "formalReviews": 0,
@@ -139,7 +139,7 @@
       ],
       "priority": 6,
       "passes": true,
-      "notes": "Completed the review follow-up for the reusable root-process proof and the final value-only invocation cutover. Both representative success and provider-failure invocations enter through the public `you --json run` CLI on one root.BuildProcess/Process.Execute instance; the injected API server is observation-only for public session and Factory Event streams. The current pushed head is `aeecd983102b8e9500ca577e74890858858bcc53`, based on synchronized current origin/main `1b871e3a84125400ca3f04b2bdf9fd2658ac5c45`. Workflow `31474198084` and its failed-job reruns passed every other required lane and retained only the unchanged `TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput`; the P1 diff is empty for that package. The thread-aware audit has zero unresolved review threads and zero formal reviews. All six P1 stories remain marked `passes:true`; the remaining follow-up is the unchanged functional-CI baseline and final PR handoff."
+      "notes": "Completed the review follow-up for the reusable root-process proof and the final value-only invocation cutover. Both representative success and provider-failure invocations enter through the public `you --json run` CLI on one root.BuildProcess/Process.Execute instance; the injected API server is observation-only for public session and Factory Event streams. The last tested pushed head was `aeecd983102b8e9500ca577e74890858858bcc53`, based on synchronized origin/main `1b871e3a84125400ca3f04b2bdf9fd2658ac5c45`. Workflow `31474198084` and its failed-job reruns passed every other required lane and retained only the unchanged `TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput`; the P1 diff is empty for that package. The branch is now synchronized with live origin/main `0e7df069f80518287a7905558a525ac196b11bc0`, so a fresh workflow is required on the replacement head. The thread-aware audit has zero unresolved review threads and zero formal reviews. All six P1 stories remain marked `passes:true`; the remaining follow-up is the unchanged functional-CI baseline and final PR handoff."
     }
   ]
 }
