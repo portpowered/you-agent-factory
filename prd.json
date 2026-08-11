@@ -108,8 +108,8 @@
         "Tests pass"
       ],
       "priority": 5,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Refactored synchronous InvokeSession and asynchronous Start to use one Worker Sessions preparation path for reservation, STARTING transition, observation capture, opening publication, supervision registration, retry budget, admission callback, control races, terminal classification, and terminal publication. InvokeSession retains its request-ID-free session conflict rules and synchronous terminal return behavior; Start retains the server-owned readiness barrier and returns at admission. Added deterministic compatibility tests proving synchronous terminal waiting versus asynchronous admission return and matching pre-admission failure classification/event history. Verification: full Worker Sessions package tests, focused race suite, affected Factory Runtime and HTTP transport suites, go vet on affected packages, make typecheck, make ui-lint, make backend-size, make pkg-maint, make pkg-file-count, make pkg-structure, and git diff --check pass. The aggregate make lint command was separately bounded at five minutes while unrelated concurrent unit-lane processes were active; its focused lint/static targets and affected vet checks pass."
     }
   ]
 }

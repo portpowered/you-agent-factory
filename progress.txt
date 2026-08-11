@@ -1,4 +1,8 @@
 ## Codebase Patterns
+- Keep synchronous and asynchronous entry points on one domain-owned
+  preparation/supervision path; parameterize lifecycle ownership and caller
+  wait semantics instead of duplicating reservation, opening, and admission
+  logic.
 - When a package is constrained to one named root service interface, keep a
   peer lifecycle hook structural and optional; let composition detect the
   narrow method without widening every test double or alternate adapter.
@@ -4129,4 +4133,24 @@
   - `make typecheck`, `make ui-lint`, `make backend-size pkg-maint pkg-file-count pkg-structure`, and `git diff --check` passed.
 - **Learnings for future iterations:**
   - New functional scenarios must live under `tests/functional/<durable-domain>/<subsection>/...`; the package-structure checker rejects new files under the historical `runtime_api` aggregate even when their assertions are valid.
+---
+## [2026-08-11 01:45 -07:00] - dwro-s2-server-owned-start-005
+- What was implemented
+  - Consolidated synchronous `InvokeSession` and asynchronous `Start` onto one Worker Sessions preparation path covering reservation, STARTING transition, observation capture, opening publication, supervision registration, retry budget, admission callback, control races, terminal classification, and terminal publication.
+  - Preserved synchronous callers' request-ID-free session conflict rules and terminal return behavior while keeping asynchronous Starts server-owned and admission-gated.
+  - Added deterministic compatibility tests proving synchronous terminal waiting versus asynchronous admission return and matching pre-admission failure classification and event history.
+- Files changed
+  - `pkg/services/worker_sessions/contracts.go`
+  - `pkg/services/worker_sessions/internal/service/invoke_session.go`
+  - `pkg/services/worker_sessions/internal/service/publish_record.go`
+  - `pkg/services/worker_sessions/internal/service/service.go`
+  - `pkg/services/worker_sessions/internal/service/start_test.go`
+- Verification
+  - `go test ./pkg/services/worker_sessions/... -count=1` passed.
+  - `go test -race ./pkg/services/worker_sessions/internal/service -count=1` passed.
+  - Affected Factory Runtime and HTTP transport suites, affected `go vet`, `make typecheck`, `make ui-lint`, `make backend-size`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, and `git diff --check` passed.
+  - The aggregate `make lint` command was bounded at five minutes while unrelated concurrent unit-lane processes were active; focused lint/static targets and affected vet checks passed.
+- **Learnings for future iterations:**
+  - Shared lifecycle behavior should be factored below the public entry points, with mode options limited to lifecycle ownership, readiness verification, and caller-facing wait/error semantics.
+  - Keep the Worker Sessions package at its 15-file limit by placing small lifecycle coordination beside the existing publication/lifecycle implementation rather than adding another package file.
 ---
