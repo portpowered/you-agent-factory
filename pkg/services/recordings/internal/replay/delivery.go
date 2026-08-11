@@ -10,6 +10,7 @@ import (
 	"time"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -550,6 +551,8 @@ func (p *CompletionDeliveryPlan) PlannedResultForDispatch(dispatch work.WorkDisp
 
 func cloneReplayPlannedResult(result workerexecution.WorkResult) workerexecution.WorkResult {
 	clone := result
+	clone.StructuredResult = jsonvalue.Clone(result.StructuredResult)
+	clone.StructuredResultPresent = jsonvalue.Present(result.StructuredResult, result.StructuredResultPresent)
 	if result.RecordedOutputWork != nil {
 		clone.RecordedOutputWork = cloneReplayFactoryWorkItems(result.RecordedOutputWork)
 	}
@@ -572,6 +575,8 @@ func cloneReplayFactoryWorkItems(items []work.FactoryWorkItem) []work.FactoryWor
 		if items[i].Content != nil {
 			out[i].Content = append([]work.WorkContentPart(nil), items[i].Content...)
 		}
+		out[i].StructuredResult = jsonvalue.Clone(items[i].StructuredResult)
+		out[i].StructuredResultPresent = jsonvalue.Present(items[i].StructuredResult, items[i].StructuredResultPresent)
 		if items[i].Tags != nil {
 			out[i].Tags = cloneStringMap(items[i].Tags)
 		}

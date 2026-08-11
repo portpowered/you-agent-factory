@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
@@ -95,6 +96,13 @@ func newAgentExecutor(
 // response against OutputSchema if present, and returns a WorkResult.
 func (ae *AgentExecutor) Execute(ctx context.Context, request workerexecution.WorkstationExecutionRequest) (workerexecution.WorkResult, error) {
 	start := ae.clock()
+	if request.OutputSchema != "" {
+		if err := validateOutputSchema([]byte(request.OutputSchema)); err != nil {
+			failed := outputSchemaConfigurationFailure(request, err)
+			failed.Metrics = agentWorkMetrics(start, 0, ae.clock)
+			return failed, nil
+		}
+	}
 	workerType := workerTypeForExecutionRequest(request)
 	workerDef, ok := ae.runtimeConfig.Worker(workerType)
 	if !ok {
@@ -382,24 +390,27 @@ func missingCompletionEvidenceWorkResult(
 
 func (ae *AgentExecutor) workResultForInferenceResponse(request workerexecution.WorkstationExecutionRequest, resp workerexecution.InferenceResponse, outcome workerexecution.WorkOutcome, diagnostics *workerexecution.WorkDiagnostics, retryCount int, start time.Time) (workerexecution.WorkResult, error) {
 	metrics := agentWorkMetrics(start, retryCount, ae.clock)
+	var structuredResult any
+	structuredResultPresent := false
 	if request.OutputSchema != "" {
-		ae.logger.Info("parsing output against schema", "schema", request.OutputSchema)
-		parseFailure := ""
-		if _, parseErr := parseOutputAgainstSchema(resp.Content, []byte(request.OutputSchema)); parseErr != nil {
-			parseFailure = parseErr.Error()
-		}
-		if parseFailure != "" {
+		ae.logger.Info("parsing output against schema", "schema_bytes", len(request.OutputSchema))
+		parsed, parseErr := parseOutputAgainstSchema(resp.Content, []byte(request.OutputSchema))
+		if parseErr != nil {
 			return workerexecution.WorkResult{
 				DispatchID:      request.Dispatch.DispatchID,
 				TransitionID:    request.Dispatch.TransitionID,
 				Outcome:         workerexecution.OutcomeFailed,
 				Output:          resp.Content,
-				Error:           "output parse failed: " + parseFailure,
-				FailureMetadata: structuredOutputFailureMetadata(),
+				Error:           "structured output schema violation: " + parseErr.Error(),
+				FailureMetadata: structuredOutputSchemaViolationMetadata(),
 				ProviderSession: workerexecution.CloneProviderSessionMetadata(resp.ProviderSession),
 				Diagnostics:     diagnostics,
 				Metrics:         metrics,
 			}, nil
+		}
+		if outcome == workerexecution.OutcomeAccepted {
+			structuredResult = jsonvalue.Clone(parsed)
+			structuredResultPresent = true
 		}
 		if verdictFailure := structuredOutputFailure(resp.Content, request.OutputContract); verdictFailure != "" {
 			return workerexecution.WorkResult{
@@ -417,13 +428,15 @@ func (ae *AgentExecutor) workResultForInferenceResponse(request workerexecution.
 	}
 
 	return workerexecution.WorkResult{
-		DispatchID:      request.Dispatch.DispatchID,
-		TransitionID:    request.Dispatch.TransitionID,
-		Outcome:         outcome,
-		Output:          resp.Content,
-		ProviderSession: workerexecution.CloneProviderSessionMetadata(resp.ProviderSession),
-		Diagnostics:     diagnostics,
-		Metrics:         metrics,
+		DispatchID:              request.Dispatch.DispatchID,
+		TransitionID:            request.Dispatch.TransitionID,
+		Outcome:                 outcome,
+		Output:                  resp.Content,
+		StructuredResult:        structuredResult,
+		StructuredResultPresent: structuredResultPresent,
+		ProviderSession:         workerexecution.CloneProviderSessionMetadata(resp.ProviderSession),
+		Diagnostics:             diagnostics,
+		Metrics:                 metrics,
 	}, nil
 }
 

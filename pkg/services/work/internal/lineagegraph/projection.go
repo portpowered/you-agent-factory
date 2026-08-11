@@ -340,6 +340,8 @@ func cloneSnapshot(snapshot WorkPayloadSnapshot) WorkPayloadSnapshot {
 func cloneWorkItem(item WorkItem) WorkItem {
 	item.PreviousChainingTraceIDs = cloneStringSlice(item.PreviousChainingTraceIDs)
 	item.Content = cloneContentParts(item.Content)
+	item.StructuredResult = cloneAnyValue(item.StructuredResult)
+	item.StructuredResultPresent = item.StructuredResultPresent || item.StructuredResult != nil
 	item.Tags = cloneStringMap(item.Tags)
 	return item
 }

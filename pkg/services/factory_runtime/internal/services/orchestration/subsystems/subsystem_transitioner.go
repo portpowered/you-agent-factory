@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
@@ -46,6 +47,8 @@ type resolvedWorkResult struct {
 	outcome                     workerexecution.WorkOutcome
 	selectedClassificationLabel string
 	output                      string
+	structuredResult            any
+	structuredResultPresent     bool
 	recordedOutputWork          []work.FactoryWorkItem
 	err                         string
 	feedback                    string
@@ -447,8 +450,10 @@ func cloneFactoryWorkItems(items []work.FactoryWorkItem) []work.FactoryWorkItem 
 			clone[i].PreviousChainingTraceIDs = append([]string(nil), items[i].PreviousChainingTraceIDs...)
 		}
 		if items[i].Content != nil {
-			clone[i].Content = append([]work.WorkContentPart(nil), items[i].Content...)
+			clone[i].Content = work.CloneWorkContentParts(items[i].Content)
 		}
+		clone[i].StructuredResult = jsonvalue.Clone(items[i].StructuredResult)
+		clone[i].StructuredResultPresent = jsonvalue.Present(items[i].StructuredResult, items[i].StructuredResultPresent)
 		if items[i].Tags != nil {
 			clone[i].Tags = cloneTags(items[i].Tags)
 		}
@@ -474,6 +479,8 @@ func resolveWorkResult(transition *petri.Transition, result *workerexecution.Wor
 		transitionID:                result.TransitionID,
 		outcome:                     result.Outcome,
 		output:                      result.Output,
+		structuredResult:            jsonvalue.Clone(result.StructuredResult),
+		structuredResultPresent:     jsonvalue.Present(result.StructuredResult, result.StructuredResultPresent),
 		selectedClassificationLabel: result.SelectedClassificationLabel,
 		recordedOutputWork:          cloneFactoryWorkItems(result.RecordedOutputWork),
 		err:                         result.Error,
@@ -746,20 +753,22 @@ func calculateMutations(in mutationCalculationInput) ([]interfaces.MarkingMutati
 	}
 	for arcIdx, arc := range in.arcs {
 		baseInput := token_transformer.OutputTokenInput{
-			ArcIndex:            arcIdx,
-			Arcs:                in.arcs,
-			ConsumedTokens:      in.consumed,
-			InputColors:         in.inputColors,
-			Output:              in.result.output,
-			WorkPropagationMode: workPropagationMode,
-			WorkstationName:     workstationName,
-			WorkstationType:     workstationType(in.workstation),
-			Outcome:             in.result.outcome,
-			TransitionID:        in.result.transitionID,
-			Error:               in.result.err,
-			Feedback:            in.result.feedback,
-			Now:                 in.now,
-			History:             in.history,
+			ArcIndex:                arcIdx,
+			Arcs:                    in.arcs,
+			ConsumedTokens:          in.consumed,
+			InputColors:             in.inputColors,
+			Output:                  in.result.output,
+			StructuredResult:        in.result.structuredResult,
+			StructuredResultPresent: in.result.structuredResultPresent,
+			WorkPropagationMode:     workPropagationMode,
+			WorkstationName:         workstationName,
+			WorkstationType:         workstationType(in.workstation),
+			Outcome:                 in.result.outcome,
+			TransitionID:            in.result.transitionID,
+			Error:                   in.result.err,
+			Feedback:                in.result.feedback,
+			Now:                     in.now,
+			History:                 in.history,
 		}
 		repeatCount := mutationRepeatCountForArc(arc, in.consumed)
 		for resourceTokenIndex := 0; resourceTokenIndex < repeatCount; resourceTokenIndex++ {
@@ -863,46 +872,6 @@ func consumedResourceTokenCountForPlace(consumedTokens []factorytoken.Token, pla
 		}
 	}
 	return count
-}
-
-func applyRecordedOutputWorkIdentity(token *factorytoken.Token, recorded work.FactoryWorkItem) {
-	if token == nil {
-		return
-	}
-	if recorded.WorkTypeID != "" && token.Color.WorkTypeID != "" && recorded.WorkTypeID != token.Color.WorkTypeID {
-		return
-	}
-	if recorded.ID != "" {
-		token.ID = recorded.ID
-		token.Color.WorkID = recorded.ID
-	}
-	if recorded.WorkTypeID != "" {
-		token.Color.WorkTypeID = recorded.WorkTypeID
-	}
-	if recorded.DisplayName != "" {
-		token.Color.Name = recorded.DisplayName
-	}
-	if recorded.CurrentChainingTraceID != "" {
-		token.Color.CurrentChainingTraceID = recorded.CurrentChainingTraceID
-	}
-	if len(recorded.PreviousChainingTraceIDs) > 0 {
-		token.Color.PreviousChainingTraceIDs = append([]string(nil), recorded.PreviousChainingTraceIDs...)
-	}
-	if recorded.ChainingTraceDepth > 0 {
-		token.Color.ChainingTraceDepth = recorded.ChainingTraceDepth
-	}
-	if recorded.TraceID != "" {
-		token.Color.TraceID = recorded.TraceID
-	}
-	if recorded.ParentID != "" {
-		token.Color.ParentID = recorded.ParentID
-	}
-	if len(recorded.Tags) > 0 {
-		token.Color.Tags = cloneTags(recorded.Tags)
-	}
-	if len(recorded.Content) > 0 {
-		token.Color.Content = work.CloneWorkContentParts(recorded.Content)
-	}
 }
 
 func (t *TransitionerSubsystem) buildIntermittentFailureRequeueMutations(
