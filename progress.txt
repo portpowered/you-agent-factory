@@ -9325,3 +9325,16 @@
 - **Learnings for future iterations:**
   - After a moving-base merge changes the dependency graph, rerun the generator even when the feature's Wire source is unchanged; generated variable numbering can legitimately change when mainline adds providers.
 ---
+## [2026-08-11 06:16:34 -07:00] - graph-workstation-semantics hosted functional characterization
+- What was implemented
+  - Investigated the replacement-head hosted failure in `Backend Functional Coverage`; the only failing product scenario was the untouched `TestPlainBatchDrainPreservesFiniteAndContinuousCounterexamples/continuous_idle` case.
+  - Characterized the failure as transient packaged-installation staging-owner contention during system bootstrap, not an assertion or compile regression in the packaged-preparation change.
+- Files changed
+  - `progress.txt`
+- Verification
+  - The hosted failure log shows the `@you/tournament` staging-owner path reported an active owner during the isolated functional process, and the dependent pinned ACP artifact step failed only because the functional lane stopped early.
+  - `go test ./tests/functional/workers/mock -run '^TestPlainBatchDrainPreservesFiniteAndContinuousCounterexamples/continuous_idle$' -count=10 -timeout 600s` — passed all ten repetitions locally.
+  - No product or test source was changed for this unrelated hosted contention; the replacement CI lane must be rerun on the next pushed bookkeeping head.
+- **Learnings for future iterations:**
+  - When hosted functional coverage fails in an untouched fixture with an active packaged-installation owner, repeat that exact test locally before changing runtime behavior; a clean repetition supports rerunning the failed lane and its dependent policy check.
+---
