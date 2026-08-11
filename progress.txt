@@ -7687,3 +7687,18 @@
   - A PR can become conflicting again after a successful retry because `main` advances asynchronously; fetch the hosting ref immediately before each final push and repeat the shared-file merge protocol.
   - When parallel Go test processes produce a tool subprocess failure, rerun the named package serially before treating it as a source regression.
 ---
+## 2026-08-10 22:44 -07:00 - cli-error-classification-and-run-output hosted functional failure correction
+- What was implemented
+  - Updated the run-scoped server functional assertion to reflect the CLI contract introduced by this story: active dispatch and worker progress is emitted on stderr while the customer invocation result remains on stdout.
+  - Investigated the hosted runtime-log failure separately; it was the same timing-sensitive `factory started` observation that passes when isolated and repeated locally.
+- Files changed
+  - `tests/functional/transport/run_scoped_server/run_scoped_server_test.go`
+  - `progress.txt`
+- Verification
+  - `go test ./tests/functional/transport/run_scoped_server -run TestRunScopedServerAndSiteOwnNamedAndFileInvocationLifecycles -count=1 -timeout 180s` — passed.
+  - `go test ./tests/functional/runtime_api -run TestFunctionalAPIServer_RuntimeLogDirectoryIsAProcessInput -count=5 -timeout 300s` — passed all five runs.
+  - Hosted run `31461891506` identified the stale stderr assertion as the cause of the two run-scoped failures; the runtime-log failure remains an isolated timing flake.
+- **Learnings for future iterations:**
+  - When a CLI output contract moves operator progress to stderr, update broader functional invocation tests to assert the progress channel explicitly instead of retaining an empty-stderr expectation.
+  - A missing downstream evidence artifact can be a consequence of an earlier functional assertion failure; inspect the first failing test before treating artifact publication as the root cause.
+---
