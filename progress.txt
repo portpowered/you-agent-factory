@@ -6870,3 +6870,20 @@
 - **Learnings for future iterations:**
   - For a shared task bookkeeping conflict, keep the branch-specific PRD authoritative and append the branch-specific progress entries after the current-main history; validate both parseability and marker-free output before staging.
 ---
+
+## [2026-08-10 21:23 -07:00] - thr-deflake-model-host-concurrent-reuse-002 current-main synchronization
+- What was implemented
+  - Merged the live `origin/main` head `469204421` after it advanced beyond `ee0023397`; preserved this task's authoritative `prd.json` and appended the four current-main `ci-additive-classifier` progress entries without truncating the append-only log.
+  - Kept the deterministic `AfterLoadStateObservation` regression and Models runtime-host production fix unchanged while reconciling the shared bookkeeping files.
+- Files changed
+  - `Makefile`
+  - `cmd/ciclassify/main.go`
+  - `cmd/ciclassify/main_test.go`
+  - `progress.txt`
+- Verification
+  - `GOMAXPROCS=8 go test -race ./pkg/services/models/internal/services/runtime_host/internal/service -run '^TestEnsureModelHostConcurrentReuseSharesOneSupervisedProcess$' -count=50` — passed all 50 repetitions in 3.411s.
+  - `prd.json` parses with three passing stories; `progress.txt` remains 6,872 lines before this entry, has no conflict markers, and retains both branch histories.
+  - `git diff --check` and `git merge-tree --write-tree origin/main HEAD` passed with `origin/main=469204421`.
+- **Learnings for future iterations:**
+  - For long append-only conflict files, resolve from full Git objects or bounded patches; never reconstruct a large file from truncated shell output, and validate line count plus both branch histories before staging.
+---
