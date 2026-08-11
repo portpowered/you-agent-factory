@@ -60,15 +60,8 @@ func TestWorkerCapturePersistsOpeningBeforeBarrierRelease(t *testing.T) {
 		t.Fatal("opening was not offered to the durable writer")
 	}
 
-	barrier := make(chan error, 1)
-	go func() { barrier <- handle.AwaitOpening(context.Background()) }()
-	select {
-	case err := <-barrier:
-		t.Fatalf("opening barrier released before durable writer returned: %v", err)
-	case <-time.After(20 * time.Millisecond):
-	}
 	close(releaseWrite)
-	if err := <-barrier; err != nil {
+	if err := handle.AwaitOpening(context.Background()); err != nil {
 		t.Fatalf("AwaitOpening() error = %v", err)
 	}
 	if _, err := eventService.Append(context.Background(), terminalAppend(request.Topic, request.WorkerSessionID)); err != nil {

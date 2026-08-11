@@ -17,6 +17,30 @@ import (
 )
 
 func TestWorkerCaptureLiveProjectionEqualsCompletedReplay(t *testing.T) {
+	request, handle, recordingRoot := startCompletedWorkerCapture(t)
+	liveReader, ok := handle.(recordings.WorkerRecordingProjectionReader)
+	if !ok {
+		t.Fatal("capture does not expose its live projection")
+	}
+	live, err := liveReader.WorkerRecordingProjection()
+	if err != nil {
+		t.Fatalf("WorkerRecordingProjection() error = %v", err)
+	}
+	snapshot := loadWorkerRecording(t, recordingRoot, request.RecordingID)
+	replayed, err := recordings.ReplayWorkerRecording(recordings.WorkerRecordingReplayRequest{Snapshot: snapshot})
+	if err != nil {
+		t.Fatalf("ReplayWorkerRecording() error = %v", err)
+	}
+	if !reflect.DeepEqual(live, replayed.Projection) {
+		t.Fatalf("live projection = %#v, replay projection = %#v", live, replayed.Projection)
+	}
+	if !live.Complete || len(live.Records) != 3 || live.Records[2].ID.Position != 3 {
+		t.Fatalf("live projection = %#v, want complete opening/output/terminal history", live)
+	}
+}
+
+func startCompletedWorkerCapture(t *testing.T) (recordings.WorkerSessionRecordingRequest, recordings.WorkerSessionRecording, string) {
+	t.Helper()
 	eventService, err := eventswire.NewService()
 	if err != nil {
 		t.Fatal(err)
@@ -54,14 +78,11 @@ func TestWorkerCaptureLiveProjectionEqualsCompletedReplay(t *testing.T) {
 	if err := handle.Close(context.Background()); err != nil {
 		t.Fatalf("Close() error = %v", err)
 	}
-	liveReader, ok := handle.(recordings.WorkerRecordingProjectionReader)
-	if !ok {
-		t.Fatal("capture does not expose its live projection")
-	}
-	live, err := liveReader.WorkerRecordingProjection()
-	if err != nil {
-		t.Fatalf("WorkerRecordingProjection() error = %v", err)
-	}
+	return request, handle, recordingRoot
+}
+
+func loadWorkerRecording(t *testing.T, recordingRoot, recordingID string) recordings.WorkerRecordingSnapshot {
+	t.Helper()
 	reopenedWriter, err := NewFileWriter(platformreplay.NewLocal(runtime.GOOS), recordingRoot)
 	if err != nil {
 		t.Fatal(err)
@@ -70,20 +91,11 @@ func TestWorkerCaptureLiveProjectionEqualsCompletedReplay(t *testing.T) {
 	if !ok {
 		t.Fatal("FileWriter does not expose its durable reader")
 	}
-	snapshot, err := reader.LoadWorkerRecording(context.Background(), request.RecordingID)
+	snapshot, err := reader.LoadWorkerRecording(context.Background(), recordingID)
 	if err != nil {
 		t.Fatalf("LoadWorkerRecording() error = %v", err)
 	}
-	replayed, err := recordings.ReplayWorkerRecording(recordings.WorkerRecordingReplayRequest{Snapshot: snapshot})
-	if err != nil {
-		t.Fatalf("ReplayWorkerRecording() error = %v", err)
-	}
-	if !reflect.DeepEqual(live, replayed.Projection) {
-		t.Fatalf("live projection = %#v, replay projection = %#v", live, replayed.Projection)
-	}
-	if !live.Complete || len(live.Records) != 3 || live.Records[2].ID.Position != 3 {
-		t.Fatalf("live projection = %#v, want complete opening/output/terminal history", live)
-	}
+	return snapshot
 }
 
 func TestWorkerCaptureCloseRejectsProviderCompletionWithoutTerminal(t *testing.T) {

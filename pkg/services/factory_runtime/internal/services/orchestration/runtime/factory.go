@@ -91,8 +91,7 @@ type runtimeConfig struct {
 	clock                 factory.Clock
 	workRequestIDs        work.RequestIDGenerator
 	eventHistory          recordings.RuntimeLedger
-	// recordingID is the runtime recording target propagated to Worker
-	// Sessions when a caller did not supply a narrower recording identity.
+	// recordingID is the runtime recording target propagated to Worker Sessions.
 	recordingID               string
 	worldStateProjector       factory.WorldStateProjector
 	providerSessions          providersessions.Service
@@ -269,15 +268,11 @@ func New(
 	return impl, nil
 }
 
-// SetRecordingID binds the runtime recording target after construction and
-// before dispatch begins. The target is an internal runtime fact; Worker
-// Sessions receives it only through its already-resolved execution request.
+// SetRecordingID binds the runtime recording target before dispatch.
 func SetRecordingID(target factory.Factory, recordingID string) {
-	implementation, ok := target.(*factoryImpl)
-	if !ok || implementation == nil || implementation.cfg == nil {
-		return
+	if implementation, ok := target.(*factoryImpl); ok && implementation != nil && implementation.cfg != nil {
+		implementation.cfg.recordingID = strings.TrimSpace(recordingID)
 	}
-	implementation.cfg.recordingID = strings.TrimSpace(recordingID)
 }
 
 func buildRuntimeScheduler(cfg *runtimeConfig) scheduler.Scheduler {

@@ -139,6 +139,16 @@ func New(
 	return registry, nil
 }
 
+func (r *registry) startWorkerRecording(ctx context.Context, req workersessions.InvokeSessionRequest) (recordings.WorkerSessionRecording, error) {
+	recordingID := strings.TrimSpace(req.Execution.Execution.RecordingID)
+	if r.recording == nil || recordingID == "" {
+		return nil, nil
+	}
+	return r.recording.StartWorkerSessionRecording(ctx, recordings.WorkerSessionRecordingRequest{
+		RecordingID: recordingID, WorkerSessionID: req.ID, Topic: workersessions.Topic(req.ID),
+	})
+}
+
 func (r *registry) Reserve(_ context.Context, req workersessions.ReserveRequest) (workersessions.Session, error) {
 	if err := req.Validate(); err != nil {
 		r.logger.Info("worker session reserve rejected", "sessionID", req.ID, "outcome", "invalid")

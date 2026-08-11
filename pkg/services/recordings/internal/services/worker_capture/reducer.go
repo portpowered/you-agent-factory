@@ -133,55 +133,71 @@ func ReduceWorkerRecording(history WorkerRecordingHistory) (WorkerRecordingProje
 	}
 	identities := make(map[events.AppendIdentity]struct{}, len(history.Records))
 	for index, record := range history.Records {
-		if err := validateWorkerRecord(record, topic, identities, index == 0, history.WorkerSessionID); err != nil {
+		if err := reduceWorkerRecord(&projection, identities, record, index, len(history.Records), history.WorkerSessionID, topic); err != nil {
 			return WorkerRecordingProjection{}, err
 		}
-		identities[record.Identity()] = struct{}{}
-		draft, err := decodeWorkerDraft(record)
-		if err != nil {
-			if index == 0 {
-				return WorkerRecordingProjection{}, fmt.Errorf("%w: %w", ErrWorkerRecordingOpening, err)
-			}
-			return WorkerRecordingProjection{}, err
-		}
-		if index == 0 {
-			if err := validateWorkerOpening(record, draft, history.WorkerSessionID); err != nil {
-				return WorkerRecordingProjection{}, err
-			}
-			projection.Opening = record.Detached()
-		} else if draft.Kind == workers.KindSession && draft.Phase == workers.PhaseStarted {
-			return WorkerRecordingProjection{}, fmt.Errorf("%w: duplicate SESSION/STARTED record at position %d", ErrWorkerRecordingOpening, record.ID.Position)
-		}
-
-		if draft.Kind == workers.KindSession && isWorkerTerminalPhase(draft.Phase) {
-			if err := validateWorkerTerminal(record, history.WorkerSessionID); err != nil {
-				return WorkerRecordingProjection{}, err
-			}
-			if projection.Terminal != nil {
-				return WorkerRecordingProjection{}, fmt.Errorf("%w: multiple terminal records", ErrWorkerRecordingTerminal)
-			}
-			if index != len(history.Records)-1 {
-				return WorkerRecordingProjection{}, fmt.Errorf("%w: record follows terminal at position %d", ErrWorkerRecordingTerminal, record.ID.Position)
-			}
-			status, err := workerTerminalStatus(draft)
-			if err != nil {
-				return WorkerRecordingProjection{}, err
-			}
-			projection.Terminal = &WorkerRecordingTerminal{
-				Position: record.ID.Position,
-				Phase:    draft.Phase,
-				Status:   status,
-			}
-		}
-
-		projection.Records = append(projection.Records, record.Detached())
-		projection.LastPosition = record.ID.Position
 	}
 	if projection.Terminal != nil {
 		projection.Status = WorkerRecordingStatusCompleted
 		projection.Complete = true
 	}
 	return projection, nil
+}
+
+func reduceWorkerRecord(
+	projection *WorkerRecordingProjection,
+	identities map[events.AppendIdentity]struct{},
+	record events.Record,
+	index, recordCount int,
+	sessionID string,
+	topic events.Topic,
+) error {
+	if err := validateWorkerRecord(record, topic, identities, index == 0, sessionID); err != nil {
+		return err
+	}
+	identities[record.Identity()] = struct{}{}
+	draft, err := decodeWorkerDraft(record)
+	if err != nil {
+		if index == 0 {
+			return fmt.Errorf("%w: %w", ErrWorkerRecordingOpening, err)
+		}
+		return err
+	}
+	if index == 0 {
+		if err := validateWorkerOpening(record, draft, sessionID); err != nil {
+			return err
+		}
+		projection.Opening = record.Detached()
+	} else if draft.Kind == workers.KindSession && draft.Phase == workers.PhaseStarted {
+		return fmt.Errorf("%w: duplicate SESSION/STARTED record at position %d", ErrWorkerRecordingOpening, record.ID.Position)
+	}
+	if err := reduceWorkerTerminal(projection, record, draft, recordCount, sessionID); err != nil {
+		return err
+	}
+	projection.Records = append(projection.Records, record.Detached())
+	projection.LastPosition = record.ID.Position
+	return nil
+}
+
+func reduceWorkerTerminal(projection *WorkerRecordingProjection, record events.Record, draft workers.Draft, recordCount int, sessionID string) error {
+	if draft.Kind != workers.KindSession || !isWorkerTerminalPhase(draft.Phase) {
+		return nil
+	}
+	if err := validateWorkerTerminal(record, sessionID); err != nil {
+		return err
+	}
+	if projection.Terminal != nil {
+		return fmt.Errorf("%w: multiple terminal records", ErrWorkerRecordingTerminal)
+	}
+	if record.ID.Position != events.AggregateSequence(recordCount) {
+		return fmt.Errorf("%w: record follows terminal at position %d", ErrWorkerRecordingTerminal, record.ID.Position)
+	}
+	status, err := workerTerminalStatus(draft)
+	if err != nil {
+		return err
+	}
+	projection.Terminal = &WorkerRecordingTerminal{Position: record.ID.Position, Phase: draft.Phase, Status: status}
+	return nil
 }
 
 // ReplayWorkerRecording reduces one durable snapshot and rejects an active

@@ -13,26 +13,18 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-// InvokeSession and the attempt loop it drives live beside the controls they
-// race with, but in their own file: one Worker Session's attempts are a single
-// concern, and reading them next to Pause/Resume/Cancel obscures both.
+// InvokeSession and its attempt loop live beside the controls they race with.
 
 // InvokeSession supervises one resolved execution through the injected
-// workstation pool boundary, for every orchestrator. The boundary is the sole
-// mechanism that starts, cancels, and reports an attempt; the result callback
-// remains authoritative for terminal Workers output, so control cannot
-// fabricate a Factory Runtime result.
+// workstation boundary; its result callback remains authoritative for terminal
+// Worker output.
 //
-// req.Execution.WorkstationName is a route into the runtime-binding snapshot
-// Workers already assembled. InvokeSession never selects, constructs, or
-// injects an executor of its own -- the route is the whole of its say in what
-// runs -- which is what lets a Petri Worker and a JavaScript workflow child
-// share this one operation.
+// req.Execution.WorkstationName routes into the runtime binding already
+// assembled by Workers, allowing Petri and JavaScript children to share it.
 func (r *registry) InvokeSession(ctx context.Context, req workersessions.InvokeSessionRequest) (workersessions.InvokeSessionResult, error) {
 	attemptID := req.Execution.Execution.Dispatch.DispatchID
 	if err := req.Validate(); err != nil {
@@ -53,12 +45,7 @@ func (r *registry) InvokeSession(ctx context.Context, req workersessions.InvokeS
 		r.logger.Info("worker session start rejected", "sessionID", req.ID, "attemptID", attemptID, "outcome", "not_startable")
 		return workersessions.InvokeSessionResult{}, err
 	}
-	startedAt := r.ensureObservation(
-		req.ID,
-		attemptID,
-		req.Execution.Execution.Dispatch.Execution.RequestID,
-		req.Execution.Execution.Dispatch.Execution.WorkIDs,
-	)
+	startedAt := r.ensureObservation(req.ID, attemptID, req.Execution.Execution.Dispatch.Execution.RequestID, req.Execution.Execution.Dispatch.Execution.WorkIDs)
 	workerRecording, err := r.startWorkerRecording(ctx, req)
 	if err != nil {
 		r.logger.Info("worker session recording opening rejected", "sessionID", req.ID, "attemptID", attemptID, "outcome", "failed", "error", err.Error())
@@ -88,23 +75,6 @@ func (r *registry) InvokeSession(ctx context.Context, req workersessions.InvokeS
 		return workersessions.InvokeSessionResult{Session: final}, nil
 	}
 	return r.driveInvocation(ctx, req, attemptID)
-}
-
-func (r *registry) startWorkerRecording(
-	ctx context.Context,
-	req workersessions.InvokeSessionRequest,
-) (recordings.WorkerSessionRecording, error) {
-	if r.recording == nil {
-		return nil, nil
-	}
-	if strings.TrimSpace(req.Execution.Execution.RecordingID) == "" {
-		return nil, nil
-	}
-	return r.recording.StartWorkerSessionRecording(ctx, recordings.WorkerSessionRecordingRequest{
-		RecordingID:     strings.TrimSpace(req.Execution.Execution.RecordingID),
-		WorkerSessionID: req.ID,
-		Topic:           workersessions.Topic(req.ID),
-	})
 }
 
 // driveInvocation begins boundary supervision only after the opening Worker

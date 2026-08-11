@@ -381,6 +381,12 @@ func (capture *capture) WorkerRecordingProjection() (recordings.WorkerRecordingP
 }
 
 func (capture *capture) Close(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		// Classify an already-canceled close before marking the capture as
+		// closing; otherwise the consumer can win the race and report an
+		// incomplete source instead of the caller's cancellation.
+		capture.fail(fmt.Errorf("%w: close wait canceled: %w", recordings.ErrWorkerRecordingCanceled, err))
+	}
 	capture.mu.Lock()
 	if !capture.closed {
 		capture.closed = true
