@@ -11962,3 +11962,23 @@
 - **Learnings for future iterations:**
   - When all stories already pass, preserve the implementation and use one append-only audit commit to keep the PR head, PRD body, base relationship, CI, and review state synchronized.
 ---
+## [2026-08-11 12:23 -07:00] - dwro-s7-placement-grammar current-main merge and gate follow-up
+- What was implemented
+  - Merged the live `origin/main` head `05db67124` into the S7 branch, preserved the task-owned `prd.json` and append-only `progress.txt`, and carried the mainline workspace-restore fix.
+  - Split shared remote invocation protocol fixtures into the existing response-stream test owner so `run_invocation_output_test.go` is below the backend-size limit without increasing the package file-count baseline.
+- Files changed
+  - `factory/scripts/setup-workspace.py` from current `main`.
+  - `pkg/transports/cli/run/run_invocation_output_test.go`
+  - `pkg/transports/cli/run/run_response_stream_renderer_test.go`
+  - Merge-preserved `prd.json` and `progress.txt` metadata.
+- Verification
+  - Focused CLI, response-stream, help, and root-built durable lifecycle tests passed.
+  - `make cli-manifest-check contracts-check docs-reference-smoke backend-size pkg-maint pkg-file-count pkg-structure vet` passed.
+  - `make pkg-boundary` reports no package-boundary violations; its aggregate ownership check reports only two findings in files unchanged by this task diff and already present on current `origin/main`.
+  - `prd.json` still parses with all four stories marked `passes:true`; `git diff --check` passes and `origin/main` is an ancestor.
+  - Local `make typecheck` remains blocked before compilation by the checkout's missing Bun type definitions (`TS2688`); no task source or generated contract change causes that environment failure.
+- **Learnings for future iterations:**
+  - When a package is already at its exact deletion-only file-count baseline, split oversized tests into an existing focused owner instead of adding another same-package file.
+  - Current `main` removes task bookkeeping files; task branches must retain their authoritative PRD and append-only progress log when resolving that modify/delete conflict.
+  - Treat local missing toolchain type definitions as an environment limitation only after the backend and contract gates pass; hosted CI remains the authoritative cross-platform typecheck evidence.
+---
