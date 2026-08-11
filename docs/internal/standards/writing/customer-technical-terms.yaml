@@ -1,0 +1,1252 @@
+version: 1
+schema:
+  description: >-
+    Version 1 of the repository product-terminology register. Every item in
+    terms uses the same record shape. Null approved forms mean that the form
+    does not apply; they are explicit and must not be inferred from omission.
+  termRecord:
+    canonical: Non-empty customer-facing spelling or protected literal.
+    definition: Non-empty public meaning, limited to the owning contract.
+    category: One of product-term, technical-noun, technical-verb, acronym, command, or protected-literal.
+    approvedForms:
+      singular: String or null.
+      plural: String or null.
+      verb: String or null.
+    discouragedAlternatives:
+      text: Non-empty alternative spelling or phrase.
+      status: Either discouraged or prohibited.
+      replacement: Approved canonical term or exact protected literal.
+    example: Non-empty customer-facing usage example.
+    surfaces: Non-empty list of surfaces where the term is valid.
+    owner: Repository path, contract, or architecture source that owns the meaning.
+terms:
+  - canonical: Factory
+    definition: A persisted factory definition used to author, save, import, export, and activate factory configuration.
+    category: product-term
+    approvedForms:
+      singular: Factory
+      plural: Factories
+      verb: null
+    discouragedAlternatives:
+      - text: factory definition
+        status: discouraged
+        replacement: Factory
+      - text: CPN
+        status: prohibited
+        replacement: Factory
+    example: Save the `Factory` before you activate it in a `Factory Session`.
+    surfaces:
+      - Factory authoring and validation
+      - CLI help and customer documentation
+      - Public factory definition API
+    owner: docs/architecture/data-model.md#canonical-public-resource-vocabulary
+
+  - canonical: Factory Session
+    definition: One live running factory instance with its runtime state, event history, current work, and active factory.
+    category: product-term
+    approvedForms:
+      singular: Factory Session
+      plural: Factory Sessions
+      verb: null
+    discouragedAlternatives:
+      - text: factory instance
+        status: discouraged
+        replacement: Factory Session
+      - text: runtime session
+        status: discouraged
+        replacement: Factory Session
+    example: Open a `Factory Session` before you submit `Work` to the running factory.
+    surfaces:
+      - Factory Session API and CLI commands
+      - Session inspection and lifecycle controls
+      - Customer documentation
+    owner: docs/architecture/data-model.md#canonical-public-resource-vocabulary
+
+  - canonical: Current Factory
+    definition: The factory definition currently active inside one Factory Session.
+    category: product-term
+    approvedForms:
+      singular: Current Factory
+      plural: Current Factories
+      verb: null
+    discouragedAlternatives:
+      - text: active factory
+        status: discouraged
+        replacement: Current Factory
+      - text: session factory
+        status: discouraged
+        replacement: Current Factory
+    example: Edit the `Current Factory` when you need to change the definition used by a session.
+    surfaces:
+      - Current Factory read and save routes
+      - Factory editor and CLI invocation
+      - Customer documentation
+    owner: docs/architecture/data-model.md#canonical-public-resource-vocabulary
+
+  - canonical: Work
+    definition: One customer-visible unit of work moving through a factory according to configured work types, states, workstations, workers, and guards.
+    category: product-term
+    approvedForms:
+      singular: Work
+      plural: Work items
+      verb: work
+    discouragedAlternatives:
+      - text: job
+        status: discouraged
+        replacement: Work
+      - text: task
+        status: discouraged
+        replacement: Work
+    example: Submit `Work` to a running `Factory Session` and inspect its current state.
+    surfaces:
+      - Work submission, listing, and inspection
+      - Work relationships and state transitions
+      - CLI and customer documentation
+    owner: api/components/schemas/data-models/Work.yaml
+
+  - canonical: Work Request
+    definition: One caller-authored request that creates or upserts Work through the public API.
+    category: product-term
+    approvedForms:
+      singular: Work Request
+      plural: Work Requests
+      verb: request Work
+    discouragedAlternatives:
+      - text: work payload
+        status: discouraged
+        replacement: Work Request
+      - text: job request
+        status: prohibited
+        replacement: Work Request
+    example: A `Work Request` can create one Work item or update an existing request identity.
+    surfaces:
+      - Work Request API
+      - Factory Event history
+      - Work submission documentation
+    owner: docs/architecture/data-model.md#canonical-public-resource-vocabulary
+
+  - canonical: Worker
+    definition: A reusable definition that tells a Workstation how to execute Work through a model, script, or other configured mechanism.
+    category: product-term
+    approvedForms:
+      singular: Worker
+      plural: Workers
+      verb: null
+    discouragedAlternatives:
+      - text: agent
+        status: discouraged
+        replacement: Worker
+      - text: executor
+        status: discouraged
+        replacement: Worker
+    example: Assign a `Worker` to the `Workstation` that handles the selected Work type.
+    surfaces:
+      - Factory worker definitions
+      - Worker configuration and diagnostics
+      - Customer documentation
+    owner: api/components/schemas/data-models/Worker.yaml
+
+  - canonical: Worker Session
+    definition: The execution and control context for a Worker that participates in a target episode.
+    category: product-term
+    approvedForms:
+      singular: Worker Session
+      plural: Worker Sessions
+      verb: null
+    discouragedAlternatives:
+      - text: worker run
+        status: discouraged
+        replacement: Worker Session
+      - text: agent session
+        status: discouraged
+        replacement: Worker Session
+    example: Inspect the `Worker Session` when you need the execution transcript or lifecycle evidence.
+    surfaces:
+      - Worker Session inspection API
+      - Worker Session event stream
+      - Customer execution diagnostics
+    owner: api/components/schemas/api/WorkerSessionObservation.yaml
+
+  - canonical: Workstation
+    definition: A processing step that consumes authored Work states, runs a Worker or logical move, and emits the next Work states.
+    category: product-term
+    approvedForms:
+      singular: Workstation
+      plural: Workstations
+      verb: null
+    discouragedAlternatives:
+      - text: station
+        status: discouraged
+        replacement: Workstation
+      - text: worker step
+        status: discouraged
+        replacement: Workstation
+    example: Configure the `Workstation` inputs and outputs before you run the `Factory`.
+    surfaces:
+      - Factory configuration
+      - Workstation routing and execution
+      - CLI and reference documentation
+    owner: api/components/schemas/data-models/Workstation.yaml
+
+  - canonical: Provider
+    definition: A configured integration that supplies model or execution capabilities to a Worker.
+    category: product-term
+    approvedForms:
+      singular: Provider
+      plural: Providers
+      verb: provide
+    discouragedAlternatives:
+      - text: vendor
+        status: discouraged
+        replacement: Provider
+      - text: backend
+        status: discouraged
+        replacement: Provider
+    example: Select a `Provider` before you invoke a model-backed `Worker`.
+    surfaces:
+      - Provider catalog and configuration
+      - Worker routing and provider diagnostics
+      - Provider CLI and API documentation
+    owner: api/components/schemas/model-providers/ProviderManifest.yaml
+
+  - canonical: Provider Session
+    definition: One provider-backed execution session or transcript-bearing interaction owned by a workstation run or related runtime activity.
+    category: product-term
+    approvedForms:
+      singular: Provider Session
+      plural: Provider Sessions
+      verb: null
+    discouragedAlternatives:
+      - text: provider run
+        status: discouraged
+        replacement: Provider Session
+      - text: model session
+        status: discouraged
+        replacement: Provider Session
+    example: Use the `Provider Session` identifier to inspect the provider transcript for a completed run.
+    surfaces:
+      - Provider Session inspection
+      - Worker diagnostics and transcripts
+      - Public provider-session API
+    owner: docs/architecture/data-model.md#canonical-public-resource-vocabulary
+
+  - canonical: Model
+    definition: A named model capability that a Provider can expose to a Worker or direct invocation.
+    category: product-term
+    approvedForms:
+      singular: Model
+      plural: Models
+      verb: model
+    discouragedAlternatives:
+      - text: model runtime
+        status: discouraged
+        replacement: Model
+      - text: LLM
+        status: discouraged
+        replacement: Model
+    example: List the available `Model` values before choosing a Worker configuration.
+    surfaces:
+      - Model catalog and invocation API
+      - Provider manifests
+      - Model CLI and customer documentation
+    owner: api/components/schemas/api/ModelSummary.yaml
+
+  - canonical: Recording
+    definition: An ordered container of canonical Factory Events for exactly one Factory Session.
+    category: product-term
+    approvedForms:
+      singular: Recording
+      plural: Recordings
+      verb: record
+    discouragedAlternatives:
+      - text: event log
+        status: discouraged
+        replacement: Recording
+      - text: transcript
+        status: discouraged
+        replacement: Recording
+    example: Replay the `Recording` to inspect the canonical history of a `Factory Session`.
+    surfaces:
+      - Record and replay operations
+      - Factory Session history
+      - Recording artifacts and documentation
+    owner: api/components/schemas/events/FactoryRecording.yaml
+
+  - canonical: Factory Event
+    definition: One versioned canonical event that records a Factory, Work, dispatch, lifecycle, or related runtime change.
+    category: product-term
+    approvedForms:
+      singular: Factory Event
+      plural: Factory Events
+      verb: null
+    discouragedAlternatives:
+      - text: event log entry
+        status: discouraged
+        replacement: Factory Event
+      - text: response event
+        status: prohibited
+        replacement: Factory Event
+    example: A `Factory Event` records the accepted `Work Request` before dispatch begins.
+    surfaces:
+      - Canonical event stream
+      - Recording and replay
+      - CLI NDJSON and public event documentation
+    owner: api/components/schemas/events/FactoryEvent.yaml
+
+  - canonical: Factory Response Event
+    definition: An ephemeral process-local observation of invocation progress, such as a message snapshot, tool update, or running status.
+    category: product-term
+    approvedForms:
+      singular: Factory Response Event
+      plural: Factory Response Events
+      verb: null
+    discouragedAlternatives:
+      - text: canonical event
+        status: prohibited
+        replacement: Factory Event
+      - text: progress log entry
+        status: discouraged
+        replacement: Factory Response Event
+    example: The response stream delivers a `Factory Response Event` while the `Factory Session` is running.
+    surfaces:
+      - Ephemeral response-event stream
+      - Invocation progress and dashboard observations
+      - Response-event API documentation
+    owner: api/components/schemas/response-events/FactoryResponseEvent.yaml
+
+  - canonical: Chat Session
+    definition: The customer-facing conversation and control context for addressing a selected target.
+    category: product-term
+    approvedForms:
+      singular: Chat Session
+      plural: Chat Sessions
+      verb: chat
+    discouragedAlternatives:
+      - text: conversation
+        status: discouraged
+        replacement: Chat Session
+      - text: chat run
+        status: discouraged
+        replacement: Chat Session
+    example: A `Chat Session` keeps ordered turns and records changes to the selected target.
+    surfaces:
+      - Chat control and conversation APIs
+      - ACP sessions and target selection
+      - Customer-facing chat documentation
+    owner: docs/architecture/data-model.md#canonical-public-resource-vocabulary
+
+  - canonical: Target Episode
+    definition: One bounded attempt to run or interact with the target selected in a Chat Session.
+    category: product-term
+    approvedForms:
+      singular: Target Episode
+      plural: Target Episodes
+      verb: null
+    discouragedAlternatives:
+      - text: chat attempt
+        status: discouraged
+        replacement: Target Episode
+      - text: session run
+        status: discouraged
+        replacement: Target Episode
+    example: Selecting a different target opens a new `Target Episode` without changing earlier turns.
+    surfaces:
+      - Chat Session target history
+      - ACP control context
+      - Customer execution documentation
+    owner: docs/architecture/data-model.md#canonical-public-resource-vocabulary
+
+  - canonical: Turn
+    definition: One ordered user or agent interaction unit admitted within a Chat Session and its current Target Episode.
+    category: product-term
+    approvedForms:
+      singular: Turn
+      plural: Turns
+      verb: turn
+    discouragedAlternatives:
+      - text: message
+        status: discouraged
+        replacement: Turn
+      - text: prompt
+        status: discouraged
+        replacement: Turn
+    example: Each `Turn` belongs to one `Target Episode` and can cause Work or Worker activity.
+    surfaces:
+      - Chat Session history
+      - Response-event correlation
+      - Customer conversation documentation
+    owner: docs/architecture/data-model.md#canonical-public-resource-vocabulary
+
+  - canonical: Work Type
+    definition: A named category of Work whose states define the lifecycle available to its Work items.
+    category: product-term
+    approvedForms:
+      singular: Work Type
+      plural: Work Types
+      verb: null
+    discouragedAlternatives:
+      - text: task type
+        status: discouraged
+        replacement: Work Type
+      - text: job kind
+        status: discouraged
+        replacement: Work Type
+    example: Define a `Work Type` before you submit Work that uses its states.
+    surfaces:
+      - Factory configuration
+      - Work submission and routing
+      - Public factory schema
+    owner: api/components/schemas/data-models/WorkType.yaml
+
+  - canonical: Work State
+    definition: A named lifecycle state that a Work item can occupy inside one Work Type.
+    category: product-term
+    approvedForms:
+      singular: Work State
+      plural: Work States
+      verb: null
+    discouragedAlternatives:
+      - text: work status
+        status: discouraged
+        replacement: Work State
+      - text: place
+        status: prohibited
+        replacement: Work State
+    example: Move the Work item to its next `Work State` after the workstation response.
+    surfaces:
+      - Factory configuration
+      - Work listing and movement
+      - Work lifecycle documentation
+    owner: api/components/schemas/data-models/WorkState.yaml
+
+  - canonical: Resource
+    definition: A named capacity or managed runtime requirement that a Worker or Workstation consumes while processing Work.
+    category: product-term
+    approvedForms:
+      singular: Resource
+      plural: Resources
+      verb: resource
+    discouragedAlternatives:
+      - text: slot
+        status: discouraged
+        replacement: Resource
+      - text: semaphore
+        status: prohibited
+        replacement: Resource
+    example: Add a `Resource` when the Workstation must limit concurrent execution.
+    surfaces:
+      - Factory configuration
+      - Scheduling and capacity diagnostics
+      - Resource documentation
+    owner: api/components/schemas/data-models/Resource.yaml
+
+  - canonical: Guard
+    definition: A configured condition that allows or prevents a Work or Workstation route from proceeding.
+    category: product-term
+    approvedForms:
+      singular: Guard
+      plural: Guards
+      verb: guard
+    discouragedAlternatives:
+      - text: gate
+        status: discouraged
+        replacement: Guard
+      - text: transition guard
+        status: discouraged
+        replacement: Guard
+    example: Add a `Guard` when a Workstation route requires a matching input condition.
+    surfaces:
+      - Factory configuration
+      - Workstation routing
+      - Guard reference documentation
+    owner: api/components/schemas/data-models/Guard.yaml
+
+  - canonical: Dispatch
+    definition: One request to execute a Workstation operation and its associated execution outcome.
+    category: product-term
+    approvedForms:
+      singular: Dispatch
+      plural: Dispatches
+      verb: dispatch
+    discouragedAlternatives:
+      - text: worker job
+        status: discouraged
+        replacement: Dispatch
+      - text: execution attempt
+        status: discouraged
+        replacement: Dispatch
+    example: Inspect the `Dispatch` when a Work item remains active after a Worker response.
+    surfaces:
+      - Factory Session dispatch inspection
+      - Factory Event history
+      - Runtime diagnostics
+    owner: api/components/schemas/data-models/FactoryDispatch.yaml
+
+  - canonical: Artifact
+    definition: A customer-visible output captured by a Factory Session without exposing unrestricted host paths or raw storage details.
+    category: product-term
+    approvedForms:
+      singular: Artifact
+      plural: Artifacts
+      verb: null
+    discouragedAlternatives:
+      - text: output file
+        status: discouraged
+        replacement: Artifact
+      - text: raw file
+        status: discouraged
+        replacement: Artifact
+    example: Retrieve the `Artifact` reference after the Factory Session reaches a terminal state.
+    surfaces:
+      - Durable Factory Session results
+      - Artifact listing and retrieval
+      - Customer result documentation
+    owner: api/components/schemas/data-models/FactoryArtifact.yaml
+
+  - canonical: Checkpoint
+    definition: A persisted reference that records resumable workflow progress without exposing raw runtime state.
+    category: product-term
+    approvedForms:
+      singular: Checkpoint
+      plural: Checkpoints
+      verb: checkpoint
+    discouragedAlternatives:
+      - text: snapshot
+        status: discouraged
+        replacement: Checkpoint
+      - text: VM dump
+        status: prohibited
+        replacement: Checkpoint
+    example: A `Checkpoint` lets a durable Factory Session report resumability without exposing its internal state.
+    surfaces:
+      - Durable Factory Session results
+      - Workflow recovery and inspection
+      - Checkpoint event references
+    owner: api/components/schemas/api/FactorySessionCheckpointRef.yaml
+
+  - canonical: Relationship
+    definition: A typed connection between two Work items that controls dependency, parent-child, or generated-work behavior.
+    category: product-term
+    approvedForms:
+      singular: Relationship
+      plural: Relationships
+      verb: relate
+    discouragedAlternatives:
+      - text: edge
+        status: prohibited
+        replacement: Relationship
+      - text: link
+        status: discouraged
+        replacement: Relationship
+    example: Add a `Relationship` when one Work item depends on another.
+    surfaces:
+      - Work read models
+      - Relationship change requests
+      - Relationship documentation
+    owner: api/components/schemas/data-models/Relation.yaml
+
+  - canonical: Depends On
+    definition: A Relationship in which source Work cannot proceed until target Work reaches the required state.
+    category: product-term
+    approvedForms:
+      singular: Depends On
+      plural: null
+      verb: depends on
+    discouragedAlternatives:
+      - text: blocks
+        status: discouraged
+        replacement: Depends On
+      - text: waits for
+        status: discouraged
+        replacement: Depends On
+    example: Use `Depends On` when the source Work must wait for the target Work.
+    surfaces:
+      - Work relationship authoring
+      - Batch input documentation
+      - Relationship API
+    owner: api/components/schemas/data-models/RelationType.yaml
+
+  - canonical: Parent-Child
+    definition: A Relationship in which one Work item is the parent of another Work item.
+    category: product-term
+    approvedForms:
+      singular: Parent-Child
+      plural: null
+      verb: parent
+    discouragedAlternatives:
+      - text: nested work
+        status: discouraged
+        replacement: Parent-Child
+      - text: tree relation
+        status: discouraged
+        replacement: Parent-Child
+    example: Use `Parent-Child` when one Work item owns the lifecycle of its child Work items.
+    surfaces:
+      - Work relationship authoring
+      - Batch input documentation
+      - Relationship API
+    owner: api/components/schemas/data-models/RelationType.yaml
+
+  - canonical: Spawned By
+    definition: A Relationship showing that one Work item was generated by a Workstation handling another Work item.
+    category: product-term
+    approvedForms:
+      singular: Spawned By
+      plural: null
+      verb: spawn
+    discouragedAlternatives:
+      - text: created by
+        status: discouraged
+        replacement: Spawned By
+      - text: child of
+        status: discouraged
+        replacement: Spawned By
+    example: The Work read model can show that a child item was `Spawned By` a Workstation.
+    surfaces:
+      - Work relationship read models
+      - Factory Event projections
+      - Relationship documentation
+    owner: api/components/schemas/data-models/RelationType.yaml
+
+  - canonical: Queued
+    definition: A durable Factory Session lifecycle state in which execution has been accepted but has not begun.
+    category: product-term
+    approvedForms:
+      singular: Queued
+      plural: null
+      verb: queue
+    discouragedAlternatives:
+      - text: waiting
+        status: discouraged
+        replacement: Queued
+      - text: pending
+        status: discouraged
+        replacement: Queued
+    example: The durable `Factory Session` is `Queued` until its execution starts.
+    surfaces:
+      - Durable Factory Session status
+      - Session execution API
+      - Lifecycle documentation
+    owner: api/components/schemas/api/FactorySessionDurableLifecycleStatus.yaml
+
+  - canonical: Awaiting Approval
+    definition: A durable Factory Session lifecycle state in which execution waits for an approval control.
+    category: product-term
+    approvedForms:
+      singular: Awaiting Approval
+      plural: null
+      verb: approve
+    discouragedAlternatives:
+      - text: waiting for approval
+        status: discouraged
+        replacement: Awaiting Approval
+      - text: held
+        status: discouraged
+        replacement: Awaiting Approval
+    example: The `Factory Session` remains `Awaiting Approval` until an operator approves it.
+    surfaces:
+      - Durable Factory Session status
+      - Approval control API
+      - Lifecycle documentation
+    owner: api/components/schemas/api/FactorySessionDurableLifecycleStatus.yaml
+
+  - canonical: Running
+    definition: A lifecycle state in which a Factory Session or Worker Session is actively processing Work.
+    category: product-term
+    approvedForms:
+      singular: Running
+      plural: null
+      verb: run
+    discouragedAlternatives:
+      - text: executing
+        status: discouraged
+        replacement: Running
+      - text: in progress
+        status: discouraged
+        replacement: Running
+    example: The `Factory Session` is `Running` while it processes Work.
+    surfaces:
+      - Factory Session and Worker Session status
+      - Factory state and response-event contracts
+      - CLI status output
+    owner: api/components/schemas/api/FactorySessionDurableLifecycleStatus.yaml
+
+  - canonical: Paused
+    definition: A lifecycle state in which execution has stopped temporarily and can be resumed when the control policy allows it.
+    category: product-term
+    approvedForms:
+      singular: Paused
+      plural: null
+      verb: pause
+    discouragedAlternatives:
+      - text: stopped
+        status: discouraged
+        replacement: Paused
+      - text: suspended
+        status: discouraged
+        replacement: Paused
+    example: Resume the `Factory Session` after its status changes from `Paused`.
+    surfaces:
+      - Factory Session lifecycle controls
+      - Worker Session observations
+      - CLI and API status output
+    owner: api/components/schemas/api/FactorySessionDurableLifecycleStatus.yaml
+
+  - canonical: Resuming
+    definition: A durable Factory Session lifecycle state in which a paused session is restoring execution.
+    category: product-term
+    approvedForms:
+      singular: Resuming
+      plural: null
+      verb: resume
+    discouragedAlternatives:
+      - text: restarting
+        status: discouraged
+        replacement: Resuming
+      - text: continuing
+        status: discouraged
+        replacement: Resuming
+    example: The `Factory Session` is `Resuming` while it restores its execution path.
+    surfaces:
+      - Durable Factory Session status
+      - Resume control API
+      - Lifecycle documentation
+    owner: api/components/schemas/api/FactorySessionDurableLifecycleStatus.yaml
+
+  - canonical: Succeeded
+    definition: A terminal durable Factory Session lifecycle state indicating successful completion.
+    category: product-term
+    approvedForms:
+      singular: Succeeded
+      plural: null
+      verb: succeed
+    discouragedAlternatives:
+      - text: successful
+        status: discouraged
+        replacement: Succeeded
+      - text: done
+        status: discouraged
+        replacement: Succeeded
+    example: The `Factory Session` is `Succeeded` when its durable result completed successfully.
+    surfaces:
+      - Durable Factory Session status
+      - Session result and event projections
+      - CLI and API status output
+    owner: api/components/schemas/api/FactorySessionDurableLifecycleStatus.yaml
+
+  - canonical: Failed
+    definition: A terminal lifecycle state indicating that execution ended because a failure prevented successful completion.
+    category: product-term
+    approvedForms:
+      singular: Failed
+      plural: null
+      verb: fail
+    discouragedAlternatives:
+      - text: errored
+        status: discouraged
+        replacement: Failed
+      - text: broken
+        status: discouraged
+        replacement: Failed
+    example: Inspect the failure details when the `Factory Session` is `Failed`.
+    surfaces:
+      - Factory Session and Worker Session status
+      - Work and dispatch failure projections
+      - CLI and API status output
+    owner: api/components/schemas/api/FactorySessionDurableLifecycleStatus.yaml
+
+  - canonical: Canceling
+    definition: A durable Factory Session lifecycle state in which cancellation was requested and terminal cleanup is in progress.
+    category: product-term
+    approvedForms:
+      singular: Canceling
+      plural: null
+      verb: cancel
+    discouragedAlternatives:
+      - text: cancelling
+        status: discouraged
+        replacement: Canceling
+      - text: stopping
+        status: discouraged
+        replacement: Canceling
+    example: Wait for the `Factory Session` to leave `Canceling` before reading its terminal result.
+    surfaces:
+      - Durable Factory Session status
+      - Cancellation control API
+      - Lifecycle documentation
+    owner: api/components/schemas/api/FactorySessionDurableLifecycleStatus.yaml
+
+  - canonical: Canceled
+    definition: A terminal durable Factory Session lifecycle state indicating that cancellation completed.
+    category: product-term
+    approvedForms:
+      singular: Canceled
+      plural: null
+      verb: cancel
+    discouragedAlternatives:
+      - text: Cancelled
+        status: prohibited
+        replacement: Canceled
+      - text: aborted
+        status: discouraged
+        replacement: Canceled
+    example: A `Canceled` Factory Session does not resume its unfinished dispatches.
+    surfaces:
+      - Durable Factory Session status
+      - Invocation and lifecycle result contracts
+      - CLI and API status output
+    owner: api/components/schemas/api/FactorySessionDurableLifecycleStatus.yaml
+
+  - canonical: Timed Out
+    definition: A terminal durable Factory Session lifecycle state indicating that the configured execution limit elapsed.
+    category: product-term
+    approvedForms:
+      singular: Timed Out
+      plural: null
+      verb: time out
+    discouragedAlternatives:
+      - text: timeout
+        status: discouraged
+        replacement: Timed Out
+      - text: expired
+        status: discouraged
+        replacement: Timed Out
+    example: The `Factory Session` is `Timed Out` when its configured execution limit expires.
+    surfaces:
+      - Durable Factory Session status
+      - Sync invocation outcomes
+      - Failure and recovery documentation
+    owner: api/components/schemas/api/FactorySessionDurableLifecycleStatus.yaml
+
+  - canonical: Interrupted
+    definition: A lifecycle state indicating that execution stopped before completion because the active run was interrupted.
+    category: product-term
+    approvedForms:
+      singular: Interrupted
+      plural: null
+      verb: interrupt
+    discouragedAlternatives:
+      - text: stopped unexpectedly
+        status: discouraged
+        replacement: Interrupted
+      - text: killed
+        status: discouraged
+        replacement: Interrupted
+    example: Reconcile the `Dispatch` when the `Factory Session` is `Interrupted`.
+    surfaces:
+      - Durable Factory Session and Worker Session status
+      - Dispatch reconciliation
+      - Recovery documentation
+    owner: api/components/schemas/api/FactorySessionDurableLifecycleStatus.yaml
+
+  - canonical: Terminated
+    definition: A terminal lifecycle state indicating that an operator explicitly ended execution.
+    category: product-term
+    approvedForms:
+      singular: Terminated
+      plural: null
+      verb: terminate
+    discouragedAlternatives:
+      - text: force stopped
+        status: discouraged
+        replacement: Terminated
+      - text: killed
+        status: discouraged
+        replacement: Terminated
+    example: A `Terminated` Factory Session requires a new invocation to run again.
+    surfaces:
+      - Durable Factory Session lifecycle controls
+      - Session result and event projections
+      - Recovery documentation
+    owner: api/components/schemas/api/FactorySessionDurableLifecycleStatus.yaml
+
+  - canonical: Active
+    definition: A live Factory Session runtime state indicating that the session is processing or ready to process Work.
+    category: product-term
+    approvedForms:
+      singular: Active
+      plural: null
+      verb: activate
+    discouragedAlternatives:
+      - text: enabled
+        status: discouraged
+        replacement: Active
+      - text: online
+        status: discouraged
+        replacement: Active
+    example: The live `Factory Session` reports `Active` while its runtime is available.
+    surfaces:
+      - Live Factory Session status
+      - Runtime status API
+      - CLI status output
+    owner: api/components/schemas/api/FactorySessionStatus.yaml
+
+  - canonical: Idle
+    definition: A live Factory Session runtime state indicating that the session is available but is not currently processing Work.
+    category: product-term
+    approvedForms:
+      singular: Idle
+      plural: null
+      verb: idle
+    discouragedAlternatives:
+      - text: waiting
+        status: discouraged
+        replacement: Idle
+      - text: inactive
+        status: discouraged
+        replacement: Idle
+    example: The live `Factory Session` is `Idle` after it finishes the current Work cohort.
+    surfaces:
+      - Live Factory Session status
+      - Runtime status API
+      - CLI status output
+    owner: api/components/schemas/api/FactorySessionStatus.yaml
+
+  - canonical: Finished
+    definition: A live Factory Session runtime state indicating that the session reached a terminal finished state.
+    category: product-term
+    approvedForms:
+      singular: Finished
+      plural: null
+      verb: finish
+    discouragedAlternatives:
+      - text: completed
+        status: discouraged
+        replacement: Finished
+      - text: done
+        status: discouraged
+        replacement: Finished
+    example: The live session reports `Finished` after its terminal lifecycle event.
+    surfaces:
+      - Live Factory Session status
+      - Runtime status API
+      - Session lifecycle documentation
+    owner: api/components/schemas/api/FactorySessionStatus.yaml
+
+  - canonical: Initial
+    definition: A Work State category for Work waiting to be picked up by a Workstation.
+    category: product-term
+    approvedForms:
+      singular: Initial
+      plural: null
+      verb: initialize
+    discouragedAlternatives:
+      - text: new
+        status: discouraged
+        replacement: Initial
+      - text: unstarted
+        status: discouraged
+        replacement: Initial
+    example: New Work enters the `Initial` Work State category before dispatch.
+    surfaces:
+      - Work State configuration
+      - Work lifecycle documentation
+      - Factory validation
+    owner: api/components/schemas/data-models/WorkStateType.yaml
+
+  - canonical: Processing
+    definition: A Work State category for Work that has been partially processed and continues through its lifecycle.
+    category: product-term
+    approvedForms:
+      singular: Processing
+      plural: null
+      verb: process
+    discouragedAlternatives:
+      - text: in progress
+        status: discouraged
+        replacement: Processing
+      - text: active state
+        status: discouraged
+        replacement: Processing
+    example: A Work item remains in the `Processing` category while it moves between Workstations.
+    surfaces:
+      - Work State configuration
+      - Work lifecycle documentation
+      - Factory validation
+    owner: api/components/schemas/data-models/WorkStateType.yaml
+
+  - canonical: Terminal
+    definition: A Work State category for Work that has completed successfully and does not require another route.
+    category: product-term
+    approvedForms:
+      singular: Terminal
+      plural: null
+      verb: terminate
+    discouragedAlternatives:
+      - text: final state
+        status: discouraged
+        replacement: Terminal
+      - text: done state
+        status: discouraged
+        replacement: Terminal
+    example: A Work item in a `Terminal` Work State is no longer eligible for normal processing.
+    surfaces:
+      - Work State configuration
+      - Work lifecycle documentation
+      - Factory validation
+    owner: api/components/schemas/data-models/WorkStateType.yaml
+
+  - canonical: Failed Work State
+    definition: A Work State category for Work that cannot complete successfully because processing failed.
+    category: product-term
+    approvedForms:
+      singular: Failed Work State
+      plural: Failed Work States
+      verb: fail
+    discouragedAlternatives:
+      - text: error state
+        status: discouraged
+        replacement: Failed Work State
+      - text: broken state
+        status: prohibited
+        replacement: Failed Work State
+    example: Route failed Work to its configured `Failed Work State` for inspection or recovery.
+    surfaces:
+      - Work State configuration
+      - Work failure and recovery documentation
+      - Factory validation
+    owner: api/components/schemas/data-models/WorkStateType.yaml
+
+  - canonical: Blocked
+    definition: A stop condition indicating that Work cannot proceed until a required condition changes.
+    category: product-term
+    approvedForms:
+      singular: Blocked
+      plural: null
+      verb: block
+    discouragedAlternatives:
+      - text: stuck
+        status: discouraged
+        replacement: Blocked
+      - text: hung
+        status: discouraged
+        replacement: Blocked
+    example: Inspect the stop summary when Work is `Blocked` by a guard or unavailable resource.
+    surfaces:
+      - Work stop summaries
+      - Factory invocation diagnostics
+      - Recovery documentation
+    owner: api/components/schemas/api/FactoryStopKind.yaml
+
+  - canonical: Needs Human
+    definition: A stop condition indicating that Work requires an operator decision or action before it can proceed.
+    category: product-term
+    approvedForms:
+      singular: Needs Human
+      plural: null
+      verb: review
+    discouragedAlternatives:
+      - text: manual mode
+        status: discouraged
+        replacement: Needs Human
+      - text: human gate
+        status: discouraged
+        replacement: Needs Human
+    example: Show recovery guidance when the Work stop summary says `Needs Human`.
+    surfaces:
+      - Work stop summaries
+      - Factory invocation diagnostics
+      - Operator recovery documentation
+    owner: api/components/schemas/api/FactoryStopKind.yaml
+
+  - canonical: CPN
+    definition: An internal colored Petri net implementation term for the runtime model; it is not a customer-facing Factory resource.
+    category: acronym
+    approvedForms:
+      singular: CPN
+      plural: CPNs
+      verb: null
+    discouragedAlternatives:
+      - text: Factory
+        status: prohibited
+        replacement: Factory
+      - text: public workflow model
+        status: prohibited
+        replacement: Factory
+    example: Use `CPN` only in an explicitly internal explanation of the runtime implementation.
+    surfaces:
+      - Explicitly internal architecture material
+      - Implementation-focused runtime packages
+    owner: docs/architecture/data-model.md#internal-system-data-model
+
+  - canonical: place
+    definition: An internal Petri-net location associated with a Work State; it is not a customer-facing Work State name.
+    category: technical-noun
+    approvedForms:
+      singular: place
+      plural: places
+      verb: place
+    discouragedAlternatives:
+      - text: Work State
+        status: prohibited
+        replacement: Work State
+      - text: customer state
+        status: prohibited
+        replacement: Work State
+    example: Use `place` only in an explicitly internal explanation of Petri-net topology.
+    surfaces:
+      - Explicitly internal architecture material
+      - Implementation-focused runtime packages
+    owner: docs/architecture/data-model.md#internal-system-data-model
+
+  - canonical: transition
+    definition: An internal Petri-net operation that moves internal tokens between places; it is not a customer-facing Workstation.
+    category: technical-noun
+    approvedForms:
+      singular: transition
+      plural: transitions
+      verb: transition
+    discouragedAlternatives:
+      - text: Workstation
+        status: prohibited
+        replacement: Workstation
+      - text: customer step
+        status: prohibited
+        replacement: Workstation
+    example: Use `transition` only in an explicitly internal explanation of runtime execution.
+    surfaces:
+      - Explicitly internal architecture material
+      - Implementation-focused runtime packages
+    owner: docs/architecture/data-model.md#internal-system-data-model
+
+  - canonical: marking
+    definition: An internal Petri-net snapshot of token placement used by the runtime; it is not a customer-facing Work listing.
+    category: technical-noun
+    approvedForms:
+      singular: marking
+      plural: markings
+      verb: mark
+    discouragedAlternatives:
+      - text: Work list
+        status: prohibited
+        replacement: Work list
+      - text: current Work
+        status: prohibited
+        replacement: Work
+    example: Use `marking` only in an explicitly internal explanation of runtime state.
+    surfaces:
+      - Explicitly internal architecture material
+      - Implementation-focused runtime packages
+    owner: docs/architecture/data-model.md#internal-system-data-model
+
+  - canonical: token
+    definition: An internal Petri-net value carrying runtime color and placement data for a Work or resource; it is not a public Work synonym.
+    category: technical-noun
+    approvedForms:
+      singular: token
+      plural: tokens
+      verb: tokenize
+    discouragedAlternatives:
+      - text: Work
+        status: prohibited
+        replacement: Work
+      - text: task
+        status: prohibited
+        replacement: Work
+    example: Use `token` only in an explicitly internal explanation of runtime state or implementation diagnostics.
+    surfaces:
+      - Explicitly internal architecture material
+      - Implementation-focused runtime packages
+    owner: docs/architecture/data-model.md#internal-system-data-model
+
+  - canonical: DEPENDS_ON
+    definition: The protected relationship-type literal for a dependency between two Work items.
+    category: protected-literal
+    approvedForms:
+      singular: DEPENDS_ON
+      plural: null
+      verb: null
+    discouragedAlternatives:
+      - text: DEPENDS-ON
+        status: prohibited
+        replacement: DEPENDS_ON
+      - text: depends on
+        status: discouraged
+        replacement: Depends On
+    example: Set the relationship type to `DEPENDS_ON` in the public relationship contract.
+    surfaces:
+      - JSON and YAML relationship contracts
+      - Protected API and CLI examples
+    owner: api/components/schemas/data-models/RelationType.yaml
+
+  - canonical: PARENT_CHILD
+    definition: The protected relationship-type literal for a parent and child Work relationship.
+    category: protected-literal
+    approvedForms:
+      singular: PARENT_CHILD
+      plural: null
+      verb: null
+    discouragedAlternatives:
+      - text: PARENT-CHILD
+        status: prohibited
+        replacement: PARENT_CHILD
+      - text: parent child
+        status: discouraged
+        replacement: Parent-Child
+    example: Set the relationship type to `PARENT_CHILD` for a parent-child batch relation.
+    surfaces:
+      - JSON and YAML relationship contracts
+      - Protected API and CLI examples
+    owner: api/components/schemas/data-models/RelationType.yaml
+
+  - canonical: SPAWNED_BY
+    definition: The protected relationship-type literal for Work generated by a Workstation handling another Work item.
+    category: protected-literal
+    approvedForms:
+      singular: SPAWNED_BY
+      plural: null
+      verb: null
+    discouragedAlternatives:
+      - text: SPAWNED-BY
+        status: prohibited
+        replacement: SPAWNED_BY
+      - text: generated by
+        status: discouraged
+        replacement: Spawned By
+    example: The relationship contract may return `SPAWNED_BY` for generated Work lineage.
+    surfaces:
+      - JSON and YAML relationship contracts
+      - Protected API and CLI examples
+    owner: api/components/schemas/data-models/RelationType.yaml
+
+  - canonical: FactoryEvent
+    definition: The protected schema identifier for the canonical Factory Event envelope.
+    category: protected-literal
+    approvedForms:
+      singular: FactoryEvent
+      plural: null
+      verb: null
+    discouragedAlternatives:
+      - text: Factory Event schema
+        status: discouraged
+        replacement: Factory Event
+      - text: Factoryevent
+        status: prohibited
+        replacement: FactoryEvent
+    example: Preserve the `FactoryEvent` schema identifier in generated API clients.
+    surfaces:
+      - OpenAPI schema names
+      - Generated Go and TypeScript contracts
+      - Protected code and schema examples
+    owner: api/components/schemas/events/FactoryEvent.yaml
+
+  - canonical: FactoryResponseEvent
+    definition: The protected schema identifier for the ephemeral Factory Response Event envelope.
+    category: protected-literal
+    approvedForms:
+      singular: FactoryResponseEvent
+      plural: null
+      verb: null
+    discouragedAlternatives:
+      - text: Factory Response Event schema
+        status: discouraged
+        replacement: Factory Response Event
+      - text: FactoryResponseevent
+        status: prohibited
+        replacement: FactoryResponseEvent
+    example: Preserve the `FactoryResponseEvent` schema identifier when documenting the response-event contract.
+    surfaces:
+      - OpenAPI response-event schemas
+      - Generated Go and TypeScript contracts
+      - Protected code and schema examples
+    owner: api/components/schemas/response-events/FactoryResponseEvent.yaml
