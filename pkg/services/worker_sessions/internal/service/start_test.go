@@ -59,7 +59,13 @@ func TestStart_InvalidRequestHasNoRegistryEventsOrWorkersSideEffects(t *testing.
 	req := validStartRequest("worker-1", "dispatch-1")
 	req.ID = "   "
 
-	if _, err := registry.Start(context.Background(), req); !errors.Is(err, workersessions.ErrInvalidSessionID) {
+	asyncReq := workersessions.StartRequest{
+		RequestID: "request-invalid-session",
+		ID:        req.ID,
+		Execution: req.Execution,
+		Retry:     req.Retry,
+	}
+	if _, err := registry.Start(context.Background(), asyncReq); !errors.Is(err, workersessions.ErrInvalidSessionID) {
 		t.Fatalf("Start() error = %v, want ErrInvalidSessionID", err)
 	}
 	if execution.callCount() != 0 {
@@ -78,6 +84,24 @@ func TestStart_InvalidRequestHasNoRegistryEventsOrWorkersSideEffects(t *testing.
 	}
 	if read.Outcome != events.ReadOutcomeAtHead || len(read.Records) != 0 {
 		t.Fatalf("Read() after invalid Start() = %+v, want an empty topic", read)
+	}
+}
+
+func TestStart_MissingRequestIDDoesNotConsumeAnIdempotencyKey(t *testing.T) {
+	execution := succeedingExecution()
+	registry := newRegistryWithExecution(execution)
+	invalid := validAsyncStartRequest("worker-request-id", "dispatch-request-id")
+	invalid.RequestID = ""
+	if _, err := registry.Start(context.Background(), invalid); !errors.Is(err, workersessions.ErrInvalidStartRequestID) {
+		t.Fatalf("Start() without request ID error = %v, want ErrInvalidStartRequestID", err)
+	}
+
+	valid := validAsyncStartRequest("worker-request-id", "dispatch-request-id")
+	if _, err := registry.Start(context.Background(), valid); err != nil {
+		t.Fatalf("Start() after invalid request ID error = %v, want nil", err)
+	}
+	if execution.callCount() != 1 {
+		t.Fatalf("Workers dispatch count after valid retry = %d, want 1", execution.callCount())
 	}
 }
 
@@ -169,7 +193,7 @@ func TestStart_ReturnsAfterEventReadyAndWorkersAdmission(t *testing.T) {
 
 	outcomes := make(chan asyncStartOutcome, 1)
 	go func() {
-		result, startErr := registry.Start(context.Background(), validStartRequest("worker-1", "dispatch-1"))
+		result, startErr := registry.Start(context.Background(), validAsyncStartRequest("worker-1", "dispatch-1"))
 		outcomes <- asyncStartOutcome{result: result, err: startErr}
 	}()
 	waitForStartSignal(t, started, "Workers dispatch did not begin")
@@ -206,7 +230,7 @@ func TestStart_RequiresReadableAndSubscribableEventsTopic(t *testing.T) {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
 
-	result, err := registry.Start(context.Background(), validStartRequest("worker-1", "dispatch-1"))
+	result, err := registry.Start(context.Background(), validAsyncStartRequest("worker-1", "dispatch-1"))
 	if !errors.Is(err, workersessions.ErrStartNotAccepted) || !errors.Is(err, workersessions.ErrEventTopicUnavailable) {
 		t.Fatalf("Start() error = %v, want ErrStartNotAccepted and ErrEventTopicUnavailable", err)
 	}
@@ -228,7 +252,7 @@ func TestStart_PreAdmissionFailureDoesNotReturnAccepted(t *testing.T) {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
 
-	result, err := registry.Start(context.Background(), validStartRequest("worker-1", "dispatch-1"))
+	result, err := registry.Start(context.Background(), validAsyncStartRequest("worker-1", "dispatch-1"))
 	if !errors.Is(err, workersessions.ErrStartNotAccepted) || !errors.Is(err, workersessions.ErrStartAdmissionFailed) {
 		t.Fatalf("Start() error = %v, want ErrStartNotAccepted and ErrStartAdmissionFailed", err)
 	}
@@ -237,6 +261,229 @@ func TestStart_PreAdmissionFailureDoesNotReturnAccepted(t *testing.T) {
 	}
 	if result.Session.Result == nil || result.Session.Result.Cause == nil {
 		t.Fatalf("Start() result = %+v, want a terminal failure cause", result.Session.Result)
+	}
+}
+
+func TestStart_RequestIDReplayAfterTerminalReturnsOriginalAcceptanceWithoutRepeatingEffects(t *testing.T) {
+	eventsSvc := newEventsAppender()
+	admissionStarted := make(chan struct{})
+	releaseAdmission := make(chan struct{})
+	releaseDispatch := make(chan struct{})
+	execution := &fakeExecution{
+		admissionStarted: admissionStarted,
+		releaseAdmission: releaseAdmission,
+		dispatch: func(_ context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+			<-releaseDispatch
+			return workers.WorkstationDispatchResult{
+				DispatchID:      req.Execution.Dispatch.DispatchID,
+				TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeCompleted,
+				Result: workers.WorkResult{
+					DispatchID: req.Execution.Dispatch.DispatchID,
+					Outcome:    workers.OutcomeAccepted,
+				},
+			}, nil
+		},
+	}
+	registry, err := newService(executionBoundary{execution: execution}, eventsSvc, nil)
+	if err != nil {
+		t.Fatalf("service.New() error = %v, want nil", err)
+	}
+	req := validAsyncStartRequest("worker-replay", "dispatch-replay")
+	results := make(chan asyncStartOutcome, 1)
+	go func() {
+		result, startErr := registry.Start(context.Background(), req)
+		results <- asyncStartOutcome{result: result, err: startErr}
+	}()
+	waitForStartSignal(t, admissionStarted, "Start did not reach the admission barrier")
+	close(releaseAdmission)
+	first := waitForAsyncStart(t, results)
+	if first.err != nil {
+		t.Fatalf("initial Start() error = %v, want nil", first.err)
+	}
+	if first.result.Session.ID != req.ID {
+		t.Fatalf("initial Start() session ID = %q, want %q", first.result.Session.ID, req.ID)
+	}
+
+	topic := workersessions.Topic(req.ID)
+	terminalSubscription := subscribeForTerminal(t, eventsSvc, topic)
+	close(releaseDispatch)
+	assertTerminalDelivery(t, terminalSubscription)
+	final, err := registry.Get(context.Background(), workersessions.GetRequest{ID: req.ID})
+	if err != nil || final.State != workersessions.StateCompleted {
+		t.Fatalf("terminal Get() = %+v, %v, want COMPLETED", final, err)
+	}
+
+	replayRequest := req
+	replayRequest.Retry.MaxAttempts = 1
+	replay, replayErr := registry.Start(context.Background(), replayRequest)
+	if replayErr != nil {
+		t.Fatalf("same-key replay error = %v, want nil", replayErr)
+	}
+	if replay.Session.ID != first.result.Session.ID || replay.Session.State != first.result.Session.State {
+		t.Fatalf("same-key replay session = %+v, want original acceptance %+v", replay.Session, first.result.Session)
+	}
+	if execution.callCount() != 1 {
+		t.Fatalf("Workers dispatch count = %d, want exactly one", execution.callCount())
+	}
+	read, err := eventsSvc.Read(context.Background(), events.ReadRequest{
+		Topic: topic,
+		From:  events.Cursor{Topic: topic},
+		Limit: 10,
+	})
+	if err != nil || len(read.Records) != 2 {
+		t.Fatalf("replayed topic = %+v, %v, want one opening and one terminal record", read, err)
+	}
+}
+
+func TestStart_RequestIDConflictBeforeAdmissionHasNoSecondSideEffect(t *testing.T) {
+	eventsSvc := newEventsAppender()
+	admissionStarted := make(chan struct{})
+	releaseAdmission := make(chan struct{})
+	execution := &fakeExecution{
+		admissionStarted: admissionStarted,
+		releaseAdmission: releaseAdmission,
+		dispatch: func(_ context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+			return workers.WorkstationDispatchResult{
+				DispatchID:      req.Execution.Dispatch.DispatchID,
+				TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeCompleted,
+				Result: workers.WorkResult{
+					DispatchID: req.Execution.Dispatch.DispatchID,
+					Outcome:    workers.OutcomeAccepted,
+				},
+			}, nil
+		},
+	}
+	registry, err := newService(executionBoundary{execution: execution}, eventsSvc, nil)
+	if err != nil {
+		t.Fatalf("service.New() error = %v, want nil", err)
+	}
+	firstRequest := validAsyncStartRequest("worker-conflict", "dispatch-1")
+	firstResult := make(chan asyncStartOutcome, 1)
+	go func() {
+		result, startErr := registry.Start(context.Background(), firstRequest)
+		firstResult <- asyncStartOutcome{result: result, err: startErr}
+	}()
+	waitForStartSignal(t, admissionStarted, "initial Start did not reach the admission barrier")
+
+	conflictingRequest := validAsyncStartRequest("worker-conflict", "dispatch-2")
+	conflictingRequest.RequestID = firstRequest.RequestID
+	if _, err := registry.Start(context.Background(), conflictingRequest); !errors.Is(err, workersessions.ErrStartRequestIDConflict) {
+		t.Fatalf("conflicting Start() error = %v, want ErrStartRequestIDConflict", err)
+	}
+	if execution.callCount() != 0 {
+		t.Fatalf("Workers dispatch count before admission = %d, want 0", execution.callCount())
+	}
+
+	close(releaseAdmission)
+	first := waitForAsyncStart(t, firstResult)
+	if first.err != nil || first.result.Session.ID != firstRequest.ID {
+		t.Fatalf("initial Start() = %+v, %v, want accepted %q", first.result, first.err, firstRequest.ID)
+	}
+	if execution.callCount() != 1 {
+		t.Fatalf("Workers dispatch count after conflict = %d, want exactly one", execution.callCount())
+	}
+}
+
+func TestStart_RequestIDFailureReplayDoesNotReserveReplacementWork(t *testing.T) {
+	eventsSvc := newEventsAppender()
+	registry, err := newService(
+		noAdmissionBoundary{err: errors.New("admission rejected")},
+		eventsSvc,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("service.New() error = %v, want nil", err)
+	}
+	req := validAsyncStartRequest("worker-failed-replay", "dispatch-failed-replay")
+	first, firstErr := registry.Start(context.Background(), req)
+	if !errors.Is(firstErr, workersessions.ErrStartNotAccepted) || !errors.Is(firstErr, workersessions.ErrStartAdmissionFailed) {
+		t.Fatalf("initial Start() error = %v, want stable admission failure", firstErr)
+	}
+	second, secondErr := registry.Start(context.Background(), req)
+	if !errors.Is(secondErr, workersessions.ErrStartNotAccepted) || !errors.Is(secondErr, workersessions.ErrStartAdmissionFailed) {
+		t.Fatalf("failure replay error = %v, want original stable admission failure", secondErr)
+	}
+	if first.Session.ID != second.Session.ID || first.Session.State != second.Session.State {
+		t.Fatalf("failure replay session = %+v, want original %+v", second.Session, first.Session)
+	}
+	read, err := eventsSvc.Read(context.Background(), events.ReadRequest{
+		Topic: workersessions.Topic(req.ID),
+		From:  events.Cursor{Topic: workersessions.Topic(req.ID)},
+		Limit: 10,
+	})
+	if err != nil || len(read.Records) != 2 {
+		t.Fatalf("failure replay topic = %+v, %v, want one opening and one terminal record", read, err)
+	}
+}
+
+func TestStart_ConcurrentSameRequestIDConvergesOnOneExecution(t *testing.T) {
+	const callers = 8
+	eventsSvc := newEventsAppender()
+	admissionStarted := make(chan struct{})
+	releaseAdmission := make(chan struct{})
+	execution := &fakeExecution{
+		admissionStarted: admissionStarted,
+		releaseAdmission: releaseAdmission,
+		dispatch: func(_ context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+			return workers.WorkstationDispatchResult{
+				DispatchID:      req.Execution.Dispatch.DispatchID,
+				TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeCompleted,
+				Result: workers.WorkResult{
+					DispatchID: req.Execution.Dispatch.DispatchID,
+					Outcome:    workers.OutcomeAccepted,
+				},
+			}, nil
+		},
+	}
+	registry, err := newService(executionBoundary{execution: execution}, eventsSvc, nil)
+	if err != nil {
+		t.Fatalf("service.New() error = %v, want nil", err)
+	}
+	req := validAsyncStartRequest("worker-concurrent", "dispatch-concurrent")
+	ready := sync.WaitGroup{}
+	ready.Add(callers)
+	startGate := make(chan struct{})
+	outcomes := make(chan asyncStartOutcome, callers)
+	for range callers {
+		go func() {
+			ready.Done()
+			<-startGate
+			result, startErr := registry.Start(context.Background(), req)
+			outcomes <- asyncStartOutcome{result: result, err: startErr}
+		}()
+	}
+	ready.Wait()
+	close(startGate)
+	waitForStartSignal(t, admissionStarted, "concurrent Start calls did not reach admission")
+	terminalSubscription := subscribeForTerminal(t, eventsSvc, workersessions.Topic(req.ID))
+	close(releaseAdmission)
+
+	var accepted workersessions.Session
+	for i := 0; i < callers; i++ {
+		outcome := waitForAsyncStart(t, outcomes)
+		if outcome.err != nil {
+			t.Fatalf("concurrent Start(%d) error = %v, want nil", i, outcome.err)
+		}
+		if i == 0 {
+			accepted = outcome.result.Session
+		} else if !sessionsEqual(outcome.result.Session, accepted) {
+			t.Fatalf("concurrent Start(%d) session = %+v, want the original acceptance %+v", i, outcome.result.Session, accepted)
+		}
+	}
+	if accepted.ID != req.ID {
+		t.Fatalf("concurrent accepted session ID = %q, want %q", accepted.ID, req.ID)
+	}
+	if execution.callCount() != 1 {
+		t.Fatalf("concurrent Workers dispatch count = %d, want exactly one", execution.callCount())
+	}
+	assertTerminalDelivery(t, terminalSubscription)
+	read, err := eventsSvc.Read(context.Background(), events.ReadRequest{
+		Topic: workersessions.Topic(req.ID),
+		From:  events.Cursor{Topic: workersessions.Topic(req.ID)},
+		Limit: 10,
+	})
+	if err != nil || len(read.Records) != 2 {
+		t.Fatalf("concurrent topic = %+v, %v, want one opening and one terminal record", read, err)
 	}
 }
 
@@ -254,7 +501,7 @@ func TestStart_CancelBeforeAdmissionCannotReturnAcceptedOrDuplicateTerminal(t *t
 		err    error
 	}, 1)
 	go func() {
-		result, startErr := registry.Start(context.Background(), validStartRequest("worker-1", "dispatch-1"))
+		result, startErr := registry.Start(context.Background(), validAsyncStartRequest("worker-1", "dispatch-1"))
 		results <- struct {
 			result workersessions.StartResult
 			err    error

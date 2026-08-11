@@ -211,7 +211,11 @@ func (s *preHandoffFailedWorkerSessionsService) InvokeSession(
 func (s *preHandoffFailedWorkerSessionsService) Start(
 	ctx context.Context, req workersessions.StartRequest,
 ) (workersessions.StartResult, error) {
-	result, err := s.InvokeSession(ctx, req)
+	result, err := s.InvokeSession(ctx, workersessions.InvokeSessionRequest{
+		ID:        req.ID,
+		Execution: req.Execution,
+		Retry:     req.Retry,
+	})
 	return workersessions.StartResult{Session: result.Session}, err
 }
 

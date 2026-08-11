@@ -250,8 +250,31 @@ type InvokeSessionRequest struct {
 
 // StartRequest is the asynchronous form of InvokeSessionRequest. The
 // execution must already be resolved by Workers; Worker Sessions only owns
-// identity, lifecycle, Events visibility, and supervision.
-type StartRequest = InvokeSessionRequest
+// identity, lifecycle, Events visibility, supervision, and the caller's
+// idempotency key. RequestID is required for Start and is intentionally not a
+// field on InvokeSessionRequest: synchronous callers retain their existing
+// session-ID conflict behavior without constructing an asynchronous transport
+// value.
+type StartRequest struct {
+	RequestID string
+	ID        string
+	Execution workers.WorkstationDispatchRequest
+	Retry     RetryPolicy
+}
+
+// Validate reports whether req carries the required caller request identity
+// and a minimally well-formed resolved Workers execution. It is pure and does
+// not reserve the request ID or mutate any caller-owned value.
+func (req StartRequest) Validate() error {
+	if strings.TrimSpace(req.RequestID) == "" {
+		return ErrInvalidStartRequestID
+	}
+	return (InvokeSessionRequest{
+		ID:        req.ID,
+		Execution: req.Execution,
+		Retry:     req.Retry,
+	}).Validate()
+}
 
 // StartResult is the detached Worker Session snapshot returned after Workers
 // admission. The snapshot may already be terminal when a Workers boundary
@@ -474,6 +497,13 @@ var (
 	// ErrInvalidExecutionRequest reports a Start request whose resolved
 	// Workers execution request is missing required identity fields.
 	ErrInvalidExecutionRequest = errors.New("worker session: invalid execution request")
+	// ErrInvalidStartRequestID reports an asynchronous Start request without a
+	// non-empty caller-owned idempotency key. InvokeSession does not require
+	// this value.
+	ErrInvalidStartRequestID = errors.New("worker session: start request id is required")
+	// ErrStartRequestIDConflict reports reuse of an asynchronous Start request
+	// ID with a different normalized immutable start tuple.
+	ErrStartRequestIDConflict = errors.New("worker session: start request id conflict")
 	// ErrSessionNotStartable reports Start called for an identity that is
 	// already registered outside StateReserved (already starting, running,
 	// paused, or terminal). No Workers call is made and the existing session

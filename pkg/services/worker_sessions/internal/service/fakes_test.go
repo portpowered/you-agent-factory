@@ -40,6 +40,10 @@ type fakeExecution struct {
 	dispatch func(context.Context, workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error)
 	cancel   func(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error)
 
+	admissionStarted chan struct{}
+	releaseAdmission chan struct{}
+	admissionOnce    sync.Once
+
 	mu          sync.Mutex
 	calls       []workers.WorkstationDispatchRequest
 	cancelCalls []workers.WorkstationDispatchCancelRequest
@@ -77,6 +81,10 @@ func (f *fakeExecution) DispatchWorkstationWithAdmission(
 	req workers.WorkstationDispatchRequest,
 	admitted workers.WorkstationDispatchAdmissionFunc,
 ) (workers.WorkstationDispatchResult, error) {
+	if f.admissionStarted != nil {
+		f.admissionOnce.Do(func() { close(f.admissionStarted) })
+		<-f.releaseAdmission
+	}
 	if admitted != nil {
 		admitted()
 	}
@@ -249,6 +257,16 @@ func validStartRequest(id, attemptID string) workersessions.InvokeSessionRequest
 				},
 			},
 		},
+	}
+}
+
+func validAsyncStartRequest(id, attemptID string) workersessions.StartRequest {
+	request := validStartRequest(id, attemptID)
+	return workersessions.StartRequest{
+		RequestID: "request-" + id + "-" + attemptID,
+		ID:        request.ID,
+		Execution: request.Execution,
+		Retry:     request.Retry,
 	}
 }
 

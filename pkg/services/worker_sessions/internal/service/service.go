@@ -7,6 +7,7 @@ package service
 import (
 	"context"
 	"errors"
+	"reflect"
 	"slices"
 	"sort"
 	"strings"
@@ -66,6 +67,7 @@ type registry struct {
 	publications map[string]*publication
 	supervisions map[string]*supervision
 	observations map[string]*observation
+	startReplays map[string]*startReplay
 	// dispatchOwners is the Worker Sessions-owned reverse lookup from the
 	// currently supervised Workers dispatch to its stable session identity.
 	// Provider progress names dispatches, never Worker Sessions, so this map is
@@ -114,6 +116,7 @@ func New(
 		publications:     make(map[string]*publication),
 		supervisions:     make(map[string]*supervision),
 		observations:     make(map[string]*observation),
+		startReplays:     make(map[string]*startReplay),
 		dispatchOwners:   make(map[string]string),
 		boundary:         boundary,
 		events:           eventsAppender,
@@ -159,26 +162,78 @@ func serverOwnedContext(ctx context.Context) context.Context {
 	return context.WithoutCancel(ctx)
 }
 
-// Start establishes the Worker Session and returns at the exact Workers
-// admission barrier. The attempt driver owns serverOwnedContext and continues
-// independently of the request that initiated it; terminal completion is
-// observed through the existing supervision channels rather than by blocking
-// the Start call on Workers output.
+// Start establishes or replays one Worker Session and returns at the exact
+// Workers admission barrier. The request ID is claimed together with the
+// stable session identity before any opening event or Workers handoff. The
+// owner drives the state machine once; concurrent and later replays wait for
+// and return the owner's stored acceptance or pre-admission failure.
 func (r *registry) Start(ctx context.Context, req workersessions.StartRequest) (workersessions.StartResult, error) {
 	attemptID := req.Execution.Execution.Dispatch.DispatchID
 	if err := req.Validate(); err != nil {
 		r.logger.Info("worker session start rejected", "sessionID", req.ID, "attemptID", attemptID, "outcome", "invalid")
 		return workersessions.StartResult{}, err
 	}
+	req = normalizeStartRequest(req)
+	replay, owner, err := r.reserveStart(req)
+	if err != nil {
+		r.logger.Info("worker session start rejected", "sessionID", req.ID, "attemptID", attemptID, "requestID", req.RequestID, "outcome", startReservationOutcome(err))
+		return workersessions.StartResult{}, err
+	}
+	if !owner {
+		result, replayErr := awaitStartReplay(replay)
+		r.logger.Info("worker session start replay", "sessionID", replay.sessionID, "attemptID", attemptID, "requestID", req.RequestID, "outcome", startReplayOutcome(replayErr))
+		return result, replayErr
+	}
+
+	result, startErr := r.startReserved(ctx, req)
+	r.finishStartReplay(replay, result, startErr)
+	return result, startErr
+}
+
+// reserveStart atomically claims the caller request ID and stable session
+// identity. No downstream effect is possible until this method has installed
+// both registry records and returned ownership to the first caller.
+func (r *registry) reserveStart(req workersessions.StartRequest) (*startReplay, bool, error) {
+	tuple := startTupleFor(req)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.startReplays == nil {
+		r.startReplays = make(map[string]*startReplay)
+	}
+	if existing, ok := r.startReplays[req.RequestID]; ok {
+		if !reflect.DeepEqual(existing.tuple, tuple) {
+			return nil, false, workersessions.ErrStartRequestIDConflict
+		}
+		return existing, false, nil
+	}
+	if _, exists := r.sessions[req.ID]; exists {
+		return nil, false, workersessions.ErrSessionNotStartable
+	}
+
+	replay := &startReplay{
+		tuple:     tuple,
+		sessionID: req.ID,
+		done:      make(chan struct{}),
+	}
+	r.sessions[req.ID] = workersessions.Session{ID: req.ID, State: workersessions.StateReserved}
+	r.publications[req.ID] = &publication{}
+	r.startReplays[req.RequestID] = replay
+	r.logger.Info("worker session start", "sessionID", req.ID, "attemptID", req.Execution.Execution.Dispatch.DispatchID, "requestID", req.RequestID, "outcome", "reserved", "state", string(workersessions.StateReserved))
+	return replay, true, nil
+}
+
+// startReserved runs the original Start state machine after reserveStart has
+// atomically installed the request replay and RESERVED session records.
+func (r *registry) startReserved(ctx context.Context, req workersessions.StartRequest) (workersessions.StartResult, error) {
+	attemptID := req.Execution.Execution.Dispatch.DispatchID
 	serverCtx := serverOwnedContext(ctx)
-	r.reserveIfAbsent(req.ID)
-	r.logger.Info("worker session start accepted", "sessionID", req.ID, "attemptID", attemptID, "outcome", "reserved", "state", string(workersessions.StateReserved))
 	if _, err := r.transitionToStarting(req.ID); err != nil {
 		if terminal, ok := r.preAdmissionControlTerminal(req.ID, attemptID); ok {
 			r.publishTerminalSnapshot(serverCtx, req.ID, attemptID, terminal)
 			return workersessions.StartResult{Session: terminal}, startNotAccepted(workersessions.ErrStartAdmissionFailed)
 		}
-		r.logger.Info("worker session start rejected", "sessionID", req.ID, "attemptID", attemptID, "outcome", "not_startable")
+		r.logger.Info("worker session start rejected", "sessionID", req.ID, "attemptID", attemptID, "requestID", req.RequestID, "outcome", "not_startable")
 		return workersessions.StartResult{}, err
 	}
 	r.ensureObservation(
@@ -194,7 +249,7 @@ func (r *registry) Start(ctx context.Context, req workersessions.StartRequest) (
 	if err := r.ensureOpeningTopicReady(serverCtx, req.ID); err != nil {
 		return r.rejectStartBeforeAdmission(serverCtx, req.ID, attemptID, errors.Join(workersessions.ErrStartOpeningPublication, workersessions.ErrEventTopicUnavailable))
 	}
-	r.logger.Info("worker session start", "sessionID", req.ID, "attemptID", attemptID, "outcome", "event_ready", "state", string(workersessions.StateStarting))
+	r.logger.Info("worker session start", "sessionID", req.ID, "attemptID", attemptID, "requestID", req.RequestID, "outcome", "event_ready", "state", string(workersessions.StateStarting))
 
 	supervision, canStart := r.registerSupervision(req.ID, attemptID, req.Execution.Execution.Dispatch.Execution.RequestID, req.Execution)
 	if !canStart {
@@ -206,8 +261,13 @@ func (r *registry) Start(ctx context.Context, req workersessions.StartRequest) (
 	supervision.serverOwned = true
 	supervision.retryBudget = req.Retry.Attempts()
 	supervision.mu.Unlock()
+	invokeReq := workersessions.InvokeSessionRequest{
+		ID:        req.ID,
+		Execution: req.Execution,
+		Retry:     req.Retry,
+	}
 	go func() {
-		r.driveRegisteredInvocation(serverCtx, req, supervision)
+		r.driveRegisteredInvocation(serverCtx, invokeReq, supervision)
 	}()
 
 	select {

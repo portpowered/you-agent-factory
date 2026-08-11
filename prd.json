@@ -53,8 +53,8 @@
         "Tests pass"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented a required StartRequest.RequestID and Worker Sessions-owned atomic replay registry keyed by a detached normalized start tuple. Same-key submissions, concurrent retries, post-terminal retries, and deterministic pre-admission failures return the original outcome without duplicate opening/terminal events or Workers dispatch; tuple conflicts return ErrStartRequestIDConflict, while invalid requests do not consume keys. Added focused replay/conflict/failure/concurrency tests and updated Factory Runtime contract doubles. Verification: focused Worker Sessions tests, focused race test, affected Factory Runtime tests, full make test, make backend-size pkg-maint pkg-file-count pkg-structure, and go vet ./... pass; repository make typecheck remains environment-blocked by missing UI Bun type definitions."
     },
     {
       "id": "dwro-s2-server-owned-start-003",

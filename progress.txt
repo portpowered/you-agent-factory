@@ -1,5 +1,6 @@
 ## Codebase Patterns
 - For final PR handoff, compare the PR body byte-for-byte with `prd.json` and use the thread-aware GraphQL review audit because flat PR comments do not expose inline-thread resolution state.
+- Worker Session async idempotency should claim the caller key and stable session identity in one lock transaction before publication or dispatch, then replay a detached tuple and stored outcome.
 - OS-boundary functional tests may poll an isolated durable filesystem checkpoint only when the child exposes no parent-process event or injected edge; document that reason at each polling helper and keep the bound as a failure guard.
 - Git Worktree preparation treats a retained Git `*.lock` as indeterminate ownership: retry within a named bound, preserve the resource, and return its exact path with verify/remove/retry guidance.
 - Git's `.git/config.lock` has no trustworthy owner or PID evidence; after a bounded retry, report the exact lock with `owner_liveness=indeterminate` and require verification before removing only that file—never auto-delete it.
@@ -4023,4 +4024,28 @@
 - **Learnings for future iterations:**
   - Keep the async start acceptance signal distinct from publication and terminal completion, and reserve the admission signal for starts with no queued pre-admission control.
   - The Worker Sessions package is already at its file-count budget; move focused implementation or tests into existing responsibility-aligned files and rerun backend-size/pkg-maint after additions.
+---
+## [2026-08-10 23:06 -07:00] - dwro-s2-server-owned-start-002
+- What was implemented
+  - Made asynchronous `StartRequest` distinct from synchronous `InvokeSessionRequest` and required a non-empty caller `RequestID`.
+  - Added an atomic Worker Sessions replay registry that stores a detached normalized start tuple and original acceptance/failure outcome before any opening publication or Workers admission.
+  - Same-key identical starts now converge before, during, and after execution; tuple conflicts return a typed idempotency error; invalid requests do not consume keys; deterministic pre-admission failures replay without replacement work.
+  - Added deterministic replay, conflict, failure-replay, and concurrent-submission tests, plus the Factory Runtime test-double conversions required by the distinct contract.
+- Files changed
+  - `pkg/services/worker_sessions/contracts.go`
+  - `pkg/services/worker_sessions/internal/service/control.go`
+  - `pkg/services/worker_sessions/internal/service/service.go`
+  - `pkg/services/worker_sessions/internal/service/fakes_test.go`
+  - `pkg/services/worker_sessions/internal/service/start_test.go`
+  - `pkg/services/worker_sessions/start_test.go`
+  - Factory Runtime test doubles under `pkg/services/factory_runtime/`
+  - `prd.json`
+- Verification
+  - `go test ./pkg/services/worker_sessions/... -count=1` passed.
+  - `go test -race ./pkg/services/worker_sessions/internal/service -count=1` passed.
+  - Affected Factory Runtime tests, full `make test`, `make backend-size`, `make pkg-maint`, `make pkg-file-count`, `make pkg-structure`, and `go vet ./...` passed.
+  - `make typecheck` remains environment-blocked by missing UI Bun type definitions; no UI files changed.
+- **Learnings for future iterations:**
+  - Keep idempotency replay state in the Worker Sessions owner and compare cloned canonical values; reserve the caller key and session identity in one mutex transaction before downstream effects.
+  - When a strict package file budget prevents a focused helper file, place small lifecycle-coordination helpers in an existing responsibility-aligned owner and rerun both backend-size and package-file-count gates.
 ---
