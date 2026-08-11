@@ -8298,3 +8298,18 @@
 - **Learnings for future iterations:**
   - Record the exact CI run, head, base, body synchronization, and thread state together after a current-main rebase; a green prior head is insufficient evidence when GitHub has reported a branch conflict.
 ---
+
+## 2026-08-10 23:25 -07:00 - e3-event-webhooks-004 CI rerun audit
+- What was implemented
+  - Investigated the final-head Backend Functional Coverage failure and confirmed it was the unrelated current-main test `TestCLISuccessorAfterHardKillReportsPreRuntimeStagingContention`, which failed on a successor stdout scanner `file already closed` race after the predecessor was hard-killed.
+  - Made no product or test changes; the webhook functional scenario passed in the same CI run, and the named test passed five consecutive local repetitions.
+- Files changed
+  - `prd.json`
+  - `progress.txt`
+- Verification
+  - Reran only the failed CI jobs with `gh run rerun 31463941210 --failed`; Backend Functional Coverage and Verification Policy both passed on attempt 2.
+  - All 18 required checks pass for head `df10ed95ae043005f86f5c2ef1b7953e2b4f6884`; PR #1850 remains clean and mergeable against `ecd1d248731c9108dbbc4dafe2f28c4120043346`.
+  - The thread-aware review audit still reports three historical conversation comments, zero formal reviews, and zero inline review threads; the blocking feedback is addressed.
+- **Learnings for future iterations:**
+  - When a broad functional lane fails on one named current-main timing test, isolate and repeat that test before changing feature code; if it passes repeatedly, rerun only the failed CI jobs and record the exact attempt.
+---
