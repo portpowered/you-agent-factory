@@ -235,20 +235,8 @@ func (service *Service) wait(ctx context.Context, delay time.Duration) error {
 	if delay <= 0 {
 		return ctx.Err()
 	}
-	if clock, ok := service.clock.(interface {
-		After(time.Duration) <-chan time.Time
-	}); ok {
-		select {
-		case <-clock.After(delay):
-			return nil
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
-	timer := time.NewTimer(delay)
-	defer timer.Stop()
 	select {
-	case <-timer.C:
+	case <-service.clock.After(delay):
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()

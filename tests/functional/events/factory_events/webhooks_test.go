@@ -103,7 +103,7 @@ func testFunctionalWebhookRetrySuccess(t *testing.T) {
 	})
 	resolver := newFunctionalWebhookSecretResolver()
 	server := startWebhookFunctionalServer(t, dir, serviceedges.Edges{
-		Clock: fakeClock, FactoryWebhookSecretResolver: resolver.resolve,
+		FactoryWebhookClock: fakeClock, FactoryWebhookSecretResolver: resolver.resolve,
 	})
 	resolver.waitForCount(t, 1, 5*time.Second)
 
@@ -192,7 +192,7 @@ func testFunctionalWebhookRetryExhaustion(t *testing.T) {
 	})
 	resolver := newFunctionalWebhookSecretResolver()
 	server := startWebhookFunctionalServer(t, dir, serviceedges.Edges{
-		Clock: fakeClock, FactoryWebhookSecretResolver: resolver.resolve,
+		FactoryWebhookClock: fakeClock, FactoryWebhookSecretResolver: resolver.resolve,
 	})
 	resolver.waitForCount(t, 1, 5*time.Second)
 

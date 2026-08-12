@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -20,7 +19,7 @@ type Service struct {
 		Do(*http.Request) (*http.Response, error)
 	}
 	secretResolve webhooks.SecretResolver
-	clock         interface{ Now() time.Time }
+	clock         webhooks.Clock
 	deadLetters   webhooks.DeadLetterAppender
 	deadLetterMu  sync.Mutex
 	logger        logging.Logger
@@ -33,7 +32,7 @@ func New(
 		Do(*http.Request) (*http.Response, error)
 	},
 	secretResolve webhooks.SecretResolver,
-	clock interface{ Now() time.Time },
+	clock webhooks.Clock,
 	logger logging.Logger,
 ) *Service {
 	return NewWithDeadLetterAppender(httpClient, secretResolve, clock, nil, logger)
@@ -46,7 +45,7 @@ func NewWithDeadLetterAppender(
 		Do(*http.Request) (*http.Response, error)
 	},
 	secretResolve webhooks.SecretResolver,
-	clock interface{ Now() time.Time },
+	clock webhooks.Clock,
 	deadLetters webhooks.DeadLetterAppender,
 	logger logging.Logger,
 ) *Service {

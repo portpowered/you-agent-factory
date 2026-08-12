@@ -67,7 +67,7 @@ func provideFactoryWebhooksService(
 			return hostedResolver(ctx, source, secretRef)
 		}
 	}
-	clockSource := edges.Clock
+	clockSource := edges.FactoryWebhookClock
 	if clockSource == nil {
 		clockSource = platformclock.Real{}
 	}

@@ -16,7 +16,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jonboulle/clockwork"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -63,7 +62,7 @@ func TestServiceDeliversCanonicalWorkEventWithSignedBody(t *testing.T) {
 		func(context.Context, factorydefinitions.LoadedFactorySource, string) (string, error) {
 			return secret, nil
 		},
-		platformclock.NewDeterministic(when, time.Second),
+		newExactWebhookClock(when),
 		logging.NoopLogger{},
 	)
 	subscription, err := service.Start(context.Background(), webhooks.StartRequest{
@@ -544,7 +543,7 @@ func TestServiceRetriesWithBoundedRetryAfterAndFreshSignedTimestamp(t *testing.T
 	root := newRecordingRootStub()
 	secret := "retry-signing-secret"
 	start := time.Date(2026, time.August, 10, 13, 0, 0, 0, time.UTC)
-	clock := clockwork.NewFakeClockAt(start)
+	clock := newExactWebhookClock(start)
 	attempts := make(chan receivedRequest, 2)
 	var calls int
 	client := roundTripFunc(func(request *http.Request) (*http.Response, error) {
@@ -583,7 +582,9 @@ func TestServiceRetriesWithBoundedRetryAfterAndFreshSignedTimestamp(t *testing.T
 	event := testWorkEvent(t)
 	root.Publish(recordings.SubscriptionOutcome{Kind: recordings.SubscriptionEvent, Event: event})
 	first := receiveRequest(t, attempts)
-	clock.BlockUntil(1)
+	if got := clock.WaitForSchedule(); got != 2*time.Second {
+		t.Fatalf("retry schedule = %s, want bounded Retry-After delay %s", got, 2*time.Second)
+	}
 	clock.Advance(2 * time.Second)
 	second := receiveRequest(t, attempts)
 
@@ -611,7 +612,7 @@ func TestServiceUsesRetryAfterHTTPDateFromResponseReceipt(t *testing.T) {
 	root := newRecordingRootStub()
 	start := time.Date(2026, time.August, 10, 13, 30, 0, 0, time.UTC)
 	retryAt := start.Add(5 * time.Second)
-	clock := clockwork.NewFakeClockAt(start)
+	clock := newExactWebhookClock(start)
 	attempts := make(chan receivedRequest, 2)
 	var calls int
 	client := roundTripFunc(func(request *http.Request) (*http.Response, error) {
@@ -650,7 +651,9 @@ func TestServiceUsesRetryAfterHTTPDateFromResponseReceipt(t *testing.T) {
 	waitForSubscriptions(t, root, 1)
 	root.Publish(recordings.SubscriptionOutcome{Kind: recordings.SubscriptionEvent, Event: testWorkEvent(t)})
 	first := receiveRequest(t, attempts)
-	clock.BlockUntil(1)
+	if got := clock.WaitForSchedule(); got != time.Second {
+		t.Fatalf("retry schedule = %s, want response-relative Retry-After delay %s", got, time.Second)
+	}
 	clock.Advance(time.Second)
 	second := receiveRequest(t, attempts)
 
@@ -666,7 +669,7 @@ func TestServiceExhaustionAppendsOneRedactedDeadLetter(t *testing.T) {
 	root := newRecordingRootStub()
 	secret := "must-not-be-written"
 	start := time.Date(2026, time.August, 10, 14, 0, 0, 0, time.UTC)
-	clock := clockwork.NewFakeClockAt(start)
+	clock := newExactWebhookClock(start)
 	attempts := make(chan receivedRequest, 3)
 	client := roundTripFunc(func(request *http.Request) (*http.Response, error) {
 		body, _ := io.ReadAll(request.Body)
@@ -712,7 +715,9 @@ func TestServiceExhaustionAppendsOneRedactedDeadLetter(t *testing.T) {
 	for attempt := 1; attempt <= 3; attempt++ {
 		receiveRequest(t, attempts)
 		if attempt < 3 {
-			clock.BlockUntil(1)
+			if got := clock.WaitForSchedule(); got != time.Duration(1<<uint(attempt-1))*time.Second {
+				t.Fatalf("retry %d schedule = %s, want %s", attempt, got, time.Duration(1<<uint(attempt-1))*time.Second)
+			}
 			clock.Advance(time.Duration(1<<uint(attempt-1)) * time.Second)
 		}
 	}
@@ -815,7 +820,7 @@ func TestServiceNonRetryableResponseDeadLettersWithoutRetry(t *testing.T) {
 
 func TestServiceCancellationStopsRetryWithoutDeadLetter(t *testing.T) {
 	root := newRecordingRootStub()
-	clock := clockwork.NewFakeClock()
+	clock := newExactWebhookClock(time.Date(2026, time.August, 10, 15, 0, 0, 0, time.UTC))
 	attempts := make(chan struct{}, 2)
 	deadLetters := make(chan []byte, 1)
 	service := NewWithDeadLetterAppender(
@@ -852,7 +857,9 @@ func TestServiceCancellationStopsRetryWithoutDeadLetter(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("initial retryable attempt was not made")
 	}
-	clock.BlockUntil(1)
+	if got := clock.WaitForSchedule(); got != time.Hour {
+		t.Fatalf("retry schedule = %s, want %s", got, time.Hour)
+	}
 	cancel()
 	if err := subscription(context.Background()); err != nil {
 		t.Fatalf("Close() after cancellation: %v", err)

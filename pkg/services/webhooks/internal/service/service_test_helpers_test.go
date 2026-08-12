@@ -10,7 +10,74 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/webhooks"
 )
+
+// exactWebhookClock implements only the public Webhooks clock port. Its
+// scheduler is controlled explicitly so retry tests never depend on wall time
+// or on an optional capability discovered at runtime.
+type exactWebhookClock struct {
+	mu        sync.Mutex
+	now       time.Time
+	waiters   []webhookClockWaiter
+	scheduled chan time.Duration
+}
+
+type webhookClockWaiter struct {
+	at    time.Time
+	ready chan time.Time
+}
+
+var _ webhooks.Clock = (*exactWebhookClock)(nil)
+
+func newExactWebhookClock(now time.Time) *exactWebhookClock {
+	return &exactWebhookClock{
+		now:       now,
+		scheduled: make(chan time.Duration, 8),
+	}
+}
+
+func (clock *exactWebhookClock) Now() time.Time {
+	clock.mu.Lock()
+	defer clock.mu.Unlock()
+	return clock.now
+}
+
+func (clock *exactWebhookClock) After(delay time.Duration) <-chan time.Time {
+	ready := make(chan time.Time, 1)
+	clock.mu.Lock()
+	clock.waiters = append(clock.waiters, webhookClockWaiter{
+		at:    clock.now.Add(delay),
+		ready: ready,
+	})
+	clock.mu.Unlock()
+	clock.scheduled <- delay
+	return ready
+}
+
+func (clock *exactWebhookClock) WaitForSchedule() time.Duration {
+	return <-clock.scheduled
+}
+
+func (clock *exactWebhookClock) Advance(delay time.Duration) {
+	clock.mu.Lock()
+	clock.now = clock.now.Add(delay)
+	now := clock.now
+	var ready []chan time.Time
+	remaining := clock.waiters[:0]
+	for _, waiter := range clock.waiters {
+		if !waiter.at.After(now) {
+			ready = append(ready, waiter.ready)
+			continue
+		}
+		remaining = append(remaining, waiter)
+	}
+	clock.waiters = remaining
+	clock.mu.Unlock()
+	for _, channel := range ready {
+		channel <- now
+	}
+}
 
 type receivedRequest struct {
 	body    []byte

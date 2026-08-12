@@ -3,7 +3,6 @@ package wire
 
 import (
 	"net/http"
-	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -18,7 +17,7 @@ func NewService(
 		Do(*http.Request) (*http.Response, error)
 	},
 	secretResolver webhooks.SecretResolver,
-	clockSource interface{ Now() time.Time },
+	clockSource webhooks.Clock,
 	deadLetterAppender webhooks.DeadLetterAppender,
 	logger logging.Logger,
 ) webhooks.Service {

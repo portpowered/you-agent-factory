@@ -3,6 +3,7 @@ package webhooks
 
 import (
 	"context"
+	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -18,6 +19,14 @@ const (
 	// delivery failures remain owned by the Factory Session runtime.
 	DeadLetterRelativePath = ".you-agent-factory/webhooks/dead-letter.jsonl"
 )
+
+// Clock provides timestamps and the retry-wait scheduler used by outbound
+// delivery. Keeping both operations in one exact port prevents retry timing
+// from silently escaping to a different wall-clock implementation.
+type Clock interface {
+	Now() time.Time
+	After(time.Duration) <-chan time.Time
+}
 
 // SecretResolver resolves a declaration's reference without exposing secret
 // material in Factory definitions or canonical events.
