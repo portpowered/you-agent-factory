@@ -245,7 +245,7 @@ function policyInputFromEnvironment() {
 				"PACKAGED_RESULT",
 				"PACKAGED_CANDIDATE_RESULT",
 			),
-				directLane(
+			directLane(
 				"Model Providers Package",
 				"RUN_PROVIDERS",
 				"PROVIDERS_REASON",
