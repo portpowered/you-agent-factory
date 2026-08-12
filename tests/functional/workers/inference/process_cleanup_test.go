@@ -20,6 +20,8 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+const processCleanupWorkerTimeout = 5 * time.Second
+
 // TestProviderTimeoutTerminatesChildProcessTree proves a timed-out script-worker
 // invocation tears down its spawned descendant process tree and clears active
 // execution so the public Work listing and Factory Event stream show a terminal
@@ -50,13 +52,13 @@ type: SCRIPT_WORKER
 command: %s
 args:
   - '-test.run=TestProcessTreeHelper'
-  - '--'
+%s  - '--'
   - 'spawn-child'
   - %s
-timeout: 1500ms
+timeout: %s
 ---
 Spawn a descendant and wait for the factory timeout to cancel it.
-`, yamlSingleQuoted(os.Args[0]), yamlSingleQuoted(childPIDFile))
+`, yamlSingleQuoted(os.Args[0]), processCleanupCoverageTestArg(), yamlSingleQuoted(childPIDFile), processCleanupWorkerTimeout.String())
 	if err := os.WriteFile(workerAgentsPath, []byte(workerAgents), 0o644); err != nil {
 		t.Fatalf("write worker AGENTS.md: %v", err)
 	}
@@ -157,13 +159,13 @@ type: SCRIPT_WORKER
 command: %s
 args:
   - '-test.run=TestProcessTreeHelper'
-  - '--'
+%s  - '--'
   - 'timeout-once'
   - %s
-timeout: 1500ms
+timeout: %s
 ---
 Timeout once, then succeed after the Agent Factory requeues the work.
-`, yamlSingleQuoted(os.Args[0]), yamlSingleQuoted(attemptFile))
+`, yamlSingleQuoted(os.Args[0]), processCleanupCoverageTestArg(), yamlSingleQuoted(attemptFile), processCleanupWorkerTimeout.String())
 	if err := os.WriteFile(workerAgentsPath, []byte(workerAgents), 0o644); err != nil {
 		t.Fatalf("write worker AGENTS.md: %v", err)
 	}
@@ -279,12 +281,12 @@ func readProcessCleanupAttempt(attemptFile string) int {
 }
 
 func spawnProcessCleanupChild(pidFile string) {
-	child := exec.Command(os.Args[0],
-		"-test.run=TestProcessTreeHelper",
-		"--",
-		"pid-sleep",
-		pidFile,
-	)
+	args := []string{"-test.run=TestProcessTreeHelper"}
+	if coverageArg := processCleanupCoverageTestArgValue(); coverageArg != "" {
+		args = append(args, coverageArg)
+	}
+	args = append(args, "--", "pid-sleep", pidFile)
+	child := exec.Command(os.Args[0], args...)
 	child.Env = os.Environ()
 	if err := child.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "start child: %v\n", err)
@@ -516,4 +518,20 @@ func processCleanupScriptEdges(t *testing.T) serviceedges.Edges {
 
 func yamlSingleQuoted(value string) string {
 	return "'" + strings.ReplaceAll(value, "'", "''") + "'"
+}
+
+func processCleanupCoverageTestArg() string {
+	coverageArg := processCleanupCoverageTestArgValue()
+	if coverageArg == "" {
+		return ""
+	}
+	return fmt.Sprintf("  - %s\n", yamlSingleQuoted(coverageArg))
+}
+
+func processCleanupCoverageTestArgValue() string {
+	coverageDir := os.Getenv("GOCOVERDIR")
+	if coverageDir == "" {
+		return ""
+	}
+	return "-test.gocoverdir=" + coverageDir
 }
