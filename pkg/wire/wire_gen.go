@@ -282,36 +282,37 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	v31 := provideFactorySessionInvocationInputReader(edges2)
 	v32 := provideFactorySessionInitialWorkReader(edges2)
 	logicalTargetResolveSymlinks := provideFactorySessionResolveLogicalTargetSymlinks(edges2)
-	factorysessionsService, err := provideFactorySessionsService(sessionResultProjectionOperation, invocationInterpolationService, invocationWorkTypeService, ttsObservabilityService, responseEventIDGenerator, responseEventRetentionLimits, v29, homeDirectoryResolver, v30, namedPathResolver, v31, v32, logicalTargetResolveSymlinks, eventsService)
+	v33 := wire.NewLiveChangeCoordinator()
+	factorysessionsService, err := provideFactorySessionsService(sessionResultProjectionOperation, invocationInterpolationService, invocationWorkTypeService, ttsObservabilityService, responseEventIDGenerator, responseEventRetentionLimits, v29, homeDirectoryResolver, v30, namedPathResolver, v31, v32, logicalTargetResolveSymlinks, eventsService, v33)
 	if err != nil {
 		return nil, err
 	}
 	durableExecutionFactory := provideDurableExecutionFactory(configLoader)
 	orchestrationJavaScriptExecution := provideOrchestrationJavaScriptExecution(factoryIDGenerator, javaScriptWorkflows)
-	v33, err := providePortableRecordingWriter(edges2)
+	v34, err := providePortableRecordingWriter(edges2)
 	if err != nil {
 		return nil, err
 	}
-	v34 := provideFactorySessionRuntimePersistenceFileSystem(edges2)
-	v35 := provideFactorySessionRuntimePersistenceStoreFactory(v34)
-	v36 := provideFactorySessionSyncWaitScheduler()
-	v37 := provideWorkerCommandRunnerAdapter()
-	v38 := provideFactorySessionExecutionFactory(javaScriptWorkflows, orchestrationJavaScriptExecution, v33, v35, v36, v29, responseEventIDGenerator, responseEventRetentionLimits, ptyAllocator, v37, edges2, eventsService)
+	v35 := provideFactorySessionRuntimePersistenceFileSystem(edges2)
+	v36 := provideFactorySessionRuntimePersistenceStoreFactory(v35)
+	v37 := provideFactorySessionSyncWaitScheduler()
+	v38 := provideWorkerCommandRunnerAdapter()
+	v39 := provideFactorySessionExecutionFactory(javaScriptWorkflows, orchestrationJavaScriptExecution, v34, v36, v37, v29, responseEventIDGenerator, responseEventRetentionLimits, ptyAllocator, v38, edges2, eventsService, v33)
 	scaffoldFileSystem := provideFactoryDefinitionScaffoldFileSystem(edges2)
 	scaffoldOutput := provideFactoryDefinitionScaffoldOutput(edges2)
-	v39, err := provideFactoryScaffoldCommandInitializer(scaffoldFileSystem, scaffoldOutput)
+	v40, err := provideFactoryScaffoldCommandInitializer(scaffoldFileSystem, scaffoldOutput)
 	if err != nil {
 		return nil, err
 	}
-	factoryScaffoldInitializer := provideFactoryScaffoldInitializer(v39)
-	v40 := provideDefinitionValidationOperation(validationOperations)
-	editableFactoryValidator := provideEditableFactoryValidator(v40, v18)
+	factoryScaffoldInitializer := provideFactoryScaffoldInitializer(v40)
+	v41 := provideDefinitionValidationOperation(validationOperations)
+	editableFactoryValidator := provideEditableFactoryValidator(v41, v18)
 	starter, err := provideAPIServerStarter(edges2)
 	if err != nil {
 		return nil, err
 	}
-	v41 := provideRuntimeHostOperation(starter)
-	processRuntimeFactory, err := provideProcessRuntimeFactory(v41)
+	v42 := provideRuntimeHostOperation(starter)
+	processRuntimeFactory, err := provideProcessRuntimeFactory(v42)
 	if err != nil {
 		return nil, err
 	}
@@ -320,7 +321,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	factorySessionsDependencies := &wire.FactorySessionsRuntimeOpeningDependencies{
 		Service:                        factorysessionsService,
 		DurableExecutionFactory:        durableExecutionFactory,
-		FactorySessionExecutionFactory: v38,
+		FactorySessionExecutionFactory: v39,
 		FactoryScaffoldInitializer:     factoryScaffoldInitializer,
 		EditableFactoryValidator:       editableFactoryValidator,
 		ProcessRuntimeFactory:          processRuntimeFactory,
@@ -332,20 +333,20 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	v42 := provideWorkFactory(submittedFileReader, submittedFilePathInspector, contentStagingService, contentMaterializer)
+	v43 := provideWorkFactory(submittedFileReader, submittedFilePathInspector, contentStagingService, contentMaterializer)
 	workDependencies := &wire.WorkRuntimeOpeningDependencies{
-		Factory:             v42,
+		Factory:             v43,
 		ContentMaterializer: contentMaterializer,
 	}
 	workstationExecutionPolicyService := provideWorkstationExecutionPolicyService(invocationPolicyPorts)
-	v43 := provideAutomationFactory(edges2, workstationExecutionPolicyService)
-	v44, err := provideAutomationHostedSourcesFactory(edges2)
+	v44 := provideAutomationFactory(edges2, workstationExecutionPolicyService)
+	v45, err := provideAutomationHostedSourcesFactory(edges2)
 	if err != nil {
 		return nil, err
 	}
 	automationsDependencies := &wire.AutomationsRuntimeOpeningDependencies{
-		Factory:              v43,
-		HostedSourcesFactory: v44,
+		Factory:              v44,
+		HostedSourcesFactory: v45,
 	}
 	modelsService, err := provideModelsService(edges2)
 	if err != nil {
@@ -354,25 +355,25 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	modelsDependencies := &wire.ModelsRuntimeOpeningDependencies{
 		Service: modelsService,
 	}
-	v45 := provideRecordingsProjectionFactory()
+	v46 := provideRecordingsProjectionFactory()
 	storage := provideReplayArtifactStorage()
-	v46 := provideRecordingsFactory(edges2, v5, storage)
-	v47 := provideRecordingLifecycleFactory(edges2, v5, storage)
-	v48 := provideRuntimeLedgerFactory()
-	v49 := provideRuntimeRecorderFactory(v28)
-	v50 := provideReplayClockFactory()
-	v51 := provideReplayExecutionFactory()
-	v52 := provideReplayArtifactLoader(storage)
-	v53 := provideFactorySessionReplayRecordingReader(edges2)
-	replayInputLoader := provideFactorySessionReplayInputs(v52, v53, loggingLogger)
+	v47 := provideRecordingsFactory(edges2, v5, storage)
+	v48 := provideRecordingLifecycleFactory(edges2, v5, storage)
+	v49 := provideRuntimeLedgerFactory()
+	v50 := provideRuntimeRecorderFactory(v28)
+	v51 := provideReplayClockFactory()
+	v52 := provideReplayExecutionFactory()
+	v53 := provideReplayArtifactLoader(storage)
+	v54 := provideFactorySessionReplayRecordingReader(edges2)
+	replayInputLoader := provideFactorySessionReplayInputs(v53, v54, loggingLogger)
 	recordingsDependencies := &wire.RecordingsRuntimeOpeningDependencies{
-		ProjectionFactory:      v45,
-		ServiceFactory:         v46,
-		LifecycleFactory:       v47,
-		RuntimeLedgerFactory:   v48,
-		RuntimeRecorderFactory: v49,
-		ReplayClockFactory:     v50,
-		ReplayExecutionFactory: v51,
+		ProjectionFactory:      v46,
+		ServiceFactory:         v47,
+		LifecycleFactory:       v48,
+		RuntimeLedgerFactory:   v49,
+		RuntimeRecorderFactory: v50,
+		ReplayClockFactory:     v51,
+		ReplayExecutionFactory: v52,
 		ReplayInputs:           replayInputLoader,
 	}
 	webhooksService := provideFactoryWebhooksService(edges2, loggingLogger)
@@ -380,29 +381,29 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		Service: webhooksService,
 	}
 	workerExecutionFactory := provideWorkerExecutionFactory()
-	v54 := provideWorkerProcessEnvironment()
-	v55 := provideWorkerCurrentWorkingDirectory()
+	v55 := provideWorkerProcessEnvironment()
+	v56 := provideWorkerCurrentWorkingDirectory()
 	source := provideWorkersRetryRandomSource(edges2)
 	readFileInspector := provideWorkersWorkstationFileSystem(edges2)
 	temporaryFileSystem := provideWorkersProviderTemporaryFileSystem(edges2)
-	v56, err := provideWorkersRuntimeFactory(service, invocationInterpolationService, decisionEnvelopeService, workstationExecutionPolicyService, v54, v55, source, readFileInspector, temporaryFileSystem, ptyAllocator, edges2, providerRegistry, v8)
+	v57, err := provideWorkersRuntimeFactory(service, invocationInterpolationService, decisionEnvelopeService, workstationExecutionPolicyService, v55, v56, source, readFileInspector, temporaryFileSystem, ptyAllocator, edges2, providerRegistry, v8)
 	if err != nil {
 		return nil, err
 	}
-	v57 := provideWorkersLocalRuntimeHooksFactory()
+	v58 := provideWorkersLocalRuntimeHooksFactory()
 	providerFromCommandRunnerFactory := provideProviderFromCommandRunnerFactory(service, edges2, ptyAllocator)
 	workersDependencies := &wire.WorkersRuntimeOpeningDependencies{
 		ExecutionFactory:                 workerExecutionFactory,
-		RuntimeFactory:                   v56,
-		LocalRuntimeHooksFactory:         v57,
-		AdaptCommandRunner:               v37,
+		RuntimeFactory:                   v57,
+		LocalRuntimeHooksFactory:         v58,
+		AdaptCommandRunner:               v38,
 		ProviderFromCommandRunnerFactory: providerFromCommandRunnerFactory,
 	}
 	backendScopeEnsurer := provideOperatorBackendScopeEnsurer(operatorsettingsService)
 	operatorSettingsDependencies := &wire.OperatorSettingsRuntimeOpeningDependencies{
 		EnsureBackendScope: backendScopeEnsurer,
 	}
-	v58 := wire.RuntimeOpeningDependencies{
+	v59 := wire.RuntimeOpeningDependencies{
 		ProviderSessions:   providerSessionsDependencies,
 		FactoryRuntime:     factoryRuntimeDependencies,
 		FactoryDefinitions: factoryDefinitionsDependencies,
@@ -415,40 +416,40 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		Workers:            workersDependencies,
 		OperatorSettings:   operatorSettingsDependencies,
 	}
-	v59, err := wire.NewRuntimeOpening(v58)
+	v60, err := wire.NewRuntimeOpening(v59)
 	if err != nil {
 		return nil, err
 	}
-	v60 := provideFactorySessionContractFixtureReader(edges2)
-	v61 := provideStandaloneSessionExecutionFactory(javaScriptWorkflows, orchestrationJavaScriptExecution, v33, v35, v36, v29, v60)
-	v62 := provideWorkerInvocationFactory(service, edges2)
+	v61 := provideFactorySessionContractFixtureReader(edges2)
+	v62 := provideStandaloneSessionExecutionFactory(javaScriptWorkflows, orchestrationJavaScriptExecution, v34, v36, v37, v29, v61, v33)
+	v63 := provideWorkerInvocationFactory(service, edges2)
 	runtimeArtifactRootResolver := provideRuntimeArtifactRootResolver()
-	v63 := provideFactorySessionExecutionOpeningFileSystem(edges2)
-	v64, err := provideSessionExecutionOpeningFactory(v59, edges2, v61, v62, clockResolver, runtimeArtifactRootResolver, v37, v63, ptyAllocator, logger)
+	v64 := provideFactorySessionExecutionOpeningFileSystem(edges2)
+	v65, err := provideSessionExecutionOpeningFactory(v60, edges2, v62, v63, clockResolver, runtimeArtifactRootResolver, v38, v64, ptyAllocator, logger)
 	if err != nil {
 		return nil, err
 	}
-	v65 := wire.NewExecutionServiceBuilder(v64)
-	executionServiceBuilder := provideCLIExecutionServiceBuilder(v65)
+	v66 := wire.NewExecutionServiceBuilder(v65)
+	executionServiceBuilder := provideCLIExecutionServiceBuilder(v66)
 	wireStandardCLIHTTPProtocol, err := provideStandardCLIHTTPProtocol()
 	if err != nil {
 		return nil, err
 	}
 	workingDirectory := provideFactorySessionsWorkingDirectory(edges2)
-	v66, err := provideModelInvocationArtifactExporter(edges2)
+	v67, err := provideModelInvocationArtifactExporter(edges2)
 	if err != nil {
 		return nil, err
 	}
 	modelInvocationTimeout := provideModelInvocationTimeout()
-	v67, err := provideInvocationOperation(v59, modelsService, edges2, workingDirectory, v4, v66, modelInvocationTimeout, runtimeArtifactRootResolver, v29)
+	v68, err := provideInvocationOperation(v60, modelsService, edges2, workingDirectory, v4, v67, modelInvocationTimeout, runtimeArtifactRootResolver, v29)
 	if err != nil {
 		return nil, err
 	}
-	invocationOperation := provideModelsCLIInvocationOperation(v67)
+	invocationOperation := provideModelsCLIInvocationOperation(v68)
 	cliService := provideModelsCLIService(wireStandardCLIHTTPProtocol, invocationOperation)
 	service2 := provideProvidersCLIService(service)
-	v68 := wire.NewRequestPreparation()
-	sessionService := provideSessionsCLIService(wireStandardCLIHTTPProtocol, v68)
+	v69 := wire.NewRequestPreparation()
+	sessionService := provideSessionsCLIService(wireStandardCLIHTTPProtocol, v69)
 	localSessionsCLIService := provideLocalSessionsCLIService(factorysessionsService)
 	payloadFileReader := provideSubmitPayloadReader()
 	wireExtendedCLIHTTPProtocol, err := provideExtendedCLIHTTPProtocol()
@@ -467,14 +468,14 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	installPackagedFactoryOperation := provideInstallPackagedFactoryOperation(packagedFactoryCatalogOperations, packagedFactoryInstallationOperations)
 	cliInstallPackagedFactoryOperation := provideInstallPackagedFactoryCLI(installPackagedFactoryOperation)
 	queryFactoryOperation := provideQueryFactoryOperation(wireStandardCLIHTTPProtocol)
-	v69 := provideCurrentFactoryPointerReader(namedPathResolver)
-	listFactoriesOperation := provideListFactoriesOperation(v3, v69)
-	v70 := provideSubmittedDefinitionValidationOperation(validationOperations)
-	validateFactoryOperation := provideValidateFactoryOperation(v70, authoredFactorySourceLoader)
-	v71 := provideNamedFactoryPersistenceOperation(v24)
-	createFactoryFromFileOperation := provideCreateFactoryFromFileOperation(v71, authoredFactorySourceLoader)
+	v70 := provideCurrentFactoryPointerReader(namedPathResolver)
+	listFactoriesOperation := provideListFactoriesOperation(v3, v70)
+	v71 := provideSubmittedDefinitionValidationOperation(validationOperations)
+	validateFactoryOperation := provideValidateFactoryOperation(v71, authoredFactorySourceLoader)
+	v72 := provideNamedFactoryPersistenceOperation(v24)
+	createFactoryFromFileOperation := provideCreateFactoryFromFileOperation(v72, authoredFactorySourceLoader)
 	replaceFactoryCurrentOperation := provideReplaceFactoryCurrentOperation(wireStandardCLIHTTPProtocol)
-	updateFactoryFromFileOperation := provideUpdateFactoryFromFileOperation(v71, authoredFactorySourceLoader)
+	updateFactoryFromFileOperation := provideUpdateFactoryFromFileOperation(v72, authoredFactorySourceLoader)
 	deleteFactoryOperation := provideDeleteFactoryOperation(v)
 	listRequestPreparation := work.NewListRequestPreparation()
 	listWorkOperation := provideListWorkOperation(wireStandardCLIHTTPProtocol, listRequestPreparation)
@@ -485,24 +486,24 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	watchWorkOperation := provideWatchWorkOperation(wireWatchCLIHTTPProtocol)
 	showWorkOperation := provideShowWorkOperation(wireStandardCLIHTTPProtocol)
 	moveWorkOperation := provideMoveWorkOperation(wireExtendedCLIHTTPProtocol)
-	v72 := provideWorkVisualizationOperation()
-	visualizeWorkOperation := provideVisualizeWorkOperation(v72)
-	v73 := provideListWorkerSessionsOperation(wireStandardCLIHTTPProtocol)
-	v74 := provideShowWorkerSessionOperation(wireStandardCLIHTTPProtocol)
-	v75 := provideReadWorkerSessionOperation(wireStandardCLIHTTPProtocol)
+	v73 := provideWorkVisualizationOperation()
+	visualizeWorkOperation := provideVisualizeWorkOperation(v73)
+	v74 := provideListWorkerSessionsOperation(wireStandardCLIHTTPProtocol)
+	v75 := provideShowWorkerSessionOperation(wireStandardCLIHTTPProtocol)
+	v76 := provideReadWorkerSessionOperation(wireStandardCLIHTTPProtocol)
 	wireStreamingCLIHTTPProtocol, err := provideStreamingCLIHTTPProtocol()
 	if err != nil {
 		return nil, err
 	}
-	v76 := provideStreamWorkerSessionOperation(wireStreamingCLIHTTPProtocol)
+	v77 := provideStreamWorkerSessionOperation(wireStreamingCLIHTTPProtocol)
 	wireLocalWorkerSessionsBoundary, err := provideLocalWorkerSessionsBoundary(eventsService, providersessionsService, loggingLogger, providerInvocationExecutorFactory, v11)
 	if err != nil {
 		return nil, err
 	}
 	cliIDGenerator := provideWorkerSessionsCLIIdentityGenerator()
 	executionFileReader := provideWorkerSessionsCLIExecutionFileReader()
-	v77 := provideInvokeWorkerSessionOperation(wireStreamingCLIHTTPProtocol, wireLocalWorkerSessionsBoundary, cliIDGenerator, executionFileReader)
-	v78 := provideContinueWorkerSessionOperation(wireStandardCLIHTTPProtocol, wireLocalWorkerSessionsBoundary, cliIDGenerator)
+	v78 := provideInvokeWorkerSessionOperation(wireStreamingCLIHTTPProtocol, wireLocalWorkerSessionsBoundary, cliIDGenerator, executionFileReader)
+	v79 := provideContinueWorkerSessionOperation(wireStandardCLIHTTPProtocol, wireLocalWorkerSessionsBoundary, cliIDGenerator)
 	singleWorkTargetPreparation := work.NewSingleWorkTargetPreparation()
 	mockWorkersConfigFileSystem := provideWorkersMockWorkersConfigFileSystem(edges2)
 	mockWorkersConfigLoader, err := workers.NewMockWorkersConfigLoader(mockWorkersConfigFileSystem)
@@ -516,7 +517,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	v79 := provideRuntimeInputResolver(edges2, clockResolver)
+	v80 := provideRuntimeInputResolver(edges2, clockResolver)
 	runtimeFactory := provideFactoryVisualizationFactory()
 	factoryStatusProjector := factory.NewFactoryStatusProjector()
 	contentPreparation := work.NewContentPreparation()
@@ -530,36 +531,36 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	requestPreparation := provideFactorySessionHTTPRequestPreparation(v68)
-	applicationHandler, err := application2.NewHandler(httpBinder, handler, contentPreparation, v70, invocationWorkTypeService, contentStagingService, requestPreparationService, requestPreparation)
+	requestPreparation := provideFactorySessionHTTPRequestPreparation(v69)
+	applicationHandler, err := application2.NewHandler(httpBinder, handler, contentPreparation, v71, invocationWorkTypeService, contentStagingService, requestPreparationService, requestPreparation)
 	if err != nil {
 		return nil, err
 	}
 	runnerFactory := provideLifecycleRunnerFactory()
-	v80, err := provideApplicationRuntimeAdapter(runtimeFactory, applicationHandler, runnerFactory)
+	v81, err := provideApplicationRuntimeAdapter(runtimeFactory, applicationHandler, runnerFactory)
 	if err != nil {
 		return nil, err
 	}
-	v81 := wire.NewLifecyclePlanOperation()
-	v82, err := wire.NewApplicationService(v79, v59, v80, v81)
+	v82 := wire.NewLifecyclePlanOperation()
+	v83, err := wire.NewApplicationService(v80, v60, v81, v82)
 	if err != nil {
 		return nil, err
 	}
-	runRuntimeRunnerBuilder, err := provideRunRuntimeRunnerBuilder(runtimeRunnerBuilder, v82)
+	runRuntimeRunnerBuilder, err := provideRunRuntimeRunnerBuilder(runtimeRunnerBuilder, v83)
 	if err != nil {
 		return nil, err
 	}
-	v83 := provideResponsePresentation()
-	v84 := provideDirectJavaScriptSyncRunner()
+	v84 := provideResponsePresentation()
+	v85 := provideDirectJavaScriptSyncRunner()
 	directJavaScriptHostAdapter, err := provideDirectJavaScriptHostAdapter(applicationHandler, starter, runnerFactory)
 	if err != nil {
 		return nil, err
 	}
-	v85, err := wire.NewDirectJavaScriptRunOperation(v65, v84, v29, directJavaScriptHostAdapter)
+	v86, err := wire.NewDirectJavaScriptRunOperation(v66, v85, v29, directJavaScriptHostAdapter)
 	if err != nil {
 		return nil, err
 	}
-	selectionFactory, err := provideRunSelectionFactory(runOpener, runRuntimeRunnerBuilder, v67, v83, v85, runtimeRunnerBuilder)
+	selectionFactory, err := provideRunSelectionFactory(runOpener, runRuntimeRunnerBuilder, v68, v84, v86, runtimeRunnerBuilder)
 	if err != nil {
 		return nil, err
 	}
@@ -578,14 +579,14 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	wireAcpServerResolveHomeDir := provideACPServerResolveHomeDir()
-	v86 := provideACPServerFactoryTargetRuntimeResolver(wireAcpServerResolveHomeDir, v, defaultsResolver, runtimeArtifactRootResolver)
-	v87, err := provideACPServerFactoryTarget(v59, edges2, v86, v29, logger)
+	v87 := provideACPServerFactoryTargetRuntimeResolver(wireAcpServerResolveHomeDir, v, defaultsResolver, runtimeArtifactRootResolver)
+	v88, err := provideACPServerFactoryTarget(v60, edges2, v87, v29, logger)
 	if err != nil {
 		return nil, err
 	}
-	targetExecutionService := provideACPServerFactoryTargetService(v87)
-	v88 := provideChatSessionsResponseBridge(chatsessionsService, targetExecutionService, eventsService, loggingLogger)
-	responseBridge := provideACPServerResponseBridge(v88)
+	targetExecutionService := provideACPServerFactoryTargetService(v88)
+	v89 := provideChatSessionsResponseBridge(chatsessionsService, targetExecutionService, eventsService, loggingLogger)
+	responseBridge := provideACPServerResponseBridge(v89)
 	wireRecorder, err := provideACPWireRecorder(reserver, wireRuntimeArtifactClock, wireAcpServerResolveHomeDir)
 	if err != nil {
 		return nil, err
@@ -620,7 +621,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		SubmitBatch:                       submitBatchOperation,
 		FlattenFactoryConfig:              flattenFactoryConfigOperation,
 		ExpandFactoryConfig:               expandFactoryConfigOperation,
-		InitFactory:                       v39,
+		InitFactory:                       v40,
 		ConfigureInit:                     configureInitOperation,
 		InstallPackagedFactory:            cliInstallPackagedFactoryOperation,
 		QueryFactory:                      queryFactoryOperation,
@@ -635,16 +636,16 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		ShowWork:                          showWorkOperation,
 		MoveWork:                          moveWorkOperation,
 		VisualizeWork:                     visualizeWorkOperation,
-		ListWorkerSessions:                v73,
-		ShowWorkerSession:                 v74,
-		ReadWorkerSession:                 v75,
-		StreamWorkerSession:               v76,
-		InvokeWorkerSession:               v77,
-		ContinueWorkerSession:             v78,
+		ListWorkerSessions:                v74,
+		ShowWorkerSession:                 v75,
+		ReadWorkerSession:                 v76,
+		StreamWorkerSession:               v77,
+		InvokeWorkerSession:               v78,
+		ContinueWorkerSession:             v79,
 		LocalWorkerSessions:               wireLocalWorkerSessionsBoundary,
 		OpenRunSelection:                  selectionFactory,
 		RemoteInvocation:                  remoteInvocationOperation,
-		ResponsePresentation:              v83,
+		ResponsePresentation:              v84,
 		ACP:                               acpService,
 		ACPServer:                         server,
 	}
@@ -654,23 +655,23 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	stdioOpener := stdio.NewOpener()
-	v89 := provideFixtureStdioApplicationBuilder(stdioRunnerBuilder, runnerFactory, stdioOpener, v68, workflowPreviewOperation)
+	v90 := provideFixtureStdioApplicationBuilder(stdioRunnerBuilder, runnerFactory, stdioOpener, v69, workflowPreviewOperation)
 	openedStdioRunnerBuilder, err := application.NewOpenedStdioRunnerBuilder(managedRunnerFactory)
 	if err != nil {
 		return nil, err
 	}
-	v90 := provideRuntimeStdioApplicationBuilder(openedStdioRunnerBuilder, runnerFactory, stdioOpener, v68)
-	v91, err := wire.NewStdioOpeningService(v64, v89, v90)
+	v91 := provideRuntimeStdioApplicationBuilder(openedStdioRunnerBuilder, runnerFactory, stdioOpener, v69)
+	v92, err := wire.NewStdioOpeningService(v65, v90, v91)
 	if err != nil {
 		return nil, err
 	}
-	processStdioApplicationOpener, err := provideStdioApplicationOpener(v91)
+	processStdioApplicationOpener, err := provideStdioApplicationOpener(v92)
 	if err != nil {
 		return nil, err
 	}
-	v92 := provideSystemInitializationInspectPath(edges2)
-	v93 := provideSystemInitializationLegacyFactoryMigrationFileSystem(edges2)
-	systeminitializationService, err := provideSystemInitializationService(v24, packagedInstallationFileSystem, packagedInstallationDirectoryCreator, packagedFactoryCatalogOperations, configLoader, backendScopeEnsurer, v92, v93, loggingLogger)
+	v93 := provideSystemInitializationInspectPath(edges2)
+	v94 := provideSystemInitializationLegacyFactoryMigrationFileSystem(edges2)
+	systeminitializationService, err := provideSystemInitializationService(v24, packagedInstallationFileSystem, packagedInstallationDirectoryCreator, packagedFactoryCatalogOperations, configLoader, backendScopeEnsurer, v93, v94, loggingLogger)
 	if err != nil {
 		return nil, err
 	}
@@ -679,7 +680,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	processLifecycle, err := provideApplicationProcessLifecycle(service, eventsService, v87, wireLocalWorkerSessionsBoundary)
+	processLifecycle, err := provideApplicationProcessLifecycle(service, eventsService, v88, wireLocalWorkerSessionsBoundary)
 	if err != nil {
 		return nil, err
 	}
@@ -710,7 +711,7 @@ var servicesSet = wire4.NewSet(
 	provideWorkerSessionsFactoryWithRecorder,
 	provideApplicationProcessLifecycle,
 	provideProviderRegistry,
-	provideProviderRegistryRebinder, wire4.Bind(new(application.ProviderRegistry), new(workers.ProviderRegistry)), provideFactorySessionProviderIdentityResolver, wire.NewRequestPreparation, provideFactorySessionHTTPRequestPreparation, factory.NewFactoryStatusProjector, factory.NewSessionResultProjectionOperation, provideOperatorSettingsFileSystem,
+	provideProviderRegistryRebinder, wire4.Bind(new(application.ProviderRegistry), new(workers.ProviderRegistry)), provideFactorySessionProviderIdentityResolver, wire.NewRequestPreparation, wire.NewLiveChangeCoordinator, provideFactorySessionHTTPRequestPreparation, factory.NewFactoryStatusProjector, factory.NewSessionResultProjectionOperation, provideOperatorSettingsFileSystem,
 	provideOperatorSettingsCreateTemporaryFile,
 	provideOperatorSettingsProviderCatalog,
 	provideOperatorSettingsLogger,
