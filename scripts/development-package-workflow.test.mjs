@@ -165,6 +165,10 @@ test("candidate work is disabled for protected-main CI while direct publication 
 test("main CI passes classifier decisions and package failures to Verification Policy", () => {
 	const caller = ci.jobs["development-package"];
 	assert.equal(caller.uses, "./.github/workflows/development-package.yml");
+	assert.deepEqual(caller.permissions, {
+		contents: "read",
+		"id-token": "write",
+	});
 	assert.match(
 		caller.with.run_api_package,
 		/needs\.classify\.outputs\.run_api_package != 'false'/,

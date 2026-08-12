@@ -270,6 +270,11 @@ jobs:
         (github.event_name == 'pull_request' || github.event_name == 'push')
       }}
     uses: ./.github/workflows/development-package.yml
+    permissions:
+      # The called workflow contains publication jobs whose existing gates
+      # require OIDC authorization, while verification jobs remain read-only.
+      contents: read
+      id-token: write
     with:
       is_ci_call: true
       run_candidates: ${{ github.event_name == 'pull_request' }}
