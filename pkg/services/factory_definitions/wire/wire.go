@@ -19,6 +19,7 @@ import (
 	compilationcanonical "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/canonical"
 	compilationloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading"
 	compilationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/wire"
+	runtimesnapshot "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/runtime_snapshot"
 	snapshotsportability "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability"
 	snapshotsportabilitymaterialize "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/materialize"
 	internalportableconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig"
@@ -188,7 +189,27 @@ func NewService(
 	if withSnapshots == nil {
 		return nil, fmt.Errorf("construct Factory Definitions: snapshots portability attachment rejected its dependencies")
 	}
-	return attachCompilation(withSnapshots, compilation), nil
+	runtimeSnapshot, err := runtimesnapshot.New(
+		loader.LoadSourceFromCanonicalJSON,
+		loader.LoadSourceFromFactoryDir,
+		func() factorydefinitions.WorkstationLoader {
+			return sessionHost.WorkstationLoader()
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("construct Factory Definitions runtime snapshot resolver: %w", err)
+	}
+	withRuntimeSnapshot, err := factorydefinitionsinternal.AttachRuntimeSnapshot(
+		withSnapshots,
+		runtimeSnapshot.ResolveRuntimeSnapshot,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if withRuntimeSnapshot == nil {
+		return nil, fmt.Errorf("construct Factory Definitions: runtime snapshot attachment rejected its dependencies")
+	}
+	return attachCompilation(withRuntimeSnapshot, compilation), nil
 }
 
 // pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
