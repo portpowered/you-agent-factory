@@ -630,6 +630,7 @@ func (f *factoryImpl) recordOperatorWorkStateChange(result work.OperatorMoveResu
 		RequestID:     requestID,
 		TriggerWorkID: triggerWorkID,
 		Reason:        reason,
+		SessionID:     sessionIDFromFactoryConfig(f.cfg),
 	}, f.clock.Now())
 }
 

@@ -4563,6 +4563,8 @@ export interface components {
       invocationSignature?: components["schemas"]["FactoryInvocationSignature"];
       /** @description Ordered runnable invocation examples. Canonical Factory documents write examples here; legacy invocationSignature.examples are accepted only by the Factory input compatibility mapper. */
       examples?: components["schemas"]["FactoryInvocationExample"][];
+      /** @description Optional outbound webhook subscriptions. Existing Factory definitions without this field do not start outbound delivery work. */
+      webhooks?: components["schemas"]["FactoryWebhook"][];
       /** @description Root-level guards that apply across the factory instead of one specific workstation or input. */
       guards?: components["schemas"]["FactoryGuard"][];
       /** @description Customer-authored work item categories and the lifecycle states each one can occupy. */
@@ -4577,6 +4579,50 @@ export interface components {
       workers?: components["schemas"]["Worker"][];
       /** @description Processing steps that consume work, invoke workers, and emit the next work states. */
       workstations?: components["schemas"]["Workstation"][];
+    };
+    /** @description One Factory-configured outbound webhook subscription. Secret material is represented only by a reference and is resolved at delivery time. */
+    FactoryWebhook: {
+      /** @description Unique customer-authored subscription name. */
+      name: string;
+      /** @description Whether this subscription is active for future canonical events. */
+      enabled: boolean;
+      /** @description Absolute HTTP or HTTPS destination URL. */
+      url: string;
+      /** @description Secret reference resolved by the delivery boundary; raw secret values are never part of Factory configuration. */
+      signingSecretRef: string;
+      filter: components["schemas"]["FactoryWebhookFilter"];
+      /** @description Optional bounded delivery policy. Omitted fields use the documented defaults. */
+      deliveryPolicy?: components["schemas"]["FactoryWebhookDeliveryPolicy"];
+    };
+    /** @description Canonical event filter for one outbound webhook subscription. */
+    FactoryWebhookFilter: {
+      /** @description Canonical event types selected for delivery. */
+      eventTypes: components["schemas"]["FactoryWebhookEventType"][];
+      /** @description Optional canonical dispatch statuses applied only to dispatch event types. */
+      dispatchStatuses?: components["schemas"]["FactoryWebhookDispatchStatus"][];
+    };
+    /**
+     * @description Canonical Factory Event types supported by outbound webhook filters.
+     * @enum {string}
+     */
+    FactoryWebhookEventType: FactoryWebhookEventType;
+    /**
+     * @description Canonical dispatch statuses supported by outbound webhook filters.
+     * @enum {string}
+     */
+    FactoryWebhookDispatchStatus: FactoryWebhookDispatchStatus;
+    /** @description Bounded outbound delivery policy. Durations use Go duration syntax. Omitted values resolve to a 10 second request timeout, 5 total attempts, 1 second initial backoff, 2.0 multiplier, and 30 second maximum backoff. */
+    FactoryWebhookDeliveryPolicy: {
+      /** @description Positive Go duration allowed for one HTTP request attempt. */
+      requestTimeout?: string;
+      /** @description Total delivery attempts including the initial request. */
+      maxAttempts?: number;
+      /** @description Positive Go duration before the first retry. */
+      initialBackoff?: string;
+      /** @description Exponential retry multiplier; values below 1 are not supported. */
+      backoffMultiplier?: number;
+      /** @description Positive Go duration cap for one retry delay; it must not be below initialBackoff. */
+      maxBackoff?: string;
     };
     /** @description Authored orchestrator identity for one factory. When omitted, existing Petri factories load through compatibility defaulting to orchestrator.kind = PETRI. */
     FactoryOrchestrator: {
@@ -9082,6 +9128,20 @@ export const FactorySaveMode = {
 } as const;
 export type FactorySaveMode =
   (typeof FactorySaveMode)[keyof typeof FactorySaveMode];
+export const FactoryWebhookEventType = {
+  WORK_STATE_CHANGE: "WORK_STATE_CHANGE",
+  DISPATCH_RESPONSE: "DISPATCH_RESPONSE",
+  DISPATCH_RECONCILED: "DISPATCH_RECONCILED",
+  DISPATCH_INTERRUPTED: "DISPATCH_INTERRUPTED",
+} as const;
+export type FactoryWebhookEventType =
+  (typeof FactoryWebhookEventType)[keyof typeof FactoryWebhookEventType];
+export const FactoryWebhookDispatchStatus = {
+  FAILED: "FAILED",
+  INTERRUPTED: "INTERRUPTED",
+} as const;
+export type FactoryWebhookDispatchStatus =
+  (typeof FactoryWebhookDispatchStatus)[keyof typeof FactoryWebhookDispatchStatus];
 export const FactoryOrchestratorKind = {
   PETRI: "PETRI",
   JAVASCRIPT: "JAVASCRIPT",

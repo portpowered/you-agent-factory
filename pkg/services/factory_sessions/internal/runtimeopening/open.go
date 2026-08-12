@@ -3,6 +3,8 @@ package runtimeopening
 import (
 	"context"
 	"fmt"
+	"path/filepath"
+	"strings"
 	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -13,6 +15,7 @@ import (
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/webhooks"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
@@ -36,6 +39,7 @@ func openRuntime(
 	factorySessionsService factorysessions.Service,
 	factorySessionExecutionFactory FactorySessionExecutionFactory,
 	recordingsProjectionFactory RecordingsProjectionFactory,
+	recordingsServiceFactory RecordingsServiceFactory,
 	recordingLifecycleFactory RecordingLifecycleFactory,
 	runtimeLedgerFactory RuntimeLedgerFactory,
 	runtimeRecorderFactory recordings.RuntimeRecorderFactory,
@@ -63,6 +67,7 @@ func openRuntime(
 	decodeReplayConfig factorydefinitions.ReplayRuntimeConfigDecoder,
 	replayInputs recordings.ReplayInputLoader,
 	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
+	webhooksService webhooks.Service,
 	resolveClock factoryruntime.ClockResolver,
 	newSessionLogger factoryruntime.SessionLoggerFactory,
 	adaptWorkerCommandRunner WorkerCommandRunnerAdapter,
@@ -349,6 +354,23 @@ func openRuntime(
 		return runtimeProducts{}, err
 	}
 	cleanup.Add(startupRuntime.CloseArtifacts)
+	webhookSubscription, err := startFactoryWebhookSubscription(
+		ctx,
+		webhooksService,
+		recordingsServiceFactory,
+		startupRuntime.RecordingLedger(),
+		recordingProjections,
+		load.LoadedFactoryCfg,
+		load.ReplayArtifact == nil,
+	)
+	if err != nil {
+		return runtimeProducts{}, err
+	}
+	if webhookSubscription != nil {
+		cleanup.Add(func() error {
+			return webhookSubscription(context.WithoutCancel(ctx))
+		})
+	}
 	sessionRuntime, service4, invocationDomain, definitionHost, err := runtimeService.Complete(
 		root.FactoryRootDir,
 		clock,
@@ -474,6 +496,87 @@ func openRuntime(
 		cleanup.Close,
 	)
 	return opened, nil
+}
+
+func startFactoryWebhookSubscription(
+	ctx context.Context,
+	webhooksService webhooks.Service,
+	recordingsServiceFactory RecordingsServiceFactory,
+	ledger recordings.Ledger,
+	projection recordings.ProjectionService,
+	loaded factorydefinitions.MutableLoadedFactorySource,
+	active bool,
+) (webhooks.Subscription, error) {
+	if !active || loaded == nil || !hasEnabledWebhooks(loaded.FactoryConfig()) {
+		return nil, nil
+	}
+	if webhooksService == nil {
+		return nil, fmt.Errorf("construct runtime scope: Webhooks service is required")
+	}
+	if recordingsServiceFactory == nil {
+		return nil, fmt.Errorf("construct runtime scope: Recordings service factory is required for Webhooks")
+	}
+	recordingsService := recordingsServiceFactory(ledger, projection)
+	if recordingsService == nil {
+		return nil, fmt.Errorf("construct runtime scope: Recordings service factory returned nil service")
+	}
+	scope := recordings.CanonicalEventScope{FactorySessionID: factorysessions.DefaultSessionID}
+	return webhooksService.Start(ctx, webhooks.StartRequest{
+		Definitions:      loaded.FactoryConfig().Webhooks,
+		Events:           recordingsService,
+		Scope:            scope,
+		ActivationCursor: lastCanonicalCursor(ledger, scope),
+		RuntimeSource:    loaded,
+		DeadLetterPath:   factoryWebhookDeadLetterPath(loaded),
+	})
+}
+
+func factoryWebhookDeadLetterPath(loaded factorydefinitions.LoadedFactorySource) string {
+	if loaded == nil {
+		return ""
+	}
+	baseDir := strings.TrimSpace(loaded.RuntimeBaseDir())
+	if baseDir == "" {
+		baseDir = strings.TrimSpace(loaded.FactoryDir())
+	}
+	if baseDir == "" {
+		return ""
+	}
+	return filepath.Join(baseDir, filepath.FromSlash(webhooks.DeadLetterRelativePath))
+}
+
+func hasEnabledWebhooks(config *factorydefinitions.FactoryConfig) bool {
+	if config == nil {
+		return false
+	}
+	for _, webhook := range config.Webhooks {
+		if webhook.Enabled {
+			return true
+		}
+	}
+	return false
+}
+
+func lastCanonicalCursor(
+	ledger recordings.Ledger,
+	scope recordings.CanonicalEventScope,
+) *recordings.CanonicalEventCursor {
+	if ledger == nil {
+		return nil
+	}
+	events := ledger.CanonicalEvents()
+	for index := len(events) - 1; index >= 0; index-- {
+		event := events[index]
+		if scope.FactorySessionID != "" &&
+			(event.Context.SessionID == nil || *event.Context.SessionID != scope.FactorySessionID) {
+			continue
+		}
+		return &recordings.CanonicalEventCursor{
+			StreamGenerationID: ledger.StreamGenerationID(),
+			Sequence:           recordings.CanonicalEventSequence(event.Context.Sequence),
+		}
+	}
+	return nil
 }
 
 // bindRuntimeRecordingLifecycle binds the runtime recorder to the already-

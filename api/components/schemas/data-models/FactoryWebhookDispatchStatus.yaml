@@ -1,0 +1,5 @@
+type: string
+description: Canonical dispatch statuses supported by outbound webhook filters.
+enum:
+  - FAILED
+  - INTERRUPTED

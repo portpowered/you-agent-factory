@@ -9381,6 +9381,11 @@ components:
           description: Ordered runnable invocation examples. Canonical Factory documents write examples here; legacy invocationSignature.examples are accepted only by the Factory input compatibility mapper.
           items:
             $ref: '#/components/schemas/FactoryInvocationExample'
+        webhooks:
+          type: array
+          description: Optional outbound webhook subscriptions. Existing Factory definitions without this field do not start outbound delivery work.
+          items:
+            $ref: '#/components/schemas/FactoryWebhook'
         guards:
           type: array
           description: Root-level guards that apply across the factory instead of one specific workstation or input.
@@ -9414,6 +9419,93 @@ components:
           description: Processing steps that consume work, invoke workers, and emit the next work states.
           items:
             $ref: '#/components/schemas/Workstation'
+    FactoryWebhook:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - enabled
+        - url
+        - signingSecretRef
+        - filter
+      description: One Factory-configured outbound webhook subscription. Secret material is represented only by a reference and is resolved at delivery time.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          description: Unique customer-authored subscription name.
+        enabled:
+          type: boolean
+          description: Whether this subscription is active for future canonical events.
+        url:
+          type: string
+          minLength: 1
+          description: Absolute HTTP or HTTPS destination URL.
+        signingSecretRef:
+          type: string
+          minLength: 1
+          description: Secret reference resolved by the delivery boundary; raw secret values are never part of Factory configuration.
+        filter:
+          $ref: '#/components/schemas/FactoryWebhookFilter'
+        deliveryPolicy:
+          allOf:
+            - $ref: '#/components/schemas/FactoryWebhookDeliveryPolicy'
+          description: Optional bounded delivery policy. Omitted fields use the documented defaults.
+    FactoryWebhookFilter:
+      type: object
+      additionalProperties: false
+      required:
+        - eventTypes
+      description: Canonical event filter for one outbound webhook subscription.
+      properties:
+        eventTypes:
+          type: array
+          minItems: 1
+          description: Canonical event types selected for delivery.
+          items:
+            $ref: '#/components/schemas/FactoryWebhookEventType'
+        dispatchStatuses:
+          type: array
+          minItems: 1
+          description: Optional canonical dispatch statuses applied only to dispatch event types.
+          items:
+            $ref: '#/components/schemas/FactoryWebhookDispatchStatus'
+    FactoryWebhookEventType:
+      type: string
+      description: Canonical Factory Event types supported by outbound webhook filters.
+      enum:
+        - WORK_STATE_CHANGE
+        - DISPATCH_RESPONSE
+        - DISPATCH_RECONCILED
+        - DISPATCH_INTERRUPTED
+    FactoryWebhookDispatchStatus:
+      type: string
+      description: Canonical dispatch statuses supported by outbound webhook filters.
+      enum:
+        - FAILED
+        - INTERRUPTED
+    FactoryWebhookDeliveryPolicy:
+      type: object
+      additionalProperties: false
+      description: Bounded outbound delivery policy. Durations use Go duration syntax. Omitted values resolve to a 10 second request timeout, 5 total attempts, 1 second initial backoff, 2.0 multiplier, and 30 second maximum backoff.
+      properties:
+        requestTimeout:
+          type: string
+          description: Positive Go duration allowed for one HTTP request attempt.
+        maxAttempts:
+          type: integer
+          minimum: 1
+          description: Total delivery attempts including the initial request.
+        initialBackoff:
+          type: string
+          description: Positive Go duration before the first retry.
+        backoffMultiplier:
+          type: number
+          minimum: 1
+          description: Exponential retry multiplier; values below 1 are not supported.
+        maxBackoff:
+          type: string
+          description: Positive Go duration cap for one retry delay; it must not be below initialBackoff.
     FactoryOrchestrator:
       type: object
       additionalProperties: false

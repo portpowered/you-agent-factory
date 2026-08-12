@@ -24,6 +24,7 @@ var ProductOwners = []string{
 	"chat_sessions",
 	"events",
 	"worker_sessions",
+	"webhooks",
 }
 
 // ApprovedFamilies are retain destinations that are not product services.
@@ -53,6 +54,7 @@ var AdditionalCurrentRoots = []string{
 	"pkg/services/operator_settings",
 	"pkg/services/system_initialization",
 	"pkg/services/factory_visualization",
+	"pkg/services/webhooks",
 	ProcessEdgesPackagePath,
 }
 

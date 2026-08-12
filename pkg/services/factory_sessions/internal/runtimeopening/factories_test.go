@@ -16,6 +16,7 @@ import (
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/webhooks"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"go.uber.org/zap"
 )
@@ -59,6 +60,7 @@ func TestNewFactoryRejectsEveryMissingRuntimeOpeningGroup(t *testing.T) {
 		{"Automations group", func(dependencies *Dependencies) { dependencies.Automations = nil }},
 		{"Models group", func(dependencies *Dependencies) { dependencies.Models = nil }},
 		{"Recordings group", func(dependencies *Dependencies) { dependencies.Recordings = nil }},
+		{"Webhooks group", func(dependencies *Dependencies) { dependencies.Webhooks = nil }},
 		{"Workers group", func(dependencies *Dependencies) { dependencies.Workers = nil }},
 		{"Operator Settings group", func(dependencies *Dependencies) { dependencies.OperatorSettings = nil }},
 	}
@@ -172,6 +174,7 @@ func TestNewFactoryRetainsExactGroupedCollaborators(t *testing.T) {
 	assertAutomationsDependenciesRetained(t, factory, dependencies)
 	assertModelsDependenciesRetained(t, factory, dependencies)
 	assertRecordingsDependenciesRetained(t, factory, dependencies)
+	assertWebhooksDependenciesRetained(t, factory, dependencies)
 	assertWorkersDependenciesRetained(t, factory, dependencies)
 	assertOperatorSettingsDependenciesRetained(t, factory, dependencies)
 	if calls != 0 {
@@ -320,6 +323,11 @@ func assertRecordingsDependenciesRetained(t *testing.T, factory *Factory, depend
 	assertRuntimeOpeningDependencyIdentity(t, "Recordings replay inputs", factory.replayInputs, group.ReplayInputs)
 }
 
+func assertWebhooksDependenciesRetained(t *testing.T, factory *Factory, dependencies Dependencies) {
+	t.Helper()
+	assertRuntimeOpeningDependencyIdentity(t, "Webhooks service", factory.webhooksService, dependencies.Webhooks.Service)
+}
+
 func assertWorkersDependenciesRetained(t *testing.T, factory *Factory, dependencies Dependencies) {
 	t.Helper()
 	group := dependencies.Workers
@@ -397,6 +405,7 @@ func runtimeOpeningMemberOmissions() []runtimeOpeningDependencyOmission {
 		{"Automations hosted sources factory", func(d *Dependencies) { d.Automations.HostedSourcesFactory = nil }},
 		{"Models service", func(d *Dependencies) { d.Models.Service = nil }},
 		{"Recordings projection factory", func(d *Dependencies) { d.Recordings.ProjectionFactory = nil }},
+		{"Webhooks service", func(d *Dependencies) { d.Webhooks.Service = nil }},
 		{"Recordings lifecycle factory", func(d *Dependencies) { d.Recordings.LifecycleFactory = nil }},
 		{"Recordings runtime ledger factory", func(d *Dependencies) { d.Recordings.RuntimeLedgerFactory = nil }},
 		{"Recordings runtime recorder factory", func(d *Dependencies) { d.Recordings.RuntimeRecorderFactory = nil }},
@@ -466,6 +475,9 @@ func validRuntimeOpeningDependencies(calls *int) Dependencies {
 			ReplayExecutionFactory: inertRuntimeOpeningFunction[recordings.ReplayExecutionFactory](calls),
 			ReplayInputs:           replayInputsConstructionStub{},
 		},
+		Webhooks: &WebhooksDependencies{
+			Service: webhooksConstructionStub{},
+		},
 		Workers: &WorkersDependencies{
 			ExecutionFactory:                 inertRuntimeOpeningFunction[WorkerExecutionFactory](calls),
 			RuntimeFactory:                   inertRuntimeOpeningFunction[WorkersRuntimeFactory](calls),
@@ -508,6 +520,7 @@ type factoryRuntimeAssemblerConstructionStub struct{ FactoryRuntimeAssembler }
 type processRuntimeFactoryConstructionStub struct{ roles.ProcessRuntimeFactory }
 type modelsConstructionStub struct{ models.Service }
 type replayInputsConstructionStub struct{ recordings.ReplayInputLoader }
+type webhooksConstructionStub struct{ webhooks.Service }
 
 type constructionMaterializer struct{ calls *int }
 

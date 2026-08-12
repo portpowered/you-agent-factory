@@ -496,6 +496,7 @@ type WorkStateChangeRecord struct {
 	FromPlaceID, ToPlaceID           string
 	Source                           WorkStateChangeSource
 	RequestID, TriggerWorkID, Reason string
+	SessionID                        string
 }
 
 // OperatorMoveResult is the existing detached move success shape returned by

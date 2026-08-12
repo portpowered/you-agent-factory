@@ -583,6 +583,20 @@ const (
 	FactoryValidationSubjectTypeWorkstation FactoryValidationSubjectType = "WORKSTATION"
 )
 
+// Defines values for FactoryWebhookDispatchStatus.
+const (
+	FactoryWebhookDispatchStatusFailed      FactoryWebhookDispatchStatus = "FAILED"
+	FactoryWebhookDispatchStatusInterrupted FactoryWebhookDispatchStatus = "INTERRUPTED"
+)
+
+// Defines values for FactoryWebhookEventType.
+const (
+	DISPATCHINTERRUPTED FactoryWebhookEventType = "DISPATCH_INTERRUPTED"
+	DISPATCHRECONCILED  FactoryWebhookEventType = "DISPATCH_RECONCILED"
+	DISPATCHRESPONSE    FactoryWebhookEventType = "DISPATCH_RESPONSE"
+	WORKSTATECHANGE     FactoryWebhookEventType = "WORK_STATE_CHANGE"
+)
+
 // Defines values for FactoryWorldRunnerBaselineCapability.
 const (
 	PromptSubmission FactoryWorldRunnerBaselineCapability = "prompt_submission"
@@ -1698,6 +1712,9 @@ type Factory struct {
 
 	// Version Server-managed current-factory version metadata. Clients should echo this value on complete replacement saves when they want stale-write detection, but durable factory configuration does not treat it as customer-authored topology.
 	Version *HybridLogicalTimestamp `json:"version,omitempty"`
+
+	// Webhooks Optional outbound webhook subscriptions. Existing Factory definitions without this field do not start outbound delivery work.
+	Webhooks *[]FactoryWebhook `json:"webhooks,omitempty"`
 
 	// WorkTypes Customer-authored work item categories and the lifecycle states each one can occupy.
 	WorkTypes *[]WorkType `json:"workTypes,omitempty"`
@@ -4226,6 +4243,60 @@ type FactoryValidationTarget struct {
 	// Severity Validation severity for one factory validation target.
 	Severity FactoryValidationSeverity `json:"severity"`
 	Subject  FactoryValidationSubject  `json:"subject"`
+}
+
+// FactoryWebhook One Factory-configured outbound webhook subscription. Secret material is represented only by a reference and is resolved at delivery time.
+type FactoryWebhook struct {
+	// DeliveryPolicy Optional bounded delivery policy. Omitted fields use the documented defaults.
+	DeliveryPolicy *FactoryWebhookDeliveryPolicy `json:"deliveryPolicy,omitempty"`
+
+	// Enabled Whether this subscription is active for future canonical events.
+	Enabled bool `json:"enabled"`
+
+	// Filter Canonical event filter for one outbound webhook subscription.
+	Filter FactoryWebhookFilter `json:"filter"`
+
+	// Name Unique customer-authored subscription name.
+	Name string `json:"name"`
+
+	// SigningSecretRef Secret reference resolved by the delivery boundary; raw secret values are never part of Factory configuration.
+	SigningSecretRef string `json:"signingSecretRef"`
+
+	// Url Absolute HTTP or HTTPS destination URL.
+	Url string `json:"url"`
+}
+
+// FactoryWebhookDeliveryPolicy Bounded outbound delivery policy. Durations use Go duration syntax. Omitted values resolve to a 10 second request timeout, 5 total attempts, 1 second initial backoff, 2.0 multiplier, and 30 second maximum backoff.
+type FactoryWebhookDeliveryPolicy struct {
+	// BackoffMultiplier Exponential retry multiplier; values below 1 are not supported.
+	BackoffMultiplier *float32 `json:"backoffMultiplier,omitempty"`
+
+	// InitialBackoff Positive Go duration before the first retry.
+	InitialBackoff *string `json:"initialBackoff,omitempty"`
+
+	// MaxAttempts Total delivery attempts including the initial request.
+	MaxAttempts *int `json:"maxAttempts,omitempty"`
+
+	// MaxBackoff Positive Go duration cap for one retry delay; it must not be below initialBackoff.
+	MaxBackoff *string `json:"maxBackoff,omitempty"`
+
+	// RequestTimeout Positive Go duration allowed for one HTTP request attempt.
+	RequestTimeout *string `json:"requestTimeout,omitempty"`
+}
+
+// FactoryWebhookDispatchStatus Canonical dispatch statuses supported by outbound webhook filters.
+type FactoryWebhookDispatchStatus string
+
+// FactoryWebhookEventType Canonical Factory Event types supported by outbound webhook filters.
+type FactoryWebhookEventType string
+
+// FactoryWebhookFilter Canonical event filter for one outbound webhook subscription.
+type FactoryWebhookFilter struct {
+	// DispatchStatuses Optional canonical dispatch statuses applied only to dispatch event types.
+	DispatchStatuses *[]FactoryWebhookDispatchStatus `json:"dispatchStatuses,omitempty"`
+
+	// EventTypes Canonical event types selected for delivery.
+	EventTypes []FactoryWebhookEventType `json:"eventTypes"`
 }
 
 // FactoryWorldAgentRunInspectionView Customer-visible agent-run inspection for one workstation dispatch response.

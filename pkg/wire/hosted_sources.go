@@ -1,14 +1,20 @@
 package wire
 
 import (
+	"context"
 	"net/http"
 	"os"
 
 	"github.com/jonboulle/clockwork"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	automationswire "github.com/portpowered/infinite-you/pkg/services/automations/wire"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/webhooks"
+	webhookswire "github.com/portpowered/infinite-you/pkg/services/webhooks/wire"
 	"go.uber.org/zap"
 )
 
@@ -40,4 +46,48 @@ func provideAutomationHostedSourcesFactory(edges serviceedges.Edges) (automation
 		}
 		return factory(logger, clock, httpClient, secretResolver, linearEndpoint)
 	}, nil
+}
+
+func provideFactoryWebhooksService(
+	edges serviceedges.Edges,
+	logger logging.Logger,
+) webhooks.Service {
+	httpClient := edges.FactoryWebhookHTTPClient
+	if httpClient == nil {
+		httpClient = newFactoryWebhookHTTPClient()
+	}
+	secretResolver := edges.FactoryWebhookSecretResolver
+	if secretResolver == nil {
+		hostedResolver := automationswire.NewHostedLinearSecretResolver(os.Getenv, os.ReadFile)
+		secretResolver = func(
+			ctx context.Context,
+			source factorydefinitions.LoadedFactorySource,
+			secretRef string,
+		) (string, error) {
+			return hostedResolver(ctx, source, secretRef)
+		}
+	}
+	clockSource := edges.FactoryWebhookClock
+	if clockSource == nil {
+		clockSource = platformclock.Real{}
+	}
+	deadLetterAppender := edges.FactoryWebhookDeadLetterAppender
+	if deadLetterAppender == nil {
+		deadLetterAppender = platformfilesystem.Local{}.AppendDurable
+	}
+	return webhookswire.NewService(
+		httpClient,
+		secretResolver,
+		clockSource,
+		deadLetterAppender,
+		logger,
+	)
+}
+
+func newFactoryWebhookHTTPClient() *http.Client {
+	return &http.Client{
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
 }
