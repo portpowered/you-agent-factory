@@ -592,7 +592,9 @@ func HandleStartFailure(
 		stopErr = stop(handle)
 	}
 	if ctx != nil && ctx.Err() != nil && errors.Is(startErr, context.Canceled) {
-		if stopErr != nil && !errors.Is(stopErr, context.Canceled) {
+		if stopErr != nil &&
+			!errors.Is(stopErr, context.Canceled) &&
+			!errors.Is(stopErr, factory.ErrAlreadyStopped) {
 			return stopErr
 		}
 		return nil
