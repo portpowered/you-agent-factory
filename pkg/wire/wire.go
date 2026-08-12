@@ -20,6 +20,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
+	workersessionsrootcli "github.com/portpowered/infinite-you/pkg/transports/cli/worker_sessions"
 	httpapplication "github.com/portpowered/infinite-you/pkg/transports/http/application"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/composition"
@@ -311,6 +312,7 @@ var cliCommandOperationsSet = wire.NewSet(
 	provideReadWorkerSessionOperation,
 	provideStreamWorkerSessionOperation,
 	provideLocalWorkerSessionsBoundary,
+	wire.Bind(new(workersessionsrootcli.LocalInvokeBoundary), new(*localWorkerSessionsBoundary)),
 	provideInvokeWorkerSessionOperation,
 	provideSessionsCLIService,
 	provideLocalSessionsCLIService,

@@ -11,20 +11,28 @@ import (
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformstdio "github.com/portpowered/infinite-you/pkg/platform/stdio"
+	events "github.com/portpowered/infinite-you/pkg/services/events"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
+	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	providerscli "github.com/portpowered/infinite-you/pkg/services/providers/transports/cli"
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	workersessionscli "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli"
+	workersessionswire "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
+	workerswire "github.com/portpowered/infinite-you/pkg/services/workers/wire"
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
 	acpcli "github.com/portpowered/infinite-you/pkg/transports/cli/acp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
@@ -142,17 +150,85 @@ func provideStreamWorkerSessionOperation(transport streamingCLIHTTPProtocol) cli
 	return workersessionscli.BindStream(transport.Protocol)
 }
 
-// Direct Worker Sessions execution is runtime-scoped today: Factory Runtime
-// owns the workstation pool and constructs the Worker Sessions service around
-// it. Keep the process-level slot explicit so local invoke never silently
-// changes placement to HTTP while the standalone local opener is added.
-func provideLocalWorkerSessionsBoundary() workersessionscli.LocalInvokeBoundary {
-	return nil
+// localWorkerSessionsBoundary owns the process-scoped direct Worker route used
+// by the CLI. Direct invoke has already resolved the provider-facing execution
+// fields, so its user-facing workstation name is not an authored route. The
+// boundary rewrites only the pool route while preserving the execution payload
+// that the provider-invocation executor consumes.
+type localWorkerSessionsBoundary struct {
+	service workersessions.Service
+	pool    workers.WorkstationPoolBoundary
+}
+
+var _ workersessionscli.LocalInvokeBoundary = (*localWorkerSessionsBoundary)(nil)
+
+func (b *localWorkerSessionsBoundary) Start(
+	ctx context.Context,
+	req workersessions.StartRequest,
+) (workersessions.StartResult, error) {
+	if b == nil || b.service == nil {
+		return workersessions.StartResult{}, fmt.Errorf("local Worker Sessions service is unavailable")
+	}
+	req.Execution.WorkstationName = workers.ProviderInvocationRoute
+	req.Execution.Execution.Dispatch.WorkstationName = workers.ProviderInvocationRoute
+	return b.service.Start(ctx, req)
+}
+
+func (b *localWorkerSessionsBoundary) StreamObservationsByWorkerSessionID(
+	ctx context.Context,
+	req workersessions.StreamObservationsByWorkerSessionIDRequest,
+) (workersessions.ObservationSubscription, error) {
+	if b == nil || b.service == nil {
+		return workersessions.ObservationSubscription{}, fmt.Errorf("local Worker Sessions service is unavailable")
+	}
+	return b.service.StreamObservationsByWorkerSessionID(ctx, req)
+}
+
+func (b *localWorkerSessionsBoundary) Close(ctx context.Context) error {
+	if b == nil || b.pool == nil {
+		return nil
+	}
+	return b.pool.Stop(ctx)
+}
+
+func provideLocalWorkerSessionsBoundary(
+	eventsService events.Service,
+	providerSessions providersessions.Service,
+	logger logging.Logger,
+	providerInvocationFactory factoryruntime.ProviderInvocationExecutorFactory,
+) (*localWorkerSessionsBoundary, error) {
+	if providerInvocationFactory == nil {
+		return nil, fmt.Errorf("construct local Worker Sessions boundary: provider invocation factory is required")
+	}
+	providerInvocation, err := providerInvocationFactory(nil, nil)
+	if err != nil {
+		return nil, fmt.Errorf("construct local Worker Sessions boundary: %w", err)
+	}
+	if providerInvocation == nil {
+		return nil, fmt.Errorf("construct local Worker Sessions boundary: provider invocation is unavailable")
+	}
+
+	pool := workers.NewWorkstationPoolBoundary(workers.WorkstationPoolBoundaryConfig{
+		Service:            workerswire.NewWorkstationPool(logger),
+		ProviderInvocation: providerInvocation,
+		Async:              true,
+	})
+	service, err := workersessionswire.NewService(
+		pool,
+		eventsService,
+		logger,
+		platformclock.Real{},
+		providerSessions,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("construct local Worker Sessions service: %w", err)
+	}
+	return &localWorkerSessionsBoundary{service: service, pool: pool}, nil
 }
 
 func provideInvokeWorkerSessionOperation(
 	transport streamingCLIHTTPProtocol,
-	local workersessionscli.LocalInvokeBoundary,
+	local *localWorkerSessionsBoundary,
 ) cli.InvokeWorkerSessionOperation {
 	return workersessionscli.BindInvoke(transport.Protocol, local)
 }

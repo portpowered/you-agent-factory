@@ -75,11 +75,14 @@ func (c compositeProcessLifecycle) Close(ctx context.Context) error {
 // -- so every runtime that activation ever opens is guaranteed a reachable,
 // deterministic close on process shutdown, not left open for the life of the
 // process regardless of whether a production ACP stdio entrypoint has been
-// built yet.
+// built yet. The process-scoped direct Worker Sessions pool closes first so an
+// admitted local invocation can publish its terminal observation before the
+// shared Events root is closed.
 func provideApplicationProcessLifecycle(
 	service providers.Service,
 	eventsService events.Service,
 	factoryTarget *factorysessionwire.OnDemandFactoryTargetService,
+	localWorkerSessions *localWorkerSessionsBoundary,
 ) (initializerapplication.ProcessLifecycle, error) {
 	lifecycle, ok := service.(providers.Lifecycle)
 	if !ok {
@@ -90,6 +93,12 @@ func provideApplicationProcessLifecycle(
 		return nil, fmt.Errorf("construct application process: Events lifecycle is required")
 	}
 	return compositeProcessLifecycle{closers: []func(context.Context) error{
+		func(ctx context.Context) error {
+			if localWorkerSessions == nil {
+				return nil
+			}
+			return localWorkerSessions.Close(ctx)
+		},
 		lifecycle.Close,
 		eventsLifecycleValue.Close,
 		func(context.Context) error {

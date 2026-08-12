@@ -9,14 +9,22 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
+	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/completionprojection"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	cliobservation "github.com/portpowered/infinite-you/pkg/transports/cli/observation"
@@ -38,6 +46,86 @@ func TestProvideSessionsCLIServiceReturnsConstructedAdapter(t *testing.T) {
 	if err := service.Show(sessioncli.ShowConfig{SessionID: "session-alpha"}); err == nil {
 		t.Fatal("Show without output = nil, want required output error")
 	}
+}
+
+func TestProvideLocalWorkerSessionsBoundaryUsesProviderInvocationRoute(t *testing.T) {
+	t.Parallel()
+
+	eventsService, err := eventswire.NewService(logging.NoopLogger{})
+	if err != nil {
+		t.Fatalf("construct events service: %v", err)
+	}
+	routes := make(chan string, 1)
+	providerInvocationFactory := factoryruntime.ProviderInvocationExecutorFactory(
+		func(workers.CommandRunner, workers.ProgressPublisher) (workers.WorkstationRequestExecutor, error) {
+			return localBoundaryRequestExecutor{routes: routes}, nil
+		},
+	)
+	boundary, err := provideLocalWorkerSessionsBoundary(
+		eventsService,
+		localBoundaryProviderSessions{},
+		logging.NoopLogger{},
+		providerInvocationFactory,
+	)
+	if err != nil {
+		t.Fatalf("provideLocalWorkerSessionsBoundary() error = %v", err)
+	}
+	t.Cleanup(func() {
+		if err := boundary.Close(context.Background()); err != nil {
+			t.Errorf("local boundary Close() error = %v", err)
+		}
+	})
+
+	started, err := boundary.Start(context.Background(), workersessions.StartRequest{
+		RequestID: "request-local",
+		ID:        "session-local",
+		Execution: workers.WorkstationDispatchRequest{
+			WorkstationName: "authored-name",
+			Execution: workers.WorkstationExecutionRequest{
+				Dispatch: work.WorkDispatch{
+					DispatchID:      "dispatch-local",
+					WorkstationName: "authored-name",
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("local boundary Start() error = %v", err)
+	}
+	if started.Session.ID != "session-local" {
+		t.Fatalf("started session ID = %q, want session-local", started.Session.ID)
+	}
+	select {
+	case route := <-routes:
+		if route != workers.ProviderInvocationRoute {
+			t.Fatalf("provider invocation route = %q, want %q", route, workers.ProviderInvocationRoute)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("provider invocation did not receive the admitted local dispatch")
+	}
+}
+
+type localBoundaryRequestExecutor struct {
+	routes chan<- string
+}
+
+func (e localBoundaryRequestExecutor) Execute(
+	_ context.Context,
+	request workers.WorkstationExecutionRequest,
+) (workers.WorkResult, error) {
+	e.routes <- request.Dispatch.WorkstationName
+	return workers.WorkResult{
+		DispatchID: request.Dispatch.DispatchID,
+		Outcome:    workers.OutcomeAccepted,
+	}, nil
+}
+
+type localBoundaryProviderSessions struct {
+	providersessions.Service
+}
+
+func (localBoundaryProviderSessions) Project(providersessions.ProjectRequest) (providersessions.ProjectResult, error) {
+	return providersessions.ProjectResult{}, providersessions.ErrSessionStorageUnavailable
 }
 
 func TestCLIRunDefaultsRetainWireSelectedRecordingTargetPlanner(t *testing.T) {
