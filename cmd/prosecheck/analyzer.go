@@ -39,12 +39,17 @@ type Suppression struct {
 // Span is one structurally classified natural-language block. It is the
 // boundary between source adapters and pure rule evaluation.
 type Span struct {
-	SourcePath   string
-	StartLine    int
-	StartColumn  int
-	Class        ContentClass
-	Text         string
-	Identity     string
+	SourcePath  string
+	StartLine   int
+	StartColumn int
+	Class       ContentClass
+	Text        string
+	Identity    string
+	// Surfaces are deterministic selectors for the canonical terminology
+	// register. Adapters provide them when the source structure establishes
+	// where the prose will be shown; an empty set declines ambiguous term
+	// findings rather than guessing at meaning.
+	Surfaces     []string
 	Protected    []TextRange
 	Suppressions []Suppression
 	positions    []sourcePosition
@@ -272,6 +277,9 @@ func analyzeTerms(span Span, policy Policy, masked string) []candidate {
 	matches := make([]termMatch, 0)
 	lowerMasked := strings.ToLower(masked)
 	for _, term := range policy.Terms {
+		if !termAppliesToSpan(term, span) {
+			continue
+		}
 		if publicOK {
 			for _, alternative := range term.DiscouragedAlternatives {
 				if alternative.Status != "prohibited" {
@@ -335,6 +343,29 @@ func analyzeTerms(span Span, policy Policy, masked string) []candidate {
 		})
 	}
 	return findings
+}
+
+func termAppliesToSpan(term Term, span Span) bool {
+	if len(term.Surfaces) == 0 || len(span.Surfaces) == 0 {
+		return false
+	}
+	for _, sourceSurface := range span.Surfaces {
+		source := normalizeSurface(sourceSurface)
+		if source == "" {
+			continue
+		}
+		for _, termSurface := range term.Surfaces {
+			allowed := normalizeSurface(termSurface)
+			if allowed == source || strings.Contains(allowed, source) || strings.Contains(source, allowed) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func normalizeSurface(value string) string {
+	return strings.Join(strings.Fields(strings.ToLower(strings.TrimSpace(value))), " ")
 }
 
 func termSpellings(term Term) []string {

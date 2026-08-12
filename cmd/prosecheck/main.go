@@ -78,6 +78,7 @@ func run(args []string, stdout, stderr io.Writer) error {
 			StartColumn: 1,
 			Class:       cfg.class,
 			Text:        string(data),
+			Surfaces:    []string{surfaceCustomerDocumentation},
 			Protected:   LexicalProtectedRanges(string(data)),
 		})
 	}
@@ -106,7 +107,8 @@ func isCLIManifestInput(path string) bool {
 
 func isGeneratedCLIProjection(path string) bool {
 	normalized := strings.ToLower(strings.ReplaceAll(filepath.Clean(path), "\\", "/"))
-	return strings.HasSuffix(normalized, "/packages/api/generated/cli/commands.json")
+	const generatedPath = "packages/api/generated/cli/commands.json"
+	return normalized == generatedPath || strings.HasSuffix(normalized, "/"+generatedPath)
 }
 
 func parseConfig(args []string, stderr io.Writer) (config, error) {

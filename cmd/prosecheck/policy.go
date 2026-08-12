@@ -70,7 +70,18 @@ type Term struct {
 	Category                string
 	ApprovedForms           map[string]string
 	DiscouragedAlternatives []Alternative
+	Surfaces                []string
 }
+
+const (
+	surfaceCustomerDocumentation       = "customer documentation"
+	surfaceCLIHelp                     = "cli help"
+	surfaceCLIReferenceDocumentation   = "cli and reference documentation"
+	surfaceCLIAndCustomerDocumentation = "cli and customer documentation"
+	surfaceCLIAndAPIDocumentation      = "cli and api documentation"
+	surfaceProviderCLIAndAPIDoc        = "provider cli and api documentation"
+	surfaceModelCLIAndCustomerDoc      = "model cli and customer documentation"
+)
 
 // Policy is the canonical policy snapshot used by Analyze. It contains no
 // filesystem handles or other mutable runtime state.
@@ -308,6 +319,7 @@ func parseTerminologyRegister(data []byte) ([]Term, error) {
 			Category:                strings.TrimSpace(record.Category),
 			ApprovedForms:           forms,
 			DiscouragedAlternatives: alternatives,
+			Surfaces:                append([]string(nil), record.Surfaces...),
 		})
 	}
 

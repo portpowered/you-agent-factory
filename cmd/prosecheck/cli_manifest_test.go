@@ -81,6 +81,21 @@ const cliManifestFixture = `{
   }
 }`
 
+const ambiguousCLIManifestFixture = `{
+  "commands": {
+    "you.status": {
+      "id": "you.status",
+      "visibility": "visible",
+      "documentation": {
+        "documentation": {
+          "title": {"id": "you.status.title", "canonicalEnglish": "Status"},
+          "description": {"id": "you.status.description", "canonicalEnglish": "The active service is running before you place the file."}
+        }
+      }
+    }
+  }
+}`
+
 func TestAnalyzeCLIManifestExtractsVisibleFieldsAndLifecycleGuidance(t *testing.T) {
 	policy := loadRepositoryPolicy(t)
 	findings := AnalyzeCLIManifest(`.\contracts\cli\commands.json`, []byte(cliManifestFixture), policy)
@@ -161,6 +176,14 @@ func TestAnalyzeCLIManifestProtectsAuthoredTechnicalLiterals(t *testing.T) {
 	findings := AnalyzeCLIManifest("contracts/cli/commands.json", []byte(fixture), policy)
 	if len(findings) != 0 {
 		t.Fatalf("technical CLI literals produced findings: %#v", findings)
+	}
+}
+
+func TestAnalyzeCLIManifestDeclinesAmbiguousRegisterTermsOutsideTheirSurfaces(t *testing.T) {
+	policy := loadRepositoryPolicy(t)
+	findings := AnalyzeCLIManifest("contracts/cli/commands.json", []byte(ambiguousCLIManifestFixture), policy)
+	if len(findings) != 0 {
+		t.Fatalf("ambiguous ordinary words produced terminology findings: %#v", findings)
 	}
 }
 
@@ -251,5 +274,13 @@ func TestRunDispatchesAuthoredCLIManifestAndRejectsGeneratedProjection(t *testin
 	err = run([]string{"-standard", standardPath, "-terms", termsPath, generated}, &stdout, &stderr)
 	if err == nil || !strings.Contains(err.Error(), "generated CLI projection") {
 		t.Fatalf("run(generated projection) error = %v, want explicit authoring-input rejection", err)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	t.Chdir(root)
+	err = run([]string{"-standard", standardPath, "-terms", termsPath, "packages/api/generated/cli/commands.json"}, &stdout, &stderr)
+	if err == nil || !strings.Contains(err.Error(), "generated CLI projection") {
+		t.Fatalf("run(repo-relative generated projection) error = %v, want rejection before read", err)
 	}
 }

@@ -132,6 +132,7 @@ func TestAnalyzeReportsEverySupportedBlockingRule(t *testing.T) {
 				StartColumn: 2,
 				Class:       tt.class,
 				Text:        tt.text,
+				Surfaces:    []string{surfaceCustomerDocumentation},
 			}}, policy)
 			if len(findings) != 1 {
 				t.Fatalf("Analyze() returned %d findings: %#v", len(findings), findings)
@@ -212,6 +213,7 @@ func TestAnalyzeReportsLineAndColumnAcrossCRLF(t *testing.T) {
 		StartColumn: 3,
 		Class:       ContentClassDescriptive,
 		Text:        "A safe sentence.\r\nfactory starts.",
+		Surfaces:    []string{surfaceCustomerDocumentation},
 	}}, policy)
 	if len(findings) != 1 {
 		t.Fatalf("Analyze() findings = %#v, want one term-case finding", findings)
@@ -441,6 +443,14 @@ func TestMarkdownMetadataProvidesExplicitClassificationAndBoundedSuppression(t *
 	findings := AnalyzeMarkdown("docs/metadata.md", []byte(content), policy)
 	if len(findings) != 1 || findings[0].RuleID != RuleProceduralSentenceLength || findings[0].ContentClass != ContentClassProcedural || findings[0].StartLine != 2 {
 		t.Fatalf("metadata findings = %#v, want one procedural-length finding on line 2", findings)
+	}
+}
+
+func TestAnalyzeMarkdownDeclinesAmbiguousRegisterTermsOutsideTheirSurfaces(t *testing.T) {
+	policy := loadRepositoryPolicy(t)
+	findings := AnalyzeMarkdown("docs/ambiguous.md", []byte("The active service is running before you place the file.\n"), policy)
+	if len(findings) != 0 {
+		t.Fatalf("ambiguous ordinary words produced terminology findings: %#v", findings)
 	}
 }
 
