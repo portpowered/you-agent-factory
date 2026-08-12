@@ -14,7 +14,7 @@ import {
   type SaveNotificationStableIdentity,
   shouldDeliverSaveNotification,
 } from "../../notifications/lib/save-notification-delivery-policy";
-import type { CurrentActivityGraphCardViewModel } from "../hooks/use-current-activity-graph-card-view-model";
+import type { CurrentActivityGraphEditorController } from "../hooks/current-activity-graph-state-value";
 
 function readSaveErrorCode(error: unknown): string | null {
   if (
@@ -45,21 +45,51 @@ function buildToastStableIdentity(
   });
 }
 
+export interface CurrentActivityGraphSaveNotificationEffects {
+  error: (
+    title: string,
+    options: { description: string; duration: number },
+  ) => void;
+  success: (
+    title: string,
+    options: { description: string; duration: number },
+  ) => void;
+  warning: (
+    title: string,
+    options: { description: string; duration: number },
+  ) => void;
+}
+
+const defaultNotificationEffects: CurrentActivityGraphSaveNotificationEffects =
+  {
+    error: (title, options) => {
+      toast.error(title, options);
+    },
+    success: (title, options) => {
+      toast.success(title, options);
+    },
+    warning: (title, options) => {
+      toast.warning(title, options);
+    },
+  };
+
 export function CurrentActivityGraphSaveNotifications({
-  viewModel,
+  editorController,
   locale,
+  notificationEffects = defaultNotificationEffects,
 }: {
-  viewModel: CurrentActivityGraphCardViewModel;
+  editorController: CurrentActivityGraphEditorController;
+  notificationEffects?: CurrentActivityGraphSaveNotificationEffects;
   locale?: string;
 }) {
   const messages = getFactoryGraphEditorMessages(locale);
   const lastDeliveredDeliveryKeyRef =
     useRef<SaveNotificationDeliveryKey | null>(null);
-  const saveAttemptRevision = viewModel.saveControls.attemptRevision;
-  const saveMutationError = viewModel.status.saveError;
+  const saveAttemptRevision = editorController.saveControls.attemptRevision;
+  const saveMutationError = editorController.status.saveError;
   const notification = resolveGraphDocumentSaveToastNotification({
-    documentSave: viewModel.saveControls.feedback,
-    hasDraftChanges: viewModel.status.hasSharedGraphChanges,
+    documentSave: editorController.saveControls.feedback,
+    hasDraftChanges: editorController.status.hasSharedGraphChanges,
     messages,
     saveMutationError,
   });
@@ -86,7 +116,7 @@ export function CurrentActivityGraphSaveNotifications({
     lastDeliveredDeliveryKeyRef.current = deliveryKey;
 
     if (notification.kind === "warning") {
-      toast.warning(notification.title, {
+      notificationEffects.warning(notification.title, {
         description: notification.description,
         duration: GLOBAL_TOAST_DURATION_MS,
       });
@@ -94,16 +124,21 @@ export function CurrentActivityGraphSaveNotifications({
     }
 
     if (notification.kind === "error") {
-      toast.error(notification.title, {
+      notificationEffects.error(notification.title, {
         ...buildSaveErrorToastOptions(notification.description),
       });
       return;
     }
 
-    toast.success(notification.title, {
+    notificationEffects.success(notification.title, {
       ...buildSaveSuccessToastOptions(notification.description),
     });
-  }, [notification, saveAttemptRevision, saveMutationError]);
+  }, [
+    notification,
+    notificationEffects,
+    saveAttemptRevision,
+    saveMutationError,
+  ]);
 
   return null;
 }

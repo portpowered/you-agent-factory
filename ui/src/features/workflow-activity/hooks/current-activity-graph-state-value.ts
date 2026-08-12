@@ -417,3 +417,18 @@ export interface CurrentActivityGraphStateValue {
   validationControls: CurrentActivityGraphValidationControls;
   visibilityControls: CurrentActivityGraphVisibilityControls;
 }
+
+/**
+ * The editor-facing controller contract consumed by focused graph surfaces.
+ * Canonical draft mutations remain owned by the underlying graph state; this
+ * type only exposes the controls and outcomes an editor surface needs.
+ */
+export type CurrentActivityGraphEditorController = Pick<
+  CurrentActivityGraphStateValue,
+  | "addControls"
+  | "editorControls"
+  | "leaveControls"
+  | "removalControls"
+  | "saveControls"
+  | "status"
+>;

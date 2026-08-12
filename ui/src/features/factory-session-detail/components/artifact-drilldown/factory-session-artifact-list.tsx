@@ -1,11 +1,19 @@
+import {
+  ButtonLink,
+  Heading,
+  Label,
+  Text,
+} from "@you-agent-factory/components/primitives";
 import { WidgetDetailCopy } from "@you-agent-factory/components/recipes";
 import { useState } from "react";
 import type { components } from "../../../../api/generated/openapi";
-import { ButtonLink, Heading, Label, Text } from "@you-agent-factory/components/primitives";
 import { AlertPanel } from "../../../../components/ui/alert-panel";
 import { ExpandablePanelTrigger } from "../../../../components/ui/expandable-panel-trigger";
 import { WorkContentReadOnlyList } from "../../../work-content/components/work-content-read-only-list";
-import { useFactorySessionArtifactDrilldown } from "../../hooks/use-factory-session-artifact-drilldown";
+import {
+  type FactorySessionArtifactDrilldownViewState,
+  useFactorySessionArtifactDrilldown,
+} from "../../hooks/use-factory-session-artifact-drilldown";
 import { hasUsableArtifactDownload } from "../../lib/factory-session-artifact-drilldown";
 import { getFactorySessionDetailMessages } from "../../messages/factory-session-detail";
 
@@ -13,11 +21,13 @@ type FactoryArtifact = components["schemas"]["FactoryArtifact"];
 
 export function FactorySessionArtifactList({
   artifacts,
+  drilldownStates,
   heading,
   locale,
   sessionID,
 }: {
   artifacts: FactoryArtifact[];
+  drilldownStates?: Record<string, FactorySessionArtifactDrilldownViewState>;
   heading: string;
   locale?: string;
   sessionID: string | null;
@@ -35,6 +45,7 @@ export function FactorySessionArtifactList({
           <li key={artifact.id}>
             <ArtifactDisclosure
               artifact={artifact}
+              drilldownState={drilldownStates?.[artifact.id]}
               expanded={expandedArtifactID === artifact.id}
               locale={locale}
               messages={messages}
@@ -52,6 +63,7 @@ export function FactorySessionArtifactList({
 
 function ArtifactDisclosure({
   artifact,
+  drilldownState,
   expanded,
   locale,
   messages,
@@ -59,6 +71,7 @@ function ArtifactDisclosure({
   sessionID,
 }: {
   artifact: FactoryArtifact;
+  drilldownState?: FactorySessionArtifactDrilldownViewState;
   expanded: boolean;
   locale?: string;
   messages: ReturnType<typeof getFactorySessionDetailMessages>;
@@ -93,6 +106,7 @@ function ArtifactDisclosure({
         <div className="grid gap-3 border-t border-outline pt-3" id={contentID}>
           <ArtifactDrilldownBody
             artifactID={artifact.id}
+            drilldownState={drilldownState}
             locale={locale}
             sessionID={sessionID}
           />
@@ -104,6 +118,32 @@ function ArtifactDisclosure({
 
 function ArtifactDrilldownBody({
   artifactID,
+  drilldownState,
+  locale,
+  sessionID,
+}: {
+  artifactID: string;
+  drilldownState?: FactorySessionArtifactDrilldownViewState;
+  locale?: string;
+  sessionID: string | null;
+}) {
+  if (drilldownState !== undefined) {
+    return (
+      <ArtifactDrilldownBodyContent locale={locale} state={drilldownState} />
+    );
+  }
+
+  return (
+    <ArtifactDrilldownBodyWithQuery
+      artifactID={artifactID}
+      locale={locale}
+      sessionID={sessionID}
+    />
+  );
+}
+
+function ArtifactDrilldownBodyWithQuery({
+  artifactID,
   locale,
   sessionID,
 }: {
@@ -111,8 +151,19 @@ function ArtifactDrilldownBody({
   locale?: string;
   sessionID: string | null;
 }) {
-  const messages = getFactorySessionDetailMessages(locale);
   const state = useFactorySessionArtifactDrilldown(sessionID, artifactID, true);
+
+  return <ArtifactDrilldownBodyContent locale={locale} state={state} />;
+}
+
+function ArtifactDrilldownBodyContent({
+  locale,
+  state,
+}: {
+  locale?: string;
+  state: FactorySessionArtifactDrilldownViewState;
+}) {
+  const messages = getFactorySessionDetailMessages(locale);
 
   if (state.status === "loading") {
     return (
