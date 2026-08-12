@@ -271,9 +271,10 @@ jobs:
       }}
     uses: ./.github/workflows/development-package.yml
     permissions:
-      # The called workflow contains publication jobs whose existing gates
-      # require OIDC authorization, while verification jobs remain read-only.
-      contents: read
+      # The called workflow contains explicitly gated publication jobs whose
+      # permission ceiling must be allowed at the call boundary. Its package
+      # verification jobs retain the called workflow's read-only default.
+      contents: write
       id-token: write
     with:
       is_ci_call: true

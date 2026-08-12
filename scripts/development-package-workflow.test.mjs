@@ -166,7 +166,7 @@ test("main CI passes classifier decisions and package failures to Verification P
 	const caller = ci.jobs["development-package"];
 	assert.equal(caller.uses, "./.github/workflows/development-package.yml");
 	assert.deepEqual(caller.permissions, {
-		contents: "read",
+		contents: "write",
 		"id-token": "write",
 	});
 	assert.match(
