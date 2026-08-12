@@ -202,7 +202,7 @@ func (capture *capture) accept(record events.Record) error {
 		return fmt.Errorf("%w: expected aggregate position %d, got %d", recordings.ErrWorkerRecordingOrder, lastPosition+1, record.ID.Position)
 	}
 	history = append(history, record.Detached())
-	projection, err := recordings.ReduceWorkerRecording(recordings.WorkerRecordingHistory{
+	projection, err := (recordings.WorkerRecordingCodec{}).ReduceWorkerRecording(recordings.WorkerRecordingHistory{
 		RecordingID:     capture.request.RecordingID,
 		WorkerSessionID: capture.request.WorkerSessionID,
 		Topic:           capture.request.Topic,

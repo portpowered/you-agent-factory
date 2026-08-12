@@ -1,11 +1,11 @@
 package wire
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	runtime "runtime"
 
-	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
@@ -20,19 +20,14 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-type workerRecordingReaderCapability struct {
-	reader recordings.WorkerRecordingReader
-}
-
-func (capability workerRecordingReaderCapability) Value() any {
-	return capability.reader
-}
-
-func provideWorkerRecordingReaderCapability(
+func provideWorkerRecordingReader(
 	writer recordings.WorkerRecordingWriter,
-) initializerapplication.WorkerRecordingReaderCapability {
-	reader, _ := writer.(recordings.WorkerRecordingReader)
-	return workerRecordingReaderCapability{reader: reader}
+) (recordings.WorkerRecordingReader, error) {
+	reader, ok := writer.(recordings.WorkerRecordingReader)
+	if !ok || reader == nil {
+		return nil, fmt.Errorf("compose Worker recording reader: %w", recordings.ErrMissingWorkerRecordingReader)
+	}
+	return reader, nil
 }
 
 // provideWorkerSessionsFactory constructs the one canonical per-session

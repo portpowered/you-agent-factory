@@ -50,7 +50,7 @@ var servicesSet = wire.NewSet(
 	provideEventsService,
 	provideWorkerRecordingWriter,
 	provideWorkerSessionRecorder,
-	provideWorkerRecordingReaderCapability,
+	provideWorkerRecordingReader,
 	provideWorkerSessionsFactoryWithRecorder,
 	provideApplicationProcessLifecycle,
 	provideProviderRegistry,

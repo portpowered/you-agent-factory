@@ -18,16 +18,16 @@ type neutralReplayCompositionLedger struct {
 	recordings.Ledger
 }
 
-func TestProvideWorkerRecordingReaderCapabilityPreservesReader(t *testing.T) {
+func TestProvideWorkerRecordingReaderPreservesReader(t *testing.T) {
 	t.Parallel()
 
 	reader := workerRecordingReaderCompositionProbe{}
-	capability := provideWorkerRecordingReaderCapability(reader)
-	if capability == nil {
-		t.Fatal("provideWorkerRecordingReaderCapability() returned nil")
+	got, err := provideWorkerRecordingReader(reader)
+	if err != nil {
+		t.Fatalf("provideWorkerRecordingReader() error = %v", err)
 	}
-	if got, ok := capability.Value().(recordings.WorkerRecordingReader); !ok || got != reader {
-		t.Fatalf("reader capability value = %T/%#v, want %T/%#v", capability.Value(), capability.Value(), reader, reader)
+	if got != reader {
+		t.Fatalf("reader = %T/%#v, want %T/%#v", got, got, reader, reader)
 	}
 }
 

@@ -83,7 +83,7 @@ func (writer *FileWriter) PersistWorkerRecord(ctx context.Context, record record
 		history = append(history, accepted.Detached())
 	}
 	history = append(history, record.Record.Detached())
-	projection, err := recordings.ReduceWorkerRecording(recordings.WorkerRecordingHistory{
+	projection, err := (recordings.WorkerRecordingCodec{}).ReduceWorkerRecording(recordings.WorkerRecordingHistory{
 		RecordingID:     record.RecordingID,
 		WorkerSessionID: record.WorkerSessionID,
 		Topic:           session.Topic,

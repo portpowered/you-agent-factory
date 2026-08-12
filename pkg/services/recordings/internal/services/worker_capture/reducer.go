@@ -109,7 +109,12 @@ const (
 
 // ReduceWorkerRecording is the single deterministic reducer used by live
 // capture and completed replay. It performs no I/O or provider lookup.
-func ReduceWorkerRecording(history WorkerRecordingHistory) (WorkerRecordingProjection, error) {
+// WorkerRecordingCodec exposes the pure Worker history and portable-contract
+// operations without adding package-level operational entry points to the
+// Recordings service root.
+type WorkerRecordingCodec struct{}
+
+func (WorkerRecordingCodec) ReduceWorkerRecording(history WorkerRecordingHistory) (WorkerRecordingProjection, error) {
 	if strings.TrimSpace(history.WorkerSessionID) == "" {
 		return WorkerRecordingProjection{}, fmt.Errorf("%w: Worker Session ID is required", ErrInvalidWorkerRecordingRequest)
 	}
@@ -202,7 +207,7 @@ func reduceWorkerTerminal(projection *WorkerRecordingProjection, record events.R
 
 // ReplayWorkerRecording reduces one durable snapshot and rejects an active
 // or failed prefix so callers cannot mistake incomplete capture for replay.
-func ReplayWorkerRecording(request WorkerRecordingReplayRequest) (WorkerRecordingReplayResult, error) {
+func (codec WorkerRecordingCodec) ReplayWorkerRecording(request WorkerRecordingReplayRequest) (WorkerRecordingReplayResult, error) {
 	if strings.TrimSpace(request.Snapshot.RecordingID) == "" {
 		return WorkerRecordingReplayResult{}, fmt.Errorf("%w: recording identity is required", ErrWorkerRecordingReplay)
 	}
@@ -223,7 +228,7 @@ func ReplayWorkerRecording(request WorkerRecordingReplayRequest) (WorkerRecordin
 		if session.Status == WorkerRecordingStatusFailed {
 			return WorkerRecordingReplayResult{}, fmt.Errorf("%w: durable capture failed", ErrWorkerRecordingIncomplete)
 		}
-		projection, err := ReduceWorkerRecording(WorkerRecordingHistory{
+		projection, err := codec.ReduceWorkerRecording(WorkerRecordingHistory{
 			RecordingID:     request.Snapshot.RecordingID,
 			WorkerSessionID: session.WorkerSessionID,
 			Topic:           session.Topic,

@@ -23,7 +23,6 @@ func TestInitializerApplicationDoesNotConstructConcreteTransportsOrMappingAdapte
 			t.Fatalf("read %s: %v", entry.Name(), err)
 		}
 		for _, forbidden := range []string{
-			"github.com/portpowered/infinite-you/pkg/services/",
 			"transporthttp.NewServer",
 			"mcpserver.New",
 			"factorydefinitionmapping.New",

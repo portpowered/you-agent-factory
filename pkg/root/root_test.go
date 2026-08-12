@@ -106,11 +106,11 @@ func TestWorkerRecordingReaderFromProcessUsesComposedReader(t *testing.T) {
 			return nil
 		}),
 	})
-	if err != nil {
-		t.Fatalf("BuildProcess(write-only writer) error = %v", err)
+	if writeOnlyProcess != nil {
+		t.Fatal("BuildProcess(write-only writer) returned a process")
 	}
-	if reader := WorkerRecordingReaderFromProcess(writeOnlyProcess); reader != nil {
-		t.Fatalf("WorkerRecordingReaderFromProcess(write-only) = %#v, want nil", reader)
+	if !errors.Is(err, recordings.ErrMissingWorkerRecordingReader) {
+		t.Fatalf("BuildProcess(write-only writer) error = %v, want ErrMissingWorkerRecordingReader", err)
 	}
 }
 

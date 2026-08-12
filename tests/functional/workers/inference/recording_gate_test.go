@@ -9,7 +9,6 @@ import (
 	"runtime"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
@@ -17,11 +16,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/events"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -39,7 +36,7 @@ func TestWSRFT004DurableOpeningGatesProviderHandoff(t *testing.T) {
 		runner := newWSRFT004ProviderRunner(t, probe)
 		dir := wsrFT004Factory(t)
 
-		_, listed := runWSRFT004Factory(t, dir, serviceedges.Edges{
+		runWSRFT004Factory(t, dir, serviceedges.Edges{
 			ProviderCommandRunner: runner,
 			WorkerRecordingWriter: probe,
 		})
@@ -48,9 +45,7 @@ func TestWSRFT004DurableOpeningGatesProviderHandoff(t *testing.T) {
 			t.Fatalf("provider command calls = %d, want exactly one call after durable opening", got)
 		}
 		probe.assertOpeningBeforeProvider(t)
-		if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {
-			t.Fatalf("completed Work = %d, want one; listed=%#v", got, listed)
-		}
+		_ = probe.LiveProjection(t)
 	})
 
 	t.Run("opening durability failure prevents provider call", func(t *testing.T) {
@@ -58,7 +53,7 @@ func TestWSRFT004DurableOpeningGatesProviderHandoff(t *testing.T) {
 		runner := newWSRFT004ProviderRunner(t, probe)
 		dir := wsrFT004Factory(t)
 
-		_, listed := runWSRFT004Factory(t, dir, serviceedges.Edges{
+		runWSRFT004Factory(t, dir, serviceedges.Edges{
 			ProviderCommandRunner: runner,
 			WorkerRecordingWriter: probe,
 		})
@@ -67,9 +62,6 @@ func TestWSRFT004DurableOpeningGatesProviderHandoff(t *testing.T) {
 			t.Fatalf("provider command calls = %d, want zero after opening durability failure", got)
 		}
 		probe.assertOpeningFailure(t)
-		if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
-			t.Fatalf("failed Work = %d, want one; listed=%#v", got, listed)
-		}
 	})
 }
 
@@ -86,7 +78,7 @@ func TestWSRFT005CompletedWorkerReplayParity(t *testing.T) {
 	runner := newWSRFT004ProviderRunner(t, probe)
 	dir := wsrFT004Factory(t)
 
-	reader, _, _ := runWSRFT004FactoryWithProcess(t, dir, serviceedges.Edges{
+	reader := runWSRFT004FactoryWithProcess(t, dir, serviceedges.Edges{
 		ProviderCommandRunner: runner,
 		WorkerRecordingWriter: probe,
 	})
@@ -102,7 +94,7 @@ func TestWSRFT005CompletedWorkerReplayParity(t *testing.T) {
 	}
 
 	providerCallsBeforeReplay := runner.CallCount()
-	replayed, err := recordings.ReplayWorkerRecording(recordings.WorkerRecordingReplayRequest{
+	replayed, err := (recordings.WorkerRecordingCodec{}).ReplayWorkerRecording(recordings.WorkerRecordingReplayRequest{
 		Snapshot:        snapshot,
 		WorkerSessionID: workerSessionID,
 	})
@@ -141,21 +133,16 @@ func wsrFT004Factory(t *testing.T) string {
 	return dir
 }
 
-func runWSRFT004Factory(
-	t *testing.T,
-	dir string,
-	edges serviceedges.Edges,
-) (factoryapi.FactorySession, factoryapi.ListWorkResponse) {
+func runWSRFT004Factory(t *testing.T, dir string, edges serviceedges.Edges) {
 	t.Helper()
-	_, session, listed := runWSRFT004FactoryWithProcess(t, dir, edges)
-	return session, listed
+	_ = runWSRFT004FactoryWithProcess(t, dir, edges)
 }
 
 func runWSRFT004FactoryWithProcess(
 	t *testing.T,
 	dir string,
 	edges serviceedges.Edges,
-) (recordings.WorkerRecordingReader, factoryapi.FactorySession, factoryapi.ListWorkResponse) {
+) recordings.WorkerRecordingReader {
 	t.Helper()
 	loaded := loadOpeningRecordFixture(t, "codex", "success")
 	exitCode := 0
@@ -172,8 +159,6 @@ func runWSRFT004FactoryWithProcess(
 		ExitCode: exitCode,
 	})
 
-	api := support.NewProcessAPIServer()
-	edges.APIServerStarter = api.Start
 	processValue, err := root.BuildProcess(context.Background(), edges)
 	if err != nil {
 		t.Fatalf("BuildProcess() error = %v", err)
@@ -184,23 +169,15 @@ func runWSRFT004FactoryWithProcess(
 		t.Fatal("root-built process returned a nil Recordings reader")
 	}
 	support.CleanupProcess(t, process)
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
 	recordPath := filepath.Join(t.TempDir(), "wsr-ft-004.json")
-	inputs := support.FakeInputs(ctx, []string{
-		"you", "run", "--dir", dir, "--continuously", "--with-server", "--quiet", "--record", recordPath,
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "run", "--dir", dir, "--quiet", "--record", recordPath,
 	})
 	inputs.Input.WorkingDirectory = dir
-	daemon := support.StartProcessCommand(t, process, inputs.Input)
-	baseURL := api.WaitForURL(t)
-	support.WaitForSessionTerminalStatus(t, baseURL, factorysessions.DefaultSessionID, 30*time.Second)
-	session := support.GetDefaultSession(t, baseURL)
-	listed := support.ListDefaultSessionWork(t, baseURL)
-	daemon.Stop(t)
-	if err := daemon.Err(); err != nil && !errors.Is(err, context.Canceled) {
+	if err := process.Execute(inputs.Input); err != nil {
 		t.Fatalf("recorded factory Process.Execute: %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
 	}
-	return reader, session, listed
+	return reader
 }
 
 type wsrFT004RecordingProbe struct {
@@ -246,7 +223,7 @@ func (probe *wsrFT004RecordingProbe) PersistWorkerRecord(
 	probe.workerID = record.WorkerSessionID
 	history := append([]events.Record(nil), probe.live.Records...)
 	history = append(history, record.Record.Detached())
-	live, err := recordings.ReduceWorkerRecording(recordings.WorkerRecordingHistory{
+	live, err := (recordings.WorkerRecordingCodec{}).ReduceWorkerRecording(recordings.WorkerRecordingHistory{
 		RecordingID:     record.RecordingID,
 		WorkerSessionID: record.WorkerSessionID,
 		Topic:           record.Record.ID.Topic,

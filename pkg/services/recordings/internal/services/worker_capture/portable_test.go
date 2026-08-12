@@ -11,6 +11,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+var workerRecordingCodec = WorkerRecordingCodec{}
+
 func TestWorkerPortableRecordingRoundTripPreservesFidelityMatrix(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -24,11 +26,11 @@ func TestWorkerPortableRecordingRoundTripPreservesFidelityMatrix(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			snapshot := portableSnapshot(t, test.fidelity, "codex", "codex")
-			portable, err := BuildWorkerPortableRecording(snapshot)
+			portable, err := workerRecordingCodec.BuildWorkerPortableRecording(snapshot)
 			if err != nil {
 				t.Fatalf("BuildWorkerPortableRecording() error = %v", err)
 			}
-			if err := ValidateWorkerPortableRecording(portable); err != nil {
+			if err := workerRecordingCodec.ValidateWorkerPortableRecording(portable); err != nil {
 				t.Fatalf("ValidateWorkerPortableRecording() error = %v", err)
 			}
 			if portable.Provider.Provider != "codex" || portable.Provider.ProviderSessionRef != "" {
@@ -38,11 +40,11 @@ func TestWorkerPortableRecordingRoundTripPreservesFidelityMatrix(t *testing.T) {
 				t.Fatalf("portable record count/terminal = %d/%#v", len(portable.Records), portable.Lifecycle.Terminal)
 			}
 
-			encoded, err := EncodeWorkerPortableRecording(portable)
+			encoded, err := workerRecordingCodec.EncodeWorkerPortableRecording(portable)
 			if err != nil {
 				t.Fatalf("EncodeWorkerPortableRecording() error = %v", err)
 			}
-			decoded, err := DecodeWorkerPortableRecording(encoded)
+			decoded, err := workerRecordingCodec.DecodeWorkerPortableRecording(encoded)
 			if err != nil {
 				t.Fatalf("DecodeWorkerPortableRecording() error = %v", err)
 			}
@@ -50,11 +52,11 @@ func TestWorkerPortableRecordingRoundTripPreservesFidelityMatrix(t *testing.T) {
 				t.Fatalf("decoded portable recording differs from exported value:\nwant=%#v\ngot=%#v", portable, decoded)
 			}
 
-			replayed, err := ReplayWorkerPortableRecording(decoded)
+			replayed, err := workerRecordingCodec.ReplayWorkerPortableRecording(decoded)
 			if err != nil {
 				t.Fatalf("ReplayWorkerPortableRecording() error = %v", err)
 			}
-			live, err := ReduceWorkerRecording(WorkerRecordingHistory{
+			live, err := workerRecordingCodec.ReduceWorkerRecording(WorkerRecordingHistory{
 				RecordingID:     snapshot.RecordingID,
 				WorkerSessionID: snapshot.Sessions[0].WorkerSessionID,
 				Topic:           snapshot.Sessions[0].Topic,
@@ -72,14 +74,14 @@ func TestWorkerPortableRecordingRoundTripPreservesFidelityMatrix(t *testing.T) {
 }
 
 func TestWorkerPortableRecordingRejectsOrderingFidelityIntegrityAndUnknownFields(t *testing.T) {
-	portable, err := BuildWorkerPortableRecording(portableSnapshot(t, "snapshot", "codex", "codex"))
+	portable, err := workerRecordingCodec.BuildWorkerPortableRecording(portableSnapshot(t, "snapshot", "codex", "codex"))
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	ordering := cloneWorkerPortableRecording(portable)
 	ordering.Records[1].Position = 3
-	if err := ValidateWorkerPortableRecording(ordering); !errors.Is(err, ErrWorkerPortableRecordingOrder) {
+	if err := workerRecordingCodec.ValidateWorkerPortableRecording(ordering); !errors.Is(err, ErrWorkerPortableRecordingOrder) {
 		t.Fatalf("ordering validation error = %v, want order classification", err)
 	}
 
@@ -91,7 +93,7 @@ func TestWorkerPortableRecordingRejectsOrderingFidelityIntegrityAndUnknownFields
 	fidelityDraft.Provenance.Fidelity = workers.FidelityFinalOnly
 	fidelity.Records[1].Payload, _ = json.Marshal(fidelityDraft)
 	fidelity.Records[1].Provenance = fidelityDraft.Provenance
-	if err := ValidateWorkerPortableRecording(fidelity); !errors.Is(err, ErrWorkerPortableRecordingFidelity) {
+	if err := workerRecordingCodec.ValidateWorkerPortableRecording(fidelity); !errors.Is(err, ErrWorkerPortableRecordingFidelity) {
 		t.Fatalf("overstated fidelity error = %v, want fidelity classification", err)
 	}
 
@@ -107,11 +109,11 @@ func TestWorkerPortableRecordingRejectsOrderingFidelityIntegrityAndUnknownFields
 	message.ContentBlocks[0].Text = "tampered"
 	changedDraft.Payload, _ = json.Marshal(message)
 	integrity.Records[1].Payload, _ = json.Marshal(changedDraft)
-	if err := ValidateWorkerPortableRecording(integrity); !errors.Is(err, ErrWorkerPortableRecordingIntegrity) {
+	if err := workerRecordingCodec.ValidateWorkerPortableRecording(integrity); !errors.Is(err, ErrWorkerPortableRecordingIntegrity) {
 		t.Fatalf("integrity validation error = %v, want integrity classification", err)
 	}
 
-	encoded, err := EncodeWorkerPortableRecording(portable)
+	encoded, err := workerRecordingCodec.EncodeWorkerPortableRecording(portable)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,13 +126,13 @@ func TestWorkerPortableRecordingRejectsOrderingFidelityIntegrityAndUnknownFields
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := DecodeWorkerPortableRecording(unknown); !errors.Is(err, ErrWorkerPortableRecording) {
+	if _, err := workerRecordingCodec.DecodeWorkerPortableRecording(unknown); !errors.Is(err, ErrWorkerPortableRecording) {
 		t.Fatalf("unknown field error = %v, want malformed portable recording", err)
 	}
 }
 
 func TestWorkerPortableRecordingRejectsProviderOutputBeforeBinding(t *testing.T) {
-	_, err := BuildWorkerPortableRecording(portableSnapshot(t, "snapshot", "", "codex"))
+	_, err := workerRecordingCodec.BuildWorkerPortableRecording(portableSnapshot(t, "snapshot", "", "codex"))
 	if !errors.Is(err, ErrWorkerPortableRecordingProvenance) {
 		t.Fatalf("provider-before-binding error = %v, want provenance classification", err)
 	}
@@ -143,10 +145,10 @@ func TestBuildWorkerPortableRecordingSelectsOneSessionFromMultiSessionSnapshot(t
 	combined := first
 	combined.Sessions = append([]WorkerSessionRecordingSnapshot(nil), first.Sessions[0], second)
 
-	if _, err := BuildWorkerPortableRecording(combined); !errors.Is(err, ErrWorkerPortableRecordingIdentity) {
+	if _, err := workerRecordingCodec.BuildWorkerPortableRecording(combined); !errors.Is(err, ErrWorkerPortableRecordingIdentity) {
 		t.Fatalf("multi-session export without selector = %v, want identity diagnostic", err)
 	}
-	portable, err := BuildWorkerPortableRecording(combined, first.Sessions[0].WorkerSessionID)
+	portable, err := workerRecordingCodec.BuildWorkerPortableRecording(combined, first.Sessions[0].WorkerSessionID)
 	if err != nil {
 		t.Fatalf("multi-session export with selector error = %v", err)
 	}

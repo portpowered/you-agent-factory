@@ -27,7 +27,7 @@ func TestWorkerCaptureLiveProjectionEqualsCompletedReplay(t *testing.T) {
 		t.Fatalf("WorkerRecordingProjection() error = %v", err)
 	}
 	snapshot := loadWorkerRecording(t, recordingRoot, request.RecordingID)
-	replayed, err := recordings.ReplayWorkerRecording(recordings.WorkerRecordingReplayRequest{Snapshot: snapshot})
+	replayed, err := (recordings.WorkerRecordingCodec{}).ReplayWorkerRecording(recordings.WorkerRecordingReplayRequest{Snapshot: snapshot})
 	if err != nil {
 		t.Fatalf("ReplayWorkerRecording() error = %v", err)
 	}
@@ -179,7 +179,7 @@ func TestWorkerCaptureCloseRejectsProviderCompletionWithoutTerminal(t *testing.T
 	if len(snapshot.Sessions) != 1 || snapshot.Sessions[0].Status != recordings.WorkerRecordingStatusFailed {
 		t.Fatalf("failed snapshot = %#v, want one FAILED Worker Session", snapshot)
 	}
-	if _, err := recordings.ReplayWorkerRecording(recordings.WorkerRecordingReplayRequest{Snapshot: snapshot}); !errors.Is(err, recordings.ErrWorkerRecordingIncomplete) {
+	if _, err := (recordings.WorkerRecordingCodec{}).ReplayWorkerRecording(recordings.WorkerRecordingReplayRequest{Snapshot: snapshot}); !errors.Is(err, recordings.ErrWorkerRecordingIncomplete) {
 		t.Fatalf("ReplayWorkerRecording(failed) error = %v, want ErrWorkerRecordingIncomplete", err)
 	}
 }
@@ -307,7 +307,7 @@ func TestReplayWorkerRecordingRejectsIncompleteOrSkippedHistory(t *testing.T) {
 			Records:         []events.Record{opening, terminal},
 		}},
 	}
-	if _, err := recordings.ReplayWorkerRecording(recordings.WorkerRecordingReplayRequest{Snapshot: snapshot}); err != nil {
+	if _, err := (recordings.WorkerRecordingCodec{}).ReplayWorkerRecording(recordings.WorkerRecordingReplayRequest{Snapshot: snapshot}); err != nil {
 		t.Fatalf("ReplayWorkerRecording(valid history) error = %v", err)
 	}
 	incomplete := snapshot
@@ -316,7 +316,7 @@ func TestReplayWorkerRecordingRejectsIncompleteOrSkippedHistory(t *testing.T) {
 		Topic:           topic,
 		Records:         []events.Record{opening},
 	}}
-	if _, err := recordings.ReplayWorkerRecording(recordings.WorkerRecordingReplayRequest{Snapshot: incomplete}); !errors.Is(err, recordings.ErrWorkerRecordingIncomplete) {
+	if _, err := (recordings.WorkerRecordingCodec{}).ReplayWorkerRecording(recordings.WorkerRecordingReplayRequest{Snapshot: incomplete}); !errors.Is(err, recordings.ErrWorkerRecordingIncomplete) {
 		t.Fatalf("ReplayWorkerRecording(incomplete) error = %v, want ErrWorkerRecordingIncomplete", err)
 	}
 	skipped := snapshot
@@ -329,7 +329,7 @@ func TestReplayWorkerRecordingRejectsIncompleteOrSkippedHistory(t *testing.T) {
 			return record
 		}()},
 	}}
-	if _, err := recordings.ReplayWorkerRecording(recordings.WorkerRecordingReplayRequest{Snapshot: skipped}); !errors.Is(err, recordings.ErrWorkerRecordingOrder) {
+	if _, err := (recordings.WorkerRecordingCodec{}).ReplayWorkerRecording(recordings.WorkerRecordingReplayRequest{Snapshot: skipped}); !errors.Is(err, recordings.ErrWorkerRecordingOrder) {
 		t.Fatalf("ReplayWorkerRecording(skipped) error = %v, want ErrWorkerRecordingOrder", err)
 	}
 }

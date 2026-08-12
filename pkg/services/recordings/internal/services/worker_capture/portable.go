@@ -195,7 +195,7 @@ var (
 // snapshot with multiple Worker Sessions requires the selected Worker Session
 // ID so the portable identity and reducer input remain unambiguous. The
 // optional argument preserves the single-session convenience form.
-func BuildWorkerPortableRecording(snapshot WorkerRecordingSnapshot, workerSessionIDs ...string) (WorkerPortableRecording, error) {
+func (codec WorkerRecordingCodec) BuildWorkerPortableRecording(snapshot WorkerRecordingSnapshot, workerSessionIDs ...string) (WorkerPortableRecording, error) {
 	if strings.TrimSpace(snapshot.RecordingID) == "" {
 		return WorkerPortableRecording{}, portableDiagnostic(
 			WorkerPortableCodeInvalidIdentity, "identity.recordingId", "recording identity is required", ErrWorkerPortableRecordingIdentity,
@@ -210,7 +210,7 @@ func BuildWorkerPortableRecording(snapshot WorkerRecordingSnapshot, workerSessio
 			WorkerPortableCodeInvalidLifecycle, "lifecycle.status", "failed capture is not portable replay", ErrWorkerPortableRecordingLifecycle,
 		)
 	}
-	projection, err := ReduceWorkerRecording(WorkerRecordingHistory{
+	projection, err := codec.ReduceWorkerRecording(WorkerRecordingHistory{
 		RecordingID:     snapshot.RecordingID,
 		WorkerSessionID: session.WorkerSessionID,
 		Topic:           session.Topic,
@@ -288,7 +288,7 @@ func BuildWorkerPortableRecording(snapshot WorkerRecordingSnapshot, workerSessio
 		)
 	}
 	value.Integrity.Digest = digest
-	if err := ValidateWorkerPortableRecording(value); err != nil {
+	if err := codec.ValidateWorkerPortableRecording(value); err != nil {
 		return WorkerPortableRecording{}, err
 	}
 	return cloneWorkerPortableRecording(value), nil
@@ -296,8 +296,8 @@ func BuildWorkerPortableRecording(snapshot WorkerRecordingSnapshot, workerSessio
 
 // ExportWorkerPortableRecording is the descriptive alias used by callers
 // that treat a completed snapshot as an export source.
-func ExportWorkerPortableRecording(snapshot WorkerRecordingSnapshot, workerSessionIDs ...string) (WorkerPortableRecording, error) {
-	return BuildWorkerPortableRecording(snapshot, workerSessionIDs...)
+func (codec WorkerRecordingCodec) ExportWorkerPortableRecording(snapshot WorkerRecordingSnapshot, workerSessionIDs ...string) (WorkerPortableRecording, error) {
+	return codec.BuildWorkerPortableRecording(snapshot, workerSessionIDs...)
 }
 
 func selectedWorkerSession(snapshot WorkerRecordingSnapshot, workerSessionIDs ...string) (WorkerSessionRecordingSnapshot, error) {
@@ -342,14 +342,14 @@ func selectedWorkerSession(snapshot WorkerRecordingSnapshot, workerSessionIDs ..
 
 // ValidateWorkerPortableRecording validates compatibility, detached identity,
 // exact source order, reducer parity, provenance, fidelity, and integrity.
-func ValidateWorkerPortableRecording(recording WorkerPortableRecording) error {
+func (WorkerRecordingCodec) ValidateWorkerPortableRecording(recording WorkerPortableRecording) error {
 	return validateWorkerPortableRecording(recording, true)
 }
 
 // EncodeWorkerPortableRecording validates and encodes exactly one portable
 // Worker recording document.
-func EncodeWorkerPortableRecording(recording WorkerPortableRecording) ([]byte, error) {
-	if err := ValidateWorkerPortableRecording(recording); err != nil {
+func (codec WorkerRecordingCodec) EncodeWorkerPortableRecording(recording WorkerPortableRecording) ([]byte, error) {
+	if err := codec.ValidateWorkerPortableRecording(recording); err != nil {
 		return nil, err
 	}
 	payload, err := json.Marshal(recording)
@@ -364,7 +364,7 @@ func EncodeWorkerPortableRecording(recording WorkerPortableRecording) ([]byte, e
 // DecodeWorkerPortableRecording strictly decodes and validates exactly one
 // portable Worker recording. Unknown envelope fields and trailing JSON are
 // rejected before any replay projection is returned.
-func DecodeWorkerPortableRecording(payload []byte) (WorkerPortableRecording, error) {
+func (codec WorkerRecordingCodec) DecodeWorkerPortableRecording(payload []byte) (WorkerPortableRecording, error) {
 	decoder := json.NewDecoder(bytes.NewReader(payload))
 	decoder.DisallowUnknownFields()
 	var recording WorkerPortableRecording
@@ -379,7 +379,7 @@ func DecodeWorkerPortableRecording(payload []byte) (WorkerPortableRecording, err
 			WorkerPortableCodeMalformedContract, "document", "portable recording must contain exactly one JSON document", ErrWorkerPortableRecording,
 		)
 	}
-	if err := ValidateWorkerPortableRecording(recording); err != nil {
+	if err := codec.ValidateWorkerPortableRecording(recording); err != nil {
 		return WorkerPortableRecording{}, err
 	}
 	return cloneWorkerPortableRecording(recording), nil
@@ -388,15 +388,15 @@ func DecodeWorkerPortableRecording(payload []byte) (WorkerPortableRecording, err
 // ReplayWorkerPortableRecording validates and reduces portable records using
 // the same reducer used during live capture. No provider, Worker, clock,
 // transcript, process, or network capability is accepted by this API.
-func ReplayWorkerPortableRecording(recording WorkerPortableRecording) (WorkerRecordingReplayResult, error) {
-	if err := ValidateWorkerPortableRecording(recording); err != nil {
+func (codec WorkerRecordingCodec) ReplayWorkerPortableRecording(recording WorkerPortableRecording) (WorkerRecordingReplayResult, error) {
+	if err := codec.ValidateWorkerPortableRecording(recording); err != nil {
 		return WorkerRecordingReplayResult{}, err
 	}
 	records, err := canonicalRecords(recording)
 	if err != nil {
 		return WorkerRecordingReplayResult{}, err
 	}
-	return ReplayWorkerRecording(WorkerRecordingReplayRequest{
+	return codec.ReplayWorkerRecording(WorkerRecordingReplayRequest{
 		Snapshot: WorkerRecordingSnapshot{
 			RecordingID: recording.Identity.RecordingID,
 			Sessions: []WorkerSessionRecordingSnapshot{{
@@ -456,7 +456,7 @@ func reducePortableHistory(recording WorkerPortableRecording) ([]workers.Draft, 
 	if err != nil {
 		return nil, WorkerRecordingProjection{}, err
 	}
-	projection, err := ReduceWorkerRecording(WorkerRecordingHistory{
+	projection, err := (WorkerRecordingCodec{}).ReduceWorkerRecording(WorkerRecordingHistory{
 		RecordingID: recording.Identity.RecordingID, WorkerSessionID: recording.Identity.WorkerSessionID,
 		Topic: recording.Identity.Topic, Records: records,
 	})

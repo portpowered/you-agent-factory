@@ -1249,11 +1249,6 @@
     },
     {
       "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/recordings/root_composition/packaged_root_shape_test.go",
-      "target": "recordings"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
       "filePath": "tests/functional/recordings/root_composition/portable_replay_execution_test.go",
       "target": "recordings"
     },
@@ -2445,7 +2440,7 @@
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/recordings",
-      "target": "pkg/services/recordings/contracts.go:Service,pkg/services/recordings/lifecycle_capability.go:RecordingLifecycle,pkg/services/recordings/replay_artifact_capability.go:RecordingReplayArtifacts,pkg/services/recordings/replay_artifact_capability.go:ReplayInputLoader,pkg/services/recordings/runtime_recording_binder.go:RuntimeRecordingBinder,pkg/services/recordings/worker_capture.go:WorkerRecordingFailureWriter,pkg/services/recordings/worker_capture.go:WorkerRecordingProjectionReader,pkg/services/recordings/worker_capture.go:WorkerRecordingReader,pkg/services/recordings/worker_capture.go:WorkerRecordingWriter,pkg/services/recordings/worker_capture.go:WorkerSessionRecording,pkg/services/recordings/worker_capture.go:WorkerSessionRecordingService"
+      "target": "pkg/services/recordings/contracts.go:Service,pkg/services/recordings/lifecycle_capability.go:RecordingLifecycle,pkg/services/recordings/replay_artifact_capability.go:RecordingReplayArtifacts,pkg/services/recordings/replay_artifact_capability.go:ReplayInputLoader,pkg/services/recordings/runtime_recording_binder.go:RuntimeRecordingBinder"
     },
     {
       "rule": "service-root-interface-count",
@@ -2866,86 +2861,6 @@
       "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/workers/internal/services/workstations/worktree",
       "target": "pkg/services/workers/internal/services/workstations"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/recordings/internal/services/worker_capture/portable.go",
-      "target": "BuildWorkerPortableRecording"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/recordings/internal/services/worker_capture/portable.go",
-      "target": "DecodeWorkerPortableRecording"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/recordings/internal/services/worker_capture/portable.go",
-      "target": "EncodeWorkerPortableRecording"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/recordings/internal/services/worker_capture/portable.go",
-      "target": "ExportWorkerPortableRecording"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/recordings/internal/services/worker_capture/portable.go",
-      "target": "ReplayWorkerPortableRecording"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/recordings/internal/services/worker_capture/portable.go",
-      "target": "ValidateWorkerPortableRecording"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/recordings/internal/services/worker_capture/reducer.go",
-      "target": "ReduceWorkerRecording"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/recordings/internal/services/worker_capture/reducer.go",
-      "target": "ReplayWorkerRecording"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/recordings/worker_capture.go",
-      "target": "BuildWorkerPortableRecording"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/recordings/worker_capture.go",
-      "target": "DecodeWorkerPortableRecording"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/recordings/worker_capture.go",
-      "target": "EncodeWorkerPortableRecording"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/recordings/worker_capture.go",
-      "target": "ExportWorkerPortableRecording"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/recordings/worker_capture.go",
-      "target": "ReduceWorkerRecording"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/recordings/worker_capture.go",
-      "target": "ReplayWorkerPortableRecording"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/recordings/worker_capture.go",
-      "target": "ReplayWorkerRecording"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/recordings/worker_capture.go",
-      "target": "ValidateWorkerPortableRecording"
     },
     {
       "rule": "service-root-interface-count",

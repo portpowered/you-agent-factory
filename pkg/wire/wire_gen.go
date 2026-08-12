@@ -658,8 +658,11 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	applicationWorkerRecordingReaderCapability := provideWorkerRecordingReaderCapability(workerRecordingWriter)
-	process, err := application.NewProcess(commandFactory, initializer, providerRegistry, processLifecycle, server, applicationWorkerRecordingReaderCapability)
+	workerRecordingReader, err := provideWorkerRecordingReader(workerRecordingWriter)
+	if err != nil {
+		return nil, err
+	}
+	process, err := application.NewProcess(commandFactory, initializer, providerRegistry, processLifecycle, server, workerRecordingReader)
 	if err != nil {
 		return nil, err
 	}
@@ -677,7 +680,7 @@ var servicesSet = wire4.NewSet(
 	provideEventsService,
 	provideWorkerRecordingWriter,
 	provideWorkerSessionRecorder,
-	provideWorkerRecordingReaderCapability,
+	provideWorkerRecordingReader,
 	provideWorkerSessionsFactoryWithRecorder,
 	provideApplicationProcessLifecycle,
 	provideProviderRegistry,

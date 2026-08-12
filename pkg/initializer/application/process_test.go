@@ -10,6 +10,7 @@ import (
 	"time"
 
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/spf13/cobra"
 )
 
@@ -268,14 +269,14 @@ func TestProcessExposesACPServer(t *testing.T) {
 	}
 }
 
-func TestProcessExposesWorkerRecordingReaderCapability(t *testing.T) {
+func TestProcessExposesWorkerRecordingReader(t *testing.T) {
 	t.Parallel()
 
 	if capability := (*Process)(nil).WorkerRecordingReader(); capability != nil {
 		t.Fatalf("nil Process.WorkerRecordingReader() = %#v, want nil", capability)
 	}
 
-	want := processTestWorkerRecordingReaderCapability{}
+	want := processTestWorkerRecordingReader{}
 	process, err := NewProcess(nil, nil, processTestProviderRegistry{}, processTestLifecycle{}, nil, want)
 	if err != nil {
 		t.Fatalf("NewProcess() error = %v", err)
@@ -308,9 +309,11 @@ func (processTestLifecycle) Close(context.Context) error { return nil }
 
 type processTestACPServer struct{}
 
-type processTestWorkerRecordingReaderCapability struct{}
+type processTestWorkerRecordingReader struct{}
 
-func (processTestWorkerRecordingReaderCapability) Value() any { return "reader" }
+func (processTestWorkerRecordingReader) LoadWorkerRecording(context.Context, string) (recordings.WorkerRecordingSnapshot, error) {
+	return recordings.WorkerRecordingSnapshot{}, nil
+}
 
 func (processTestACPServer) Serve(context.Context, io.Reader, io.Writer) error { return nil }
 
