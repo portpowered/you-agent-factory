@@ -126,7 +126,11 @@ func TestPackagedACPIdentitiesAndLegacyAliasesResolveToTheirCanonicalIDs(t *test
 			}
 			wantCapabilities := []providers.Capability{providers.CapabilityPromptSubmission}
 			if test.canonical == "cursor-acp" {
-				wantCapabilities = append(wantCapabilities, providers.CapabilityImageInput)
+				wantCapabilities = append(
+					wantCapabilities,
+					providers.CapabilityImageInput,
+					providers.CapabilityPermissionBypass,
+				)
 			}
 			if !reflect.DeepEqual(canonical.Provider.Capabilities, wantCapabilities) {
 				t.Fatalf("GetProvider(%q) capabilities = %v, want %v", test.canonical, canonical.Provider.Capabilities, wantCapabilities)
