@@ -36,7 +36,11 @@ func (s *Server) SetFactorySessionResourceCapacity(
 		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
 		return
 	}
-	request, err := factorysession.ResourceCapacityRequestFromAPI(string(resourceID), requestBody)
+	source := factorysession.ResourceCapacitySourceAPI
+	if strings.EqualFold(strings.TrimSpace(r.Header.Get("X-You-Source")), factorysession.ResourceCapacitySourceCLI) {
+		source = factorysession.ResourceCapacitySourceCLI
+	}
+	request, err := factorysession.ResourceCapacityRequestFromAPIWithSource(string(resourceID), requestBody, source)
 	if err != nil {
 		s.writeError(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST")
 		return
@@ -79,11 +83,10 @@ func (s *Server) writeLiveChangeError(w http.ResponseWriter, sessionID string, e
 		status, code = http.StatusConflict, string(factoryapi.ErrorResponseCodeLIFECYCLECONFLICT)
 	case factorysessions.LiveChangeErrorCapacityInUse:
 		status, code = http.StatusConflict, string(factoryapi.ErrorResponseCodeRESOURCECAPACITYINUSE)
+	case factorysessions.LiveChangeErrorRequestConflict:
+		status, code = http.StatusConflict, string(factoryapi.ErrorResponseCodeREQUESTCONFLICT)
 	case factorysessions.LiveChangeErrorApplicationFailed:
 		status, code = http.StatusInternalServerError, string(factoryapi.ErrorResponseCodeADMITTEDAPPLICATIONFAILURE)
-	case factorysessions.LiveChangeErrorNoOp,
-		factorysessions.LiveChangeErrorRequestConflict:
-		status, code = http.StatusConflict, string(factoryapi.ErrorResponseCodeBADREQUEST)
 	}
 	message := strings.TrimSpace(liveChangeErr.Error())
 	if message == "" {

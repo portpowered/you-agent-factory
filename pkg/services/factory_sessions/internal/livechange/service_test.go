@@ -171,7 +171,7 @@ func assertLiveChangeRequestPayload(t *testing.T, event interfaces.FactoryEvent)
 	if err := event.DecodePayload(&payload); err != nil {
 		t.Fatalf("decode request payload: %v", err)
 	}
-	if payload.ChangeID != "live-change/request-1" || payload.Operation != "resource.capacity.set" || payload.Reason != "raise throughput" {
+	if payload.ChangeID != "live-change/request-1" || payload.Operation != "resource.capacity.set" || payload.Reason != "raise throughput" || payload.Actor != "operator" || payload.Source != "api" {
 		t.Fatalf("normalized request payload = %#v", payload)
 	}
 }
@@ -244,7 +244,6 @@ func TestApplyLiveChange_PreAdmissionRejectionsDoNotAppend(t *testing.T) {
 	}{
 		{name: "stale revision", request: testRequest("1"), lifecycle: factorysessions.LiveChangeLifecycleRunning, want: factorysessions.ErrLiveChangeRevisionConflict},
 		{name: "terminal lifecycle", request: testRequest("1"), lifecycle: factorysessions.LiveChangeLifecycleCompleted, want: factorysessions.ErrLiveChangeLifecycleConflict},
-		{name: "exact no-op", request: testRequest("1"), lifecycle: factorysessions.LiveChangeLifecycleRunning, preflight: factorysessions.LiveChangePreflightResult{NoOp: true}, want: factorysessions.ErrLiveChangeNoOp},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -264,6 +263,102 @@ func TestApplyLiveChange_PreAdmissionRejectionsDoNotAppend(t *testing.T) {
 				t.Fatalf("pre-admission rejection mutated events=%d applicationCalls=%d", len(log.events), app.applyCalls)
 			}
 		})
+	}
+}
+
+func TestApplyLiveChange_ExactNoOpReturnsTypedSuccessWithoutHistory(t *testing.T) {
+	state := testState(t, factorysessions.LiveChangeLifecycleRunning)
+	app := &application{
+		preflight: factorysessions.LiveChangePreflightResult{
+			Admissible: true, NoOp: true, Factory: state.Factory,
+			ResourceCapacity: &factoryruntime.ResourceCapacityResult{
+				ResourceID: "reviewers", PreviousCapacity: 1, RequestedCapacity: 1,
+				EffectiveCapacity: 1, InUseCount: 0, AvailableCount: 1, MinimumCapacity: 0,
+				Outcome: factoryruntime.ResourceCapacityOutcomeNoOp, Factory: state.Factory,
+			},
+		},
+	}
+	log := &eventLog{}
+	result, err := New(nil, nil).Apply(context.Background(), "session-1", testRequest("1"), func(context.Context, string) (factorysessions.LiveChangeSessionState, error) {
+		return state, nil
+	}, log, app)
+	if err != nil || result.Outcome != factorysessions.LiveChangeOutcomeNoOp || result.PreviousRevision != 2 || result.NewRevision != 2 || len(log.events) != 0 || app.applyCalls != 0 {
+		t.Fatalf("no-op result=%#v error=%v events=%d applyCalls=%d, want typed no-op without mutation", result, err, len(log.events), app.applyCalls)
+	}
+}
+
+func TestApplyLiveChange_SequentialSnapshotsRemainCompleteOnReplay(t *testing.T) {
+	firstSnapshot := testFactorySnapshotWithCapacities(t, map[string]int{"reviewers": 4, "approvers": 2})
+	secondSnapshot := testFactorySnapshotWithCapacities(t, map[string]int{"reviewers": 4, "approvers": 8})
+	app := &application{
+		preflight:   factorysessions.LiveChangePreflightResult{Admissible: true},
+		applyResult: factorysessions.LiveChangeApplicationResult{Factory: firstSnapshot},
+	}
+	log := &eventLog{}
+	service := New(nil, nil)
+	first := testRequest("4")
+	first.RequestID = "request-reviewers"
+	result, err := service.Apply(context.Background(), "session-1", first, func(context.Context, string) (factorysessions.LiveChangeSessionState, error) {
+		return testState(t, factorysessions.LiveChangeLifecycleRunning), nil
+	}, log, app)
+	if err != nil || result.Outcome != factorysessions.LiveChangeOutcomeApplied {
+		t.Fatalf("first change = %#v, error=%v", result, err)
+	}
+
+	app.applyResult.Factory = secondSnapshot
+	second := testRequest("8")
+	second.RequestID = "request-approvers"
+	second.TargetID = "approvers"
+	second.ExpectedRevision = 3
+	result, err = service.Apply(context.Background(), "session-1", second, func(_ context.Context, _ string) (factorysessions.LiveChangeSessionState, error) {
+		state := ProjectState("session-1", log.LiveChangeEvents())
+		state.Lifecycle = factorysessions.LiveChangeLifecycleRunning
+		return state, nil
+	}, log, app)
+	if err != nil || result.Outcome != factorysessions.LiveChangeOutcomeApplied {
+		t.Fatalf("second change = %#v, error=%v", result, err)
+	}
+	assertFactorySnapshotCapacities(t, result.Factory, map[string]int{"reviewers": 4, "approvers": 8})
+
+	replayed, err := service.Apply(context.Background(), "session-1", second, func(_ context.Context, _ string) (factorysessions.LiveChangeSessionState, error) {
+		state := ProjectState("session-1", log.LiveChangeEvents())
+		state.Lifecycle = factorysessions.LiveChangeLifecycleCompleted
+		return state, nil
+	}, log, app)
+	if err != nil || replayed.Outcome != factorysessions.LiveChangeOutcomeReplayed || app.applyCalls != 2 || len(log.events) != 4 {
+		t.Fatalf("replayed second change = %#v, error=%v events=%d applyCalls=%d", replayed, err, len(log.events), app.applyCalls)
+	}
+	assertFactorySnapshotCapacities(t, replayed.Factory, map[string]int{"reviewers": 4, "approvers": 8})
+}
+
+func testFactorySnapshotWithCapacities(t *testing.T, capacities map[string]int) *interfaces.FactorySnapshot {
+	t.Helper()
+	resources := make([]interfaces.ResourceConfig, 0, len(capacities))
+	for resourceID, capacity := range capacities {
+		resources = append(resources, interfaces.ResourceConfig{ID: resourceID, Capacity: capacity})
+	}
+	snapshot, err := interfaces.NewFactorySnapshot(interfaces.FactoryConfig{Name: "factory", Resources: resources})
+	if err != nil {
+		t.Fatalf("create Factory snapshot: %v", err)
+	}
+	return snapshot
+}
+
+func assertFactorySnapshotCapacities(t *testing.T, snapshot *interfaces.FactorySnapshot, want map[string]int) {
+	t.Helper()
+	if snapshot == nil {
+		t.Fatal("Factory snapshot is nil")
+	}
+	var config interfaces.FactoryConfig
+	if err := snapshot.Decode(&config); err != nil {
+		t.Fatalf("decode Factory snapshot: %v", err)
+	}
+	got := make(map[string]int, len(config.Resources))
+	for _, resource := range config.Resources {
+		got[resource.ID] = resource.Capacity
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Factory snapshot capacities = %#v, want %#v", got, want)
 	}
 }
 

@@ -173,6 +173,30 @@ func TestResourceCapacityRuntimeOrphanMutationAndLease(t *testing.T) {
 	lease.Release()
 }
 
+func TestResourceCapacityRuntimeSnapshotsRetainEarlierCapacityChanges(t *testing.T) {
+	harness := newResourceCapacityRuntimeHarness(t)
+	ctx := context.Background()
+	if _, err := harness.capacity.SetResourceCapacity(ctx, factoryruntime.ResourceCapacityRequest{
+		ResourceID: "gpu-slot", RequestedCapacity: 4,
+	}); err != nil {
+		t.Fatalf("SetResourceCapacity gpu-slot: %v", err)
+	}
+	second, err := harness.capacity.SetResourceCapacity(ctx, factoryruntime.ResourceCapacityRequest{
+		ResourceID: "orphan", RequestedCapacity: 2,
+	})
+	if err != nil {
+		t.Fatalf("SetResourceCapacity orphan: %v", err)
+	}
+	config := decodeResourceCapacityFactorySnapshot(t, second)
+	capacities := make(map[string]int, len(config.Resources))
+	for _, resource := range config.Resources {
+		capacities[resource.ID] = resource.Capacity
+	}
+	if capacities["gpu-slot"] != 4 || capacities["orphan"] != 2 {
+		t.Fatalf("effective capacities = %#v, want gpu-slot=4 and orphan=2", capacities)
+	}
+}
+
 func assertResourceCapacityFactorySnapshot(t *testing.T, result factoryruntime.ResourceCapacityResult, capacity, resourceCount int) {
 	t.Helper()
 	if result.Outcome == "" {

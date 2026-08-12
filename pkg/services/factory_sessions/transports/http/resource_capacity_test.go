@@ -89,3 +89,86 @@ func TestSetFactorySessionResourceCapacityMapsCapacityConflict(t *testing.T) {
 		t.Fatalf("capacity error details = %#v", response.ResourceCapacity)
 	}
 }
+
+func TestSetFactorySessionResourceCapacityMapsNoOpAndAPIAttribution(t *testing.T) {
+	root := &httpSessionsRootFake{
+		onApplyLiveChange: func(_ context.Context, sessionID string, request factorysessions.LiveChangeRequest) (factorysessions.LiveChangeResult, error) {
+			if sessionID != "session-beta" || request.Actor != "operator" || request.Source != "api" {
+				t.Fatalf("request attribution = %#v, want operator/api", request)
+			}
+			return factorysessions.LiveChangeResult{
+				SessionID: sessionID, RequestID: request.RequestID, ChangeID: request.ChangeID,
+				Outcome: factorysessions.LiveChangeOutcomeNoOp, PreviousRevision: 2, NewRevision: 2,
+				ResourceCapacity: &factoryruntime.ResourceCapacityResult{
+					ResourceID: "reviewers", PreviousCapacity: 2, RequestedCapacity: 2,
+					EffectiveCapacity: 2, AvailableCount: 2, Outcome: factoryruntime.ResourceCapacityOutcomeNoOp,
+				},
+			}, nil
+		},
+	}
+	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/factory-sessions/session-beta/resources/reviewers/capacity", strings.NewReader(`{"requestId":"noop-1","expectedRevision":2,"capacity":2}`))
+	request.Header.Set("Content-Type", "application/json")
+	handler.SetFactorySessionResourceCapacity(recorder, request, "session-beta", "reviewers")
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	var response factoryapi.FactorySessionResourceCapacityResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response.Outcome != factoryapi.FactorySessionResourceCapacityOutcomeNOOP || response.Revision != 2 {
+		t.Fatalf("response = %#v, want NO_OP at unchanged revision", response)
+	}
+}
+
+func TestSetFactorySessionResourceCapacityMapsRequestConflict(t *testing.T) {
+	root := &httpSessionsRootFake{
+		onApplyLiveChange: func(context.Context, string, factorysessions.LiveChangeRequest) (factorysessions.LiveChangeResult, error) {
+			return factorysessions.LiveChangeResult{}, &factorysessions.LiveChangeError{Code: factorysessions.LiveChangeErrorRequestConflict, Message: "request conflict"}
+		},
+	}
+	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/factory-sessions/session-beta/resources/reviewers/capacity", strings.NewReader(`{"requestId":"conflict-1","expectedRevision":2,"capacity":2}`))
+	request.Header.Set("Content-Type", "application/json")
+	handler.SetFactorySessionResourceCapacity(recorder, request, "session-beta", "reviewers")
+	if recorder.Code != http.StatusConflict {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response.Code != factoryapi.ErrorResponseCodeREQUESTCONFLICT {
+		t.Fatalf("error code = %q, want REQUEST_CONFLICT", response.Code)
+	}
+}
+
+func TestSetFactorySessionResourceCapacityMapsCLIAttribution(t *testing.T) {
+	root := &httpSessionsRootFake{
+		onApplyLiveChange: func(_ context.Context, _ string, request factorysessions.LiveChangeRequest) (factorysessions.LiveChangeResult, error) {
+			if request.Actor != "operator" || request.Source != "cli" {
+				t.Fatalf("request attribution = %#v, want operator/cli", request)
+			}
+			return factorysessions.LiveChangeResult{
+				SessionID: "session-beta", RequestID: request.RequestID, ChangeID: request.ChangeID,
+				Outcome: factorysessions.LiveChangeOutcomeNoOp, PreviousRevision: 2, NewRevision: 2,
+				ResourceCapacity: &factoryruntime.ResourceCapacityResult{
+					ResourceID: "reviewers", PreviousCapacity: 2, RequestedCapacity: 2,
+					EffectiveCapacity: 2, AvailableCount: 2, Outcome: factoryruntime.ResourceCapacityOutcomeNoOp,
+				},
+			}, nil
+		},
+	}
+	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/factory-sessions/session-beta/resources/reviewers/capacity", strings.NewReader(`{"requestId":"cli-1","expectedRevision":2,"capacity":2}`))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("X-You-Source", "cli")
+	handler.SetFactorySessionResourceCapacity(recorder, request, "session-beta", "reviewers")
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+}

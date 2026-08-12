@@ -236,6 +236,7 @@ type LiveChangeOutcome string
 
 const (
 	LiveChangeOutcomeApplied  LiveChangeOutcome = "APPLIED"
+	LiveChangeOutcomeNoOp     LiveChangeOutcome = "NO_OP"
 	LiveChangeOutcomeReplayed LiveChangeOutcome = "REPLAYED"
 	LiveChangeOutcomeFailed   LiveChangeOutcome = "FAILED"
 )
@@ -313,9 +314,10 @@ type LiveChangeApplicationResult struct {
 // LiveChangePreflightResult lets an application reject a no-op or other
 // target-specific condition before the request enters canonical history.
 type LiveChangePreflightResult struct {
-	Admissible bool
-	NoOp       bool
-	Factory    *factorydefinitions.FactorySnapshot
+	Admissible       bool
+	NoOp             bool
+	Factory          *factorydefinitions.FactorySnapshot
+	ResourceCapacity *factoryruntime.ResourceCapacityResult
 }
 
 // LiveChangeEventLog is the explicit canonical event boundary used by

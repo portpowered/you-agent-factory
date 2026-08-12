@@ -58,9 +58,10 @@ func (a *liveChangeCapacityApplication) PreflightLiveChange(ctx context.Context,
 		return factorysessions.LiveChangePreflightResult{}, capacityError(err)
 	}
 	return factorysessions.LiveChangePreflightResult{
-		Admissible: true,
-		NoOp:       result.Outcome == factory.ResourceCapacityOutcomeNoOp,
-		Factory:    result.Factory,
+		Admissible:       true,
+		NoOp:             result.Outcome == factory.ResourceCapacityOutcomeNoOp,
+		Factory:          result.Factory,
+		ResourceCapacity: &result,
 	}, nil
 }
 

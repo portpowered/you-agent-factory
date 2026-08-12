@@ -12,11 +12,29 @@ import (
 
 const resourceCapacityOperation = "resource.capacity.set"
 
+const (
+	ResourceCapacityActorOperator = "operator"
+	ResourceCapacitySourceAPI     = "api"
+	ResourceCapacitySourceCLI     = "cli"
+)
+
 // ResourceCapacityRequestFromAPI maps the public capacity body and stable path
 // identity into the shared live-change request contract.
 func ResourceCapacityRequestFromAPI(
 	resourceID string,
 	request factoryapi.FactorySessionResourceCapacityRequest,
+) (factorysessions.LiveChangeRequest, error) {
+	return ResourceCapacityRequestFromAPIWithSource(resourceID, request, ResourceCapacitySourceAPI)
+}
+
+// ResourceCapacityRequestFromAPIWithSource maps a public capacity body and a
+// trusted transport source into the shared live-change request contract.
+// Only known transport labels are retained; arbitrary caller headers cannot
+// become canonical attribution.
+func ResourceCapacityRequestFromAPIWithSource(
+	resourceID string,
+	request factoryapi.FactorySessionResourceCapacityRequest,
+	source string,
 ) (factorysessions.LiveChangeRequest, error) {
 	value, err := json.Marshal(request.Capacity)
 	if err != nil {
@@ -28,8 +46,17 @@ func ResourceCapacityRequestFromAPI(
 		Operation:        resourceCapacityOperation,
 		TargetID:         strings.TrimSpace(resourceID),
 		RequestedValue:   value,
+		Actor:            ResourceCapacityActorOperator,
+		Source:           resourceCapacitySource(source),
 		Reason:           strings.TrimSpace(derefString(request.Reason)),
 	}, nil
+}
+
+func resourceCapacitySource(source string) string {
+	if strings.EqualFold(strings.TrimSpace(source), ResourceCapacitySourceCLI) {
+		return ResourceCapacitySourceCLI
+	}
+	return ResourceCapacitySourceAPI
 }
 
 // ResourceCapacityResponseToAPI maps a detached live-change result to the

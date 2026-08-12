@@ -55,7 +55,7 @@ func (f *factoryImpl) PreviewResourceCapacity(ctx context.Context, request facto
 	if err != nil {
 		return result, err
 	}
-	return f.attachResourceCapacitySnapshot(result)
+	return f.attachResourceCapacitySnapshot(result, false)
 }
 
 func (f *factoryImpl) PreviewResourceCapacityAdmitted(ctx context.Context, request factory.ResourceCapacityRequest) (factory.ResourceCapacityResult, error) {
@@ -66,7 +66,7 @@ func (f *factoryImpl) PreviewResourceCapacityAdmitted(ctx context.Context, reque
 	if err != nil {
 		return result, err
 	}
-	return f.attachResourceCapacitySnapshot(result)
+	return f.attachResourceCapacitySnapshot(result, false)
 }
 
 func (f *factoryImpl) SetResourceCapacity(ctx context.Context, request factory.ResourceCapacityRequest) (factory.ResourceCapacityResult, error) {
@@ -77,7 +77,7 @@ func (f *factoryImpl) SetResourceCapacity(ctx context.Context, request factory.R
 	if err != nil {
 		return result, err
 	}
-	result, err = f.attachResourceCapacitySnapshot(result)
+	result, err = f.attachResourceCapacitySnapshot(result, result.Outcome == factory.ResourceCapacityOutcomeApplied)
 	if err != nil {
 		return result, err
 	}
@@ -93,7 +93,7 @@ func (f *factoryImpl) SetResourceCapacityAdmitted(ctx context.Context, request f
 	if err != nil {
 		return result, err
 	}
-	result, err = f.attachResourceCapacitySnapshot(result)
+	result, err = f.attachResourceCapacitySnapshot(result, result.Outcome == factory.ResourceCapacityOutcomeApplied)
 	if err != nil {
 		return result, err
 	}
@@ -108,8 +108,13 @@ func (f *factoryImpl) wakeAfterResourceCapacityChange(result factory.ResourceCap
 	f.engine.WakeForResourceCapacity()
 }
 
-func (f *factoryImpl) attachResourceCapacitySnapshot(result factory.ResourceCapacityResult) (factory.ResourceCapacityResult, error) {
-	config, err := f.effectiveFactoryConfigForCapacity()
+func (f *factoryImpl) attachResourceCapacitySnapshot(result factory.ResourceCapacityResult, commit bool) (factory.ResourceCapacityResult, error) {
+	if f == nil {
+		return result, fmt.Errorf("Factory Runtime is unavailable")
+	}
+	f.capacitySnapshotMu.Lock()
+	defer f.capacitySnapshotMu.Unlock()
+	config, err := f.effectiveFactoryConfigForCapacityLocked()
 	if err != nil {
 		return result, err
 	}
@@ -132,13 +137,20 @@ func (f *factoryImpl) attachResourceCapacitySnapshot(result factory.ResourceCapa
 	if err != nil {
 		return result, fmt.Errorf("capture effective resource capacity Factory: %w", err)
 	}
+	if commit && result.Outcome == factory.ResourceCapacityOutcomeApplied {
+		f.effectiveFactoryConfig = config
+	}
 	result.Factory = snapshot
 	return result, nil
 }
 
-func (f *factoryImpl) effectiveFactoryConfigForCapacity() (*interfaces.FactoryConfig, error) {
-	if f == nil {
-		return nil, fmt.Errorf("Factory Runtime is unavailable")
+func (f *factoryImpl) effectiveFactoryConfigForCapacityLocked() (*interfaces.FactoryConfig, error) {
+	if f.effectiveFactoryConfig != nil {
+		cloned, err := interfaces.CloneFactoryConfig(f.effectiveFactoryConfig)
+		if err != nil {
+			return nil, fmt.Errorf("clone effective Factory: %w", err)
+		}
+		return cloned, nil
 	}
 	var source *interfaces.FactoryConfig
 	if f.cfg != nil {

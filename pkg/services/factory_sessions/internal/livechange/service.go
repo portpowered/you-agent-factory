@@ -103,8 +103,12 @@ func (s *Service) applyFresh(
 		PreviousRevision: request.ExpectedRevision,
 		CurrentFactory:   cloneSnapshot(state.Factory),
 	}
-	if err := s.preflight(ctx, request, applicationRequest, application); err != nil {
+	preflight, err := s.preflight(ctx, request, applicationRequest, application)
+	if err != nil {
 		return factorysessions.LiveChangeResult{}, err
+	}
+	if preflight.NoOp {
+		return s.noOpResult(sessionID, state, request, preflight), nil
 	}
 	if _, err := appendRequest(events, sessionID, request, s.now()); err != nil {
 		return factorysessions.LiveChangeResult{}, err
@@ -478,31 +482,50 @@ func (s *Service) preflight(
 	request factorysessions.LiveChangeRequest,
 	applicationRequest *factorysessions.LiveChangeApplicationRequest,
 	application factorysessions.LiveChangeApplication,
-) error {
+) (factorysessions.LiveChangePreflightResult, error) {
 	preflight, ok := application.(factorysessions.LiveChangePreflight)
 	if !ok {
-		return nil
+		return factorysessions.LiveChangePreflightResult{Admissible: true}, nil
 	}
 	result, err := preflight.PreflightLiveChange(ctx, *applicationRequest)
 	if err != nil {
-		return preflightError(err, request)
+		return factorysessions.LiveChangePreflightResult{}, preflightError(err, request)
 	}
 	if result.Factory != nil {
 		applicationRequest.CurrentFactory = result.Factory.Clone()
 	}
 	if result.NoOp {
-		return &factorysessions.LiveChangeError{
-			Code: factorysessions.LiveChangeErrorNoOp, Message: "live change would not alter the effective Factory",
-			RequestID: request.RequestID, ChangeID: request.ChangeID,
-		}
+		return result, nil
 	}
 	if result.Admissible {
-		return nil
+		return result, nil
 	}
-	return &factorysessions.LiveChangeError{
+	return factorysessions.LiveChangePreflightResult{}, &factorysessions.LiveChangeError{
 		Code: factorysessions.LiveChangeErrorTargetNotFound, Message: "live change target was not found",
 		RequestID: request.RequestID, ChangeID: request.ChangeID,
 	}
+}
+
+func (s *Service) noOpResult(
+	sessionID string,
+	state factorysessions.LiveChangeSessionState,
+	request factorysessions.LiveChangeRequest,
+	preflight factorysessions.LiveChangePreflightResult,
+) factorysessions.LiveChangeResult {
+	factorySnapshot := preflight.Factory
+	if factorySnapshot == nil {
+		factorySnapshot = state.Factory
+	}
+	result := factorysessions.LiveChangeResult{
+		SessionID: sessionID, RequestID: request.RequestID, ChangeID: request.ChangeID,
+		Outcome:          factorysessions.LiveChangeOutcomeNoOp,
+		PreviousRevision: state.EffectiveRevision, NewRevision: state.EffectiveRevision,
+		EffectiveSequence: state.EffectiveSequence, Factory: cloneSnapshot(factorySnapshot),
+		ResourceCapacity: cloneResourceCapacity(preflight.ResourceCapacity),
+	}
+	s.logger.Info("live change completed", logFields(sessionID, request, state.EffectiveRevision,
+		zap.String("outcome", string(result.Outcome)))...)
+	return result
 }
 
 func preflightError(err error, request factorysessions.LiveChangeRequest) error {
@@ -784,7 +807,9 @@ func cloneResourceCapacity(result *factoryruntime.ResourceCapacityResult) *facto
 		return nil
 	}
 	clone := *result
-	clone.Factory = result.Factory.Clone()
+	if result.Factory != nil {
+		clone.Factory = result.Factory.Clone()
+	}
 	return &clone
 }
 

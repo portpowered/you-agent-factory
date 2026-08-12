@@ -6636,7 +6636,7 @@ export interface components {
           | components["schemas"]["ErrorResponse"];
       };
     };
-    /** @description Resource capacity admission was rejected because the request revision or Factory Session lifecycle is stale, the requested capacity is below units in use, or the request would be an exact no-op. */
+    /** @description Resource capacity admission was rejected because the request revision or Factory Session lifecycle is stale, the requested capacity is below units in use. */
     FactorySessionResourceCapacityConflict: {
       headers: {
         [name: string]: unknown;
@@ -8544,6 +8544,8 @@ export const ErrorResponseCode = {
   METHOD_NOT_ALLOWED: "METHOD_NOT_ALLOWED",
   // Durable execution requestId was reused with materially different inputs.
   EXECUTION_REQUEST_ID_CONFLICT: "EXECUTION_REQUEST_ID_CONFLICT",
+  // A live-change requestId was reused with a different normalized request body.
+  REQUEST_CONFLICT: "REQUEST_CONFLICT",
   // Worker Session start requestId was reused with different normalized inputs.
   WORKER_SESSION_START_REQUEST_ID_CONFLICT:
     "WORKER_SESSION_START_REQUEST_ID_CONFLICT",

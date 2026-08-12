@@ -23,6 +23,7 @@ properties:
       - MOVE_WORK_REQUEST_ALREADY_APPLIED
       - METHOD_NOT_ALLOWED
       - EXECUTION_REQUEST_ID_CONFLICT
+      - REQUEST_CONFLICT
       - WORKER_SESSION_START_REQUEST_ID_CONFLICT
       - WORKER_SESSION_NOT_STARTABLE
       - WORKER_SESSION_START_OPENING_FAILED
@@ -57,6 +58,7 @@ properties:
       - Operator move requestId was already applied for this session.
       - The HTTP method is not allowed for the requested route.
       - Durable execution requestId was reused with materially different inputs.
+      - A live-change requestId was reused with a different normalized request body.
       - Worker Session start requestId was reused with different normalized inputs.
       - The requested Worker Session identity is already reserved or terminal.
       - The Worker Session opening record could not be published.

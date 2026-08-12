@@ -1,7 +1,7 @@
 description: >-
   Resource capacity admission was rejected because the request revision or
   Factory Session lifecycle is stale, the requested capacity is below units in
-  use, or the request would be an exact no-op.
+  use.
 content:
   application/json:
     schema:

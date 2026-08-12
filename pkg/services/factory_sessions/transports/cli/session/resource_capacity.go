@@ -92,6 +92,7 @@ func SetResourceCapacity(cfg ResourceCapacityConfig) error {
 		return fmt.Errorf("build resource capacity request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-You-Source", "cli")
 	transportResponse, err := cfg.HTTP.Execute(req)
 	if err != nil {
 		return fmt.Errorf("factory sessions endpoint not reachable at %s: %w", endpoint.String(), err)

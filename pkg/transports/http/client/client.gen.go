@@ -83,6 +83,7 @@ const (
 	ErrorResponseCodeNOTFOUND                                     ErrorResponseCode = "NOT_FOUND"
 	ErrorResponseCodePROJECTIONUNAVAILABLE                        ErrorResponseCode = "PROJECTION_UNAVAILABLE"
 	ErrorResponseCodePROVIDERUNSUPPORTED                          ErrorResponseCode = "PROVIDER_UNSUPPORTED"
+	ErrorResponseCodeREQUESTCONFLICT                              ErrorResponseCode = "REQUEST_CONFLICT"
 	ErrorResponseCodeRESOURCECAPACITYINUSE                        ErrorResponseCode = "RESOURCE_CAPACITY_IN_USE"
 	ErrorResponseCodeRESPONSEEVENTSESSIONNOTFOUND                 ErrorResponseCode = "RESPONSE_EVENT_SESSION_NOT_FOUND"
 	ErrorResponseCodeRESPONSEEVENTSTREAMEXPIRED                   ErrorResponseCode = "RESPONSE_EVENT_STREAM_EXPIRED"

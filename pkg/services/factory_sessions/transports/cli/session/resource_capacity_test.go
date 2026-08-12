@@ -19,6 +19,9 @@ func TestSetResourceCapacitySendsStableIDAndRendersJSON(t *testing.T) {
 		if r.Method != http.MethodPost || r.URL.Path != "/factory-sessions/session-beta/resources/reviewers/capacity" {
 			t.Fatalf("request = %s %s", r.Method, r.URL.Path)
 		}
+		if r.Header.Get("X-You-Source") != "cli" {
+			t.Fatalf("source header = %q, want cli", r.Header.Get("X-You-Source"))
+		}
 		if err := json.NewDecoder(r.Body).Decode(&gotRequest); err != nil {
 			t.Fatalf("decode request: %v", err)
 		}
