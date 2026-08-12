@@ -18,7 +18,10 @@ import type { FactorySessionLifecycleControl } from "../../hooks/use-factory-ses
 import type { FactorySessionLifecycleActionID } from "../../lib/factory-session-lifecycle-controls";
 import { resolveFactorySessionLifecycleActionAvailability } from "../../lib/factory-session-lifecycle-controls";
 import type { LifecycleControlFeedbackState } from "../../lib/lifecycle/factory-session-lifecycle-feedback";
-import { FactorySessionDetailPanel } from "../factory-session-detail-panel";
+import {
+  type FactorySessionDetailInspectionState,
+  FactorySessionDetailPanel,
+} from "../factory-session-detail-panel";
 import { LifecycleActionSection } from "./lifecycle-action-section";
 
 const SESSION_ID = "dur-sess-lifecycle-contract-001";
@@ -64,8 +67,10 @@ describe("Factory Session lifecycle controller contract", () => {
     expect(screen.getByRole("button", { name: "Terminate" })).toBeDisabled();
   });
 
-  it("renders an injected accepted outcome without losing the session controls", () => {
+  it("reconciles an accepted pause response from Pause to Resume through typed inputs", () => {
     function AcceptedOutcomeHarness() {
+      const [detailState, setDetailState] =
+        useState<FactorySessionDetailViewState>(runningDetailState);
       const [state, setState] = useState<
         Pick<FactorySessionLifecycleControl, "feedback" | "pendingActionID">
       >({
@@ -84,8 +89,10 @@ describe("Factory Session lifecycle controller contract", () => {
                 feedback: resolvedFeedback(actionID),
                 pendingActionID: null,
               });
+              setDetailState(pausedDetailState);
             },
           }}
+          detailState={detailState}
         />
       );
     }
@@ -97,7 +104,39 @@ describe("Factory Session lifecycle controller contract", () => {
       expect(screen.getByText("Accepted")).toBeTruthy();
       expect(screen.getByText("Pause accepted")).toBeTruthy();
       expect(screen.getByRole("button", { name: "Cancel" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Resume" })).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Pause" })).toBeNull();
     });
+  });
+
+  it("keeps selected dispatch detail visible when an injected retry conflict is returned", () => {
+    render(
+      <PanelHarness
+        detailState={conflictDetailState}
+        inspectionState={conflictInspectionState}
+        lifecycleControl={createLifecycleControl({
+          feedback: conflictFeedback,
+        })}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: `Expand dispatch detail for ${FAILED_DISPATCH_ID}`,
+      }),
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Another retry request is still being applied.",
+    );
+    expect(screen.getByText("Failure detail")).toBeTruthy();
+    expect(screen.getByText("VERIFY_ASSERTION_FAILED")).toBeTruthy();
+    expect(
+      screen.getByText("session_id · provider-session-verify-1"),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "artifact-failure-log" }),
+    ).toBeTruthy();
   });
 
   it("renders injected transport failure feedback while keeping retryable actions available", () => {
@@ -179,14 +218,19 @@ describe("Factory Session lifecycle controller contract", () => {
 });
 
 function PanelHarness({
+  detailState = runningDetailState,
+  inspectionState,
   lifecycleControl,
 }: {
+  detailState?: FactorySessionDetailViewState;
+  inspectionState?: FactorySessionDetailInspectionState;
   lifecycleControl: FactorySessionLifecycleControl;
 }) {
   return (
     <QueryClientProvider client={new QueryClient()}>
       <FactorySessionDetailPanel
-        detailState={runningDetailState}
+        detailState={detailState}
+        inspectionState={inspectionState}
         lifecycleControl={lifecycleControl}
         sessionID={SESSION_ID}
       />
@@ -222,6 +266,136 @@ function resolvedFeedback(
 
   return { actionID, kind: "resolved", response };
 }
+
+const pausedDetailState: FactorySessionDetailViewState = {
+  data: {
+    ...runningDetailState.data,
+    durableLifecycleStatus: "PAUSED",
+    session: {
+      ...runningDetailState.data.session,
+      runtime: {
+        ...runningDetailState.data.session.runtime,
+        javascript: {
+          ...runningDetailState.data.session.runtime.javascript,
+          scriptStatus: FactorySessionJavaScriptScriptStatus.PAUSED,
+        },
+        lifecycleControlStatus: "PAUSED",
+        progress: {
+          ...runningDetailState.data.session.runtime.progress,
+          factoryState: "PAUSED",
+          inFlightCount: 0,
+        },
+        status: FactorySessionStatus.IDLE,
+      },
+    },
+  },
+  status: "success",
+};
+
+const FAILED_DISPATCH_ID = "dispatch-failed-conflict";
+
+const conflictDetailState: FactorySessionDetailViewState = {
+  data: {
+    ...runningDetailState.data,
+    dispatches: [
+      {
+        artifactIds: ["artifact-failure-log"],
+        dispatchKind: "JAVASCRIPT_VERIFY",
+        failureDetail: {
+          message: "Expected release manifest checksum.",
+          reason: "VERIFY_ASSERTION_FAILED",
+        },
+        id: FAILED_DISPATCH_ID,
+        javascript: {
+          executionMode: "live",
+          taskKind: "VERIFY",
+          taskLabel: "Verify release manifest",
+        },
+        orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+        providerSessionRefs: [
+          {
+            id: "provider-session-verify-1",
+            kind: "session_id",
+            provider: "codex",
+          },
+        ],
+        sessionId: SESSION_ID,
+        status: "FAILED",
+      },
+    ],
+    durableLifecycleStatus: "FAILED",
+    session: {
+      ...runningDetailState.data.session,
+      runtime: {
+        ...runningDetailState.data.session.runtime,
+        javascript: {
+          ...runningDetailState.data.session.runtime.javascript,
+          scriptStatus: FactorySessionJavaScriptScriptStatus.FAILED,
+        },
+        progress: {
+          ...runningDetailState.data.session.runtime.progress,
+          factoryState: "FAILED",
+          inFlightCount: 0,
+        },
+        status: FactorySessionStatus.FINISHED,
+      },
+    },
+  },
+  status: "success",
+};
+
+const conflictInspectionState: FactorySessionDetailInspectionState = {
+  dispatchDetails: {
+    [FAILED_DISPATCH_ID]: {
+      data: {
+        artifactLinks: [
+          {
+            href: `/factory-sessions/${SESSION_ID}/artifacts/artifact-failure-log`,
+            id: "artifact-failure-log",
+          },
+        ],
+        dispatchID: FAILED_DISPATCH_ID,
+        dispatchKind: "JAVASCRIPT_VERIFY",
+        failureDetail: {
+          message: "Expected release manifest checksum.",
+          reason: "VERIFY_ASSERTION_FAILED",
+        },
+        javascript: {
+          executionMode: "live",
+          taskKind: "VERIFY",
+          taskLabel: "Verify release manifest",
+        },
+        orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+        providerSessionRefs: [
+          {
+            id: "provider-session-verify-1",
+            kind: "session_id",
+            provider: "codex",
+          },
+        ],
+        relatedWorkIDs: [],
+        sessionID: SESSION_ID,
+        status: "FAILED",
+        statusHistory: ["QUEUED", "RUNNING", "FAILED"],
+        warnings: [],
+      },
+      status: "success",
+    },
+  },
+};
+
+const conflictFeedback: LifecycleControlFeedbackState = {
+  actionID: "retry-dispatch",
+  kind: "resolved",
+  response: {
+    detail: "Another retry request is still being applied.",
+    dispatchId: FAILED_DISPATCH_ID,
+    operation: "RETRY_DISPATCH",
+    outcome: "CONFLICT",
+    sessionId: SESSION_ID,
+    status: "FAILED",
+  },
+};
 
 function buildRunningDetailData(): FactorySessionDetailData {
   return {
