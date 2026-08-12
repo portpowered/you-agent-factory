@@ -284,6 +284,20 @@ func TestRuntimeLifecycleLeavesRuntimeUnwindAvailableAfterWorkerStartFailure(t *
 	}
 }
 
+func TestRuntimeLifecycleRejectsPreActivationCancellationBeforeRuntimeAcquisition(t *testing.T) {
+	runtime := &planRuntime{}
+	plan := requiredPlan(t, runtime)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if err := lifecycle.NewManager().Run(ctx, plan); err != nil {
+		t.Fatalf("Run error = %v, want canceled activation to unwind quietly", err)
+	}
+	if len(runtime.events) != 0 {
+		t.Fatalf("runtime events = %v, want no runtime acquisition after pre-activation cancellation", runtime.events)
+	}
+}
+
 func TestRuntimeLifecycleKeepsRuntimeAliveUntilCanceledStartupUnwinds(t *testing.T) {
 	runtime := &cancellationTransitionRuntime{
 		startEntered: make(chan struct{}),

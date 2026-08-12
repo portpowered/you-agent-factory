@@ -224,10 +224,17 @@ type applicationRuntimeLifecycle struct {
 }
 
 func (state *applicationRuntimeLifecycle) startRuntime(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	state.mu.Lock()
 	if state.runtimeActive || state.runtimeCancel != nil {
 		state.mu.Unlock()
 		return errors.New("start Factory Session runtime: already started")
+	}
+	if err := ctx.Err(); err != nil {
+		state.mu.Unlock()
+		return err
 	}
 	// The lifecycle manager owns orderly unwind after activation returns. Keep
 	// the hosted runtime alive until that owner can stop it, otherwise parent
