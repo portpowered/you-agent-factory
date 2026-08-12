@@ -356,6 +356,51 @@ func WorkerSessionContinueResponseToAPI(
 	}
 }
 
+// WorkerSessionInterruptRequestFromAPI maps the source path identity and the
+// caller-owned replacement tuple into the Worker Sessions contract.
+func WorkerSessionInterruptRequestFromAPI(
+	sourceWorkerSessionID string,
+	request factoryapi.WorkerSessionInterruptRequest,
+) (workersessions.InterruptRequest, error) {
+	interrupt := workersessions.InterruptRequest{
+		RequestID:                strings.TrimSpace(request.RequestId),
+		SourceWorkerSessionID:    strings.TrimSpace(sourceWorkerSessionID),
+		SuccessorWorkerSessionID: strings.TrimSpace(request.SuccessorWorkerSessionId),
+		ReplacementMessage:       request.ReplacementMessage,
+	}
+	interrupt = interrupt.Normalize()
+	if err := interrupt.Validate(); err != nil {
+		return workersessions.InterruptRequest{}, err
+	}
+	return interrupt, nil
+}
+
+// WorkerSessionInterruptResponseToAPI maps the authoritative source and
+// successor snapshots without exposing provider selection inputs.
+func WorkerSessionInterruptResponseToAPI(
+	result workersessions.InterruptResult,
+) factoryapi.WorkerSessionInterruptResponse {
+	return factoryapi.WorkerSessionInterruptResponse{
+		RequestId:                result.RequestID,
+		SourceWorkerSessionId:    result.SourceWorkerSessionID,
+		SuccessorWorkerSessionId: result.SuccessorWorkerSessionID,
+		Phase:                    factoryapi.WorkerSessionInterruptResponsePhase(result.Phase),
+		Accepted:                 result.Accepted,
+		Source:                   workerSessionInterruptSnapshotToAPI(result.Source),
+		Successor:                workerSessionInterruptSnapshotToAPI(result.Successor),
+	}
+}
+
+func workerSessionInterruptSnapshotToAPI(
+	session workersessions.Session,
+) factoryapi.WorkerSessionInterruptSnapshot {
+	return factoryapi.WorkerSessionInterruptSnapshot{
+		WorkerSessionId: session.ID,
+		State:           factoryapi.WorkerSessionInterruptSnapshotState(session.State),
+		EventTopic:      string(workersessions.Topic(session.ID)),
+	}
+}
+
 func optionalString(value *string) string {
 	if value == nil {
 		return ""

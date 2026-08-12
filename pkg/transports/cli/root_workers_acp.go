@@ -166,6 +166,11 @@ func productionWorkerSessionsCommand(
 	}); err != nil {
 		panic(fmt.Sprintf("build worker sessions handler registry: %v", err))
 	}
+	if err := registry.Register("you.worker-sessions.interrupt.handler", func(cmd *cobra.Command, args []string) error {
+		return executeGeneratedWorkerSessionsInterrupt(cmd, args, globals, diagnostics, options.InterruptWorkerSession)
+	}); err != nil {
+		panic(fmt.Sprintf("build worker sessions handler registry: %v", err))
+	}
 	command, err := climanifestcobra.NewWorkerSessionsFamilyCommand(registry)
 	if err != nil {
 		panic(fmt.Sprintf("build worker sessions family command: %v", err))
@@ -333,6 +338,79 @@ func readGeneratedWorkerSessionsContinueInputs(values map[string]any) (generated
 	inputs.async, err = commandInputValue[bool](values, "you.worker-sessions.continue.flag.async")
 	if err != nil {
 		return generatedWorkerSessionsContinueInputs{}, err
+	}
+	return inputs, nil
+}
+
+func executeGeneratedWorkerSessionsInterrupt(
+	cmd *cobra.Command,
+	args []string,
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+	interrupt workersessionscli.InterruptOperation,
+) error {
+	if interrupt == nil {
+		return fmt.Errorf("worker sessions interrupt service is required")
+	}
+	values, err := generatedCommandInputs(cmd)
+	if err != nil {
+		return err
+	}
+	inputs, err := readGeneratedWorkerSessionsInterruptInputs(values)
+	if err != nil {
+		return err
+	}
+	return interrupt(workersessionscli.InterruptConfig{
+		Context: cmd.Context(), Server: globals.server, Remote: remotePlacementSelected(globals),
+		RequestID: inputs.requestID, SourceWorkerSessionID: inputs.sourceWorkerSessionID,
+		SuccessorWorkerSessionID: inputs.successorWorkerSessionID, ReplacementMessage: inputs.userMessage,
+		Prompt: inputs.replacementInput, Stdin: cmd.InOrStdin(), StdinIsTTY: startupcli.StdinIsTTY(cmd.Context()),
+		Async: inputs.async, OutputFormat: inputs.outputFormat,
+		JSON:   globals.json || strings.EqualFold(strings.TrimSpace(inputs.outputFormat), "json"),
+		Output: cmd.OutOrStdout(), Diagnostics: diagnostics.writer(cmd),
+		Verbose: diagnostics.verboseEnabled(), Debug: diagnostics.debug,
+	})
+}
+
+type generatedWorkerSessionsInterruptInputs struct {
+	sourceWorkerSessionID, requestID, successorWorkerSessionID string
+	userMessage, outputFormat                                  string
+	replacementInput                                           []string
+	async                                                      bool
+}
+
+func readGeneratedWorkerSessionsInterruptInputs(values map[string]any) (generatedWorkerSessionsInterruptInputs, error) {
+	var inputs generatedWorkerSessionsInterruptInputs
+	readString := func(id string, target *string) error {
+		value, err := commandInputValue[string](values, id)
+		if err != nil {
+			return err
+		}
+		*target = value
+		return nil
+	}
+	for _, input := range []struct {
+		id     string
+		target *string
+	}{
+		{"you.worker-sessions.interrupt.arg.0", &inputs.sourceWorkerSessionID},
+		{"you.worker-sessions.interrupt.flag.request-id", &inputs.requestID},
+		{"you.worker-sessions.interrupt.flag.successor-worker-session-id", &inputs.successorWorkerSessionID},
+		{"you.worker-sessions.interrupt.flag.replacement-message", &inputs.userMessage},
+		{"you.worker-sessions.interrupt.flag.output", &inputs.outputFormat},
+	} {
+		if err := readString(input.id, input.target); err != nil {
+			return generatedWorkerSessionsInterruptInputs{}, err
+		}
+	}
+	var err error
+	inputs.replacementInput, err = commandInputValue[[]string](values, "you.worker-sessions.interrupt.arg.1")
+	if err != nil {
+		return generatedWorkerSessionsInterruptInputs{}, err
+	}
+	inputs.async, err = commandInputValue[bool](values, "you.worker-sessions.interrupt.flag.async")
+	if err != nil {
+		return generatedWorkerSessionsInterruptInputs{}, err
 	}
 	return inputs, nil
 }

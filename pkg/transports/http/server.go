@@ -94,6 +94,20 @@ func (s *Server) ContinueWorkerSession(
 	s.workerSessionsHTTP.ContinueWorkerSession(w, r, workerSessionID)
 }
 
+// InterruptWorkerSession forwards the source-addressed interrupt-and-replace
+// operation to the Worker Sessions owner handler.
+func (s *Server) InterruptWorkerSession(
+	w http.ResponseWriter,
+	r *http.Request,
+	workerSessionID factoryapi.WorkerSessionID,
+) {
+	if s.workerSessionsHTTP == nil {
+		s.writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
+		return
+	}
+	s.workerSessionsHTTP.InterruptWorkerSession(w, r, workerSessionID)
+}
+
 // ListWorkerSessions forwards the top-level Worker Session observation list.
 func (s *Server) ListWorkerSessions(
 	w http.ResponseWriter,

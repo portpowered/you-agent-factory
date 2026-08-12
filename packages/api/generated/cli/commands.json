@@ -11121,6 +11121,267 @@
         ]
       }
     },
+    "you.worker-sessions.interrupt": {
+      "id": "you.worker-sessions.interrupt",
+      "name": "interrupt",
+      "path": "you worker-sessions interrupt",
+      "aliases": [],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.worker-sessions.interrupt",
+        "documentation": {
+          "title": {
+            "id": "you.worker-sessions.interrupt.title",
+            "canonicalEnglish": "Interrupt a Worker Session into a replacement"
+          },
+          "description": {
+            "id": "you.worker-sessions.interrupt.description",
+            "canonicalEnglish": "Cancel the exact active Worker Session dispatch, wait for its authoritative CANCELED outcome, and admit a distinct replacement Worker Session with the supplied input. Local Worker Sessions are the default; add --remote to use exactly --server. Without --async the command waits for the successor terminal event; --async returns after source cancellation and successor admission."
+          }
+        },
+        "examples": [
+          "you worker-sessions interrupt worker-session-123 --request-id interrupt-1 --successor-worker-session-id worker-session-124 --replacement-message 'Take a different approach'",
+          "you worker-sessions interrupt worker-session-123 --request-id interrupt-1 --successor-worker-session-id worker-session-124 --async --output json",
+          "you worker-sessions interrupt worker-session-123 --remote --server https://factory.example --request-id interrupt-1 --successor-worker-session-id worker-session-124 'Stop and revise the plan'"
+        ],
+        "visibility": "public",
+        "sourceHash": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.worker-sessions.interrupt",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "placement": "dual",
+      "usage": {
+        "line": "interrupt <source-worker-session-id> [replacement-input...]",
+        "example": "  you worker-sessions interrupt worker-session-123 --request-id interrupt-1 --successor-worker-session-id worker-session-124 --replacement-message 'Take a different approach'"
+      },
+      "arguments": {
+        "you.worker-sessions.interrupt.arg.0": {
+          "id": "you.worker-sessions.interrupt.arg.0",
+          "name": "source-worker-session-id",
+          "position": 0,
+          "kind": "positional",
+          "valueType": "string",
+          "required": true,
+          "minCardinality": 1,
+          "maxCardinality": 1,
+          "variadic": false,
+          "enum": [],
+          "pattern": "",
+          "completion": "none",
+          "channels": ["cli"],
+          "doubleDash": "terminates-flags"
+        },
+        "you.worker-sessions.interrupt.arg.1": {
+          "id": "you.worker-sessions.interrupt.arg.1",
+          "name": "replacement-input",
+          "position": 1,
+          "kind": "positional",
+          "valueType": "stringArray",
+          "required": false,
+          "minCardinality": 0,
+          "maxCardinality": -1,
+          "variadic": true,
+          "enum": [],
+          "pattern": "",
+          "completion": "none",
+          "channels": ["cli", "stdin"],
+          "doubleDash": "terminates-flags"
+        }
+      },
+      "flags": {
+        "you.worker-sessions.interrupt.flag.request-id": {
+          "id": "you.worker-sessions.interrupt.flag.request-id",
+          "long": "request-id",
+          "usage": "stable interrupt request identity; generated when omitted",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.interrupt.flag.request-id",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.interrupt.flag.successor-worker-session-id": {
+          "id": "you.worker-sessions.interrupt.flag.successor-worker-session-id",
+          "long": "successor-worker-session-id",
+          "usage": "stable replacement Worker Session identity; generated when omitted",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.interrupt.flag.successor-worker-session-id",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.interrupt.flag.replacement-message": {
+          "id": "you.worker-sessions.interrupt.flag.replacement-message",
+          "long": "replacement-message",
+          "usage": "replacement input override; otherwise use positional input or non-TTY stdin",
+          "shorthand": "",
+          "aliases": ["message"],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.interrupt.flag.replacement-message",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.interrupt.flag.async": {
+          "id": "you.worker-sessions.interrupt.flag.async",
+          "long": "async",
+          "usage": "return after source cancellation and successor admission instead of waiting for terminal output",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.interrupt.flag.async",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.interrupt.flag.output": {
+          "id": "you.worker-sessions.interrupt.flag.output",
+          "long": "output",
+          "usage": "output format: human (default) or json",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "human",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.interrupt.flag.output",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        }
+      },
+      "handler": {
+        "id": "you.worker-sessions.interrupt.handler",
+        "operationId": "interruptWorkerSession"
+      },
+      "precedence": {
+        "order": ["cli", "stdin", "environment", "operator-config", "manifest-default", "factory-signature-default"],
+        "withinTier": {"scalar": "last", "repeated": "append"},
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
+      },
+      "channels": {
+        "input": ["cli", "env", "config", "stdin"],
+        "output": ["stdout", "stderr"]
+      },
+      "outputs": {
+        "you.worker-sessions.interrupt.output.human": {
+          "id": "you.worker-sessions.interrupt.output.human",
+          "channel": "stdout",
+          "format": "text"
+        },
+        "you.worker-sessions.interrupt.output.json": {
+          "id": "you.worker-sessions.interrupt.output.json",
+          "channel": "stdout",
+          "format": "json"
+        }
+      },
+      "errors": {
+        "you.worker-sessions.interrupt.error.invalid-input": {
+          "id": "you.worker-sessions.interrupt.error.invalid-input",
+          "code": "WORKER_SESSION_INTERRUPT_INVALID"
+        },
+        "you.worker-sessions.interrupt.error.conflict": {
+          "id": "you.worker-sessions.interrupt.error.conflict",
+          "code": "WORKER_SESSION_INTERRUPT_CONFLICT"
+        },
+        "you.worker-sessions.interrupt.error.source-cancellation": {
+          "id": "you.worker-sessions.interrupt.error.source-cancellation",
+          "code": "WORKER_SESSION_INTERRUPT_SOURCE_CANCELLATION_FAILED"
+        },
+        "you.worker-sessions.interrupt.error.successor-admission": {
+          "id": "you.worker-sessions.interrupt.error.successor-admission",
+          "code": "WORKER_SESSION_INTERRUPT_SUCCESSOR_ADMISSION_FAILED"
+        },
+        "you.worker-sessions.interrupt.error.wait": {
+          "id": "you.worker-sessions.interrupt.error.wait",
+          "code": "WORKER_SESSION_INTERRUPT_WAIT_FAILED"
+        },
+        "you.worker-sessions.interrupt.error.remote": {
+          "id": "you.worker-sessions.interrupt.error.remote",
+          "code": "FACTORY_UNREACHABLE"
+        }
+      },
+      "exits": {
+        "you.worker-sessions.interrupt.exit.success": {"id": "you.worker-sessions.interrupt.exit.success", "code": 0, "kind": "success"},
+        "you.worker-sessions.interrupt.exit.failure": {"id": "you.worker-sessions.interrupt.exit.failure", "code": 1, "kind": "failure"},
+        "you.worker-sessions.interrupt.exit.usage": {"id": "you.worker-sessions.interrupt.exit.usage", "code": 1, "kind": "usage"},
+        "you.worker-sessions.interrupt.exit.cancel": {"id": "you.worker-sessions.interrupt.exit.cancel", "code": 130, "kind": "cancel"}
+      },
+      "sideEffects": {
+        "you.worker-sessions.interrupt.side-effect.network": {"id": "you.worker-sessions.interrupt.side-effect.network", "kind": "network"}
+      },
+      "constraints": {
+        "runtime": ["local"],
+        "platforms": ["linux", "darwin", "windows"]
+      }
+    },
     "you.workers": {
       "id": "you.workers",
       "name": "workers",

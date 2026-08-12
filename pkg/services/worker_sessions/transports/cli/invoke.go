@@ -21,13 +21,21 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
-// LocalInvokeBoundary is the deliberately small local seam used by invoke.
-// The CLI never turns a local request into an HTTP request: production wiring
-// or a functional test supplies the already-open Worker Sessions boundary.
+// LocalObservationBoundary is the smallest local seam needed to follow a
+// Worker Session after admission. It is shared by invoke, continue, and
+// interrupt without widening any operation-specific admission interface.
+type LocalObservationBoundary interface {
+	StreamObservationsByWorkerSessionID(context.Context, workersessions.StreamObservationsByWorkerSessionIDRequest) (workersessions.ObservationSubscription, error)
+}
+
+// LocalInvokeBoundary is the deliberately small local seam used by invoke and
+// continue. The CLI never turns a local request into an HTTP request:
+// production wiring or a functional test supplies the already-open Worker
+// Sessions boundary.
 type LocalInvokeBoundary interface {
 	Start(context.Context, workersessions.StartRequest) (workersessions.StartResult, error)
 	Continue(context.Context, workersessions.ContinueRequest) (workersessions.ContinueResult, error)
-	StreamObservationsByWorkerSessionID(context.Context, workersessions.StreamObservationsByWorkerSessionIDRequest) (workersessions.ObservationSubscription, error)
+	LocalObservationBoundary
 }
 
 // InvokeConfig holds the direct Worker execution inputs accepted by the
@@ -399,7 +407,7 @@ func invokeLocal(config InvokeConfig, request normalizedInvokeRequest, jsonOutpu
 	return writeInvokeResult(config, jsonOutput, invokeResultFromCapture(request.Service.RequestID, started.Session.ID, capture), true)
 }
 
-func waitLocalTerminal(ctx context.Context, boundary LocalInvokeBoundary, workerSessionID string) (invokeCapture, error) {
+func waitLocalTerminal(ctx context.Context, boundary LocalObservationBoundary, workerSessionID string) (invokeCapture, error) {
 	subscription, err := boundary.StreamObservationsByWorkerSessionID(ctx, workersessions.StreamObservationsByWorkerSessionIDRequest{WorkerSessionID: workerSessionID})
 	if err != nil {
 		return invokeCapture{}, newCLIError("WORKER_SESSION_STREAM_FAILED", "failed to open Worker Session observation stream", err)

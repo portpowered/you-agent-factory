@@ -253,6 +253,28 @@ you --server http://localhost:7437 worker-sessions continue <source-worker-sessi
   --async --output json "Review the result"
 ```
 
+To replace an active direct Worker Session, interrupt its admitted dispatch and
+provide a distinct successor identity and replacement input. The server first
+records the source as canceled, then admits the successor against the same
+Provider Session association. Use `--async` to return after those admission
+barriers, or omit it to wait for the successor terminal output:
+
+```bash
+you worker-sessions interrupt <source-worker-session-id> \
+  --request-id <interrupt-request-id> \
+  --successor-worker-session-id <successor-worker-session-id> \
+  --replacement-message "Take a different approach"
+you --server http://localhost:7437 worker-sessions interrupt <source-worker-session-id> \
+  --remote --request-id <interrupt-request-id> \
+  --successor-worker-session-id <successor-worker-session-id> \
+  --async --output json "Stop and revise the plan"
+```
+
+Interrupt failures include a stable phase: `VALIDATION`,
+`SOURCE_CANCELLATION`, or `SUCCESSOR_ADMISSION`. Local placement is the
+default. `--remote` sends the complete request only to the configured
+`--server`; it never falls back to local state.
+
 Local placement is the default. `--remote` selects exactly the configured
 `--server`; a failed remote continuation never falls back to a new local
 request. The JSON response includes the source, successor, predecessor, event

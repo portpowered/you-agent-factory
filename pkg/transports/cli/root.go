@@ -113,6 +113,7 @@ type ReadWorkerSessionOperation = workersessionscli.ReadOperation
 type StreamWorkerSessionOperation = workersessionscli.StreamOperation
 type InvokeWorkerSessionOperation = workersessionscli.InvokeOperation
 type ContinueWorkerSessionOperation = workersessionscli.ContinueOperation
+type InterruptWorkerSessionOperation = workersessionscli.InterruptOperation
 type NamedFactoryRootsResolver func(homeDir, workingDir string) (interfaces.NamedFactoryRoots, error)
 
 // CommandOperations is the complete inert CLI operation graph assembled by Wire.
@@ -166,6 +167,7 @@ type CommandOperations struct {
 	StreamWorkerSession               StreamWorkerSessionOperation
 	InvokeWorkerSession               InvokeWorkerSessionOperation
 	ContinueWorkerSession             ContinueWorkerSessionOperation
+	InterruptWorkerSession            InterruptWorkerSessionOperation
 	LocalWorkerSessions               workersessionscli.LocalInvokeBoundary
 	OpenRunSelection                  runcli.SelectionFactory
 	RemoteInvocation                  runcli.RemoteInvocationOperation
@@ -230,6 +232,7 @@ type CommandFactory struct {
 	StreamWorkerSession    workersessionscli.StreamOperation
 	InvokeWorkerSession    workersessionscli.InvokeOperation
 	ContinueWorkerSession  workersessionscli.ContinueOperation
+	InterruptWorkerSession workersessionscli.InterruptOperation
 	LocalWorkerSessions    workersessionscli.LocalInvokeBoundary
 	openRunSelection       runcli.SelectionFactory
 	remoteInvocation       runcli.RemoteInvocationOperation
@@ -290,6 +293,7 @@ func NewCommandFactory(operations CommandOperations) CommandFactory {
 		StreamWorkerSession:               operations.StreamWorkerSession,
 		InvokeWorkerSession:               operations.InvokeWorkerSession,
 		ContinueWorkerSession:             operations.ContinueWorkerSession,
+		InterruptWorkerSession:            operations.InterruptWorkerSession,
 		LocalWorkerSessions:               operations.LocalWorkerSessions,
 		openRunSelection:                  operations.OpenRunSelection,
 		remoteInvocation:                  operations.RemoteInvocation,

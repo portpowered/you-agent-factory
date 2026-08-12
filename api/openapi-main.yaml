@@ -179,6 +179,45 @@ paths:
           $ref: '#/components/responses/WorkerSessionContinuationConflict'
         '503':
           $ref: '#/components/responses/WorkerSessionContinuationUnavailable'
+  /worker-sessions/{worker_session_id}/interrupt:
+    post:
+      tags:
+        - Worker Sessions
+      operationId: interruptWorkerSession
+      summary: Interrupt one active Worker Session into a replacement
+      description: >-
+        Cancels the exact active source Worker Session dispatch, waits for its
+        authoritative CANCELED outcome, and admits one distinct successor with
+        replacement input. The requestId and successor identity are idempotent
+        inputs. A 202 response is returned only after source cancellation and
+        successor admission have crossed their authoritative barriers;
+        successor terminal output remains asynchronous. Callers that need
+        terminal output should inspect or stream the successor Worker Session.
+      parameters:
+        - $ref: '#/components/parameters/WorkerSessionID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkerSessionInterruptRequest'
+      responses:
+        '202':
+          description: The source was canceled and the replacement successor was admitted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkerSessionInterruptResponse'
+        '400':
+          $ref: '#/components/responses/WorkerSessionInterruptBadRequest'
+        '404':
+          $ref: '#/components/responses/WorkerSessionInterruptNotFound'
+        '409':
+          $ref: '#/components/responses/WorkerSessionInterruptConflict'
+        '500':
+          $ref: '#/components/responses/WorkerSessionInterruptInternalError'
+        '503':
+          $ref: '#/components/responses/WorkerSessionInterruptUnavailable'
   /worker-sessions/{worker_session_id}/events:
     get:
       tags:
@@ -2060,6 +2099,16 @@ components:
       $ref: './components/responses/WorkerSessionContinuationConflict.yaml'
     WorkerSessionContinuationUnavailable:
       $ref: './components/responses/WorkerSessionContinuationUnavailable.yaml'
+    WorkerSessionInterruptBadRequest:
+      $ref: './components/responses/WorkerSessionInterruptBadRequest.yaml'
+    WorkerSessionInterruptNotFound:
+      $ref: './components/responses/WorkerSessionInterruptNotFound.yaml'
+    WorkerSessionInterruptConflict:
+      $ref: './components/responses/WorkerSessionInterruptConflict.yaml'
+    WorkerSessionInterruptUnavailable:
+      $ref: './components/responses/WorkerSessionInterruptUnavailable.yaml'
+    WorkerSessionInterruptInternalError:
+      $ref: './components/responses/WorkerSessionInterruptInternalError.yaml'
     FactorySessionLifecycleControlConflict:
       $ref: './components/responses/FactorySessionLifecycleControlConflict.yaml'
     FactorySessionResourceCapacityConflict:
@@ -2129,6 +2178,14 @@ components:
       $ref: './components/schemas/api/WorkerSessionContinueRequest.yaml'
     WorkerSessionContinueResponse:
       $ref: './components/schemas/api/WorkerSessionContinueResponse.yaml'
+    WorkerSessionInterruptRequest:
+      $ref: './components/schemas/api/WorkerSessionInterruptRequest.yaml'
+    WorkerSessionInterruptSnapshot:
+      $ref: './components/schemas/api/WorkerSessionInterruptSnapshot.yaml'
+    WorkerSessionInterruptResponse:
+      $ref: './components/schemas/api/WorkerSessionInterruptResponse.yaml'
+    WorkerSessionInterruptError:
+      $ref: './components/schemas/api/WorkerSessionInterruptError.yaml'
     WorkerSessionStartRetryPolicy:
       $ref: './components/schemas/api/WorkerSessionStartRetryPolicy.yaml'
     WorkerSessionResolvedExecution:

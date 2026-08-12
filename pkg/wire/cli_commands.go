@@ -204,6 +204,14 @@ func provideContinueWorkerSessionOperation(
 	return workersessionscli.BindContinue(transport.Protocol, local, workersessionscli.Effects{GenerateID: generateID})
 }
 
+func provideInterruptWorkerSessionOperation(
+	transport standardCLIHTTPProtocol,
+	local *localWorkerSessionsBoundary,
+	generateID workersessionscli.IDGenerator,
+) cli.InterruptWorkerSessionOperation {
+	return workersessionscli.BindInterrupt(transport.Protocol, local, workersessionscli.Effects{GenerateID: generateID})
+}
+
 // localWorkerSessionsBoundary owns the process-scoped direct Worker route used
 // by the CLI. Direct invoke has already resolved the provider-facing execution
 // fields, so its user-facing workstation name is not an authored route. The
@@ -236,6 +244,16 @@ func (b *localWorkerSessionsBoundary) Continue(
 		return workersessions.ContinueResult{}, fmt.Errorf("local Worker Sessions service is unavailable")
 	}
 	return b.service.Continue(ctx, req)
+}
+
+func (b *localWorkerSessionsBoundary) Interrupt(
+	ctx context.Context,
+	req workersessions.InterruptRequest,
+) (workersessions.InterruptResult, error) {
+	if b == nil || b.service == nil {
+		return workersessions.InterruptResult{}, fmt.Errorf("local Worker Sessions service is unavailable")
+	}
+	return b.service.Interrupt(ctx, req)
 }
 
 func (b *localWorkerSessionsBoundary) StreamObservationsByWorkerSessionID(

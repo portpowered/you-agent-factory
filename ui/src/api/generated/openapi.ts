@@ -68,6 +68,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/worker-sessions/{worker_session_id}/interrupt": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Interrupt one active Worker Session into a replacement
+     * @description Cancels the exact active source Worker Session dispatch, waits for its authoritative CANCELED outcome, and admits one distinct successor with replacement input. The requestId and successor identity are idempotent inputs. A 202 response is returned only after source cancellation and successor admission have crossed their authoritative barriers; successor terminal output remains asynchronous. Callers that need terminal output should inspect or stream the successor Worker Session.
+     */
+    post: operations["interruptWorkerSession"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/worker-sessions/{worker_session_id}/events": {
     parameters: {
       query?: never;
@@ -1301,6 +1321,59 @@ export interface components {
       state: WorkerSessionContinueResponseState;
       /** @description Deterministic Events topic whose retained opening record is ready to read and subscribe. */
       eventTopic: string;
+    };
+    /** @description Idempotent interrupt-and-replace request for one active Worker Session. The server cancels the exact source dispatch, waits for its authoritative CANCELED outcome, and admits the distinct successor with this replacement input. The source identity is supplied by the route. */
+    WorkerSessionInterruptRequest: {
+      /** @description Required caller idempotency key for this interrupt. */
+      requestId: string;
+      /** @description Distinct Worker Session identity to reserve for the replacement. */
+      successorWorkerSessionId: string;
+      /** @description Non-empty replacement input delivered to the admitted successor. */
+      replacementMessage: string;
+    };
+    /** @description Detached lifecycle snapshot captured at an interrupt operation boundary. */
+    WorkerSessionInterruptSnapshot: {
+      /** @description Stable Worker Session identity. */
+      workerSessionId: string;
+      /** @enum {string} */
+      state: WorkerSessionInterruptSnapshotState;
+      /** @description Deterministic Events topic for this Worker Session. */
+      eventTopic: string;
+    };
+    /** @description Admission acknowledgment for an interrupt-and-replace operation. A 202 response is returned only after source cancellation has reached the authoritative CANCELED state and the successor has crossed its admission barrier. Successor terminal output remains asynchronous. */
+    WorkerSessionInterruptResponse: {
+      /** @description Caller idempotency key echoed for correlation. */
+      requestId: string;
+      /** @description Active source Worker Session that was interrupted. */
+      sourceWorkerSessionId: string;
+      /** @description Replacement Worker Session admitted after source cancellation. */
+      successorWorkerSessionId: string;
+      /**
+       * @description Authoritative phase reached by a successful interrupt.
+       * @enum {string}
+       */
+      phase: WorkerSessionInterruptResponsePhase;
+      /** @description Always true for a 202 response. */
+      accepted: boolean;
+      source: components["schemas"]["WorkerSessionInterruptSnapshot"];
+      successor: components["schemas"]["WorkerSessionInterruptSnapshot"];
+    };
+    /** @description Stable, phase-aware interrupt failure. Source and successor snapshots are included when the server reached the corresponding operation boundary. */
+    WorkerSessionInterruptError: {
+      message: string;
+      family: components["schemas"]["ErrorFamily"];
+      /** @description Stable machine-readable interrupt error code. */
+      code: string;
+      /**
+       * @description Stable operation boundary or caller/transport phase.
+       * @enum {string}
+       */
+      phase: WorkerSessionInterruptErrorPhase;
+      requestId?: string;
+      sourceWorkerSessionId?: string;
+      successorWorkerSessionId?: string;
+      source?: components["schemas"]["WorkerSessionInterruptSnapshot"];
+      successor?: components["schemas"]["WorkerSessionInterruptSnapshot"];
     };
     WorkerSessionStartRetryPolicy: {
       /**
@@ -6757,6 +6830,51 @@ export interface components {
         "application/json": components["schemas"]["ErrorResponse"];
       };
     };
+    /** @description The Worker Session interrupt request failed validation. */
+    WorkerSessionInterruptBadRequest: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["WorkerSessionInterruptError"];
+      };
+    };
+    /** @description The Worker Session interrupt source was not found. */
+    WorkerSessionInterruptNotFound: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["WorkerSessionInterruptError"];
+      };
+    };
+    /** @description The Worker Session interrupt conflicts with source, lineage, or idempotency state. */
+    WorkerSessionInterruptConflict: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["WorkerSessionInterruptError"];
+      };
+    };
+    /** @description The Worker Session interrupt could not cross its cancellation or successor admission barrier. */
+    WorkerSessionInterruptUnavailable: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["WorkerSessionInterruptError"];
+      };
+    };
+    /** @description The server failed while handling an otherwise valid Worker Session interrupt. */
+    WorkerSessionInterruptInternalError: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["WorkerSessionInterruptError"];
+      };
+    };
     /** @description Lifecycle control request conflicts with current session state, another in-flight control, or a previously applied control requestId. */
     FactorySessionLifecycleControlConflict: {
       headers: {
@@ -6995,6 +7113,38 @@ export interface operations {
       404: components["responses"]["NotFound"];
       409: components["responses"]["WorkerSessionContinuationConflict"];
       503: components["responses"]["WorkerSessionContinuationUnavailable"];
+    };
+  };
+  interruptWorkerSession: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable Worker Session identity returned by the Worker Sessions list operation. */
+        worker_session_id: components["parameters"]["WorkerSessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["WorkerSessionInterruptRequest"];
+      };
+    };
+    responses: {
+      /** @description The source was canceled and the replacement successor was admitted. */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkerSessionInterruptResponse"];
+        };
+      };
+      400: components["responses"]["WorkerSessionInterruptBadRequest"];
+      404: components["responses"]["WorkerSessionInterruptNotFound"];
+      409: components["responses"]["WorkerSessionInterruptConflict"];
+      500: components["responses"]["WorkerSessionInterruptInternalError"];
+      503: components["responses"]["WorkerSessionInterruptUnavailable"];
     };
   };
   streamWorkerSessionEventsByTopLevelWorkerSessionId: {
@@ -8707,6 +8857,33 @@ export const WorkerSessionContinueResponseState = {
 } as const;
 export type WorkerSessionContinueResponseState =
   (typeof WorkerSessionContinueResponseState)[keyof typeof WorkerSessionContinueResponseState];
+export const WorkerSessionInterruptSnapshotState = {
+  WorkerSessionInterruptSnapshotStateReserved: "RESERVED",
+  WorkerSessionInterruptSnapshotStateStarting: "STARTING",
+  WorkerSessionInterruptSnapshotStateRunning: "RUNNING",
+  WorkerSessionInterruptSnapshotStatePaused: "PAUSED",
+  WorkerSessionInterruptSnapshotStateCompleted: "COMPLETED",
+  WorkerSessionInterruptSnapshotStateFailed: "FAILED",
+  WorkerSessionInterruptSnapshotStateCanceled: "CANCELED",
+  WorkerSessionInterruptSnapshotStateTerminated: "TERMINATED",
+} as const;
+export type WorkerSessionInterruptSnapshotState =
+  (typeof WorkerSessionInterruptSnapshotState)[keyof typeof WorkerSessionInterruptSnapshotState];
+export const WorkerSessionInterruptResponsePhase = {
+  WorkerSessionInterruptResponsePhaseSuccessorAdmission: "SUCCESSOR_ADMISSION",
+} as const;
+export type WorkerSessionInterruptResponsePhase =
+  (typeof WorkerSessionInterruptResponsePhase)[keyof typeof WorkerSessionInterruptResponsePhase];
+export const WorkerSessionInterruptErrorPhase = {
+  WorkerSessionInterruptErrorPhaseValidation: "VALIDATION",
+  WorkerSessionInterruptErrorPhaseSourceCancellation: "SOURCE_CANCELLATION",
+  WorkerSessionInterruptErrorPhaseSuccessorAdmission: "SUCCESSOR_ADMISSION",
+  WorkerSessionInterruptErrorPhaseTransport: "TRANSPORT",
+  WorkerSessionInterruptErrorPhaseResponse: "RESPONSE",
+  WorkerSessionInterruptErrorPhaseWait: "WAIT",
+} as const;
+export type WorkerSessionInterruptErrorPhase =
+  (typeof WorkerSessionInterruptErrorPhase)[keyof typeof WorkerSessionInterruptErrorPhase];
 export const WorkerSessionObservationState = {
   WorkerSessionObservationStateReserved: "RESERVED",
   WorkerSessionObservationStateStarting: "STARTING",
@@ -8884,6 +9061,20 @@ export const ErrorResponseCode = {
   // Workers could not admit the Worker Session continuation.
   WORKER_SESSION_CONTINUATION_ADMISSION_FAILED:
     "WORKER_SESSION_CONTINUATION_ADMISSION_FAILED",
+  // Worker Session interrupt requestId was reused with different inputs.
+  WORKER_SESSION_INTERRUPT_REQUEST_ID_CONFLICT:
+    "WORKER_SESSION_INTERRUPT_REQUEST_ID_CONFLICT",
+  // Worker Session interrupt conflicts with source lifecycle, lineage, or Provider Session state.
+  WORKER_SESSION_INTERRUPT_CONFLICT: "WORKER_SESSION_INTERRUPT_CONFLICT",
+  // Worker Sessions could not cancel the exact source dispatch for an interrupt.
+  WORKER_SESSION_INTERRUPT_SOURCE_CANCELLATION_FAILED:
+    "WORKER_SESSION_INTERRUPT_SOURCE_CANCELLATION_FAILED",
+  // Worker Sessions canceled the source but could not admit the replacement successor.
+  WORKER_SESSION_INTERRUPT_SUCCESSOR_ADMISSION_FAILED:
+    "WORKER_SESSION_INTERRUPT_SUCCESSOR_ADMISSION_FAILED",
+  // Workers could not admit the Worker Session interrupt replacement.
+  WORKER_SESSION_INTERRUPT_ADMISSION_FAILED:
+    "WORKER_SESSION_INTERRUPT_ADMISSION_FAILED",
   // Lifecycle control requestId was already applied with different control inputs.
   FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED:
     "FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED",

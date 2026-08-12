@@ -36,10 +36,15 @@ type continuationService interface {
 	Continue(context.Context, workersessions.ContinueRequest) (workersessions.ContinueResult, error)
 }
 
+type interruptService interface {
+	Interrupt(context.Context, workersessions.InterruptRequest) (workersessions.InterruptResult, error)
+}
+
 type Adapter struct {
 	observations observationService
 	starter      startService
 	continuer    continuationService
+	interrupter  interruptService
 	work         work.Service
 }
 
@@ -242,6 +247,25 @@ func NewAdapterWithStartAndContinue(
 	return &Adapter{starter: starter, continuer: continuer, observations: observations, work: workRoot}
 }
 
+// NewAdapterWithStartAndContinueAndInterrupt binds the direct admission and
+// replacement operations while retaining the observation and Work read
+// capabilities of the base adapter.
+func NewAdapterWithStartAndContinueAndInterrupt(
+	starter startService,
+	continuer continuationService,
+	interrupter interruptService,
+	observations observationService,
+	workRoot work.Service,
+) *Adapter {
+	if starter == nil || continuer == nil || interrupter == nil || observations == nil || workRoot == nil {
+		return nil
+	}
+	return &Adapter{
+		starter: starter, continuer: continuer, interrupter: interrupter,
+		observations: observations, work: workRoot,
+	}
+}
+
 // StartWorkerSession maps one typed HTTP request to the Worker Sessions-owned
 // asynchronous start operation. The service returns only at its admission
 // barrier; terminal execution is deliberately not awaited here.
@@ -289,6 +313,31 @@ func (a *Adapter) ContinueWorkerSession(
 		return factoryapi.WorkerSessionContinueResponse{}, err
 	}
 	return WorkerSessionContinueResponseToAPI(result), nil
+}
+
+// InterruptWorkerSession maps one source-addressed HTTP request to the
+// Worker Sessions-owned interrupt barrier. A successful response is emitted
+// only after source cancellation and successor admission are authoritative.
+func (a *Adapter) InterruptWorkerSession(
+	ctx context.Context,
+	sourceWorkerSessionID string,
+	request factoryapi.WorkerSessionInterruptRequest,
+) (factoryapi.WorkerSessionInterruptResponse, error) {
+	if a == nil || a.interrupter == nil {
+		return factoryapi.WorkerSessionInterruptResponse{}, errors.New("Worker Sessions interrupt service is unavailable")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	interrupt, err := WorkerSessionInterruptRequestFromAPI(sourceWorkerSessionID, request)
+	if err != nil {
+		return factoryapi.WorkerSessionInterruptResponse{}, err
+	}
+	result, err := a.interrupter.Interrupt(ctx, interrupt)
+	if err != nil {
+		return factoryapi.WorkerSessionInterruptResponse{}, err
+	}
+	return WorkerSessionInterruptResponseToAPI(result), nil
 }
 
 // ListWorkerSessions verifies Work existence and returns every authoritative

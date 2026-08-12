@@ -324,6 +324,7 @@ var cliCommandOperationsSet = wire.NewSet(
 	provideWorkerSessionsCLIIdentityGenerator,
 	provideWorkerSessionsCLIExecutionFileReader,
 	provideContinueWorkerSessionOperation,
+	provideInterruptWorkerSessionOperation,
 	provideLocalWorkerSessionsBoundary,
 	wire.Bind(new(workersessionsrootcli.LocalInvokeBoundary), new(*localWorkerSessionsBoundary)),
 	provideInvokeWorkerSessionOperation,

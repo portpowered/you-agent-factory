@@ -29,6 +29,24 @@ type directWorkerSessionCLIResult struct {
 	Output                   string `json:"output"`
 }
 
+type directWorkerSessionInterruptCLIResult struct {
+	RequestID                string `json:"requestId"`
+	SourceWorkerSessionID    string `json:"sourceWorkerSessionId"`
+	SuccessorWorkerSessionID string `json:"successorWorkerSessionId"`
+	Phase                    string `json:"phase"`
+	Accepted                 bool   `json:"accepted"`
+	Source                   struct {
+		WorkerSessionID string `json:"workerSessionId"`
+		State           string `json:"state"`
+		EventTopic      string `json:"eventTopic"`
+	} `json:"source"`
+	Successor struct {
+		WorkerSessionID string `json:"workerSessionId"`
+		State           string `json:"state"`
+		EventTopic      string `json:"eventTopic"`
+	} `json:"successor"`
+}
+
 func TestDirectWorkerSessionInvokeContinueLocalPreservesSessionAndLineage(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -119,6 +137,61 @@ func TestDirectWorkerSessionInvokeContinueLocalPreservesSessionAndLineage(t *tes
 		t.Fatalf("provider command requests after idempotency conflict = %d, want two", len(requests))
 	}
 	functionalevidence.Covers(t, "cli/you.worker-sessions.continue", "cli/you.worker-sessions.invoke")
+}
+
+func TestDirectWorkerSessionRemoteInterruptUsesExactRouteAndAdmissionSnapshots(t *testing.T) {
+	var received factoryapi.WorkerSessionInterruptRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/worker-sessions/source-session/interrupt" {
+			t.Fatalf("unexpected remote interrupt request %s %s", r.Method, r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&received); err != nil {
+			t.Fatalf("decode remote interrupt request: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		_ = json.NewEncoder(w).Encode(factoryapi.WorkerSessionInterruptResponse{
+			RequestId:                "remote-interrupt-request",
+			SourceWorkerSessionId:    "source-session",
+			SuccessorWorkerSessionId: "successor-session",
+			Phase:                    factoryapi.WorkerSessionInterruptResponsePhaseSuccessorAdmission,
+			Accepted:                 true,
+			Source: factoryapi.WorkerSessionInterruptSnapshot{
+				WorkerSessionId: "source-session", State: factoryapi.WorkerSessionInterruptSnapshotStateCanceled,
+				EventTopic: "worker-session/source-session/events",
+			},
+			Successor: factoryapi.WorkerSessionInterruptSnapshot{
+				WorkerSessionId: "successor-session", State: factoryapi.WorkerSessionInterruptSnapshotStateRunning,
+				EventTopic: "worker-session/successor-session/events",
+			},
+		})
+	}))
+	defer server.Close()
+
+	process := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: testutil.NewProviderCommandRunner()})
+	support.CleanupProcess(t, process)
+	inputs := support.FakeInputs(context.Background(), []string{
+		"you", "--remote", "--server", server.URL, "--json", "worker-sessions", "interrupt", "source-session",
+		"--request-id", "remote-interrupt-request", "--successor-worker-session-id", "successor-session",
+		"--replacement-message", "replace the active work", "--async",
+	})
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf("remote Worker Session interrupt: %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
+	}
+	var result directWorkerSessionInterruptCLIResult
+	decodeDirectWorkerSessionResult(t, inputs.Stdout(), &result)
+	if received.RequestId != "remote-interrupt-request" || received.SuccessorWorkerSessionId != "successor-session" ||
+		received.ReplacementMessage != "replace the active work" {
+		t.Fatalf("remote interrupt request = %#v, want exact request tuple", received)
+	}
+	if !result.Accepted || result.Phase != string(factoryapi.WorkerSessionInterruptResponsePhaseSuccessorAdmission) ||
+		result.SourceWorkerSessionID != "source-session" || result.SuccessorWorkerSessionID != "successor-session" ||
+		result.Source.State != string(factoryapi.WorkerSessionInterruptSnapshotStateCanceled) ||
+		result.Successor.State != string(factoryapi.WorkerSessionInterruptSnapshotStateRunning) ||
+		result.Source.EventTopic == "" || result.Successor.EventTopic == "" {
+		t.Fatalf("remote interrupt result = %#v, want admitted source/successor snapshots", result)
+	}
+	functionalevidence.Covers(t, "cli/you.worker-sessions.interrupt")
 }
 
 func TestDirectWorkerSessionContinueUnknownSourceReturnsNotFoundWithoutProviderCall(t *testing.T) {

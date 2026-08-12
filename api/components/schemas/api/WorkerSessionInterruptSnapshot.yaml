@@ -1,0 +1,35 @@
+type: object
+additionalProperties: false
+required:
+  - workerSessionId
+  - state
+  - eventTopic
+description: >-
+  Detached lifecycle snapshot captured at an interrupt operation boundary.
+properties:
+  workerSessionId:
+    type: string
+    description: Stable Worker Session identity.
+  state:
+    type: string
+    enum:
+      - RESERVED
+      - STARTING
+      - RUNNING
+      - PAUSED
+      - COMPLETED
+      - FAILED
+      - CANCELED
+      - TERMINATED
+    x-enum-varnames:
+      - WorkerSessionInterruptSnapshotStateReserved
+      - WorkerSessionInterruptSnapshotStateStarting
+      - WorkerSessionInterruptSnapshotStateRunning
+      - WorkerSessionInterruptSnapshotStatePaused
+      - WorkerSessionInterruptSnapshotStateCompleted
+      - WorkerSessionInterruptSnapshotStateFailed
+      - WorkerSessionInterruptSnapshotStateCanceled
+      - WorkerSessionInterruptSnapshotStateTerminated
+  eventTopic:
+    type: string
+    description: Deterministic Events topic for this Worker Session.

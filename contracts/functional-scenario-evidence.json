@@ -110,6 +110,12 @@
       ]
     },
     {
+      "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestDirectWorkerSessionRemoteInterruptUsesExactRouteAndAdmissionSnapshots",
+      "stableIds": [
+        "cli/you.worker-sessions.interrupt"
+      ]
+    },
+    {
       "test": "tests/functional/workers/mock/live_capacity_test.go::TestLiveResourceCapacityIncreaseAdmitsWaitingMockDispatch",
       "stableIds": [
         "cli/you.session.resource.set"

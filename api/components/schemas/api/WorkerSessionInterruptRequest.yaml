@@ -1,0 +1,24 @@
+type: object
+additionalProperties: false
+required:
+  - requestId
+  - successorWorkerSessionId
+  - replacementMessage
+description: >-
+  Idempotent interrupt-and-replace request for one active Worker Session. The
+  server cancels the exact source dispatch, waits for its authoritative
+  CANCELED outcome, and admits the distinct successor with this replacement
+  input. The source identity is supplied by the route.
+properties:
+  requestId:
+    type: string
+    minLength: 1
+    description: Required caller idempotency key for this interrupt.
+  successorWorkerSessionId:
+    type: string
+    minLength: 1
+    description: Distinct Worker Session identity to reserve for the replacement.
+  replacementMessage:
+    type: string
+    minLength: 1
+    description: Non-empty replacement input delivered to the admitted successor.

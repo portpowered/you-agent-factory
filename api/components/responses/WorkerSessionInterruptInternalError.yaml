@@ -1,0 +1,5 @@
+description: The server failed while handling an otherwise valid Worker Session interrupt.
+content:
+  application/json:
+    schema:
+      $ref: '../schemas/api/WorkerSessionInterruptError.yaml'
