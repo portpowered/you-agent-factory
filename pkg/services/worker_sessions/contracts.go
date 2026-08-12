@@ -134,6 +134,13 @@ type Service interface {
 	// the only provider execution path after Workers accepts the dispatch.
 	Continue(ctx context.Context, req ContinueRequest) (ContinueResult, error)
 
+	// Interrupt claims one active source dispatch at its exact admitted
+	// boundary, waits for the authoritative canceled source outcome, and then
+	// admits one distinct replacement successor through Continue. The source's
+	// exact recorded Provider Session reference is captured before cancellation
+	// and is the only reference accepted by the successor.
+	Interrupt(ctx context.Context, req InterruptRequest) (InterruptResult, error)
+
 	// AssociateProviderSession records the exact Providers-owned SessionRef
 	// observed by one currently supervised Worker Session attempt. The caller
 	// must name the session's exact dispatch identity; Worker Sessions derives
@@ -668,6 +675,45 @@ var (
 	// ErrContinuationServerStopping reports rejection while the owning process
 	// lifecycle is stopping.
 	ErrContinuationServerStopping = errors.New("worker session: continuation server is stopping")
+	// ErrInvalidInterruptRequestID reports an interrupt without a stable
+	// caller-owned idempotency key.
+	ErrInvalidInterruptRequestID = errors.New("worker session: interrupt request id is required")
+	// ErrInvalidInterruptLineage reports missing or equal source and successor
+	// identities.
+	ErrInvalidInterruptLineage = errors.New("worker session: invalid interrupt lineage")
+	// ErrInvalidInterruptMessage reports an interrupt without replacement
+	// content.
+	ErrInvalidInterruptMessage = errors.New("worker session: interrupt replacement message is required")
+	// ErrInterruptSourceNotFound reports an interrupt whose source is absent.
+	ErrInterruptSourceNotFound = errors.New("worker session: interrupt source not found")
+	// ErrInterruptSourceNotActive reports a source that is not currently
+	// running an active dispatch.
+	ErrInterruptSourceNotActive = errors.New("worker session: interrupt source is not active")
+	// ErrInterruptSourceConflict reports a source already claimed by another
+	// terminal control or successor operation.
+	ErrInterruptSourceConflict = errors.New("worker session: interrupt source conflict")
+	// ErrInterruptProviderSessionMissing reports an active source without the
+	// exact Provider Session association required for replacement execution.
+	ErrInterruptProviderSessionMissing = errors.New("worker session: interrupt provider session is missing")
+	// ErrInterruptProviderSessionInvalid reports an association that does not
+	// match the source's exact admitted dispatch identity.
+	ErrInterruptProviderSessionInvalid = errors.New("worker session: interrupt provider session is invalid")
+	// ErrInterruptExecutionUnavailable reports a source without its immutable
+	// resolved Workers execution.
+	ErrInterruptExecutionUnavailable = errors.New("worker session: interrupt execution unavailable")
+	// ErrInterruptRequestIDConflict reports reuse of an interrupt idempotency
+	// key with a different immutable request tuple.
+	ErrInterruptRequestIDConflict = errors.New("worker session: interrupt request id conflict")
+	// ErrInterruptSourceCancellationFailed reports failure at the exact Workers
+	// cancellation boundary or an authoritative source outcome other than
+	// CANCELED.
+	ErrInterruptSourceCancellationFailed = errors.New("worker session: interrupt source cancellation failed")
+	// ErrInterruptSuccessorAdmissionFailed reports a successor reservation or
+	// Workers admission failure after source cancellation committed.
+	ErrInterruptSuccessorAdmissionFailed = errors.New("worker session: interrupt successor admission failed")
+	// ErrInterruptServerStopping reports rejection while the owning process
+	// lifecycle is stopping.
+	ErrInterruptServerStopping = errors.New("worker session: interrupt server is stopping")
 	// ErrPublicationNotOpen reports PublishRecord called for a session whose
 	// publication window is not open: the session was only ever reserved,
 	// its opening record has not yet committed, or its terminal record has

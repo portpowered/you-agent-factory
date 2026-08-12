@@ -218,6 +218,10 @@ func (s *fakeWorkerSessionsService) Continue(context.Context, workersessions.Con
 	return workersessions.ContinueResult{}, nil
 }
 
+func (s *fakeWorkerSessionsService) Interrupt(context.Context, workersessions.InterruptRequest) (workersessions.InterruptResult, error) {
+	return workersessions.InterruptResult{}, nil
+}
+
 func (s *fakeWorkerSessionsService) PublishRecord(context.Context, workersessions.PublishRecordRequest) (workersessions.PublishRecordResult, error) {
 	return workersessions.PublishRecordResult{}, nil
 }

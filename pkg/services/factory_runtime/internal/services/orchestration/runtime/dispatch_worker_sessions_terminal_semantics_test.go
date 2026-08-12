@@ -390,6 +390,12 @@ func (s *preHandoffFailedWorkerSessionsService) Continue(
 	return workersessions.ContinueResult{}, nil
 }
 
+func (s *preHandoffFailedWorkerSessionsService) Interrupt(
+	context.Context, workersessions.InterruptRequest,
+) (workersessions.InterruptResult, error) {
+	return workersessions.InterruptResult{}, nil
+}
+
 func (s *preHandoffFailedWorkerSessionsService) PublishRecord(
 	context.Context, workersessions.PublishRecordRequest,
 ) (workersessions.PublishRecordResult, error) {

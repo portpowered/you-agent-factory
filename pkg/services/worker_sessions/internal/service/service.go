@@ -65,13 +65,14 @@ type EventsRetainedReader interface {
 }
 
 type registry struct {
-	mu              sync.RWMutex
-	sessions        map[string]workersessions.Session
-	publications    map[string]*publication
-	supervisions    map[string]*supervision
-	observations    map[string]*observation
-	startReplays    map[string]*startReplay
-	continueReplays map[string]*continueReplay
+	mu               sync.RWMutex
+	sessions         map[string]workersessions.Session
+	publications     map[string]*publication
+	supervisions     map[string]*supervision
+	observations     map[string]*observation
+	startReplays     map[string]*startReplay
+	continueReplays  map[string]*continueReplay
+	interruptReplays map[string]*interruptReplay
 	// dispatchOwners is the Worker Sessions-owned reverse lookup from the
 	// currently supervised Workers dispatch to its stable session identity.
 	// Provider progress names dispatches, never Worker Sessions, so this map is
@@ -141,6 +142,7 @@ func New(
 		observations:     make(map[string]*observation),
 		startReplays:     make(map[string]*startReplay),
 		continueReplays:  make(map[string]*continueReplay),
+		interruptReplays: make(map[string]*interruptReplay),
 		dispatchOwners:   make(map[string]string),
 		boundary:         boundary,
 		events:           eventsAppender,
