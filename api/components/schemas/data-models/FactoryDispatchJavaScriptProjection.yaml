@@ -11,3 +11,6 @@ properties:
   executionMode:
     type: string
     description: Durable child execution mode recorded for the JavaScript workflow task when available.
+  skipPermissions:
+    type: boolean
+    description: Whether this child requested the selected provider's permission-bypass behavior.

@@ -260,6 +260,20 @@ func TestRegistryRejectsInvalidNegotiatedCapabilitiesAndDiscovery(t *testing.T) 
 			want: `omit required capability "message_snapshots"`,
 		},
 		{
+			name: "omits requested permission bypass capability",
+			mutate: func(integration *recordingIntegration) {
+				integration.negotiated = inference.NewCapabilitySet(inference.CapabilityPromptSubmission)
+			},
+			call: func(registry *Registry) error {
+				request := inference.NewInvocationRequest(inference.InvocationInput{
+					Required: inference.NewCapabilitySet(inference.CapabilityPermissionBypass),
+				})
+				_, err := registry.Capabilities(context.Background(), "codex", request)
+				return err
+			},
+			want: `omit required capability "permission_bypass"`,
+		},
+		{
 			name: "contradictory discovery",
 			mutate: func(integration *recordingIntegration) {
 				integration.discovery = inference.NewDiscovery(inference.ReadinessUnavailable)

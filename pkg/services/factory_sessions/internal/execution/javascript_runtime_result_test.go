@@ -605,6 +605,47 @@ func TestChildWorkerExecutor_CarriesTheAuthoredWorkerNameAndPermissionPolicy(t *
 	}
 }
 
+// TestDirectChildExecutor_CarriesSkipPermissionsToProviderInferenceRequest
+// is the standalone composition regression. Its child has no Factory Runtime
+// or Worker Session behind it, so the direct executor must carry the resolved
+// child policy into the exact provider-boundary request itself.
+func TestDirectChildExecutor_CarriesSkipPermissionsToProviderInferenceRequest(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		want bool
+	}{
+		{name: "true", want: true},
+		{name: "false", want: false},
+		{name: "omitted", want: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			invocation := &capturingChildInvocationExecutor{
+				result: workers.InvocationResult{
+					Response: workers.InferenceResponse{Content: "child output"},
+				},
+			}
+			executor := newDirectChildExecutor(
+				"direct-sess-1",
+				invocation,
+				newChildRecordSink(),
+				childTestValues{},
+				"/project",
+			)
+			request := factory.JavaScriptChildExecutionRequest{Prompt: "run"}
+			if test.name == "true" {
+				request.SkipPermissions = true
+			}
+
+			if _, err := executor.Execute(context.Background(), request); err != nil {
+				t.Fatalf("Execute: %v", err)
+			}
+			if invocation.request.SkipPermissions != test.want {
+				t.Fatalf("provider skip-permissions = %v, want %v", invocation.request.SkipPermissions, test.want)
+			}
+		})
+	}
+}
+
 func newTestChildWorkerExecutor(
 	invoke factory.Service,
 	sink *childRecordSink,
@@ -671,6 +712,21 @@ func (s *childRecordSink) terminalChildDispatch(t *testing.T) factory.JavaScript
 }
 
 type childTestValues struct{}
+
+type capturingChildInvocationExecutor struct {
+	workers.InvocationExecutor
+	request workers.ProviderInferenceRequest
+	result  workers.InvocationResult
+}
+
+func (e *capturingChildInvocationExecutor) Execute(
+	_ context.Context,
+	input workers.InvocationInput,
+) (workers.InvocationResult, error) {
+	e.request = workers.CloneProviderInferenceRequest(input.Request)
+	e.result.Attempt = input.Attempt
+	return e.result, nil
+}
 
 func (childTestValues) TextDigest(string) string           { return "digest" }
 func (childTestValues) SchemaDigest(map[string]any) string { return "schema-digest" }

@@ -96,7 +96,7 @@ func validateCapabilitySet(field string, capabilities CapabilitySet) error {
 func knownCapability(capability Capability) bool {
 	switch capability {
 	case CapabilityPromptSubmission, CapabilityImageInput, CapabilitySessionResume,
-		CapabilityStructuredOutput, CapabilityNativeStreaming, CapabilityMessageDeltas,
+		CapabilityStructuredOutput, CapabilityPermissionBypass, CapabilityNativeStreaming, CapabilityMessageDeltas,
 		CapabilityMessageSnapshots, CapabilityReasoningSummaries, CapabilityToolLifecycle,
 		CapabilityToolOutputDeltas, CapabilityFileChanges, CapabilityPlans, CapabilityUsage,
 		CapabilityStableItemIDs, CapabilityProviderReconnect:

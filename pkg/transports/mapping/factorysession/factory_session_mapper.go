@@ -746,6 +746,9 @@ func dispatchJavaScriptFromAPI(javascript factoryapi.FactoryDispatchJavaScriptPr
 	if javascript.ExecutionMode != nil {
 		out.ExecutionMode = strings.TrimSpace(*javascript.ExecutionMode)
 	}
+	if javascript.SkipPermissions != nil {
+		out.SkipPermissions = *javascript.SkipPermissions
+	}
 	return out
 }
 

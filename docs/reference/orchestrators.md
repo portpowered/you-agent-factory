@@ -131,7 +131,13 @@ All other per-child properties are rejected before dispatch. In particular,
 host-access fields, output schemas, per-child concurrency or agent caps, and
 duration controls are unsupported. Configure global budgets on an applicable
 factory or Factory Session policy surface when one exists. The only supported
-per-child permission control is the boolean `skipPermissions` field.
+per-child permission control is the boolean `skipPermissions` field. It is a
+dangerous child-level override for provider approval and sandbox restrictions,
+and the selected provider must advertise permission-bypass support. Unsupported
+routes fail before execution with a safe capability diagnostic. The field does
+not disable routing, model or reasoning allowlists, fanout, concurrency,
+duration, token, output, artifact, network, connector, or other resource
+controls.
 
 For example, this workflow fails validation with
 `agent.run() does not support field "writableRoots"`; the diagnostic names the

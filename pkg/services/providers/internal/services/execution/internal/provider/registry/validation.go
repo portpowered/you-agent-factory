@@ -137,6 +137,7 @@ func manifestCapabilities(manifest Manifest) inference.CapabilitySet {
 	appendIf(execution.ImageInput, inference.CapabilityImageInput)
 	appendIf(execution.SessionResume, inference.CapabilitySessionResume)
 	appendIf(execution.StructuredOutput, inference.CapabilityStructuredOutput)
+	appendIf(execution.PermissionBypass, inference.CapabilityPermissionBypass)
 	appendIf(response.NativeStreaming, inference.CapabilityNativeStreaming)
 	appendIf(response.MessageDeltas, inference.CapabilityMessageDeltas)
 	appendIf(response.MessageSnapshots, inference.CapabilityMessageSnapshots)
@@ -157,6 +158,7 @@ func allManifestCapabilities() []inference.Capability {
 		inference.CapabilityImageInput,
 		inference.CapabilitySessionResume,
 		inference.CapabilityStructuredOutput,
+		inference.CapabilityPermissionBypass,
 		inference.CapabilityNativeStreaming,
 		inference.CapabilityMessageDeltas,
 		inference.CapabilityMessageSnapshots,

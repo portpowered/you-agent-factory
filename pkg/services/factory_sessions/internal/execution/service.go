@@ -658,9 +658,10 @@ func dispatchFailureDetailFromChildRecord(child factory.JavaScriptChildDispatchR
 
 func dispatchJavaScriptFromChildRecord(child factory.JavaScriptChildDispatchRecord) DispatchJavaScriptProjection {
 	return DispatchJavaScriptProjection{
-		TaskKind:      "AGENT",
-		TaskLabel:     child.Label,
-		ExecutionMode: strings.TrimSpace(child.ExecutionMode),
+		TaskKind:        "AGENT",
+		TaskLabel:       child.Label,
+		ExecutionMode:   strings.TrimSpace(child.ExecutionMode),
+		SkipPermissions: child.SkipPermissions,
 	}
 }
 

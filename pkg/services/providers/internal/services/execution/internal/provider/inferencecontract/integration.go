@@ -20,6 +20,7 @@ const (
 	CapabilityImageInput         Capability = "image_input"
 	CapabilitySessionResume      Capability = "session_resume"
 	CapabilityStructuredOutput   Capability = "structured_output"
+	CapabilityPermissionBypass   Capability = "permission_bypass"
 	CapabilityNativeStreaming    Capability = "native_streaming"
 	CapabilityMessageDeltas      Capability = "message_deltas"
 	CapabilityMessageSnapshots   Capability = "message_snapshots"

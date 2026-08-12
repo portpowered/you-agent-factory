@@ -16,6 +16,7 @@ maximumExecutionCapabilities:
   imageInput: true
   sessionResume: true
   structuredOutput: true
+  permissionBypass: true
   toolExecution: true
   workingDirectory: true
   worktree: true
