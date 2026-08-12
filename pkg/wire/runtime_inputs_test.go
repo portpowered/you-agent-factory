@@ -128,7 +128,7 @@ func TestWorkRequestEffectsUseExplicitEdgesOrProcessDefaults(t *testing.T) {
 	}
 }
 
-func TestProvideWorkFactoryConstructsThroughWorkWireBridge(t *testing.T) {
+func TestProvideWorkServiceConstructsThroughWorkWireBridge(t *testing.T) {
 	t.Parallel()
 
 	staging, err := provideWorkContentStagingService(serviceedges.Edges{})
@@ -143,13 +143,9 @@ func TestProvideWorkFactoryConstructsThroughWorkWireBridge(t *testing.T) {
 	readFile := provideWorkSubmittedFileReader(serviceedges.Edges{})
 	inspectPath := provideWorkSubmittedFilePathInspector(serviceedges.Edges{})
 
-	factory := provideWorkFactory(readFile, inspectPath, staging, materializer)
-	if factory == nil {
-		t.Fatal("provideWorkFactory() returned nil factory")
-	}
-	service := factory(nil)
+	service := provideWorkService(nil, readFile, inspectPath, staging, materializer)
 	if service == nil {
-		t.Fatal("Work factory returned nil service")
+		t.Fatal("provideWorkService() returned nil service")
 	}
 	var root work.Service = service
 	if root == nil {

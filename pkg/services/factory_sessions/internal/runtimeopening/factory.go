@@ -114,8 +114,7 @@ type FactorySessionsPorts struct {
 
 // WorkPorts contains Work-owned opening collaborators.
 type WorkPorts struct {
-	Factory             WorkFactory
-	ContentMaterializer work.ContentMaterializer
+	Service work.Service
 }
 
 // AutomationsPorts contains Automations-owned opening collaborators.
@@ -184,7 +183,6 @@ type Factory struct {
 	durableExecutionFactory          DurableExecutionFactory
 	workerExecutionFactory           WorkerExecutionFactory
 	modelService                     models.Service
-	workFactory                      WorkFactory
 	automationFactory                AutomationFactory
 	factorySessionsService           factorysessions.Service
 	factorySessionExecutionFactory   FactorySessionExecutionFactory
@@ -277,7 +275,6 @@ func NewFactory(
 		durableExecutionFactory:          factorySessions.DurableExecutionFactory,
 		workerExecutionFactory:           workersPorts.ExecutionFactory,
 		modelService:                     modelsPorts.Service,
-		workFactory:                      workPorts.Factory,
 		automationFactory:                automations.Factory,
 		factorySessionsService:           factorySessions.Service,
 		factorySessionsRuntimeAssembly:   factorySessions.RuntimeAssembly,
@@ -301,7 +298,7 @@ func NewFactory(
 		editableFactoryValidator:         factorySessions.EditableFactoryValidator,
 		initialFactorySnapshotFactory:    factoryDefinitions.InitialFactorySnapshotFactory,
 		factoryRuntimeAssembler:          factoryRuntime.FactoryRuntimeAssembler,
-		workService:                      work.MaterializationService(workPorts.ContentMaterializer),
+		workService:                      workPorts.Service,
 		providerSessions:                 providerSessions.Service,
 		factoryDefinitionValidator:       factoryDefinitions.Validator,
 		namedPaths:                       factoryDefinitions.NamedPaths,
@@ -434,8 +431,7 @@ func validateWork(group *WorkPorts) error {
 		return err
 	}
 	return validateRuntimeOpeningRequirements("Work",
-		runtimeOpeningRequirement{"factory", group.Factory},
-		runtimeOpeningRequirement{"content materializer", group.ContentMaterializer},
+		runtimeOpeningRequirement{"service", group.Service},
 	)
 }
 
@@ -558,7 +554,6 @@ func (f *Factory) openRuntime(
 		f.durableExecutionFactory,
 		f.workerExecutionFactory,
 		f.modelService,
-		f.workFactory,
 		f.automationFactory,
 		f.factorySessionsRuntimeAssembly,
 		f.factorySessionExecutionFactory,

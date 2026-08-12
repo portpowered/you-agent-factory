@@ -25,27 +25,6 @@ import (
 	"go.uber.org/zap"
 )
 
-func TestWorkFactoryProjectsMaterializationServiceFromContentMaterializer(t *testing.T) {
-	t.Parallel()
-
-	var factory WorkFactory = func(resolver work.RuntimeResolver) work.Service {
-		if resolver != nil {
-			t.Fatalf("WorkFactory resolver = %#v, want nil for materialization projection", resolver)
-		}
-		return work.MaterializationService(materializerStub{})
-	}
-
-	service := factory(nil)
-	if service == nil {
-		t.Fatal("WorkFactory() = nil, want materialization service")
-	}
-	path, cleanup, err := service.MaterializeContentURL(t.Context(), "file:///fixtures/runtimeopening.png")
-	if err != nil || path != "/tmp/runtimeopening.png" || cleanup == nil {
-		t.Fatalf("MaterializeContentURL = (%q, %v, %v)", path, cleanup, err)
-	}
-	cleanup()
-}
-
 type materializerStub struct{}
 
 func (materializerStub) MaterializeContentURL(_ context.Context, rawURL string) (string, work.ContentCleanup, error) {
@@ -194,7 +173,7 @@ func TestNewFactoryRetainsExactGroupedCollaborators(t *testing.T) {
 	calls := 0
 	dependencies := validRuntimeOpeningOwnerPorts(&calls)
 	materializer := &identityConstructionMaterializer{}
-	dependencies.Work.ContentMaterializer = materializer
+	dependencies.Work.Service = work.MaterializationService(materializer)
 
 	factory, err := dependencies.newFactory()
 	if err != nil {
@@ -327,7 +306,7 @@ func assertWorkPortsRetained(
 	materializer *identityConstructionMaterializer,
 ) {
 	t.Helper()
-	assertRuntimeOpeningDependencyIdentity(t, "Work factory", factory.workFactory, dependencies.Work.Factory)
+	assertRuntimeOpeningDependencyIdentity(t, "Work service", factory.workService, dependencies.Work.Service)
 	path, cleanup, err := factory.workService.MaterializeContentURL(t.Context(), "file:///identity.png")
 	if err != nil || path != "/tmp/identity.png" || cleanup == nil {
 		t.Fatalf("Work materialization = (%q, %v, %v), want exact injected materializer", path, cleanup, err)
@@ -444,8 +423,7 @@ func runtimeOpeningMemberOmissions() []runtimeOpeningDependencyOmission {
 		{"Factory Sessions runtime instance ID generator", func(d *runtimeOpeningFixture) { d.FactorySessions.GenerateRuntimeInstanceID = nil }},
 		{"Factory Sessions home directory resolver", func(d *runtimeOpeningFixture) { d.FactorySessions.ResolveHome = nil }},
 		{"Factory Sessions provider identity resolver", func(d *runtimeOpeningFixture) { d.FactorySessions.ProviderIdentities = nil }},
-		{"Work factory", func(d *runtimeOpeningFixture) { d.Work.Factory = nil }},
-		{"Work content materializer", func(d *runtimeOpeningFixture) { d.Work.ContentMaterializer = nil }},
+		{"Work service", func(d *runtimeOpeningFixture) { d.Work.Service = nil }},
 		{"Automations factory", func(d *runtimeOpeningFixture) { d.Automations.Factory = nil }},
 		{"Automations hosted sources factory", func(d *runtimeOpeningFixture) { d.Automations.HostedSourcesFactory = nil }},
 		{"Models service", func(d *runtimeOpeningFixture) { d.Models.Service = nil }},
@@ -510,8 +488,7 @@ func validRuntimeOpeningOwnerPorts(calls *int) runtimeOpeningFixture {
 			ProviderIdentities:             inertRuntimeOpeningFunction[factorysessions.ProviderIdentityResolver](calls),
 		},
 		Work: &WorkPorts{
-			Factory:             inertRuntimeOpeningFunction[WorkFactory](calls),
-			ContentMaterializer: constructionMaterializer{calls: calls},
+			Service: work.MaterializationService(constructionMaterializer{calls: calls}),
 		},
 		Automations: &AutomationsPorts{
 			Factory:              inertRuntimeOpeningFunction[AutomationFactory](calls),
