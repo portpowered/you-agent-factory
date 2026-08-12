@@ -3,6 +3,7 @@
 package process_test
 
 import (
+	"errors"
 	"os"
 	"sync"
 	"syscall"
@@ -14,19 +15,32 @@ func suspendHardKillProcess(pid int) (hardKillProcessControl, error) {
 		return hardKillProcessControl{}, err
 	}
 	if err := process.Signal(syscall.SIGSTOP); err != nil {
-		return hardKillProcessControl{}, err
+		return hardKillProcessControl{}, errors.Join(err, process.Release())
 	}
-	var resumeOnce sync.Once
-	var resumeErr error
+
+	var mu sync.Mutex
+	released := false
 	resume := func() error {
-		resumeOnce.Do(func() { resumeErr = process.Signal(syscall.SIGCONT) })
-		return resumeErr
+		mu.Lock()
+		defer mu.Unlock()
+		if released {
+			return nil
+		}
+		signalErr := process.Signal(syscall.SIGCONT)
+		releaseErr := process.Release()
+		released = true
+		return errors.Join(signalErr, releaseErr)
 	}
-	var terminateOnce sync.Once
-	var terminateErr error
 	terminate := func() error {
-		terminateOnce.Do(func() { terminateErr = process.Kill() })
-		return terminateErr
+		mu.Lock()
+		defer mu.Unlock()
+		if released {
+			return nil
+		}
+		killErr := process.Kill()
+		releaseErr := process.Release()
+		released = true
+		return errors.Join(killErr, releaseErr)
 	}
 	return hardKillProcessControl{resume: resume, terminate: terminate}, nil
 }
