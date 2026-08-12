@@ -121,6 +121,7 @@ func (r *factoryWorldReducer) apply(event interfaces.FactoryEvent) error {
 		return nil
 	case interfaces.FactoryEventTypeInferenceRequest,
 		interfaces.FactoryEventTypeInferenceResponse,
+		interfaces.FactoryEventTypeModelResponse,
 		interfaces.FactoryEventTypeScriptRequest,
 		interfaces.FactoryEventTypeScriptResponse,
 		interfaces.FactoryEventTypeAgentRunResponse:

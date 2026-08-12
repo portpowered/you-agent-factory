@@ -246,6 +246,48 @@ func TestReconstructFactoryWorldState_RetainsInferenceAttemptsByDispatchID(t *te
 	}
 }
 
+func TestReconstructFactoryWorldState_PromotesModelResponseProviderSession(t *testing.T) {
+	t0 := time.Date(2026, 8, 12, 12, 0, 0, 0, time.UTC)
+	providerSession := &workerexecution.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "model-session-1"}
+	events := []factoryapi.FactoryEvent{
+		initialStructureEvent(t0),
+		workstationRequestEvent(1, t0.Add(time.Second), interfaces.WorkstationRequestPayload{
+			DispatchID:   "dispatch-model-1",
+			TransitionID: "process",
+			Workstation:  interfaces.FactoryWorkstationRef{ID: "process", Name: "Process"},
+		}),
+		modelResponseEvent(2, t0.Add(2*time.Second), factoryapi.ModelResponseEventPayload{
+			Attempt:         1,
+			DurationMillis:  125,
+			Model:           "fixture-model",
+			ModelRequestId:  "dispatch-model-1/model-request/1",
+			Outcome:         factoryapi.InferenceOutcomeSucceeded,
+			OutputPreview:   stringPtrForProjectionTest("provider completion"),
+			ProviderSession: generatedProviderSessionForProjectionTest(providerSession),
+			Worker:          "processor",
+		}),
+		workstationResponseEvent(3, t0.Add(3*time.Second), interfaces.WorkstationResponsePayload{
+			DispatchID:     "dispatch-model-1",
+			TransitionID:   "process",
+			Workstation:    interfaces.FactoryWorkstationRef{ID: "process", Name: "Process"},
+			Result:         interfaces.WorkstationResult{Outcome: string(workerexecution.OutcomeAccepted), Output: "provider completion"},
+			DurationMillis: 125,
+		}),
+	}
+
+	state, err := ReconstructFactoryWorldState(events, 3)
+	if err != nil {
+		t.Fatalf("ReconstructFactoryWorldState: %v", err)
+	}
+	if len(state.CompletedDispatches) != 1 || state.CompletedDispatches[0].ProviderSession == nil {
+		t.Fatalf("completed dispatches = %#v, want one provider-associated completion", state.CompletedDispatches)
+	}
+	got := state.CompletedDispatches[0].ProviderSession
+	if got.Provider != providerSession.Provider || got.Kind != providerSession.Kind || got.ID != providerSession.ID {
+		t.Fatalf("completed provider session = %#v, want %#v", got, providerSession)
+	}
+}
+
 func TestReconstructFactoryWorldState_RetainsScriptAttemptsByDispatchID(t *testing.T) {
 	t0 := time.Date(2026, 4, 22, 12, 0, 0, 0, time.UTC)
 	events := []factoryapi.FactoryEvent{

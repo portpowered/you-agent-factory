@@ -640,6 +640,10 @@ func assignGeneratedProjectionPayload(event *factoryapi.FactoryEvent, payload an
 		if err := event.Payload.FromInferenceResponseEventPayload(typed); err != nil {
 			panic(err)
 		}
+	case factoryapi.ModelResponseEventPayload:
+		if err := event.Payload.FromModelResponseEventPayload(typed); err != nil {
+			panic(err)
+		}
 	case factoryapi.ScriptRequestEventPayload:
 		if err := event.Payload.FromScriptRequestEventPayload(typed); err != nil {
 			panic(err)
@@ -751,9 +755,23 @@ func inferenceResponseEvent(tick int, eventTime time.Time, payload factoryapi.In
 	return generatedProjectionEvent(factoryapi.FactoryEventTypeInferenceResponse, "inference-response/"+payload.InferenceRequestId, tick, eventTime, context, payload)
 }
 
+func modelResponseEvent(tick int, eventTime time.Time, payload factoryapi.ModelResponseEventPayload) factoryapi.FactoryEvent {
+	context := factoryapi.FactoryEventContext{
+		DispatchId: stringPtrForProjectionTest(dispatchIDForModelRequest(payload.ModelRequestId)),
+	}
+	return generatedProjectionEvent(factoryapi.FactoryEventTypeModelResponse, "model-response/"+payload.ModelRequestId, tick, eventTime, context, payload)
+}
+
 func dispatchIDForInferenceRequest(inferenceRequestID string) string {
 	if idx := strings.Index(inferenceRequestID, "/inference-request/"); idx > 0 {
 		return inferenceRequestID[:idx]
+	}
+	return ""
+}
+
+func dispatchIDForModelRequest(modelRequestID string) string {
+	if idx := strings.Index(modelRequestID, "/model-request/"); idx > 0 {
+		return modelRequestID[:idx]
 	}
 	return ""
 }

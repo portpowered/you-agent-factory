@@ -111,6 +111,12 @@ func (r *factoryWorldReducer) applyWorkerExecutionEvent(event interfaces.Factory
 			return err
 		}
 		return r.applyInferenceResponse(event, payload)
+	case interfaces.FactoryEventTypeModelResponse:
+		var payload workerexecution.ModelResponseEventPayload
+		if err := event.DecodePayload(&payload); err != nil {
+			return err
+		}
+		return r.applyModelResponse(event, payload)
 	case interfaces.FactoryEventTypeScriptRequest:
 		var payload workerexecution.ScriptRequestEventPayload
 		if err := event.DecodePayload(&payload); err != nil {
@@ -180,6 +186,32 @@ func (r *factoryWorldReducer) applyInferenceResponse(event interfaces.FactoryEve
 	current.Diagnostics = diagnostics
 	current.ResponseTime = event.Context.EventTime
 	attempts[payload.InferenceRequestID] = current
+	return nil
+}
+
+func (r *factoryWorldReducer) applyModelResponse(event interfaces.FactoryEvent, payload workerexecution.ModelResponseEventPayload) error {
+	dispatchID := stringValue(event.Context.DispatchID)
+	if dispatchID == "" || payload.ModelRequestID == "" {
+		return nil
+	}
+	attempts := r.inferenceAttemptsForDispatch(dispatchID)
+	current := attempts[payload.ModelRequestID]
+	current.DispatchID = dispatchID
+	current.TransitionID = firstNonEmpty(current.TransitionID, r.transitionIDForDispatch(dispatchID))
+	current.InferenceRequestID = payload.ModelRequestID
+	current.Attempt = payload.Attempt
+	current.Outcome = string(payload.Outcome)
+	current.Response = stringValue(payload.OutputPreview)
+	current.DurationMillis = payload.DurationMillis
+	current.ProviderSession = workerexecution.CloneProviderSessionMetadata(payload.ProviderSession)
+	current.FailureDetail = workerexecution.CloneFailureDetail(payload.FailureDetail)
+	diagnostics, err := workerdiagnostics.SafeWorkDiagnosticsFromEventPayload(payload.Diagnostics)
+	if err != nil {
+		return err
+	}
+	current.Diagnostics = diagnostics
+	current.ResponseTime = event.Context.EventTime
+	attempts[payload.ModelRequestID] = current
 	return nil
 }
 
