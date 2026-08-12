@@ -57,6 +57,12 @@ func (r *ManagedRunner) SetRuntimeHostReady(ready <-chan initializer.RuntimeHost
 	r.ready = ready
 }
 
+// RuntimeHostReadinessConfigured reports whether the opened application has
+// an externally hosted endpoint whose readiness can be observed.
+func (r *ManagedRunner) RuntimeHostReadinessConfigured() bool {
+	return r != nil && r.ready != nil
+}
+
 // RuntimeHostBinding waits for and returns the endpoint published by the
 // hosted transport. The first observation is retained for later transport
 // presentation without exposing the channel to product services.
@@ -74,6 +80,21 @@ func (r *ManagedRunner) RuntimeHostBinding(ctx context.Context) (initializer.Run
 	r.readyMu.Unlock()
 	if ready == nil {
 		return initializer.RuntimeHostBinding{}, initializer.ErrRuntimeHostReadinessUnavailable
+	}
+	select {
+	case binding, ok := <-ready:
+		if !ok {
+			return initializer.RuntimeHostBinding{}, errors.New("managed application host readiness ended without a binding")
+		}
+		r.readyMu.Lock()
+		if r.readyValue == nil {
+			copy := binding
+			r.readyValue = &copy
+		}
+		binding = *r.readyValue
+		r.readyMu.Unlock()
+		return binding, nil
+	default:
 	}
 	select {
 	case binding, ok := <-ready:

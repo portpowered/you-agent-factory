@@ -3,9 +3,11 @@ package applicationopening
 import (
 	"context"
 	"errors"
+	"net/http"
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/initializer/lifecycle"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
@@ -193,4 +195,169 @@ func TestOpenApplicationRejectsUnavailableVisualizationSink(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "Visualization sink") {
 		t.Fatalf("OpenApplication error = %v, want unavailable sink", err)
 	}
+}
+
+func TestOpenApplicationStopsAtRuntimeInputAndOpenFailures(t *testing.T) {
+	resolveErr := errors.New("resolve failed")
+	openErr := errors.New("open failed")
+	tests := []struct {
+		name       string
+		resolveErr error
+		openErr    error
+	}{
+		{name: "resolve", resolveErr: resolveErr},
+		{name: "open", openErr: openErr},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			resolve, open, adapt, plan, owner := validApplicationOpeningDependencies()
+			resolve = func(context.Context, *factorysessions.RuntimeOpeningRequest) (RuntimeInputs, error) {
+				if test.resolveErr != nil {
+					return RuntimeInputs{}, test.resolveErr
+				}
+				return RuntimeInputs{Request: &factorysessions.RuntimeOpeningRequest{}}, nil
+			}
+			open = func(context.Context, *factorysessions.RuntimeOpeningRequest) (roles.OpenedApplicationRuntime, error) {
+				return roles.OpenedApplicationRuntime{}, test.openErr
+			}
+			service, err := New(resolve, open, adapt, plan, owner)
+			if err != nil {
+				t.Fatalf("New: %v", err)
+			}
+			_, err = service.OpenApplication(context.Background(), roles.ApplicationOpeningRequest{
+				Runtime: &factorysessions.RuntimeOpeningRequest{},
+			})
+			want := test.resolveErr
+			if want == nil {
+				want = test.openErr
+			}
+			if !errors.Is(err, want) {
+				t.Fatalf("OpenApplication error = %v, want %v", err, want)
+			}
+		})
+	}
+}
+
+func TestOpenApplicationClosesOpenedResourcesWhenLifecyclePlanningFails(t *testing.T) {
+	planErr := errors.New("plan failed")
+	closeErr := errors.New("close failed")
+	closed := 0
+	resolve, open, adapt, _, owner := validApplicationOpeningDependencies()
+	open = runtimeOpenerFunc(func(context.Context, *factorysessions.RuntimeOpeningRequest) (roles.OpenedApplicationRuntime, error) {
+		return roles.OpenedApplicationRuntime{Resources: roles.RuntimeResources{
+			Close: func() error {
+				closed++
+				return closeErr
+			},
+		}}, nil
+	})
+	plan := roles.LifecyclePlanOperation(func(roles.LifecyclePlanRequest) (lifecycle.Plan, error) {
+		return lifecycle.Plan{}, planErr
+	})
+	service, err := New(resolve, open, adapt, plan, owner)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	_, err = service.OpenApplication(context.Background(), roles.ApplicationOpeningRequest{
+		Runtime: &factorysessions.RuntimeOpeningRequest{},
+	})
+	if !errors.Is(err, planErr) || !errors.Is(err, closeErr) || closed != 1 {
+		t.Fatalf("OpenApplication error = %v, close count = %d", err, closed)
+	}
+}
+
+func TestOpenApplicationReturnsReadinessAndHostedInvocationCapabilities(t *testing.T) {
+	ready := make(chan initializer.RuntimeHostBinding)
+	resolve, open, adapt, plan, owner := validApplicationOpeningDependencies()
+	open = runtimeOpenerFunc(func(context.Context, *factorysessions.RuntimeOpeningRequest) (roles.OpenedApplicationRuntime, error) {
+		return roles.OpenedApplicationRuntime{
+			Process: &applicationProcessStub{ready: ready},
+			HTTP: roles.RuntimeHTTPServices{
+				FactorySessions: hostedServiceStub{},
+			},
+		}, nil
+	})
+	service, err := New(resolve, open, adapt, plan, owner)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	opened, err := service.OpenApplication(context.Background(), roles.ApplicationOpeningRequest{
+		Runtime: &factorysessions.RuntimeOpeningRequest{},
+	})
+	if err != nil {
+		t.Fatalf("OpenApplication: %v", err)
+	}
+	if opened.Ready == nil {
+		t.Fatal("opened application readiness channel is nil")
+	}
+	if opened.Ready != ready {
+		t.Fatal("opened application did not retain the process readiness channel")
+	}
+	if opened.HostedInvocation == nil {
+		t.Fatal("opened application hosted invocation capability is nil")
+	}
+}
+
+func TestOpenApplicationReturnsHistoricalReplayPlanningAndCleanupFailures(t *testing.T) {
+	planErr := errors.New("historical plan failed")
+	closeErr := errors.New("historical close failed")
+	closed := 0
+	inspection := &factorysessions.HistoricalReplayInspection{
+		Session: factorysessions.SessionReadResult{SessionID: "recorded"},
+	}
+	resolve, open, adapt, _, owner := validApplicationOpeningDependencies()
+	open = runtimeOpenerFunc(func(context.Context, *factorysessions.RuntimeOpeningRequest) (roles.OpenedApplicationRuntime, error) {
+		return roles.OpenedApplicationRuntime{
+			HistoricalReplay: inspection,
+			Resources: roles.RuntimeResources{
+				Close: func() error {
+					closed++
+					return closeErr
+				},
+			},
+		}, nil
+	})
+	plan := roles.LifecyclePlanOperation(func(roles.LifecyclePlanRequest) (lifecycle.Plan, error) {
+		return lifecycle.Plan{}, planErr
+	})
+	service, err := New(resolve, open, adapt, plan, owner)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	_, err = service.OpenApplication(context.Background(), roles.ApplicationOpeningRequest{
+		Runtime: &factorysessions.RuntimeOpeningRequest{},
+	})
+	if !errors.Is(err, planErr) || !errors.Is(err, closeErr) || closed != 1 {
+		t.Fatalf("OpenApplication error = %v, close count = %d", err, closed)
+	}
+}
+
+func TestOpenApplicationRejectsNilService(t *testing.T) {
+	var service *Service
+	_, err := service.OpenApplication(context.Background(), roles.ApplicationOpeningRequest{})
+	if err == nil || !strings.Contains(err.Error(), "service is required") {
+		t.Fatalf("OpenApplication error = %v, want missing service", err)
+	}
+}
+
+type applicationProcessStub struct {
+	ready <-chan factorysessions.RuntimeHostBinding
+}
+
+func (*applicationProcessStub) Start(context.Context, context.Context) error { return nil }
+
+func (*applicationProcessStub) StartWorkers(context.Context) (factorysessions.RuntimeStop, error) {
+	return func(context.Context) error { return nil }, nil
+}
+
+func (*applicationProcessStub) RunTransport(context.Context, http.Handler) error { return nil }
+
+func (*applicationProcessStub) Stop(context.Context) error { return nil }
+
+func (process *applicationProcessStub) RuntimeHostReady() <-chan factorysessions.RuntimeHostBinding {
+	return process.ready
+}
+
+type hostedServiceStub struct {
+	factorysessions.Service
 }

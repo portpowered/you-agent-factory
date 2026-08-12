@@ -238,23 +238,22 @@ func (runner testRuntimeHostRunner) RuntimeHostBinding(ctx context.Context) (ini
 	select {
 	case binding := <-runner.ready:
 		return binding, nil
+	default:
+	}
+	select {
+	case binding := <-runner.ready:
+		return binding, nil
 	case <-ctx.Done():
 		return initializer.RuntimeHostBinding{}, ctx.Err()
 	}
 }
 
-func (runner testRuntimeHostRunner) RuntimeLogDiagnostics() runtimeartifact.Diagnostics {
-	return runtimeLogDiagnosticsForRunner(runner.LocalRuntimeRunner)
+func (runner testRuntimeHostRunner) RuntimeHostReadinessConfigured() bool {
+	return runner.ready != nil
 }
 
-func (runner testRuntimeHostRunner) GetEngineStateSnapshot(
-	ctx context.Context,
-) (*interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.Net], error) {
-	provider, ok := runner.LocalRuntimeRunner.(factoryruntime.LegacySnapshotProvider)
-	if !ok {
-		return nil, errors.New("runtime engine snapshot is unavailable")
-	}
-	return provider.GetEngineStateSnapshot(ctx)
+func (runner testRuntimeHostRunner) RuntimeLogDiagnostics() runtimeartifact.Diagnostics {
+	return runtimeLogDiagnosticsForRunner(runner.LocalRuntimeRunner)
 }
 
 type testDashboardRenderingRunner struct {
@@ -274,16 +273,6 @@ func (r testDashboardRenderingRunner) Run(ctx context.Context) error {
 	r.input.ObservedAt = time.Now()
 	r.sink.PresentFactoryView(r.input)
 	return nil
-}
-
-func (r testDashboardRenderingRunner) GetEngineStateSnapshot(
-	ctx context.Context,
-) (*interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.Net], error) {
-	provider, ok := r.LocalRuntimeRunner.(factoryruntime.LegacySnapshotProvider)
-	if !ok {
-		return nil, errors.New("runtime engine snapshot is unavailable")
-	}
-	return provider.GetEngineStateSnapshot(ctx)
 }
 
 func (f testRunnerOpeners) Invocation() InvocationOperation {
