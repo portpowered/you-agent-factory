@@ -19,14 +19,6 @@ import (
 
 type invocationPresentationOwnerStub struct{}
 
-func (invocationPresentationOwnerStub) RegisterApplication(factorysessions.ApplicationOpeningScope) (factorysessions.OpeningScopeID, error) {
-	return "", nil
-}
-
-func (invocationPresentationOwnerStub) Application(factorysessions.OpeningScopeID) (factorysessions.ApplicationOpeningScope, bool) {
-	return factorysessions.ApplicationOpeningScope{}, false
-}
-
 func (invocationPresentationOwnerStub) RegisterDirectJavaScript(factorysessions.DirectJavaScriptRunScope) (factorysessions.OpeningScopeID, error) {
 	return "", nil
 }
@@ -51,13 +43,10 @@ func (invocationPresentationOwnerStub) InvocationEvents(factorysessions.OpeningS
 	return nil, false
 }
 
-func (invocationPresentationOwnerStub) StartFactoryEventBridge(context.Context, factorysessions.Service, factorysessions.OpeningScopeID) (interface {
-	Finish(context.Context, factorysessions.Service, factorysessions.FactoryInvocationOutcome) error
+func (invocationPresentationOwnerStub) StartFactoryEventBridge(context.Context, roles.FactoryEventReader, factorysessions.OpeningScopeID) (interface {
+	Finish(context.Context, roles.FactoryEventReader, factorysessions.FactoryInvocationOutcome) error
 }, error) {
 	return nil, nil
-}
-
-func (invocationPresentationOwnerStub) ObserveHost(factorysessions.OpeningScopeID, factorysessions.RuntimeHostBinding) {
 }
 
 func (invocationPresentationOwnerStub) Close(factorysessions.OpeningScopeID) {}

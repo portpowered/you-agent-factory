@@ -215,31 +215,13 @@ func (executionMethodsStub) ListSessions(context.Context, factorysessions.ListSe
 	return factorysessions.ListSessionsResult{}, nil
 }
 
-type hostedInvokerFake struct {
-	result factorysessions.InvocationResult
-	err    error
-}
-
-func (fake *hostedInvokerFake) InvokeFactorySession(
-	_ context.Context,
-	sessionID string,
-	_ factorysessions.InvocationRequest,
-) (factorysessions.InvocationResult, error) {
-	if sessionID != factorysessions.DefaultSessionID {
-		return factorysessions.InvocationResult{}, factorysessions.ErrSessionNotFound
-	}
-	return fake.result, fake.err
-}
-
 func TestInvokeFactoryRejectsIncompleteHostedLiveInvocation(t *testing.T) {
 	t.Parallel()
 
 	op := &operation{}
 	_, err := op.invokeFactoryOnHostedLiveRuntime(
 		context.Background(),
-		&factorysessions.HostedLiveInvocation{
-			Sessions: newHostedLiveSessionsFake(factorysessions.SessionProjection{}),
-		},
+		nil,
 		roles.InvocationTarget{},
 		factorysessions.InvocationRequest{},
 	)
@@ -273,15 +255,12 @@ func TestInvokeFactoryUsesHostedLiveRuntimeForPetriFactory(t *testing.T) {
 		WorkState: "completed",
 	}
 	sessions := newHostedLiveSessionsFake(petriProjection)
-	invoker := &hostedInvokerFake{result: wantResult}
+	sessions.invokeResult = wantResult
 
 	op := &operation{}
 	outcome, err := op.invokeFactoryOnHostedLiveRuntime(
 		context.Background(),
-		&factorysessions.HostedLiveInvocation{
-			Sessions: sessions,
-			Invoker:  invoker,
-		},
+		sessions,
 		roles.InvocationTarget{},
 		factorysessions.InvocationRequest{},
 	)
@@ -311,15 +290,13 @@ func TestInvokeFactoryHostedLiveRuntimePropagatesInvokerError(t *testing.T) {
 		},
 	}
 	invokerErr := errors.New("invoke failed")
-	invoker := &hostedInvokerFake{err: invokerErr}
+	sessions := newHostedLiveSessionsFake(petriProjection)
+	sessions.invokeErr = invokerErr
 
 	op := &operation{}
 	_, err := op.invokeFactoryOnHostedLiveRuntime(
 		context.Background(),
-		&factorysessions.HostedLiveInvocation{
-			Sessions: newHostedLiveSessionsFake(petriProjection),
-			Invoker:  invoker,
-		},
+		sessions,
 		roles.InvocationTarget{},
 		factorysessions.InvocationRequest{},
 	)

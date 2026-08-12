@@ -11,17 +11,17 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 )
 
 // NewOpeningPresentationOwner constructs the process-scoped owner used by
-// transport adapters to keep streams, callbacks, and live bindings out of
-// opening operation requests.
+// transport adapters to keep direct-protocol streams and event consumers out
+// of opening operation requests.
 func NewOpeningPresentationOwner() factorysessions.OpeningPresentationOwner {
 	return &openingPresentationOwner{scopes: make(map[factorysessions.OpeningScopeID]openingScope)}
 }
 
 type openingScope struct {
-	application      *factorysessions.ApplicationOpeningScope
 	directJavaScript *factorysessions.DirectJavaScriptRunScope
 	stdio            *factorysessions.StdioOpeningScope
 	invocationEvents *factorysessions.InvocationEventScope
@@ -31,24 +31,6 @@ type openingPresentationOwner struct {
 	mu     sync.RWMutex
 	nextID uint64
 	scopes map[factorysessions.OpeningScopeID]openingScope
-}
-
-func (o *openingPresentationOwner) RegisterApplication(scope factorysessions.ApplicationOpeningScope) (factorysessions.OpeningScopeID, error) {
-	if scope.RuntimeHostObserver == nil && scope.Completion == nil && scope.RuntimeHTTPServicesBound == nil && scope.HistoricalReplayBound == nil && scope.VisualizationSink == nil {
-		return "", errors.New("application opening scope has no presentation owner")
-	}
-	scope = gateApplicationCompletion(scope)
-	return o.register(openingScope{application: &scope})
-}
-
-func (o *openingPresentationOwner) Application(id factorysessions.OpeningScopeID) (factorysessions.ApplicationOpeningScope, bool) {
-	o.mu.RLock()
-	scope, ok := o.scopes[id]
-	o.mu.RUnlock()
-	if !ok || scope.application == nil {
-		return factorysessions.ApplicationOpeningScope{}, false
-	}
-	return *scope.application, true
 }
 
 func (o *openingPresentationOwner) RegisterDirectJavaScript(scope factorysessions.DirectJavaScriptRunScope) (factorysessions.OpeningScopeID, error) {
@@ -104,10 +86,10 @@ func (o *openingPresentationOwner) InvocationEvents(id factorysessions.OpeningSc
 
 func (o *openingPresentationOwner) StartFactoryEventBridge(
 	ctx context.Context,
-	reader factorysessions.Service,
+	reader roles.FactoryEventReader,
 	id factorysessions.OpeningScopeID,
 ) (interface {
-	Finish(context.Context, factorysessions.Service, factorysessions.FactoryInvocationOutcome) error
+	Finish(context.Context, roles.FactoryEventReader, factorysessions.FactoryInvocationOutcome) error
 }, error) {
 	if ctx == nil {
 		return nil, errors.New("Factory Event bridge context is required")
@@ -144,15 +126,6 @@ func (o *openingPresentationOwner) StartFactoryEventBridge(
 	return bridge, nil
 }
 
-func (o *openingPresentationOwner) ObserveHost(id factorysessions.OpeningScopeID, binding factorysessions.RuntimeHostBinding) {
-	if scope, ok := o.Application(id); ok && scope.RuntimeHostObserver != nil {
-		scope.RuntimeHostObserver(binding)
-	}
-	if scope, ok := o.DirectJavaScript(id); ok && scope.RuntimeHostObserver != nil {
-		scope.RuntimeHostObserver(binding)
-	}
-}
-
 func (o *openingPresentationOwner) Close(id factorysessions.OpeningScopeID) {
 	if id == "" {
 		return
@@ -172,7 +145,7 @@ type factoryEventBridge struct {
 
 func (bridge *factoryEventBridge) Finish(
 	ctx context.Context,
-	reader factorysessions.Service,
+	reader roles.FactoryEventReader,
 	outcome factorysessions.FactoryInvocationOutcome,
 ) error {
 	if bridge == nil {
@@ -222,7 +195,7 @@ func factoryEventPresentationKey(event factorydefinitions.FactoryEvent) string {
 
 func readFactoryEventHistory(
 	ctx context.Context,
-	reader factorysessions.Service,
+	reader roles.FactoryEventReader,
 	sessionID string,
 ) ([]factorydefinitions.FactoryEvent, error) {
 	if reader == nil {
@@ -268,31 +241,4 @@ func (o *openingPresentationOwner) register(scope openingScope) (factorysessions
 	}
 	o.scopes[id] = scope
 	return id, nil
-}
-
-func gateApplicationCompletion(scope factorysessions.ApplicationOpeningScope) factorysessions.ApplicationOpeningScope {
-	if scope.Completion == nil {
-		return scope
-	}
-	ready := make(chan struct{})
-	var publish sync.Once
-	observer := scope.RuntimeHostObserver
-	scope.RuntimeHostObserver = func(binding factorysessions.RuntimeHostBinding) {
-		publish.Do(func() {
-			if observer != nil {
-				observer(binding)
-			}
-			close(ready)
-		})
-	}
-	completion := scope.Completion
-	scope.Completion = func(ctx context.Context) error {
-		select {
-		case <-ready:
-			return completion(ctx)
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
-	return scope
 }

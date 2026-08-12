@@ -169,10 +169,6 @@ func provideFactorySessionInvocationMetricsRecorder(edges serviceedges.Edges) fa
 	return edges.InvocationMetricsRecorder
 }
 
-func provideFactorySessionRuntimeHostObserver(edges serviceedges.Edges) factorysessions.RuntimeHostObserver {
-	return edges.RuntimeHostObserver
-}
-
 func provideFactoryRuntimeProviderCommandRunner(
 	edges serviceedges.Edges,
 ) (factorysessionwire.ProviderCommandRunner, error) {

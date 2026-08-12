@@ -20,6 +20,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	invocationwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/invocation/wire"
+	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"go.uber.org/zap"
 )
@@ -137,6 +138,7 @@ type (
 	WorkerInvocationWithProgressFactory = executionopening.WorkerInvocationWithProgressFactory
 	ExecutionOpeningFactory             = executionopening.Factory
 	StdioOpeningService                 = executionopening.StdioOpeningService
+	RuntimeVisualizationSinkOwner       = factoryvisualization.RuntimeSinkOwner
 )
 
 // RuntimeAssemblyFromService narrows the one Wire-constructed Factory
@@ -201,9 +203,9 @@ func NewApplicationService(
 	openRuntime ApplicationRuntimeOpening,
 	adaptRuntime RuntimeAdapter,
 	planLifecycle LifecyclePlanOperation,
-	presentations OpeningPresentationOwner,
+	visualization RuntimeVisualizationSinkOwner,
 ) (*ApplicationService, error) {
-	return applicationopening.New(resolveInputs, openRuntime, adaptRuntime, planLifecycle, presentations)
+	return applicationopening.New(resolveInputs, openRuntime, adaptRuntime, planLifecycle, visualization)
 }
 
 func NewInvocationOperation(

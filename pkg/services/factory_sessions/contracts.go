@@ -66,12 +66,6 @@ type InvocationTarget struct {
 	EventScopeID OpeningScopeID
 }
 
-// HostedLiveInvocation is the live runtime surface used by hosted CLI invocations.
-type HostedLiveInvocation struct {
-	Sessions Service
-	Invoker  InvocationService
-}
-
 // FactoryInvocationOutcome is the detached result of one Factory invocation.
 type FactoryInvocationOutcome struct {
 	Result interfaces.FactoryInvocationResult
@@ -87,19 +81,10 @@ type FactoryEventConsumer func([]interfaces.FactoryEvent)
 // retaining streams, observers, services, or callbacks.
 type OpeningScopeID string
 
-// ApplicationOpeningScope is private owner state registered by a transport
-// adapter before it opens one application. The application-opening operation
-// looks it up by OpeningScopeID; callers never pass this collaborator bundle
-// through the operation request.
-type ApplicationOpeningScope struct {
-	RuntimeHostObserver      RuntimeHostObserver
-	RuntimeHTTPServicesBound func(RuntimeHTTPServices)
-	HistoricalReplayBound    func(HistoricalReplayInspection)
-	Completion               func(context.Context) error
-	// VisualizationSink is adapted by the application-opening owner because
-	// Factory Visualization depends on Factory Sessions' public contracts.
-	VisualizationSink any
-}
+// VisualizationSinkID identifies a transport-selected visualization sink
+// without importing the Factory Visualization implementation into the
+// Factory Sessions root contract.
+type VisualizationSinkID string
 
 // DirectJavaScriptRunScope holds protocol presentation state behind the
 // process-scoped opening owner. Direct JavaScript requests carry only values
@@ -122,13 +107,12 @@ type InvocationEventScope struct {
 	Consume FactoryEventConsumer
 }
 
-// OpeningPresentationOwner owns the transport-local state associated with
-// value-only opening requests. Canonical Wire constructs one owner once and
-// each transport adapter registers a scope before invoking an opening
-// operation. Lookup and host observation remain owner-internal operations.
+// OpeningPresentationOwner owns only transport-local stream and event state
+// associated with value-only protocol operations. Canonical Wire constructs
+// one owner once and each transport adapter registers a scope before invoking
+// an operation. Application HTTP binding, visualization sink selection, and
+// runtime-host readiness are owned by their canonical Wire/initializer paths.
 type OpeningPresentationOwner interface {
-	RegisterApplication(ApplicationOpeningScope) (OpeningScopeID, error)
-	Application(OpeningScopeID) (ApplicationOpeningScope, bool)
 	RegisterDirectJavaScript(DirectJavaScriptRunScope) (OpeningScopeID, error)
 	DirectJavaScript(OpeningScopeID) (DirectJavaScriptRunScope, bool)
 	RegisterStdio(StdioOpeningScope) (OpeningScopeID, error)
@@ -139,19 +123,24 @@ type OpeningPresentationOwner interface {
 	// anonymous contract keeps this transport collaborator out of the service
 	// root's named interface inventory; callers exchange only the injected
 	// service root and detached outcome.
-	StartFactoryEventBridge(context.Context, Service, OpeningScopeID) (interface {
-		Finish(context.Context, Service, FactoryInvocationOutcome) error
+	StartFactoryEventBridge(context.Context, interface {
+		SubscribeFactoryEventsForSession(context.Context, string, *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error)
+		ReadDurableFactorySessionEventStream(context.Context, string, EventReconnectRequest) (*interfaces.FactoryEventStream, error)
+	}, OpeningScopeID) (interface {
+		Finish(context.Context, interface {
+			SubscribeFactoryEventsForSession(context.Context, string, *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error)
+			ReadDurableFactorySessionEventStream(context.Context, string, EventReconnectRequest) (*interfaces.FactoryEventStream, error)
+		}, FactoryInvocationOutcome) error
 	}, error)
-	ObserveHost(OpeningScopeID, RuntimeHostBinding)
 	Close(OpeningScopeID)
 }
 
-// ApplicationOpeningRequest carries only immutable runtime selections and an
-// opaque owner scope identity for one application opening. The opening owner
-// retains all presentation state.
+// ApplicationOpeningRequest carries only immutable runtime selections and the
+// typed Factory Visualization sink identity selected for one application
+// opening. Transport streams and event consumers remain with their owner.
 type ApplicationOpeningRequest struct {
-	Runtime *RuntimeOpeningRequest
-	ScopeID OpeningScopeID
+	Runtime             *RuntimeOpeningRequest
+	VisualizationSinkID VisualizationSinkID
 }
 
 // RuntimeHTTPServices is the detached set of opened runtime services consumed

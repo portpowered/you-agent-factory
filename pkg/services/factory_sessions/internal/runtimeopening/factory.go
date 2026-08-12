@@ -109,8 +109,6 @@ type FactorySessionsPorts struct {
 	ResolveHome                    factorysessions.HomeDirectoryResolver
 	ProviderIdentities             factorysessions.ProviderIdentityResolver
 	InvocationMetricsRecorder      roles.InvocationMetricsRecorder
-	RuntimeHostObserver            factorysessions.RuntimeHostObserver
-	PresentationOwner              factorysessions.OpeningPresentationOwner
 }
 
 // WorkPorts contains Work-owned opening collaborators.
@@ -172,9 +170,8 @@ type OperatorSettingsPorts struct {
 
 // Factory is the process-scoped, inert Factory Session opening operation.
 // Wire selects all implementation functions and fixed owner effects once.
-// Invocation and durable-execution openings receive only invocation data;
-// application transport compatibility retains its presentation observation
-// edge until that boundary is migrated.
+// Invocation and durable-execution openings receive only operation data;
+// application transport binding is composed by the canonical Wire adapter.
 type Factory struct {
 	durableExecutionFactory          DurableExecutionFactory
 	workerExecutionFactory           WorkerExecutionFactory
@@ -229,8 +226,6 @@ type Factory struct {
 	scriptCommandRunner              workers.CommandRunner
 	submissionRecorder               recordings.SubmissionRecorder
 	dispatchRecorder                 recordings.DispatchRecorder
-	runtimeHostObserver              factorysessions.RuntimeHostObserver
-	presentationOwner                factorysessions.OpeningPresentationOwner
 }
 
 var (
@@ -320,8 +315,6 @@ func NewFactory(
 		scriptCommandRunner:              workersPorts.ScriptCommandRunner,
 		submissionRecorder:               factoryRuntime.SubmissionRecorder,
 		dispatchRecorder:                 factoryRuntime.DispatchRecorder,
-		runtimeHostObserver:              factorySessions.RuntimeHostObserver,
-		presentationOwner:                factorySessions.PresentationOwner,
 	}, nil
 }
 
@@ -417,7 +410,6 @@ func validateFactorySessions(group *FactorySessionsPorts) error {
 		runtimeOpeningRequirement{"runtime instance ID generator", group.GenerateRuntimeInstanceID},
 		runtimeOpeningRequirement{"home directory resolver", group.ResolveHome},
 		runtimeOpeningRequirement{"provider identity resolver", group.ProviderIdentities},
-		runtimeOpeningRequirement{"opening presentation owner", group.PresentationOwner},
 	)
 }
 
@@ -527,7 +519,6 @@ func (f *Factory) openRuntime(
 	ctx context.Context,
 	request *factorysessions.RuntimeOpeningRequest,
 	logger *zap.Logger,
-	observer factorysessions.RuntimeHostObserver,
 ) (runtimeProducts, error) {
 	return openRuntime(
 		ctx, request, logger,
@@ -538,7 +529,6 @@ func (f *Factory) openRuntime(
 		f.scriptCommandRunner,
 		f.submissionRecorder,
 		f.dispatchRecorder,
-		f.runtimeHostObserver,
 		f.durableExecutionFactory,
 		f.workerExecutionFactory,
 		f.modelService,
@@ -583,7 +573,6 @@ func (f *Factory) openRuntime(
 		f.generateRuntimeInstanceID,
 		f.resolveHome,
 		f.providerIdentities,
-		observer,
 	)
 }
 
@@ -593,17 +582,8 @@ func (f *Factory) OpenApplicationRuntime(
 	ctx context.Context,
 	request *factorysessions.RuntimeOpeningRequest,
 ) (roles.OpenedApplicationRuntime, error) {
-	opened, err := f.openRuntime(ctx, request, f.baseLogger, f.runtimeHostObserverFor(request))
+	opened, err := f.openRuntime(ctx, request, f.baseLogger)
 	return opened.application, err
-}
-
-func (f *Factory) runtimeHostObserverFor(request *factorysessions.RuntimeOpeningRequest) factorysessions.RuntimeHostObserver {
-	if f == nil || f.presentationOwner == nil || request == nil || request.ScopeID == "" {
-		return nil
-	}
-	return func(binding factorysessions.RuntimeHostBinding) {
-		f.presentationOwner.ObserveHost(request.ScopeID, binding)
-	}
 }
 
 // ModelsRoot returns the process-scoped accepted Models root used by runtime
@@ -621,7 +601,7 @@ func (f *Factory) OpenInvocationRuntime(
 	ctx context.Context,
 	request *factorysessions.RuntimeOpeningRequest,
 ) (roles.OpenedInvocationRuntime, error) {
-	opened, err := f.openRuntime(ctx, request, f.baseLogger, nil)
+	opened, err := f.openRuntime(ctx, request, f.baseLogger)
 	return opened.invocation, err
 }
 
@@ -631,6 +611,6 @@ func (f *Factory) OpenExecutionRuntime(
 	ctx context.Context,
 	request *factorysessions.RuntimeOpeningRequest,
 ) (roles.OpenedExecutionRuntime, error) {
-	opened, err := f.openRuntime(ctx, request, f.baseLogger, nil)
+	opened, err := f.openRuntime(ctx, request, f.baseLogger)
 	return opened.execution, err
 }

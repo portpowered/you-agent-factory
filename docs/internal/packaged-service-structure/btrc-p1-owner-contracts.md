@@ -9,6 +9,20 @@ boundary changed by stories `btrc-p1-root-injection-001` and
 cutover in `btrc-p1-root-injection-005`, plus the end-to-end process proof in
 `btrc-p1-root-injection-006`.
 
+## P0 matrix reconciliation
+
+This register is reconciled against
+`docs/internal/packaged-service-structure/runtime-opening-ownership-matrix.md`.
+The matrix is authoritative for the late-opening rows: P1 deletes L-11
+`RuntimeHTTPServicesBound` and L-13 `gateCompletionOnRuntimeHost`; HTTP
+binding remains a canonical Wire adapter, while readiness and completion
+ordering are owned by the initializer lifecycle runner. L-10 visualization
+attachment is kept at the Factory Visualization/Wire boundary, and the
+transport passes only a typed `RuntimeSinkID` selection into application
+opening. L-12 historical replay is returned as a detached read model and is
+not published through an opening callback. No P1 contract intentionally
+deviates from those four matrix dispositions.
+
 ## P1 deletion register
 
 The following rows record only seams replaced by this packet. A retained
@@ -37,7 +51,7 @@ retain the aggregate `edges.Edges` value or select another service graph.
 | Provider Sessions | `ProviderSessionsPorts` | Provider Sessions root |
 | Factory Runtime | `FactoryRuntimePorts` plus `RuntimeLogOwner` and `RuntimeMetricsOwner` | base logger, workflow definitions, preview, runtime executors, provider invocation, mock runner, assembler, clock resolver, session logger factory, selected clock, provider override, submission recorder, dispatch recorder, and process-scoped observability owners |
 | Factory Definitions | `FactoryDefinitionsPorts` | validator, named paths, loading, replay decoding, and snapshot capabilities |
-| Factory Sessions | `FactorySessionsPorts` | Sessions root, its directly retained runtime assembly, execution/scaffold/validation capabilities, runtime identity, home, provider identity, invocation metrics recorder, runtime-host observer, and the process-scoped opening presentation owner |
+| Factory Sessions | `FactorySessionsPorts` | Sessions root, its directly retained runtime assembly, execution/scaffold/validation capabilities, runtime identity, home, provider identity, and invocation metrics recorder |
 | Work | `WorkPorts` | Work factory and content materializer |
 | Automations | `AutomationsPorts` | automation and hosted-source factories |
 | Models | `ModelsPorts` | Models root |
@@ -55,12 +69,16 @@ runtime clock.
 
 `factorysessions.RuntimeOpeningRequest`, `factorysessions.ApplicationOpeningRequest`,
 and `factorysessions.InvocationTarget` are value-only selections for runtime
-opening and one-shot invocation. Opening requests carry only an opaque typed
-`OpeningScopeID` when a transport needs dynamic presentation state. The
-application, direct JavaScript, and MCP stdio adapters register streams,
-observers, completion callbacks, hosted-service bindings, and visualization
-sinks with the process-scoped `OpeningPresentationOwner`; operation methods
-receive only the request and context and resolve that state by ID.
+opening and one-shot invocation. Application opening carries only a typed
+`VisualizationSinkID` selection; it does not carry HTTP service callbacks,
+completion callbacks, observers, or service-valued results. Canonical Wire
+binds the opened HTTP service table directly, while Factory Sessions returns
+only its narrow `HostedInvocationOperation` result for a hosted one-shot
+caller. The initializer consumes the detached host-readiness value and owns
+hosted completion ordering. Direct JavaScript, MCP stdio, and invocation-event
+presentation state remains behind the process-scoped `OpeningPresentationOwner`,
+because those are transport streams rather than application-opening service
+bindings.
 
 Durable `StartRequest` is value-only. Invocation presentation registers its
 consumer with the process-scoped `OpeningPresentationOwner`; `InvocationTarget`
@@ -76,8 +94,11 @@ fields. Opened runtime products, cleanup scopes, recording bindings, and model
 runtime scopes are operation-scoped state and are not exposed through the
 construction contract. Hosted clock/client/secret effects and visualization
 sink/root-observer effects are captured by their canonical Wire providers or
-application adapter once. The opening presentation owner retains transport
-state only until the corresponding lifecycle run closes its scope.
+application adapter once. Factory Visualization retains selected runtime sinks
+behind its typed `RuntimeSinkOwner`; the opening presentation owner retains
+only direct-protocol streams and event consumers until their corresponding
+transport operation closes its scope. The initializer retains the detached
+runtime-host binding used by its readiness gate.
 `RuntimeLogOwner` and `RuntimeMetricsOwner` retain
 the base logger, artifact clock, collision ID generator, and path reserver at
 process construction; their `Open` methods accept only destination values and
@@ -101,9 +122,13 @@ scopes, and cleanup stacks remain private to each opened operation.
 supplies distinct fakes for every owner-port contract, asserts exact identity
 retention, and verifies construction does not invoke collaborator functions.
 `pkg/services/factory_sessions/internal/applicationopening/service_test.go`
-proves the value-only resolver/opening handoff, owner-scope lookup, and
-lifecycle cleanup behavior. `pkg/services/factory_sessions/wire/presentation_test.go`
-proves owner scope retention, host observation, completion gating, and close.
+proves the value-only resolver/opening handoff, typed visualization-owner
+lookup, detached replay result, and lifecycle cleanup behavior.
+`pkg/services/factory_visualization/wire/runtime_sink_owner_test.go` proves
+typed sink retention and close isolation. The initializer managed-runner test
+proves completion waits for the detached host binding and then unwinds the
+transport. `pkg/services/factory_sessions/wire/presentation_test.go` proves
+the remaining direct-protocol scope retention and close behavior.
 The direct JavaScript and stdio execution-opening tests prove their streams
 and host callbacks arrive through registered owner scopes.
 `pkg/services/factory_sessions/internal/runtimeopening/factories_test.go`

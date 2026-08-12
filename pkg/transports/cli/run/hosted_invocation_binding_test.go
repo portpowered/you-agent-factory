@@ -6,20 +6,20 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/initializer"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
 
-func TestOpenHostedRuntimeBindsFactorySessionsInvocationCapability(t *testing.T) {
+func TestOpenHostedRuntimeUsesOpenedHostedInvocationCapability(t *testing.T) {
 	sessions := &hostedInvocationCapabilityFake{}
 	request := invocationRequestFromText("summarize the dispatch")
-	owner := newTestOpeningPresentationOwner()
 
 	operation, err := openHostedRuntime(
 		t.Context(),
-		RunConfig{Output: io.Discard},
+		RunConfig{Output: io.Discard, WithServer: true},
 		zap.NewNop(),
 		request,
 		resolvedRunRecordPath{},
@@ -31,22 +31,15 @@ func TestOpenHostedRuntimeBindsFactorySessionsInvocationCapability(t *testing.T)
 		0,
 		func(
 			_ context.Context,
-			opening factorysessions.ApplicationOpeningRequest,
+			_ factorysessions.ApplicationOpeningRequest,
 		) (initializer.LocalRuntimeRunner, error) {
-			scope, ok := owner.Application(opening.ScopeID)
-			if !ok || scope.RuntimeHTTPServicesBound == nil {
-				t.Fatal("runtime HTTP services binding = nil")
-			}
-			scope.RuntimeHTTPServicesBound(factorysessions.RuntimeHTTPServices{FactorySessions: sessions})
-			if scope.RuntimeHostObserver != nil {
-				scope.RuntimeHostObserver(factorysessions.RuntimeHostBinding{Host: "127.0.0.1", Port: 1})
-			}
-			return stubFactoryService{run: scope.Completion}, nil
+			return WithHostedInvocation(hostedInvocationCompletionRunner{}, sessions), nil
 		},
 		func(RunConfig, *workers.MockWorkersConfig) factorysessions.ApplicationOpeningRequest {
 			return factorysessions.ApplicationOpeningRequest{}
 		},
-		owner,
+		nil,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("openHostedRuntime() error = %v", err)
@@ -59,13 +52,19 @@ func TestOpenHostedRuntimeBindsFactorySessionsInvocationCapability(t *testing.T)
 	}
 }
 
-type hostedInvocationCapabilityFake struct {
-	factorysessions.Service
-	invoked bool
+type hostedInvocationCompletionRunner struct{}
+
+func (hostedInvocationCompletionRunner) Run(context.Context) error { return nil }
+
+func (hostedInvocationCompletionRunner) RunWithCompletion(
+	ctx context.Context,
+	completion initializer.CompletionOperation,
+) error {
+	return completion(ctx)
 }
 
-func (fake *hostedInvocationCapabilityFake) GetFactorySession(context.Context, string) (factorysessions.SessionProjection, error) {
-	return factorysessions.SessionProjection{}, nil
+type hostedInvocationCapabilityFake struct {
+	invoked bool
 }
 
 func (fake *hostedInvocationCapabilityFake) InvokeFactorySession(
@@ -82,3 +81,21 @@ func (fake *hostedInvocationCapabilityFake) InvokeFactorySession(
 		}},
 	}, nil
 }
+
+func (*hostedInvocationCapabilityFake) SubscribeFactoryEventsForSession(
+	context.Context,
+	string,
+	*interfaces.FactoryEventReconnectCursor,
+) (*interfaces.FactoryEventStream, error) {
+	return nil, nil
+}
+
+func (*hostedInvocationCapabilityFake) ReadDurableFactorySessionEventStream(
+	context.Context,
+	string,
+	factorysessions.EventReconnectRequest,
+) (*interfaces.FactoryEventStream, error) {
+	return nil, nil
+}
+
+var _ HostedInvocationOperation = (*hostedInvocationCapabilityFake)(nil)

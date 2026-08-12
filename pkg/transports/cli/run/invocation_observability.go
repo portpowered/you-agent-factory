@@ -1,11 +1,13 @@
 package run
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"sync/atomic"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	state "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -14,6 +16,246 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/runconfig"
 	"go.uber.org/zap"
 )
+
+// HostedInvocationOperation is the narrow capability retained by the CLI
+// after application opening. It is transport-local; the Factory Sessions root
+// remains the sole named service interface.
+type HostedInvocationOperation interface {
+	InvokeFactorySession(context.Context, string, factorysessions.InvocationRequest) (factorysessions.InvocationResult, error)
+	SubscribeFactoryEventsForSession(context.Context, string, *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error)
+	ReadDurableFactorySessionEventStream(context.Context, string, factorysessions.EventReconnectRequest) (*interfaces.FactoryEventStream, error)
+}
+
+// factoryEventReader aliases the anonymous presentation-bridge reader shape
+// required by OpeningPresentationOwner without publishing a root interface.
+type factoryEventReader = interface {
+	SubscribeFactoryEventsForSession(context.Context, string, *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error)
+	ReadDurableFactorySessionEventStream(context.Context, string, factorysessions.EventReconnectRequest) (*interfaces.FactoryEventStream, error)
+}
+
+type historicalReplayRunner struct {
+	runner initializer.LocalRuntimeRunner
+	replay *factorysessions.HistoricalReplayInspection
+}
+
+func (runner historicalReplayRunner) Run(ctx context.Context) error {
+	return runner.runner.Run(ctx)
+}
+
+func (runner historicalReplayRunner) RunWithCompletion(
+	ctx context.Context,
+	completion initializer.CompletionOperation,
+) error {
+	managed, ok := runner.runner.(initializer.CompletionRuntimeRunner)
+	if !ok {
+		return runner.runner.Run(ctx)
+	}
+	return managed.RunWithCompletion(ctx, completion)
+}
+
+func (runner historicalReplayRunner) RuntimeHostBinding(ctx context.Context) (initializer.RuntimeHostBinding, error) {
+	reader, ok := runner.runner.(interface {
+		RuntimeHostBinding(context.Context) (initializer.RuntimeHostBinding, error)
+	})
+	if !ok {
+		return initializer.RuntimeHostBinding{}, initializer.ErrRuntimeHostReadinessUnavailable
+	}
+	return reader.RuntimeHostBinding(ctx)
+}
+
+func (runner historicalReplayRunner) RuntimeLogDiagnostics() runtimeartifact.Diagnostics {
+	return runtimeLogDiagnosticsForRunner(runner.runner)
+}
+
+func (runner historicalReplayRunner) HistoricalReplay() *factorysessions.HistoricalReplayInspection {
+	return runner.replay
+}
+
+func (runner historicalReplayRunner) HostedInvocation() HostedInvocationOperation {
+	provider, ok := runner.runner.(interface {
+		HostedInvocation() HostedInvocationOperation
+	})
+	if !ok {
+		return nil
+	}
+	return provider.HostedInvocation()
+}
+
+// WithHistoricalReplay keeps the detached replay read model beside the
+// initializer runner so the CLI can render it without adding replay services
+// to the neutral lifecycle contract.
+func WithHistoricalReplay(
+	runner initializer.LocalRuntimeRunner,
+	replay *factorysessions.HistoricalReplayInspection,
+) initializer.LocalRuntimeRunner {
+	if runner == nil || replay == nil {
+		return runner
+	}
+	return historicalReplayRunner{runner: runner, replay: replay}
+}
+
+type hostedInvocationRunner struct {
+	runner     initializer.LocalRuntimeRunner
+	invocation HostedInvocationOperation
+}
+
+func (runner hostedInvocationRunner) Run(ctx context.Context) error {
+	return runner.runner.Run(ctx)
+}
+
+func (runner hostedInvocationRunner) RunWithCompletion(
+	ctx context.Context,
+	completion initializer.CompletionOperation,
+) error {
+	managed, ok := runner.runner.(initializer.CompletionRuntimeRunner)
+	if !ok {
+		return runner.runner.Run(ctx)
+	}
+	return managed.RunWithCompletion(ctx, completion)
+}
+
+func (runner hostedInvocationRunner) HostedInvocation() HostedInvocationOperation {
+	return runner.invocation
+}
+
+func (runner hostedInvocationRunner) RuntimeHostBinding(ctx context.Context) (initializer.RuntimeHostBinding, error) {
+	reader, ok := runner.runner.(interface {
+		RuntimeHostBinding(context.Context) (initializer.RuntimeHostBinding, error)
+	})
+	if !ok {
+		return initializer.RuntimeHostBinding{}, initializer.ErrRuntimeHostReadinessUnavailable
+	}
+	return reader.RuntimeHostBinding(ctx)
+}
+
+func (runner hostedInvocationRunner) RuntimeLogDiagnostics() runtimeartifact.Diagnostics {
+	return runtimeLogDiagnosticsForRunner(runner.runner)
+}
+
+func (runner hostedInvocationRunner) GetEngineStateSnapshot(
+	ctx context.Context,
+) (*interfaces.EngineStateSnapshot[state.PetriMarkingSnapshot, *state.Net], error) {
+	provider, ok := runner.runner.(state.LegacySnapshotProvider)
+	if !ok {
+		return nil, errors.New("runtime engine snapshot is unavailable")
+	}
+	return provider.GetEngineStateSnapshot(ctx)
+}
+
+// WithHostedInvocation retains the opened runtime's narrow invocation
+// capability beside the lifecycle runner. The capability is an operation
+// result, not part of the immutable application-opening request.
+func WithHostedInvocation(
+	runner initializer.LocalRuntimeRunner,
+	invocation HostedInvocationOperation,
+) initializer.LocalRuntimeRunner {
+	if runner == nil || invocation == nil {
+		return runner
+	}
+	return hostedInvocationRunner{runner: runner, invocation: invocation}
+}
+
+type startupObservingRunner struct {
+	runner  initializer.LocalRuntimeRunner
+	onReady func(initializer.RuntimeHostBinding)
+}
+
+func (runner startupObservingRunner) Run(ctx context.Context) error {
+	reader, ok := runner.runner.(interface {
+		RuntimeHostBinding(context.Context) (initializer.RuntimeHostBinding, error)
+	})
+	if !ok {
+		return runner.runner.Run(ctx)
+	}
+	runResult := make(chan error, 1)
+	go func() { runResult <- runner.runner.Run(ctx) }()
+	readyResult := make(chan struct {
+		binding initializer.RuntimeHostBinding
+		err     error
+	}, 1)
+	go func() {
+		binding, err := reader.RuntimeHostBinding(ctx)
+		readyResult <- struct {
+			binding initializer.RuntimeHostBinding
+			err     error
+		}{binding: binding, err: err}
+	}()
+	select {
+	case result := <-readyResult:
+		if result.err == nil && runner.onReady != nil {
+			runner.onReady(result.binding)
+		}
+		return <-runResult
+	case err := <-runResult:
+		if err == nil {
+			// Small synchronous runners used by transport adapters may publish
+			// readiness immediately before returning. Give that detached value a
+			// chance to reach the reader without delaying ordinary shutdown.
+			select {
+			case result := <-readyResult:
+				if result.err == nil && runner.onReady != nil {
+					runner.onReady(result.binding)
+				}
+			case <-time.After(10 * time.Millisecond):
+			}
+		}
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (runner startupObservingRunner) RunWithCompletion(
+	ctx context.Context,
+	completion initializer.CompletionOperation,
+) error {
+	managed, ok := runner.runner.(initializer.CompletionRuntimeRunner)
+	if !ok {
+		return runner.runner.Run(ctx)
+	}
+	return managed.RunWithCompletion(ctx, func(completionCtx context.Context) error {
+		if reader, ok := runner.runner.(interface {
+			RuntimeHostBinding(context.Context) (initializer.RuntimeHostBinding, error)
+		}); ok {
+			binding, err := reader.RuntimeHostBinding(completionCtx)
+			if err != nil && !errors.Is(err, initializer.ErrRuntimeHostReadinessUnavailable) {
+				return err
+			}
+			if err == nil && runner.onReady != nil {
+				runner.onReady(binding)
+			}
+		}
+		return completion(completionCtx)
+	})
+}
+
+func (runner startupObservingRunner) RuntimeHostBinding(ctx context.Context) (initializer.RuntimeHostBinding, error) {
+	reader, ok := runner.runner.(interface {
+		RuntimeHostBinding(context.Context) (initializer.RuntimeHostBinding, error)
+	})
+	if !ok {
+		return initializer.RuntimeHostBinding{}, initializer.ErrRuntimeHostReadinessUnavailable
+	}
+	return reader.RuntimeHostBinding(ctx)
+}
+
+func (runner startupObservingRunner) RuntimeLogDiagnostics() runtimeartifact.Diagnostics {
+	return runtimeLogDiagnosticsForRunner(runner.runner)
+}
+
+// GetEngineStateSnapshot preserves the migration-only clean-invocation
+// observation capability while this transport wrapper owns host-readiness
+// presentation. The capability is forwarded; it is not part of the opening
+// contract.
+func (runner startupObservingRunner) GetEngineStateSnapshot(
+	ctx context.Context,
+) (*interfaces.EngineStateSnapshot[state.PetriMarkingSnapshot, *state.Net], error) {
+	provider, ok := runner.runner.(state.LegacySnapshotProvider)
+	if !ok {
+		return nil, errors.New("runtime engine snapshot is unavailable")
+	}
+	return provider.GetEngineStateSnapshot(ctx)
+}
 
 const (
 	cleanInvocationLogMessageCompleted = "run.invocation.completed"

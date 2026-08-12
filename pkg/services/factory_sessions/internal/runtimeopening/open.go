@@ -34,7 +34,6 @@ func openRuntime(
 	scriptCommandRunner workers.CommandRunner,
 	submissionRecorder recordings.SubmissionRecorder,
 	dispatchRecorder recordings.DispatchRecorder,
-	runtimeHostObserver factorysessions.RuntimeHostObserver,
 	durableExecutionFactory DurableExecutionFactory,
 	workerExecutionFactory WorkerExecutionFactory,
 	modelService models.Service,
@@ -79,7 +78,6 @@ func openRuntime(
 	generateRuntimeInstanceID factorysessions.RuntimeInstanceIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
 	providerIdentities factorysessions.ProviderIdentityResolver,
-	operationObserver factorysessions.RuntimeHostObserver,
 ) (products runtimeProducts, err error) {
 	if request == nil {
 		return runtimeProducts{}, fmt.Errorf("runtime opening request is required")
@@ -429,7 +427,7 @@ func openRuntime(
 			Host: configured.Session.Host.Host, Port: configured.Session.Host.Port,
 			AutoPort: configured.Session.Host.AutoPort,
 		},
-		effectiveRuntimeHostObserver(runtimeHostObserver, operationObserver),
+		nil,
 		startupRuntime.RuntimeLogger(),
 	)
 	if err != nil {
@@ -469,22 +467,6 @@ func openRuntime(
 	)
 	opened.application.Resources.Clock = clock
 	return opened, nil
-}
-
-func effectiveRuntimeHostObserver(
-	configured factorysessions.RuntimeHostObserver,
-	operation factorysessions.RuntimeHostObserver,
-) factorysessions.RuntimeHostObserver {
-	if configured == nil {
-		return operation
-	}
-	if operation == nil {
-		return configured
-	}
-	return func(binding factorysessions.RuntimeHostBinding) {
-		configured(binding)
-		operation(binding)
-	}
 }
 
 // bindRuntimeRecordingLifecycle binds the runtime recorder to the already-

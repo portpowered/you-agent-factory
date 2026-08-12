@@ -30,7 +30,6 @@ type testOpeningPresentationOwner struct {
 }
 
 type testOpeningPresentationScope struct {
-	application      *factorysessions.ApplicationOpeningScope
 	directJavaScript *factorysessions.DirectJavaScriptRunScope
 	stdio            *factorysessions.StdioOpeningScope
 	invocationEvents *factorysessions.InvocationEventScope
@@ -47,20 +46,6 @@ func (o *testOpeningPresentationOwner) register(scope testOpeningPresentationSco
 	id := factorysessions.OpeningScopeID(fmt.Sprintf("test-opening-%d", o.nextID))
 	o.scopes[id] = scope
 	return id, nil
-}
-
-func (o *testOpeningPresentationOwner) RegisterApplication(scope factorysessions.ApplicationOpeningScope) (factorysessions.OpeningScopeID, error) {
-	return o.register(testOpeningPresentationScope{application: &scope})
-}
-
-func (o *testOpeningPresentationOwner) Application(id factorysessions.OpeningScopeID) (factorysessions.ApplicationOpeningScope, bool) {
-	o.mu.Lock()
-	defer o.mu.Unlock()
-	scope, ok := o.scopes[id]
-	if !ok || scope.application == nil {
-		return factorysessions.ApplicationOpeningScope{}, false
-	}
-	return *scope.application, true
 }
 
 func (o *testOpeningPresentationOwner) RegisterDirectJavaScript(scope factorysessions.DirectJavaScriptRunScope) (factorysessions.OpeningScopeID, error) {
@@ -105,17 +90,10 @@ func (o *testOpeningPresentationOwner) InvocationEvents(id factorysessions.Openi
 	return scope.invocationEvents.Consume, scope.invocationEvents.Consume != nil
 }
 
-func (o *testOpeningPresentationOwner) StartFactoryEventBridge(context.Context, factorysessions.Service, factorysessions.OpeningScopeID) (interface {
-	Finish(context.Context, factorysessions.Service, factorysessions.FactoryInvocationOutcome) error
+func (o *testOpeningPresentationOwner) StartFactoryEventBridge(context.Context, factoryEventReader, factorysessions.OpeningScopeID) (interface {
+	Finish(context.Context, factoryEventReader, factorysessions.FactoryInvocationOutcome) error
 }, error) {
 	return nil, nil
-}
-
-func (o *testOpeningPresentationOwner) ObserveHost(id factorysessions.OpeningScopeID, binding factorysessions.RuntimeHostBinding) {
-	scope, ok := o.Application(id)
-	if ok && scope.RuntimeHostObserver != nil {
-		scope.RuntimeHostObserver(binding)
-	}
 }
 
 func (o *testOpeningPresentationOwner) Close(id factorysessions.OpeningScopeID) {

@@ -489,13 +489,11 @@ func TestFactoryRuntimeEffectProvidersSelectExactProcessEdges(t *testing.T) {
 	t.Parallel()
 	clock := platformclock.Real{}
 	metrics := &runtimeInputMetricsRecorder{}
-	observer := factorysessions.RuntimeHostObserver(func(factorysessions.RuntimeHostBinding) {})
 	providerRunner := &processCommandRunner{}
 	scriptRunner := &processCommandRunner{}
 	edges := serviceedges.Edges{
 		Clock:                     clock,
 		InvocationMetricsRecorder: metrics,
-		RuntimeHostObserver:       observer,
 		ProviderCommandRunner:     providerRunner,
 		ScriptCommandRunner:       scriptRunner,
 	}
@@ -504,9 +502,6 @@ func TestFactoryRuntimeEffectProvidersSelectExactProcessEdges(t *testing.T) {
 	}
 	if got := provideFactorySessionInvocationMetricsRecorder(edges); got != metrics {
 		t.Fatalf("metrics recorder = %v, want exact edge", got)
-	}
-	if got := provideFactorySessionRuntimeHostObserver(edges); got == nil {
-		t.Fatal("runtime host observer = nil, want edge observer")
 	}
 	gotProvider, err := provideFactoryRuntimeProviderCommandRunner(edges)
 	if err != nil {

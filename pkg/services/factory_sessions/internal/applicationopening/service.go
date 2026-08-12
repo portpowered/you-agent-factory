@@ -41,7 +41,7 @@ type Service struct {
 	openRuntime   runtimeopening.ApplicationRuntimeOpening
 	adaptRuntime  RuntimeAdapter
 	planLifecycle roles.LifecyclePlanOperation
-	presentations factorysessions.OpeningPresentationOwner
+	visualization factoryvisualization.RuntimeSinkOwner
 }
 
 func New(
@@ -49,7 +49,7 @@ func New(
 	openRuntime runtimeopening.ApplicationRuntimeOpening,
 	adaptRuntime RuntimeAdapter,
 	planLifecycle roles.LifecyclePlanOperation,
-	presentations ...factorysessions.OpeningPresentationOwner,
+	visualization factoryvisualization.RuntimeSinkOwner,
 ) (*Service, error) {
 	switch {
 	case resolveInputs == nil:
@@ -60,17 +60,15 @@ func New(
 		return nil, errors.New("construct application opener: application adapter is required")
 	case planLifecycle == nil:
 		return nil, errors.New("construct application opener: lifecycle plan operation is required")
+	case visualization == nil:
+		return nil, errors.New("construct application opener: Factory Visualization sink owner is required")
 	default:
-		var presentationOwner factorysessions.OpeningPresentationOwner
-		if len(presentations) > 0 {
-			presentationOwner = presentations[0]
-		}
 		return &Service{
 			resolveInputs: resolveInputs,
 			openRuntime:   openRuntime,
 			adaptRuntime:  adaptRuntime,
 			planLifecycle: planLifecycle,
-			presentations: presentationOwner,
+			visualization: visualization,
 		}, nil
 	}
 }
@@ -79,21 +77,17 @@ func (service *Service) OpenApplication(
 	ctx context.Context,
 	request roles.ApplicationOpeningRequest,
 ) (roles.OpenedProcessApplication, error) {
-	if service == nil || service.resolveInputs == nil || service.openRuntime == nil || service.adaptRuntime == nil || service.planLifecycle == nil {
+	if service == nil || service.resolveInputs == nil || service.openRuntime == nil || service.adaptRuntime == nil || service.planLifecycle == nil || service.visualization == nil {
 		return roles.OpenedProcessApplication{}, errors.New("open Factory Session application: service is required")
-	}
-	presentation, err := service.presentationScope(request.ScopeID)
-	if err != nil {
-		return roles.OpenedProcessApplication{}, fmt.Errorf("open Factory Session application: %w", err)
 	}
 	opened, err := service.openRuntimeForRequest(ctx, request)
 	if err != nil {
 		return roles.OpenedProcessApplication{}, fmt.Errorf("open Factory Session application runtime: %w", err)
 	}
 	if opened.HistoricalReplay != nil {
-		return service.openHistoricalReplayApplication(opened, presentation)
+		return service.openHistoricalReplayApplication(opened)
 	}
-	return service.bindLiveApplication(opened, presentation)
+	return service.bindLiveApplication(opened, request.VisualizationSinkID)
 }
 
 func (service *Service) openRuntimeForRequest(
@@ -104,9 +98,6 @@ func (service *Service) openRuntimeForRequest(
 	if err != nil {
 		return roles.OpenedApplicationRuntime{}, fmt.Errorf("resolve runtime inputs: %w", err)
 	}
-	if inputs.Request != nil {
-		inputs.Request.ScopeID = request.ScopeID
-	}
 	opened, err := service.openRuntime.OpenApplicationRuntime(ctx, inputs.Request)
 	if err != nil {
 		return roles.OpenedApplicationRuntime{}, err
@@ -116,15 +107,16 @@ func (service *Service) openRuntimeForRequest(
 
 func (service *Service) bindLiveApplication(
 	opened roles.OpenedApplicationRuntime,
-	presentation factorysessions.ApplicationOpeningScope,
+	sinkID factorysessions.VisualizationSinkID,
 ) (roles.OpenedProcessApplication, error) {
-	if presentation.RuntimeHTTPServicesBound != nil {
-		presentation.RuntimeHTTPServicesBound(opened.HTTP)
-	}
-	visualizationSink, ok := presentation.VisualizationSink.(factoryvisualization.Sink)
-	if presentation.VisualizationSink != nil && !ok {
-		err := closeOpenedRuntime(opened, errors.New("visualization sink has an invalid type"))
-		return roles.OpenedProcessApplication{}, fmt.Errorf("bind Factory Session application: %w", err)
+	var visualizationSink factoryvisualization.Sink
+	if sinkID != "" {
+		var ok bool
+		visualizationSink, ok = service.visualization.RuntimeSink(factoryvisualization.RuntimeSinkID(sinkID))
+		if !ok {
+			err := closeOpenedRuntime(opened, fmt.Errorf("Factory Visualization sink %q is unavailable", sinkID))
+			return roles.OpenedProcessApplication{}, fmt.Errorf("bind Factory Session application: %w", err)
+		}
 	}
 	components, err := service.adaptRuntime(opened, visualizationSink)
 	if err != nil {
@@ -135,25 +127,22 @@ func (service *Service) bindLiveApplication(
 		Runtime:    opened.Process,
 		Components: components,
 		Close:      opened.Resources.Close,
-		Completion: presentation.Completion,
 	})
 	if err != nil {
 		err = closeOpenedRuntime(opened, err)
 		return roles.OpenedProcessApplication{}, fmt.Errorf("plan Factory Session application lifecycle: %w", err)
 	}
 	return roles.OpenedProcessApplication{
-		Plan:        plan,
-		Diagnostics: opened.Resources.Diagnostics,
+		Plan:             plan,
+		Diagnostics:      opened.Resources.Diagnostics,
+		Ready:            runtimeReady(opened.Process),
+		HostedInvocation: hostedInvocation(opened.HTTP.FactorySessions),
 	}, nil
 }
 
 func (service *Service) openHistoricalReplayApplication(
 	opened roles.OpenedApplicationRuntime,
-	presentation factorysessions.ApplicationOpeningScope,
 ) (roles.OpenedProcessApplication, error) {
-	if presentation.HistoricalReplayBound != nil && opened.HistoricalReplay != nil {
-		presentation.HistoricalReplayBound(*opened.HistoricalReplay)
-	}
 	plan, err := service.planLifecycle(roles.LifecyclePlanRequest{
 		Runtime: opened.Process,
 		Components: factorysessions.BoundProcessComponents{
@@ -166,23 +155,29 @@ func (service *Service) openHistoricalReplayApplication(
 		return roles.OpenedProcessApplication{}, fmt.Errorf("plan Factory Session historical replay lifecycle: %w", err)
 	}
 	return roles.OpenedProcessApplication{
-		Plan:        plan,
-		Diagnostics: opened.Resources.Diagnostics,
+		Plan:             plan,
+		Diagnostics:      opened.Resources.Diagnostics,
+		HistoricalReplay: opened.HistoricalReplay,
 	}, nil
 }
 
-func (service *Service) presentationScope(id factorysessions.OpeningScopeID) (factorysessions.ApplicationOpeningScope, error) {
-	if id == "" {
-		return factorysessions.ApplicationOpeningScope{}, nil
+func hostedInvocation(service factorysessions.Service) roles.HostedInvocationOperation {
+	if service == nil {
+		return nil
 	}
-	if service.presentations == nil {
-		return factorysessions.ApplicationOpeningScope{}, fmt.Errorf("application opening presentation scope %q is unavailable", id)
+	operation, _ := service.(roles.HostedInvocationOperation)
+	return operation
+}
+
+type runtimeReadySource interface {
+	RuntimeHostReady() <-chan factorysessions.RuntimeHostBinding
+}
+
+func runtimeReady(process roles.ProcessRuntime) <-chan factorysessions.RuntimeHostBinding {
+	if source, ok := process.(runtimeReadySource); ok {
+		return source.RuntimeHostReady()
 	}
-	scope, ok := service.presentations.Application(id)
-	if !ok {
-		return factorysessions.ApplicationOpeningScope{}, fmt.Errorf("application opening presentation scope %q is unavailable", id)
-	}
-	return scope, nil
+	return nil
 }
 
 func closeOpenedRuntime(opened roles.OpenedApplicationRuntime, cause error) error {

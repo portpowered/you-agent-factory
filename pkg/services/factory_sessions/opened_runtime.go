@@ -30,5 +30,4 @@ type RuntimeOpeningRequest struct {
 	Recordings          recordings.RuntimeOpeningRequest
 	ModelCacheDirectory string
 	OperatorDefaults    operatorsettings.ResolvedDefaults
-	ScopeID             OpeningScopeID
 }

@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
-	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/initializer"
@@ -13,6 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/platform/metrics"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
+	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -182,9 +181,10 @@ var openTestRuntimeRunner testRuntimeRunnerOpener = missingTestRuntimeRunner
 var openTestInvocationRunner testInvocationRunnerOpener
 
 type testRunnerOpeners struct {
-	runtime       testRuntimeRunnerOpener
-	invocation    testInvocationRunnerOpener
-	presentations factorysessions.OpeningPresentationOwner
+	runtime           testRuntimeRunnerOpener
+	invocation        testInvocationRunnerOpener
+	presentations     factorysessions.OpeningPresentationOwner
+	visualizationSink factoryvisualization.Sink
 }
 
 func (f testRunnerOpeners) BuildRunner(
@@ -195,41 +195,66 @@ func (f testRunnerOpeners) BuildRunner(
 		return nil, errors.New("construct local runtime: dependency-injected builder is required")
 	}
 	selections := flattenTestRuntimeRequest(request.Runtime)
-	var visualizationSink factoryvisualization.Sink
 	edges := serviceedges.Edges{}
-	if f.presentations != nil && request.ScopeID != "" {
-		if scope, ok := f.presentations.Application(request.ScopeID); ok {
-			edges.RuntimeHostObserver = scope.RuntimeHostObserver
-			visualizationSink, _ = scope.VisualizationSink.(factoryvisualization.Sink)
+	var ready chan initializer.RuntimeHostBinding
+	if selections != nil && selections.Port > 0 {
+		ready = make(chan initializer.RuntimeHostBinding, 1)
+		selections.RuntimeHostObserver = func(binding factorysessions.RuntimeHostBinding) {
+			ready <- initializer.RuntimeHostBinding{Host: binding.Host, Port: binding.Port}
 		}
 	}
-	if selections != nil {
-		selections.RuntimeHostObserver = edges.RuntimeHostObserver
-	}
 	runner, err := f.runtime(ctx, selections, edges)
-	if err != nil || visualizationSink == nil {
+	if err != nil || runner == nil {
 		return runner, err
 	}
-	snapshots, ok := runner.(factoryruntime.LegacySnapshotProvider)
+	if f.visualizationSink != nil {
+		snapshots, ok := runner.(factoryruntime.LegacySnapshotProvider)
+		if ok {
+			snapshot, snapshotErr := snapshots.GetEngineStateSnapshot(ctx)
+			if snapshotErr == nil {
+				runner = testDashboardRenderingRunner{
+					LocalRuntimeRunner: runner,
+					sink:               f.visualizationSink,
+					input: factoryvisualization.View{Runtime: factoryvisualization.RuntimeObservation{
+						TickCount: snapshot.TickCount, FactoryState: snapshot.FactoryState,
+						RuntimeStatus: snapshot.RuntimeStatus, Uptime: snapshot.Uptime,
+					}},
+				}
+			}
+		}
+	}
+	if ready == nil {
+		return runner, nil
+	}
+	return testRuntimeHostRunner{LocalRuntimeRunner: runner, ready: ready}, nil
+}
+
+type testRuntimeHostRunner struct {
+	initializer.LocalRuntimeRunner
+	ready <-chan initializer.RuntimeHostBinding
+}
+
+func (runner testRuntimeHostRunner) RuntimeHostBinding(ctx context.Context) (initializer.RuntimeHostBinding, error) {
+	select {
+	case binding := <-runner.ready:
+		return binding, nil
+	case <-ctx.Done():
+		return initializer.RuntimeHostBinding{}, ctx.Err()
+	}
+}
+
+func (runner testRuntimeHostRunner) RuntimeLogDiagnostics() runtimeartifact.Diagnostics {
+	return runtimeLogDiagnosticsForRunner(runner.LocalRuntimeRunner)
+}
+
+func (runner testRuntimeHostRunner) GetEngineStateSnapshot(
+	ctx context.Context,
+) (*interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.Net], error) {
+	provider, ok := runner.LocalRuntimeRunner.(factoryruntime.LegacySnapshotProvider)
 	if !ok {
-		return runner, nil
+		return nil, errors.New("runtime engine snapshot is unavailable")
 	}
-	snapshot, err := snapshots.GetEngineStateSnapshot(ctx)
-	if err != nil {
-		return runner, nil
-	}
-	return testDashboardRenderingRunner{
-		LocalRuntimeRunner: runner,
-		sink:               visualizationSink,
-		input: factoryvisualization.View{
-			Runtime: factoryvisualization.RuntimeObservation{
-				TickCount:     snapshot.TickCount,
-				FactoryState:  snapshot.FactoryState,
-				RuntimeStatus: snapshot.RuntimeStatus,
-				Uptime:        snapshot.Uptime,
-			},
-		},
-	}, nil
+	return provider.GetEngineStateSnapshot(ctx)
 }
 
 type testDashboardRenderingRunner struct {
@@ -242,91 +267,6 @@ type runFuncRunner func(context.Context) error
 
 func (run runFuncRunner) Run(ctx context.Context) error { return run(ctx) }
 
-func TestOpenRunScopedServerAttachesInvocationCompletionAndKeepsOneShotResult(t *testing.T) {
-	prompt := "ship it"
-	var output strings.Builder
-	var opening factorysessions.ApplicationOpeningRequest
-	var openingScope factorysessions.ApplicationOpeningScope
-	owner := newTestOpeningPresentationOwner()
-	runnerCalls := 0
-	invocationCalls := 0
-	operation, err := Open(
-		t.Context(),
-		ensureTestRecordingsCLI(RunConfig{
-			Dir:                      "factory",
-			FactoryConfigPath:        "factory/factory.json",
-			InvocationPositionalText: &prompt,
-			WithServer:               true,
-			Port:                     7437,
-			DisableDefaultRecording:  true,
-			Output:                   &output,
-		}),
-		func(
-			_ context.Context,
-			request factorysessions.ApplicationOpeningRequest,
-		) (initializer.LocalRuntimeRunner, error) {
-			opening = request
-			var ok bool
-			openingScope, ok = owner.Application(request.ScopeID)
-			if !ok {
-				t.Fatalf("application opening scope %q was not registered", request.ScopeID)
-			}
-			return runFuncRunner(func(context.Context) error {
-				runnerCalls++
-				return nil
-			}), nil
-		},
-		testInvocationOperation{invokeFactory: func(
-			context.Context,
-			factorysessions.InvocationTarget,
-			factorysessions.InvocationRequest,
-			func([]interfaces.FactoryEvent),
-		) (factorysessions.FactoryInvocationOutcome, error) {
-			invocationCalls++
-			return factorysessions.FactoryInvocationOutcome{
-				Result: interfaces.FactoryInvocationResult{
-					Status: interfaces.InvocationTerminalStatusCompleted,
-					PrimaryResult: []work.WorkContentPart{{
-						Type: work.WorkContentPartTypeText,
-						Text: "done",
-					}},
-				},
-			}, nil
-		}},
-		nil,
-		prepareSingleWorkTargetForTest,
-		testMockWorkersConfigLoader,
-		testRuntimeOpeningRequestFactory,
-		owner,
-	)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	if opening.Runtime.FactoryRuntime.Mode != interfaces.RuntimeModeService {
-		t.Fatalf("hosted runtime mode = %q, want service until terminal completion", opening.Runtime.FactoryRuntime.Mode)
-	}
-	if openingScope.Completion == nil || openingScope.RuntimeHostObserver == nil {
-		t.Fatal("run-scoped server omitted readiness-gated terminal completion")
-	}
-
-	if invocationCalls != 0 {
-		t.Fatal("invocation started while opening the hosted lifecycle")
-	}
-	openingScope.RuntimeHostObserver(factorysessions.RuntimeHostBinding{Port: 7437})
-	if err := openingScope.Completion(t.Context()); err != nil {
-		t.Fatalf("completion: %v", err)
-	}
-	if invocationCalls != 1 || output.String() != "done" {
-		t.Fatalf("invocation calls = %d, output = %q", invocationCalls, output.String())
-	}
-	if err := operation.Run(t.Context()); err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-	if runnerCalls != 1 {
-		t.Fatalf("owned lifecycle runner calls = %d, want 1", runnerCalls)
-	}
-}
-
 func (r testDashboardRenderingRunner) Run(ctx context.Context) error {
 	if err := r.LocalRuntimeRunner.Run(ctx); err != nil {
 		return err
@@ -334,6 +274,16 @@ func (r testDashboardRenderingRunner) Run(ctx context.Context) error {
 	r.input.ObservedAt = time.Now()
 	r.sink.PresentFactoryView(r.input)
 	return nil
+}
+
+func (r testDashboardRenderingRunner) GetEngineStateSnapshot(
+	ctx context.Context,
+) (*interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.Net], error) {
+	provider, ok := r.LocalRuntimeRunner.(factoryruntime.LegacySnapshotProvider)
+	if !ok {
+		return nil, errors.New("runtime engine snapshot is unavailable")
+	}
+	return provider.GetEngineStateSnapshot(ctx)
 }
 
 func (f testRunnerOpeners) Invocation() InvocationOperation {
@@ -504,12 +454,14 @@ func runWithTestRuntimeRunnerAndMockWorkersLoader(
 		runtime: builder, invocation: openTestInvocationRunner,
 	}
 	factory.presentations = newTestOpeningPresentationOwner()
+	presentation := testResponsePresentation()
+	factory.visualizationSink = runVisualizationSink(normalizeRunInvocationMode(cfg), presentation)
 	operation, err := Open(
 		ctx,
 		cfg,
 		factory.BuildRunner,
 		factory.Invocation(),
-		testResponsePresentation(),
+		presentation,
 		prepareSingleWorkTargetForTest,
 		loadMockWorkers,
 		testRuntimeOpeningRequestFactory,

@@ -880,6 +880,7 @@ func provideRunOpener(
 	loadMockWorkers workers.MockWorkersConfigLoader,
 	buildRuntimeRequest runcli.RuntimeOpeningRequestFactory,
 	presentations factorysessions.OpeningPresentationOwner,
+	visualizations factoryvisualization.RuntimeSinkOwner,
 ) runcli.Opener {
 	return func(
 		ctx context.Context,
@@ -888,9 +889,9 @@ func provideRunOpener(
 		invocation runcli.InvocationOperation,
 		presentation factoryvisualization.ResponsePresentation,
 	) (*runcli.Operation, error) {
-		return runcli.Open(
+		return runcli.OpenWithVisualizationOwner(
 			ctx, cfg, buildRunner, invocation, presentation,
-			prepareWorkTarget, loadMockWorkers, buildRuntimeRequest, presentations,
+			prepareWorkTarget, loadMockWorkers, buildRuntimeRequest, presentations, visualizations,
 		)
 	}
 }
@@ -920,30 +921,6 @@ func provideRunSelectionFactory(
 		open, buildRunner, invocation, presentation, directJavaScript, buildApplication,
 		presentations,
 	)
-}
-
-func provideRunRuntimeRunnerBuilder(
-	build initializer.RuntimeRunnerBuilder,
-	open *factorysessionwire.ApplicationService,
-) (runcli.RuntimeRunnerBuilder, error) {
-	if build == nil || open == nil {
-		return nil, errors.New("run application lifecycle builder and Factory Session opener are required")
-	}
-	return func(
-		ctx context.Context,
-		request factorysessionwire.ApplicationOpeningRequest,
-	) (initializer.LocalRuntimeRunner, error) {
-		return build(ctx, func(openCtx context.Context) (initializer.OpenedApplication, error) {
-			opened, err := open.OpenApplication(openCtx, request)
-			if err != nil {
-				return initializer.OpenedApplication{}, err
-			}
-			return initializer.OpenedApplication{
-				Plan:        opened.Plan,
-				Diagnostics: runtimeartifact.Diagnostics(opened.Diagnostics),
-			}, nil
-		})
-	}, nil
 }
 
 func provideFactorySessionHTTPRequestPreparation(

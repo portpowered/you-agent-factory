@@ -4,25 +4,14 @@ import (
 	"context"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 )
 
 type openingOwnerStub struct {
-	application      factorysessions.ApplicationOpeningScope
 	directJavaScript factorysessions.DirectJavaScriptRunScope
 	stdio            factorysessions.StdioOpeningScope
-	applicationID    factorysessions.OpeningScopeID
 	directID         factorysessions.OpeningScopeID
 	stdioID          factorysessions.OpeningScopeID
-}
-
-func (owner *openingOwnerStub) RegisterApplication(scope factorysessions.ApplicationOpeningScope) (factorysessions.OpeningScopeID, error) {
-	owner.application = scope
-	owner.applicationID = "application-test"
-	return owner.applicationID, nil
-}
-
-func (owner *openingOwnerStub) Application(id factorysessions.OpeningScopeID) (factorysessions.ApplicationOpeningScope, bool) {
-	return owner.application, id == owner.applicationID
 }
 
 func (owner *openingOwnerStub) RegisterDirectJavaScript(scope factorysessions.DirectJavaScriptRunScope) (factorysessions.OpeningScopeID, error) {
@@ -53,19 +42,10 @@ func (*openingOwnerStub) InvocationEvents(factorysessions.OpeningScopeID) (facto
 	return nil, false
 }
 
-func (*openingOwnerStub) StartFactoryEventBridge(context.Context, factorysessions.Service, factorysessions.OpeningScopeID) (interface {
-	Finish(context.Context, factorysessions.Service, factorysessions.FactoryInvocationOutcome) error
+func (*openingOwnerStub) StartFactoryEventBridge(context.Context, roles.FactoryEventReader, factorysessions.OpeningScopeID) (interface {
+	Finish(context.Context, roles.FactoryEventReader, factorysessions.FactoryInvocationOutcome) error
 }, error) {
 	return nil, nil
-}
-
-func (owner *openingOwnerStub) ObserveHost(id factorysessions.OpeningScopeID, binding factorysessions.RuntimeHostBinding) {
-	if id == owner.applicationID && owner.application.RuntimeHostObserver != nil {
-		owner.application.RuntimeHostObserver(binding)
-	}
-	if id == owner.directID && owner.directJavaScript.RuntimeHostObserver != nil {
-		owner.directJavaScript.RuntimeHostObserver(binding)
-	}
 }
 
 func (owner *openingOwnerStub) Close(factorysessions.OpeningScopeID) {}

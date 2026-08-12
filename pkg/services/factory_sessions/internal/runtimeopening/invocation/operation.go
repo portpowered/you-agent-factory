@@ -183,31 +183,35 @@ func joinTeardownErrorUnlessResultDetermined(
 
 func (o *operation) invokeFactoryOnHostedLiveRuntime(
 	ctx context.Context,
-	hosted *factorysessions.HostedLiveInvocation,
+	hosted roles.HostedInvocationOperation,
 	target roles.InvocationTarget,
 	request factorysessions.InvocationRequest,
 ) (outcome roles.FactoryInvocationOutcome, resultErr error) {
-	if hosted == nil || hosted.Sessions == nil || hosted.Invoker == nil {
+	if hosted == nil {
 		return outcome, errors.New("hosted live invocation runtime is incomplete")
 	}
-	projection, projectionErr := hosted.Sessions.GetFactorySession(
-		ctx, factorysessions.DefaultSessionID,
-	)
-	if projectionErr == nil && factorydefinitions.IsJavaScriptOrchestratorFactory(projection.Context.FactoryCfg) {
-		return o.invokeFactoryOnEphemeralRuntime(ctx, target, request)
+	if projectionReader, ok := hosted.(interface {
+		GetFactorySession(context.Context, string) (factorysessions.SessionProjection, error)
+	}); ok {
+		projection, projectionErr := projectionReader.GetFactorySession(
+			ctx, factorysessions.DefaultSessionID,
+		)
+		if projectionErr == nil && factorydefinitions.IsJavaScriptOrchestratorFactory(projection.Context.FactoryCfg) {
+			return o.invokeFactoryOnEphemeralRuntime(ctx, target, request)
+		}
 	}
-	bridge, err := o.startFactoryEventBridge(ctx, hosted.Sessions, target)
+	bridge, err := o.startFactoryEventBridge(ctx, hosted, target)
 	if err != nil {
 		return outcome, err
 	}
-	invocationResult, err := hosted.Invoker.InvokeFactorySession(
+	invocationResult, err := hosted.InvokeFactorySession(
 		ctx, factorysessions.DefaultSessionID, request,
 	)
 	outcome.Result = factoryInvocationResultFromSessionInvocation(invocationResult)
 	resultErr = err
 	if bridge != nil {
 		resultErr = joinTeardownErrorUnlessResultDetermined(
-			outcome, resultErr, bridge.Finish(ctx, hosted.Sessions, outcome), o.logger,
+			outcome, resultErr, bridge.Finish(ctx, hosted, outcome), o.logger,
 		)
 	}
 	return outcome, resultErr
@@ -280,10 +284,10 @@ func (o *operation) invokeFactoryOnOpenedRuntime(
 
 func (o *operation) startFactoryEventBridge(
 	ctx context.Context,
-	reader factorysessions.Service,
+	reader roles.FactoryEventReader,
 	target roles.InvocationTarget,
 ) (interface {
-	Finish(context.Context, factorysessions.Service, factorysessions.FactoryInvocationOutcome) error
+	Finish(context.Context, roles.FactoryEventReader, factorysessions.FactoryInvocationOutcome) error
 }, error) {
 	if target.EventScopeID == "" {
 		return nil, nil

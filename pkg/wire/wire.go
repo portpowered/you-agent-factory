@@ -14,6 +14,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
+	factoryvisualizationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire"
 	providersessionshttp "github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -88,6 +89,7 @@ var servicesSet = wire.NewSet(
 	factorysessionwire.NewLifecyclePlanOperation,
 	provideFactoryVisualizationFactory,
 	provideResponsePresentation,
+	factoryvisualizationwire.NewRuntimeSinkOwner,
 	factorysessionwire.NewOpeningPresentationOwner,
 	provideWorkContentStagingService,
 	work.NewContentPreparation,
@@ -203,7 +205,6 @@ var servicesSet = wire.NewSet(
 	provideFactoryRuntimeSubmissionRecorder,
 	provideFactoryRuntimeDispatchRecorder,
 	provideFactorySessionInvocationMetricsRecorder,
-	provideFactorySessionRuntimeHostObserver,
 	provideFactoryRuntimeProviderCommandRunner,
 	provideFactoryRuntimeScriptCommandRunner,
 	provideFactoryRuntimeSessionLoggerFactory,

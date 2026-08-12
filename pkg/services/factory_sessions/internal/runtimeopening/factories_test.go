@@ -433,7 +433,6 @@ func runtimeOpeningMemberOmissions() []runtimeOpeningDependencyOmission {
 		{"Factory Sessions runtime instance ID generator", func(d *runtimeOpeningFixture) { d.FactorySessions.GenerateRuntimeInstanceID = nil }},
 		{"Factory Sessions home directory resolver", func(d *runtimeOpeningFixture) { d.FactorySessions.ResolveHome = nil }},
 		{"Factory Sessions provider identity resolver", func(d *runtimeOpeningFixture) { d.FactorySessions.ProviderIdentities = nil }},
-		{"Factory Sessions opening presentation owner", func(d *runtimeOpeningFixture) { d.FactorySessions.PresentationOwner = nil }},
 		{"Work factory", func(d *runtimeOpeningFixture) { d.Work.Factory = nil }},
 		{"Work content materializer", func(d *runtimeOpeningFixture) { d.Work.ContentMaterializer = nil }},
 		{"Automations factory", func(d *runtimeOpeningFixture) { d.Automations.Factory = nil }},
@@ -496,7 +495,6 @@ func validRuntimeOpeningOwnerPorts(calls *int) runtimeOpeningFixture {
 			GenerateRuntimeInstanceID:      inertRuntimeOpeningFunction[factorysessions.RuntimeInstanceIDGenerator](calls),
 			ResolveHome:                    inertRuntimeOpeningFunction[factorysessions.HomeDirectoryResolver](calls),
 			ProviderIdentities:             inertRuntimeOpeningFunction[factorysessions.ProviderIdentityResolver](calls),
-			PresentationOwner:              runtimeOpeningPresentationOwnerStub{},
 		},
 		Work: &WorkPorts{
 			Factory:             inertRuntimeOpeningFunction[WorkFactory](calls),
@@ -530,51 +528,6 @@ func validRuntimeOpeningOwnerPorts(calls *int) runtimeOpeningFixture {
 		},
 	}
 }
-
-type runtimeOpeningPresentationOwnerStub struct{}
-
-func (runtimeOpeningPresentationOwnerStub) RegisterApplication(factorysessions.ApplicationOpeningScope) (factorysessions.OpeningScopeID, error) {
-	return "test", nil
-}
-
-func (runtimeOpeningPresentationOwnerStub) Application(factorysessions.OpeningScopeID) (factorysessions.ApplicationOpeningScope, bool) {
-	return factorysessions.ApplicationOpeningScope{}, false
-}
-
-func (runtimeOpeningPresentationOwnerStub) RegisterDirectJavaScript(factorysessions.DirectJavaScriptRunScope) (factorysessions.OpeningScopeID, error) {
-	return "test", nil
-}
-
-func (runtimeOpeningPresentationOwnerStub) DirectJavaScript(factorysessions.OpeningScopeID) (factorysessions.DirectJavaScriptRunScope, bool) {
-	return factorysessions.DirectJavaScriptRunScope{}, false
-}
-
-func (runtimeOpeningPresentationOwnerStub) RegisterStdio(factorysessions.StdioOpeningScope) (factorysessions.OpeningScopeID, error) {
-	return "test", nil
-}
-
-func (runtimeOpeningPresentationOwnerStub) Stdio(factorysessions.OpeningScopeID) (factorysessions.StdioOpeningScope, bool) {
-	return factorysessions.StdioOpeningScope{}, false
-}
-
-func (runtimeOpeningPresentationOwnerStub) RegisterInvocationEvents(factorysessions.InvocationEventScope) (factorysessions.OpeningScopeID, error) {
-	return "test", nil
-}
-
-func (runtimeOpeningPresentationOwnerStub) InvocationEvents(factorysessions.OpeningScopeID) (factorysessions.FactoryEventConsumer, bool) {
-	return nil, false
-}
-
-func (runtimeOpeningPresentationOwnerStub) StartFactoryEventBridge(context.Context, factorysessions.Service, factorysessions.OpeningScopeID) (interface {
-	Finish(context.Context, factorysessions.Service, factorysessions.FactoryInvocationOutcome) error
-}, error) {
-	return nil, nil
-}
-
-func (runtimeOpeningPresentationOwnerStub) ObserveHost(factorysessions.OpeningScopeID, factorysessions.RuntimeHostBinding) {
-}
-
-func (runtimeOpeningPresentationOwnerStub) Close(factorysessions.OpeningScopeID) {}
 
 func inertRuntimeOpeningFunction[T any](calls *int) T {
 	functionType := reflect.TypeOf((*T)(nil)).Elem()
@@ -692,7 +645,7 @@ func TestConcurrentRuntimeOpeningUsesSharedFactorySessionsRoot(t *testing.T) {
 		wait.Add(1)
 		go func() {
 			defer wait.Done()
-			_, err := factory.openRuntime(context.Background(), request, zap.NewNop(), nil)
+			_, err := factory.openRuntime(context.Background(), request, zap.NewNop())
 			results <- err
 		}()
 	}

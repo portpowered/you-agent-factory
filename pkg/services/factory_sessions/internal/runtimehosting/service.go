@@ -72,7 +72,7 @@ func (service *Service) Run(
 	if err := runtime.CompleteStartup(ctx); err != nil {
 		return err
 	}
-	if binding.Port > 0 && observer != nil {
+	if observer != nil {
 		observer(factorysessions.RuntimeHostBinding{Host: binding.Host, Port: binding.Port})
 	}
 	logStartup(logger, runtime.CurrentRuntimeBundle(), request)

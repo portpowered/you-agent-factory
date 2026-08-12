@@ -278,11 +278,11 @@ func wrapInvocationInputError(err error) error {
 
 // hostedInvocationOperation keeps the already-opened application runtime at
 // the CLI composition edge. InvocationTarget remains detached configuration;
-// the Factory Sessions invocation operation only receives that value contract
-// and opens ephemeral runtimes for its normal path.
+// the hosted capability itself is an operation-valued result from application
+// opening rather than a service table retained in the opening request.
 type hostedInvocationOperation struct {
 	delegate      InvocationOperation
-	hosted        *factorysessions.HostedLiveInvocation
+	hosted        HostedInvocationOperation
 	logger        *zap.Logger
 	presentations factorysessions.OpeningPresentationOwner
 }
@@ -313,27 +313,31 @@ func (operation *hostedInvocationOperation) InvokeFactory(
 		return factorysessions.FactoryInvocationOutcome{}, errors.New("hosted invocation operation is required")
 	}
 	hosted := operation.hosted
-	if hosted == nil || hosted.Sessions == nil || hosted.Invoker == nil {
-		return factorysessions.FactoryInvocationOutcome{}, errors.New("hosted live invocation runtime is incomplete")
+	if hosted == nil {
+		return factorysessions.FactoryInvocationOutcome{}, errors.New("hosted invocation operation is incomplete")
 	}
-	projection, projectionErr := hosted.Sessions.GetFactorySession(ctx, factorysessions.DefaultSessionID)
-	if projectionErr == nil && interfaces.IsJavaScriptOrchestratorFactory(projection.Context.FactoryCfg) {
-		return operation.delegate.InvokeFactory(ctx, target, request)
+	if projectionReader, ok := hosted.(interface {
+		GetFactorySession(context.Context, string) (factorysessions.SessionProjection, error)
+	}); ok {
+		projection, projectionErr := projectionReader.GetFactorySession(ctx, factorysessions.DefaultSessionID)
+		if projectionErr == nil && interfaces.IsJavaScriptOrchestratorFactory(projection.Context.FactoryCfg) {
+			return operation.delegate.InvokeFactory(ctx, target, request)
+		}
 	}
 	var bridge interface {
-		Finish(context.Context, factorysessions.Service, factorysessions.FactoryInvocationOutcome) error
+		Finish(context.Context, factoryEventReader, factorysessions.FactoryInvocationOutcome) error
 	}
 	if target.EventScopeID != "" {
 		if operation.presentations == nil {
 			return factorysessions.FactoryInvocationOutcome{}, errors.New("invocation presentation owner is required")
 		}
 		var bridgeErr error
-		bridge, bridgeErr = operation.presentations.StartFactoryEventBridge(ctx, hosted.Sessions, target.EventScopeID)
+		bridge, bridgeErr = operation.presentations.StartFactoryEventBridge(ctx, hosted, target.EventScopeID)
 		if bridgeErr != nil {
 			return factorysessions.FactoryInvocationOutcome{}, bridgeErr
 		}
 	}
-	invocationResult, invokeErr := hosted.Invoker.InvokeFactorySession(
+	invocationResult, invokeErr := hosted.InvokeFactorySession(
 		ctx, factorysessions.DefaultSessionID, request,
 	)
 	outcome := factorysessions.FactoryInvocationOutcome{
@@ -342,7 +346,7 @@ func (operation *hostedInvocationOperation) InvokeFactory(
 	if bridge == nil {
 		return outcome, invokeErr
 	}
-	postResultErr := bridge.Finish(ctx, hosted.Sessions, outcome)
+	postResultErr := bridge.Finish(ctx, hosted, outcome)
 	if postResultErr != nil && outcome.Result.Status != "" {
 		if operation.logger != nil {
 			operation.logger.Warn(
