@@ -7,10 +7,12 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 
@@ -19,6 +21,7 @@ import (
 	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -2102,6 +2105,9 @@ func testProviderBindingAppendEdges(t *testing.T) {
 
 func assertWorkerObservationLookups(t *testing.T, registry *registry, got workersessions.Observation, canceled context.Context) {
 	t.Helper()
+	if _, err := registry.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{}); !errors.Is(err, workersessions.ErrInvalidSessionID) {
+		t.Fatalf("GetObservationByWorkerSessionID(invalid) error = %v, want ErrInvalidSessionID", err)
+	}
 	gotByWorker, err := registry.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "worker-1"})
 	if err != nil || gotByWorker.WorkerSessionID != "worker-1" || gotByWorker.ProviderSessionAvailable != got.ProviderSessionAvailable {
 		t.Fatalf("GetObservationByWorkerSessionID() = %#v, %v", gotByWorker, err)
@@ -2111,6 +2117,9 @@ func assertWorkerObservationLookups(t *testing.T, registry *registry, got worker
 	}
 	if _, err := registry.GetObservationByWorkerSessionID(canceled, workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "worker-1"}); !errors.Is(err, workersessions.ErrObservationCanceled) {
 		t.Fatalf("GetObservationByWorkerSessionID(canceled) error = %v", err)
+	}
+	if _, err := registry.projectWorkerSessionIdentity(canceled, "worker-1"); !errors.Is(err, workersessions.ErrObservationCanceled) {
+		t.Fatalf("projectWorkerSessionIdentity(canceled) error = %v, want ErrObservationCanceled", err)
 	}
 }
 
@@ -2161,6 +2170,20 @@ func TestInvokeObservationProjectionUnavailableOutcomes(t *testing.T) {
 	gotIdentity, err := noProvider.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "worker-1"})
 	if err != nil || !gotIdentity.ProviderSessionAvailable || gotIdentity.ProviderSession.ID != ref.ID {
 		t.Fatalf("GetObservationByWorkerSessionID(provider reference without projector) = %#v, %v", gotIdentity, err)
+	}
+	failed := newObservationRegistry(nil, nil)
+	failed.sessions["failed-worker"] = workersessions.Session{
+		ID:    "failed-worker",
+		State: workersessions.StateFailed,
+		Result: &workersessions.TerminalResult{
+			Outcome: workersessions.TerminalOutcomeFailed,
+			Cause:   &workersessions.FailureCause{Kind: workersessions.FailureCauseWorkersExecutionFailure, Detail: "provider failed"},
+		},
+	}
+	failed.observations["failed-worker"] = observationMetadata()
+	failedObservation, err := failed.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "failed-worker"})
+	if err != nil || failedObservation.Failure == nil || failedObservation.Failure.Detail != "provider failed" {
+		t.Fatalf("failed Worker Session observation = %#v, %v, want copied failure cause", failedObservation, err)
 	}
 	canceledProvider := newObservationRegistry(observationProjectorFake{err: context.Canceled}, nil)
 	canceledProvider.sessions["worker-1"] = observationSession("worker-1", workersessions.StateRunning)
@@ -2834,5 +2857,164 @@ func TestContinuationObservationQueriesMapCanceledAndUnavailableProjections(t *t
 	}
 	if _, err := withoutProjector.ReadTranscriptByWorkerSessionID(canceled, workersessions.ReadTranscriptByWorkerSessionIDRequest{WorkerSessionID: "terminal-with-association"}); !errors.Is(err, workersessions.ErrObservationCanceled) {
 		t.Fatalf("ReadTranscriptByWorkerSessionID(canceled) = %v, want ErrObservationCanceled", err)
+	}
+}
+
+func TestReplayObservationSubscriptionCancellationCloses(t *testing.T) {
+	topic := workersessions.Topic("worker-1")
+	initial := replayProgressResult(topic, 2, 1)
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	subscription, err := newReplayObservationSubscription(context.Background(), &observationEventReaderFake{readResults: []events.ReadResult{initial}}, topic, workersessions.StateRunning, 1)
+	if err != nil {
+		t.Fatalf("newReplayObservationSubscription(canceled) error = %v", err)
+	}
+	if got := subscription.Next(canceled); got.Kind != workersessions.ObservationDeliveryCanceled || !errors.Is(got.Err, workersessions.ErrObservationCanceled) {
+		t.Fatalf("canceled delivery = %#v, want CANCELED", got)
+	}
+	if got := subscription.Next(context.Background()); got.Kind != workersessions.ObservationDeliveryClosed {
+		t.Fatalf("delivery after cancellation = %#v, want CLOSED", got)
+	}
+}
+
+func TestReplayObservationSubscriptionCloseDuringReadCloses(t *testing.T) {
+	topic := workersessions.Topic("worker-1")
+	initial := replayProgressResult(topic, 2, 1)
+	var racing *replayObservationSubscription
+	reads := 0
+	racingReader := &observationEventReaderFake{}
+	racingReader.readFunc = func(context.Context, events.ReadRequest) (events.ReadResult, error) {
+		reads++
+		if reads == 1 {
+			return initial, nil
+		}
+		racing.Close()
+		return replayProgressResult(topic, 2, 2), nil
+	}
+	var err error
+	racing, err = newReplayObservationSubscription(context.Background(), racingReader, topic, workersessions.StateRunning, 1)
+	if err != nil {
+		t.Fatalf("newReplayObservationSubscription(racing) error = %v", err)
+	}
+	if got := racing.Next(context.Background()); got.Kind != workersessions.ObservationDeliveryRecord {
+		t.Fatalf("racing initial delivery = %#v, want RECORD", got)
+	}
+	if got := racing.Next(context.Background()); got.Kind != workersessions.ObservationDeliveryClosed {
+		t.Fatalf("racing delivery = %#v, want CLOSED", got)
+	}
+}
+
+func TestReplayObservationSubscriptionRejectsSnapshotInvariantViolations(t *testing.T) {
+	topic := workersessions.Topic("worker-1")
+	subscription := &replayObservationSubscription{
+		topic:        topic,
+		snapshotHead: 1,
+		next:         events.Cursor{Topic: topic, Position: 1},
+	}
+	result := replayProgressResult(topic, 2, 2)
+	if err := subscription.appendPage(result); !errors.Is(err, workersessions.ErrObservationSourceUnavailable) {
+		t.Fatalf("appendPage(after snapshot) error = %v, want source unavailable", err)
+	}
+}
+
+func replayProgressResult(topic events.Topic, head uint64, positions ...uint64) events.ReadResult {
+	records := make([]events.Record, 0, len(positions))
+	for _, position := range positions {
+		records = append(records, replayObservationRecord(topic, position, fmt.Sprintf("event-%d", position)))
+	}
+	return events.ReadResult{
+		Outcome:  events.ReadOutcomeProgress,
+		Records:  records,
+		Next:     events.Cursor{Topic: topic, Position: events.AggregateSequence(positions[len(positions)-1])},
+		Retained: events.RetainedRange{Topic: topic, Earliest: 1, Head: events.AggregateSequence(head)},
+	}
+}
+
+func replayObservationRecord(topic events.Topic, position uint64, eventID string) events.Record {
+	return events.Record{
+		ID:             events.RecordID{Topic: topic, Position: events.AggregateSequence(position)},
+		SourceType:     "worker_observation",
+		SourceID:       "provider-session-1",
+		SourceSequence: events.SourceSequence(position),
+		SourceEventID:  events.SourceEventID(eventID),
+		SchemaID:       "worker_session.observation",
+		Payload:        []byte(`{"position":1}`),
+	}
+}
+
+func timePointer(value time.Time) *time.Time { return &value }
+
+type observationRecordingReaderStub struct {
+	recordings.WorkerSessionRecordingService
+	snapshot recordings.WorkerRecordingSnapshot
+	err      error
+	ctx      context.Context
+	id       string
+}
+
+type observationRecordingServiceStub struct {
+	recordings.WorkerSessionRecordingService
+}
+
+func (s *observationRecordingReaderStub) LoadWorkerRecording(ctx context.Context, recordingID string) (recordings.WorkerRecordingSnapshot, error) {
+	s.ctx = ctx
+	s.id = recordingID
+	return s.snapshot, s.err
+}
+func TestLoadWorkerRecordingUsesOptionalDurableReader(t *testing.T) {
+	var nilRegistry *registry
+	if _, err := nilRegistry.LoadWorkerRecording(context.Background(), "recording-1"); !errors.Is(err, recordings.ErrMissingWorkerRecordingReader) {
+		t.Fatalf("nil registry LoadWorkerRecording() = %v, want missing reader", err)
+	}
+	withoutReader := &registry{}
+	if _, err := withoutReader.LoadWorkerRecording(context.Background(), "recording-1"); !errors.Is(err, recordings.ErrMissingWorkerRecordingReader) {
+		t.Fatalf("missing recording service LoadWorkerRecording() = %v, want missing reader", err)
+	}
+	withoutDurableReader := &registry{recording: &observationRecordingServiceStub{}}
+	if _, err := withoutDurableReader.LoadWorkerRecording(context.Background(), "recording-1"); !errors.Is(err, recordings.ErrMissingWorkerRecordingReader) {
+		t.Fatalf("recording service without reader LoadWorkerRecording() = %v, want missing reader", err)
+	}
+
+	want := recordings.WorkerRecordingSnapshot{RecordingID: "recording-1"}
+	reader := &observationRecordingReaderStub{snapshot: want}
+	got, err := (&registry{recording: reader}).LoadWorkerRecording(nil, "recording-1")
+	if err != nil || got.RecordingID != want.RecordingID || reader.id != "recording-1" || reader.ctx == nil {
+		t.Fatalf("LoadWorkerRecording() = %#v, %v; reader id=%q ctx=%v", got, err, reader.id, reader.ctx)
+	}
+
+	readErr := errors.New("durable read failed")
+	reader = &observationRecordingReaderStub{err: readErr}
+	if _, err := (&registry{recording: reader}).LoadWorkerRecording(context.Background(), "recording-1"); !errors.Is(err, readErr) {
+		t.Fatalf("LoadWorkerRecording() error = %v, want %v", err, readErr)
+	}
+}
+func TestObservationSubscriptionMapsLiveCursorGapBeforeDeliveryToStale(t *testing.T) {
+	gap := events.Delivery{Kind: events.DeliveryGap, Gap: &events.GapFacts{Topic: "worker-session/worker-1", Requested: 1, EarliestRetained: 2, Head: 3}}
+	subscription := &observationSubscription{
+		source:         events.Subscription(func(context.Context) events.Delivery { return gap }),
+		cursorProvided: true,
+	}
+	got := subscription.Next(context.Background())
+	if got.Kind != workersessions.ObservationDeliverySourceFailure || !errors.Is(got.Err, workersessions.ErrObservationCursorStale) {
+		t.Fatalf("live cursor gap delivery = %#v, want stale source failure", got)
+	}
+}
+func TestStreamObservationsByWorkerSessionIDRejectsDurableCursorOnLiveFallback(t *testing.T) {
+	reader := &observationEventReaderFake{
+		subscription: events.Subscription(func(context.Context) events.Delivery {
+			return events.Delivery{Kind: events.DeliveryClosed}
+		}),
+	}
+	registry := newObservationRegistry(nil, reader)
+	registry.sessions["worker-1"] = observationSession("worker-1", workersessions.StateRunning)
+	_, err := registry.StreamObservationsByWorkerSessionID(context.Background(), workersessions.StreamObservationsByWorkerSessionIDRequest{
+		WorkerSessionID: "worker-1",
+		Cursor:          &workersessions.ObservationCursor{WorkerSessionID: "worker-1", StreamGenerationID: "factory-generation-1", Position: 4},
+	})
+	if !errors.Is(err, workersessions.ErrObservationCursorUnavailable) {
+		t.Fatalf("live stream with durable cursor error = %v, want ErrObservationCursorUnavailable", err)
+	}
+	if reader.subscribeCalls != 0 {
+		t.Fatalf("Subscribe() calls = %d, want 0 for unavailable durable cursor", reader.subscribeCalls)
 	}
 }

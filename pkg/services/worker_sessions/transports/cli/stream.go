@@ -189,6 +189,12 @@ func consumeStreamPayload(config StreamConfig, jsonOutput, started bool, payload
 		return started, true, nil
 	}
 	if frame.Delivery == "TERMINAL" || frame.Delivery == "TERMINAL_REPLAY" {
+		// Durable replay may attach its finite-drain summary to the terminal
+		// frame. Treat that envelope as complete so a replay-only client does
+		// not wait for a second summary frame after the server has closed.
+		if config.ReplayOnly && frame.ReplaySummary != nil {
+			return started, true, nil
+		}
 		return started, !config.ReplayOnly, nil
 	}
 	if frame.Delivery == "SOURCE_FAILURE" {

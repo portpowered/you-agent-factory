@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -62,6 +63,8 @@ func TestObservationRequests_ValidateIdentityAndBounds(t *testing.T) {
 		{"stream by Worker Session invalid", (StreamObservationsByWorkerSessionIDRequest{}).Validate(), ErrInvalidSessionID},
 		{"stream by Worker Session negative limit", (StreamObservationsByWorkerSessionIDRequest{WorkerSessionID: "worker-1", Limit: -1}).Validate(), ErrInvalidObservationStreamLimit},
 		{"read valid", (ReadTranscriptRequest{ProviderSession: valid}).Validate(), nil},
+		{"read by Worker Session valid", (ReadTranscriptRequest{WorkerSessionID: "worker-1"}).Validate(), nil},
+		{"read ambiguous identities", (ReadTranscriptRequest{WorkerSessionID: "worker-1", ProviderSession: valid}).Validate(), ErrInvalidObservationIdentity},
 		{"read invalid", (ReadTranscriptRequest{}).Validate(), ErrInvalidObservationIdentity},
 		{"top-level list default", (ListWorkerSessionObservationsRequest{}).Validate(), nil},
 		{"top-level list direct", (ListWorkerSessionObservationsRequest{Scope: ObservationScopeDirect}).Validate(), nil},
@@ -91,6 +94,31 @@ func TestObservationRequests_ValidateIdentityAndBounds(t *testing.T) {
 	}
 	if got := ObservationScopeFactory.Normalized(); got != ObservationScopeFactory {
 		t.Fatalf("factory ObservationScope.Normalized() = %q, want unchanged factory scope", got)
+	}
+
+	validCursor := &ObservationCursor{WorkerSessionID: "worker-1", StreamGenerationID: "generation-1", Position: 1}
+	for _, test := range []struct {
+		name string
+		got  error
+		want error
+	}{
+		{"provider stream valid cursor", (StreamObservationsRequest{ProviderSession: valid, Cursor: validCursor}).Validate(), nil},
+		{"provider stream zero cursor position", (StreamObservationsRequest{ProviderSession: valid, Cursor: &ObservationCursor{WorkerSessionID: "worker-1", Position: 0}}).Validate(), ErrInvalidObservationCursor},
+		{"provider stream padded worker cursor", (StreamObservationsRequest{ProviderSession: valid, Cursor: &ObservationCursor{WorkerSessionID: " worker-1", Position: 1}}).Validate(), ErrInvalidObservationCursor},
+		{"worker stream valid cursor", (StreamObservationsByWorkerSessionIDRequest{WorkerSessionID: "worker-1", Cursor: validCursor}).Validate(), nil},
+		{"worker stream padded generation cursor", (StreamObservationsByWorkerSessionIDRequest{WorkerSessionID: "worker-1", Cursor: &ObservationCursor{StreamGenerationID: "generation-1 ", Position: 1}}).Validate(), ErrInvalidObservationCursor},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if test.want == nil {
+				if test.got != nil {
+					t.Fatalf("Validate() = %v, want nil", test.got)
+				}
+				return
+			}
+			if !errors.Is(test.got, test.want) {
+				t.Fatalf("Validate() = %v, want %v", test.got, test.want)
+			}
+		})
 	}
 }
 
@@ -161,6 +189,33 @@ func TestObservation_ValidateLifecycleTimingAndFailure(t *testing.T) {
 				t.Fatalf("Validate() = %v, want %v", err, test.want)
 			}
 		})
+	}
+}
+
+func TestObservation_ValidateRecordingHealth(t *testing.T) {
+	for _, status := range []recordings.WorkerRecordingStatus{
+		recordings.WorkerRecordingStatusComplete,
+		recordings.WorkerRecordingStatusDegraded,
+		recordings.WorkerRecordingStatusIncomplete,
+	} {
+		t.Run(string(status), func(t *testing.T) {
+			observation := validObservationForTest(StateCompleted)
+			observation.RecordingHealth = status
+			if err := observation.Validate(); err != nil {
+				t.Fatalf("Validate() with %s = %v, want nil", status, err)
+			}
+		})
+	}
+
+	withReason := validObservationForTest(StateCompleted)
+	withReason.RecordingHealthReason = "capture interrupted"
+	if err := withReason.Validate(); !errors.Is(err, ErrInvalidObservationRecordingHealth) {
+		t.Fatalf("Validate() with health reason but no status = %v, want invalid recording health", err)
+	}
+	unknown := validObservationForTest(StateCompleted)
+	unknown.RecordingHealth = recordings.WorkerRecordingStatus("UNKNOWN")
+	if err := unknown.Validate(); !errors.Is(err, ErrInvalidObservationRecordingHealth) {
+		t.Fatalf("Validate() with unknown health = %v, want invalid recording health", err)
 	}
 }
 

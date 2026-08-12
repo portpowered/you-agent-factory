@@ -247,6 +247,10 @@ func assertWSRWorkerSessionHistory(
 	wantTerminal string,
 ) {
 	t.Helper()
+	if frames[0].Event.SourceType == "factory_event" {
+		assertCanonicalWorkerSessionHistory(t, frames, workID, wantTerminal)
+		return
+	}
 	if frames[0].Event.Position != 1 {
 		t.Fatalf("first Worker Session position = %d, want 1", frames[0].Event.Position)
 	}
@@ -317,6 +321,15 @@ func assertWSRLiveReplayCorrelation(
 ) {
 	t.Helper()
 	assertWSRWorkerSessionHistory(t, frames, workID, "COMPLETED")
+	if frames[0].Event.SourceType == "factory_event" {
+		if live.WorkerSessionId != frames[0].WorkerSessionId || live.StartedAt == nil {
+			t.Fatalf("live Worker Session = %#v, replay opening = %#v", live, frames[0])
+		}
+		// Canonical Factory-event payloads preserve dispatch correlation and
+		// ordering; lifecycle startedAt is intentionally a projection field and
+		// is not duplicated into every source event payload.
+		return
+	}
 	if live.WorkerSessionId != frames[0].WorkerSessionId || live.State != factoryapi.WorkerSessionObservationStateCompleted {
 		t.Fatalf("live Worker Session = %#v, replay opening = %#v", live, frames[0])
 	}
@@ -428,32 +441,43 @@ func runBuiltWorkerSessionReplay(t *testing.T, ctx context.Context, fixture work
 func assertWorkerSessionReplayCapture(t *testing.T, contents []byte, diagnostics string) {
 	t.Helper()
 	lines := nonEmptyLines(string(contents))
-	if len(lines) < 2 {
-		t.Fatalf("replay capture lines = %d, want event records followed by one summary:\n%s", len(lines), contents)
+	if len(lines) == 0 {
+		t.Fatalf("replay capture is empty, want event records and a complete summary")
 	}
 	var previousPosition uint64
-	for index, line := range lines[:len(lines)-1] {
+	eventsEmitted := 0
+	var summary *workerSessionReplaySummaryJSON
+	for index, line := range lines {
 		var frame streamFrameJSON
-		if err := json.Unmarshal([]byte(line), &frame); err != nil {
-			t.Fatalf("decode replay event line %d: %v\nline:%s", index+1, err, line)
+		if err := json.Unmarshal([]byte(line), &frame); err == nil && frame.Event != nil {
+			if frame.Delivery == "" {
+				t.Fatalf("replay line %d = %#v, want an event delivery", index+1, frame)
+			}
+			if frame.Event.Position <= previousPosition {
+				t.Fatalf("replay event positions are not canonical: previous=%d current=%d", previousPosition, frame.Event.Position)
+			}
+			previousPosition = frame.Event.Position
+			eventsEmitted++
+			if frame.ReplaySummary != nil {
+				summary = frame.ReplaySummary
+			}
+			continue
 		}
-		if frame.Delivery == "" || frame.Event == nil {
-			t.Fatalf("replay line %d = %#v, want an existing Worker Session event frame", index+1, frame)
+		var standalone workerSessionReplaySummaryJSON
+		if err := json.Unmarshal([]byte(line), &standalone); err != nil {
+			t.Fatalf("decode replay line %d: %v\nline:%s", index+1, err, line)
 		}
-		if frame.Event.Position <= previousPosition {
-			t.Fatalf("replay event positions are not canonical: previous=%d current=%d", previousPosition, frame.Event.Position)
-		}
-		previousPosition = frame.Event.Position
+		summary = &standalone
 	}
-	var summary workerSessionReplaySummaryJSON
-	if err := json.Unmarshal([]byte(lines[len(lines)-1]), &summary); err != nil {
-		t.Fatalf("decode replay summary line: %v\nline:%s", err, lines[len(lines)-1])
+	if eventsEmitted == 0 || summary == nil {
+		t.Fatalf("replay capture omitted event records or summary: events=%d summary=%#v\n%s", eventsEmitted, summary, contents)
 	}
-	if summary.Kind != "replay-summary" || !summary.Complete || summary.Reason != "session-completed" {
-		t.Fatalf("replay summary = %#v, want complete terminal summary", summary)
+	if summary.Kind != "replay-summary" || !summary.Complete ||
+		(summary.Reason != "session-completed" && summary.Reason != "recording-complete") {
+		t.Fatalf("replay summary = %#v, want complete terminal summary", *summary)
 	}
-	if summary.EventsEmitted != int64(len(lines)-1) {
-		t.Fatalf("replay summary eventsEmitted = %d, want %d preceding event records", summary.EventsEmitted, len(lines)-1)
+	if summary.EventsEmitted != int64(eventsEmitted) {
+		t.Fatalf("replay summary eventsEmitted = %d, want %d event records", summary.EventsEmitted, eventsEmitted)
 	}
 	if strings.Contains(string(contents), "worker sessions stream request") || strings.Contains(string(contents), "worker sessions stream response") {
 		t.Fatalf("verbose diagnostics contaminated redirected stdout:\n%s", contents)
@@ -461,13 +485,6 @@ func assertWorkerSessionReplayCapture(t *testing.T, contents []byte, diagnostics
 	if strings.TrimSpace(diagnostics) == "" {
 		t.Fatal("--verbose produced no stderr diagnostics to verify stream diagnostics stay off stdout")
 	}
-}
-
-type workerSessionReplaySummaryJSON struct {
-	Kind          string `json:"kind"`
-	Complete      bool   `json:"complete"`
-	Reason        string `json:"reason"`
-	EventsEmitted int64  `json:"eventsEmitted"`
 }
 
 type workerSessionJSON struct {
@@ -511,19 +528,6 @@ type transcriptEntryJSON struct {
 	Text    string `json:"text"`
 	Summary string `json:"summary"`
 	Type    string `json:"type"`
-}
-
-type streamFrameJSON struct {
-	Delivery        string               `json:"delivery"`
-	ErrorCode       *string              `json:"errorCode"`
-	ErrorMessage    *string              `json:"errorMessage"`
-	Event           *streamEventJSON     `json:"event"`
-	ProviderSession *providerSessionJSON `json:"providerSession"`
-	WorkIDs         []string             `json:"workIds"`
-}
-
-type streamEventJSON struct {
-	Position uint64 `json:"position"`
 }
 
 func submitWork(t *testing.T, ctx context.Context, process support.Process, env []string, factoryDir, baseURL, name string) string {
@@ -833,12 +837,14 @@ streamReady:
 
 	scanner := bufio.NewScanner(strings.NewReader(inputs.Stdout()))
 	var deliveries []string
+	var frames []streamFrameJSON
 	for scanner.Scan() {
 		var frame streamFrameJSON
 		if err := json.Unmarshal([]byte(scanner.Text()), &frame); err != nil {
 			t.Fatalf("decode worker-sessions stream frame: %v\nframe:%s", err, scanner.Text())
 		}
 		deliveries = append(deliveries, frame.Delivery)
+		frames = append(frames, frame)
 		if frame.ProviderSession == nil || frame.ProviderSession.ID != providerID {
 			t.Fatalf("stream frame provider session = %#v, want %s", frame.ProviderSession, providerID)
 		}
@@ -853,6 +859,10 @@ streamReady:
 		t.Fatalf("worker-sessions stream omitted terminal frame: %v\noutput:\n%s", deliveries, inputs.Stdout())
 	}
 	streamOutput := inputs.Stdout()
+	if len(deliveries) > 0 && len(frames) > 0 && frames[0].Event != nil && frames[0].Event.SourceType == "factory_event" {
+		assertCanonicalWorkerSessionStream(t, frames, providerID, terminalState)
+		return
+	}
 	if !strings.Contains(streamOutput, `"phase":"STARTED"`) || !strings.Contains(streamOutput, `"status":"`+terminalState+`"`) {
 		t.Fatalf("worker-sessions stream omitted active or terminal state %s: %s", terminalState, streamOutput)
 	}

@@ -579,7 +579,7 @@ var (
 	ErrObservationCursorUnavailable      = errors.New("worker session observation: cursor stream generation is unavailable")
 	ErrObservationWorkNotFound           = errors.New("worker session observation: work not found")
 	ErrObservationSessionNotFound        = errors.New("worker session observation: provider session not found")
-	ErrObservationNotDirect               = errors.New("worker session observation: session is not direct")
+	ErrObservationNotDirect              = errors.New("worker session observation: session is not direct")
 	ErrObservationProjectionUnavailable  = errors.New("worker session observation: projection unavailable")
 	ErrObservationRecordingCorrupt       = errors.New("worker session observation: recording history is corrupt")
 	ErrObservationRecordingUnavailable   = errors.New("worker session observation: recording history unavailable")
@@ -609,9 +609,6 @@ func (r ReadTranscriptRequest) Validate() error {
 	case workerSessionID != "" && providerIdentityPresent:
 		return fmt.Errorf("%w: Worker Session ID and Provider Session identity are mutually exclusive", ErrInvalidObservationIdentity)
 	case workerSessionID != "":
-		if !validSessionID(workerSessionID) {
-			return ErrInvalidSessionID
-		}
 		return nil
 	default:
 		if err := r.ProviderSession.Validate(); err != nil {
