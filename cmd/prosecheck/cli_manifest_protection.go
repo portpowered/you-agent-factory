@@ -52,26 +52,6 @@ func cliRegexRanges(text string, pattern *regexp.Regexp) []TextRange {
 	return ranges
 }
 
-func cliLiteralRanges(text, literal string) []TextRange {
-	if literal == "" || len(literal) > len(text) {
-		return nil
-	}
-	var ranges []TextRange
-	for search := 0; search <= len(text)-len(literal); {
-		index := strings.Index(text[search:], literal)
-		if index < 0 {
-			break
-		}
-		index += search
-		end := index + len(literal)
-		if cliLiteralBoundary(text, index, end, literal) {
-			ranges = append(ranges, TextRange{Start: index, End: end})
-		}
-		search = index + 1
-	}
-	return ranges
-}
-
 func cliLiteralBoundary(text string, start, end int, literal string) bool {
 	if len(literal) == 0 {
 		return false

@@ -108,20 +108,6 @@ func Analyze(spans []Span, policy Policy) []Finding {
 	return SortFindings(findings)
 }
 
-// AnalyzeText is a small pure convenience entry point for callers that
-// already have one natural-language span. Structural adapters should provide
-// their own protected ranges instead of relying on lexical guesses.
-func AnalyzeText(sourcePath string, line, column int, class ContentClass, text string, policy Policy) []Finding {
-	return Analyze([]Span{{
-		SourcePath:  sourcePath,
-		StartLine:   line,
-		StartColumn: column,
-		Class:       class,
-		Text:        text,
-		Protected:   LexicalProtectedRanges(text),
-	}}, policy)
-}
-
 func analyzeSpan(span Span, policy Policy) []Finding {
 	if !utf8.ValidString(span.Text) {
 		return []Finding{parseFinding(span, "source span is not valid UTF-8", 0, 1)}
