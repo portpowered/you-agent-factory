@@ -38,94 +38,130 @@ func TestWithServerDrainCannotReportSuccessWhileWorkIsNonTerminal(t *testing.T) 
 	} {
 		mode := mode
 		t.Run(mode.name, func(t *testing.T) {
-			factoryDir := scaffoldIncompleteDrainFactory(t)
-			workFile := writeIncompleteDrainWork(t)
-
-			var listenerStarts, listenerStops, browserCalls atomic.Int32
-			api := support.NewProcessAPIServer()
-			shutdownGate := make(chan struct{})
-			var releaseOnce sync.Once
-			releaseListener := func() {
-				releaseOnce.Do(func() { close(shutdownGate) })
-			}
-			transportStopRequested := make(chan struct{})
-			listenerJoined := make(chan struct{})
-			api.HoldShutdownUntilSignaled(shutdownGate)
-			process := support.BuildProcess(t, serviceedges.Edges{
-				APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
-					listenerStarts.Add(1)
-					context.AfterFunc(ctx, func() { close(transportStopRequested) })
-					err := api.Start(ctx, request)
-					listenerStops.Add(1)
-					close(listenerJoined)
-					return err
-				},
-				BrowserOpener: func(context.Context, string) error {
-					browserCalls.Add(1)
-					return nil
-				},
-			})
-			support.CleanupProcess(t, process)
-
-			inputs := support.FakeInputs(t.Context(), []string{
-				"you", "run", "--dir", factoryDir, "--no-record", "--quiet",
-				mode.flag, "--work", workFile,
-			})
-			inputs.WorkingDirectory = factoryDir
-			homeDir := t.TempDir()
-			inputs.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-
-			command := support.StartProcessCommand(t, process, inputs.Input)
-			t.Cleanup(releaseListener)
-			baseURL := api.WaitForURL(t)
-			observation, err := waitForIncompleteDrainObservation(baseURL)
-			if err != nil {
-				t.Fatalf("incomplete-drain observation: %v", err)
-			}
-			if len(observation.Work.Results) != 1 {
-				t.Fatalf("observed Work count = %d, want 1", len(observation.Work.Results))
-			}
-			work := observation.Work.Results[0]
-			if work.Name != "blocked-work" {
-				t.Fatalf("observed Work name = %q, want blocked-work", work.Name)
-			}
-			if work.State == nil || work.State.Type != factoryapi.WorkStateTypePROCESSING {
-				t.Fatalf("observed Work state = %#v, want PROCESSING", work.State)
-			}
-			if observation.Status.RuntimeStatus == "" || observation.Status.Categories.Processing != 1 {
-				t.Fatalf("observed runtime status = %#v, want one processing Work", observation.Status)
-			}
-
-			waitForSignal(t, transportStopRequested, "finite hosted runtime did not request listener shutdown")
-			select {
-			case <-command.Done():
-				t.Fatal("finite hosted command completed before the listener join gate was released")
-			default:
-			}
-			releaseListener()
-			waitForCommandDone(t, command, "finite hosted run did not return after the runtime drained")
-			waitForSignal(t, listenerJoined, "finite hosted listener did not join before command completion")
-			command.AcceptError()
-
-			err = command.Err()
-			if err == nil {
-				t.Fatalf("Process.Execute() error = %v, want incomplete-drain failure", err)
-			}
-
-			support.RequireSafeCLIDiagnostic(t, inputs.Stderr())
-			if stdout := inputs.Stdout(); stdout != "" {
-				t.Fatalf("stdout = %q, want no success or completion output", stdout)
-			}
-			if got := listenerStarts.Load(); got != 1 {
-				t.Fatalf("listener starts = %d, want 1; err=%v stdout=%q stderr=%q", got, err, inputs.Stdout(), inputs.Stderr())
-			}
-			if got := listenerStops.Load(); got != 1 {
-				t.Fatalf("listener stops = %d, want one joined listener", got)
-			}
-			if got := browserCalls.Load(); got != mode.wantBrowser {
-				t.Fatalf("browser calls = %d, want %d", got, mode.wantBrowser)
-			}
+			runIncompleteDrainMode(t, mode.flag, mode.wantBrowser)
 		})
+	}
+}
+
+func runIncompleteDrainMode(t *testing.T, modeFlag string, wantBrowser int32) {
+	t.Helper()
+	factoryDir := scaffoldIncompleteDrainFactory(t)
+	workFile := writeIncompleteDrainWork(t)
+
+	var listenerStarts, listenerStops, browserCalls atomic.Int32
+	api := support.NewProcessAPIServer()
+	shutdownGate := make(chan struct{})
+	workerRelease := make(chan struct{})
+	var releaseListenerOnce, releaseWorkerOnce sync.Once
+	releaseListener := func() {
+		releaseListenerOnce.Do(func() { close(shutdownGate) })
+	}
+	releaseWorker := func() {
+		releaseWorkerOnce.Do(func() { close(workerRelease) })
+	}
+	transportStopRequested := make(chan struct{})
+	listenerJoined := make(chan struct{})
+	api.HoldShutdownUntilSignaled(shutdownGate)
+	edges := serviceedges.Edges{
+		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
+			listenerStarts.Add(1)
+			context.AfterFunc(ctx, func() { close(transportStopRequested) })
+			bound := request.OnBound
+			request.OnBound = func(binding platformhttpserver.Binding) {
+				if bound != nil {
+					bound(binding)
+				}
+				// The gated worker output is the observable ordering barrier: the
+				// listener must bind before Work can reach its blocked state and
+				// become eligible for finite drain classification.
+				releaseWorker()
+			}
+			err := api.Start(ctx, request)
+			listenerStops.Add(1)
+			close(listenerJoined)
+			return err
+		},
+		BrowserOpener: func(context.Context, string) error {
+			browserCalls.Add(1)
+			return nil
+		},
+	}
+	support.ConfigureWorkerCommands(
+		t, &edges,
+		support.NewGatedSuccessCommandRunner("Done. COMPLETE", workerRelease),
+		nil,
+	)
+	process := support.BuildProcess(t, edges)
+	support.CleanupProcess(t, process)
+
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "run", "--dir", factoryDir, "--no-record", "--quiet",
+		modeFlag, "--work", workFile,
+	})
+	inputs.WorkingDirectory = factoryDir
+	homeDir := t.TempDir()
+	inputs.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+
+	command := support.StartProcessCommand(t, process, inputs.Input)
+	t.Cleanup(releaseListener)
+	baseURL := api.WaitForURL(t)
+	observation, err := waitForIncompleteDrainObservation(baseURL)
+	if err != nil {
+		t.Fatalf("incomplete-drain observation: %v", err)
+	}
+	if len(observation.Work.Results) != 1 {
+		t.Fatalf("observed Work count = %d, want 1", len(observation.Work.Results))
+	}
+	work := observation.Work.Results[0]
+	if work.Name != "blocked-work" {
+		t.Fatalf("observed Work name = %q, want blocked-work", work.Name)
+	}
+	if work.State == nil || work.State.Type != factoryapi.WorkStateTypePROCESSING {
+		t.Fatalf("observed Work state = %#v, want PROCESSING", work.State)
+	}
+	if observation.Status.RuntimeStatus == "" || observation.Status.Categories.Processing != 1 {
+		t.Fatalf("observed runtime status = %#v, want one processing Work", observation.Status)
+	}
+
+	waitForSignal(t, transportStopRequested, "finite hosted runtime did not request listener shutdown")
+	select {
+	case <-command.Done():
+		t.Fatal("finite hosted command completed before the listener join gate was released")
+	default:
+	}
+	releaseListener()
+	waitForCommandDone(t, command, "finite hosted run did not return after the runtime drained")
+	waitForSignal(t, listenerJoined, "finite hosted listener did not join before command completion")
+	assertIncompleteDrainFailure(
+		t, command, inputs, &listenerStarts, &listenerStops, &browserCalls, wantBrowser,
+	)
+}
+
+func assertIncompleteDrainFailure(
+	t *testing.T,
+	command *support.ProcessCommand,
+	inputs *support.CapturedInputs,
+	listenerStarts, listenerStops, browserCalls *atomic.Int32,
+	wantBrowser int32,
+) {
+	t.Helper()
+	command.AcceptError()
+	err := command.Err()
+	if err == nil {
+		t.Fatalf("Process.Execute() error = %v, want incomplete-drain failure", err)
+	}
+	support.RequireSafeCLIDiagnostic(t, inputs.Stderr())
+	if stdout := inputs.Stdout(); stdout != "" {
+		t.Fatalf("stdout = %q, want no success or completion output", stdout)
+	}
+	if got := listenerStarts.Load(); got != 1 {
+		t.Fatalf("listener starts = %d, want 1; err=%v stdout=%q stderr=%q", got, err, inputs.Stdout(), inputs.Stderr())
+	}
+	if got := listenerStops.Load(); got != 1 {
+		t.Fatalf("listener stops = %d, want one joined listener", got)
+	}
+	if got := browserCalls.Load(); got != wantBrowser {
+		t.Fatalf("browser calls = %d, want %d", got, wantBrowser)
 	}
 }
 
@@ -397,12 +433,20 @@ func scaffoldIncompleteDrainFactory(t *testing.T) string {
 		"name": "blocked",
 		"type": "PROCESSING",
 	})
-	return scaffoldInvocationFactory(t, map[string]any{"workTypes": workTypes})
+	workstations := cfg["workstations"].([]map[string]any)
+	workstations[0]["outputs"] = []map[string]string{{
+		"workType": "task",
+		"state":    "blocked",
+	}}
+	return scaffoldInvocationFactory(t, map[string]any{
+		"workTypes":    workTypes,
+		"workstations": workstations,
+	})
 }
 
 func writeIncompleteDrainWork(t *testing.T) string {
 	t.Helper()
-	return writeDrainWork(t, "blocked")
+	return writeDrainWork(t, "init")
 }
 
 func writeDrainWork(t *testing.T, state string) string {
