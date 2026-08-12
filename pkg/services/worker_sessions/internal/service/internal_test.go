@@ -2250,7 +2250,7 @@ func TestReadTranscriptRejectsInvalidRequestAndProjection(t *testing.T) {
 	}
 }
 
-func TestContinuationHelpersCoverReplayErrorsAndObservationScopes(t *testing.T) {
+func TestContinuationNotAcceptedPreservesCause(t *testing.T) {
 	cause := errors.New("admission failed")
 	withCause := continuationNotAccepted(cause)
 	if withCause.Error() != workersessions.ErrContinuationNotAccepted.Error() || !errors.Is(withCause, workersessions.ErrContinuationNotAccepted) || !errors.Is(withCause, cause) {
@@ -2260,7 +2260,10 @@ func TestContinuationHelpersCoverReplayErrorsAndObservationScopes(t *testing.T) 
 	if !errors.Is(withoutCause, workersessions.ErrContinuationNotAccepted) || errors.Is(withoutCause, cause) {
 		t.Fatalf("continuationNotAccepted(nil) = %v, want only typed continuation error", withoutCause)
 	}
+}
 
+func TestContinuationReservationOutcomeClassifiesErrors(t *testing.T) {
+	cause := errors.New("admission failed")
 	for _, test := range []struct {
 		name string
 		err  error
@@ -2279,7 +2282,9 @@ func TestContinuationHelpersCoverReplayErrorsAndObservationScopes(t *testing.T) 
 	if continuationReplayOutcome(nil) != "accepted" || continuationReplayOutcome(cause) != "rejected" {
 		t.Fatalf("continuationReplayOutcome() did not classify nil/non-nil errors")
 	}
+}
 
+func TestObservationScopeAndCursorHelpersRemainDeterministic(t *testing.T) {
 	for _, test := range []struct {
 		direct bool
 		scope  workersessions.ObservationScope
@@ -2382,105 +2387,82 @@ func TestValidateContinuationSourceAssociationClassifiesMissingMalformedAndForei
 	}
 }
 
-func TestContinuationReservationRejectsExecutionAndLifecycleEdges(t *testing.T) {
-	request := workersessions.ContinueRequest{
-		RequestID:                "request-1",
-		SourceWorkerSessionID:    "source-1",
-		SuccessorWorkerSessionID: "successor-1",
-		FollowUpInput:            "follow up",
-	}
-	association := &workersessions.ProviderSessionAssociation{
-		WorkerSessionID: "source-1",
-		DispatchID:      "dispatch-1",
-		AttemptID:       "dispatch-1",
-		Reference:       providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-session-1"},
-	}
-	validExecution := func(dispatchID string) workers.WorkstationDispatchRequest {
-		return workers.WorkstationDispatchRequest{
-			WorkstationName: "review",
-			Execution: workers.WorkstationExecutionRequest{Dispatch: work.WorkDispatch{
-				DispatchID: dispatchID, WorkstationName: "review",
-			}},
-		}
-	}
-	newSource := func() *registry {
-		r := newTestRegistry(t)
-		associationCopy := association.Clone()
-		r.sessions[request.SourceWorkerSessionID] = workersessions.Session{
-			ID:                         request.SourceWorkerSessionID,
-			State:                      workersessions.StateCompleted,
-			ProviderSessionAssociation: &associationCopy,
-		}
-		return r
-	}
-
-	missingSupervision := newSource()
+func TestContinuationSnapshotRejectsExecutionEdges(t *testing.T) {
+	request := continuationReservationRequest()
+	missingSupervision := newContinuationSource(t, request)
 	if _, err := missingSupervision.snapshotContinuationSourceLocked(request); !errors.Is(err, workersessions.ErrContinuationExecutionUnavailable) {
 		t.Fatalf("snapshotContinuationSourceLocked(missing supervision) = %v, want execution unavailable", err)
 	}
 
-	missingDispatch := newSource()
-	missingDispatch.supervisions[request.SourceWorkerSessionID] = newSupervision("", "turn-1", validExecution("dispatch-1"))
+	missingDispatch := newContinuationSource(t, request)
+	missingDispatch.supervisions[request.SourceWorkerSessionID] = newSupervision("", "turn-1", continuationValidExecution("dispatch-1"))
 	if _, err := missingDispatch.snapshotContinuationSourceLocked(request); !errors.Is(err, workersessions.ErrContinuationExecutionUnavailable) {
 		t.Fatalf("snapshotContinuationSourceLocked(blank dispatch) = %v, want execution unavailable", err)
 	}
 
-	mismatchedDispatch := newSource()
-	mismatchedDispatch.supervisions[request.SourceWorkerSessionID] = newSupervision("dispatch-2", "turn-1", validExecution("dispatch-2"))
+	mismatchedDispatch := newContinuationSource(t, request)
+	mismatchedDispatch.supervisions[request.SourceWorkerSessionID] = newSupervision("dispatch-2", "turn-1", continuationValidExecution("dispatch-2"))
 	if _, err := mismatchedDispatch.snapshotContinuationSourceLocked(request); !errors.Is(err, workersessions.ErrContinuationProviderSessionInvalid) {
 		t.Fatalf("snapshotContinuationSourceLocked(mismatched dispatch) = %v, want provider session invalid", err)
 	}
+}
 
-	valid := newSource()
-	valid.supervisions[request.SourceWorkerSessionID] = newSupervision("dispatch-1", "turn-1", validExecution("dispatch-1"))
+func TestContinuationExecutionRejectsConflicts(t *testing.T) {
+	request := continuationReservationRequest()
+	valid := newContinuationSource(t, request)
+	valid.supervisions[request.SourceWorkerSessionID] = newSupervision("dispatch-1", "turn-1", continuationValidExecution("dispatch-1"))
 	valid.dispatchOwners["dispatch-1"] = request.SourceWorkerSessionID
 	snapshot, err := valid.snapshotContinuationSourceLocked(request)
 	if err != nil {
 		t.Fatalf("snapshotContinuationSourceLocked(valid) = %v, want nil", err)
 	}
 
-	withSuccessor := newSource()
+	withSuccessor := newContinuationSource(t, request)
 	withSuccessor.sessions[request.SuccessorWorkerSessionID] = workersessions.Session{ID: request.SuccessorWorkerSessionID, State: workersessions.StateReserved}
 	if _, err := withSuccessor.buildContinuationExecutionLocked(request, snapshot); !errors.Is(err, workersessions.ErrContinuationSuccessorConflict) {
 		t.Fatalf("buildContinuationExecutionLocked(existing successor) = %v, want successor conflict", err)
 	}
 
-	withDispatchConflict := newSource()
+	withDispatchConflict := newContinuationSource(t, request)
 	withDispatchConflict.dispatchOwners[continuationDispatchID("dispatch-1", request.SuccessorWorkerSessionID)] = "other-session"
 	if _, err := withDispatchConflict.buildContinuationExecutionLocked(request, snapshot); !errors.Is(err, workersessions.ErrContinuationSuccessorConflict) {
 		t.Fatalf("buildContinuationExecutionLocked(existing dispatch) = %v, want successor conflict", err)
 	}
 
-	withInvalidExecution := newSource()
+	withInvalidExecution := newContinuationSource(t, request)
 	invalidSnapshot := snapshot
 	invalidSnapshot.execution = workers.WorkstationDispatchRequest{Execution: workers.WorkstationExecutionRequest{Dispatch: work.WorkDispatch{DispatchID: "dispatch-1"}}}
 	if _, err := withInvalidExecution.buildContinuationExecutionLocked(request, invalidSnapshot); !errors.Is(err, workersessions.ErrContinuationExecutionUnavailable) {
 		t.Fatalf("buildContinuationExecutionLocked(invalid execution) = %v, want execution unavailable", err)
 	}
+}
+
+func TestContinuationReservationRejectsLifecycleEdges(t *testing.T) {
+	request := continuationReservationRequest()
 	missingReservation := newTestRegistry(t)
 	if _, _, err := missingReservation.reserveContinuation(request); !errors.Is(err, workersessions.ErrContinuationSourceNotFound) {
 		t.Fatalf("reserveContinuation(missing source) = %v, want source not found", err)
 	}
 
-	reservation := newSource()
-	reservation.supervisions[request.SourceWorkerSessionID] = newSupervision("dispatch-1", "turn-1", validExecution("dispatch-1"))
+	reservation := newContinuationSource(t, request)
+	reservation.supervisions[request.SourceWorkerSessionID] = newSupervision("dispatch-1", "turn-1", continuationValidExecution("dispatch-1"))
 	reservation.continueReplays = nil
 	reservation.startsDone = nil
 	if replay, owner, err := reservation.reserveContinuation(request); err != nil || !owner || replay == nil {
 		t.Fatalf("reserveContinuation(first reservation) = %v, %t, %#v, want owned replay", err, owner, replay)
 	}
 
-	stopping := newSource()
+	stopping := newContinuationSource(t, request)
 	stopping.stopping = true
 	if _, _, err := stopping.reserveContinuation(request); !errors.Is(err, workersessions.ErrContinuationServerStopping) {
 		t.Fatalf("reserveContinuation(stopping) = %v, want server stopping", err)
 	}
-	if _, err := valid.Continue(nil, workersessions.ContinueRequest{}); !errors.Is(err, workersessions.ErrInvalidContinuationRequestID) {
+	if _, err := stopping.Continue(nil, workersessions.ContinueRequest{}); !errors.Is(err, workersessions.ErrInvalidContinuationRequestID) {
 		t.Fatalf("Continue(nil, invalid) = %v, want invalid request ID", err)
 	}
 
-	terminal := newSource()
-	terminal.supervisions[request.SourceWorkerSessionID] = newSupervision("dispatch-1", "turn-1", validExecution("dispatch-1"))
+	terminal := newContinuationSource(t, request)
+	terminal.supervisions[request.SourceWorkerSessionID] = newSupervision("dispatch-1", "turn-1", continuationValidExecution("dispatch-1"))
 	terminalReplay, owner, err := terminal.reserveContinuation(request)
 	if err != nil || !owner {
 		t.Fatalf("reserveContinuation(terminal branch) = %v, %t, want owned replay", err, owner)
@@ -2490,6 +2472,41 @@ func TestContinuationReservationRejectsExecutionAndLifecycleEdges(t *testing.T) 
 	if !errors.Is(err, workersessions.ErrContinuationNotAccepted) {
 		t.Fatalf("continueReserved(stopping) = %v, want ErrContinuationNotAccepted", err)
 	}
+}
+
+func continuationReservationRequest() workersessions.ContinueRequest {
+	return workersessions.ContinueRequest{
+		RequestID:                "request-1",
+		SourceWorkerSessionID:    "source-1",
+		SuccessorWorkerSessionID: "successor-1",
+		FollowUpInput:            "follow up",
+	}
+}
+
+func continuationValidExecution(dispatchID string) workers.WorkstationDispatchRequest {
+	return workers.WorkstationDispatchRequest{
+		WorkstationName: "review",
+		Execution: workers.WorkstationExecutionRequest{Dispatch: work.WorkDispatch{
+			DispatchID: dispatchID, WorkstationName: "review",
+		}},
+	}
+}
+
+func newContinuationSource(t *testing.T, request workersessions.ContinueRequest) *registry {
+	t.Helper()
+	r := newTestRegistry(t)
+	association := workersessions.ProviderSessionAssociation{
+		WorkerSessionID: request.SourceWorkerSessionID,
+		DispatchID:      "dispatch-1",
+		AttemptID:       "dispatch-1",
+		Reference:       providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-session-1"},
+	}
+	r.sessions[request.SourceWorkerSessionID] = workersessions.Session{
+		ID:                         request.SourceWorkerSessionID,
+		State:                      workersessions.StateCompleted,
+		ProviderSessionAssociation: &association,
+	}
+	return r
 }
 
 func TestContinuationObservationQueriesMapCanceledAndUnavailableProjections(t *testing.T) {

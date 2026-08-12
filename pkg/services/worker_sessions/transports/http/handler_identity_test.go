@@ -13,77 +13,139 @@ import (
 	"go.uber.org/zap"
 )
 
-func TestWorkerSessionStartMappingRoundTripsResolvedExecutionAndOptionalValues(t *testing.T) {
-	var apiRequest factoryapi.WorkerSessionStartRequest
-	if err := json.Unmarshal([]byte(`{
-		"requestId":"request-1",
-		"workerSessionId":"worker-1",
-		"retry":{"maxAttempts":3},
-		"execution":{
-			"workstationName":"review",
+const workerSessionStartMappingJSON = `{
+	"requestId":"request-1",
+	"workerSessionId":"worker-1",
+	"retry":{"maxAttempts":3},
+	"execution":{
+		"workstationName":"review",
+		"workerType":"worker",
+		"workstationType":"type",
+		"runnerId":"runner",
+		"runnerSelectionSource":"explicit",
+		"executorProvider":"provider",
+		"projectId":"project",
+		"factorySessionId":"factory-session",
+		"modelOperation":"operation",
+		"model":"model",
+		"modelProvider":"codex",
+		"reasoningEffort":"high",
+		"systemPrompt":"system",
+		"userMessage":"message",
+		"outputSchema":"schema",
+		"outputContract":"contract",
+		"worktree":"worktree",
+		"workingDirectory":"workspace",
+		"workingDirectoryAuthored":true,
+		"skipPermissions":true,
+		"inputTokens":["input"],
+		"envVars":{"KEY":"VALUE"},
+		"resumeSession":{"provider":"codex","kind":"session_id","id":"provider-session"},
+		"modelBindings":[{"slot":"slot","source":"INPUT","content":[]}],
+		"dispatch":{
+			"dispatchId":"dispatch-1",
+			"transitionId":"transition",
 			"workerType":"worker",
-			"workstationType":"type",
-			"runnerId":"runner",
-			"runnerSelectionSource":"explicit",
-			"executorProvider":"provider",
+			"workstationName":"review",
 			"projectId":"project",
-			"factorySessionId":"factory-session",
-			"modelOperation":"operation",
-			"model":"model",
-			"modelProvider":"codex",
-			"reasoningEffort":"high",
-			"systemPrompt":"system",
-			"userMessage":"message",
-			"outputSchema":"schema",
-			"outputContract":"contract",
-			"worktree":"worktree",
-			"workingDirectory":"workspace",
-			"workingDirectoryAuthored":true,
-			"skipPermissions":true,
-			"inputTokens":["input"],
-			"envVars":{"KEY":"VALUE"},
-			"resumeSession":{"provider":"codex","kind":"session_id","id":"provider-session"},
-			"modelBindings":[{"slot":"slot","source":"INPUT","content":[]}],
-			"dispatch":{
-				"dispatchId":"dispatch-1",
-				"transitionId":"transition",
-				"workerType":"worker",
-				"workstationName":"review",
-				"projectId":"project",
-				"currentChainingTraceId":"trace",
-				"previousChainingTraceIds":["previous"],
-				"expectedArtifactContext":{"project":"project","sessionId":"factory-session","inputs":[]},
-				"execution":{"dispatchCreatedTick":1,"currentTick":2,"requestId":"request-1","traceId":"trace","workIds":["work-1"],"replayKey":"replay"},
-				"inputTokens":["dispatch-input"],
-				"inputBindings":{"slot":["work-1"]}
-			}
+			"currentChainingTraceId":"trace",
+			"previousChainingTraceIds":["previous"],
+			"expectedArtifactContext":{"project":"project","sessionId":"factory-session","inputs":[]},
+			"execution":{"dispatchCreatedTick":1,"currentTick":2,"requestId":"request-1","traceId":"trace","workIds":["work-1"],"replayKey":"replay"},
+			"inputTokens":["dispatch-input"],
+			"inputBindings":{"slot":["work-1"]}
 		}
-	}`), &apiRequest); err != nil {
+	}
+}`
+
+func TestWorkerSessionStartMappingRoundTripsResolvedExecutionAndOptionalValues(t *testing.T) {
+	serviceRequest := workerSessionStartServiceRequest(t)
+	assertWorkerSessionStartServiceRequest(t, serviceRequest)
+
+	apiRoundTrip, err := WorkerSessionStartRequestToAPI(serviceRequest)
+	if err != nil {
+		t.Fatalf("WorkerSessionStartRequestToAPI() = %v, want nil", err)
+	}
+	assertWorkerSessionStartAPIRoundTrip(t, apiRoundTrip)
+
+	minimal, err := WorkerSessionStartRequestToAPI(workersessions.StartRequest{RequestID: "request", ID: "worker"})
+	if err != nil {
+		t.Fatalf("minimal WorkerSessionStartRequestToAPI() = %v, want nil", err)
+	}
+	if minimal.Retry != nil {
+		t.Fatalf("minimal retry = %#v, want omitted", minimal.Retry)
+	}
+	if minimal.Execution.Dispatch.Execution != nil {
+		t.Fatalf("minimal dispatch execution = %#v, want omitted", minimal.Execution.Dispatch.Execution)
+	}
+	if minimal.Execution.ResumeSession != nil {
+		t.Fatalf("minimal resume session = %#v, want omitted", minimal.Execution.ResumeSession)
+	}
+}
+
+func workerSessionStartServiceRequest(t *testing.T) workersessions.StartRequest {
+	t.Helper()
+	var apiRequest factoryapi.WorkerSessionStartRequest
+	if err := json.Unmarshal([]byte(workerSessionStartMappingJSON), &apiRequest); err != nil {
 		t.Fatalf("decode mapping fixture: %v", err)
 	}
 	serviceRequest, err := WorkerSessionStartRequestFromAPI(apiRequest)
 	if err != nil {
 		t.Fatalf("WorkerSessionStartRequestFromAPI() = %v, want nil", err)
 	}
-	if serviceRequest.RequestID != "request-1" || serviceRequest.ID != "worker-1" || serviceRequest.Retry.MaxAttempts != 3 ||
-		serviceRequest.Execution.WorkstationName != "review" || serviceRequest.Execution.Execution.Dispatch.DispatchID != "dispatch-1" ||
-		serviceRequest.Execution.Execution.ResumeSession == nil || serviceRequest.Execution.Execution.ResumeSession.ID != "provider-session" ||
-		len(serviceRequest.Execution.Execution.ModelBindings) != 1 || serviceRequest.Execution.Execution.ModelBindings[0].Slot != "slot" ||
-		serviceRequest.Execution.Execution.WorkingDirectoryAuthored != true || !serviceRequest.Execution.Execution.SkipPermissions {
-		t.Fatalf("mapped service request = %#v, want all resolved execution values", serviceRequest)
+	return serviceRequest
+}
+
+func assertWorkerSessionStartServiceRequest(t *testing.T, request workersessions.StartRequest) {
+	t.Helper()
+	if request.RequestID != "request-1" {
+		t.Fatalf("request ID = %q, want request-1", request.RequestID)
 	}
-	apiRoundTrip, err := WorkerSessionStartRequestToAPI(serviceRequest)
-	if err != nil {
-		t.Fatalf("WorkerSessionStartRequestToAPI() = %v, want nil", err)
+	if request.ID != "worker-1" {
+		t.Fatalf("worker session ID = %q, want worker-1", request.ID)
 	}
-	if apiRoundTrip.RequestId != "request-1" || apiRoundTrip.WorkerSessionId != "worker-1" || apiRoundTrip.Retry == nil || apiRoundTrip.Retry.MaxAttempts == nil || *apiRoundTrip.Retry.MaxAttempts != 3 ||
-		apiRoundTrip.Execution.ResumeSession == nil || apiRoundTrip.Execution.ResumeSession.Id != "provider-session" || apiRoundTrip.Execution.Dispatch.Execution == nil ||
-		apiRoundTrip.Execution.Dispatch.Execution.RequestId == nil || *apiRoundTrip.Execution.Dispatch.Execution.RequestId != "request-1" || apiRoundTrip.Execution.EnvVars == nil || apiRoundTrip.Execution.ModelBindings == nil {
-		t.Fatalf("round-tripped API request = %#v, want retained optional execution fields", apiRoundTrip)
+	if request.Retry.MaxAttempts != 3 {
+		t.Fatalf("retry max attempts = %d, want 3", request.Retry.MaxAttempts)
 	}
-	minimal, err := WorkerSessionStartRequestToAPI(workersessions.StartRequest{RequestID: "request", ID: "worker"})
-	if err != nil || minimal.Retry != nil || minimal.Execution.Dispatch.Execution != nil || minimal.Execution.ResumeSession != nil {
-		t.Fatalf("minimal WorkerSessionStartRequestToAPI() = %#v, %v, want omitted optional values", minimal, err)
+	if request.Execution.WorkstationName != "review" {
+		t.Fatalf("workstation = %q, want review", request.Execution.WorkstationName)
+	}
+	if request.Execution.Execution.Dispatch.DispatchID != "dispatch-1" {
+		t.Fatalf("dispatch ID = %q, want dispatch-1", request.Execution.Execution.Dispatch.DispatchID)
+	}
+	if request.Execution.Execution.ResumeSession == nil || request.Execution.Execution.ResumeSession.ID != "provider-session" {
+		t.Fatalf("resume session = %#v, want provider-session", request.Execution.Execution.ResumeSession)
+	}
+	if len(request.Execution.Execution.ModelBindings) != 1 || request.Execution.Execution.ModelBindings[0].Slot != "slot" {
+		t.Fatalf("model bindings = %#v, want slot binding", request.Execution.Execution.ModelBindings)
+	}
+	if !request.Execution.Execution.WorkingDirectoryAuthored || !request.Execution.Execution.SkipPermissions {
+		t.Fatalf("execution flags = authored:%t skip:%t, want true/true", request.Execution.Execution.WorkingDirectoryAuthored, request.Execution.Execution.SkipPermissions)
+	}
+}
+
+func assertWorkerSessionStartAPIRoundTrip(t *testing.T, request factoryapi.WorkerSessionStartRequest) {
+	t.Helper()
+	if request.RequestId != "request-1" {
+		t.Fatalf("request ID = %q, want request-1", request.RequestId)
+	}
+	if request.WorkerSessionId != "worker-1" {
+		t.Fatalf("worker session ID = %q, want worker-1", request.WorkerSessionId)
+	}
+	if request.Retry == nil || request.Retry.MaxAttempts == nil || *request.Retry.MaxAttempts != 3 {
+		t.Fatalf("retry = %#v, want max attempts 3", request.Retry)
+	}
+	if request.Execution.ResumeSession == nil || request.Execution.ResumeSession.Id != "provider-session" {
+		t.Fatalf("resume session = %#v, want provider-session", request.Execution.ResumeSession)
+	}
+	if request.Execution.Dispatch.Execution == nil || request.Execution.Dispatch.Execution.RequestId == nil || *request.Execution.Dispatch.Execution.RequestId != "request-1" {
+		t.Fatalf("dispatch execution = %#v, want request-1", request.Execution.Dispatch.Execution)
+	}
+	if request.Execution.EnvVars == nil {
+		t.Fatal("env vars are nil, want retained optional fields")
+	}
+	if request.Execution.ModelBindings == nil {
+		t.Fatal("model bindings are nil, want retained optional fields")
 	}
 }
 

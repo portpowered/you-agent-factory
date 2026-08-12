@@ -233,9 +233,7 @@ func TestInvokeRemoteConnectionFailureRedactsSelectedEndpoint(t *testing.T) {
 	}
 }
 
-func TestInvokeRequestHelpersCoverInjectedInputsAndValidationEdges(t *testing.T) {
-	local := &invokeLocalFake{}
-	valid := InvokeConfig{Context: context.Background(), Output: &bytes.Buffer{}, Local: local}
+func TestInvokeConfigValidationCoversRequiredInputs(t *testing.T) {
 	for _, test := range []struct {
 		name   string
 		config InvokeConfig
@@ -254,10 +252,13 @@ func TestInvokeRequestHelpersCoverInjectedInputsAndValidationEdges(t *testing.T)
 			}
 		})
 	}
+	valid := InvokeConfig{Context: context.Background(), Output: &bytes.Buffer{}, Local: &invokeLocalFake{}}
 	if err := validateInvokeConfig(valid); err != nil {
 		t.Fatalf("validateInvokeConfig(valid) = %v, want nil", err)
 	}
+}
 
+func TestReadInvokeRequestCoversInputFailures(t *testing.T) {
 	for _, test := range []struct {
 		name   string
 		config InvokeConfig
@@ -282,10 +283,15 @@ func TestInvokeRequestHelpersCoverInjectedInputsAndValidationEdges(t *testing.T)
 			return []byte(`{"requestId":"request","workerSessionId":"session","execution":{"workstationName":"review","dispatch":{"dispatchId":"dispatch","workstationName":"review"},"userMessage":"message"}}`), nil
 		},
 	})
-	if err != nil || fromFile.RequestId != "request" {
-		t.Fatalf("readInvokeRequest(file) = %#v, %v, want decoded request", fromFile, err)
+	if err != nil {
+		t.Fatalf("readInvokeRequest(file) = %v, want nil", err)
 	}
+	if fromFile.RequestId != "request" {
+		t.Fatalf("readInvokeRequest(file) request ID = %q, want request", fromFile.RequestId)
+	}
+}
 
+func TestApplyInvokeOverridesPreservesExplicitFields(t *testing.T) {
 	request := factoryapi.WorkerSessionStartRequest{}
 	if err := applyInvokeOverrides(&request, InvokeConfig{
 		RequestID: " request ", WorkerSessionID: " session ", WorkstationName: " review ", DispatchID: " dispatch ",
@@ -294,15 +300,62 @@ func TestInvokeRequestHelpersCoverInjectedInputsAndValidationEdges(t *testing.T)
 	}); err != nil {
 		t.Fatalf("applyInvokeOverrides() = %v, want nil", err)
 	}
-	if request.RequestId != "request" || request.WorkerSessionId != "session" || request.Execution.WorkstationName != "review" ||
-		request.Execution.Dispatch.DispatchId != "dispatch" || request.Execution.Dispatch.WorkstationName != "review" || request.Execution.UserMessage == nil || *request.Execution.UserMessage != "user" ||
-		request.Execution.WorkerType == nil || *request.Execution.WorkerType != "type" || request.Execution.RunnerId == nil || *request.Execution.RunnerId != "runner" ||
-		request.Execution.ModelProvider == nil || *request.Execution.ModelProvider != "provider" || request.Execution.Model == nil || *request.Execution.Model != "model" ||
-		request.Execution.ReasoningEffort == nil || *request.Execution.ReasoningEffort != "high" || request.Execution.SystemPrompt == nil || *request.Execution.SystemPrompt != "system" ||
-		request.Retry == nil || request.Retry.MaxAttempts == nil || *request.Retry.MaxAttempts != 3 {
-		t.Fatalf("applyInvokeOverrides() did not apply all explicit fields: %#v", request)
-	}
+	assertInvokeOverrides(t, request)
+}
 
+func assertInvokeOverrides(t *testing.T, request factoryapi.WorkerSessionStartRequest) {
+	t.Helper()
+	assertInvokeIdentityAndRouting(t, request)
+	assertInvokeMessages(t, request)
+	assertInvokeRunnerFields(t, request)
+	assertInvokeModelFields(t, request)
+	assertInvokeRetry(t, request)
+}
+
+func assertInvokeIdentityAndRouting(t *testing.T, request factoryapi.WorkerSessionStartRequest) {
+	t.Helper()
+	if request.RequestId != "request" || request.WorkerSessionId != "session" {
+		t.Fatalf("request identity = %q/%q, want request/session", request.RequestId, request.WorkerSessionId)
+	}
+	if request.Execution.WorkstationName != "review" || request.Execution.Dispatch.DispatchId != "dispatch" || request.Execution.Dispatch.WorkstationName != "review" {
+		t.Fatalf("dispatch/workstation = %#v/%q, want dispatch/review", request.Execution.Dispatch, request.Execution.WorkstationName)
+	}
+}
+
+func assertInvokeMessages(t *testing.T, request factoryapi.WorkerSessionStartRequest) {
+	t.Helper()
+	if request.Execution.UserMessage == nil || *request.Execution.UserMessage != "user" || request.Execution.SystemPrompt == nil || *request.Execution.SystemPrompt != "system" {
+		t.Fatalf("messages = %#v/%#v, want system/user", request.Execution.SystemPrompt, request.Execution.UserMessage)
+	}
+}
+
+func assertInvokeRunnerFields(t *testing.T, request factoryapi.WorkerSessionStartRequest) {
+	t.Helper()
+	if request.Execution.WorkerType == nil || *request.Execution.WorkerType != "type" || request.Execution.RunnerId == nil || *request.Execution.RunnerId != "runner" {
+		t.Fatalf("runner fields = %#v/%#v, want type/runner", request.Execution.WorkerType, request.Execution.RunnerId)
+	}
+}
+
+func assertInvokeModelFields(t *testing.T, request factoryapi.WorkerSessionStartRequest) {
+	t.Helper()
+	if request.Execution.ModelProvider == nil || *request.Execution.ModelProvider != "provider" || request.Execution.Model == nil || *request.Execution.Model != "model" {
+		t.Fatalf("model fields = %#v/%#v, want provider/model", request.Execution.ModelProvider, request.Execution.Model)
+	}
+}
+
+func assertInvokeRetry(t *testing.T, request factoryapi.WorkerSessionStartRequest) {
+	t.Helper()
+	if request.Execution.ReasoningEffort == nil || *request.Execution.ReasoningEffort != "high" {
+		t.Fatalf("reasoning effort = %#v, want high", request.Execution.ReasoningEffort)
+	}
+	if request.Retry == nil || request.Retry.MaxAttempts == nil || *request.Retry.MaxAttempts != 3 {
+		t.Fatalf("retry = %#v, want max attempts 3", request.Retry)
+	}
+}
+
+func TestEnsureInvokeIdentitiesUsesInjectedGenerator(t *testing.T) {
+	request := factoryapi.WorkerSessionStartRequest{RequestId: "request", WorkerSessionId: "session"}
+	request.Execution.Dispatch.DispatchId = "dispatch"
 	if err := ensureInvokeIdentities(&request, nil); err != nil {
 		t.Fatalf("ensureInvokeIdentities(populated) = %v, want nil", err)
 	}
@@ -315,12 +368,26 @@ func TestInvokeRequestHelpersCoverInjectedInputsAndValidationEdges(t *testing.T)
 	if err := ensureInvokeIdentities(&missing, func() string { value := ids[index]; index++; return value }); err != nil {
 		t.Fatalf("ensureInvokeIdentities(generated) = %v, want nil", err)
 	}
-	if missing.RequestId != ids[0] || missing.WorkerSessionId != ids[1] || missing.Execution.Dispatch.DispatchId != ids[2] || missing.Execution.Dispatch.Execution == nil || missing.Execution.Dispatch.Execution.RequestId == nil {
-		t.Fatalf("generated identities = %#v, want request/session/dispatch metadata", missing)
+	assertGeneratedInvokeIdentities(t, missing, ids)
+}
+
+func assertGeneratedInvokeIdentities(t *testing.T, request factoryapi.WorkerSessionStartRequest, ids []string) {
+	t.Helper()
+	if request.RequestId != ids[0] || request.WorkerSessionId != ids[1] {
+		t.Fatalf("generated request/session IDs = %q/%q, want %q/%q", request.RequestId, request.WorkerSessionId, ids[0], ids[1])
+	}
+	if request.Execution.Dispatch.DispatchId != ids[2] {
+		t.Fatalf("generated dispatch ID = %q, want %q", request.Execution.Dispatch.DispatchId, ids[2])
+	}
+	if request.Execution.Dispatch.Execution == nil || request.Execution.Dispatch.Execution.RequestId == nil {
+		t.Fatalf("generated dispatch execution = %#v, want request metadata", request.Execution.Dispatch.Execution)
+	}
+	if *request.Execution.Dispatch.Execution.RequestId != ids[0] {
+		t.Fatalf("generated dispatch request ID = %q, want %q", *request.Execution.Dispatch.Execution.RequestId, ids[0])
 	}
 }
 
-func TestInvokeObservationProjectionAndTerminalHelpersCoverCanonicalFrames(t *testing.T) {
+func TestInvokeCaptureEventProjectsOutputAndError(t *testing.T) {
 	capture := invokeCapture{}
 	captureEvent(&capture, "worker.session.running", json.RawMessage(`{"state":"RUNNING","kind":"MESSAGE","phase":"COMPLETED","payload":{"contentBlocks":[{"kind":"TEXT","text":"provider output"},{"kind":"JSON","structuredOutput":{"answer":42}}]}}`))
 	if capture.State != "RUNNING" || capture.Output != "provider output" || !capture.HasOutput || !capture.HasStructured {
@@ -335,6 +402,9 @@ func TestInvokeObservationProjectionAndTerminalHelpersCoverCanonicalFrames(t *te
 	if errorCapture.Error != "draft failure" {
 		t.Fatalf("captureEvent(ERROR draft) = %#v, want draft failure", errorCapture)
 	}
+}
+
+func TestInferInvokeStateCoversKnownSchemas(t *testing.T) {
 	for _, test := range []struct {
 		schema string
 		want   string
@@ -346,6 +416,9 @@ func TestInvokeObservationProjectionAndTerminalHelpersCoverCanonicalFrames(t *te
 			t.Errorf("inferInvokeState(%q) = %q, want %q", test.schema, got, test.want)
 		}
 	}
+}
+
+func TestInvokeObservationPayloadHelpersRejectInvalidValues(t *testing.T) {
 	if _, ok := eventPayloadObject(nil); ok {
 		t.Fatal("eventPayloadObject(nil) = ok, want false")
 	}
@@ -358,6 +431,9 @@ func TestInvokeObservationProjectionAndTerminalHelpersCoverCanonicalFrames(t *te
 	if derefString(nil) != "" {
 		t.Fatal("derefString(nil) was non-empty")
 	}
+}
+
+func TestInvokeTerminalErrorClassifiesStates(t *testing.T) {
 	for _, state := range []string{"COMPLETED", "FAILED", "CANCELED", "TERMINATED", "", "UNKNOWN"} {
 		err := terminalInvokeError(invokeCapture{State: state})
 		if state == "COMPLETED" && err != nil {
@@ -367,7 +443,9 @@ func TestInvokeObservationProjectionAndTerminalHelpersCoverCanonicalFrames(t *te
 			t.Fatalf("terminalInvokeError(%q) = nil, want error", state)
 		}
 	}
+}
 
+func TestInvokeObservationFramesClassifyTerminalAndFailure(t *testing.T) {
 	for _, test := range []struct {
 		delivery string
 		payload  string
