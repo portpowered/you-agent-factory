@@ -13,11 +13,25 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
-func TestWaitForCompleteWorkerSessionReplayWaitsForTerminalRetention(t *testing.T) {
-	var requests atomic.Int32
-	secondRequest := make(chan struct{})
-	releaseTerminal := make(chan struct{})
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+type delayedWorkerSessionReplayFixture struct {
+	requests        atomic.Int32
+	secondRequest   chan struct{}
+	releaseTerminal chan struct{}
+	server          *httptest.Server
+}
+
+type workerSessionReplayResult struct {
+	events []factoryapi.WorkerSessionEvent
+	err    error
+}
+
+func newDelayedWorkerSessionReplayFixture(t testing.TB) *delayedWorkerSessionReplayFixture {
+	t.Helper()
+	fixture := &delayedWorkerSessionReplayFixture{
+		secondRequest:   make(chan struct{}),
+		releaseTerminal: make(chan struct{}),
+	}
+	fixture.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("replayOnly") != "true" {
 			http.Error(w, "replayOnly is required", http.StatusBadRequest)
 			return
@@ -41,7 +55,7 @@ func TestWaitForCompleteWorkerSessionReplayWaitsForTerminalRetention(t *testing.
 			flusher.Flush()
 		}
 
-		switch requests.Add(1) {
+		switch fixture.requests.Add(1) {
 		case 1:
 			writeEvent(map[string]any{
 				"delivery":        "RECORD",
@@ -59,8 +73,8 @@ func TestWaitForCompleteWorkerSessionReplayWaitsForTerminalRetention(t *testing.
 				},
 			})
 		case 2:
-			close(secondRequest)
-			<-releaseTerminal
+			close(fixture.secondRequest)
+			<-fixture.releaseTerminal
 			writeEvent(map[string]any{
 				"delivery":        "RECORD",
 				"workerSessionId": "worker-1",
@@ -84,24 +98,23 @@ func TestWaitForCompleteWorkerSessionReplayWaitsForTerminalRetention(t *testing.
 			http.Error(w, "unexpected replay request", http.StatusInternalServerError)
 		}
 	}))
-	defer server.Close()
+	t.Cleanup(fixture.server.Close)
+	return fixture
+}
+
+func TestWaitForCompleteWorkerSessionReplayWaitsForTerminalRetention(t *testing.T) {
+	fixture := newDelayedWorkerSessionReplayFixture(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	replayDone := make(chan struct {
-		events []factoryapi.WorkerSessionEvent
-		err    error
-	}, 1)
+	replayDone := make(chan workerSessionReplayResult, 1)
 	go func() {
-		events, err := waitForCompleteWorkerSessionReplay(ctx, server.URL+"/worker-sessions/worker-1/events?replayOnly=true")
-		replayDone <- struct {
-			events []factoryapi.WorkerSessionEvent
-			err    error
-		}{events: events, err: err}
+		events, err := waitForCompleteWorkerSessionReplay(ctx, fixture.server.URL+"/worker-sessions/worker-1/events?replayOnly=true")
+		replayDone <- workerSessionReplayResult{events: events, err: err}
 	}()
 
 	select {
-	case <-secondRequest:
+	case <-fixture.secondRequest:
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for the second replay observation")
 	}
@@ -111,7 +124,7 @@ func TestWaitForCompleteWorkerSessionReplayWaitsForTerminalRetention(t *testing.
 	default:
 	}
 
-	close(releaseTerminal)
+	close(fixture.releaseTerminal)
 	select {
 	case result := <-replayDone:
 		if result.err != nil {
@@ -128,7 +141,7 @@ func TestWaitForCompleteWorkerSessionReplayWaitsForTerminalRetention(t *testing.
 		t.Fatal("timed out waiting for complete replay")
 	}
 
-	if got := requests.Load(); got != 2 {
+	if got := fixture.requests.Load(); got != 2 {
 		t.Fatalf("replay requests = %d, want one incomplete and one complete observation", got)
 	}
 }
