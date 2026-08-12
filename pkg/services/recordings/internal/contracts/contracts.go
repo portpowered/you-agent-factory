@@ -7,6 +7,7 @@ package contracts
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -87,6 +88,33 @@ var ErrRecordingSnapshotWrite = errors.New("recording snapshot write failed")
 // ErrRecordingWriteRejected reports that a write was rejected after the
 // recording finished.
 var ErrRecordingWriteRejected = errors.New("recording write rejected after finish")
+
+// ErrRecordingScopeInvalid reports an empty or malformed opaque recording
+// scope reference.
+var ErrRecordingScopeInvalid = errors.New("recording scope is invalid")
+
+// ErrInvalidRecordingScopeRef is the descriptive alias used by callers that
+// validate a reference at a transport boundary.
+var ErrInvalidRecordingScopeRef = ErrRecordingScopeInvalid
+
+// ErrRecordingScopeStale reports a well-formed reference that no longer
+// identifies a live scope issued by this Recordings root.
+var ErrRecordingScopeStale = errors.New("recording scope is stale")
+
+// ErrRecordingScopeUnknown is the operation-oriented alias for stale scope
+// references.
+var ErrRecordingScopeUnknown = ErrRecordingScopeStale
+
+// ErrRecordingScopeClosed reports a reference that was explicitly closed.
+var ErrRecordingScopeClosed = errors.New("recording scope is closed")
+
+// ErrRecordingScopeForeign reports a reference issued by another Recordings
+// root.
+var ErrRecordingScopeForeign = errors.New("recording scope is foreign")
+
+// ErrRecordingScopeFinalized reports an append or mutable operation attempted
+// after the selected scope reached its terminal lifecycle state.
+var ErrRecordingScopeFinalized = errors.New("recording scope is finalized")
 
 // DefaultRecordingFlushInterval is the cadence used when an enabled recording
 // does not request a positive active-flush interval.
@@ -657,6 +685,35 @@ type ValidateReconnectReplayRequest struct {
 // RecordingID is the Recordings-owned identity of one bound recording.
 type RecordingID string
 
+// RecordingScopeRef is an opaque Recordings-owned reference to one live
+// recording scope. Callers may carry and compare it, but they cannot inspect
+// or construct the lifecycle, ledger, projection, recorder, or storage state
+// behind the reference.
+type RecordingScopeRef struct {
+	value string
+}
+
+// Parse restores a scope reference received from a trusted boundary. The
+// issuing Recordings root classifies stale, closed, and foreign ownership when
+// the reference is used.
+func (RecordingScopeRef) Parse(value string) (RecordingScopeRef, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return RecordingScopeRef{}, ErrRecordingScopeInvalid
+	}
+	return RecordingScopeRef{value: value}, nil
+}
+
+// String returns the opaque serialized reference.
+func (ref RecordingScopeRef) String() string {
+	return ref.value
+}
+
+// IsZero reports whether no recording scope reference was supplied.
+func (ref RecordingScopeRef) IsZero() bool {
+	return strings.TrimSpace(ref.value) == ""
+}
+
 // RecordingArtifactReference is an opaque portable artifact reference. It does
 // not grant filesystem authority or expose a writer, transaction, or temporary
 // storage location.
@@ -852,6 +909,104 @@ type RecordingStatusRequest struct {
 // RecordingStatusResult is the plain status outcome for one bound recording.
 type RecordingStatusResult struct {
 	Status RecordingStatusFacts
+}
+
+// RecordingScopeStatus is a detached lifecycle snapshot addressed by an
+// opaque scope reference. It intentionally omits the private RecordingID used
+// by the compatibility lifecycle implementation.
+type RecordingScopeStatus struct {
+	Scope          RecordingScopeRef
+	EventScope     CanonicalEventScope
+	Artifact       RecordingArtifactReference
+	State          RecordingLifecycleState
+	AcceptedEvents int
+	LastEvent      *CanonicalEventCursor
+	FlushedThrough *CanonicalEventCursor
+	Failures       []RecordingFailure
+	FinalizedAt    *time.Time
+}
+
+// BeginRecordingScopeRequest selects one value-only recording scope. Artifact
+// takes precedence over generated HomeDir/ReportedSessionID target selection.
+// RecordingID is an optional caller identity used only to correlate the
+// private lifecycle binding; it is never returned as the scope reference.
+type BeginRecordingScopeRequest struct {
+	Enabled       bool
+	RecordingID   RecordingID
+	Scope         CanonicalEventScope
+	Target        RecordingTargetRequest
+	FlushInterval time.Duration
+}
+
+// BeginRecordingScopeResult returns the opaque scope and detached active
+// status. Disabled requests return a zero scope and zero status.
+type BeginRecordingScopeResult struct {
+	Scope  RecordingScopeRef
+	Status RecordingScopeStatus
+}
+
+// AppendRecordingScopeEventRequest appends one canonical event to the
+// selected scope and its canonical event ledger.
+type AppendRecordingScopeEventRequest struct {
+	Scope RecordingScopeRef
+	Event CanonicalEvent
+}
+
+// AppendRecordingScopeEventResult returns the accepted canonical event and
+// detached scope status.
+type AppendRecordingScopeEventResult struct {
+	Event  CanonicalEvent
+	Status RecordingScopeStatus
+}
+
+// FlushRecordingScopeRequest asks the selected scope to persist its accepted
+// prefix through Recordings-owned lifecycle effects.
+type FlushRecordingScopeRequest struct {
+	Scope RecordingScopeRef
+}
+
+// FlushRecordingScopeResult returns the detached status after flushing.
+type FlushRecordingScopeResult struct {
+	Status RecordingScopeStatus
+}
+
+// FinalizeRecordingScopeRequest applies terminal metadata and performs the
+// final owned flush for the selected scope.
+type FinalizeRecordingScopeRequest struct {
+	Scope      RecordingScopeRef
+	FinishedAt time.Time
+}
+
+// FinalizeRecordingScopeResult returns the first terminal outcome. Repeated
+// finalization is idempotent.
+type FinalizeRecordingScopeResult struct {
+	Status RecordingScopeStatus
+}
+
+// CloseRecordingScopeRequest releases an acquired scope. An active scope is
+// finalized before release; a FinishedAt value is required for that implicit
+// finalization.
+type CloseRecordingScopeRequest struct {
+	Scope      RecordingScopeRef
+	FinishedAt time.Time
+}
+
+// CloseRecordingScopeResult confirms that owned lifecycle resources have been
+// released. Repeated close calls return the same detached terminal status.
+type CloseRecordingScopeResult struct {
+	Scope  RecordingScopeRef
+	Closed bool
+	Status RecordingScopeStatus
+}
+
+// QueryRecordingScopeRequest selects one opaque scope for inspection.
+type QueryRecordingScopeRequest struct {
+	Scope RecordingScopeRef
+}
+
+// QueryRecordingScopeResult returns a detached status for one scope.
+type QueryRecordingScopeResult struct {
+	Status RecordingScopeStatus
 }
 
 // RecordingSnapshot is the detached value passed to the exact persistence
@@ -1086,6 +1241,8 @@ type Ledger interface {
 // deliberately excluded so a peer can implement this authority without
 // importing Factory Definitions or Recordings implementation packages.
 type Service interface {
+	RecordingScopeService
+
 	// Append publishes one ordered Factory Event through the plain
 	// append/subscribe root-contract slice.
 	Append(AppendRecordedEventRequest) (AppendRecordedEventResult, error)
@@ -1158,6 +1315,18 @@ type Service interface {
 	// ReadPortableArtifact reads and validates one published portable artifact
 	// from its public reference.
 	ReadPortableArtifact(context.Context, ReadPortableArtifactRequest) (ReadPortableArtifactResult, error)
+}
+
+// RecordingScopeService is the scope-bearing lifecycle slice of the
+// Recordings root. Its operations accept only detached values and opaque
+// references; owner collaborators remain private to Recordings.
+type RecordingScopeService interface {
+	BeginRecordingScope(context.Context, BeginRecordingScopeRequest) (BeginRecordingScopeResult, error)
+	AppendRecordingScopeEvent(context.Context, AppendRecordingScopeEventRequest) (AppendRecordingScopeEventResult, error)
+	FlushRecordingScope(context.Context, FlushRecordingScopeRequest) (FlushRecordingScopeResult, error)
+	FinalizeRecordingScope(context.Context, FinalizeRecordingScopeRequest) (FinalizeRecordingScopeResult, error)
+	CloseRecordingScope(context.Context, CloseRecordingScopeRequest) (CloseRecordingScopeResult, error)
+	QueryRecordingScope(context.Context, QueryRecordingScopeRequest) (QueryRecordingScopeResult, error)
 }
 
 // ProjectionService is the legacy runtime projection composition capability.

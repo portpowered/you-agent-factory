@@ -456,6 +456,30 @@ func (fake *recordingsRootFake) ReadPortableArtifact(
 	return recordings.ReadPortableArtifactResult{}, recordings.ErrMissingRecordingTarget
 }
 
+func (fake *recordingsRootFake) BeginRecordingScope(context.Context, recordings.BeginRecordingScopeRequest) (recordings.BeginRecordingScopeResult, error) {
+	return recordings.BeginRecordingScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (fake *recordingsRootFake) AppendRecordingScopeEvent(context.Context, recordings.AppendRecordingScopeEventRequest) (recordings.AppendRecordingScopeEventResult, error) {
+	return recordings.AppendRecordingScopeEventResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (fake *recordingsRootFake) FlushRecordingScope(context.Context, recordings.FlushRecordingScopeRequest) (recordings.FlushRecordingScopeResult, error) {
+	return recordings.FlushRecordingScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (fake *recordingsRootFake) FinalizeRecordingScope(context.Context, recordings.FinalizeRecordingScopeRequest) (recordings.FinalizeRecordingScopeResult, error) {
+	return recordings.FinalizeRecordingScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (fake *recordingsRootFake) CloseRecordingScope(context.Context, recordings.CloseRecordingScopeRequest) (recordings.CloseRecordingScopeResult, error) {
+	return recordings.CloseRecordingScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (fake *recordingsRootFake) QueryRecordingScope(context.Context, recordings.QueryRecordingScopeRequest) (recordings.QueryRecordingScopeResult, error) {
+	return recordings.QueryRecordingScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
 func recordingsBackedWorldPayload(
 	t *testing.T,
 	workID string,

@@ -309,3 +309,27 @@ func (stub *recordingsRequestBoundaryStub) ExportPortableArtifact(context.Contex
 func (stub *recordingsRequestBoundaryStub) ReadPortableArtifact(context.Context, recordings.ReadPortableArtifactRequest) (recordings.ReadPortableArtifactResult, error) {
 	return recordings.ReadPortableArtifactResult{}, recordings.ErrMissingRecordingTarget
 }
+
+func (stub *recordingsRequestBoundaryStub) BeginRecordingScope(context.Context, recordings.BeginRecordingScopeRequest) (recordings.BeginRecordingScopeResult, error) {
+	return recordings.BeginRecordingScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (stub *recordingsRequestBoundaryStub) AppendRecordingScopeEvent(context.Context, recordings.AppendRecordingScopeEventRequest) (recordings.AppendRecordingScopeEventResult, error) {
+	return recordings.AppendRecordingScopeEventResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (stub *recordingsRequestBoundaryStub) FlushRecordingScope(context.Context, recordings.FlushRecordingScopeRequest) (recordings.FlushRecordingScopeResult, error) {
+	return recordings.FlushRecordingScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (stub *recordingsRequestBoundaryStub) FinalizeRecordingScope(context.Context, recordings.FinalizeRecordingScopeRequest) (recordings.FinalizeRecordingScopeResult, error) {
+	return recordings.FinalizeRecordingScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (stub *recordingsRequestBoundaryStub) CloseRecordingScope(context.Context, recordings.CloseRecordingScopeRequest) (recordings.CloseRecordingScopeResult, error) {
+	return recordings.CloseRecordingScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (stub *recordingsRequestBoundaryStub) QueryRecordingScope(context.Context, recordings.QueryRecordingScopeRequest) (recordings.QueryRecordingScopeResult, error) {
+	return recordings.QueryRecordingScopeResult{}, recordings.ErrRecordingScopeUnknown
+}

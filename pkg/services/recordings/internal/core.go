@@ -36,6 +36,11 @@ type combinedService struct {
 
 	lifecycleMu sync.Mutex
 	replayByKey map[string]*recordings.ReplayArtifact
+
+	scopeMu     sync.RWMutex
+	scopeIssuer string
+	nextScopeID uint64
+	scopeByRef  map[recordings.RecordingScopeRef]*recordingScopeBinding
 }
 
 var _ recordings.Service = (*combinedService)(nil)
@@ -239,7 +244,7 @@ func NewServiceWithLifecycleEffects(
 		tickers,
 		clocks...,
 	)
-	return &combinedService{
+	service := &combinedService{
 		Ledger:            ledger,
 		ProjectionService: projection,
 		Service:           lifecycle,
@@ -248,6 +253,9 @@ func NewServiceWithLifecycleEffects(
 		canonicalLedger:   canonicalledgerwire.NewService(ledger),
 		replayByKey:       make(map[string]*recordings.ReplayArtifact),
 	}
+	service.scopeIssuer = recordingScopeIssuer(service)
+	service.scopeByRef = make(map[recordings.RecordingScopeRef]*recordingScopeBinding)
+	return service
 }
 
 func NewRuntimeLedger(
