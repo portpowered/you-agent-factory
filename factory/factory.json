@@ -820,7 +820,7 @@
     {
       "guards": [
         {
-          "maxVisits": 50,
+          "maxVisits": 12,
           "type": "VISIT_COUNT",
           "workstation": "process"
         }
