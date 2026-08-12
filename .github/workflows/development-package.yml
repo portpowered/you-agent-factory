@@ -64,7 +64,9 @@ on:
       - completed
 
 permissions:
-  contents: write
+  # The CI caller intentionally grants only read access. Publication jobs
+  # request their narrower write or OIDC permissions at job level.
+  contents: read
 
 # Dev-snapshot pushes to main supersede each other; a real release publish
 # never should, so it gets its own group keyed by the triggering run id
