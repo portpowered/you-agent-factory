@@ -12,6 +12,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
+	visualizationcli "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -195,42 +196,21 @@ func openHostedRuntime(
 	if cfg.Port <= 0 {
 		emitVerboseStartupDiagnostics(cfg, recordPath, requestedPort)
 	}
-	var visualizationSinkID factoryvisualization.RuntimeSinkID
-	if visualizations != nil {
-		sink := runVisualizationSink(cfg, presentation)
-		if sink != nil {
-			visualizationSinkID, err = visualizations.RegisterRuntimeSink(sink)
-			if err != nil {
-				return nil, fmt.Errorf("register Factory Visualization sink: %w", err)
-			}
-			openingRequest.VisualizationSinkID = factorysessions.VisualizationSinkID(visualizationSinkID)
-		}
+	visualizationSinkID, err := registerRuntimeVisualizationSink(visualizations, cfg, presentation)
+	if err != nil {
+		return nil, err
 	}
+	openingRequest.VisualizationSinkID = factorysessions.VisualizationSinkID(visualizationSinkID)
 	factorySvc, err = buildRunner(ctx, openingRequest)
 	if err != nil {
-		if visualizations != nil {
-			visualizations.CloseRuntimeSink(visualizationSinkID)
-		}
+		closeRuntimeVisualizationSink(visualizations, visualizationSinkID)
 		return nil, err
 	}
 	if factorySvc == nil {
-		if visualizations != nil {
-			visualizations.CloseRuntimeSink(visualizationSinkID)
-		}
+		closeRuntimeVisualizationSink(visualizations, visualizationSinkID)
 		return nil, fmt.Errorf("construct local runtime: builder returned nil runner")
 	}
-	var historicalReplay *factorysessions.HistoricalReplayInspection
-	if provider, ok := factorySvc.(interface {
-		HistoricalReplay() *factorysessions.HistoricalReplayInspection
-	}); ok {
-		historicalReplay = provider.HistoricalReplay()
-	}
-	var hostedInvocation HostedInvocationOperation
-	if provider, ok := factorySvc.(interface {
-		HostedInvocation() HostedInvocationOperation
-	}); ok {
-		hostedInvocation = provider.HostedInvocation()
-	}
+	historicalReplay, hostedInvocation := hostedRuntimeCapabilities(factorySvc)
 	if !cfg.CleanInvocation && (cfg.WithServer || cfg.WithSite || cfg.Port > 0) {
 		factorySvc = runtimeapplication.WithRuntimeHostObserver(factorySvc, onBound)
 	}
@@ -251,6 +231,52 @@ func openHostedRuntime(
 		openingPresentations: presentations, visualizations: visualizations,
 		visualizationSinkID: visualizationSinkID,
 	}, nil
+}
+
+func registerRuntimeVisualizationSink(
+	visualizations factoryvisualization.RuntimeSinkOwner,
+	cfg RunConfig,
+	presentation factoryvisualization.ResponsePresentation,
+) (factoryvisualization.RuntimeSinkID, error) {
+	if visualizations == nil {
+		return "", nil
+	}
+	sink := runVisualizationSink(cfg, presentation)
+	if sink == nil {
+		return "", nil
+	}
+	id, err := visualizations.RegisterRuntimeSink(sink)
+	if err != nil {
+		return "", fmt.Errorf("register Factory Visualization sink: %w", err)
+	}
+	return id, nil
+}
+
+func closeRuntimeVisualizationSink(
+	visualizations factoryvisualization.RuntimeSinkOwner,
+	id factoryvisualization.RuntimeSinkID,
+) {
+	if visualizations != nil {
+		visualizations.CloseRuntimeSink(id)
+	}
+}
+
+func hostedRuntimeCapabilities(
+	runner initializer.LocalRuntimeRunner,
+) (*factorysessions.HistoricalReplayInspection, HostedInvocationOperation) {
+	var historicalReplay *factorysessions.HistoricalReplayInspection
+	if provider, ok := runner.(interface {
+		HistoricalReplay() *factorysessions.HistoricalReplayInspection
+	}); ok {
+		historicalReplay = provider.HistoricalReplay()
+	}
+	var hostedInvocation HostedInvocationOperation
+	if provider, ok := runner.(interface {
+		HostedInvocation() HostedInvocationOperation
+	}); ok {
+		hostedInvocation = provider.HostedInvocation()
+	}
+	return historicalReplay, hostedInvocation
 }
 
 func prepareHostedInvocation(
@@ -299,4 +325,45 @@ func newRuntimeHostObserver(
 			openDashboardAtBoundEndpoint(ctx, resolved, cfg.BrowserOpener)
 		}
 	}
+}
+
+func visualizationCLIService(
+	presentation factoryvisualization.ResponsePresentation,
+) visualizationcli.Service {
+	return visualizationcli.NewFromPresentation(presentation)
+}
+
+func runVisualizationSink(
+	cfg RunConfig,
+	presentation factoryvisualization.ResponsePresentation,
+) factoryvisualization.Sink {
+	service := visualizationCLIService(presentation)
+	if service == nil {
+		return nil
+	}
+	return service.BuildVisualizationSink(visualizationcli.SinkConfig{
+		Output:                     cfg.Output,
+		SuppressDashboardRendering: cfg.SuppressDashboardRendering,
+	})
+}
+
+func invocationFactoryEventRenderer(
+	cfg RunConfig,
+	presentation factoryvisualization.ResponsePresentation,
+) (visualizationcli.FactoryEventRenderer, error) {
+	if !isResponseStreamOutputMode(cfg.InvocationOutputMode) {
+		return nil, nil
+	}
+	service := visualizationCLIService(presentation)
+	if service == nil {
+		return nil, fmt.Errorf("construct factory invocation: response presentation operation is required")
+	}
+	return service.OpenFactoryEventRenderer(visualizationcli.FactoryEventRendererConfig{
+		Output:               cfg.Output,
+		ProgressOutput:       cfg.ProgressOutput,
+		JSON:                 cfg.JSONOutput,
+		Color:                cfg.OutputIsTTY && !cfg.JSONOutput,
+		ProgressIsTTY:        cfg.ProgressIsTTY && !cfg.JSONOutput,
+		InvocationOutputMode: cfg.InvocationOutputMode,
+	})
 }
