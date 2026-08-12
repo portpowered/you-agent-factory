@@ -36,12 +36,17 @@ func AnalyzeMarkdown(sourcePath string, data []byte, policy Policy) []Finding {
 }
 
 func markdownSurfaceSelectors(sourcePath string) []string {
-	surfaces := []string{surfaceCustomerDocumentation}
 	path := normalizeSourcePath(sourcePath)
-	if strings.Contains(path, "/reference/") {
-		surfaces = append(surfaces, surfaceCLIReferenceDocumentation)
+	if strings.Contains(path, "/architecture/") || strings.HasPrefix(path, "architecture/") {
+		return []string{surfaceInternalArchitecture}
 	}
-	return surfaces
+	if strings.Contains(path, "/internal/") || strings.HasPrefix(path, "internal/") || strings.HasPrefix(path, "pkg/") || strings.HasPrefix(path, "cmd/") {
+		return []string{surfaceImplementationRuntimePackages}
+	}
+	if strings.Contains(path, "/reference/") {
+		return []string{surfaceCLIReferenceDocumentation}
+	}
+	return []string{surfaceCustomerDocumentation}
 }
 
 type markdownLine struct {

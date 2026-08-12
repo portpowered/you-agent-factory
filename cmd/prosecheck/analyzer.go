@@ -356,12 +356,45 @@ func termAppliesToSpan(term Term, span Span) bool {
 		}
 		for _, termSurface := range term.Surfaces {
 			allowed := normalizeSurface(termSurface)
-			if allowed == source || strings.Contains(allowed, source) || strings.Contains(source, allowed) {
+			if surfaceSelectorMatchesTerm(source, allowed, term) {
 				return true
 			}
 		}
 	}
 	return false
+}
+
+func surfaceSelectorMatchesTerm(source, allowed string, term Term) bool {
+	if source == allowed {
+		return true
+	}
+	switch source {
+	case surfaceCLIHelp:
+		// CLI help is a deliberately narrow selector. It may match a
+		// canonical surface that explicitly contains CLI help, but it must
+		// not opt every CLI/status/API term into every authored field.
+		return strings.Contains(allowed, source)
+	case surfaceCustomerDocumentation:
+		// A generic Markdown document does not establish that an ordinary
+		// word such as "work" or "model" denotes the product resource. A
+		// specific command or structural surface can still opt the term in
+		// through an exact selector.
+		if ambiguousBroadDocumentationTerm(term) {
+			return false
+		}
+		return strings.Contains(allowed, source)
+	default:
+		return false
+	}
+}
+
+func ambiguousBroadDocumentationTerm(term Term) bool {
+	switch strings.ToLower(strings.TrimSpace(term.Canonical)) {
+	case "work", "model", "running", "active":
+		return true
+	default:
+		return false
+	}
 }
 
 func normalizeSurface(value string) string {

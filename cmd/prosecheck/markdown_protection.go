@@ -7,6 +7,12 @@ import (
 	"unicode"
 )
 
+var (
+	markdownProviderPattern = regexp.MustCompile(`(?i)\b(?:codex|cursor(?:-acp)?|openai|anthropic|ollama)\b`)
+	markdownModelPattern    = regexp.MustCompile(`(?i)\b(?:gpt(?:-[a-z0-9.]+)+|claude(?:-[a-z0-9.]+)+|llama[0-9.]*|mistral(?:-[a-z0-9.]+)+|qwen[0-9.]*|gemma(?:-[a-z0-9.]+)+)\b`)
+	markdownYAMLKeyPattern  = regexp.MustCompile(`(?i)^\s*(?:-\s*)?(?:event|schema|state|status|type|kind|code|id|name|provider|model|route|path|method|operationid|error|message|default|value|version)\s*:\s*\S`)
+)
+
 func markdownProtectedRanges(text string) []TextRange {
 	ranges := append([]TextRange(nil), LexicalProtectedRanges(text)...)
 	ranges = append(ranges, markdownLinkRanges(text)...)
@@ -16,7 +22,18 @@ func markdownProtectedRanges(text string) []TextRange {
 	ranges = append(ranges, markdownStructuredLineRanges(text)...)
 	ranges = append(ranges, markdownQuotedOutputRanges(text)...)
 	ranges = append(ranges, markdownTechnicalTokenRanges(text)...)
+	ranges = append(ranges, markdownRegexRanges(text, markdownProviderPattern)...)
+	ranges = append(ranges, markdownRegexRanges(text, markdownModelPattern)...)
 	return mergeMarkdownRanges(ranges)
+}
+
+func markdownRegexRanges(text string, pattern *regexp.Regexp) []TextRange {
+	matches := pattern.FindAllStringIndex(text, -1)
+	ranges := make([]TextRange, 0, len(matches))
+	for _, match := range matches {
+		ranges = append(ranges, TextRange{Start: match[0], End: match[1]})
+	}
+	return ranges
 }
 
 func markdownLinkRanges(text string) []TextRange {
@@ -110,7 +127,7 @@ func markdownStructuredLineRanges(text string) []TextRange {
 		}
 		line := strings.TrimSpace(strings.TrimSuffix(text[start:end], "\r"))
 		jsonArray := strings.HasPrefix(line, "[") && (strings.HasSuffix(line, "]") && strings.ContainsAny(line, "{}\"") || strings.Contains(line, `":`))
-		if strings.HasPrefix(line, "{") || strings.HasPrefix(line, "}") || jsonArray || strings.HasPrefix(line, "]") || strings.Contains(line, `":`) {
+		if strings.HasPrefix(line, "{") || strings.HasPrefix(line, "}") || jsonArray || strings.HasPrefix(line, "]") || strings.Contains(line, `":`) || markdownYAMLKeyPattern.MatchString(line) {
 			ranges = append(ranges, TextRange{Start: start, End: end})
 		}
 		if end == len(text) {
@@ -122,7 +139,7 @@ func markdownStructuredLineRanges(text string) []TextRange {
 }
 
 func markdownQuotedOutputRanges(text string) []TextRange {
-	pattern := regexp.MustCompile(`(?im)^\s*(?:\$\s*|(?:error|fatal|usage|exit status|stdout|stderr)\s*:)\S[^\r\n]*`)
+	pattern := regexp.MustCompile(`(?im)^\s*(?:\$\s*|(?:error|fatal|usage|exit status|stdout|stderr)\s*:\s*)\S[^\r\n]*`)
 	var ranges []TextRange
 	for _, match := range pattern.FindAllStringIndex(text, -1) {
 		ranges = append(ranges, TextRange{Start: match[0], End: match[1]})

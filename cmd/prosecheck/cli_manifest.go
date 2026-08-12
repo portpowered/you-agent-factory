@@ -62,12 +62,6 @@ func (e cliJSONError) Error() string {
 	return fmt.Sprintf("%s at byte %d", e.message, e.offset)
 }
 
-type cliManifestContext struct {
-	commandID string
-	inputID   string
-	jsonPath  string
-}
-
 type cliManifestExtraction struct {
 	spans    []Span
 	findings []Finding
@@ -75,7 +69,7 @@ type cliManifestExtraction struct {
 
 type cliManifestCollector struct {
 	doc      *cliJSONDocument
-	literals []string
+	policy   Policy
 	spans    []Span
 	findings []Finding
 }
@@ -116,10 +110,7 @@ func extractCLIManifest(sourcePath string, data []byte, policy Policy) cliManife
 		return cliManifestExtraction{findings: []Finding{cliManifestParseFinding(sourcePath, data, "", "/commands", "", commands.start, "JSON path /commands must be an object")}}
 	}
 
-	literals := append([]string(nil), cliManifestLiterals(document.root)...)
-	literals = append(literals, cliPolicyLiterals(policy)...)
-	literals = uniqueCLIStrings(literals)
-	collector := cliManifestCollector{doc: document, literals: literals}
+	collector := cliManifestCollector{doc: document, policy: policy}
 	for _, entry := range sortedCLIFields(commands) {
 		collector.visitCommand(entry)
 	}
@@ -599,23 +590,11 @@ func (c *cliManifestCollector) addStringSpan(node *cliJSONValue, start, end int,
 		Class:       class,
 		Text:        text,
 		Identity:    cliManifestIdentity(context.commandID, context.inputID, context.jsonPath),
-		Surfaces:    cliManifestSurfaceSelectors(),
-		Protected:   cliProtectedRanges(text, c.literals),
+		Surfaces:    append([]string(nil), context.surfaces...),
+		Protected:   cliProtectedRanges(text, context.literals),
 		positions:   positions,
 	}
 	c.spans = append(c.spans, span)
-}
-
-func cliManifestSurfaceSelectors() []string {
-	return []string{
-		surfaceCLIHelp,
-		surfaceCustomerDocumentation,
-		surfaceCLIReferenceDocumentation,
-		surfaceCLIAndCustomerDocumentation,
-		surfaceCLIAndAPIDocumentation,
-		surfaceProviderCLIAndAPIDoc,
-		surfaceModelCLIAndCustomerDoc,
-	}
 }
 
 func (c *cliManifestCollector) stringField(parent *cliJSONValue, key, path string, context cliManifestContext, required bool) (string, bool, *cliJSONValue) {
@@ -653,7 +632,13 @@ func (c *cliManifestCollector) visitCommand(entry cliJSONField) {
 	if !hasID || strings.TrimSpace(commandID) == "" {
 		commandID = entry.key
 	}
-	context := cliManifestContext{commandID: commandID, inputID: commandID, jsonPath: commandPath}
+	context := cliManifestContext{
+		commandID: commandID,
+		inputID:   commandID,
+		jsonPath:  commandPath,
+		surfaces:  cliManifestSurfaceSelectors(c.policy, commandID),
+		literals:  c.commandLiterals(entry.value),
+	}
 	c.visitGuidanceFields(entry.value, context)
 	c.visitLifecycle(entry.value, context)
 	if visibility.hidden {
@@ -737,6 +722,8 @@ func (c *cliManifestCollector) visitDocumentationField(copy *cliJSONValue, conte
 			commandID: context.commandID,
 			inputID:   inputID,
 			jsonPath:  valuePath,
+			surfaces:  context.surfaces,
+			literals:  context.literals,
 		})
 	}
 }
@@ -757,7 +744,7 @@ func (c *cliManifestCollector) visitDocumentationExamples(documentation *cliJSON
 			c.issue(example, contextWithPath(context, path), fmt.Sprintf("JSON path %s must be a string", path))
 			continue
 		}
-		c.addExampleComments(example, context.commandID, context.commandID+".documentation.example."+strconv.Itoa(index), path)
+		c.addExampleComments(example, context, context.commandID+".documentation.example."+strconv.Itoa(index), path)
 	}
 }
 
@@ -783,10 +770,10 @@ func (c *cliManifestCollector) visitUsage(command *cliJSONValue, context cliMani
 		c.issue(example, contextWithPath(context, examplePath), fmt.Sprintf("JSON path %s must be a string", examplePath))
 		return
 	}
-	c.addExampleComments(example, context.commandID, context.commandID+".usage.example", examplePath)
+	c.addExampleComments(example, context, context.commandID+".usage.example", examplePath)
 }
 
-func (c *cliManifestCollector) addExampleComments(node *cliJSONValue, commandID, inputID, path string) {
+func (c *cliManifestCollector) addExampleComments(node *cliJSONValue, context cliManifestContext, inputID, path string) {
 	value := node.stringValue
 	for lineStart := 0; lineStart < len(value); {
 		lineEnd := strings.IndexByte(value[lineStart:], '\n')
@@ -808,11 +795,10 @@ func (c *cliManifestCollector) addExampleComments(node *cliJSONValue, commandID,
 			if contentStart < contentEnd && value[contentStart] == ' ' {
 				contentStart++
 			}
-			c.addStringSpan(node, contentStart, contentEnd, ContentClassProcedural, cliManifestContext{
-				commandID: commandID,
-				inputID:   inputID,
-				jsonPath:  path,
-			})
+			spanContext := context
+			spanContext.inputID = inputID
+			spanContext.jsonPath = path
+			c.addStringSpan(node, contentStart, contentEnd, ContentClassProcedural, spanContext)
 		}
 		if lineEnd == len(value) {
 			break
@@ -841,13 +827,21 @@ func (c *cliManifestCollector) visitInputRecords(command *cliJSONValue, context 
 		if !hasID || strings.TrimSpace(inputID) == "" {
 			inputID = entry.key
 		}
-		inputContext := cliManifestContext{commandID: context.commandID, inputID: inputID, jsonPath: path}
+		inputContext := cliManifestContext{
+			commandID: context.commandID,
+			inputID:   inputID,
+			jsonPath:  path,
+			surfaces:  context.surfaces,
+			literals:  c.inputLiterals(context, entry.value),
+		}
 		visibility := c.recordVisibility(entry.value, path, inputContext)
 		if usage, present, usageNode := c.stringField(entry.value, "usage", cliJSONPointerFromPath(path, "usage"), inputContext, false); present && !visibility.hidden {
 			c.addStringSpan(usageNode, 0, len(usage), ContentClassProcedural, cliManifestContext{
 				commandID: context.commandID,
 				inputID:   inputID,
 				jsonPath:  cliJSONPointerFromPath(path, "usage"),
+				surfaces:  inputContext.surfaces,
+				literals:  inputContext.literals,
 			})
 		}
 		c.visitGuidanceFields(entry.value, inputContext)
@@ -866,6 +860,8 @@ func (c *cliManifestCollector) visitGuidanceFields(record *cliJSONValue, context
 			commandID: context.commandID,
 			inputID:   context.inputID + "." + key,
 			jsonPath:  path,
+			surfaces:  context.surfaces,
+			literals:  context.literals,
 		})
 	}
 }
@@ -888,6 +884,8 @@ func (c *cliManifestCollector) visitLifecycle(record *cliJSONValue, context cliM
 				commandID: context.commandID,
 				inputID:   context.inputID + "." + key,
 				jsonPath:  valuePath,
+				surfaces:  context.surfaces,
+				literals:  context.literals,
 			})
 		}
 	}
@@ -910,6 +908,8 @@ func (c *cliManifestCollector) visitLifecycle(record *cliJSONValue, context cliM
 			commandID: context.commandID,
 			inputID:   context.inputID + ".successor",
 			jsonPath:  guidancePath,
+			surfaces:  context.surfaces,
+			literals:  context.literals,
 		})
 	}
 }
@@ -926,73 +926,4 @@ func cliJSONPointerFromPath(path string, parts ...string) string {
 		return cliJSONPointer(parts...)
 	}
 	return path + cliJSONPointer(parts...)
-}
-
-func cliManifestLiterals(root *cliJSONValue) []string {
-	var literals []string
-	var visit func(*cliJSONValue, string)
-	visit = func(value *cliJSONValue, key string) {
-		if value == nil {
-			return
-		}
-		switch value.kind {
-		case cliJSONString:
-			if cliLiteralField(key) {
-				literals = append(literals, value.stringValue)
-			}
-		case cliJSONObject:
-			for _, field := range value.fields {
-				visit(field.value, field.key)
-			}
-		case cliJSONArray:
-			for _, item := range value.elements {
-				visit(item, key)
-			}
-		}
-	}
-	visit(root, "")
-	return uniqueCLIStrings(literals)
-}
-
-func cliLiteralField(key string) bool {
-	switch key {
-	case "id", "name", "path", "long", "shorthand", "aliases", "targetItemId", "operationId", "code", "default", "provider", "model", "providerName", "modelName", "event", "schema":
-		return true
-	default:
-		return false
-	}
-}
-
-func cliPolicyLiterals(policy Policy) []string {
-	var literals []string
-	for _, term := range policy.Terms {
-		if term.Category != "command" && term.Category != "protected-literal" {
-			continue
-		}
-		literals = append(literals, term.Canonical)
-		for _, form := range term.ApprovedForms {
-			literals = append(literals, form)
-		}
-	}
-	return uniqueCLIStrings(literals)
-}
-
-func uniqueCLIStrings(values []string) []string {
-	seen := make(map[string]bool, len(values))
-	result := make([]string, 0, len(values))
-	for _, value := range values {
-		value = strings.TrimSpace(value)
-		if value == "" || seen[value] {
-			continue
-		}
-		seen[value] = true
-		result = append(result, value)
-	}
-	slices.SortStableFunc(result, func(left, right string) int {
-		if len(left) != len(right) {
-			return len(right) - len(left)
-		}
-		return strings.Compare(left, right)
-	})
-	return result
 }

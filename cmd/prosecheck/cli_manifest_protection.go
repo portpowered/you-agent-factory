@@ -40,9 +40,6 @@ func cliProtectedRanges(text string, literals []string) []TextRange {
 	ranges = append(ranges, cliStructuredLineRanges(text)...)
 	ranges = append(ranges, cliQuotedOutputRanges(text)...)
 	ranges = append(ranges, cliRegexRanges(text, cliQuotedTechnical)...)
-	for _, literal := range literals {
-		ranges = append(ranges, cliLiteralRanges(text, literal)...)
-	}
 	return mergeCLIRanges(ranges)
 }
 

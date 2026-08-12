@@ -454,6 +454,52 @@ func TestAnalyzeMarkdownDeclinesAmbiguousRegisterTermsOutsideTheirSurfaces(t *te
 	}
 }
 
+func TestMarkdownSurfaceContextKeepsProductTermsBounded(t *testing.T) {
+	policy := loadRepositoryPolicy(t)
+	internal := AnalyzeMarkdown("docs/architecture/ambiguous.md", []byte("Workers are things that can do work.\n"), policy)
+	for _, finding := range internal {
+		if finding.RuleID == RuleTermCase || finding.RuleID == RulePublicTerm {
+			t.Fatalf("internal architecture prose produced product terminology finding: %#v", finding)
+		}
+	}
+	reference := AnalyzeMarkdown("docs/reference/ambiguous.md", []byte("The model worker is described here.\n"), policy)
+	for _, finding := range reference {
+		if finding.RuleID == RuleTermCase || finding.RuleID == RulePublicTerm {
+			t.Fatalf("reference prose produced ambiguous product terminology finding: %#v", finding)
+		}
+	}
+	customer := AnalyzeMarkdown("docs/guide.md", []byte("the factory starts.\n"), policy)
+	if len(customer) != 1 || customer[0].RuleID != RuleTermCase || customer[0].Excerpt != "factory" {
+		t.Fatalf("customer prose lost positive product-term finding: %#v", customer)
+	}
+}
+
+func TestAnalyzeMarkdownProtectsRequiredTechnicalFixtureMatrix(t *testing.T) {
+	policy := loadRepositoryPolicy(t)
+	cases := []struct {
+		name      string
+		technical string
+	}{
+		{name: "shell operators", technical: "$ go test ./cmd/prosecheck && go vet ./cmd/prosecheck || exit 1"},
+		{name: "file and package paths", technical: "Read ./pkg/services/factory_runtime/internal/runner.go and github.com/portpowered/infinite-you/pkg/services."},
+		{name: "identifiers", technical: "Keep FactoryEvent and FACTORY_REQUEST_BATCH unchanged."},
+		{name: "schema and event literals", technical: "The FactoryResponseEvent schema carries the event payload."},
+		{name: "JSON contract example", technical: `{"event":"FactoryEvent","state":"active; doesn't stop"}`},
+		{name: "YAML contract example", technical: "state: active; message: doesn't stop"},
+		{name: "model and provider names", technical: "Use gpt-5 with OpenAI and anthropic."},
+		{name: "quoted external output", technical: `error: doesn't stop; external output`},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			content := testCase.technical + "\n\nThe service doesn't stop.\n"
+			findings := AnalyzeMarkdown("docs/technical-matrix.md", []byte(content), policy)
+			if len(findings) != 1 || findings[0].RuleID != RuleContraction || findings[0].Excerpt != "doesn't" || findings[0].StartLine != 3 {
+				t.Fatalf("technical fixture findings = %#v, want only adjacent prose contraction", findings)
+			}
+		})
+	}
+}
+
 func TestRunReadsExplicitInputsAndKeepsOutputStable(t *testing.T) {
 	root := t.TempDir()
 	standardPath, termsPath := repositoryPolicyPaths(t)

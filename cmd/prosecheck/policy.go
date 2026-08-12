@@ -74,13 +74,15 @@ type Term struct {
 }
 
 const (
-	surfaceCustomerDocumentation       = "customer documentation"
-	surfaceCLIHelp                     = "cli help"
-	surfaceCLIReferenceDocumentation   = "cli and reference documentation"
-	surfaceCLIAndCustomerDocumentation = "cli and customer documentation"
-	surfaceCLIAndAPIDocumentation      = "cli and api documentation"
-	surfaceProviderCLIAndAPIDoc        = "provider cli and api documentation"
-	surfaceModelCLIAndCustomerDoc      = "model cli and customer documentation"
+	surfaceCustomerDocumentation         = "customer documentation"
+	surfaceCLIHelp                       = "cli help"
+	surfaceCLIReferenceDocumentation     = "cli and reference documentation"
+	surfaceCLIAndCustomerDocumentation   = "cli and customer documentation"
+	surfaceCLIAndAPIDocumentation        = "cli and api documentation"
+	surfaceProviderCLIAndAPIDoc          = "provider cli and api documentation"
+	surfaceModelCLIAndCustomerDoc        = "model cli and customer documentation"
+	surfaceInternalArchitecture          = "explicitly internal architecture material"
+	surfaceImplementationRuntimePackages = "implementation-focused runtime packages"
 )
 
 // Policy is the canonical policy snapshot used by Analyze. It contains no

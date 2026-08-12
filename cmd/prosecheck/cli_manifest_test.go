@@ -96,6 +96,33 @@ const ambiguousCLIManifestFixture = `{
   }
 }`
 
+const scopedLiteralCLIManifestFixture = `{
+  "commands": {
+    "you.status": {
+      "id": "you.status",
+      "visibility": "visible",
+      "documentation": {
+        "documentation": {
+          "title": {"id": "you.status.title", "canonicalEnglish": "Status"},
+          "description": {"id": "you.status.description", "canonicalEnglish": "The active service is running before you place the file."}
+        }
+      }
+    },
+    "you.work": {
+      "id": "you.work",
+      "visibility": "visible",
+      "name": "work",
+      "documentation": {
+        "documentation": {
+          "title": {"id": "you.work.title", "canonicalEnglish": "work"},
+          "description": {"id": "you.work.description", "canonicalEnglish": "Inspect work before you submit the next item."}
+        }
+      },
+      "usage": {"example": "  # you work --help\n"}
+    }
+  }
+}`
+
 func TestAnalyzeCLIManifestExtractsVisibleFieldsAndLifecycleGuidance(t *testing.T) {
 	policy := loadRepositoryPolicy(t)
 	findings := AnalyzeCLIManifest(`.\contracts\cli\commands.json`, []byte(cliManifestFixture), policy)
@@ -184,6 +211,30 @@ func TestAnalyzeCLIManifestDeclinesAmbiguousRegisterTermsOutsideTheirSurfaces(t 
 	findings := AnalyzeCLIManifest("contracts/cli/commands.json", []byte(ambiguousCLIManifestFixture), policy)
 	if len(findings) != 0 {
 		t.Fatalf("ambiguous ordinary words produced terminology findings: %#v", findings)
+	}
+}
+
+func TestAnalyzeCLIManifestScopesLiteralsAndRetainsCommandSubjectTerms(t *testing.T) {
+	policy := loadRepositoryPolicy(t)
+	findings := AnalyzeCLIManifest("contracts/cli/commands.json", []byte(scopedLiteralCLIManifestFixture), policy)
+	var workFindings int
+	for _, finding := range findings {
+		if strings.Contains(finding.Identity, "command=you.status") {
+			if finding.RuleID == RuleTermCase || finding.RuleID == RulePublicTerm {
+				t.Fatalf("status prose produced ambiguous terminology finding: %#v", finding)
+			}
+		}
+		if strings.Contains(finding.Identity, "command=you.work") && finding.RuleID == RuleTermCase && finding.Excerpt == "work" {
+			workFindings++
+		}
+	}
+	if workFindings == 0 {
+		t.Fatalf("command subject lost product Work term finding: %#v", findings)
+	}
+	for _, finding := range findings {
+		if strings.Contains(finding.Identity, "you.work.usage.example") {
+			t.Fatalf("command example literal was analyzed as prose: %#v", finding)
+		}
 	}
 }
 
