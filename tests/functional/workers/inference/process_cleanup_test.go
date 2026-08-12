@@ -122,7 +122,6 @@ func TestProcessTreeHelper(t *testing.T) {
 		finishProcessCleanupHelper()
 		return
 	case "pid-sleep":
-		writeProcessCleanupPID(pidFile)
 		time.Sleep(30 * time.Second)
 		finishProcessCleanupHelper()
 		return
@@ -291,23 +290,29 @@ func spawnProcessCleanupChild(pidFile string) {
 		fmt.Fprintf(os.Stderr, "start child: %v\n", err)
 		os.Exit(2)
 	}
-
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		if _, err := os.Stat(pidFile); err == nil {
-			return
-		}
-		time.Sleep(25 * time.Millisecond)
+	if err := publishProcessCleanupPID(pidFile, child.Process.Pid); err != nil {
+		fmt.Fprintf(os.Stderr, "publish child pid file: %v\n", err)
+		_ = child.Process.Kill()
+		os.Exit(2)
 	}
-	fmt.Fprintln(os.Stderr, "child did not write pid file")
-	os.Exit(2)
 }
 
 func writeProcessCleanupPID(pidFile string) {
-	if err := os.WriteFile(pidFile, []byte(strconv.Itoa(os.Getpid())), 0o600); err != nil {
+	if err := publishProcessCleanupPID(pidFile, os.Getpid()); err != nil {
 		fmt.Fprintf(os.Stderr, "write pid file: %v\n", err)
 		os.Exit(2)
 	}
+}
+
+func publishProcessCleanupPID(pidFile string, pid int) error {
+	// Publish the complete PID atomically so the parent can use file existence
+	// as an authoritative readiness signal instead of observing an empty file
+	// between creation and write completion.
+	temporaryPIDFile := pidFile + ".tmp"
+	if err := os.WriteFile(temporaryPIDFile, []byte(strconv.Itoa(pid)), 0o600); err != nil {
+		return err
+	}
+	return os.Rename(temporaryPIDFile, pidFile)
 }
 
 func readProcessCleanupPID(t *testing.T, pidFile string) int {
