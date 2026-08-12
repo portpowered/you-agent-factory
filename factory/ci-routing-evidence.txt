@@ -1,0 +1,1 @@
+This isolated fixture verifies that factory-only changes are neutral to product verification.
