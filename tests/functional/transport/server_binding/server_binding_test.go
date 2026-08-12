@@ -12,7 +12,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -176,28 +175,22 @@ func TestBuiltExecutableServerInterruptExits130AndReleasesListener(t *testing.T)
 // treating the command as a successful server launch. Port 65535 is used so
 // the normal auto-port scan has no higher candidate to select.
 func TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput(t *testing.T) {
+	binaryPath := buildServerBindingBinary(t, t.Context(), testutil.MustRepoRoot(t))
+
 	busyListener, err := net.Listen("tcp4", "127.0.0.1:65535")
 	if err != nil {
 		t.Skipf("reserve terminal loopback port for deterministic bind failure: %v", err)
 	}
-	defer busyListener.Close()
-
-	repoRoot := testutil.MustRepoRoot(t)
-	binaryName := "you"
-	if runtime.GOOS == "windows" {
-		binaryName += ".exe"
-	}
-	binaryPath := filepath.Join(t.TempDir(), binaryName)
-	build := exec.CommandContext(t.Context(), "go", "build", "-o", binaryPath, "./cmd/factory")
-	build.Dir = repoRoot
-	if output, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build you CLI: %v\n%s", err, output)
-	}
+	defer func() {
+		if err := busyListener.Close(); err != nil {
+			t.Errorf("close blocking listener: %v", err)
+		}
+	}()
 
 	workingDirectory := t.TempDir()
 	writeCurrentFactory(t, workingDirectory)
 	homeDirectory := t.TempDir()
-	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), serverBindFailureProcessTimeout)
 	defer cancel()
 	command := exec.CommandContext(
 		ctx,
@@ -212,7 +205,14 @@ func TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput(t *t
 
 	err = command.Run()
 	if ctx.Err() != nil {
-		t.Fatalf("server bind-failure process timed out: %v; stdout=%q stderr=%q", ctx.Err(), stdout.String(), stderr.String())
+		processState := "unavailable"
+		if command.ProcessState != nil {
+			processState = command.ProcessState.String()
+		}
+		t.Fatalf(
+			"server bind-failure process timed out: %v; listener=%s listener_owned=%t process_state=%s stdout=%q stderr=%q",
+			ctx.Err(), busyListener.Addr().String(), true, processState, stdout.String(), stderr.String(),
+		)
 	}
 	var exitErr *exec.ExitError
 	if err == nil || !errors.As(err, &exitErr) {
