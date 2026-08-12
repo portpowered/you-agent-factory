@@ -383,7 +383,11 @@ func (b *continuationAdmissionBoundary) PublishWithAdmission(
 	admitted workers.WorkstationDispatchAdmissionFunc,
 	accept workers.WorkstationDispatchAcceptFunc,
 ) error {
-	if err := b.controlledBoundary.PublishWithAdmission(ctx, request, nil, accept); err != nil {
+	embeddedAdmission := admitted
+	if request.Execution.ResumeSession != nil {
+		embeddedAdmission = nil
+	}
+	if err := b.controlledBoundary.PublishWithAdmission(ctx, request, embeddedAdmission, accept); err != nil {
 		return err
 	}
 	if request.Execution.ResumeSession == nil || admitted == nil {

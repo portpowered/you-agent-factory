@@ -66,6 +66,7 @@ func TestProvideLocalWorkerSessionsBoundaryUsesProviderInvocationRoute(t *testin
 		localBoundaryProviderSessions{},
 		logging.NoopLogger{},
 		providerInvocationFactory,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("provideLocalWorkerSessionsBoundary() error = %v", err)
