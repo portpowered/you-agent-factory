@@ -80,6 +80,76 @@ func (s *Server) StartWorkerSession(w http.ResponseWriter, r *http.Request) {
 	s.workerSessionsHTTP.StartWorkerSession(w, r)
 }
 
+// ContinueWorkerSession forwards the source-addressed continuation operation
+// to the Worker Sessions owner handler.
+func (s *Server) ContinueWorkerSession(
+	w http.ResponseWriter,
+	r *http.Request,
+	workerSessionID factoryapi.WorkerSessionID,
+) {
+	if s.workerSessionsHTTP == nil {
+		s.writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
+		return
+	}
+	s.workerSessionsHTTP.ContinueWorkerSession(w, r, workerSessionID)
+}
+
+// ListWorkerSessions forwards the top-level Worker Session observation list.
+func (s *Server) ListWorkerSessions(
+	w http.ResponseWriter,
+	r *http.Request,
+	params factoryapi.ListWorkerSessionsParams,
+) {
+	if s.workerSessionsHTTP == nil {
+		s.writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
+		return
+	}
+	s.workerSessionsHTTP.ListWorkerSessions(w, r, params)
+}
+
+// GetWorkerSessionObservationByWorkerSessionId forwards the top-level
+// identity detail operation.
+func (s *Server) GetWorkerSessionObservationByWorkerSessionId(
+	w http.ResponseWriter,
+	r *http.Request,
+	workerSessionID factoryapi.WorkerSessionID,
+) {
+	if s.workerSessionsHTTP == nil {
+		s.writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
+		return
+	}
+	s.workerSessionsHTTP.GetWorkerSessionObservationByWorkerSessionId(w, r, workerSessionID)
+}
+
+// ReadWorkerSessionTranscriptByWorkerSessionId forwards top-level transcript
+// projection by stable Worker Session identity.
+func (s *Server) ReadWorkerSessionTranscriptByWorkerSessionId(
+	w http.ResponseWriter,
+	r *http.Request,
+	workerSessionID factoryapi.WorkerSessionID,
+) {
+	if s.workerSessionsHTTP == nil {
+		s.writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
+		return
+	}
+	s.workerSessionsHTTP.ReadWorkerSessionTranscriptByWorkerSessionId(w, r, workerSessionID)
+}
+
+// StreamWorkerSessionEventsByTopLevelWorkerSessionId forwards the top-level
+// identity event stream.
+func (s *Server) StreamWorkerSessionEventsByTopLevelWorkerSessionId(
+	w http.ResponseWriter,
+	r *http.Request,
+	workerSessionID factoryapi.WorkerSessionID,
+	params factoryapi.StreamWorkerSessionEventsByTopLevelWorkerSessionIdParams,
+) {
+	if s.workerSessionsHTTP == nil {
+		s.writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
+		return
+	}
+	s.workerSessionsHTTP.StreamWorkerSessionEventsByTopLevelWorkerSessionId(w, r, workerSessionID, params)
+}
+
 // ListWorkerSessionsBySessionId forwards the generated operation to the
 // Worker Sessions owner handler.
 func (s *Server) ListWorkerSessionsBySessionId(

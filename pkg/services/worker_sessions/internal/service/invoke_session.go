@@ -264,11 +264,12 @@ type observation struct {
 	workIDs   []string
 	turnID    string
 	attemptID string
+	direct    bool
 	startedAt time.Time
 	endedAt   *time.Time
 }
 
-func (r *registry) ensureObservation(id, attemptID, turnID string, workIDs []string) time.Time {
+func (r *registry) ensureObservation(id, attemptID, turnID string, workIDs []string, direct ...bool) time.Time {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if current, exists := r.observations[id]; exists {
@@ -279,6 +280,7 @@ func (r *registry) ensureObservation(id, attemptID, turnID string, workIDs []str
 		workIDs:   append([]string(nil), workIDs...),
 		turnID:    turnID,
 		attemptID: attemptID,
+		direct:    len(direct) > 0 && direct[0],
 		startedAt: startedAt,
 	}
 	return startedAt
@@ -536,13 +538,16 @@ func (r *registry) loadObservationState(id string) (workersessions.Session, *obs
 // lifecycle facts that never require the Provider Sessions root.
 func baseObservation(id string, session workersessions.Session, metadata *observation) workersessions.Observation {
 	projected := workersessions.Observation{
-		WorkerSessionID: id,
-		WorkIDs:         append([]string(nil), metadata.workIDs...),
-		TurnID:          metadata.turnID,
-		AttemptID:       metadata.attemptID,
-		State:           session.State,
-		DurationBasis:   workersessions.DurationBasisUnavailable,
-		Transcript:      workersessions.TranscriptAvailabilityUnavailable,
+		WorkerSessionID:            id,
+		PredecessorWorkerSessionID: session.PredecessorWorkerSessionID,
+		SuccessorWorkerSessionID:   session.SuccessorWorkerSessionID,
+		Direct:                     metadata.direct,
+		WorkIDs:                    append([]string(nil), metadata.workIDs...),
+		TurnID:                     metadata.turnID,
+		AttemptID:                  metadata.attemptID,
+		State:                      session.State,
+		DurationBasis:              workersessions.DurationBasisUnavailable,
+		Transcript:                 workersessions.TranscriptAvailabilityUnavailable,
 	}
 	if session.ProviderSessionAssociation != nil {
 		projected.ProviderSession = session.ProviderSessionAssociation.Reference.Clone()

@@ -26,6 +26,10 @@ type ListConfig struct {
 	Server       string
 	SessionID    string
 	WorkID       string
+	Scope        string
+	States       []string
+	MaxResults   int
+	NextToken    string
 	OutputFormat string
 	JSON         bool
 	Verbose      bool
@@ -46,6 +50,11 @@ func NewList(transport clihttp.Protocol) func(ListConfig) error {
 
 func list(config ListConfig) error {
 	config.WorkID = strings.TrimSpace(config.WorkID)
+	config.Scope = strings.TrimSpace(config.Scope)
+	config.NextToken = strings.TrimSpace(config.NextToken)
+	for index := range config.States {
+		config.States[index] = strings.TrimSpace(config.States[index])
+	}
 	jsonOutput := config.JSON || strings.EqualFold(strings.TrimSpace(config.OutputFormat), "json")
 	if err := validateListConfig(config); err != nil {
 		return emitCLIError(config, jsonOutput, err)
@@ -56,19 +65,21 @@ func list(config ListConfig) error {
 		return emitCLIError(config, jsonOutput, err)
 	}
 	jsonOutput = config.JSON || format == "json"
-	endpoint, err := workerSessionsEndpoint(config.Server, config.SessionID, config.WorkID)
+	endpoint, err := workerSessionsEndpoint(config.Server, config.SessionID, config.WorkID, config.Scope, config.States, config.MaxResults, config.NextToken)
 	if err != nil {
 		return err
 	}
 	clidiag.Printf(
 		config.Diagnostics,
 		config.Verbose || config.Debug,
-		"worker sessions list request endpointPath=%s endpoint=%s server=%s session=%s workID=%s",
+		"worker sessions list request endpointPath=%s endpoint=%s server=%s session=%s workID=%s scope=%s stateCount=%d",
 		endpoint.Path,
 		endpoint.String(),
 		config.Server,
 		clidiag.SessionLabel(config.SessionID),
 		config.WorkID,
+		config.Scope,
+		len(config.States),
 	)
 
 	var result factoryapi.ListWorkerSessionsResponse
@@ -92,7 +103,7 @@ func list(config ListConfig) error {
 	}
 	defer response.HTTP.Body.Close()
 	if response.HTTP.StatusCode != http.StatusOK {
-		return emitCLIError(config, jsonOutput, workerSessionsHTTPError(response.HTTP, response.HTTP.StatusCode))
+		return emitCLIError(config, jsonOutput, workerSessionsHTTPError(response.HTTP, response.HTTP.StatusCode, strings.TrimSpace(config.WorkID) == ""))
 	}
 	if result.Sessions == nil {
 		result.Sessions = []factoryapi.WorkerSessionObservation{}
@@ -122,21 +133,40 @@ func validateListConfig(config ListConfig) error {
 	if config.HTTP == nil {
 		return fmt.Errorf("CLI HTTP protocol is required")
 	}
-	if strings.TrimSpace(config.WorkID) == "" {
-		return newCLIError("WORK_ID_REQUIRED", "--work-id is required", nil)
+	if config.MaxResults < 0 {
+		return newCLIError("MAX_RESULTS_INVALID", "--max-results must not be negative", nil)
+	}
+	if config.Scope != "" && config.Scope != "direct" && config.Scope != "factory" && config.Scope != "all" {
+		return newCLIError("WORKER_SESSION_SCOPE_INVALID", fmt.Sprintf("unsupported --scope value %q; supported values are direct, factory, and all", config.Scope), nil)
+	}
+	for _, state := range config.States {
+		if !validWorkerSessionState(state) {
+			return newCLIError("WORKER_SESSION_STATE_INVALID", fmt.Sprintf("unsupported --state value %q", state), nil)
+		}
 	}
 	return nil
+}
+
+func validWorkerSessionState(state string) bool {
+	switch state {
+	case "RESERVED", "STARTING", "RUNNING", "PAUSED", "COMPLETED", "FAILED", "CANCELED", "TERMINATED":
+		return true
+	default:
+		return false
+	}
 }
 
 // listJSONResponse makes nullable observation fields explicit for CLI JSON.
 // The generated REST models use omitempty for optional references, while the
 // CLI contract promises stable keys whose unavailable values are null.
 type listJSONResponse struct {
-	Sessions []listJSONObservation `json:"sessions"`
+	Sessions          []listJSONObservation         `json:"sessions"`
+	PaginationContext *factoryapi.PaginationContext `json:"paginationContext,omitempty"`
 }
 
 type listJSONObservation struct {
 	AttemptID                string                                           `json:"attemptId"`
+	Direct                   bool                                             `json:"direct"`
 	DurationBasis            factoryapi.WorkerSessionObservationDurationBasis `json:"durationBasis"`
 	DurationMillis           *int64                                           `json:"durationMillis"`
 	EndedAt                  *time.Time                                       `json:"endedAt"`
@@ -167,10 +197,13 @@ func encodeListJSON(output io.Writer, result factoryapi.ListWorkerSessionsRespon
 	for _, session := range result.Sessions {
 		sessions = append(sessions, observationJSON(session))
 	}
-	return json.NewEncoder(output).Encode(listJSONResponse{Sessions: sessions})
+	return json.NewEncoder(output).Encode(listJSONResponse{Sessions: sessions, PaginationContext: result.PaginationContext})
 }
 
-func workerSessionsEndpoint(server, sessionID, workID string) (url.URL, error) {
+func workerSessionsEndpoint(server, sessionID, workID, scope string, states []string, maxResults int, nextToken string) (url.URL, error) {
+	if strings.TrimSpace(workID) == "" {
+		return topLevelWorkerSessionsEndpoint(server, scope, states, maxResults, nextToken)
+	}
 	endpointURL, err := cliserver.RequestURL(server, sessionpath.WorkerSessionsCollectionPath(sessionID))
 	if err != nil {
 		return url.URL{}, err
@@ -181,6 +214,32 @@ func workerSessionsEndpoint(server, sessionID, workID string) (url.URL, error) {
 	}
 	query := endpoint.Query()
 	query.Set("workId", workID)
+	endpoint.RawQuery = query.Encode()
+	return *endpoint, nil
+}
+
+func topLevelWorkerSessionsEndpoint(server, scope string, states []string, maxResults int, nextToken string) (url.URL, error) {
+	endpointURL, err := cliserver.RequestURL(server, sessionpath.TopLevelWorkerSessionsCollectionPath())
+	if err != nil {
+		return url.URL{}, err
+	}
+	endpoint, err := url.Parse(endpointURL)
+	if err != nil {
+		return url.URL{}, fmt.Errorf("parse top-level Worker Sessions list endpoint: %w", err)
+	}
+	query := endpoint.Query()
+	if scope != "" {
+		query.Set("scope", scope)
+	}
+	for _, state := range states {
+		query.Add("state", state)
+	}
+	if maxResults > 0 {
+		query.Set("maxResults", strconv.Itoa(maxResults))
+	}
+	if nextToken != "" {
+		query.Set("nextToken", nextToken)
+	}
 	endpoint.RawQuery = query.Encode()
 	return *endpoint, nil
 }
@@ -278,11 +337,15 @@ func cliErrorMessage(err error) string {
 	return err.Error()
 }
 
-func workerSessionsHTTPError(response *http.Response, status int) error {
+func workerSessionsHTTPError(response *http.Response, status int, topLevel bool) error {
 	if apiError, ok := clihttp.DecodeAPIError(response); ok {
 		code := strings.TrimSpace(string(apiError.Code))
 		if status == http.StatusNotFound {
-			code = "WORK_NOT_FOUND"
+			if topLevel {
+				code = "WORKER_SESSION_NOT_FOUND"
+			} else {
+				code = "WORK_NOT_FOUND"
+			}
 		}
 		if code == "" {
 			code = "WORKER_SESSION_LIST_FAILED"
@@ -291,7 +354,11 @@ func workerSessionsHTTPError(response *http.Response, status int) error {
 	}
 	code := "WORKER_SESSION_LIST_FAILED"
 	if status == http.StatusNotFound {
-		code = "WORK_NOT_FOUND"
+		if topLevel {
+			code = "WORKER_SESSION_NOT_FOUND"
+		} else {
+			code = "WORK_NOT_FOUND"
+		}
 	}
 	return newCLIError(code, fmt.Sprintf("worker session list failed (%d)", status), nil)
 }
@@ -301,7 +368,7 @@ func renderList(output io.Writer, result factoryapi.ListWorkerSessionsResponse) 
 		_, err := fmt.Fprintln(output, "No worker sessions found.")
 		return err
 	}
-	if _, err := fmt.Fprintln(output, "PROVIDER\tKIND\tSESSION ID\tWORK ID\tATTEMPT\tSTATE\tTOKENS\tDURATION\tFAILURE"); err != nil {
+	if _, err := fmt.Fprintln(output, "DIRECT\tPROVIDER\tKIND\tSESSION ID\tWORK ID\tATTEMPT\tSTATE\tTOKENS\tDURATION\tFAILURE"); err != nil {
 		return err
 	}
 	for _, session := range result.Sessions {
@@ -333,7 +400,8 @@ func renderList(output io.Writer, result factoryapi.ListWorkerSessionsResponse) 
 		}
 		if _, err := fmt.Fprintf(
 			output,
-			"%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+			"%t\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+			session.Direct,
 			provider,
 			kind,
 			sessionID,

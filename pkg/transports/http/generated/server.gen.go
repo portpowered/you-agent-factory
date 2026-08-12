@@ -88,8 +88,12 @@ const (
 	ErrorResponseCodeSESSIONKINDUNSUPPORTED                       ErrorResponseCode = "SESSION_KIND_UNSUPPORTED"
 	ErrorResponseCodeSTALEFACTORYVERSION                          ErrorResponseCode = "STALE_FACTORY_VERSION"
 	ErrorResponseCodeWORKERSESSIONADMISSIONFAILED                 ErrorResponseCode = "WORKER_SESSION_ADMISSION_FAILED"
+	ErrorResponseCodeWORKERSESSIONCONTINUATIONADMISSIONFAILED     ErrorResponseCode = "WORKER_SESSION_CONTINUATION_ADMISSION_FAILED"
+	ErrorResponseCodeWORKERSESSIONCONTINUATIONCONFLICT            ErrorResponseCode = "WORKER_SESSION_CONTINUATION_CONFLICT"
+	ErrorResponseCodeWORKERSESSIONCONTINUATIONREQUESTIDCONFLICT   ErrorResponseCode = "WORKER_SESSION_CONTINUATION_REQUEST_ID_CONFLICT"
 	ErrorResponseCodeWORKERSESSIONEVENTTOPICUNAVAILABLE           ErrorResponseCode = "WORKER_SESSION_EVENT_TOPIC_UNAVAILABLE"
 	ErrorResponseCodeWORKERSESSIONNOTSTARTABLE                    ErrorResponseCode = "WORKER_SESSION_NOT_STARTABLE"
+	ErrorResponseCodeWORKERSESSIONPROVIDERCONTINUATIONINVALID     ErrorResponseCode = "WORKER_SESSION_PROVIDER_CONTINUATION_INVALID"
 	ErrorResponseCodeWORKERSESSIONSTARTOPENINGFAILED              ErrorResponseCode = "WORKER_SESSION_START_OPENING_FAILED"
 	ErrorResponseCodeWORKERSESSIONSTARTREQUESTIDCONFLICT          ErrorResponseCode = "WORKER_SESSION_START_REQUEST_ID_CONFLICT"
 	ErrorResponseCodeWORKERSESSIONSTREAMUNAVAILABLE               ErrorResponseCode = "WORKER_SESSION_STREAM_UNAVAILABLE"
@@ -564,10 +568,10 @@ const (
 
 // Defines values for FactoryStopKind.
 const (
-	BLOCKED     FactoryStopKind = "BLOCKED"
-	INTERRUPTED FactoryStopKind = "INTERRUPTED"
-	NEEDSHUMAN  FactoryStopKind = "NEEDS_HUMAN"
-	PAUSED      FactoryStopKind = "PAUSED"
+	FactoryStopKindBLOCKED     FactoryStopKind = "BLOCKED"
+	FactoryStopKindINTERRUPTED FactoryStopKind = "INTERRUPTED"
+	FactoryStopKindNEEDSHUMAN  FactoryStopKind = "NEEDS_HUMAN"
+	FactoryStopKindPAUSED      FactoryStopKind = "PAUSED"
 )
 
 // Defines values for FactoryValidationSeverity.
@@ -1200,6 +1204,18 @@ const (
 	WorkerModelProviderCodex       WorkerModelProvider = "CODEX"
 )
 
+// Defines values for WorkerSessionContinueResponseState.
+const (
+	WorkerSessionContinueResponseStateCanceled   WorkerSessionContinueResponseState = "CANCELED"
+	WorkerSessionContinueResponseStateCompleted  WorkerSessionContinueResponseState = "COMPLETED"
+	WorkerSessionContinueResponseStateFailed     WorkerSessionContinueResponseState = "FAILED"
+	WorkerSessionContinueResponseStatePaused     WorkerSessionContinueResponseState = "PAUSED"
+	WorkerSessionContinueResponseStateReserved   WorkerSessionContinueResponseState = "RESERVED"
+	WorkerSessionContinueResponseStateRunning    WorkerSessionContinueResponseState = "RUNNING"
+	WorkerSessionContinueResponseStateStarting   WorkerSessionContinueResponseState = "STARTING"
+	WorkerSessionContinueResponseStateTerminated WorkerSessionContinueResponseState = "TERMINATED"
+)
+
 // Defines values for WorkerSessionEventDelivery.
 const (
 	WorkerSessionEventDeliveryRecord         WorkerSessionEventDelivery = "RECORD"
@@ -1300,6 +1316,25 @@ const (
 // Defines values for ListWorkBySessionIdParamsSortBy.
 const (
 	ListWorkBySessionIdParamsSortByStateType ListWorkBySessionIdParamsSortBy = "state.type"
+)
+
+// Defines values for ListWorkerSessionsParamsScope.
+const (
+	ListWorkerSessionsParamsScopeAll     ListWorkerSessionsParamsScope = "all"
+	ListWorkerSessionsParamsScopeDirect  ListWorkerSessionsParamsScope = "direct"
+	ListWorkerSessionsParamsScopeFactory ListWorkerSessionsParamsScope = "factory"
+)
+
+// Defines values for ListWorkerSessionsParamsState.
+const (
+	ListWorkerSessionsParamsStateCANCELED   ListWorkerSessionsParamsState = "CANCELED"
+	ListWorkerSessionsParamsStateCOMPLETED  ListWorkerSessionsParamsState = "COMPLETED"
+	ListWorkerSessionsParamsStateFAILED     ListWorkerSessionsParamsState = "FAILED"
+	ListWorkerSessionsParamsStatePAUSED     ListWorkerSessionsParamsState = "PAUSED"
+	ListWorkerSessionsParamsStateRESERVED   ListWorkerSessionsParamsState = "RESERVED"
+	ListWorkerSessionsParamsStateRUNNING    ListWorkerSessionsParamsState = "RUNNING"
+	ListWorkerSessionsParamsStateSTARTING   ListWorkerSessionsParamsState = "STARTING"
+	ListWorkerSessionsParamsStateTERMINATED ListWorkerSessionsParamsState = "TERMINATED"
 )
 
 // AgentRunResponseEventPayload Response details captured after an AGENT_RUN workstation completes an agent loop. Final output stays on DispatchResponse; bounded agent-run diagnostics and transcript metadata stay on this agent-boundary event instead of being copied onto provider-session inspection surfaces.
@@ -5215,6 +5250,8 @@ type ListWorkResponse struct {
 
 // ListWorkerSessionsResponse defines model for ListWorkerSessionsResponse.
 type ListWorkerSessionsResponse struct {
+	PaginationContext *PaginationContext `json:"paginationContext,omitempty"`
+
 	// Sessions Deterministically ordered Worker Session observations correlated with the requested Work.
 	Sessions []WorkerSessionObservation `json:"sessions"`
 }
@@ -7610,6 +7647,43 @@ type WorkerModelProvider string
 // WorkerProvider Worker execution mechanism. Canonical values are ACP and SCRIPT_WRAP; extensible lowercase identities remain accepted for compatibility with existing factories.
 type WorkerProvider = string
 
+// WorkerSessionContinueRequest Idempotent continuation request for one terminal Worker Session. The server resolves and validates the source Provider Session association; callers may supply only the successor identity and follow-up input.
+type WorkerSessionContinueRequest struct {
+	// FollowUpInput Non-empty follow-up input delivered to the resumed Provider Session.
+	FollowUpInput string `json:"followUpInput"`
+
+	// RequestId Required caller idempotency key for this continuation.
+	RequestId string `json:"requestId"`
+
+	// SuccessorWorkerSessionId Distinct Worker Session identity to reserve for the successor.
+	SuccessorWorkerSessionId string `json:"successorWorkerSessionId"`
+}
+
+// WorkerSessionContinueResponse Admission acknowledgment for a Worker Session continuation. The response exposes the source-to-successor lineage needed to inspect or stream the successor without exposing provider selection inputs.
+type WorkerSessionContinueResponse struct {
+	// Accepted Always true for a 202 response.
+	Accepted bool `json:"accepted"`
+
+	// EventTopic Deterministic Events topic whose retained opening record is ready to read and subscribe.
+	EventTopic string `json:"eventTopic"`
+
+	// PredecessorWorkerSessionId Stable predecessor identity recorded on the successor; equal to sourceWorkerSessionId.
+	PredecessorWorkerSessionId string `json:"predecessorWorkerSessionId"`
+
+	// RequestId Caller idempotency key echoed for correlation.
+	RequestId string `json:"requestId"`
+
+	// SourceWorkerSessionId Stable terminal Worker Session identity used as the source.
+	SourceWorkerSessionId string                             `json:"sourceWorkerSessionId"`
+	State                 WorkerSessionContinueResponseState `json:"state"`
+
+	// SuccessorWorkerSessionId Stable Worker Session identity reserved for the successor.
+	SuccessorWorkerSessionId string `json:"successorWorkerSessionId"`
+}
+
+// WorkerSessionContinueResponseState defines model for WorkerSessionContinueResponse.State.
+type WorkerSessionContinueResponseState string
+
 // WorkerSessionEvent defines model for WorkerSessionEvent.
 type WorkerSessionEvent struct {
 	// Delivery Delivery outcome for one Worker Session stream frame. RECORD is a retained or live canonical event, TERMINAL marks the live terminal event, and TERMINAL_REPLAY marks the terminal event in an already-terminal replay. SOURCE_FAILURE is an explicit non-event outcome after the stream has opened.
@@ -7692,7 +7766,10 @@ type WorkerSessionFailure struct {
 // WorkerSessionObservation defines model for WorkerSessionObservation.
 type WorkerSessionObservation struct {
 	// AttemptId Stable attempt or dispatch identity.
-	AttemptId     string                                `json:"attemptId"`
+	AttemptId string `json:"attemptId"`
+
+	// Direct Whether this observation was admitted through the direct top-level Worker Session surface.
+	Direct        bool                                  `json:"direct"`
 	DurationBasis WorkerSessionObservationDurationBasis `json:"durationBasis"`
 
 	// DurationMillis Projected duration in milliseconds when authoritative timing exists.
@@ -8344,6 +8421,12 @@ type SaveCurrentFactoryBadRequest = ErrorResponse
 // SaveCurrentFactoryConflict defines model for SaveCurrentFactoryConflict.
 type SaveCurrentFactoryConflict = ErrorResponse
 
+// WorkerSessionContinuationConflict defines model for WorkerSessionContinuationConflict.
+type WorkerSessionContinuationConflict = ErrorResponse
+
+// WorkerSessionContinuationUnavailable defines model for WorkerSessionContinuationUnavailable.
+type WorkerSessionContinuationUnavailable = ErrorResponse
+
 // WorkerSessionStartConflict defines model for WorkerSessionStartConflict.
 type WorkerSessionStartConflict = ErrorResponse
 
@@ -8512,6 +8595,33 @@ type GetProviderSessionDetailsParams struct {
 	Id string `form:"id" json:"id"`
 }
 
+// ListWorkerSessionsParams defines parameters for ListWorkerSessions.
+type ListWorkerSessionsParams struct {
+	// Scope Origin scope to inspect. Direct is the safe default.
+	Scope *ListWorkerSessionsParamsScope `form:"scope,omitempty" json:"scope,omitempty"`
+
+	// State Optional repeated Worker Session lifecycle state filters.
+	State *[]ListWorkerSessionsParamsState `form:"state,omitempty" json:"state,omitempty"`
+
+	// MaxResults Optional positive page size. Omit to use the default page size; non-positive values fall back to the default after successful integer binding.
+	MaxResults *MaxResults `form:"maxResults,omitempty" json:"maxResults,omitempty"`
+
+	// NextToken Optional base64-encoded token ID cursor.
+	NextToken *NextToken `form:"nextToken,omitempty" json:"nextToken,omitempty"`
+}
+
+// ListWorkerSessionsParamsScope defines parameters for ListWorkerSessions.
+type ListWorkerSessionsParamsScope string
+
+// ListWorkerSessionsParamsState defines parameters for ListWorkerSessions.
+type ListWorkerSessionsParamsState string
+
+// StreamWorkerSessionEventsByTopLevelWorkerSessionIdParams defines parameters for StreamWorkerSessionEventsByTopLevelWorkerSessionId.
+type StreamWorkerSessionEventsByTopLevelWorkerSessionIdParams struct {
+	// ReplayOnly Drain retained history without registering a live follower.
+	ReplayOnly *bool `form:"replayOnly,omitempty" json:"replayOnly,omitempty"`
+}
+
 // PreviewFactoryJSONRequestBody defines body for PreviewFactory for application/json ContentType.
 type PreviewFactoryJSONRequestBody = FactoryPreviewRequest
 
@@ -8577,6 +8687,9 @@ type InvokeModelJSONRequestBody = ModelInvocationRequest
 
 // StartWorkerSessionJSONRequestBody defines body for StartWorkerSession for application/json ContentType.
 type StartWorkerSessionJSONRequestBody = WorkerSessionStartRequest
+
+// ContinueWorkerSessionJSONRequestBody defines body for ContinueWorkerSession for application/json ContentType.
+type ContinueWorkerSessionJSONRequestBody = WorkerSessionContinueRequest
 
 // Getter for additional properties for FactorySessionEffectivePolicy. Returns the specified
 // element and whether it was found
@@ -11877,9 +11990,24 @@ type ServerInterface interface {
 	// Get runtime status
 	// (GET /status)
 	GetStatus(w http.ResponseWriter, r *http.Request)
+	// List top-level Worker Session observations
+	// (GET /worker-sessions)
+	ListWorkerSessions(w http.ResponseWriter, r *http.Request, params ListWorkerSessionsParams)
 	// Start one directly resolved Worker Session
 	// (POST /worker-sessions)
 	StartWorkerSession(w http.ResponseWriter, r *http.Request)
+	// Show one top-level Worker Session observation
+	// (GET /worker-sessions/{worker_session_id})
+	GetWorkerSessionObservationByWorkerSessionId(w http.ResponseWriter, r *http.Request, workerSessionId WorkerSessionID)
+	// Continue one terminal Worker Session
+	// (POST /worker-sessions/{worker_session_id}/continue)
+	ContinueWorkerSession(w http.ResponseWriter, r *http.Request, workerSessionId WorkerSessionID)
+	// Stream top-level Worker Session events
+	// (GET /worker-sessions/{worker_session_id}/events)
+	StreamWorkerSessionEventsByTopLevelWorkerSessionId(w http.ResponseWriter, r *http.Request, workerSessionId WorkerSessionID, params StreamWorkerSessionEventsByTopLevelWorkerSessionIdParams)
+	// Read one top-level Worker Session transcript
+	// (GET /worker-sessions/{worker_session_id}/transcript)
+	ReadWorkerSessionTranscriptByWorkerSessionId(w http.ResponseWriter, r *http.Request, workerSessionId WorkerSessionID)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -13566,11 +13694,173 @@ func (siw *ServerInterfaceWrapper) GetStatus(w http.ResponseWriter, r *http.Requ
 	handler.ServeHTTP(w, r)
 }
 
+// ListWorkerSessions operation middleware
+func (siw *ServerInterfaceWrapper) ListWorkerSessions(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListWorkerSessionsParams
+
+	// ------------- Optional query parameter "scope" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "scope", r.URL.Query(), &params.Scope)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "scope", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "state" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "state", r.URL.Query(), &params.State)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "state", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "maxResults" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "maxResults", r.URL.Query(), &params.MaxResults)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "maxResults", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "nextToken" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "nextToken", r.URL.Query(), &params.NextToken)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "nextToken", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListWorkerSessions(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // StartWorkerSession operation middleware
 func (siw *ServerInterfaceWrapper) StartWorkerSession(w http.ResponseWriter, r *http.Request) {
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.StartWorkerSession(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetWorkerSessionObservationByWorkerSessionId operation middleware
+func (siw *ServerInterfaceWrapper) GetWorkerSessionObservationByWorkerSessionId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "worker_session_id" -------------
+	var workerSessionId WorkerSessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "worker_session_id", mux.Vars(r)["worker_session_id"], &workerSessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "worker_session_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetWorkerSessionObservationByWorkerSessionId(w, r, workerSessionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ContinueWorkerSession operation middleware
+func (siw *ServerInterfaceWrapper) ContinueWorkerSession(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "worker_session_id" -------------
+	var workerSessionId WorkerSessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "worker_session_id", mux.Vars(r)["worker_session_id"], &workerSessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "worker_session_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ContinueWorkerSession(w, r, workerSessionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// StreamWorkerSessionEventsByTopLevelWorkerSessionId operation middleware
+func (siw *ServerInterfaceWrapper) StreamWorkerSessionEventsByTopLevelWorkerSessionId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "worker_session_id" -------------
+	var workerSessionId WorkerSessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "worker_session_id", mux.Vars(r)["worker_session_id"], &workerSessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "worker_session_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params StreamWorkerSessionEventsByTopLevelWorkerSessionIdParams
+
+	// ------------- Optional query parameter "replayOnly" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "replayOnly", r.URL.Query(), &params.ReplayOnly)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "replayOnly", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.StreamWorkerSessionEventsByTopLevelWorkerSessionId(w, r, workerSessionId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ReadWorkerSessionTranscriptByWorkerSessionId operation middleware
+func (siw *ServerInterfaceWrapper) ReadWorkerSessionTranscriptByWorkerSessionId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "worker_session_id" -------------
+	var workerSessionId WorkerSessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "worker_session_id", mux.Vars(r)["worker_session_id"], &workerSessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "worker_session_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ReadWorkerSessionTranscriptByWorkerSessionId(w, r, workerSessionId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -13793,7 +14083,17 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 
 	r.HandleFunc(options.BaseURL+"/status", wrapper.GetStatus).Methods("GET")
 
+	r.HandleFunc(options.BaseURL+"/worker-sessions", wrapper.ListWorkerSessions).Methods("GET")
+
 	r.HandleFunc(options.BaseURL+"/worker-sessions", wrapper.StartWorkerSession).Methods("POST")
+
+	r.HandleFunc(options.BaseURL+"/worker-sessions/{worker_session_id}", wrapper.GetWorkerSessionObservationByWorkerSessionId).Methods("GET")
+
+	r.HandleFunc(options.BaseURL+"/worker-sessions/{worker_session_id}/continue", wrapper.ContinueWorkerSession).Methods("POST")
+
+	r.HandleFunc(options.BaseURL+"/worker-sessions/{worker_session_id}/events", wrapper.StreamWorkerSessionEventsByTopLevelWorkerSessionId).Methods("GET")
+
+	r.HandleFunc(options.BaseURL+"/worker-sessions/{worker_session_id}/transcript", wrapper.ReadWorkerSessionTranscriptByWorkerSessionId).Methods("GET")
 
 	return r
 }

@@ -49,6 +49,35 @@ func TestReadJSONUsesTranscriptRouteAndPreservesNormalizedEntries(t *testing.T) 
 	assertTranscriptReadJSON(t, output.Bytes())
 }
 
+func TestReadByWorkerSessionIDUsesTopLevelTranscriptRoute(t *testing.T) {
+	var gotPath string
+	var gotQuery string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotQuery = r.URL.RawQuery
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(generated.WorkerSessionTranscriptResponse{
+			WorkerSessionId: "direct-1", AttemptId: "attempt-1", State: "COMPLETED",
+			ProviderSession: generated.WorkerSessionProviderSessionRef{Provider: "codex", Kind: "session_id", Id: "provider-1"},
+		})
+	}))
+	defer server.Close()
+
+	var output bytes.Buffer
+	err := NewRead(testHTTPProtocol(t))(ReadConfig{
+		Context: context.Background(), Server: server.URL, WorkerSessionID: "direct-1", OutputFormat: "json", Output: &output,
+	})
+	if err != nil {
+		t.Fatalf("Read() error = %v", err)
+	}
+	if gotPath != "/worker-sessions/direct-1/transcript" || gotQuery != "" {
+		t.Fatalf("request = path=%q query=%q, want top-level identity transcript route", gotPath, gotQuery)
+	}
+	if !strings.Contains(output.String(), `"workerSessionId":"direct-1"`) {
+		t.Fatalf("output = %q, want transcript identity", output.String())
+	}
+}
+
 func assertTranscriptReadRequest(t *testing.T, path string, query map[string]string) {
 	t.Helper()
 	if path != "/factory-sessions/session-1/worker-sessions/transcript" || query["provider"] != "codex" || query["kind"] != "session_id" || query["id"] != "provider-session-1" {

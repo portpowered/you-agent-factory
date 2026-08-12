@@ -99,7 +99,7 @@ func TestProvideApplicationProcessLifecycleSharesTheExactEventsInstance(t *testi
 		t.Fatalf("provideEventsService() error = %v", err)
 	}
 
-	lifecycle, err := provideApplicationProcessLifecycle(providersService, eventsService, nil)
+	lifecycle, err := provideApplicationProcessLifecycle(providersService, eventsService, nil, &localWorkerSessionsBoundary{})
 	if err != nil {
 		t.Fatalf("provideApplicationProcessLifecycle() error = %v", err)
 	}
@@ -130,7 +130,7 @@ func TestProvideApplicationProcessLifecycleRequiresEventsLifecycle(t *testing.T)
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}
 
-	if _, err := provideApplicationProcessLifecycle(providersService, staticEventsServiceWithoutLifecycle{}, nil); err == nil {
+	if _, err := provideApplicationProcessLifecycle(providersService, staticEventsServiceWithoutLifecycle{}, nil, &localWorkerSessionsBoundary{}); err == nil {
 		t.Fatal("provideApplicationProcessLifecycle() error = nil, want a diagnostic when the Events service does not expose a Close(context.Context) error shutdown method")
 	}
 }

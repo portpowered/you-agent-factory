@@ -553,6 +553,93 @@ func TestWorkerSessionsListCommandMapsManifestInputsToOperation(t *testing.T) {
 	}
 }
 
+func TestWorkerSessionsInvokeCommandMapsManifestInputsToOperation(t *testing.T) {
+	var got workersessionscli.InvokeConfig
+	factory := withTestInjectedPlatformRoles(CommandFactory{
+		InvokeWorkerSession: func(config workersessionscli.InvokeConfig) error {
+			got = config
+			return nil
+		},
+	})
+	root := factory.NewCommand(nil, nil, nil)
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{
+		"--json", "--server", "http://factory.test:7437",
+		"worker-sessions", "invoke", "--request-id", "request-1", "--worker-session-id", "session-1",
+		"--dispatch-id", "dispatch-1", "--workstation", "coding", "--provider", "codex",
+		"--model", "model-1", "--user-message", "hello", "--async", "--output", "json", "follow-up", "now",
+	})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute worker-sessions invoke: %v", err)
+	}
+	assertWorkerSessionsInvokeConfig(t, got)
+}
+
+func TestWorkerSessionsContinueCommandMapsManifestInputsToOperation(t *testing.T) {
+	var got workersessionscli.ContinueConfig
+	factory := withTestInjectedPlatformRoles(CommandFactory{
+		ContinueWorkerSession: func(config workersessionscli.ContinueConfig) error {
+			got = config
+			return nil
+		},
+	})
+	root := factory.NewCommand(nil, nil, nil)
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{
+		"--json", "--server", "http://factory.test:7437",
+		"worker-sessions", "continue", "source-1", "--request-id", "request-1",
+		"--successor-worker-session-id", "successor-1", "--user-message", "hello",
+		"--async", "--output", "json", "follow", "up",
+	})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute worker-sessions continue: %v", err)
+	}
+	if got.SourceWorkerSessionID != "source-1" || got.RequestID != "request-1" ||
+		got.SuccessorWorkerSessionID != "successor-1" || got.FollowUpInput != "hello" ||
+		got.Server != "http://factory.test:7437" || got.Remote || !got.Async || got.OutputFormat != "json" || !got.JSON {
+		t.Fatalf("continue config = %#v, want manifest values", got)
+	}
+	if len(got.Prompt) != 2 || got.Prompt[0] != "follow" || got.Prompt[1] != "up" {
+		t.Fatalf("continue prompt = %#v, want positional follow-up input", got.Prompt)
+	}
+}
+
+func assertWorkerSessionsInvokeConfig(t *testing.T, got workersessionscli.InvokeConfig) {
+	t.Helper()
+	checks := map[string]bool{
+		"local placement":   !got.Remote,
+		"server":            got.Server == "http://factory.test:7437",
+		"request ID":        got.RequestID == "request-1",
+		"Worker Session ID": got.WorkerSessionID == "session-1",
+		"dispatch ID":       got.DispatchID == "dispatch-1",
+		"workstation":       got.WorkstationName == "coding",
+		"provider":          got.Provider == "codex",
+		"model":             got.Model == "model-1",
+		"user message":      got.UserMessage == "hello",
+		"async":             got.Async,
+		"output format":     got.OutputFormat == "json",
+		"JSON output":       got.JSON,
+	}
+	for name, ok := range checks {
+		if !ok {
+			t.Errorf("invoke config %s is incorrect: %#v", name, got)
+		}
+	}
+	wantPrompt := []string{"follow-up", "now"}
+	if len(got.Prompt) != len(wantPrompt) {
+		t.Fatalf("invoke prompt = %#v, want positional prompt %#v", got.Prompt, wantPrompt)
+	}
+	for index, want := range wantPrompt {
+		if got.Prompt[index] != want {
+			t.Errorf("invoke prompt[%d] = %q, want %q", index, got.Prompt[index], want)
+		}
+	}
+}
+
 func TestWorkerSessionsShowCommandMapsManifestInputsToOperation(t *testing.T) {
 	var got workersessionscli.ShowConfig
 	factory := withTestInjectedPlatformRoles(CommandFactory{

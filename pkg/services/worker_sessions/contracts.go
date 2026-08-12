@@ -56,9 +56,21 @@ type Service interface {
 	// provider-neutral histories inspectable when no Provider Session exists.
 	GetObservationByWorkerSessionID(ctx context.Context, req GetObservationByWorkerSessionIDRequest) (Observation, error)
 
+	// ListWorkerSessionObservations returns detached observations through the
+	// top-level Worker Session identity surface. The zero Scope selects direct
+	// sessions; callers must explicitly select All to include Factory-originated
+	// sessions. Results are sorted by Worker Session ID and use a bounded opaque
+	// cursor.
+	ListWorkerSessionObservations(ctx context.Context, req ListWorkerSessionObservationsRequest) (ListWorkerSessionObservationsResult, error)
+
 	// ReadTranscript returns the normalized Provider Sessions transcript for one
 	// terminal Worker Session identified by its exact Provider Session reference.
 	ReadTranscript(ctx context.Context, req ReadTranscriptRequest) (ReadTranscriptResult, error)
+
+	// ReadTranscriptByWorkerSessionID resolves the exact Provider Session
+	// association recorded by Worker Sessions before projecting the normalized
+	// transcript. Callers never supply a provider/kind/id tuple.
+	ReadTranscriptByWorkerSessionID(ctx context.Context, req ReadTranscriptByWorkerSessionIDRequest) (ReadTranscriptResult, error)
 
 	// StreamObservations returns a cancellable retained-then-live stream over
 	// the canonical Worker Session Events topic for the exact Provider Session
@@ -112,6 +124,15 @@ type Service interface {
 	// canceled; Cancel and Terminate are the explicit control paths for an
 	// admitted execution.
 	Start(ctx context.Context, req StartRequest) (StartResult, error)
+
+	// Continue validates req, atomically reserves one distinct successor Worker
+	// Session from the terminal source snapshot, and starts that successor
+	// under server-owned supervision. Worker Sessions owns source validation,
+	// lineage, idempotency, and admission; the resolved Workers execution is
+	// cloned from the source supervision and carries the source's exact
+	// Providers-owned SessionRef as ResumeSession. Providers.Continue remains
+	// the only provider execution path after Workers accepts the dispatch.
+	Continue(ctx context.Context, req ContinueRequest) (ContinueResult, error)
 
 	// AssociateProviderSession records the exact Providers-owned SessionRef
 	// observed by one currently supervised Worker Session attempt. The caller
@@ -308,6 +329,63 @@ func (req StartRequest) Validate() error {
 // is never made synchronous by Start.
 type StartResult struct {
 	Session Session
+}
+
+// ContinueRequest asks Worker Sessions to create one successor from a
+// terminal source Worker Session. The source's exact provider association is
+// read from registry-owned state; callers cannot supply or replace it.
+// SuccessorWorkerSessionID is caller-selected so the newly reserved identity
+// is visible before provider execution begins and can never be confused with
+// the source identity.
+type ContinueRequest struct {
+	RequestID                string
+	SourceWorkerSessionID    string
+	SuccessorWorkerSessionID string
+	FollowUpInput            string
+}
+
+// Normalize returns the immutable request tuple used for validation and
+// idempotent replay. User input is preserved byte-for-byte after the required
+// non-empty check; only identity fields discard surrounding whitespace.
+func (req ContinueRequest) Normalize() ContinueRequest {
+	req.RequestID = strings.TrimSpace(req.RequestID)
+	req.SourceWorkerSessionID = strings.TrimSpace(req.SourceWorkerSessionID)
+	req.SuccessorWorkerSessionID = strings.TrimSpace(req.SuccessorWorkerSessionID)
+	return req
+}
+
+// Validate reports whether req carries all continuation identities and a
+// non-empty follow-up message. Validation is pure and does not inspect or
+// mutate Worker Sessions state.
+func (req ContinueRequest) Validate() error {
+	normalized := req.Normalize()
+	if normalized.RequestID == "" {
+		return ErrInvalidContinuationRequestID
+	}
+	if !validSessionID(normalized.SourceWorkerSessionID) || !validSessionID(normalized.SuccessorWorkerSessionID) ||
+		normalized.SourceWorkerSessionID == normalized.SuccessorWorkerSessionID {
+		return ErrInvalidContinuationLineage
+	}
+	if strings.TrimSpace(normalized.FollowUpInput) == "" {
+		return ErrInvalidContinuationInput
+	}
+	return nil
+}
+
+// ContinueResult is the detached successor snapshot returned once the
+// continuation reaches Workers admission. A pre-admission failure returns a
+// terminal successor snapshot together with ErrContinuationNotAccepted.
+type ContinueResult struct {
+	RequestID                string
+	SourceWorkerSessionID    string
+	SuccessorWorkerSessionID string
+	Session                  Session
+}
+
+// Clone returns a detached continuation result.
+func (result ContinueResult) Clone() ContinueResult {
+	result.Session = result.Session.Clone()
+	return result
 }
 
 // RetryPolicy bounds the attempts one InvokeSession call may make.
@@ -551,6 +629,45 @@ var (
 	// ErrStartServerStopping reports an asynchronous start rejected because
 	// the owning server/process lifecycle is stopping or has stopped.
 	ErrStartServerStopping = errors.New("worker session: server is stopping")
+	// ErrInvalidContinuationRequestID reports a continuation without a stable
+	// caller-owned idempotency key.
+	ErrInvalidContinuationRequestID = errors.New("worker session: continuation request id is required")
+	// ErrInvalidContinuationLineage reports missing, equal, or malformed source
+	// and successor identities.
+	ErrInvalidContinuationLineage = errors.New("worker session: invalid continuation lineage")
+	// ErrInvalidContinuationInput reports a continuation without follow-up
+	// input.
+	ErrInvalidContinuationInput = errors.New("worker session: continuation input is required")
+	// ErrContinuationSourceNotFound reports a valid continuation whose source
+	// Worker Session is not registered.
+	ErrContinuationSourceNotFound = errors.New("worker session: continuation source not found")
+	// ErrContinuationSourceActive reports a source that has not reached an
+	// absorbing terminal state.
+	ErrContinuationSourceActive = errors.New("worker session: continuation source is active")
+	// ErrContinuationProviderSessionMissing reports a terminal source without
+	// the exact Provider Session association required for continuation.
+	ErrContinuationProviderSessionMissing = errors.New("worker session: continuation provider session is missing")
+	// ErrContinuationProviderSessionInvalid reports a stored association that
+	// cannot be trusted as an exact typed Providers reference.
+	ErrContinuationProviderSessionInvalid = errors.New("worker session: continuation provider session is invalid")
+	// ErrContinuationSourceConflict reports that the source already has a
+	// reserved successor, preventing lineage branching.
+	ErrContinuationSourceConflict = errors.New("worker session: continuation source conflict")
+	// ErrContinuationRequestIDConflict reports reuse of an idempotency key with
+	// a different immutable continuation tuple.
+	ErrContinuationRequestIDConflict = errors.New("worker session: continuation request id conflict")
+	// ErrContinuationSuccessorConflict reports a successor identity already
+	// reserved by another operation.
+	ErrContinuationSuccessorConflict = errors.New("worker session: continuation successor conflict")
+	// ErrContinuationExecutionUnavailable reports that the source no longer has
+	// the immutable resolved execution context needed to derive a successor.
+	ErrContinuationExecutionUnavailable = errors.New("worker session: continuation execution unavailable")
+	// ErrContinuationNotAccepted reports a successor that was reserved but did
+	// not reach the Workers admission callback.
+	ErrContinuationNotAccepted = errors.New("worker session: continuation not accepted")
+	// ErrContinuationServerStopping reports rejection while the owning process
+	// lifecycle is stopping.
+	ErrContinuationServerStopping = errors.New("worker session: continuation server is stopping")
 	// ErrPublicationNotOpen reports PublishRecord called for a session whose
 	// publication window is not open: the session was only ever reserved,
 	// its opening record has not yet committed, or its terminal record has

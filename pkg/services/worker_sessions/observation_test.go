@@ -2,6 +2,7 @@ package workersessions
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"testing"
@@ -52,6 +53,8 @@ func TestObservationRequests_ValidateIdentityAndBounds(t *testing.T) {
 		{"get invalid", (GetObservationRequest{}).Validate(), ErrInvalidObservationIdentity},
 		{"get by Worker Session valid", (GetObservationByWorkerSessionIDRequest{WorkerSessionID: "worker-1"}).Validate(), nil},
 		{"get by Worker Session invalid", (GetObservationByWorkerSessionIDRequest{}).Validate(), ErrInvalidSessionID},
+		{"read by Worker Session valid", (ReadTranscriptByWorkerSessionIDRequest{WorkerSessionID: "worker-1"}).Validate(), nil},
+		{"read by Worker Session invalid", (ReadTranscriptByWorkerSessionIDRequest{}).Validate(), ErrInvalidSessionID},
 		{"stream valid zero limit", (StreamObservationsRequest{ProviderSession: valid}).Validate(), nil},
 		{"stream invalid identity", (StreamObservationsRequest{Limit: 1}).Validate(), ErrInvalidObservationIdentity},
 		{"stream negative limit", (StreamObservationsRequest{ProviderSession: valid, Limit: -1}).Validate(), ErrInvalidObservationStreamLimit},
@@ -60,6 +63,15 @@ func TestObservationRequests_ValidateIdentityAndBounds(t *testing.T) {
 		{"stream by Worker Session negative limit", (StreamObservationsByWorkerSessionIDRequest{WorkerSessionID: "worker-1", Limit: -1}).Validate(), ErrInvalidObservationStreamLimit},
 		{"read valid", (ReadTranscriptRequest{ProviderSession: valid}).Validate(), nil},
 		{"read invalid", (ReadTranscriptRequest{}).Validate(), ErrInvalidObservationIdentity},
+		{"top-level list default", (ListWorkerSessionObservationsRequest{}).Validate(), nil},
+		{"top-level list direct", (ListWorkerSessionObservationsRequest{Scope: ObservationScopeDirect}).Validate(), nil},
+		{"top-level list factory", (ListWorkerSessionObservationsRequest{Scope: ObservationScopeFactory}).Validate(), nil},
+		{"top-level list all", (ListWorkerSessionObservationsRequest{Scope: ObservationScopeAll, States: []State{StateCompleted}, MaxResults: 1, NextToken: base64.StdEncoding.EncodeToString([]byte("worker-1"))}).Validate(), nil},
+		{"top-level list invalid scope", (ListWorkerSessionObservationsRequest{Scope: "other"}).Validate(), ErrInvalidObservationScope},
+		{"top-level list invalid state", (ListWorkerSessionObservationsRequest{States: []State{"INTERRUPTED"}}).Validate(), ErrInvalidState},
+		{"top-level list negative max", (ListWorkerSessionObservationsRequest{MaxResults: -1}).Validate(), ErrInvalidObservationPagination},
+		{"top-level list malformed cursor", (ListWorkerSessionObservationsRequest{NextToken: "%%%"}).Validate(), ErrInvalidObservationPagination},
+		{"top-level list blank cursor", (ListWorkerSessionObservationsRequest{NextToken: base64.StdEncoding.EncodeToString([]byte(" "))}).Validate(), ErrInvalidObservationPagination},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
@@ -73,6 +85,12 @@ func TestObservationRequests_ValidateIdentityAndBounds(t *testing.T) {
 				t.Fatalf("Validate() = %v, want %v", test.got, test.want)
 			}
 		})
+	}
+	if got := (ObservationScope("")).Normalized(); got != ObservationScopeDirect {
+		t.Fatalf("empty ObservationScope.Normalized() = %q, want %q", got, ObservationScopeDirect)
+	}
+	if got := ObservationScopeFactory.Normalized(); got != ObservationScopeFactory {
+		t.Fatalf("factory ObservationScope.Normalized() = %q, want unchanged factory scope", got)
 	}
 }
 
@@ -109,6 +127,16 @@ func TestObservation_ValidateLifecycleTimingAndFailure(t *testing.T) {
 			o.EndedAt = &ended
 			return o
 		}, ErrInvalidObservationDuration},
+		{"self predecessor lineage", func() Observation {
+			o := validActive
+			o.PredecessorWorkerSessionID = o.WorkerSessionID
+			return o
+		}, ErrInvalidContinuationLineage},
+		{"malformed successor lineage", func() Observation {
+			o := validActive
+			o.SuccessorWorkerSessionID = "   "
+			return o
+		}, ErrInvalidContinuationLineage},
 		{"valid failed cause", func() Observation { o := validObservationForTest(StateFailed); o.Failure = &failure; return o }, nil},
 		{"invalid failed cause", func() Observation {
 			o := validObservationForTest(StateFailed)

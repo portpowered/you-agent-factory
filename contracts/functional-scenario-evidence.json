@@ -103,9 +103,22 @@
       ]
     },
     {
+      "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestDirectWorkerSessionInvokeContinueLocalPreservesSessionAndLineage",
+      "stableIds": [
+        "cli/you.worker-sessions.continue",
+        "cli/you.worker-sessions.invoke"
+      ]
+    },
+    {
       "test": "tests/functional/workers/mock/live_capacity_test.go::TestLiveResourceCapacityIncreaseAdmitsWaitingMockDispatch",
       "stableIds": [
         "cli/you.session.resource.set"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/transports/http/worker_sessions_invoke_continue_test.go::TestWorkerSessionRemoteInvokeObserveContinueUsesServerAfterDisconnect",
+      "stableIds": [
+        "sse/streamWorkerSessionEventsByTopLevelWorkerSessionId"
       ]
     },
     {

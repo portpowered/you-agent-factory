@@ -111,6 +111,8 @@ type ListWorkerSessionsOperation = workersessionscli.ListOperation
 type ShowWorkerSessionsOperation = workersessionscli.ShowOperation
 type ReadWorkerSessionOperation = workersessionscli.ReadOperation
 type StreamWorkerSessionOperation = workersessionscli.StreamOperation
+type InvokeWorkerSessionOperation = workersessionscli.InvokeOperation
+type ContinueWorkerSessionOperation = workersessionscli.ContinueOperation
 type NamedFactoryRootsResolver func(homeDir, workingDir string) (interfaces.NamedFactoryRoots, error)
 
 // CommandOperations is the complete inert CLI operation graph assembled by Wire.
@@ -162,6 +164,9 @@ type CommandOperations struct {
 	ShowWorkerSession                 ShowWorkerSessionsOperation
 	ReadWorkerSession                 ReadWorkerSessionOperation
 	StreamWorkerSession               StreamWorkerSessionOperation
+	InvokeWorkerSession               InvokeWorkerSessionOperation
+	ContinueWorkerSession             ContinueWorkerSessionOperation
+	LocalWorkerSessions               workersessionscli.LocalInvokeBoundary
 	OpenRunSelection                  runcli.SelectionFactory
 	RemoteInvocation                  runcli.RemoteInvocationOperation
 	ResponsePresentation              factoryvisualization.ResponsePresentation
@@ -223,6 +228,9 @@ type CommandFactory struct {
 	ShowWorkerSession      workersessionscli.ShowOperation
 	ReadWorkerSession      workersessionscli.ReadOperation
 	StreamWorkerSession    workersessionscli.StreamOperation
+	InvokeWorkerSession    workersessionscli.InvokeOperation
+	ContinueWorkerSession  workersessionscli.ContinueOperation
+	LocalWorkerSessions    workersessionscli.LocalInvokeBoundary
 	openRunSelection       runcli.SelectionFactory
 	remoteInvocation       runcli.RemoteInvocationOperation
 	responsePresentation   factoryvisualization.ResponsePresentation
@@ -280,6 +288,9 @@ func NewCommandFactory(operations CommandOperations) CommandFactory {
 		ShowWorkerSession:                 operations.ShowWorkerSession,
 		ReadWorkerSession:                 operations.ReadWorkerSession,
 		StreamWorkerSession:               operations.StreamWorkerSession,
+		InvokeWorkerSession:               operations.InvokeWorkerSession,
+		ContinueWorkerSession:             operations.ContinueWorkerSession,
+		LocalWorkerSessions:               operations.LocalWorkerSessions,
 		openRunSelection:                  operations.OpenRunSelection,
 		remoteInvocation:                  operations.RemoteInvocation,
 		responsePresentation:              operations.ResponsePresentation,

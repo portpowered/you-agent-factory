@@ -11,13 +11,97 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    get?: never;
+    /**
+     * List top-level Worker Session observations
+     * @description Lists Worker Session observations through their stable top-level identity. The default scope is direct Worker Sessions admitted through this API; Factory-originated observations require an explicit scope. Results are deterministically ordered by Worker Session identity and use an opaque cursor for bounded pagination. State filters compose with the selected origin scope.
+     */
+    get: operations["listWorkerSessions"];
     put?: never;
     /**
      * Start one directly resolved Worker Session
      * @description Reserves and starts one already-resolved Worker execution. The server returns 202 only after the Worker Session identity is reserved, its opening record is retained-readable and subscribable on the returned event topic, and Workers has admitted the execution. The requestId is required for safe retries; replaying it with the same normalized start tuple returns the same Worker Session identity without another dispatch.
      */
     post: operations["startWorkerSession"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/worker-sessions/{worker_session_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Show one top-level Worker Session observation
+     * @description Returns one authoritative Worker Session observation by its stable Worker Session identity. Direct observations expose their origin and any recorded Provider Session association without requiring callers to reconstruct a provider tuple.
+     */
+    get: operations["getWorkerSessionObservationByWorkerSessionId"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/worker-sessions/{worker_session_id}/continue": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Continue one terminal Worker Session
+     * @description Reserves one distinct successor Worker Session for a terminal source Worker Session and resumes the exact Provider Session association recorded by the server. The requestId and successor identity are idempotent inputs. A 202 response is returned only after the successor opening event is readable/subscribable and Workers has admitted the continuation; terminal output remains asynchronous.
+     */
+    post: operations["continueWorkerSession"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/worker-sessions/{worker_session_id}/events": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Stream top-level Worker Session events
+     * @description Streams the retained and live Worker Session Events topic by stable Worker Session identity. The server resolves the exact topic from its own observation registry; callers do not supply Provider Session identity fields. Retained records are emitted first, followed by live records unless replayOnly is true.
+     */
+    get: operations["streamWorkerSessionEventsByTopLevelWorkerSessionId"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/worker-sessions/{worker_session_id}/transcript": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Read one top-level Worker Session transcript
+     * @description Returns the normalized transcript for a terminal Worker Session by its stable identity. Provider Session association and projection are resolved by the Worker Sessions service; callers cannot substitute a provider, kind, or provider-issued id tuple.
+     */
+    get: operations["readWorkerSessionTranscriptByWorkerSessionId"];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -1165,6 +1249,8 @@ export interface components {
     ListWorkerSessionsResponse: {
       /** @description Deterministically ordered Worker Session observations correlated with the requested Work. */
       sessions: components["schemas"]["WorkerSessionObservation"][];
+      /** @description Bounded pagination context for top-level Worker Session observation queries. */
+      paginationContext?: components["schemas"]["PaginationContext"];
     };
     /** @description One caller-owned idempotent request for a directly resolved Worker execution. Worker Sessions owns reservation, event visibility, supervision, and admission; it does not select a provider or runner from this payload. */
     WorkerSessionStartRequest: {
@@ -1187,6 +1273,32 @@ export interface components {
       accepted: boolean;
       /** @enum {string} */
       state: WorkerSessionStartResponseState;
+      /** @description Deterministic Events topic whose retained opening record is ready to read and subscribe. */
+      eventTopic: string;
+    };
+    /** @description Idempotent continuation request for one terminal Worker Session. The server resolves and validates the source Provider Session association; callers may supply only the successor identity and follow-up input. */
+    WorkerSessionContinueRequest: {
+      /** @description Required caller idempotency key for this continuation. */
+      requestId: string;
+      /** @description Distinct Worker Session identity to reserve for the successor. */
+      successorWorkerSessionId: string;
+      /** @description Non-empty follow-up input delivered to the resumed Provider Session. */
+      followUpInput: string;
+    };
+    /** @description Admission acknowledgment for a Worker Session continuation. The response exposes the source-to-successor lineage needed to inspect or stream the successor without exposing provider selection inputs. */
+    WorkerSessionContinueResponse: {
+      /** @description Caller idempotency key echoed for correlation. */
+      requestId: string;
+      /** @description Stable terminal Worker Session identity used as the source. */
+      sourceWorkerSessionId: string;
+      /** @description Stable Worker Session identity reserved for the successor. */
+      successorWorkerSessionId: string;
+      /** @description Stable predecessor identity recorded on the successor; equal to sourceWorkerSessionId. */
+      predecessorWorkerSessionId: string;
+      /** @description Always true for a 202 response. */
+      accepted: boolean;
+      /** @enum {string} */
+      state: WorkerSessionContinueResponseState;
       /** @description Deterministic Events topic whose retained opening record is ready to read and subscribe. */
       eventTopic: string;
     };
@@ -1274,6 +1386,8 @@ export interface components {
     WorkerSessionObservation: {
       /** @description Stable Worker Session identity. */
       workerSessionId: string;
+      /** @description Whether this observation was admitted through the direct top-level Worker Session surface. */
+      direct: boolean;
       providerSession?: components["schemas"]["WorkerSessionProviderSessionRef"];
       /** @description Whether a provider-session identity is available for this attempt. */
       providerSessionAvailable: boolean;
@@ -6625,6 +6739,24 @@ export interface components {
         "application/json": components["schemas"]["ErrorResponse"];
       };
     };
+    /** @description The Worker Session continuation conflicts with source lifecycle, lineage, idempotency, or Provider Session validation. */
+    WorkerSessionContinuationConflict: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
+    /** @description The Worker Session continuation could not cross its event-readiness or Workers-admission barrier. */
+    WorkerSessionContinuationUnavailable: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
     /** @description Lifecycle control request conflicts with current session state, another in-flight control, or a previously applied control requestId. */
     FactorySessionLifecycleControlConflict: {
       headers: {
@@ -6750,6 +6882,37 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+  listWorkerSessions: {
+    parameters: {
+      query?: {
+        /** @description Origin scope to inspect. Direct is the safe default. */
+        scope?: PathsWorkerSessionsGetParametersQueryScope;
+        /** @description Optional repeated Worker Session lifecycle state filters. */
+        state?: PathsWorkerSessionsGetParametersQueryState[];
+        /** @description Optional positive page size. Omit to use the default page size; non-positive values fall back to the default after successful integer binding. */
+        maxResults?: components["parameters"]["MaxResults"];
+        /** @description Optional base64-encoded token ID cursor. */
+        nextToken?: components["parameters"]["NextToken"];
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Deterministically ordered top-level Worker Session observations. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListWorkerSessionsResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      500: components["responses"]["InternalError"];
+    };
+  };
   startWorkerSession: {
     parameters: {
       query?: never;
@@ -6775,6 +6938,127 @@ export interface operations {
       400: components["responses"]["BadRequest"];
       409: components["responses"]["WorkerSessionStartConflict"];
       503: components["responses"]["WorkerSessionStartUnavailable"];
+    };
+  };
+  getWorkerSessionObservationByWorkerSessionId: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable Worker Session identity returned by the Worker Sessions list operation. */
+        worker_session_id: components["parameters"]["WorkerSessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description One top-level Worker Session observation. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkerSessionObservation"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  continueWorkerSession: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable Worker Session identity returned by the Worker Sessions list operation. */
+        worker_session_id: components["parameters"]["WorkerSessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["WorkerSessionContinueRequest"];
+      };
+    };
+    responses: {
+      /** @description The successor Worker Session was admitted and is observable. */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkerSessionContinueResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      409: components["responses"]["WorkerSessionContinuationConflict"];
+      503: components["responses"]["WorkerSessionContinuationUnavailable"];
+    };
+  };
+  streamWorkerSessionEventsByTopLevelWorkerSessionId: {
+    parameters: {
+      query?: {
+        /** @description Drain retained history without registering a live follower. */
+        replayOnly?: boolean;
+      };
+      header?: never;
+      path: {
+        /** @description Stable Worker Session identity returned by the Worker Sessions list operation. */
+        worker_session_id: components["parameters"]["WorkerSessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Retained then live Worker Session event frames. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "text/event-stream": string;
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  readWorkerSessionTranscriptByWorkerSessionId: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable Worker Session identity returned by the Worker Sessions list operation. */
+        worker_session_id: components["parameters"]["WorkerSessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Normalized transcript for a finished Worker Session. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkerSessionTranscriptResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      /** @description The Worker Session is still active and has no final transcript. */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      500: components["responses"]["InternalError"];
     };
   };
   listWorkBySessionId: {
@@ -8310,6 +8594,25 @@ export interface operations {
     };
   };
 }
+export const PathsWorkerSessionsGetParametersQueryScope = {
+  direct: "direct",
+  factory: "factory",
+  all: "all",
+} as const;
+export type PathsWorkerSessionsGetParametersQueryScope =
+  (typeof PathsWorkerSessionsGetParametersQueryScope)[keyof typeof PathsWorkerSessionsGetParametersQueryScope];
+export const PathsWorkerSessionsGetParametersQueryState = {
+  RESERVED: "RESERVED",
+  STARTING: "STARTING",
+  RUNNING: "RUNNING",
+  PAUSED: "PAUSED",
+  COMPLETED: "COMPLETED",
+  FAILED: "FAILED",
+  CANCELED: "CANCELED",
+  TERMINATED: "TERMINATED",
+} as const;
+export type PathsWorkerSessionsGetParametersQueryState =
+  (typeof PathsWorkerSessionsGetParametersQueryState)[keyof typeof PathsWorkerSessionsGetParametersQueryState];
 export const InvocationInputSourceKind = {
   // Text supplied in canonical WorkContent.
   InvocationInputSourceKindText: "text",
@@ -8392,6 +8695,18 @@ export const WorkerSessionStartResponseState = {
 } as const;
 export type WorkerSessionStartResponseState =
   (typeof WorkerSessionStartResponseState)[keyof typeof WorkerSessionStartResponseState];
+export const WorkerSessionContinueResponseState = {
+  WorkerSessionContinueResponseStateReserved: "RESERVED",
+  WorkerSessionContinueResponseStateStarting: "STARTING",
+  WorkerSessionContinueResponseStateRunning: "RUNNING",
+  WorkerSessionContinueResponseStatePaused: "PAUSED",
+  WorkerSessionContinueResponseStateCompleted: "COMPLETED",
+  WorkerSessionContinueResponseStateFailed: "FAILED",
+  WorkerSessionContinueResponseStateCanceled: "CANCELED",
+  WorkerSessionContinueResponseStateTerminated: "TERMINATED",
+} as const;
+export type WorkerSessionContinueResponseState =
+  (typeof WorkerSessionContinueResponseState)[keyof typeof WorkerSessionContinueResponseState];
 export const WorkerSessionObservationState = {
   WorkerSessionObservationStateReserved: "RESERVED",
   WorkerSessionObservationStateStarting: "STARTING",
@@ -8558,6 +8873,17 @@ export const ErrorResponseCode = {
     "WORKER_SESSION_EVENT_TOPIC_UNAVAILABLE",
   // Workers could not admit the Worker Session execution.
   WORKER_SESSION_ADMISSION_FAILED: "WORKER_SESSION_ADMISSION_FAILED",
+  // Worker Session continuation requestId was reused with different inputs.
+  WORKER_SESSION_CONTINUATION_REQUEST_ID_CONFLICT:
+    "WORKER_SESSION_CONTINUATION_REQUEST_ID_CONFLICT",
+  // The Worker Session continuation conflicts with source lifecycle or successor lineage.
+  WORKER_SESSION_CONTINUATION_CONFLICT: "WORKER_SESSION_CONTINUATION_CONFLICT",
+  // The recorded Provider Session cannot be resumed for this Worker Session continuation.
+  WORKER_SESSION_PROVIDER_CONTINUATION_INVALID:
+    "WORKER_SESSION_PROVIDER_CONTINUATION_INVALID",
+  // Workers could not admit the Worker Session continuation.
+  WORKER_SESSION_CONTINUATION_ADMISSION_FAILED:
+    "WORKER_SESSION_CONTINUATION_ADMISSION_FAILED",
   // Lifecycle control requestId was already applied with different control inputs.
   FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED:
     "FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED",

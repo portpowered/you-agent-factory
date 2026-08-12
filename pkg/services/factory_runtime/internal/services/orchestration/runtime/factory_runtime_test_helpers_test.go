@@ -172,6 +172,10 @@ func (s *fakeWorkerSessionsService) GetObservationByWorkerSessionID(context.Cont
 	return workersessions.Observation{}, nil
 }
 
+func (s *fakeWorkerSessionsService) ListWorkerSessionObservations(context.Context, workersessions.ListWorkerSessionObservationsRequest) (workersessions.ListWorkerSessionObservationsResult, error) {
+	return workersessions.ListWorkerSessionObservationsResult{}, nil
+}
+
 func (s *fakeWorkerSessionsService) StreamObservations(context.Context, workersessions.StreamObservationsRequest) (workersessions.ObservationSubscription, error) {
 	return workersessions.ObservationSubscription{}, nil
 }
@@ -181,6 +185,10 @@ func (s *fakeWorkerSessionsService) StreamObservationsByWorkerSessionID(context.
 }
 
 func (s *fakeWorkerSessionsService) ReadTranscript(context.Context, workersessions.ReadTranscriptRequest) (workersessions.ReadTranscriptResult, error) {
+	return workersessions.ReadTranscriptResult{}, nil
+}
+
+func (s *fakeWorkerSessionsService) ReadTranscriptByWorkerSessionID(context.Context, workersessions.ReadTranscriptByWorkerSessionIDRequest) (workersessions.ReadTranscriptResult, error) {
 	return workersessions.ReadTranscriptResult{}, nil
 }
 
@@ -204,6 +212,10 @@ func (s *fakeWorkerSessionsService) Start(ctx context.Context, req workersession
 		Retry:     req.Retry,
 	})
 	return workersessions.StartResult{Session: result.Session}, err
+}
+
+func (s *fakeWorkerSessionsService) Continue(context.Context, workersessions.ContinueRequest) (workersessions.ContinueResult, error) {
+	return workersessions.ContinueResult{}, nil
 }
 
 func (s *fakeWorkerSessionsService) PublishRecord(context.Context, workersessions.PublishRecordRequest) (workersessions.PublishRecordResult, error) {

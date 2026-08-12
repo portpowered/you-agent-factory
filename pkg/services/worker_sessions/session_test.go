@@ -250,6 +250,41 @@ func TestControlRequest_Validate(t *testing.T) {
 	}
 }
 
+func TestContinueRequest_ValidateAndNormalize(t *testing.T) {
+	valid := workersessions.ContinueRequest{
+		RequestID:                " request-1 ",
+		SourceWorkerSessionID:    " source-1 ",
+		SuccessorWorkerSessionID: " successor-1 ",
+		FollowUpInput:            "  follow-up  ",
+	}
+	if err := valid.Validate(); err != nil {
+		t.Fatalf("valid ContinueRequest.Validate() = %v, want nil", err)
+	}
+	normalized := valid.Normalize()
+	if normalized.RequestID != "request-1" || normalized.SourceWorkerSessionID != "source-1" || normalized.SuccessorWorkerSessionID != "successor-1" {
+		t.Fatalf("Normalize() identities = %#v, want trimmed identities", normalized)
+	}
+	if normalized.FollowUpInput != valid.FollowUpInput {
+		t.Fatalf("Normalize() changed follow-up input from %q to %q", valid.FollowUpInput, normalized.FollowUpInput)
+	}
+
+	for _, test := range []struct {
+		name string
+		req  workersessions.ContinueRequest
+		want error
+	}{
+		{name: "missing request ID", req: workersessions.ContinueRequest{SourceWorkerSessionID: "source", SuccessorWorkerSessionID: "successor", FollowUpInput: "input"}, want: workersessions.ErrInvalidContinuationRequestID},
+		{name: "same lineage identity", req: workersessions.ContinueRequest{RequestID: "request", SourceWorkerSessionID: "same", SuccessorWorkerSessionID: "same", FollowUpInput: "input"}, want: workersessions.ErrInvalidContinuationLineage},
+		{name: "missing input", req: workersessions.ContinueRequest{RequestID: "request", SourceWorkerSessionID: "source", SuccessorWorkerSessionID: "successor"}, want: workersessions.ErrInvalidContinuationInput},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if err := test.req.Validate(); !errors.Is(err, test.want) {
+				t.Fatalf("Validate() = %v, want %v", err, test.want)
+			}
+		})
+	}
+}
+
 func TestSession_Validate_RequiresAssociationToBelongToSession(t *testing.T) {
 	association := &workersessions.ProviderSessionAssociation{
 		WorkerSessionID: "worker-1",
@@ -280,5 +315,68 @@ func TestSession_Validate_RequiresAssociationToBelongToSession(t *testing.T) {
 	malformed.ProviderSessionAssociation = &malformedAssociation
 	if err := malformed.Validate(); !errors.Is(err, providers.ErrInvalidSessionRef) {
 		t.Fatalf("malformed association Validate() = %v, want Providers ErrInvalidSessionRef", err)
+	}
+}
+
+func TestSession_CloneAndContinueResultCloneDetachNestedState(t *testing.T) {
+	association := &workersessions.ProviderSessionAssociation{
+		WorkerSessionID: "worker-1",
+		DispatchID:      "dispatch-1",
+		AttemptID:       "dispatch-1",
+		Reference: providers.SessionRef{
+			Provider: providers.IDCodex,
+			Kind:     providers.SessionIDKind,
+			ID:       "provider-session-1",
+		},
+	}
+	original := workersessions.Session{
+		ID:                         "worker-1",
+		State:                      workersessions.StateFailed,
+		Result:                     &workersessions.TerminalResult{Outcome: workersessions.TerminalOutcomeFailed, Cause: &workersessions.FailureCause{Kind: workersessions.FailureCauseExecutorPanic, Detail: "failed"}},
+		ProviderSessionAssociation: association,
+		PredecessorWorkerSessionID: "previous-worker",
+	}
+	clone := original.Clone()
+	result := workersessions.ContinueResult{
+		RequestID:                "request-1",
+		SourceWorkerSessionID:    "worker-1",
+		SuccessorWorkerSessionID: "worker-2",
+		Session:                  original,
+	}.Clone()
+
+	clone.Result.Cause.Detail = "mutated clone"
+	clone.ProviderSessionAssociation.Reference.ID = "mutated-provider"
+	if original.Result.Cause.Detail != "failed" || original.ProviderSessionAssociation.Reference.ID != "provider-session-1" {
+		t.Fatalf("Session.Clone() shared nested state: original = %#v", original)
+	}
+	result.Session.Result.Cause.Detail = "mutated result clone"
+	result.Session.ProviderSessionAssociation.Reference.ID = "mutated-result-provider"
+	if original.Result.Cause.Detail != "failed" || original.ProviderSessionAssociation.Reference.ID != "provider-session-1" {
+		t.Fatalf("ContinueResult.Clone() shared nested state: original = %#v", original)
+	}
+}
+
+func TestSession_Validate_RejectsMalformedLineage(t *testing.T) {
+	for _, test := range []struct {
+		name        string
+		predecessor string
+		successor   string
+	}{
+		{name: "blank predecessor", predecessor: "   "},
+		{name: "self predecessor", predecessor: "worker-1"},
+		{name: "blank successor", successor: "\t"},
+		{name: "self successor", successor: "worker-1"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			session := workersessions.Session{
+				ID:                         "worker-1",
+				State:                      workersessions.StateRunning,
+				PredecessorWorkerSessionID: test.predecessor,
+				SuccessorWorkerSessionID:   test.successor,
+			}
+			if err := session.Validate(); !errors.Is(err, workersessions.ErrInvalidContinuationLineage) {
+				t.Fatalf("Validate() = %v, want ErrInvalidContinuationLineage", err)
+			}
+		})
 	}
 }

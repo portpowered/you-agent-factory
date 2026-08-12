@@ -47,6 +47,8 @@ you work show	show <work-id>	you work
 you work visualize	visualize <batch-file.json>	you work
 you work watch	watch [--session <session>] [--follow]	you work
 you worker-sessions	worker-sessions	you
+you worker-sessions continue	continue <source-worker-session-id> [follow-up-input...]	you worker-sessions
+you worker-sessions invoke	invoke [prompt...]	you worker-sessions
 you worker-sessions list	list	you worker-sessions
 you worker-sessions read	read	you worker-sessions
 you worker-sessions show	show	you worker-sessions

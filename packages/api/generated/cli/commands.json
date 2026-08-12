@@ -9123,14 +9123,16 @@
         "documentation": {
           "title": {
             "id": "you.worker-sessions.list.title",
-            "canonicalEnglish": "List Worker Sessions for one Work item"
+          "canonicalEnglish": "List direct or Factory Worker Sessions"
           },
           "description": {
             "id": "you.worker-sessions.list.description",
-            "canonicalEnglish": "List every authoritative Worker Session attempt correlated with one Work item. The default output is a stable labeled table; use --output json for one machine-readable sessions document."
+          "canonicalEnglish": "List authoritative Worker Session observations by stable identity. Omit --work-id to inspect direct sessions through the top-level identity surface; use --output json for one machine-readable sessions document."
           }
         },
         "examples": [
+          "you worker-sessions list",
+          "you worker-sessions list --scope direct --state COMPLETED --max-results 25",
           "you worker-sessions list --work-id work-123",
           "you worker-sessions list --work-id work-123 --output json"
         ],
@@ -9159,7 +9161,7 @@
           "aliases": [],
           "scope": "local",
           "valueType": "string",
-          "required": true,
+          "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
@@ -9171,6 +9173,117 @@
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.worker-sessions.list.flag.work-id",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.list.flag.scope": {
+          "id": "you.worker-sessions.list.flag.scope",
+          "long": "scope",
+          "usage": "top-level observation scope: direct (default), factory, or all",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "enum": [
+            "direct",
+            "factory",
+            "all"
+          ],
+          "required": false,
+          "default": "direct",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "static",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.list.flag.scope",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.list.flag.state": {
+          "id": "you.worker-sessions.list.flag.state",
+          "long": "state",
+          "usage": "repeatable Worker Session lifecycle state filter",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "stringArray",
+          "enum": [
+            "RESERVED",
+            "STARTING",
+            "RUNNING",
+            "PAUSED",
+            "COMPLETED",
+            "FAILED",
+            "CANCELED",
+            "TERMINATED"
+          ],
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": true,
+          "normalization": "trim",
+          "completion": "static",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.list.flag.state",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.list.flag.max-results": {
+          "id": "you.worker-sessions.list.flag.max-results",
+          "long": "max-results",
+          "usage": "maximum top-level Worker Session observations to return per page",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "int",
+          "required": false,
+          "default": "0",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.list.flag.max-results",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.list.flag.next-token": {
+          "id": "you.worker-sessions.list.flag.next-token",
+          "long": "next-token",
+          "usage": "opaque cursor returned by a previous top-level Worker Session list",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.list.flag.next-token",
             "state": "active",
             "since": "1.0.0"
           }
@@ -9317,10 +9430,12 @@
           },
           "description": {
             "id": "you.worker-sessions.show.description",
-            "canonicalEnglish": "Show the authoritative Work correlation, lifecycle, timing, token usage, transcript availability, failure, and parse diagnostics for one Worker Session."
+            "canonicalEnglish": "Show one Worker Session by stable identity, with an exact Provider Session tuple retained for Factory compatibility."
           }
         },
         "examples": [
+          "you worker-sessions show --worker-session-id worker-session-123",
+          "you worker-sessions show --worker-session-id worker-session-123 --output json",
           "you worker-sessions show --provider codex --kind session_id --id session-123",
           "you worker-sessions show --provider codex --kind session_id --id session-123 --output json"
         ],
@@ -9341,6 +9456,30 @@
         "example": "  you worker-sessions show --provider codex --kind session_id --id session-123"
       },
       "flags": {
+        "you.worker-sessions.show.flag.worker-session-id": {
+          "id": "you.worker-sessions.show.flag.worker-session-id",
+          "long": "worker-session-id",
+          "usage": "stable Worker Session identity for the top-level observation route",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.show.flag.worker-session-id",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
         "you.worker-sessions.show.flag.provider": {
           "id": "you.worker-sessions.show.flag.provider",
           "long": "provider",
@@ -9349,7 +9488,7 @@
           "aliases": [],
           "scope": "local",
           "valueType": "string",
-          "required": true,
+          "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
@@ -9373,7 +9512,7 @@
           "aliases": [],
           "scope": "local",
           "valueType": "string",
-          "required": true,
+          "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
@@ -9397,7 +9536,7 @@
           "aliases": [],
           "scope": "local",
           "valueType": "string",
-          "required": true,
+          "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
@@ -9555,10 +9694,12 @@
           },
           "description": {
             "id": "you.worker-sessions.read.description",
-            "canonicalEnglish": "Read the ordered normalized transcript for one finished Worker Session through the Provider Sessions projection. Use --output json for structured entries."
+            "canonicalEnglish": "Read a finished Worker Session transcript by stable identity through the Provider Sessions projection. Factory-scoped Provider tuple arguments remain supported. Use --output json for structured entries."
           }
         },
         "examples": [
+          "you worker-sessions read --worker-session-id worker-session-123",
+          "you worker-sessions read --worker-session-id worker-session-123 --output json",
           "you worker-sessions read --provider codex --kind session_id --id session-123",
           "you worker-sessions read --provider codex --kind session_id --id session-123 --output json"
         ],
@@ -9579,6 +9720,30 @@
         "example": "  you worker-sessions read --provider codex --kind session_id --id session-123"
       },
       "flags": {
+        "you.worker-sessions.read.flag.worker-session-id": {
+          "id": "you.worker-sessions.read.flag.worker-session-id",
+          "long": "worker-session-id",
+          "usage": "stable Worker Session identity for the top-level transcript route",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.read.flag.worker-session-id",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
         "you.worker-sessions.read.flag.provider": {
           "id": "you.worker-sessions.read.flag.provider",
           "long": "provider",
@@ -9587,7 +9752,7 @@
           "aliases": [],
           "scope": "local",
           "valueType": "string",
-          "required": true,
+          "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
@@ -9611,7 +9776,7 @@
           "aliases": [],
           "scope": "local",
           "valueType": "string",
-          "required": true,
+          "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
@@ -9635,7 +9800,7 @@
           "aliases": [],
           "scope": "local",
           "valueType": "string",
-          "required": true,
+          "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
@@ -9793,10 +9958,12 @@
           },
           "description": {
             "id": "you.worker-sessions.stream.description",
-            "canonicalEnglish": "Stream retained and live canonical Worker Session events for one exact Provider Session identity. Live following is the default and can be selected explicitly with --follow. Use --replay-only to drain retained history once and append a completeness summary; --replay-only and --follow cannot be combined. The stream ends successfully on a terminal event and reports source failures explicitly."
+            "canonicalEnglish": "Stream retained and live canonical Worker Session events by stable identity or exact Provider Session tuple. Live following is the default and can be selected explicitly with --follow. Use --replay-only to drain retained history once and append a completeness summary; --replay-only and --follow cannot be combined. The stream ends successfully on a terminal event and reports source failures explicitly."
           }
         },
         "examples": [
+          "you worker-sessions stream --worker-session-id worker-session-123",
+          "you worker-sessions stream --worker-session-id worker-session-123 --replay-only --output json",
           "you worker-sessions stream --provider codex --kind session_id --id session-123",
           "you worker-sessions stream --provider codex --kind session_id --id session-123 --output json",
           "you worker-sessions stream --provider codex --kind session_id --id session-123 --follow",
@@ -9819,6 +9986,30 @@
         "example": "  you worker-sessions stream --provider codex --kind session_id --id session-123\n\n  # Explicitly follow retained history with live events (the default).\n  you worker-sessions stream --provider codex --kind session_id --id session-123 --follow\n\n  # Drain retained events to redirect-safe NDJSON. The final replay-summary marks ACTIVE captures incomplete.\n  you worker-sessions stream --provider codex --kind session_id --id session-123 --replay-only --output json > worker-session.jsonl"
       },
       "flags": {
+        "you.worker-sessions.stream.flag.worker-session-id": {
+          "id": "you.worker-sessions.stream.flag.worker-session-id",
+          "long": "worker-session-id",
+          "usage": "stable Worker Session identity for the top-level event route",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.stream.flag.worker-session-id",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
         "you.worker-sessions.stream.flag.provider": {
           "id": "you.worker-sessions.stream.flag.provider",
           "long": "provider",
@@ -9827,7 +10018,7 @@
           "aliases": [],
           "scope": "local",
           "valueType": "string",
-          "required": true,
+          "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
@@ -9851,7 +10042,7 @@
           "aliases": [],
           "scope": "local",
           "valueType": "string",
-          "required": true,
+          "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
@@ -9875,7 +10066,7 @@
           "aliases": [],
           "scope": "local",
           "valueType": "string",
-          "required": true,
+          "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
@@ -10079,6 +10270,843 @@
       "sideEffects": {
         "you.worker-sessions.stream.side-effect.network": {
           "id": "you.worker-sessions.stream.side-effect.network",
+          "kind": "network"
+        }
+      },
+      "constraints": {
+        "runtime": [
+          "local"
+        ],
+        "platforms": [
+          "linux",
+          "darwin",
+          "windows"
+        ]
+      }
+    },
+    "you.worker-sessions.invoke": {
+      "id": "you.worker-sessions.invoke",
+      "name": "invoke",
+      "path": "you worker-sessions invoke",
+      "aliases": [],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.worker-sessions.invoke",
+        "documentation": {
+          "title": {
+            "id": "you.worker-sessions.invoke.title",
+            "canonicalEnglish": "Invoke a direct Worker"
+          },
+          "description": {
+            "id": "you.worker-sessions.invoke.description",
+            "canonicalEnglish": "Start exactly one direct Worker Session from a resolved workstation execution. The command uses local Worker Sessions by default; add --remote to use exactly --server. Use --execution with inline JSON, a file path, or - for stdin. Explicit execution flags override the JSON document, then a positional prompt, then non-TTY stdin supplies the user message. Without --async the command waits on the authoritative Worker Session event stream; --async returns after server admission and prints observation guidance."
+          }
+        },
+        "examples": [
+          "you worker-sessions invoke --workstation coding --user-message 'Fix the failing test'",
+          "you worker-sessions invoke --workstation coding --async --output json --user-message 'Inspect the repository'",
+          "you worker-sessions invoke --remote --server https://factory.example --execution ./worker-start.json",
+          "cat worker-start.json | you worker-sessions invoke --execution - --async --output json"
+        ],
+        "visibility": "public",
+        "sourceHash": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.worker-sessions.invoke",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "placement": "dual",
+      "usage": {
+        "line": "invoke [prompt...]",
+        "example": "  you worker-sessions invoke --workstation coding --user-message 'Fix the failing test'"
+      },
+      "arguments": {
+        "you.worker-sessions.invoke.arg.0": {
+          "id": "you.worker-sessions.invoke.arg.0",
+          "name": "prompt",
+          "position": 0,
+          "kind": "positional",
+          "valueType": "stringArray",
+          "required": false,
+          "minCardinality": 0,
+          "maxCardinality": -1,
+          "variadic": true,
+          "enum": [],
+          "pattern": "",
+          "completion": "none",
+          "channels": [
+            "cli",
+            "stdin"
+          ],
+          "doubleDash": "terminates-flags"
+        }
+      },
+      "flags": {
+        "you.worker-sessions.invoke.flag.execution": {
+          "id": "you.worker-sessions.invoke.flag.execution",
+          "long": "execution",
+          "usage": "resolved Worker execution JSON, file path, or - for stdin",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.invoke.flag.execution",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.invoke.flag.request-id": {
+          "id": "you.worker-sessions.invoke.flag.request-id",
+          "long": "request-id",
+          "usage": "stable S2 start request identity; generated when omitted",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.invoke.flag.request-id",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.invoke.flag.worker-session-id": {
+          "id": "you.worker-sessions.invoke.flag.worker-session-id",
+          "long": "worker-session-id",
+          "usage": "stable Worker Session identity; generated when omitted",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.invoke.flag.worker-session-id",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.invoke.flag.dispatch-id": {
+          "id": "you.worker-sessions.invoke.flag.dispatch-id",
+          "long": "dispatch-id",
+          "usage": "stable attempt identity; generated when omitted",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.invoke.flag.dispatch-id",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.invoke.flag.workstation": {
+          "id": "you.worker-sessions.invoke.flag.workstation",
+          "long": "workstation",
+          "usage": "resolved Workers workstation route (required unless supplied by --execution)",
+          "shorthand": "",
+          "aliases": [
+            "workstation-name"
+          ],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.invoke.flag.workstation",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.invoke.flag.worker-type": {
+          "id": "you.worker-sessions.invoke.flag.worker-type",
+          "long": "worker-type",
+          "usage": "optional authored Worker type selector",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.invoke.flag.worker-type",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.invoke.flag.runner": {
+          "id": "you.worker-sessions.invoke.flag.runner",
+          "long": "runner",
+          "usage": "optional Workers runner selector",
+          "shorthand": "",
+          "aliases": [
+            "runner-id"
+          ],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.invoke.flag.runner",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.invoke.flag.provider": {
+          "id": "you.worker-sessions.invoke.flag.provider",
+          "long": "provider",
+          "usage": "optional provider selector",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.invoke.flag.provider",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.invoke.flag.model": {
+          "id": "you.worker-sessions.invoke.flag.model",
+          "long": "model",
+          "usage": "optional model selector",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.invoke.flag.model",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.invoke.flag.reasoning-effort": {
+          "id": "you.worker-sessions.invoke.flag.reasoning-effort",
+          "long": "reasoning-effort",
+          "usage": "optional provider reasoning effort",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.invoke.flag.reasoning-effort",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.invoke.flag.system-prompt": {
+          "id": "you.worker-sessions.invoke.flag.system-prompt",
+          "long": "system-prompt",
+          "usage": "optional system prompt override",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.invoke.flag.system-prompt",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.invoke.flag.user-message": {
+          "id": "you.worker-sessions.invoke.flag.user-message",
+          "long": "user-message",
+          "usage": "user message override; otherwise use a prompt or non-TTY stdin",
+          "shorthand": "",
+          "aliases": [
+            "message"
+          ],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.invoke.flag.user-message",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.invoke.flag.async": {
+          "id": "you.worker-sessions.invoke.flag.async",
+          "long": "async",
+          "usage": "return after S2 admission without waiting for terminal output",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.invoke.flag.async",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.invoke.flag.retry-max-attempts": {
+          "id": "you.worker-sessions.invoke.flag.retry-max-attempts",
+          "long": "retry-max-attempts",
+          "usage": "maximum provider attempts for this Worker Session",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "int",
+          "required": false,
+          "default": "0",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.invoke.flag.retry-max-attempts",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.invoke.flag.output": {
+          "id": "you.worker-sessions.invoke.flag.output",
+          "long": "output",
+          "usage": "output format: human (default) or json",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "human",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.invoke.flag.output",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        }
+      },
+      "handler": {
+        "id": "you.worker-sessions.invoke.handler",
+        "operationId": "startWorkerSession"
+      },
+      "precedence": {
+        "order": [
+          "cli",
+          "stdin",
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
+      },
+      "channels": {
+        "input": [
+          "cli",
+          "env",
+          "config",
+          "stdin"
+        ],
+        "output": [
+          "stdout",
+          "stderr"
+        ]
+      },
+      "outputs": {
+        "you.worker-sessions.invoke.output.human": {
+          "id": "you.worker-sessions.invoke.output.human",
+          "channel": "stdout",
+          "format": "text"
+        },
+        "you.worker-sessions.invoke.output.json": {
+          "id": "you.worker-sessions.invoke.output.json",
+          "channel": "stdout",
+          "format": "json"
+        }
+      },
+      "errors": {
+        "you.worker-sessions.invoke.error.invalid-input": {
+          "id": "you.worker-sessions.invoke.error.invalid-input",
+          "code": "WORKER_SESSION_INVOKE_INVALID"
+        },
+        "you.worker-sessions.invoke.error.admission": {
+          "id": "you.worker-sessions.invoke.error.admission",
+          "code": "WORKER_SESSION_ADMISSION_FAILED"
+        },
+        "you.worker-sessions.invoke.error.stream": {
+          "id": "you.worker-sessions.invoke.error.stream",
+          "code": "WORKER_SESSION_STREAM_FAILED"
+        },
+        "you.worker-sessions.invoke.error.remote": {
+          "id": "you.worker-sessions.invoke.error.remote",
+          "code": "FACTORY_UNREACHABLE"
+        }
+      },
+      "exits": {
+        "you.worker-sessions.invoke.exit.success": {
+          "id": "you.worker-sessions.invoke.exit.success",
+          "code": 0,
+          "kind": "success"
+        },
+        "you.worker-sessions.invoke.exit.failure": {
+          "id": "you.worker-sessions.invoke.exit.failure",
+          "code": 1,
+          "kind": "failure"
+        },
+        "you.worker-sessions.invoke.exit.usage": {
+          "id": "you.worker-sessions.invoke.exit.usage",
+          "code": 1,
+          "kind": "usage"
+        },
+        "you.worker-sessions.invoke.exit.cancel": {
+          "id": "you.worker-sessions.invoke.exit.cancel",
+          "code": 130,
+          "kind": "cancel"
+        }
+      },
+      "sideEffects": {
+        "you.worker-sessions.invoke.side-effect.network": {
+          "id": "you.worker-sessions.invoke.side-effect.network",
+          "kind": "network"
+        }
+      },
+      "constraints": {
+        "runtime": [
+          "local"
+        ],
+        "platforms": [
+          "linux",
+          "darwin",
+          "windows"
+        ]
+      }
+    },
+    "you.worker-sessions.continue": {
+      "id": "you.worker-sessions.continue",
+      "name": "continue",
+      "path": "you worker-sessions continue",
+      "aliases": [],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.worker-sessions.continue",
+        "documentation": {
+          "title": {
+            "id": "you.worker-sessions.continue.title",
+            "canonicalEnglish": "Continue a Worker Session"
+          },
+          "description": {
+            "id": "you.worker-sessions.continue.description",
+            "canonicalEnglish": "Create one admitted successor Worker Session from a terminal source, resuming the exact server-recorded Provider Session. Local Worker Sessions are the default; add --remote to use exactly --server. Without --async the command waits for the successor terminal event; --async returns after admission."
+          }
+        },
+        "examples": [
+          "you worker-sessions continue worker-session-123 --request-id follow-up-1 --successor-worker-session-id worker-session-124 --user-message 'Continue the work'",
+          "you worker-sessions continue worker-session-123 --request-id follow-up-1 --successor-worker-session-id worker-session-124 --async --output json",
+          "you worker-sessions continue worker-session-123 --remote --server https://factory.example --request-id follow-up-1 --successor-worker-session-id worker-session-124 'Review the result'"
+        ],
+        "visibility": "public",
+        "sourceHash": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.worker-sessions.continue",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "placement": "dual",
+      "usage": {
+        "line": "continue <source-worker-session-id> [follow-up-input...]",
+        "example": "  you worker-sessions continue worker-session-123 --request-id follow-up-1 --successor-worker-session-id worker-session-124 --user-message 'Continue the work'"
+      },
+      "arguments": {
+        "you.worker-sessions.continue.arg.0": {
+          "id": "you.worker-sessions.continue.arg.0",
+          "name": "source-worker-session-id",
+          "position": 0,
+          "kind": "positional",
+          "valueType": "string",
+          "required": true,
+          "minCardinality": 1,
+          "maxCardinality": 1,
+          "variadic": false,
+          "enum": [],
+          "pattern": "",
+          "completion": "none",
+          "channels": [
+            "cli"
+          ],
+          "doubleDash": "terminates-flags"
+        },
+        "you.worker-sessions.continue.arg.1": {
+          "id": "you.worker-sessions.continue.arg.1",
+          "name": "follow-up-input",
+          "position": 1,
+          "kind": "positional",
+          "valueType": "stringArray",
+          "required": false,
+          "minCardinality": 0,
+          "maxCardinality": -1,
+          "variadic": true,
+          "enum": [],
+          "pattern": "",
+          "completion": "none",
+          "channels": [
+            "cli",
+            "stdin"
+          ],
+          "doubleDash": "terminates-flags"
+        }
+      },
+      "flags": {
+        "you.worker-sessions.continue.flag.request-id": {
+          "id": "you.worker-sessions.continue.flag.request-id",
+          "long": "request-id",
+          "usage": "stable continuation request identity; generated when omitted",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.continue.flag.request-id",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.continue.flag.successor-worker-session-id": {
+          "id": "you.worker-sessions.continue.flag.successor-worker-session-id",
+          "long": "successor-worker-session-id",
+          "usage": "stable successor Worker Session identity; generated when omitted",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.continue.flag.successor-worker-session-id",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.continue.flag.user-message": {
+          "id": "you.worker-sessions.continue.flag.user-message",
+          "long": "user-message",
+          "usage": "follow-up input override; otherwise use positional input or non-TTY stdin",
+          "shorthand": "",
+          "aliases": [
+            "message"
+          ],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.continue.flag.user-message",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.continue.flag.async": {
+          "id": "you.worker-sessions.continue.flag.async",
+          "long": "async",
+          "usage": "return after successor admission instead of waiting for terminal output",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.continue.flag.async",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.continue.flag.output": {
+          "id": "you.worker-sessions.continue.flag.output",
+          "long": "output",
+          "usage": "output format: human (default) or json",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "human",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.continue.flag.output",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        }
+      },
+      "handler": {
+        "id": "you.worker-sessions.continue.handler",
+        "operationId": "continueWorkerSession"
+      },
+      "precedence": {
+        "order": [
+          "cli",
+          "stdin",
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
+      },
+      "channels": {
+        "input": [
+          "cli",
+          "env",
+          "config",
+          "stdin"
+        ],
+        "output": [
+          "stdout",
+          "stderr"
+        ]
+      },
+      "outputs": {
+        "you.worker-sessions.continue.output.human": {
+          "id": "you.worker-sessions.continue.output.human",
+          "channel": "stdout",
+          "format": "text"
+        },
+        "you.worker-sessions.continue.output.json": {
+          "id": "you.worker-sessions.continue.output.json",
+          "channel": "stdout",
+          "format": "json"
+        }
+      },
+      "errors": {
+        "you.worker-sessions.continue.error.invalid-input": {
+          "id": "you.worker-sessions.continue.error.invalid-input",
+          "code": "WORKER_SESSION_CONTINUATION_INVALID"
+        },
+        "you.worker-sessions.continue.error.conflict": {
+          "id": "you.worker-sessions.continue.error.conflict",
+          "code": "WORKER_SESSION_CONTINUATION_CONFLICT"
+        },
+        "you.worker-sessions.continue.error.admission": {
+          "id": "you.worker-sessions.continue.error.admission",
+          "code": "WORKER_SESSION_CONTINUATION_ADMISSION_FAILED"
+        },
+        "you.worker-sessions.continue.error.stream": {
+          "id": "you.worker-sessions.continue.error.stream",
+          "code": "WORKER_SESSION_STREAM_FAILED"
+        },
+        "you.worker-sessions.continue.error.remote": {
+          "id": "you.worker-sessions.continue.error.remote",
+          "code": "FACTORY_UNREACHABLE"
+        }
+      },
+      "exits": {
+        "you.worker-sessions.continue.exit.success": {
+          "id": "you.worker-sessions.continue.exit.success",
+          "code": 0,
+          "kind": "success"
+        },
+        "you.worker-sessions.continue.exit.failure": {
+          "id": "you.worker-sessions.continue.exit.failure",
+          "code": 1,
+          "kind": "failure"
+        },
+        "you.worker-sessions.continue.exit.usage": {
+          "id": "you.worker-sessions.continue.exit.usage",
+          "code": 1,
+          "kind": "usage"
+        },
+        "you.worker-sessions.continue.exit.cancel": {
+          "id": "you.worker-sessions.continue.exit.cancel",
+          "code": 130,
+          "kind": "cancel"
+        }
+      },
+      "sideEffects": {
+        "you.worker-sessions.continue.side-effect.network": {
+          "id": "you.worker-sessions.continue.side-effect.network",
           "kind": "network"
         }
       },

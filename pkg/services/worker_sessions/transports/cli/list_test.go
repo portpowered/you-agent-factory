@@ -94,15 +94,7 @@ func TestListHumanRendersLabelsTokensDurationAndFailure(t *testing.T) {
 				ProviderSession:          &factoryapi.WorkerSessionProviderSessionRef{Provider: "codex", Kind: "session_id", Id: "provider-session-1"},
 				WorkIds:                  []string{"work-1"}, State: factoryapi.WorkerSessionObservationState("FAILED"),
 				DurationMillis: int64Ptr(2500), TokenUsage: &factoryapi.ProviderSessionTokenUsage{TotalTokens: intPtr(17)},
-				Failure: &factoryapi.WorkerSessionFailure{Kind: "WORKERS_EXECUTION_FAILURE", Detail: "safe detail", AgentRunFailureClass: stringPtrForTest("agent_run_provider_failure")},
-			},
-			{
-				WorkerSessionId: "worker-session-2", AttemptId: "attempt-2",
-				ProviderSessionAvailable: true,
-				ProviderSession:          &factoryapi.WorkerSessionProviderSessionRef{Provider: "codex", Kind: "session_id", Id: "provider-session-2"},
-				WorkIds:                  []string{"work-1"}, State: factoryapi.WorkerSessionObservationState("FAILED"),
-				DurationMillis: int64Ptr(2500), TokenUsage: &factoryapi.ProviderSessionTokenUsage{TotalTokens: intPtr(17)},
-				Failure: &factoryapi.WorkerSessionFailure{Kind: "WORKERS_EXECUTION_FAILURE", Detail: "safe detail", AgentRunFailureClass: stringPtrForTest("agent_run_harness_failure")},
+				Failure: &factoryapi.WorkerSessionFailure{Kind: "WORKERS_EXECUTION_FAILURE", Detail: "safe detail"},
 			},
 		}})
 	}))
@@ -116,9 +108,8 @@ func TestListHumanRendersLabelsTokensDurationAndFailure(t *testing.T) {
 		t.Fatalf("List() error = %v", err)
 	}
 	for _, want := range []string{
-		"PROVIDER\tKIND\tSESSION ID\tWORK ID\tATTEMPT\tSTATE\tTOKENS\tDURATION\tFAILURE",
-		"codex\tsession_id\tprovider-session-1\twork-1\tattempt-1\tFAILED\t17\t2.5s\tagent_run_provider_failure",
-		"codex\tsession_id\tprovider-session-2\twork-1\tattempt-2\tFAILED\t17\t2.5s\tagent_run_harness_failure",
+		"DIRECT\tPROVIDER\tKIND\tSESSION ID\tWORK ID\tATTEMPT\tSTATE\tTOKENS\tDURATION\tFAILURE",
+		"false\tcodex\tsession_id\tprovider-session-1\twork-1\tattempt-1\tFAILED\t17\t2.5s\tWORKERS_EXECUTION_FAILURE",
 	} {
 		if !strings.Contains(output.String(), want) {
 			t.Fatalf("output %q missing %q", output.String(), want)
@@ -223,24 +214,24 @@ func TestListJSONMissingWorkReturnsStableMachineReadableError(t *testing.T) {
 	}
 }
 
-func TestListJSONMissingWorkIDReturnsStableMachineReadableError(t *testing.T) {
+func TestListWithoutWorkIDUsesTopLevelIdentityCollection(t *testing.T) {
+	var gotPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(factoryapi.ListWorkerSessionsResponse{Sessions: []factoryapi.WorkerSessionObservation{}})
+	}))
+	defer server.Close()
+
 	var output bytes.Buffer
 	err := NewList(testHTTPProtocol(t))(ListConfig{
-		Context: context.Background(), Server: "http://127.0.0.1:1", OutputFormat: "json", Output: &output,
+		Context: context.Background(), Server: server.URL, OutputFormat: "json", Output: &output,
 	})
-	if err == nil {
-		t.Fatal("List() error = nil, want required Work ID error")
+	if err != nil {
+		t.Fatalf("List() error = %v, want top-level success", err)
 	}
-	var typed *CLIError
-	if !errors.As(err, &typed) || typed.Code != "WORK_ID_REQUIRED" {
-		t.Fatalf("error = %v, want CLIError code WORK_ID_REQUIRED", err)
-	}
-	var payload map[string]string
-	if decodeErr := json.Unmarshal(output.Bytes(), &payload); decodeErr != nil {
-		t.Fatalf("decode error JSON: %v; output=%q", decodeErr, output.String())
-	}
-	if payload["code"] != "WORK_ID_REQUIRED" || payload["message"] != "--work-id is required" {
-		t.Fatalf("error payload = %#v, want stable code/message", payload)
+	if gotPath != "/worker-sessions" {
+		t.Fatalf("request path = %q, want top-level Worker Sessions collection", gotPath)
 	}
 }
 

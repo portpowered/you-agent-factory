@@ -20,21 +20,22 @@ import (
 
 // StreamConfig holds parameters for the Worker Sessions stream command.
 type StreamConfig struct {
-	Context      context.Context
-	Server       string
-	SessionID    string
-	Provider     string
-	Kind         string
-	ID           string
-	OutputFormat string
-	JSON         bool
-	Follow       bool
-	ReplayOnly   bool
-	Verbose      bool
-	Debug        bool
-	Output       io.Writer
-	Diagnostics  io.Writer
-	HTTP         clihttp.Protocol
+	Context         context.Context
+	Server          string
+	SessionID       string
+	WorkerSessionID string
+	Provider        string
+	Kind            string
+	ID              string
+	OutputFormat    string
+	JSON            bool
+	Follow          bool
+	ReplayOnly      bool
+	Verbose         bool
+	Debug           bool
+	Output          io.Writer
+	Diagnostics     io.Writer
+	HTTP            clihttp.Protocol
 }
 
 // NewStream returns the composition-facing stream operation bound to one HTTP
@@ -93,6 +94,7 @@ func stream(config StreamConfig) error {
 	config.Provider = strings.TrimSpace(config.Provider)
 	config.Kind = strings.TrimSpace(config.Kind)
 	config.ID = strings.TrimSpace(config.ID)
+	config.WorkerSessionID = strings.TrimSpace(config.WorkerSessionID)
 	if config.ReplayOnly && config.Follow {
 		return NewStreamModeConflictError()
 	}
@@ -105,13 +107,13 @@ func stream(config StreamConfig) error {
 		return emitStreamCLIError(config, jsonOutput, err)
 	}
 	jsonOutput = config.JSON || format == "json"
-	endpoint, err := workerSessionEventsEndpoint(config.Server, config.SessionID, config.Provider, config.Kind, config.ID, config.ReplayOnly)
+	endpoint, err := workerSessionEventsEndpoint(config.Server, config.SessionID, config.WorkerSessionID, config.Provider, config.Kind, config.ID, config.ReplayOnly)
 	if err != nil {
 		return emitStreamCLIError(config, jsonOutput, err)
 	}
 	clidiag.Printf(config.Diagnostics, config.Verbose || config.Debug,
-		"worker sessions stream request endpointPath=%s endpoint=%s server=%s session=%s provider=%s kind=%s id=%s",
-		endpoint.Path, endpoint.String(), config.Server, clidiag.SessionLabel(config.SessionID), config.Provider, config.Kind, config.ID)
+		"worker sessions stream request endpointPath=%s endpoint=%s server=%s session=%s workerSessionID=%s provider=%s kind=%s id=%s",
+		endpoint.Path, endpoint.String(), config.Server, clidiag.SessionLabel(config.SessionID), config.WorkerSessionID, config.Provider, config.Kind, config.ID)
 
 	request, err := http.NewRequestWithContext(config.Context, http.MethodGet, endpoint.String(), nil)
 	if err != nil {
@@ -223,6 +225,13 @@ func validateStreamConfig(config StreamConfig) error {
 	if config.HTTP == nil {
 		return fmt.Errorf("CLI HTTP protocol is required")
 	}
+	config.WorkerSessionID = strings.TrimSpace(config.WorkerSessionID)
+	if config.WorkerSessionID != "" {
+		if config.Provider != "" || config.Kind != "" || config.ID != "" {
+			return newCLIError("WORKER_SESSION_MODE_CONFLICT", "--worker-session-id cannot be combined with --provider, --kind, or --id", nil)
+		}
+		return nil
+	}
 	if config.Provider == "" {
 		return newCLIError("PROVIDER_REQUIRED", "--provider is required", nil)
 	}
@@ -241,8 +250,12 @@ func validateStreamConfig(config StreamConfig) error {
 	return nil
 }
 
-func workerSessionEventsEndpoint(server, sessionID, provider, kind, id string, replayOnly bool) (url.URL, error) {
-	endpointURL, err := cliserver.RequestURL(server, sessionpath.WorkerSessionsEventsPath(sessionID))
+func workerSessionEventsEndpoint(server, sessionID, workerSessionID, provider, kind, id string, replayOnly bool) (url.URL, error) {
+	path := sessionpath.WorkerSessionsEventsPath(sessionID)
+	if strings.TrimSpace(workerSessionID) != "" {
+		path = sessionpath.TopLevelWorkerSessionEventsPath(workerSessionID)
+	}
+	endpointURL, err := cliserver.RequestURL(server, path)
 	if err != nil {
 		return url.URL{}, err
 	}
@@ -251,9 +264,11 @@ func workerSessionEventsEndpoint(server, sessionID, provider, kind, id string, r
 		return url.URL{}, fmt.Errorf("parse Worker Sessions stream endpoint: %w", err)
 	}
 	query := endpoint.Query()
-	query.Set("provider", provider)
-	query.Set("kind", kind)
-	query.Set("id", id)
+	if strings.TrimSpace(workerSessionID) == "" {
+		query.Set("provider", provider)
+		query.Set("kind", kind)
+		query.Set("id", id)
+	}
 	if replayOnly {
 		query.Set("replayOnly", "true")
 	}

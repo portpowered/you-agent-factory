@@ -2,6 +2,7 @@ package workersessions
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -35,6 +36,71 @@ type ListObservationsResult struct {
 	Observations []Observation
 }
 
+// ObservationScope selects which Worker Session origin a top-level list may
+// return. Direct is the safe zero-value default; Factory and All are explicit
+// compatibility/diagnostic choices.
+type ObservationScope string
+
+const (
+	ObservationScopeDirect  ObservationScope = "direct"
+	ObservationScopeFactory ObservationScope = "factory"
+	ObservationScopeAll     ObservationScope = "all"
+)
+
+func (s ObservationScope) Valid() bool {
+	switch s {
+	case "", ObservationScopeDirect, ObservationScopeFactory, ObservationScopeAll:
+		return true
+	default:
+		return false
+	}
+}
+
+func (s ObservationScope) Normalized() ObservationScope {
+	if s == "" {
+		return ObservationScopeDirect
+	}
+	return s
+}
+
+const DefaultWorkerSessionObservationListMaxResults = 50
+
+// ListWorkerSessionObservationsRequest is the bounded top-level observation
+// query. NextToken is an opaque base64 cursor returned by the previous page.
+type ListWorkerSessionObservationsRequest struct {
+	Scope      ObservationScope
+	States     []State
+	MaxResults int
+	NextToken  string
+}
+
+func (r ListWorkerSessionObservationsRequest) Validate() error {
+	if !r.Scope.Valid() {
+		return ErrInvalidObservationScope
+	}
+	for _, state := range r.States {
+		if !state.Valid() {
+			return ErrInvalidState
+		}
+	}
+	if r.MaxResults < 0 {
+		return ErrInvalidObservationPagination
+	}
+	if strings.TrimSpace(r.NextToken) != "" {
+		decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(r.NextToken))
+		if err != nil || strings.TrimSpace(string(decoded)) == "" {
+			return ErrInvalidObservationPagination
+		}
+	}
+	return nil
+}
+
+type ListWorkerSessionObservationsResult struct {
+	Observations []Observation
+	MaxResults   int
+	NextToken    string
+}
+
 // GetObservationRequest names one exact Provider Session identity.
 type GetObservationRequest struct {
 	ProviderSession providers.SessionRef
@@ -57,6 +123,19 @@ type GetObservationByWorkerSessionIDRequest struct {
 // Validate reports whether the request carries a complete Worker Session
 // identity.
 func (r GetObservationByWorkerSessionIDRequest) Validate() error {
+	if !validSessionID(r.WorkerSessionID) {
+		return ErrInvalidSessionID
+	}
+	return nil
+}
+
+// ReadTranscriptByWorkerSessionIDRequest names a Worker Session whose exact
+// recorded Provider Session association should be projected.
+type ReadTranscriptByWorkerSessionIDRequest struct {
+	WorkerSessionID string
+}
+
+func (r ReadTranscriptByWorkerSessionIDRequest) Validate() error {
 	if !validSessionID(r.WorkerSessionID) {
 		return ErrInvalidSessionID
 	}
@@ -114,21 +193,24 @@ func (r StreamObservationsByWorkerSessionIDRequest) Validate() error {
 // show. Optional values stay nil when the owning source cannot provide them;
 // callers must not infer zero usage or zero duration from absence.
 type Observation struct {
-	WorkerSessionID          string
-	ProviderSession          providers.SessionRef
-	ProviderSessionAvailable bool
-	WorkIDs                  []string
-	TurnID                   string
-	AttemptID                string
-	State                    State
-	StartedAt                *time.Time
-	EndedAt                  *time.Time
-	Duration                 *time.Duration
-	DurationBasis            DurationBasis
-	TokenUsage               *TokenUsage
-	Transcript               TranscriptAvailability
-	Failure                  *FailureCause
-	Parse                    ParseDiagnostics
+	WorkerSessionID            string
+	PredecessorWorkerSessionID string
+	SuccessorWorkerSessionID   string
+	Direct                     bool
+	ProviderSession            providers.SessionRef
+	ProviderSessionAvailable   bool
+	WorkIDs                    []string
+	TurnID                     string
+	AttemptID                  string
+	State                      State
+	StartedAt                  *time.Time
+	EndedAt                    *time.Time
+	Duration                   *time.Duration
+	DurationBasis              DurationBasis
+	TokenUsage                 *TokenUsage
+	Transcript                 TranscriptAvailability
+	Failure                    *FailureCause
+	Parse                      ParseDiagnostics
 }
 
 // Validate reports whether an observation has a coherent detached identity,
@@ -151,6 +233,9 @@ func (o Observation) Validate() error {
 func (o Observation) validateIdentity() error {
 	if strings.TrimSpace(o.WorkerSessionID) == "" {
 		return ErrInvalidObservationIdentity
+	}
+	if err := validateLineage(o.WorkerSessionID, o.PredecessorWorkerSessionID, o.SuccessorWorkerSessionID); err != nil {
+		return err
 	}
 	if o.ProviderSessionAvailable {
 		if err := o.ProviderSession.Validate(); err != nil {
@@ -401,12 +486,15 @@ func (s ObservationSubscription) Close() {
 var (
 	ErrInvalidObservationWorkID         = errors.New("worker session observation: invalid work id")
 	ErrInvalidObservationIdentity       = errors.New("worker session observation: invalid provider session identity")
+	ErrInvalidObservationScope          = errors.New("worker session observation: invalid scope")
+	ErrInvalidObservationPagination     = errors.New("worker session observation: invalid pagination")
 	ErrInvalidObservationAttempt        = errors.New("worker session observation: invalid attempt")
 	ErrInvalidObservationDuration       = errors.New("worker session observation: invalid duration projection")
 	ErrInvalidObservationFailure        = errors.New("worker session observation: invalid failure projection")
 	ErrInvalidObservationStreamLimit    = errors.New("worker session observation: stream limit must not be negative")
 	ErrObservationWorkNotFound          = errors.New("worker session observation: work not found")
 	ErrObservationSessionNotFound       = errors.New("worker session observation: provider session not found")
+	ErrObservationNotDirect             = errors.New("worker session observation: session is not direct")
 	ErrObservationProjectionUnavailable = errors.New("worker session observation: projection unavailable")
 	ErrObservationSourceUnavailable     = errors.New("worker session observation: event source unavailable")
 	ErrObservationSourceGap             = errors.New("worker session observation: retained event gap")

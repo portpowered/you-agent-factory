@@ -29,6 +29,56 @@ tags:
     description: Stored workflow inspection.
 paths:
   /worker-sessions:
+    get:
+      tags:
+        - Worker Sessions
+      operationId: listWorkerSessions
+      summary: List top-level Worker Session observations
+      description: Lists Worker Session observations through their stable top-level identity. The default scope is direct Worker Sessions admitted through this API; Factory-originated observations require an explicit scope. Results are deterministically ordered by Worker Session identity and use an opaque cursor for bounded pagination. State filters compose with the selected origin scope.
+      parameters:
+        - name: scope
+          in: query
+          required: false
+          description: Origin scope to inspect. Direct is the safe default.
+          schema:
+            type: string
+            enum:
+              - direct
+              - factory
+              - all
+            default: direct
+        - name: state
+          in: query
+          required: false
+          description: Optional repeated Worker Session lifecycle state filters.
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              type: string
+              enum:
+                - RESERVED
+                - STARTING
+                - RUNNING
+                - PAUSED
+                - COMPLETED
+                - FAILED
+                - CANCELED
+                - TERMINATED
+        - $ref: '#/components/parameters/MaxResults'
+        - $ref: '#/components/parameters/NextToken'
+      responses:
+        '200':
+          description: Deterministically ordered top-level Worker Session observations.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListWorkerSessionsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
     post:
       tags:
         - Worker Sessions
@@ -54,6 +104,117 @@ paths:
           $ref: '#/components/responses/WorkerSessionStartConflict'
         '503':
           $ref: '#/components/responses/WorkerSessionStartUnavailable'
+  /worker-sessions/{worker_session_id}:
+    get:
+      tags:
+        - Worker Sessions
+      operationId: getWorkerSessionObservationByWorkerSessionId
+      summary: Show one top-level Worker Session observation
+      description: Returns one authoritative Worker Session observation by its stable Worker Session identity. Direct observations expose their origin and any recorded Provider Session association without requiring callers to reconstruct a provider tuple.
+      parameters:
+        - $ref: '#/components/parameters/WorkerSessionID'
+      responses:
+        '200':
+          description: One top-level Worker Session observation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkerSessionObservation'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /worker-sessions/{worker_session_id}/continue:
+    post:
+      tags:
+        - Worker Sessions
+      operationId: continueWorkerSession
+      summary: Continue one terminal Worker Session
+      description: Reserves one distinct successor Worker Session for a terminal source Worker Session and resumes the exact Provider Session association recorded by the server. The requestId and successor identity are idempotent inputs. A 202 response is returned only after the successor opening event is readable/subscribable and Workers has admitted the continuation; terminal output remains asynchronous.
+      parameters:
+        - $ref: '#/components/parameters/WorkerSessionID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkerSessionContinueRequest'
+      responses:
+        '202':
+          description: The successor Worker Session was admitted and is observable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkerSessionContinueResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/WorkerSessionContinuationConflict'
+        '503':
+          $ref: '#/components/responses/WorkerSessionContinuationUnavailable'
+  /worker-sessions/{worker_session_id}/events:
+    get:
+      tags:
+        - Worker Sessions
+      operationId: streamWorkerSessionEventsByTopLevelWorkerSessionId
+      summary: Stream top-level Worker Session events
+      description: Streams the retained and live Worker Session Events topic by stable Worker Session identity. The server resolves the exact topic from its own observation registry; callers do not supply Provider Session identity fields. Retained records are emitted first, followed by live records unless replayOnly is true.
+      parameters:
+        - $ref: '#/components/parameters/WorkerSessionID'
+        - name: replayOnly
+          in: query
+          required: false
+          description: Drain retained history without registering a live follower.
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Retained then live Worker Session event frames.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: Server-Sent Events where each data frame is serialized JSON matching WorkerSessionEvent.
+              x-event-schema: '#/components/schemas/WorkerSessionEvent'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /worker-sessions/{worker_session_id}/transcript:
+    get:
+      tags:
+        - Worker Sessions
+      operationId: readWorkerSessionTranscriptByWorkerSessionId
+      summary: Read one top-level Worker Session transcript
+      description: Returns the normalized transcript for a terminal Worker Session by its stable identity. Provider Session association and projection are resolved by the Worker Sessions service; callers cannot substitute a provider, kind, or provider-issued id tuple.
+      parameters:
+        - $ref: '#/components/parameters/WorkerSessionID'
+      responses:
+        '200':
+          description: Normalized transcript for a finished Worker Session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkerSessionTranscriptResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The Worker Session is still active and has no final transcript.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /factory-sessions/{session_id}/work:
     post:
       tags:
@@ -1971,6 +2132,18 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
+    WorkerSessionContinuationConflict:
+      description: The Worker Session continuation conflicts with source lifecycle, lineage, idempotency, or Provider Session validation.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    WorkerSessionContinuationUnavailable:
+      description: The Worker Session continuation could not cross its event-readiness or Workers-admission barrier.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
     FactorySessionLifecycleControlConflict:
       description: Lifecycle control request conflicts with current session state, another in-flight control, or a previously applied control requestId.
       content:
@@ -2477,6 +2650,9 @@ components:
           description: Deterministically ordered Worker Session observations correlated with the requested Work.
           items:
             $ref: '#/components/schemas/WorkerSessionObservation'
+        paginationContext:
+          $ref: '#/components/schemas/PaginationContext'
+          description: Bounded pagination context for top-level Worker Session observation queries.
     WorkerSessionStartRequest:
       type: object
       additionalProperties: false
@@ -2540,6 +2716,78 @@ components:
             - WorkerSessionStartResponseStateFailed
             - WorkerSessionStartResponseStateCanceled
             - WorkerSessionStartResponseStateTerminated
+        eventTopic:
+          type: string
+          description: Deterministic Events topic whose retained opening record is ready to read and subscribe.
+    WorkerSessionContinueRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - requestId
+        - successorWorkerSessionId
+        - followUpInput
+      description: Idempotent continuation request for one terminal Worker Session. The server resolves and validates the source Provider Session association; callers may supply only the successor identity and follow-up input.
+      properties:
+        requestId:
+          type: string
+          minLength: 1
+          description: Required caller idempotency key for this continuation.
+        successorWorkerSessionId:
+          type: string
+          minLength: 1
+          description: Distinct Worker Session identity to reserve for the successor.
+        followUpInput:
+          type: string
+          minLength: 1
+          description: Non-empty follow-up input delivered to the resumed Provider Session.
+    WorkerSessionContinueResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - requestId
+        - sourceWorkerSessionId
+        - successorWorkerSessionId
+        - predecessorWorkerSessionId
+        - accepted
+        - state
+        - eventTopic
+      description: Admission acknowledgment for a Worker Session continuation. The response exposes the source-to-successor lineage needed to inspect or stream the successor without exposing provider selection inputs.
+      properties:
+        requestId:
+          type: string
+          description: Caller idempotency key echoed for correlation.
+        sourceWorkerSessionId:
+          type: string
+          description: Stable terminal Worker Session identity used as the source.
+        successorWorkerSessionId:
+          type: string
+          description: Stable Worker Session identity reserved for the successor.
+        predecessorWorkerSessionId:
+          type: string
+          description: Stable predecessor identity recorded on the successor; equal to sourceWorkerSessionId.
+        accepted:
+          type: boolean
+          description: Always true for a 202 response.
+        state:
+          type: string
+          enum:
+            - RESERVED
+            - STARTING
+            - RUNNING
+            - PAUSED
+            - COMPLETED
+            - FAILED
+            - CANCELED
+            - TERMINATED
+          x-enum-varnames:
+            - WorkerSessionContinueResponseStateReserved
+            - WorkerSessionContinueResponseStateStarting
+            - WorkerSessionContinueResponseStateRunning
+            - WorkerSessionContinueResponseStatePaused
+            - WorkerSessionContinueResponseStateCompleted
+            - WorkerSessionContinueResponseStateFailed
+            - WorkerSessionContinueResponseStateCanceled
+            - WorkerSessionContinueResponseStateTerminated
         eventTopic:
           type: string
           description: Deterministic Events topic whose retained opening record is ready to read and subscribe.
@@ -2718,6 +2966,7 @@ components:
       additionalProperties: false
       required:
         - workerSessionId
+        - direct
         - providerSessionAvailable
         - workIds
         - turnId
@@ -2733,6 +2982,9 @@ components:
         workerSessionId:
           type: string
           description: Stable Worker Session identity.
+        direct:
+          type: boolean
+          description: Whether this observation was admitted through the direct top-level Worker Session surface.
         providerSession:
           $ref: '#/components/schemas/WorkerSessionProviderSessionRef'
           nullable: true
@@ -3637,6 +3889,10 @@ components:
             - WORKER_SESSION_START_OPENING_FAILED
             - WORKER_SESSION_EVENT_TOPIC_UNAVAILABLE
             - WORKER_SESSION_ADMISSION_FAILED
+            - WORKER_SESSION_CONTINUATION_REQUEST_ID_CONFLICT
+            - WORKER_SESSION_CONTINUATION_CONFLICT
+            - WORKER_SESSION_PROVIDER_CONTINUATION_INVALID
+            - WORKER_SESSION_CONTINUATION_ADMISSION_FAILED
             - FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED
             - RESOURCE_CAPACITY_IN_USE
             - REVISION_CONFLICT
@@ -3672,6 +3928,10 @@ components:
             - The Worker Session opening record could not be published.
             - The Worker Session event topic did not reach the required readiness barrier.
             - Workers could not admit the Worker Session execution.
+            - Worker Session continuation requestId was reused with different inputs.
+            - The Worker Session continuation conflicts with source lifecycle or successor lineage.
+            - The recorded Provider Session cannot be resumed for this Worker Session continuation.
+            - Workers could not admit the Worker Session continuation.
             - Lifecycle control requestId was already applied with different control inputs.
             - Requested resource capacity is below the number of units currently in use.
             - The caller's expected Factory revision is no longer current.

@@ -29,6 +29,53 @@ type CommandResult = workerexecution.CommandResult
 type ExecCommandRunner = workerprocess.ExecCommandRunner
 type LoggingCommandRunner = workerprocess.LoggingCommandRunner
 
+func resolveExecutionTimeout(
+	executionPolicy interfaces.WorkstationExecutionPolicyService,
+	workerDef *interfaces.FactoryWorkerConfig,
+	workstationDef *interfaces.FactoryWorkstationConfig,
+) (time.Duration, error) {
+	if executionPolicy != nil && workstationDef != nil {
+		timeout, err := executionPolicy.ExecutionTimeout(workstationDef)
+		if err != nil {
+			return 0, err
+		}
+		if timeout > 0 {
+			return timeout, nil
+		}
+	}
+
+	if workerDef != nil && workerDef.Timeout != "" {
+		timeout, err := time.ParseDuration(workerDef.Timeout)
+		if err != nil {
+			return 0, fmt.Errorf("invalid worker timeout %q: %w", workerDef.Timeout, err)
+		}
+		if timeout > 0 {
+			return timeout, nil
+		}
+	}
+
+	if workerDef != nil && workerDef.Type != "" {
+		return defaultSubprocessExecutionTimeout, nil
+	}
+
+	return 0, nil
+}
+
+func timeoutWorkResult(dispatch work.WorkDispatch, duration time.Duration) workerexecution.WorkResult {
+	failureMetadata := &workerexecution.WorkFailureMetadata{
+		Family: workerexecution.WorkFailureFamilyRetryable,
+		Type:   workerexecution.WorkFailureTypeTimeout,
+	}
+	return workerexecution.WorkResult{
+		DispatchID:      dispatch.DispatchID,
+		TransitionID:    dispatch.TransitionID,
+		Outcome:         workerexecution.OutcomeFailed,
+		Error:           "execution timeout",
+		FailureMetadata: workerexecution.CloneWorkFailureMetadata(failureMetadata),
+		Metrics:         workerexecution.WorkMetrics{Duration: duration},
+	}
+}
+
 type ProviderError = workerexecution.ProviderError
 
 const (
