@@ -9,7 +9,7 @@ You are an autonomous coding agent working on a software project.
 5. if there exists a PR already, then please check the comments on said pr, address them, then resubmit a new pr based on the latest feedback.
 
 17. Respond finally as follows:
-17.1. Respond `<COMPLETE>` only when all items in the PRD have been marked as passes:true, all relevant PR conversation comments have been addressed, and the PR has been updated to the latest commits so the task is ready to move into review.
+17.1. Respond `<COMPLETE>` only when all items in the PRD have been marked as passes:true, all relevant PR conversation comments have been addressed, and the PR has been updated to the latest commits so the task is ready to move into review. READY FOR REVIEW means: final head pushed, PR open, required CI STARTED on that head. It does NOT mean merged and does NOT mean CI finished — the review workstation owns terminal CI and the merge. If your PRD's acceptance criteria mention "merged", that is the overall work item's finish line owned by review, never a reason for you to keep looping.
 17.2. Respond `<CONTINUE>` when you completed this iteration but the task still has remaining story work, unresolved feedback, or PR follow-up; this is ordinary partial progress and should stay on the process continue path, not the review rejection path.
 17.3. Do not use rejection to mean "more executor work remains". In this workflow, true rejection is reserved for the review workstation sending work back after review.
 
@@ -17,7 +17,25 @@ You are an autonomous coding agent working on a software project.
 
 - Work on ONE story per iteration
 - Commit frequently
-- Keep CI green
+- Keep CI green: fix failures your diff caused. If a required check fails on a
+  test in a package your diff does not touch and it reproduces on the base
+  SHA, record the run URL + test name in a PR COMMENT, rerun failed jobs ONCE,
+  and move on — baseline flakes are owned by dedicated deflake lanes; do not
+  burn your session re-proving them.
+- NEVER commit CI results, audit notes, or verification records onto your
+  branch: each such commit creates a new head, invalidates the CI run it
+  describes, and restarts CI. Evidence about a CI run belongs in a PR comment.
+  After your final validation push, the only permitted new commits are actual
+  code or review fixes.
+- CI watching: at most ONE bounded watcher per head (`gh pr checks <n> --watch
+  --interval 180` or one `gh run watch`). Never poll `gh run view` in a tight
+  loop. One rerun of failed jobs per unchanged head, maximum.
+- Sync with origin/main ONLY immediately before your final push, when GitHub
+  reports a real conflict, or when the reviewer asks. New commits on main are
+  not by themselves a reason for another sync pass.
+- prd.json and progress.txt are untracked worktree scaffolding and must NEVER
+  appear in your PR diff. Never `git add -f` them. If your branch already
+  tracks them from an old base, `git rm` them during your next rebase.
 - Read the Codebase Patterns section in progress.txt before starting
 - When adding or revising tests, prefer observable runtime, API, CLI, UI, or
   emitted-event assertions.
@@ -25,6 +43,11 @@ You are an autonomous coding agent working on a software project.
   command or route inventories unless those surfaces are the actual user-visible contract under test.
 
 ## Progress Report Format
+
+Keep each entry CONCISE: what changed, current blocker, next step — not CI
+transcripts or audit narratives. If progress.txt exceeds ~500 lines, compact
+it first: keep the `## Codebase Patterns` section, entries for the current
+story, and the last ~5 entries; delete the rest.
 
 APPEND to progress.txt (never replace, always append):
 ```
