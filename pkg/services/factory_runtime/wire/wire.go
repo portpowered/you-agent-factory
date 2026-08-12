@@ -1,6 +1,6 @@
 // Package wire is the Factory Runtime service composition boundary.
 //
-// Wire performs construction only, returns the singular factory.Service root
+// Wire performs construction only, returns the singular Factory Runtime root
 // interface, and starts no lifecycle components. Parent-private orchestration,
 // instance_host, and dispatch_planning owner wiring stays inside the owner
 // service assembly path; peers depend on Service rather than owner internals or
@@ -41,7 +41,8 @@ func NewService(
 	clock factoryruntime.Clock,
 	workersPublisher WorkersPublisher,
 	workersCanceler WorkersCanceler,
-) (factoryruntime.Service, error) {
+	activation ...factoryruntime.RuntimeActivationOperation,
+) (factoryruntime.Root, error) {
 	var publisher dispatchplanning.WorkersPublisher
 	if workersPublisher != nil {
 		publisher = func(ctx context.Context, request workers.WorkstationDispatchRequest) error {
@@ -64,6 +65,7 @@ func NewService(
 		clock,
 		publisher,
 		canceler,
+		activation...,
 	)
 	if err != nil {
 		return nil, err
@@ -72,22 +74,4 @@ func NewService(
 		return nil, fmt.Errorf("construct Factory Runtime: implementation rejected its dependencies")
 	}
 	return service, nil
-}
-
-// BindActiveService attaches the hosted runtime delegate that serves published
-// control, observation, and dispatch-plan operations on a wire-constructed
-// root.
-func BindActiveService(root factoryruntime.Service, active factoryruntime.Service) error {
-	if root == nil {
-		return fmt.Errorf("bind Factory Runtime active service: root is required")
-	}
-	if active == nil {
-		return fmt.Errorf("bind Factory Runtime active service: active service is required")
-	}
-	concrete, ok := root.(*factoryruntimeinternal.Root)
-	if !ok {
-		return fmt.Errorf("bind Factory Runtime active service: root is not wire-constructed implementation")
-	}
-	concrete.BindActiveService(active)
-	return nil
 }

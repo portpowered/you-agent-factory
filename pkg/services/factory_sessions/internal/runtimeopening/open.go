@@ -415,9 +415,9 @@ func openRuntime(
 	// A JavaScript workflow's children are Workers, and Workers are supervised
 	// by the runtime that owns this session's Worker Sessions service and
 	// canonical ledger. That runtime only exists here, after the execution
-	// service it must be handed to was already constructed, so the binding is
-	// late by necessity rather than by preference -- the same ordering
-	// Root.BindActiveService resolves the same way.
+	// service it must be handed to was already constructed. The eventual root
+	// activation operation must preserve this dependency ordering without
+	// publishing a second post-construction binding path.
 	bindWorkerInvoker(durableExecution.Service, rootRuntime)
 	opened := assembleRuntimeProducts(
 		factoryDefinitionOwner,

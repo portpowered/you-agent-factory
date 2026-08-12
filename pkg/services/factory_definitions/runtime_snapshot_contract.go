@@ -51,6 +51,61 @@ type RuntimeSnapshot struct {
 	BundledFiles      []PortableBundledFileReplacement
 }
 
+// CloneRuntimeSnapshot returns a detached copy suitable for crossing another
+// service boundary. Runtime activation stores the copy it was given so a
+// caller cannot change an already accepted activation by retaining one of the
+// nested maps, slices, or pointers in its request.
+func CloneRuntimeSnapshot(snapshot RuntimeSnapshot) (RuntimeSnapshot, error) {
+	config, err := CloneFactoryConfig(&snapshot.EffectiveFactory)
+	if err != nil {
+		return RuntimeSnapshot{}, fmt.Errorf("clone runtime snapshot Factory: %w", err)
+	}
+	if config == nil {
+		return RuntimeSnapshot{}, fmt.Errorf("clone runtime snapshot Factory: configuration is required")
+	}
+	for index := range config.Workers {
+		if index < len(snapshot.EffectiveFactory.Workers) {
+			config.Workers[index] = CloneWorkerConfig(snapshot.EffectiveFactory.Workers[index])
+		}
+	}
+	for index := range config.Workstations {
+		if index < len(snapshot.EffectiveFactory.Workstations) {
+			config.Workstations[index] = CloneWorkstationConfig(snapshot.EffectiveFactory.Workstations[index])
+		}
+	}
+
+	cloned := RuntimeSnapshot{
+		FactoryDir:        snapshot.FactoryDir,
+		RuntimeBaseDir:    snapshot.RuntimeBaseDir,
+		Invocation:        snapshot.Invocation,
+		EffectiveFactory:  *config,
+		Workers:           make([]FactoryWorkerConfig, len(snapshot.Workers)),
+		Workstations:      make([]FactoryWorkstationConfig, len(snapshot.Workstations)),
+		AutomationSources: make([]RuntimeAutomationSource, len(snapshot.AutomationSources)),
+		PromptSources:     append([]RuntimePromptSource(nil), snapshot.PromptSources...),
+		BundledFiles:      append([]PortableBundledFileReplacement(nil), snapshot.BundledFiles...),
+	}
+	if snapshot.DefinitionVersion != nil {
+		version := *snapshot.DefinitionVersion
+		cloned.DefinitionVersion = &version
+	}
+	for index, worker := range snapshot.Workers {
+		cloned.Workers[index] = CloneWorkerConfig(worker)
+	}
+	for index, workstation := range snapshot.Workstations {
+		cloned.Workstations[index] = CloneWorkstationConfig(workstation)
+	}
+	for index, source := range snapshot.AutomationSources {
+		cloned.AutomationSources[index] = source
+		cloned.AutomationSources[index].Workstation = CloneWorkstationConfig(source.Workstation)
+		if source.Worker != nil {
+			worker := CloneWorkerConfig(*source.Worker)
+			cloned.AutomationSources[index].Worker = &worker
+		}
+	}
+	return cloned, nil
+}
+
 // RuntimeAutomationSource is the value-only automation definition associated
 // with one effective workstation. Runtime and Automations use the embedded
 // workstation/worker policy to create their own isolated live source state.
