@@ -36,6 +36,7 @@ type DispatchResultHookWakeSignaler interface {
 }
 
 type CompletionDeliveryPlanner = recordings.CompletionDeliveryPlanner
+type ReplayWorkerSessionIDResolver = recordings.ReplayWorkerSessionIDResolver
 
 // DispatchPlanOutcome is the plain success vocabulary for Factory Runtime root
 // dispatch-plan operations. Peers branch on these values without Petri

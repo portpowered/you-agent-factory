@@ -103,6 +103,15 @@
       ]
     },
     {
+      "test": "tests/functional/workers/inference/worker_session_id_history_test.go::TestWSRFT010WorkerSessionIDHTTPHistory",
+      "stableIds": [
+        "rest/getWorkerSessionObservationByFactorySessionAndWorkerSessionId",
+        "rest/getWorkerSessionObservationByWorkerSessionId",
+        "rest/readWorkerSessionTranscriptByFactorySessionAndWorkerSessionId",
+        "rest/readWorkerSessionTranscriptByWorkerSessionId"
+      ]
+    },
+    {
       "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestDirectWorkerSessionInvokeContinueLocalPreservesSessionAndLineage",
       "stableIds": [
         "cli/you.worker-sessions.continue",

@@ -25,6 +25,7 @@ type (
 	Clock                                                      = recordingcontracts.Clock
 	CompletedDispatch                                          = recordingcontracts.CompletedDispatch
 	CompletionDeliveryPlanner                                  = recordingcontracts.CompletionDeliveryPlanner
+	ReplayWorkerSessionIDResolver                              = recordingcontracts.ReplayWorkerSessionIDResolver
 	CreateReplayPlanRequest                                    = recordingcontracts.CreateReplayPlanRequest
 	CreateReplayPlanResult                                     = recordingcontracts.CreateReplayPlanResult
 	DecodePortableArtifactRequest                              = recordingcontracts.DecodePortableArtifactRequest

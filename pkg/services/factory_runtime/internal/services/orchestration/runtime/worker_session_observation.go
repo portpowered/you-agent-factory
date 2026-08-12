@@ -191,6 +191,9 @@ func (s *recordedWorkerSessionObservation) withRecordingHealth(
 	ctx context.Context,
 	observation workersessions.Observation,
 ) (workersessions.Observation, error) {
+	if s != nil && s.factorySessionID != "" {
+		observation.FactorySessionID = s.factorySessionID
+	}
 	health, err := s.recordingHealth(ctx)
 	if err != nil {
 		return workersessions.Observation{}, err
@@ -211,6 +214,9 @@ func (s *recordedWorkerSessionObservation) applyRecordingHealth(
 		return err
 	}
 	for index := range observations {
+		if s != nil && s.factorySessionID != "" {
+			observations[index].FactorySessionID = s.factorySessionID
+		}
 		if current, ok := health[observations[index].WorkerSessionID]; ok {
 			observations[index].RecordingHealth = current.status
 			observations[index].RecordingHealthReason = current.reason
@@ -471,10 +477,15 @@ func newRecordedWorkerSessionObservationWithRecording(
 	providerSessions providersessions.Service,
 	recordingID string,
 	recordingReader recordings.WorkerRecordingReader,
+	factorySessionIDs ...string,
 ) workersessions.Service {
+	factorySessionID := ""
+	if len(factorySessionIDs) > 0 {
+		factorySessionID = strings.TrimSpace(factorySessionIDs[0])
+	}
 	return &recordedWorkerSessionObservation{
 		Service: live, ledger: ledger, projector: projector, clock: clock,
 		providerSessions: providerSessions, recordingID: strings.TrimSpace(recordingID),
-		recordingReader: recordingReader,
+		recordingReader: recordingReader, factorySessionID: factorySessionID,
 	}
 }

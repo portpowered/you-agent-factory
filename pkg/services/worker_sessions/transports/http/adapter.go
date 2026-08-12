@@ -86,7 +86,9 @@ func (a *Adapter) GetWorkerSessionObservation(
 	if err != nil {
 		return factoryapi.WorkerSessionObservation{}, fmt.Errorf("get Worker Session observation: %w", err)
 	}
-	observation.FactorySessionID = strings.TrimSpace(sessionID)
+	if observation, err = scopeWorkerSessionObservation(observation, sessionID); err != nil {
+		return factoryapi.WorkerSessionObservation{}, fmt.Errorf("scope Worker Session observation: %w", err)
+	}
 	return WorkerSessionObservationToAPI(observation), nil
 }
 
@@ -120,7 +122,9 @@ func (a *Adapter) GetWorkerSessionObservationByWorkerSessionID(
 	if err != nil {
 		return factoryapi.WorkerSessionObservation{}, fmt.Errorf("get Worker Session observation: %w", err)
 	}
-	observation.FactorySessionID = strings.TrimSpace(sessionID)
+	if observation, err = scopeWorkerSessionObservation(observation, sessionID); err != nil {
+		return factoryapi.WorkerSessionObservation{}, fmt.Errorf("scope Worker Session observation: %w", err)
+	}
 	return WorkerSessionObservationToAPI(observation), nil
 }
 
@@ -147,6 +151,15 @@ func (a *Adapter) ReadWorkerSessionTranscript(
 	}
 	if err := ctx.Err(); err != nil {
 		return factoryapi.WorkerSessionTranscriptResponse{}, err
+	}
+	observation, err := a.observations.GetObservation(ctx, workersessions.GetObservationRequest{
+		ProviderSession: providers.SessionRef{Provider: providers.ID(provider), Kind: kind, ID: id},
+	})
+	if err != nil {
+		return factoryapi.WorkerSessionTranscriptResponse{}, fmt.Errorf("get Worker Session observation: %w", err)
+	}
+	if _, err := scopeWorkerSessionObservation(observation, sessionID); err != nil {
+		return factoryapi.WorkerSessionTranscriptResponse{}, fmt.Errorf("scope Worker Session observation: %w", err)
 	}
 	result, err := a.observations.ReadTranscript(ctx, workersessions.ReadTranscriptRequest{
 		ProviderSession: providers.SessionRef{Provider: providers.ID(provider), Kind: kind, ID: id},
@@ -182,6 +195,15 @@ func (a *Adapter) ReadWorkerSessionTranscriptByWorkerSessionID(
 	}
 	if err := ctx.Err(); err != nil {
 		return factoryapi.WorkerSessionTranscriptResponse{}, err
+	}
+	observation, err := a.observations.GetObservationByWorkerSessionID(ctx, workersessions.GetObservationByWorkerSessionIDRequest{
+		WorkerSessionID: workerSessionID,
+	})
+	if err != nil {
+		return factoryapi.WorkerSessionTranscriptResponse{}, fmt.Errorf("get Worker Session observation: %w", err)
+	}
+	if _, err := scopeWorkerSessionObservation(observation, sessionID); err != nil {
+		return factoryapi.WorkerSessionTranscriptResponse{}, fmt.Errorf("scope Worker Session observation: %w", err)
 	}
 	result, err := a.observations.ReadTranscript(ctx, workersessions.ReadTranscriptRequest{
 		WorkerSessionID: workerSessionID,
@@ -240,6 +262,9 @@ func (a *Adapter) StreamWorkerSessionEventsWithCursor(
 	if err != nil {
 		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, fmt.Errorf("get Worker Session observation: %w", err)
 	}
+	if observation, err = scopeWorkerSessionObservation(observation, sessionID); err != nil {
+		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, fmt.Errorf("scope Worker Session observation: %w", err)
+	}
 	subscription, err := a.observations.StreamObservations(ctx, workersessions.StreamObservationsRequest{
 		ProviderSession: request.ProviderSession,
 		// Carry the documented default explicitly so the canonical ledger
@@ -254,7 +279,6 @@ func (a *Adapter) StreamWorkerSessionEventsWithCursor(
 	if subscription.NextFunc == nil {
 		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, workersessions.ErrObservationSourceUnavailable
 	}
-	observation.FactorySessionID = strings.TrimSpace(sessionID)
 	return WorkerSessionObservationToAPI(observation), subscription, nil
 }
 
@@ -299,6 +323,9 @@ func (a *Adapter) StreamWorkerSessionEventsByWorkerSessionIDWithCursor(
 	if err != nil {
 		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, fmt.Errorf("get Worker Session observation: %w", err)
 	}
+	if observation, err = scopeWorkerSessionObservation(observation, sessionID); err != nil {
+		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, fmt.Errorf("scope Worker Session observation: %w", err)
+	}
 	subscription, err := a.observations.StreamObservationsByWorkerSessionID(ctx, workersessions.StreamObservationsByWorkerSessionIDRequest{
 		WorkerSessionID: workerSessionID,
 		Limit:           workersessions.DefaultObservationStreamLimit,
@@ -311,7 +338,6 @@ func (a *Adapter) StreamWorkerSessionEventsByWorkerSessionIDWithCursor(
 	if subscription.NextFunc == nil {
 		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, workersessions.ErrObservationSourceUnavailable
 	}
-	observation.FactorySessionID = strings.TrimSpace(sessionID)
 	return WorkerSessionObservationToAPI(observation), subscription, nil
 }
 
@@ -544,7 +570,9 @@ func (a *Adapter) ListWorkerSessions(
 	}
 	sortObservations(result.Observations)
 	for index := range result.Observations {
-		result.Observations[index].FactorySessionID = strings.TrimSpace(sessionID)
+		if result.Observations[index], err = scopeWorkerSessionObservation(result.Observations[index], sessionID); err != nil {
+			return factoryapi.ListWorkerSessionsResponse{}, fmt.Errorf("scope Worker Session observation: %w", err)
+		}
 	}
 	return ListWorkerSessionsResponseToAPI(result), nil
 }
@@ -683,6 +711,19 @@ func (a *Adapter) StreamTopLevelWorkerSessionEvents(
 		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, workersessions.ErrObservationSourceUnavailable
 	}
 	return WorkerSessionObservationToAPI(observation), subscription, nil
+}
+
+func scopeWorkerSessionObservation(
+	observation workersessions.Observation,
+	sessionID string,
+) (workersessions.Observation, error) {
+	expectedSessionID := strings.TrimSpace(sessionID)
+	actualSessionID := strings.TrimSpace(observation.FactorySessionID)
+	if actualSessionID != "" && actualSessionID != expectedSessionID {
+		return workersessions.Observation{}, workersessions.ErrObservationSessionNotFound
+	}
+	observation.FactorySessionID = expectedSessionID
+	return observation, nil
 }
 
 // sortObservations gives the public list a chronological attempt order while

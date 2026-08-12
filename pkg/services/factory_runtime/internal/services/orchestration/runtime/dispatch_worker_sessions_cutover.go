@@ -42,6 +42,12 @@ func startThroughWorkerSessions(
 	}
 	dispatchID := request.Execution.Dispatch.DispatchID
 	sessionID := dispatchID
+	if resolver, ok := cfg.completionDeliveryPlanner.(factory.ReplayWorkerSessionIDResolver); ok {
+		recordedSessionID, found := resolver.WorkerSessionIDForDispatch(request.Execution.Dispatch)
+		if found {
+			sessionID = recordedSessionID
+		}
+	}
 	if _, err := cfg.workerSessions.Reserve(
 		context.WithoutCancel(ctx),
 		workersessions.ReserveRequest{ID: sessionID},
@@ -160,6 +166,7 @@ func (f *factoryImpl) WorkerSessionsObservation() workersessions.ObservationServ
 		f.cfg.providerSessions,
 		f.cfg.recordingID,
 		workerRecordingReader,
+		sessionIDFromFactoryConfig(f.cfg),
 	)
 }
 
@@ -175,6 +182,7 @@ type recordedWorkerSessionObservation struct {
 	providerSessions providersessions.Service
 	recordingID      string
 	recordingReader  recordings.WorkerRecordingReader
+	factorySessionID string
 }
 
 var _ workersessions.Service = (*recordedWorkerSessionObservation)(nil)
