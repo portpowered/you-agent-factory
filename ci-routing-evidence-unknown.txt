@@ -1,0 +1,1 @@
+This isolated fixture verifies the conservative unknown-path fallback.
