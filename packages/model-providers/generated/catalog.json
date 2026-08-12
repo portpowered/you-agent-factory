@@ -2343,6 +2343,7 @@
       "knownLimits": [],
       "maximumExecutionCapabilities": {
         "imageInput": false,
+        "permissionBypass": false,
         "promptSubmission": true,
         "sessionResume": false,
         "structuredOutput": false,
@@ -2499,6 +2500,7 @@
       "knownLimits": [],
       "maximumExecutionCapabilities": {
         "imageInput": true,
+        "permissionBypass": false,
         "promptSubmission": true,
         "sessionResume": false,
         "structuredOutput": false,
@@ -2654,6 +2656,7 @@
       "knownLimits": [],
       "maximumExecutionCapabilities": {
         "imageInput": false,
+        "permissionBypass": false,
         "promptSubmission": true,
         "sessionResume": false,
         "structuredOutput": false,
@@ -2806,6 +2809,7 @@
       "knownLimits": [],
       "maximumExecutionCapabilities": {
         "imageInput": false,
+        "permissionBypass": false,
         "promptSubmission": true,
         "sessionResume": false,
         "structuredOutput": false,
@@ -2958,6 +2962,7 @@
       "knownLimits": [],
       "maximumExecutionCapabilities": {
         "imageInput": false,
+        "permissionBypass": false,
         "promptSubmission": true,
         "sessionResume": false,
         "structuredOutput": false,
@@ -3110,6 +3115,7 @@
       "knownLimits": [],
       "maximumExecutionCapabilities": {
         "imageInput": false,
+        "permissionBypass": false,
         "promptSubmission": true,
         "sessionResume": false,
         "structuredOutput": false,
@@ -3262,6 +3268,7 @@
       "knownLimits": [],
       "maximumExecutionCapabilities": {
         "imageInput": false,
+        "permissionBypass": false,
         "promptSubmission": true,
         "sessionResume": false,
         "structuredOutput": false,
@@ -3414,6 +3421,7 @@
       "knownLimits": [],
       "maximumExecutionCapabilities": {
         "imageInput": false,
+        "permissionBypass": false,
         "promptSubmission": true,
         "sessionResume": false,
         "structuredOutput": false,
@@ -3566,6 +3574,7 @@
       "knownLimits": [],
       "maximumExecutionCapabilities": {
         "imageInput": false,
+        "permissionBypass": false,
         "promptSubmission": true,
         "sessionResume": false,
         "structuredOutput": false,
@@ -3718,6 +3727,7 @@
       "knownLimits": [],
       "maximumExecutionCapabilities": {
         "imageInput": false,
+        "permissionBypass": false,
         "promptSubmission": true,
         "sessionResume": false,
         "structuredOutput": false,
@@ -3870,6 +3880,7 @@
       "knownLimits": [],
       "maximumExecutionCapabilities": {
         "imageInput": false,
+        "permissionBypass": false,
         "promptSubmission": true,
         "sessionResume": false,
         "structuredOutput": false,
@@ -4022,6 +4033,7 @@
       "knownLimits": [],
       "maximumExecutionCapabilities": {
         "imageInput": false,
+        "permissionBypass": false,
         "promptSubmission": true,
         "sessionResume": false,
         "structuredOutput": false,
@@ -4174,6 +4186,7 @@
       "knownLimits": [],
       "maximumExecutionCapabilities": {
         "imageInput": false,
+        "permissionBypass": false,
         "promptSubmission": true,
         "sessionResume": false,
         "structuredOutput": false,
@@ -4326,6 +4339,7 @@
       "knownLimits": [],
       "maximumExecutionCapabilities": {
         "imageInput": false,
+        "permissionBypass": false,
         "promptSubmission": true,
         "sessionResume": false,
         "structuredOutput": false,
@@ -4478,6 +4492,7 @@
       "knownLimits": [],
       "maximumExecutionCapabilities": {
         "imageInput": false,
+        "permissionBypass": false,
         "promptSubmission": true,
         "sessionResume": false,
         "structuredOutput": false,
@@ -4630,6 +4645,7 @@
       "knownLimits": [],
       "maximumExecutionCapabilities": {
         "imageInput": false,
+        "permissionBypass": false,
         "promptSubmission": true,
         "sessionResume": false,
         "structuredOutput": false,
@@ -4782,6 +4798,7 @@
       "knownLimits": [],
       "maximumExecutionCapabilities": {
         "imageInput": false,
+        "permissionBypass": false,
         "promptSubmission": true,
         "sessionResume": false,
         "structuredOutput": false,
@@ -4934,6 +4951,7 @@
       "knownLimits": [],
       "maximumExecutionCapabilities": {
         "imageInput": false,
+        "permissionBypass": false,
         "promptSubmission": true,
         "sessionResume": false,
         "structuredOutput": false,
@@ -5086,6 +5104,7 @@
       "knownLimits": [],
       "maximumExecutionCapabilities": {
         "imageInput": false,
+        "permissionBypass": false,
         "promptSubmission": true,
         "sessionResume": false,
         "structuredOutput": false,
@@ -5238,6 +5257,7 @@
       "knownLimits": [],
       "maximumExecutionCapabilities": {
         "imageInput": false,
+        "permissionBypass": false,
         "promptSubmission": true,
         "sessionResume": false,
         "structuredOutput": false,

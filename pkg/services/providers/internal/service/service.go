@@ -533,6 +533,13 @@ func (s *Service) validatePermissionBypass(provider providers.ID, requested bool
 func (s *Service) permissionDescriptor(provider providers.ID) (providers.Descriptor, error) {
 	if s.acp != nil {
 		if canonical, ok := s.acp.Resolve(provider); ok {
+			// A package-owned catalog descriptor is the authoritative static
+			// capability fact for a packaged ACP integration. The conservative
+			// runtime fallback below is only for operator-configured integrations
+			// that have no published catalog entry.
+			if descriptor, err := s.catalog.RegistrationProvider(canonical); err == nil {
+				return descriptor, nil
+			}
 			for _, integration := range s.acp.Integrations() {
 				if integration.Name == canonical {
 					return acpDescriptor(integration), nil

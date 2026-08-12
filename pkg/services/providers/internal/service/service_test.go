@@ -374,7 +374,16 @@ func (service *stubACPService) TryCancel(context.Context, acp.Generation) (bool,
 func TestRootACPUsesAdvertisedPermissionBypass(t *testing.T) {
 	t.Parallel()
 
-	catalogService, err := catalogwire.NewService()
+	catalogService, err := catalogwire.NewService(catalogwire.WithDescriptors(providers.Descriptor{
+		ID:           "cursor-acp",
+		DisplayName:  "Cursor ACP",
+		Availability: providers.AvailabilitySelectable,
+		Readiness:    providers.ReadinessUnverified,
+		Capabilities: []providers.Capability{
+			providers.CapabilityPromptSubmission,
+			providers.CapabilityPermissionBypass,
+		},
+	}))
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
