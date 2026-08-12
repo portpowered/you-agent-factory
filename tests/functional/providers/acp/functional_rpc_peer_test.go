@@ -21,6 +21,7 @@ type functionalRPCPeer struct {
 	scanner      *bufio.Scanner
 	writer       *bufio.Writer
 	stderr       io.Writer
+	closeOutput  io.Closer
 	modelSet     bool
 	sessionID    string
 	sessions     int
@@ -47,6 +48,9 @@ func runFunctionalRPCPeer(mode string, stdin io.Reader, stdout, stderr io.Writer
 	peer := &functionalRPCPeer{
 		mode: mode, scanner: bufio.NewScanner(stdin), writer: bufio.NewWriter(stdout), stderr: stderr,
 		sessionID: os.Getenv("YOU_TEST_ACP_SESSION_ID"), retryAttempt: retryAttempt,
+	}
+	if closeOutput, ok := stdout.(io.Closer); ok {
+		peer.closeOutput = closeOutput
 	}
 	if peer.sessionID == "" {
 		peer.sessionID = "acp-session-functional-1"
@@ -116,6 +120,44 @@ func (p *functionalRPCPeer) serve() error {
 		case "session/prompt":
 			if err := p.prompt(request); err != nil {
 				return err
+			}
+			if p.mode == "disconnect-once" && p.sessions == 1 {
+				marker := os.Getenv(acpDisconnectMarkerEnvironment)
+				ready := os.Getenv(acpDisconnectReadyEnvironment)
+				release := os.Getenv(acpDisconnectReleaseEnvironment)
+				if marker == "" {
+					return fmt.Errorf("disconnect-once mode requires %s", acpDisconnectMarkerEnvironment)
+				}
+				if ready == "" || release == "" {
+					return fmt.Errorf("disconnect-once mode requires %s and %s", acpDisconnectReadyEnvironment, acpDisconnectReleaseEnvironment)
+				}
+				if _, err := os.Stat(marker); os.IsNotExist(err) {
+					if err := os.WriteFile(ready, []byte("response-ready"), 0o600); err != nil {
+						return fmt.Errorf("write ACP response-ready marker: %w", err)
+					}
+					for {
+						if _, err := os.Stat(release); err == nil {
+							break
+						} else if !os.IsNotExist(err) {
+							return fmt.Errorf("inspect ACP disconnect release: %w", err)
+						}
+						time.Sleep(10 * time.Millisecond)
+					}
+					if p.closeOutput == nil {
+						return fmt.Errorf("disconnect-once mode cannot close its output")
+					}
+					if err := p.closeOutput.Close(); err != nil {
+						return fmt.Errorf("close disconnected ACP output: %w", err)
+					}
+					if err := os.WriteFile(marker, []byte("disconnected"), 0o600); err != nil {
+						return fmt.Errorf("write ACP disconnect marker: %w", err)
+					}
+					for p.scanner.Scan() {
+					}
+					return p.scanner.Err()
+				} else if err != nil {
+					return fmt.Errorf("inspect ACP disconnect marker: %w", err)
+				}
 			}
 			if (p.mode == "spawn" && p.sessions >= 4) ||
 				(p.mode == "tournament" && p.sessions >= 3) ||

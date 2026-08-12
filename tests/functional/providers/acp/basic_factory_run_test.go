@@ -24,6 +24,10 @@ import (
 const (
 	acpHelperEnvironment                = "YOU_TEST_ACP_AGENT_HELPER"
 	acpRetryAttemptDirectoryEnvironment = "YOU_TEST_ACP_RETRY_ATTEMPT_DIR"
+	acpRetryMarkerEnvironment           = "YOU_TEST_ACP_RETRY_MARKER"
+	acpDisconnectMarkerEnvironment      = "YOU_TEST_ACP_DISCONNECT_MARKER"
+	acpDisconnectReadyEnvironment       = "YOU_TEST_ACP_DISCONNECT_READY"
+	acpDisconnectReleaseEnvironment     = "YOU_TEST_ACP_DISCONNECT_RELEASE"
 )
 
 func TestFactoryRunRoutesExecutorProviderThroughACPAdapter(t *testing.T) {
@@ -356,7 +360,7 @@ func (p *legacyProvider) Infer(context.Context, workers.ProviderInferenceRequest
 
 func TestACPAgentHelperProcess(t *testing.T) {
 	mode := os.Getenv(acpHelperEnvironment)
-	if mode != "1" && mode != "fail" && mode != "auth" && mode != "model" && mode != "package-conformance" && mode != "resource" && mode != "content" && mode != "version" && mode != "init-fail" && mode != "stderr" && mode != "malformed" && mode != "eof" && mode != "block" && mode != "isolate" && mode != "unsupported" && mode != "persistent" && mode != "serialize" && mode != "crash-once" && mode != "spawn" && mode != "tournament" && mode != "cancelled-response" && mode != "resume" && mode != "resume-not-found" && mode != "retry-resume" {
+	if mode != "1" && mode != "fail" && mode != "auth" && mode != "model" && mode != "package-conformance" && mode != "resource" && mode != "content" && mode != "version" && mode != "init-fail" && mode != "stderr" && mode != "malformed" && mode != "eof" && mode != "block" && mode != "isolate" && mode != "unsupported" && mode != "persistent" && mode != "serialize" && mode != "crash-once" && mode != "spawn" && mode != "tournament" && mode != "cancelled-response" && mode != "resume" && mode != "resume-not-found" && mode != "retry-resume" && mode != "disconnect-once" {
 		return
 	}
 	if err := runFunctionalRPCPeer(mode, os.Stdin, os.Stdout, os.Stderr); err != nil {
