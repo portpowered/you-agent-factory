@@ -358,6 +358,7 @@ describe("CurrentActivityGraphSurface", () => {
 
     render(
       <CurrentActivityGraphSurface
+        editorController={viewModel as never}
         viewModel={viewModel as never}
         imports={importControllerStub}
         selection={{ kind: "state-node", placeId: "story:queued" }}
@@ -366,7 +367,9 @@ describe("CurrentActivityGraphSurface", () => {
     );
 
     expect(
-      screen.getByTestId("graph-viewport").getAttribute("data-selected-node-ids"),
+      screen
+        .getByTestId("graph-viewport")
+        .getAttribute("data-selected-node-ids"),
     ).toBe("work-state:story:queued");
   });
 
