@@ -16,6 +16,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -120,6 +121,74 @@ func TestWSRFT005CompletedWorkerReplayParity(t *testing.T) {
 	}
 }
 
+// TestWSRFT008PostHandoffRecordingLossPreservesExecutionTruth injects a
+// capture failure after the durable opening barrier for both a successful and
+// an unsuccessful provider result. The Work execution remains authoritative;
+// only the Worker recording projection degrades to the readable prefix.
+//
+// WSR-FT-008: post-handoff recording loss never rewrites execution outcome,
+// and a correlated terminal fact upgrades the surviving prefix to DEGRADED.
+func TestWSRFT008PostHandoffRecordingLossPreservesExecutionTruth(t *testing.T) {
+	tests := []struct {
+		name       string
+		fixture    string
+		exitCode   int
+		wantPhase  workers.Phase
+		wantStatus recordings.WorkerRecordingStatus
+	}{
+		{name: "successful execution", fixture: "executor_success", wantPhase: workers.PhaseCompleted, wantStatus: recordings.WorkerRecordingStatusDegraded},
+		{name: "failed execution", fixture: "executor_failure_no_arcs", exitCode: 1, wantPhase: workers.PhaseFailed, wantStatus: recordings.WorkerRecordingStatusDegraded},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			probe := newWSRFT004RecordingProbe(t, false)
+			probe.failPosition = 2
+			runner := newWSRFT004ProviderRunner(t, probe)
+			dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, test.fixture))
+			support.ClearSeedInputs(t, dir)
+			loaded := loadOpeningRecordFixture(t, "codex", "success")
+			support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, loaded.Process.Model))
+			testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"WSR-FT-008 recording loss"}`))
+
+			reader, execErr := runWSRFT008FactoryWithProcess(t, dir, runner, probe, test.exitCode)
+			if execErr != nil {
+				t.Fatalf("recorded factory Process.Execute error = %v", execErr)
+			}
+			recordingID, workerSessionID := probe.RecordingIdentity(t)
+			snapshot, err := reader.LoadWorkerRecording(t.Context(), recordingID)
+			if err != nil {
+				t.Fatalf("LoadWorkerRecording(%q) error = %v", recordingID, err)
+			}
+			if len(snapshot.Sessions) != 1 {
+				t.Fatalf("durable Worker snapshot = %#v, want one session", snapshot)
+			}
+			session := snapshot.Sessions[0]
+			if session.Status != test.wantStatus || session.Failure != "PERSISTENCE_FAILED" {
+				t.Fatalf("durable Worker session = %#v, want DEGRADED/PERSISTENCE_FAILED", session)
+			}
+			if session.ExecutionTerminal == nil || session.ExecutionTerminal.Phase != test.wantPhase || session.ExecutionTerminal.Status != string(test.wantPhase) {
+				t.Fatalf("durable execution terminal = %#v, want %q execution truth", session.ExecutionTerminal, test.wantPhase)
+			}
+			if len(session.Records) != 1 || session.Records[0].ID.Position != 1 {
+				t.Fatalf("durable prefix = %#v, want only opening record", session.Records)
+			}
+			replayed, err := (recordings.WorkerRecordingCodec{}).ReplayWorkerRecording(recordings.WorkerRecordingReplayRequest{
+				Snapshot: snapshot, WorkerSessionID: workerSessionID,
+			})
+			if err != nil {
+				t.Fatalf("ReplayWorkerRecording(%q) error = %v", recordingID, err)
+			}
+			if replayed.Projection.Status != test.wantStatus || replayed.Projection.Terminal != nil {
+				t.Fatalf("replayed projection = %#v, want degraded prefix without fabricated terminal", replayed.Projection)
+			}
+			if runner.CallCount() != 1 {
+				t.Fatalf("provider command calls = %d, want exactly one", runner.CallCount())
+			}
+		})
+	}
+}
+
 func wsrFT004Factory(t *testing.T) string {
 	t.Helper()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
@@ -177,9 +246,43 @@ func runWSRFT004FactoryWithProcess(
 	return reader
 }
 
+func runWSRFT008FactoryWithProcess(
+	t *testing.T,
+	dir string,
+	runner *wsrFT004ProviderRunner,
+	probe *wsrFT004RecordingProbe,
+	exitCode int,
+) (recordings.WorkerRecordingReader, error) {
+	t.Helper()
+	loaded := loadOpeningRecordFixture(t, "codex", "success")
+	runner.delegate.Queue(platformprocess.CommandResult{
+		Stdout:   append([]byte(nil), loaded.Stdout.Raw...),
+		Stderr:   []byte("injected execution result"),
+		ExitCode: exitCode,
+	})
+
+	processValue, err := root.BuildProcess(context.Background(), serviceedges.Edges{
+		ProviderCommandRunner: runner,
+		WorkerRecordingWriter: probe,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("BuildProcess() error: %w", err)
+	}
+	process := processValue
+	reader := root.WorkerRecordingReaderFromProcess(process)
+	support.CleanupProcess(t, process)
+	recordPath := filepath.Join(t.TempDir(), "wsr-ft-008.json")
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "run", "--dir", dir, "--quiet", "--record", recordPath,
+	})
+	inputs.Input.WorkingDirectory = dir
+	return reader, process.Execute(inputs.Input)
+}
+
 type wsrFT004RecordingProbe struct {
-	delegate    recordings.WorkerRecordingWriter
-	failOpening bool
+	delegate     recordings.WorkerRecordingWriter
+	failOpening  bool
+	failPosition events.AggregateSequence
 
 	mu           sync.Mutex
 	events       []string
@@ -224,10 +327,12 @@ func (store *wsrFT004RecordingStore) PersistWorkerRecord(
 	history := append([]events.Record(nil), session.Records...)
 	history = append(history, record.Record.Detached())
 	projection, err := (recordings.WorkerRecordingCodec{}).ReduceWorkerRecording(recordings.WorkerRecordingHistory{
-		RecordingID:     record.RecordingID,
-		WorkerSessionID: record.WorkerSessionID,
-		Topic:           record.Record.ID.Topic,
-		Records:         history,
+		RecordingID:       record.RecordingID,
+		WorkerSessionID:   record.WorkerSessionID,
+		Topic:             record.Record.ID.Topic,
+		Failure:           session.Failure,
+		ExecutionTerminal: session.ExecutionTerminal,
+		Records:           history,
 	})
 	if err != nil {
 		return err
@@ -235,6 +340,7 @@ func (store *wsrFT004RecordingStore) PersistWorkerRecord(
 	session.Topic = projection.Topic
 	session.Status = projection.Status
 	session.LastPosition = projection.LastPosition
+	session.ExecutionTerminal = projection.ExecutionTerminal
 	session.Records = cloneWSRFT004Records(projection.Records)
 	store.snapshots[record.RecordingID] = snapshot
 	return nil
@@ -253,8 +359,24 @@ func (store *wsrFT004RecordingStore) PersistWorkerRecordingFailure(
 	snapshot.RecordingID = failure.RecordingID
 	session := findWSRFT004Session(&snapshot, failure.WorkerSessionID)
 	session.Topic = failure.Topic
-	session.Status = recordings.WorkerRecordingStatusFailed
 	session.Failure = failure.Code
+	session.ExecutionTerminal = failure.ExecutionTerminal
+	projection, err := (recordings.WorkerRecordingCodec{}).ReduceWorkerRecording(recordings.WorkerRecordingHistory{
+		RecordingID:       snapshot.RecordingID,
+		WorkerSessionID:   session.WorkerSessionID,
+		Topic:             session.Topic,
+		Failure:           session.Failure,
+		ExecutionTerminal: session.ExecutionTerminal,
+		Records:           session.Records,
+	})
+	if err != nil {
+		return err
+	}
+	session.Topic = projection.Topic
+	session.Status = projection.Status
+	session.LastPosition = projection.LastPosition
+	session.ExecutionTerminal = projection.ExecutionTerminal
+	session.Records = cloneWSRFT004Records(projection.Records)
 	store.snapshots[failure.RecordingID] = snapshot
 	return nil
 }
@@ -319,6 +441,12 @@ func (probe *wsrFT004RecordingProbe) PersistWorkerRecord(
 		probe.events = append(probe.events, "opening-rejected")
 		probe.mu.Unlock()
 		return errors.New("injected opening durability failure")
+	}
+	if probe.failPosition > 0 && record.Record.ID.Position == probe.failPosition {
+		probe.mu.Lock()
+		probe.events = append(probe.events, fmt.Sprintf("post-opening-failure:%d", record.Record.ID.Position))
+		probe.mu.Unlock()
+		return errors.New("injected post-opening durability failure")
 	}
 	if err := probe.delegate.PersistWorkerRecord(ctx, record); err != nil {
 		return err

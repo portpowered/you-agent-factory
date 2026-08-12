@@ -14,6 +14,7 @@ import (
 type (
 	WorkerSessionRecordingService         = recordingcontracts.WorkerSessionRecordingService
 	WorkerSessionRecording                = recordingcontracts.WorkerSessionRecording
+	WorkerSessionRecordingFinalizer       = recordingcontracts.WorkerSessionRecordingFinalizer
 	WorkerSessionRecordingRequest         = workerrecording.WorkerSessionRecordingRequest
 	WorkerRecordingRecord                 = workerrecording.WorkerRecordingRecord
 	WorkerRecordingReader                 = recordingcontracts.WorkerRecordingReader

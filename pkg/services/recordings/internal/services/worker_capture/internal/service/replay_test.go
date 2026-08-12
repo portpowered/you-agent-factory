@@ -267,6 +267,83 @@ func TestWorkerRecordingDurableLossWithAuthoritativeTerminalReopensAsDegraded(t 
 	}
 }
 
+func TestWorkerCapturePostOpeningPersistenceFailureRetainsTerminalTruth(t *testing.T) {
+	eventService := newRecordingEventsService()
+	recordingRoot := t.TempDir()
+	baseWriter, err := NewFileWriter(platformreplay.NewLocal(runtime.GOOS), recordingRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	failureWriter, ok := baseWriter.(recordings.WorkerRecordingFailureWriter)
+	if !ok {
+		t.Fatal("FileWriter does not expose the failure writer contract")
+	}
+	service, err := New(eventService, &postOpeningFailureWriter{
+		delegate:      baseWriter,
+		failureWriter: failureWriter,
+		failPosition:  2,
+	}, logging.NoopLogger{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := recordings.WorkerSessionRecordingRequest{
+		RecordingID:     "recording-post-opening-loss",
+		WorkerSessionID: "worker-post-opening-loss",
+		Topic:           events.Topic("worker-session/worker-post-opening-loss/events"),
+	}
+	handle, err := service.StartWorkerSessionRecording(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := eventService.Append(context.Background(), openingAppend(request.Topic, request.WorkerSessionID)); err != nil {
+		t.Fatal(err)
+	}
+	if err := handle.AwaitOpening(context.Background()); err != nil {
+		t.Fatalf("AwaitOpening() error = %v", err)
+	}
+	if _, err := eventService.Append(context.Background(), terminalAppend(request.Topic, request.WorkerSessionID)); err != nil {
+		t.Fatal(err)
+	}
+
+	finalizer, ok := handle.(recordings.WorkerSessionRecordingFinalizer)
+	if !ok {
+		t.Fatal("capture does not expose terminal-aware finalization")
+	}
+	closeErr := finalizer.CloseWithTerminal(context.Background(), recordings.WorkerRecordingTerminal{
+		Position: 2,
+		Phase:    workers.PhaseCompleted,
+		Status:   "COMPLETED",
+	})
+	if !errors.Is(closeErr, recordings.ErrWorkerRecordingPersistence) {
+		t.Fatalf("CloseWithTerminal() error = %v, want persistence failure", closeErr)
+	}
+
+	snapshot := loadWorkerRecording(t, recordingRoot, request.RecordingID)
+	if len(snapshot.Sessions) != 1 {
+		t.Fatalf("durable snapshot = %#v, want one Worker Session", snapshot)
+	}
+	session := snapshot.Sessions[0]
+	if session.Status != recordings.WorkerRecordingStatusDegraded || session.Failure != "PERSISTENCE_FAILED" {
+		t.Fatalf("durable session = %#v, want DEGRADED/PERSISTENCE_FAILED", session)
+	}
+	if session.ExecutionTerminal == nil || session.ExecutionTerminal.Phase != workers.PhaseCompleted || session.ExecutionTerminal.Status != "COMPLETED" {
+		t.Fatalf("durable execution terminal = %#v, want completed authoritative truth", session.ExecutionTerminal)
+	}
+	if len(session.Records) != 1 || session.Records[0].ID.Position != 1 {
+		t.Fatalf("durable prefix = %#v, want only the opening record", session.Records)
+	}
+	replayed, err := (recordings.WorkerRecordingCodec{}).ReplayWorkerRecording(recordings.WorkerRecordingReplayRequest{
+		Snapshot:        snapshot,
+		WorkerSessionID: request.WorkerSessionID,
+	})
+	if err != nil {
+		t.Fatalf("ReplayWorkerRecording() error = %v", err)
+	}
+	if replayed.Projection.Status != recordings.WorkerRecordingStatusDegraded || replayed.Projection.Terminal != nil {
+		t.Fatalf("replayed projection = %#v, want degraded prefix without fabricated terminal record", replayed.Projection)
+	}
+}
+
 func TestWorkerCaptureRejectsRecordAfterTerminal(t *testing.T) {
 	eventService := newRecordingEventsService()
 	service, err := New(eventService, recordings.WorkerRecordingWriterFunc(func(context.Context, recordings.WorkerRecordingRecord) error {
@@ -298,6 +375,23 @@ func TestWorkerCaptureRejectsRecordAfterTerminal(t *testing.T) {
 	if err := handle.Close(context.Background()); !errors.Is(err, recordings.ErrWorkerRecordingTerminal) {
 		t.Fatalf("Close() error = %v, want ErrWorkerRecordingTerminal", err)
 	}
+}
+
+type postOpeningFailureWriter struct {
+	delegate      recordings.WorkerRecordingWriter
+	failureWriter recordings.WorkerRecordingFailureWriter
+	failPosition  events.AggregateSequence
+}
+
+func (writer *postOpeningFailureWriter) PersistWorkerRecord(ctx context.Context, record recordings.WorkerRecordingRecord) error {
+	if record.Record.ID.Position == writer.failPosition {
+		return errors.New("injected post-opening persistence failure")
+	}
+	return writer.delegate.PersistWorkerRecord(ctx, record)
+}
+
+func (writer *postOpeningFailureWriter) PersistWorkerRecordingFailure(ctx context.Context, failure recordings.WorkerRecordingFailure) error {
+	return writer.failureWriter.PersistWorkerRecordingFailure(ctx, failure)
 }
 
 func TestWorkerCaptureDuplicateDeliveryIsIdempotentOnlyWhenIdentical(t *testing.T) {

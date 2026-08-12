@@ -965,14 +965,43 @@ func (r *registry) publishTerminalRecord(ctx context.Context, id, attemptID stri
 		SourceSequence: terminalSourceSequence,
 		SourceEventID:  terminalSourceEventID,
 	}
-	_, err = r.appendDraft(ctx, workersessions.Topic(id), identity, workerDraftSchemaID, draft)
+	appendResult, err := r.appendDraft(ctx, workersessions.Topic(id), identity, workerDraftSchemaID, draft)
 	pub.mu.Unlock()
 	if recording != nil {
-		if closeErr := recording.Close(context.WithoutCancel(ctx)); err == nil {
+		closeErr := r.closeWorkerRecording(
+			context.WithoutCancel(ctx),
+			recording,
+			state,
+			appendResult.Record.ID.Position,
+		)
+		if err == nil {
 			err = closeErr
+		} else if closeErr != nil {
+			err = errors.Join(err, closeErr)
 		}
 	}
 	return err
+}
+
+func (r *registry) closeWorkerRecording(
+	ctx context.Context,
+	recording recordings.WorkerSessionRecording,
+	state workersessions.State,
+	position events.AggregateSequence,
+) error {
+	finalizer, ok := recording.(recordings.WorkerSessionRecordingFinalizer)
+	if !ok {
+		return recording.Close(ctx)
+	}
+	phase, err := terminalPhase(state)
+	if err != nil {
+		return errors.Join(err, recording.Close(ctx))
+	}
+	return finalizer.CloseWithTerminal(ctx, recordings.WorkerRecordingTerminal{
+		Position: position,
+		Phase:    phase,
+		Status:   string(state),
+	})
 }
 
 // publishTerminalRecordOrLog calls publishTerminalRecord and, on failure,
