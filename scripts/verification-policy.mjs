@@ -163,12 +163,18 @@ function env(name) {
 	return process.env[name] ?? "";
 }
 
-function directLane(name, selectedEnv, reasonEnv, resultEnv) {
+function directLane(
+	name,
+	selectedEnv,
+	reasonEnv,
+	resultEnv,
+	allowMissingWhenNotRequired = false,
+) {
 	return {
 		name,
 		selected: env(selectedEnv),
 		reason: env(reasonEnv),
-		checks: [{ name, result: env(resultEnv) }],
+		checks: [{ name, result: env(resultEnv), allowMissingWhenNotRequired }],
 	};
 }
 
@@ -239,11 +245,12 @@ function policyInputFromEnvironment() {
 				"PACKAGED_RESULT",
 				"PACKAGED_CANDIDATE_RESULT",
 			),
-			directLane(
+				directLane(
 				"Model Providers Package",
 				"RUN_PROVIDERS",
 				"PROVIDERS_REASON",
 				"PROVIDERS_RESULT",
+				true,
 			),
 			directLane(
 				"Local Inference",

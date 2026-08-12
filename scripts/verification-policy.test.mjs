@@ -152,6 +152,31 @@ test("unselected package outputs may be absent, but an unexpected unselected res
 	assert.match(unexpected.failures[0], /not selected but returned success/);
 });
 
+test("an unselected package verification lane may omit its reusable-workflow output", () => {
+	const evaluation = evaluateVerificationPolicy(
+		policy({
+			classification: "factory-content",
+			areas: "factory-content",
+			packageWorkflowResult: "skipped",
+			lanes: [
+				...laneNames.slice(0, 7).map((name) => lane(name)),
+				lane("Model Providers Package", false, "", {
+					checks: [
+						{
+							name: "Model Providers Package",
+							result: "",
+							allowMissingWhenNotRequired: true,
+						},
+					],
+				}),
+				lane("Local Inference"),
+			],
+		}),
+	);
+
+	assert.deepEqual(evaluation, { ok: true, failures: [] });
+});
+
 test("summary records touched areas, each decision, reason, and terminal result", () => {
 	const input = policy({
 		areas: "documentation-reference+frontend",
