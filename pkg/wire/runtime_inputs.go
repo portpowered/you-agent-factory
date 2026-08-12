@@ -296,23 +296,12 @@ func provideWorkSubmittedFilePathInspector(edges serviceedges.Edges) work.Submit
 	return os.Stat
 }
 
-func provideWorkFactory(
+func provideWorkService(
+	runtimes factorysessionwire.RuntimeAssembly,
 	readFile work.SubmittedFileReader,
 	inspectPath work.SubmittedFilePathInspector,
 	contentStaging work.ContentStagingService,
 	contentMaterializer work.ContentMaterializer,
-) factorysessionwire.WorkFactory {
-	return func(runtimes work.RuntimeResolver) work.Service {
-		return workwire.NewRuntimeService(runtimes, readFile, inspectPath, contentStaging, contentMaterializer)
-	}
-}
-
-// provideWorkMaterializationService supplies Runtime's canonical Worker-output
-// materialization seam without introducing a Runtime→Work implementation
-// import. Session-scoped admission/state access receives its own resolver-bound
-// Work root; this root is intentionally policy-only.
-func provideWorkMaterializationService(
-	contentMaterializer work.ContentMaterializer,
 ) work.Service {
-	return workwire.NewRuntimeService(nil, nil, nil, nil, contentMaterializer)
+	return workwire.NewRuntimeService(runtimes, readFile, inspectPath, contentStaging, contentMaterializer)
 }
