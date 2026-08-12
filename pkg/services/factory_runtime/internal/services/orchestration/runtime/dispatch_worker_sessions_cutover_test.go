@@ -695,10 +695,29 @@ func TestRecordedDispatchFailureProjection(t *testing.T) {
 	if fact.state != workersessions.StateFailed || fact.provider == nil || len(fact.workIDs) != 1 || fact.failure == nil {
 		t.Fatalf("recordedDispatchFact() = %#v", fact)
 	}
+	rejectedCompletion := completed
+	rejectedCompletion.DispatchID = "dispatch-rejected"
+	rejectedCompletion.Result.Outcome = string(workers.OutcomeRejected)
+	rejectedFact := recordedDispatchFact(
+		"dispatch-rejected",
+		recordedDispatchAssociation{workerSessionID: "worker-rejected", turnID: "turn-rejected", eventTime: base},
+		nil,
+		map[string]interfaces.FactoryWorldDispatchCompletion{"dispatch-rejected": rejectedCompletion},
+		nil,
+		nil,
+		nil,
+	)
+	rejectedObservation := recordedObservationFromFact(rejectedFact, nil)
+	if rejectedObservation.State != workersessions.StateFailed || rejectedObservation.Failure == nil || rejectedObservation.Failure.Kind != workersessions.FailureCauseRejected {
+		t.Fatalf("recorded rejection observation = %#v, want bounded REJECTED failure classification", rejectedObservation)
+	}
+	if err := rejectedObservation.Validate(); err != nil {
+		t.Fatalf("recorded rejection observation validation = %v", err)
+	}
 	if recordedObservationState(string(workers.OutcomeAccepted)) != workersessions.StateCompleted || recordedObservationState(string(workers.OutcomeContinue)) != workersessions.StateCompleted || recordedObservationState(string(workers.OutcomeRejected)) != workersessions.StateFailed || recordedObservationState("unknown") != workersessions.StateFailed {
 		t.Fatal("recordedObservationState() mapping is incorrect")
 	}
-	if recordedFailure(nil, nil, workersessions.StateRunning) != nil {
+	if recordedFailure(workers.OutcomeFailed, nil, nil, workersessions.StateRunning) != nil {
 		t.Fatal("recordedFailure(active) returned a failure")
 	}
 }
@@ -706,9 +725,13 @@ func TestRecordedDispatchFailureProjection(t *testing.T) {
 func TestRecordedFailureMappingBranches(t *testing.T) {
 	failureDetail := &workers.FailureDetail{Reason: workers.WorkFailureTypeAuthFailure}
 	for _, reason := range []workers.WorkFailureType{workers.WorkFailureTypeAuthFailure, workers.WorkFailureTypeTimeout, workers.WorkFailureTypeThrottled, workers.WorkFailureTypeMisconfigured, workers.WorkFailureTypeUnknown, workers.WorkFailureTypeStructuredOutputSchemaViolation} {
-		if failure := recordedFailure(failureDetail, &workers.WorkFailureMetadata{Family: workers.WorkFailureFamilyTerminal, Type: reason}, workersessions.StateFailed); failure == nil || failure.Detail == "" {
+		if failure := recordedFailure(workers.OutcomeFailed, failureDetail, &workers.WorkFailureMetadata{Family: workers.WorkFailureFamilyTerminal, Type: reason}, workersessions.StateFailed); failure == nil || failure.Detail == "" {
 			t.Fatalf("recordedFailure(%q) = %#v", reason, failure)
 		}
+	}
+	rejected := recordedFailure(workers.OutcomeRejected, nil, nil, workersessions.StateFailed)
+	if rejected == nil || rejected.Kind != workersessions.FailureCauseRejected {
+		t.Fatalf("recordedFailure(REJECTED) = %#v, want bounded REJECTED classification", rejected)
 	}
 	if recordedProviderFailureKind(&workers.FailureDetail{Reason: workers.WorkFailureTypeAuthFailure}) != providers.ExecuteFailureKindAuthentication || recordedProviderFailureKind(&workers.FailureDetail{Reason: workers.WorkFailureTypeTimeout}) != providers.ExecuteFailureKindTimeout || recordedProviderFailureKind(&workers.FailureDetail{Reason: workers.WorkFailureTypeThrottled}) != providers.ExecuteFailureKindThrottled || recordedProviderFailureKind(&workers.FailureDetail{Reason: workers.WorkFailureTypeMisconfigured}) != providers.ExecuteFailureKindMisconfigured || recordedProviderFailureKind(nil) != "" {
 		t.Fatal("recordedProviderFailureKind() mapping is incorrect")
@@ -731,10 +754,10 @@ func TestRecordedFailureKindAndTypeBranches(t *testing.T) {
 }
 
 func TestRecordedFailureDetailFallback(t *testing.T) {
-	if recordedFailureDetail(nil, nil) == "" || recordedFailureDetail(nil, &workers.WorkFailureMetadata{Family: "foreign", Type: "foreign"}) == "" {
+	if recordedFailureDetail(workersessions.FailureCauseWorkersExecutionFailure, nil, nil) == "" || recordedFailureDetail(workersessions.FailureCauseWorkersExecutionFailure, nil, &workers.WorkFailureMetadata{Family: "foreign", Type: "foreign"}) == "" {
 		t.Fatal("recordedFailureDetail() returned an empty fallback")
 	}
-	if got := recordedFailureDetail(nil, &workers.WorkFailureMetadata{Family: "", Type: workers.WorkFailureTypeTimeout}); got != "family=unknown type=timeout" {
+	if got := recordedFailureDetail(workersessions.FailureCauseWorkersExecutionFailure, nil, &workers.WorkFailureMetadata{Family: "", Type: workers.WorkFailureTypeTimeout}); got != "family=unknown type=timeout" {
 		t.Fatalf("recordedFailureDetail(empty family) = %q", got)
 	}
 }

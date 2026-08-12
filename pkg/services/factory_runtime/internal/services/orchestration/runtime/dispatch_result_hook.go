@@ -494,14 +494,21 @@ func recordedObservationState(outcome string) workersessions.State {
 	}
 }
 
-func recordedFailure(detail *workers.FailureDetail, metadata *workers.WorkFailureMetadata, state workersessions.State) *workersessions.FailureCause {
+func recordedFailure(outcome workers.WorkOutcome, detail *workers.FailureDetail, metadata *workers.WorkFailureMetadata, state workersessions.State) *workersessions.FailureCause {
 	if !state.Terminal() || state == workersessions.StateCompleted {
 		return nil
 	}
-	return &workersessions.FailureCause{Kind: workersessions.FailureCauseWorkersExecutionFailure, Detail: recordedFailureDetail(detail, metadata), ProviderFailureKind: recordedProviderFailureKind(detail)}
+	kind := workersessions.FailureCauseWorkersExecutionFailure
+	if outcome == workers.OutcomeRejected {
+		kind = workersessions.FailureCauseRejected
+	}
+	return &workersessions.FailureCause{Kind: kind, Detail: recordedFailureDetail(kind, detail, metadata), ProviderFailureKind: recordedProviderFailureKind(detail)}
 }
 
-func recordedFailureDetail(detail *workers.FailureDetail, metadata *workers.WorkFailureMetadata) string {
+func recordedFailureDetail(kind workersessions.FailureCauseKind, detail *workers.FailureDetail, metadata *workers.WorkFailureMetadata) string {
+	if kind == workersessions.FailureCauseRejected {
+		return "the Workers result was rejected by the business review"
+	}
 	if metadata != nil {
 		family, familyKnown := recordedFailureFamily(metadata.Family)
 		typ, typeKnown := recordedFailureType(metadata.Type)

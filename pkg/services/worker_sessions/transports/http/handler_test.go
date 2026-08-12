@@ -54,6 +54,60 @@ func TestListWorkerSessionsBySessionIDProjectsPopulatedObservation(t *testing.T)
 	assertPopulatedListResponse(t, recorder.Body.Bytes(), total)
 }
 
+func TestListWorkerSessionsBySessionIDPreservesBoundedFailureKinds(t *testing.T) {
+	kinds := []workersessions.FailureCauseKind{
+		workersessions.FailureCauseRejected,
+		workersessions.FailureCauseIncompleteOutput,
+		workersessions.FailureCauseWorkersExecutionFailure,
+	}
+	observations := make([]workersessions.Observation, 0, len(kinds))
+	for _, kind := range kinds {
+		observations = append(observations, workersessions.Observation{
+			WorkerSessionID: "worker-session-" + string(kind),
+			AttemptID:       "attempt-" + string(kind),
+			WorkIDs:         []string{"work-1"},
+			State:           workersessions.StateFailed,
+			DurationBasis:   workersessions.DurationBasisRecordedTimestamps,
+			Transcript:      workersessions.TranscriptAvailabilityUnavailable,
+			Failure:         &workersessions.FailureCause{Kind: kind, Detail: "safe bounded detail"},
+		})
+	}
+	service := &fakeObservationService{result: workersessions.ListObservationsResult{Observations: observations}}
+	handler := NewHandler(NewAdapter(service, workServiceStub{}), zap.NewNop())
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest("GET", "/factory-sessions/session-1/worker-sessions?workId=work-1", nil)
+
+	handler.ListWorkerSessionsBySessionId(
+		recorder,
+		request,
+		factoryapi.SessionID("session-1"),
+		factoryapi.ListWorkerSessionsBySessionIdParams{WorkId: "work-1"},
+	)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", recorder.Code, recorder.Body.String())
+	}
+	var response factoryapi.ListWorkerSessionsResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(response.Sessions) != len(kinds) {
+		t.Fatalf("session count = %d, want %d", len(response.Sessions), len(kinds))
+	}
+	gotKinds := make(map[string]bool, len(response.Sessions))
+	for _, session := range response.Sessions {
+		if session.Failure == nil {
+			t.Fatalf("session %q has no failure classification", session.WorkerSessionId)
+		}
+		gotKinds[session.Failure.Kind] = true
+	}
+	for _, kind := range kinds {
+		if !gotKinds[string(kind)] {
+			t.Fatalf("response failure kinds = %#v, missing %q", gotKinds, kind)
+		}
+	}
+}
+
 func assertPopulatedListResponse(t *testing.T, payload []byte, total int) {
 	t.Helper()
 	var response factoryapi.ListWorkerSessionsResponse

@@ -54,6 +54,11 @@ const (
 	// boundary returned a WorkResult classified as failed for an ordinary
 	// business or system reason, with no executor-panic evidence.
 	FailureCauseWorkersExecutionFailure FailureCauseKind = "WORKERS_EXECUTION_FAILURE"
+	// FailureCauseRejected reports that Workers cleanly completed with the
+	// business-level rejection outcome. The Work result remains a normal
+	// rejection for Factory routing; this classification only describes the
+	// terminal Worker Session projection.
+	FailureCauseRejected FailureCauseKind = "REJECTED"
 	// FailureCauseIncompleteOutput reports that Workers completed a readable
 	// attempt but did not produce the required final output contract.
 	FailureCauseIncompleteOutput FailureCauseKind = "INCOMPLETE_OUTPUT"
@@ -73,10 +78,10 @@ const (
 	FailureCauseEventPublicationFailure FailureCauseKind = "EVENT_PUBLICATION_FAILURE"
 )
 
-// Valid reports whether k is one of the six bounded W2+W3 failure kinds.
+// Valid reports whether k is one of the seven bounded W2+W3 failure kinds.
 func (k FailureCauseKind) Valid() bool {
 	switch k {
-	case FailureCauseStartFailure, FailureCauseWorkersExecutionFailure, FailureCauseAdapterFailure,
+	case FailureCauseStartFailure, FailureCauseWorkersExecutionFailure, FailureCauseRejected, FailureCauseAdapterFailure,
 		FailureCauseIncompleteOutput, FailureCauseExecutorPanic, FailureCauseEventPublicationFailure:
 		return true
 	default:

@@ -126,6 +126,56 @@ func TestListHumanRendersLabelsTokensDurationAndFailure(t *testing.T) {
 	}
 }
 
+func TestListPreservesDistinctBoundedFailureKindsInHumanAndJSON(t *testing.T) {
+	kinds := []string{"REJECTED", "INCOMPLETE_OUTPUT", "WORKERS_EXECUTION_FAILURE"}
+	observations := make([]factoryapi.WorkerSessionObservation, 0, len(kinds))
+	for _, kind := range kinds {
+		observations = append(observations, factoryapi.WorkerSessionObservation{
+			WorkerSessionId: "worker-session-" + kind,
+			AttemptId:       "attempt-" + kind,
+			WorkIds:         []string{"work-1"},
+			State:           factoryapi.WorkerSessionObservationState("FAILED"),
+			Failure:         &factoryapi.WorkerSessionFailure{Kind: kind, Detail: "safe bounded detail"},
+		})
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(factoryapi.ListWorkerSessionsResponse{Sessions: observations})
+	}))
+	defer server.Close()
+
+	var humanOutput bytes.Buffer
+	if err := NewList(testHTTPProtocol(t))(ListConfig{
+		Context: context.Background(), Server: server.URL, WorkID: "work-1", Output: &humanOutput,
+	}); err != nil {
+		t.Fatalf("human List() error = %v", err)
+	}
+	for _, kind := range kinds {
+		if !strings.Contains(humanOutput.String(), kind) {
+			t.Fatalf("human output %q missing failure kind %q", humanOutput.String(), kind)
+		}
+	}
+
+	var jsonOutput bytes.Buffer
+	if err := NewList(testHTTPProtocol(t))(ListConfig{
+		Context: context.Background(), Server: server.URL, WorkID: "work-1", OutputFormat: "json", Output: &jsonOutput,
+	}); err != nil {
+		t.Fatalf("JSON List() error = %v", err)
+	}
+	var document factoryapi.ListWorkerSessionsResponse
+	if err := json.Unmarshal(jsonOutput.Bytes(), &document); err != nil {
+		t.Fatalf("decode JSON output: %v; output=%q", err, jsonOutput.String())
+	}
+	if len(document.Sessions) != len(kinds) {
+		t.Fatalf("JSON session count = %d, want %d", len(document.Sessions), len(kinds))
+	}
+	for index, kind := range kinds {
+		if document.Sessions[index].Failure == nil || document.Sessions[index].Failure.Kind != kind {
+			t.Fatalf("JSON session %d failure = %#v, want %q", index, document.Sessions[index].Failure, kind)
+		}
+	}
+}
+
 func TestListHumanRendersKnownWorkWithoutSessions(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

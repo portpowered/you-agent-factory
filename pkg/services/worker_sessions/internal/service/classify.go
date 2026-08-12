@@ -61,7 +61,21 @@ func classifyTerminal(
 			return terminalForDispatchResult(kind, detail, workResult, dispatchErr)
 		}
 		return workersessions.TerminalResult{Outcome: workersessions.TerminalOutcomeCompleted}
-	default: // workers.OutcomeRejected, workers.OutcomeFailed
+	case workers.OutcomeRejected:
+		// A cleanly completed rejection is a normal business result. Keep the
+		// Worker's rejection route and feedback untouched; Worker Sessions
+		// records the bounded classification so inspection does not confuse it
+		// with an execution failure.
+		if dispatchErr == nil && dispatchResult.TerminalOutcome != workers.WorkstationDispatchTerminalOutcomeFailed {
+			return terminalForDispatchResult(
+				workersessions.FailureCauseRejected,
+				safeDetailForDispatchError(workersessions.FailureCauseRejected, workResult, nil, false),
+				workResult,
+				nil,
+			)
+		}
+		fallthrough
+	default: // workers.OutcomeFailed and contradictory/unknown outcomes
 		kind := workersessions.FailureCauseWorkersExecutionFailure
 		switch {
 		case isExecutorPanicEvidence(dispatchErr, workResult):
@@ -253,6 +267,7 @@ func rawDetail(err error) string {
 var genericFailureDetail = map[workersessions.FailureCauseKind]string{
 	workersessions.FailureCauseStartFailure:            "the attempt could not be handed off to Workers",
 	workersessions.FailureCauseWorkersExecutionFailure: "the Workers execution result was not successful",
+	workersessions.FailureCauseRejected:                "the Workers result was rejected by the business review",
 	workersessions.FailureCauseIncompleteOutput:        "the Workers result did not include the required final output",
 	workersessions.FailureCauseAdapterFailure:          "the Workers adapter reported a failure",
 	workersessions.FailureCauseExecutorPanic:           "the Workers executor reported a panic",

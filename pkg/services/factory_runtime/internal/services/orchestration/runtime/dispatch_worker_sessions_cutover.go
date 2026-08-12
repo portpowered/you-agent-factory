@@ -909,7 +909,7 @@ func recordedDispatchFact(
 		fact.startedAt = firstRecordedTime(dispatch.StartedAt, fact.startedAt)
 		fact.endedAt = recordedDispatchEnd(dispatch, events, dispatchID)
 		fact.workIDs = firstRecordedWorkIDs(dispatch.WorkItemIDs, fact.workIDs)
-		fact.failure = recordedFailure(dispatch.Result.FailureDetail, dispatch.Result.FailureMetadata, fact.state)
+		fact.failure = recordedFailure(workers.WorkOutcome(dispatch.Result.Outcome), dispatch.Result.FailureDetail, dispatch.Result.FailureMetadata, fact.state)
 		fact.provider = cloneProviderMetadata(dispatch.ProviderSession)
 	}
 	for _, provider := range providerSessions {
@@ -918,7 +918,7 @@ func recordedDispatchFact(
 		}
 		fact.provider = cloneProviderMetadata(&provider.ProviderSession)
 		fact.workIDs = firstRecordedWorkIDs(provider.WorkItemIDs, fact.workIDs)
-		fact.failure = firstRecordedFailure(fact.failure, recordedFailure(provider.FailureDetail, nil, fact.state))
+		fact.failure = firstRecordedFailure(fact.failure, recordedFailure(workers.OutcomeFailed, provider.FailureDetail, nil, fact.state))
 		break
 	}
 	return fact

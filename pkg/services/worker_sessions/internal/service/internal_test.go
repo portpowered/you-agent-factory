@@ -862,6 +862,31 @@ func TestTerminalDraft_IncompleteOutputPreservesBoundedFailureKind(t *testing.T)
 	}
 }
 
+func TestClassifyTerminal_CleanRejectedWorkResultUsesBoundedRejectionCause(t *testing.T) {
+	terminal := classifyTerminal(nil, workers.WorkstationDispatchResult{
+		TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeCompleted,
+		Result: workers.WorkResult{
+			Outcome:  workers.OutcomeRejected,
+			Feedback: "raw reviewer feedback remains on the Work result",
+		},
+	})
+	if terminal.Outcome != workersessions.TerminalOutcomeFailed || terminal.Cause == nil {
+		t.Fatalf("terminal = %#v, want failed Worker Session projection with cause", terminal)
+	}
+	if terminal.Cause.Kind != workersessions.FailureCauseRejected {
+		t.Fatalf("terminal cause kind = %q, want REJECTED", terminal.Cause.Kind)
+	}
+	if terminal.Cause.Detail != genericFailureDetail[workersessions.FailureCauseRejected] {
+		t.Fatalf("terminal cause detail = %q, want bounded generic rejection detail", terminal.Cause.Detail)
+	}
+	if strings.Contains(terminal.Cause.Detail, "raw reviewer feedback") {
+		t.Fatalf("terminal cause detail leaked reviewer feedback: %q", terminal.Cause.Detail)
+	}
+	if err := terminal.Validate(); err != nil {
+		t.Fatalf("terminal.Validate() = %v, want nil", err)
+	}
+}
+
 func TestClassifyTerminal_SuccessWithFailedDispatchUsesExplicitFailureCause(t *testing.T) {
 	terminal := classifyTerminal(nil, workers.WorkstationDispatchResult{
 		TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeFailed,
