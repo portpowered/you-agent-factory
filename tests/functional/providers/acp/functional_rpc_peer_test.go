@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -290,7 +291,10 @@ func (p *functionalRPCPeer) prompt(request rpcEnvelope) error {
 	if p.mode == "retry-resume" {
 		switch p.retryAttempt {
 		case 1:
-			return p.respondError(request.ID, -32001, "temporarily unavailable", nil)
+			if err := p.respondError(request.ID, -32001, "temporarily unavailable", nil); err != nil {
+				return err
+			}
+			return holdFailedRetryPeer()
 		case 2:
 			break
 		default:
@@ -359,6 +363,23 @@ func (p *functionalRPCPeer) prompt(request rpcEnvelope) error {
 		}
 	}
 	return p.respond(request.ID, json.RawMessage(`{"stopReason":"end_turn"}`))
+}
+
+func holdFailedRetryPeer() error {
+	holdMarker := os.Getenv(acpRetryHoldEnvironment)
+	if holdMarker == "" {
+		return nil
+	}
+	if err := os.WriteFile(holdMarker, []byte("first prompt failed and peer remains live"), 0o600); err != nil {
+		return err
+	}
+	// Keep the failed peer alive and unresponsive so the public retry can only
+	// succeed after the provider retires this process. The production stop
+	// deadline is the failure guard for this fixture; no test-side delay is
+	// needed.
+	for {
+		runtime.Gosched()
+	}
 }
 
 // respondToPackagedPrompt handles the prompt() modes whose reply depends on

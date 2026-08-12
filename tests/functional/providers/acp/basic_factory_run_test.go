@@ -24,7 +24,7 @@ import (
 const (
 	acpHelperEnvironment                = "YOU_TEST_ACP_AGENT_HELPER"
 	acpRetryAttemptDirectoryEnvironment = "YOU_TEST_ACP_RETRY_ATTEMPT_DIR"
-	acpRetryMarkerEnvironment           = "YOU_TEST_ACP_RETRY_MARKER"
+	acpRetryHoldEnvironment             = "YOU_TEST_ACP_RETRY_HOLD"
 	acpDisconnectMarkerEnvironment      = "YOU_TEST_ACP_DISCONNECT_MARKER"
 	acpDisconnectReadyEnvironment       = "YOU_TEST_ACP_DISCONNECT_READY"
 	acpDisconnectReleaseEnvironment     = "YOU_TEST_ACP_DISCONNECT_RELEASE"
@@ -76,6 +76,8 @@ func TestFactoryRunRetriesACPProviderByResumingExactSession(t *testing.T) {
 	writeACPWorker(t, dir, providerID)
 	t.Setenv(acpHelperEnvironment, "retry-resume")
 	retryAttemptDir := t.TempDir()
+	retryHoldMarker := filepath.Join(retryAttemptDir, "first-prompt-held")
+	t.Setenv(acpRetryHoldEnvironment, retryHoldMarker)
 	t.Setenv(acpRetryAttemptDirectoryEnvironment, retryAttemptDir)
 	t.Setenv("YOU_TEST_ACP_SESSION_ID", sessionID)
 
@@ -102,6 +104,9 @@ func TestFactoryRunRetriesACPProviderByResumingExactSession(t *testing.T) {
 	}
 	if got := processStarts.Load(); got != 2 {
 		t.Fatalf("ACP process starts = %d, want 2 for the failed attempt and resumed retry", got)
+	}
+	if _, err := os.Stat(retryHoldMarker); err != nil {
+		t.Fatalf("first ACP retry peer did not reach its controlled live-process checkpoint: %v", err)
 	}
 	assertProviderSessionID(t, events, providerID, sessionID)
 }
