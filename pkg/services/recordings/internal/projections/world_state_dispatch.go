@@ -745,8 +745,9 @@ func (r *factoryWorldReducer) applyDispatchQueuedEvent(event interfaces.FactoryE
 		}
 	} else {
 		state.JavaScript = &interfaces.FactorySessionDispatchJavaScriptState{
-			TaskKind:  javaScriptTaskKindFromDispatchKind(payload.DispatchKind),
-			TaskLabel: stringValue(payload.Label),
+			TaskKind:        javaScriptTaskKindFromDispatchKind(payload.DispatchKind),
+			TaskLabel:       stringValue(payload.Label),
+			SkipPermissions: payload.SkipPermissions != nil && *payload.SkipPermissions,
 		}
 	}
 	r.upsertJavaScriptDispatch(state)

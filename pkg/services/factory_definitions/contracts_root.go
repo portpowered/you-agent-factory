@@ -9,6 +9,10 @@ import (
 // Root-owned aliases expose the Factory Definition vocabulary without making
 // peer services import implementation subpackages.
 type FactoryConfig = contracts.FactoryConfig
+type FactoryWebhookConfig = contracts.FactoryWebhookConfig
+type FactoryWebhookFilterConfig = contracts.FactoryWebhookFilterConfig
+type FactoryWebhookDeliveryPolicyConfig = contracts.FactoryWebhookDeliveryPolicyConfig
+type FactoryWebhookEffectiveDeliveryPolicy = contracts.FactoryWebhookEffectiveDeliveryPolicy
 type NameValueConfig = contracts.NameValueConfig
 type NameValueValidationError = contracts.NameValueValidationError
 type SaveMode = contracts.SaveMode
@@ -79,6 +83,18 @@ const (
 	ValidationProfilePrePersist        = contracts.ValidationProfilePrePersist
 	DefaultTopologyValidationMessage   = contracts.DefaultTopologyValidationMessage
 
+	FactoryWebhookEventTypeWorkStateChange     = contracts.FactoryWebhookEventTypeWorkStateChange
+	FactoryWebhookEventTypeDispatchResponse    = contracts.FactoryWebhookEventTypeDispatchResponse
+	FactoryWebhookEventTypeDispatchReconciled  = contracts.FactoryWebhookEventTypeDispatchReconciled
+	FactoryWebhookEventTypeDispatchInterrupted = contracts.FactoryWebhookEventTypeDispatchInterrupted
+	FactoryWebhookDispatchStatusFailed         = contracts.FactoryWebhookDispatchStatusFailed
+	FactoryWebhookDispatchStatusInterrupted    = contracts.FactoryWebhookDispatchStatusInterrupted
+	DefaultFactoryWebhookRequestTimeout        = contracts.DefaultFactoryWebhookRequestTimeout
+	DefaultFactoryWebhookMaxAttempts           = contracts.DefaultFactoryWebhookMaxAttempts
+	DefaultFactoryWebhookInitialBackoff        = contracts.DefaultFactoryWebhookInitialBackoff
+	DefaultFactoryWebhookBackoffMultiplier     = contracts.DefaultFactoryWebhookBackoffMultiplier
+	DefaultFactoryWebhookMaxBackoff            = contracts.DefaultFactoryWebhookMaxBackoff
+
 	InvocationParameterTypeHintString        = contracts.InvocationParameterTypeHintString
 	InvocationParameterTypeHintPath          = contracts.InvocationParameterTypeHintPath
 	InvocationParameterTypeHintFilePath      = contracts.InvocationParameterTypeHintFilePath
@@ -122,6 +138,7 @@ var (
 var (
 	ValidateNameValue                            = contracts.ValidateNameValue
 	ResolveNameValue                             = contracts.ResolveNameValue
+	ResolveFactoryWebhookDeliveryPolicy          = contracts.ResolveFactoryWebhookDeliveryPolicy
 	CanonicalFactoryGraphEntityID                = contracts.CanonicalFactoryGraphEntityID
 	CanonicalFactoryGraphWorkTypeID              = contracts.CanonicalFactoryGraphWorkTypeID
 	CanonicalFactoryGraphWorkStateID             = contracts.CanonicalFactoryGraphWorkStateID

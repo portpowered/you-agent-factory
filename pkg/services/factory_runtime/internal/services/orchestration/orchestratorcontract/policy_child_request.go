@@ -12,6 +12,10 @@ type ChildRequest struct {
 	ReasoningEffort string
 	Command         string
 	Sandbox         string
+	// SkipPermissions is a child-scoped provider permission override. It may
+	// bypass provider sandbox restrictions for this child, but it does not
+	// weaken routing, capability, or resource policy.
+	SkipPermissions bool
 	WritableRoots   []string
 	AllowNetwork    bool
 	Concurrency     int
@@ -108,6 +112,9 @@ func validateChildSandbox(policy EffectivePolicy, req ChildRequest) error {
 			safeChildLabel(req.Label),
 		)
 	}
+	if req.SkipPermissions {
+		return nil
+	}
 	if sandbox == "workspace-write" && policy.Mode == ModeReadOnly {
 		return fmt.Errorf(
 			"policy denied: sandbox %q is not allowed when policy.mode is READ_ONLY (label=%q)",
@@ -128,6 +135,9 @@ func validateChildSandbox(policy EffectivePolicy, req ChildRequest) error {
 
 func validateChildWritableRoots(policy EffectivePolicy, req ChildRequest) error {
 	if len(req.WritableRoots) == 0 {
+		return nil
+	}
+	if req.SkipPermissions {
 		return nil
 	}
 	if policy.Mode == ModeReadOnly || len(policy.WritableRoots) == 0 {

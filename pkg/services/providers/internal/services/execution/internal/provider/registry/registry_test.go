@@ -226,6 +226,20 @@ func TestNewRejectsCoverageAndCapabilityContradictions(t *testing.T) {
 			},
 			want: `"claude": integration maximum contradicts manifest maximum by omitting: message_deltas`,
 		},
+		{
+			name: "permission bypass maximum contradicts manifest",
+			mutate: func(registrations []Registration) []Registration {
+				index := catalogRegistrationIndex(registrations, "claude")
+				registrations[index].integration = &fakeIntegration{
+					identity: "claude",
+					maximum: inference.NewCapabilitySet(
+						inference.CapabilityPromptSubmission,
+					),
+				}
+				return registrations
+			},
+			want: `"claude": integration maximum contradicts manifest maximum by omitting: message_deltas, message_snapshots, native_streaming, permission_bypass`,
+		},
 	}
 	for _, test := range tests {
 		test := test
@@ -377,6 +391,24 @@ func catalogRegistrationIndex(registrations []Registration, identity string) int
 		}
 	}
 	return -1
+}
+
+func TestNewRejectsExternalPermissionBypassMaximumContradiction(t *testing.T) {
+	t.Parallel()
+
+	registrations := supportedCatalogRegistrations(t)
+	manifest := externalManifest(t, "customer.incapable", "customer-incapable")
+	manifest.MaximumExecutionCapabilities.PermissionBypass = true
+	registrations = append(registrations, ExternalRegistration(manifest, &fakeIntegration{
+		identity: inference.Identity(manifest.ID),
+		maximum:  inference.NewCapabilitySet(inference.CapabilityPromptSubmission),
+	}))
+
+	_, err := New(registrations...)
+	assertErrorContains(t, err,
+		`"customer.incapable": integration maximum contradicts manifest maximum by omitting:`,
+		"permission_bypass",
+	)
 }
 
 func withoutCatalogRegistration(registrations []Registration, identity string) []Registration {

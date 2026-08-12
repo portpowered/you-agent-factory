@@ -87,6 +87,7 @@ type publishedExecutionCapabilities struct {
 	ImageInput       bool `json:"imageInput"`
 	SessionResume    bool `json:"sessionResume"`
 	StructuredOutput bool `json:"structuredOutput"`
+	PermissionBypass bool `json:"permissionBypass"`
 }
 
 type publishedResponseCapabilities struct {
@@ -563,6 +564,7 @@ func projectCapabilities(manifest publishedProviderManifest) []providers.Capabil
 	appendIf(execution.ImageInput, providers.CapabilityImageInput)
 	appendIf(execution.SessionResume, providers.CapabilitySessionResume)
 	appendIf(execution.StructuredOutput, providers.CapabilityStructuredOutput)
+	appendIf(execution.PermissionBypass, providers.CapabilityPermissionBypass)
 	appendIf(response.NativeStreaming, providers.CapabilityNativeStreaming)
 	appendIf(response.MessageDeltas, providers.CapabilityMessageDeltas)
 	appendIf(response.MessageSnapshots, providers.CapabilityMessageSnapshots)
@@ -587,6 +589,7 @@ func allProviderCapabilities() []providers.Capability {
 		providers.CapabilityImageInput,
 		providers.CapabilitySessionResume,
 		providers.CapabilityStructuredOutput,
+		providers.CapabilityPermissionBypass,
 		providers.CapabilityNativeStreaming,
 		providers.CapabilityMessageDeltas,
 		providers.CapabilityMessageSnapshots,

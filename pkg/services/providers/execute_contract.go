@@ -19,20 +19,25 @@ var ErrExecuteTimeout = errors.New("provider execution timed out")
 // one of the more specific cancellation or timeout outcomes.
 var ErrExecuteFailed = errors.New("provider execution failed")
 
+// ErrCapabilityMismatch reports that a request asks a selected provider route
+// for a capability it does not truthfully advertise.
+var ErrCapabilityMismatch = errors.New("provider capability mismatch")
+
 // ExecuteFailureKind is a provider-neutral one-attempt failure category.
 // Providers owns the normalized attempt outcome; Workers and other callers own
 // retry, throttle, and scheduling policy.
 type ExecuteFailureKind string
 
 const (
-	ExecuteFailureKindCanceled       ExecuteFailureKind = "canceled"
-	ExecuteFailureKindTimeout        ExecuteFailureKind = "timeout"
-	ExecuteFailureKindAuthentication ExecuteFailureKind = "authentication"
-	ExecuteFailureKindInvalidRequest ExecuteFailureKind = "invalid_request"
-	ExecuteFailureKindMisconfigured  ExecuteFailureKind = "misconfigured"
-	ExecuteFailureKindThrottled      ExecuteFailureKind = "throttled"
-	ExecuteFailureKindDependency     ExecuteFailureKind = "dependency"
-	ExecuteFailureKindUnknown        ExecuteFailureKind = "unknown"
+	ExecuteFailureKindCanceled           ExecuteFailureKind = "canceled"
+	ExecuteFailureKindTimeout            ExecuteFailureKind = "timeout"
+	ExecuteFailureKindAuthentication     ExecuteFailureKind = "authentication"
+	ExecuteFailureKindInvalidRequest     ExecuteFailureKind = "invalid_request"
+	ExecuteFailureKindMisconfigured      ExecuteFailureKind = "misconfigured"
+	ExecuteFailureKindThrottled          ExecuteFailureKind = "throttled"
+	ExecuteFailureKindDependency         ExecuteFailureKind = "dependency"
+	ExecuteFailureKindUnknown            ExecuteFailureKind = "unknown"
+	ExecuteFailureKindCapabilityMismatch ExecuteFailureKind = "capability_mismatch"
 	// ExecuteFailureKindSessionNotFound reports that a resolved provider did
 	// not recognize the exact requested Provider Session id as live. Ordinary
 	// Execute never produces this kind: only a private Continue-triggered
@@ -84,6 +89,8 @@ func sentinelForExecuteFailureKind(kind ExecuteFailureKind) error {
 		return ErrExecuteCancelled
 	case ExecuteFailureKindTimeout:
 		return ErrExecuteTimeout
+	case ExecuteFailureKindCapabilityMismatch:
+		return ErrCapabilityMismatch
 	default:
 		return ErrExecuteFailed
 	}

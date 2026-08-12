@@ -43,6 +43,23 @@ type AgyPTYPlatformDependencies struct {
 	Inspector platformfilesystem.PathInspector
 }
 
+// CatalogCapabilityOverride supplies an authoritative capability view for one
+// already-registered provider route during process construction. It is used by
+// hosts and functional tests whose selected route has narrower capabilities
+// than its static publication; it cannot register a new provider identity.
+type CatalogCapabilityOverride struct {
+	Provider     providers.ID
+	Capabilities []providers.Capability
+}
+
+// Clone returns detached override values for the construction boundary.
+func (override CatalogCapabilityOverride) Clone() CatalogCapabilityOverride {
+	return CatalogCapabilityOverride{
+		Provider:     override.Provider,
+		Capabilities: append([]providers.Capability(nil), override.Capabilities...),
+	}
+}
+
 // Option configures Providers root construction.
 type Option interface {
 	apply(*wireOptions)
@@ -120,6 +137,31 @@ func (o catalogOption) apply(opts *wireOptions) {
 // CatalogOption adapts a catalog subservice option for root construction.
 func CatalogOption(option catalogwire.Option) Option {
 	return catalogOption{value: option}
+}
+
+type catalogCapabilityOverridesOption struct {
+	overrides []CatalogCapabilityOverride
+}
+
+func (option catalogCapabilityOverridesOption) apply(config *wireOptions) {
+	overrides := make([]catalog.CapabilityOverride, 0, len(option.overrides))
+	for _, override := range option.overrides {
+		overrides = append(overrides, catalog.CapabilityOverride{
+			Provider:     override.Provider,
+			Capabilities: append([]providers.Capability(nil), override.Capabilities...),
+		})
+	}
+	config.catalog = append(config.catalog, catalogwire.WithCapabilityOverrides(overrides...))
+}
+
+// WithCatalogCapabilityOverrides supplies route-specific static capability
+// facts without adding or replacing a provider registration.
+func WithCatalogCapabilityOverrides(overrides ...CatalogCapabilityOverride) Option {
+	cloned := make([]CatalogCapabilityOverride, len(overrides))
+	for index, override := range overrides {
+		cloned[index] = override.Clone()
+	}
+	return catalogCapabilityOverridesOption{overrides: cloned}
 }
 
 type commandRunnerOption struct {
@@ -293,6 +335,9 @@ func newRoot(
 				return nil, fmt.Errorf("provider registry validation failed for %q: identity collision", registration.Manifest.ID)
 			}
 		}
+		if err := validateExternalRegistrationCapabilities(registration); err != nil {
+			return nil, err
+		}
 		attempt, err := externalRegistrationAttempt(registration)
 		if err != nil {
 			return nil, err
@@ -316,6 +361,22 @@ func newRoot(
 	)
 }
 
+func validateExternalRegistrationCapabilities(registration Registration) error {
+	if registration.Integration == nil {
+		return nil
+	}
+	manifestSupportsBypass := registration.Manifest.MaximumExecutionCapabilities.PermissionBypass
+	integrationSupportsBypass := registration.Integration.MaximumCapabilities().Has(CapabilityPermissionBypass)
+	if manifestSupportsBypass == integrationSupportsBypass {
+		return nil
+	}
+	return fmt.Errorf(
+		"provider registry validation failed for %q: integration maximum capability %q contradicts manifest maximum execution capability permissionBypass",
+		registration.Manifest.ID,
+		CapabilityPermissionBypass,
+	)
+}
+
 func registrationDescriptor(manifest Manifest) providers.Descriptor {
 	capabilities := []providers.Capability{}
 	if manifest.MaximumExecutionCapabilities.PromptSubmission {
@@ -329,6 +390,9 @@ func registrationDescriptor(manifest Manifest) providers.Descriptor {
 	}
 	if manifest.MaximumExecutionCapabilities.StructuredOutput {
 		capabilities = append(capabilities, providers.CapabilityStructuredOutput)
+	}
+	if manifest.MaximumExecutionCapabilities.PermissionBypass {
+		capabilities = append(capabilities, providers.CapabilityPermissionBypass)
 	}
 	return providers.Descriptor{
 		ID: providers.ID(manifest.ID), Aliases: append([]string(nil), manifest.Aliases...),
@@ -348,10 +412,15 @@ func externalRegistrationAttempt(registration Registration) (execution.Registrat
 		Provider: providers.ID(registration.Manifest.ID),
 		Attempt: func(ctx context.Context, request providers.ExecuteRequest) (providers.ExecuteResult, error) {
 			writer := &externalResponseWriter{}
-			err := registration.Integration.Invoke(ctx, InvocationRequest{
+			invocation := InvocationRequest{
 				ID: request.AttemptID, ModelID: request.Model,
-				ReasoningEffort: request.ReasoningEffort, Prompt: request.UserMessage,
-			}, writer)
+				ReasoningEffort: request.ReasoningEffort,
+				SkipPermissions: request.SkipPermissions, Prompt: request.UserMessage,
+			}
+			if err := validateExternalInvocationCapabilities(ctx, registration.Manifest.ID, registration.Integration, invocation); err != nil {
+				return providers.ExecuteResult{}, err
+			}
+			err := registration.Integration.Invoke(ctx, invocation, writer)
 			if err != nil {
 				return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindUnknown, Message: err.Error()}
 			}
@@ -436,7 +505,7 @@ func effectiveACPIntegrations(packaged, configured []providers.ACPIntegration) [
 }
 
 func acpDescriptor(integration providers.ACPIntegration) providers.Descriptor {
-	return providers.Descriptor{ID: integration.Name, Aliases: append([]string(nil), integration.Aliases...), DisplayName: integration.Name.String(), Availability: providers.AvailabilitySelectable, Readiness: providers.ReadinessReady, Capabilities: []providers.Capability{providers.CapabilityPromptSubmission, providers.CapabilityImageInput, providers.CapabilitySessionResume, providers.CapabilityNativeStreaming, providers.CapabilityMessageDeltas, providers.CapabilityReasoningSummaries, providers.CapabilityToolLifecycle, providers.CapabilityFileChanges, providers.CapabilityPlans, providers.CapabilityUsage}}
+	return providers.Descriptor{ID: integration.Name, Aliases: append([]string(nil), integration.Aliases...), DisplayName: integration.Name.String(), Availability: providers.AvailabilitySelectable, Readiness: providers.ReadinessReady, Capabilities: []providers.Capability{providers.CapabilityPromptSubmission, providers.CapabilityImageInput, providers.CapabilitySessionResume, providers.CapabilityPermissionBypass, providers.CapabilityNativeStreaming, providers.CapabilityMessageDeltas, providers.CapabilityReasoningSummaries, providers.CapabilityToolLifecycle, providers.CapabilityFileChanges, providers.CapabilityPlans, providers.CapabilityUsage}}
 }
 
 // NewFactory returns an inert constructor used for operator-configured ACP catalogs.
