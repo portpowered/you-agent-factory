@@ -337,7 +337,20 @@ func openRuntime(
 			return webhookSubscription(context.WithoutCancel(ctx))
 		})
 	}
-	sessionRuntime, service4, invocationDomain, definitionHost, err := runtimeService.Complete(
+	if factoryDefinitionsFactory == nil {
+		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Definitions factory is required")
+	}
+	definitionHostHandoff := &definitionHostHandoff{}
+	definitionActivationHandoff := &definitionActivationHandoff{}
+	factoryDefinitionOwner := factoryDefinitionsFactory(
+		definitionHostHandoff,
+		definitionActivationHandoff,
+		factoryDefinitionValidator,
+	)
+	if factoryDefinitionOwner == nil {
+		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Definitions factory returned nil service")
+	}
+	sessionRuntime, service4, invocationDomain, definitionHost, definitionActivationGateway, err := runtimeService.Complete(
 		root.FactoryRootDir,
 		clock,
 		logger,
@@ -348,6 +361,7 @@ func openRuntime(
 		runtimeLifecycle,
 		runtimeSidecars,
 		factorysessionexecutionService,
+		factoryDefinitionOwner,
 		configured.Definition.Directory,
 		configured.Definition.ExecutionBaseDir,
 		configured.Runtime.Mode,
@@ -371,24 +385,27 @@ func openRuntime(
 	if err != nil {
 		return runtimeProducts{}, err
 	}
-	if factoryDefinitionsFactory == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Definitions factory is required")
+	definitionHostHandoff.bind(definitionHost)
+	definitionActivationHandoff.bind(definitionActivationGateway)
+	if workFactory == nil {
+		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Work factory is required")
 	}
-	activationGatewayProvider, ok := sessionRuntime.(interface {
-		DefinitionActivationGateway() factorydefinitions.DefinitionActivationGateway
-	})
-	if !ok {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Session runtime must expose DefinitionActivationGateway")
+	workDomain := workFactory(runtimeService)
+	if workDomain == nil {
+		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Work factory returned nil service")
 	}
-	factoryDefinitionOwner := factoryDefinitionsFactory(
-		definitionHost,
-		activationGatewayProvider.DefinitionActivationGateway(),
-		factoryDefinitionValidator,
-	)
-	if factoryDefinitionOwner == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Definitions factory returned nil service")
+	if recordingLifecycleFactory == nil {
+		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Recordings lifecycle factory is required")
 	}
-	if err := attachFactoryDefinitionServiceToRuntime(sessionRuntime, factoryDefinitionOwner); err != nil {
+	recordingLifecycle := recordingLifecycleFactory(startupRuntime.RecordingLedger(), recordingProjections)
+	if recordingLifecycle == nil {
+		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Recordings lifecycle factory returned nil lifecycle")
+	}
+	if err := bindRuntimeRecordingLifecycle(
+		runtimeRecording,
+		recordingLifecycle,
+		recordings.CanonicalEventScope{FactorySessionID: factorysessions.DefaultSessionID},
+	); err != nil {
 		return runtimeProducts{}, err
 	}
 	if processRuntimeFactory == nil {
