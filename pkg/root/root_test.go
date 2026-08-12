@@ -120,6 +120,56 @@ func TestWorkerRecordingReaderFromProcessUsesComposedReader(t *testing.T) {
 	}
 }
 
+func TestWorkerRecordingReaderFromProcessPropagatesReaderError(t *testing.T) {
+	t.Parallel()
+
+	wantErr := errors.New("worker recording reader unavailable")
+	process, err := initializerapplication.NewProcess(
+		nil,
+		nil,
+		rootWorkerProcessRegistry{},
+		rootWorkerProcessLifecycle{},
+		nil,
+		rootWorkerProcessReader{err: wantErr},
+	)
+	if err != nil {
+		t.Fatalf("NewProcess() error = %v", err)
+	}
+
+	reader := WorkerRecordingReaderFromProcess(process)
+	if reader == nil {
+		t.Fatal("WorkerRecordingReaderFromProcess() returned nil")
+	}
+	if _, err := reader.LoadWorkerRecording(t.Context(), "root-recording"); !errors.Is(err, wantErr) {
+		t.Fatalf("LoadWorkerRecording() error = %v, want %v", err, wantErr)
+	}
+}
+
+func TestWorkerRecordingReaderFromProcessRejectsMalformedSnapshot(t *testing.T) {
+	t.Parallel()
+
+	process, err := initializerapplication.NewProcess(
+		nil,
+		nil,
+		rootWorkerProcessRegistry{},
+		rootWorkerProcessLifecycle{},
+		nil,
+		rootWorkerProcessReader{payload: json.RawMessage(`{"recordingId":`)},
+	)
+	if err != nil {
+		t.Fatalf("NewProcess() error = %v", err)
+	}
+
+	reader := WorkerRecordingReaderFromProcess(process)
+	if reader == nil {
+		t.Fatal("WorkerRecordingReaderFromProcess() returned nil")
+	}
+	if _, err := reader.LoadWorkerRecording(t.Context(), "root-recording"); err == nil ||
+		!strings.Contains(err.Error(), "decode Worker recording snapshot") {
+		t.Fatalf("LoadWorkerRecording() error = %v, want decode diagnostic", err)
+	}
+}
+
 type rootWorkerRecordingReaderProbe struct{}
 
 type rootWorkerProcessRegistry struct{}
@@ -131,6 +181,15 @@ func (rootWorkerProcessRegistry) CanonicalIdentity(identity string) (string, err
 type rootWorkerProcessLifecycle struct{}
 
 func (rootWorkerProcessLifecycle) Close(context.Context) error { return nil }
+
+type rootWorkerProcessReader struct {
+	payload json.RawMessage
+	err     error
+}
+
+func (reader rootWorkerProcessReader) LoadWorkerRecording(context.Context, string) (json.RawMessage, error) {
+	return reader.payload, reader.err
+}
 
 func (*rootWorkerRecordingReaderProbe) PersistWorkerRecord(context.Context, recordings.WorkerRecordingRecord) error {
 	return nil
