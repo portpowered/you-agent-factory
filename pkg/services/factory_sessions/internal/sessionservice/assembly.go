@@ -17,6 +17,7 @@ import (
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
+	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"go.uber.org/zap"
 )
@@ -29,7 +30,7 @@ type Assembly struct {
 	state                        *sessionruntime.Service
 	streams                      streamManager
 	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory
-	liveChangeCoordinator        factorysessions.LiveChangeCoordinator
+	liveChangeCoordinator        factorysessioncontracts.LiveChangeCoordinator
 	sessionResultProjection      factoryruntime.SessionResultProjectionOperation
 	interpolation                factorydefinitions.InvocationInterpolationService
 	invocationWorkTypes          factorydefinitions.InvocationWorkTypeService
@@ -67,7 +68,7 @@ func NewAssembly(
 	initialWorkFiles fileeffects.InitialWorkReader,
 	identityService identity.Service,
 	responseStreamService responsestreamservice.Service,
-	liveChangeCoordinator factorysessions.LiveChangeCoordinator,
+	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
 ) roles.RuntimeAssembly {
 	if clock == nil || eventIDs == nil || sessionIDs == nil || resolveHome == nil || directoryInspection == nil || namedPaths == nil || invocationInputFiles == nil || initialWorkFiles == nil || sessionResultProjection == nil || identityService == nil || responseStreamService == nil || liveChangeCoordinator == nil {
 		return nil

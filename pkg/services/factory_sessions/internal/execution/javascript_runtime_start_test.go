@@ -9,9 +9,9 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livechange"
+	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"os"
@@ -290,7 +290,7 @@ type javaScriptRuntimeServiceConfig struct {
 	Persistence           runtimepersist.Store
 	Clock                 factory.Clock
 	Workflows             factory.JavaScriptWorkflows
-	LiveChangeCoordinator factorysessions.LiveChangeCoordinator
+	LiveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator
 }
 
 func testRuntimePersistenceStoreFactory(projectRoot string) (runtimepersist.Store, error) {

@@ -15,6 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
+	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 	recording "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -225,7 +226,7 @@ type JavaScriptRuntimeService struct {
 	generateSessionID       internalcontracts.SessionIDGenerator
 	generateResponseEventID factorysessions.ResponseEventIDGenerator
 	responseStreams         responsestreamservice.Service
-	liveChangeCoordinator   factorysessions.LiveChangeCoordinator
+	liveChangeCoordinator   factorysessioncontracts.LiveChangeCoordinator
 	// resolveWorkerInvoker is guarded by its own lock, not the session lock.
 	// It is bound once, after construction, and read on paths that already hold
 	// the session lock; sharing one mutex between them deadlocks.
@@ -269,7 +270,7 @@ func NewJavaScriptRuntimeService(
 	generateSessionID internalcontracts.SessionIDGenerator,
 	generateResponseEventID factorysessions.ResponseEventIDGenerator,
 	responseStreams responsestreamservice.Service,
-	liveChangeCoordinator factorysessions.LiveChangeCoordinator,
+	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
 ) *JavaScriptRuntimeService {
 	if generateSessionID == nil {
 		return nil

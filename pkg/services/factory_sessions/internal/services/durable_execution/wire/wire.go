@@ -10,6 +10,7 @@ import (
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	durableexecutionservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution/internal/service"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
+	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -42,7 +43,7 @@ func NewDurable(
 	generateSessionID factorysessions.SessionIDGenerator,
 	generateResponseEventID factorysessions.ResponseEventIDGenerator,
 	responseStreams responsestreamservice.Service,
-	liveChangeCoordinator factorysessions.LiveChangeCoordinator,
+	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
 ) (durableexecution.Service, error) {
 	return durableexecutionservice.NewDurable(
 		projectRoot, persistencePolicy, stores, childExecutorMode, clock, syncWaits,
@@ -70,7 +71,7 @@ func NewStandalone(
 	recordingWriter recordings.PortableRecordingWriter,
 	generateSessionID factorysessions.SessionIDGenerator,
 	fixtureFiles fileeffects.ContractFixtureReader,
-	liveChangeCoordinator factorysessions.LiveChangeCoordinator,
+	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
 ) (durableexecution.Service, error) {
 	return durableexecutionservice.NewStandalone(
 		provider, projectRoot, stores, fixtureCatalogPath, childExecutorMode,

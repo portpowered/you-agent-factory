@@ -13,6 +13,7 @@ import (
 	internalcontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
+	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 	recording "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -349,7 +350,7 @@ func NewJavaScriptExecutionService(
 	generateSessionID internalcontracts.SessionIDGenerator,
 	generateResponseEventID factorysessions.ResponseEventIDGenerator,
 	responseStreams responsestreamservice.Service,
-	liveChangeCoordinator factorysessions.LiveChangeCoordinator,
+	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
 ) (Service, error) {
 	projectRoot = strings.TrimSpace(projectRoot)
 	if projectRoot == "" {

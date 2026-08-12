@@ -13,6 +13,7 @@ import (
 	responsestreamwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream/wire"
 	factorysessionservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream"
+	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 )
 
 type liveRuntimeEffectHost struct {
@@ -77,7 +78,7 @@ func newLiveRuntimeCompositionGateway(t *testing.T, host liveRuntimeGatewayHost)
 func newLiveRuntimeCompositionGatewayWithCoordinator(
 	t *testing.T,
 	host liveRuntimeGatewayHost,
-	coordinator factorysessions.LiveChangeCoordinator,
+	coordinator factorysessioncontracts.LiveChangeCoordinator,
 ) *factorysessionservice.Service {
 	t.Helper()
 	responseService, err := responsestreamwire.NewService(func() string { return "response-event-live-runtime" }, nil, newTestEventsServiceForSessionService(t))

@@ -365,15 +365,6 @@ type LiveChangeOperation struct {
 	Logger        *zap.Logger
 }
 
-// LiveChangeCoordinator is the owner-published admission capability shared by
-// live Factory Sessions and durable JavaScript execution. Implementations own
-// request normalization, idempotency, recovery, and canonical event closure;
-// callers supply only the runtime-specific operation ports.
-type LiveChangeCoordinator interface {
-	ApplyLiveChange(context.Context, string, LiveChangeRequest, LiveChangeOperation) (LiveChangeResult, error)
-	RecoverLiveChange(context.Context, string, string, LiveChangeOperation) (LiveChangeResult, error)
-}
-
 // LiveChangeErrorCode identifies a safe, stable failure category.
 type LiveChangeErrorCode string
 

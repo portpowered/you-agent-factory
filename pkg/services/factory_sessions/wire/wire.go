@@ -23,6 +23,7 @@ import (
 	identitywire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity/wire"
 	responsestreamwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream/wire"
 	sessionprojection "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionprojection"
+	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -48,7 +49,7 @@ func NewWorkStopSummaryProjector() factorysessions.WorkStopSummaryProjector {
 
 // NewLiveChangeCoordinator constructs the one process-scoped admission
 // coordinator shared by live and durable Factory Session execution.
-func NewLiveChangeCoordinator() factorysessions.LiveChangeCoordinator {
+func NewLiveChangeCoordinator() factorysessioncontracts.LiveChangeCoordinator {
 	return livechange.NewCoordinator()
 }
 
@@ -73,7 +74,7 @@ func NewService(
 	initialWorkFiles fileeffects.InitialWorkReader,
 	resolveSymlinks factorysessions.LogicalTargetResolveSymlinks,
 	eventsService events.Service,
-	liveChangeCoordinator factorysessions.LiveChangeCoordinator,
+	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
 ) (factorysessions.Service, error) {
 	if sessionResultProjection == nil {
 		return nil, fmt.Errorf("construct Factory Sessions: session result projection is required")
@@ -156,7 +157,7 @@ func NewDurableExecution(
 	generateResponseEventID factorysessions.ResponseEventIDGenerator,
 	responseEventRetentionLimits *factorysessions.ResponseEventRetentionLimits,
 	eventsService events.Service,
-	liveChangeCoordinator factorysessions.LiveChangeCoordinator,
+	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
 ) (durableexecution.Service, error) {
 	responseStreams, err := responsestreamwire.NewService(generateResponseEventID, responseEventRetentionLimits, eventsService)
 	if err != nil {
@@ -188,7 +189,7 @@ func NewStandaloneExecution(
 	recordingWriter recordings.PortableRecordingWriter,
 	generateSessionID factorysessions.SessionIDGenerator,
 	fixtureFiles fileeffects.ContractFixtureReader,
-	liveChangeCoordinator factorysessions.LiveChangeCoordinator,
+	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
 ) (durableexecution.Service, error) {
 	return durableexecutionwire.NewStandalone(
 		provider, projectRoot, stores, fixtureCatalogPath, childExecutorMode,

@@ -21,13 +21,14 @@ import (
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionvalidation"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream"
+	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 )
 
 // Service is the canonical Factory Session application gateway for open, read, and lifecycle behavior.
 type Service struct {
 	host              Host
 	liveRuntime       liveruntime.Service
-	liveChange        factorysessions.LiveChangeCoordinator
+	liveChange        factorysessioncontracts.LiveChangeCoordinator
 	streams           *stream.Manager
 	reconnects        factorysessions.ReconnectCursorValidator
 	results           factoryruntime.SessionResultProjectionOperation
@@ -103,7 +104,7 @@ func NewWithLiveChangeCoordinator(
 	reconnects factorysessions.ReconnectCursorValidator,
 	results factoryruntime.SessionResultProjectionOperation,
 	responseEvents responsestreamservice.Service,
-	liveChange factorysessions.LiveChangeCoordinator,
+	liveChange factorysessioncontracts.LiveChangeCoordinator,
 ) *Service {
 	if host == nil || sessions == nil || observer == nil || responseStreams == nil {
 		return nil

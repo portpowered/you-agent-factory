@@ -240,7 +240,7 @@ type newServiceInputs struct {
 	initialWorkFiles             fileeffects.InitialWorkReader
 	resolveSymlinks              factorysessions.LogicalTargetResolveSymlinks
 	eventsService                events.Service
-	liveChangeCoordinator        factorysessions.LiveChangeCoordinator
+	liveChangeCoordinator        LiveChangeCoordinator
 }
 
 func validNewServiceInputs() newServiceInputs {

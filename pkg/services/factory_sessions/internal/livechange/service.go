@@ -14,6 +14,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 	"go.uber.org/zap"
 )
 
@@ -29,7 +30,7 @@ type Service struct {
 	logger *zap.Logger
 }
 
-var _ factorysessions.LiveChangeCoordinator = (*Service)(nil)
+var _ factorysessioncontracts.LiveChangeCoordinator = (*Service)(nil)
 
 // NewCoordinator constructs the process-scoped coordinator for the Factory
 // Sessions wire graph. Runtime-specific clocks and loggers are supplied at the
