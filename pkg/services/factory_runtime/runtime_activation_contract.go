@@ -33,6 +33,26 @@ type RuntimeActivationRequest struct {
 type RuntimeActivationResult struct {
 	RuntimeID string
 	State     RuntimeLifecycleState
+	// Runtime contains the initialized, root-owned capabilities needed by the
+	// caller to finish composing its public session view. Cleanup is deliberately
+	// absent; the Runtime root retains that ownership and performs it through
+	// Deactivate.
+	Runtime RuntimeActivationView
+}
+
+// RuntimeActivationView is the published handoff for one successfully
+// initialized Runtime. The view contains already-constructed runtime
+// capabilities; callers cannot use it to replace the root's active delegate
+// or take ownership of cleanup.
+type RuntimeActivationView struct {
+	RuntimeID        string
+	FactorySessionID string
+	Service          Service
+	HostedInstance   HostedInstance
+	Replacement      ReplacementBuilder
+	BuildSpec        SessionBuildSpec
+	Lifecycle        Lifecycle
+	Sidecars         Sidecars
 }
 
 // RuntimeDeactivationRequest selects the Runtime whose owned resources should
@@ -147,7 +167,15 @@ func (e *RuntimeActivationError) Is(target error) bool {
 // invokes during deactivation or failed publication.
 type RuntimeActivation struct {
 	Service Service
-	Close   func(context.Context) error
+	// The remaining fields are returned as a RuntimeActivationView after the
+	// root publishes the delegate. They are optional for narrow callers that
+	// only need the Service contract.
+	HostedInstance HostedInstance
+	Replacement    ReplacementBuilder
+	BuildSpec      SessionBuildSpec
+	Lifecycle      Lifecycle
+	Sidecars       Sidecars
+	Close          func(context.Context) error
 }
 
 // RuntimeActivationOperation is injected when the process root is composed.

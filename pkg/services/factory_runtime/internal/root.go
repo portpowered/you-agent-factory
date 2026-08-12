@@ -37,6 +37,7 @@ var _ factoryruntime.Root = (*Root)(nil)
 type runtimeActivationState struct {
 	request factoryruntime.RuntimeActivationRequest
 	service factoryruntime.Service
+	view    factoryruntime.RuntimeActivationView
 	close   func(context.Context) error
 }
 
@@ -112,9 +113,22 @@ func (r *Root) Activate(
 	if err := r.finishActivation(ctx, normalized, activation, operationErr); err != nil {
 		return factoryruntime.RuntimeActivationResult{}, err
 	}
+	r.mu.RLock()
+	active := r.active
+	if active == nil {
+		r.mu.RUnlock()
+		return factoryruntime.RuntimeActivationResult{}, &factoryruntime.RuntimeActivationError{
+			Kind:      factoryruntime.RuntimeActivationErrorFailed,
+			RuntimeID: normalized.RuntimeID,
+			Message:   "activate Factory Runtime: published state is unavailable",
+		}
+	}
+	view := active.view
+	r.mu.RUnlock()
 	return factoryruntime.RuntimeActivationResult{
 		RuntimeID: normalized.RuntimeID,
 		State:     factoryruntime.RuntimeLifecycleStateActive,
+		Runtime:   view,
 	}, nil
 }
 
@@ -209,9 +223,20 @@ func (r *Root) finishActivation(
 	}
 	r.mu.Lock()
 	r.activating = false
+	view := factoryruntime.RuntimeActivationView{
+		RuntimeID:        request.RuntimeID,
+		FactorySessionID: request.FactorySessionID,
+		Service:          activation.Service,
+		HostedInstance:   activation.HostedInstance,
+		Replacement:      activation.Replacement,
+		BuildSpec:        activation.BuildSpec,
+		Lifecycle:        activation.Lifecycle,
+		Sidecars:         activation.Sidecars,
+	}
 	r.active = &runtimeActivationState{
 		request: request,
 		service: activation.Service,
+		view:    view,
 		close:   activation.Close,
 	}
 	r.mu.Unlock()

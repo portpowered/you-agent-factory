@@ -64,6 +64,38 @@ func TestRuntimeRootActivationPublishesOnlyDetachedSuccessfulState(t *testing.T)
 	}
 }
 
+func TestRuntimeRootActivationReturnsPublishedRuntimeHandoff(t *testing.T) {
+	t.Parallel()
+
+	active := newFoldHostedRuntimeStub("RUNNING")
+	root := newRuntimeRoot(t, func(_ context.Context, request factoryruntime.RuntimeActivationRequest) (*factoryruntime.RuntimeActivation, error) {
+		return &factoryruntime.RuntimeActivation{
+			Service: active,
+			BuildSpec: factoryruntime.SessionBuildSpec{
+				RuntimeInstanceID: request.Runtime.RuntimeInstanceID,
+			},
+		}, nil
+	})
+	request := foldRuntimeActivationRequest()
+
+	result, err := root.Activate(context.Background(), request)
+	if err != nil {
+		t.Fatalf("Activate() error = %v", err)
+	}
+	if result.Runtime.RuntimeID != request.RuntimeID {
+		t.Fatalf("published handoff RuntimeID = %q, want %q", result.Runtime.RuntimeID, request.RuntimeID)
+	}
+	if result.Runtime.FactorySessionID != request.FactorySessionID {
+		t.Fatalf("published handoff FactorySessionID = %q, want %q", result.Runtime.FactorySessionID, request.FactorySessionID)
+	}
+	if result.Runtime.Service != active {
+		t.Fatal("published handoff did not return the activated Service")
+	}
+	if result.Runtime.BuildSpec.RuntimeInstanceID != request.RuntimeID {
+		t.Fatalf("published handoff RuntimeInstanceID = %q, want %q", result.Runtime.BuildSpec.RuntimeInstanceID, request.RuntimeID)
+	}
+}
+
 func TestRuntimeRootActivationRejectsDuplicateAndConflictingIdentity(t *testing.T) {
 	t.Parallel()
 
