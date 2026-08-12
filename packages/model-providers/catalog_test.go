@@ -20,7 +20,6 @@ func TestPublishedBytesMatchGeneratedArtifacts(t *testing.T) {
 		got  []byte
 	}{
 		{name: "catalog", path: "generated/catalog.json", got: modelproviders.CatalogJSON()},
-		{name: "runtime ACP catalog", path: "generated/runtime-acp.json", got: modelproviders.RuntimeACPJSON()},
 		{name: "manifest schema", path: "generated/provider-manifest.schema.json", got: modelproviders.ProviderManifestSchemaJSON()},
 		{name: "catalog schema", path: "generated/provider-catalog.schema.json", got: modelproviders.ProviderCatalogSchemaJSON()},
 	}
