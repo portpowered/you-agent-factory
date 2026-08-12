@@ -28,7 +28,6 @@ func TestCLIValidationFailureExitCode(t *testing.T) {
 	t.Parallel()
 
 	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
-	session := harness.NewSession(t)
 
 	for _, tc := range []struct {
 		name string
@@ -45,6 +44,7 @@ func TestCLIValidationFailureExitCode(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+			session := harness.NewSession(t)
 
 			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 			defer cancel()
@@ -124,6 +124,7 @@ func TestCLIInterruptedExitCode(t *testing.T) {
 
 	_ = waitForDashboardURL(t, lines, scanErr, stderr, 30*time.Second)
 	interruptAndAssertCancellationExit(t, command, 10*time.Second)
+	waitForScannerCompletion(t, scanErr, "interrupted root process", 5*time.Second)
 	stopped = true
 }
 
@@ -195,6 +196,7 @@ func TestBuiltCLIDeclaredCancellationExitCodes(t *testing.T) {
 
 			waitForDashboardURL(t, lines, scanErr, &stderr, 30*time.Second)
 			interruptBuiltCLIAndAssertExit130(t, command, 15*time.Second)
+			waitForScannerCompletion(t, scanErr, test.name, 5*time.Second)
 			stopped = true
 		})
 	}
