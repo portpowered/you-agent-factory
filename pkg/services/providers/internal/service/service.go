@@ -158,6 +158,9 @@ func (s *Service) dispatch(
 				}
 			}
 			request.Provider = canonical
+			if err := s.validatePermissionBypass(canonical, request.SkipPermissions); err != nil {
+				return providers.ExecuteResult{}, err
+			}
 			control := &acpAttemptControl{acp: s.acp, canonical: canonical, attemptID: request.AttemptID}
 			release, bindErr := s.bindLiveAttempt(canonical, request.AttemptID, control)
 			if bindErr != nil {
@@ -183,6 +186,9 @@ func (s *Service) dispatch(
 			Kind:    providers.ExecuteFailureKindInvalidRequest,
 			Message: "Agy does not support a separate reasoning effort",
 		}
+	}
+	if err := s.validatePermissionBypass(request.Provider, request.SkipPermissions); err != nil {
+		return providers.ExecuteResult{}, err
 	}
 	attemptCtx, cancelAttempt := context.WithCancel(ctx)
 	control := &nativeAttemptControl{cancel: cancelAttempt, done: make(chan struct{})}
@@ -216,6 +222,9 @@ func (s *Service) dispatchContinuation(
 				}
 			}
 			request.Provider = canonical
+			if err := s.validatePermissionBypass(canonical, request.SkipPermissions); err != nil {
+				return providers.ExecuteResult{}, err
+			}
 			control := &acpAttemptControl{acp: s.acp, canonical: canonical, attemptID: request.AttemptID}
 			release, bindErr := s.bindLiveAttempt(canonical, request.AttemptID, control)
 			if bindErr != nil {
@@ -248,6 +257,9 @@ func (s *Service) dispatchContinuation(
 			Kind:    providers.ExecuteFailureKindInvalidRequest,
 			Message: "Agy does not support a separate reasoning effort",
 		}
+	}
+	if err := s.validatePermissionBypass(request.Provider, request.SkipPermissions); err != nil {
+		return providers.ExecuteResult{}, err
 	}
 	attemptCtx, cancelAttempt := context.WithCancel(ctx)
 	control := &nativeAttemptControl{cancel: cancelAttempt, done: make(chan struct{})}
@@ -485,6 +497,44 @@ func descriptorHasCapability(descriptor providers.Descriptor, capability provide
 	return slices.Contains(descriptor.Capabilities, capability)
 }
 
+// validatePermissionBypass checks the static capability fact before binding a
+// live attempt. This keeps an unsupported bypass request away from native
+// process startup, ACP prompt traffic, and other provider side effects.
+func (s *Service) validatePermissionBypass(provider providers.ID, requested bool) error {
+	if !requested {
+		return nil
+	}
+	descriptor, err := s.permissionDescriptor(provider)
+	if err != nil {
+		return err
+	}
+	if descriptorHasCapability(descriptor, providers.CapabilityPermissionBypass) {
+		return nil
+	}
+	return providers.ExecuteFailure{
+		Kind: providers.ExecuteFailureKindCapabilityMismatch,
+		Message: fmt.Sprintf(
+			"provider %q does not support capability %q",
+			provider,
+			providers.CapabilityPermissionBypass,
+		),
+	}
+}
+
+func (s *Service) permissionDescriptor(provider providers.ID) (providers.Descriptor, error) {
+	if s.acp != nil {
+		if canonical, ok := s.acp.Resolve(provider); ok {
+			for _, integration := range s.acp.Integrations() {
+				if integration.Name == canonical {
+					return acpDescriptor(integration), nil
+				}
+			}
+			return providers.Descriptor{}, providers.ErrUnknownProvider
+		}
+	}
+	return s.catalog.RegistrationProvider(provider)
+}
+
 // ControlAttempt routes a valid cancel or terminate request to the exact
 // live native provider attempt it names, or a valid cancel request to the
 // exact live ACP attempt it names, when one is bound and truthfully
@@ -597,7 +647,7 @@ func acpDescriptor(integration providers.ACPIntegration) providers.Descriptor {
 	return providers.Descriptor{
 		ID: integration.Name, Aliases: append([]string(nil), integration.Aliases...), DisplayName: integration.Name.String(),
 		Availability: providers.AvailabilitySelectable, Readiness: providers.ReadinessReady,
-		Capabilities: []providers.Capability{providers.CapabilityPromptSubmission, providers.CapabilityImageInput, providers.CapabilitySessionResume, providers.CapabilityNativeStreaming, providers.CapabilityMessageDeltas, providers.CapabilityReasoningSummaries, providers.CapabilityToolLifecycle, providers.CapabilityFileChanges, providers.CapabilityPlans, providers.CapabilityUsage},
+		Capabilities: []providers.Capability{providers.CapabilityPromptSubmission, providers.CapabilityImageInput, providers.CapabilitySessionResume, providers.CapabilityPermissionBypass, providers.CapabilityNativeStreaming, providers.CapabilityMessageDeltas, providers.CapabilityReasoningSummaries, providers.CapabilityToolLifecycle, providers.CapabilityFileChanges, providers.CapabilityPlans, providers.CapabilityUsage},
 	}
 }
 

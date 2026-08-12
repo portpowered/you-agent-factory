@@ -93,6 +93,7 @@ func scriptedSingleChildWorkflows(
 						Label: request.Label, Preset: request.Preset,
 						ModelProvider: request.ModelProvider, Model: request.Model,
 						ReasoningEffort: request.ReasoningEffort,
+						SkipPermissions: request.SkipPermissions,
 						ExecutionMode:   factory.JavaScriptChildExecutionModeFake,
 						Provider:        "fake", ProviderSessionRef: "fake-provider-session-1",
 						ArtifactRef: artifactRef,

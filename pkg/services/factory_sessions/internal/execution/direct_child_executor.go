@@ -152,6 +152,7 @@ func (e *directChildExecutor) inferenceRequest(
 		ModelProvider:    strings.TrimSpace(req.ModelProvider),
 		ReasoningEffort:  strings.TrimSpace(req.ReasoningEffort),
 		WorkingDirectory: e.workingDir,
+		SkipPermissions:  req.SkipPermissions,
 	}
 }
 

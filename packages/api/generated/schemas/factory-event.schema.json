@@ -332,6 +332,10 @@
         "schemaDigest": {
           "description": "Stable digest of the output schema when applicable.",
           "type": "string"
+        },
+        "skipPermissions": {
+          "description": "Whether this child requested the selected provider's permission-bypass behavior.",
+          "type": "boolean"
         }
       },
       "required": [

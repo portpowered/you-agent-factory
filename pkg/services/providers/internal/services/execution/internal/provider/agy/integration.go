@@ -44,6 +44,7 @@ func (*Integration) MaximumCapabilities() inference.CapabilitySet {
 	return inference.NewCapabilitySet(
 		inference.CapabilityPromptSubmission,
 		inference.CapabilitySessionResume,
+		inference.CapabilityPermissionBypass,
 		inference.CapabilityMessageSnapshots,
 	)
 }

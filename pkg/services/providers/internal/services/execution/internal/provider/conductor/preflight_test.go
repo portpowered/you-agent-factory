@@ -104,6 +104,29 @@ func TestConductorAcceptedCapabilitySubsetProceedsToProviderIO(t *testing.T) {
 	}
 }
 
+func TestConductorRejectsNegotiatedPermissionBypassOmissionBeforeInvoke(t *testing.T) {
+	t.Parallel()
+
+	providers, recording := newNegotiatedPermissionBypassRegistry(t)
+	subject := conductor.New(providers)
+	request := inference.NewInvocationRequest(inference.InvocationInput{
+		InvocationID: "inv-negotiated-bypass",
+		Required: inference.NewCapabilitySet(
+			inference.CapabilityPromptSubmission,
+			inference.CapabilityPermissionBypass,
+		),
+	})
+
+	err := subject.Invoke(context.Background(), "conductor.negotiated", request, &recordingWriter{})
+	assertEscalationRejection(t, err, inference.CapabilityPermissionBypass)
+	if got := recording.capabilityCalls.Load(); got != 1 {
+		t.Fatalf("capabilityCalls = %d, want one request-time negotiation", got)
+	}
+	if got := recording.invocationCalls.Load(); got != 0 {
+		t.Fatalf("invocationCalls = %d, want zero after omitted negotiated bypass", got)
+	}
+}
+
 func TestConductorEscalationDiagnosticsAreStableAcrossRepeatedRuns(t *testing.T) {
 	t.Parallel()
 
@@ -172,6 +195,7 @@ func TestConductorRejectsContradictoryCapabilityDependenciesWithoutProviderIO(t 
 type recordingIntegration struct {
 	identity        inference.Identity
 	maximum         inference.CapabilitySet
+	negotiated      inference.CapabilitySet
 	discoveryCalls  atomic.Int32
 	capabilityCalls atomic.Int32
 	invocationCalls atomic.Int32
@@ -191,6 +215,9 @@ func (r *recordingIntegration) Capabilities(
 	request inference.InvocationRequest,
 ) (inference.CapabilitySet, error) {
 	r.capabilityCalls.Add(1)
+	if len(r.negotiated.Values()) > 0 {
+		return r.negotiated, nil
+	}
 	return request.RequiredCapabilities(), nil
 }
 func (r *recordingIntegration) Invoke(
@@ -248,6 +275,32 @@ func newLimitedCapabilityRegistry(t *testing.T) (*registry.Registry, *recordingI
 	return providers, recording
 }
 
+func newNegotiatedPermissionBypassRegistry(t *testing.T) (*registry.Registry, *recordingIntegration) {
+	t.Helper()
+	builtIns, err := registry.BuiltInRegistrations()
+	if err != nil {
+		t.Fatalf("BuiltInRegistrations() error = %v", err)
+	}
+	manifest := limitedExternalManifest(t, "conductor.negotiated", "conductor-negotiated")
+	manifest.MaximumExecutionCapabilities.PermissionBypass = true
+	recording := &recordingIntegration{
+		identity: inference.Identity(manifest.ID),
+		maximum: inference.NewCapabilitySet(
+			inference.CapabilityPromptSubmission,
+			inference.CapabilityPermissionBypass,
+		),
+		negotiated: inference.NewCapabilitySet(inference.CapabilityPromptSubmission),
+	}
+	providers, err := registry.New(append(
+		builtIns,
+		registry.ExternalRegistration(manifest, recording),
+	)...)
+	if err != nil {
+		t.Fatalf("registry.New() error = %v", err)
+	}
+	return providers, recording
+}
+
 func limitedExternalManifest(t *testing.T, identity, alias string) registry.Manifest {
 	t.Helper()
 	var catalog struct {
@@ -264,6 +317,7 @@ func limitedExternalManifest(t *testing.T, identity, alias string) registry.Mani
 	manifest.Deprecation = nil
 	manifest.MaximumExecutionCapabilities = registry.ExecutionCapabilities{
 		PromptSubmission: true,
+		PermissionBypass: false,
 	}
 	manifest.MaximumResponseFidelityCapabilities = registry.ResponseFidelityCapabilities{}
 	return manifest

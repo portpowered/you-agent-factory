@@ -51,6 +51,34 @@ func TestBuildPreview_ValidWorkflowName(t *testing.T) {
 	}
 }
 
+func TestBuildPreview_SkipPermissionsTrueRemainsValid(t *testing.T) {
+	t.Parallel()
+	projectRoot := t.TempDir()
+	writeWorkflow(t, projectRoot, "review.js", `
+return (async function () {
+  const child = await agent.run({ prompt: "review", skipPermissions: true });
+  return { child };
+})();
+`)
+
+	ctx, err := factoryWorkflowDefinitions.DefaultSourceContext(projectRoot)
+	if err != nil {
+		t.Fatalf("DefaultContext: %v", err)
+	}
+
+	preview := factoryWorkflowDefinitions.BuildPreview(factory.WorkflowPreviewRequest{
+		Source: factory.WorkflowSourceRequest{
+			Kind:  factory.WorkflowSourceKindWorkflowName,
+			Value: "review",
+		},
+		Context: ctx,
+	})
+
+	if !preview.Valid {
+		t.Fatalf("preview = %#v, want valid for literal skipPermissions=true", preview)
+	}
+}
+
 func TestBuildPreview_SyntaxError(t *testing.T) {
 	t.Parallel()
 	projectRoot := t.TempDir()

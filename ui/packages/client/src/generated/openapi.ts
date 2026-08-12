@@ -2191,6 +2191,8 @@ export interface components {
       taskLabel?: string;
       /** @description Durable child execution mode recorded for the JavaScript workflow task when available. */
       executionMode?: string;
+      /** @description Whether this child requested the selected provider's permission-bypass behavior. */
+      skipPermissions?: boolean;
     };
     FactoryDispatchUsage: {
       /** Format: int64 */
@@ -2496,6 +2498,8 @@ export interface components {
       reasoningEffort?: string;
       /** @description Selected provider identifier when applicable. */
       provider?: string;
+      /** @description Whether this child requested the selected provider's permission-bypass behavior. */
+      skipPermissions?: boolean;
       /** @description Parent dispatch identifier when this dispatch was spawned from another dispatch. */
       parentDispatchId?: string;
       /** @description Prior dispatch identifier when this dispatch is a retry. */
@@ -5142,6 +5146,8 @@ export interface components {
       sessionResume: boolean;
       /** @description Can constrain authoritative output using a structured schema. */
       structuredOutput: boolean;
+      /** @description Can explicitly bypass the provider's normal permission and sandbox prompts. */
+      permissionBypass: boolean;
       /** @description Can execute provider-managed tools during an invocation. */
       toolExecution: boolean;
       /** @description Can execute with an explicit working directory. */

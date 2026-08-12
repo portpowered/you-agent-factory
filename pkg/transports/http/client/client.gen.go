@@ -1468,6 +1468,9 @@ type DispatchQueuedEventPayload struct {
 
 	// SchemaDigest Stable digest of the output schema when applicable.
 	SchemaDigest *string `json:"schemaDigest,omitempty"`
+
+	// SkipPermissions Whether this child requested the selected provider's permission-bypass behavior.
+	SkipPermissions *bool `json:"skipPermissions,omitempty"`
 }
 
 // DispatchReconciledEventPayload Dispatch reconciliation recorded on the canonical factory event stream. Dispatch identity lives in FactoryEvent.context.
@@ -1884,6 +1887,9 @@ type FactoryDispatch struct {
 type FactoryDispatchJavaScriptProjection struct {
 	// ExecutionMode Durable child execution mode recorded for the JavaScript workflow task when available.
 	ExecutionMode *string `json:"executionMode,omitempty"`
+
+	// SkipPermissions Whether this child requested the selected provider's permission-bypass behavior.
+	SkipPermissions *bool `json:"skipPermissions,omitempty"`
 
 	// TaskKind JavaScript workflow task kind for one child dispatch.
 	TaskKind FactoryDispatchJavaScriptTaskKind `json:"taskKind"`
@@ -5799,6 +5805,9 @@ type ProviderEffort string
 type ProviderExecutionCapabilities struct {
 	// ImageInput Accepts image content as invocation input.
 	ImageInput bool `json:"imageInput"`
+
+	// PermissionBypass Can explicitly bypass the provider's normal permission and sandbox prompts.
+	PermissionBypass bool `json:"permissionBypass"`
 
 	// PromptSubmission Accepts authored prompt input for execution.
 	PromptSubmission bool `json:"promptSubmission"`

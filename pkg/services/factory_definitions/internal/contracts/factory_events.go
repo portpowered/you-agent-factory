@@ -276,6 +276,7 @@ type DispatchQueuedEventPayload struct {
 	RetryOfDispatchID *string             `json:"retryOfDispatchId,omitempty"`
 	RunnerID          *string             `json:"runnerId,omitempty"`
 	SchemaDigest      *string             `json:"schemaDigest,omitempty"`
+	SkipPermissions   *bool               `json:"skipPermissions,omitempty"`
 }
 
 // DispatchInterruptedEventPayload records an observed interruption.
