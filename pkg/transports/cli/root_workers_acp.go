@@ -161,6 +161,11 @@ func productionWorkerSessionsCommand(
 	}); err != nil {
 		panic(fmt.Sprintf("build worker sessions handler registry: %v", err))
 	}
+	if err := registry.Register("you.worker-sessions.continue.handler", func(cmd *cobra.Command, args []string) error {
+		return executeGeneratedWorkerSessionsContinue(cmd, args, globals, diagnostics, options.ContinueWorkerSession, options.LocalWorkerSessions)
+	}); err != nil {
+		panic(fmt.Sprintf("build worker sessions handler registry: %v", err))
+	}
 	command, err := climanifestcobra.NewWorkerSessionsFamilyCommand(registry)
 	if err != nil {
 		panic(fmt.Sprintf("build worker sessions family command: %v", err))
@@ -254,6 +259,80 @@ func readGeneratedWorkerSessionsInvokeInputs(values map[string]any) (generatedWo
 	inputs.retryMaxAttempts, err = commandInputValue[int](values, "you.worker-sessions.invoke.flag.retry-max-attempts")
 	if err != nil {
 		return generatedWorkerSessionsInvokeInputs{}, err
+	}
+	return inputs, nil
+}
+
+func executeGeneratedWorkerSessionsContinue(
+	cmd *cobra.Command,
+	args []string,
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+	continueOperation workersessionscli.ContinueOperation,
+	local workersessionscli.LocalInvokeBoundary,
+) error {
+	if continueOperation == nil {
+		return fmt.Errorf("worker sessions continue service is required")
+	}
+	values, err := generatedCommandInputs(cmd)
+	if err != nil {
+		return err
+	}
+	inputs, err := readGeneratedWorkerSessionsContinueInputs(values)
+	if err != nil {
+		return err
+	}
+	return continueOperation(workersessionscli.ContinueConfig{
+		Context: cmd.Context(), Server: globals.server, Remote: remotePlacementSelected(globals),
+		RequestID: inputs.requestID, SourceWorkerSessionID: inputs.sourceWorkerSessionID,
+		SuccessorWorkerSessionID: inputs.successorWorkerSessionID, FollowUpInput: inputs.userMessage,
+		Prompt: inputs.followUpInput, Stdin: cmd.InOrStdin(), StdinIsTTY: startupcli.StdinIsTTY(cmd.Context()),
+		Async: inputs.async, OutputFormat: inputs.outputFormat,
+		JSON:  globals.json || strings.EqualFold(strings.TrimSpace(inputs.outputFormat), "json"),
+		Local: local, Output: cmd.OutOrStdout(), Diagnostics: diagnostics.writer(cmd),
+		Verbose: diagnostics.verboseEnabled(), Debug: diagnostics.debug,
+	})
+}
+
+type generatedWorkerSessionsContinueInputs struct {
+	sourceWorkerSessionID, requestID, successorWorkerSessionID string
+	userMessage, outputFormat                                  string
+	followUpInput                                              []string
+	async                                                      bool
+}
+
+func readGeneratedWorkerSessionsContinueInputs(values map[string]any) (generatedWorkerSessionsContinueInputs, error) {
+	var inputs generatedWorkerSessionsContinueInputs
+	readString := func(id string, target *string) error {
+		value, err := commandInputValue[string](values, id)
+		if err != nil {
+			return err
+		}
+		*target = value
+		return nil
+	}
+	for _, input := range []struct {
+		id     string
+		target *string
+	}{
+		{"you.worker-sessions.continue.arg.0", &inputs.sourceWorkerSessionID},
+		{"you.worker-sessions.continue.flag.request-id", &inputs.requestID},
+		{"you.worker-sessions.continue.flag.successor-worker-session-id", &inputs.successorWorkerSessionID},
+		{"you.worker-sessions.continue.flag.user-message", &inputs.userMessage},
+		{"you.worker-sessions.continue.flag.output", &inputs.outputFormat},
+	} {
+		if err := readString(input.id, input.target); err != nil {
+			return generatedWorkerSessionsContinueInputs{}, err
+		}
+	}
+	var err error
+	inputs.followUpInput, err = commandInputValue[[]string](values, "you.worker-sessions.continue.arg.1")
+	if err != nil {
+		return generatedWorkerSessionsContinueInputs{}, err
+	}
+	inputs.async, err = commandInputValue[bool](values, "you.worker-sessions.continue.flag.async")
+	if err != nil {
+		return generatedWorkerSessionsContinueInputs{}, err
 	}
 	return inputs, nil
 }

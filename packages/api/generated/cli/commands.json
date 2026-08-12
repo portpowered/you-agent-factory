@@ -10814,6 +10814,313 @@
         ]
       }
     },
+    "you.worker-sessions.continue": {
+      "id": "you.worker-sessions.continue",
+      "name": "continue",
+      "path": "you worker-sessions continue",
+      "aliases": [],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.worker-sessions.continue",
+        "documentation": {
+          "title": {
+            "id": "you.worker-sessions.continue.title",
+            "canonicalEnglish": "Continue a Worker Session"
+          },
+          "description": {
+            "id": "you.worker-sessions.continue.description",
+            "canonicalEnglish": "Create one admitted successor Worker Session from a terminal source, resuming the exact server-recorded Provider Session. Local Worker Sessions are the default; add --remote to use exactly --server. Without --async the command waits for the successor terminal event; --async returns after admission."
+          }
+        },
+        "examples": [
+          "you worker-sessions continue worker-session-123 --request-id follow-up-1 --successor-worker-session-id worker-session-124 --user-message 'Continue the work'",
+          "you worker-sessions continue worker-session-123 --request-id follow-up-1 --successor-worker-session-id worker-session-124 --async --output json",
+          "you worker-sessions continue worker-session-123 --remote --server https://factory.example --request-id follow-up-1 --successor-worker-session-id worker-session-124 'Review the result'"
+        ],
+        "visibility": "public",
+        "sourceHash": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.worker-sessions.continue",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "placement": "dual",
+      "usage": {
+        "line": "continue <source-worker-session-id> [follow-up-input...]",
+        "example": "  you worker-sessions continue worker-session-123 --request-id follow-up-1 --successor-worker-session-id worker-session-124 --user-message 'Continue the work'"
+      },
+      "arguments": {
+        "you.worker-sessions.continue.arg.0": {
+          "id": "you.worker-sessions.continue.arg.0",
+          "name": "source-worker-session-id",
+          "position": 0,
+          "kind": "positional",
+          "valueType": "string",
+          "required": true,
+          "minCardinality": 1,
+          "maxCardinality": 1,
+          "variadic": false,
+          "enum": [],
+          "pattern": "",
+          "completion": "none",
+          "channels": [
+            "cli"
+          ],
+          "doubleDash": "terminates-flags"
+        },
+        "you.worker-sessions.continue.arg.1": {
+          "id": "you.worker-sessions.continue.arg.1",
+          "name": "follow-up-input",
+          "position": 1,
+          "kind": "positional",
+          "valueType": "stringArray",
+          "required": false,
+          "minCardinality": 0,
+          "maxCardinality": -1,
+          "variadic": true,
+          "enum": [],
+          "pattern": "",
+          "completion": "none",
+          "channels": [
+            "cli",
+            "stdin"
+          ],
+          "doubleDash": "terminates-flags"
+        }
+      },
+      "flags": {
+        "you.worker-sessions.continue.flag.request-id": {
+          "id": "you.worker-sessions.continue.flag.request-id",
+          "long": "request-id",
+          "usage": "stable continuation request identity; generated when omitted",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.continue.flag.request-id",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.continue.flag.successor-worker-session-id": {
+          "id": "you.worker-sessions.continue.flag.successor-worker-session-id",
+          "long": "successor-worker-session-id",
+          "usage": "stable successor Worker Session identity; generated when omitted",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.continue.flag.successor-worker-session-id",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.continue.flag.user-message": {
+          "id": "you.worker-sessions.continue.flag.user-message",
+          "long": "user-message",
+          "usage": "follow-up input override; otherwise use positional input or non-TTY stdin",
+          "shorthand": "",
+          "aliases": [
+            "message"
+          ],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.continue.flag.user-message",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.continue.flag.async": {
+          "id": "you.worker-sessions.continue.flag.async",
+          "long": "async",
+          "usage": "return after successor admission instead of waiting for terminal output",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.continue.flag.async",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.continue.flag.output": {
+          "id": "you.worker-sessions.continue.flag.output",
+          "long": "output",
+          "usage": "output format: human (default) or json",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "human",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.continue.flag.output",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        }
+      },
+      "handler": {
+        "id": "you.worker-sessions.continue.handler",
+        "operationId": "continueWorkerSession"
+      },
+      "precedence": {
+        "order": [
+          "cli",
+          "stdin",
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
+      },
+      "channels": {
+        "input": [
+          "cli",
+          "env",
+          "config",
+          "stdin"
+        ],
+        "output": [
+          "stdout",
+          "stderr"
+        ]
+      },
+      "outputs": {
+        "you.worker-sessions.continue.output.human": {
+          "id": "you.worker-sessions.continue.output.human",
+          "channel": "stdout",
+          "format": "text"
+        },
+        "you.worker-sessions.continue.output.json": {
+          "id": "you.worker-sessions.continue.output.json",
+          "channel": "stdout",
+          "format": "json"
+        }
+      },
+      "errors": {
+        "you.worker-sessions.continue.error.invalid-input": {
+          "id": "you.worker-sessions.continue.error.invalid-input",
+          "code": "WORKER_SESSION_CONTINUATION_INVALID"
+        },
+        "you.worker-sessions.continue.error.conflict": {
+          "id": "you.worker-sessions.continue.error.conflict",
+          "code": "WORKER_SESSION_CONTINUATION_CONFLICT"
+        },
+        "you.worker-sessions.continue.error.admission": {
+          "id": "you.worker-sessions.continue.error.admission",
+          "code": "WORKER_SESSION_CONTINUATION_ADMISSION_FAILED"
+        },
+        "you.worker-sessions.continue.error.stream": {
+          "id": "you.worker-sessions.continue.error.stream",
+          "code": "WORKER_SESSION_STREAM_FAILED"
+        },
+        "you.worker-sessions.continue.error.remote": {
+          "id": "you.worker-sessions.continue.error.remote",
+          "code": "FACTORY_UNREACHABLE"
+        }
+      },
+      "exits": {
+        "you.worker-sessions.continue.exit.success": {
+          "id": "you.worker-sessions.continue.exit.success",
+          "code": 0,
+          "kind": "success"
+        },
+        "you.worker-sessions.continue.exit.failure": {
+          "id": "you.worker-sessions.continue.exit.failure",
+          "code": 1,
+          "kind": "failure"
+        },
+        "you.worker-sessions.continue.exit.usage": {
+          "id": "you.worker-sessions.continue.exit.usage",
+          "code": 1,
+          "kind": "usage"
+        },
+        "you.worker-sessions.continue.exit.cancel": {
+          "id": "you.worker-sessions.continue.exit.cancel",
+          "code": 130,
+          "kind": "cancel"
+        }
+      },
+      "sideEffects": {
+        "you.worker-sessions.continue.side-effect.network": {
+          "id": "you.worker-sessions.continue.side-effect.network",
+          "kind": "network"
+        }
+      },
+      "constraints": {
+        "runtime": [
+          "local"
+        ],
+        "platforms": [
+          "linux",
+          "darwin",
+          "windows"
+        ]
+      }
+    },
     "you.workers": {
       "id": "you.workers",
       "name": "workers",

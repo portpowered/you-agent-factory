@@ -869,6 +869,10 @@ type fakeObservationService struct {
 	startErr                   error
 	startCalled                bool
 	startRequest               workersessions.StartRequest
+	continueResult             workersessions.ContinueResult
+	continueErr                error
+	continueCalled             bool
+	continueRequest            workersessions.ContinueRequest
 }
 
 func (f *fakeObservationService) ListObservations(context.Context, workersessions.ListObservationsRequest) (workersessions.ListObservationsResult, error) {
@@ -920,6 +924,12 @@ func (f *fakeObservationService) Start(_ context.Context, request workersessions
 	f.startCalled = true
 	f.startRequest = request
 	return f.startResult, f.startErr
+}
+
+func (f *fakeObservationService) Continue(_ context.Context, request workersessions.ContinueRequest) (workersessions.ContinueResult, error) {
+	f.continueCalled = true
+	f.continueRequest = request
+	return f.continueResult, f.continueErr
 }
 
 func (f *fakeObservationService) StreamObservationsByWorkerSessionID(_ context.Context, request workersessions.StreamObservationsByWorkerSessionIDRequest) (workersessions.ObservationSubscription, error) {

@@ -71,6 +71,7 @@ func TestNewWorkerSessionsFamilyCommandBuildsDetachedRunnableLeaves(t *testing.T
 		{id: "you.worker-sessions.read", handlerID: "you.worker-sessions.read.handler"},
 		{id: "you.worker-sessions.stream", handlerID: "you.worker-sessions.stream.handler"},
 		{id: "you.worker-sessions.invoke", handlerID: "you.worker-sessions.invoke.handler"},
+		{id: "you.worker-sessions.continue", handlerID: "you.worker-sessions.continue.handler"},
 	} {
 		command := command
 		if err := registry.RegisterHandlers(command.handlerID, commandregistry.CommandHandlers{
@@ -94,11 +95,11 @@ func TestNewWorkerSessionsFamilyCommandBuildsDetachedRunnableLeaves(t *testing.T
 	if workerSessions.Name() != "worker-sessions" || workerSessions.Parent() != nil {
 		t.Fatalf("worker-sessions command = name %q parent %v, want detached root", workerSessions.Name(), workerSessions.Parent())
 	}
-	if len(workerSessions.Commands()) != 5 {
-		t.Fatalf("worker-sessions child count = %d, want 5", len(workerSessions.Commands()))
+	if len(workerSessions.Commands()) != 6 {
+		t.Fatalf("worker-sessions child count = %d, want 6", len(workerSessions.Commands()))
 	}
 
-	for _, command := range []string{"invoke", "list", "show", "read", "stream"} {
+	for _, command := range []string{"invoke", "continue", "list", "show", "read", "stream"} {
 		leaf, err := findCommandByPath(workerSessions, "worker-sessions "+command)
 		if err != nil {
 			t.Fatalf("FindCommandByPath(%s) error = %v", command, err)
@@ -205,6 +206,7 @@ func workerSessionsRegistry(t *testing.T) *commandregistry.Registry {
 	registry := commandregistry.NewRegistry()
 	for _, handlerID := range []string{
 		"you.worker-sessions.invoke.handler",
+		"you.worker-sessions.continue.handler",
 		"you.worker-sessions.list.handler",
 		"you.worker-sessions.show.handler",
 		"you.worker-sessions.read.handler",
@@ -225,6 +227,7 @@ func workerSessionsResolvedOnlyRegistry(t *testing.T) *commandregistry.Registry 
 	}
 	for _, handlerID := range []string{
 		"you.worker-sessions.invoke.handler",
+		"you.worker-sessions.continue.handler",
 		"you.worker-sessions.show.handler",
 		"you.worker-sessions.read.handler",
 		"you.worker-sessions.stream.handler",

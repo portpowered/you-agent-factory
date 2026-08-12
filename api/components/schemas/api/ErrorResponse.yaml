@@ -29,6 +29,10 @@ properties:
       - WORKER_SESSION_START_OPENING_FAILED
       - WORKER_SESSION_EVENT_TOPIC_UNAVAILABLE
       - WORKER_SESSION_ADMISSION_FAILED
+      - WORKER_SESSION_CONTINUATION_REQUEST_ID_CONFLICT
+      - WORKER_SESSION_CONTINUATION_CONFLICT
+      - WORKER_SESSION_PROVIDER_CONTINUATION_INVALID
+      - WORKER_SESSION_CONTINUATION_ADMISSION_FAILED
       - FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED
       - RESOURCE_CAPACITY_IN_USE
       - REVISION_CONFLICT
@@ -64,6 +68,10 @@ properties:
       - The Worker Session opening record could not be published.
       - The Worker Session event topic did not reach the required readiness barrier.
       - Workers could not admit the Worker Session execution.
+      - Worker Session continuation requestId was reused with different inputs.
+      - The Worker Session continuation conflicts with source lifecycle or successor lineage.
+      - The recorded Provider Session cannot be resumed for this Worker Session continuation.
+      - Workers could not admit the Worker Session continuation.
       - Lifecycle control requestId was already applied with different control inputs.
       - Requested resource capacity is below the number of units currently in use.
       - The caller's expected Factory revision is no longer current.

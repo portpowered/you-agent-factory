@@ -91,8 +91,12 @@ const (
 	ErrorResponseCodeSESSIONKINDUNSUPPORTED                       ErrorResponseCode = "SESSION_KIND_UNSUPPORTED"
 	ErrorResponseCodeSTALEFACTORYVERSION                          ErrorResponseCode = "STALE_FACTORY_VERSION"
 	ErrorResponseCodeWORKERSESSIONADMISSIONFAILED                 ErrorResponseCode = "WORKER_SESSION_ADMISSION_FAILED"
+	ErrorResponseCodeWORKERSESSIONCONTINUATIONADMISSIONFAILED     ErrorResponseCode = "WORKER_SESSION_CONTINUATION_ADMISSION_FAILED"
+	ErrorResponseCodeWORKERSESSIONCONTINUATIONCONFLICT            ErrorResponseCode = "WORKER_SESSION_CONTINUATION_CONFLICT"
+	ErrorResponseCodeWORKERSESSIONCONTINUATIONREQUESTIDCONFLICT   ErrorResponseCode = "WORKER_SESSION_CONTINUATION_REQUEST_ID_CONFLICT"
 	ErrorResponseCodeWORKERSESSIONEVENTTOPICUNAVAILABLE           ErrorResponseCode = "WORKER_SESSION_EVENT_TOPIC_UNAVAILABLE"
 	ErrorResponseCodeWORKERSESSIONNOTSTARTABLE                    ErrorResponseCode = "WORKER_SESSION_NOT_STARTABLE"
+	ErrorResponseCodeWORKERSESSIONPROVIDERCONTINUATIONINVALID     ErrorResponseCode = "WORKER_SESSION_PROVIDER_CONTINUATION_INVALID"
 	ErrorResponseCodeWORKERSESSIONSTARTOPENINGFAILED              ErrorResponseCode = "WORKER_SESSION_START_OPENING_FAILED"
 	ErrorResponseCodeWORKERSESSIONSTARTREQUESTIDCONFLICT          ErrorResponseCode = "WORKER_SESSION_START_REQUEST_ID_CONFLICT"
 	ErrorResponseCodeWORKERSESSIONSTREAMUNAVAILABLE               ErrorResponseCode = "WORKER_SESSION_STREAM_UNAVAILABLE"
@@ -1201,6 +1205,18 @@ const (
 	WorkerModelProviderAntigravity WorkerModelProvider = "ANTIGRAVITY"
 	WorkerModelProviderClaude      WorkerModelProvider = "CLAUDE"
 	WorkerModelProviderCodex       WorkerModelProvider = "CODEX"
+)
+
+// Defines values for WorkerSessionContinueResponseState.
+const (
+	WorkerSessionContinueResponseStateCanceled   WorkerSessionContinueResponseState = "CANCELED"
+	WorkerSessionContinueResponseStateCompleted  WorkerSessionContinueResponseState = "COMPLETED"
+	WorkerSessionContinueResponseStateFailed     WorkerSessionContinueResponseState = "FAILED"
+	WorkerSessionContinueResponseStatePaused     WorkerSessionContinueResponseState = "PAUSED"
+	WorkerSessionContinueResponseStateReserved   WorkerSessionContinueResponseState = "RESERVED"
+	WorkerSessionContinueResponseStateRunning    WorkerSessionContinueResponseState = "RUNNING"
+	WorkerSessionContinueResponseStateStarting   WorkerSessionContinueResponseState = "STARTING"
+	WorkerSessionContinueResponseStateTerminated WorkerSessionContinueResponseState = "TERMINATED"
 )
 
 // Defines values for WorkerSessionEventDelivery.
@@ -7610,6 +7626,43 @@ type WorkerModelProvider string
 // WorkerProvider Worker execution mechanism. Canonical values are ACP and SCRIPT_WRAP; extensible lowercase identities remain accepted for compatibility with existing factories.
 type WorkerProvider = string
 
+// WorkerSessionContinueRequest Idempotent continuation request for one terminal Worker Session. The server resolves and validates the source Provider Session association; callers may supply only the successor identity and follow-up input.
+type WorkerSessionContinueRequest struct {
+	// FollowUpInput Non-empty follow-up input delivered to the resumed Provider Session.
+	FollowUpInput string `json:"followUpInput"`
+
+	// RequestId Required caller idempotency key for this continuation.
+	RequestId string `json:"requestId"`
+
+	// SuccessorWorkerSessionId Distinct Worker Session identity to reserve for the successor.
+	SuccessorWorkerSessionId string `json:"successorWorkerSessionId"`
+}
+
+// WorkerSessionContinueResponse Admission acknowledgment for a Worker Session continuation. The response exposes the source-to-successor lineage needed to inspect or stream the successor without exposing provider selection inputs.
+type WorkerSessionContinueResponse struct {
+	// Accepted Always true for a 202 response.
+	Accepted bool `json:"accepted"`
+
+	// EventTopic Deterministic Events topic whose retained opening record is ready to read and subscribe.
+	EventTopic string `json:"eventTopic"`
+
+	// PredecessorWorkerSessionId Stable predecessor identity recorded on the successor; equal to sourceWorkerSessionId.
+	PredecessorWorkerSessionId string `json:"predecessorWorkerSessionId"`
+
+	// RequestId Caller idempotency key echoed for correlation.
+	RequestId string `json:"requestId"`
+
+	// SourceWorkerSessionId Stable terminal Worker Session identity used as the source.
+	SourceWorkerSessionId string                             `json:"sourceWorkerSessionId"`
+	State                 WorkerSessionContinueResponseState `json:"state"`
+
+	// SuccessorWorkerSessionId Stable Worker Session identity reserved for the successor.
+	SuccessorWorkerSessionId string `json:"successorWorkerSessionId"`
+}
+
+// WorkerSessionContinueResponseState defines model for WorkerSessionContinueResponse.State.
+type WorkerSessionContinueResponseState string
+
 // WorkerSessionEvent defines model for WorkerSessionEvent.
 type WorkerSessionEvent struct {
 	// Delivery Delivery outcome for one Worker Session stream frame. RECORD is a retained or live canonical event, TERMINAL marks the live terminal event, and TERMINAL_REPLAY marks the terminal event in an already-terminal replay. SOURCE_FAILURE is an explicit non-event outcome after the stream has opened.
@@ -8346,6 +8399,12 @@ type SaveCurrentFactoryBadRequest = ErrorResponse
 
 // SaveCurrentFactoryConflict defines model for SaveCurrentFactoryConflict.
 type SaveCurrentFactoryConflict = ErrorResponse
+
+// WorkerSessionContinuationConflict defines model for WorkerSessionContinuationConflict.
+type WorkerSessionContinuationConflict = ErrorResponse
+
+// WorkerSessionContinuationUnavailable defines model for WorkerSessionContinuationUnavailable.
+type WorkerSessionContinuationUnavailable = ErrorResponse
 
 // WorkerSessionStartConflict defines model for WorkerSessionStartConflict.
 type WorkerSessionStartConflict = ErrorResponse

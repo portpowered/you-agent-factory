@@ -17,6 +17,8 @@ type StreamConfig = workersessionscli.StreamConfig
 type StreamOperation = workersessionscli.StreamOperation
 type InvokeConfig = workersessionscli.InvokeConfig
 type InvokeOperation = workersessionscli.InvokeOperation
+type ContinueConfig = workersessionscli.ContinueConfig
+type ContinueOperation = workersessionscli.ContinueOperation
 type LocalInvokeBoundary = workersessionscli.LocalInvokeBoundary
 type CLIError = workersessionscli.CLIError
 
@@ -64,4 +66,12 @@ func NewInvoke(transport clihttp.Protocol, local LocalInvokeBoundary) InvokeOper
 
 func BindInvoke(transport clihttp.Protocol, local LocalInvokeBoundary) InvokeOperation {
 	return workersessionscli.BindInvoke(transport, local)
+}
+
+func NewContinue(transport clihttp.Protocol, local LocalInvokeBoundary) ContinueOperation {
+	return workersessionscli.NewContinue(transport, local)
+}
+
+func BindContinue(transport clihttp.Protocol, local LocalInvokeBoundary) ContinueOperation {
+	return workersessionscli.BindContinue(transport, local)
 }

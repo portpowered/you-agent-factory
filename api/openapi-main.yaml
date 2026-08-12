@@ -143,6 +143,42 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+  /worker-sessions/{worker_session_id}/continue:
+    post:
+      tags:
+        - Worker Sessions
+      operationId: continueWorkerSession
+      summary: Continue one terminal Worker Session
+      description: >-
+        Reserves one distinct successor Worker Session for a terminal source
+        Worker Session and resumes the exact Provider Session association
+        recorded by the server. The requestId and successor identity are
+        idempotent inputs. A 202 response is returned only after the successor
+        opening event is readable/subscribable and Workers has admitted the
+        continuation; terminal output remains asynchronous.
+      parameters:
+        - $ref: '#/components/parameters/WorkerSessionID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkerSessionContinueRequest'
+      responses:
+        '202':
+          description: The successor Worker Session was admitted and is observable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkerSessionContinueResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/WorkerSessionContinuationConflict'
+        '503':
+          $ref: '#/components/responses/WorkerSessionContinuationUnavailable'
   /worker-sessions/{worker_session_id}/events:
     get:
       tags:
@@ -2020,6 +2056,10 @@ components:
       $ref: './components/responses/WorkerSessionStartConflict.yaml'
     WorkerSessionStartUnavailable:
       $ref: './components/responses/WorkerSessionStartUnavailable.yaml'
+    WorkerSessionContinuationConflict:
+      $ref: './components/responses/WorkerSessionContinuationConflict.yaml'
+    WorkerSessionContinuationUnavailable:
+      $ref: './components/responses/WorkerSessionContinuationUnavailable.yaml'
     FactorySessionLifecycleControlConflict:
       $ref: './components/responses/FactorySessionLifecycleControlConflict.yaml'
     FactorySessionResourceCapacityConflict:
@@ -2085,6 +2125,10 @@ components:
       $ref: './components/schemas/api/WorkerSessionStartRequest.yaml'
     WorkerSessionStartResponse:
       $ref: './components/schemas/api/WorkerSessionStartResponse.yaml'
+    WorkerSessionContinueRequest:
+      $ref: './components/schemas/api/WorkerSessionContinueRequest.yaml'
+    WorkerSessionContinueResponse:
+      $ref: './components/schemas/api/WorkerSessionContinueResponse.yaml'
     WorkerSessionStartRetryPolicy:
       $ref: './components/schemas/api/WorkerSessionStartRetryPolicy.yaml'
     WorkerSessionResolvedExecution:

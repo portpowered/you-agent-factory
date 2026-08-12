@@ -1,0 +1,23 @@
+type: object
+additionalProperties: false
+required:
+  - requestId
+  - successorWorkerSessionId
+  - followUpInput
+description: >-
+  Idempotent continuation request for one terminal Worker Session. The server
+  resolves and validates the source Provider Session association; callers may
+  supply only the successor identity and follow-up input.
+properties:
+  requestId:
+    type: string
+    minLength: 1
+    description: Required caller idempotency key for this continuation.
+  successorWorkerSessionId:
+    type: string
+    minLength: 1
+    description: Distinct Worker Session identity to reserve for the successor.
+  followUpInput:
+    type: string
+    minLength: 1
+    description: Non-empty follow-up input delivered to the resumed Provider Session.

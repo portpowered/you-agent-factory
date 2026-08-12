@@ -80,6 +80,20 @@ func (s *Server) StartWorkerSession(w http.ResponseWriter, r *http.Request) {
 	s.workerSessionsHTTP.StartWorkerSession(w, r)
 }
 
+// ContinueWorkerSession forwards the source-addressed continuation operation
+// to the Worker Sessions owner handler.
+func (s *Server) ContinueWorkerSession(
+	w http.ResponseWriter,
+	r *http.Request,
+	workerSessionID factoryapi.WorkerSessionID,
+) {
+	if s.workerSessionsHTTP == nil {
+		s.writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
+		return
+	}
+	s.workerSessionsHTTP.ContinueWorkerSession(w, r, workerSessionID)
+}
+
 // ListWorkerSessions forwards the top-level Worker Session observation list.
 func (s *Server) ListWorkerSessions(
 	w http.ResponseWriter,

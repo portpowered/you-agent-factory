@@ -234,16 +234,24 @@ func TestInvokeRemoteConnectionFailureRedactsSelectedEndpoint(t *testing.T) {
 }
 
 type invokeLocalFake struct {
-	startResult   workersessions.StartResult
-	startRequests []workersessions.StartRequest
-	deliveries    []workersessions.ObservationDelivery
-	streamCalls   int
-	closed        bool
+	startResult      workersessions.StartResult
+	startRequests    []workersessions.StartRequest
+	continueResult   workersessions.ContinueResult
+	continueErr      error
+	continueRequests []workersessions.ContinueRequest
+	deliveries       []workersessions.ObservationDelivery
+	streamCalls      int
+	closed           bool
 }
 
 func (fake *invokeLocalFake) Start(_ context.Context, request workersessions.StartRequest) (workersessions.StartResult, error) {
 	fake.startRequests = append(fake.startRequests, request)
 	return fake.startResult, nil
+}
+
+func (fake *invokeLocalFake) Continue(_ context.Context, request workersessions.ContinueRequest) (workersessions.ContinueResult, error) {
+	fake.continueRequests = append(fake.continueRequests, request)
+	return fake.continueResult, fake.continueErr
 }
 
 func (fake *invokeLocalFake) StreamObservationsByWorkerSessionID(_ context.Context, _ workersessions.StreamObservationsByWorkerSessionIDRequest) (workersessions.ObservationSubscription, error) {

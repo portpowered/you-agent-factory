@@ -28,6 +28,7 @@ import (
 // or a functional test supplies the already-open Worker Sessions boundary.
 type LocalInvokeBoundary interface {
 	Start(context.Context, workersessions.StartRequest) (workersessions.StartResult, error)
+	Continue(context.Context, workersessions.ContinueRequest) (workersessions.ContinueResult, error)
 	StreamObservationsByWorkerSessionID(context.Context, workersessions.StreamObservationsByWorkerSessionIDRequest) (workersessions.ObservationSubscription, error)
 }
 

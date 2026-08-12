@@ -237,6 +237,29 @@ you --server http://localhost:7437 worker-sessions stream --worker-session-id <w
 you --server http://localhost:7437 worker-sessions read --worker-session-id <worker-session-id>
 ```
 
+To resume a terminal direct Worker Session, continue it through the server-owned
+Provider Session association. The command reserves a distinct successor and
+returns its lineage after admission; use `--async` to return before terminal
+output, or omit it to wait on the successor event stream:
+
+```bash
+you worker-sessions continue <source-worker-session-id> \
+  --request-id <continuation-request-id> \
+  --successor-worker-session-id <successor-worker-session-id> \
+  --user-message "Continue the work"
+you --server http://localhost:7437 worker-sessions continue <source-worker-session-id> \
+  --remote --request-id <continuation-request-id> \
+  --successor-worker-session-id <successor-worker-session-id> \
+  --async --output json "Review the result"
+```
+
+Local placement is the default. `--remote` selects exactly the configured
+`--server`; a failed remote continuation never falls back to a new local
+request. The JSON response includes the source, successor, predecessor, event
+topic, and observation guidance needed for later `show`, `read`, or `stream`
+operations. A source must be terminal and have a valid server-recorded Provider
+Session that supports continuation.
+
 Top-level list defaults to `direct`; use `--scope factory` or `--scope all` to
 include Factory-originated observations explicitly. Repeat `--state` to filter
 by lifecycle state. `--max-results` bounds one page and `--next-token` resumes

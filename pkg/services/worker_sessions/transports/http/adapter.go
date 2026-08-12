@@ -32,9 +32,14 @@ type startService interface {
 	Start(context.Context, workersessions.StartRequest) (workersessions.StartResult, error)
 }
 
+type continuationService interface {
+	Continue(context.Context, workersessions.ContinueRequest) (workersessions.ContinueResult, error)
+}
+
 type Adapter struct {
 	observations observationService
 	starter      startService
+	continuer    continuationService
 	work         work.Service
 }
 
@@ -223,6 +228,20 @@ func NewAdapterWithStart(
 	return &Adapter{starter: starter, observations: observations, work: workRoot}
 }
 
+// NewAdapterWithStartAndContinue binds both direct admission operations while
+// retaining the observation and Work read capabilities of the base adapter.
+func NewAdapterWithStartAndContinue(
+	starter startService,
+	continuer continuationService,
+	observations observationService,
+	workRoot work.Service,
+) *Adapter {
+	if starter == nil || continuer == nil || observations == nil || workRoot == nil {
+		return nil
+	}
+	return &Adapter{starter: starter, continuer: continuer, observations: observations, work: workRoot}
+}
+
 // StartWorkerSession maps one typed HTTP request to the Worker Sessions-owned
 // asynchronous start operation. The service returns only at its admission
 // barrier; terminal execution is deliberately not awaited here.
@@ -245,6 +264,31 @@ func (a *Adapter) StartWorkerSession(
 		return factoryapi.WorkerSessionStartResponse{}, err
 	}
 	return WorkerSessionStartResponseToAPI(start.RequestID, result), nil
+}
+
+// ContinueWorkerSession maps one source-addressed HTTP request to the
+// Worker Sessions continuation barrier. A successful response is emitted
+// only after the successor is reserved, observable, and admitted.
+func (a *Adapter) ContinueWorkerSession(
+	ctx context.Context,
+	sourceWorkerSessionID string,
+	request factoryapi.WorkerSessionContinueRequest,
+) (factoryapi.WorkerSessionContinueResponse, error) {
+	if a == nil || a.continuer == nil {
+		return factoryapi.WorkerSessionContinueResponse{}, errors.New("Worker Sessions continuation service is unavailable")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	continuation, err := WorkerSessionContinueRequestFromAPI(sourceWorkerSessionID, request)
+	if err != nil {
+		return factoryapi.WorkerSessionContinueResponse{}, err
+	}
+	result, err := a.continuer.Continue(ctx, continuation)
+	if err != nil {
+		return factoryapi.WorkerSessionContinueResponse{}, err
+	}
+	return WorkerSessionContinueResponseToAPI(result), nil
 }
 
 // ListWorkerSessions verifies Work existence and returns every authoritative

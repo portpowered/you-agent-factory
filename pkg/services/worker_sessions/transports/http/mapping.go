@@ -321,6 +321,41 @@ func WorkerSessionStartResponseToAPI(
 	}
 }
 
+// WorkerSessionContinueRequestFromAPI maps the source path identity and the
+// caller-owned continuation tuple into the Worker Sessions contract.
+func WorkerSessionContinueRequestFromAPI(
+	sourceWorkerSessionID string,
+	request factoryapi.WorkerSessionContinueRequest,
+) (workersessions.ContinueRequest, error) {
+	continuation := workersessions.ContinueRequest{
+		RequestID:                strings.TrimSpace(request.RequestId),
+		SourceWorkerSessionID:    strings.TrimSpace(sourceWorkerSessionID),
+		SuccessorWorkerSessionID: strings.TrimSpace(request.SuccessorWorkerSessionId),
+		FollowUpInput:            request.FollowUpInput,
+	}
+	continuation = continuation.Normalize()
+	if err := continuation.Validate(); err != nil {
+		return workersessions.ContinueRequest{}, err
+	}
+	return continuation, nil
+}
+
+// WorkerSessionContinueResponseToAPI maps the admitted successor snapshot
+// and its explicit source lineage without exposing provider selection data.
+func WorkerSessionContinueResponseToAPI(
+	result workersessions.ContinueResult,
+) factoryapi.WorkerSessionContinueResponse {
+	return factoryapi.WorkerSessionContinueResponse{
+		RequestId:                  result.RequestID,
+		SourceWorkerSessionId:      result.SourceWorkerSessionID,
+		SuccessorWorkerSessionId:   result.SuccessorWorkerSessionID,
+		PredecessorWorkerSessionId: result.SourceWorkerSessionID,
+		Accepted:                   true,
+		State:                      factoryapi.WorkerSessionContinueResponseState(result.Session.State),
+		EventTopic:                 string(workersessions.Topic(result.Session.ID)),
+	}
+}
+
 func optionalString(value *string) string {
 	if value == nil {
 		return ""

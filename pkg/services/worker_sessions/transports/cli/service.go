@@ -6,6 +6,7 @@ type Service interface {
 	List(ListConfig) error
 	Show(ShowConfig) error
 	Read(ReadConfig) error
+	Continue(ContinueConfig) error
 }
 
 type service struct{}
@@ -18,3 +19,5 @@ func (service) List(config ListConfig) error { return list(config) }
 func (service) Show(config ShowConfig) error { return show(config) }
 
 func (service) Read(config ReadConfig) error { return read(config) }
+
+func (service) Continue(config ContinueConfig) error { return continueWorkerSession(config) }

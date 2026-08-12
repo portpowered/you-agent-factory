@@ -45,6 +45,12 @@ func TopLevelWorkerSessionEventsPath(workerSessionID string) string {
 	return TopLevelWorkerSessionDetailPath(workerSessionID) + "/events"
 }
 
+// TopLevelWorkerSessionContinuePath returns the source-addressed continuation
+// route. The source ID is the only identity supplied to the server.
+func TopLevelWorkerSessionContinuePath(workerSessionID string) string {
+	return TopLevelWorkerSessionDetailPath(workerSessionID) + "/continue"
+}
+
 // TopLevelWorkerSessionTranscriptPath returns the identity transcript route.
 func TopLevelWorkerSessionTranscriptPath(workerSessionID string) string {
 	return TopLevelWorkerSessionDetailPath(workerSessionID) + "/transcript"

@@ -58,6 +58,39 @@ func (h *Handler) StartWorkerSession(w http.ResponseWriter, r *http.Request) {
 	h.writeJSON(w, http.StatusAccepted, response)
 }
 
+// ContinueWorkerSession handles one source-addressed asynchronous Worker
+// Session continuation. The source identity is supplied by the generated
+// route, while the server resolves the exact recorded Provider Session.
+func (h *Handler) ContinueWorkerSession(
+	w http.ResponseWriter,
+	r *http.Request,
+	sourceWorkerSessionID factoryapi.WorkerSessionID,
+) {
+	if h == nil || h.adapter == nil {
+		writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
+		return
+	}
+	if strings.TrimSpace(string(sourceWorkerSessionID)) == "" {
+		writeError(w, http.StatusBadRequest, "worker session id is required", "BAD_REQUEST")
+		return
+	}
+	if r == nil || r.Body == nil {
+		writeError(w, http.StatusBadRequest, "request payload is required", "BAD_REQUEST")
+		return
+	}
+	request, err := decodeWorkerSessionContinueRequest(r.Body)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid continuation request payload", "BAD_REQUEST")
+		return
+	}
+	response, err := h.adapter.ContinueWorkerSession(r.Context(), string(sourceWorkerSessionID), request)
+	if err != nil {
+		h.writeMappedContinueError(w, err)
+		return
+	}
+	h.writeJSON(w, http.StatusAccepted, response)
+}
+
 func decodeWorkerSessionStartRequest(body io.Reader) (factoryapi.WorkerSessionStartRequest, error) {
 	data, err := io.ReadAll(body)
 	if err != nil {
@@ -75,6 +108,27 @@ func decodeWorkerSessionStartRequest(body io.Reader) (factoryapi.WorkerSessionSt
 			return factoryapi.WorkerSessionStartRequest{}, errors.New("request payload must contain one JSON object")
 		}
 		return factoryapi.WorkerSessionStartRequest{}, err
+	}
+	return request, nil
+}
+
+func decodeWorkerSessionContinueRequest(body io.Reader) (factoryapi.WorkerSessionContinueRequest, error) {
+	data, err := io.ReadAll(body)
+	if err != nil {
+		return factoryapi.WorkerSessionContinueRequest{}, err
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	var request factoryapi.WorkerSessionContinueRequest
+	if err := decoder.Decode(&request); err != nil {
+		return factoryapi.WorkerSessionContinueRequest{}, err
+	}
+	var trailing struct{}
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		if err == nil {
+			return factoryapi.WorkerSessionContinueRequest{}, errors.New("request payload must contain one JSON object")
+		}
+		return factoryapi.WorkerSessionContinueRequest{}, err
 	}
 	return request, nil
 }
@@ -692,6 +746,36 @@ func (h *Handler) writeMappedStartError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusServiceUnavailable, "Workers could not admit the Worker Session", string(factoryapi.ErrorResponseCodeWORKERSESSIONADMISSIONFAILED))
 	default:
 		writeError(w, http.StatusInternalServerError, "failed to start Worker Session", "INTERNAL_ERROR")
+	}
+}
+
+func (h *Handler) writeMappedContinueError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+		return
+	case errors.Is(err, workersessions.ErrInvalidContinuationRequestID),
+		errors.Is(err, workersessions.ErrInvalidContinuationLineage),
+		errors.Is(err, workersessions.ErrInvalidContinuationInput):
+		writeError(w, http.StatusBadRequest, "invalid Worker Session continuation request", "BAD_REQUEST")
+	case errors.Is(err, workersessions.ErrContinuationSourceNotFound):
+		writeError(w, http.StatusNotFound, "Worker Session continuation source not found", "NOT_FOUND")
+	case errors.Is(err, workersessions.ErrContinuationRequestIDConflict):
+		writeError(w, http.StatusConflict, "Worker Session continuation requestId was reused with different inputs", string(factoryapi.ErrorResponseCodeWORKERSESSIONCONTINUATIONREQUESTIDCONFLICT))
+	case errors.Is(err, workersessions.ErrContinuationSourceActive),
+		errors.Is(err, workersessions.ErrContinuationSourceConflict),
+		errors.Is(err, workersessions.ErrContinuationSuccessorConflict):
+		writeError(w, http.StatusConflict, "Worker Session continuation conflicts with existing state", string(factoryapi.ErrorResponseCodeWORKERSESSIONCONTINUATIONCONFLICT))
+	case errors.Is(err, workersessions.ErrContinuationProviderSessionMissing),
+		errors.Is(err, workersessions.ErrContinuationProviderSessionInvalid):
+		writeError(w, http.StatusConflict, "recorded Provider Session cannot be continued", string(factoryapi.ErrorResponseCodeWORKERSESSIONPROVIDERCONTINUATIONINVALID))
+	case errors.Is(err, workersessions.ErrContinuationExecutionUnavailable),
+		errors.Is(err, workersessions.ErrContinuationNotAccepted),
+		errors.Is(err, workersessions.ErrContinuationServerStopping),
+		errors.Is(err, workersessions.ErrEventTopicUnavailable),
+		errors.Is(err, workersessions.ErrStartOpeningPublication):
+		writeError(w, http.StatusServiceUnavailable, "Workers could not admit the Worker Session continuation", string(factoryapi.ErrorResponseCodeWORKERSESSIONCONTINUATIONADMISSIONFAILED))
+	default:
+		writeError(w, http.StatusInternalServerError, "failed to continue Worker Session", "INTERNAL_ERROR")
 	}
 }
 

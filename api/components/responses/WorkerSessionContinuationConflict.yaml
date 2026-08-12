@@ -1,0 +1,5 @@
+description: The Worker Session continuation conflicts with source lifecycle, lineage, idempotency, or Provider Session validation.
+content:
+  application/json:
+    schema:
+      $ref: '../schemas/api/ErrorResponse.yaml'
