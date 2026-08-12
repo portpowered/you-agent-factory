@@ -169,6 +169,13 @@ func applyReviewedEvidence(scenario *Scenario) {
 		markCovered(scenario, LaneLong, "tests/functional/workers/inference/worker_session_id_history_test.go::TestWSRFT010WorkerSessionIDHTTPHistory", InterfaceREST)
 	case "rest/streamWorkerSessionEventsByWorkerSessionId":
 		markCovered(scenario, LaneLong, "tests/functional/workers/inference/opening_record_test.go::TestWSRFT003ProviderNeutralLifecycleWorksWithoutProviderSession", InterfaceREST)
+		appendEvidence(scenario, "tests/functional/workers/inference/worker_session_id_cursor_follow_test.go::TestWSRFT011WorkerSessionCursorResumeAcrossRestart", InterfaceREST)
+	case "rest/getWorkerSessionObservationBySessionId":
+		markCovered(scenario, LaneLong, "tests/functional/workers/inference/worker_session_id_cursor_follow_test.go::TestWSRFT012WorkerSessionFollowAndProviderReferenceParity", InterfaceREST)
+	case "rest/readWorkerSessionTranscriptBySessionId":
+		markCovered(scenario, LaneLong, "tests/functional/workers/inference/worker_session_id_cursor_follow_test.go::TestWSRFT012WorkerSessionFollowAndProviderReferenceParity", InterfaceREST)
+	case "rest/streamWorkerSessionEventsBySessionId":
+		markCovered(scenario, LaneLong, "tests/functional/workers/inference/worker_session_id_cursor_follow_test.go::TestWSRFT012WorkerSessionFollowAndProviderReferenceParity", InterfaceREST)
 	case "rest/getEventsBySessionId":
 		scenario.Status = StatusPartial
 		scenario.Lane = LaneLong
@@ -191,9 +198,11 @@ func applyReviewedEvidence(scenario *Scenario) {
 		scenario.ReviewedReason = "Factory response-event stream functional coverage is non-required and currently deferred."
 		scenario.SSE = &SSEDisposition{Required: false, Disposition: SSECurrentlyDeferred, Scope: "session Factory response-event stream"}
 	case workerSessionEventsStableID:
+		markCovered(scenario, LaneLong, "tests/functional/workers/inference/worker_session_id_cursor_follow_test.go::TestWSRFT012WorkerSessionFollowAndProviderReferenceParity", InterfaceSSE)
 		scenario.SSE = &SSEDisposition{Required: true, Disposition: SSERequired, Scope: workerSessionEventsScope}
 	case workerSessionEventsByWorkerSessionIDStableID:
 		markCovered(scenario, LaneLong, "tests/functional/workers/inference/opening_record_test.go::TestWSRFT003ProviderNeutralLifecycleWorksWithoutProviderSession", InterfaceSSE)
+		appendEvidence(scenario, "tests/functional/workers/inference/worker_session_id_cursor_follow_test.go::TestWSRFT011WorkerSessionCursorResumeAcrossRestart", InterfaceSSE)
 		scenario.SSE = &SSEDisposition{Required: true, Disposition: SSERequired, Scope: workerSessionEventsScope}
 	case topLevelWorkerSessionEventsStableID:
 		markCovered(scenario, LaneLong, "tests/functional/workers/transports/http/worker_sessions_invoke_continue_test.go::TestWorkerSessionRemoteInvokeObserveContinueUsesServerAfterDisconnect", InterfaceSSE)
@@ -206,6 +215,10 @@ func markCovered(scenario *Scenario, lane, test, boundary string) {
 	scenario.Lane = lane
 	scenario.ReviewedReason = ""
 	scenario.Evidence = []Evidence{{Test: test, Boundary: boundary}}
+}
+
+func appendEvidence(scenario *Scenario, test, boundary string) {
+	scenario.Evidence = append(scenario.Evidence, Evidence{Test: test, Boundary: boundary})
 }
 
 // ValidateManifest rejects semantically inconsistent reviewed coverage records.

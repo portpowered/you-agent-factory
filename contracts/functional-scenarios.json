@@ -1121,10 +1121,15 @@
       "name": "getWorkerSessionObservationBySessionId",
       "interface": "rest",
       "classification": "operation",
-      "status": "missing",
-      "lane": "short",
+      "status": "covered",
+      "lane": "long",
       "executionClass": "deterministic",
-      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+      "evidence": [
+        {
+          "test": "tests/functional/workers/inference/worker_session_id_cursor_follow_test.go::TestWSRFT012WorkerSessionFollowAndProviderReferenceParity",
+          "boundary": "rest"
+        }
+      ]
     },
     {
       "stableId": "rest/getWorkerSessionObservationByWorkerSessionId",
@@ -1366,10 +1371,15 @@
       "name": "readWorkerSessionTranscriptBySessionId",
       "interface": "rest",
       "classification": "operation",
-      "status": "missing",
-      "lane": "short",
+      "status": "covered",
+      "lane": "long",
       "executionClass": "deterministic",
-      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+      "evidence": [
+        {
+          "test": "tests/functional/workers/inference/worker_session_id_cursor_follow_test.go::TestWSRFT012WorkerSessionFollowAndProviderReferenceParity",
+          "boundary": "rest"
+        }
+      ]
     },
     {
       "stableId": "rest/readWorkerSessionTranscriptByWorkerSessionId",
@@ -1486,10 +1496,15 @@
       "name": "streamWorkerSessionEventsBySessionId",
       "interface": "rest",
       "classification": "operation",
-      "status": "missing",
-      "lane": "short",
+      "status": "covered",
+      "lane": "long",
       "executionClass": "deterministic",
-      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+      "evidence": [
+        {
+          "test": "tests/functional/workers/inference/worker_session_id_cursor_follow_test.go::TestWSRFT012WorkerSessionFollowAndProviderReferenceParity",
+          "boundary": "rest"
+        }
+      ]
     },
     {
       "stableId": "rest/streamWorkerSessionEventsByTopLevelWorkerSessionId",
@@ -1512,6 +1527,10 @@
       "evidence": [
         {
           "test": "tests/functional/workers/inference/opening_record_test.go::TestWSRFT003ProviderNeutralLifecycleWorksWithoutProviderSession",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/inference/worker_session_id_cursor_follow_test.go::TestWSRFT011WorkerSessionCursorResumeAcrossRestart",
           "boundary": "rest"
         }
       ]
@@ -1627,10 +1646,15 @@
       "name": "streamWorkerSessionEventsBySessionId",
       "interface": "sse",
       "classification": "event-stream",
-      "status": "missing",
-      "lane": "short",
+      "status": "covered",
+      "lane": "long",
       "executionClass": "deterministic",
-      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary.",
+      "evidence": [
+        {
+          "test": "tests/functional/workers/inference/worker_session_id_cursor_follow_test.go::TestWSRFT012WorkerSessionFollowAndProviderReferenceParity",
+          "boundary": "sse"
+        }
+      ],
       "sse": {
         "required": true,
         "disposition": "required",
@@ -1668,6 +1692,10 @@
       "evidence": [
         {
           "test": "tests/functional/workers/inference/opening_record_test.go::TestWSRFT003ProviderNeutralLifecycleWorksWithoutProviderSession",
+          "boundary": "sse"
+        },
+        {
+          "test": "tests/functional/workers/inference/worker_session_id_cursor_follow_test.go::TestWSRFT011WorkerSessionCursorResumeAcrossRestart",
           "boundary": "sse"
         }
       ],

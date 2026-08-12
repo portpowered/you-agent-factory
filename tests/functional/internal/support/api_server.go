@@ -417,7 +417,7 @@ func readWorkerSessionReplay(
 			return nil, nil, fmt.Errorf("decode Worker Session event: %w", err)
 		}
 		events = append(events, event)
-		if string(event.Delivery) == "REPLAY_SUMMARY" {
+		if string(event.Delivery) == "REPLAY_SUMMARY" || event.ReplaySummary != nil {
 			if event.ReplaySummary == nil {
 				return nil, nil, fmt.Errorf("Worker Session replay summary is empty: %s", endpoint)
 			}
@@ -427,7 +427,7 @@ func readWorkerSessionReplay(
 	if err := scanner.Err(); err != nil {
 		return nil, nil, fmt.Errorf("read Worker Session events: %w", err)
 	}
-	return nil, nil, fmt.Errorf("Worker Session event stream ended without REPLAY_SUMMARY: %s", endpoint)
+	return nil, nil, fmt.Errorf("Worker Session event stream ended without replay summary: %s", endpoint)
 }
 
 func readFactoryEventsInvalidCursorErrorFromURL(t testing.TB, endpoint string) FactoryEventsInvalidCursorError {
