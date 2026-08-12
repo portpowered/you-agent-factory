@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"os/exec"
 	"path"
@@ -39,6 +40,7 @@ const modulePath = "github.com/portpowered/infinite-you"
 const defaultPackageCoverageBaselinePath = "docs/internal/baselines/go-coverage-package-baseline.txt"
 const defaultFunctionalPackageCoverageBaselinePath = "docs/internal/baselines/go-functional-coverage-package-baseline.txt"
 const defaultPackageCoverageMin = 80.0
+const defaultPackageFloorEpsilon = 0.25
 const defaultCoverageJobs = 2
 
 var (
@@ -67,23 +69,24 @@ var (
 )
 
 type config struct {
-	covermode        string
-	coverpkg         string
-	jobs             int
-	generateManifest string
-	updateManifest   string
-	packageManifest  string
-	jsonOutput       string
-	timingOutput     string
-	min              float64
-	packageBaseline  string
-	packageMin       float64
-	packages         string
-	profile          string
-	short            bool
-	suite            string
-	timeout          time.Duration
-	totalOnly        bool
+	covermode           string
+	coverpkg            string
+	jobs                int
+	generateManifest    string
+	updateManifest      string
+	packageManifest     string
+	jsonOutput          string
+	timingOutput        string
+	min                 float64
+	packageBaseline     string
+	packageMin          float64
+	packageFloorEpsilon float64
+	packages            string
+	profile             string
+	short               bool
+	suite               string
+	timeout             time.Duration
+	totalOnly           bool
 }
 
 type coverageResult struct {
@@ -94,6 +97,7 @@ type coverageResult struct {
 	packageGates                 map[string]packageCoverageGate
 	zeroCoveragePackages         []string
 	packageMinimumFailures       []string
+	packageMinimumWarnings       []string
 }
 
 type packageCoverageTotals struct {
@@ -160,6 +164,9 @@ func execute(cfg config) error {
 	if err := writeCoverageSummaryJSON(cfg.jsonOutput, result); err != nil {
 		return err
 	}
+	for _, warning := range result.packageMinimumWarnings {
+		fmt.Fprintln(stderrWriter, warning)
+	}
 
 	if len(failures) > 0 {
 		return errors.New(strings.Join(failures, "\n"))
@@ -181,6 +188,7 @@ func parseConfig() config {
 	flag.Float64Var(&cfg.min, "min", 0, "minimum total statement coverage percentage")
 	flag.StringVar(&cfg.packageBaseline, "package-baseline", "", "newline-delimited list of backend packages temporarily exempt from the per-package minimum coverage gate; defaults by suite")
 	flag.Float64Var(&cfg.packageMin, "package-min", defaultPackageCoverageMin, "minimum statement coverage required for each non-baselined backend package")
+	flag.Float64Var(&cfg.packageFloorEpsilon, "package-floor-epsilon", defaultPackageFloorEpsilon, "allowed manifest package-floor drift in percentage points; only applies with -package-manifest")
 	flag.StringVar(&cfg.packages, "packages", "", "space-separated go test package patterns; overrides -suite package discovery")
 	flag.StringVar(&cfg.profile, "profile", "", "coverage profile output path; defaults to a temp file")
 	flag.BoolVar(&cfg.short, "short", true, "run with go test -short")
@@ -200,6 +208,9 @@ func validateConfig(cfg config) error {
 	}
 	if manifestOperations > 1 {
 		return errors.New("configure go coverage: choose only one of -generate-manifest, -update-manifest, or -package-manifest")
+	}
+	if cfg.packageFloorEpsilon < 0 || math.IsNaN(cfg.packageFloorEpsilon) || math.IsInf(cfg.packageFloorEpsilon, 0) {
+		return fmt.Errorf("configure go coverage: -package-floor-epsilon must be a finite non-negative percentage-point value (got %v); set it to 0 or greater", cfg.packageFloorEpsilon)
 	}
 	return nil
 }
@@ -307,7 +318,7 @@ func run(cfg config) (coverageResult, error) {
 		if err != nil {
 			return coverageResult{}, err
 		}
-		result.packageMinimumFailures = checkCoverageManifest(manifest, result.packageTotals, cfg.packageManifest)
+		result.packageMinimumFailures, result.packageMinimumWarnings = checkCoverageManifestWithEpsilon(manifest, result.packageTotals, cfg.packageManifest, cfg.packageFloorEpsilon)
 		result.packageGates = packageGatesFromManifest(manifest)
 	} else if legacyPackageGateEnabled {
 		result.packageGates = packageGatesFromLegacyMin(result.packageSummaries, cfg.packageCoverageMin(), baselinePackages)

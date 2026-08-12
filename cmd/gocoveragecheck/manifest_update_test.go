@@ -93,14 +93,14 @@ func TestUpdateCoverageManifestFileRejectsDecreaseWithoutAnyMutation(t *testing.
 	}
 
 	updates, err := updateCoverageManifestFile(filename, "unit", map[string]packageCoverageTotals{
-		alpha: {coveredStatements: 79, totalStatements: 100},
+		alpha: {coveredStatements: 319, totalStatements: 400},
 		beta:  {coveredStatements: 3, totalStatements: 5},
 	}, []string{beta, alpha})
 	if err == nil || !strings.Contains(err.Error(), "rejected one or more floor decreases") {
 		t.Fatalf("updateCoverageManifestFile() error = %v, want rejected decrease", err)
 	}
 	wantUpdates := []string{
-		"package coverage update: package=" + alpha + " lane=unit status=rejected old=80.00% candidate=79.00%",
+		"package coverage update: package=" + alpha + " lane=unit status=rejected old=80.00% candidate=79.75%",
 		"package coverage update: package=" + beta + " lane=unit status=raised old=50.00% candidate=60.00%",
 	}
 	if got := coverageManifestUpdateStrings(updates); !slices.Equal(got, wantUpdates) {

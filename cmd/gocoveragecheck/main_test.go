@@ -183,6 +183,17 @@ func TestValidateConfigRejectsConflictingManifestOperations(t *testing.T) {
 	}
 }
 
+func TestValidateConfigRejectsInvalidPackageFloorEpsilon(t *testing.T) {
+	t.Parallel()
+
+	for _, epsilon := range []float64{-0.01, -1} {
+		err := validateConfig(config{packageFloorEpsilon: epsilon})
+		if err == nil || !strings.Contains(err.Error(), "-package-floor-epsilon must be a finite non-negative percentage-point value") {
+			t.Fatalf("validateConfig(%v) error = %v, want actionable epsilon diagnostic", epsilon, err)
+		}
+	}
+}
+
 func TestFindInsufficientCoveragePackagesSkipsBaselinedPackages(t *testing.T) {
 	t.Parallel()
 
