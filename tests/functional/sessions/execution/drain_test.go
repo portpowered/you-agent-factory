@@ -4,15 +4,20 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -37,15 +42,23 @@ func TestWithServerDrainCannotReportSuccessWhileWorkIsNonTerminal(t *testing.T) 
 			workFile := writeIncompleteDrainWork(t)
 
 			var listenerStarts, listenerStops, browserCalls atomic.Int32
+			api := support.NewProcessAPIServer()
+			shutdownGate := make(chan struct{})
+			var releaseOnce sync.Once
+			releaseListener := func() {
+				releaseOnce.Do(func() { close(shutdownGate) })
+			}
+			transportStopRequested := make(chan struct{})
+			listenerJoined := make(chan struct{})
+			api.HoldShutdownUntilSignaled(shutdownGate)
 			process := support.BuildProcess(t, serviceedges.Edges{
 				APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
 					listenerStarts.Add(1)
-					if request.OnBound != nil {
-						request.OnBound(platformhttpserver.Binding{Port: request.Port})
-					}
-					<-ctx.Done()
+					context.AfterFunc(ctx, func() { close(transportStopRequested) })
+					err := api.Start(ctx, request)
 					listenerStops.Add(1)
-					return ctx.Err()
+					close(listenerJoined)
+					return err
 				},
 				BrowserOpener: func(context.Context, string) error {
 					browserCalls.Add(1)
@@ -63,10 +76,38 @@ func TestWithServerDrainCannotReportSuccessWhileWorkIsNonTerminal(t *testing.T) 
 			inputs.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 
 			command := support.StartProcessCommand(t, process, inputs.Input)
+			t.Cleanup(releaseListener)
+			baseURL := api.WaitForURL(t)
+			observation, err := waitForIncompleteDrainObservation(baseURL)
+			if err != nil {
+				t.Fatalf("incomplete-drain observation: %v", err)
+			}
+			if len(observation.Work.Results) != 1 {
+				t.Fatalf("observed Work count = %d, want 1", len(observation.Work.Results))
+			}
+			work := observation.Work.Results[0]
+			if work.Name != "blocked-work" {
+				t.Fatalf("observed Work name = %q, want blocked-work", work.Name)
+			}
+			if work.State == nil || work.State.Type != factoryapi.WorkStateTypePROCESSING {
+				t.Fatalf("observed Work state = %#v, want PROCESSING", work.State)
+			}
+			if observation.Status.RuntimeStatus == "" || observation.Status.Categories.Processing != 1 {
+				t.Fatalf("observed runtime status = %#v, want one processing Work", observation.Status)
+			}
+
+			waitForSignal(t, transportStopRequested, "finite hosted runtime did not request listener shutdown")
+			select {
+			case <-command.Done():
+				t.Fatal("finite hosted command completed before the listener join gate was released")
+			default:
+			}
+			releaseListener()
 			waitForCommandDone(t, command, "finite hosted run did not return after the runtime drained")
+			waitForSignal(t, listenerJoined, "finite hosted listener did not join before command completion")
 			command.AcceptError()
 
-			err := command.Err()
+			err = command.Err()
 			if err == nil {
 				t.Fatalf("Process.Execute() error = %v, want incomplete-drain failure", err)
 			}
@@ -85,6 +126,83 @@ func TestWithServerDrainCannotReportSuccessWhileWorkIsNonTerminal(t *testing.T) 
 				t.Fatalf("browser calls = %d, want %d", got, mode.wantBrowser)
 			}
 		})
+	}
+}
+
+type incompleteDrainObservation struct {
+	Work   factoryapi.ListWorkResponse
+	Status factoryapi.StatusResponse
+}
+
+func waitForIncompleteDrainObservation(baseURL string) (incompleteDrainObservation, error) {
+	// Work and status are asynchronously committed public projections and do
+	// not expose one shared readiness channel. WaitForObservation therefore
+	// accepts only the observable admitted/non-terminal state; its timeout is
+	// solely a hung-projection guard, not a success window.
+	return support.WaitForObservation(
+		incompleteDrainProcessTimeout,
+		func() (incompleteDrainObservation, error) {
+			work, err := readHostedWork(baseURL)
+			if err != nil {
+				return incompleteDrainObservation{}, err
+			}
+			status, err := readHostedStatus(baseURL)
+			if err != nil {
+				return incompleteDrainObservation{}, err
+			}
+			return incompleteDrainObservation{Work: work, Status: status}, nil
+		},
+		func(observation incompleteDrainObservation) bool {
+			if len(observation.Work.Results) != 1 {
+				return false
+			}
+			work := observation.Work.Results[0]
+			return work.State != nil &&
+				work.State.Type == factoryapi.WorkStateTypePROCESSING &&
+				observation.Status.RuntimeStatus != "" &&
+				observation.Status.Categories.Processing == 1
+		},
+	)
+}
+
+func readHostedWork(baseURL string) (factoryapi.ListWorkResponse, error) {
+	return readHostedJSON[factoryapi.ListWorkResponse](support.DefaultSessionWorkURL(baseURL, "/work"))
+}
+
+func readHostedStatus(baseURL string) (factoryapi.StatusResponse, error) {
+	return readHostedJSON[factoryapi.StatusResponse](strings.TrimSuffix(baseURL, "/") + "/status")
+}
+
+func readHostedJSON[T any](endpoint string) (T, error) {
+	var result T
+	response, err := http.Get(endpoint)
+	if err != nil {
+		return result, fmt.Errorf("GET %s: %w", endpoint, err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		payload, _ := io.ReadAll(response.Body)
+		return result, fmt.Errorf(
+			"GET %s status = %d: %s",
+			endpoint,
+			response.StatusCode,
+			strings.TrimSpace(string(payload)),
+		)
+	}
+	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+		return result, fmt.Errorf("decode GET %s: %w", endpoint, err)
+	}
+	return result, nil
+}
+
+func waitForSignal(t *testing.T, signal <-chan struct{}, message string) {
+	t.Helper()
+	timer := time.NewTimer(incompleteDrainProcessTimeout)
+	defer timer.Stop()
+	select {
+	case <-signal:
+	case <-timer.C:
+		t.Fatal(message)
 	}
 }
 
