@@ -23,6 +23,7 @@ import (
 
 const incompleteDrainProcessTimeout = 15 * time.Second
 const continuousIdleObservation = 500 * time.Millisecond
+const incompleteDrainListenAddress = "127.0.0.1:7437"
 
 // TestWithServerDrainCannotReportSuccessWhileWorkIsNonTerminal proves that a
 // finite hosted run returns a failure after its listener and runtime have

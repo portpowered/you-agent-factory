@@ -428,16 +428,19 @@ func w4OutputWorkCount(values []work.WorkRequestEventWork, workID, state string)
 }
 
 type interleavingW4ProviderCommandRunner struct {
-	mu                    sync.Mutex
-	planArrivals          int
-	planCompletions       []int
-	completed             map[string]int
-	firstArrived, release chan struct{}
+	mu              sync.Mutex
+	planArrivals    int
+	planCompletions []int
+	completed       map[string]int
+	firstArrived    chan struct{}
+	release         chan struct{}
 }
 
 func newInterleavingW4ProviderCommandRunner() *interleavingW4ProviderCommandRunner {
 	return &interleavingW4ProviderCommandRunner{
-		completed: map[string]int{}, firstArrived: make(chan struct{}), release: make(chan struct{}),
+		completed:    map[string]int{},
+		firstArrived: make(chan struct{}),
+		release:      make(chan struct{}),
 	}
 }
 
@@ -464,7 +467,6 @@ func (r *interleavingW4ProviderCommandRunner) Run(ctx context.Context, req platf
 		case <-ctx.Done():
 			return platformprocess.CommandResult{}, ctx.Err()
 		}
-		close(r.release)
 	}
 	r.mu.Lock()
 	r.completed[stage]++
@@ -472,6 +474,9 @@ func (r *interleavingW4ProviderCommandRunner) Run(ctx context.Context, req platf
 		r.planCompletions = append(r.planCompletions, planArrival)
 	}
 	r.mu.Unlock()
+	if stage == "planner" && planArrival == 2 {
+		close(r.release)
+	}
 	return platformprocess.CommandResult{Stdout: w4ProviderStdout(req, output)}, nil
 }
 
