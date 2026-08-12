@@ -185,6 +185,20 @@ func TestOpenApplicationClosesOpenedResourcesOnBindingFailure(t *testing.T) {
 
 func TestOpenApplicationRejectsUnavailableVisualizationSink(t *testing.T) {
 	resolve, open, adapt, plan, owner := validApplicationOpeningDependencies()
+	closed := 0
+	open = runtimeOpenerFunc(func(context.Context, *factorysessions.RuntimeOpeningRequest) (roles.OpenedApplicationRuntime, error) {
+		return roles.OpenedApplicationRuntime{Resources: roles.RuntimeResources{
+			Close: func() error {
+				closed++
+				return nil
+			},
+		}}, nil
+	})
+	adaptCalled := false
+	adapt = RuntimeAdapter(func(roles.OpenedApplicationRuntime, factoryvisualization.Sink) (factorysessions.BoundProcessComponents, error) {
+		adaptCalled = true
+		return factorysessions.BoundProcessComponents{}, nil
+	})
 	service, err := New(resolve, open, adapt, plan, owner)
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -194,6 +208,12 @@ func TestOpenApplicationRejectsUnavailableVisualizationSink(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "Visualization sink") {
 		t.Fatalf("OpenApplication error = %v, want unavailable sink", err)
+	}
+	if closed != 1 {
+		t.Fatalf("opened runtime close count = %d, want one cleanup", closed)
+	}
+	if adaptCalled {
+		t.Fatal("application adapter was called after visualization sink lookup failed")
 	}
 }
 
