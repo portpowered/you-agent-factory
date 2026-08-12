@@ -292,6 +292,46 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/factory-sessions/{session_id}/worker-sessions/{worker_session_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Show one Worker Session observation by Worker Session ID
+     * @description Returns the authoritative observation for the exact Worker Session identity in the explicitly selected Factory Session. The Worker Session ID is the canonical lookup key for live and durable history; Provider Session identity is optional enrichment and is never required for a Worker to be observable.
+     */
+    get: operations["getWorkerSessionObservationByWorkerSessionId"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/factory-sessions/{session_id}/worker-sessions/{worker_session_id}/transcript": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Read one Worker Session transcript by Worker Session ID
+     * @description Returns normalized transcript entries for the exact Worker Session identity in the explicitly selected Factory Session. Provider-native transcript detail is optional; when it is absent the server returns a typed unavailable result while the canonical Worker history remains readable through the Worker-ID event route.
+     */
+    get: operations["readWorkerSessionTranscriptByWorkerSessionId"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/factory-sessions/{session_id}/worker-sessions/detail": {
     parameters: {
       query?: never;
@@ -7614,6 +7654,71 @@ export interface operations {
       };
       400: components["responses"]["BadRequest"];
       404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  getWorkerSessionObservationByWorkerSessionId: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+        /** @description Stable Worker Session identity returned by the Worker Sessions list operation. */
+        worker_session_id: components["parameters"]["WorkerSessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description One detached Worker Session observation. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkerSessionObservation"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  readWorkerSessionTranscriptByWorkerSessionId: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+        /** @description Stable Worker Session identity returned by the Worker Sessions list operation. */
+        worker_session_id: components["parameters"]["WorkerSessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Normalized transcript for a finished Worker Session. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkerSessionTranscriptResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      /** @description The Worker Session is still active and has no final transcript. */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
       500: components["responses"]["InternalError"];
     };
   };

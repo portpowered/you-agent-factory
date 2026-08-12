@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -279,6 +280,44 @@ func (s *recordedWorkerSessionObservation) GetObservation(
 	return s.Service.GetObservation(ctx, req)
 }
 
+// GetObservationByWorkerSessionID resolves the canonical Worker Session
+// identity against this Factory Session's durable event history before
+// consulting the process-local registry. The wrapper is deliberately
+// Factory-Session scoped, so an identical Worker Session ID in another
+// session cannot leak into this response.
+func (s *recordedWorkerSessionObservation) GetObservationByWorkerSessionID(
+	ctx context.Context,
+	req workersessions.GetObservationByWorkerSessionIDRequest,
+) (workersessions.Observation, error) {
+	if err := req.Validate(); err != nil {
+		return workersessions.Observation{}, err
+	}
+	req.WorkerSessionID = strings.TrimSpace(req.WorkerSessionID)
+	if err := observationContextError(ctx); err != nil {
+		return workersessions.Observation{}, err
+	}
+	if s != nil && s.ledger != nil && s.projector != nil {
+		fact, found, err := s.recordedObservationForWorkerSessionID(ctx, req.WorkerSessionID)
+		if err != nil {
+			return workersessions.Observation{}, err
+		}
+		if found {
+			observation := recordedObservationFromFact(fact, s.clock)
+			if fact.provider == nil {
+				return observation, nil
+			}
+			return s.enrichRecordedObservation(ctx, observation, providerSessionRef(*fact.provider))
+		}
+		if s.Service == nil {
+			return workersessions.Observation{}, workersessions.ErrObservationSessionNotFound
+		}
+	}
+	if s == nil || s.Service == nil {
+		return workersessions.Observation{}, workersessions.ErrObservationProjectionUnavailable
+	}
+	return s.Service.GetObservationByWorkerSessionID(ctx, req)
+}
+
 func (s *recordedWorkerSessionObservation) ReadTranscript(
 	ctx context.Context,
 	req workersessions.ReadTranscriptRequest,
@@ -286,11 +325,19 @@ func (s *recordedWorkerSessionObservation) ReadTranscript(
 	if err := req.Validate(); err != nil {
 		return workersessions.ReadTranscriptResult{}, err
 	}
+	req.WorkerSessionID = strings.TrimSpace(req.WorkerSessionID)
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.ReadTranscriptResult{}, err
 	}
 	if s != nil && s.ledger != nil && s.projector != nil {
-		fact, found, err := s.recordedObservationForProvider(ctx, req.ProviderSession)
+		var fact recordedDispatchObservation
+		var found bool
+		var err error
+		if req.WorkerSessionID != "" {
+			fact, found, err = s.recordedObservationForWorkerSessionID(ctx, req.WorkerSessionID)
+		} else {
+			fact, found, err = s.recordedObservationForProvider(ctx, req.ProviderSession)
+		}
 		if err != nil {
 			return workersessions.ReadTranscriptResult{}, err
 		}
@@ -298,7 +345,14 @@ func (s *recordedWorkerSessionObservation) ReadTranscript(
 			if !fact.state.Terminal() {
 				return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationTranscriptActive
 			}
-			return s.readRecordedTranscript(ctx, req, fact)
+			if fact.provider == nil {
+				return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationTranscriptUnavailable
+			}
+			readRequest := req
+			if readRequest.WorkerSessionID != "" {
+				readRequest = workersessions.ReadTranscriptRequest{ProviderSession: providerSessionRef(*fact.provider)}
+			}
+			return s.readRecordedTranscript(ctx, readRequest, fact)
 		}
 		if s.Service == nil {
 			return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationSessionNotFound
@@ -422,6 +476,33 @@ func (s *recordedWorkerSessionObservation) StreamObservations(
 	return s.Service.StreamObservations(ctx, req)
 }
 
+// StreamObservationsByWorkerSessionID gives the canonical Worker-ID route the
+// same durable Factory Session history as the legacy provider-reference route.
+// A live registry is only the fallback for a session that is not present in
+// the durable projection.
+func (s *recordedWorkerSessionObservation) StreamObservationsByWorkerSessionID(
+	ctx context.Context,
+	req workersessions.StreamObservationsByWorkerSessionIDRequest,
+) (workersessions.ObservationSubscription, error) {
+	if s == nil || (s.ledger == nil && s.projector == nil && s.Service == nil) {
+		return workersessions.ObservationSubscription{}, workersessions.ErrObservationProjectionUnavailable
+	}
+	if err := req.Validate(); err != nil {
+		return workersessions.ObservationSubscription{}, err
+	}
+	req.WorkerSessionID = strings.TrimSpace(req.WorkerSessionID)
+	if err := observationContextError(ctx); err != nil {
+		return workersessions.ObservationSubscription{}, err
+	}
+	if subscription, handled, err := s.streamRecordedByWorkerSessionID(ctx, req); handled {
+		return subscription, err
+	}
+	if s.Service == nil {
+		return workersessions.ObservationSubscription{}, workersessions.ErrObservationProjectionUnavailable
+	}
+	return s.Service.StreamObservationsByWorkerSessionID(ctx, req)
+}
+
 func (s *recordedWorkerSessionObservation) streamRecorded(
 	ctx context.Context,
 	req workersessions.StreamObservationsRequest,
@@ -439,12 +520,40 @@ func (s *recordedWorkerSessionObservation) streamRecorded(
 		}
 		return workersessions.ObservationSubscription{}, false, nil
 	}
+	return s.streamRecordedFact(ctx, fact, req.Limit)
+}
+
+func (s *recordedWorkerSessionObservation) streamRecordedByWorkerSessionID(
+	ctx context.Context,
+	req workersessions.StreamObservationsByWorkerSessionIDRequest,
+) (workersessions.ObservationSubscription, bool, error) {
+	if s.ledger == nil || s.projector == nil {
+		return workersessions.ObservationSubscription{}, false, nil
+	}
+	fact, found, err := s.recordedObservationForWorkerSessionID(ctx, req.WorkerSessionID)
+	if err != nil {
+		return workersessions.ObservationSubscription{}, true, err
+	}
+	if !found {
+		if s.Service == nil {
+			return workersessions.ObservationSubscription{}, true, workersessions.ErrObservationSessionNotFound
+		}
+		return workersessions.ObservationSubscription{}, false, nil
+	}
+	return s.streamRecordedFact(ctx, fact, req.Limit)
+}
+
+func (s *recordedWorkerSessionObservation) streamRecordedFact(
+	ctx context.Context,
+	fact recordedDispatchObservation,
+	limit int,
+) (workersessions.ObservationSubscription, bool, error) {
 	streamContext := ctx
 	if streamContext == nil {
 		streamContext = context.Background()
 	}
 	streamContext, cancel := context.WithCancel(streamContext)
-	limit := observationStreamLimit(req.Limit)
+	limit = observationStreamLimit(limit)
 	source, subscribeErr := s.ledger.Subscribe(streamContext, nil, interfaces.FactoryEventReconnectScope{
 		DispatchID: fact.dispatchID,
 		Limit:      limit,
@@ -499,23 +608,63 @@ func (s *recordedWorkerSessionObservation) recordedObservationForProvider(
 	ctx context.Context,
 	ref providers.SessionRef,
 ) (recordedDispatchObservation, bool, error) {
-	if err := observationContextError(ctx); err != nil {
+	facts, err := s.recordedObservationFacts(ctx)
+	if err != nil {
 		return recordedDispatchObservation{}, false, err
 	}
-	ordered := cloneAndSortFactoryEvents(s.ledger.CanonicalEvents())
-	world, err := s.projector(ordered, latestFactoryEventTick(ordered))
-	if err != nil {
-		return recordedDispatchObservation{}, false, workersessions.ErrObservationProjectionUnavailable
-	}
-	associations, requests := recordedDispatchFacts(ordered)
-	completed := recordedDispatchStateMaps(world)
-	for dispatchID, association := range associations {
-		fact := recordedDispatchFact(dispatchID, association, requests, completed, world.ProviderSessions, world.ActiveDispatches, ordered)
+	for _, fact := range facts {
 		if fact.provider != nil && providerSessionRef(*fact.provider) == ref {
 			return fact, true, nil
 		}
 	}
 	return recordedDispatchObservation{}, false, nil
+}
+
+func (s *recordedWorkerSessionObservation) recordedObservationForWorkerSessionID(
+	ctx context.Context,
+	workerSessionID string,
+) (recordedDispatchObservation, bool, error) {
+	facts, err := s.recordedObservationFacts(ctx)
+	if err != nil {
+		return recordedDispatchObservation{}, false, err
+	}
+	for _, fact := range facts {
+		if fact.workerSessionID == workerSessionID {
+			return fact, true, nil
+		}
+	}
+	return recordedDispatchObservation{}, false, nil
+}
+
+func (s *recordedWorkerSessionObservation) recordedObservationFacts(
+	ctx context.Context,
+) ([]recordedDispatchObservation, error) {
+	if err := observationContextError(ctx); err != nil {
+		return nil, err
+	}
+	if s == nil || s.ledger == nil || s.projector == nil {
+		return nil, workersessions.ErrObservationProjectionUnavailable
+	}
+	ordered := cloneAndSortFactoryEvents(s.ledger.CanonicalEvents())
+	world, err := s.projector(ordered, latestFactoryEventTick(ordered))
+	if err != nil {
+		return nil, workersessions.ErrObservationProjectionUnavailable
+	}
+	associations, requests := recordedDispatchFacts(ordered)
+	completed := recordedDispatchStateMaps(world)
+	dispatchIDs := make([]string, 0, len(associations))
+	for dispatchID := range associations {
+		dispatchIDs = append(dispatchIDs, dispatchID)
+	}
+	sort.Strings(dispatchIDs)
+	facts := make([]recordedDispatchObservation, 0, len(dispatchIDs))
+	for _, dispatchID := range dispatchIDs {
+		facts = append(facts, recordedDispatchFact(
+			dispatchID, associations[dispatchID], requests, completed,
+			world.ProviderSessions, world.ActiveDispatches, ordered,
+		))
+	}
+	return facts, nil
 }
 
 type recordedObservationSubscription struct {

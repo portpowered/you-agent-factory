@@ -89,6 +89,39 @@ func (a *Adapter) GetWorkerSessionObservation(
 	return WorkerSessionObservationToAPI(observation), nil
 }
 
+// GetWorkerSessionObservationByWorkerSessionID returns the canonical
+// Worker-ID observation for the explicitly opened Factory Session. Provider
+// Session association is enrichment only and is never required at this
+// boundary.
+func (a *Adapter) GetWorkerSessionObservationByWorkerSessionID(
+	ctx context.Context,
+	sessionID, workerSessionID string,
+) (factoryapi.WorkerSessionObservation, error) {
+	if a == nil || a.observations == nil {
+		return factoryapi.WorkerSessionObservation{}, errors.New("Worker Sessions service is required")
+	}
+	if strings.TrimSpace(sessionID) == "" {
+		return factoryapi.WorkerSessionObservation{}, errors.New("session id is required")
+	}
+	workerSessionID = strings.TrimSpace(workerSessionID)
+	if workerSessionID == "" {
+		return factoryapi.WorkerSessionObservation{}, errors.New("worker session id is required")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return factoryapi.WorkerSessionObservation{}, err
+	}
+	observation, err := a.observations.GetObservationByWorkerSessionID(ctx, workersessions.GetObservationByWorkerSessionIDRequest{
+		WorkerSessionID: workerSessionID,
+	})
+	if err != nil {
+		return factoryapi.WorkerSessionObservation{}, fmt.Errorf("get Worker Session observation: %w", err)
+	}
+	return WorkerSessionObservationToAPI(observation), nil
+}
+
 // ReadWorkerSessionTranscript returns the normalized transcript for one
 // terminal Worker Session identified by its exact Provider Session reference.
 func (a *Adapter) ReadWorkerSessionTranscript(
@@ -115,6 +148,39 @@ func (a *Adapter) ReadWorkerSessionTranscript(
 	}
 	result, err := a.observations.ReadTranscript(ctx, workersessions.ReadTranscriptRequest{
 		ProviderSession: providers.SessionRef{Provider: providers.ID(provider), Kind: kind, ID: id},
+	})
+	if err != nil {
+		return factoryapi.WorkerSessionTranscriptResponse{}, fmt.Errorf("read Worker Session transcript: %w", err)
+	}
+	return WorkerSessionTranscriptToAPI(result), nil
+}
+
+// ReadWorkerSessionTranscriptByWorkerSessionID reads the normalized history
+// for the canonical Worker Session identity. A missing provider-native
+// transcript remains an explicit service outcome; callers can use the Worker
+// Session event route for the canonical history in that case.
+func (a *Adapter) ReadWorkerSessionTranscriptByWorkerSessionID(
+	ctx context.Context,
+	sessionID, workerSessionID string,
+) (factoryapi.WorkerSessionTranscriptResponse, error) {
+	if a == nil || a.observations == nil {
+		return factoryapi.WorkerSessionTranscriptResponse{}, errors.New("Worker Sessions service is required")
+	}
+	if strings.TrimSpace(sessionID) == "" {
+		return factoryapi.WorkerSessionTranscriptResponse{}, errors.New("session id is required")
+	}
+	workerSessionID = strings.TrimSpace(workerSessionID)
+	if workerSessionID == "" {
+		return factoryapi.WorkerSessionTranscriptResponse{}, errors.New("worker session id is required")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return factoryapi.WorkerSessionTranscriptResponse{}, err
+	}
+	result, err := a.observations.ReadTranscript(ctx, workersessions.ReadTranscriptRequest{
+		WorkerSessionID: workerSessionID,
 	})
 	if err != nil {
 		return factoryapi.WorkerSessionTranscriptResponse{}, fmt.Errorf("read Worker Session transcript: %w", err)

@@ -250,6 +250,21 @@ func (s *Server) GetWorkerSessionObservationBySessionId(
 	s.workerSessionsHTTP.GetWorkerSessionObservationBySessionId(w, r, sessionID, params)
 }
 
+// GetWorkerSessionObservationByWorkerSessionId forwards the canonical
+// Worker-ID observation operation to the Worker Sessions owner handler.
+func (s *Server) GetWorkerSessionObservationByWorkerSessionId(
+	w http.ResponseWriter,
+	r *http.Request,
+	sessionID factoryapi.SessionID,
+	workerSessionID factoryapi.WorkerSessionID,
+) {
+	if s.workerSessionsHTTP == nil {
+		s.writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
+		return
+	}
+	s.workerSessionsHTTP.GetWorkerSessionObservationByWorkerSessionId(w, r, sessionID, workerSessionID)
+}
+
 // ReadWorkerSessionTranscriptBySessionId forwards the generated operation to
 // the Worker Sessions owner handler.
 func (s *Server) ReadWorkerSessionTranscriptBySessionId(
@@ -263,6 +278,21 @@ func (s *Server) ReadWorkerSessionTranscriptBySessionId(
 		return
 	}
 	s.workerSessionsHTTP.ReadWorkerSessionTranscriptBySessionId(w, r, sessionID, params)
+}
+
+// ReadWorkerSessionTranscriptByWorkerSessionId forwards the canonical
+// Worker-ID transcript operation to the Worker Sessions owner handler.
+func (s *Server) ReadWorkerSessionTranscriptByWorkerSessionId(
+	w http.ResponseWriter,
+	r *http.Request,
+	sessionID factoryapi.SessionID,
+	workerSessionID factoryapi.WorkerSessionID,
+) {
+	if s.workerSessionsHTTP == nil {
+		s.writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
+		return
+	}
+	s.workerSessionsHTTP.ReadWorkerSessionTranscriptByWorkerSessionId(w, r, sessionID, workerSessionID)
 }
 
 // StreamWorkerSessionEventsBySessionId forwards the generated operation to

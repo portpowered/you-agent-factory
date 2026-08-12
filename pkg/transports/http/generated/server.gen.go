@@ -12152,9 +12152,15 @@ type ServerInterface interface {
 	// Read one finished Worker Session transcript
 	// (GET /factory-sessions/{session_id}/worker-sessions/transcript)
 	ReadWorkerSessionTranscriptBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID, params ReadWorkerSessionTranscriptBySessionIdParams)
+	// Show one Worker Session observation by Worker Session ID
+	// (GET /factory-sessions/{session_id}/worker-sessions/{worker_session_id})
+	GetWorkerSessionObservationByWorkerSessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID, workerSessionId WorkerSessionID)
 	// Stream retained and live Worker Session events by Worker Session identity
 	// (GET /factory-sessions/{session_id}/worker-sessions/{worker_session_id}/events)
 	StreamWorkerSessionEventsByWorkerSessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID, workerSessionId WorkerSessionID, params StreamWorkerSessionEventsByWorkerSessionIdParams)
+	// Read one Worker Session transcript by Worker Session ID
+	// (GET /factory-sessions/{session_id}/worker-sessions/{worker_session_id}/transcript)
+	ReadWorkerSessionTranscriptByWorkerSessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID, workerSessionId WorkerSessionID)
 	// Validate factory definition
 	// (POST /factory-validations)
 	ValidateFactory(w http.ResponseWriter, r *http.Request)
@@ -13658,6 +13664,40 @@ func (siw *ServerInterfaceWrapper) ReadWorkerSessionTranscriptBySessionId(w http
 	handler.ServeHTTP(w, r)
 }
 
+// GetWorkerSessionObservationByWorkerSessionId operation middleware
+func (siw *ServerInterfaceWrapper) GetWorkerSessionObservationByWorkerSessionId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "session_id" -------------
+	var sessionId SessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "session_id", mux.Vars(r)["session_id"], &sessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "worker_session_id" -------------
+	var workerSessionId WorkerSessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "worker_session_id", mux.Vars(r)["worker_session_id"], &workerSessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "worker_session_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetWorkerSessionObservationByWorkerSessionId(w, r, sessionId, workerSessionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // StreamWorkerSessionEventsByWorkerSessionId operation middleware
 func (siw *ServerInterfaceWrapper) StreamWorkerSessionEventsByWorkerSessionId(w http.ResponseWriter, r *http.Request) {
 
@@ -13694,6 +13734,40 @@ func (siw *ServerInterfaceWrapper) StreamWorkerSessionEventsByWorkerSessionId(w 
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.StreamWorkerSessionEventsByWorkerSessionId(w, r, sessionId, workerSessionId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ReadWorkerSessionTranscriptByWorkerSessionId operation middleware
+func (siw *ServerInterfaceWrapper) ReadWorkerSessionTranscriptByWorkerSessionId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "session_id" -------------
+	var sessionId SessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "session_id", mux.Vars(r)["session_id"], &sessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "worker_session_id" -------------
+	var workerSessionId WorkerSessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "worker_session_id", mux.Vars(r)["worker_session_id"], &workerSessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "worker_session_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ReadWorkerSessionTranscriptByWorkerSessionId(w, r, sessionId, workerSessionId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -14394,7 +14468,11 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/worker-sessions/transcript", wrapper.ReadWorkerSessionTranscriptBySessionId).Methods("GET")
 
+	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/worker-sessions/{worker_session_id}", wrapper.GetWorkerSessionObservationByWorkerSessionId).Methods("GET")
+
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/worker-sessions/{worker_session_id}/events", wrapper.StreamWorkerSessionEventsByWorkerSessionId).Methods("GET")
+
+	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/worker-sessions/{worker_session_id}/transcript", wrapper.ReadWorkerSessionTranscriptByWorkerSessionId).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/factory-validations", wrapper.ValidateFactory).Methods("POST")
 

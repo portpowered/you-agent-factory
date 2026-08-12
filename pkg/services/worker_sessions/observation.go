@@ -502,22 +502,43 @@ var (
 	ErrObservationCanceled              = fmt.Errorf("worker session observation: canceled: %w", context.Canceled)
 )
 
-// ReadTranscriptRequest identifies one exact Provider Session whose normalized
-// transcript should be returned.
+// ReadTranscriptRequest identifies one Worker Session whose normalized
+// transcript should be returned. ProviderSession is retained as the legacy
+// compatibility identity; new callers should use WorkerSessionID so the read
+// remains provider-neutral and can resolve durable Factory Session history.
 type ReadTranscriptRequest struct {
+	WorkerSessionID string
 	ProviderSession providers.SessionRef
 }
 
-// Validate reports whether the request carries a complete typed identity.
+// Validate reports whether the request carries exactly one complete typed
+// identity. Accepting both identities would make a disagreement ambiguous and
+// could let a legacy provider reference escape its Worker Session scope.
 func (r ReadTranscriptRequest) Validate() error {
-	if err := r.ProviderSession.Validate(); err != nil {
-		return fmt.Errorf("%w: %w", ErrInvalidObservationIdentity, err)
+	workerSessionID := strings.TrimSpace(r.WorkerSessionID)
+	providerIdentityPresent := strings.TrimSpace(string(r.ProviderSession.Provider)) != "" ||
+		strings.TrimSpace(r.ProviderSession.Kind) != "" || strings.TrimSpace(r.ProviderSession.ID) != ""
+	switch {
+	case workerSessionID != "" && providerIdentityPresent:
+		return fmt.Errorf("%w: Worker Session ID and Provider Session identity are mutually exclusive", ErrInvalidObservationIdentity)
+	case workerSessionID != "":
+		if !validSessionID(workerSessionID) {
+			return ErrInvalidSessionID
+		}
+		return nil
+	default:
+		if err := r.ProviderSession.Validate(); err != nil {
+			return fmt.Errorf("%w: %w", ErrInvalidObservationIdentity, err)
+		}
+		return nil
 	}
-	return nil
 }
 
 // ReadTranscriptResult is the detached Worker Session envelope and ordered
-// normalized transcript returned for a finished Provider Session.
+// normalized transcript returned for a finished Worker Session with readable
+// provider-native transcript detail. A Worker without that detail receives
+// ErrObservationTranscriptUnavailable while canonical history remains
+// available through the Worker-ID event read.
 type ReadTranscriptResult struct {
 	WorkerSessionID string
 	ProviderSession providers.SessionRef
@@ -541,7 +562,7 @@ func (r ReadTranscriptResult) Clone() ReadTranscriptResult {
 }
 
 // Validate reports whether the transcript envelope has a coherent identity,
-// terminal lifecycle state, and ordered entries.
+// provider transcript identity, terminal lifecycle state, and ordered entries.
 func (r ReadTranscriptResult) Validate() error {
 	if strings.TrimSpace(r.WorkerSessionID) == "" {
 		return ErrInvalidObservationIdentity

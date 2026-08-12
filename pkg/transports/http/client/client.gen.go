@@ -8619,6 +8619,12 @@ type GetFactoryResponseEventsBySessionIdParams struct {
 	Kind *ResponseEventKind `form:"kind,omitempty" json:"kind,omitempty"`
 }
 
+// StreamWorkerSessionEventsByWorkerSessionIdParams defines parameters for StreamWorkerSessionEventsByWorkerSessionId.
+type StreamWorkerSessionEventsByWorkerSessionIdParams struct {
+	// ReplayOnly Drain the retained history through a captured Events head without registering a live follower.
+	ReplayOnly *bool `form:"replayOnly,omitempty" json:"replayOnly,omitempty"`
+}
+
 // Getter for additional properties for FactorySessionEffectivePolicy. Returns the specified
 // element and whether it was found
 func (a FactorySessionEffectivePolicy) Get(fieldName string) (value interface{}, found bool) {
@@ -11845,6 +11851,15 @@ type ClientInterface interface {
 	// GetFactoryResponseEventsBySessionId request
 	GetFactoryResponseEventsBySessionId(ctx context.Context, sessionId SessionID, params *GetFactoryResponseEventsBySessionIdParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetWorkerSessionObservationByWorkerSessionId request
+	GetWorkerSessionObservationByWorkerSessionId(ctx context.Context, sessionId SessionID, workerSessionId WorkerSessionID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// StreamWorkerSessionEventsByWorkerSessionId request
+	StreamWorkerSessionEventsByWorkerSessionId(ctx context.Context, sessionId SessionID, workerSessionId WorkerSessionID, params *StreamWorkerSessionEventsByWorkerSessionIdParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ReadWorkerSessionTranscriptByWorkerSessionId request
+	ReadWorkerSessionTranscriptByWorkerSessionId(ctx context.Context, sessionId SessionID, workerSessionId WorkerSessionID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetStatus request
 	GetStatus(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
@@ -11863,6 +11878,42 @@ func (c *Client) GetEventsBySessionId(ctx context.Context, sessionId SessionID, 
 
 func (c *Client) GetFactoryResponseEventsBySessionId(ctx context.Context, sessionId SessionID, params *GetFactoryResponseEventsBySessionIdParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetFactoryResponseEventsBySessionIdRequest(c.Server, sessionId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetWorkerSessionObservationByWorkerSessionId(ctx context.Context, sessionId SessionID, workerSessionId WorkerSessionID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetWorkerSessionObservationByWorkerSessionIdRequest(c.Server, sessionId, workerSessionId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) StreamWorkerSessionEventsByWorkerSessionId(ctx context.Context, sessionId SessionID, workerSessionId WorkerSessionID, params *StreamWorkerSessionEventsByWorkerSessionIdParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewStreamWorkerSessionEventsByWorkerSessionIdRequest(c.Server, sessionId, workerSessionId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ReadWorkerSessionTranscriptByWorkerSessionId(ctx context.Context, sessionId SessionID, workerSessionId WorkerSessionID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReadWorkerSessionTranscriptByWorkerSessionIdRequest(c.Server, sessionId, workerSessionId)
 	if err != nil {
 		return nil, err
 	}
@@ -12045,6 +12096,151 @@ func NewGetFactoryResponseEventsBySessionIdRequest(server string, sessionId Sess
 	return req, nil
 }
 
+// NewGetWorkerSessionObservationByWorkerSessionIdRequest generates requests for GetWorkerSessionObservationByWorkerSessionId
+func NewGetWorkerSessionObservationByWorkerSessionIdRequest(server string, sessionId SessionID, workerSessionId WorkerSessionID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "session_id", runtime.ParamLocationPath, sessionId)
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "worker_session_id", runtime.ParamLocationPath, workerSessionId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/factory-sessions/%s/worker-sessions/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewStreamWorkerSessionEventsByWorkerSessionIdRequest generates requests for StreamWorkerSessionEventsByWorkerSessionId
+func NewStreamWorkerSessionEventsByWorkerSessionIdRequest(server string, sessionId SessionID, workerSessionId WorkerSessionID, params *StreamWorkerSessionEventsByWorkerSessionIdParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "session_id", runtime.ParamLocationPath, sessionId)
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "worker_session_id", runtime.ParamLocationPath, workerSessionId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/factory-sessions/%s/worker-sessions/%s/events", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.ReplayOnly != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "replayOnly", runtime.ParamLocationQuery, *params.ReplayOnly); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewReadWorkerSessionTranscriptByWorkerSessionIdRequest generates requests for ReadWorkerSessionTranscriptByWorkerSessionId
+func NewReadWorkerSessionTranscriptByWorkerSessionIdRequest(server string, sessionId SessionID, workerSessionId WorkerSessionID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "session_id", runtime.ParamLocationPath, sessionId)
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "worker_session_id", runtime.ParamLocationPath, workerSessionId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/factory-sessions/%s/worker-sessions/%s/transcript", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetStatusRequest generates requests for GetStatus
 func NewGetStatusRequest(server string) (*http.Request, error) {
 	var err error
@@ -12121,6 +12317,15 @@ type ClientWithResponsesInterface interface {
 	// GetFactoryResponseEventsBySessionIdWithResponse request
 	GetFactoryResponseEventsBySessionIdWithResponse(ctx context.Context, sessionId SessionID, params *GetFactoryResponseEventsBySessionIdParams, reqEditors ...RequestEditorFn) (*GetFactoryResponseEventsBySessionIdClientResponse, error)
 
+	// GetWorkerSessionObservationByWorkerSessionIdWithResponse request
+	GetWorkerSessionObservationByWorkerSessionIdWithResponse(ctx context.Context, sessionId SessionID, workerSessionId WorkerSessionID, reqEditors ...RequestEditorFn) (*GetWorkerSessionObservationByWorkerSessionIdClientResponse, error)
+
+	// StreamWorkerSessionEventsByWorkerSessionIdWithResponse request
+	StreamWorkerSessionEventsByWorkerSessionIdWithResponse(ctx context.Context, sessionId SessionID, workerSessionId WorkerSessionID, params *StreamWorkerSessionEventsByWorkerSessionIdParams, reqEditors ...RequestEditorFn) (*StreamWorkerSessionEventsByWorkerSessionIdClientResponse, error)
+
+	// ReadWorkerSessionTranscriptByWorkerSessionIdWithResponse request
+	ReadWorkerSessionTranscriptByWorkerSessionIdWithResponse(ctx context.Context, sessionId SessionID, workerSessionId WorkerSessionID, reqEditors ...RequestEditorFn) (*ReadWorkerSessionTranscriptByWorkerSessionIdClientResponse, error)
+
 	// GetStatusWithResponse request
 	GetStatusWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetStatusClientResponse, error)
 }
@@ -12175,6 +12380,81 @@ func (r GetFactoryResponseEventsBySessionIdClientResponse) StatusCode() int {
 	return 0
 }
 
+type GetWorkerSessionObservationByWorkerSessionIdClientResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *WorkerSessionObservation
+	JSON400      *BadRequest
+	JSON404      *NotFound
+	JSON500      *InternalError
+}
+
+// Status returns HTTPResponse.Status
+func (r GetWorkerSessionObservationByWorkerSessionIdClientResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetWorkerSessionObservationByWorkerSessionIdClientResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type StreamWorkerSessionEventsByWorkerSessionIdClientResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON400      *BadRequest
+	JSON404      *NotFound
+	JSON500      *InternalError
+}
+
+// Status returns HTTPResponse.Status
+func (r StreamWorkerSessionEventsByWorkerSessionIdClientResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r StreamWorkerSessionEventsByWorkerSessionIdClientResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ReadWorkerSessionTranscriptByWorkerSessionIdClientResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *WorkerSessionTranscriptResponse
+	JSON400      *BadRequest
+	JSON404      *NotFound
+	JSON409      *ErrorResponse
+	JSON500      *InternalError
+}
+
+// Status returns HTTPResponse.Status
+func (r ReadWorkerSessionTranscriptByWorkerSessionIdClientResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ReadWorkerSessionTranscriptByWorkerSessionIdClientResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type GetStatusClientResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -12214,6 +12494,33 @@ func (c *ClientWithResponses) GetFactoryResponseEventsBySessionIdWithResponse(ct
 		return nil, err
 	}
 	return ParseGetFactoryResponseEventsBySessionIdClientResponse(rsp)
+}
+
+// GetWorkerSessionObservationByWorkerSessionIdWithResponse request returning *GetWorkerSessionObservationByWorkerSessionIdClientResponse
+func (c *ClientWithResponses) GetWorkerSessionObservationByWorkerSessionIdWithResponse(ctx context.Context, sessionId SessionID, workerSessionId WorkerSessionID, reqEditors ...RequestEditorFn) (*GetWorkerSessionObservationByWorkerSessionIdClientResponse, error) {
+	rsp, err := c.GetWorkerSessionObservationByWorkerSessionId(ctx, sessionId, workerSessionId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetWorkerSessionObservationByWorkerSessionIdClientResponse(rsp)
+}
+
+// StreamWorkerSessionEventsByWorkerSessionIdWithResponse request returning *StreamWorkerSessionEventsByWorkerSessionIdClientResponse
+func (c *ClientWithResponses) StreamWorkerSessionEventsByWorkerSessionIdWithResponse(ctx context.Context, sessionId SessionID, workerSessionId WorkerSessionID, params *StreamWorkerSessionEventsByWorkerSessionIdParams, reqEditors ...RequestEditorFn) (*StreamWorkerSessionEventsByWorkerSessionIdClientResponse, error) {
+	rsp, err := c.StreamWorkerSessionEventsByWorkerSessionId(ctx, sessionId, workerSessionId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseStreamWorkerSessionEventsByWorkerSessionIdClientResponse(rsp)
+}
+
+// ReadWorkerSessionTranscriptByWorkerSessionIdWithResponse request returning *ReadWorkerSessionTranscriptByWorkerSessionIdClientResponse
+func (c *ClientWithResponses) ReadWorkerSessionTranscriptByWorkerSessionIdWithResponse(ctx context.Context, sessionId SessionID, workerSessionId WorkerSessionID, reqEditors ...RequestEditorFn) (*ReadWorkerSessionTranscriptByWorkerSessionIdClientResponse, error) {
+	rsp, err := c.ReadWorkerSessionTranscriptByWorkerSessionId(ctx, sessionId, workerSessionId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReadWorkerSessionTranscriptByWorkerSessionIdClientResponse(rsp)
 }
 
 // GetStatusWithResponse request returning *GetStatusClientResponse
@@ -12309,6 +12616,147 @@ func ParseGetFactoryResponseEventsBySessionIdClientResponse(rsp *http.Response) 
 			return nil, err
 		}
 		response.JSON410 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest InternalError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetWorkerSessionObservationByWorkerSessionIdClientResponse parses an HTTP response from a GetWorkerSessionObservationByWorkerSessionIdWithResponse call
+func ParseGetWorkerSessionObservationByWorkerSessionIdClientResponse(rsp *http.Response) (*GetWorkerSessionObservationByWorkerSessionIdClientResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetWorkerSessionObservationByWorkerSessionIdClientResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest WorkerSessionObservation
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest InternalError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseStreamWorkerSessionEventsByWorkerSessionIdClientResponse parses an HTTP response from a StreamWorkerSessionEventsByWorkerSessionIdWithResponse call
+func ParseStreamWorkerSessionEventsByWorkerSessionIdClientResponse(rsp *http.Response) (*StreamWorkerSessionEventsByWorkerSessionIdClientResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &StreamWorkerSessionEventsByWorkerSessionIdClientResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest InternalError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseReadWorkerSessionTranscriptByWorkerSessionIdClientResponse parses an HTTP response from a ReadWorkerSessionTranscriptByWorkerSessionIdWithResponse call
+func ParseReadWorkerSessionTranscriptByWorkerSessionIdClientResponse(rsp *http.Response) (*ReadWorkerSessionTranscriptByWorkerSessionIdClientResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ReadWorkerSessionTranscriptByWorkerSessionIdClientResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest WorkerSessionTranscriptResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
 		var dest InternalError

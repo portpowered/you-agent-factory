@@ -803,6 +803,7 @@ type fakeObservationService struct {
 	readResult                 workersessions.ReadTranscriptResult
 	readErr                    error
 	readCalled                 bool
+	readWorkerSessionID        string
 	readProviderSession        providers.SessionRef
 	readByWorkerResult         workersessions.ReadTranscriptResult
 	readByWorkerErr            error
@@ -853,6 +854,7 @@ func (f *fakeObservationService) GetObservationByWorkerSessionID(_ context.Conte
 
 func (f *fakeObservationService) ReadTranscript(_ context.Context, request workersessions.ReadTranscriptRequest) (workersessions.ReadTranscriptResult, error) {
 	f.readCalled = true
+	f.readWorkerSessionID = request.WorkerSessionID
 	f.readProviderSession = request.ProviderSession
 	return f.readResult, f.readErr
 }

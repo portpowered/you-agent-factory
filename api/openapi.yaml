@@ -522,6 +522,58 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/worker-sessions/{worker_session_id}:
+    get:
+      tags:
+        - Worker Sessions
+      operationId: getWorkerSessionObservationByWorkerSessionId
+      summary: Show one Worker Session observation by Worker Session ID
+      description: Returns the authoritative observation for the exact Worker Session identity in the explicitly selected Factory Session. The Worker Session ID is the canonical lookup key for live and durable history; Provider Session identity is optional enrichment and is never required for a Worker to be observable.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - $ref: '#/components/parameters/WorkerSessionID'
+      responses:
+        '200':
+          description: One detached Worker Session observation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkerSessionObservation'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/worker-sessions/{worker_session_id}/transcript:
+    get:
+      tags:
+        - Worker Sessions
+      operationId: readWorkerSessionTranscriptByWorkerSessionId
+      summary: Read one Worker Session transcript by Worker Session ID
+      description: Returns normalized transcript entries for the exact Worker Session identity in the explicitly selected Factory Session. Provider-native transcript detail is optional; when it is absent the server returns a typed unavailable result while the canonical Worker history remains readable through the Worker-ID event route.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - $ref: '#/components/parameters/WorkerSessionID'
+      responses:
+        '200':
+          description: Normalized transcript for a finished Worker Session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkerSessionTranscriptResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The Worker Session is still active and has no final transcript.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /factory-sessions/{session_id}/worker-sessions/detail:
     get:
       tags:

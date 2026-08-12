@@ -18,7 +18,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -792,33 +791,43 @@ func replayReason(state workersessions.State) string {
 	return "session-" + strings.ToLower(string(state))
 }
 
-// ReadTranscript returns the final normalized Provider Sessions transcript for
-// one exact Worker Session association. The lifecycle check happens before the
-// provider projection so an active session has a stable active outcome even
-// when its provider source is not yet readable.
+// ReadTranscript returns the final normalized transcript for one Worker
+// Session. The canonical Worker Session identity is preferred; the exact
+// Provider Session reference remains a compatibility lookup. The lifecycle
+// check happens before the provider projection so an active session has a
+// stable active outcome even when its provider source is not yet readable.
 func (r *registry) ReadTranscript(ctx context.Context, req workersessions.ReadTranscriptRequest) (workersessions.ReadTranscriptResult, error) {
 	if err := req.Validate(); err != nil {
 		r.logger.Info("worker session transcript read rejected", "outcome", "invalid")
 		return workersessions.ReadTranscriptResult{}, err
 	}
+	req.WorkerSessionID = strings.TrimSpace(req.WorkerSessionID)
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.ReadTranscriptResult{}, err
 	}
 
-	session, metadata, err := r.transcriptSession(req.ProviderSession)
+	session, metadata, err := r.transcriptSession(req)
 	if err != nil {
 		r.logger.Info("worker session transcript read", "outcome", "not_found")
 		return workersessions.ReadTranscriptResult{}, err
 	}
-	return r.projectTranscript(ctx, session, metadata, req.ProviderSession)
+	providerSession := req.ProviderSession
+	if req.WorkerSessionID != "" && session.ProviderSessionAssociation != nil {
+		providerSession = session.ProviderSessionAssociation.Reference
+	}
+	return r.projectTranscript(ctx, session, metadata, providerSession)
 }
 
-func (r *registry) transcriptSession(ref providers.SessionRef) (workersessions.Session, *observation, error) {
+func (r *registry) transcriptSession(req workersessions.ReadTranscriptRequest) (workersessions.Session, *observation, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	ids := make([]string, 0, 1)
 	for id, session := range r.sessions {
-		if session.ProviderSessionAssociation != nil && session.ProviderSessionAssociation.Reference == ref {
+		matches := id == req.WorkerSessionID
+		if req.WorkerSessionID == "" {
+			matches = session.ProviderSessionAssociation != nil && session.ProviderSessionAssociation.Reference == req.ProviderSession
+		}
+		if matches {
 			ids = append(ids, id)
 		}
 	}

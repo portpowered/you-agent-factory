@@ -462,6 +462,7 @@ func (r *registry) GetObservationByWorkerSessionID(ctx context.Context, req work
 		r.logger.Info("worker session observation get by Worker Session rejected", "outcome", "invalid")
 		return workersessions.Observation{}, err
 	}
+	req.WorkerSessionID = strings.TrimSpace(req.WorkerSessionID)
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.Observation{}, err
 	}
@@ -878,6 +879,7 @@ func (r *registry) StreamObservationsByWorkerSessionID(ctx context.Context, req 
 		r.logger.Info("worker session observation stream by Worker Session rejected", "outcome", "invalid")
 		return workersessions.ObservationSubscription{}, err
 	}
+	req.WorkerSessionID = strings.TrimSpace(req.WorkerSessionID)
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.ObservationSubscription{}, err
 	}

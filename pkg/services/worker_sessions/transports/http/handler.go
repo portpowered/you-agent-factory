@@ -262,6 +262,41 @@ func (h *Handler) GetWorkerSessionObservationBySessionId(
 	h.writeJSON(w, http.StatusOK, response)
 }
 
+// GetWorkerSessionObservationByWorkerSessionId handles the canonical
+// session-scoped Worker Session identity lookup. It intentionally has no
+// provider query parameters: provider association is optional enrichment.
+func (h *Handler) GetWorkerSessionObservationByWorkerSessionId(
+	w http.ResponseWriter,
+	r *http.Request,
+	sessionID factoryapi.SessionID,
+	workerSessionID factoryapi.WorkerSessionID,
+) {
+	if h == nil || h.adapter == nil {
+		writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
+		return
+	}
+	if strings.TrimSpace(string(sessionID)) == "" {
+		writeError(w, http.StatusBadRequest, "session id is required", "BAD_REQUEST")
+		return
+	}
+	if strings.TrimSpace(string(workerSessionID)) == "" {
+		writeError(w, http.StatusBadRequest, "worker session id is required", "BAD_REQUEST")
+		return
+	}
+	if r == nil {
+		writeError(w, http.StatusBadRequest, "request is required", "BAD_REQUEST")
+		return
+	}
+	response, err := h.adapter.GetWorkerSessionObservationByWorkerSessionID(
+		r.Context(), string(sessionID), string(workerSessionID),
+	)
+	if err != nil {
+		h.writeMappedObservationError(w, err)
+		return
+	}
+	h.writeJSON(w, http.StatusOK, response)
+}
+
 // ReadWorkerSessionTranscriptBySessionId handles the session-scoped finished
 // Worker Session transcript operation.
 func (h *Handler) ReadWorkerSessionTranscriptBySessionId(
@@ -304,6 +339,41 @@ func (h *Handler) ReadWorkerSessionTranscriptBySessionId(
 		return
 	}
 	response, err := h.adapter.ReadWorkerSessionTranscript(r.Context(), string(sessionID), provider, kind, id)
+	if err != nil {
+		h.writeMappedTranscriptError(w, err)
+		return
+	}
+	h.writeJSON(w, http.StatusOK, response)
+}
+
+// ReadWorkerSessionTranscriptByWorkerSessionId handles the canonical
+// Worker-ID transcript/history read. Provider-native identity is resolved by
+// Worker Sessions when available and is never accepted from the caller here.
+func (h *Handler) ReadWorkerSessionTranscriptByWorkerSessionId(
+	w http.ResponseWriter,
+	r *http.Request,
+	sessionID factoryapi.SessionID,
+	workerSessionID factoryapi.WorkerSessionID,
+) {
+	if h == nil || h.adapter == nil {
+		writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
+		return
+	}
+	if strings.TrimSpace(string(sessionID)) == "" {
+		writeError(w, http.StatusBadRequest, "session id is required", "BAD_REQUEST")
+		return
+	}
+	if strings.TrimSpace(string(workerSessionID)) == "" {
+		writeError(w, http.StatusBadRequest, "worker session id is required", "BAD_REQUEST")
+		return
+	}
+	if r == nil {
+		writeError(w, http.StatusBadRequest, "request is required", "BAD_REQUEST")
+		return
+	}
+	response, err := h.adapter.ReadWorkerSessionTranscriptByWorkerSessionID(
+		r.Context(), string(sessionID), string(workerSessionID),
+	)
 	if err != nil {
 		h.writeMappedTranscriptError(w, err)
 		return
@@ -815,6 +885,9 @@ func (h *Handler) writeMappedControlError(w http.ResponseWriter, err error) {
 
 func (h *Handler) writeMappedObservationError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, workersessions.ErrInvalidSessionID),
+		errors.Is(err, workersessions.ErrInvalidObservationIdentity):
+		writeError(w, http.StatusBadRequest, "invalid Worker Session identity", "BAD_REQUEST")
 	case errors.Is(err, workersessions.ErrObservationSessionNotFound):
 		writeError(w, http.StatusNotFound, "worker session observation not found", "NOT_FOUND")
 	case errors.Is(err, workersessions.ErrObservationNotDirect):
@@ -832,6 +905,9 @@ func (h *Handler) writeMappedObservationError(w http.ResponseWriter, err error) 
 
 func (h *Handler) writeMappedTranscriptError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, workersessions.ErrInvalidSessionID),
+		errors.Is(err, workersessions.ErrInvalidObservationIdentity):
+		writeError(w, http.StatusBadRequest, "invalid Worker Session identity", "BAD_REQUEST")
 	case errors.Is(err, workersessions.ErrObservationSessionNotFound):
 		writeError(w, http.StatusNotFound, "worker session transcript not found", "NOT_FOUND")
 	case errors.Is(err, workersessions.ErrObservationNotDirect):
@@ -853,6 +929,9 @@ func (h *Handler) writeMappedTranscriptError(w http.ResponseWriter, err error) {
 
 func (h *Handler) writeMappedStreamError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, workersessions.ErrInvalidSessionID),
+		errors.Is(err, workersessions.ErrInvalidObservationIdentity):
+		writeError(w, http.StatusBadRequest, "invalid Worker Session identity", "BAD_REQUEST")
 	case errors.Is(err, workersessions.ErrObservationSessionNotFound):
 		writeError(w, http.StatusNotFound, "worker session observation not found", "NOT_FOUND")
 	case errors.Is(err, workersessions.ErrObservationNotDirect):
