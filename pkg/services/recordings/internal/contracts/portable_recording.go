@@ -9,17 +9,30 @@ import (
 const (
 	// KindJavaScriptFactorySession identifies the portable JavaScript Factory
 	// Session recording contract.
-	KindJavaScriptFactorySession  = "you.factory-session.javascript.recording"
-	portableRecordingSchemaV2     = "2"
-	portableRecordingReplayCompat = "1"
+	KindJavaScriptFactorySession = "you.factory-session.javascript.recording"
+
+	// PortableRecordingSchemaV1 is the first shipped Factory Session recording
+	// schema. It intentionally permits a recording without a result projection.
+	PortableRecordingSchemaV1 = "1"
+	// PortableRecordingSchemaV2 adds the required public result projection while
+	// preserving the established Factory Session and event summaries.
+	PortableRecordingSchemaV2 = "2"
+	// PortableRecordingCurrentSchemaVersion is the version emitted by the
+	// pre-Worker-history Factory Session exporter.
+	PortableRecordingCurrentSchemaVersion = PortableRecordingSchemaV2
+
+	// PortableRecordingReplayCompatibilityV1 identifies the replay vocabulary
+	// supported by both shipped Factory Session recording schemas.
+	PortableRecordingReplayCompatibilityV1 = "1"
+
 	// portableRecordingMaxSecretsRedacted bounds the aggregate count exposed by
 	// a recording. Counts at or above this limit are reported as the limit.
 	portableRecordingMaxSecretsRedacted int64 = 1_000_000
 )
 
 var (
-	portableRecordingSupportedSchemaVersions = []string{"1", portableRecordingSchemaV2}
-	portableRecordingSupportedReplayVersions = []string{portableRecordingReplayCompat}
+	portableRecordingSupportedSchemaVersions = []string{PortableRecordingSchemaV1, PortableRecordingSchemaV2}
+	portableRecordingSupportedReplayVersions = []string{PortableRecordingReplayCompatibilityV1}
 )
 
 // PortableRecording is the privacy-bounded JavaScript Factory Session recording

@@ -1,6 +1,7 @@
 package contracts
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -15,18 +16,33 @@ var portableRecordingSHA256Pattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 
 // DecodePortableRecording decodes and validates one portable recording document.
 func DecodePortableRecording(reader io.Reader) (PortableRecording, error) {
-	decoder := json.NewDecoder(reader)
+	document, err := decodePortableRecordingDocument(reader)
+	if err != nil {
+		return PortableRecording{}, portableRecordingDiagnostic(
+			PortableRecordingCodeMalformedContract, "document", "", "decode recording: "+err.Error(),
+		)
+	}
+	header, err := decodePortableRecordingHeader(document)
+	if err != nil {
+		return PortableRecording{}, portableRecordingDiagnostic(
+			PortableRecordingCodeMalformedContract, "document", "", "decode recording header: "+err.Error(),
+		)
+	}
+	// A missing version header is still a malformed document. Let the strict
+	// decoder inspect the complete envelope first so unknown fields and other
+	// structural corruption are not misclassified as unsupported versions.
+	if header.SchemaVersion != "" && header.ReplayCompatibilityVersion != "" {
+		if err := validatePortableRecordingCompatibility(header.RecordingKind, header.SchemaVersion, header.ReplayCompatibilityVersion); err != nil {
+			return PortableRecording{}, err
+		}
+	}
+
+	decoder := json.NewDecoder(bytes.NewReader(document))
 	decoder.DisallowUnknownFields()
 	var recording PortableRecording
 	if err := decoder.Decode(&recording); err != nil {
 		return PortableRecording{}, portableRecordingDiagnostic(
 			PortableRecordingCodeMalformedContract, "document", "", "decode recording: "+err.Error(),
-		)
-	}
-	var trailing any
-	if err := decoder.Decode(&trailing); err != io.EOF {
-		return PortableRecording{}, portableRecordingDiagnostic(
-			PortableRecordingCodeMalformedContract, "document", "", "recording must contain exactly one JSON document",
 		)
 	}
 	if err := ValidatePortableRecording(recording); err != nil {
@@ -35,9 +51,39 @@ func DecodePortableRecording(reader io.Reader) (PortableRecording, error) {
 	return recording, nil
 }
 
+type portableRecordingHeader struct {
+	RecordingKind              string `json:"recordingKind"`
+	SchemaVersion              string `json:"schemaVersion"`
+	ReplayCompatibilityVersion string `json:"replayCompatibilityVersion"`
+}
+
+func decodePortableRecordingDocument(reader io.Reader) ([]byte, error) {
+	if reader == nil {
+		return nil, fmt.Errorf("recording reader is required")
+	}
+	decoder := json.NewDecoder(reader)
+	var document json.RawMessage
+	if err := decoder.Decode(&document); err != nil {
+		return nil, err
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		return nil, fmt.Errorf("recording must contain exactly one JSON document")
+	}
+	return document, nil
+}
+
+func decodePortableRecordingHeader(document []byte) (portableRecordingHeader, error) {
+	var header portableRecordingHeader
+	if err := json.Unmarshal(document, &header); err != nil {
+		return portableRecordingHeader{}, err
+	}
+	return header, nil
+}
+
 // ValidatePortableRecording validates one portable recording document.
 func ValidatePortableRecording(recording PortableRecording) error {
-	if err := validatePortableRecordingCompatibility(recording); err != nil {
+	if err := validatePortableRecordingCompatibilityForValue(recording); err != nil {
 		return err
 	}
 	if err := validatePortableRecordingSession(recording); err != nil {
@@ -96,12 +142,10 @@ func validatePortableRecordingCheckpoint(recording PortableRecording) error {
 }
 
 func validatePortableRecordingResult(recording PortableRecording) error {
+	if err := validatePortableRecordingVersionSpecificFields(recording); err != nil {
+		return err
+	}
 	if recording.Result == nil {
-		if recording.SchemaVersion == portableRecordingSchemaV2 {
-			return portableRecordingDiagnostic(
-				PortableRecordingCodeInvalidSummary, "result", "result", "is required for the current schema version",
-			)
-		}
 		return nil
 	}
 	result := recording.Result
@@ -153,14 +197,16 @@ func validatePortableRecordingResult(recording PortableRecording) error {
 	return nil
 }
 
-func validatePortableRecordingCompatibility(recording PortableRecording) error {
-	if recording.RecordingKind != KindJavaScriptFactorySession {
+func validatePortableRecordingCompatibility(
+	recordingKind, schemaVersion, replayCompatibilityVersion string,
+) error {
+	if recordingKind != KindJavaScriptFactorySession {
 		return portableRecordingDiagnostic(
 			PortableRecordingCodeInvalidIdentity, "identity", "recordingKind",
 			fmt.Sprintf("must be %q", KindJavaScriptFactorySession),
 		)
 	}
-	if !slices.Contains(portableRecordingSupportedReplayVersions, recording.ReplayCompatibilityVersion) {
+	if !slices.Contains(portableRecordingSupportedReplayVersions, replayCompatibilityVersion) {
 		return &PortableRecordingDiagnostic{
 			Code: PortableRecordingCodeUnsupportedVersion, Area: "compatibility",
 			Path:              "replayCompatibilityVersion",
@@ -168,7 +214,7 @@ func validatePortableRecordingCompatibility(recording PortableRecording) error {
 			SupportedVersions: slices.Clone(portableRecordingSupportedReplayVersions),
 		}
 	}
-	if !slices.Contains(portableRecordingSupportedSchemaVersions, recording.SchemaVersion) {
+	if !slices.Contains(portableRecordingSupportedSchemaVersions, schemaVersion) {
 		return &PortableRecordingDiagnostic{
 			Code: PortableRecordingCodeUnsupportedVersion, Area: "compatibility", Path: "schemaVersion",
 			Message:           "unsupported recording schema version; migrate the recording before replay",
@@ -176,6 +222,30 @@ func validatePortableRecordingCompatibility(recording PortableRecording) error {
 		}
 	}
 	return nil
+}
+
+func validatePortableRecordingCompatibilityForValue(recording PortableRecording) error {
+	return validatePortableRecordingCompatibility(
+		recording.RecordingKind, recording.SchemaVersion, recording.ReplayCompatibilityVersion,
+	)
+}
+
+func validatePortableRecordingVersionSpecificFields(recording PortableRecording) error {
+	switch recording.SchemaVersion {
+	case PortableRecordingSchemaV1:
+		// Schema 1 predates the result projection. An omitted result is part of
+		// its contract and must not be defaulted into a success or failure.
+		return nil
+	case PortableRecordingSchemaV2:
+		if recording.Result == nil {
+			return portableRecordingDiagnostic(
+				PortableRecordingCodeInvalidSummary, "result", "result", "is required for the current schema version",
+			)
+		}
+		return nil
+	default:
+		return validatePortableRecordingCompatibilityForValue(recording)
+	}
 }
 
 func validatePortableRecordingSession(recording PortableRecording) error {

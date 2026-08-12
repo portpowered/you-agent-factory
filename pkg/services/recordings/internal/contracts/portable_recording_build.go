@@ -36,8 +36,8 @@ func BuildPortableRecording(facts PortableRecordingCanonicalFacts) (PortableReco
 		return PortableRecording{}, err
 	}
 	value := PortableRecording{
-		RecordingKind: KindJavaScriptFactorySession, SchemaVersion: portableRecordingSchemaV2,
-		ReplayCompatibilityVersion: portableRecordingReplayCompat,
+		RecordingKind: KindJavaScriptFactorySession, SchemaVersion: PortableRecordingCurrentSchemaVersion,
+		ReplayCompatibilityVersion: PortableRecordingReplayCompatibilityV1,
 		Session: PortableRecordingSessionSummary{
 			ID: facts.SessionID, Status: facts.Status, OrchestratorKind: facts.OrchestratorKind,
 		},

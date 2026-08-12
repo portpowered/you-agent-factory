@@ -324,12 +324,16 @@ const (
 	KindJavaScriptFactorySession                  = recordingcontracts.KindJavaScriptFactorySession
 	PortableArtifactIntegritySHA256               = recordingcontracts.PortableArtifactIntegritySHA256
 	PortableArtifactSchemaV1                      = recordingcontracts.PortableArtifactSchemaV1
+	PortableRecordingCurrentSchemaVersion         = recordingcontracts.PortableRecordingCurrentSchemaVersion
 	PortableRecordingCodeInvalidDigest            = recordingcontracts.PortableRecordingCodeInvalidDigest
 	PortableRecordingCodeInvalidIdentity          = recordingcontracts.PortableRecordingCodeInvalidIdentity
 	PortableRecordingCodeInvalidSummary           = recordingcontracts.PortableRecordingCodeInvalidSummary
 	PortableRecordingCodeInvalidOrder             = recordingcontracts.PortableRecordingCodeInvalidOrder
 	PortableRecordingCodeMalformedContract        = recordingcontracts.PortableRecordingCodeMalformedContract
 	PortableRecordingCodeUnsupportedVersion       = recordingcontracts.PortableRecordingCodeUnsupportedVersion
+	PortableRecordingReplayCompatibilityV1        = recordingcontracts.PortableRecordingReplayCompatibilityV1
+	PortableRecordingSchemaV1                     = recordingcontracts.PortableRecordingSchemaV1
+	PortableRecordingSchemaV2                     = recordingcontracts.PortableRecordingSchemaV2
 	RecordingActive                               = recordingcontracts.RecordingActive
 	RecordingFailed                               = recordingcontracts.RecordingFailed
 	RecordingFinalized                            = recordingcontracts.RecordingFinalized

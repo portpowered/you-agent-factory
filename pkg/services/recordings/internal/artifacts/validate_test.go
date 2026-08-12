@@ -2,9 +2,11 @@ package artifacts_test
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	recording "github.com/portpowered/infinite-you/pkg/services/recordings/internal/artifacts"
@@ -12,7 +14,7 @@ import (
 
 func TestContractFixtures(t *testing.T) {
 	t.Parallel()
-	for _, name := range []string{"valid-v2.json", "valid-v1.json"} {
+	for _, name := range []string{"valid-v2.json", "valid-v2-checkpoint.json", "valid-v1.json"} {
 		name := name
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -25,6 +27,139 @@ func TestContractFixtures(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestVersionPinnedSchemaV1FixturePreservesFactorySessionFacts(t *testing.T) {
+	t.Parallel()
+	assertVersionPinnedFixture(t, "valid-v1.json", versionPinnedFixtureExpectation{
+		schemaVersion: "1", sessionID: "session-historical-001", sourceRef: "workflow/historical.js",
+		eventIDs: []string{"event-historical-1"},
+	})
+}
+
+func TestVersionPinnedSchemaV2FixturePreservesFactorySessionFacts(t *testing.T) {
+	t.Parallel()
+	assertVersionPinnedFixture(t, "valid-v2.json", versionPinnedFixtureExpectation{
+		schemaVersion: "2", sessionID: "session-js-001", sourceRef: "workflow/example.js",
+		eventIDs: []string{"event-1", "event-2"}, artifactCount: 1, result: true,
+	})
+}
+
+func TestVersionPinnedSchemaV2CheckpointFixturePreservesFactorySessionFacts(t *testing.T) {
+	t.Parallel()
+	assertVersionPinnedFixture(t, "valid-v2-checkpoint.json", versionPinnedFixtureExpectation{
+		schemaVersion: "2", sessionID: "session-js-checkpoint-001", sourceRef: "workflow/checkpoint.js",
+		eventIDs: []string{"event-started", "event-checkpoint", "event-completed"}, artifactCount: 1, result: true, checkpoint: true,
+	})
+}
+
+type versionPinnedFixtureExpectation struct {
+	schemaVersion string
+	sessionID     string
+	sourceRef     string
+	eventIDs      []string
+	artifactCount int
+	result        bool
+	checkpoint    bool
+}
+
+func assertVersionPinnedFixture(t *testing.T, name string, want versionPinnedFixtureExpectation) {
+	t.Helper()
+	value, err := loadFixture(name)
+	if err != nil {
+		t.Fatalf("DecodeAndValidate() error = %v", err)
+	}
+	if value.SchemaVersion != want.schemaVersion || value.ReplayCompatibilityVersion != recording.ReplayCompatibilityVersion {
+		t.Fatalf("compatibility = %q/%q", value.SchemaVersion, value.ReplayCompatibilityVersion)
+	}
+	if value.Session.ID != want.sessionID || value.Source.Ref != want.sourceRef {
+		t.Fatalf("identity/source = %#v/%#v", value.Session, value.Source)
+	}
+	if len(value.Events) != len(want.eventIDs) || len(value.Artifacts) != want.artifactCount {
+		t.Fatalf("summary counts = events:%d artifacts:%d", len(value.Events), len(value.Artifacts))
+	}
+	for index, eventID := range want.eventIDs {
+		if value.Events[index].ID != eventID || value.Events[index].Sequence != int64(index) {
+			t.Fatalf("event[%d] = %#v, want %q at sequence %d", index, value.Events[index], eventID, index)
+		}
+	}
+	if (value.Result != nil) != want.result || (value.Checkpoint != nil) != want.checkpoint {
+		t.Fatalf("versioned optional facts = result:%t checkpoint:%t", value.Result != nil, value.Checkpoint != nil)
+	}
+	if value.Redaction != (recording.RedactionMetadata{
+		RuntimeStateOmitted: true, CheckpointBodiesOmitted: true,
+		ProviderTranscriptsOmitted: true, ChildDispatchesOmitted: true,
+		SecretsRedacted: value.Redaction.SecretsRedacted,
+	}) {
+		t.Fatalf("redaction metadata = %#v", value.Redaction)
+	}
+	assertVersionPinnedRoundTrip(t, value)
+}
+
+func assertVersionPinnedRoundTrip(t *testing.T, value recording.Recording) {
+	t.Helper()
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+	decoded, err := recording.DecodeAndValidate(bytes.NewReader(encoded))
+	if err != nil {
+		t.Fatalf("round-trip DecodeAndValidate() error = %v", err)
+	}
+	if !reflect.DeepEqual(value, decoded) {
+		t.Fatalf("round-trip changed versioned facts:\nwant=%#v\ngot=%#v", value, decoded)
+	}
+}
+
+func TestSupportedSchemaCorruptionKeepsItsOwnedDiagnostic(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name   string
+		code   recording.DiagnosticCode
+		path   string
+		mutate func(*recording.Recording)
+	}{
+		{name: "identity", code: recording.CodeInvalidIdentity, path: "session.id", mutate: func(value *recording.Recording) { value.Session.ID = "" }},
+		{name: "digest", code: recording.CodeInvalidDigest, path: "source.hash", mutate: func(value *recording.Recording) { value.Source.Hash = "sha256:not-a-digest" }},
+		{name: "order", code: recording.CodeInvalidOrder, path: "events[1].sequence", mutate: func(value *recording.Recording) { value.Events[1].Sequence = value.Events[0].Sequence }},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			value, err := loadFixture("valid-v2.json")
+			if err != nil {
+				t.Fatal(err)
+			}
+			test.mutate(&value)
+			payload, err := json.Marshal(value)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = recording.DecodeAndValidate(bytes.NewReader(payload))
+			assertDiagnostic(t, err, test.code, test.path)
+		})
+	}
+
+	value, err := loadFixture("valid-v2.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, err := json.Marshal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &document); err != nil {
+		t.Fatal(err)
+	}
+	document["unsupportedField"] = json.RawMessage(`true`)
+	payload, err = json.Marshal(document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = recording.DecodeAndValidate(bytes.NewReader(payload))
+	assertDiagnostic(t, err, recording.CodeMalformedContract, "")
 }
 
 func TestMalformedFixtureReturnsTypedAreaDiagnostic(t *testing.T) {

@@ -1,0 +1,18 @@
+{
+  "recordingKind": "you.factory-session.javascript.recording",
+  "schemaVersion": "2",
+  "replayCompatibilityVersion": "1",
+  "session": {"id": "session-js-checkpoint-001", "status": "COMPLETED", "orchestratorKind": "JAVASCRIPT"},
+  "source": {"ref": "workflow/checkpoint.js", "hash": "sha256:5555555555555555555555555555555555555555555555555555555555555555"},
+  "argumentsDigest": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+  "policyHash": "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+  "artifacts": [{"id": "artifact-checkpoint", "kind": "CHECKPOINT", "visibility": "PUBLIC", "label": "Approval", "contentHash": "sha256:8888888888888888888888888888888888888888888888888888888888888888", "sizeBytes": 12, "createdAt": "2026-07-12T13:00:01Z"}],
+  "events": [
+    {"id": "event-started", "type": "SESSION_STARTED", "sequence": 0, "timestamp": "2026-07-12T13:00:00Z"},
+    {"id": "event-checkpoint", "type": "JAVASCRIPT_CHECKPOINT_REF", "sequence": 1, "timestamp": "2026-07-12T13:00:01Z", "artifactIds": ["artifact-checkpoint"], "checkpointId": "checkpoint-public-1"},
+    {"id": "event-completed", "type": "SESSION_COMPLETED", "sequence": 2, "timestamp": "2026-07-12T13:00:02Z", "artifactIds": ["artifact-checkpoint"]}
+  ],
+  "checkpoint": {"id": "checkpoint-public-1", "label": "Approval", "summary": "Waiting for operator input", "timestamp": "2026-07-12T13:00:01Z", "artifactId": "artifact-checkpoint"},
+  "result": {"status": "FINAL", "mode": "final", "artifactIds": ["artifact-checkpoint"]},
+  "redaction": {"runtimeStateOmitted": true, "checkpointBodiesOmitted": true, "providerTranscriptsOmitted": true, "childDispatchesOmitted": true, "secretsRedacted": 1}
+}

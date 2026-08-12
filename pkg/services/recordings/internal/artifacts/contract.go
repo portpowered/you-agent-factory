@@ -6,8 +6,8 @@ import recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 
 const (
 	KindJavaScriptFactorySession = recordings.KindJavaScriptFactorySession
-	CurrentSchemaVersion         = "2"
-	ReplayCompatibilityVersion   = "1"
+	CurrentSchemaVersion         = recordings.PortableRecordingCurrentSchemaVersion
+	ReplayCompatibilityVersion   = recordings.PortableRecordingReplayCompatibilityV1
 	MaxSecretsRedacted           = 1_000_000
 )
 
