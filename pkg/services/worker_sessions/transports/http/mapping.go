@@ -48,6 +48,26 @@ func WorkerSessionStartRequestFromAPI(request factoryapi.WorkerSessionStartReque
 	return start, nil
 }
 
+// WorkerSessionStartRequestToAPI maps the normalized service request back to
+// the public top-level start contract. Keeping this inverse next to the
+// boundary mapper lets a CLI normalize once, then send the exact detached
+// request it validated without re-reading or resolving any input.
+func WorkerSessionStartRequestToAPI(request workersessions.StartRequest) (factoryapi.WorkerSessionStartRequest, error) {
+	execution, err := workerSessionResolvedExecutionToAPI(request.Execution)
+	if err != nil {
+		return factoryapi.WorkerSessionStartRequest{}, err
+	}
+	result := factoryapi.WorkerSessionStartRequest{
+		RequestId:       strings.TrimSpace(request.RequestID),
+		WorkerSessionId: strings.TrimSpace(request.ID),
+		Execution:       execution,
+	}
+	if attempts := request.Retry.MaxAttempts; attempts > 0 {
+		result.Retry = &factoryapi.WorkerSessionStartRetryPolicy{MaxAttempts: &attempts}
+	}
+	return result, nil
+}
+
 func workerSessionResolvedExecutionFromAPI(
 	value factoryapi.WorkerSessionResolvedExecution,
 ) (workers.WorkstationDispatchRequest, error) {
@@ -106,6 +126,73 @@ func workerSessionResolvedExecutionFromAPI(
 	}, nil
 }
 
+func workerSessionResolvedExecutionToAPI(
+	value workers.WorkstationDispatchRequest,
+) (factoryapi.WorkerSessionResolvedExecution, error) {
+	dispatch, err := workerSessionResolvedDispatchToAPI(value.Execution.Dispatch)
+	if err != nil {
+		return factoryapi.WorkerSessionResolvedExecution{}, err
+	}
+	result := factoryapi.WorkerSessionResolvedExecution{
+		Dispatch:              dispatch,
+		WorkstationName:       strings.TrimSpace(value.WorkstationName),
+		WorkerType:            stringPointer(value.Execution.WorkerType),
+		WorkstationType:       stringPointer(value.Execution.WorkstationType),
+		RunnerId:              stringPointer(value.Execution.RunnerID),
+		RunnerSelectionSource: stringPointer(string(value.Execution.RunnerSelectionSource)),
+		ExecutorProvider:      stringPointer(value.Execution.ExecutorProvider),
+		ProjectId:             stringPointer(value.Execution.ProjectID),
+		FactorySessionId:      stringPointer(value.Execution.FactorySessionID),
+		ModelOperation:        stringPointer(value.Execution.ModelOperation),
+		Model:                 stringPointer(value.Execution.Model),
+		ModelProvider:         stringPointer(value.Execution.ModelProvider),
+		ReasoningEffort:       stringPointer(value.Execution.ReasoningEffort),
+		SystemPrompt:          stringPointer(value.Execution.SystemPrompt),
+		UserMessage:           stringPointer(value.Execution.UserMessage),
+		OutputSchema:          stringPointer(value.Execution.OutputSchema),
+		OutputContract:        stringPointer(value.Execution.OutputContract),
+		Worktree:              stringPointer(value.Execution.Worktree),
+		WorkingDirectory:      stringPointer(value.Execution.WorkingDirectory),
+	}
+	if value.Execution.WorkingDirectoryAuthored {
+		workingDirectoryAuthored := true
+		result.WorkingDirectoryAuthored = &workingDirectoryAuthored
+	}
+	if value.Execution.SkipPermissions {
+		skipPermissions := true
+		result.SkipPermissions = &skipPermissions
+	}
+	if len(value.Execution.InputTokens) > 0 {
+		inputTokens := append([]any(nil), value.Execution.InputTokens...)
+		result.InputTokens = &inputTokens
+	}
+	if len(value.Execution.EnvVars) > 0 {
+		envVars := cloneStringMap(value.Execution.EnvVars)
+		result.EnvVars = &envVars
+	}
+	if len(value.Execution.ModelBindings) > 0 {
+		bindings := make([]map[string]interface{}, len(value.Execution.ModelBindings))
+		for index, binding := range value.Execution.ModelBindings {
+			encoded, err := json.Marshal(binding)
+			if err != nil {
+				return factoryapi.WorkerSessionResolvedExecution{}, fmt.Errorf("encode model binding %d: %w", index, err)
+			}
+			if err := json.Unmarshal(encoded, &bindings[index]); err != nil {
+				return factoryapi.WorkerSessionResolvedExecution{}, fmt.Errorf("decode model binding %d: %w", index, err)
+			}
+		}
+		result.ModelBindings = &bindings
+	}
+	if value.Execution.ResumeSession != nil {
+		result.ResumeSession = &factoryapi.WorkerSessionProviderSessionRef{
+			Provider: string(value.Execution.ResumeSession.Provider),
+			Kind:     value.Execution.ResumeSession.Kind,
+			Id:       value.Execution.ResumeSession.ID,
+		}
+	}
+	return result, nil
+}
+
 func workerSessionResolvedDispatchFromAPI(
 	value factoryapi.WorkerSessionResolvedDispatch,
 ) (work.WorkDispatch, error) {
@@ -146,6 +233,53 @@ func workerSessionResolvedDispatchFromAPI(
 		dispatch.InputBindings = cloneStringSliceMap(*value.InputBindings)
 	}
 	return dispatch, nil
+}
+
+func workerSessionResolvedDispatchToAPI(
+	value work.WorkDispatch,
+) (factoryapi.WorkerSessionResolvedDispatch, error) {
+	result := factoryapi.WorkerSessionResolvedDispatch{
+		DispatchId:               strings.TrimSpace(value.DispatchID),
+		TransitionId:             stringPointer(value.TransitionID),
+		WorkerType:               stringPointer(value.WorkerType),
+		WorkstationName:          strings.TrimSpace(value.WorkstationName),
+		ProjectId:                stringPointer(value.ProjectID),
+		CurrentChainingTraceId:   stringPointer(value.CurrentChainingTraceID),
+		PreviousChainingTraceIds: stringSlicePointer(value.PreviousChainingTraceIDs),
+	}
+	if value.ExpectedArtifactContext != nil {
+		encoded, err := json.Marshal(value.ExpectedArtifactContext)
+		if err != nil {
+			return factoryapi.WorkerSessionResolvedDispatch{}, fmt.Errorf("encode expected artifact context: %w", err)
+		}
+		var context map[string]interface{}
+		if err := json.Unmarshal(encoded, &context); err != nil {
+			return factoryapi.WorkerSessionResolvedDispatch{}, fmt.Errorf("decode expected artifact context: %w", err)
+		}
+		result.ExpectedArtifactContext = &context
+	}
+	if len(value.InputTokens) > 0 {
+		inputTokens := append([]any(nil), value.InputTokens...)
+		result.InputTokens = &inputTokens
+	}
+	if len(value.InputBindings) > 0 {
+		inputBindings := cloneStringSliceMap(value.InputBindings)
+		result.InputBindings = &inputBindings
+	}
+	if value.Execution.DispatchCreatedTick != 0 || value.Execution.CurrentTick != 0 ||
+		value.Execution.RequestID != "" || value.Execution.TraceID != "" ||
+		value.Execution.ReplayKey != "" || len(value.Execution.WorkIDs) > 0 {
+		execution := factoryapi.WorkerSessionExecutionMetadata{
+			DispatchCreatedTick: intPointer(value.Execution.DispatchCreatedTick),
+			CurrentTick:         intPointer(value.Execution.CurrentTick),
+			ReplayKey:           stringPointer(value.Execution.ReplayKey),
+			RequestId:           stringPointer(value.Execution.RequestID),
+			TraceId:             stringPointer(value.Execution.TraceID),
+			WorkIds:             stringSlicePointer(value.Execution.WorkIDs),
+		}
+		result.Execution = &execution
+	}
+	return result, nil
 }
 
 type modelBindingPayload struct {
@@ -192,6 +326,29 @@ func optionalString(value *string) string {
 		return ""
 	}
 	return *value
+}
+
+func stringPointer(value string) *string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	return &value
+}
+
+func intPointer(value int) *int {
+	if value == 0 {
+		return nil
+	}
+	return &value
+}
+
+func stringSlicePointer(value []string) *[]string {
+	if len(value) == 0 {
+		return nil
+	}
+	clone := append([]string(nil), value...)
+	return &clone
 }
 
 func optionalBool(value *bool) bool {

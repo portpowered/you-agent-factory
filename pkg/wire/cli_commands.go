@@ -141,6 +141,21 @@ func provideReadWorkerSessionOperation(transport standardCLIHTTPProtocol) cli.Re
 func provideStreamWorkerSessionOperation(transport streamingCLIHTTPProtocol) cli.StreamWorkerSessionOperation {
 	return workersessionscli.BindStream(transport.Protocol)
 }
+
+// Direct Worker Sessions execution is runtime-scoped today: Factory Runtime
+// owns the workstation pool and constructs the Worker Sessions service around
+// it. Keep the process-level slot explicit so local invoke never silently
+// changes placement to HTTP while the standalone local opener is added.
+func provideLocalWorkerSessionsBoundary() workersessionscli.LocalInvokeBoundary {
+	return nil
+}
+
+func provideInvokeWorkerSessionOperation(
+	transport streamingCLIHTTPProtocol,
+	local workersessionscli.LocalInvokeBoundary,
+) cli.InvokeWorkerSessionOperation {
+	return workersessionscli.BindInvoke(transport.Protocol, local)
+}
 func provideSubmitBatchOperation(
 	transport extendedCLIHTTPProtocol,
 	prepare work.FactoryRequestBatchPreparation,

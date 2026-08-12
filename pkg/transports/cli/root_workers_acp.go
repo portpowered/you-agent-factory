@@ -6,6 +6,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	acpcli "github.com/portpowered/infinite-you/pkg/transports/cli/acp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
@@ -155,6 +156,11 @@ func productionWorkerSessionsCommand(
 	}); err != nil {
 		panic(fmt.Sprintf("build worker sessions handler registry: %v", err))
 	}
+	if err := registry.Register("you.worker-sessions.invoke.handler", func(cmd *cobra.Command, args []string) error {
+		return executeGeneratedWorkerSessionsInvoke(cmd, args, globals, diagnostics, options.InvokeWorkerSession, options.LocalWorkerSessions)
+	}); err != nil {
+		panic(fmt.Sprintf("build worker sessions handler registry: %v", err))
+	}
 	command, err := climanifestcobra.NewWorkerSessionsFamilyCommand(registry)
 	if err != nil {
 		panic(fmt.Sprintf("build worker sessions family command: %v", err))
@@ -163,6 +169,93 @@ func productionWorkerSessionsCommand(
 		panic(fmt.Sprintf("build worker sessions stream conflict guard: %v", err))
 	}
 	return command
+}
+
+func executeGeneratedWorkerSessionsInvoke(
+	cmd *cobra.Command,
+	args []string,
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+	invoke workersessionscli.InvokeOperation,
+	local workersessionscli.LocalInvokeBoundary,
+) error {
+	if invoke == nil {
+		return fmt.Errorf("worker sessions invoke service is required")
+	}
+	values, err := generatedCommandInputs(cmd)
+	if err != nil {
+		return err
+	}
+	inputs, err := readGeneratedWorkerSessionsInvokeInputs(values)
+	if err != nil {
+		return err
+	}
+	return invoke(workersessionscli.InvokeConfig{
+		Context: cmd.Context(), Server: globals.server, Remote: remotePlacementSelected(globals),
+		RequestID: inputs.requestID, WorkerSessionID: inputs.workerSessionID, DispatchID: inputs.dispatchID,
+		WorkstationName: inputs.workstation, WorkerType: inputs.workerType, RunnerID: inputs.runner,
+		Provider: inputs.provider, Model: inputs.model, ReasoningEffort: inputs.reasoningEffort,
+		SystemPrompt: inputs.systemPrompt, UserMessage: inputs.userMessage, ExecutionJSON: inputs.execution,
+		Prompt: append([]string(nil), args...), Stdin: cmd.InOrStdin(),
+		StdinIsTTY: startupcli.StdinIsTTY(cmd.Context()), Async: inputs.async,
+		RetryMaxAttempts: inputs.retryMaxAttempts, OutputFormat: inputs.outputFormat,
+		JSON:   globals.json || strings.EqualFold(strings.TrimSpace(inputs.outputFormat), "json"),
+		Local:  local,
+		Output: cmd.OutOrStdout(), Diagnostics: diagnostics.writer(cmd),
+		Verbose: diagnostics.verboseEnabled(), Debug: diagnostics.debug,
+	})
+}
+
+type generatedWorkerSessionsInvokeInputs struct {
+	execution, requestID, workerSessionID, dispatchID        string
+	workstation, workerType, runner, provider, model         string
+	reasoningEffort, systemPrompt, userMessage, outputFormat string
+	async                                                    bool
+	retryMaxAttempts                                         int
+}
+
+func readGeneratedWorkerSessionsInvokeInputs(values map[string]any) (generatedWorkerSessionsInvokeInputs, error) {
+	var inputs generatedWorkerSessionsInvokeInputs
+	readString := func(id string, target *string) error {
+		value, err := commandInputValue[string](values, id)
+		if err != nil {
+			return err
+		}
+		*target = value
+		return nil
+	}
+	for _, input := range []struct {
+		id     string
+		target *string
+	}{
+		{"you.worker-sessions.invoke.flag.execution", &inputs.execution},
+		{"you.worker-sessions.invoke.flag.request-id", &inputs.requestID},
+		{"you.worker-sessions.invoke.flag.worker-session-id", &inputs.workerSessionID},
+		{"you.worker-sessions.invoke.flag.dispatch-id", &inputs.dispatchID},
+		{"you.worker-sessions.invoke.flag.workstation", &inputs.workstation},
+		{"you.worker-sessions.invoke.flag.worker-type", &inputs.workerType},
+		{"you.worker-sessions.invoke.flag.runner", &inputs.runner},
+		{"you.worker-sessions.invoke.flag.provider", &inputs.provider},
+		{"you.worker-sessions.invoke.flag.model", &inputs.model},
+		{"you.worker-sessions.invoke.flag.reasoning-effort", &inputs.reasoningEffort},
+		{"you.worker-sessions.invoke.flag.system-prompt", &inputs.systemPrompt},
+		{"you.worker-sessions.invoke.flag.user-message", &inputs.userMessage},
+		{"you.worker-sessions.invoke.flag.output", &inputs.outputFormat},
+	} {
+		if err := readString(input.id, input.target); err != nil {
+			return generatedWorkerSessionsInvokeInputs{}, err
+		}
+	}
+	var err error
+	inputs.async, err = commandInputValue[bool](values, "you.worker-sessions.invoke.flag.async")
+	if err != nil {
+		return generatedWorkerSessionsInvokeInputs{}, err
+	}
+	inputs.retryMaxAttempts, err = commandInputValue[int](values, "you.worker-sessions.invoke.flag.retry-max-attempts")
+	if err != nil {
+		return generatedWorkerSessionsInvokeInputs{}, err
+	}
+	return inputs, nil
 }
 
 func installWorkerSessionsStreamModeConflictGuard(command *cobra.Command) error {

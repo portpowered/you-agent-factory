@@ -15,6 +15,9 @@ type ReadConfig = workersessionscli.ReadConfig
 type ReadOperation = workersessionscli.ReadOperation
 type StreamConfig = workersessionscli.StreamConfig
 type StreamOperation = workersessionscli.StreamOperation
+type InvokeConfig = workersessionscli.InvokeConfig
+type InvokeOperation = workersessionscli.InvokeOperation
+type LocalInvokeBoundary = workersessionscli.LocalInvokeBoundary
 type CLIError = workersessionscli.CLIError
 
 const StreamModeConflictCode = workersessionscli.StreamModeConflictCode
@@ -53,4 +56,12 @@ func NewStream(transport clihttp.Protocol) StreamOperation {
 
 func BindStream(transport clihttp.Protocol) StreamOperation {
 	return workersessionscli.BindStream(transport)
+}
+
+func NewInvoke(transport clihttp.Protocol, local LocalInvokeBoundary) InvokeOperation {
+	return workersessionscli.NewInvoke(transport, local)
+}
+
+func BindInvoke(transport clihttp.Protocol, local LocalInvokeBoundary) InvokeOperation {
+	return workersessionscli.BindInvoke(transport, local)
 }

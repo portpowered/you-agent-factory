@@ -10284,6 +10284,536 @@
         ]
       }
     },
+    "you.worker-sessions.invoke": {
+      "id": "you.worker-sessions.invoke",
+      "name": "invoke",
+      "path": "you worker-sessions invoke",
+      "aliases": [],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.worker-sessions.invoke",
+        "documentation": {
+          "title": {
+            "id": "you.worker-sessions.invoke.title",
+            "canonicalEnglish": "Invoke a direct Worker"
+          },
+          "description": {
+            "id": "you.worker-sessions.invoke.description",
+            "canonicalEnglish": "Start exactly one direct Worker Session from a resolved workstation execution. The command uses local Worker Sessions by default; add --remote to use exactly --server. Use --execution with inline JSON, a file path, or - for stdin. Explicit execution flags override the JSON document, then a positional prompt, then non-TTY stdin supplies the user message. Without --async the command waits on the authoritative Worker Session event stream; --async returns after server admission and prints observation guidance."
+          }
+        },
+        "examples": [
+          "you worker-sessions invoke --workstation coding --user-message 'Fix the failing test'",
+          "you worker-sessions invoke --workstation coding --async --output json --user-message 'Inspect the repository'",
+          "you worker-sessions invoke --remote --server https://factory.example --execution ./worker-start.json",
+          "cat worker-start.json | you worker-sessions invoke --execution - --async --output json"
+        ],
+        "visibility": "public",
+        "sourceHash": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.worker-sessions.invoke",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "placement": "dual",
+      "usage": {
+        "line": "invoke [prompt...]",
+        "example": "  you worker-sessions invoke --workstation coding --user-message 'Fix the failing test'"
+      },
+      "arguments": {
+        "you.worker-sessions.invoke.arg.0": {
+          "id": "you.worker-sessions.invoke.arg.0",
+          "name": "prompt",
+          "position": 0,
+          "kind": "positional",
+          "valueType": "stringArray",
+          "required": false,
+          "minCardinality": 0,
+          "maxCardinality": -1,
+          "variadic": true,
+          "enum": [],
+          "pattern": "",
+          "completion": "none",
+          "channels": [
+            "cli",
+            "stdin"
+          ],
+          "doubleDash": "terminates-flags"
+        }
+      },
+      "flags": {
+        "you.worker-sessions.invoke.flag.execution": {
+          "id": "you.worker-sessions.invoke.flag.execution",
+          "long": "execution",
+          "usage": "resolved Worker execution JSON, file path, or - for stdin",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.invoke.flag.execution",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.invoke.flag.request-id": {
+          "id": "you.worker-sessions.invoke.flag.request-id",
+          "long": "request-id",
+          "usage": "stable S2 start request identity; generated when omitted",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.invoke.flag.request-id",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.invoke.flag.worker-session-id": {
+          "id": "you.worker-sessions.invoke.flag.worker-session-id",
+          "long": "worker-session-id",
+          "usage": "stable Worker Session identity; generated when omitted",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.invoke.flag.worker-session-id",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.invoke.flag.dispatch-id": {
+          "id": "you.worker-sessions.invoke.flag.dispatch-id",
+          "long": "dispatch-id",
+          "usage": "stable attempt identity; generated when omitted",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.invoke.flag.dispatch-id",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.invoke.flag.workstation": {
+          "id": "you.worker-sessions.invoke.flag.workstation",
+          "long": "workstation",
+          "usage": "resolved Workers workstation route (required unless supplied by --execution)",
+          "shorthand": "",
+          "aliases": [
+            "workstation-name"
+          ],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.invoke.flag.workstation",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.invoke.flag.worker-type": {
+          "id": "you.worker-sessions.invoke.flag.worker-type",
+          "long": "worker-type",
+          "usage": "optional authored Worker type selector",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.invoke.flag.worker-type",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.invoke.flag.runner": {
+          "id": "you.worker-sessions.invoke.flag.runner",
+          "long": "runner",
+          "usage": "optional Workers runner selector",
+          "shorthand": "",
+          "aliases": [
+            "runner-id"
+          ],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.invoke.flag.runner",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.invoke.flag.provider": {
+          "id": "you.worker-sessions.invoke.flag.provider",
+          "long": "provider",
+          "usage": "optional provider selector",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.invoke.flag.provider",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.invoke.flag.model": {
+          "id": "you.worker-sessions.invoke.flag.model",
+          "long": "model",
+          "usage": "optional model selector",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.invoke.flag.model",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.invoke.flag.reasoning-effort": {
+          "id": "you.worker-sessions.invoke.flag.reasoning-effort",
+          "long": "reasoning-effort",
+          "usage": "optional provider reasoning effort",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.invoke.flag.reasoning-effort",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.invoke.flag.system-prompt": {
+          "id": "you.worker-sessions.invoke.flag.system-prompt",
+          "long": "system-prompt",
+          "usage": "optional system prompt override",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.invoke.flag.system-prompt",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.invoke.flag.user-message": {
+          "id": "you.worker-sessions.invoke.flag.user-message",
+          "long": "user-message",
+          "usage": "user message override; otherwise use a prompt or non-TTY stdin",
+          "shorthand": "",
+          "aliases": [
+            "message"
+          ],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.invoke.flag.user-message",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.invoke.flag.async": {
+          "id": "you.worker-sessions.invoke.flag.async",
+          "long": "async",
+          "usage": "return after S2 admission without waiting for terminal output",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.invoke.flag.async",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.invoke.flag.retry-max-attempts": {
+          "id": "you.worker-sessions.invoke.flag.retry-max-attempts",
+          "long": "retry-max-attempts",
+          "usage": "maximum provider attempts for this Worker Session",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "int",
+          "required": false,
+          "default": "0",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.invoke.flag.retry-max-attempts",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.invoke.flag.output": {
+          "id": "you.worker-sessions.invoke.flag.output",
+          "long": "output",
+          "usage": "output format: human (default) or json",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "human",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.invoke.flag.output",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        }
+      },
+      "handler": {
+        "id": "you.worker-sessions.invoke.handler",
+        "operationId": "startWorkerSession"
+      },
+      "precedence": {
+        "order": [
+          "cli",
+          "stdin",
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
+      },
+      "channels": {
+        "input": [
+          "cli",
+          "env",
+          "config",
+          "stdin"
+        ],
+        "output": [
+          "stdout",
+          "stderr"
+        ]
+      },
+      "outputs": {
+        "you.worker-sessions.invoke.output.human": {
+          "id": "you.worker-sessions.invoke.output.human",
+          "channel": "stdout",
+          "format": "text"
+        },
+        "you.worker-sessions.invoke.output.json": {
+          "id": "you.worker-sessions.invoke.output.json",
+          "channel": "stdout",
+          "format": "json"
+        }
+      },
+      "errors": {
+        "you.worker-sessions.invoke.error.invalid-input": {
+          "id": "you.worker-sessions.invoke.error.invalid-input",
+          "code": "WORKER_SESSION_INVOKE_INVALID"
+        },
+        "you.worker-sessions.invoke.error.admission": {
+          "id": "you.worker-sessions.invoke.error.admission",
+          "code": "WORKER_SESSION_ADMISSION_FAILED"
+        },
+        "you.worker-sessions.invoke.error.stream": {
+          "id": "you.worker-sessions.invoke.error.stream",
+          "code": "WORKER_SESSION_STREAM_FAILED"
+        },
+        "you.worker-sessions.invoke.error.remote": {
+          "id": "you.worker-sessions.invoke.error.remote",
+          "code": "FACTORY_UNREACHABLE"
+        }
+      },
+      "exits": {
+        "you.worker-sessions.invoke.exit.success": {
+          "id": "you.worker-sessions.invoke.exit.success",
+          "code": 0,
+          "kind": "success"
+        },
+        "you.worker-sessions.invoke.exit.failure": {
+          "id": "you.worker-sessions.invoke.exit.failure",
+          "code": 1,
+          "kind": "failure"
+        },
+        "you.worker-sessions.invoke.exit.usage": {
+          "id": "you.worker-sessions.invoke.exit.usage",
+          "code": 1,
+          "kind": "usage"
+        },
+        "you.worker-sessions.invoke.exit.cancel": {
+          "id": "you.worker-sessions.invoke.exit.cancel",
+          "code": 130,
+          "kind": "cancel"
+        }
+      },
+      "sideEffects": {
+        "you.worker-sessions.invoke.side-effect.network": {
+          "id": "you.worker-sessions.invoke.side-effect.network",
+          "kind": "network"
+        }
+      },
+      "constraints": {
+        "runtime": [
+          "local"
+        ],
+        "platforms": [
+          "linux",
+          "darwin",
+          "windows"
+        ]
+      }
+    },
     "you.workers": {
       "id": "you.workers",
       "name": "workers",
