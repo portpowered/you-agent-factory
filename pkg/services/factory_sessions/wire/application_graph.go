@@ -102,6 +102,7 @@ type (
 	AutomationsRuntimeOpeningDependencies        = runtimeopening.AutomationsDependencies
 	ModelsRuntimeOpeningDependencies             = runtimeopening.ModelsDependencies
 	RecordingsRuntimeOpeningDependencies         = runtimeopening.RecordingsDependencies
+	WebhooksRuntimeOpeningDependencies           = runtimeopening.WebhooksDependencies
 	WorkersRuntimeOpeningDependencies            = runtimeopening.WorkersDependencies
 	OperatorSettingsRuntimeOpeningDependencies   = runtimeopening.OperatorSettingsDependencies
 	WorkFactory                                  = runtimeopening.WorkFactory
@@ -109,6 +110,7 @@ type (
 	FactorySessionExecutionFactory               = runtimeopening.FactorySessionExecutionFactory
 	ConductorInvocationWithProgressFactory       = runtimeopening.ConductorInvocationWithProgressFactory
 	RecordingsProjectionFactory                  = runtimeopening.RecordingsProjectionFactory
+	RecordingsServiceFactory                     = runtimeopening.RecordingsServiceFactory
 	RecordingLifecycleFactory                    = runtimeopening.RecordingLifecycleFactory
 	RuntimeLedgerFactory                         = runtimeopening.RuntimeLedgerFactory
 	ReplayClockFactory                           = runtimeopening.ReplayClockFactory

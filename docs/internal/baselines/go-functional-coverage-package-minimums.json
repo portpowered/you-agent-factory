@@ -2569,6 +2569,24 @@
       "minimum": 75.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/webhooks",
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active functional coverage profile contains no measurable statements for this package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
+      }
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/webhooks/internal/service",
+      "minimum": 61.36
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/webhooks/wire",
+      "minimum": 66.66
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/work",
       "minimum": 61.06
     },

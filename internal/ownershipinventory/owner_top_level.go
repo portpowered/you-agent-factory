@@ -103,6 +103,10 @@ var productOwnerTopLevelSpecs = map[string]OwnerTopLevelSpec{
 		Owner:          "worker_sessions",
 		ExpectedRetain: []string{"internal", "transports", "wire"},
 	},
+	"webhooks": {
+		Owner:          "webhooks",
+		ExpectedRetain: []string{"internal", "wire"},
+	},
 }
 
 // ProductOwnerTopLevelSpecs returns the stable-sorted committed inventory for

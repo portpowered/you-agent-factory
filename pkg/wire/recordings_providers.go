@@ -19,7 +19,7 @@ func provideRecordingsFactory(
 	edges serviceedges.Edges,
 	targets recordings.LiveRecordingTargetPlanner,
 	storage platformreplay.Storage,
-) func(recordings.Ledger, recordings.ProjectionService) recordings.Service {
+) factorysessionwire.RecordingsServiceFactory {
 	return func(
 		ledger recordings.Ledger,
 		projection recordings.ProjectionService,

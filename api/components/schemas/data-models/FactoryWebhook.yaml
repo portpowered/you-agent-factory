@@ -1,0 +1,33 @@
+type: object
+additionalProperties: false
+required:
+  - name
+  - enabled
+  - url
+  - signingSecretRef
+  - filter
+description: >-
+  One Factory-configured outbound webhook subscription. Secret material is
+  represented only by a reference and is resolved at delivery time.
+properties:
+  name:
+    type: string
+    minLength: 1
+    description: Unique customer-authored subscription name.
+  enabled:
+    type: boolean
+    description: Whether this subscription is active for future canonical events.
+  url:
+    type: string
+    minLength: 1
+    description: Absolute HTTP or HTTPS destination URL.
+  signingSecretRef:
+    type: string
+    minLength: 1
+    description: Secret reference resolved by the delivery boundary; raw secret values are never part of Factory configuration.
+  filter:
+    $ref: './FactoryWebhookFilter.yaml'
+  deliveryPolicy:
+    allOf:
+      - $ref: './FactoryWebhookDeliveryPolicy.yaml'
+    description: Optional bounded delivery policy. Omitted fields use the documented defaults.

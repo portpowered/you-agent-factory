@@ -1,0 +1,7 @@
+type: string
+description: Canonical Factory Event types supported by outbound webhook filters.
+enum:
+  - WORK_STATE_CHANGE
+  - DISPATCH_RESPONSE
+  - DISPATCH_RECONCILED
+  - DISPATCH_INTERRUPTED
