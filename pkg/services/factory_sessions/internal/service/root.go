@@ -46,41 +46,22 @@ func NewRoot(
 	clock factoryruntime.Clock,
 	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
 ) (*Root, error) {
-	if sessionResultProjection == nil {
-		return nil, fmt.Errorf("construct Factory Sessions: session result projection is required")
+	if err := validateRootDependencies(
+		sessionResultProjection,
+		eventIDs,
+		sessionIDs,
+		resolveHome,
+		directoryInspection,
+		namedPaths,
+		invocationInputFiles,
+		initialWorkFiles,
+		identityService,
+		responseStreams,
+	); err != nil {
+		return nil, err
 	}
-	if eventIDs == nil {
-		return nil, fmt.Errorf("construct Factory Sessions: response event ID generator is required")
-	}
-	if sessionIDs == nil {
-		return nil, fmt.Errorf("construct Factory Sessions: session ID generator is required")
-	}
-	if resolveHome == nil {
-		return nil, fmt.Errorf("construct Factory Sessions: home directory resolver is required")
-	}
-	if directoryInspection == nil {
-		return nil, fmt.Errorf("construct Factory Sessions: directory inspection is required")
-	}
-	if namedPaths == nil {
-		return nil, fmt.Errorf("construct Factory Sessions: named path resolver is required")
-	}
-	if invocationInputFiles == nil {
-		return nil, fmt.Errorf("construct Factory Sessions: invocation input reader is required")
-	}
-	if initialWorkFiles == nil {
-		return nil, fmt.Errorf("construct Factory Sessions: initial Work reader is required")
-	}
-	if identityService == nil {
-		return nil, fmt.Errorf("construct Factory Sessions: identity service is required")
-	}
-	if responseStreams == nil {
-		return nil, fmt.Errorf("construct Factory Sessions: response-stream service is required")
-	}
-	if clock == nil {
-		return nil, fmt.Errorf("construct Factory Sessions: clock is required")
-	}
-	if liveChangeCoordinator == nil {
-		return nil, fmt.Errorf("construct Factory Sessions: live-change coordinator is required")
+	if err := validateRootRuntimeDependencies(clock, liveChangeCoordinator); err != nil {
+		return nil, err
 	}
 	assemblyRole := legacyservice.NewAssembly(
 		newJavaScriptCheckpointStore,
@@ -113,6 +94,64 @@ func NewRoot(
 		return nil, fmt.Errorf("construct Factory Sessions: compatibility binding rejected root: %w", err)
 	}
 	return root, nil
+}
+
+func validateRootDependencies(
+	sessionResultProjection factoryruntime.SessionResultProjectionOperation,
+	eventIDs factorysessions.ResponseEventIDGenerator,
+	sessionIDs factorysessions.SessionIDGenerator,
+	resolveHome factorysessions.HomeDirectoryResolver,
+	directoryInspection roles.DirectoryInspection,
+	namedPaths factorydefinitions.NamedPathResolver,
+	invocationInputFiles fileeffects.InvocationInputReader,
+	initialWorkFiles fileeffects.InitialWorkReader,
+	identityService identity.Service,
+	responseStreams responsestreamservice.Service,
+) error {
+	if sessionResultProjection == nil {
+		return fmt.Errorf("construct Factory Sessions: session result projection is required")
+	}
+	if eventIDs == nil {
+		return fmt.Errorf("construct Factory Sessions: response event ID generator is required")
+	}
+	if sessionIDs == nil {
+		return fmt.Errorf("construct Factory Sessions: session ID generator is required")
+	}
+	if resolveHome == nil {
+		return fmt.Errorf("construct Factory Sessions: home directory resolver is required")
+	}
+	if directoryInspection == nil {
+		return fmt.Errorf("construct Factory Sessions: directory inspection is required")
+	}
+	if namedPaths == nil {
+		return fmt.Errorf("construct Factory Sessions: named path resolver is required")
+	}
+	if invocationInputFiles == nil {
+		return fmt.Errorf("construct Factory Sessions: invocation input reader is required")
+	}
+	if initialWorkFiles == nil {
+		return fmt.Errorf("construct Factory Sessions: initial Work reader is required")
+	}
+	if identityService == nil {
+		return fmt.Errorf("construct Factory Sessions: identity service is required")
+	}
+	if responseStreams == nil {
+		return fmt.Errorf("construct Factory Sessions: response-stream service is required")
+	}
+	return nil
+}
+
+func validateRootRuntimeDependencies(
+	clock factoryruntime.Clock,
+	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
+) error {
+	if clock == nil {
+		return fmt.Errorf("construct Factory Sessions: clock is required")
+	}
+	if liveChangeCoordinator == nil {
+		return fmt.Errorf("construct Factory Sessions: live-change coordinator is required")
+	}
+	return nil
 }
 
 // validateCompatibilityBinding keeps the published compatibility contract

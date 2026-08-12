@@ -142,10 +142,35 @@ func TestJavaScriptWorkflowSourceCopiesInlineDefinitionAndRejectsMissingFile(t *
 
 func TestJavaScriptInvocationArgsPreservesMultiplicityAndCoercesValues(t *testing.T) {
 	t.Parallel()
+	t.Run("preserves repeated values", testJavaScriptInvocationArgsPreservesRepeatedValues)
+	t.Run("coerces typed values", testJavaScriptInvocationArgsCoercesTypedValues)
+	t.Run("handles empty and missing resolvers", testJavaScriptInvocationArgsHandlesResolverBranches)
+}
 
+func testJavaScriptInvocationArgsPreservesRepeatedValues(t *testing.T) {
+	t.Helper()
 	resolved := factorysessions.ResolvedInvocationInput{NormalizedArguments: &work.NormalizedArguments{
 		Arguments: map[string]work.NormalizedArgument{
-			"tags":    {Values: []string{"one", "two"}},
+			"tags": {Values: []string{"one", "two"}},
+		},
+	}}
+	args, err := javaScriptInvocationArgs(
+		&factorydefinitions.FactoryConfig{}, factorysessions.InvocationRequest{},
+		nil,
+		invocationInputResolver{resolved: resolved},
+	)
+	if err != nil {
+		t.Fatalf("javaScriptInvocationArgs: %v", err)
+	}
+	if got, ok := args["tags"].([]any); !ok || len(got) != 2 || got[0] != "one" || got[1] != "two" {
+		t.Fatalf("tags = %#v, want two values", args["tags"])
+	}
+}
+
+func testJavaScriptInvocationArgsCoercesTypedValues(t *testing.T) {
+	t.Helper()
+	resolved := factorysessions.ResolvedInvocationInput{NormalizedArguments: &work.NormalizedArguments{
+		Arguments: map[string]work.NormalizedArgument{
 			"count":   {Values: []string{"not-an-integer"}},
 			"ratio":   {Values: []string{"1.25"}},
 			"enabled": {Values: []string{"not-a-bool"}},
@@ -160,9 +185,6 @@ func TestJavaScriptInvocationArgsPreservesMultiplicityAndCoercesValues(t *testin
 	if err != nil {
 		t.Fatalf("javaScriptInvocationArgs: %v", err)
 	}
-	if got, ok := args["tags"].([]any); !ok || len(got) != 2 || got[0] != "one" || got[1] != "two" {
-		t.Fatalf("tags = %#v, want two values", args["tags"])
-	}
 	if got, ok := args["count"].(string); !ok || got != "not-an-integer" {
 		t.Fatalf("invalid integer = %#v, want original string", args["count"])
 	}
@@ -175,6 +197,10 @@ func TestJavaScriptInvocationArgsPreservesMultiplicityAndCoercesValues(t *testin
 	if got, ok := args["raw"].(string); !ok || got != "plain" {
 		t.Fatalf("raw = %#v, want original string", args["raw"])
 	}
+}
+
+func testJavaScriptInvocationArgsHandlesResolverBranches(t *testing.T) {
+	t.Helper()
 	empty, err := javaScriptInvocationArgs(&factorydefinitions.FactoryConfig{}, factorysessions.InvocationRequest{}, nil, invocationInputResolver{})
 	if err != nil || len(empty) != 0 {
 		t.Fatalf("nil normalized arguments = %#v, error = %v, want empty map", empty, err)
