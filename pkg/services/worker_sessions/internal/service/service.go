@@ -897,3 +897,58 @@ func cloneTranscriptTime(value *time.Time) *time.Time {
 	clone := *value
 	return &clone
 }
+
+// startTuple is the detached, normalized value compared for one asynchronous
+// caller request ID. Retry zero and one are the same effective policy, and the
+// resolved Workers execution is cloned before it enters this tuple so caller
+// mutation cannot change a replay decision or an admitted execution.
+type startTuple struct {
+	SessionID   string
+	Execution   workers.WorkstationDispatchRequest
+	MaxAttempts int
+}
+
+// startReplay is the one process-local record for an asynchronous caller
+// request ID. The owner closes done after the original acceptance or
+// deterministic pre-admission failure is complete; every replay returns that
+// stored outcome instead of entering the start state machine again.
+type startReplay struct {
+	tuple     startTuple
+	sessionID string
+	done      chan struct{}
+	result    workersessions.StartResult
+	err       error
+}
+
+func normalizeStartRequest(req workersessions.StartRequest) workersessions.StartRequest {
+	req.RequestID = strings.TrimSpace(req.RequestID)
+	req.Execution = cloneWorkstationDispatchRequest(req.Execution)
+	req.Retry.MaxAttempts = req.Retry.Attempts()
+	return req
+}
+
+func startTupleFor(req workersessions.StartRequest) startTuple {
+	return startTuple{
+		SessionID:   req.ID,
+		Execution:   cloneWorkstationDispatchRequest(req.Execution),
+		MaxAttempts: req.Retry.Attempts(),
+	}
+}
+
+func (r *registry) finishStartReplay(replay *startReplay, result workersessions.StartResult, err error) {
+	replay.result = cloneStartResult(result)
+	replay.err = err
+	close(replay.done)
+}
+
+func cloneStartResult(result workersessions.StartResult) workersessions.StartResult {
+	result.Session = cloneSession(result.Session)
+	return result
+}
+
+func startReplayOutcome(err error) string {
+	if err == nil {
+		return "accepted"
+	}
+	return "rejected"
+}
