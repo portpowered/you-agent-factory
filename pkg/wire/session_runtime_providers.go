@@ -94,9 +94,9 @@ func provideApplicationProcessLifecycle(
 	}
 	return compositeProcessLifecycle{closers: []func(context.Context) error{
 		func(ctx context.Context) error {
-			if localWorkerSessions == nil {
-				return nil
-			}
+			// Wire treats the process-scoped direct Worker Sessions boundary as
+			// required: construction returns an error before this lifecycle is
+			// assembled when that boundary cannot be built.
 			return localWorkerSessions.Close(ctx)
 		},
 		lifecycle.Close,
