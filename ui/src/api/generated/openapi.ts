@@ -261,7 +261,7 @@ export interface paths {
     };
     /**
      * Stream retained and live Worker Session events
-     * @description Streams the canonical Worker Session Events topic for the exact Provider Session identity in the explicitly selected Factory Session. Retained records are emitted first in aggregate order, followed by live records unless replayOnly is true. In replay-only mode the retained head is captured before delivery, no live follower is registered, and one REPLAY_SUMMARY frame closes the stream after the retained drain. Each data frame is serialized JSON matching WorkerSessionEvent. The terminal event is marked TERMINAL for an active session or TERMINAL_REPLAY for an already-terminal session. Source failures are emitted as an explicit SOURCE_FAILURE frame so clients can preserve complete records already written and return a typed non-success result.
+     * @description Streams the canonical Worker Session Events topic for the exact Provider Session identity in the explicitly selected Factory Session. Retained records are emitted first in aggregate order, followed by live records unless replayOnly is true. In replay-only mode the retained head is captured before delivery, no live follower is registered, and one REPLAY_SUMMARY frame closes the stream after the retained drain. Each data frame is serialized JSON matching WorkerSessionEvent. The terminal event is marked TERMINAL for an active session or TERMINAL_REPLAY for an already-terminal session. Source failures are emitted as an explicit SOURCE_FAILURE frame so clients can preserve complete records already written and return a typed non-success result. Every event record carries its Worker Session cursor. after_position is exclusive and may be paired with stream_generation_id; cursors are scoped to the Worker Session and never fall back to another history. The retained snapshot and live registration share one handoff, so records committed after the captured high-water mark are delivered exactly once. A terminal durable recording carries a COMPLETE, DEGRADED, or INCOMPLETE replay summary and does not wait for an unavailable live source.
      */
     get: operations["streamWorkerSessionEventsBySessionId"];
     put?: never;
@@ -281,7 +281,7 @@ export interface paths {
     };
     /**
      * Stream retained and live Worker Session events by Worker Session identity
-     * @description Streams the canonical Worker Session Events topic for the stable Worker Session identity returned by the Worker Sessions list operation. This provider-neutral path remains available when the provider did not emit a native Provider Session reference. Retained records are emitted first in aggregate order, followed by live records unless replayOnly is true. In replay-only mode the retained head is captured before delivery, no live follower is registered, and one REPLAY_SUMMARY frame closes the stream after the retained drain.
+     * @description Streams the canonical Worker Session Events topic for the stable Worker Session identity returned by the Worker Sessions list operation. This provider-neutral path remains available when the provider did not emit a native Provider Session reference. Retained records are emitted first in aggregate order, followed by live records unless replayOnly is true. In replay-only mode the retained head is captured before delivery, no live follower is registered, and one REPLAY_SUMMARY frame closes the stream after the retained drain. Every event record carries its Worker Session cursor. after_position is exclusive and may be paired with stream_generation_id; a cursor from another Worker Session, a future position, stale retained history, or an unavailable generation is rejected with a typed error. In follow mode the durable-to-live handoff is atomic and duplicate overlap is suppressed.
      */
     get: operations["streamWorkerSessionEventsByWorkerSessionId"];
     put?: never;
@@ -1660,6 +1660,8 @@ export interface components {
      */
     WorkerSessionEventDelivery: WorkerSessionEventDelivery;
     WorkerSessionEventRecord: {
+      /** @description Typed reconnect cursor for this canonical event record. */
+      cursor: components["schemas"]["WorkerSessionEventCursor"];
       /**
        * Format: int64
        * @description Aggregate position assigned by the canonical Events ledger.
@@ -1682,6 +1684,17 @@ export interface components {
       payload: {
         [key: string]: unknown;
       };
+    };
+    WorkerSessionEventCursor: {
+      /** @description Worker Session identity that owns the acknowledged position. */
+      workerSessionId?: string;
+      /**
+       * Format: int64
+       * @description Exclusive Worker Session event position acknowledged by the client.
+       */
+      position: number;
+      /** @description Durable Factory event-stream generation that issued the position. */
+      streamGenerationId?: string;
     };
     WorkerSessionProviderSessionRef: {
       /** @description Provider identity that issued the correlated session. */
@@ -7143,6 +7156,10 @@ export interface components {
     AfterEventId: string;
     /** @description Session-scoped reconnect cursor identifying the last acknowledged ordering point. Session-scoped FactoryEvent streams prefer FactoryEvent.context.sessionSequence when present and otherwise fall back to FactoryEvent.context.sequence. When both after_event_id and after_sequence are present on GET /factory-sessions/{session_id}/events, after_event_id wins. Cursors that no longer match the retained history boundary surface as cursor_stale on JSON reconnect probes or invalid-cursor 400 responses on SSE open. */
     AfterSequence: number;
+    /** @description Worker Session reconnect cursor identifying the last acknowledged canonical event position. The stream resumes exclusively after this position; a cursor from another Worker Session, a future position, or an unavailable retained position is rejected with a typed outcome. */
+    WorkerSessionAfterPosition: number;
+    /** @description Optional durable Worker Session event-stream generation that qualifies after_position. A generation mismatch never falls back to another history. */
+    WorkerSessionStreamGenerationID: string;
     /** @description Last acknowledged FactoryResponseEvent.sequence. The stream sends only retained response events with a greater sequence before continuing with live events. Omit this cursor to start at the beginning of retained response-event history. If the cursor predates retained history, the first emitted event is a STREAM_GAP record describing the loss instead of silently skipping it. */
     ResponseEventAfterSequence: number;
     /** @description Return only FactoryResponseEvent records associated with this exact dispatch identifier. Invalid or empty identifiers return the typed bad-request response. */
@@ -7602,6 +7619,12 @@ export interface operations {
         id: string;
         /** @description Drain the retained history through a captured Events head without registering a live follower. */
         replayOnly?: boolean;
+        /** @description Worker Session reconnect cursor identifying the last acknowledged canonical event position. The stream resumes exclusively after this position; a cursor from another Worker Session, a future position, or an unavailable retained position is rejected with a typed outcome. */
+        after_position?: components["parameters"]["WorkerSessionAfterPosition"];
+        /** @description Session-scoped reconnect cursor identifying the last acknowledged ordering point. Session-scoped FactoryEvent streams prefer FactoryEvent.context.sessionSequence when present and otherwise fall back to FactoryEvent.context.sequence. When both after_event_id and after_sequence are present on GET /factory-sessions/{session_id}/events, after_event_id wins. Cursors that no longer match the retained history boundary surface as cursor_stale on JSON reconnect probes or invalid-cursor 400 responses on SSE open. */
+        after_sequence?: components["parameters"]["AfterSequence"];
+        /** @description Optional durable Worker Session event-stream generation that qualifies after_position. A generation mismatch never falls back to another history. */
+        stream_generation_id?: components["parameters"]["WorkerSessionStreamGenerationID"];
       };
       header?: never;
       path: {
@@ -7631,6 +7654,12 @@ export interface operations {
       query?: {
         /** @description Drain the retained history through a captured Events head without registering a live follower. */
         replayOnly?: boolean;
+        /** @description Worker Session reconnect cursor identifying the last acknowledged canonical event position. The stream resumes exclusively after this position; a cursor from another Worker Session, a future position, or an unavailable retained position is rejected with a typed outcome. */
+        after_position?: components["parameters"]["WorkerSessionAfterPosition"];
+        /** @description Session-scoped reconnect cursor identifying the last acknowledged ordering point. Session-scoped FactoryEvent streams prefer FactoryEvent.context.sessionSequence when present and otherwise fall back to FactoryEvent.context.sequence. When both after_event_id and after_sequence are present on GET /factory-sessions/{session_id}/events, after_event_id wins. Cursors that no longer match the retained history boundary surface as cursor_stale on JSON reconnect probes or invalid-cursor 400 responses on SSE open. */
+        after_sequence?: components["parameters"]["AfterSequence"];
+        /** @description Optional durable Worker Session event-stream generation that qualifies after_position. A generation mismatch never falls back to another history. */
+        stream_generation_id?: components["parameters"]["WorkerSessionStreamGenerationID"];
       };
       header?: never;
       path: {
@@ -9413,6 +9442,17 @@ export const ErrorResponseCode = {
   // The Worker Session event topic did not reach the required readiness barrier.
   WORKER_SESSION_EVENT_TOPIC_UNAVAILABLE:
     "WORKER_SESSION_EVENT_TOPIC_UNAVAILABLE",
+  // The Worker Session event cursor is malformed.
+  WORKER_SESSION_EVENT_CURSOR_INVALID: "WORKER_SESSION_EVENT_CURSOR_INVALID",
+  // The Worker Session event cursor belongs to another Worker Session.
+  WORKER_SESSION_EVENT_CURSOR_FOREIGN: "WORKER_SESSION_EVENT_CURSOR_FOREIGN",
+  // The Worker Session event cursor is ahead of the available history.
+  WORKER_SESSION_EVENT_CURSOR_FUTURE: "WORKER_SESSION_EVENT_CURSOR_FUTURE",
+  // The Worker Session event cursor no longer names retained history.
+  WORKER_SESSION_EVENT_CURSOR_STALE: "WORKER_SESSION_EVENT_CURSOR_STALE",
+  // The Worker Session event cursor's durable stream generation is unavailable.
+  WORKER_SESSION_EVENT_CURSOR_UNAVAILABLE:
+    "WORKER_SESSION_EVENT_CURSOR_UNAVAILABLE",
   // Workers could not admit the Worker Session execution.
   WORKER_SESSION_ADMISSION_FAILED: "WORKER_SESSION_ADMISSION_FAILED",
   // Worker Session continuation requestId was reused with different inputs.

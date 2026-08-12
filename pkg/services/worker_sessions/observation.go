@@ -154,6 +154,10 @@ type StreamObservationsRequest struct {
 	// opened and then returns one completeness summary without registering a
 	// live follower.
 	ReplayOnly bool
+	// Cursor resumes strictly after the last acknowledged Worker Session event.
+	// The cursor is scoped by the selected Provider Session and, when present,
+	// the durable Factory event-stream generation.
+	Cursor *ObservationCursor
 }
 
 const DefaultObservationStreamLimit = 64
@@ -167,6 +171,11 @@ func (r StreamObservationsRequest) Validate() error {
 	if r.Limit < 0 {
 		return ErrInvalidObservationStreamLimit
 	}
+	if r.Cursor != nil {
+		if err := r.Cursor.Validate(); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -176,6 +185,8 @@ type StreamObservationsByWorkerSessionIDRequest struct {
 	WorkerSessionID string
 	Limit           int
 	ReplayOnly      bool
+	// Cursor resumes strictly after the last acknowledged Worker Session event.
+	Cursor *ObservationCursor
 }
 
 // Validate reports whether the request carries a complete Worker Session
@@ -187,8 +198,43 @@ func (r StreamObservationsByWorkerSessionIDRequest) Validate() error {
 	if r.Limit < 0 {
 		return ErrInvalidObservationStreamLimit
 	}
+	if r.Cursor != nil {
+		if err := r.Cursor.Validate(); err != nil {
+			return err
+		}
+	}
 	return nil
 }
+
+// ObservationCursor identifies one acknowledged Worker Session event. The
+// position is the aggregate position exposed in ObservationEvent.Position;
+// WorkerSessionID makes a cursor portable without allowing it to be replayed
+// against another Worker Session; StreamGenerationID is populated for durable
+// Factory history and is empty for the process-local Events fallback.
+type ObservationCursor struct {
+	WorkerSessionID    string
+	StreamGenerationID string
+	Position           uint64
+}
+
+// Validate rejects a cursor that cannot identify an acknowledged record.
+// Position zero remains the unqualified start-of-stream cursor used only by
+// the internal Events service, never by this reconnect contract.
+func (c ObservationCursor) Validate() error {
+	if c.Position == 0 {
+		return ErrInvalidObservationCursor
+	}
+	if strings.TrimSpace(c.WorkerSessionID) != c.WorkerSessionID {
+		return ErrInvalidObservationCursor
+	}
+	if strings.TrimSpace(c.StreamGenerationID) != c.StreamGenerationID {
+		return ErrInvalidObservationCursor
+	}
+	return nil
+}
+
+// Clone returns a detached cursor value.
+func (c ObservationCursor) Clone() ObservationCursor { return c }
 
 // Observation is the detached authoritative projection shared by list and
 // show. Optional values stay nil when the owning source cannot provide them;
@@ -444,6 +490,7 @@ type ParseDiagnostic struct {
 // exposing the Events store or its implementation.
 type ObservationEvent struct {
 	Position       uint64
+	Cursor         ObservationCursor
 	SourceType     string
 	SourceID       string
 	SourceSequence uint64
@@ -454,6 +501,7 @@ type ObservationEvent struct {
 
 func (e ObservationEvent) Clone() ObservationEvent {
 	clone := e
+	clone.Cursor = e.Cursor.Clone()
 	clone.Payload = append(json.RawMessage(nil), e.Payload...)
 	return clone
 }
@@ -483,7 +531,8 @@ type ReplaySummary struct {
 
 // ObservationDelivery is one subscription outcome. Event is present for
 // RECORD, TERMINAL, and TERMINAL_REPLAY; Summary is present for
-// REPLAY_SUMMARY; Err is present only for CANCELED or SOURCE_FAILURE.
+// REPLAY_SUMMARY and may accompany a terminal durable event; Err is present
+// only for CANCELED or SOURCE_FAILURE.
 type ObservationDelivery struct {
 	Kind    ObservationDeliveryKind
 	Event   ObservationEvent
@@ -523,6 +572,11 @@ var (
 	ErrInvalidObservationFailure         = errors.New("worker session observation: invalid failure projection")
 	ErrInvalidObservationRecordingHealth = errors.New("worker session observation: invalid recording health")
 	ErrInvalidObservationStreamLimit     = errors.New("worker session observation: stream limit must not be negative")
+	ErrInvalidObservationCursor          = errors.New("worker session observation: invalid cursor")
+	ErrObservationCursorForeign          = errors.New("worker session observation: cursor belongs to another Worker Session")
+	ErrObservationCursorFuture           = errors.New("worker session observation: cursor is ahead of the available history")
+	ErrObservationCursorStale            = errors.New("worker session observation: cursor is no longer retained")
+	ErrObservationCursorUnavailable      = errors.New("worker session observation: cursor stream generation is unavailable")
 	ErrObservationWorkNotFound           = errors.New("worker session observation: work not found")
 	ErrObservationSessionNotFound        = errors.New("worker session observation: provider session not found")
 	ErrObservationNotDirect               = errors.New("worker session observation: session is not direct")

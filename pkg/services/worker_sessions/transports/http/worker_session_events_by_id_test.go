@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -42,6 +43,146 @@ func TestStreamWorkerSessionEventsByWorkerSessionIDWritesProviderNeutralReplay(t
 	assertProviderNeutralReplayResponse(t, recorder)
 	assertProviderNeutralReplayFrames(t, decodeSSEFrames(t, recorder.Body.String()))
 	assertProviderNeutralReplayServiceCalls(t, service)
+}
+
+func TestStreamWorkerSessionEventsByWorkerSessionIDMapsExclusiveCursor(t *testing.T) {
+	position := factoryapi.WorkerSessionAfterPosition(7)
+	generation := factoryapi.WorkerSessionStreamGenerationID("generation-1")
+	service := &fakeObservationService{
+		getByWorkerResult: workersessions.Observation{WorkerSessionID: "worker-1", State: workersessions.StateRunning},
+		streamByWorkerSubscription: &fakeObservationSubscription{deliveries: []workersessions.ObservationDelivery{
+			{Kind: workersessions.ObservationDeliveryReplaySummary, Summary: &workersessions.ReplaySummary{Complete: false}},
+		}},
+	}
+	handler := NewHandler(NewAdapter(service, workServiceStub{}), zap.NewNop())
+	recorder := httptest.NewRecorder()
+	handler.StreamWorkerSessionEventsByWorkerSessionId(
+		recorder,
+		httptest.NewRequest("GET", "/events?after_position=7&stream_generation_id=generation-1", nil),
+		factoryapi.SessionID("session-1"), factoryapi.WorkerSessionID("worker-1"),
+		factoryapi.StreamWorkerSessionEventsByWorkerSessionIdParams{
+			AfterPosition:      &position,
+			StreamGenerationId: &generation,
+		},
+	)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", recorder.Code, recorder.Body.String())
+	}
+	if service.streamByWorkerRequest.Cursor == nil || service.streamByWorkerRequest.Cursor.Position != 7 || service.streamByWorkerRequest.Cursor.StreamGenerationID != "generation-1" {
+		t.Fatalf("stream cursor = %#v, want position 7/generation-1", service.streamByWorkerRequest.Cursor)
+	}
+}
+
+func TestStreamWorkerSessionEventsByWorkerSessionIDRejectsConflictingCursorAliases(t *testing.T) {
+	position := factoryapi.WorkerSessionAfterPosition(7)
+	sequence := factoryapi.AfterSequence(8)
+	service := &fakeObservationService{getByWorkerResult: workersessions.Observation{WorkerSessionID: "worker-1"}}
+	handler := NewHandler(NewAdapter(service, workServiceStub{}), zap.NewNop())
+	recorder := httptest.NewRecorder()
+	handler.StreamWorkerSessionEventsByWorkerSessionId(
+		recorder, httptest.NewRequest("GET", "/events", nil), factoryapi.SessionID("session-1"), factoryapi.WorkerSessionID("worker-1"),
+		factoryapi.StreamWorkerSessionEventsByWorkerSessionIdParams{AfterPosition: &position, AfterSequence: &sequence},
+	)
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body=%s", recorder.Code, recorder.Body.String())
+	}
+	if service.getByWorkerCalled {
+		t.Fatal("observation lookup ran before conflicting cursor validation")
+	}
+}
+
+func TestStreamWorkerSessionEventsByProviderReferenceDelegatesCursor(t *testing.T) {
+	position := factoryapi.WorkerSessionAfterPosition(4)
+	generation := factoryapi.WorkerSessionStreamGenerationID("generation-1")
+	service := &fakeObservationService{
+		getResult: workersessions.Observation{
+			WorkerSessionID: "worker-1",
+			ProviderSession: providers.SessionRef{Provider: "codex", Kind: providers.SessionIDKind, ID: "provider-1"},
+		},
+		streamSubscription: &fakeObservationSubscription{deliveries: []workersessions.ObservationDelivery{
+			{Kind: workersessions.ObservationDeliveryReplaySummary, Summary: &workersessions.ReplaySummary{Complete: false}},
+		}},
+	}
+	handler := NewHandler(NewAdapter(service, workServiceStub{}), zap.NewNop())
+	recorder := httptest.NewRecorder()
+	handler.StreamWorkerSessionEventsBySessionId(
+		recorder,
+		httptest.NewRequest("GET", "/events?provider=codex&kind=session_id&id=provider-1&after_position=4&stream_generation_id=generation-1", nil),
+		factoryapi.SessionID("session-1"),
+		factoryapi.StreamWorkerSessionEventsBySessionIdParams{
+			Provider:           factoryapi.LoadableProviderSessionProvider("codex"),
+			Kind:               factoryapi.LoadableProviderSessionKind("session_id"),
+			Id:                 "provider-1",
+			AfterPosition:      &position,
+			StreamGenerationId: &generation,
+		},
+	)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", recorder.Code, recorder.Body.String())
+	}
+	if service.streamRequest.Cursor == nil || service.streamRequest.Cursor.Position != 4 || service.streamRequest.Cursor.StreamGenerationID != "generation-1" {
+		t.Fatalf("provider stream cursor = %#v, want position 4/generation-1", service.streamRequest.Cursor)
+	}
+}
+
+func TestStreamWorkerSessionEventsByWorkerSessionIDMapsTypedCursorFailures(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		err  error
+		code factoryapi.ErrorResponseCode
+	}{
+		{name: "invalid", err: workersessions.ErrInvalidObservationCursor, code: factoryapi.ErrorResponseCodeWORKERSESSIONEVENTCURSORINVALID},
+		{name: "foreign", err: workersessions.ErrObservationCursorForeign, code: factoryapi.ErrorResponseCodeWORKERSESSIONEVENTCURSORFOREIGN},
+		{name: "future", err: workersessions.ErrObservationCursorFuture, code: factoryapi.ErrorResponseCodeWORKERSESSIONEVENTCURSORFUTURE},
+		{name: "stale", err: workersessions.ErrObservationCursorStale, code: factoryapi.ErrorResponseCodeWORKERSESSIONEVENTCURSORSTALE},
+		{name: "unavailable", err: workersessions.ErrObservationCursorUnavailable, code: factoryapi.ErrorResponseCodeWORKERSESSIONEVENTCURSORUNAVAILABLE},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			service := &fakeObservationService{
+				getByWorkerResult: workersessions.Observation{WorkerSessionID: "worker-1"},
+				streamByWorkerErr: test.err,
+			}
+			handler := NewHandler(NewAdapter(service, workServiceStub{}), zap.NewNop())
+			recorder := httptest.NewRecorder()
+			handler.StreamWorkerSessionEventsByWorkerSessionId(
+				recorder, httptest.NewRequest("GET", "/events", nil),
+				factoryapi.SessionID("session-1"), factoryapi.WorkerSessionID("worker-1"),
+				factoryapi.StreamWorkerSessionEventsByWorkerSessionIdParams{},
+			)
+			if recorder.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want 400; body=%s", recorder.Code, recorder.Body.String())
+			}
+			var response factoryapi.ErrorResponse
+			if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+				t.Fatalf("decode error response: %v", err)
+			}
+			if response.Code != test.code {
+				t.Fatalf("error code = %q, want %q", response.Code, test.code)
+			}
+		})
+	}
+}
+
+func TestStreamWorkerSessionEventsByWorkerSessionIDReplayTerminalCarriesSummary(t *testing.T) {
+	replayOnly := true
+	service := &fakeObservationService{
+		getByWorkerResult: workersessions.Observation{WorkerSessionID: "worker-1", State: workersessions.StateCompleted},
+		streamByWorkerSubscription: &fakeObservationSubscription{deliveries: []workersessions.ObservationDelivery{
+			{Kind: workersessions.ObservationDeliveryRecord, Event: workersessions.ObservationEvent{Position: 1, Payload: json.RawMessage(`{"step":1}`)}},
+			{Kind: workersessions.ObservationDeliveryTerminalReplay, Event: workersessions.ObservationEvent{Position: 2}, Summary: &workersessions.ReplaySummary{Complete: true, EventsEmitted: 2}},
+		}},
+	}
+	handler := NewHandler(NewAdapter(service, workServiceStub{}), zap.NewNop())
+	recorder := httptest.NewRecorder()
+	handler.StreamWorkerSessionEventsByWorkerSessionId(
+		recorder, httptest.NewRequest("GET", "/events?replayOnly=true", nil),
+		factoryapi.SessionID("session-1"), factoryapi.WorkerSessionID("worker-1"),
+		factoryapi.StreamWorkerSessionEventsByWorkerSessionIdParams{ReplayOnly: &replayOnly},
+	)
+	frames := decodeSSEFrames(t, recorder.Body.String())
+	if len(frames) != 2 || frames[1].Delivery != "TERMINAL_REPLAY" || frames[1].ReplaySummary == nil || !frames[1].ReplaySummary.Complete {
+		t.Fatalf("replay terminal frames = %#v, want terminal with complete summary and no failure frame", frames)
+	}
 }
 
 func assertProviderNeutralReplayResponse(t *testing.T, recorder *httptest.ResponseRecorder) {

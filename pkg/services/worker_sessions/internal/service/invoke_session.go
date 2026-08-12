@@ -748,12 +748,15 @@ func safeDiagnosticMessage(message string) string {
 // Worker Sessions outcome vocabulary and closes itself immediately after the
 // lifecycle terminal record.
 type observationSubscription struct {
-	source events.Subscription
-	replay *replayObservationSubscription
+	source          events.Subscription
+	replay          *replayObservationSubscription
+	workerSessionID string
 
 	mu             sync.Mutex
 	closed         bool
 	terminalReplay bool
+	cursorProvided bool
+	delivered      bool
 	activeCancel   context.CancelFunc
 }
 
@@ -785,7 +788,10 @@ func (s *observationSubscription) Next(ctx context.Context) workersessions.Obser
 
 	switch delivery.Kind {
 	case events.DeliveryRecord:
-		event := projectObservationEvent(delivery.Record)
+		event := projectObservationEvent(delivery.Record, s.workerSessionID)
+		s.mu.Lock()
+		s.delivered = true
+		s.mu.Unlock()
 		if isTerminalLifecycleRecord(delivery.Record) {
 			s.closeSource()
 			s.mu.Lock()
@@ -803,6 +809,12 @@ func (s *observationSubscription) Next(ctx context.Context) workersessions.Obser
 		return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliveryCanceled, Err: workersessions.ErrObservationCanceled}
 	case events.DeliveryGap:
 		s.closeSource()
+		s.mu.Lock()
+		cursorProvided, delivered := s.cursorProvided, s.delivered
+		s.mu.Unlock()
+		if cursorProvided && !delivered {
+			return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliverySourceFailure, Err: workersessions.ErrObservationCursorStale}
+		}
 		return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliverySourceFailure, Err: workersessions.ErrObservationSourceGap}
 	case events.DeliveryBackpressure:
 		s.closeSource()
@@ -847,9 +859,17 @@ func (s *observationSubscription) closeSource() {
 	}
 }
 
-func projectObservationEvent(record events.Record) workersessions.ObservationEvent {
+func projectObservationEvent(record events.Record, workerSessionIDArgs ...string) workersessions.ObservationEvent {
+	workerSessionID := observationWorkerSessionIDFromTopic(record.ID.Topic)
+	if len(workerSessionIDArgs) > 0 && strings.TrimSpace(workerSessionIDArgs[0]) != "" {
+		workerSessionID = strings.TrimSpace(workerSessionIDArgs[0])
+	}
 	return workersessions.ObservationEvent{
-		Position:       uint64(record.ID.Position),
+		Position: uint64(record.ID.Position),
+		Cursor: workersessions.ObservationCursor{
+			WorkerSessionID: workerSessionID,
+			Position:        uint64(record.ID.Position),
+		},
 		SourceType:     string(record.SourceType),
 		SourceID:       string(record.SourceID),
 		SourceSequence: uint64(record.SourceSequence),
@@ -857,6 +877,13 @@ func projectObservationEvent(record events.Record) workersessions.ObservationEve
 		SchemaID:       string(record.SchemaID),
 		Payload:        append([]byte(nil), record.Payload...),
 	}
+}
+
+func observationWorkerSessionIDFromTopic(topic events.Topic) string {
+	value := strings.TrimSpace(string(topic))
+	value = strings.TrimPrefix(value, "worker-session/")
+	value = strings.TrimSuffix(value, "/events")
+	return value
 }
 
 func (r *registry) StreamObservations(ctx context.Context, req workersessions.StreamObservationsRequest) (workersessions.ObservationSubscription, error) {
@@ -871,7 +898,7 @@ func (r *registry) StreamObservations(ctx context.Context, req workersessions.St
 	if err != nil {
 		return workersessions.ObservationSubscription{}, err
 	}
-	return r.streamObservationTopic(ctx, workerSessionID, workerSessionState, alreadyTerminal, req.Limit, req.ReplayOnly)
+	return r.streamObservationTopic(ctx, workerSessionID, workerSessionState, alreadyTerminal, req.Limit, req.ReplayOnly, req.Cursor)
 }
 
 func (r *registry) StreamObservationsByWorkerSessionID(ctx context.Context, req workersessions.StreamObservationsByWorkerSessionIDRequest) (workersessions.ObservationSubscription, error) {
@@ -887,7 +914,7 @@ func (r *registry) StreamObservationsByWorkerSessionID(ctx context.Context, req 
 	if err != nil {
 		return workersessions.ObservationSubscription{}, err
 	}
-	return r.streamObservationTopic(ctx, workerSessionID, workerSessionState, alreadyTerminal, req.Limit, req.ReplayOnly)
+	return r.streamObservationTopic(ctx, workerSessionID, workerSessionState, alreadyTerminal, req.Limit, req.ReplayOnly, req.Cursor)
 }
 
 func (r *registry) streamObservationTopic(
@@ -897,7 +924,11 @@ func (r *registry) streamObservationTopic(
 	alreadyTerminal bool,
 	limit int,
 	replayOnly bool,
+	cursor *workersessions.ObservationCursor,
 ) (workersessions.ObservationSubscription, error) {
+	if err := validateObservationCursorWorkerSessionID(cursor, workerSessionID); err != nil {
+		return workersessions.ObservationSubscription{}, err
+	}
 	if !replayOnly && r.eventReader == nil {
 		r.logger.Info("worker session observation stream", "outcome", "source_unavailable")
 		return workersessions.ObservationSubscription{}, workersessions.ErrObservationSourceUnavailable
@@ -907,9 +938,22 @@ func (r *registry) streamObservationTopic(
 	}
 	topic := workersessions.Topic(workerSessionID)
 	if replayOnly {
-		return r.replayObservationStream(ctx, topic, workerSessionState, limit)
+		return r.replayObservationStream(ctx, topic, workerSessionState, limit, cursor)
 	}
-	return r.liveObservationStream(ctx, topic, limit, alreadyTerminal)
+	return r.liveObservationStream(ctx, topic, limit, alreadyTerminal, cursor)
+}
+
+func validateObservationCursorWorkerSessionID(
+	cursor *workersessions.ObservationCursor,
+	workerSessionID string,
+) error {
+	if cursor == nil || strings.TrimSpace(cursor.WorkerSessionID) == "" {
+		return nil
+	}
+	if strings.TrimSpace(cursor.WorkerSessionID) != strings.TrimSpace(workerSessionID) {
+		return workersessions.ErrObservationCursorForeign
+	}
+	return nil
 }
 
 func (r *registry) observationStreamSession(ref providers.SessionRef) (string, bool, workersessions.State, error) {
@@ -950,15 +994,16 @@ func (r *registry) replayObservationStream(
 	topic events.Topic,
 	state workersessions.State,
 	limit int,
+	cursor *workersessions.ObservationCursor,
 ) (workersessions.ObservationSubscription, error) {
-	replay, err := newReplayObservationSubscription(ctx, r.retainedReader, topic, state, limit)
+	replay, err := newReplayObservationSubscription(ctx, r.retainedReader, topic, state, limit, cursor)
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, workersessions.ErrObservationCanceled) {
 			return workersessions.ObservationSubscription{}, workersessions.ErrObservationCanceled
 		}
 		return workersessions.ObservationSubscription{}, err
 	}
-	wrapped := &observationSubscription{replay: replay}
+	wrapped := &observationSubscription{replay: replay, workerSessionID: observationWorkerSessionIDFromTopic(topic)}
 	return workersessions.ObservationSubscription{NextFunc: wrapped.Next, CloseFunc: wrapped.Close}, nil
 }
 
@@ -967,18 +1012,32 @@ func (r *registry) liveObservationStream(
 	topic events.Topic,
 	limit int,
 	terminalReplay bool,
+	cursor *workersessions.ObservationCursor,
 ) (workersessions.ObservationSubscription, error) {
+	from := events.Cursor{Topic: topic}
+	if cursor != nil {
+		from.Position = events.AggregateSequence(cursor.Position)
+		if cursor.StreamGenerationID != "" {
+			return workersessions.ObservationSubscription{}, workersessions.ErrObservationCursorUnavailable
+		}
+	}
 	subscription, err := r.eventReader.Subscribe(ctx, events.SubscribeRequest{
 		Topic: topic,
-		From:  events.Cursor{Topic: topic},
+		From:  from,
 		Limit: limit,
 	})
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			return workersessions.ObservationSubscription{}, workersessions.ErrObservationCanceled
 		}
+		if errors.Is(err, events.ErrUnresolvableCursor) {
+			return workersessions.ObservationSubscription{}, workersessions.ErrObservationCursorFuture
+		}
 		return workersessions.ObservationSubscription{}, workersessions.ErrObservationSourceUnavailable
 	}
-	wrapped := &observationSubscription{source: subscription, terminalReplay: terminalReplay}
+	wrapped := &observationSubscription{
+		source: subscription, workerSessionID: observationWorkerSessionIDFromTopic(topic), terminalReplay: terminalReplay,
+		cursorProvided: cursor != nil,
+	}
 	return workersessions.ObservationSubscription{NextFunc: wrapped.Next, CloseFunc: wrapped.Close}, nil
 }

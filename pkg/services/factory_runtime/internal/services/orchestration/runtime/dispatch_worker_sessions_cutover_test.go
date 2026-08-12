@@ -654,6 +654,120 @@ func requireRecordedExactObservationWorkerID(t *testing.T, fixture recordedExact
 	}
 }
 
+func TestRecordedWorkerSessionObservationResumesExclusivelyAndClassifiesCursors(t *testing.T) {
+	fixture := newRecordedExactObservationFixture(t)
+	adapter := fixture.service.(*recordedWorkerSessionObservation)
+	ledger := adapter.ledger.(*recordingfixtures.ScriptedRuntimeLedger)
+	ledger.GenerationID = "generation-1"
+
+	subscription, err := fixture.service.StreamObservationsByWorkerSessionID(context.Background(), workersessions.StreamObservationsByWorkerSessionIDRequest{
+		WorkerSessionID: fixture.workerSessionID,
+		Cursor:          &workersessions.ObservationCursor{WorkerSessionID: fixture.workerSessionID, Position: 1, StreamGenerationID: "generation-1"},
+	})
+	if err != nil {
+		t.Fatalf("cursor resume = %v", err)
+	}
+	defer subscription.Close()
+	first := subscription.Next(context.Background())
+	if first.Kind != workersessions.ObservationDeliveryRecord || first.Event.SourceID != "exact-association" || first.Event.Position != 2 {
+		t.Fatalf("first resumed delivery = %#v, want association at position 2", first)
+	}
+	terminal := subscription.Next(context.Background())
+	if terminal.Kind != workersessions.ObservationDeliveryTerminalReplay || terminal.Event.SourceID != "exact-response" || terminal.Event.Position != 3 {
+		t.Fatalf("terminal resumed delivery = %#v, want response at position 3", terminal)
+	}
+	if terminal.Summary == nil || !terminal.Summary.Complete || terminal.Summary.EventsEmitted != 2 {
+		t.Fatalf("terminal summary = %#v, want complete two-event durable summary", terminal.Summary)
+	}
+	if terminal.Event.Cursor.WorkerSessionID != fixture.workerSessionID || terminal.Event.Cursor.StreamGenerationID != "generation-1" {
+		t.Fatalf("terminal cursor = %#v, want Worker Session and generation identity", terminal.Event.Cursor)
+	}
+
+	postTerminal, err := fixture.service.StreamObservationsByWorkerSessionID(context.Background(), workersessions.StreamObservationsByWorkerSessionIDRequest{
+		WorkerSessionID: fixture.workerSessionID,
+		Cursor:          &workersessions.ObservationCursor{WorkerSessionID: fixture.workerSessionID, Position: 3, StreamGenerationID: "generation-1"},
+	})
+	if err != nil {
+		t.Fatalf("post-terminal cursor resume = %v", err)
+	}
+	postTerminalSummary := postTerminal.Next(context.Background())
+	postTerminal.Close()
+	if postTerminalSummary.Kind != workersessions.ObservationDeliveryReplaySummary || postTerminalSummary.Summary == nil || !postTerminalSummary.Summary.Complete || postTerminalSummary.Summary.EventsEmitted != 0 {
+		t.Fatalf("post-terminal summary = %#v, want immediate complete zero-event summary", postTerminalSummary)
+	}
+
+	otherDispatch := "other-dispatch"
+	ledger.Events = append(ledger.Events, interfaces.FactoryEvent{
+		Context: interfaces.FactoryEventContext{Sequence: 5, DispatchID: &otherDispatch},
+		Id:      "other-event",
+		Type:    interfaces.FactoryEventTypeDispatchResponse,
+	})
+
+	for _, testCase := range []struct {
+		name   string
+		cursor workersessions.ObservationCursor
+		want   error
+	}{
+		{name: "foreign", cursor: workersessions.ObservationCursor{Position: 5, StreamGenerationID: "generation-1"}, want: workersessions.ErrObservationCursorForeign},
+		{name: "future", cursor: workersessions.ObservationCursor{Position: 99, StreamGenerationID: "generation-1"}, want: workersessions.ErrObservationCursorFuture},
+		{name: "stale", cursor: workersessions.ObservationCursor{Position: 4, StreamGenerationID: "generation-1"}, want: workersessions.ErrObservationCursorStale},
+		{name: "generation", cursor: workersessions.ObservationCursor{Position: 1, StreamGenerationID: "generation-2"}, want: workersessions.ErrObservationCursorUnavailable},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			_, err := fixture.service.StreamObservationsByWorkerSessionID(context.Background(), workersessions.StreamObservationsByWorkerSessionIDRequest{
+				WorkerSessionID: fixture.workerSessionID,
+				Cursor:          &testCase.cursor,
+			})
+			if !errors.Is(err, testCase.want) {
+				t.Fatalf("cursor error = %v, want %v", err, testCase.want)
+			}
+		})
+	}
+}
+
+func TestRecordedWorkerSessionObservationDeduplicatesDurableLiveOverlap(t *testing.T) {
+	dispatchID := "dispatch-overlap"
+	workerSessionID := "worker-overlap"
+	opening := interfaces.FactoryEvent{
+		Context: interfaces.FactoryEventContext{Sequence: 1, DispatchID: stringPointerForRecordedTest(dispatchID)},
+		Id:      "overlap-opening",
+		Type:    interfaces.FactoryEventTypeDispatchRequest,
+	}
+	association := interfaces.FactoryEvent{
+		Context: interfaces.FactoryEventContext{Sequence: 2, DispatchID: stringPointerForRecordedTest(dispatchID)},
+		Id:      "overlap-association",
+		Type:    interfaces.FactoryEventTypeDispatchWorkerSessionAssoc,
+	}
+	terminal := interfaces.FactoryEvent{
+		Context: interfaces.FactoryEventContext{Sequence: 3, DispatchID: stringPointerForRecordedTest(dispatchID)},
+		Id:      "overlap-terminal",
+		Type:    interfaces.FactoryEventTypeDispatchResponse,
+	}
+	live := make(chan interfaces.FactoryEvent, 2)
+	live <- association
+	live <- terminal
+	close(live)
+	subscription := newRecordedObservationSubscriptionWithSummary(
+		interfaces.FactoryEventStream{
+			StreamGenerationID: "generation-overlap",
+			History:            []interfaces.FactoryEvent{opening, association},
+			Events:             live,
+		},
+		dispatchID, false, nil, context.Background(), false, nil, workerSessionID,
+	)
+	defer subscription.Close()
+
+	first := subscription.Next(context.Background())
+	second := subscription.Next(context.Background())
+	third := subscription.Next(context.Background())
+	if first.Event.Position != 1 || second.Event.Position != 2 || third.Event.Position != 3 || third.Kind != workersessions.ObservationDeliveryTerminal {
+		t.Fatalf("overlap deliveries = %#v, %#v, %#v, want positions 1,2,3", first, second, third)
+	}
+	if third.Event.Cursor.WorkerSessionID != workerSessionID {
+		t.Fatalf("overlap terminal cursor = %#v, want Worker identity", third.Event.Cursor)
+	}
+}
+
 func TestRecordedWorkerSessionObservation_WorkerIDReadsNoProviderHistory(t *testing.T) {
 	base := time.Date(2026, 8, 8, 12, 0, 0, 0, time.UTC)
 	workID := "work-no-provider"

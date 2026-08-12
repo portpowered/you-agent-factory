@@ -47,15 +47,19 @@ type observationEventReaderFake struct {
 	readFunc       func(context.Context, events.ReadRequest) (events.ReadResult, error)
 	subscribeCalls int
 	readCalls      int
+	lastSubscribe  events.SubscribeRequest
+	readRequests   []events.ReadRequest
 }
 
-func (f *observationEventReaderFake) Subscribe(context.Context, events.SubscribeRequest) (events.Subscription, error) {
+func (f *observationEventReaderFake) Subscribe(_ context.Context, request events.SubscribeRequest) (events.Subscription, error) {
 	f.subscribeCalls++
+	f.lastSubscribe = request
 	return f.subscription, f.err
 }
 
 func (f *observationEventReaderFake) Read(ctx context.Context, req events.ReadRequest) (events.ReadResult, error) {
 	f.readCalls++
+	f.readRequests = append(f.readRequests, req)
 	if f.readFunc != nil {
 		return f.readFunc(ctx, req)
 	}
@@ -644,6 +648,97 @@ func TestStreamObservationsByWorkerSessionIDUsesCanonicalTopic(t *testing.T) {
 	}
 	if summary := subscription.Next(context.Background()); summary.Kind != workersessions.ObservationDeliveryReplaySummary || summary.Summary == nil || !summary.Summary.Complete {
 		t.Fatalf("Worker Session identity stream summary = %#v, want complete replay summary", summary)
+	}
+}
+
+func TestStreamObservationsByWorkerSessionIDResumesWithScopedCursor(t *testing.T) {
+	topic := workersessions.Topic("worker-1")
+	record := replayObservationRecord(topic, 2, "event-2")
+	reader := &observationEventReaderFake{readResults: []events.ReadResult{{
+		Outcome:  events.ReadOutcomeProgress,
+		Records:  []events.Record{record},
+		Next:     events.Cursor{Topic: topic, Position: 2},
+		Retained: events.RetainedRange{Topic: topic, Earliest: 1, Head: 2},
+	}}}
+	registry := newObservationRegistry(nil, reader)
+	registry.sessions["worker-1"] = observationSession("worker-1", workersessions.StateRunning)
+
+	subscription, err := registry.StreamObservationsByWorkerSessionID(context.Background(), workersessions.StreamObservationsByWorkerSessionIDRequest{
+		WorkerSessionID: "worker-1",
+		ReplayOnly:      true,
+		Cursor:          &workersessions.ObservationCursor{WorkerSessionID: "worker-1", Position: 1},
+	})
+	if err != nil {
+		t.Fatalf("cursor stream = %v", err)
+	}
+	defer subscription.Close()
+	if len(reader.readRequests) != 1 || reader.readRequests[0].From.Position != 1 {
+		t.Fatalf("read request = %#v, want exclusive position 1", reader.readRequests)
+	}
+	delivery := subscription.Next(context.Background())
+	if delivery.Kind != workersessions.ObservationDeliveryRecord || delivery.Event.Position != 2 {
+		t.Fatalf("resumed delivery = %#v, want record position 2", delivery)
+	}
+	if delivery.Event.Cursor.WorkerSessionID != "worker-1" || delivery.Event.Cursor.Position != 2 {
+		t.Fatalf("resumed cursor = %#v, want worker-1/2", delivery.Event.Cursor)
+	}
+}
+
+func TestStreamObservationsByWorkerSessionIDClassifiesCursorFailures(t *testing.T) {
+	topic := workersessions.Topic("worker-1")
+	gap := events.ReadResult{
+		Outcome: events.ReadOutcomeGap,
+		Gap: &events.GapFacts{
+			Topic: topic, Requested: 1, EarliestRetained: 2, Head: 3,
+		},
+	}
+	for _, test := range []struct {
+		name   string
+		cursor workersessions.ObservationCursor
+		result events.ReadResult
+		want   error
+	}{
+		{name: "foreign", cursor: workersessions.ObservationCursor{WorkerSessionID: "worker-2", Position: 1}, want: workersessions.ErrObservationCursorForeign},
+		{name: "future", cursor: workersessions.ObservationCursor{WorkerSessionID: "worker-1", Position: 3}, result: events.ReadResult{Outcome: events.ReadOutcomeInvalidCursor}, want: workersessions.ErrObservationCursorFuture},
+		{name: "stale", cursor: workersessions.ObservationCursor{WorkerSessionID: "worker-1", Position: 1}, result: gap, want: workersessions.ErrObservationCursorStale},
+		{name: "generation", cursor: workersessions.ObservationCursor{WorkerSessionID: "worker-1", StreamGenerationID: "generation-1", Position: 1}, want: workersessions.ErrObservationCursorUnavailable},
+		{name: "malformed", cursor: workersessions.ObservationCursor{WorkerSessionID: "worker-1"}, want: workersessions.ErrInvalidObservationCursor},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			reader := &observationEventReaderFake{}
+			if test.result.Outcome != events.ReadOutcomeUnspecified {
+				reader.readResults = []events.ReadResult{test.result}
+			}
+			registry := newObservationRegistry(nil, reader)
+			registry.sessions["worker-1"] = observationSession("worker-1", workersessions.StateRunning)
+			_, err := registry.StreamObservationsByWorkerSessionID(context.Background(), workersessions.StreamObservationsByWorkerSessionIDRequest{
+				WorkerSessionID: "worker-1", ReplayOnly: true, Cursor: &test.cursor,
+			})
+			if !errors.Is(err, test.want) {
+				t.Fatalf("cursor error = %v, want %v", err, test.want)
+			}
+		})
+	}
+}
+
+func TestStreamObservationsByWorkerSessionIDPassesCursorToLiveSubscribe(t *testing.T) {
+	topic := workersessions.Topic("worker-1")
+	reader := &observationEventReaderFake{
+		subscription: events.Subscription(func(context.Context) events.Delivery {
+			return events.Delivery{Kind: events.DeliveryClosed}
+		}),
+	}
+	registry := newObservationRegistry(nil, reader)
+	registry.sessions["worker-1"] = observationSession("worker-1", workersessions.StateRunning)
+	_, err := registry.StreamObservationsByWorkerSessionID(context.Background(), workersessions.StreamObservationsByWorkerSessionIDRequest{
+		WorkerSessionID: "worker-1",
+		Cursor:          &workersessions.ObservationCursor{WorkerSessionID: "worker-1", Position: 4},
+	})
+	if err != nil {
+		t.Fatalf("live cursor stream = %v", err)
+	}
+	if reader.lastSubscribe.Topic != topic || reader.lastSubscribe.From.Position != 4 {
+		t.Fatalf("subscribe request = %#v, want worker-1 after position 4", reader.lastSubscribe)
 	}
 }
 

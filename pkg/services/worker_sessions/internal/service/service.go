@@ -554,6 +554,7 @@ func (r *registry) associateProviderSessionLocked(
 type replayObservationSubscription struct {
 	reader             EventsRetainedReader
 	topic              events.Topic
+	workerSessionID    string
 	limit              int
 	snapshotHead       events.AggregateSequence
 	next               events.Cursor
@@ -565,6 +566,7 @@ type replayObservationSubscription struct {
 	eventsEmitted      int
 	summarySent        bool
 	closed             bool
+	cursorProvided     bool
 	mu                 sync.Mutex
 }
 
@@ -574,6 +576,7 @@ func newReplayObservationSubscription(
 	topic events.Topic,
 	state workersessions.State,
 	limit int,
+	cursorArgs ...*workersessions.ObservationCursor,
 ) (*replayObservationSubscription, error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -587,17 +590,33 @@ func newReplayObservationSubscription(
 	if limit <= 0 {
 		limit = workersessions.DefaultObservationStreamLimit
 	}
+	from := events.Cursor{Topic: topic}
+	var cursor *workersessions.ObservationCursor
+	if len(cursorArgs) > 0 {
+		cursor = cursorArgs[0]
+	}
+	if cursor != nil {
+		from.Position = events.AggregateSequence(cursor.Position)
+		if cursor.StreamGenerationID != "" {
+			return nil, workersessions.ErrObservationCursorUnavailable
+		}
+	}
 	replay := &replayObservationSubscription{
-		reader:         reader,
-		topic:          topic,
-		limit:          limit,
-		next:           events.Cursor{Topic: topic},
-		sessionState:   state,
-		terminalReplay: state.Terminal(),
-		reason:         replayReason(state),
+		reader:          reader,
+		topic:           topic,
+		workerSessionID: observationWorkerSessionIDFromTopic(topic),
+		limit:           limit,
+		next:            from,
+		sessionState:    state,
+		terminalReplay:  state.Terminal(),
+		reason:          replayReason(state),
+		cursorProvided:  cursor != nil,
 	}
 	result, err := reader.Read(ctx, events.ReadRequest{Topic: topic, From: replay.next, Limit: limit})
 	if err != nil {
+		if cursor != nil && errors.Is(err, events.ErrUnresolvableCursor) {
+			return nil, workersessions.ErrObservationCursorFuture
+		}
 		return nil, replayReadError(err)
 	}
 	if err := replay.acceptInitial(result); err != nil {
@@ -611,7 +630,13 @@ func (s *replayObservationSubscription) acceptInitial(result events.ReadResult) 
 		return replayReadError(err)
 	}
 	if result.Outcome == events.ReadOutcomeGap {
+		if s.cursorProvided {
+			return workersessions.ErrObservationCursorStale
+		}
 		return workersessions.ErrObservationSourceGap
+	}
+	if result.Outcome == events.ReadOutcomeInvalidCursor {
+		return workersessions.ErrObservationCursorFuture
 	}
 	if result.Next.Topic != s.topic || result.Retained.Topic != s.topic {
 		return workersessions.ErrObservationSourceUnavailable
@@ -653,7 +678,7 @@ func (s *replayObservationSubscription) Next(ctx context.Context) workersessions
 			s.eventsEmitted++
 			terminalReplay := s.terminalReplay
 			s.mu.Unlock()
-			return observationRecordDelivery(record, terminalReplay)
+			return observationRecordDelivery(record, terminalReplay, s.workerSessionID)
 		}
 		if s.next.Position >= s.snapshotHead {
 			if !s.summarySent {
@@ -783,8 +808,8 @@ func cloneEventRecords(records []events.Record) []events.Record {
 	return clone
 }
 
-func observationRecordDelivery(record events.Record, terminalReplay bool) workersessions.ObservationDelivery {
-	event := projectObservationEvent(record)
+func observationRecordDelivery(record events.Record, terminalReplay bool, workerSessionIDArgs ...string) workersessions.ObservationDelivery {
+	event := projectObservationEvent(record, workerSessionIDArgs...)
 	if isTerminalLifecycleRecord(record) {
 		kind := workersessions.ObservationDeliveryTerminal
 		if terminalReplay {
@@ -801,6 +826,8 @@ func replayReadError(err error) error {
 		return workersessions.ErrObservationCanceled
 	case errors.Is(err, workersessions.ErrObservationSourceGap):
 		return workersessions.ErrObservationSourceGap
+	case errors.Is(err, events.ErrUnresolvableCursor):
+		return workersessions.ErrObservationCursorFuture
 	default:
 		return workersessions.ErrObservationSourceUnavailable
 	}

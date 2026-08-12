@@ -1,0 +1,12 @@
+name: after_position
+in: query
+required: false
+description: >-
+  Worker Session reconnect cursor identifying the last acknowledged canonical
+  event position. The stream resumes exclusively after this position; a cursor
+  from another Worker Session, a future position, or an unavailable retained
+  position is rejected with a typed outcome.
+schema:
+  type: integer
+  format: int64
+  minimum: 1

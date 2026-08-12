@@ -1,0 +1,16 @@
+type: object
+additionalProperties: false
+required:
+  - position
+properties:
+  workerSessionId:
+    type: string
+    description: Worker Session identity that owns the acknowledged position.
+  position:
+    type: integer
+    format: int64
+    minimum: 1
+    description: Exclusive Worker Session event position acknowledged by the client.
+  streamGenerationId:
+    type: string
+    description: Durable Factory event-stream generation that issued the position.

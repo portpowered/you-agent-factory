@@ -697,7 +697,7 @@ func (s *recordedWorkerSessionObservation) streamRecorded(
 	if err := s.validateRecordingHealth(ctx); err != nil {
 		return workersessions.ObservationSubscription{}, true, err
 	}
-	return s.streamRecordedFact(ctx, fact, req.Limit)
+	return s.streamRecordedFact(ctx, fact, req.Limit, req.Cursor)
 }
 
 func (s *recordedWorkerSessionObservation) streamRecordedByWorkerSessionID(
@@ -720,13 +720,14 @@ func (s *recordedWorkerSessionObservation) streamRecordedByWorkerSessionID(
 	if err := s.validateRecordingHealth(ctx); err != nil {
 		return workersessions.ObservationSubscription{}, true, err
 	}
-	return s.streamRecordedFact(ctx, fact, req.Limit)
+	return s.streamRecordedFact(ctx, fact, req.Limit, req.Cursor)
 }
 
 func (s *recordedWorkerSessionObservation) streamRecordedFact(
 	ctx context.Context,
 	fact recordedDispatchObservation,
 	limit int,
+	cursor *workersessions.ObservationCursor,
 ) (workersessions.ObservationSubscription, bool, error) {
 	streamContext := ctx
 	if streamContext == nil {
@@ -734,7 +735,16 @@ func (s *recordedWorkerSessionObservation) streamRecordedFact(
 	}
 	streamContext, cancel := context.WithCancel(streamContext)
 	limit = observationStreamLimit(limit)
-	source, subscribeErr := s.ledger.Subscribe(streamContext, nil, interfaces.FactoryEventReconnectScope{
+	if err := validateRecordedObservationCursor(s.ledger, fact, cursor); err != nil {
+		cancel()
+		return workersessions.ObservationSubscription{}, true, err
+	}
+	var reconnect *interfaces.FactoryEventReconnectCursor
+	if cursor != nil {
+		sequence := int(cursor.Position)
+		reconnect = &interfaces.FactoryEventReconnectCursor{AfterSequence: &sequence}
+	}
+	source, subscribeErr := s.ledger.Subscribe(streamContext, reconnect, interfaces.FactoryEventReconnectScope{
 		DispatchID: fact.dispatchID,
 		Limit:      limit,
 	})
@@ -745,9 +755,23 @@ func (s *recordedWorkerSessionObservation) streamRecordedFact(
 		}
 		return workersessions.ObservationSubscription{}, true, workersessions.ErrObservationSourceUnavailable
 	}
-	source.History = boundedRecordedObservationHistory(source.History, fact.dispatchID, limit)
+	source.History = boundedRecordedObservationHistory(source.History, fact.dispatchID, limit, cursor)
 	terminalReplay := recordedObservationHistoryHasTerminal(source.History, fact.dispatchID)
-	return newRecordedObservationSubscription(source, fact.dispatchID, terminalReplay, cancel, streamContext), true, nil
+	finite := fact.state.Terminal() || terminalReplay
+	var summary *workersessions.ReplaySummary
+	if finite {
+		health := workerRecordingHealth{}
+		if statuses, healthErr := s.recordingHealth(ctx); healthErr != nil {
+			cancel()
+			return workersessions.ObservationSubscription{}, true, healthErr
+		} else if statuses != nil {
+			health = statuses[fact.workerSessionID]
+		}
+		summary = recordedObservationReplaySummary(fact, health)
+	}
+	return newRecordedObservationSubscriptionWithSummary(
+		source, fact.dispatchID, terminalReplay, cancel, streamContext, finite, summary, fact.workerSessionID,
+	), true, nil
 }
 
 func observationStreamLimit(limit int) int {
@@ -761,11 +785,13 @@ func boundedRecordedObservationHistory(
 	events []interfaces.FactoryEvent,
 	dispatchID string,
 	limit int,
+	cursor *workersessions.ObservationCursor,
 ) []interfaces.FactoryEvent {
 	limit = observationStreamLimit(limit)
 	ordered := make([]interfaces.FactoryEvent, 0, len(events))
 	for _, event := range cloneAndSortFactoryEvents(events) {
-		if stringPointerValue(event.Context.DispatchID) == dispatchID {
+		if stringPointerValue(event.Context.DispatchID) == dispatchID &&
+			(cursor == nil || (event.Context.Sequence > 0 && uint64(event.Context.Sequence) > cursor.Position)) {
 			ordered = append(ordered, event)
 		}
 	}
@@ -773,6 +799,71 @@ func boundedRecordedObservationHistory(
 		return ordered
 	}
 	return ordered[len(ordered)-limit:]
+}
+
+func validateRecordedObservationCursor(
+	ledger recordings.RuntimeLedger,
+	fact recordedDispatchObservation,
+	cursor *workersessions.ObservationCursor,
+) error {
+	if cursor == nil {
+		return nil
+	}
+	if err := cursor.Validate(); err != nil {
+		return err
+	}
+	if workerSessionID := strings.TrimSpace(cursor.WorkerSessionID); workerSessionID != "" &&
+		workerSessionID != strings.TrimSpace(fact.workerSessionID) {
+		return workersessions.ErrObservationCursorForeign
+	}
+	if generationID := strings.TrimSpace(cursor.StreamGenerationID); generationID != "" &&
+		generationID != strings.TrimSpace(ledger.StreamGenerationID()) {
+		return workersessions.ErrObservationCursorUnavailable
+	}
+	var highest uint64
+	var acknowledged *interfaces.FactoryEvent
+	for _, event := range ledger.CanonicalEvents() {
+		sequence := event.Context.Sequence
+		if sequence > 0 && uint64(sequence) > highest {
+			highest = uint64(sequence)
+		}
+		if sequence > 0 && uint64(sequence) == cursor.Position {
+			candidate := event
+			acknowledged = &candidate
+		}
+	}
+	if cursor.Position > highest {
+		return workersessions.ErrObservationCursorFuture
+	}
+	if acknowledged == nil {
+		return workersessions.ErrObservationCursorStale
+	}
+	if stringPointerValue(acknowledged.Context.DispatchID) != fact.dispatchID {
+		return workersessions.ErrObservationCursorForeign
+	}
+	return nil
+}
+
+func recordedObservationReplaySummary(
+	fact recordedDispatchObservation,
+	health workerRecordingHealth,
+) *workersessions.ReplaySummary {
+	status := health.status
+	if status == "" {
+		if fact.state.Terminal() {
+			status = recordings.WorkerRecordingStatusComplete
+		} else {
+			status = recordings.WorkerRecordingStatusIncomplete
+		}
+	}
+	reason := "recording-" + strings.ToLower(string(status))
+	if health.reason != "" {
+		reason = health.reason
+	}
+	return &workersessions.ReplaySummary{
+		Complete: status == recordings.WorkerRecordingStatusComplete,
+		Reason:   reason,
+	}
 }
 
 func recordedObservationHistoryHasTerminal(events []interfaces.FactoryEvent, dispatchID string) bool {
@@ -848,16 +939,23 @@ func (s *recordedWorkerSessionObservation) recordedObservationFacts(
 }
 
 type recordedObservationSubscription struct {
-	stream         interfaces.FactoryEventStream
-	dispatchID     string
-	terminalReplay bool
-	cancel         context.CancelFunc
-	sourceContext  context.Context
+	stream          interfaces.FactoryEventStream
+	dispatchID      string
+	generationID    string
+	workerSessionID string
+	terminalReplay  bool
+	finite          bool
+	summary         *workersessions.ReplaySummary
+	cancel          context.CancelFunc
+	sourceContext   context.Context
 
-	mu          sync.Mutex
-	closed      bool
-	history     []interfaces.FactoryEvent
-	historyRead int
+	mu            sync.Mutex
+	closed        bool
+	summarySent   bool
+	eventsEmitted int
+	seen          map[uint64]struct{}
+	history       []interfaces.FactoryEvent
+	historyRead   int
 }
 
 func newRecordedObservationSubscription(
@@ -866,14 +964,39 @@ func newRecordedObservationSubscription(
 	terminalReplay bool,
 	cancel context.CancelFunc,
 	sourceContext context.Context,
+	workerSessionIDArgs ...string,
 ) workersessions.ObservationSubscription {
+	return newRecordedObservationSubscriptionWithSummary(
+		stream, dispatchID, terminalReplay, cancel, sourceContext, false, nil, workerSessionIDArgs...,
+	)
+}
+
+func newRecordedObservationSubscriptionWithSummary(
+	stream interfaces.FactoryEventStream,
+	dispatchID string,
+	terminalReplay bool,
+	cancel context.CancelFunc,
+	sourceContext context.Context,
+	finite bool,
+	summary *workersessions.ReplaySummary,
+	workerSessionIDArgs ...string,
+) workersessions.ObservationSubscription {
+	workerSessionID := ""
+	if len(workerSessionIDArgs) > 0 {
+		workerSessionID = strings.TrimSpace(workerSessionIDArgs[0])
+	}
 	subscription := &recordedObservationSubscription{
-		stream:         stream,
-		dispatchID:     dispatchID,
-		terminalReplay: terminalReplay,
-		cancel:         cancel,
-		sourceContext:  sourceContext,
-		history:        cloneAndSortFactoryEvents(stream.History),
+		stream:          stream,
+		dispatchID:      dispatchID,
+		terminalReplay:  terminalReplay,
+		finite:          finite,
+		summary:         cloneReplaySummary(summary),
+		generationID:    strings.TrimSpace(stream.StreamGenerationID),
+		workerSessionID: workerSessionID,
+		cancel:          cancel,
+		sourceContext:   sourceContext,
+		seen:            make(map[uint64]struct{}),
+		history:         cloneAndSortFactoryEvents(stream.History),
 	}
 	return workersessions.ObservationSubscription{
 		NextFunc:  subscription.next,
@@ -898,6 +1021,9 @@ func (s *recordedObservationSubscription) next(ctx context.Context) workersessio
 				return *delivery
 			}
 			continue
+		}
+		if delivery, ok := s.nextFiniteSummary(); ok {
+			return delivery
 		}
 
 		s.mu.Lock()
@@ -948,15 +1074,66 @@ func (s *recordedObservationSubscription) project(event interfaces.FactoryEvent)
 	if stringPointerValue(event.Context.DispatchID) != s.dispatchID {
 		return nil, false
 	}
+	position := event.Context.Sequence
+	if position > 0 {
+		s.mu.Lock()
+		if s.seen == nil {
+			s.seen = make(map[uint64]struct{})
+		}
+		if _, exists := s.seen[uint64(position)]; exists {
+			s.mu.Unlock()
+			return nil, false
+		}
+		s.seen[uint64(position)] = struct{}{}
+		s.eventsEmitted++
+		s.mu.Unlock()
+	}
 	terminal := recordedWorkerSessionTerminalEvent(event)
-	delivery := workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliveryRecord, Event: recordedObservationEvent(event)}
+	delivery := workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliveryRecord, Event: recordedObservationEvent(event, s.generationID, s.workerSessionID)}
 	if terminal {
 		delivery.Kind = workersessions.ObservationDeliveryTerminal
 		if s.terminalReplay {
 			delivery.Kind = workersessions.ObservationDeliveryTerminalReplay
 		}
+		if s.finite && s.summary != nil {
+			summary := *s.summary
+			summary.EventsEmitted = s.eventsEmitted
+			delivery.Summary = &summary
+			s.mu.Lock()
+			s.summarySent = true
+			s.mu.Unlock()
+		}
 	}
 	return &delivery, terminal
+}
+
+func (s *recordedObservationSubscription) nextFiniteSummary() (workersessions.ObservationDelivery, bool) {
+	s.mu.Lock()
+	if !s.finite || s.summary == nil || s.summarySent || s.closed {
+		s.mu.Unlock()
+		return workersessions.ObservationDelivery{}, false
+	}
+	summary := *s.summary
+	summary.EventsEmitted = s.eventsEmitted
+	s.summarySent = true
+	s.closed = true
+	cancel := s.cancel
+	s.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+	return workersessions.ObservationDelivery{
+		Kind:    workersessions.ObservationDeliveryReplaySummary,
+		Summary: &summary,
+	}, true
+}
+
+func cloneReplaySummary(summary *workersessions.ReplaySummary) *workersessions.ReplaySummary {
+	if summary == nil {
+		return nil
+	}
+	clone := *summary
+	return &clone
 }
 
 func (s *recordedObservationSubscription) streamContext() context.Context {
@@ -991,13 +1168,26 @@ func recordedWorkerSessionTerminalEvent(event interfaces.FactoryEvent) bool {
 	}
 }
 
-func recordedObservationEvent(event interfaces.FactoryEvent) workersessions.ObservationEvent {
+func recordedObservationEvent(event interfaces.FactoryEvent, identityArgs ...string) workersessions.ObservationEvent {
+	generationID := ""
+	workerSessionID := ""
+	if len(identityArgs) > 0 {
+		generationID = identityArgs[0]
+	}
+	if len(identityArgs) > 1 {
+		workerSessionID = strings.TrimSpace(identityArgs[1])
+	}
 	position := event.Context.Sequence
 	if position < 0 {
 		position = 0
 	}
 	return workersessions.ObservationEvent{
-		Position:       uint64(position),
+		Position: uint64(position),
+		Cursor: workersessions.ObservationCursor{
+			StreamGenerationID: strings.TrimSpace(generationID),
+			WorkerSessionID:    workerSessionID,
+			Position:           uint64(position),
+		},
 		SourceType:     "factory_event",
 		SourceID:       event.Id,
 		SourceSequence: uint64(position),

@@ -397,7 +397,12 @@ func (h *Handler) StreamWorkerSessionEventsBySessionId(
 	}
 
 	replayOnly := params.ReplayOnly != nil && *params.ReplayOnly
-	observation, subscription, err := h.adapter.StreamWorkerSessionEvents(r.Context(), string(sessionID), provider, kind, id, replayOnly)
+	cursor, err := WorkerSessionObservationCursorFromAPI(params.AfterPosition, params.AfterSequence, params.StreamGenerationId)
+	if err != nil {
+		h.writeMappedStreamError(w, err)
+		return
+	}
+	observation, subscription, err := h.adapter.StreamWorkerSessionEventsWithCursor(r.Context(), string(sessionID), provider, kind, id, replayOnly, cursor)
 	if err != nil {
 		h.writeMappedStreamError(w, err)
 		return
@@ -422,8 +427,13 @@ func (h *Handler) StreamWorkerSessionEventsByWorkerSessionId(
 	}
 
 	replayOnly := params.ReplayOnly != nil && *params.ReplayOnly
-	observation, subscription, err := h.adapter.StreamWorkerSessionEventsByWorkerSessionID(
-		r.Context(), string(sessionID), string(workerSessionID), replayOnly,
+	cursor, err := WorkerSessionObservationCursorFromAPI(params.AfterPosition, params.AfterSequence, params.StreamGenerationId)
+	if err != nil {
+		h.writeMappedStreamError(w, err)
+		return
+	}
+	observation, subscription, err := h.adapter.StreamWorkerSessionEventsByWorkerSessionIDWithCursor(
+		r.Context(), string(sessionID), string(workerSessionID), replayOnly, cursor,
 	)
 	if err != nil {
 		h.writeMappedStreamError(w, err)
@@ -593,7 +603,7 @@ func (h *Handler) writeWorkerSessionDelivery(
 		if !h.writeWorkerSessionFrame(w, flusher, workerSessionEventFrame(observation, delivery), "event stream") {
 			return true
 		}
-		return !replayOnly && (delivery.Kind == workersessions.ObservationDeliveryTerminal || delivery.Kind == workersessions.ObservationDeliveryTerminalReplay)
+		return delivery.Summary != nil || (!replayOnly && (delivery.Kind == workersessions.ObservationDeliveryTerminal || delivery.Kind == workersessions.ObservationDeliveryTerminalReplay))
 	case workersessions.ObservationDeliveryReplaySummary:
 		h.writeWorkerSessionFrame(w, flusher, workerSessionReplaySummaryFrame(observation, delivery.Summary), "replay summary")
 		return true
@@ -639,21 +649,44 @@ type workerSessionEventFramePayload struct {
 }
 
 type workerSessionEventRecordPayload struct {
-	Position       uint64          `json:"position"`
-	SourceType     string          `json:"sourceType"`
-	SourceID       string          `json:"sourceId"`
-	SourceSequence uint64          `json:"sourceSequence"`
-	SourceEventID  string          `json:"sourceEventId"`
-	SchemaID       string          `json:"schemaId"`
-	Payload        json.RawMessage `json:"payload"`
+	Cursor         factoryapi.WorkerSessionEventCursor `json:"cursor"`
+	Position       uint64                              `json:"position"`
+	SourceType     string                              `json:"sourceType"`
+	SourceID       string                              `json:"sourceId"`
+	SourceSequence uint64                              `json:"sourceSequence"`
+	SourceEventID  string                              `json:"sourceEventId"`
+	SchemaID       string                              `json:"schemaId"`
+	Payload        json.RawMessage                     `json:"payload"`
 }
 
 func workerSessionEventFrame(observation factoryapi.WorkerSessionObservation, delivery workersessions.ObservationDelivery) workerSessionEventFramePayload {
-	return workerSessionEventFrameWithIdentity(observation, delivery.Kind, &workerSessionEventRecordPayload{
+	frame := workerSessionEventFrameWithIdentity(observation, delivery.Kind, &workerSessionEventRecordPayload{
+		Cursor:   workerSessionEventCursor(delivery.Event),
 		Position: delivery.Event.Position, SourceType: delivery.Event.SourceType, SourceID: delivery.Event.SourceID,
 		SourceSequence: delivery.Event.SourceSequence, SourceEventID: delivery.Event.SourceEventID,
 		SchemaID: delivery.Event.SchemaID, Payload: append(json.RawMessage(nil), delivery.Event.Payload...),
 	})
+	if delivery.Summary != nil {
+		frame.ReplaySummary = workerSessionReplaySummaryToAPI(delivery.Summary)
+	}
+	return frame
+}
+
+func workerSessionEventCursor(event workersessions.ObservationEvent) factoryapi.WorkerSessionEventCursor {
+	position := event.Cursor.Position
+	if position == 0 {
+		position = event.Position
+	}
+	cursor := factoryapi.WorkerSessionEventCursor{Position: int64(position)}
+	if event.Cursor.WorkerSessionID != "" {
+		workerSessionID := event.Cursor.WorkerSessionID
+		cursor.WorkerSessionId = &workerSessionID
+	}
+	if event.Cursor.StreamGenerationID != "" {
+		generation := event.Cursor.StreamGenerationID
+		cursor.StreamGenerationId = &generation
+	}
+	return cursor
 }
 
 func workerSessionFailureFrame(observation factoryapi.WorkerSessionObservation, code, message string) workerSessionEventFramePayload {
@@ -672,12 +705,19 @@ func workerSessionReplaySummaryFrame(observation factoryapi.WorkerSessionObserva
 		WorkIDs:               append([]string(nil), observation.WorkIds...),
 		RecordingHealth:       eventRecordingHealth(observation.RecordingHealth),
 		RecordingHealthReason: observation.RecordingHealthReason,
-		ReplaySummary: &factoryapi.WorkerSessionReplaySummary{
-			Kind:          "replay-summary",
-			Complete:      summary.Complete,
-			Reason:        summary.Reason,
-			EventsEmitted: int64(summary.EventsEmitted),
-		},
+		ReplaySummary:         workerSessionReplaySummaryToAPI(summary),
+	}
+}
+
+func workerSessionReplaySummaryToAPI(summary *workersessions.ReplaySummary) *factoryapi.WorkerSessionReplaySummary {
+	if summary == nil {
+		return nil
+	}
+	return &factoryapi.WorkerSessionReplaySummary{
+		Kind:          "replay-summary",
+		Complete:      summary.Complete,
+		Reason:        summary.Reason,
+		EventsEmitted: int64(summary.EventsEmitted),
 	}
 }
 
@@ -958,6 +998,16 @@ func (h *Handler) writeMappedTranscriptError(w http.ResponseWriter, err error) {
 
 func (h *Handler) writeMappedStreamError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, workersessions.ErrInvalidObservationCursor):
+		writeError(w, http.StatusBadRequest, "invalid Worker Session event cursor", string(factoryapi.ErrorResponseCodeWORKERSESSIONEVENTCURSORINVALID))
+	case errors.Is(err, workersessions.ErrObservationCursorForeign):
+		writeError(w, http.StatusBadRequest, "Worker Session event cursor belongs to another Worker Session", string(factoryapi.ErrorResponseCodeWORKERSESSIONEVENTCURSORFOREIGN))
+	case errors.Is(err, workersessions.ErrObservationCursorFuture):
+		writeError(w, http.StatusBadRequest, "Worker Session event cursor is ahead of available history", string(factoryapi.ErrorResponseCodeWORKERSESSIONEVENTCURSORFUTURE))
+	case errors.Is(err, workersessions.ErrObservationCursorStale):
+		writeError(w, http.StatusBadRequest, "Worker Session event cursor no longer names retained history", string(factoryapi.ErrorResponseCodeWORKERSESSIONEVENTCURSORSTALE))
+	case errors.Is(err, workersessions.ErrObservationCursorUnavailable):
+		writeError(w, http.StatusBadRequest, "Worker Session event cursor stream generation is unavailable", string(factoryapi.ErrorResponseCodeWORKERSESSIONEVENTCURSORUNAVAILABLE))
 	case errors.Is(err, workersessions.ErrInvalidSessionID),
 		errors.Is(err, workersessions.ErrInvalidObservationIdentity):
 		writeError(w, http.StatusBadRequest, "invalid Worker Session identity", "BAD_REQUEST")

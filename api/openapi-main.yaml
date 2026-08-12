@@ -515,7 +515,14 @@ paths:
         session or TERMINAL_REPLAY for an already-terminal session. Source
         failures are emitted as an explicit SOURCE_FAILURE frame so clients
         can preserve complete records already written and return a typed
-        non-success result.
+        non-success result. Every event record carries its Worker Session
+        cursor. after_position is exclusive and may be paired with
+        stream_generation_id; cursors are scoped to the Worker Session and
+        never fall back to another history. The retained snapshot and live
+        registration share one handoff, so records committed after the
+        captured high-water mark are delivered exactly once. A terminal
+        durable recording carries a COMPLETE, DEGRADED, or INCOMPLETE replay
+        summary and does not wait for an unavailable live source.
       parameters:
         - $ref: '#/components/parameters/SessionID'
         - name: provider
@@ -544,6 +551,9 @@ paths:
           schema:
             type: boolean
             default: false
+        - $ref: '#/components/parameters/WorkerSessionAfterPosition'
+        - $ref: '#/components/parameters/AfterSequence'
+        - $ref: '#/components/parameters/WorkerSessionStreamGenerationID'
       responses:
         '200':
           description: Retained then live Worker Session event frames, or a finite retained replay ending in REPLAY_SUMMARY.
@@ -575,7 +585,12 @@ paths:
         in aggregate order, followed by live records unless replayOnly is true.
         In replay-only mode the retained head is captured before delivery, no
         live follower is registered, and one REPLAY_SUMMARY frame closes the
-        stream after the retained drain.
+        stream after the retained drain. Every event record carries its Worker
+        Session cursor. after_position is exclusive and may be paired with
+        stream_generation_id; a cursor from another Worker Session, a future
+        position, stale retained history, or an unavailable generation is
+        rejected with a typed error. In follow mode the durable-to-live
+        handoff is atomic and duplicate overlap is suppressed.
       parameters:
         - $ref: '#/components/parameters/SessionID'
         - $ref: '#/components/parameters/WorkerSessionID'
@@ -586,6 +601,9 @@ paths:
           schema:
             type: boolean
             default: false
+        - $ref: '#/components/parameters/WorkerSessionAfterPosition'
+        - $ref: '#/components/parameters/AfterSequence'
+        - $ref: '#/components/parameters/WorkerSessionStreamGenerationID'
       responses:
         '200':
           description: Retained then live Worker Session event frames, or a finite retained replay ending in REPLAY_SUMMARY.
@@ -2253,6 +2271,10 @@ components:
       $ref: './components/parameters/AfterEventId.yaml'
     AfterSequence:
       $ref: './components/parameters/AfterSequence.yaml'
+    WorkerSessionAfterPosition:
+      $ref: './components/parameters/WorkerSessionAfterPosition.yaml'
+    WorkerSessionStreamGenerationID:
+      $ref: './components/parameters/WorkerSessionStreamGenerationID.yaml'
     ResponseEventAfterSequence:
       $ref: './components/parameters/ResponseEventAfterSequence.yaml'
     ResponseEventDispatchID:
@@ -2407,6 +2429,8 @@ components:
       $ref: './components/schemas/api/WorkerSessionEventDelivery.yaml'
     WorkerSessionEventRecord:
       $ref: './components/schemas/api/WorkerSessionEventRecord.yaml'
+    WorkerSessionEventCursor:
+      $ref: './components/schemas/api/WorkerSessionEventCursor.yaml'
     WorkerSessionProviderSessionRef:
       $ref: './components/schemas/api/WorkerSessionProviderSessionRef.yaml'
     WorkerSessionFailure:

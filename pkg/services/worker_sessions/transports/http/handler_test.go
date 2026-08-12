@@ -591,6 +591,9 @@ func TestStreamWorkerSessionEventsBySessionIDWritesRetainedAndTerminalFrames(t *
 	if frames[0].Event == nil || frames[0].Event.Position != 1 || string(frames[0].Event.Payload) != `{"state":"RUNNING"}` {
 		t.Fatalf("first event = %#v, want canonical event payload", frames[0].Event)
 	}
+	if frames[0].Event.Cursor == nil || frames[0].Event.Cursor.Position != 1 {
+		t.Fatalf("first event cursor = %#v, want position 1", frames[0].Event.Cursor)
+	}
 	if service.streamSubscription == nil || !service.streamSubscription.closed {
 		t.Fatal("stream subscription was not closed after terminal delivery")
 	}
@@ -951,8 +954,9 @@ type sseTestReplaySummary struct {
 }
 
 type sseTestEvent struct {
-	Position uint64          `json:"position"`
-	Payload  json.RawMessage `json:"payload"`
+	Cursor   *factoryapi.WorkerSessionEventCursor `json:"cursor"`
+	Position uint64                               `json:"position"`
+	Payload  json.RawMessage                      `json:"payload"`
 }
 
 func decodeSSEFrames(t *testing.T, body string) []sseTestFrame {

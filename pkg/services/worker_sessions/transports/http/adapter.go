@@ -202,6 +202,18 @@ func (a *Adapter) StreamWorkerSessionEvents(
 	sessionID, provider, kind, id string,
 	replayOnly bool,
 ) (factoryapi.WorkerSessionObservation, workersessions.ObservationSubscription, error) {
+	return a.StreamWorkerSessionEventsWithCursor(ctx, sessionID, provider, kind, id, replayOnly, nil)
+}
+
+// StreamWorkerSessionEventsWithCursor is the cursor-aware provider-reference
+// compatibility adapter. It resolves the exact Provider Session first, then
+// delegates the same typed cursor to the Worker Session observation service.
+func (a *Adapter) StreamWorkerSessionEventsWithCursor(
+	ctx context.Context,
+	sessionID, provider, kind, id string,
+	replayOnly bool,
+	cursor *workersessions.ObservationCursor,
+) (factoryapi.WorkerSessionObservation, workersessions.ObservationSubscription, error) {
 	if a == nil || a.observations == nil {
 		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, errors.New("Worker Sessions service is required")
 	}
@@ -234,6 +246,7 @@ func (a *Adapter) StreamWorkerSessionEvents(
 		// receives the bounded stream policy at the transport boundary.
 		Limit:      workersessions.DefaultObservationStreamLimit,
 		ReplayOnly: replayOnly,
+		Cursor:     cursor,
 	})
 	if err != nil {
 		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, fmt.Errorf("stream Worker Session events: %w", err)
@@ -252,6 +265,17 @@ func (a *Adapter) StreamWorkerSessionEventsByWorkerSessionID(
 	ctx context.Context,
 	sessionID, workerSessionID string,
 	replayOnly bool,
+) (factoryapi.WorkerSessionObservation, workersessions.ObservationSubscription, error) {
+	return a.StreamWorkerSessionEventsByWorkerSessionIDWithCursor(ctx, sessionID, workerSessionID, replayOnly, nil)
+}
+
+// StreamWorkerSessionEventsByWorkerSessionIDWithCursor opens the canonical
+// Worker-ID stream with an exclusive durable/live reconnect cursor.
+func (a *Adapter) StreamWorkerSessionEventsByWorkerSessionIDWithCursor(
+	ctx context.Context,
+	sessionID, workerSessionID string,
+	replayOnly bool,
+	cursor *workersessions.ObservationCursor,
 ) (factoryapi.WorkerSessionObservation, workersessions.ObservationSubscription, error) {
 	if a == nil || a.observations == nil {
 		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, errors.New("Worker Sessions service is required")
@@ -279,6 +303,7 @@ func (a *Adapter) StreamWorkerSessionEventsByWorkerSessionID(
 		WorkerSessionID: workerSessionID,
 		Limit:           workersessions.DefaultObservationStreamLimit,
 		ReplayOnly:      replayOnly,
+		Cursor:          cursor,
 	})
 	if err != nil {
 		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, fmt.Errorf("stream Worker Session events: %w", err)

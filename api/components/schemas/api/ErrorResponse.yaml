@@ -28,6 +28,11 @@ properties:
       - WORKER_SESSION_NOT_STARTABLE
       - WORKER_SESSION_START_OPENING_FAILED
       - WORKER_SESSION_EVENT_TOPIC_UNAVAILABLE
+      - WORKER_SESSION_EVENT_CURSOR_INVALID
+      - WORKER_SESSION_EVENT_CURSOR_FOREIGN
+      - WORKER_SESSION_EVENT_CURSOR_FUTURE
+      - WORKER_SESSION_EVENT_CURSOR_STALE
+      - WORKER_SESSION_EVENT_CURSOR_UNAVAILABLE
       - WORKER_SESSION_ADMISSION_FAILED
       - WORKER_SESSION_CONTINUATION_REQUEST_ID_CONFLICT
       - WORKER_SESSION_CONTINUATION_CONFLICT
@@ -77,6 +82,11 @@ properties:
       - The requested Worker Session identity is already reserved or terminal.
       - The Worker Session opening record could not be published.
       - The Worker Session event topic did not reach the required readiness barrier.
+      - The Worker Session event cursor is malformed.
+      - The Worker Session event cursor belongs to another Worker Session.
+      - The Worker Session event cursor is ahead of the available history.
+      - The Worker Session event cursor no longer names retained history.
+      - The Worker Session event cursor's durable stream generation is unavailable.
       - Workers could not admit the Worker Session execution.
       - Worker Session continuation requestId was reused with different inputs.
       - The Worker Session continuation conflicts with source lifecycle or successor lineage.
