@@ -10,10 +10,9 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	"github.com/portpowered/infinite-you/pkg/services/webhooks"
 )
 
-// exactWebhookClock implements only the public Webhooks clock port. Its
+// exactWebhookClock implements only the declared Webhooks clock port. Its
 // scheduler is controlled explicitly so retry tests never depend on wall time
 // or on an optional capability discovered at runtime.
 type exactWebhookClock struct {
@@ -28,7 +27,10 @@ type webhookClockWaiter struct {
 	ready chan time.Time
 }
 
-var _ webhooks.Clock = (*exactWebhookClock)(nil)
+var _ interface {
+	Now() time.Time
+	After(time.Duration) <-chan time.Time
+} = (*exactWebhookClock)(nil)
 
 func newExactWebhookClock(now time.Time) *exactWebhookClock {
 	return &exactWebhookClock{

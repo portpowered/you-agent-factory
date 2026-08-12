@@ -60,7 +60,10 @@ type Edges struct {
 	FactoryWebhookHTTPClient      interface {
 		Do(*http.Request) (*http.Response, error)
 	}
-	FactoryWebhookClock              webhooks.Clock
+	FactoryWebhookClock interface {
+		Now() time.Time
+		After(time.Duration) <-chan time.Time
+	}
 	FactoryWebhookSecretResolver     webhooks.SecretResolver
 	FactoryWebhookDeadLetterAppender webhooks.DeadLetterAppender
 	ModelAssetHTTPClient             interface {
