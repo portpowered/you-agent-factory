@@ -224,6 +224,14 @@ describe("useCurrentActivityGraphLayout", () => {
           visibilityPreset,
         ),
     );
+    const replacementBuildLayout: CurrentActivityGraphLayoutBuilder = vi.fn(
+      (factory, hiddenNodeClasses, visibilityPreset) =>
+        buildCurrentActivityGraphLayoutFromFactory(
+          factory,
+          hiddenNodeClasses,
+          visibilityPreset,
+        ),
+    );
     const snapshot: DashboardSnapshot = {
       ...structuredClone(singleNodeDashboardSnapshot),
       factory: {
@@ -280,15 +288,20 @@ describe("useCurrentActivityGraphLayout", () => {
     );
 
     const { result, rerender } = renderHook(
-      ({ factoryOverride }) =>
+      ({ builder, factoryOverride }) =>
         useCurrentActivityGraphLayoutForFactory(
           snapshot,
           factoryOverride,
           new Set(),
           "all",
-          buildLayout,
+          builder,
         ),
-      { initialProps: { factoryOverride: snapshot.factory } },
+      {
+        initialProps: {
+          builder: buildLayout,
+          factoryOverride: snapshot.factory,
+        },
+      },
     );
 
     await waitFor(() => {
@@ -297,12 +310,21 @@ describe("useCurrentActivityGraphLayout", () => {
     const callsAfterInitialRender = buildLayout.mock.calls.length;
     expect(callsAfterInitialRender).toBeGreaterThan(0);
 
-    rerender({ factoryOverride: promptOnlyUpdate });
+    rerender({ builder: buildLayout, factoryOverride: promptOnlyUpdate });
 
     await waitFor(() => {
       expect(result.current.nodes.length).toBeGreaterThan(0);
     });
     expect(buildLayout.mock.calls.length).toBe(callsAfterInitialRender);
+
+    rerender({
+      builder: replacementBuildLayout,
+      factoryOverride: promptOnlyUpdate,
+    });
+
+    await waitFor(() => {
+      expect(replacementBuildLayout).toHaveBeenCalledTimes(1);
+    });
   });
 
   it("drops stale resource nodes immediately when factory-change topology removes them", async () => {
