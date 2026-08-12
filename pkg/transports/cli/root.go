@@ -21,6 +21,7 @@ import (
 	factorydefinitionscli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
+	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	providerscli "github.com/portpowered/infinite-you/pkg/services/providers/transports/cli"
@@ -72,6 +73,13 @@ type cliOperatorDefaultsOptions struct {
 
 type SubmitWorkOperation func(submitcli.SubmitConfig) error
 type SubmitBatchOperation func(submitcli.BatchConfig) error
+
+// LocalSessionsCLIService is the distinct Wire binding for local lifecycle
+// controls. It embeds the CLI service contract while keeping the local and
+// remote adapters distinguishable in the inert command-operation graph.
+type LocalSessionsCLIService interface {
+	sessioncli.Service
+}
 
 // OwnedExecutionService adds execution-local cleanup to the Factory
 // Sessions-owned durable execution and scoped inventory capabilities. The CLI
@@ -130,6 +138,7 @@ type CommandOperations struct {
 	ModelsCLI                         modelscli.Service
 	ProvidersCLI                      providerscli.Service
 	SessionsCLI                       sessioncli.Service
+	LocalSessionsCLI                  LocalSessionsCLIService
 	SubmitWork                        SubmitWorkOperation
 	SubmitBatch                       SubmitBatchOperation
 	FlattenFactoryConfig              FlattenFactoryConfigOperation
@@ -155,6 +164,7 @@ type CommandOperations struct {
 	StreamWorkerSession               StreamWorkerSessionOperation
 	OpenRunSelection                  runcli.SelectionFactory
 	RemoteInvocation                  runcli.RemoteInvocationOperation
+	ResponsePresentation              factoryvisualization.ResponsePresentation
 	ACP                               acpcli.Service
 	ACPServer                         acp.Server
 }
@@ -188,6 +198,7 @@ type CommandFactory struct {
 	SubmitWork             func(submitcli.SubmitConfig) error
 	SubmitBatch            func(submitcli.BatchConfig) error
 	SessionsCLI            sessioncli.Service
+	LocalSessionsCLI       sessioncli.Service
 	BuildExecution         ExecutionServiceBuilder
 	ModelsCLI              modelscli.Service
 	ProvidersCLI           providerscli.Service
@@ -214,6 +225,7 @@ type CommandFactory struct {
 	StreamWorkerSession    workersessionscli.StreamOperation
 	openRunSelection       runcli.SelectionFactory
 	remoteInvocation       runcli.RemoteInvocationOperation
+	responsePresentation   factoryvisualization.ResponsePresentation
 	acp                    acpcli.Service
 	acpServer              acp.Server
 }
@@ -243,6 +255,7 @@ func NewCommandFactory(operations CommandOperations) CommandFactory {
 		SubmitWork:                        operations.SubmitWork,
 		SubmitBatch:                       operations.SubmitBatch,
 		SessionsCLI:                       operations.SessionsCLI,
+		LocalSessionsCLI:                  operations.LocalSessionsCLI,
 		BuildExecution:                    operations.BuildExecution,
 		ModelsCLI:                         operations.ModelsCLI,
 		ProvidersCLI:                      operations.ProvidersCLI,
@@ -269,6 +282,7 @@ func NewCommandFactory(operations CommandOperations) CommandFactory {
 		StreamWorkerSession:               operations.StreamWorkerSession,
 		openRunSelection:                  operations.OpenRunSelection,
 		remoteInvocation:                  operations.RemoteInvocation,
+		responsePresentation:              operations.ResponsePresentation,
 		acp:                               operations.ACP,
 		acpServer:                         operations.ACPServer,
 	}
@@ -519,7 +533,7 @@ func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs 
 	cfg.JSONOutput = globals.json
 	if remotePlacementSelected(globals) {
 		return runcli.RunRemoteInvocation(
-			cmd.Context(), cfg, globals.server, rootOptions.remoteInvocation,
+			cmd.Context(), cfg, globals.server, rootOptions.remoteInvocation, rootOptions.responsePresentation,
 		)
 	}
 	if rootOptions.initializer == nil {

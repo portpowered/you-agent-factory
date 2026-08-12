@@ -18,6 +18,10 @@ func lifecycleControlHumanLine(response factoryapi.FactorySessionLifecycleContro
 			return fmt.Sprintf("Paused Factory session %s (lifecycle status: %s).", response.SessionId, response.Status)
 		case factoryapi.FactorySessionLifecycleControlKindResume:
 			return fmt.Sprintf("Resumed Factory session %s (lifecycle status: %s).", response.SessionId, response.Status)
+		case factoryapi.FactorySessionLifecycleControlKindCancel:
+			return fmt.Sprintf("Canceled Factory session %s (lifecycle status: %s).", response.SessionId, response.Status)
+		case factoryapi.FactorySessionLifecycleControlKindTerminate:
+			return fmt.Sprintf("Terminated Factory session %s (lifecycle status: %s).", response.SessionId, response.Status)
 		default:
 			return fmt.Sprintf(
 				"Factory session %s %s accepted (lifecycle status: %s).",
@@ -95,6 +99,10 @@ func lifecycleControlPastParticiple(operation factoryapi.FactorySessionLifecycle
 		return "paused"
 	case factoryapi.FactorySessionLifecycleControlKindResume:
 		return "resumed"
+	case factoryapi.FactorySessionLifecycleControlKindCancel:
+		return "canceled"
+	case factoryapi.FactorySessionLifecycleControlKindTerminate:
+		return "terminated"
 	default:
 		return strings.ToLower(string(operation)) + "d"
 	}

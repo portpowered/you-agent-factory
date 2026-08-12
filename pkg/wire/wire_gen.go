@@ -453,6 +453,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	service2 := provideProvidersCLIService(service)
 	v81 := wire.NewRequestPreparation()
 	sessionService := provideSessionsCLIService(wireStandardCLIHTTPProtocol, v81)
+	localSessionsCLIService := provideLocalSessionsCLIService(factorysessionsService)
 	payloadFileReader := provideSubmitPayloadReader()
 	wireExtendedCLIHTTPProtocol, err := provideExtendedCLIHTTPProtocol()
 	if err != nil {
@@ -611,6 +612,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		ModelsCLI:                         cliService,
 		ProvidersCLI:                      service2,
 		SessionsCLI:                       sessionService,
+		LocalSessionsCLI:                  localSessionsCLIService,
 		SubmitWork:                        submitWorkOperation,
 		SubmitBatch:                       submitBatchOperation,
 		FlattenFactoryConfig:              flattenFactoryConfigOperation,
@@ -636,6 +638,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		StreamWorkerSession:               v89,
 		OpenRunSelection:                  selectionFactory,
 		RemoteInvocation:                  remoteInvocationOperation,
+		ResponsePresentation:              v95,
 		ACP:                               acpService,
 		ACPServer:                         server,
 	}
@@ -917,6 +920,7 @@ var cliCommandOperationsSet = wire5.NewSet(
 	provideReadWorkerSessionOperation,
 	provideStreamWorkerSessionOperation,
 	provideSessionsCLIService,
+	provideLocalSessionsCLIService,
 	provideModelsCLIService,
 	provideProvidersCLIService,
 	provideFlattenFactoryConfigOperation,

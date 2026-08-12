@@ -44,8 +44,8 @@ func TestBuildProcessRoutesEverySessionLeafThroughResolvedProductionComposition(
 		{"you", "--server", server.URL, "--json", "session", "show", "session-show"},
 		{"you", "--server", server.URL, "--json", "session", "dispatches",
 			"dur-sess-1", "--phase", "execute", "--status", "SUCCEEDED"},
-		{"you", "--server", server.URL, "--json", "session", "pause"},
-		{"you", "--server", server.URL, "--json", "session", "resume", "session-resume"},
+		{"you", "--remote", "--server", server.URL, "--json", "session", "pause"},
+		{"you", "--remote", "--server", server.URL, "--json", "session", "resume", "session-resume"},
 	}
 	for _, args := range invocations {
 		var stdout, stderr bytes.Buffer

@@ -367,6 +367,11 @@ func executeSessionComposition(
 	args []string,
 ) (string, string, error) {
 	t.Helper()
+	// These unit fixtures provide one adapter for the command family. Production
+	// composition supplies distinct local and remote services explicitly.
+	if operations.LocalSessionsCLI == nil {
+		operations.LocalSessionsCLI = operations.SessionsCLI
+	}
 	factory := NewCommandFactory(operations)
 	if factory.SessionsCLI == nil {
 		t.Fatal("SessionsCLI adapter is missing from production composition")

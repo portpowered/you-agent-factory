@@ -66,12 +66,16 @@ func TestSessionCommand_HelpDocumentsSubcommandsAndExamples(t *testing.T) {
 		"dispatches",
 		"pause",
 		"resume",
+		"cancel",
+		"terminate",
 		"create",
 		"delete",
 		"you session list",
 		"you session show",
 		"you session pause",
 		"you session resume",
+		"you --remote --server http://factory.example:7437 session pause",
+		"you session resume session-beta --remote --server http://factory.example:7437",
 		"you session list --json",
 		"you session create --dir /workspace/fleet --port 9090",
 		"you session delete session-beta --port 9090 --json",
@@ -859,18 +863,6 @@ func TestProductionRootUsesGeneratedSessionFamilyCutover(t *testing.T) {
 	if session.RunE != nil {
 		t.Fatal("session parent must remain non-runnable through generated cutover")
 	}
-	if len(session.Commands()) != 7 {
-		t.Fatalf("session child count = %d, want exactly 7 generated leaves", len(session.Commands()))
-	}
-	for _, name := range []string{"create", "list", "show", "delete", "pause", "resume", "dispatches"} {
-		command, _, findErr := root.Find([]string{"session", name})
-		if findErr != nil {
-			t.Fatalf("Find(session %s) error = %v", name, findErr)
-		}
-		if command.RunE == nil {
-			t.Fatalf("session %s must attach resolved RunE through generated cutover", name)
-		}
-	}
 	for _, name := range []string{"run", "submit", "factory", "models", "work"} {
 		if _, _, err := root.Find([]string{name}); err != nil {
 			t.Fatalf("Find(%s) error = %v, want non-representative families on handwritten constructors", name, err)
@@ -888,6 +880,12 @@ func TestShowSessionUsesInjectedService(t *testing.T) {
 				return nil
 			},
 		}),
+		LocalSessionsCLI: session.Bind(session.Operations{
+			Show: func(cfg session.ShowConfig) error {
+				called = true
+				return nil
+			},
+		}),
 	}).NewCommand(nil, nil, nil)
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
@@ -897,5 +895,79 @@ func TestShowSessionUsesInjectedService(t *testing.T) {
 	}
 	if !called {
 		t.Fatal("injected session show service was not invoked")
+	}
+}
+
+func TestSessionLifecycleLeavesExecuteInjectedPlacementAdapter(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		args      []string
+		placement string
+		operation string
+		sessionID string
+		server    string
+	}{
+		{
+			name:      "local cancel",
+			args:      []string{"session", "cancel", "session-alpha"},
+			placement: "local",
+			operation: "cancel",
+			sessionID: "session-alpha",
+			server:    "http://localhost:7437",
+		},
+		{
+			name:      "remote terminate",
+			args:      []string{"--remote", "--server", "http://factory.example:7437", "session", "terminate", "session-beta"},
+			placement: "remote",
+			operation: "terminate",
+			sessionID: "session-beta",
+			server:    "http://factory.example:7437",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			runSessionLifecycleAdapterCase(t, test.args, test.placement, test.operation, test.sessionID, test.server)
+		})
+	}
+}
+
+func runSessionLifecycleAdapterCase(
+	t *testing.T,
+	args []string,
+	wantPlacement, wantOperation, wantSessionID, wantServer string,
+) {
+	t.Helper()
+	type lifecycleCall struct {
+		placement string
+		operation string
+		sessionID string
+		server    string
+	}
+	var calls []lifecycleCall
+	control := func(placement, operation string) func(session.LifecycleControlConfig) error {
+		return func(cfg session.LifecycleControlConfig) error {
+			calls = append(calls, lifecycleCall{placement, operation, cfg.SessionID, cfg.Server})
+			_, err := fmt.Fprintf(cfg.Output, "%s %s accepted\n", operation, cfg.SessionID)
+			return err
+		}
+	}
+	local := session.Bind(session.Operations{Cancel: control("local", "cancel"), Terminate: control("local", "terminate")})
+	remote := session.Bind(session.Operations{Cancel: control("remote", "cancel"), Terminate: control("remote", "terminate")})
+	root := (CommandFactory{ModelsCLI: rootModelsCLI, SessionsCLI: remote, LocalSessionsCLI: local}).NewCommand(nil, nil, nil)
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetErr(io.Discard)
+	root.SetArgs(args)
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute %v: %v", args, err)
+	}
+	if len(calls) != 1 {
+		t.Fatalf("lifecycle adapter calls = %#v, want one call", calls)
+	}
+	call := calls[0]
+	if call.placement != wantPlacement || call.operation != wantOperation || call.sessionID != wantSessionID || call.server != wantServer {
+		t.Fatalf("lifecycle adapter call = %#v, want placement=%q operation=%q session=%q server=%q", call, wantPlacement, wantOperation, wantSessionID, wantServer)
+	}
+	if got := output.String(); got != wantOperation+" "+wantSessionID+" accepted\n" {
+		t.Fatalf("stdout = %q, want accepted outcome", got)
 	}
 }

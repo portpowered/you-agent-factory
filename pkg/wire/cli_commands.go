@@ -188,6 +188,12 @@ func provideSessionsCLIService(
 ) sessioncli.Service {
 	return sessioncli.New(transport.Protocol, prepare)
 }
+
+func provideLocalSessionsCLIService(
+	service factorysessions.Service,
+) cli.LocalSessionsCLIService {
+	return sessioncli.NewLocalLifecycleControls(service)
+}
 func provideModelsCLIService(
 	transport standardCLIHTTPProtocol,
 	invocation modelscli.InvocationOperation,

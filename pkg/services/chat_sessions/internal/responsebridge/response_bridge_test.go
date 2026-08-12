@@ -110,6 +110,30 @@ func TestServiceRunSequencesFactoryEventsAndPreservesInvokeResult(t *testing.T) 
 	}
 }
 
+func TestServiceRunWithoutBridgeDependenciesDelegatesInvoke(t *testing.T) {
+	want := factorysessions.InvocationResult{
+		RequestID: "turn-without-bridge",
+		Status:    factorysessions.InvocationTerminalStatusCompleted,
+	}
+	called := false
+	got, err := New(nil, nil, nil, logging.NoopLogger{}).Run(
+		context.Background(), "chat-1", 1, "factory-1", nil,
+		func(context.Context) (factorysessions.InvocationResult, error) {
+			called = true
+			return want, nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("Run() error = %v, want nil", err)
+	}
+	if !called {
+		t.Fatal("invoke callback was not called")
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Run() result = %+v, want %+v", got, want)
+	}
+}
+
 // TestServiceRunDrainsTerminalTailWithNonCancelledContext proves the
 // invocation-return handoff cannot silently lose response events published at
 // the terminal boundary: the live reader stops first, then Drain returns the
