@@ -229,7 +229,10 @@ func (state *applicationRuntimeLifecycle) startRuntime(ctx context.Context) erro
 		state.mu.Unlock()
 		return errors.New("start Factory Session runtime: already started")
 	}
-	runCtx, cancel := context.WithCancel(ctx)
+	// The lifecycle manager owns orderly unwind after activation returns. Keep
+	// the hosted runtime alive until that owner can stop it, otherwise parent
+	// cancellation can stop the runtime between this start and startWorkers.
+	runCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	state.runtimeCancel = cancel
 	state.mu.Unlock()
 
@@ -248,11 +251,18 @@ func (state *applicationRuntimeLifecycle) startWorkers(ctx context.Context) erro
 		state.mu.Unlock()
 		return errors.New("start Factory Session workers: runtime is not started")
 	}
+	if err := ctx.Err(); err != nil {
+		state.mu.Unlock()
+		return err
+	}
 	if state.workersCancel != nil || state.stopWorkersFn != nil {
 		state.mu.Unlock()
 		return errors.New("start Factory Session workers: already started")
 	}
-	workerCtx, cancel := context.WithCancel(ctx)
+	// Worker-sidecar startup is part of the same activation transaction as the
+	// runtime. Its context must not stop the runtime before startup has returned;
+	// cancellation is checked after acquisition and then unwound explicitly.
+	workerCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	state.workersCancel = cancel
 	state.mu.Unlock()
 
@@ -277,6 +287,9 @@ func (state *applicationRuntimeLifecycle) startWorkers(ctx context.Context) erro
 	state.mu.Lock()
 	state.stopWorkersFn = stop
 	state.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return errors.Join(err, state.stopWorkers(context.Background()))
+	}
 	return nil
 }
 
