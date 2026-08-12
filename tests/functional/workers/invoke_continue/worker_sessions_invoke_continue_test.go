@@ -136,7 +136,31 @@ func TestDirectWorkerSessionInvokeContinueLocalPreservesSessionAndLineage(t *tes
 	if requests := runner.Requests(); len(requests) != 2 {
 		t.Fatalf("provider command requests after idempotency conflict = %d, want two", len(requests))
 	}
+
+	assertLocalTerminalWorkerSessionControls(t, ctx, process, env, workingDirectory)
 	functionalevidence.Covers(t, "cli/you.worker-sessions.continue", "cli/you.worker-sessions.invoke")
+}
+
+func assertLocalTerminalWorkerSessionControls(t *testing.T, ctx context.Context, process support.Process, env []string, workingDirectory string) {
+	t.Helper()
+	for _, action := range []string{"pause", "resume", "cancel", "terminate"} {
+		control := support.FakeInputs(ctx, []string{"you", "--json", "worker-sessions", action, "local-successor-session"})
+		control.Input.Env = env
+		control.Input.WorkingDirectory = workingDirectory
+		if err := process.Execute(control.Input); err != nil {
+			t.Fatalf("local Worker Session %s: %v\nstdout:\n%s\nstderr:\n%s", action, err, control.Stdout(), control.Stderr())
+		}
+		var result struct {
+			Outcome string `json:"outcome"`
+			State   string `json:"state"`
+		}
+		if err := json.Unmarshal([]byte(control.Stdout()), &result); err != nil {
+			t.Fatalf("decode local Worker Session %s result: %v; stdout=%s", action, err, control.Stdout())
+		}
+		if result.Outcome != "NOOP" || result.State != "COMPLETED" {
+			t.Fatalf("local Worker Session %s result = %#v, want terminal no-op", action, result)
+		}
+	}
 }
 
 func TestDirectWorkerSessionRemoteInterruptUsesExactRouteAndAdmissionSnapshots(t *testing.T) {

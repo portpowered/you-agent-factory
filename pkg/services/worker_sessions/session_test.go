@@ -2,6 +2,7 @@ package workersessions_test
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/providers"
@@ -378,5 +379,75 @@ func TestSession_Validate_RejectsMalformedLineage(t *testing.T) {
 				t.Fatalf("Validate() = %v, want ErrInvalidContinuationLineage", err)
 			}
 		})
+	}
+}
+
+func TestInterruptRequestNormalizeValidateAndClonePreserveObservableContract(t *testing.T) {
+	request := workersessions.InterruptRequest{
+		RequestID:                " request-1 ",
+		SourceWorkerSessionID:    " source-1 ",
+		SuccessorWorkerSessionID: " successor-1 ",
+		ReplacementMessage:       "  preserve surrounding whitespace  ",
+	}
+	normalized := request.Normalize()
+	if normalized.RequestID != "request-1" || normalized.SourceWorkerSessionID != "source-1" || normalized.SuccessorWorkerSessionID != "successor-1" {
+		t.Fatalf("Normalize() = %#v, want trimmed identities", normalized)
+	}
+	if normalized.ReplacementMessage != request.ReplacementMessage {
+		t.Fatalf("Normalize() replacement message = %q, want byte-preserved %q", normalized.ReplacementMessage, request.ReplacementMessage)
+	}
+	if err := normalized.Validate(); err != nil {
+		t.Fatalf("valid InterruptRequest.Validate() = %v", err)
+	}
+
+	for name, invalid := range map[string]workersessions.InterruptRequest{
+		"missing request ID":        {SourceWorkerSessionID: "source", SuccessorWorkerSessionID: "successor", ReplacementMessage: "message"},
+		"invalid lineage":           {RequestID: "request", SourceWorkerSessionID: "source", SuccessorWorkerSessionID: "source", ReplacementMessage: "message"},
+		"blank replacement message": {RequestID: "request", SourceWorkerSessionID: "source", SuccessorWorkerSessionID: "successor", ReplacementMessage: " \t"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := invalid.Validate(); err == nil {
+				t.Fatal("Validate() = nil, want validation error")
+			}
+		})
+	}
+
+	result := workersessions.InterruptResult{
+		RequestID: request.RequestID,
+		Source:    workersessions.Session{ID: "source-1", State: workersessions.StateCanceled},
+		Successor: workersessions.Session{ID: "successor-1", State: workersessions.StateRunning},
+	}
+	clone := result.Clone()
+	if clone.Source.ID != result.Source.ID || clone.Successor.ID != result.Successor.ID || clone.Source.State != workersessions.StateCanceled || clone.Successor.State != workersessions.StateRunning {
+		t.Fatalf("InterruptResult.Clone() = %#v, want detached lifecycle snapshots", clone)
+	}
+}
+
+func TestInterruptErrorPreservesPhaseCauseAndErrorsIsContract(t *testing.T) {
+	cause := errors.New("boundary unavailable")
+	interruptErr := &workersessions.InterruptError{Phase: workersessions.InterruptPhaseSourceCancellation, Cause: cause}
+	if !strings.Contains(interruptErr.Error(), string(workersessions.InterruptPhaseSourceCancellation)) || !strings.Contains(interruptErr.Error(), cause.Error()) {
+		t.Fatalf("InterruptError.Error() = %q, want phase and cause", interruptErr.Error())
+	}
+	if !errors.Is(interruptErr, cause) || !errors.Is(interruptErr, workersessions.ErrInterruptSourceCancellation) || errors.Is(interruptErr, workersessions.ErrInterruptSuccessorAdmission) {
+		t.Fatalf("errors.Is() phase/cause matching is incorrect")
+	}
+	if workersessions.ErrInterruptValidation.Error() != string(workersessions.InterruptPhaseValidation) {
+		t.Fatalf("interrupt validation sentinel = %q, want phase name", workersessions.ErrInterruptValidation.Error())
+	}
+	if !errors.Is(interruptErr, interruptErr) {
+		t.Fatal("errors.Is() should match the same InterruptError through Cause traversal")
+	}
+	if interruptErr.Unwrap() != cause {
+		t.Fatalf("InterruptError.Unwrap() = %v, want cause", interruptErr.Unwrap())
+	}
+
+	withoutCause := (&workersessions.InterruptError{Phase: workersessions.InterruptPhaseValidation}).Error()
+	if !strings.Contains(withoutCause, string(workersessions.InterruptPhaseValidation)) {
+		t.Fatalf("InterruptError without cause = %q, want validation phase", withoutCause)
+	}
+	var nilError *workersessions.InterruptError
+	if nilError.Error() != "worker session: interrupt failed" || nilError.Unwrap() != nil || nilError.Is(workersessions.ErrInterruptValidation) {
+		t.Fatal("nil InterruptError methods did not preserve safe zero behavior")
 	}
 }

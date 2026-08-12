@@ -203,6 +203,39 @@ func TestWorkerSessionOperationsReturnStructuredErrorWhenHandlerIsUnavailable(t 
 	}
 }
 
+func TestWorkerSessionControlForwardersReturnStructuredErrorWhenHandlerIsUnavailable(t *testing.T) {
+	srv := NewServer(nil, nil, nil, nil, nil, zap.NewNop())
+	cases := []struct {
+		name string
+		call func(*httptest.ResponseRecorder)
+	}{
+		{name: "interrupt", call: func(recorder *httptest.ResponseRecorder) {
+			srv.InterruptWorkerSession(recorder, httptest.NewRequest(http.MethodPost, "/", nil), factoryapi.WorkerSessionID("source-missing"))
+		}},
+		{name: "pause", call: func(recorder *httptest.ResponseRecorder) {
+			srv.PauseWorkerSession(recorder, httptest.NewRequest(http.MethodPost, "/", nil), factoryapi.WorkerSessionID("worker-missing"))
+		}},
+		{name: "resume", call: func(recorder *httptest.ResponseRecorder) {
+			srv.ResumeWorkerSession(recorder, httptest.NewRequest(http.MethodPost, "/", nil), factoryapi.WorkerSessionID("worker-missing"))
+		}},
+		{name: "cancel", call: func(recorder *httptest.ResponseRecorder) {
+			srv.CancelWorkerSession(recorder, httptest.NewRequest(http.MethodPost, "/", nil), factoryapi.WorkerSessionID("worker-missing"))
+		}},
+		{name: "terminate", call: func(recorder *httptest.ResponseRecorder) {
+			srv.TerminateWorkerSession(recorder, httptest.NewRequest(http.MethodPost, "/", nil), factoryapi.WorkerSessionID("worker-missing"))
+		}},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			test.call(recorder)
+			if recorder.Code != http.StatusInternalServerError {
+				t.Fatalf("status = %d, want %d: %s", recorder.Code, http.StatusInternalServerError, recorder.Body.String())
+			}
+		})
+	}
+}
+
 func TestDashboardRoutesServeEmbeddedShellAssetsAndFallback(t *testing.T) {
 	srv := NewServer(nil, nil, nil, nil, nil, zap.NewNop())
 

@@ -530,6 +530,266 @@ func TestCancel_BeforeBoundaryAdmissionEitherWaitsOrTerminatesTheExactSupervisio
 	}
 }
 
+func TestInterruptGuardsAndReplayHelpersCoverObservableFailureClasses(t *testing.T) {
+	t.Run("source association validation", testInterruptSourceAssociationValidation)
+	t.Run("source identity guards", testInterruptSourceIdentityGuards)
+	t.Run("supervision reservation guards", testInterruptSupervisionReservationGuards)
+	t.Run("reservation lifecycle guards", testInterruptReservationLifecycleGuards)
+	t.Run("replay and cancellation helpers", testInterruptReplayAndCancellationHelpers)
+	t.Run("validation result", testInterruptValidationResult)
+}
+
+func testInterruptSourceAssociationValidation(t *testing.T) {
+	validReference := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-session"}
+	cases := []struct {
+		name   string
+		source workersessions.Session
+		valid  bool
+	}{
+		{name: "missing", source: workersessions.Session{ID: "source"}},
+		{name: "invalid reference", source: workersessions.Session{ID: "source", ProviderSessionAssociation: &workersessions.ProviderSessionAssociation{WorkerSessionID: "source", DispatchID: "dispatch", AttemptID: "dispatch"}}},
+		{name: "identity mismatch", source: workersessions.Session{ID: "source", ProviderSessionAssociation: &workersessions.ProviderSessionAssociation{WorkerSessionID: "other", DispatchID: "dispatch", AttemptID: "dispatch", Reference: validReference}}},
+		{name: "valid", valid: true, source: workersessions.Session{ID: "source", ProviderSessionAssociation: &workersessions.ProviderSessionAssociation{WorkerSessionID: "source", DispatchID: "dispatch", AttemptID: "dispatch", Reference: validReference}}},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			association, err := interruptSourceAssociation(test.source)
+			if test.valid {
+				if err != nil || association.Reference != validReference {
+					t.Fatalf("interruptSourceAssociation() = %#v, %v, want valid exact reference", association, err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatal("interruptSourceAssociation() = nil error, want rejection")
+			}
+		})
+	}
+}
+
+func testInterruptSourceIdentityGuards(t *testing.T) {
+	request := workersessions.InterruptRequest{SourceWorkerSessionID: "source", SuccessorWorkerSessionID: "successor"}
+	cases := []struct {
+		name    string
+		session map[string]workersessions.Session
+		wantErr error
+	}{
+		{name: "missing source", session: map[string]workersessions.Session{}, wantErr: workersessions.ErrInterruptSourceNotFound},
+		{name: "inactive source", session: map[string]workersessions.Session{"source": {ID: "source", State: workersessions.StatePaused}}, wantErr: workersessions.ErrInterruptSourceNotActive},
+		{name: "source already has successor", session: map[string]workersessions.Session{"source": {ID: "source", State: workersessions.StateRunning, SuccessorWorkerSessionID: "existing"}}, wantErr: workersessions.ErrInterruptSourceConflict},
+		{name: "successor exists", session: map[string]workersessions.Session{"source": {ID: "source", State: workersessions.StateRunning}, "successor": {ID: "successor"}}, wantErr: workersessions.ErrInterruptSourceConflict},
+		{name: "active source", session: map[string]workersessions.Session{"source": {ID: "source", State: workersessions.StateRunning}}, wantErr: nil},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			r := newTestRegistry(t)
+			r.sessions = test.session
+			_, err := r.interruptSourceLocked(request)
+			if !errors.Is(err, test.wantErr) {
+				t.Fatalf("interruptSourceLocked() error = %v, want %v", err, test.wantErr)
+			}
+		})
+	}
+}
+
+func testInterruptSupervisionReservationGuards(t *testing.T) {
+	validReference := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-session"}
+	cases := []struct {
+		name        string
+		configure   func(*supervision)
+		association workersessions.ProviderSessionAssociation
+		wantErr     error
+	}{
+		{name: "missing supervision", wantErr: workersessions.ErrInterruptExecutionUnavailable, association: validAssociation("source", "dispatch", validReference)},
+		{name: "not accepted", configure: func(s *supervision) { s.accepted = false }, wantErr: workersessions.ErrInterruptSourceNotActive, association: validAssociation("source", "dispatch", validReference)},
+		{name: "control conflict", configure: func(s *supervision) { s.accepted = true; s.controlAction = workersessions.ControlActionCancel }, wantErr: workersessions.ErrInterruptSourceConflict, association: validAssociation("source", "dispatch", validReference)},
+		{name: "provider mismatch", configure: func(s *supervision) { s.accepted = true }, wantErr: workersessions.ErrInterruptProviderSessionInvalid, association: validAssociation("source", "other-dispatch", validReference)},
+		{name: "accepted", configure: func(s *supervision) { s.accepted = true }, association: validAssociation("source", "dispatch", validReference)},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			r := newTestRegistry(t)
+			supervisionValue := newSupervision("dispatch", "")
+			if test.configure != nil {
+				test.configure(supervisionValue)
+				r.supervisions = map[string]*supervision{"source": supervisionValue}
+			}
+			plan, err := r.reserveInterruptSupervisionLocked(
+				workersessions.InterruptRequest{RequestID: "request", SourceWorkerSessionID: "source", SuccessorWorkerSessionID: "successor"},
+				workersessions.Session{ID: "source"}, test.association,
+			)
+			if !errors.Is(err, test.wantErr) {
+				t.Fatalf("reserveInterruptSupervisionLocked() error = %v, want %v", err, test.wantErr)
+			}
+			if test.wantErr == nil && (err != nil || plan.dispatchID != "dispatch") {
+				t.Fatalf("accepted supervision plan = %#v, %v, want dispatch", plan, err)
+			}
+		})
+	}
+}
+
+func testInterruptReservationLifecycleGuards(t *testing.T) {
+	request := workersessions.InterruptRequest{RequestID: "request", SourceWorkerSessionID: "source", SuccessorWorkerSessionID: "successor", ReplacementMessage: "replacement"}
+	tuple := interruptTuple{sourceID: "source", successorID: "successor", message: "replacement"}
+	r := newTestRegistry(t)
+	r.interruptReplays = nil
+	if _, _, err := r.reserveInterrupt(request); !errors.Is(err, workersessions.ErrInterruptSourceNotFound) {
+		t.Fatalf("reserveInterrupt(missing source) error = %v, want source not found", err)
+	}
+	if r.interruptReplays == nil {
+		t.Fatal("reserveInterrupt() did not initialize replay storage")
+	}
+	r.interruptReplays[request.RequestID] = &interruptReplay{tuple: tuple}
+	replay, owner, err := r.reserveInterrupt(request)
+	if err != nil || owner || replay == nil {
+		t.Fatalf("reserveInterrupt(replay) = %#v, %t, %v, want existing replay", replay, owner, err)
+	}
+	conflict := request
+	conflict.ReplacementMessage = "different"
+	if _, _, err := r.reserveInterrupt(conflict); !errors.Is(err, workersessions.ErrInterruptRequestIDConflict) {
+		t.Fatalf("reserveInterrupt(conflict) error = %v, want request ID conflict", err)
+	}
+	r.interruptReplays = make(map[string]*interruptReplay)
+	r.stopping = true
+	if _, _, err := r.reserveInterrupt(request); !errors.Is(err, workersessions.ErrInterruptServerStopping) {
+		t.Fatalf("reserveInterrupt(stopping) error = %v, want server stopping", err)
+	}
+	r.stopping = false
+	r.sessions[request.SourceWorkerSessionID] = workersessions.Session{ID: request.SourceWorkerSessionID, State: workersessions.StateRunning}
+	if _, _, err := r.reserveInterrupt(request); !errors.Is(err, workersessions.ErrInterruptProviderSessionMissing) {
+		t.Fatalf("reserveInterrupt(missing provider association) error = %v, want provider session missing", err)
+	}
+	r.startsDone = nil
+	replay = r.storeInterruptReservationLocked(request, tuple, interruptPlan{dispatchID: "dispatch"})
+	if replay == nil || r.activeStarts != 1 {
+		t.Fatalf("storeInterruptReservationLocked() = %#v with active starts %d, want replay and one active start", replay, r.activeStarts)
+	}
+	r.finishStart()
+}
+
+func testInterruptReplayAndCancellationHelpers(t *testing.T) {
+	replay := &interruptReplay{done: make(chan struct{}), result: workersessions.InterruptResult{RequestID: "request", Accepted: true}}
+	close(replay.done)
+	result, err := awaitInterruptReplay(context.Background(), replay)
+	if err != nil || !result.Accepted {
+		t.Fatalf("awaitInterruptReplay(completed) = %#v, %v, want accepted replay", result, err)
+	}
+	pending := &interruptReplay{done: make(chan struct{})}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := awaitInterruptReplay(ctx, pending); !errors.Is(err, context.Canceled) {
+		t.Fatalf("awaitInterruptReplay(canceled) error = %v, want context.Canceled", err)
+	}
+	completed := &interruptReplay{done: make(chan struct{}), result: workersessions.InterruptResult{Accepted: true}}
+	close(completed.done)
+	if result, err := awaitInterruptReplay(nil, completed); err != nil || !result.Accepted {
+		t.Fatalf("awaitInterruptReplay(nil context) = %#v, %v, want completed replay", result, err)
+	}
+	if !errors.Is(interruptPhaseCause(workersessions.InterruptPhaseValidation), workersessions.ErrInterruptValidation) ||
+		!errors.Is(interruptPhaseCause(workersessions.InterruptPhaseSourceCancellation), workersessions.ErrInterruptSourceCancellation) ||
+		!errors.Is(interruptPhaseCause(workersessions.InterruptPhaseSuccessorAdmission), workersessions.ErrInterruptSuccessorAdmission) ||
+		interruptPhaseCause("unknown") == nil {
+		t.Fatal("interruptPhaseCause() did not preserve all phase sentinels")
+	}
+	if !errors.Is(interruptCancellationCause(workers.WorkstationDispatchCancelResult{}, errors.New("cancel failed")), workersessions.ErrInterruptSourceCancellationFailed) ||
+		!errors.Is(interruptCancellationCause(workers.WorkstationDispatchCancelResult{Outcome: workers.WorkstationDispatchCancelOutcomeAlreadyTerminal}, nil), workers.ErrWorkstationDispatchAlreadyTerminal) ||
+		interruptCancellationCause(workers.WorkstationDispatchCancelResult{Outcome: workers.WorkstationDispatchCancelOutcomeAlreadyCanceled}, nil) == nil {
+		t.Fatal("interruptCancellationCause() did not classify boundary outcomes")
+	}
+}
+
+func testInterruptValidationResult(t *testing.T) {
+	result, err := newTestRegistry(t).Interrupt(nil, workersessions.InterruptRequest{})
+	var interruptErr *workersessions.InterruptError
+	if !errors.As(err, &interruptErr) || interruptErr.Phase != workersessions.InterruptPhaseValidation || result.Phase != workersessions.InterruptPhaseValidation {
+		t.Fatalf("Interrupt(nil context) = %#v, %v, want validation error", result, err)
+	}
+}
+
+func validAssociation(workerSessionID, dispatchID string, reference providers.SessionRef) workersessions.ProviderSessionAssociation {
+	return workersessions.ProviderSessionAssociation{
+		WorkerSessionID: workerSessionID,
+		DispatchID:      dispatchID,
+		AttemptID:       dispatchID,
+		Reference:       reference,
+	}
+}
+
+func TestBeginCancellationClassifiesAdmissionAndPreAdmissionStates(t *testing.T) {
+	interrupting := newSupervision("dispatch-interrupting", "")
+	interrupting.interrupting = true
+	interrupting.interruptDone = make(chan struct{})
+	attempt := interrupting.beginCancellation(workersessions.ControlActionCancel)
+	if attempt.kind != cancellationAttemptWait || attempt.wait != interrupting.interruptDone {
+		t.Fatalf("beginCancellation(interrupting) = %#v, want interrupt wait", attempt)
+	}
+
+	publishing := newSupervision("dispatch-publishing", "")
+	publishing.publishing = true
+	publishing.accepted = false
+	attempt = publishing.beginCancellation(workersessions.ControlActionPause)
+	if attempt.kind != cancellationAttemptWait || attempt.wait == nil || publishing.preAdmissionAction != workersessions.ControlActionPause {
+		t.Fatalf("beginCancellation(publishing) = %#v, want wait with queued pause", attempt)
+	}
+
+	preAdmission := newSupervision("dispatch-pre-admission", "")
+	preAdmission.preAdmissionAction = workersessions.ControlActionPause
+	attempt = preAdmission.beginCancellation(workersessions.ControlActionCancel)
+	if attempt.kind != cancellationAttemptBoundary || attempt.dispatchID != "dispatch-pre-admission" ||
+		preAdmission.requestedAction != workersessions.ControlActionPause || preAdmission.controlDone == nil {
+		t.Fatalf("beginCancellation(queued pre-admission) = %#v, want boundary for queued pause", attempt)
+	}
+
+	notAccepted := newSupervision("dispatch-not-accepted", "")
+	attempt = notAccepted.beginCancellation(workersessions.ControlActionTerminate)
+	if attempt.kind != cancellationAttemptBeforeAdmission || notAccepted.controlAction != workersessions.ControlActionTerminate {
+		t.Fatalf("beginCancellation(not accepted) = %#v, want before-admission terminal control", attempt)
+	}
+}
+
+func TestCancelBoundaryReturnsNoopForNonCanceledWorkersOutcome(t *testing.T) {
+	r := newTestRegistry(t)
+	const sessionID = "worker-noop"
+	const dispatchID = "dispatch-noop"
+	r.sessions[sessionID] = workersessions.Session{ID: sessionID, State: workersessions.StateRunning}
+	supervision := newSupervision(dispatchID, "")
+	supervision.accepted = true
+	supervision.controlActive = true
+	supervision.requestedAction = workersessions.ControlActionCancel
+	wait := make(chan struct{})
+	supervision.controlDone = wait
+	r.supervisions[sessionID] = supervision
+	r.boundary = cancellationResultBoundary{
+		unusedExecution: unusedExecution{t: t},
+		result: workers.WorkstationDispatchCancelResult{
+			DispatchID: dispatchID,
+			Outcome:    workers.WorkstationDispatchCancelOutcome("not-canceled"),
+		},
+	}
+
+	result, retry, err := r.cancelBoundary(context.Background(), workersessions.ControlRequest{ID: sessionID}, workersessions.ControlActionCancel, false, supervision, cancellationAttempt{wait: wait, dispatchID: dispatchID})
+	if err != nil || retry || result.Outcome != workersessions.ControlOutcomeNoop || result.Session.State != workersessions.StateRunning {
+		t.Fatalf("cancelBoundary(non-canceled outcome) = %#v, %t, %v, want noop", result, retry, err)
+	}
+}
+
+func TestCancelControlWaitsForConcurrentControl(t *testing.T) {
+	r := newTestRegistry(t)
+	const sessionID = "worker-wait"
+	r.sessions[sessionID] = workersessions.Session{ID: sessionID, State: workersessions.StateRunning}
+	supervision := newSupervision("dispatch-wait", "")
+	supervision.accepted = true
+	supervision.controlActive = true
+	supervision.controlDone = make(chan struct{})
+	close(supervision.controlDone)
+	r.supervisions[sessionID] = supervision
+
+	result, retry, err := r.cancelControlIteration(context.Background(), workersessions.ControlRequest{ID: sessionID}, workersessions.ControlActionCancel, false)
+	if err != nil || !retry || result != (workersessions.ControlResult{}) {
+		t.Fatalf("cancelControlIteration(concurrent control) = %#v, %t, %v, want retry", result, retry, err)
+	}
+}
+
 // TestCommitTerminal_ConcurrentCompetingOutcomes_OnlyOneWinsAndStateStaysAbsorbing
 // deterministically synchronizes several goroutines to reach commitTerminal
 // for the same identity at once with different, disagreeing outcomes and
@@ -2124,6 +2384,9 @@ func TestStartAndObservationEdgeBranches(t *testing.T) {
 	if _, err := newReplayObservationSubscription(context.Background(), nil, topic, workersessions.StateRunning, 0); !errors.Is(err, workersessions.ErrObservationSourceUnavailable) {
 		t.Fatalf("newReplayObservationSubscription(nil reader) = %v, want source unavailable", err)
 	}
+	if _, err := newReplayObservationSubscription(nil, coverageRetainedReader{err: errors.New("read unavailable")}, topic, workersessions.StateRunning, 0); !errors.Is(err, workersessions.ErrObservationSourceUnavailable) {
+		t.Fatalf("newReplayObservationSubscription(default limit) = %v, want source unavailable", err)
+	}
 	replay := &replayObservationSubscription{topic: topic, next: events.Cursor{Topic: topic}}
 	if err := replay.appendPage(events.ReadResult{Outcome: events.ReadOutcomeInvalidCursor}); !errors.Is(err, workersessions.ErrObservationSourceUnavailable) {
 		t.Fatalf("appendPage(invalid cursor) = %v, want source unavailable", err)
@@ -2406,6 +2669,14 @@ func TestContinuationSnapshotRejectsExecutionEdges(t *testing.T) {
 	if _, err := mismatchedDispatch.snapshotContinuationSourceLocked(request); !errors.Is(err, workersessions.ErrContinuationProviderSessionInvalid) {
 		t.Fatalf("snapshotContinuationSourceLocked(mismatched dispatch) = %v, want provider session invalid", err)
 	}
+
+	interrupting := newContinuationSource(t, request)
+	interrupting.supervisions[request.SourceWorkerSessionID] = newSupervision("dispatch-1", "turn-1", continuationValidExecution("dispatch-1"))
+	interrupting.supervisions[request.SourceWorkerSessionID].interrupting = true
+	interrupting.supervisions[request.SourceWorkerSessionID].interruptRequestID = "another-interrupt"
+	if _, err := interrupting.snapshotContinuationSourceLocked(request); !errors.Is(err, workersessions.ErrContinuationSourceConflict) {
+		t.Fatalf("snapshotContinuationSourceLocked(interrupt conflict) = %v, want source conflict", err)
+	}
 }
 
 func TestContinuationExecutionRejectsConflicts(t *testing.T) {
@@ -2457,6 +2728,21 @@ func TestContinuationReservationRejectsLifecycleEdges(t *testing.T) {
 	stopping.stopping = true
 	if _, _, err := stopping.reserveContinuation(request); !errors.Is(err, workersessions.ErrContinuationServerStopping) {
 		t.Fatalf("reserveContinuation(stopping) = %v, want server stopping", err)
+	}
+
+	dispatchConflict := newContinuationSource(t, request)
+	dispatchConflict.supervisions[request.SourceWorkerSessionID] = newSupervision("dispatch-1", "turn-1", continuationValidExecution("dispatch-1"))
+	dispatchConflict.dispatchOwners[continuationDispatchID("dispatch-1", request.SuccessorWorkerSessionID)] = "other-session"
+	if _, _, err := dispatchConflict.reserveContinuation(request); !errors.Is(err, workersessions.ErrContinuationSuccessorConflict) {
+		t.Fatalf("reserveContinuation(dispatch conflict) = %v, want successor conflict", err)
+	}
+
+	invalidExecution := newTestRegistry(t)
+	invalidExecution.sessions[request.SuccessorWorkerSessionID] = workersessions.Session{
+		ID: request.SuccessorWorkerSessionID, State: workersessions.StateRunning,
+	}
+	if _, err := invalidExecution.continueReserved(continuePlan{request: request}); !errors.Is(err, workersessions.ErrContinuationNotAccepted) {
+		t.Fatalf("continueReserved(invalid execution) = %v, want continuation not accepted", err)
 	}
 	if _, err := stopping.Continue(nil, workersessions.ContinueRequest{}); !errors.Is(err, workersessions.ErrInvalidContinuationRequestID) {
 		t.Fatalf("Continue(nil, invalid) = %v, want invalid request ID", err)

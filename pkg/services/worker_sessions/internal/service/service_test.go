@@ -834,6 +834,67 @@ func TestInterrupt_ReportsSourceCancellationPhaseWithoutSuccessor(t *testing.T) 
 	}
 }
 
+func TestInterrupt_RejectsSuccessfulCancelWhenAuthoritativeSourceIsNotCanceled(t *testing.T) {
+	boundary := newControlledBoundary()
+	registry := newControlledRegistry(t, boundary)
+	sourceResult, _ := prepareInterruptSource(t, registry, boundary)
+	boundary.setCancel(func(_ context.Context, request workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
+		boundary.complete(completedDispatchResult(request.DispatchID), nil)
+		return workers.WorkstationDispatchCancelResult{DispatchID: request.DispatchID, Outcome: workers.WorkstationDispatchCancelOutcomeCanceled}, nil
+	})
+
+	result, err := registry.Interrupt(context.Background(), workersessions.InterruptRequest{
+		RequestID: "interrupt-source-not-canceled", SourceWorkerSessionID: "source-session",
+		SuccessorWorkerSessionID: "successor-session", ReplacementMessage: "replacement",
+	})
+	var interruptErr *workersessions.InterruptError
+	if !errors.As(err, &interruptErr) || interruptErr.Phase != workersessions.InterruptPhaseSourceCancellation ||
+		!errors.Is(err, workersessions.ErrInterruptSourceCancellation) || result.Source.State != workersessions.StateCompleted {
+		t.Fatalf("non-canceled authoritative source = %#v, %v, want source cancellation failure", result, err)
+	}
+	if got := <-sourceResult; got.Session.State != workersessions.StateCompleted {
+		t.Fatalf("source InvokeSession() = %#v, want COMPLETED", got.Session)
+	}
+}
+
+func TestInterruptReturnsCallerCancellationWhileServerOwnedOperationFinishes(t *testing.T) {
+	boundary := newControlledBoundary()
+	registry := newControlledRegistry(t, boundary)
+	sourceResult, _ := prepareInterruptSource(t, registry, boundary)
+	release := make(chan struct{})
+	boundary.setCancel(func(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
+		<-release
+		return workers.WorkstationDispatchCancelResult{}, errors.New("cancel boundary unavailable")
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	type outcome struct {
+		result workersessions.InterruptResult
+		err    error
+	}
+	outcomes := make(chan outcome, 1)
+	go func() {
+		result, err := registry.Interrupt(ctx, workersessions.InterruptRequest{
+			RequestID: "interrupt-caller-canceled", SourceWorkerSessionID: "source-session",
+			SuccessorWorkerSessionID: "successor-session", ReplacementMessage: "replacement",
+		})
+		outcomes <- outcome{result: result, err: err}
+	}()
+	<-boundary.cancelCalled
+	cancel()
+	operation := <-outcomes
+	if !errors.Is(operation.err, context.Canceled) {
+		t.Fatalf("caller-canceled Interrupt() = %#v, %v, want context.Canceled", operation.result, operation.err)
+	}
+
+	close(release)
+	boundary.setCancel(nil)
+	boundary.complete(completedDispatchResult("dispatch-source"), nil)
+	if got := <-sourceResult; got.Session.State != workersessions.StateCompleted {
+		t.Fatalf("server-owned cleanup InvokeSession() = %#v, want COMPLETED", got.Session)
+	}
+}
+
 func TestInterrupt_ReportsSuccessorAdmissionPhaseAfterSourceCancellation(t *testing.T) {
 	boundary := newControlledBoundary()
 	registry := newControlledRegistry(t, boundary)

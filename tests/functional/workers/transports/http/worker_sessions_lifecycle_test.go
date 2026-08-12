@@ -173,6 +173,21 @@ func TestWorkerSessionHTTPControlCancelConvergesTerminalSnapshot(t *testing.T) {
 		terminateResult.DispatchId != "control-dispatch" {
 		t.Fatalf("mixed terminate result = %#v, want canonical canceled no-op", terminateResult)
 	}
+	for _, action := range []string{"pause", "resume"} {
+		control := postWorkerSessionControl(t, server.URL(), "control-session", action)
+		defer control.Body.Close()
+		if control.StatusCode != http.StatusOK {
+			t.Fatalf("mixed %s status = %d, want 200", action, control.StatusCode)
+		}
+		var result factoryapi.WorkerSessionControlResponse
+		if err := json.NewDecoder(control.Body).Decode(&result); err != nil {
+			t.Fatalf("decode mixed %s result: %v", action, err)
+		}
+		if result.Outcome != factoryapi.WorkerSessionControlResponseOutcomeNoop ||
+			result.State != factoryapi.WorkerSessionControlResponseStateCanceled || result.DispatchId != "control-dispatch" {
+			t.Fatalf("mixed %s result = %#v, want canonical canceled no-op", action, result)
+		}
+	}
 	if runner.callCount() != 1 {
 		t.Fatalf("worker command calls after repeated/mixed controls = %d, want one", runner.callCount())
 	}
