@@ -11,6 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -170,12 +171,15 @@ type RuntimeHTTPServices struct {
 // artifact, result, and ordered-event facts as the ordinary inspection
 // surfaces while making its read-only and redaction boundaries explicit.
 type HistoricalReplayInspection struct {
-	Session    SessionReadResult
-	Events     EventReadResult
-	Artifacts  ListArtifactsResult
-	Result     ResultReadResult
-	Checkpoint *HistoricalReplayCheckpoint
-	Redaction  HistoricalReplayRedaction
+	Session   SessionReadResult
+	Events    EventReadResult
+	Artifacts ListArtifactsResult
+	Result    ResultReadResult
+	// WorkerHistory is derived from the recording schema. Legacy recordings
+	// report an explicit unavailable outcome instead of an empty history.
+	WorkerHistory recordings.PortableRecordingWorkerHistory
+	Checkpoint    *HistoricalReplayCheckpoint
+	Redaction     HistoricalReplayRedaction
 }
 
 // HistoricalReplayCheckpoint is the public checkpoint summary available from

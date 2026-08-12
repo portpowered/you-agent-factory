@@ -5,11 +5,79 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+func TestConfigDrivenRetryLoopBreaker_TripsAfterThreeProcessFailures(t *testing.T) {
+	dir := support.ScaffoldFactory(t, map[string]any{
+		"name": "process_failure_breaker",
+		"workTypes": []any{map[string]any{
+			"name": "task",
+			"states": []any{
+				map[string]any{"name": "init", "type": "INITIAL"},
+				map[string]any{"name": "complete", "type": "TERMINAL"},
+				map[string]any{"name": "failed", "type": "FAILED"},
+			},
+		}},
+		"workers": []any{map[string]any{"name": "processor"}},
+		"workstations": []map[string]any{{
+			"name":   "process",
+			"worker": "processor",
+			"inputs": []any{map[string]any{"workType": "task", "state": "init"}},
+			"outputs": []any{map[string]any{
+				"workType": "task",
+				"state":    "complete",
+			}},
+			"onFailure": []any{map[string]any{
+				"workType": "task",
+				"state":    "init",
+			}},
+			"limits": map[string]any{"maxRetries": 3},
+		}},
+	})
+	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"process failure breaker"}`))
+	support.WriteAgentConfig(t, dir, "processor", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "test-model"))
+
+	runner := support.NewShapedProviderCommandRunner(
+		platformprocess.CommandResult{ExitCode: 1, Stderr: []byte("first process failed")},
+		platformprocess.CommandResult{ExitCode: 1, Stderr: []byte("second process failed")},
+		platformprocess.CommandResult{ExitCode: 1, Stderr: []byte("third process failed")},
+	)
+	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+		t,
+		dir,
+		serviceedges.Edges{ProviderCommandRunner: runner},
+		15*time.Second,
+	)
+
+	assertWorkflowSessionPlaces(t, listed, map[string]int{
+		"task:failed":   1,
+		"task:init":     0,
+		"task:complete": 0,
+	})
+	if got := runner.CallCount(); got != 3 {
+		t.Fatalf("provider command calls = %d, want three consecutive process failures", got)
+	}
+
+	observations := support.ObserveDispatchEvents(t, events)
+	processFailures := 0
+	for _, observation := range observations {
+		if observation.Request.TransitionId == "process" && observation.Response != nil {
+			if observation.Response.Outcome != factoryapi.WorkOutcomeFailed {
+				t.Errorf("process response outcome = %q, want FAILED", observation.Response.Outcome)
+			}
+			processFailures++
+		}
+	}
+	if processFailures != 3 {
+		t.Fatalf("failed process dispatches = %d, want three counted failures", processFailures)
+	}
+}
 
 func TestConfigDrivenRetryLoopBreaker_TerminatesAfterMaxRetries(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "retry_exhaustion"))

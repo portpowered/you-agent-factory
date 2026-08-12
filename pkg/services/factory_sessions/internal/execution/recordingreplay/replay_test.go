@@ -1,15 +1,19 @@
 package recordingreplay
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testpath"
 	fse "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 	recording "github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func TestReplayRecordingRestoresCompletedPublicReadModelsWithoutLiveExecution(t *testing.T) {
@@ -116,6 +120,126 @@ func TestReplayRecordingRestoresResumedHistoryAndFinalAvailability(t *testing.T)
 		t.Fatalf("resumed lifecycle/result = %#v %#v", got.Session.Lifecycle, got.Result)
 	}
 	assertRecordedInspectionParity(t, value, got)
+}
+
+func TestReplayRecordingPreservesLegacyFactsAndReportsWorkerHistoryUnavailable(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"valid-v1.json", "valid-v2.json", "valid-v2-checkpoint.json"} {
+		name := name
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			assertLegacyReplayFixture(t, name)
+		})
+	}
+}
+
+func TestReplayRecordingPreservesCurrentWorkerHistoryFacts(t *testing.T) {
+	t.Parallel()
+	value := loadVersionPinnedRecordingFixture(t, "valid-v3-worker-history.json")
+	first := replayVersionPinnedFixture(t, value)
+	second := replayVersionPinnedFixture(t, value)
+	assertStableWorkerHistory(t, first, second)
+	history := first.WorkerHistory
+	if history.Availability != recording.PortableRecordingWorkerHistoryAvailable ||
+		history.WorkerPortableRecording == nil || len(history.Records) != 3 {
+		t.Fatalf("Worker history = %#v, want available ordered history", history)
+	}
+	if history.Lifecycle.Terminal == nil || history.Lifecycle.Terminal.Status != "COMPLETED" ||
+		history.Correlation.FactorySessionID != value.Session.ID || history.Correlation.DispatchID != "dispatch-current-001" {
+		t.Fatalf("Worker lifecycle/correlation = %#v", history)
+	}
+	if history.Records[1].Provenance.Fidelity != workers.FidelityNormalized ||
+		history.Records[1].Provenance.Delivery != workers.DeliveryNativeStream {
+		t.Fatalf("Worker fidelity facts = %#v", history.Records[1])
+	}
+	if first.Session.SessionID != value.Session.ID || len(first.Events.Events) != len(value.Events) ||
+		first.Result.ResultStatus != fse.ResultStatusFinal {
+		t.Fatalf("Factory Session projection = %#v", first)
+	}
+	assertInspectionWorkerHistory(t, first)
+}
+
+func assertLegacyReplayFixture(t *testing.T, name string) {
+	t.Helper()
+	value := loadVersionPinnedRecordingFixture(t, name)
+	first := replayVersionPinnedFixture(t, value)
+	second := replayVersionPinnedFixture(t, value)
+	assertStableWorkerHistory(t, first, second)
+	assertLegacyWorkerHistory(t, first)
+	assertLegacyFactorySessionFacts(t, value, first)
+	assertLegacyResultAbsence(t, value, first)
+	assertInspectionWorkerHistory(t, first)
+}
+
+func replayVersionPinnedFixture(t *testing.T, value recording.PortableRecording) RecordingReplayProjection {
+	t.Helper()
+	projection, err := ReplayRecording(value)
+	if err != nil {
+		t.Fatalf("ReplayRecording() error = %v", err)
+	}
+	return projection
+}
+
+func assertStableWorkerHistory(t *testing.T, first, second RecordingReplayProjection) {
+	t.Helper()
+	if !reflect.DeepEqual(first.WorkerHistory, second.WorkerHistory) {
+		t.Fatalf("Worker history changed across replay: first=%#v second=%#v", first.WorkerHistory, second.WorkerHistory)
+	}
+}
+
+func assertLegacyWorkerHistory(t *testing.T, projection RecordingReplayProjection) {
+	t.Helper()
+	if projection.WorkerHistory.Availability != recording.PortableRecordingWorkerHistoryUnavailable ||
+		projection.WorkerHistory.Reason != recording.PortableRecordingWorkerHistoryReasonLegacySchema {
+		t.Fatalf("Worker history = %#v, want unavailable legacy outcome", projection.WorkerHistory)
+	}
+}
+
+func assertLegacyFactorySessionFacts(t *testing.T, value recording.PortableRecording, projection RecordingReplayProjection) {
+	t.Helper()
+	if projection.Session.SessionID != value.Session.ID ||
+		projection.Session.ResolvedSource.SourceRef != value.Source.Ref ||
+		len(projection.Events.Events) != len(value.Events) ||
+		len(projection.Artifacts.Artifacts) != len(value.Artifacts) {
+		t.Fatalf("legacy Factory Session facts were not preserved: %#v", projection)
+	}
+}
+
+func assertLegacyResultAbsence(t *testing.T, value recording.PortableRecording, projection RecordingReplayProjection) {
+	t.Helper()
+	if value.Result != nil {
+		return
+	}
+	if projection.Session.ResultSummary != nil || projection.Result.ResultStatus != "" ||
+		projection.Result.Availability != nil || projection.Result.Failure != nil {
+		t.Fatalf("schema-1 fabricated result facts: session=%#v result=%#v", projection.Session, projection.Result)
+	}
+}
+
+func assertInspectionWorkerHistory(t *testing.T, projection RecordingReplayProjection) {
+	t.Helper()
+	inspection := NewService(projection).Inspection()
+	if !reflect.DeepEqual(inspection.WorkerHistory, projection.WorkerHistory) {
+		t.Fatalf("inspection Worker history = %#v, want %#v", inspection.WorkerHistory, projection.WorkerHistory)
+	}
+}
+
+func loadVersionPinnedRecordingFixture(t *testing.T, name string) recording.PortableRecording {
+	t.Helper()
+	path := testpath.MustRepoPathFromCaller(
+		t,
+		0,
+		"pkg", "services", "recordings", "internal", "artifacts", "testdata", name,
+	)
+	payload, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read fixture %q: %v", name, err)
+	}
+	value, err := recording.DecodePortableRecording(bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("decode fixture %q: %v", name, err)
+	}
+	return value
 }
 
 func buildLifecycleRecording(t *testing.T, status string, resumed bool) recording.PortableRecording {

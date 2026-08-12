@@ -27,11 +27,12 @@ func TestListJSONUsesStableSessionDocumentAndNullOptionals(t *testing.T) {
 				WorkerSessionId: "worker-session-1", AttemptId: "attempt-1",
 				ProviderSessionAvailable: true,
 				ProviderSession:          &factoryapi.WorkerSessionProviderSessionRef{Provider: "codex", Kind: "session_id", Id: "provider-session-1"},
-				WorkIds:                  []string{"work-1"}, State: factoryapi.WorkerSessionObservationState("COMPLETED"),
+				WorkIds:                  []string{"work-1"}, State: factoryapi.WorkerSessionObservationState("FAILED"),
 				DurationBasis:  factoryapi.WorkerSessionObservationDurationBasis("RECORDED_TIMESTAMPS"),
 				Transcript:     factoryapi.WorkerSessionObservationTranscript("AVAILABLE"),
 				DurationMillis: int64Ptr(2500),
 				TokenUsage:     &factoryapi.ProviderSessionTokenUsage{TotalTokens: intPtr(17)},
+				Failure:        &factoryapi.WorkerSessionFailure{Kind: "INCOMPLETE_OUTPUT", Detail: "safe incomplete-output detail"},
 			},
 			{
 				WorkerSessionId: "worker-session-2", AttemptId: "attempt-2",
@@ -78,6 +79,9 @@ func TestListJSONUsesStableSessionDocumentAndNullOptionals(t *testing.T) {
 	if got := string(document.Sessions[0]["tokenUsage"]); !strings.Contains(got, `"totalTokens":17`) {
 		t.Fatalf("session 1 tokenUsage = %s, want totalTokens 17", got)
 	}
+	if got := string(document.Sessions[0]["failure"]); !strings.Contains(got, `"kind":"INCOMPLETE_OUTPUT"`) {
+		t.Fatalf("session 1 failure = %s, want INCOMPLETE_OUTPUT", got)
+	}
 }
 
 func TestListHumanRendersLabelsTokensDurationAndFailure(t *testing.T) {
@@ -118,6 +122,56 @@ func TestListHumanRendersLabelsTokensDurationAndFailure(t *testing.T) {
 	} {
 		if !strings.Contains(output.String(), want) {
 			t.Fatalf("output %q missing %q", output.String(), want)
+		}
+	}
+}
+
+func TestListPreservesDistinctBoundedFailureKindsInHumanAndJSON(t *testing.T) {
+	kinds := []string{"REJECTED", "INCOMPLETE_OUTPUT", "WORKERS_EXECUTION_FAILURE"}
+	observations := make([]factoryapi.WorkerSessionObservation, 0, len(kinds))
+	for _, kind := range kinds {
+		observations = append(observations, factoryapi.WorkerSessionObservation{
+			WorkerSessionId: "worker-session-" + kind,
+			AttemptId:       "attempt-" + kind,
+			WorkIds:         []string{"work-1"},
+			State:           factoryapi.WorkerSessionObservationState("FAILED"),
+			Failure:         &factoryapi.WorkerSessionFailure{Kind: kind, Detail: "safe bounded detail"},
+		})
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(factoryapi.ListWorkerSessionsResponse{Sessions: observations})
+	}))
+	defer server.Close()
+
+	var humanOutput bytes.Buffer
+	if err := NewList(testHTTPProtocol(t))(ListConfig{
+		Context: context.Background(), Server: server.URL, WorkID: "work-1", Output: &humanOutput,
+	}); err != nil {
+		t.Fatalf("human List() error = %v", err)
+	}
+	for _, kind := range kinds {
+		if !strings.Contains(humanOutput.String(), kind) {
+			t.Fatalf("human output %q missing failure kind %q", humanOutput.String(), kind)
+		}
+	}
+
+	var jsonOutput bytes.Buffer
+	if err := NewList(testHTTPProtocol(t))(ListConfig{
+		Context: context.Background(), Server: server.URL, WorkID: "work-1", OutputFormat: "json", Output: &jsonOutput,
+	}); err != nil {
+		t.Fatalf("JSON List() error = %v", err)
+	}
+	var document factoryapi.ListWorkerSessionsResponse
+	if err := json.Unmarshal(jsonOutput.Bytes(), &document); err != nil {
+		t.Fatalf("decode JSON output: %v; output=%q", err, jsonOutput.String())
+	}
+	if len(document.Sessions) != len(kinds) {
+		t.Fatalf("JSON session count = %d, want %d", len(document.Sessions), len(kinds))
+	}
+	for index, kind := range kinds {
+		if document.Sessions[index].Failure == nil || document.Sessions[index].Failure.Kind != kind {
+			t.Fatalf("JSON session %d failure = %#v, want %q", index, document.Sessions[index].Failure, kind)
 		}
 	}
 }

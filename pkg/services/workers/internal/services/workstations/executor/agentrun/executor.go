@@ -129,7 +129,7 @@ func (executor *AgentRunExecutor) Execute(ctx context.Context, request workerexe
 				request.Dispatch.TransitionID,
 				harnessResult.FinalText,
 			)
-		result.Diagnostics = agentRunDiagnostics(toolMetadata)
+		result.Diagnostics = mergeAgentRunDiagnostics(agentRunDiagnostics(toolMetadata), result.Diagnostics)
 		duration := executor.clockNow().Sub(start)
 		result.Metrics = workerexecution.WorkMetrics{Duration: duration}
 		executor.recordAgentRunResponse(request.Dispatch, result, duration, harnessResult.Messages)
@@ -144,7 +144,7 @@ func (executor *AgentRunExecutor) Execute(ctx context.Context, request workerexe
 				request.Dispatch.TransitionID,
 				harnessResult.FinalText,
 			)
-		result.Diagnostics = agentRunDiagnostics(toolMetadata)
+		result.Diagnostics = mergeAgentRunDiagnostics(agentRunDiagnostics(toolMetadata), result.Diagnostics)
 		duration := executor.clockNow().Sub(start)
 		result.Metrics = workerexecution.WorkMetrics{Duration: duration}
 		executor.recordAgentRunResponse(request.Dispatch, result, duration, harnessResult.Messages)

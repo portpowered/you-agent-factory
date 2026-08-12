@@ -291,7 +291,7 @@ func decisionEnvelopeWorkResult(
 		resp.Content,
 	)
 	result.ProviderSession = workerexecution.CloneProviderSessionMetadata(resp.ProviderSession)
-	result.Diagnostics = diagnostics
+	result.Diagnostics = mergeWorkDiagnostics(diagnostics, result.Diagnostics)
 	result.Metrics = agentWorkMetrics(start, retryCount, clock)
 	return result
 }
@@ -312,7 +312,7 @@ func goalRoutingEnvelopeWorkResult(
 			resp.Content,
 		)
 	result.ProviderSession = workerexecution.CloneProviderSessionMetadata(resp.ProviderSession)
-	result.Diagnostics = diagnostics
+	result.Diagnostics = mergeWorkDiagnostics(diagnostics, result.Diagnostics)
 	result.Metrics = agentWorkMetrics(start, retryCount, clock)
 	return result
 }
@@ -404,7 +404,7 @@ func (ae *AgentExecutor) workResultForInferenceResponse(request workerexecution.
 				Error:           "structured output schema violation: " + parseErr.Error(),
 				FailureMetadata: structuredOutputSchemaViolationMetadata(),
 				ProviderSession: workerexecution.CloneProviderSessionMetadata(resp.ProviderSession),
-				Diagnostics:     diagnostics,
+				Diagnostics:     completionValidationDiagnostics(diagnostics, "missing_required_output"),
 				Metrics:         metrics,
 			}, nil
 		}

@@ -785,6 +785,131 @@ func TestClassifyTerminal_ProviderSessionInspectionFailureRetainsSafeCauseContex
 	}
 }
 
+func TestClassifyTerminal_IncompleteOutputUsesStructuredCompletionFacts(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name           string
+		classification string
+		putInMetadata  bool
+	}{
+		{name: "missing completion evidence", classification: "missing_completion_evidence", putInMetadata: true},
+		{name: "missing required output", classification: "missing_required_output"},
+		{name: "contradictory completion", classification: "contradictory_completion"},
+	}
+	for _, test := range cases {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			diagnostics := &workers.WorkDiagnostics{}
+			if test.putInMetadata {
+				diagnostics.Metadata = map[string]string{
+					"failure_operation":      "completion_validation",
+					"failure_classification": test.classification,
+				}
+			} else {
+				diagnostics.Provider = &workers.ProviderDiagnostic{
+					ResponseMetadata: map[string]string{
+						"failure_operation":      "completion_validation",
+						"failure_classification": test.classification,
+					},
+				}
+			}
+			terminal := classifyTerminal(nil, workers.WorkstationDispatchResult{Result: workers.WorkResult{
+				Outcome:     workers.OutcomeFailed,
+				Error:       "raw prompt=secret provider transcript must not be exposed",
+				Diagnostics: diagnostics,
+			}})
+
+			if terminal.Outcome != workersessions.TerminalOutcomeFailed || terminal.Cause == nil {
+				t.Fatalf("terminal = %#v, want failed result with cause", terminal)
+			}
+			if terminal.Cause.Kind != workersessions.FailureCauseIncompleteOutput {
+				t.Fatalf("terminal cause kind = %q, want INCOMPLETE_OUTPUT", terminal.Cause.Kind)
+			}
+			if strings.Contains(terminal.Cause.Detail, "secret") || !strings.Contains(terminal.Cause.Detail, "completion_validation") {
+				t.Fatalf("terminal cause detail = %q, want safe completion-validation context", terminal.Cause.Detail)
+			}
+			if err := terminal.Validate(); err != nil {
+				t.Fatalf("terminal.Validate() = %v, want nil", err)
+			}
+		})
+	}
+}
+
+func TestTerminalDraft_IncompleteOutputPreservesBoundedFailureKind(t *testing.T) {
+	draft, err := terminalDraft(
+		workersessions.StateFailed,
+		workersessions.TerminalResult{
+			Outcome: workersessions.TerminalOutcomeFailed,
+			Cause: &workersessions.FailureCause{
+				Kind:   workersessions.FailureCauseIncompleteOutput,
+				Detail: genericFailureDetail[workersessions.FailureCauseIncompleteOutput],
+			},
+		},
+		"dispatch-incomplete-output",
+	)
+	if err != nil {
+		t.Fatalf("terminalDraft() error = %v, want nil", err)
+	}
+	var payload terminalSessionPayload
+	if err := json.Unmarshal(draft.Payload, &payload); err != nil {
+		t.Fatalf("terminal payload decode error = %v", err)
+	}
+	if payload.FailureCause != string(workersessions.FailureCauseIncompleteOutput) {
+		t.Fatalf("terminal payload failureCause = %q, want INCOMPLETE_OUTPUT", payload.FailureCause)
+	}
+}
+
+func TestClassifyTerminal_CleanRejectedWorkResultUsesBoundedRejectionCause(t *testing.T) {
+	terminal := classifyTerminal(nil, workers.WorkstationDispatchResult{
+		TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeCompleted,
+		Result: workers.WorkResult{
+			Outcome:  workers.OutcomeRejected,
+			Feedback: "raw reviewer feedback remains on the Work result",
+		},
+	})
+	if terminal.Outcome != workersessions.TerminalOutcomeFailed || terminal.Cause == nil {
+		t.Fatalf("terminal = %#v, want failed Worker Session projection with cause", terminal)
+	}
+	if terminal.Cause.Kind != workersessions.FailureCauseRejected {
+		t.Fatalf("terminal cause kind = %q, want REJECTED", terminal.Cause.Kind)
+	}
+	if terminal.Cause.Detail != genericFailureDetail[workersessions.FailureCauseRejected] {
+		t.Fatalf("terminal cause detail = %q, want bounded generic rejection detail", terminal.Cause.Detail)
+	}
+	if strings.Contains(terminal.Cause.Detail, "raw reviewer feedback") {
+		t.Fatalf("terminal cause detail leaked reviewer feedback: %q", terminal.Cause.Detail)
+	}
+	if err := terminal.Validate(); err != nil {
+		t.Fatalf("terminal.Validate() = %v, want nil", err)
+	}
+}
+
+func TestClassifyTerminal_RejectedWithFailedDispatchFallsThroughToExecutionFailure(t *testing.T) {
+	terminal := classifyTerminal(nil, workers.WorkstationDispatchResult{
+		TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeFailed,
+		Result:          workers.WorkResult{Outcome: workers.OutcomeRejected},
+	})
+	if terminal.Cause == nil || terminal.Cause.Kind != workersessions.FailureCauseWorkersExecutionFailure {
+		t.Fatalf("terminal cause = %#v, want WORKERS_EXECUTION_FAILURE", terminal.Cause)
+	}
+}
+
+func TestClassifyTerminal_UnknownCompletionClassificationRemainsExecutionFailure(t *testing.T) {
+	terminal := classifyTerminal(nil, workers.WorkstationDispatchResult{Result: workers.WorkResult{
+		Outcome: workers.OutcomeFailed,
+		Diagnostics: &workers.WorkDiagnostics{Provider: &workers.ProviderDiagnostic{ResponseMetadata: map[string]string{
+			workers.ProviderResponseMetadataFailureOperation:      "completion_validation",
+			workers.ProviderResponseMetadataFailureClassification: "unrecognized_completion_fact",
+		}}},
+	}})
+	if terminal.Cause == nil || terminal.Cause.Kind != workersessions.FailureCauseWorkersExecutionFailure {
+		t.Fatalf("terminal cause = %#v, want WORKERS_EXECUTION_FAILURE", terminal.Cause)
+	}
+}
+
 func TestClassifyTerminal_SuccessWithFailedDispatchUsesExplicitFailureCause(t *testing.T) {
 	terminal := classifyTerminal(nil, workers.WorkstationDispatchResult{
 		TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeFailed,

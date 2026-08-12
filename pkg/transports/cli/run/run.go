@@ -495,6 +495,14 @@ func emitHistoricalReplayInspection(
 	); err != nil {
 		return fmt.Errorf("write historical replay inspection: %w", err)
 	}
+	if _, err := fmt.Fprintf(
+		output,
+		"Worker history: %s (reason=%s)\n",
+		inspection.WorkerHistory.Availability,
+		inspection.WorkerHistory.Reason,
+	); err != nil {
+		return fmt.Errorf("write historical replay inspection: %w", err)
+	}
 	if inspection.Checkpoint != nil {
 		if _, err := fmt.Fprintf(
 			output,

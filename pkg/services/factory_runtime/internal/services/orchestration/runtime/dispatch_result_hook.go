@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -494,14 +495,52 @@ func recordedObservationState(outcome string) workersessions.State {
 	}
 }
 
-func recordedFailure(detail *workers.FailureDetail, metadata *workers.WorkFailureMetadata, state workersessions.State) *workersessions.FailureCause {
+func recordedFailure(outcome workers.WorkOutcome, detail *workers.FailureDetail, metadata *workers.WorkFailureMetadata, state workersessions.State) *workersessions.FailureCause {
+	return recordedFailureWithDiagnostics(outcome, detail, metadata, state, nil)
+}
+
+func recordedFailureWithDiagnostics(
+	outcome workers.WorkOutcome,
+	detail *workers.FailureDetail,
+	metadata *workers.WorkFailureMetadata,
+	state workersessions.State,
+	diagnostics *workers.SafeWorkDiagnostics,
+) *workersessions.FailureCause {
 	if !state.Terminal() || state == workersessions.StateCompleted {
 		return nil
 	}
-	return &workersessions.FailureCause{Kind: workersessions.FailureCauseWorkersExecutionFailure, Detail: recordedFailureDetail(detail, metadata), ProviderFailureKind: recordedProviderFailureKind(detail)}
+	kind := workersessions.FailureCauseWorkersExecutionFailure
+	if outcome == workers.OutcomeRejected {
+		kind = workersessions.FailureCauseRejected
+	} else if recordedIncompleteOutput(diagnostics) {
+		kind = workersessions.FailureCauseIncompleteOutput
+	}
+	return &workersessions.FailureCause{Kind: kind, Detail: recordedFailureDetail(kind, detail, metadata), ProviderFailureKind: recordedProviderFailureKind(detail)}
 }
 
-func recordedFailureDetail(detail *workers.FailureDetail, metadata *workers.WorkFailureMetadata) string {
+func recordedIncompleteOutput(diagnostics *workers.SafeWorkDiagnostics) bool {
+	if diagnostics == nil || diagnostics.Provider == nil {
+		return false
+	}
+	metadata := diagnostics.Provider.ResponseMetadata
+	if strings.ToLower(strings.TrimSpace(metadata[workerexecution.ProviderResponseMetadataFailureOperation])) != "completion_validation" {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(metadata[workerexecution.ProviderResponseMetadataFailureClassification])) {
+	case "contradictory_completion", "missing_completion_evidence", "missing_required_output":
+		return true
+	default:
+		return false
+	}
+}
+
+func recordedFailureDetail(kind workersessions.FailureCauseKind, detail *workers.FailureDetail, metadata *workers.WorkFailureMetadata) string {
+	if kind == workersessions.FailureCauseRejected {
+		return "the Workers result was rejected by the business review"
+	}
+	if kind == workersessions.FailureCauseIncompleteOutput {
+		return "the Workers result did not include the required final output"
+	}
 	if metadata != nil {
 		family, familyKnown := recordedFailureFamily(metadata.Family)
 		typ, typeKnown := recordedFailureType(metadata.Type)

@@ -1,12 +1,14 @@
 package factorysessionexecution
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"github.com/portpowered/infinite-you/internal/testutil/factoryruntimefixtures"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"os"
 	"path/filepath"
@@ -775,6 +777,7 @@ func TestJavaScriptRuntimeServiceWriteRecordingUsesCanonicalSnapshotAndCorrelate
 	if strings.Contains(string(encoded), "checkpoint-secret") || strings.Contains(string(encoded), "raw-state") {
 		t.Fatalf("recording leaked runtime state: %s", encoded)
 	}
+	assertCurrentPortableRecordingExport(t, encoded)
 	badPath := filepath.Join(t.TempDir(), "missing", "\x00invalid")
 	err = service.WriteRecording(context.Background(), sessionID, badPath)
 	var recordingErr *RecordingError
@@ -784,5 +787,21 @@ func TestJavaScriptRuntimeServiceWriteRecordingUsesCanonicalSnapshotAndCorrelate
 	read, readErr := service.GetSession(context.Background(), sessionID)
 	if readErr != nil || read.Status != LifecycleStatusSucceeded {
 		t.Fatalf("live session changed after recording failure: read=%#v err=%v", read, readErr)
+	}
+}
+
+func assertCurrentPortableRecordingExport(t *testing.T, encoded []byte) {
+	t.Helper()
+	portable, err := recordings.DecodePortableRecording(bytes.NewReader(encoded))
+	if err != nil {
+		t.Fatalf("DecodePortableRecording: %v", err)
+	}
+	if portable.SchemaVersion != recordings.PortableRecordingSchemaV3 ||
+		portable.ReplayCompatibilityVersion != recordings.PortableRecordingReplayCompatibilityV1 {
+		t.Fatalf("recording compatibility = %q/%q, want current schema/replay versions", portable.SchemaVersion, portable.ReplayCompatibilityVersion)
+	}
+	if portable.WorkerHistory == nil || portable.WorkerHistory.Availability != recordings.PortableRecordingWorkerHistoryUnavailable ||
+		portable.WorkerHistory.Reason != recordings.PortableRecordingWorkerHistoryReasonNotCaptured {
+		t.Fatalf("recording Worker history = %#v, want explicit unavailable outcome", portable.WorkerHistory)
 	}
 }
