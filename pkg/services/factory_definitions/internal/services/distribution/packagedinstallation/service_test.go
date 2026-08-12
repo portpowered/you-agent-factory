@@ -509,7 +509,7 @@ func TestInstallPackagedFactory_MaterializesPortableEditableFormats(t *testing.T
 	for _, test := range tests {
 		test := test
 		t.Run(string(test.format), func(t *testing.T) {
-		t.Parallel()
+			t.Parallel()
 
 			root := t.TempDir()
 			result, installErr := installer.InstallPackagedFactory(t.Context(), factorydefinitions.PackagedFactoryInstallParams{
