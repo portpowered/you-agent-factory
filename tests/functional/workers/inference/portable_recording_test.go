@@ -18,6 +18,7 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -82,50 +83,98 @@ func TestWSRFT006PortableWorkerRecordingParity(t *testing.T) {
 	assertWSRFT006FidelityTamperRejected(t, streaming)
 }
 
-// TestWSRFT006PortableExportSelectsRootBuiltWorkerSession proves that the
-// normal Factory recording identity can contain more than one Worker Session
-// while portable export remains explicit about which source history it emits.
-// Both captures use the canonical root-built process and the same durable
-// writer, while the absolute path is intentionally shared only as the
-// user-facing artifact target.
+// TestWSRFT006PortableExportSelectsRootBuiltWorkerSession proves that one
+// concrete Factory recording can contain more than one Worker Session while a
+// later recording at the same artifact path gets a fresh durable identity.
+// Both recordings use one reusable root-built process and the same writer.
 func TestWSRFT006PortableExportSelectsRootBuiltWorkerSession(t *testing.T) {
 	loaded := loadOpeningRecordFixture(t, "codex", "success")
-	baseProbe := newWSRFT004RecordingProbe(t, false)
-	recordPath := filepath.Join(t.TempDir(), "wsr-ft-006 multi session.json")
-
-	var readers []recordings.WorkerRecordingReader
-	var recordingID string
-	for index := 0; index < 2; index++ {
-		dir := wsrFT006Factory(t, modelprovider.ProviderCodex, loaded)
-		probe := &wsrFT004RecordingProbe{delegate: baseProbe.delegate}
-		runner := newWSRFT004ProviderRunner(t, probe)
-		reader := runWSRFT006FactoryWithSharedWriter(t, dir, loaded, runner, probe, recordPath)
-		gotRecordingID, _ := probe.RecordingIdentity(t)
-		if recordingID == "" {
-			recordingID = gotRecordingID
-		} else if gotRecordingID != recordingID {
-			t.Fatalf("run %d recording identity = %q, want shared identity %q", index, gotRecordingID, recordingID)
-		}
-		readers = append(readers, reader)
-	}
-
-	snapshot, err := readers[0].LoadWorkerRecording(t.Context(), recordingID)
+	firstDir := wsrFT006Factory(t, modelprovider.ProviderCodex, loaded)
+	support.ClearSeedInputs(t, firstDir)
+	batchPath := filepath.Join(t.TempDir(), "wsr-ft-006 two sessions.json")
+	batch, err := json.Marshal(work.WorkRequest{
+		RequestID: "wsr-ft-006-two-sessions",
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.Work{
+			{Name: "first-session", WorkTypeID: "task", State: "init", Payload: map[string]any{"title": "first"}},
+			{Name: "second-session", WorkTypeID: "task", State: "init", Payload: map[string]any{"title": "second"}},
+		},
+	})
 	if err != nil {
-		t.Fatalf("LoadWorkerRecording(%q) error = %v", recordingID, err)
+		t.Fatalf("marshal two-session batch: %v", err)
 	}
-	if len(snapshot.Sessions) != 2 {
-		t.Fatalf("durable multi-session snapshot contains %d sessions, want two", len(snapshot.Sessions))
+	if err := os.WriteFile(batchPath, batch, 0o644); err != nil {
+		t.Fatalf("write two-session batch: %v", err)
 	}
-	if _, err := (recordings.WorkerRecordingCodec{}).ExportWorkerPortableRecording(snapshot); !errors.Is(err, recordings.ErrWorkerPortableRecordingIdentity) {
+	secondDir := wsrFT006Factory(t, modelprovider.ProviderCodex, loaded)
+	probe := newWSRFT004RecordingProbe(t, false)
+	runner := newWSRFT004ProviderRunner(t, probe)
+
+	process, err := root.BuildProcess(context.Background(), serviceedges.Edges{
+		ProviderCommandRunner: runner,
+		WorkerRecordingWriter: probe,
+	})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+	reader := root.WorkerRecordingReaderFromProcess(process)
+	if reader == nil {
+		t.Fatal("root-built process returned a nil Recordings reader")
+	}
+	support.CleanupProcess(t, process)
+
+	recordPath := filepath.Join(t.TempDir(), "wsr-ft-006 multi session.json")
+	t.Cleanup(func() {
+		if err := os.Remove(recordPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("remove temporary replay record %q: %v", recordPath, err)
+		}
+	})
+	queueWSRFT006ProviderResult(t, loaded, runner)
+	queueWSRFT006ProviderResult(t, loaded, runner)
+	executeWSRFT006FactoryWithWork(t, process, firstDir, recordPath, batchPath)
+	firstRecordingID, _ := probe.RecordingIdentity(t)
+	firstSnapshot, err := reader.LoadWorkerRecording(t.Context(), firstRecordingID)
+	if err != nil {
+		t.Fatalf("LoadWorkerRecording(%q) error = %v", firstRecordingID, err)
+	}
+	if len(firstSnapshot.Sessions) != 2 {
+		summary := make([]string, len(firstSnapshot.Sessions))
+		for index, session := range firstSnapshot.Sessions {
+			summary[index] = fmt.Sprintf("%s/%s/%d", session.WorkerSessionID, session.Status, len(session.Records))
+		}
+		t.Fatalf("durable multi-session snapshot contains %d sessions, want two: %v", len(firstSnapshot.Sessions), summary)
+	}
+	if _, err := (recordings.WorkerRecordingCodec{}).ExportWorkerPortableRecording(firstSnapshot); !errors.Is(err, recordings.ErrWorkerPortableRecordingIdentity) {
 		t.Fatalf("multi-session export without selector = %v, want identity diagnostic", err)
 	}
-	selected := snapshot.Sessions[1].WorkerSessionID
-	portable, err := (recordings.WorkerRecordingCodec{}).ExportWorkerPortableRecording(snapshot, selected)
+	selected := firstSnapshot.Sessions[1].WorkerSessionID
+	portable, err := (recordings.WorkerRecordingCodec{}).ExportWorkerPortableRecording(firstSnapshot, selected)
 	if err != nil {
 		t.Fatalf("ExportWorkerPortableRecording(%q) error = %v", selected, err)
 	}
-	if portable.Identity.RecordingID != recordingID || portable.Identity.WorkerSessionID != selected {
-		t.Fatalf("portable identity = %#v, want recording %q and Worker Session %q", portable.Identity, recordingID, selected)
+	if portable.Identity.RecordingID != firstRecordingID || portable.Identity.WorkerSessionID != selected {
+		t.Fatalf("portable identity = %#v, want recording %q and Worker Session %q", portable.Identity, firstRecordingID, selected)
+	}
+
+	queueWSRFT006ProviderResult(t, loaded, runner)
+	executeWSRFT006Factory(t, process, secondDir, recordPath)
+	secondRecordingID, _ := probe.RecordingIdentity(t)
+	if secondRecordingID == firstRecordingID {
+		t.Fatalf("same-path recording identity = %q after second execution, want a fresh identity", secondRecordingID)
+	}
+	secondSnapshot, err := reader.LoadWorkerRecording(t.Context(), secondRecordingID)
+	if err != nil {
+		t.Fatalf("LoadWorkerRecording(%q) error = %v", secondRecordingID, err)
+	}
+	if len(secondSnapshot.Sessions) != 1 {
+		t.Fatalf("later same-path snapshot contains %d sessions, want one", len(secondSnapshot.Sessions))
+	}
+	for _, session := range secondSnapshot.Sessions {
+		for _, first := range firstSnapshot.Sessions {
+			if session.WorkerSessionID == first.WorkerSessionID {
+				t.Fatalf("later recording inherited Worker Session %q from recording %q", session.WorkerSessionID, firstRecordingID)
+			}
+		}
 	}
 }
 
@@ -188,15 +237,7 @@ func runWSRFT006FactoryWithProcess(
 	probe *wsrFT004RecordingProbe,
 ) recordings.WorkerRecordingReader {
 	t.Helper()
-	exitCode := 0
-	if loaded.Process.ExitCode != nil {
-		exitCode = *loaded.Process.ExitCode
-	}
-	runner.delegate.Queue(platformprocess.CommandResult{
-		Stdout:   append([]byte(nil), loaded.Stdout.Raw...),
-		Stderr:   []byte(loaded.Stderr),
-		ExitCode: exitCode,
-	})
+	queueWSRFT006ProviderResult(t, loaded, runner)
 
 	processValue, err := root.BuildProcess(context.Background(), serviceedges.Edges{
 		ProviderCommandRunner: runner,
@@ -229,14 +270,11 @@ func runWSRFT006FactoryWithProcess(
 	return reader
 }
 
-func runWSRFT006FactoryWithSharedWriter(
+func queueWSRFT006ProviderResult(
 	t *testing.T,
-	dir string,
 	loaded support.ProviderSessionCase,
 	runner *wsrFT004ProviderRunner,
-	probe *wsrFT004RecordingProbe,
-	recordPath string,
-) recordings.WorkerRecordingReader {
+) {
 	t.Helper()
 	exitCode := 0
 	if loaded.Process.ExitCode != nil {
@@ -247,29 +285,34 @@ func runWSRFT006FactoryWithSharedWriter(
 		Stderr:   []byte(loaded.Stderr),
 		ExitCode: exitCode,
 	})
+}
 
-	processValue, err := root.BuildProcess(context.Background(), serviceedges.Edges{
-		ProviderCommandRunner: runner,
-		WorkerRecordingWriter: probe,
-	})
-	if err != nil {
-		t.Fatalf("BuildProcess() error = %v", err)
-	}
-	process := processValue
-	reader := root.WorkerRecordingReaderFromProcess(process)
-	if reader == nil {
-		t.Fatal("root-built process returned a nil Recordings reader")
-	}
-	support.CleanupProcess(t, process)
+func executeWSRFT006Factory(
+	t *testing.T,
+	process interface{ Execute(root.Input) error },
+	dir string,
+	recordPath string,
+) {
+	executeWSRFT006FactoryWithWork(t, process, dir, recordPath, "")
+}
 
-	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "run", "--dir", dir, "--quiet", "--record", recordPath,
-	})
+func executeWSRFT006FactoryWithWork(
+	t *testing.T,
+	process interface{ Execute(root.Input) error },
+	dir string,
+	recordPath string,
+	workPath string,
+) {
+	t.Helper()
+	arguments := []string{"you", "run", "--dir", dir, "--quiet", "--record", recordPath}
+	if workPath != "" {
+		arguments = append(arguments, "--work", workPath)
+	}
+	inputs := support.FakeInputs(t.Context(), arguments)
 	inputs.Input.WorkingDirectory = dir
 	if err := process.Execute(inputs.Input); err != nil {
 		t.Fatalf("recorded factory Process.Execute: %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
 	}
-	return reader
 }
 
 func assertWSRFT006Fidelity(t *testing.T, portable recordings.WorkerPortableRecording, testCase wsrFT006Case) {

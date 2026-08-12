@@ -184,13 +184,14 @@ type wsrFT004RecordingProbe struct {
 	delegate    recordings.WorkerRecordingWriter
 	failOpening bool
 
-	mu          sync.Mutex
-	events      []string
-	failure     *recordings.WorkerRecordingFailure
-	failureOnce sync.Once
-	recordingID string
-	workerID    string
-	live        recordings.WorkerRecordingProjection
+	mu           sync.Mutex
+	events       []string
+	failure      *recordings.WorkerRecordingFailure
+	failureOnce  sync.Once
+	recordingID  string
+	workerID     string
+	live         recordings.WorkerRecordingProjection
+	liveByWorker map[string]recordings.WorkerRecordingProjection
 }
 
 func newWSRFT004RecordingProbe(t *testing.T, failOpening bool) *wsrFT004RecordingProbe {
@@ -202,7 +203,11 @@ func newWSRFT004RecordingProbe(t *testing.T, failOpening bool) *wsrFT004Recordin
 	if err != nil {
 		t.Fatalf("construct Worker recording writer: %v", err)
 	}
-	return &wsrFT004RecordingProbe{delegate: writer, failOpening: failOpening}
+	return &wsrFT004RecordingProbe{
+		delegate:     writer,
+		failOpening:  failOpening,
+		liveByWorker: make(map[string]recordings.WorkerRecordingProjection),
+	}
 }
 
 func (probe *wsrFT004RecordingProbe) PersistWorkerRecord(
@@ -221,7 +226,8 @@ func (probe *wsrFT004RecordingProbe) PersistWorkerRecord(
 	probe.mu.Lock()
 	probe.recordingID = record.RecordingID
 	probe.workerID = record.WorkerSessionID
-	history := append([]events.Record(nil), probe.live.Records...)
+	previous := probe.liveByWorker[record.WorkerSessionID]
+	history := append([]events.Record(nil), previous.Records...)
 	history = append(history, record.Record.Detached())
 	live, err := (recordings.WorkerRecordingCodec{}).ReduceWorkerRecording(recordings.WorkerRecordingHistory{
 		RecordingID:     record.RecordingID,
@@ -233,6 +239,7 @@ func (probe *wsrFT004RecordingProbe) PersistWorkerRecord(
 		probe.mu.Unlock()
 		return fmt.Errorf("reduce accepted Worker history: %w", err)
 	}
+	probe.liveByWorker[record.WorkerSessionID] = live
 	probe.live = live
 	probe.events = append(probe.events, fmt.Sprintf("durable:%d", record.Record.ID.Position))
 	probe.mu.Unlock()
