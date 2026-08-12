@@ -475,8 +475,20 @@ func validateFactEvidence(fact capabilityFact, evidence evidenceIndex, path stri
 		if _, exists := evidence.ids[ref]; !exists {
 			return fmt.Errorf("%s: capability fact %q references missing evidence %q", path, fact.ref, ref)
 		}
+		if !containsString(evidence.factRefs[ref], fact.ref) {
+			return fmt.Errorf("%s: evidence %q does not cite capability fact %q", path, ref, fact.ref)
+		}
 	}
 	return nil
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 func mapArray(value any, path string) ([]map[string]any, error) {

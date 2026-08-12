@@ -95,6 +95,13 @@ func TestValidateRejectsFailClosedACPPackageShapes(t *testing.T) {
 			wantErr: "requires evidenceRefs",
 		},
 		{
+			name: "mismatched capability evidence",
+			mutate: func(source fstest.MapFS) {
+				mutateFile(source, "packages/model-providers/providers/cursor-acp/provider.yaml", "    factRefs: [model_catalog, harness/acp, harness/input/text]", "    factRefs: [model_catalog]")
+			},
+			wantErr: "does not cite capability fact",
+		},
+		{
 			name: "catalog-only known fact",
 			mutate: func(source fstest.MapFS) {
 				mutateFile(source, "packages/model-providers/providers/catalog-acp/provider.yaml", "support: unknown", "support: supported")
@@ -141,6 +148,27 @@ func TestValidateRejectsFailClosedACPPackageShapes(t *testing.T) {
 				t.Fatalf("Validate() error = %v, want containing %q", err, test.wantErr)
 			}
 		})
+	}
+}
+
+func TestRuntimeProjectionQuotesUnsafeArgumentsLosslessly(t *testing.T) {
+	source := packageFixture()
+	mutateFile(source, "packages/model-providers/providers/cursor-acp/harness.yaml", "arguments: [acp]", `arguments: ["hello world", "semi;colon", "quote's"]`)
+
+	packages, err := Validate(source, []RuntimeProfile{{ID: "cursor-acp"}})
+	if err != nil {
+		t.Fatalf("Validate() error = %v", err)
+	}
+	projection := RuntimeProjection(packages)
+	if len(projection.ACP) != 1 {
+		t.Fatalf("runtime projection count = %d, want one selectable package", len(projection.ACP))
+	}
+	entry := projection.ACP[0]
+	if entry.Command != `cursor-agent 'hello world' 'semi;colon' 'quote'\''s'` {
+		t.Fatalf("runtime command = %q, want lossless shell-word encoding", entry.Command)
+	}
+	if !sameStrings(entry.Arguments, []string{"hello world", "semi;colon", "quote's"}) {
+		t.Fatalf("runtime arguments = %#v, want explicit argument vector", entry.Arguments)
 	}
 }
 

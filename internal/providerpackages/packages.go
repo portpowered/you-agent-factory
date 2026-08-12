@@ -8,6 +8,7 @@ package providerpackages
 import (
 	"sort"
 	"strings"
+	"unicode"
 
 	"github.com/portpowered/infinite-you/internal/providerprofiles"
 )
@@ -122,12 +123,11 @@ func RuntimeProjection(packages []Package) RuntimeCatalog {
 		}
 		launch := provider.Harness.Launch
 		arguments := append([]string(nil), launch.Arguments...)
-		commandParts := append([]string{launch.Command}, arguments...)
 		result.ACP = append(result.ACP, RuntimeIntegration{
 			Name:      provider.ID,
 			Aliases:   append([]string(nil), provider.Aliases...),
 			Transport: launch.Transport,
-			Command:   strings.Join(commandParts, " "),
+			Command:   legacyLaunchCommand(launch.Command, arguments),
 			Arguments: arguments,
 			Posture:   launch.Posture,
 			Implementation: RuntimeImplementation{
@@ -138,6 +138,41 @@ func RuntimeProjection(packages []Package) RuntimeCatalog {
 	}
 	sort.Slice(result.ACP, func(i, j int) bool { return result.ACP[i].Name < result.ACP[j].Name })
 	return result
+}
+
+// legacyLaunchCommand preserves the historical command string while keeping
+// its explicit argument vector lossless for the runtime loader. Simple
+// arguments retain their existing spelling so generated output remains stable;
+// arguments with shell-word syntax are quoted only for shellwords.Parse, never
+// for shell execution.
+func legacyLaunchCommand(executable string, arguments []string) string {
+	parts := make([]string, 0, len(arguments)+1)
+	parts = append(parts, executable)
+	for _, argument := range arguments {
+		if isLegacyShellWord(argument) {
+			parts = append(parts, argument)
+			continue
+		}
+		parts = append(parts, "'"+strings.ReplaceAll(argument, "'", "'\\''")+"'")
+	}
+	return strings.Join(parts, " ")
+}
+
+func isLegacyShellWord(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, r := range value {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			continue
+		}
+		switch r {
+		case '.', '/', ':', '@', '%', '+', '=', ',', '-', '_', '~', '^':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // RuntimeProfilesFromIDs adapts the runtime owner's registered profile

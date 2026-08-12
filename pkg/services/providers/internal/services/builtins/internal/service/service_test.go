@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"strings"
@@ -60,6 +61,36 @@ func TestNewBuildsDetachedRuntimeProjection(t *testing.T) {
 	second := service.ACPIntegrations()
 	if second[0].Aliases[0] != "cursor-test" || second[0].Arguments[0] != "acp" {
 		t.Fatalf("ACPIntegrations() retained caller mutation: %#v", second[0])
+	}
+}
+
+func TestNewLoadsLosslessQuotedRuntimeArguments(t *testing.T) {
+	wantArguments := []string{"hello world", "semi;colon", "quote's"}
+	document, err := json.Marshal(catalogDocument{ACP: []catalogACPIntegration{{
+		Name:      "quoted-acp",
+		Transport: "stdio",
+		Command:   `agent 'hello world' 'semi;colon' 'quote'\''s'`,
+		Arguments: wantArguments,
+		Posture:   "installed_executable",
+		Implementation: runtimeImplementation{
+			Kind:    "acp_agent",
+			Profile: "cursor-acp",
+		},
+	}}})
+	if err != nil {
+		t.Fatalf("marshal catalog document: %v", err)
+	}
+
+	service, err := New(document)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	integration := service.ACPIntegrations()[0]
+	if integration.Command != `agent 'hello world' 'semi;colon' 'quote'\''s'` {
+		t.Fatalf("integration command = %q, want lossless command", integration.Command)
+	}
+	if !reflect.DeepEqual(integration.Arguments, wantArguments) {
+		t.Fatalf("integration arguments = %#v, want %#v", integration.Arguments, wantArguments)
 	}
 }
 
