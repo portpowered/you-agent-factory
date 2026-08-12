@@ -3,7 +3,9 @@ package service_test
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -177,6 +179,109 @@ func TestContinue_IdempotencyAndLineageConflictsAvoidDuplicateAdmission(t *testi
 	}
 	handoff := boundary.currentRequest()
 	boundary.complete(completedDispatchWithProviderSession(handoff.Execution.Dispatch.DispatchID, reference), nil)
+}
+
+func TestContinue_ConcurrentIdenticalRequestsShareOneAdmission(t *testing.T) {
+	base := newControlledBoundary()
+	continuationGate := make(chan struct{})
+	boundary := &continuationAdmissionBoundary{
+		controlledBoundary: base,
+		continuationGate:   continuationGate,
+		continuationReady:  make(chan struct{}),
+	}
+	registry := newControlledRegistry(t, boundary)
+	reference := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-session-concurrent"}
+	sourceResult := startControlledSession(t, registry, base, "source-session", "dispatch-source")
+	base.complete(completedDispatchWithProviderSession("dispatch-source", reference), nil)
+	if result := <-sourceResult; result.Session.State != workersessions.StateCompleted {
+		t.Fatalf("source result = %#v, want COMPLETED", result.Session)
+	}
+
+	request := workersessions.ContinueRequest{
+		RequestID:                "continue-request-concurrent",
+		SourceWorkerSessionID:    "source-session",
+		SuccessorWorkerSessionID: "successor-session",
+		FollowUpInput:            "concurrent follow-up",
+	}
+	const callers = 8
+	start := make(chan struct{})
+	results := make(chan struct {
+		result workersessions.ContinueResult
+		err    error
+	}, callers)
+	var group sync.WaitGroup
+	group.Add(callers)
+	for range callers {
+		go func() {
+			defer group.Done()
+			<-start
+			result, err := registry.Continue(context.Background(), request)
+			results <- struct {
+				result workersessions.ContinueResult
+				err    error
+			}{result: result, err: err}
+		}()
+	}
+	close(start)
+
+	select {
+	case <-boundary.continuationReady:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for one continuation admission")
+	}
+	if got := base.publishCount(); got != 2 {
+		t.Fatalf("Worker Sessions publish count before release = %d, want source plus one continuation", got)
+	}
+	close(continuationGate)
+	group.Wait()
+	close(results)
+
+	for outcome := range results {
+		if outcome.err != nil {
+			t.Fatalf("concurrent Continue() error = %v, want nil", outcome.err)
+		}
+		if outcome.result.SuccessorWorkerSessionID != request.SuccessorWorkerSessionID ||
+			outcome.result.Session.ID != request.SuccessorWorkerSessionID {
+			t.Fatalf("concurrent Continue() result = %#v, want shared successor", outcome.result)
+		}
+	}
+	if got := base.publishCount(); got != 2 {
+		t.Fatalf("Worker Sessions publish count = %d, want source plus one continuation", got)
+	}
+	handoff := base.currentRequest()
+	base.complete(completedDispatchWithProviderSession(handoff.Execution.Dispatch.DispatchID, reference), nil)
+}
+
+type continuationAdmissionBoundary struct {
+	*controlledBoundary
+	continuationGate  <-chan struct{}
+	continuationReady chan struct{}
+	readyOnce         sync.Once
+}
+
+func (b *continuationAdmissionBoundary) PublishWithAdmission(
+	ctx context.Context,
+	request workers.WorkstationDispatchRequest,
+	admitted workers.WorkstationDispatchAdmissionFunc,
+	accept workers.WorkstationDispatchAcceptFunc,
+) error {
+	if err := b.controlledBoundary.PublishWithAdmission(ctx, request, nil, accept); err != nil {
+		return err
+	}
+	if request.Execution.ResumeSession == nil || admitted == nil {
+		if admitted != nil {
+			admitted()
+		}
+		return nil
+	}
+	b.readyOnce.Do(func() { close(b.continuationReady) })
+	select {
+	case <-b.continuationGate:
+		admitted()
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func TestContinue_ProviderFailureLeavesSuccessorFailedWithExactAssociation(t *testing.T) {
