@@ -136,6 +136,25 @@ func TestWorkerPortableRecordingRejectsProviderOutputBeforeBinding(t *testing.T)
 	}
 }
 
+func TestBuildWorkerPortableRecordingSelectsOneSessionFromMultiSessionSnapshot(t *testing.T) {
+	first := portableSnapshot(t, "snapshot", "codex", "codex")
+	second := first.Sessions[0]
+	second.WorkerSessionID = "portable-worker-other"
+	combined := first
+	combined.Sessions = append([]WorkerSessionRecordingSnapshot(nil), first.Sessions[0], second)
+
+	if _, err := BuildWorkerPortableRecording(combined); !errors.Is(err, ErrWorkerPortableRecordingIdentity) {
+		t.Fatalf("multi-session export without selector = %v, want identity diagnostic", err)
+	}
+	portable, err := BuildWorkerPortableRecording(combined, first.Sessions[0].WorkerSessionID)
+	if err != nil {
+		t.Fatalf("multi-session export with selector error = %v", err)
+	}
+	if portable.Identity.WorkerSessionID != first.Sessions[0].WorkerSessionID {
+		t.Fatalf("selected Worker Session ID = %q, want %q", portable.Identity.WorkerSessionID, first.Sessions[0].WorkerSessionID)
+	}
+}
+
 func assertFidelityFacts(t *testing.T, recording WorkerPortableRecording, class string) {
 	t.Helper()
 	delta, snapshot, finalOnly := portableTestFidelityFacts(recording)

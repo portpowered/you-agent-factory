@@ -192,20 +192,19 @@ var (
 )
 
 // BuildWorkerPortableRecording exports one completed Worker snapshot. A
-// snapshot with multiple Worker Sessions must be exported one session at a
-// time so the portable identity and reducer input remain unambiguous.
-func BuildWorkerPortableRecording(snapshot WorkerRecordingSnapshot) (WorkerPortableRecording, error) {
+// snapshot with multiple Worker Sessions requires the selected Worker Session
+// ID so the portable identity and reducer input remain unambiguous. The
+// optional argument preserves the single-session convenience form.
+func BuildWorkerPortableRecording(snapshot WorkerRecordingSnapshot, workerSessionIDs ...string) (WorkerPortableRecording, error) {
 	if strings.TrimSpace(snapshot.RecordingID) == "" {
 		return WorkerPortableRecording{}, portableDiagnostic(
 			WorkerPortableCodeInvalidIdentity, "identity.recordingId", "recording identity is required", ErrWorkerPortableRecordingIdentity,
 		)
 	}
-	if len(snapshot.Sessions) != 1 {
-		return WorkerPortableRecording{}, portableDiagnostic(
-			WorkerPortableCodeInvalidIdentity, "identity", "portable export requires exactly one Worker Session", ErrWorkerPortableRecordingIdentity,
-		)
+	session, err := selectedWorkerSession(snapshot, workerSessionIDs...)
+	if err != nil {
+		return WorkerPortableRecording{}, err
 	}
-	session := snapshot.Sessions[0]
 	if session.Status == WorkerRecordingStatusFailed {
 		return WorkerPortableRecording{}, portableDiagnostic(
 			WorkerPortableCodeInvalidLifecycle, "lifecycle.status", "failed capture is not portable replay", ErrWorkerPortableRecordingLifecycle,
@@ -297,8 +296,48 @@ func BuildWorkerPortableRecording(snapshot WorkerRecordingSnapshot) (WorkerPorta
 
 // ExportWorkerPortableRecording is the descriptive alias used by callers
 // that treat a completed snapshot as an export source.
-func ExportWorkerPortableRecording(snapshot WorkerRecordingSnapshot) (WorkerPortableRecording, error) {
-	return BuildWorkerPortableRecording(snapshot)
+func ExportWorkerPortableRecording(snapshot WorkerRecordingSnapshot, workerSessionIDs ...string) (WorkerPortableRecording, error) {
+	return BuildWorkerPortableRecording(snapshot, workerSessionIDs...)
+}
+
+func selectedWorkerSession(snapshot WorkerRecordingSnapshot, workerSessionIDs ...string) (WorkerSessionRecordingSnapshot, error) {
+	if len(workerSessionIDs) > 1 {
+		return WorkerSessionRecordingSnapshot{}, portableDiagnostic(
+			WorkerPortableCodeInvalidIdentity, "identity.workerSessionId", "portable export accepts at most one Worker Session selector", ErrWorkerPortableRecordingIdentity,
+		)
+	}
+	selectedID := ""
+	if len(workerSessionIDs) == 1 {
+		selectedID = strings.TrimSpace(workerSessionIDs[0])
+		if selectedID == "" {
+			return WorkerSessionRecordingSnapshot{}, portableDiagnostic(
+				WorkerPortableCodeInvalidIdentity, "identity.workerSessionId", "Worker Session selector is required when supplied", ErrWorkerPortableRecordingIdentity,
+			)
+		}
+	}
+	if selectedID == "" && len(snapshot.Sessions) != 1 {
+		return WorkerSessionRecordingSnapshot{}, portableDiagnostic(
+			WorkerPortableCodeInvalidIdentity, "identity.workerSessionId", "portable export requires a Worker Session selector for a multi-session snapshot", ErrWorkerPortableRecordingIdentity,
+		)
+	}
+	if selectedID == "" {
+		selectedID = snapshot.Sessions[0].WorkerSessionID
+	}
+	seen := make(map[string]struct{}, len(snapshot.Sessions))
+	for _, session := range snapshot.Sessions {
+		if _, exists := seen[session.WorkerSessionID]; exists {
+			return WorkerSessionRecordingSnapshot{}, portableDiagnostic(
+				WorkerPortableCodeInvalidIdentity, "identity.workerSessionId", "snapshot contains duplicate Worker Session identities", ErrWorkerPortableRecordingIdentity,
+			)
+		}
+		seen[session.WorkerSessionID] = struct{}{}
+		if session.WorkerSessionID == selectedID {
+			return session, nil
+		}
+	}
+	return WorkerSessionRecordingSnapshot{}, portableDiagnostic(
+		WorkerPortableCodeInvalidIdentity, "identity.workerSessionId", "selected Worker Session is not present in the snapshot", ErrWorkerPortableRecordingIdentity,
+	)
 }
 
 // ValidateWorkerPortableRecording validates compatibility, detached identity,

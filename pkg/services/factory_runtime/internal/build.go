@@ -2,6 +2,8 @@ package internal
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io/fs"
 
@@ -336,7 +338,7 @@ func assembleRuntimeBundle(
 		clock,
 		inlineDispatch,
 		eventHistory,
-		recordPath,
+		workerRecordingIdentity(recordPath),
 		worldStateProjector,
 		providerSessions,
 		effectiveSubmissionRecorder,
@@ -366,6 +368,21 @@ func assembleRuntimeBundle(
 	bundle.InputDirectoryWalker = inputDirectoryWalker
 	bundle.WorkRequestIDs = workRequestIDs
 	return bundle, nil
+}
+
+// workerRecordingIdentity keeps the Worker source-native recording identity
+// distinct from the user-facing artifact path. Artifact paths are allowed to
+// be absolute and may contain platform-specific separators or spaces, while
+// Events source identities must remain portable opaque tokens. The digest is
+// stable for one configured artifact target, so all Worker Sessions captured
+// by that Factory recording share one durable snapshot identity.
+func workerRecordingIdentity(recordPath string) string {
+	recordPath = strings.TrimSpace(recordPath)
+	if recordPath == "" {
+		return ""
+	}
+	digest := sha256.Sum256([]byte(recordPath))
+	return "worker-recording-" + hex.EncodeToString(digest[:])
 }
 
 func ensureRuntimeInputsDir(

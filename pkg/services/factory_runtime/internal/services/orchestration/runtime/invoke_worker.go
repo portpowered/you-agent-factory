@@ -179,6 +179,10 @@ func providerInvocationExecutionRequest(
 			RequestID: requestID,
 		},
 	}
+	recordingID := strings.TrimSpace(req.RecordingID)
+	if recordingID == "" && f.cfg != nil {
+		recordingID = strings.TrimSpace(f.cfg.recordingID)
+	}
 	return workers.WorkstationDispatchRequest{
 		WorkstationName: workers.ProviderInvocationRoute,
 		Execution: workers.WorkstationExecutionRequest{
@@ -188,7 +192,7 @@ func providerInvocationExecutionRequest(
 			RunnerID:         strings.TrimSpace(req.RunnerID),
 			ExecutorProvider: strings.TrimSpace(req.ExecutorProvider),
 			FactorySessionID: requestID,
-			RecordingID:      strings.TrimSpace(req.RecordingID),
+			RecordingID:      recordingID,
 			Capabilities:     cloneSessionCapabilities(req.Capabilities),
 			SystemPrompt:     req.SystemPrompt,
 			UserMessage:      req.Prompt,

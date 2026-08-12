@@ -207,14 +207,14 @@ var (
 
 // BuildWorkerPortableRecording exports one completed source-native Worker
 // snapshot into the detached portable contract.
-func BuildWorkerPortableRecording(snapshot WorkerRecordingSnapshot) (WorkerPortableRecording, error) {
-	return workerrecording.BuildWorkerPortableRecording(snapshot)
+func BuildWorkerPortableRecording(snapshot WorkerRecordingSnapshot, workerSessionIDs ...string) (WorkerPortableRecording, error) {
+	return workerrecording.BuildWorkerPortableRecording(snapshot, workerSessionIDs...)
 }
 
 // ExportWorkerPortableRecording is an explicit export synonym for callers
 // that use the portable contract as an artifact boundary.
-func ExportWorkerPortableRecording(snapshot WorkerRecordingSnapshot) (WorkerPortableRecording, error) {
-	return workerrecording.ExportWorkerPortableRecording(snapshot)
+func ExportWorkerPortableRecording(snapshot WorkerRecordingSnapshot, workerSessionIDs ...string) (WorkerPortableRecording, error) {
+	return workerrecording.ExportWorkerPortableRecording(snapshot, workerSessionIDs...)
 }
 
 // ValidateWorkerPortableRecording validates one detached Worker recording.
