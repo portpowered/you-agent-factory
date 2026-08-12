@@ -67,8 +67,9 @@ func TestHostObservingRunnerWaitsForManagedCancellationResult(t *testing.T) {
 		t.Fatalf("NewManagedRunner: %v", err)
 	}
 	managed.SetRuntimeHostReady(make(chan initializer.RuntimeHostBinding))
+	observed := make(chan struct{}, 1)
 	runner := WithRuntimeHostObserver(managed, func(initializer.RuntimeHostBinding) {
-		t.Fatal("readiness callback ran without a binding")
+		observed <- struct{}{}
 	})
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -90,6 +91,11 @@ func TestHostObservingRunnerWaitsForManagedCancellationResult(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("runner did not return after cancellation")
+	}
+	select {
+	case <-observed:
+		t.Fatal("readiness callback ran without a binding")
+	default:
 	}
 }
 
