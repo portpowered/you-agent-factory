@@ -1,6 +1,7 @@
 package agentrun
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -128,6 +129,42 @@ func TestFailureMetadataForError_PreservesRetryableProviderFailure(t *testing.T)
 	if metadata == nil || metadata.Family != workerexecution.WorkFailureFamilyRetryable ||
 		metadata.Type != workerexecution.WorkFailureTypeInternalServerError {
 		t.Fatalf("metadata = %#v, want retryable internal server error", metadata)
+	}
+}
+
+func TestAgentRunFailureDiagnostics_ProviderFailurePreservesSafeType(t *testing.T) {
+	t.Parallel()
+
+	rawProviderPayload := "provider response contained a secret payload"
+	err := workerexecution.NewProviderError(
+		workerexecution.WorkFailureTypeInternalServerError,
+		"temporary provider failure",
+		errors.New(rawProviderPayload),
+	)
+	diagnostics := agentRunFailureDiagnostics(err)
+	if diagnostics[DiagnosticFailureClass] != FailureClassProvider {
+		t.Fatalf("failure class = %q, want %q", diagnostics[DiagnosticFailureClass], FailureClassProvider)
+	}
+	if diagnostics[DiagnosticProviderFailureType] != string(workerexecution.WorkFailureTypeInternalServerError) {
+		t.Fatalf("provider failure type = %q, want %q", diagnostics[DiagnosticProviderFailureType], workerexecution.WorkFailureTypeInternalServerError)
+	}
+	formatted := formatAgentRunError(err)
+	if !strings.HasPrefix(formatted, "agent run provider failure:") {
+		t.Fatalf("formatAgentRunError() = %q, want provider prefix", formatted)
+	}
+	if !strings.Contains(formatted, string(workerexecution.WorkFailureTypeInternalServerError)) {
+		t.Fatalf("formatAgentRunError() = %q, want normalized provider type", formatted)
+	}
+	if strings.Contains(formatted, rawProviderPayload) {
+		t.Fatalf("formatAgentRunError() leaked raw provider payload: %q", formatted)
+	}
+}
+
+func TestFailureClassForError_RawDeadlineRemainsAgentRunTimeout(t *testing.T) {
+	t.Parallel()
+
+	if got := failureClassForError(context.DeadlineExceeded); got != FailureClassTimeout {
+		t.Fatalf("failureClassForError() = %q, want %q", got, FailureClassTimeout)
 	}
 }
 

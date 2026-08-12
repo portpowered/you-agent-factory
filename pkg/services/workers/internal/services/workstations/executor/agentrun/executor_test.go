@@ -267,6 +267,55 @@ func TestAgentRunExecutor_HarnessFailureSurfacesAgentRunFailureClass(t *testing.
 	}
 }
 
+func TestAgentRunExecutor_ProviderFailureSurfacesProviderClassAndSafeType(t *testing.T) {
+	t.Parallel()
+
+	rawProviderPayload := "provider response contained a secret payload"
+	providerErr := workerexecution.NewProviderError(
+		workerexecution.WorkFailureTypeInternalServerError,
+		"temporary provider failure",
+		errors.New(rawProviderPayload),
+	)
+	harness := &recordingHarnessAdapter{err: providerErr}
+	executor := NewAgentRunExecutorWithDependencies(
+		staticRuntimeConfig{
+			Workers: map[string]*interfaces.FactoryWorkerConfig{
+				"agent-worker": {Type: interfaces.WorkerTypeAgent},
+			},
+		},
+		&stubRunner{}, nil,
+
+		harness, nil, time.Now)
+
+	result, err := executor.Execute(context.Background(), testAgentRunRequest())
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeFailed)
+	}
+	if result.Diagnostics == nil {
+		t.Fatal("Diagnostics = nil, want provider failure diagnostics")
+	}
+	if got := result.Diagnostics.Metadata[DiagnosticFailureClass]; got != FailureClassProvider {
+		t.Fatalf("failure class = %q, want %q", got, FailureClassProvider)
+	}
+	if got := result.Diagnostics.Metadata[DiagnosticProviderFailureType]; got != string(workerexecution.WorkFailureTypeInternalServerError) {
+		t.Fatalf("provider failure type = %q, want %q", got, workerexecution.WorkFailureTypeInternalServerError)
+	}
+	if !strings.HasPrefix(result.Error, "agent run provider failure:") ||
+		!strings.Contains(result.Error, string(workerexecution.WorkFailureTypeInternalServerError)) {
+		t.Fatalf("Error = %q, want safe provider failure wording", result.Error)
+	}
+	if strings.Contains(result.Error, rawProviderPayload) || strings.Contains(result.Error, "agent run harness failure:") {
+		t.Fatalf("Error = %q, leaked provider payload or harness wording", result.Error)
+	}
+	if result.FailureMetadata == nil || result.FailureMetadata.Family != workerexecution.WorkFailureFamilyRetryable ||
+		result.FailureMetadata.Type != workerexecution.WorkFailureTypeInternalServerError {
+		t.Fatalf("FailureMetadata = %#v, want retryable internal server error", result.FailureMetadata)
+	}
+}
+
 func TestAgentRunExecutor_ModelhostLeaseDeniedSurfacesAgentRunLeaseFailureClass(t *testing.T) {
 	t.Parallel()
 

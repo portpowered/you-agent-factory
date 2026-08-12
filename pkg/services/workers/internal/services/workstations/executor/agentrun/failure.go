@@ -14,9 +14,11 @@ const (
 	DiagnosticExecutionBehavior = "execution_behavior"
 	ExecutionBehaviorAgentRun   = "agent_run"
 
-	DiagnosticFailureClass   = "failure_class"
-	DiagnosticRecoveryAction = "recovery_action"
+	DiagnosticFailureClass        = "failure_class"
+	DiagnosticProviderFailureType = "provider_failure_type"
+	DiagnosticRecoveryAction      = "recovery_action"
 
+	FailureClassProvider       = "agent_run_provider_failure"
 	FailureClassHarnessRuntime = "agent_run_harness_failure"
 	FailureClassCanceled       = "agent_run_canceled"
 	FailureClassTimeout        = "agent_run_timeout"
@@ -27,6 +29,8 @@ const (
 	FailureClassToolPolicy     = "agent_run_tool_policy_violation"
 	FailureClassToolRuntime    = "agent_run_tool_failure"
 )
+
+const maxAgentRunProviderFailureTypeLength = 64
 
 func agentRunDiagnostics(extra map[string]string) *workerexecution.WorkDiagnostics {
 	metadata := map[string]string{
@@ -50,6 +54,9 @@ func failureClassForError(err error) string {
 	}
 	if class, ok := modelhostFailureClass(err); ok {
 		return class
+	}
+	if normalizedProviderErrorForAgentRun(err) != nil {
+		return FailureClassProvider
 	}
 	if errors.Is(err, context.Canceled) {
 		return FailureClassCanceled
@@ -104,19 +111,70 @@ func formatAgentRunError(err error) string {
 		return "agent run tool policy violation: " + safeToolPolicyFailureSummary(err)
 	case FailureClassToolRuntime:
 		return "agent run tool failure: " + safeToolRuntimeFailureSummary(err)
+	case FailureClassProvider:
+		return "agent run provider failure: " + safeProviderFailureSummary(normalizedProviderErrorForAgentRun(err))
 	default:
 		return "agent run harness failure: " + err.Error()
 	}
 }
 
 func agentRunFailureDiagnostics(err error) map[string]string {
+	class := failureClassForError(err)
 	diagnostics := map[string]string{
-		DiagnosticFailureClass: failureClassForError(err),
+		DiagnosticFailureClass: class,
+	}
+	if class == FailureClassProvider {
+		if providerErr := normalizedProviderErrorForAgentRun(err); providerErr != nil {
+			diagnostics[DiagnosticProviderFailureType] = string(safeProviderFailureType(providerErr))
+		}
 	}
 	if action := recoveryActionForError(err); action != "" {
 		diagnostics[DiagnosticRecoveryAction] = action
 	}
 	return diagnostics
+}
+
+func normalizedProviderErrorForAgentRun(err error) *workerexecution.ProviderError {
+	if err == nil {
+		return nil
+	}
+	var providerErr *workerexecution.ProviderError
+	if errors.As(err, &providerErr) && providerErr != nil {
+		return providerErr
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return nil
+	}
+	return workerexecution.NormalizeProviderExecutionError(err)
+}
+
+func safeProviderFailureType(providerErr *workerexecution.ProviderError) workerexecution.WorkFailureType {
+	if providerErr == nil {
+		return workerexecution.WorkFailureTypeUnknown
+	}
+	typ := providerErr.Type
+	if len([]rune(string(typ))) > maxAgentRunProviderFailureTypeLength {
+		return workerexecution.WorkFailureTypeUnknown
+	}
+	switch typ {
+	case workerexecution.WorkFailureTypeAuthFailure,
+		workerexecution.WorkFailureTypePermanentBadRequest,
+		workerexecution.WorkFailureTypeThrottled,
+		workerexecution.WorkFailureTypeInternalServerError,
+		workerexecution.WorkFailureTypeTimeout,
+		workerexecution.WorkFailureTypeUnknown,
+		workerexecution.WorkFailureTypeMisconfigured,
+		workerexecution.WorkFailureTypeCommandLineTooLong,
+		workerexecution.WorkFailureTypeMissingExecutable,
+		workerexecution.WorkFailureTypeStructuredOutputSchemaViolation:
+		return typ
+	default:
+		return workerexecution.WorkFailureTypeUnknown
+	}
+}
+
+func safeProviderFailureSummary(providerErr *workerexecution.ProviderError) string {
+	return "provider error: " + string(safeProviderFailureType(providerErr))
 }
 
 func recoveryActionForError(err error) string {
