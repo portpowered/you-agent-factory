@@ -238,7 +238,7 @@ func TestTerminate_WaitsForAcceptedDispatchCallbackBeforeReportingTerminal(t *te
 	}
 }
 
-func TestTerminate_AfterCancelWaitsForTheEstablishedTerminalCallback(t *testing.T) {
+func TestCancel_WaitsForTheAuthoritativeTerminalCallback(t *testing.T) {
 	boundary := newControlledBoundary()
 	registry := newControlledRegistry(t, boundary)
 	started := startControlledSession(t, registry, boundary, "worker-1", "dispatch-1")
@@ -248,28 +248,29 @@ func TestTerminate_AfterCancelWaitsForTheEstablishedTerminalCallback(t *testing.
 		}, nil
 	})
 
-	canceled, err := registry.Cancel(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
-	if err != nil || canceled.Outcome != workersessions.ControlOutcomeApplied || canceled.Session.State != workersessions.StateRunning {
-		t.Fatalf("Cancel() = %#v, %v, want applied control while callback remains pending", canceled, err)
-	}
-
-	terminated := make(chan workersessions.ControlResult, 1)
-	terminateErr := make(chan error, 1)
+	canceled := make(chan workersessions.ControlResult, 1)
+	cancelErr := make(chan error, 1)
 	go func() {
-		result, callErr := registry.Terminate(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
-		terminated <- result
-		terminateErr <- callErr
+		result, callErr := registry.Cancel(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
+		canceled <- result
+		cancelErr <- callErr
 	}()
+	<-boundary.cancelCalled
 	select {
-	case result := <-terminated:
-		t.Fatalf("Terminate() returned before the prior Cancel callback: %#v", result)
+	case result := <-canceled:
+		t.Fatalf("Cancel() returned before its callback: %#v", result)
 	default:
 	}
 
 	boundary.complete(canceledDispatchResult("dispatch-1"), workers.ErrWorkstationDispatchCanceled)
-	result := <-terminated
-	if callErr := <-terminateErr; callErr != nil || result.Outcome != workersessions.ControlOutcomeNoop || result.Session.State != workersessions.StateCanceled {
-		t.Fatalf("Terminate() = %#v, %v, want joined CANCELED NOOP", result, callErr)
+	result := <-canceled
+	if callErr := <-cancelErr; callErr != nil || result.Outcome != workersessions.ControlOutcomeApplied || result.Session.State != workersessions.StateCanceled {
+		t.Fatalf("Cancel() = %#v, %v, want joined CANCELED APPLIED", result, callErr)
+	}
+
+	terminated, err := registry.Terminate(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
+	if err != nil || terminated.Outcome != workersessions.ControlOutcomeNoop || terminated.Session.State != workersessions.StateCanceled {
+		t.Fatalf("Terminate() = %#v, %v, want joined CANCELED NOOP", terminated, err)
 	}
 	if calls := boundary.cancellations(); len(calls) != 1 || calls[0].DispatchID != "dispatch-1" {
 		t.Fatalf("boundary cancellation calls = %#v, want one exact call", calls)
@@ -700,7 +701,7 @@ func TestControl_BeforeStartCancellationAndTerminationPreventWorkersHandoff(t *t
 	}
 }
 
-func TestCancel_BoundaryAlreadyCanceledReturnsNoopWithoutChangingRunningSession(t *testing.T) {
+func TestCancel_BoundaryAlreadyCanceledWaitsForTheCanonicalTerminalSnapshot(t *testing.T) {
 	boundary := newControlledBoundary()
 	registry := newControlledRegistry(t, boundary)
 	started := startControlledSession(t, registry, boundary, "worker-1", "dispatch-1")
@@ -710,13 +711,26 @@ func TestCancel_BoundaryAlreadyCanceledReturnsNoopWithoutChangingRunningSession(
 		}, nil
 	})
 
-	result, err := registry.Cancel(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
-	if err != nil || result.Outcome != workersessions.ControlOutcomeNoop || result.Session.State != workersessions.StateRunning {
-		t.Fatalf("Cancel() = %#v, %v, want NOOP with unchanged RUNNING session", result, err)
+	resultCh := make(chan workersessions.ControlResult, 1)
+	errCh := make(chan error, 1)
+	go func() {
+		result, err := registry.Cancel(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
+		resultCh <- result
+		errCh <- err
+	}()
+	<-boundary.cancelCalled
+	select {
+	case result := <-resultCh:
+		t.Fatalf("Cancel() returned before the canonical callback: %#v", result)
+	default:
 	}
-	boundary.complete(completedDispatchResult("dispatch-1"), nil)
-	if final := <-started; final.Session.State != workersessions.StateCompleted {
-		t.Fatalf("Start() after ordinary completion = %#v, want COMPLETED", final)
+	boundary.complete(canceledDispatchResult("dispatch-1"), workers.ErrWorkstationDispatchCanceled)
+	result := <-resultCh
+	if err := <-errCh; err != nil || result.Outcome != workersessions.ControlOutcomeNoop || result.Session.State != workersessions.StateCanceled {
+		t.Fatalf("Cancel() = %#v, %v, want joined CANCELED NOOP", result, err)
+	}
+	if final := <-started; final.Session.State != workersessions.StateCanceled {
+		t.Fatalf("Start() after canonical cancellation = %#v, want CANCELED", final)
 	}
 }
 

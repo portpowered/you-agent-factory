@@ -499,6 +499,7 @@ func TestCancel_BeforeBoundaryAdmissionEitherWaitsOrTerminatesTheExactSupervisio
 		t.Fatal("registerSupervision(worker-2): want exact attempt")
 	}
 	noOpSupervision.controlAction = workersessions.ControlActionCancel
+	noOpSupervision.signalDone()
 	noOp, err := r.Cancel(context.Background(), workersessions.ControlRequest{ID: "worker-2"})
 	if err != nil || noOp.Outcome != workersessions.ControlOutcomeNoop {
 		t.Fatalf("repeated pre-admission Cancel() = %#v, %v, want NOOP", noOp, err)

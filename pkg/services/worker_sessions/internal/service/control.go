@@ -550,7 +550,6 @@ func (r *registry) logTerminal(id, attemptID string, session workersessions.Sess
 // established Workers cancellation callback has committed; an unassociated
 // execution remains truthfully unsupported rather than becoming a fabricated
 // resumable session.
-// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func (r *registry) Pause(ctx context.Context, req workersessions.ControlRequest) (workersessions.ControlResult, error) {
 	if err := req.Validate(); err != nil {
 		return workersessions.ControlResult{Action: workersessions.ControlActionPause, Outcome: workersessions.ControlOutcomeFailed}, err
@@ -809,7 +808,6 @@ func (r *registry) terminateForShutdown(ctx context.Context, id string) (workers
 	return r.cancelControl(ctx, workersessions.ControlRequest{ID: id}, workersessions.ControlActionTerminate, false)
 }
 
-// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func (r *registry) cancelControl(ctx context.Context, req workersessions.ControlRequest, action workersessions.ControlAction, detachContext bool) (workersessions.ControlResult, error) {
 	if err := req.Validate(); err != nil {
 		return workersessions.ControlResult{Action: action, Outcome: workersessions.ControlOutcomeFailed}, err
@@ -855,12 +853,11 @@ func (r *registry) cancelControl(ctx context.Context, req workersessions.Control
 		cancelResult, cancelErr := r.boundary.Cancel(boundaryContext, workers.WorkstationDispatchCancelRequest{DispatchID: dispatchID})
 		alreadyTerminal := supervision.finishCancellation(action, wait, cancelResult, cancelErr, sessionIsTerminal(r, req.ID))
 
-		// Terminate promises to return only after the authoritative dispatch
-		// callback has committed. Workers reports an already-canceled dispatch
-		// without an error, but that callback can still be in flight; join it
-		// before returning the idempotent snapshot. Cancel intentionally keeps
-		// its non-joining already-canceled behavior.
-		if alreadyTerminal || (action == workersessions.ControlActionTerminate && cancelAlreadyCanceled(cancelResult, cancelErr)) {
+		// Every terminal control promises to return only after the authoritative
+		// dispatch callback has committed. Workers can report an already-canceled
+		// dispatch while that callback is still in flight, so the callback channel
+		// remains the canonical join point for both Cancel and Terminate.
+		if alreadyTerminal || cancelAlreadyCanceled(cancelResult, cancelErr) {
 			<-supervision.done
 			current, _ := r.Get(context.Background(), workersessions.GetRequest{ID: req.ID})
 			result := workersessions.ControlResult{
@@ -881,10 +878,8 @@ func (r *registry) cancelControl(ctx context.Context, req workersessions.Control
 			result.Outcome = workersessions.ControlOutcomeNoop
 			return result, nil
 		}
-		if action == workersessions.ControlActionTerminate {
-			<-supervision.done
-			result.Session, _ = r.Get(context.Background(), workersessions.GetRequest{ID: req.ID})
-		}
+		<-supervision.done
+		result.Session, _ = r.Get(context.Background(), workersessions.GetRequest{ID: req.ID})
 		result.Outcome = workersessions.ControlOutcomeApplied
 		r.logger.Info("worker session control", "sessionID", req.ID, "attemptID", dispatchID, "action", string(action), "outcome", string(result.Outcome))
 		return result, nil
@@ -950,11 +945,9 @@ func (r *registry) controlTarget(id string) (workersessions.Session, *supervisio
 }
 
 func (r *registry) controlNoop(id string, action workersessions.ControlAction, session workersessions.Session, supervision *supervision) workersessions.ControlResult {
-	// Every successful Terminate result promises the terminal callback's
-	// snapshot, including a no-op caused by an earlier Cancel or Terminate.
-	// The prior control closes controlDone before that callback can complete,
-	// so the callback channel is the only authoritative join point here.
-	if action == workersessions.ControlActionTerminate && supervision != nil {
+	// Every terminal control promises the terminal callback's snapshot,
+	// including a no-op caused by an earlier terminal control.
+	if supervision != nil && (action == workersessions.ControlActionCancel || action == workersessions.ControlActionTerminate) {
 		<-supervision.done
 		if current, err := r.Get(context.Background(), workersessions.GetRequest{ID: id}); err == nil {
 			session = current
