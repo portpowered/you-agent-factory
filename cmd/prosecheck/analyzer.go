@@ -47,6 +47,15 @@ type Span struct {
 	Identity     string
 	Protected    []TextRange
 	Suppressions []Suppression
+	positions    []sourcePosition
+}
+
+// sourcePosition is an absolute source location for one byte boundary in a
+// span. Structured adapters use it when the authored representation encodes
+// text (for example, JSON string escapes) instead of storing it literally.
+type sourcePosition struct {
+	line   int
+	column int
 }
 
 // Finding is the stable, actionable result emitted by the analyzer.
@@ -428,6 +437,18 @@ func boundedExcerpt(value string) string {
 }
 
 func spanPosition(span Span, offset int) (int, int) {
+	if len(span.positions) > 0 {
+		if offset < 0 {
+			offset = 0
+		}
+		if offset >= len(span.positions) {
+			offset = len(span.positions) - 1
+		}
+		position := span.positions[offset]
+		if position.line > 0 && position.column > 0 {
+			return position.line, position.column
+		}
+	}
 	line := span.StartLine
 	column := span.StartColumn
 	if line < 1 {

@@ -52,9 +52,16 @@ func run(args []string, stdout, stderr io.Writer) error {
 	spans := make([]Span, 0, len(cfg.inputs))
 	var adapterFindings []Finding
 	for _, input := range cfg.inputs {
+		if isGeneratedCLIProjection(input) {
+			return fmt.Errorf("generated CLI projection %s is not an authored prosecheck input", input)
+		}
 		data, readErr := os.ReadFile(input)
 		if readErr != nil {
 			return fmt.Errorf("read prose input %s: %w", input, readErr)
+		}
+		if isCLIManifestInput(input) {
+			adapterFindings = append(adapterFindings, AnalyzeCLIManifest(input, data, policy)...)
+			continue
 		}
 		if isMarkdownInput(input) {
 			markdownSpans, parseErr := ExtractMarkdownSpans(input, data)
@@ -90,6 +97,16 @@ func run(args []string, stdout, stderr io.Writer) error {
 func isMarkdownInput(path string) bool {
 	extension := strings.ToLower(filepath.Ext(path))
 	return extension == ".md" || extension == ".markdown"
+}
+
+func isCLIManifestInput(path string) bool {
+	normalized := strings.ToLower(strings.ReplaceAll(filepath.Clean(path), "\\", "/"))
+	return normalized == strings.TrimPrefix(authoredCLIManifestSuffix, "/") || strings.HasSuffix(normalized, authoredCLIManifestSuffix)
+}
+
+func isGeneratedCLIProjection(path string) bool {
+	normalized := strings.ToLower(strings.ReplaceAll(filepath.Clean(path), "\\", "/"))
+	return strings.HasSuffix(normalized, "/packages/api/generated/cli/commands.json")
 }
 
 func parseConfig(args []string, stderr io.Writer) (config, error) {
