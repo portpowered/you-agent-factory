@@ -30,7 +30,7 @@ const (
 // skip worker/workstation behavior pairing checks.
 func ExemptFromWorkerWorkstationCompatibility(workstation Workstation) bool {
 	switch strings.TrimSpace(workstation.Type) {
-	case workertaxonomy.WorkstationTypeLogical, workertaxonomy.WorkstationTypeClassify:
+	case workertaxonomy.WorkstationTypeLogical, workertaxonomy.WorkstationTypeClassify, workertaxonomy.WorkstationTypeHumanApproval:
 		return true
 	default:
 		return false

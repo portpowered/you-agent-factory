@@ -24,6 +24,7 @@ func ValidateStructural(cfg *factorydefinitions.FactoryConfig) Result {
 		Targets: append(WebhookTargets(cfg), OrchestratorTargets(cfg)...),
 	}
 	result.Targets = append(result.Targets, ExpectedArtifactTargets(cfg)...)
+	result.Targets = append(result.Targets, humanApprovalWorkstationTargets(cfg)...)
 	if !IsPetriOrchestratorValidationScope(cfg) {
 		return result
 	}

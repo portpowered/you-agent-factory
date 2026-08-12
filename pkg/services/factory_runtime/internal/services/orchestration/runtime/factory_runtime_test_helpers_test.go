@@ -1128,12 +1128,16 @@ func safeBoundaryGeneratedFactory() factoryapi.Factory {
 		Workstations: &[]factoryapi.Workstation{{
 			Id:        &workstationID,
 			Name:      "Process",
-			Worker:    "mock",
+			Worker:    stringPtrForRuntimeTest("mock"),
 			Inputs:    []factoryapi.WorkstationIO{{WorkType: "task", State: "init"}},
 			Outputs:   &[]factoryapi.WorkstationIO{{WorkType: "task", State: "done"}},
 			OnFailure: &[]factoryapi.WorkstationIO{{WorkType: "task", State: "failed"}},
 		}},
 	}
+}
+
+func stringPtrForRuntimeTest(value string) *string {
+	return &value
 }
 
 func assertNoAuthRemediationText(t *testing.T, body string) {

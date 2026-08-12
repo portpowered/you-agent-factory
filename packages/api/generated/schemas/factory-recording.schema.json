@@ -5971,7 +5971,7 @@
           "description": "Optional policy for whether downstream work uses the workstation output payload or preserves the consumed input payload."
         },
         "worker": {
-          "description": "Name of a worker declared in the workers list.",
+          "description": "Name of a worker declared in the workers list. Omit this field for HUMAN_APPROVAL workstations.",
           "type": "string"
         },
         "workingDirectory": {
@@ -5985,7 +5985,6 @@
       },
       "required": [
         "name",
-        "worker",
         "inputs"
       ],
       "type": "object"
@@ -6225,7 +6224,8 @@
         "MODEL_WORKSTATION",
         "MODEL_INVOKE",
         "LOGICAL_MOVE",
-        "CLASSIFIER_WORKSTATION"
+        "CLASSIFIER_WORKSTATION",
+        "HUMAN_APPROVAL"
       ],
       "type": "string"
     }

@@ -156,10 +156,11 @@ const (
 	WorkstationTypeScript    = "SCRIPT_RUN"
 	WorkstationTypePoller    = "POLLER_RUN"
 	// Legacy runtime identifiers retained during the migration window.
-	WorkstationTypeModel    = "MODEL_WORKSTATION"
-	WorkstationTypeInvoke   = "MODEL_INVOKE"
-	WorkstationTypeLogical  = "LOGICAL_MOVE"
-	WorkstationTypeClassify = "CLASSIFIER_WORKSTATION"
+	WorkstationTypeModel         = "MODEL_WORKSTATION"
+	WorkstationTypeInvoke        = "MODEL_INVOKE"
+	WorkstationTypeLogical       = "LOGICAL_MOVE"
+	WorkstationTypeClassify      = "CLASSIFIER_WORKSTATION"
+	WorkstationTypeHumanApproval = "HUMAN_APPROVAL"
 )
 
 // FactoryConfig is the specification of a factory as a JSON file.

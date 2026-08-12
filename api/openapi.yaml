@@ -12242,7 +12242,6 @@ components:
       additionalProperties: false
       required:
         - name
-        - worker
         - inputs
       properties:
         id:
@@ -12274,7 +12273,7 @@ components:
             $ref: '#/components/schemas/WorkstationOperationBinding'
         worker:
           type: string
-          description: Name of a worker declared in the workers list.
+          description: Name of a worker declared in the workers list. Omit this field for HUMAN_APPROVAL workstations.
         runner:
           allOf:
             - $ref: '#/components/schemas/RunnerID'
@@ -12433,6 +12432,7 @@ components:
         - MODEL_INVOKE
         - LOGICAL_MOVE
         - CLASSIFIER_WORKSTATION
+        - HUMAN_APPROVAL
     WorkstationCron:
       type: object
       description: Trigger timing for scheduled workstations. Provide exactly one of a five-field cron schedule or a positive duration in every; Factory validation enforces the exclusive choice.

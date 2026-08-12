@@ -253,7 +253,7 @@ func factoryWithResourceSlotRoutes() factoryapi.Factory {
 			OnRejection: &onRejection,
 			Outputs:     &outputs,
 			Type:        &workstationType,
-			Worker:      "processor",
+			Worker:      stringPtr("processor"),
 		}},
 	}
 }

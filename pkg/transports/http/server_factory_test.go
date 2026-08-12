@@ -687,7 +687,7 @@ func TestGetCurrentFactoryWorkstationPromptTemplateContract(t *testing.T) {
 				Type:       factoryapi.BundledFileTypeDOC,
 			}},
 		},
-		Workstations: &[]factoryapi.Workstation{{Name: "Review", Worker: "reviewer", Inputs: []factoryapi.WorkstationIO{{State: "queued", WorkType: "task"}}, Outputs: &[]factoryapi.WorkstationIO{{State: "reviewed", WorkType: "task"}}}},
+		Workstations: &[]factoryapi.Workstation{{Name: "Review", Worker: httpStringPtr("reviewer"), Inputs: []factoryapi.WorkstationIO{{State: "queued", WorkType: "task"}}, Outputs: &[]factoryapi.WorkstationIO{{State: "reviewed", WorkType: "task"}}}},
 	}, nil), nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/~default/factory/workstations/Review/prompt-template-contract", nil)
@@ -718,7 +718,7 @@ func TestValidateCurrentFactoryWorkstationPromptTemplate_AcceptsBundledDocRefere
 				Type:       factoryapi.BundledFileTypeDOC,
 			}},
 		},
-		Workstations: &[]factoryapi.Workstation{{Name: "Review", Worker: "reviewer", Inputs: []factoryapi.WorkstationIO{{State: "queued", WorkType: "task"}}, Outputs: &[]factoryapi.WorkstationIO{{State: "reviewed", WorkType: "task"}}}},
+		Workstations: &[]factoryapi.Workstation{{Name: "Review", Worker: httpStringPtr("reviewer"), Inputs: []factoryapi.WorkstationIO{{State: "queued", WorkType: "task"}}, Outputs: &[]factoryapi.WorkstationIO{{State: "reviewed", WorkType: "task"}}}},
 	}, nil), nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/factory-sessions/~default/factory/workstations/Review/prompt-template-validation", bytes.NewBufferString(`{"prompt":"{{ index .Docs \"factory/docs/overview.md\" }}"}`))
@@ -738,7 +738,7 @@ func TestValidateCurrentFactoryWorkstationPromptTemplate_AcceptsBundledDocRefere
 func TestValidateCurrentFactoryWorkstationPromptTemplate_AcceptsContextSessionID(t *testing.T) {
 	srv := newFactoryDefinitionTestServer(factoryReadFake(factoryapi.Factory{
 		Name:         "beta",
-		Workstations: &[]factoryapi.Workstation{{Name: "Review", Worker: "reviewer", Inputs: []factoryapi.WorkstationIO{{State: "queued", WorkType: "task"}}, Outputs: &[]factoryapi.WorkstationIO{{State: "reviewed", WorkType: "task"}}}},
+		Workstations: &[]factoryapi.Workstation{{Name: "Review", Worker: httpStringPtr("reviewer"), Inputs: []factoryapi.WorkstationIO{{State: "queued", WorkType: "task"}}, Outputs: &[]factoryapi.WorkstationIO{{State: "reviewed", WorkType: "task"}}}},
 	}, nil), nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/factory-sessions/~default/factory/workstations/Review/prompt-template-validation", bytes.NewBufferString(`{"prompt":"you submit --session {{ .Context.SessionID }} --work follow-up"}`))
@@ -767,7 +767,7 @@ func promptTemplateContractHasPath(references []factoryapi.PromptTemplateVariabl
 func TestValidateCurrentFactoryWorkstationPromptTemplate(t *testing.T) {
 	srv := newFactoryDefinitionTestServer(factoryReadFake(factoryapi.Factory{
 		Name:         "beta",
-		Workstations: &[]factoryapi.Workstation{{Name: "Review", Worker: "reviewer", Inputs: []factoryapi.WorkstationIO{{State: "queued", WorkType: "task"}}, Outputs: &[]factoryapi.WorkstationIO{{State: "reviewed", WorkType: "task"}}}},
+		Workstations: &[]factoryapi.Workstation{{Name: "Review", Worker: httpStringPtr("reviewer"), Inputs: []factoryapi.WorkstationIO{{State: "queued", WorkType: "task"}}, Outputs: &[]factoryapi.WorkstationIO{{State: "reviewed", WorkType: "task"}}}},
 	}, nil), nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/factory-sessions/~default/factory/workstations/Review/prompt-template-validation", bytes.NewBufferString(`{"prompt":"{{ (index .Inputs 1).Payload }}"}`))

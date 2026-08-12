@@ -53,7 +53,7 @@ func TestSaveUpsertNamedAndActivateForSession_PersistsChosenTargetName(t *testin
 		}},
 		Workstations: &[]factoryapi.Workstation{{
 			Name:   "plan-task",
-			Worker: "planner",
+			Worker: definitionStringPtr("planner"),
 			Type:   upsertWorkstationTypeModel(),
 			Body:   upsertStringPointer("Plan the story."),
 			Inputs: []factoryapi.WorkstationIO{{WorkType: "story", State: "init"}},
@@ -138,7 +138,7 @@ func TestSaveUpsertNamedAndActivateForSession_ReplacesExistingNamedFactory(t *te
 		}},
 		Workstations: &[]factoryapi.Workstation{{
 			Name:   "plan-task",
-			Worker: "planner",
+			Worker: definitionStringPtr("planner"),
 			Type:   upsertWorkstationTypeModel(),
 			Body:   upsertStringPointer("replacement workstation"),
 			Inputs: []factoryapi.WorkstationIO{{WorkType: "story", State: "init"}},

@@ -317,7 +317,9 @@ func conflictingRouteTargets(workstation factorydefinitions.FactoryWorkstationCo
 }
 
 func workstationSkipsOutcomeRouteRequirements(workstation factorydefinitions.FactoryWorkstationConfig) bool {
-	return strings.TrimSpace(workstation.Type) == factorydefinitions.WorkstationTypeLogical
+	typeName := strings.TrimSpace(workstation.Type)
+	return typeName == factorydefinitions.WorkstationTypeLogical ||
+		typeName == factorydefinitions.WorkstationTypeHumanApproval
 }
 
 func workstationHasEffectiveOutputs(workstation factorydefinitions.FactoryWorkstationConfig) bool {

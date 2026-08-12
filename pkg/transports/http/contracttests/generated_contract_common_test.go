@@ -530,7 +530,7 @@ func generatedNamedFactoryFixture() factoryapi.Factory {
 		}},
 		Workstations: &[]factoryapi.Workstation{{
 			Name:   "plan-task",
-			Worker: "planner",
+			Worker: stringPtr("planner"),
 			Inputs: []factoryapi.WorkstationIO{{WorkType: "task", State: "init"}},
 			Outputs: &[]factoryapi.WorkstationIO{{
 				WorkType: "task",

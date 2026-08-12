@@ -66,7 +66,7 @@ func testGeneratedFactory() factoryapi.Factory {
 		Workers:   &[]factoryapi.Worker{{Name: "worker-a"}},
 		Workstations: &[]factoryapi.Workstation{{
 			Name:    "process",
-			Worker:  "worker-a",
+			Worker:  generatedStringPtr("worker-a"),
 			Inputs:  []factoryapi.WorkstationIO{},
 			Outputs: &[]factoryapi.WorkstationIO{},
 		}},

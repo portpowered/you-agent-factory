@@ -110,7 +110,7 @@ func TestGeneratedFactoryContractsSupportClassifierRoutes(t *testing.T) {
 		Workstations: &[]factoryapi.Workstation{{
 			Name:   "classify-task",
 			Type:   &classifierType,
-			Worker: "planner",
+			Worker: stringPtr("planner"),
 			Inputs: []factoryapi.WorkstationIO{{WorkType: "task", State: "init"}},
 			ClassificationRoutes: &[]factoryapi.ClassificationRoute{
 				{Label: "approved", Outputs: []factoryapi.WorkstationIO{{WorkType: "task", State: "done"}}},
@@ -265,7 +265,7 @@ func assertGeneratedOpenAPISurfaceTypes(
 		Name:     "daily-refresh",
 		Behavior: &workstationKind,
 		Type:     &workstationRuntimeType,
-		Worker:   "agent",
+		Worker:   stringPtr("agent"),
 		Inputs:   []factoryapi.WorkstationIO{{WorkType: "task", State: "init"}},
 		Outputs:  &[]factoryapi.WorkstationIO{{WorkType: "task", State: "complete"}},
 	}
@@ -473,7 +473,7 @@ func assertGeneratedNamedFactoryRoundTripFields(t *testing.T, namedFactory facto
 	if roundTripped.InvocationSignature == nil || roundTripped.InvocationSignature.Parameters == nil || len(*roundTripped.InvocationSignature.Parameters) != 1 {
 		t.Fatalf("round-tripped named factory invocationSignature = %#v, want one parameter", roundTripped.InvocationSignature)
 	}
-	if roundTripped.Workstations == nil || len(*roundTripped.Workstations) != 1 || (*roundTripped.Workstations)[0].Worker != "planner" {
+	if roundTripped.Workstations == nil || len(*roundTripped.Workstations) != 1 || (*roundTripped.Workstations)[0].Worker == nil || *(*roundTripped.Workstations)[0].Worker != "planner" {
 		t.Fatalf("round-tripped named factory workstations = %#v, want planner workstation", roundTripped.Workstations)
 	}
 }

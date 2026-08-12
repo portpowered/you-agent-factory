@@ -60,7 +60,7 @@ func TestSaveNamedCurrentFactoryForSession_PersistsSplitLayout(t *testing.T) {
 		}},
 		Workstations: &[]factoryapi.Workstation{{
 			Name:   "plan-task",
-			Worker: "planner",
+			Worker: definitionStringPtr("planner"),
 			Type:   workstationTypeModel(),
 			Body:   stringPointer("Plan the story."),
 			Inputs: []factoryapi.WorkstationIO{{WorkType: "story", State: "init"}},
@@ -146,7 +146,7 @@ func TestSaveNamedCurrentFactoryForSession_CoercesDriftedPayloadName(t *testing.
 		}},
 		Workstations: &[]factoryapi.Workstation{{
 			Name:   "plan-task",
-			Worker: "planner",
+			Worker: definitionStringPtr("planner"),
 			Type:   workstationTypeModel(),
 			Body:   stringPointer("Plan the story."),
 			Inputs: []factoryapi.WorkstationIO{{WorkType: "story", State: "init"}},
@@ -304,7 +304,7 @@ func TestSaveUpsertNamedAndActivateForSession_PersistsChosenTargetName(t *testin
 		}},
 		Workstations: &[]factoryapi.Workstation{{
 			Name:   "plan-task",
-			Worker: "planner",
+			Worker: definitionStringPtr("planner"),
 			Type:   workstationTypeModel(),
 			Body:   stringPointer("Plan the story."),
 			Inputs: []factoryapi.WorkstationIO{{WorkType: "story", State: "init"}},

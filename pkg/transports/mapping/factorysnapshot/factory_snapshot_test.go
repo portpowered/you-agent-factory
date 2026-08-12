@@ -12,7 +12,7 @@ func TestToAPIPreservesPublicFactoryShape(t *testing.T) {
 	t.Parallel()
 
 	workers := []api.Worker{{Name: "reviewer"}}
-	workstations := []api.Workstation{{Name: "review", Worker: "reviewer"}}
+	workstations := []api.Workstation{{Name: "review", Worker: stringPtr("reviewer")}}
 	want := api.Factory{
 		Name:         "factory-a",
 		Workers:      &workers,
@@ -33,6 +33,10 @@ func TestToAPIPreservesPublicFactoryShape(t *testing.T) {
 	if got.Workstations == nil || len(*got.Workstations) != 1 || (*got.Workstations)[0].Name != "review" {
 		t.Fatalf("ToAPI workstations = %#v, want review", got.Workstations)
 	}
+}
+
+func stringPtr(value string) *string {
+	return &value
 }
 
 func TestToAPIHandlesAbsentAndMalformedSnapshots(t *testing.T) {

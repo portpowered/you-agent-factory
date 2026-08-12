@@ -1043,7 +1043,7 @@ func workstationAPIFromInternal(workstation interfaces.FactoryWorkstationConfig,
 	apiWorkstation := factoryapi.Workstation{
 		Name:                  normalized.Name,
 		Description:           NameValueAPIFromInternal(normalized.Description),
-		Worker:                normalized.WorkerTypeName,
+		Worker:                stringPtrIfNotEmpty(normalized.WorkerTypeName),
 		Inputs:                workstationIOsAPIFromInternal(normalized.Inputs),
 		Outputs:               optionalWorkstationIOsAPIFromInternal(normalized.Outputs),
 		ClassificationRoutes:  classificationRoutesAPIFromInternal(normalized.ClassificationRoutes),

@@ -49,6 +49,7 @@ func NewConfigValidator(requiredToolChecker RequiredToolChecker) *ConfigValidato
 		ruleGuards,
 		ruleInvocationBoundLimits,
 		ruleWorkstationKind,
+		ruleHumanApprovalWorkstations,
 		ruleClassifierWorkstations,
 		ruleCronWorkstations,
 		rulePollerWorkstations,

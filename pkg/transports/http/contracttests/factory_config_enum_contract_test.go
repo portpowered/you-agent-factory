@@ -307,7 +307,7 @@ func assertGeneratedModelInvokeWorkstationOperation(t *testing.T) {
 	outputs := []generated.WorkstationIO{{WorkType: "story", State: "complete"}}
 	payloadBytes, err := json.Marshal(generated.Workstation{
 		Name:      "tts",
-		Worker:    "executor",
+		Worker:    stringPtr("executor"),
 		Type:      &modelInvokeType,
 		Operation: &modelInvokeOperation,
 		Inputs:    []generated.WorkstationIO{{WorkType: "story", State: "init"}},

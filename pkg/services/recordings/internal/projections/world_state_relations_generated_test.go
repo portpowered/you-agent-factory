@@ -408,7 +408,7 @@ func projectionReducerInitialStructureEvent(eventTime time.Time) factoryapi.Fact
 			Workstations: &[]factoryapi.Workstation{{
 				Id:        stringPtrForProjectionTest("t-review"),
 				Name:      "Review",
-				Worker:    "reviewer",
+				Worker:    stringPtrForProjectionTest("reviewer"),
 				Inputs:    []factoryapi.WorkstationIO{{WorkType: "task", State: "init"}},
 				Outputs:   &[]factoryapi.WorkstationIO{{WorkType: "task", State: "complete"}},
 				OnFailure: &[]factoryapi.WorkstationIO{{WorkType: "task", State: "failed"}},

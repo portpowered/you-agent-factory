@@ -741,7 +741,7 @@ func assertWorkstationSurfaceSchemas(t *testing.T, schemas map[string]any) {
 	}
 	assertPropertiesAbsent(t, workstationProperties, "Workstation", "timeout", "runtime_type")
 	assertEnumValues(t, schemaObject(t, schemas, "WorkstationKind"), "WorkstationKind", []string{"STANDARD", "REPEATER", "CRON", "POLLER"})
-	assertEnumValues(t, schemaObject(t, schemas, "WorkstationType"), "WorkstationType", []string{"INFERENCE_RUN", "AGENT_RUN", "SCRIPT_RUN", "POLLER_RUN", "MODEL_WORKSTATION", "MODEL_INVOKE", "LOGICAL_MOVE", "CLASSIFIER_WORKSTATION"})
+	assertEnumValues(t, schemaObject(t, schemas, "WorkstationType"), "WorkstationType", []string{"INFERENCE_RUN", "AGENT_RUN", "SCRIPT_RUN", "POLLER_RUN", "MODEL_WORKSTATION", "MODEL_INVOKE", "LOGICAL_MOVE", "CLASSIFIER_WORKSTATION", "HUMAN_APPROVAL"})
 
 	classificationRouteSchema := schemaObject(t, schemas, "ClassificationRoute")
 	assertRequiredFields(t, classificationRouteSchema, "label", "outputs")

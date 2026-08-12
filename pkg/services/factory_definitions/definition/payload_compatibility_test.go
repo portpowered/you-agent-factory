@@ -68,7 +68,7 @@ func TestValidateEditableFactoryTopology_UsesSameNormalizationAsPersist(t *testi
 		}},
 		Workstations: &[]factoryapi.Workstation{{
 			Name:   "process",
-			Worker: "worker-a",
+			Worker: definitionStringPtr("worker-a"),
 			Type:   workstationTypeModel(),
 			Inputs: []factoryapi.WorkstationIO{{WorkType: "task", State: "init"}},
 			Outputs: &[]factoryapi.WorkstationIO{

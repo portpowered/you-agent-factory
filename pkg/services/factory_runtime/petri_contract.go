@@ -34,13 +34,14 @@ type (
 )
 
 const (
-	PetriTransitionNormal       = petri.TransitionNormal
-	PetriTransitionExhaustion   = petri.TransitionExhaustion
-	PetriArcInput               = petri.ArcInput
-	PetriArcOutput              = petri.ArcOutput
-	PetriCardinalityOne         = petri.CardinalityOne
-	PetriCardinalityAll         = petri.CardinalityAll
-	PetriCardinalityAllTerminal = petri.CardinalityAllTerminal
-	PetriCardinalityN           = petri.CardinalityN
-	PetriCardinalityZeroOrMore  = petri.CardinalityZeroOrMore
+	PetriTransitionNormal        = petri.TransitionNormal
+	PetriTransitionHumanApproval = petri.TransitionHumanApproval
+	PetriTransitionExhaustion    = petri.TransitionExhaustion
+	PetriArcInput                = petri.ArcInput
+	PetriArcOutput               = petri.ArcOutput
+	PetriCardinalityOne          = petri.CardinalityOne
+	PetriCardinalityAll          = petri.CardinalityAll
+	PetriCardinalityAllTerminal  = petri.CardinalityAllTerminal
+	PetriCardinalityN            = petri.CardinalityN
+	PetriCardinalityZeroOrMore   = petri.CardinalityZeroOrMore
 )

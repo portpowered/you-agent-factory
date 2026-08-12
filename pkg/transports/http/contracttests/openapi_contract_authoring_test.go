@@ -525,7 +525,7 @@ func generatedFactoryLoopBreakerPayload(t *testing.T) map[string]any {
 	factory := generated.Factory{
 		Workstations: &[]generated.Workstation{{
 			Name:    "review-story-loop-breaker",
-			Worker:  "logical-move",
+			Worker:  stringPtr("logical-move"),
 			Type:    &logicalMoveType,
 			Inputs:  []generated.WorkstationIO{{WorkType: "story", State: "in_review"}},
 			Outputs: &[]generated.WorkstationIO{{WorkType: "story", State: "failed"}},

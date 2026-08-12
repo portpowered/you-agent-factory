@@ -1385,6 +1385,7 @@ const (
 
 // Defines values for WorkstationType.
 const (
+	HUMANAPPROVAL                        WorkstationType = "HUMAN_APPROVAL"
 	WorkstationTypeAgentRun              WorkstationType = "AGENT_RUN"
 	WorkstationTypeClassifierWorkstation WorkstationType = "CLASSIFIER_WORKSTATION"
 	WorkstationTypeInferenceRun          WorkstationType = "INFERENCE_RUN"
@@ -8367,8 +8368,8 @@ type Workstation struct {
 	// WorkPropagation Optional policy for whether downstream work uses the workstation output payload or preserves the consumed input payload.
 	WorkPropagation *WorkPropagation `json:"workPropagation,omitempty"`
 
-	// Worker Name of a worker declared in the workers list.
-	Worker string `json:"worker"`
+	// Worker Name of a worker declared in the workers list. Omit this field for HUMAN_APPROVAL workstations.
+	Worker *string `json:"worker,omitempty"`
 
 	// WorkingDirectory Go template resolved from token tags at dispatch time.
 	WorkingDirectory *string `json:"workingDirectory,omitempty"`
