@@ -54,6 +54,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/worker-sessions/{worker_session_id}/continue": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Continue one terminal Worker Session
+     * @description Reserves one distinct successor Worker Session for a terminal source Worker Session and resumes the exact Provider Session association recorded by the server. The requestId and successor identity are idempotent inputs. A 202 response is returned only after the successor opening event is readable/subscribable and Workers has admitted the continuation; terminal output remains asynchronous.
+     */
+    post: operations["continueWorkerSession"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/worker-sessions/{worker_session_id}/events": {
     parameters: {
       query?: never;
@@ -1259,6 +1279,32 @@ export interface components {
       accepted: boolean;
       /** @enum {string} */
       state: WorkerSessionStartResponseState;
+      /** @description Deterministic Events topic whose retained opening record is ready to read and subscribe. */
+      eventTopic: string;
+    };
+    /** @description Idempotent continuation request for one terminal Worker Session. The server resolves and validates the source Provider Session association; callers may supply only the successor identity and follow-up input. */
+    WorkerSessionContinueRequest: {
+      /** @description Required caller idempotency key for this continuation. */
+      requestId: string;
+      /** @description Distinct Worker Session identity to reserve for the successor. */
+      successorWorkerSessionId: string;
+      /** @description Non-empty follow-up input delivered to the resumed Provider Session. */
+      followUpInput: string;
+    };
+    /** @description Admission acknowledgment for a Worker Session continuation. The response exposes the source-to-successor lineage needed to inspect or stream the successor without exposing provider selection inputs. */
+    WorkerSessionContinueResponse: {
+      /** @description Caller idempotency key echoed for correlation. */
+      requestId: string;
+      /** @description Stable terminal Worker Session identity used as the source. */
+      sourceWorkerSessionId: string;
+      /** @description Stable Worker Session identity reserved for the successor. */
+      successorWorkerSessionId: string;
+      /** @description Stable predecessor identity recorded on the successor; equal to sourceWorkerSessionId. */
+      predecessorWorkerSessionId: string;
+      /** @description Always true for a 202 response. */
+      accepted: boolean;
+      /** @enum {string} */
+      state: WorkerSessionContinueResponseState;
       /** @description Deterministic Events topic whose retained opening record is ready to read and subscribe. */
       eventTopic: string;
     };
@@ -6699,6 +6745,24 @@ export interface components {
         "application/json": components["schemas"]["ErrorResponse"];
       };
     };
+    /** @description The Worker Session continuation conflicts with source lifecycle, lineage, idempotency, or Provider Session validation. */
+    WorkerSessionContinuationConflict: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
+    /** @description The Worker Session continuation could not cross its event-readiness or Workers-admission barrier. */
+    WorkerSessionContinuationUnavailable: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
     /** @description Lifecycle control request conflicts with current session state, another in-flight control, or a previously applied control requestId. */
     FactorySessionLifecycleControlConflict: {
       headers: {
@@ -6906,6 +6970,37 @@ export interface operations {
       400: components["responses"]["BadRequest"];
       404: components["responses"]["NotFound"];
       500: components["responses"]["InternalError"];
+    };
+  };
+  continueWorkerSession: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable Worker Session identity returned by the Worker Sessions list operation. */
+        worker_session_id: components["parameters"]["WorkerSessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["WorkerSessionContinueRequest"];
+      };
+    };
+    responses: {
+      /** @description The successor Worker Session was admitted and is observable. */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkerSessionContinueResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      409: components["responses"]["WorkerSessionContinuationConflict"];
+      503: components["responses"]["WorkerSessionContinuationUnavailable"];
     };
   };
   streamWorkerSessionEventsByTopLevelWorkerSessionId: {
@@ -8606,6 +8701,18 @@ export const WorkerSessionStartResponseState = {
 } as const;
 export type WorkerSessionStartResponseState =
   (typeof WorkerSessionStartResponseState)[keyof typeof WorkerSessionStartResponseState];
+export const WorkerSessionContinueResponseState = {
+  WorkerSessionContinueResponseStateReserved: "RESERVED",
+  WorkerSessionContinueResponseStateStarting: "STARTING",
+  WorkerSessionContinueResponseStateRunning: "RUNNING",
+  WorkerSessionContinueResponseStatePaused: "PAUSED",
+  WorkerSessionContinueResponseStateCompleted: "COMPLETED",
+  WorkerSessionContinueResponseStateFailed: "FAILED",
+  WorkerSessionContinueResponseStateCanceled: "CANCELED",
+  WorkerSessionContinueResponseStateTerminated: "TERMINATED",
+} as const;
+export type WorkerSessionContinueResponseState =
+  (typeof WorkerSessionContinueResponseState)[keyof typeof WorkerSessionContinueResponseState];
 export const WorkerSessionObservationState = {
   WorkerSessionObservationStateReserved: "RESERVED",
   WorkerSessionObservationStateStarting: "STARTING",
@@ -8772,6 +8879,17 @@ export const ErrorResponseCode = {
     "WORKER_SESSION_EVENT_TOPIC_UNAVAILABLE",
   // Workers could not admit the Worker Session execution.
   WORKER_SESSION_ADMISSION_FAILED: "WORKER_SESSION_ADMISSION_FAILED",
+  // Worker Session continuation requestId was reused with different inputs.
+  WORKER_SESSION_CONTINUATION_REQUEST_ID_CONFLICT:
+    "WORKER_SESSION_CONTINUATION_REQUEST_ID_CONFLICT",
+  // The Worker Session continuation conflicts with source lifecycle or successor lineage.
+  WORKER_SESSION_CONTINUATION_CONFLICT: "WORKER_SESSION_CONTINUATION_CONFLICT",
+  // The recorded Provider Session cannot be resumed for this Worker Session continuation.
+  WORKER_SESSION_PROVIDER_CONTINUATION_INVALID:
+    "WORKER_SESSION_PROVIDER_CONTINUATION_INVALID",
+  // Workers could not admit the Worker Session continuation.
+  WORKER_SESSION_CONTINUATION_ADMISSION_FAILED:
+    "WORKER_SESSION_CONTINUATION_ADMISSION_FAILED",
   // Lifecycle control requestId was already applied with different control inputs.
   FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED:
     "FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED",
