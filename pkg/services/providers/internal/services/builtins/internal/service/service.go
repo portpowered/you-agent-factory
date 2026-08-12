@@ -20,6 +20,7 @@ type catalogACPIntegration struct {
 	Name           string                `json:"name"`
 	Aliases        []string              `json:"aliases,omitempty"`
 	Transport      string                `json:"transport"`
+	Executable     string                `json:"executable"`
 	Command        string                `json:"command"`
 	Arguments      []string              `json:"arguments,omitempty"`
 	Posture        string                `json:"posture"`
@@ -104,9 +105,15 @@ func validateRuntimeLaunch(name providers.ID, entry catalogACPIntegration) (stri
 	if strings.ToLower(strings.TrimSpace(entry.Transport)) != "stdio" {
 		return "", "", fmt.Errorf("packaged ACP integration %q has unsupported transport %q", name, entry.Transport)
 	}
+	if entry.Executable == "" || strings.TrimSpace(entry.Executable) != entry.Executable {
+		return "", "", fmt.Errorf("packaged ACP integration %q has incomplete executable", name)
+	}
 	argv, err := shellwords.Parse(strings.TrimSpace(entry.Command))
 	if err != nil || len(argv) == 0 {
 		return "", "", fmt.Errorf("packaged ACP integration %q has invalid command", name)
+	}
+	if argv[0] != entry.Executable {
+		return "", "", fmt.Errorf("packaged ACP integration %q command executable drift from its runtime projection", name)
 	}
 	posture := strings.TrimSpace(entry.Posture)
 	if posture != "bundled" && posture != "package_runner" && posture != "installed_executable" {

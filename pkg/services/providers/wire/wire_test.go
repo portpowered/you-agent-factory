@@ -2,15 +2,20 @@ package wire
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io/fs"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"runtime"
 	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/providerpackages"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	catalog "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog"
@@ -159,6 +164,79 @@ func TestNewServiceBuildsUsableRoot(t *testing.T) {
 	)
 	if err != nil || len(result.Providers) == 0 {
 		t.Fatalf("ListProviders() = (%#v, %v), want catalog entries", result, err)
+	}
+}
+
+const generatedExecutableHelperEnvironment = "YOU_TEST_GENERATED_EXECUTABLE_HELPER"
+
+func TestGeneratedRuntimeExecutableReachesCommandFactoryLosslessly(t *testing.T) {
+	if os.Getenv(generatedExecutableHelperEnvironment) != "" {
+		os.Exit(0)
+	}
+
+	wantExecutable := `agent'\tool`
+	wantArguments := []string{"hello world", "semi;colon"}
+	source := fstest.MapFS{
+		"packages/model-providers/providers/generated-acp/provider.yaml": &fstest.MapFile{Data: []byte(`id: generated-acp
+aliases: []
+implementationAvailability: externally-supplied
+harness: {kind: acp, acpSupport: {support: supported, evidenceRefs: [fixture]}}
+modelCatalogPosture: unknown
+harnessRoutes: [{direction: input, modality: text, support: supported, transport: inline, evidenceRefs: [fixture]}]
+evidence: [{id: fixture, kind: conformance_fixture, verifiedOn: "2026-08-11", factRefs: [harness/acp, harness/input/text]}]
+models: []
+tools: []
+knownLimits: []
+discovery: {prerequisites: [{kind: executable, name: generated-acp, description: Install the generated ACP executable.}]}
+`)},
+		"packages/model-providers/providers/generated-acp/harness.yaml": &fstest.MapFile{Data: []byte(`implementation: {kind: acp_agent, profile: cursor-acp}
+launch: {posture: installed_executable, transport: stdio, command: 'agent''\tool', arguments: ["hello world", "semi;colon"]}
+`)},
+	}
+	packages, err := providerpackages.Validate(source, []providerpackages.RuntimeProfile{{ID: "cursor-acp"}})
+	if err != nil {
+		t.Fatalf("Validate() error = %v", err)
+	}
+	document, err := json.Marshal(providerpackages.RuntimeProjection(packages))
+	if err != nil {
+		t.Fatalf("marshal runtime projection: %v", err)
+	}
+	integrations, err := ACPIntegrationsFromRuntimeCatalog(document)
+	if err != nil {
+		t.Fatalf("load generated runtime projection: %v", err)
+	}
+
+	var gotExecutable string
+	var gotArguments []string
+	commandFactory := func(name string, arguments ...string) *exec.Cmd {
+		gotExecutable = name
+		gotArguments = append([]string(nil), arguments...)
+		return exec.Command(os.Args[0], "-test.run=^TestGeneratedRuntimeExecutableReachesCommandFactoryLosslessly$")
+	}
+	root, err := NewService(
+		WithACPIntegrations(integrations...),
+		WithCommandFactory(commandFactory),
+		WithExecutableLocator(fakeExecutableLocator{wantExecutable: wantExecutable}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	_, err = root.Execute(context.Background(), providers.ExecuteRequest{
+		Provider:           "generated-acp",
+		AttemptID:          "generated-executable-round-trip",
+		UserMessage:        "exercise generated executable",
+		WorkingDirectory:   t.TempDir(),
+		ProcessEnvironment: append(os.Environ(), generatedExecutableHelperEnvironment+"=1"),
+	})
+	if err == nil {
+		t.Fatal("Execute() error = nil, want helper process to terminate before ACP initialize")
+	}
+	if gotExecutable != wantExecutable {
+		t.Fatalf("command executable = %q, want %q", gotExecutable, wantExecutable)
+	}
+	if !reflect.DeepEqual(gotArguments, wantArguments) {
+		t.Fatalf("command arguments = %#v, want %#v", gotArguments, wantArguments)
 	}
 }
 

@@ -59,13 +59,14 @@ type RuntimeCatalog struct {
 }
 
 // RuntimeIntegration is the package-owned runtime projection consumed by the
-// Providers composition boundary. Command is retained as the legacy shell
-// command representation while Arguments keeps the shell-free launch shape
-// explicit for generation and drift tests.
+// Providers composition boundary. Executable and Arguments are authoritative
+// shell-free launch values; Command is retained as the legacy representation
+// and is checked against both values by the runtime loader.
 type RuntimeIntegration struct {
 	Name           string                `json:"name"`
 	Aliases        []string              `json:"aliases,omitempty"`
 	Transport      Transport             `json:"transport"`
+	Executable     string                `json:"executable"`
 	Command        string                `json:"command"`
 	Arguments      []string              `json:"arguments,omitempty"`
 	Posture        LaunchPosture         `json:"posture"`
@@ -124,12 +125,13 @@ func RuntimeProjection(packages []Package) RuntimeCatalog {
 		launch := provider.Harness.Launch
 		arguments := append([]string(nil), launch.Arguments...)
 		result.ACP = append(result.ACP, RuntimeIntegration{
-			Name:      provider.ID,
-			Aliases:   append([]string(nil), provider.Aliases...),
-			Transport: launch.Transport,
-			Command:   legacyLaunchCommand(launch.Command, arguments),
-			Arguments: arguments,
-			Posture:   launch.Posture,
+			Name:       provider.ID,
+			Aliases:    append([]string(nil), provider.Aliases...),
+			Transport:  launch.Transport,
+			Executable: launch.Command,
+			Command:    legacyLaunchCommand(launch.Command, arguments),
+			Arguments:  arguments,
+			Posture:    launch.Posture,
 			Implementation: RuntimeImplementation{
 				Kind:    provider.Harness.Implementation.Kind,
 				Profile: strings.TrimSpace(provider.Harness.Implementation.Profile),
@@ -141,21 +143,24 @@ func RuntimeProjection(packages []Package) RuntimeCatalog {
 }
 
 // legacyLaunchCommand preserves the historical command string while keeping
-// its explicit argument vector lossless for the runtime loader. Simple
-// arguments retain their existing spelling so generated output remains stable;
-// arguments with shell-word syntax are quoted only for shellwords.Parse, never
-// for shell execution.
+// its executable and explicit argument vector lossless for the runtime loader.
+// Simple tokens retain their existing spelling so generated output remains
+// stable; tokens with shell-word syntax are quoted only for shellwords.Parse,
+// never for shell execution.
 func legacyLaunchCommand(executable string, arguments []string) string {
 	parts := make([]string, 0, len(arguments)+1)
-	parts = append(parts, executable)
+	parts = append(parts, legacyLaunchToken(executable))
 	for _, argument := range arguments {
-		if isLegacyShellWord(argument) {
-			parts = append(parts, argument)
-			continue
-		}
-		parts = append(parts, "'"+strings.ReplaceAll(argument, "'", "'\\''")+"'")
+		parts = append(parts, legacyLaunchToken(argument))
 	}
 	return strings.Join(parts, " ")
+}
+
+func legacyLaunchToken(value string) string {
+	if isLegacyShellWord(value) {
+		return value
+	}
+	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
 }
 
 func isLegacyShellWord(value string) bool {

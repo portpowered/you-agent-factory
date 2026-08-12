@@ -13,6 +13,7 @@ const validCatalogDocument = `{
     "name": " cursor-acp ",
     "aliases": ["cursor-test"],
     "transport": " STDIO ",
+    "executable": "cursor-agent",
     "command": " cursor-agent acp ",
     "arguments": ["acp"],
     "posture": " installed_executable ",
@@ -65,13 +66,15 @@ func TestNewBuildsDetachedRuntimeProjection(t *testing.T) {
 }
 
 func TestNewLoadsLosslessQuotedRuntimeArguments(t *testing.T) {
+	wantExecutable := `agent'\tool`
 	wantArguments := []string{"hello world", "semi;colon", "quote's"}
 	document, err := json.Marshal(catalogDocument{ACP: []catalogACPIntegration{{
-		Name:      "quoted-acp",
-		Transport: "stdio",
-		Command:   `agent 'hello world' 'semi;colon' 'quote'\''s'`,
-		Arguments: wantArguments,
-		Posture:   "installed_executable",
+		Name:       "quoted-acp",
+		Transport:  "stdio",
+		Executable: wantExecutable,
+		Command:    `'agent'\''\tool' 'hello world' 'semi;colon' 'quote'\''s'`,
+		Arguments:  wantArguments,
+		Posture:    "installed_executable",
 		Implementation: runtimeImplementation{
 			Kind:    "acp_agent",
 			Profile: "cursor-acp",
@@ -86,7 +89,7 @@ func TestNewLoadsLosslessQuotedRuntimeArguments(t *testing.T) {
 		t.Fatalf("New() error = %v", err)
 	}
 	integration := service.ACPIntegrations()[0]
-	if integration.Command != `agent 'hello world' 'semi;colon' 'quote'\''s'` {
+	if integration.Command != `'agent'\''\tool' 'hello world' 'semi;colon' 'quote'\''s'` {
 		t.Fatalf("integration command = %q, want lossless command", integration.Command)
 	}
 	if !reflect.DeepEqual(integration.Arguments, wantArguments) {
@@ -99,6 +102,7 @@ func TestNewRejectsMalformedPackagedACPEntries(t *testing.T) {
   "acp": [{
     "name": "cursor-acp",
     "transport": "stdio",
+    "executable": "cursor-agent",
     "command": "cursor-agent acp",
     "arguments": ["acp"],
     "posture": "installed_executable",
@@ -176,6 +180,7 @@ func TestNewRejectsIdentityAndAliasCollisions(t *testing.T) {
     "name": "%s",
     "aliases": %s,
     "transport": "stdio",
+    "executable": "cursor-agent",
     "command": "cursor-agent acp",
     "arguments": ["acp"],
     "posture": "installed_executable",
@@ -232,6 +237,7 @@ func TestNewRejectsRuntimeProjectionBindingDrift(t *testing.T) {
   "acp": [{
     "name": "cursor-acp",
     "transport": "stdio",
+    "executable": "cursor-agent",
     "command": "cursor-agent acp",
     "arguments": ["acp"],
     "posture": "installed_executable",
@@ -271,6 +277,13 @@ func TestNewRejectsRuntimeProjectionBindingDrift(t *testing.T) {
 				return strings.Replace(document, `"arguments": ["acp"]`, `"arguments": ["wrong"]`, 1)
 			},
 			want: "command arguments drift",
+		},
+		{
+			name: "executable drift",
+			mutate: func(document string) string {
+				return strings.Replace(document, `"executable": "cursor-agent"`, `"executable": "other-agent"`, 1)
+			},
+			want: "command executable drift",
 		},
 	}
 	for _, test := range tests {

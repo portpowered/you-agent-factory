@@ -14,9 +14,9 @@ import (
 const argumentRoundTripHelperEnvironment = "YOU_TEST_ACP_ARGUMENT_ROUNDTRIP_HELPER"
 
 // TestACPArgumentRoundTripHelperProcess is the direct child used by
-// TestExecuteUsesLosslessQuotedArguments. It exits before an ACP handshake so
-// the test can assert the exact argv received by exec.Command without running
-// a shell or a live provider.
+// TestExecuteUsesLosslessQuotedLaunch. It exits before an ACP handshake so the
+// test can assert the exact executable and argv received by exec.Command
+// without running a shell or a live provider.
 func TestACPArgumentRoundTripHelperProcess(t *testing.T) {
 	if os.Getenv(argumentRoundTripHelperEnvironment) == "" {
 		return
@@ -24,8 +24,8 @@ func TestACPArgumentRoundTripHelperProcess(t *testing.T) {
 	os.Exit(0)
 }
 
-func TestExecuteUsesLosslessQuotedArguments(t *testing.T) {
-	wantName := "agent"
+func TestExecuteUsesLosslessQuotedLaunch(t *testing.T) {
+	wantName := `agent'\tool`
 	wantArguments := []string{"hello world", "semi;colon", "quote's"}
 	var gotName string
 	var gotArguments []string
@@ -38,7 +38,7 @@ func TestExecuteUsesLosslessQuotedArguments(t *testing.T) {
 	serviceValue, err := New([]providers.ACPIntegration{{
 		Name:      "quoted-acp",
 		Transport: "stdio",
-		Command:   `agent 'hello world' 'semi;colon' 'quote'\''s'`,
+		Command:   `'agent'\''\tool' 'hello world' 'semi;colon' 'quote'\''s'`,
 		Arguments: wantArguments,
 	}}, commandFactory, availableLocator{})
 	if err != nil {

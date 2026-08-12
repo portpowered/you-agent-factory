@@ -65,6 +65,7 @@ func TestPackagedACPProjectionRejectsInvalidRuntimeBindings(t *testing.T) {
   "acp": [{
     "name": "cursor-acp",
     "transport": "stdio",
+    "executable": "cursor-agent",
     "command": "cursor-agent acp",
     "arguments": ["acp"],
     "posture": "installed_executable",

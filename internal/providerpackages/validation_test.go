@@ -55,7 +55,7 @@ func TestRuntimeProjectionIncludesSelectablePackageOnceAndOmitsCatalogOnly(t *te
 		t.Fatalf("runtime projection count = %d, want one selectable package", len(projection.ACP))
 	}
 	entry := projection.ACP[0]
-	if entry.Name != "cursor-acp" || !sameStrings(entry.Aliases, nil) || entry.Transport != TransportStdio || entry.Command != "cursor-agent acp" || !sameStrings(entry.Arguments, []string{"acp"}) || entry.Posture != LaunchPostureInstalledExecutable || entry.Implementation.Kind != ImplementationKindACPAgent || entry.Implementation.Profile != "cursor-acp" {
+	if entry.Name != "cursor-acp" || !sameStrings(entry.Aliases, nil) || entry.Transport != TransportStdio || entry.Executable != "cursor-agent" || entry.Command != "cursor-agent acp" || !sameStrings(entry.Arguments, []string{"acp"}) || entry.Posture != LaunchPostureInstalledExecutable || entry.Implementation.Kind != ImplementationKindACPAgent || entry.Implementation.Profile != "cursor-acp" {
 		t.Fatalf("runtime projection = %#v, want package-owned cursor launch", entry)
 	}
 }
@@ -169,6 +169,27 @@ func TestRuntimeProjectionQuotesUnsafeArgumentsLosslessly(t *testing.T) {
 	}
 	if !sameStrings(entry.Arguments, []string{"hello world", "semi;colon", "quote's"}) {
 		t.Fatalf("runtime arguments = %#v, want explicit argument vector", entry.Arguments)
+	}
+}
+
+func TestRuntimeProjectionQuotesUnsafeExecutableLosslessly(t *testing.T) {
+	source := packageFixture()
+	mutateFile(source, "packages/model-providers/providers/cursor-acp/harness.yaml", "command: cursor-agent", `command: agent'\tool`)
+
+	packages, err := Validate(source, []RuntimeProfile{{ID: "cursor-acp"}})
+	if err != nil {
+		t.Fatalf("Validate() error = %v", err)
+	}
+	projection := RuntimeProjection(packages)
+	if len(projection.ACP) != 1 {
+		t.Fatalf("runtime projection count = %d, want one selectable package", len(projection.ACP))
+	}
+	entry := projection.ACP[0]
+	if entry.Executable != `agent'\tool` {
+		t.Fatalf("runtime executable = %q, want exact package executable", entry.Executable)
+	}
+	if entry.Command != `'agent'\''\tool' acp` {
+		t.Fatalf("runtime command = %q, want lossless executable and argument encoding", entry.Command)
 	}
 }
 

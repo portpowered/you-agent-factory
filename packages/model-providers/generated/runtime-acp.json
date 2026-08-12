@@ -3,6 +3,7 @@
     {
       "name": "copilot-acp",
       "transport": "stdio",
+      "executable": "copilot",
       "command": "copilot --acp --stdio",
       "arguments": [
         "--acp",
@@ -17,6 +18,7 @@
     {
       "name": "cursor-acp",
       "transport": "stdio",
+      "executable": "cursor-agent",
       "command": "cursor-agent acp",
       "arguments": [
         "acp"
@@ -34,6 +36,7 @@
         "factorydroid"
       ],
       "transport": "stdio",
+      "executable": "droid",
       "command": "droid exec --output-format acp",
       "arguments": [
         "exec",
@@ -49,6 +52,7 @@
     {
       "name": "fast-agent-acp",
       "transport": "stdio",
+      "executable": "uvx",
       "command": "uvx fast-agent-mcp acp",
       "arguments": [
         "fast-agent-mcp",
@@ -63,6 +67,7 @@
     {
       "name": "gemini-acp",
       "transport": "stdio",
+      "executable": "gemini",
       "command": "gemini --acp",
       "arguments": [
         "--acp"
@@ -76,6 +81,7 @@
     {
       "name": "grok-build-acp",
       "transport": "stdio",
+      "executable": "grok",
       "command": "grok agent stdio",
       "arguments": [
         "agent",
@@ -90,6 +96,7 @@
     {
       "name": "iflow-acp",
       "transport": "stdio",
+      "executable": "iflow",
       "command": "iflow --experimental-acp",
       "arguments": [
         "--experimental-acp"
@@ -103,6 +110,7 @@
     {
       "name": "kilocode-acp",
       "transport": "stdio",
+      "executable": "npx",
       "command": "npx -y @kilocode/cli acp",
       "arguments": [
         "-y",
@@ -118,6 +126,7 @@
     {
       "name": "kimi-acp",
       "transport": "stdio",
+      "executable": "kimi",
       "command": "kimi acp",
       "arguments": [
         "acp"
@@ -131,6 +140,7 @@
     {
       "name": "kiro-acp",
       "transport": "stdio",
+      "executable": "kiro-cli-chat",
       "command": "kiro-cli-chat acp",
       "arguments": [
         "acp"
@@ -144,6 +154,7 @@
     {
       "name": "mux-acp",
       "transport": "stdio",
+      "executable": "mux",
       "command": "mux acp",
       "arguments": [
         "acp"
@@ -157,6 +168,7 @@
     {
       "name": "openclaw-acp",
       "transport": "stdio",
+      "executable": "openclaw",
       "command": "openclaw acp",
       "arguments": [
         "acp"
@@ -170,6 +182,7 @@
     {
       "name": "opencode-acp",
       "transport": "stdio",
+      "executable": "npx",
       "command": "npx -y opencode-ai acp",
       "arguments": [
         "-y",
@@ -185,6 +198,7 @@
     {
       "name": "pi-acp",
       "transport": "stdio",
+      "executable": "npx",
       "command": "npx pi-acp",
       "arguments": [
         "pi-acp"
@@ -198,6 +212,7 @@
     {
       "name": "pool-acp",
       "transport": "stdio",
+      "executable": "pool",
       "command": "pool acp",
       "arguments": [
         "acp"
@@ -211,6 +226,7 @@
     {
       "name": "qoder-acp",
       "transport": "stdio",
+      "executable": "qodercli",
       "command": "qodercli --acp",
       "arguments": [
         "--acp"
@@ -224,6 +240,7 @@
     {
       "name": "qwen-acp",
       "transport": "stdio",
+      "executable": "qwen",
       "command": "qwen --acp",
       "arguments": [
         "--acp"
@@ -237,6 +254,7 @@
     {
       "name": "reasonix-acp",
       "transport": "stdio",
+      "executable": "reasonix",
       "command": "reasonix acp",
       "arguments": [
         "acp"
@@ -250,6 +268,7 @@
     {
       "name": "trae-acp",
       "transport": "stdio",
+      "executable": "traecli",
       "command": "traecli acp serve",
       "arguments": [
         "acp",
@@ -264,6 +283,7 @@
     {
       "name": "zeroclaw-acp",
       "transport": "stdio",
+      "executable": "zeroclaw",
       "command": "zeroclaw acp",
       "arguments": [
         "acp"
