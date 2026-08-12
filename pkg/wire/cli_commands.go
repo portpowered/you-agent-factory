@@ -27,6 +27,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	providerscli "github.com/portpowered/infinite-you/pkg/services/providers/transports/cli"
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	workersessionscli "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli"
@@ -222,6 +223,7 @@ func provideLocalWorkerSessionsBoundary(
 	providerSessions providersessions.Service,
 	logger logging.Logger,
 	providerInvocationFactory factoryruntime.ProviderInvocationExecutorFactory,
+	recording recordings.WorkerSessionRecordingService,
 ) (*localWorkerSessionsBoundary, error) {
 	if providerInvocationFactory == nil {
 		return nil, fmt.Errorf("construct local Worker Sessions boundary: provider invocation factory is required")
@@ -250,6 +252,7 @@ func provideLocalWorkerSessionsBoundary(
 		logger,
 		platformclock.Real{},
 		providerSessions,
+		recording,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("construct local Worker Sessions service: %w", err)
