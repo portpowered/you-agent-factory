@@ -2,16 +2,157 @@ package runtime
 
 import (
 	"context"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil/recordingfixtures"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+func TestRecordedWorkerSessionObservation_PreservesIncompleteOutputFromReplay(t *testing.T) {
+	base := time.Date(2026, 8, 8, 12, 0, 0, 0, time.UTC)
+	workID := "work-recorded-incomplete"
+	dispatchID := "dispatch-recorded-incomplete"
+	events := []interfaces.FactoryEvent{
+		{
+			Context: interfaces.FactoryEventContext{
+				Tick: 1, Sequence: 1, EventTime: base,
+				DispatchID: stringPointerForRecordedTest(dispatchID),
+				WorkIDs:    stringSliceForRecordedTest([]string{workID}),
+			},
+			Id:      "incomplete-request",
+			Type:    interfaces.FactoryEventTypeDispatchRequest,
+			Payload: mustMarshalRecordedTest(t, interfaces.DispatchRequestEventPayload{}),
+		},
+		{
+			Context: interfaces.FactoryEventContext{
+				Tick: 1, Sequence: 2, EventTime: base.Add(time.Second),
+				DispatchID: stringPointerForRecordedTest(dispatchID),
+			},
+			Id: "incomplete-association", Type: interfaces.FactoryEventTypeDispatchWorkerSessionAssoc,
+			Payload: mustMarshalRecordedTest(t, interfaces.DispatchWorkerSessionAssociationEventPayload{
+				WorkerSessionID: "worker-recorded-incomplete",
+			}),
+		},
+		{
+			Context: interfaces.FactoryEventContext{
+				Tick: 2, Sequence: 3, EventTime: base.Add(2 * time.Second),
+				DispatchID: stringPointerForRecordedTest(dispatchID),
+			},
+			Id: "incomplete-response", Type: interfaces.FactoryEventTypeDispatchResponse,
+		},
+	}
+	diagnostics := &workers.SafeWorkDiagnostics{Provider: &workers.SafeProviderDiagnostic{ResponseMetadata: map[string]string{
+		workers.ProviderResponseMetadataFailureOperation:      "completion_validation",
+		workers.ProviderResponseMetadataFailureClassification: "missing_required_output",
+	}}}
+	service := newRecordedWorkerSessionObservation(
+		nil,
+		&recordingfixtures.ScriptedRuntimeLedger{Events: events},
+		func(_ []interfaces.FactoryEvent, _ int) (interfaces.FactoryWorldState, error) {
+			return interfaces.FactoryWorldState{
+				WorkItemsByID: map[string]work.FactoryWorkItem{workID: {ID: workID}},
+				CompletedDispatches: []interfaces.FactoryWorldDispatchCompletion{{
+					DispatchID: dispatchID, StartedAt: base, CompletedAt: base.Add(2 * time.Second), WorkItemIDs: []string{workID},
+					Result: interfaces.WorkstationResult{Outcome: string(workers.OutcomeFailed)}, Diagnostics: diagnostics,
+				}},
+			}, nil
+		},
+		platformclock.Real{},
+		nil,
+	)
+
+	result, err := service.ListObservations(context.Background(), workersessions.ListObservationsRequest{WorkID: workID})
+	if err != nil || len(result.Observations) != 1 {
+		t.Fatalf("ListObservations() = %#v, %v; want one replayed observation", result, err)
+	}
+	observation := result.Observations[0]
+	if observation.Failure == nil || observation.Failure.Kind != workersessions.FailureCauseIncompleteOutput {
+		t.Fatalf("replayed observation failure = %#v, want INCOMPLETE_OUTPUT", observation.Failure)
+	}
+	if strings.Contains(observation.Failure.Detail, "missing_required_output") || strings.Contains(observation.Failure.Detail, "transcript") {
+		t.Fatalf("replayed failure detail = %q, want bounded safe detail", observation.Failure.Detail)
+	}
+	if err := observation.Validate(); err != nil {
+		t.Fatalf("replayed observation validation = %v", err)
+	}
+}
+
+func TestRecordedDispatchFailureProjection(t *testing.T) {
+	base := time.Date(2026, 8, 8, 12, 0, 0, 0, time.UTC)
+	failureDetail := &workers.FailureDetail{Reason: workers.WorkFailureTypeAuthFailure}
+	metadata := &workers.WorkFailureMetadata{Family: workers.WorkFailureFamilyRetryable, Type: workers.WorkFailureTypeTimeout}
+	providerMetadata := &workers.ProviderSessionMetadata{Provider: "codex", Kind: providers.SessionIDKind, ID: "provider-session-1"}
+	completed := interfaces.FactoryWorldDispatchCompletion{DispatchID: "dispatch-1", StartedAt: base, CompletedAt: base.Add(2 * time.Second), WorkItemIDs: []string{"work-1"}, Result: interfaces.WorkstationResult{Outcome: string(workers.OutcomeFailed), FailureDetail: failureDetail, FailureMetadata: metadata}, ProviderSession: providerMetadata}
+	active := interfaces.FactoryWorldDispatch{DispatchID: "dispatch-1", StartedAt: base.Add(time.Second), WorkItemIDs: []string{"work-2"}}
+	providerRecords := []interfaces.FactoryWorldProviderSessionRecord{{DispatchID: "dispatch-1", ProviderSession: *providerMetadata, WorkItemIDs: []string{"work-3"}, FailureDetail: failureDetail}}
+	fact := recordedDispatchFact("dispatch-1", recordedDispatchAssociation{workerSessionID: "worker-1", turnID: "turn-1", eventTime: base}, map[string]recordedDispatchRequest{"dispatch-1": {workIDs: []string{"work-1"}, startedAt: base}}, map[string]interfaces.FactoryWorldDispatchCompletion{"dispatch-1": completed}, providerRecords, map[string]interfaces.FactoryWorldDispatch{"dispatch-1": active}, nil)
+	if fact.state != workersessions.StateFailed || fact.provider == nil || len(fact.workIDs) != 1 || fact.failure == nil {
+		t.Fatalf("recordedDispatchFact() = %#v", fact)
+	}
+	rejectedCompletion := completed
+	rejectedCompletion.DispatchID = "dispatch-rejected"
+	rejectedCompletion.Result.Outcome = string(workers.OutcomeRejected)
+	rejectedFact := recordedDispatchFact(
+		"dispatch-rejected",
+		recordedDispatchAssociation{workerSessionID: "worker-rejected", turnID: "turn-rejected", eventTime: base},
+		nil,
+		map[string]interfaces.FactoryWorldDispatchCompletion{"dispatch-rejected": rejectedCompletion},
+		nil,
+		nil,
+		nil,
+	)
+	rejectedObservation := recordedObservationFromFact(rejectedFact, nil)
+	if rejectedObservation.State != workersessions.StateFailed || rejectedObservation.Failure == nil || rejectedObservation.Failure.Kind != workersessions.FailureCauseRejected {
+		t.Fatalf("recorded rejection observation = %#v, want bounded REJECTED failure classification", rejectedObservation)
+	}
+	if err := rejectedObservation.Validate(); err != nil {
+		t.Fatalf("recorded rejection observation validation = %v", err)
+	}
+	if recordedObservationState(string(workers.OutcomeAccepted)) != workersessions.StateCompleted || recordedObservationState(string(workers.OutcomeContinue)) != workersessions.StateCompleted || recordedObservationState(string(workers.OutcomeRejected)) != workersessions.StateFailed || recordedObservationState("unknown") != workersessions.StateFailed {
+		t.Fatal("recordedObservationState() mapping is incorrect")
+	}
+	if recordedFailure(workers.OutcomeFailed, nil, nil, workersessions.StateRunning) != nil {
+		t.Fatal("recordedFailure(active) returned a failure")
+	}
+}
+
+func TestRecordedDispatchIncompleteOutputProjection(t *testing.T) {
+	base := time.Date(2026, 8, 8, 12, 0, 0, 0, time.UTC)
+	completed := interfaces.FactoryWorldDispatchCompletion{
+		DispatchID: "dispatch-incomplete", StartedAt: base, CompletedAt: base.Add(2 * time.Second),
+		Result: interfaces.WorkstationResult{Outcome: string(workers.OutcomeFailed)},
+	}
+	incompleteDiagnostics := &workers.SafeWorkDiagnostics{Provider: &workers.SafeProviderDiagnostic{ResponseMetadata: map[string]string{
+		workers.ProviderResponseMetadataFailureOperation:      "completion_validation",
+		workers.ProviderResponseMetadataFailureClassification: "missing_completion_evidence",
+	}}}
+	incomplete := completed
+	incomplete.DispatchID = "dispatch-incomplete"
+	incomplete.Diagnostics = incompleteDiagnostics
+	incompleteFact := recordedDispatchFact(
+		"dispatch-incomplete",
+		recordedDispatchAssociation{workerSessionID: "worker-incomplete", eventTime: base},
+		nil,
+		map[string]interfaces.FactoryWorldDispatchCompletion{"dispatch-incomplete": incomplete},
+		nil,
+		nil,
+		nil,
+	)
+	incompleteObservation := recordedObservationFromFact(incompleteFact, nil)
+	if incompleteObservation.Failure == nil || incompleteObservation.Failure.Kind != workersessions.FailureCauseIncompleteOutput {
+		t.Fatalf("recorded incomplete observation = %#v, want bounded INCOMPLETE_OUTPUT failure", incompleteObservation)
+	}
+}
 
 // TestFactoryImpl_DirectAndChildDispatchPreserveIdenticalTerminalOutcomeMapping
 // is the W4 story 002 cutover-preservation proof: a direct Runtime-root

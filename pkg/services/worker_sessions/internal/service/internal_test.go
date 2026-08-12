@@ -887,6 +887,29 @@ func TestClassifyTerminal_CleanRejectedWorkResultUsesBoundedRejectionCause(t *te
 	}
 }
 
+func TestClassifyTerminal_RejectedWithFailedDispatchFallsThroughToExecutionFailure(t *testing.T) {
+	terminal := classifyTerminal(nil, workers.WorkstationDispatchResult{
+		TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeFailed,
+		Result:          workers.WorkResult{Outcome: workers.OutcomeRejected},
+	})
+	if terminal.Cause == nil || terminal.Cause.Kind != workersessions.FailureCauseWorkersExecutionFailure {
+		t.Fatalf("terminal cause = %#v, want WORKERS_EXECUTION_FAILURE", terminal.Cause)
+	}
+}
+
+func TestClassifyTerminal_UnknownCompletionClassificationRemainsExecutionFailure(t *testing.T) {
+	terminal := classifyTerminal(nil, workers.WorkstationDispatchResult{Result: workers.WorkResult{
+		Outcome: workers.OutcomeFailed,
+		Diagnostics: &workers.WorkDiagnostics{Provider: &workers.ProviderDiagnostic{ResponseMetadata: map[string]string{
+			workers.ProviderResponseMetadataFailureOperation:      "completion_validation",
+			workers.ProviderResponseMetadataFailureClassification: "unrecognized_completion_fact",
+		}}},
+	}})
+	if terminal.Cause == nil || terminal.Cause.Kind != workersessions.FailureCauseWorkersExecutionFailure {
+		t.Fatalf("terminal cause = %#v, want WORKERS_EXECUTION_FAILURE", terminal.Cause)
+	}
+}
+
 func TestClassifyTerminal_SuccessWithFailedDispatchUsesExplicitFailureCause(t *testing.T) {
 	terminal := classifyTerminal(nil, workers.WorkstationDispatchResult{
 		TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeFailed,

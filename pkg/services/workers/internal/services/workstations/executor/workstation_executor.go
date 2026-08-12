@@ -754,18 +754,7 @@ func (we *WorkstationExecutor) executeInnerWorker(ctx context.Context, request w
 		}, nil
 	}
 	result = attachStructuredResult(request, result)
-	if result.Outcome == workerexecution.OutcomeFailed && result.FailureMetadata != nil &&
-		result.FailureMetadata.Type == workerexecution.WorkFailureTypeStructuredOutputSchemaViolation {
-		result.Diagnostics = completionValidationDiagnostics(result.Diagnostics, "missing_required_output")
-	}
-	if result.Outcome == workerexecution.OutcomeAccepted && request.OutputContract != "" {
-		if contractErr := validateOutputContract(result.Output, request.OutputContract); contractErr != nil {
-			result.Outcome = workerexecution.OutcomeFailed
-			result.Error = "output contract failed: " + contractErr.Error()
-			result.FailureMetadata = structuredOutputFailureMetadata()
-			result.Diagnostics = completionValidationDiagnostics(result.Diagnostics, "missing_required_output")
-		}
-	}
+	result = validateWorkstationCompletion(request, result)
 
 	logger.Info("workstation: executor result",
 		WorkLogFields(request.Dispatch.Execution,
