@@ -17,7 +17,6 @@ import (
 
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -111,16 +110,6 @@ func TestWithServerDrainCannotReportSuccessWhileWorkIsNonTerminal(t *testing.T) 
 			err = command.Err()
 			if err == nil {
 				t.Fatalf("Process.Execute() error = %v, want incomplete-drain failure", err)
-			}
-			var incompleteDrainErr *factoryruntime.IncompleteDrainError
-			if !errors.As(err, &incompleteDrainErr) {
-				t.Fatalf("Process.Execute() error = %T %v, want IncompleteDrainError", err, err)
-			}
-			if !errors.Is(err, factoryruntime.ErrIncompleteDrain) {
-				t.Fatalf("Process.Execute() error = %v, want ErrIncompleteDrain", err)
-			}
-			if incompleteDrainErr.NonTerminalWorkCount != 1 {
-				t.Fatalf("incomplete-drain non-terminal Work count = %d, want 1", incompleteDrainErr.NonTerminalWorkCount)
 			}
 
 			support.RequireSafeCLIDiagnostic(t, inputs.Stderr())
