@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -383,23 +384,40 @@ func runFactoryToCompletionWithHome(
 	session := GetDefaultSession(t, baseURL)
 	work := ListDefaultSessionWork(t, baseURL)
 	events := GetFactoryEventsAt(t, baseURL)
+	if captureWorkerSessionEvents != nil {
+		// Worker Session replay is the provider-owned lifecycle boundary. Its
+		// terminal replay summary is authoritative for source observations that
+		// can be published after the Work projection or response RUN event.
+		captureWorkerSessionEvents(baseURL, work)
+	}
 	var responseEvents []factoryapi.FactoryResponseEvent
+	var responseStreamComplete bool
 	if responseCaptureCancel != nil {
 		// Work completion and response-stream publication use separate observers.
 		// Wait for the stream's terminal event instead of relying on a scheduler
-		// sleep, with a short ceiling for providers that expose partial streams.
-		waitForTerminalResponseEvent(responseActivity, 500*time.Millisecond)
+		// sleep. The caller's deadline is a failure guard for a delayed response
+		// stream, not permission to return a partial event snapshot.
+		responseStreamComplete = waitForTerminalResponseEvent(responseActivity, timeout)
+	}
+	// Stop the root process before canceling the capture request. Process
+	// shutdown closes the session-owned response stream, which is the
+	// authoritative boundary after all response publishers have quiesced.
+	daemon.Stop(t)
+	if responseCaptureCancel != nil {
 		responseCaptureCancel()
 		capture := <-responseCaptureDone
 		if capture.err != nil {
 			t.Fatalf("capture factory response events: %v", capture.err)
 		}
 		responseEvents = capture.events
+		if !responseStreamComplete {
+			t.Fatalf(
+				"timed out waiting for terminal response event after %s; captured %d events",
+				timeout,
+				len(responseEvents),
+			)
+		}
 	}
-	if captureWorkerSessionEvents != nil {
-		captureWorkerSessionEvents(baseURL, work)
-	}
-	daemon.Stop(t)
 	closeCtx, cancelClose := context.WithTimeout(context.Background(), processCommandStopTimeout)
 	defer cancelClose()
 	if closer, ok := process.(interface{ Close(context.Context) error }); ok {
@@ -457,7 +475,10 @@ func captureFactoryResponseEvents(
 		default:
 		}
 	}
-	if err := scanner.Err(); err != nil && !errors.Is(err, context.Canceled) && !errors.Is(ctx.Err(), context.Canceled) {
+	if err := scanner.Err(); err != nil &&
+		!errors.Is(err, context.Canceled) &&
+		!errors.Is(ctx.Err(), context.Canceled) &&
+		!errors.Is(err, io.ErrUnexpectedEOF) {
 		return nil, fmt.Errorf("read response-event stream: %w", err)
 	}
 	return events, nil
@@ -466,17 +487,23 @@ func captureFactoryResponseEvents(
 func waitForTerminalResponseEvent(
 	activity <-chan factoryapi.FactoryResponseEvent,
 	ceiling time.Duration,
-) {
+) bool {
+	if ceiling <= 0 {
+		return false
+	}
 	timer := time.NewTimer(ceiling)
 	defer timer.Stop()
 	for {
 		select {
-		case event := <-activity:
+		case event, ok := <-activity:
+			if !ok {
+				return false
+			}
 			if isTerminalResponseEvent(event) {
-				return
+				return true
 			}
 		case <-timer.C:
-			return
+			return false
 		}
 	}
 }
