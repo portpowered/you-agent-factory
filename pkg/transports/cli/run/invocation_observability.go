@@ -96,9 +96,38 @@ func (client remoteInvocationClient) OpenFactorySessionEvents(
 	if client.transport == nil {
 		return nil, &InvocationError{Code: RemoteDurableResultCode, Message: "remote Factory Event stream: CLI HTTP protocol is required"}
 	}
+	request, endpointURL, err := newRemoteFactoryEventRequest(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+	clidiag.Printf(
+		cfg.Diagnostics,
+		cfg.Verbose,
+		"remote Factory Event stream open endpointPath=%s endpoint=%s sessionId=%s afterEventId=%s afterSequence=%s",
+		request.URL.Path,
+		request.URL.String(),
+		strings.TrimSpace(cfg.SessionID),
+		strings.TrimSpace(cfg.AfterEventID),
+		formatRemoteEventSequence(cfg.AfterSequence),
+	)
+	response, err := client.transport.Execute(request)
+	if err != nil {
+		return nil, &remoteInvocationEventTransportError{
+			status:  0,
+			message: fmt.Sprintf("remote Factory Event stream failed at %s: %v", safeRemoteEndpoint(endpointURL), err),
+			cause:   err,
+		}
+	}
+	return openRemoteFactoryEventStreamResponse(response, endpointURL)
+}
+
+func newRemoteFactoryEventRequest(
+	ctx context.Context,
+	cfg RemoteInvocationEventRequest,
+) (*http.Request, string, error) {
 	endpointURL, err := cliserver.RequestURL(cfg.Server, sessionpath.FactoryEventsPath(cfg.SessionID))
 	if err != nil {
-		return nil, &InvocationError{
+		return nil, "", &InvocationError{
 			Code:    RemoteDurableResultCode,
 			Message: fmt.Sprintf("remote Factory Event stream endpoint %q is invalid", safeRemoteEndpoint(cfg.Server)),
 			Cause:   err,
@@ -106,7 +135,7 @@ func (client remoteInvocationClient) OpenFactorySessionEvents(
 	}
 	parsed, err := url.Parse(endpointURL)
 	if err != nil {
-		return nil, &InvocationError{
+		return nil, "", &InvocationError{
 			Code:    RemoteDurableResultCode,
 			Message: fmt.Sprintf("remote Factory Event stream endpoint %q is invalid", safeRemoteEndpoint(cfg.Server)),
 			Cause:   err,
@@ -122,27 +151,16 @@ func (client remoteInvocationClient) OpenFactorySessionEvents(
 	parsed.RawQuery = query.Encode()
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, parsed.String(), nil)
 	if err != nil {
-		return nil, &InvocationError{Code: RemoteDurableResultCode, Message: fmt.Sprintf("build remote Factory Event stream request: %v", err), Cause: err}
+		return nil, "", &InvocationError{Code: RemoteDurableResultCode, Message: fmt.Sprintf("build remote Factory Event stream request: %v", err), Cause: err}
 	}
 	request.Header.Set("Accept", "text/event-stream")
-	clidiag.Printf(
-		cfg.Diagnostics,
-		cfg.Verbose,
-		"remote Factory Event stream open endpointPath=%s endpoint=%s sessionId=%s afterEventId=%s afterSequence=%s",
-		parsed.Path,
-		parsed.String(),
-		strings.TrimSpace(cfg.SessionID),
-		strings.TrimSpace(cfg.AfterEventID),
-		formatRemoteEventSequence(cfg.AfterSequence),
-	)
-	response, err := client.transport.Execute(request)
-	if err != nil {
-		return nil, &remoteInvocationEventTransportError{
-			status:  0,
-			message: fmt.Sprintf("remote Factory Event stream failed at %s: %v", safeRemoteEndpoint(endpointURL), err),
-			cause:   err,
-		}
-	}
+	return request, endpointURL, nil
+}
+
+func openRemoteFactoryEventStreamResponse(
+	response clihttp.Response,
+	endpointURL string,
+) (RemoteInvocationEventStream, error) {
 	if response.HTTP == nil {
 		return nil, &remoteInvocationEventTransportError{
 			status:  0,

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -32,6 +33,254 @@ func TestCLIRemoteRunStartsDurableSessionOnSelectedServer(t *testing.T) {
 	server := startRemotePlacementServer(t, homeDir, namedFactoryDir)
 	runRemoteClientDisconnect(t, homeDir, namedFactoryDir, server.URL())
 	assertRemoteRequestIDBehavior(t, server.URL())
+}
+
+// TestCLILocalAndRemoteRunSuccessParityThroughRootProcess proves equivalent
+// local and selected-server invocations through the public root-built
+// Process.Execute boundary. The JavaScript Factory has no provider dependency,
+// so both placements exercise the same domain outcome and public JSON envelope.
+func TestCLILocalAndRemoteRunSuccessParityThroughRootProcess(t *testing.T) {
+	homeDir := t.TempDir()
+	namedFactoryDir := scaffoldNamedPlacementFactory(
+		t,
+		homeDir,
+		"session-parity-success",
+		`workflow.final("placement parity complete");`,
+	)
+	server := startRemotePlacementServer(t, homeDir, namedFactoryDir)
+
+	local := executePlacementRun(t, homeDir, namedFactoryDir, "session-parity-success", "", false)
+	remote := executePlacementRun(t, homeDir, namedFactoryDir, "session-parity-success", server.URL(), true)
+	assertPlacementSuccessParity(t, local, remote, "placement parity complete")
+}
+
+// TestCLILocalAndRemoteRunDomainFailureParityThroughRootProcess proves the
+// same Factory-domain failure stays a failed invocation at both placements,
+// with terminal output on stdout and diagnostics on stderr.
+func TestCLILocalAndRemoteRunDomainFailureParityThroughRootProcess(t *testing.T) {
+	homeDir := t.TempDir()
+	namedFactoryDir := scaffoldNamedPlacementFactory(
+		t,
+		homeDir,
+		"session-parity-domain-failure",
+		`throw new Error("placement parity domain failure");`,
+	)
+	server := startRemotePlacementServer(t, homeDir, namedFactoryDir)
+
+	local := executePlacementRun(t, homeDir, namedFactoryDir, "session-parity-domain-failure", "", false)
+	remote := executePlacementRun(t, homeDir, namedFactoryDir, "session-parity-domain-failure", server.URL(), true)
+	assertPlacementFailureParity(t, local, remote, "INVOCATION_RUNTIME_FAILURE")
+}
+
+// TestCLILocalAndRemoteRunCancellationParityThroughRootProcess proves a
+// caller cancellation reaches both local and selected-server placements and
+// neither path reports a fabricated successful primary result.
+func TestCLILocalAndRemoteRunCancellationParityThroughRootProcess(t *testing.T) {
+	homeDir := t.TempDir()
+	namedFactoryDir := scaffoldNamedPlacementFactory(
+		t,
+		homeDir,
+		"session-parity-cancel",
+		`while (true) {}`,
+	)
+	server := startRemotePlacementServer(t, homeDir, namedFactoryDir)
+
+	localContext, cancelLocal := context.WithTimeout(t.Context(), 500*time.Millisecond)
+	defer cancelLocal()
+	remoteContext, cancelRemote := context.WithTimeout(t.Context(), 500*time.Millisecond)
+	defer cancelRemote()
+	local := executePlacementRunWithContext(localContext, t, homeDir, namedFactoryDir, "session-parity-cancel", "", false)
+	remote := executePlacementRunWithContext(remoteContext, t, homeDir, namedFactoryDir, "session-parity-cancel", server.URL(), true)
+	assertPlacementCancellationParity(t, local, remote)
+}
+
+// TestCLIRemoteRunTransportFailureKeepsStreamsAndExitObservable proves a
+// selected-server transport failure does not leak a success payload onto
+// stdout and remains a non-nil Process.Execute failure with a diagnostic.
+func TestCLIRemoteRunTransportFailureKeepsStreamsAndExitObservable(t *testing.T) {
+	homeDir := t.TempDir()
+	namedFactoryDir := scaffoldNamedPlacementFactory(
+		t,
+		homeDir,
+		"session-parity-transport-failure",
+		`workflow.final("must not run");`,
+	)
+	observation := executePlacementRun(
+		t,
+		homeDir,
+		namedFactoryDir,
+		"session-parity-transport-failure",
+		"http://127.0.0.1:1",
+		true,
+	)
+	if observation.err == nil {
+		t.Fatal("remote Process.Execute error = nil, want transport failure")
+	}
+	if strings.TrimSpace(observation.stdout) != "" {
+		t.Fatalf("remote transport-failure stdout = %q, want empty", observation.stdout)
+	}
+	if strings.TrimSpace(observation.stderr) == "" {
+		t.Fatal("remote transport-failure stderr is empty, want actionable diagnostic")
+	}
+	if !strings.Contains(observation.stderr, "REMOTE_DURABLE_START_FAILED") {
+		t.Fatalf("remote transport-failure stderr = %q, want REMOTE_DURABLE_START_FAILED", observation.stderr)
+	}
+}
+
+func scaffoldNamedPlacementFactory(t *testing.T, homeDir, name, inlineSource string) string {
+	t.Helper()
+	sourceDir := support.ScaffoldFactory(t, map[string]any{
+		"name": name,
+		"invocationSignature": map[string]any{
+			"parameters": []any{map[string]any{
+				"name":     "prompt",
+				"required": true,
+				"bindings": []any{map[string]any{"kind": "POSITIONAL", "position": 1}},
+			}},
+		},
+		"orchestrator": map[string]any{
+			"kind": "JAVASCRIPT",
+			"javascript": map[string]any{
+				"inlineSource": map[string]any{
+					"encoding": "utf-8",
+					"inline":   inlineSource,
+				},
+				"argsSchema": map[string]any{
+					"type":                 "object",
+					"properties":           map[string]any{"prompt": map[string]any{"type": "string"}},
+					"additionalProperties": false,
+				},
+			},
+		},
+	})
+	return support.CreateNamedFactory(
+		t,
+		homeDir,
+		t.TempDir(),
+		name,
+		filepath.Join(sourceDir, interfaces.FactoryConfigFile),
+	)
+}
+
+type placementRunObservation struct {
+	err    error
+	stdout string
+	stderr string
+}
+
+func executePlacementRun(
+	t *testing.T,
+	homeDir, workingDirectory, factoryName, serverURL string,
+	remote bool,
+) placementRunObservation {
+	t.Helper()
+	return executePlacementRunWithContext(t.Context(), t, homeDir, workingDirectory, factoryName, serverURL, remote)
+}
+
+func executePlacementRunWithContext(
+	ctx context.Context,
+	t *testing.T,
+	homeDir, workingDirectory, factoryName, serverURL string,
+	remote bool,
+) placementRunObservation {
+	t.Helper()
+	args := []string{"you"}
+	if remote {
+		args = append(args, "--remote", "--server", serverURL)
+	}
+	args = append(args, "--json", "run", "--named", factoryName, "--no-record", "placement parity")
+	inputs := support.FakeInputs(ctx, args)
+	inputs.Input.Env = []string{"HOME=" + homeDir, "USERPROFILE=" + homeDir}
+	inputs.Input.WorkingDirectory = workingDirectory
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	support.CleanupProcess(t, process)
+	err := process.Execute(inputs.Input)
+	return placementRunObservation{err: err, stdout: inputs.Stdout(), stderr: inputs.Stderr()}
+}
+
+func assertPlacementSuccessParity(
+	t *testing.T,
+	local, remote placementRunObservation,
+	wantPrimaryResult string,
+) {
+	t.Helper()
+	for name, observation := range map[string]placementRunObservation{"local": local, "remote": remote} {
+		if observation.err != nil {
+			t.Fatalf("%s Process.Execute error = %v\nstdout:\n%s\nstderr:\n%s", name, observation.err, observation.stdout, observation.stderr)
+		}
+		response := support.DecodeInvocationResponseJSON(t, observation.stdout)
+		if response.Status != factoryapi.InvocationTerminalStatusCompleted {
+			t.Fatalf("%s status = %q, want COMPLETED", name, response.Status)
+		}
+		if response.PrimaryResult == nil || len(*response.PrimaryResult) != 1 {
+			t.Fatalf("%s primaryResult = %#v, want %q", name, response.PrimaryResult, wantPrimaryResult)
+		}
+		part, err := (*response.PrimaryResult)[0].AsWorkTextContentPart()
+		if err != nil || part.Text != wantPrimaryResult {
+			t.Fatalf("%s primaryResult text = %q (decode error %v), want %q", name, part.Text, err, wantPrimaryResult)
+		}
+		if strings.TrimSpace(observation.stderr) != "" {
+			t.Fatalf("%s stderr = %q, want empty on success", name, observation.stderr)
+		}
+	}
+}
+
+func assertPlacementFailureParity(
+	t *testing.T,
+	local, remote placementRunObservation,
+	wantErrorCode string,
+) {
+	t.Helper()
+	var localResponse, remoteResponse factoryapi.InvocationResponse
+	for name, observation := range map[string]placementRunObservation{
+		"local":  local,
+		"remote": remote,
+	} {
+		if observation.err == nil {
+			t.Fatalf("%s Process.Execute error = nil, want terminal domain failure", name)
+		}
+		if strings.TrimSpace(observation.stderr) == "" {
+			t.Fatalf("%s stderr is empty, want terminal failure diagnostic", name)
+		}
+		response := support.DecodeInvocationResponseJSON(t, observation.stdout)
+		if response.Status != factoryapi.InvocationTerminalStatusFailed {
+			t.Fatalf("%s status = %q, want FAILED", name, response.Status)
+		}
+		if response.ErrorCode == nil || string(*response.ErrorCode) != wantErrorCode {
+			t.Fatalf("%s errorCode = %#v, want %q", name, response.ErrorCode, wantErrorCode)
+		}
+		if name == "local" {
+			localResponse = response
+		} else {
+			remoteResponse = response
+		}
+	}
+	if localResponse.Status != remoteResponse.Status ||
+		localResponse.ErrorCode == nil || remoteResponse.ErrorCode == nil ||
+		*localResponse.ErrorCode != *remoteResponse.ErrorCode {
+		t.Fatalf("local/remote failure responses differ: local=%#v remote=%#v", localResponse, remoteResponse)
+	}
+}
+
+func assertPlacementCancellationParity(
+	t *testing.T,
+	local, remote placementRunObservation,
+) {
+	t.Helper()
+	for name, observation := range map[string]placementRunObservation{
+		"local":  local,
+		"remote": remote,
+	} {
+		if observation.err == nil {
+			t.Fatalf("%s Process.Execute error = nil, want context deadline", name)
+		}
+		if !errors.Is(observation.err, context.DeadlineExceeded) && !errors.Is(observation.err, context.Canceled) {
+			t.Fatalf("%s Process.Execute error = %v, want context cancellation", name, observation.err)
+		}
+		if strings.Contains(observation.stdout, "placement parity complete") {
+			t.Fatalf("%s stdout fabricated a successful primary result:\n%s", name, observation.stdout)
+		}
+	}
 }
 
 func scaffoldRemotePlacementFactory(t *testing.T, homeDir string) string {
@@ -81,7 +330,6 @@ func startRemotePlacementServer(t *testing.T, homeDir, namedFactoryDir string) *
 	t.Helper()
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                namedFactoryDir,
-		UseMockWorkers:            true,
 		WaitForServiceModeRuntime: true,
 		Env:                       []string{"HOME=" + homeDir, "USERPROFILE=" + homeDir},
 		Edges: serviceedges.Edges{
