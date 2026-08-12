@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -330,6 +331,75 @@ func TestRecordedWorkerSessionObservation_ListsHistoricalAttemptsInChronological
 	}
 	if result.Observations[1].AttemptID != "dispatch-late" || result.Observations[1].TurnID != "turn-late" {
 		t.Fatalf("late recorded observation = %#v, want dispatch-late/turn-late", result.Observations[1])
+	}
+}
+
+func TestRecordedWorkerSessionObservation_PreservesIncompleteOutputFromReplay(t *testing.T) {
+	base := time.Date(2026, 8, 8, 12, 0, 0, 0, time.UTC)
+	workID := "work-recorded-incomplete"
+	dispatchID := "dispatch-recorded-incomplete"
+	events := []interfaces.FactoryEvent{
+		{
+			Context: interfaces.FactoryEventContext{
+				Tick: 1, Sequence: 1, EventTime: base,
+				DispatchID: stringPointerForRecordedTest(dispatchID),
+				WorkIDs:    stringSliceForRecordedTest([]string{workID}),
+			},
+			Id:      "incomplete-request",
+			Type:    interfaces.FactoryEventTypeDispatchRequest,
+			Payload: mustMarshalRecordedTest(t, interfaces.DispatchRequestEventPayload{}),
+		},
+		{
+			Context: interfaces.FactoryEventContext{
+				Tick: 1, Sequence: 2, EventTime: base.Add(time.Second),
+				DispatchID: stringPointerForRecordedTest(dispatchID),
+			},
+			Id: "incomplete-association", Type: interfaces.FactoryEventTypeDispatchWorkerSessionAssoc,
+			Payload: mustMarshalRecordedTest(t, interfaces.DispatchWorkerSessionAssociationEventPayload{
+				WorkerSessionID: "worker-recorded-incomplete",
+			}),
+		},
+		{
+			Context: interfaces.FactoryEventContext{
+				Tick: 2, Sequence: 3, EventTime: base.Add(2 * time.Second),
+				DispatchID: stringPointerForRecordedTest(dispatchID),
+			},
+			Id: "incomplete-response", Type: interfaces.FactoryEventTypeDispatchResponse,
+		},
+	}
+	diagnostics := &workers.SafeWorkDiagnostics{Provider: &workers.SafeProviderDiagnostic{ResponseMetadata: map[string]string{
+		workers.ProviderResponseMetadataFailureOperation:      "completion_validation",
+		workers.ProviderResponseMetadataFailureClassification: "missing_required_output",
+	}}}
+	service := newRecordedWorkerSessionObservation(
+		nil,
+		&recordingfixtures.ScriptedRuntimeLedger{Events: events},
+		func(_ []interfaces.FactoryEvent, _ int) (interfaces.FactoryWorldState, error) {
+			return interfaces.FactoryWorldState{
+				WorkItemsByID: map[string]work.FactoryWorkItem{workID: {ID: workID}},
+				CompletedDispatches: []interfaces.FactoryWorldDispatchCompletion{{
+					DispatchID: dispatchID, StartedAt: base, CompletedAt: base.Add(2 * time.Second), WorkItemIDs: []string{workID},
+					Result: interfaces.WorkstationResult{Outcome: string(workers.OutcomeFailed)}, Diagnostics: diagnostics,
+				}},
+			}, nil
+		},
+		platformclock.Real{},
+		nil,
+	)
+
+	result, err := service.ListObservations(context.Background(), workersessions.ListObservationsRequest{WorkID: workID})
+	if err != nil || len(result.Observations) != 1 {
+		t.Fatalf("ListObservations() = %#v, %v; want one replayed observation", result, err)
+	}
+	observation := result.Observations[0]
+	if observation.Failure == nil || observation.Failure.Kind != workersessions.FailureCauseIncompleteOutput {
+		t.Fatalf("replayed observation failure = %#v, want INCOMPLETE_OUTPUT", observation.Failure)
+	}
+	if strings.Contains(observation.Failure.Detail, "missing_required_output") || strings.Contains(observation.Failure.Detail, "transcript") {
+		t.Fatalf("replayed failure detail = %q, want bounded safe detail", observation.Failure.Detail)
+	}
+	if err := observation.Validate(); err != nil {
+		t.Fatalf("replayed observation validation = %v", err)
 	}
 }
 
@@ -719,6 +789,26 @@ func TestRecordedDispatchFailureProjection(t *testing.T) {
 	}
 	if recordedFailure(workers.OutcomeFailed, nil, nil, workersessions.StateRunning) != nil {
 		t.Fatal("recordedFailure(active) returned a failure")
+	}
+	incompleteDiagnostics := &workers.SafeWorkDiagnostics{Provider: &workers.SafeProviderDiagnostic{ResponseMetadata: map[string]string{
+		workers.ProviderResponseMetadataFailureOperation:      "completion_validation",
+		workers.ProviderResponseMetadataFailureClassification: "missing_completion_evidence",
+	}}}
+	incomplete := completed
+	incomplete.DispatchID = "dispatch-incomplete"
+	incomplete.Diagnostics = incompleteDiagnostics
+	incompleteFact := recordedDispatchFact(
+		"dispatch-incomplete",
+		recordedDispatchAssociation{workerSessionID: "worker-incomplete", eventTime: base},
+		nil,
+		map[string]interfaces.FactoryWorldDispatchCompletion{"dispatch-incomplete": incomplete},
+		nil,
+		nil,
+		nil,
+	)
+	incompleteObservation := recordedObservationFromFact(incompleteFact, nil)
+	if incompleteObservation.Failure == nil || incompleteObservation.Failure.Kind != workersessions.FailureCauseIncompleteOutput {
+		t.Fatalf("recorded incomplete observation = %#v, want bounded INCOMPLETE_OUTPUT failure", incompleteObservation)
 	}
 }
 
