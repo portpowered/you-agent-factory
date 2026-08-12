@@ -24,6 +24,10 @@ import (
 const (
 	acpHelperEnvironment                = "YOU_TEST_ACP_AGENT_HELPER"
 	acpRetryAttemptDirectoryEnvironment = "YOU_TEST_ACP_RETRY_ATTEMPT_DIR"
+	acpRetryHoldEnvironment             = "YOU_TEST_ACP_RETRY_HOLD"
+	acpDisconnectMarkerEnvironment      = "YOU_TEST_ACP_DISCONNECT_MARKER"
+	acpDisconnectReadyEnvironment       = "YOU_TEST_ACP_DISCONNECT_READY"
+	acpDisconnectReleaseEnvironment     = "YOU_TEST_ACP_DISCONNECT_RELEASE"
 )
 
 func TestFactoryRunRoutesExecutorProviderThroughACPAdapter(t *testing.T) {
@@ -72,6 +76,8 @@ func TestFactoryRunRetriesACPProviderByResumingExactSession(t *testing.T) {
 	writeACPWorker(t, dir, providerID)
 	t.Setenv(acpHelperEnvironment, "retry-resume")
 	retryAttemptDir := t.TempDir()
+	retryHoldMarker := filepath.Join(retryAttemptDir, "first-prompt-held")
+	t.Setenv(acpRetryHoldEnvironment, retryHoldMarker)
 	t.Setenv(acpRetryAttemptDirectoryEnvironment, retryAttemptDir)
 	t.Setenv("YOU_TEST_ACP_SESSION_ID", sessionID)
 
@@ -98,6 +104,9 @@ func TestFactoryRunRetriesACPProviderByResumingExactSession(t *testing.T) {
 	}
 	if got := processStarts.Load(); got != 2 {
 		t.Fatalf("ACP process starts = %d, want 2 for the failed attempt and resumed retry", got)
+	}
+	if _, err := os.Stat(retryHoldMarker); err != nil {
+		t.Fatalf("first ACP retry peer did not reach its controlled live-process checkpoint: %v", err)
 	}
 	assertProviderSessionID(t, events, providerID, sessionID)
 }
@@ -356,7 +365,7 @@ func (p *legacyProvider) Infer(context.Context, workers.ProviderInferenceRequest
 
 func TestACPAgentHelperProcess(t *testing.T) {
 	mode := os.Getenv(acpHelperEnvironment)
-	if mode != "1" && mode != "fail" && mode != "auth" && mode != "model" && mode != "package-conformance" && mode != "resource" && mode != "content" && mode != "version" && mode != "init-fail" && mode != "stderr" && mode != "malformed" && mode != "eof" && mode != "block" && mode != "isolate" && mode != "unsupported" && mode != "persistent" && mode != "serialize" && mode != "crash-once" && mode != "spawn" && mode != "tournament" && mode != "cancelled-response" && mode != "resume" && mode != "resume-not-found" && mode != "retry-resume" {
+	if mode != "1" && mode != "fail" && mode != "auth" && mode != "model" && mode != "package-conformance" && mode != "resource" && mode != "content" && mode != "version" && mode != "init-fail" && mode != "stderr" && mode != "malformed" && mode != "eof" && mode != "block" && mode != "isolate" && mode != "unsupported" && mode != "persistent" && mode != "serialize" && mode != "crash-once" && mode != "spawn" && mode != "tournament" && mode != "cancelled-response" && mode != "resume" && mode != "resume-not-found" && mode != "retry-resume" && mode != "disconnect-once" {
 		return
 	}
 	if err := runFunctionalRPCPeer(mode, os.Stdin, os.Stdout, os.Stderr); err != nil {

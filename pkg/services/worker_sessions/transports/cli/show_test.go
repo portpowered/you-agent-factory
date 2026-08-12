@@ -77,7 +77,7 @@ func TestShowHumanRendersFailureAndParseDiagnostics(t *testing.T) {
 			DurationMillis: int64Ptr(2500), DurationBasis: generated.WorkerSessionObservationDurationBasisRECORDEDTIMESTAMPS,
 			Transcript: generated.WorkerSessionObservationTranscriptAVAILABLE,
 			TokenUsage: &generated.ProviderSessionTokenUsage{TotalTokens: intPtr(17)},
-			Failure:    &generated.WorkerSessionFailure{Kind: "WORKERS_EXECUTION_FAILURE", Detail: "safe failure detail", ProviderFailureKind: stringPtrForTest("dependency")},
+			Failure:    &generated.WorkerSessionFailure{Kind: "WORKERS_EXECUTION_FAILURE", Detail: "safe failure detail", ProviderFailureKind: stringPtrForTest("dependency"), AgentRunFailureClass: stringPtrForTest("agent_run_provider_failure")},
 			Parse:      generated.WorkerSessionParseDiagnostics{EventCount: 3, Errors: []generated.WorkerSessionParseDiagnostic{{Code: "provider_session_parse_error", LineNumber: 2, Message: "malformed event"}}},
 		})
 	}))
@@ -91,7 +91,7 @@ func TestShowHumanRendersFailureAndParseDiagnostics(t *testing.T) {
 	for _, want := range []string{
 		"Worker Session ID:\tworker-session-1", "Work IDs:\twork-1", "State:\tFAILED", "Duration:\t2.5s",
 		"Token usage:\tinput=- cached-input=- cache-write=- output=- reasoning=- total=17",
-		"Failure:\tkind=WORKERS_EXECUTION_FAILURE detail=safe failure detail provider-kind=dependency",
+		"Failure:\tkind=WORKERS_EXECUTION_FAILURE detail=safe failure detail provider-kind=dependency", "agent-run-class=agent_run_provider_failure",
 		"Parse diagnostics:\tevents=3 malformed=0 unknown=0 errors=1",
 		"Parse error 1:\tcode=provider_session_parse_error line=2 message=malformed event",
 	} {

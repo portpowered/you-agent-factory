@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -120,6 +121,56 @@ func TestPlainBatchDrainPreservesFiniteAndContinuousCounterexamples(t *testing.T
 			t.Fatalf("continuous plain stderr = %q, want empty or the cancellation diagnostic", stderr)
 		}
 	})
+}
+
+func TestPlainBatchDrainRejectsCancellationBeforeRuntimeActivation(t *testing.T) {
+	factoryDir := scaffoldPlainBatchDrainFactory(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	inputs := plainBatchInputs(t, factoryDir, "", true)
+	inputs.Input.Context = ctx
+
+	process := support.BuildProcess(t, serviceedges.Edges{
+		FactorySessionIDGenerator: func() string {
+			cancel()
+			return "preactivation-canceled-session"
+		},
+	})
+	support.CleanupProcess(t, process)
+
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf("canceled continuous plain batch error = %v; stdout=%q stderr=%q", err, inputs.Stdout(), inputs.Stderr())
+	}
+	if inputs.Stdout() != "" || inputs.Stderr() != "" {
+		t.Fatalf("canceled pre-activation output = stdout:%q stderr:%q, want quiet output", inputs.Stdout(), inputs.Stderr())
+	}
+}
+
+func TestPlainBatchDrainStopsAfterWorkerActivationCancellation(t *testing.T) {
+	factoryDir := scaffoldPlainBatchDrainFactory(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	inputs := support.FakeInputs(ctx, []string{
+		"you", "run", "--dir", factoryDir, "--continuously", "--with-server", "--no-record", "--quiet",
+	})
+	inputs.WorkingDirectory = factoryDir
+	homeDir := t.TempDir()
+	inputs.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+
+	process := support.BuildProcess(t, serviceedges.Edges{
+		FactoryRuntimeInputDirectoryWalker: func(string, fs.WalkDirFunc) error {
+			cancel()
+			return nil
+		},
+	})
+	support.CleanupProcess(t, process)
+
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf("canceled service-mode plain batch error = %v; stdout=%q stderr=%q", err, inputs.Stdout(), inputs.Stderr())
+	}
+	if inputs.Stdout() != "" || inputs.Stderr() != "" {
+		t.Fatalf("canceled post-activation output = stdout:%q stderr:%q, want quiet output", inputs.Stdout(), inputs.Stderr())
+	}
 }
 
 func plainBatchInputs(t *testing.T, factoryDir, workFile string, continuous bool) *support.CapturedInputs {

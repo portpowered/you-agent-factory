@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
@@ -323,8 +324,12 @@ func renderList(output io.Writer, result factoryapi.ListWorkerSessionsResponse) 
 			state = "-"
 		}
 		failure := "-"
-		if session.Failure != nil && session.Failure.Kind != "" {
-			failure = session.Failure.Kind
+		if session.Failure != nil {
+			if class := safeAgentRunFailureClass(session.Failure.AgentRunFailureClass); class != nil {
+				failure = *class
+			} else if session.Failure.Kind != "" {
+				failure = session.Failure.Kind
+			}
 		}
 		if _, err := fmt.Fprintf(
 			output,
@@ -343,6 +348,26 @@ func renderList(output io.Writer, result factoryapi.ListWorkerSessionsResponse) 
 		}
 	}
 	return nil
+}
+
+func safeAgentRunFailureClass(value *string) *string {
+	if value == nil {
+		return nil
+	}
+	class := safeAgentRunFailureClassValue(*value)
+	if class == "" {
+		return nil
+	}
+	return &class
+}
+
+func safeAgentRunFailureClassValue(class string) string {
+	switch class {
+	case workers.AgentRunFailureClassProvider, workers.AgentRunFailureClassHarness:
+		return class
+	default:
+		return ""
+	}
 }
 
 func formatTokens(usage *factoryapi.ProviderSessionTokenUsage) string {

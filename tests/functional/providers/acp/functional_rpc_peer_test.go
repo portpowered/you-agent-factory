@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -21,6 +22,7 @@ type functionalRPCPeer struct {
 	scanner      *bufio.Scanner
 	writer       *bufio.Writer
 	stderr       io.Writer
+	closeOutput  io.Closer
 	modelSet     bool
 	sessionID    string
 	sessions     int
@@ -47,6 +49,9 @@ func runFunctionalRPCPeer(mode string, stdin io.Reader, stdout, stderr io.Writer
 	peer := &functionalRPCPeer{
 		mode: mode, scanner: bufio.NewScanner(stdin), writer: bufio.NewWriter(stdout), stderr: stderr,
 		sessionID: os.Getenv("YOU_TEST_ACP_SESSION_ID"), retryAttempt: retryAttempt,
+	}
+	if closeOutput, ok := stdout.(io.Closer); ok {
+		peer.closeOutput = closeOutput
 	}
 	if peer.sessionID == "" {
 		peer.sessionID = "acp-session-functional-1"
@@ -116,6 +121,44 @@ func (p *functionalRPCPeer) serve() error {
 		case "session/prompt":
 			if err := p.prompt(request); err != nil {
 				return err
+			}
+			if p.mode == "disconnect-once" && p.sessions == 1 {
+				marker := os.Getenv(acpDisconnectMarkerEnvironment)
+				ready := os.Getenv(acpDisconnectReadyEnvironment)
+				release := os.Getenv(acpDisconnectReleaseEnvironment)
+				if marker == "" {
+					return fmt.Errorf("disconnect-once mode requires %s", acpDisconnectMarkerEnvironment)
+				}
+				if ready == "" || release == "" {
+					return fmt.Errorf("disconnect-once mode requires %s and %s", acpDisconnectReadyEnvironment, acpDisconnectReleaseEnvironment)
+				}
+				if _, err := os.Stat(marker); os.IsNotExist(err) {
+					if err := os.WriteFile(ready, []byte("response-ready"), 0o600); err != nil {
+						return fmt.Errorf("write ACP response-ready marker: %w", err)
+					}
+					for {
+						if _, err := os.Stat(release); err == nil {
+							break
+						} else if !os.IsNotExist(err) {
+							return fmt.Errorf("inspect ACP disconnect release: %w", err)
+						}
+						time.Sleep(10 * time.Millisecond)
+					}
+					if p.closeOutput == nil {
+						return fmt.Errorf("disconnect-once mode cannot close its output")
+					}
+					if err := p.closeOutput.Close(); err != nil {
+						return fmt.Errorf("close disconnected ACP output: %w", err)
+					}
+					if err := os.WriteFile(marker, []byte("disconnected"), 0o600); err != nil {
+						return fmt.Errorf("write ACP disconnect marker: %w", err)
+					}
+					for p.scanner.Scan() {
+					}
+					return p.scanner.Err()
+				} else if err != nil {
+					return fmt.Errorf("inspect ACP disconnect marker: %w", err)
+				}
 			}
 			if (p.mode == "spawn" && p.sessions >= 4) ||
 				(p.mode == "tournament" && p.sessions >= 3) ||
@@ -248,7 +291,10 @@ func (p *functionalRPCPeer) prompt(request rpcEnvelope) error {
 	if p.mode == "retry-resume" {
 		switch p.retryAttempt {
 		case 1:
-			return p.respondError(request.ID, -32001, "temporarily unavailable", nil)
+			if err := p.respondError(request.ID, -32001, "temporarily unavailable", nil); err != nil {
+				return err
+			}
+			return holdFailedRetryPeer()
 		case 2:
 			break
 		default:
@@ -317,6 +363,23 @@ func (p *functionalRPCPeer) prompt(request rpcEnvelope) error {
 		}
 	}
 	return p.respond(request.ID, json.RawMessage(`{"stopReason":"end_turn"}`))
+}
+
+func holdFailedRetryPeer() error {
+	holdMarker := os.Getenv(acpRetryHoldEnvironment)
+	if holdMarker == "" {
+		return nil
+	}
+	if err := os.WriteFile(holdMarker, []byte("first prompt failed and peer remains live"), 0o600); err != nil {
+		return err
+	}
+	// Keep the failed peer alive and unresponsive so the public retry can only
+	// succeed after the provider retires this process. The production stop
+	// deadline is the failure guard for this fixture; no test-side delay is
+	// needed.
+	for {
+		runtime.Gosched()
+	}
 }
 
 // respondToPackagedPrompt handles the prompt() modes whose reply depends on

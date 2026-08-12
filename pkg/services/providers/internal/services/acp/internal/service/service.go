@@ -356,7 +356,11 @@ func (daemon *daemon) execute(
 			_ = connection.Cancel(cancelCtx, acpsdk.CancelNotification{SessionId: session.SessionId})
 			cancel()
 		}
-		daemon.invalidateDisconnected(context.Background())
+		// A failed prompt leaves the ACP turn's connection state
+		// authoritative only after the process has been retired. Waiting for
+		// stopLocked here prevents a retry from racing cmd.Wait or reusing a
+		// connection whose peer is already exiting.
+		_ = daemon.stopLocked(context.Background())
 		return providers.ExecuteResult{}, withPartial(rpcFailure(ctx, "session/prompt", id, err, daemon.stderr.String(), request), client, id)
 	}
 	if response.StopReason == acpsdk.StopReasonCancelled {
@@ -472,11 +476,18 @@ func (daemon *daemon) promptWithWindow(
 
 func (daemon *daemon) ensureStarted(ctx context.Context, id providers.ID, cwd string, environment []string, request providers.ExecuteRequest) error {
 	if daemon.connection != nil {
-		select {
-		case <-daemon.finished:
-			daemon.clearProcess()
-		default:
-			return nil
+		// A peer disconnect is authoritative even when cmd.Wait has not yet
+		// published the process result. Retrying through a connection whose
+		// reader has already terminated sends the continuation to a dead ACP
+		// process and loses the original attempt outcome.
+		daemon.invalidateDisconnected(ctx)
+		if daemon.connection != nil {
+			select {
+			case <-daemon.finished:
+				daemon.clearProcess()
+			default:
+				return nil
+			}
 		}
 	}
 	if daemon.newCommand == nil {

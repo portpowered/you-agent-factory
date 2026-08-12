@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
 )
@@ -190,7 +191,8 @@ func TestGetWorkerSessionObservationBySessionIDProjectsFailureDiagnostics(t *tes
 	duration := int64(2500)
 	failure := &workersessions.FailureCause{
 		Kind: workersessions.FailureCauseWorkersExecutionFailure, Detail: "provider exited with status 1",
-		ProviderFailureKind: providers.ExecuteFailureKindDependency,
+		AgentRunFailureClass: workers.AgentRunFailureClassProvider,
+		ProviderFailureKind:  providers.ExecuteFailureKindDependency,
 	}
 	service := &fakeObservationService{getResult: workersessions.Observation{
 		WorkerSessionID:          "worker-session-1",
@@ -239,7 +241,8 @@ func assertFailureObservationIdentity(t *testing.T, response factoryapi.WorkerSe
 
 func assertFailureObservationCause(t *testing.T, response factoryapi.WorkerSessionObservation) {
 	t.Helper()
-	if response.Failure == nil || response.Failure.Detail != "provider exited with status 1" || response.Failure.ProviderFailureKind == nil {
+	if response.Failure == nil || response.Failure.Detail != "provider exited with status 1" || response.Failure.ProviderFailureKind == nil ||
+		response.Failure.AgentRunFailureClass == nil || *response.Failure.AgentRunFailureClass != workers.AgentRunFailureClassProvider {
 		t.Fatalf("failure = %#v, want structured failure diagnostics", response.Failure)
 	}
 }
