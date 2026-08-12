@@ -59,20 +59,12 @@ async function verifyViewport(browser, viewport) {
     const tabs = navigation.getByRole("tab");
     await tabs.first().focus();
     await page.keyboard.press("End");
-    await page.waitForFunction(
-      (tab) => tab?.getAttribute("aria-selected") === "true",
-      await tabs.nth(1).elementHandle(),
-    );
     if ((await tabs.nth(1).getAttribute("aria-selected")) !== "true") {
       throw new Error(
         `End key did not select the last session at ${viewport.label}.`,
       );
     }
     await page.keyboard.press("Home");
-    await page.waitForFunction(
-      (tab) => tab?.getAttribute("aria-selected") === "true",
-      await tabs.first().elementHandle(),
-    );
     if ((await tabs.first().getAttribute("aria-selected")) !== "true") {
       throw new Error(
         `Home key did not restore the first session at ${viewport.label}.`,
