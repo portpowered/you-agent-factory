@@ -14,6 +14,7 @@ import (
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/webhooks"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
@@ -123,6 +124,12 @@ type AutomationsPorts struct {
 	HostedSourcesFactory AutomationHostedSourcesFactory
 }
 
+// WebhooksPorts contains the Webhooks root used to attach hosted delivery to
+// the runtime's canonical recording stream.
+type WebhooksPorts struct {
+	Service webhooks.Service
+}
+
 // ModelsPorts contains the Models root used while opening a session.
 type ModelsPorts struct {
 	Service models.Service
@@ -131,6 +138,7 @@ type ModelsPorts struct {
 // RecordingsPorts contains Recordings-owned opening collaborators.
 type RecordingsPorts struct {
 	ProjectionFactory      RecordingsProjectionFactory
+	ServiceFactory         RecordingsServiceFactory
 	LifecycleFactory       RecordingLifecycleFactory
 	RuntimeLedgerFactory   RuntimeLedgerFactory
 	RuntimeRecorderFactory recordings.RuntimeRecorderFactory
@@ -181,7 +189,9 @@ type Factory struct {
 	factorySessionsService           factorysessions.Service
 	factorySessionExecutionFactory   FactorySessionExecutionFactory
 	recordingsProjectionFactory      RecordingsProjectionFactory
+	recordingsServiceFactory         RecordingsServiceFactory
 	recordingLifecycleFactory        RecordingLifecycleFactory
+	webhooksService                  webhooks.Service
 	runtimeLedgerFactory             RuntimeLedgerFactory
 	runtimeRecorderFactory           recordings.RuntimeRecorderFactory
 	replayClockFactory               ReplayClockFactory
@@ -243,6 +253,7 @@ func NewFactory(
 	automations *AutomationsPorts,
 	modelsPorts *ModelsPorts,
 	recordingsPorts *RecordingsPorts,
+	webhooksPorts *WebhooksPorts,
 	workersPorts *WorkersPorts,
 	operatorSettings *OperatorSettingsPorts,
 ) (*Factory, error) {
@@ -255,6 +266,7 @@ func NewFactory(
 		automations,
 		modelsPorts,
 		recordingsPorts,
+		webhooksPorts,
 		workersPorts,
 		operatorSettings,
 	); err != nil {
@@ -271,7 +283,9 @@ func NewFactory(
 		factorySessionsRuntimeAssembly:   factorySessions.RuntimeAssembly,
 		factorySessionExecutionFactory:   factorySessions.FactorySessionExecutionFactory,
 		recordingsProjectionFactory:      recordingsPorts.ProjectionFactory,
+		recordingsServiceFactory:         recordingsPorts.ServiceFactory,
 		recordingLifecycleFactory:        recordingsPorts.LifecycleFactory,
+		webhooksService:                  webhooksPorts.Service,
 		runtimeLedgerFactory:             recordingsPorts.RuntimeLedgerFactory,
 		runtimeRecorderFactory:           recordingsPorts.RuntimeRecorderFactory,
 		replayClockFactory:               recordingsPorts.ReplayClockFactory,
@@ -330,6 +344,7 @@ func validateOwnerPorts(
 	automations *AutomationsPorts,
 	modelsPorts *ModelsPorts,
 	recordingsPorts *RecordingsPorts,
+	webhooksPorts *WebhooksPorts,
 	workersPorts *WorkersPorts,
 	operatorSettings *OperatorSettingsPorts,
 ) error {
@@ -342,6 +357,7 @@ func validateOwnerPorts(
 		func() error { return validateAutomations(automations) },
 		func() error { return validateModels(modelsPorts) },
 		func() error { return validateRecordings(recordingsPorts) },
+		func() error { return validateWebhooks(webhooksPorts) },
 		func() error { return validateWorkers(workersPorts) },
 		func() error { return validateOperatorSettings(operatorSettings) },
 	} {
@@ -448,6 +464,7 @@ func validateRecordings(group *RecordingsPorts) error {
 	}
 	return validateRuntimeOpeningRequirements("Recordings",
 		runtimeOpeningRequirement{"projection factory", group.ProjectionFactory},
+		runtimeOpeningRequirement{"service factory", group.ServiceFactory},
 		runtimeOpeningRequirement{"lifecycle factory", group.LifecycleFactory},
 		runtimeOpeningRequirement{"runtime ledger factory", group.RuntimeLedgerFactory},
 		runtimeOpeningRequirement{"runtime recorder factory", group.RuntimeRecorderFactory},
@@ -469,6 +486,15 @@ func validateWorkers(group *WorkersPorts) error {
 		runtimeOpeningRequirement{"provider-from-command-runner factory", group.ProviderFromCommandRunnerFactory},
 		runtimeOpeningRequirement{"provider command runner", group.ProviderCommandRunner},
 		runtimeOpeningRequirement{"script command runner", group.ScriptCommandRunner},
+	)
+}
+
+func validateWebhooks(group *WebhooksPorts) error {
+	if err := requireRuntimeOpeningPorts("Webhooks", group); err != nil {
+		return err
+	}
+	return validateRuntimeOpeningRequirements("Webhooks",
+		runtimeOpeningRequirement{"service", group.Service},
 	)
 }
 
@@ -537,6 +563,7 @@ func (f *Factory) openRuntime(
 		f.factorySessionsRuntimeAssembly,
 		f.factorySessionExecutionFactory,
 		f.recordingsProjectionFactory,
+		f.recordingsServiceFactory,
 		f.recordingLifecycleFactory,
 		f.runtimeLedgerFactory,
 		f.runtimeRecorderFactory,
@@ -564,6 +591,7 @@ func (f *Factory) openRuntime(
 		f.decodeReplayConfig,
 		f.replayInputs,
 		f.captureLoadedFactorySnapshot,
+		f.webhooksService,
 		f.resolveClock,
 		f.newSessionLogger,
 		f.adaptWorkerCommandRunner,

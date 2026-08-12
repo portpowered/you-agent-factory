@@ -210,7 +210,7 @@ func (c Composition) LoadedFactoryFromCanonicalJSON(payload []byte, loader facto
 func (c Composition) Persistence(
 	validator factorydefinitions.Validator,
 	mapInput factorydefinitions.FactoryLayoutPayloadMapper,
-) factorydefinitions.Persistence {
+) factorydefinitions.PackagedFactoryPersistence {
 	loader := c.Loader()
 	_, _, pruneRemovedDocs := PortableOperations(c.fileSystem)
 	representation := c.representation
@@ -389,7 +389,7 @@ func (c Composition) MapFactoryJSONForPersistence(payload []byte) (factorydefini
 	return c.representation.MapPersistence(payload)
 }
 
-func (c Composition) FactoryDefinitionPersistenceWithValidator(validator factorydefinitions.Validator) factorydefinitions.Persistence {
+func (c Composition) FactoryDefinitionPersistenceWithValidator(validator factorydefinitions.Validator) factorydefinitions.PackagedFactoryPersistence {
 	return c.Persistence(validator, c.MapFactoryJSONForPersistence)
 }
 

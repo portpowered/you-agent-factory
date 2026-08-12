@@ -1,5 +1,5 @@
-import { SurfacePanel } from "@you-agent-factory/components/layout";
 import type { ReactFlowInstance } from "@xyflow/react";
+import { SurfacePanel } from "@you-agent-factory/components/layout";
 import { useId, useMemo, useRef, useState } from "react";
 import { CurrentFactoryDefinitionError } from "../../../api/current-factory-definition";
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
@@ -9,6 +9,7 @@ import { cn } from "../../../lib/cn";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import { NODE_TYPES } from "../../flowchart/components/current-activity-nodes";
 import { FACTORY_GRAPH_EDGE_TYPES } from "../../graphs/components/factory-graph-edge";
+import type { CurrentActivityGraphEditorController } from "../hooks/current-activity-graph-state-value";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import type { CurrentActivityGraphCardViewModel } from "../hooks/use-current-activity-graph-card-view-model";
 import type { CurrentActivitySelection } from "../lib/react-flow-current-activity-card-types";
@@ -35,6 +36,7 @@ const EDITOR_NOTICE_TONE_CLASS: Record<EditorNoticeTone, string> = {
 };
 
 export function CurrentActivityGraphSurface({
+  editorController,
   viewModel,
   headingID,
   imports,
@@ -42,6 +44,7 @@ export function CurrentActivityGraphSurface({
   selection,
   snapshot,
 }: {
+  editorController?: CurrentActivityGraphEditorController;
   viewModel: CurrentActivityGraphCardViewModel;
   headingID: string;
   imports: CurrentActivityImportController;
@@ -52,6 +55,7 @@ export function CurrentActivityGraphSurface({
   return (
     <CurrentActivityGraphSurfaceContent
       headingID={headingID}
+      editorController={editorController}
       imports={imports}
       locale={locale}
       model={viewModel}
@@ -63,6 +67,7 @@ export function CurrentActivityGraphSurface({
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: graph surface keeps editor notices, validation, and viewport wiring together.
 function CurrentActivityGraphSurfaceContent({
+  editorController,
   headingID,
   imports,
   locale,
@@ -70,6 +75,7 @@ function CurrentActivityGraphSurfaceContent({
   selection,
   snapshot,
 }: {
+  editorController?: CurrentActivityGraphEditorController;
   headingID: string;
   imports: CurrentActivityImportController;
   locale?: string;
@@ -80,9 +86,10 @@ function CurrentActivityGraphSurfaceContent({
   const messages = getFactoryGraphEditorMessages(locale);
   const flowContainerRef = useRef<HTMLElement | null>(null);
   const flowInstanceRef = useRef<ReactFlowInstance | null>(null);
-  const saveError = model.status.saveError;
-  const editorControls = model.editorControls;
-  const removalControls = model.removalControls;
+  const controller = editorController ?? model;
+  const saveError = controller.status.saveError;
+  const editorControls = controller.editorControls;
+  const removalControls = controller.removalControls;
   const visualGroupControls = model.visualGroupControls;
   const editorValidationProjection = useMemo(() => {
     if (!editorControls.isEditing) {
@@ -169,7 +176,10 @@ function CurrentActivityGraphSurfaceContent({
       tone: "warning",
     });
   }
-  if (model.status.hasActiveWork && model.status.hasSharedGraphChanges) {
+  if (
+    controller.status.hasActiveWork &&
+    controller.status.hasSharedGraphChanges
+  ) {
     editorNoticeSections.push({
       id: "active-work",
       messages: [messages.noticeTopologyBlockedDescription],
@@ -177,7 +187,7 @@ function CurrentActivityGraphSurfaceContent({
       tone: "danger",
     });
   }
-  if (model.status.isStaleDraft) {
+  if (controller.status.isStaleDraft) {
     editorNoticeSections.push({
       id: "stale-draft",
       messages: [messages.noticeStaleDescription],
@@ -198,7 +208,7 @@ function CurrentActivityGraphSurfaceContent({
       style={{ height: "100%", maxHeight: "100%", overflow: "hidden" }}
     >
       <CurrentActivityGraphViewport
-        addControls={model.addControls}
+        addControls={controller.addControls}
         canDeleteGraphSelection={model.canDeleteGraphSelection}
         clearGraphSelection={model.clearGraphSelection}
         deleteGraphSelection={model.deleteGraphSelection}
@@ -212,10 +222,10 @@ function CurrentActivityGraphSurfaceContent({
         handleGraphSelectionChange={model.handleGraphSelectionChange}
         handleGraphSelectionStart={model.handleGraphSelectionStart}
         handleNodesChange={model.handleNodesChange}
-        hasPendingChanges={model.status.hasSharedGraphChanges}
+        hasPendingChanges={controller.status.hasSharedGraphChanges}
         headingID={headingID}
         imports={imports}
-        isSavingDraft={model.status.isSaving}
+        isSavingDraft={controller.status.isSaving}
         layoutControls={layoutControls}
         locale={locale}
         nodeTypes={NODE_TYPES}
@@ -250,8 +260,8 @@ function CurrentActivityGraphSurfaceContent({
         visualGroupControls={visualGroupControls.visualGroupControls}
         visualGroupAriaLabel={visualGroupControls.groupAriaLabel}
         visualGroups={visualGroupControls.groups}
-        saveControls={model.saveControls}
-        saveDisabledReason={model.status.saveBlockedReason}
+        saveControls={controller.saveControls}
+        saveDisabledReason={controller.status.saveBlockedReason}
       />
       {editorControls.isEditing ? (
         <CurrentActivityGraphEditorNoticePanel

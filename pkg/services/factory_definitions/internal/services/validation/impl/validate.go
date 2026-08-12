@@ -3,7 +3,10 @@ package impl
 import (
 	"bytes"
 	"fmt"
+	"math"
+	"net/url"
 	"strings"
+	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/santhosh-tekuri/jsonschema/v6"
@@ -18,8 +21,9 @@ func ValidateStructural(cfg *factorydefinitions.FactoryConfig) Result {
 		return Result{}
 	}
 	result := Result{
-		Targets: append(OrchestratorTargets(cfg), ExpectedArtifactTargets(cfg)...),
+		Targets: append(WebhookTargets(cfg), OrchestratorTargets(cfg)...),
 	}
+	result.Targets = append(result.Targets, ExpectedArtifactTargets(cfg)...)
 	if !IsPetriOrchestratorValidationScope(cfg) {
 		return result
 	}
@@ -118,6 +122,252 @@ func validateWorkstationOutputSchema(value string) error {
 		return fmt.Errorf("cannot compile schema: %w", err)
 	}
 	return nil
+}
+
+// WebhookTargets validates Factory-owned outbound webhook declarations before
+// any orchestrator-specific validation runs. The validator never resolves or
+// stores secret values; it checks only the authored reference.
+func WebhookTargets(cfg *factorydefinitions.FactoryConfig) []Target {
+	if cfg == nil || len(cfg.Webhooks) == 0 {
+		return nil
+	}
+	seenNames := make(map[string]int, len(cfg.Webhooks))
+	var targets []Target
+	for index, webhook := range cfg.Webhooks {
+		basePath := fmt.Sprintf("%s.webhooks[%d](%s)", validationRoot, index, webhook.Name)
+		name := strings.TrimSpace(webhook.Name)
+		if name == "" {
+			targets = append(targets, webhookTarget(CodeWebhookNameRequired, basePath+".name", "webhook name must be non-empty", webhook.Name))
+		} else if previousIndex, exists := seenNames[name]; exists {
+			targets = append(targets, webhookTarget(
+				CodeWebhookNameDuplicate,
+				basePath+".name",
+				fmt.Sprintf("webhook name %q duplicates webhooks[%d]", name, previousIndex),
+				name,
+			))
+		} else {
+			seenNames[name] = index
+		}
+
+		if !validWebhookURL(webhook.URL) {
+			targets = append(targets, webhookTarget(
+				CodeWebhookURLInvalid,
+				basePath+".url",
+				"webhook url must be an absolute http or https URL with a host",
+				name,
+			))
+		}
+		if strings.TrimSpace(webhook.SigningSecretRef) == "" {
+			targets = append(targets, webhookTarget(
+				CodeWebhookSecretReferenceRequired,
+				basePath+".signingSecretRef",
+				"webhook signingSecretRef must be non-empty",
+				name,
+			))
+		}
+		targets = append(targets, webhookFilterTargets(webhook.Filter, basePath, name)...)
+		targets = append(targets, webhookDeliveryPolicyTargets(webhook.DeliveryPolicy, basePath, name)...)
+	}
+	return targets
+}
+
+func validWebhookURL(raw string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || parsed.Host == "" || !parsed.IsAbs() {
+		return false
+	}
+	scheme := strings.ToLower(parsed.Scheme)
+	return scheme == "http" || scheme == "https"
+}
+
+func webhookFilterTargets(filter factorydefinitions.FactoryWebhookFilterConfig, basePath, subjectID string) []Target {
+	var targets []Target
+	if len(filter.EventTypes) == 0 {
+		targets = append(targets, webhookTarget(
+			CodeWebhookEventTypesRequired,
+			basePath+".filter.eventTypes",
+			"webhook filter.eventTypes must contain at least one supported event type",
+			subjectID,
+		))
+	}
+	dispatchEventTypes := false
+	seenEventTypes := make(map[string]int, len(filter.EventTypes))
+	for index, eventType := range filter.EventTypes {
+		path := fmt.Sprintf("%s.filter.eventTypes[%d]", basePath, index)
+		if previousIndex, exists := seenEventTypes[eventType]; exists {
+			targets = append(targets, webhookTarget(CodeWebhookFilterValueDuplicate, path, fmt.Sprintf("webhook filter value %q duplicates eventTypes[%d]", eventType, previousIndex), subjectID))
+		} else {
+			seenEventTypes[eventType] = index
+		}
+		if isWebhookDispatchEventType(eventType) {
+			dispatchEventTypes = true
+			continue
+		}
+		if !isSupportedWebhookEventType(eventType) {
+			targets = append(targets, webhookTarget(CodeWebhookEventTypeUnsupported, path, fmt.Sprintf("unsupported webhook event type %q", eventType), subjectID))
+		}
+	}
+	targets = append(targets, webhookDispatchStatusTargets(filter, basePath, subjectID, dispatchEventTypes)...)
+	return targets
+}
+
+func webhookDispatchStatusTargets(
+	filter factorydefinitions.FactoryWebhookFilterConfig,
+	basePath string,
+	subjectID string,
+	dispatchEventTypes bool,
+) []Target {
+	var targets []Target
+	seenStatuses := make(map[string]int, len(filter.DispatchStatuses))
+	if filter.DispatchStatuses != nil && len(filter.DispatchStatuses) == 0 {
+		targets = append(targets, webhookTarget(
+			CodeWebhookDispatchStatusesRequired,
+			basePath+".filter.dispatchStatuses",
+			"webhook filter.dispatchStatuses must contain at least one supported status when provided",
+			subjectID,
+		))
+	}
+	for index, status := range filter.DispatchStatuses {
+		path := fmt.Sprintf("%s.filter.dispatchStatuses[%d]", basePath, index)
+		if previousIndex, exists := seenStatuses[status]; exists {
+			targets = append(targets, webhookTarget(CodeWebhookFilterValueDuplicate, path, fmt.Sprintf("webhook filter value %q duplicates dispatchStatuses[%d]", status, previousIndex), subjectID))
+		} else {
+			seenStatuses[status] = index
+		}
+		if status != factorydefinitions.FactoryWebhookDispatchStatusFailed && status != factorydefinitions.FactoryWebhookDispatchStatusInterrupted {
+			targets = append(targets, webhookTarget(CodeWebhookDispatchStatusUnsupported, path, fmt.Sprintf("unsupported webhook dispatch status %q", status), subjectID))
+		}
+	}
+	if len(filter.DispatchStatuses) == 0 {
+		return targets
+	}
+	if !dispatchEventTypes {
+		targets = append(targets, webhookTarget(
+			CodeWebhookDispatchStatusIncompatible,
+			basePath+".filter.dispatchStatuses",
+			"webhook filter.dispatchStatuses requires at least one dispatch event type",
+			subjectID,
+		))
+	} else if !webhookDispatchFilterHasCompatibleStatus(filter.EventTypes, filter.DispatchStatuses) {
+		targets = append(targets, webhookTarget(
+			CodeWebhookDispatchStatusIncompatible,
+			basePath+".filter.dispatchStatuses",
+			"webhook filter.dispatchStatuses has no status compatible with the configured dispatch event types",
+			subjectID,
+		))
+	}
+	return targets
+}
+
+func webhookDispatchFilterHasCompatibleStatus(eventTypes, statuses []string) bool {
+	for _, eventType := range eventTypes {
+		for _, status := range statuses {
+			if webhookDispatchStatusCompatible(eventType, status) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func webhookDispatchStatusCompatible(eventType, status string) bool {
+	switch eventType {
+	case factorydefinitions.FactoryWebhookEventTypeDispatchResponse,
+		factorydefinitions.FactoryWebhookEventTypeDispatchReconciled:
+		return status == factorydefinitions.FactoryWebhookDispatchStatusFailed
+	case factorydefinitions.FactoryWebhookEventTypeDispatchInterrupted:
+		return status == factorydefinitions.FactoryWebhookDispatchStatusInterrupted
+	default:
+		return false
+	}
+}
+
+func isSupportedWebhookEventType(value string) bool {
+	switch value {
+	case factorydefinitions.FactoryWebhookEventTypeWorkStateChange,
+		factorydefinitions.FactoryWebhookEventTypeDispatchResponse,
+		factorydefinitions.FactoryWebhookEventTypeDispatchReconciled,
+		factorydefinitions.FactoryWebhookEventTypeDispatchInterrupted:
+		return true
+	default:
+		return false
+	}
+}
+
+func isWebhookDispatchEventType(value string) bool {
+	switch value {
+	case factorydefinitions.FactoryWebhookEventTypeDispatchResponse,
+		factorydefinitions.FactoryWebhookEventTypeDispatchReconciled,
+		factorydefinitions.FactoryWebhookEventTypeDispatchInterrupted:
+		return true
+	default:
+		return false
+	}
+}
+
+func webhookDeliveryPolicyTargets(policy *factorydefinitions.FactoryWebhookDeliveryPolicyConfig, basePath, subjectID string) []Target {
+	if policy == nil {
+		return nil
+	}
+	targets := webhookPolicyDurationTargets(policy, basePath, subjectID)
+	if policy.MaxAttempts != nil && *policy.MaxAttempts <= 0 {
+		targets = append(targets, webhookPolicyTarget(basePath, "maxAttempts", subjectID, "maxAttempts must be positive, including the initial attempt"))
+	}
+	if policy.BackoffMultiplier != nil && (math.IsNaN(*policy.BackoffMultiplier) || math.IsInf(*policy.BackoffMultiplier, 0) || *policy.BackoffMultiplier < 1) {
+		targets = append(targets, webhookPolicyTarget(basePath, "backoffMultiplier", subjectID, "backoffMultiplier must be at least 1"))
+	}
+	targets = append(targets, webhookBackoffOrderingTarget(policy, basePath, subjectID)...)
+	return targets
+}
+
+func webhookPolicyDurationTargets(policy *factorydefinitions.FactoryWebhookDeliveryPolicyConfig, basePath, subjectID string) []Target {
+	var targets []Target
+	if policy.RequestTimeout != nil && !positiveWebhookDuration(*policy.RequestTimeout) {
+		targets = append(targets, webhookPolicyTarget(basePath, "requestTimeout", subjectID, "requestTimeout must be a positive Go duration"))
+	}
+	if policy.InitialBackoff != nil && !positiveWebhookDuration(*policy.InitialBackoff) {
+		targets = append(targets, webhookPolicyTarget(basePath, "initialBackoff", subjectID, "initialBackoff must be a positive Go duration"))
+	}
+	if policy.MaxBackoff != nil && !positiveWebhookDuration(*policy.MaxBackoff) {
+		targets = append(targets, webhookPolicyTarget(basePath, "maxBackoff", subjectID, "maxBackoff must be a positive Go duration"))
+	}
+	return targets
+}
+
+func webhookBackoffOrderingTarget(policy *factorydefinitions.FactoryWebhookDeliveryPolicyConfig, basePath, subjectID string) []Target {
+	initial, initialOK := webhookDurationValue(policy.InitialBackoff, factorydefinitions.DefaultFactoryWebhookInitialBackoff)
+	maximum, maximumOK := webhookDurationValue(policy.MaxBackoff, factorydefinitions.DefaultFactoryWebhookMaxBackoff)
+	if initialOK && maximumOK && maximum < initial {
+		return []Target{webhookPolicyTarget(basePath, "maxBackoff", subjectID, "maxBackoff must not be less than initialBackoff")}
+	}
+	return nil
+}
+
+func positiveWebhookDuration(value string) bool {
+	duration, err := time.ParseDuration(strings.TrimSpace(value))
+	return err == nil && duration > 0
+}
+
+func webhookDurationValue(value *string, fallback time.Duration) (time.Duration, bool) {
+	if value == nil {
+		return fallback, true
+	}
+	duration, err := time.ParseDuration(strings.TrimSpace(*value))
+	return duration, err == nil && duration > 0
+}
+
+func webhookPolicyTarget(basePath, field, subjectID, message string) Target {
+	return webhookTarget(CodeWebhookDeliveryPolicyInvalid, basePath+".deliveryPolicy."+field, message, subjectID)
+}
+
+func webhookTarget(code, path, message, subjectID string) Target {
+	return Target{
+		Code:     code,
+		Severity: SeverityError,
+		Message:  message,
+		Subject:  Subject{Type: SubjectTypeFactory, ID: subjectID, Location: SubjectLocationDefinition},
+		Path:     path,
+	}
 }
 
 // Validate runs structural factory validation for a complete factory definition and

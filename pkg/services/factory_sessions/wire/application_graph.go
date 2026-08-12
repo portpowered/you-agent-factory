@@ -105,6 +105,7 @@ type (
 	AutomationsRuntimeOpeningPorts         = runtimeopening.AutomationsPorts
 	ModelsRuntimeOpeningPorts              = runtimeopening.ModelsPorts
 	RecordingsRuntimeOpeningPorts          = runtimeopening.RecordingsPorts
+	WebhooksRuntimeOpeningPorts            = runtimeopening.WebhooksPorts
 	WorkersRuntimeOpeningPorts             = runtimeopening.WorkersPorts
 	OperatorSettingsRuntimeOpeningPorts    = runtimeopening.OperatorSettingsPorts
 	WorkFactory                            = runtimeopening.WorkFactory
@@ -112,6 +113,7 @@ type (
 	FactorySessionExecutionFactory         = runtimeopening.FactorySessionExecutionFactory
 	ConductorInvocationWithProgressFactory = runtimeopening.ConductorInvocationWithProgressFactory
 	RecordingsProjectionFactory            = runtimeopening.RecordingsProjectionFactory
+	RecordingsServiceFactory               = runtimeopening.RecordingsServiceFactory
 	RecordingLifecycleFactory              = runtimeopening.RecordingLifecycleFactory
 	RuntimeLedgerFactory                   = runtimeopening.RuntimeLedgerFactory
 	ReplayClockFactory                     = runtimeopening.ReplayClockFactory
@@ -177,6 +179,7 @@ func NewRuntimeOpening(
 	automations *AutomationsRuntimeOpeningPorts,
 	modelsPorts *ModelsRuntimeOpeningPorts,
 	recordingsPorts *RecordingsRuntimeOpeningPorts,
+	webhooksPorts *WebhooksRuntimeOpeningPorts,
 	workersPorts *WorkersRuntimeOpeningPorts,
 	operatorSettings *OperatorSettingsRuntimeOpeningPorts,
 ) (*RuntimeOpening, error) {
@@ -189,6 +192,7 @@ func NewRuntimeOpening(
 		automations,
 		modelsPorts,
 		recordingsPorts,
+		webhooksPorts,
 		workersPorts,
 		operatorSettings,
 	)

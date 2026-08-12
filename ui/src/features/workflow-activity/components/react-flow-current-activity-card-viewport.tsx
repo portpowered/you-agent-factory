@@ -39,6 +39,7 @@ import { FactoryGraphEdgeWaypointControls } from "../../factory-graph-editor/com
 import { FactoryGraphEdgeWaypointLayer } from "../../factory-graph-editor/components/flow/factory-graph-edge-waypoint-layer";
 import { FactoryGraphVisualGroupControls } from "../../factory-graph-editor/components/flow/visual-groups/factory-graph-visual-group-controls";
 import { FactoryGraphVisualGroupLayer } from "../../factory-graph-editor/components/flow/visual-groups/factory-graph-visual-group-layer";
+import { useFactoryGraphTouchPanePan } from "../../factory-graph-editor/hooks/selection/use-factory-graph-touch-pane-pan";
 import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 import { isValidFactoryGraphConnection } from "../../factory-graph-editor/lib/editor/factory-graph-editor-connections";
 import type {
@@ -54,12 +55,14 @@ import {
 import type { FactoryLayoutGroup } from "../../factory-graph-editor/lib/layout/visual-groups/factory-graph-layout-groups";
 import { FACTORY_GRAPH_EDITOR_REACT_FLOW_GESTURE_PROPS } from "../../factory-graph-editor/lib/selection/factory-graph-editor-react-flow-interaction";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
-import { useFactoryGraphTouchPanePan } from "../../factory-graph-editor/hooks/selection/use-factory-graph-touch-pane-pan";
 import { GraphViewportSurface } from "../../graphs/components/dashboard-graph-viewport-surface";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import { useCanonicalLayoutViewportSync } from "../lib/layout/use-canonical-layout-viewport-sync";
 import { handleCurrentActivityReactFlowError } from "../lib/react-flow-current-activity-card-errors";
-import { useMeasuredCurrentActivityGraphViewport } from "../lib/use-measured-current-activity-graph-viewport";
+import {
+  type MeasuredCurrentActivityGraphViewport,
+  useMeasuredCurrentActivityGraphViewport,
+} from "../lib/use-measured-current-activity-graph-viewport";
 import {
   DashboardFlowAxisLegend,
   getDefaultDashboardFlowAxisLegendEdgeItems,
@@ -341,6 +344,7 @@ export function CurrentActivityGraphViewport({
   saveControls,
   saveDisabledReason,
   visibilityControls,
+  viewportMeasurement,
   flowContainerRef,
   flowInstanceRef,
 }: {
@@ -418,6 +422,7 @@ export function CurrentActivityGraphViewport({
   saveControls: CurrentActivityGraphViewportSaveControls;
   saveDisabledReason?: string;
   visibilityControls: CurrentActivityGraphViewportVisibilityControls;
+  viewportMeasurement?: MeasuredCurrentActivityGraphViewport;
   flowContainerRef?: MutableRefObject<HTMLElement | null>;
   flowInstanceRef?: MutableRefObject<ReactFlowInstance | null>;
 }) {
@@ -435,8 +440,9 @@ export function CurrentActivityGraphViewport({
     editorMode: editorControls.isEditing,
     nodes,
   });
-  const graphViewport =
+  const measuredGraphViewport =
     useMeasuredCurrentActivityGraphViewport(flowContainerRef);
+  const graphViewport = viewportMeasurement ?? measuredGraphViewport;
   const canonicalLayoutViewport = layoutControls.canonicalViewport ?? null;
   const shouldFitView = canonicalLayoutViewport == null;
   const skipNextViewportMoveEndRef = useRef(false);

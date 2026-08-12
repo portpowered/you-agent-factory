@@ -44,6 +44,7 @@ func TestValidateMaximumCapabilities(t *testing.T) {
 		wantErr      bool
 	}{
 		{name: "final only", capabilities: contract.NewCapabilitySet(contract.CapabilityPromptSubmission)},
+		{name: "permission bypass", capabilities: contract.NewCapabilitySet(contract.CapabilityPromptSubmission, contract.CapabilityPermissionBypass)},
 		{name: "streaming deltas", capabilities: contract.NewCapabilitySet(contract.CapabilityPromptSubmission, contract.CapabilityNativeStreaming, contract.CapabilityMessageDeltas)},
 		{name: "missing prompt submission", capabilities: contract.NewCapabilitySet(contract.CapabilityUsage), wantErr: true},
 		{name: "delta without streaming", capabilities: contract.NewCapabilitySet(contract.CapabilityPromptSubmission, contract.CapabilityMessageDeltas), wantErr: true},

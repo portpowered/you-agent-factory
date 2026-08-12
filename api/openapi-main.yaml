@@ -2484,6 +2484,16 @@ components:
       $ref: './components/schemas/api/SaveFactoryForSessionRequest.yaml'
     Factory:
       $ref: './components/schemas/data-models/Factory.yaml'
+    FactoryWebhook:
+      $ref: './components/schemas/data-models/FactoryWebhook.yaml'
+    FactoryWebhookFilter:
+      $ref: './components/schemas/data-models/FactoryWebhookFilter.yaml'
+    FactoryWebhookEventType:
+      $ref: './components/schemas/data-models/FactoryWebhookEventType.yaml'
+    FactoryWebhookDispatchStatus:
+      $ref: './components/schemas/data-models/FactoryWebhookDispatchStatus.yaml'
+    FactoryWebhookDeliveryPolicy:
+      $ref: './components/schemas/data-models/FactoryWebhookDeliveryPolicy.yaml'
     FactoryOrchestrator:
       $ref: './components/schemas/data-models/FactoryOrchestrator.yaml'
     FactoryOrchestratorKind:

@@ -11,8 +11,8 @@ import (
 	"time"
 
 	internalartifact "github.com/portpowered/infinite-you/pkg/platform/internal/runtimeartifact"
+	platformrollingfile "github.com/portpowered/infinite-you/pkg/platform/rollingfile"
 	platformartifact "github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
-	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 const (
@@ -109,7 +109,7 @@ func (opener *RuntimeMetricsOpener) Open(request RuntimeMetricsOpeningRequest) (
 	}
 
 	metricsConfig := normalizeRuntimeMetricsConfig(request.Config)
-	writer := newRuntimeMetricsWriter(&lumberjack.Logger{
+	writer := newRuntimeMetricsWriter(&platformrollingfile.Writer{
 		Filename:   path,
 		MaxSize:    metricsConfig.MaxSize,
 		MaxBackups: metricsConfig.MaxBackups,
@@ -194,11 +194,11 @@ func (s *RuntimeMetricsSink) WriteMetric(ctx context.Context, record any) error 
 
 type runtimeMetricsWriter struct {
 	mu     sync.Mutex
-	writer *lumberjack.Logger
+	writer *platformrollingfile.Writer
 	closed bool
 }
 
-func newRuntimeMetricsWriter(writer *lumberjack.Logger) *runtimeMetricsWriter {
+func newRuntimeMetricsWriter(writer *platformrollingfile.Writer) *runtimeMetricsWriter {
 	return &runtimeMetricsWriter{writer: writer}
 }
 

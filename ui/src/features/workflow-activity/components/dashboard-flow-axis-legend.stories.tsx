@@ -90,7 +90,6 @@ export const Interactive = {
       [messages.iconLabels.cron, "cron"],
       [messages.iconLabels.poller, "poller"],
       [messages.iconLabels["active-work"], "active-work"],
-      [messages.iconLabels.exhaustion, "exhaustion"],
     ]) {
       const iconEntry = legend.querySelector(`[data-legend-icon='${kind}']`);
       await expect(
@@ -170,9 +169,6 @@ export const Narrow = {
     expect(legendRect.right).toBeLessThanOrEqual(
       (storyFrameRect?.right ?? 0) + 1,
     );
-    await expect(
-      canvas.getByText(messages.iconLabels.exhaustion),
-    ).toBeVisible();
   },
 };
 

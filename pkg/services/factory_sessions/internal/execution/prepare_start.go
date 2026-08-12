@@ -533,6 +533,7 @@ type dispatchQueuedEventPayload struct {
 	Model           string `json:"model,omitempty"`
 	ReasoningEffort string `json:"reasoningEffort,omitempty"`
 	Provider        string `json:"provider,omitempty"`
+	SkipPermissions *bool  `json:"skipPermissions,omitempty"`
 	QueuePosition   *int   `json:"queuePosition,omitempty"`
 }
 
@@ -566,6 +567,9 @@ func appendCanonicalRuntimeDispatchLifecycleEvents(
 		}
 		if dispatch.Status == DispatchStatusInterrupted {
 			continue
+		}
+		if javascript, ok := input.DispatchJavaScript[dispatch.ID]; ok && dispatch.JavaScript == nil {
+			dispatch.JavaScript = &javascript
 		}
 		dispatchEvents = buildDispatchQueuedEvent(events, dispatchEvents, session, dispatch, source, index)
 		if isReconciledDispatchStatus(dispatch.Status) {
@@ -611,6 +615,10 @@ func buildDispatchQueuedEvent(
 	}
 	if provider := strings.TrimSpace(dispatch.Provider); provider != "" {
 		payload.Provider = provider
+	}
+	if javascript := dispatch.JavaScript; javascript != nil {
+		skipPermissions := javascript.SkipPermissions
+		payload.SkipPermissions = &skipPermissions
 	}
 	position := queueIndex
 	payload.QueuePosition = &position

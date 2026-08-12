@@ -23,13 +23,16 @@ interface LifecycleControlMutationInput {
   actionID: FactorySessionLifecycleActionID;
 }
 
-export interface UseFactorySessionLifecycleControlResult {
+export interface FactorySessionLifecycleControl {
   feedback: LifecycleControlFeedbackState | null;
   pendingActionID: FactorySessionLifecycleActionID | null;
   submitLifecycleAction: (
     actionID: FactorySessionLifecycleActionID,
   ) => Promise<void>;
 }
+
+export type UseFactorySessionLifecycleControlResult =
+  FactorySessionLifecycleControl;
 
 export function useFactorySessionLifecycleControl({
   selectedDispatchID,

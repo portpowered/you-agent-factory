@@ -1,7 +1,8 @@
-import type { FactoryGraphSource } from "./source.js";
+import { WorkstationKind, WorkstationType } from "@you-agent-factory/client";
 import { expect, test } from "vitest";
 
 import { projectFactoryGraphReplayFlow } from "./factory-graph-replay-surface.js";
+import type { FactoryGraphSource } from "./source.js";
 
 test("projects Factory-authored layout, documents, and semantic runtime nodes together", () => {
   const source = {
@@ -59,7 +60,10 @@ test("projects Factory-authored layout, documents, and semantic runtime nodes to
     selectedTick: 4,
   } satisfies FactoryGraphSource;
 
-  const flow = projectFactoryGraphReplayFlow(source, "doc:factory/docs/runbook.md");
+  const flow = projectFactoryGraphReplayFlow(
+    source,
+    "doc:factory/docs/runbook.md",
+  );
 
   expect(flow.nodes).toEqual(
     expect.arrayContaining([
@@ -79,4 +83,85 @@ test("projects Factory-authored layout, documents, and semantic runtime nodes to
       }),
     ]),
   );
+});
+
+test("projects authored workstation semantics and id-based activity onto the graph node", () => {
+  const source = {
+    factory: {
+      name: "Semantic Factory",
+      workstations: [
+        {
+          behavior: WorkstationKind.REPEATER,
+          id: "stable-workstation",
+          inputs: [],
+          name: "Renamed process",
+          type: WorkstationType.AGENT_RUN,
+          worker: "agent",
+        },
+      ],
+    },
+    runtime: {
+      activity: {
+        activeDispatchOverlays: [
+          {
+            connectionIds: [],
+            dispatchId: "dispatch-1",
+            evidence: {
+              resources: "unavailable",
+              route: "unavailable",
+              work: "unavailable",
+              worker: "unavailable",
+              workstation: "known",
+            },
+            id: "dispatch:dispatch-1",
+            startedTick: 4,
+            workstationId: "stable-workstation",
+          },
+        ],
+        activeWorkstationNodeIds: [],
+        issues: [],
+        resourceOccupancy: [],
+        selectedTick: 4,
+      },
+      load: {
+        issues: [],
+        resourceOccupancy: [],
+        selectedTick: 4,
+        workStateCounts: [],
+      },
+      topology: {
+        connections: [],
+        issues: [],
+        nodes: [
+          {
+            entityId: "stable-workstation",
+            handles: [],
+            id: "workstation:stable-workstation",
+            kind: "workstation",
+            label: "Renamed process",
+          },
+        ],
+        ok: true,
+        selectedTick: 4,
+      },
+    },
+    selectedTick: 4,
+  } satisfies FactoryGraphSource;
+
+  const node = projectFactoryGraphReplayFlow(source).nodes[0];
+
+  expect(node).toMatchObject({
+    data: {
+      active: true,
+      activeFlow: true,
+      workstationSemantics: {
+        controlRole: "NONE",
+        runtimeRole: "AGENT",
+        runtimeType: WorkstationType.AGENT_RUN,
+        schedulingBehavior: WorkstationKind.REPEATER,
+      },
+    },
+    id: "workstation:stable-workstation",
+    type: "workstation",
+  });
 });

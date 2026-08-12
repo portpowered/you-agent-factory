@@ -1,4 +1,8 @@
 import type { Edge, NodeProps } from "@xyflow/react";
+import {
+  FactoryGraphWorkstationGuardedControlCard,
+  factoryGraphWorkstationPresentation,
+} from "@you-agent-factory/factory-graph";
 
 import { cn } from "../../../../lib/cn";
 import {
@@ -92,6 +96,7 @@ export function buildFactoryGraphEditorFlowModel(input: {
       workerStatusByName: input.workerStatusByName,
     },
     topology: input.topology,
+    workstations: input.workstations,
     workstationResolver: createFactoryGraphWorkstationResolver(
       input.workstations,
       input.factoryDefinition?.workers,
@@ -113,20 +118,27 @@ function FactoryGraphEditorNodeView({
     data.kind === "work-state"
       ? workStatePhaseSurfaceClassName(data.workStateType)
       : KIND_CLASS[data.kind];
+  const workstationPresentation =
+    data.kind === "workstation"
+      ? factoryGraphWorkstationPresentation(
+          data.workstationSemantics,
+          data.locale,
+        )
+      : undefined;
   const semanticIconKind =
-    data.workstationSemanticIconKind ??
+    workstationPresentation?.iconKind ??
     semanticIconKindForNodeKind(data.kind, data.workStateType);
   const semanticIconClassName =
-    data.workstationSemanticIconClassName ??
+    workstationPresentation?.className ??
     semanticIconClassNameForNodeKind(data.kind, data.workStateType);
-  const semanticIconLabel = data.workstationSemanticLabel ?? data.kindLabel;
+  const semanticIconLabel = workstationPresentation?.label ?? data.kindLabel;
 
   return (
     <ActivityGraphNodeShell
       className={cn(
         "min-w-0 w-full justify-start overflow-hidden text-left shadow-none",
         surfaceClassName,
-        data.workstationSemanticBorderClassName,
+        workstationPresentation?.borderClassName,
         data.draftStatus === "none"
           ? currentActivityGraphNodeHoverClassName({
               activeFlow: data.activeFlow,
@@ -174,6 +186,15 @@ function FactoryGraphEditorNodeView({
               {data.defaultWorkTypeLabel}
             </ActivityGraphNodeBadge>
           ) : null}
+          {workstationPresentation?.schedulingLabel ? (
+            <ActivityGraphNodeBadge
+              className="shrink-0"
+              tone="neutral"
+              weight="label"
+            >
+              {workstationPresentation.schedulingLabel}
+            </ActivityGraphNodeBadge>
+          ) : null}
           {data.draftStatus === "addition" ? (
             <ActivityGraphNodeBadge
               className="shrink-0"
@@ -207,6 +228,12 @@ function FactoryGraphEditorNodeView({
         >
           {data.label}
         </p>
+        {workstationPresentation ? (
+          <FactoryGraphWorkstationGuardedControlCard
+            locale={data.locale}
+            presentation={workstationPresentation}
+          />
+        ) : null}
         {data.canEditConnections ? (
           <p className="m-0 text-[0.65rem] leading-5 text-on-surface-subtle">
             {data.connectionHint}

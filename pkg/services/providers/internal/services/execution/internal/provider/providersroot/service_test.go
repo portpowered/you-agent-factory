@@ -73,6 +73,7 @@ func TestInferenceRequestForwardsEnvFields(t *testing.T) {
 		WorkstationName:    "execute-goal",
 		EnvVars:            map[string]string{"FIXTURE": "configured"},
 		ProcessEnvironment: []string{"FIXTURE=configured"},
+		SkipPermissions:    true,
 	}
 	infer := inferenceRequest(request)
 	if infer.EnvVars["FIXTURE"] != "configured" {
@@ -80,6 +81,9 @@ func TestInferenceRequestForwardsEnvFields(t *testing.T) {
 	}
 	if len(infer.ProcessEnvironment) != 1 || infer.ProcessEnvironment[0] != "FIXTURE=configured" {
 		t.Fatalf("ProcessEnvironment = %#v, want forwarded process env", infer.ProcessEnvironment)
+	}
+	if !infer.SkipPermissions {
+		t.Fatal("SkipPermissions = false, want true")
 	}
 }
 

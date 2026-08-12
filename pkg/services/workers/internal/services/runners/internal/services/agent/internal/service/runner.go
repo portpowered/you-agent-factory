@@ -679,6 +679,8 @@ func failureTypeForProviderKind(
 		return workers.WorkFailureTypeAuthFailure
 	case providers.ExecuteFailureKindInvalidRequest:
 		return workers.WorkFailureTypePermanentBadRequest
+	case providers.ExecuteFailureKindCapabilityMismatch:
+		return workers.WorkFailureTypePermanentBadRequest
 	case providers.ExecuteFailureKindMisconfigured:
 		return workers.WorkFailureTypeMisconfigured
 	case providers.ExecuteFailureKindThrottled:

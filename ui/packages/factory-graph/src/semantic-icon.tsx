@@ -19,7 +19,6 @@ export const GRAPH_SEMANTIC_ICON_KINDS = [
   "repeater",
   "cron",
   "poller",
-  "exhaustion",
   "active-work",
 ] as const;
 
@@ -80,15 +79,6 @@ const GRAPH_SEMANTIC_ICON_DEFINITIONS = {
         <path d="m7.5 4-3 2.5 3 2.5" />
         <path d="M18 17.5H10a4 4 0 1 1 0-8h4.5" />
         <path d="m16.5 20 3-2.5-3-2.5" />
-      </>
-    ),
-  },
-  exhaustion: {
-    paths: (
-      <>
-        <path d="M12 4 21 19H3L12 4Z" />
-        <path d="M12 9v4" />
-        <path d="M12 16.5h.01" />
       </>
     ),
   },

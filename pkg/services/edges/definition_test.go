@@ -20,6 +20,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	inference "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -405,6 +406,42 @@ func TestMergeAppendsAndDetachesProviderRegistrations(t *testing.T) {
 	want := inference.ProviderRegistrations{defaultRegistration, addedRegistration}
 	if !reflect.DeepEqual(merged.ProviderRegistrations, want) {
 		t.Fatalf("ProviderRegistrations = %#v, want detached append %#v", merged.ProviderRegistrations, want)
+	}
+}
+
+func TestMergeAppendsAndDetachesCatalogCapabilityOverrides(t *testing.T) {
+	t.Parallel()
+
+	defaultOverride := inference.CatalogCapabilityOverride{
+		Provider:     providers.IDCodex,
+		Capabilities: []providers.Capability{providers.CapabilityPromptSubmission},
+	}
+	addedOverride := inference.CatalogCapabilityOverride{
+		Provider:     providers.IDClaude,
+		Capabilities: []providers.Capability{providers.CapabilitySessionResume},
+	}
+	defaults := []inference.CatalogCapabilityOverride{defaultOverride}
+	additions := []inference.CatalogCapabilityOverride{addedOverride}
+
+	merged := Merge(
+		Edges{ProviderCatalogCapabilityOverrides: defaults},
+		Edges{ProviderCatalogCapabilityOverrides: additions},
+	)
+	defaults[0].Capabilities[0] = providers.CapabilityUsage
+	additions[0].Capabilities[0] = providers.CapabilityUsage
+
+	want := []inference.CatalogCapabilityOverride{
+		{
+			Provider:     providers.IDCodex,
+			Capabilities: []providers.Capability{providers.CapabilityPromptSubmission},
+		},
+		{
+			Provider:     providers.IDClaude,
+			Capabilities: []providers.Capability{providers.CapabilitySessionResume},
+		},
+	}
+	if !reflect.DeepEqual(merged.ProviderCatalogCapabilityOverrides, want) {
+		t.Fatalf("ProviderCatalogCapabilityOverrides = %#v, want detached append %#v", merged.ProviderCatalogCapabilityOverrides, want)
 	}
 }
 

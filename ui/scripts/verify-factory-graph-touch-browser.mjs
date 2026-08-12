@@ -54,6 +54,51 @@ async function viewportTransform(page) {
     .evaluate((viewport) => viewport.style.transform);
 }
 
+async function verifyMixedWorkstationSemantics(page) {
+  const viewportTransformValue = await viewportTransform(page);
+  if (!/scale\([^)]*\)/.test(viewportTransformValue)) {
+    throw new Error(
+      `Factory graph did not settle at fit-to-view zoom: ${viewportTransformValue}`,
+    );
+  }
+
+  const expectedWorkstations = [
+    ["Classifier route", "Classifier workstation"],
+    ["Logical route", "Logical move workstation"],
+    [
+      "Inference workstation with a deliberately long authored title",
+      "Inference workstation",
+    ],
+    ["Agent worker", "Agent workstation"],
+    ["execute-goal", "Repeater schedule"],
+    ["Script cron", "Cron schedule"],
+    ["Poller source", "Poller schedule"],
+  ];
+
+  for (const [name, semanticLabel] of expectedWorkstations) {
+    const button = page.getByRole("button", {
+      name: `Select ${name} workstation`,
+    });
+    await button.waitFor({ state: "visible" });
+    await button.getByText(semanticLabel, { exact: true }).waitFor({
+      state: "visible",
+    });
+  }
+
+  const guardCard = page.locator("[data-workstation-guard-card]");
+  await guardCard.waitFor({ state: "visible" });
+  const guardText = await guardCard.textContent();
+  if (
+    !guardText?.includes("Loop breaker") ||
+    !guardText.includes("execute-goal") ||
+    !guardText.includes("3")
+  ) {
+    throw new Error(
+      `Guarded workstation card did not expose its authored target and limit: ${guardText ?? "<empty>"}`,
+    );
+  }
+}
+
 async function waitForAnimationFrame(page) {
   await page.evaluate(
     () => new Promise((resolve) => requestAnimationFrame(() => resolve())),
@@ -76,6 +121,7 @@ async function verifyTouchGestures(browser) {
   });
 
   try {
+    await verifyMixedWorkstationSemantics(page);
     const client = await context.newCDPSession(page);
     const nodeButtons = page.locator(".react-flow__node button");
     let station = null;
@@ -165,6 +211,7 @@ async function verifyDesktopPaneSelectionDrag(browser) {
   });
 
   try {
+    await verifyMixedWorkstationSemantics(page);
     const point = await emptyPanePoint(page);
     const initialTransform = await viewportTransform(page);
     const initialScroll = await page.evaluate(() => ({

@@ -151,9 +151,10 @@ type DispatchFilters struct {
 
 // DispatchJavaScriptProjection carries JavaScript-specific dispatch metadata.
 type DispatchJavaScriptProjection struct {
-	TaskKind      string
-	TaskLabel     string
-	ExecutionMode string
+	TaskKind        string
+	TaskLabel       string
+	ExecutionMode   string
+	SkipPermissions bool
 }
 
 // DispatchPetriProjection carries Petri-specific dispatch metadata.

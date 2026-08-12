@@ -378,6 +378,10 @@
           "description": "Accepts image content as invocation input.",
           "type": "boolean"
         },
+        "permissionBypass": {
+          "description": "Can explicitly bypass the provider's normal permission and sandbox prompts.",
+          "type": "boolean"
+        },
         "promptSubmission": {
           "description": "Accepts authored prompt input for execution.",
           "type": "boolean"
@@ -408,6 +412,7 @@
         "imageInput",
         "sessionResume",
         "structuredOutput",
+        "permissionBypass",
         "toolExecution",
         "workingDirectory",
         "worktree"

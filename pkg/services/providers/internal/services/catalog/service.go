@@ -29,6 +29,15 @@ type ProbeFacts struct {
 	Prerequisites []providers.Prerequisite
 }
 
+// CapabilityOverride replaces the static capability facts for one existing
+// catalog provider identity during process construction. It is a construction
+// seam for hosts that supply an authoritative route-specific capability view;
+// it cannot add a provider that is absent from the catalog.
+type CapabilityOverride struct {
+	Provider     providers.ID
+	Capabilities []providers.Capability
+}
+
 // ProbeQuery reports current readiness facts for one projected catalog provider.
 // Inputs and outputs are detached Providers-owned values; implementations must
 // honor context cancellation and must not expose Workers types through the

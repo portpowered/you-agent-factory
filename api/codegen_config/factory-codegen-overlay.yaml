@@ -1,4 +1,9 @@
 actions:
+    - target: $.components.schemas.FactoryWebhookDispatchStatus
+      update:
+        x-enum-varnames:
+            - FactoryWebhookDispatchStatusFailed
+            - FactoryWebhookDispatchStatusInterrupted
     - target: $.components.schemas.AgentWorkerToolPolicy
       update:
         x-enum-varnames:

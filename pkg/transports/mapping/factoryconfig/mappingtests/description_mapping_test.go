@@ -41,6 +41,80 @@ func TestFactoryEntityDescriptionsRoundTripWithoutAffectingTopology(t *testing.T
 	assertDescriptionsEqual(t, expanded, cfg)
 }
 
+func TestFactoryConfigMapper_ExpandAndFlattenPreservesWebhookDeclarations(t *testing.T) {
+	mapper := NewFactoryConfigMapper()
+	raw := []byte(`{
+		"name":"webhook-roundtrip",
+		"webhooks":[{
+			"name":"monitor",
+			"enabled":true,
+			"url":"https://hooks.example.test/factory",
+			"signingSecretRef":"secrets/factory-monitor",
+			"filter":{"eventTypes":["WORK_STATE_CHANGE","DISPATCH_RECONCILED"],"dispatchStatuses":["FAILED"]},
+			"deliveryPolicy":{"requestTimeout":"15s","maxAttempts":3,"initialBackoff":"2s","backoffMultiplier":1.5,"maxBackoff":"10s"}
+		}]
+	}`)
+
+	cfg, err := mapper.Expand(raw)
+	if err != nil {
+		t.Fatalf("mapper.Expand: %v", err)
+	}
+	assertExpandedWebhookDeclaration(t, cfg)
+
+	flattened, err := mapper.Flatten(cfg)
+	if err != nil {
+		t.Fatalf("mapper.Flatten: %v", err)
+	}
+	assertFlattenedWebhookDeclaration(t, flattened)
+
+	roundTrip, err := mapper.Expand(flattened)
+	if err != nil {
+		t.Fatalf("mapper.Expand(round trip): %v", err)
+	}
+	if len(roundTrip.Webhooks) != 1 || roundTrip.Webhooks[0].Name != "monitor" {
+		t.Fatalf("round-tripped webhooks = %#v", roundTrip.Webhooks)
+	}
+}
+
+func assertExpandedWebhookDeclaration(t *testing.T, cfg *interfaces.FactoryConfig) {
+	t.Helper()
+	if len(cfg.Webhooks) != 1 {
+		t.Fatalf("expanded webhooks = %#v, want one declaration", cfg.Webhooks)
+	}
+	webhook := cfg.Webhooks[0]
+	if webhook.Name != "monitor" || !webhook.Enabled || webhook.URL != "https://hooks.example.test/factory" {
+		t.Fatalf("expanded webhook identity = %#v", webhook)
+	}
+	if webhook.SigningSecretRef != "secrets/factory-monitor" {
+		t.Fatalf("expanded secret reference = %q", webhook.SigningSecretRef)
+	}
+	if len(webhook.Filter.EventTypes) != 2 || webhook.Filter.EventTypes[1] != interfaces.FactoryWebhookEventTypeDispatchReconciled {
+		t.Fatalf("expanded event filter = %#v", webhook.Filter)
+	}
+	if len(webhook.Filter.DispatchStatuses) != 1 || webhook.Filter.DispatchStatuses[0] != interfaces.FactoryWebhookDispatchStatusFailed {
+		t.Fatalf("expanded dispatch filter = %#v", webhook.Filter)
+	}
+	if webhook.DeliveryPolicy == nil || webhook.DeliveryPolicy.MaxAttempts == nil || *webhook.DeliveryPolicy.MaxAttempts != 3 {
+		t.Fatalf("expanded delivery policy = %#v", webhook.DeliveryPolicy)
+	}
+}
+
+func assertFlattenedWebhookDeclaration(t *testing.T, flattened []byte) {
+	t.Helper()
+	payload := mustDecodeFactoryPayload(t, flattened)
+	webhooks, ok := payload["webhooks"].([]any)
+	if !ok || len(webhooks) != 1 {
+		t.Fatalf("flattened webhooks = %#v", payload["webhooks"])
+	}
+	webhookPayload := webhooks[0].(map[string]any)
+	if webhookPayload["signingSecretRef"] != "secrets/factory-monitor" {
+		t.Fatalf("flattened secret reference = %#v", webhookPayload["signingSecretRef"])
+	}
+	if strings.Contains(string(flattened), "resolved-secret-value") {
+		t.Fatalf("flattened factory leaked resolved secret material: %s", flattened)
+	}
+}
+
 func TestFactoryEntityDescriptionsPreserveJSONAndYAMLRepresentations(t *testing.T) {
 	want := factoryWithLocalizedDescriptions()
 

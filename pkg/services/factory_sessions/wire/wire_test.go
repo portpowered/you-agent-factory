@@ -103,6 +103,7 @@ func TestNewRuntimeOpeningRejectsIncompleteGroupsAtCompositionBoundary(t *testin
 		nil,
 		nil,
 		nil,
+		nil,
 	)
 	if factory != nil {
 		t.Fatalf("NewRuntimeOpening() = %#v, want nil factory", factory)

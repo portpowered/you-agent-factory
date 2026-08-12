@@ -332,6 +332,10 @@
         "schemaDigest": {
           "description": "Stable digest of the output schema when applicable.",
           "type": "string"
+        },
+        "skipPermissions": {
+          "description": "Whether this child requested the selected provider's permission-bypass behavior.",
+          "type": "boolean"
         }
       },
       "required": [
@@ -798,6 +802,13 @@
             }
           ],
           "description": "Server-managed current-factory version metadata. Clients should echo this value on complete replacement saves when they want stale-write detection, but durable factory configuration does not treat it as customer-authored topology."
+        },
+        "webhooks": {
+          "description": "Optional outbound webhook subscriptions. Existing Factory definitions without this field do not start outbound delivery work.",
+          "items": {
+            "$ref": "#/$defs/FactoryWebhook"
+          },
+          "type": "array"
         },
         "workTypes": {
           "description": "Customer-authored work item categories and the lifecycle states each one can occupy.",
@@ -2428,6 +2439,123 @@
       "required": [
         "stopKind",
         "sessionId"
+      ],
+      "type": "object"
+    },
+    "FactoryWebhook": {
+      "additionalProperties": false,
+      "description": "One Factory-configured outbound webhook subscription. Secret material is represented only by a reference and is resolved at delivery time.",
+      "properties": {
+        "deliveryPolicy": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/FactoryWebhookDeliveryPolicy"
+            }
+          ],
+          "description": "Optional bounded delivery policy. Omitted fields use the documented defaults."
+        },
+        "enabled": {
+          "description": "Whether this subscription is active for future canonical events.",
+          "type": "boolean"
+        },
+        "filter": {
+          "$ref": "#/$defs/FactoryWebhookFilter"
+        },
+        "name": {
+          "description": "Unique customer-authored subscription name.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "signingSecretRef": {
+          "description": "Secret reference resolved by the delivery boundary; raw secret values are never part of Factory configuration.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "url": {
+          "description": "Absolute HTTP or HTTPS destination URL.",
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "enabled",
+        "url",
+        "signingSecretRef",
+        "filter"
+      ],
+      "type": "object"
+    },
+    "FactoryWebhookDeliveryPolicy": {
+      "additionalProperties": false,
+      "description": "Bounded outbound delivery policy. Durations use Go duration syntax. Omitted values resolve to a 10 second request timeout, 5 total attempts, 1 second initial backoff, 2.0 multiplier, and 30 second maximum backoff.",
+      "properties": {
+        "backoffMultiplier": {
+          "description": "Exponential retry multiplier; values below 1 are not supported.",
+          "minimum": 1,
+          "type": "number"
+        },
+        "initialBackoff": {
+          "description": "Positive Go duration before the first retry.",
+          "type": "string"
+        },
+        "maxAttempts": {
+          "description": "Total delivery attempts including the initial request.",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "maxBackoff": {
+          "description": "Positive Go duration cap for one retry delay; it must not be below initialBackoff.",
+          "type": "string"
+        },
+        "requestTimeout": {
+          "description": "Positive Go duration allowed for one HTTP request attempt.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "FactoryWebhookDispatchStatus": {
+      "description": "Canonical dispatch statuses supported by outbound webhook filters.",
+      "enum": [
+        "FAILED",
+        "INTERRUPTED"
+      ],
+      "type": "string"
+    },
+    "FactoryWebhookEventType": {
+      "description": "Canonical Factory Event types supported by outbound webhook filters.",
+      "enum": [
+        "WORK_STATE_CHANGE",
+        "DISPATCH_RESPONSE",
+        "DISPATCH_RECONCILED",
+        "DISPATCH_INTERRUPTED"
+      ],
+      "type": "string"
+    },
+    "FactoryWebhookFilter": {
+      "additionalProperties": false,
+      "description": "Canonical event filter for one outbound webhook subscription.",
+      "properties": {
+        "dispatchStatuses": {
+          "description": "Optional canonical dispatch statuses applied only to dispatch event types.",
+          "items": {
+            "$ref": "#/$defs/FactoryWebhookDispatchStatus"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "eventTypes": {
+          "description": "Canonical event types selected for delivery.",
+          "items": {
+            "$ref": "#/$defs/FactoryWebhookEventType"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "eventTypes"
       ],
       "type": "object"
     },

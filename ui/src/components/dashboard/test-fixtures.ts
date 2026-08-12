@@ -1,6 +1,4 @@
 import type { DashboardSnapshot } from "../../api/dashboard/types";
-import type { WorkstationIconMetadata } from "../../features/flowchart/lib/workstation-icon-metadata";
-import { workstationIconMetadata } from "../../features/flowchart/lib/workstation-icon-metadata";
 import {
   activeWorkRuntimeOverlay,
   activeWorkWithMultimodalPayloadRuntimeOverlay,
@@ -17,10 +15,12 @@ import {
   twentyNodeDashboardTopology as twentyNodeTopologyFixture,
   workstationKindParityDashboardTopology,
 } from "./fixtures/topologies";
+import type { WorkstationIconMetadata } from "../../features/flowchart/lib/workstation-icon-metadata";
+import { workstationIconMetadata } from "../../features/flowchart/lib/workstation-icon-metadata";
 
 export interface WorkstationKindParityExpectation {
   buttonName: string;
-  metadata: WorkstationIconMetadata;
+  metadata: Pick<WorkstationIconMetadata, "iconKind" | "label">;
   nodeID: string;
   workstationName: string;
 }
@@ -59,6 +59,104 @@ export const workstationKindParityDashboardSnapshot: DashboardSnapshot = {
       "story:scheduled": 1,
     },
   },
+};
+
+const mixedFactorySemanticsDefinition = {
+  ...workstationKindParityDashboardSnapshot.factory,
+  name: "mixed-workstation-semantics",
+  workers: [
+    { model: "gpt-5-mini", name: "agent", type: "MODEL_WORKER" },
+    { model: "gpt-5-mini", name: "classifier", type: "MODEL_WORKER" },
+    { model: "gpt-5-mini", name: "inference", type: "MODEL_WORKER" },
+    { model: "gpt-5-mini", name: "poller", type: "HOSTED_WORKER" },
+    { model: "gpt-5-mini", name: "script", type: "SCRIPT_WORKER" },
+  ],
+  workstations: [
+    {
+      behavior: "STANDARD",
+      id: "classifier",
+      inputs: [{ state: "init", workType: "story" }],
+      name: "Classifier route",
+      outputs: [{ state: "planned", workType: "story" }],
+      type: "CLASSIFIER_WORKSTATION",
+      worker: "classifier",
+    },
+    {
+      behavior: "STANDARD",
+      id: "logical-router",
+      inputs: [{ state: "planned", workType: "story" }],
+      name: "Logical route",
+      outputs: [{ state: "ready", workType: "story" }],
+      type: "LOGICAL_MOVE",
+      worker: "",
+    },
+    {
+      behavior: "STANDARD",
+      guards: [
+        {
+          maxVisits: 3,
+          type: "VISIT_COUNT",
+          workstation: "execute-goal",
+        },
+      ],
+      id: "goal-loop-breaker",
+      inputs: [{ state: "implemented", workType: "story" }],
+      name: "goal-loop-breaker",
+      outputs: [{ state: "planned", workType: "story" }],
+      type: "LOGICAL_MOVE",
+      worker: "",
+    },
+    {
+      behavior: "STANDARD",
+      id: "long-inference",
+      inputs: [{ state: "ready", workType: "story" }],
+      name: "Inference workstation with a deliberately long authored title",
+      outputs: [{ state: "implemented", workType: "story" }],
+      type: "INFERENCE_RUN",
+      worker: "inference",
+    },
+    {
+      behavior: "STANDARD",
+      id: "agent",
+      inputs: [{ state: "implemented", workType: "story" }],
+      name: "Agent worker",
+      outputs: [{ state: "complete", workType: "story" }],
+      type: "AGENT_RUN",
+      worker: "agent",
+    },
+    {
+      behavior: "REPEATER",
+      id: "execute-goal",
+      inputs: [{ state: "ready", workType: "story" }],
+      name: "execute-goal",
+      outputs: [{ state: "implemented", workType: "story" }],
+      type: "AGENT_RUN",
+      worker: "agent",
+    },
+    {
+      behavior: "CRON",
+      id: "script-cron",
+      inputs: [{ state: "tick", workType: "schedule" }],
+      name: "Script cron",
+      outputs: [{ state: "scheduled", workType: "story" }],
+      type: "SCRIPT_RUN",
+      worker: "script",
+    },
+    {
+      behavior: "POLLER",
+      id: "poller",
+      inputs: [],
+      name: "Poller source",
+      outputs: [{ state: "scheduled", workType: "story" }],
+      type: "POLLER_RUN",
+      worker: "poller",
+    },
+  ],
+} satisfies NonNullable<DashboardSnapshot["factory"]>;
+
+export const mixedFactorySemanticsDashboardSnapshot: DashboardSnapshot = {
+  ...workstationKindParityDashboardSnapshot,
+  factory: mixedFactorySemanticsDefinition,
 };
 
 export const workstationKindParityExpectations: WorkstationKindParityExpectation[] =

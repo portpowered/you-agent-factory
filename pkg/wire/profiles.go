@@ -336,7 +336,7 @@ func provideModelInvocationOperation(
 }
 
 func provideSystemInitializationService(
-	persistence factorydefinitions.Persistence,
+	persistence factorydefinitions.PackagedFactoryPersistence,
 	packagedInstallationFileSystem factorydefinitions.PackagedInstallationFileSystem,
 	packagedInstallationDirectoryCreator factorydefinitions.PackagedInstallationDirectoryCreator,
 	packagedCatalog factorydefinitions.PackagedFactoryCatalogOperations,
@@ -387,7 +387,7 @@ func providePackagedFactoryCatalog(
 }
 
 func providePackagedFactoryInstallation(
-	persistence factorydefinitions.Persistence,
+	persistence factorydefinitions.PackagedFactoryPersistence,
 	fileSystem factorydefinitions.PackagedInstallationFileSystem,
 	directoryCreator factorydefinitions.PackagedInstallationDirectoryCreator,
 	logger logging.Logger,

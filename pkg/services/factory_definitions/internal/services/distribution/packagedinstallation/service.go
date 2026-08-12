@@ -17,7 +17,7 @@ import (
 )
 
 type Service struct {
-	persistence      factorydefinitions.Persistence
+	persistence      factorydefinitions.PackagedFactoryPersistence
 	fileSystem       factorydefinitions.PackagedInstallationFileSystem
 	directoryCreator factorydefinitions.PackagedInstallationDirectoryCreator
 	ownerProbe       ownerProbe
@@ -60,7 +60,7 @@ func (localOwnerProbe) Classify(owner ownerRecord) ownerLiveness {
 }
 
 func New(
-	persistence factorydefinitions.Persistence,
+	persistence factorydefinitions.PackagedFactoryPersistence,
 	fileSystem factorydefinitions.PackagedInstallationFileSystem,
 	directoryCreator factorydefinitions.PackagedInstallationDirectoryCreator,
 	loggers ...logging.Logger,
@@ -79,7 +79,7 @@ func New(
 }
 
 func newWithOwnerProbe(
-	persistence factorydefinitions.Persistence,
+	persistence factorydefinitions.PackagedFactoryPersistence,
 	fileSystem factorydefinitions.PackagedInstallationFileSystem,
 	directoryCreator factorydefinitions.PackagedInstallationDirectoryCreator,
 	probe ownerProbe,
@@ -777,7 +777,7 @@ func (service *Service) createPackagedFactory(
 	if err := ctx.Err(); err != nil {
 		return result, installError(name, namedFactoriesRoot, err)
 	}
-	prepared, err := service.persistence.PrepareFactoryLayout(ctx, name, payload)
+	prepared, err := service.persistence.PreparePackagedFactoryLayout(ctx, name, payload)
 	if err != nil {
 		return result, installError(name, namedFactoriesRoot, err)
 	}
@@ -810,7 +810,7 @@ func (service *Service) replaceExistingPackagedFactory(
 	if err := ctx.Err(); err != nil {
 		return result, installError(name, namedFactoriesRoot, err)
 	}
-	prepared, err := service.persistence.PrepareFactoryLayout(ctx, name, payload)
+	prepared, err := service.persistence.PreparePackagedFactoryLayout(ctx, name, payload)
 	if err != nil {
 		return result, installError(name, namedFactoriesRoot, err)
 	}

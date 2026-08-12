@@ -20,6 +20,7 @@ import (
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/webhooks"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"go.uber.org/zap"
 )
@@ -64,6 +65,7 @@ type runtimeOpeningFixture struct {
 	Automations        *AutomationsPorts
 	Models             *ModelsPorts
 	Recordings         *RecordingsPorts
+	Webhooks           *WebhooksPorts
 	Workers            *WorkersPorts
 	OperatorSettings   *OperatorSettingsPorts
 }
@@ -78,6 +80,7 @@ func (fixture runtimeOpeningFixture) newFactory() (*Factory, error) {
 		fixture.Automations,
 		fixture.Models,
 		fixture.Recordings,
+		fixture.Webhooks,
 		fixture.Workers,
 		fixture.OperatorSettings,
 	)
@@ -95,6 +98,7 @@ func TestNewFactoryRejectsEveryMissingRuntimeOpeningOwnerPorts(t *testing.T) {
 		{"Automations owner ports", func(dependencies *runtimeOpeningFixture) { dependencies.Automations = nil }},
 		{"Models owner ports", func(dependencies *runtimeOpeningFixture) { dependencies.Models = nil }},
 		{"Recordings owner ports", func(dependencies *runtimeOpeningFixture) { dependencies.Recordings = nil }},
+		{"Webhooks owner ports", func(dependencies *runtimeOpeningFixture) { dependencies.Webhooks = nil }},
 		{"Workers owner ports", func(dependencies *runtimeOpeningFixture) { dependencies.Workers = nil }},
 		{"Operator Settings owner ports", func(dependencies *runtimeOpeningFixture) { dependencies.OperatorSettings = nil }},
 	}
@@ -208,6 +212,7 @@ func TestNewFactoryRetainsExactGroupedCollaborators(t *testing.T) {
 	assertAutomationsPortsRetained(t, factory, dependencies)
 	assertModelsPortsRetained(t, factory, dependencies)
 	assertRecordingsPortsRetained(t, factory, dependencies)
+	assertWebhooksPortsRetained(t, factory, dependencies)
 	assertWorkersPortsRetained(t, factory, dependencies)
 	assertOperatorSettingsPortsRetained(t, factory, dependencies)
 	if calls != 0 {
@@ -349,12 +354,18 @@ func assertRecordingsPortsRetained(t *testing.T, factory *Factory, dependencies 
 	t.Helper()
 	group := dependencies.Recordings
 	assertRuntimeOpeningDependencyIdentity(t, "Recordings projections", factory.recordingsProjectionFactory, group.ProjectionFactory)
+	assertRuntimeOpeningDependencyIdentity(t, "Recordings service factory", factory.recordingsServiceFactory, group.ServiceFactory)
 	assertRuntimeOpeningDependencyIdentity(t, "Recordings lifecycle", factory.recordingLifecycleFactory, group.LifecycleFactory)
 	assertRuntimeOpeningDependencyIdentity(t, "Recordings ledger", factory.runtimeLedgerFactory, group.RuntimeLedgerFactory)
 	assertRuntimeOpeningDependencyIdentity(t, "Recordings recorder", factory.runtimeRecorderFactory, group.RuntimeRecorderFactory)
 	assertRuntimeOpeningDependencyIdentity(t, "Recordings replay clock", factory.replayClockFactory, group.ReplayClockFactory)
 	assertRuntimeOpeningDependencyIdentity(t, "Recordings replay execution", factory.replayExecutionFactory, group.ReplayExecutionFactory)
 	assertRuntimeOpeningDependencyIdentity(t, "Recordings replay inputs", factory.replayInputs, group.ReplayInputs)
+}
+
+func assertWebhooksPortsRetained(t *testing.T, factory *Factory, dependencies runtimeOpeningFixture) {
+	t.Helper()
+	assertRuntimeOpeningDependencyIdentity(t, "Webhooks service", factory.webhooksService, dependencies.Webhooks.Service)
 }
 
 func assertWorkersPortsRetained(t *testing.T, factory *Factory, dependencies runtimeOpeningFixture) {
@@ -439,7 +450,9 @@ func runtimeOpeningMemberOmissions() []runtimeOpeningDependencyOmission {
 		{"Automations hosted sources factory", func(d *runtimeOpeningFixture) { d.Automations.HostedSourcesFactory = nil }},
 		{"Models service", func(d *runtimeOpeningFixture) { d.Models.Service = nil }},
 		{"Recordings projection factory", func(d *runtimeOpeningFixture) { d.Recordings.ProjectionFactory = nil }},
+		{"Recordings service factory", func(d *runtimeOpeningFixture) { d.Recordings.ServiceFactory = nil }},
 		{"Recordings lifecycle factory", func(d *runtimeOpeningFixture) { d.Recordings.LifecycleFactory = nil }},
+		{"Webhooks service", func(d *runtimeOpeningFixture) { d.Webhooks.Service = nil }},
 		{"Recordings runtime ledger factory", func(d *runtimeOpeningFixture) { d.Recordings.RuntimeLedgerFactory = nil }},
 		{"Recordings runtime recorder factory", func(d *runtimeOpeningFixture) { d.Recordings.RuntimeRecorderFactory = nil }},
 		{"Recordings replay clock factory", func(d *runtimeOpeningFixture) { d.Recordings.ReplayClockFactory = nil }},
@@ -507,6 +520,7 @@ func validRuntimeOpeningOwnerPorts(calls *int) runtimeOpeningFixture {
 		Models: &ModelsPorts{Service: &modelsConstructionStub{}},
 		Recordings: &RecordingsPorts{
 			ProjectionFactory:      inertRuntimeOpeningFunction[RecordingsProjectionFactory](calls),
+			ServiceFactory:         inertRuntimeOpeningFunction[RecordingsServiceFactory](calls),
 			LifecycleFactory:       inertRuntimeOpeningFunction[RecordingLifecycleFactory](calls),
 			RuntimeLedgerFactory:   inertRuntimeOpeningFunction[RuntimeLedgerFactory](calls),
 			RuntimeRecorderFactory: inertRuntimeOpeningFunction[recordings.RuntimeRecorderFactory](calls),
@@ -514,6 +528,7 @@ func validRuntimeOpeningOwnerPorts(calls *int) runtimeOpeningFixture {
 			ReplayExecutionFactory: inertRuntimeOpeningFunction[recordings.ReplayExecutionFactory](calls),
 			ReplayInputs:           replayInputsConstructionStub{},
 		},
+		Webhooks: &WebhooksPorts{Service: webhooksConstructionStub{}},
 		Workers: &WorkersPorts{
 			ExecutionFactory:                 inertRuntimeOpeningFunction[WorkerExecutionFactory](calls),
 			RuntimeFactory:                   inertRuntimeOpeningFunction[WorkersRuntimeFactory](calls),
@@ -561,6 +576,7 @@ type factoryRuntimeAssemblerConstructionStub struct{ FactoryRuntimeAssembler }
 type processRuntimeFactoryConstructionStub struct{ roles.ProcessRuntimeFactory }
 type modelsConstructionStub struct{ models.Service }
 type replayInputsConstructionStub struct{ recordings.ReplayInputLoader }
+type webhooksConstructionStub struct{ webhooks.Service }
 
 type constructionMaterializer struct{ calls *int }
 

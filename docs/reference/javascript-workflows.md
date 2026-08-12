@@ -142,6 +142,16 @@ writable-root, network, concurrency, and output-schema fields are not otherwise 
 `agent.run` arguments. Use `agent.run` for host-mediated child work and
 `workflow.artifact` for durable outputs.
 
+`skipPermissions: true` is a dangerous, child-scoped override for the selected
+provider's approval and sandbox restrictions. The selected provider route must
+advertise the permission-bypass capability; an incapable route fails closed
+before a provider attempt, prompt, subprocess, or other execution side effect
+with a safe capability diagnostic. It does not change `policy.mode`, session
+state, model or reasoning allowlists, route selection, fanout or concurrency,
+duration, token, output, or artifact budgets, network or connector access, or
+other workflow controls. Omitted and `false` values retain the provider's
+normal permission behavior.
+
 ## Runnable examples
 
 The repository ships these executable examples under

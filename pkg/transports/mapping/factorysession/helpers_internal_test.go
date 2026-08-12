@@ -180,9 +180,10 @@ func testDispatchDetailProjectionHelpers(t *testing.T) {
 		t.Fatal("dispatchJavaScriptToAPI(nil) should be nil")
 	}
 	js := dispatchJavaScriptToAPI(&factorysessionexecution.DispatchJavaScriptProjection{
-		TaskKind:      "VERIFY",
-		TaskLabel:     " review ",
-		ExecutionMode: " live ",
+		TaskKind:        "VERIFY",
+		TaskLabel:       " review ",
+		ExecutionMode:   " live ",
+		SkipPermissions: true,
 	})
 	if js == nil || js.TaskLabel == nil || *js.TaskLabel != "review" {
 		t.Fatalf("javascript = %#v", js)
@@ -190,6 +191,7 @@ func testDispatchDetailProjectionHelpers(t *testing.T) {
 	if js.ExecutionMode == nil || *js.ExecutionMode != "live" {
 		t.Fatalf("javascript execution mode = %#v", js)
 	}
+	assertJavaScriptSkipPermissions(t, js.SkipPermissions)
 
 	if dispatchStatusTransitionsToAPI(nil) != nil {
 		t.Fatal("dispatchStatusTransitionsToAPI(nil) should be nil")
@@ -201,6 +203,13 @@ func testDispatchDetailProjectionHelpers(t *testing.T) {
 	})
 	if transitions == nil || len(*transitions) != 2 {
 		t.Fatalf("status transitions = %#v", transitions)
+	}
+}
+
+func assertJavaScriptSkipPermissions(t *testing.T, value *bool) {
+	t.Helper()
+	if value == nil || !*value {
+		t.Fatalf("javascript skipPermissions = %#v, want true", value)
 	}
 }
 

@@ -4,14 +4,14 @@ import { FactoryGraphEditorConfirmationDialog } from "../../factory-graph-editor
 import { FactoryGraphEditorLeaveDialog } from "../../factory-graph-editor/components/dialogs/factory-graph-editor-leave-dialog";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import { FactoryImportPreviewDialog } from "../../import/components/dashboard-import-preview-dialog";
+import type { CurrentActivityGraphEditorController } from "../hooks/current-activity-graph-state-value";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
-import type { CurrentActivityGraphCardViewModel } from "../hooks/use-current-activity-graph-card-view-model";
 import { GraphImportErrorPanel } from "./react-flow-current-activity-card-import";
 
 export function CurrentActivityGraphEditorDialogs({
   currentSessionFactoryName,
   discardEditorChanges,
-  viewModel,
+  editorController,
   imports,
   locale,
   readyImportPreviewState,
@@ -19,7 +19,7 @@ export function CurrentActivityGraphEditorDialogs({
 }: {
   currentSessionFactoryName: string;
   discardEditorChanges?: () => void;
-  viewModel: CurrentActivityGraphCardViewModel;
+  editorController: CurrentActivityGraphEditorController;
   imports: CurrentActivityImportController;
   locale?: string;
   readyImportPreviewState: Extract<
@@ -29,11 +29,11 @@ export function CurrentActivityGraphEditorDialogs({
   shouldRenderImportPreviewDialog: boolean;
 }) {
   const messages = getFactoryGraphEditorMessages(locale);
-  const addControls = viewModel.addControls;
-  const isSaving = viewModel.status.isSaving;
-  const leaveControls = viewModel.leaveControls;
-  const removalControls = viewModel.removalControls;
-  const saveControls = viewModel.saveControls;
+  const addControls = editorController.addControls;
+  const isSaving = editorController.status.isSaving;
+  const leaveControls = editorController.leaveControls;
+  const removalControls = editorController.removalControls;
+  const saveControls = editorController.saveControls;
   const isSaveBusy =
     isSaving || isFactoryDocumentSaveSubmitting(saveControls.feedback);
 

@@ -69,6 +69,7 @@ func TestSubmitBatchReadsJSONFromStdin(t *testing.T) {
 		if !stopped {
 			command.Cancel()
 			_ = command.Wait()
+			waitForScannerCompletion(t, scanErr, "stdin submit server", 5*time.Second)
 		}
 	}()
 	_ = waitForDashboardURL(t, lines, scanErr, stderr, 45*time.Second)
@@ -108,9 +109,10 @@ func TestSubmitBatchReadsJSONFromStdin(t *testing.T) {
 		}
 	}
 
-	stopped = true
 	command.Cancel()
 	_ = command.Wait()
+	stopped = true
+	waitForScannerCompletion(t, scanErr, "stdin submit server", 5*time.Second)
 }
 
 // TestCLIEmptyRequiredStdinFailsWithoutDispatch proves you run - rejects EOF or

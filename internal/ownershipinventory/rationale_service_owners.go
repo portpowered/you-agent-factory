@@ -490,3 +490,18 @@ func committedWorkersRationales() []OwnerRationaleCard {
 		),
 	}
 }
+
+func committedWebhooksRationales() []OwnerRationaleCard {
+	return []OwnerRationaleCard{
+		topLevel(
+			"webhooks",
+			"pkg/services/webhooks",
+			"Factory-configured outbound webhook subscriptions, canonical event filtering, signed delivery attempts, bounded retry/backoff, and session-owned dead-letter diagnostics; Recordings remains the event authority.",
+			"Process-local endpoint delivery state and session-owned dead-letter JSONL; no canonical Factory state.",
+			"Wire constructs the service once; Factory Sessions start and stop session-scoped endpoint subscribers and delivery workers.",
+			"Factory Definitions configuration, Recordings canonical events, platform HTTP/clock/logging effects, and external webhook receivers.",
+			"Webhook delivery, retry, and dead-letter state remain Webhooks-local; canonical events are read-only input and terminal records use an injected runtime-storage effect.",
+			"Secret, receiver, retry, cancellation, and dead-letter failures are structured Webhooks diagnostics and never mutate or block Factory Session or Work state.",
+		),
+	}
+}

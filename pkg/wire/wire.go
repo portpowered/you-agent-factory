@@ -10,6 +10,7 @@ import (
 	processcontract "github.com/portpowered/infinite-you/pkg/initializer/process"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	edges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire"
@@ -150,12 +151,14 @@ var servicesSet = wire.NewSet(
 	provideAutomationFactory,
 	provideFactorySessionsService,
 	provideFactorySessionsRuntimeAssembly,
+	provideFactoryWebhooksService,
 	providePortableRecordingWriter,
 	provideOrchestrationJavaScriptExecution,
 	provideOrchestrationCompilation,
 	provideFactorySessionExecutionFactory,
 	provideConductorInvocationWithProgressFactory,
 	provideRecordingsProjectionFactory,
+	provideRecordingsFactory,
 	provideRecordingLifecycleFactory,
 	provideFactorySessionReplayInputs,
 	provideRuntimeLedgerFactory,
@@ -235,6 +238,7 @@ var servicesSet = wire.NewSet(
 	wire.Struct(new(factorysessionwire.AutomationsRuntimeOpeningPorts), "*"),
 	wire.Struct(new(factorysessionwire.ModelsRuntimeOpeningPorts), "*"),
 	wire.Struct(new(factorysessionwire.RecordingsRuntimeOpeningPorts), "*"),
+	wire.Struct(new(factorysessionwire.WebhooksRuntimeOpeningPorts), "*"),
 	wire.Struct(new(factorysessionwire.WorkersRuntimeOpeningPorts), "*"),
 	wire.Struct(new(factorysessionwire.OperatorSettingsRuntimeOpeningPorts), "*"),
 	provideLoadedFactorySourceFactory,
@@ -354,6 +358,7 @@ var BundleSet = wire.NewSet(
 	providePackagedFactoryCatalog,
 	provideSystemInitializationService,
 	provideSystemInitializationOperation,
+	wire.Bind(new(factorydefinitions.Persistence), new(factorydefinitions.PackagedFactoryPersistence)),
 	wire.Bind(new(factorysessionwire.ApplicationRuntimeOpening), new(*factorysessionwire.RuntimeOpening)),
 	wire.Bind(new(factorysessionwire.InvocationRuntimeOpening), new(*factorysessionwire.RuntimeOpening)),
 	wire.Bind(new(factorysessionwire.ExecutionRuntimeOpening), new(*factorysessionwire.RuntimeOpening)),

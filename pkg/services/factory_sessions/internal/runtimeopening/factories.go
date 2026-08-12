@@ -54,6 +54,10 @@ type ConductorInvocationWithProgressFactory = func(
 
 type RecordingsProjectionFactory = func() recordings.ProjectionService
 
+// RecordingsServiceFactory constructs the canonical Recordings root over the
+// runtime ledger and projection shared by one Factory Session.
+type RecordingsServiceFactory = func(recordings.Ledger, recordings.ProjectionService) recordings.Service
+
 // RecordingLifecycleFactory constructs the Recordings-owned narrow lifecycle
 // capability bound to the runtime recorder while opening a Factory Session
 // runtime. Wire supplies this factory directly so this path never discovers

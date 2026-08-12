@@ -33,6 +33,7 @@ func factoryInternalFromAPI(apiCfg factoryapi.Factory) (interfaces.FactoryConfig
 	}
 	cfg.InvocationReturn = invocationReturnInternalFromAPI(apiCfg.InvocationReturn)
 	cfg.InvocationSignature = invocationSignatureInternalFromAPI(apiCfg.InvocationSignature)
+	cfg.Webhooks = factoryWebhooksInternalFromAPI(apiCfg.Webhooks)
 	orchestrator, err := orchestratorInternalFromAPI(apiCfg.Orchestrator)
 	if err != nil {
 		return interfaces.FactoryConfig{}, err
@@ -69,6 +70,56 @@ func factoryInternalFromAPI(apiCfg factoryapi.Factory) (interfaces.FactoryConfig
 		cfg.Workstations = workstations
 	}
 	return cfg, nil
+}
+
+func factoryWebhooksInternalFromAPI(values *[]factoryapi.FactoryWebhook) []interfaces.FactoryWebhookConfig {
+	if values == nil {
+		return nil
+	}
+	result := make([]interfaces.FactoryWebhookConfig, len(*values))
+	for index, value := range *values {
+		webhook := interfaces.FactoryWebhookConfig{
+			Name:             value.Name,
+			Enabled:          value.Enabled,
+			URL:              value.Url,
+			SigningSecretRef: value.SigningSecretRef,
+			Filter: interfaces.FactoryWebhookFilterConfig{
+				EventTypes: make([]string, len(value.Filter.EventTypes)),
+			},
+			DeliveryPolicy: factoryWebhookDeliveryPolicyInternalFromAPI(value.DeliveryPolicy),
+		}
+		for eventIndex, eventType := range value.Filter.EventTypes {
+			webhook.Filter.EventTypes[eventIndex] = string(eventType)
+		}
+		if value.Filter.DispatchStatuses != nil {
+			webhook.Filter.DispatchStatuses = make([]string, len(*value.Filter.DispatchStatuses))
+			for statusIndex, status := range *value.Filter.DispatchStatuses {
+				webhook.Filter.DispatchStatuses[statusIndex] = string(status)
+			}
+		}
+		result[index] = webhook
+	}
+	return result
+}
+
+func factoryWebhookDeliveryPolicyInternalFromAPI(value *factoryapi.FactoryWebhookDeliveryPolicy) *interfaces.FactoryWebhookDeliveryPolicyConfig {
+	if value == nil {
+		return nil
+	}
+	result := &interfaces.FactoryWebhookDeliveryPolicyConfig{
+		RequestTimeout: value.RequestTimeout,
+		InitialBackoff: value.InitialBackoff,
+		MaxBackoff:     value.MaxBackoff,
+	}
+	if value.MaxAttempts != nil {
+		attempts := *value.MaxAttempts
+		result.MaxAttempts = &attempts
+	}
+	if value.BackoffMultiplier != nil {
+		multiplier := float64(*value.BackoffMultiplier)
+		result.BackoffMultiplier = &multiplier
+	}
+	return result
 }
 
 func mapFactoryMetadataInternalFromAPI(cfg *interfaces.FactoryConfig, description *factoryapi.NameValue, examples *[]factoryapi.FactoryInvocationExample) error {

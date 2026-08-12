@@ -174,6 +174,7 @@ type FactoryConfig struct {
 	InvocationReturn    *InvocationReturnConfig         `json:"invocation_return,omitempty"`
 	InvocationSignature *InvocationSignatureConfig      `json:"invocationSignature,omitempty"`
 	Examples            []InvocationExampleConfig       `json:"examples,omitempty" yaml:"examples,omitempty"`
+	Webhooks            []FactoryWebhookConfig          `json:"webhooks,omitempty" yaml:"webhooks,omitempty"`
 	Orchestrator        *FactoryOrchestratorConfig      `json:"orchestrator,omitempty"`
 	WorkTypes           []WorkTypeConfig                `json:"work_types"`
 	Resources           []catalogresource.Config        `json:"resources"`

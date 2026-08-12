@@ -125,6 +125,15 @@ type Persistence interface {
 	ReplaceFactoryLayout(string, *PreparedFactoryLayoutPayload) (*FactorySplitLayoutReplaceResult, error)
 }
 
+// PackagedFactoryPersistence is the explicit persistence capability required
+// by first-party packaged Factory installation. The packaged preparation path
+// remains separate from ordinary named-Factory persistence so catalog-only
+// lifecycle allowances cannot be recovered through a runtime type assertion.
+type PackagedFactoryPersistence interface {
+	Persistence
+	PreparePackagedFactoryLayout(context.Context, string, []byte) (*PreparedFactoryLayoutPayload, error)
+}
+
 type Service interface {
 	ActivateNamedFactory(context.Context, string) error
 	Save(context.Context, string, SaveMode, EditableFactory) (EditableFactory, error)

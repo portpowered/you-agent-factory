@@ -35,6 +35,7 @@ import (
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	providercontract "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/webhooks"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -56,7 +57,16 @@ type Edges struct {
 	HostedSecretResolver          automations.HostedLinearSecretResolver
 	HostedLinearCheckpointStore   automations.HostedLinearCheckpointStore
 	HostedClock                   automations.HostedLinearClock
-	ModelAssetHTTPClient          interface {
+	FactoryWebhookHTTPClient      interface {
+		Do(*http.Request) (*http.Response, error)
+	}
+	FactoryWebhookClock interface {
+		Now() time.Time
+		After(time.Duration) <-chan time.Time
+	}
+	FactoryWebhookSecretResolver     webhooks.SecretResolver
+	FactoryWebhookDeadLetterAppender webhooks.DeadLetterAppender
+	ModelAssetHTTPClient             interface {
 		Do(*http.Request) (*http.Response, error)
 	}
 	ModelAssetEndpoints            models.RuntimeAssetEndpoints
@@ -180,6 +190,7 @@ type Edges struct {
 	ModelPullMetricsRecorder         interface{ RecordModelPullMetric(PullMetric) }
 	ProviderOverride                 providercontract.Provider
 	providercontract.ProviderRegistrations
+	ProviderCatalogCapabilityOverrides []providercontract.CatalogCapabilityOverride
 	WorkersFactoryDocsFileSystem       platformfilesystem.ReadFileTree
 	WorkersResolveSymlinks             workers.ResolveExecutableSymlinks
 	WorkersExecutableLocator           platformprocess.ExecutableLocator
@@ -220,6 +231,10 @@ func Merge(defaults Edges, replacements Edges) Edges {
 		append(providercontract.ProviderRegistrations(nil), defaults.ProviderRegistrations...),
 		replacements.ProviderRegistrations...,
 	)
+	defaults.ProviderCatalogCapabilityOverrides = append(
+		cloneCatalogCapabilityOverrides(defaults.ProviderCatalogCapabilityOverrides),
+		cloneCatalogCapabilityOverrides(replacements.ProviderCatalogCapabilityOverrides)...,
+	)
 	if replacements.CLIObserver != nil {
 		defaults.CLIObserver = replacements.CLIObserver
 	}
@@ -255,6 +270,18 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.HostedClock != nil {
 		defaults.HostedClock = replacements.HostedClock
+	}
+	if replacements.FactoryWebhookHTTPClient != nil {
+		defaults.FactoryWebhookHTTPClient = replacements.FactoryWebhookHTTPClient
+	}
+	if replacements.FactoryWebhookClock != nil {
+		defaults.FactoryWebhookClock = replacements.FactoryWebhookClock
+	}
+	if replacements.FactoryWebhookSecretResolver != nil {
+		defaults.FactoryWebhookSecretResolver = replacements.FactoryWebhookSecretResolver
+	}
+	if replacements.FactoryWebhookDeadLetterAppender != nil {
+		defaults.FactoryWebhookDeadLetterAppender = replacements.FactoryWebhookDeadLetterAppender
 	}
 	if replacements.ModelAssetHTTPClient != nil {
 		defaults.ModelAssetHTTPClient = replacements.ModelAssetHTTPClient
@@ -620,4 +647,14 @@ func Merge(defaults Edges, replacements Edges) Edges {
 		defaults.WorkSubmittedFilePathInspector = replacements.WorkSubmittedFilePathInspector
 	}
 	return defaults
+}
+
+func cloneCatalogCapabilityOverrides(
+	overrides []providercontract.CatalogCapabilityOverride,
+) []providercontract.CatalogCapabilityOverride {
+	cloned := make([]providercontract.CatalogCapabilityOverride, len(overrides))
+	for index, override := range overrides {
+		cloned[index] = override.Clone()
+	}
+	return cloned
 }

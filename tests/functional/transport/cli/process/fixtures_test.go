@@ -41,6 +41,13 @@ func initializeOperatorConfig(
 	return operatorConfigOutcome{ConfigPath: configPath}
 }
 
+// Functional-test construction exception: this package invokes a separately
+// built `you` executable to prove OS process, pipe, signal, and exit behavior.
+// ProviderCommandRunner is an edges.Edges dependency in the parent test
+// process and cannot cross that executable boundary, so these serialized
+// --with-mock-workers fixtures are the deterministic child-process seam for
+// the stream and lifecycle assertions below. They do not replace provider-edge
+// coverage for in-process root.BuildProcess scenarios.
 func writeAcceptingGoalMockWorkers(t *testing.T) string {
 	t.Helper()
 
@@ -229,6 +236,23 @@ func interruptAndAssertCancellationExit(t testing.TB, command *builtcliacceptanc
 		}
 	case <-time.After(waitTimeout):
 		t.Fatalf("canceled root process did not exit within %s", waitTimeout)
+	}
+}
+
+func waitForScannerCompletion(t testing.TB, scanErr <-chan error, role string, timeout time.Duration) {
+	t.Helper()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case err := <-scanErr:
+		// exec.Cmd.Wait closes a StdoutPipe after the child exits. Depending on
+		// scheduling, the scanner can observe that terminal close as fs.ErrClosed
+		// instead of EOF after an intentional cancellation.
+		if err != nil && !errors.Is(err, os.ErrClosed) {
+			t.Fatalf("%s stdout scanner failed: %v", role, err)
+		}
+	case <-timer.C:
+		t.Fatalf("%s stdout scanner did not finish within %s", role, timeout)
 	}
 }
 

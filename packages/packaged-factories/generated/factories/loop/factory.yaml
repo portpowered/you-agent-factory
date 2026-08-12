@@ -69,8 +69,6 @@ workTypes:
       states:
         - name: active
           type: INITIAL
-        - name: stopped
-          type: TERMINAL
         - name: failed
           type: FAILED
     - name: scheduled-execution
