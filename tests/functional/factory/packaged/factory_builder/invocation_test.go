@@ -91,6 +91,7 @@ func TestFactoryBuilderCreatesAndInstallsValidatedJavaScriptFactory(t *testing.T
 	homeDir := t.TempDir()
 	workingDirectory := t.TempDir()
 	environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	writeJavaScriptAgentPresetConfig(t, homeDir)
 	runner := &factoryBuilderCommandRunner{
 		targetName:      javascriptFactoryName,
 		customerRequest: javascriptFactoryRequest,
@@ -423,6 +424,16 @@ func assertRepresentativeJavaScriptDefinition(t *testing.T, definition map[strin
 	javascript, ok := orchestrator["javascript"].(map[string]any)
 	if !ok {
 		t.Fatalf("javascript orchestrator config = %#v, want metadata, args schema, policy, and inline source", orchestrator["javascript"])
+	}
+	agents, ok := javascript["agents"].(map[string]any)
+	if !ok || len(agents) != 1 {
+		t.Fatalf("JavaScript agents = %#v, want one named agent role", javascript["agents"])
+	}
+	for agentID, value := range agents {
+		analyst, ok := value.(map[string]any)
+		if !ok || analyst["preset"] != "careful-review" {
+			t.Fatalf("%s agent = %#v, want careful-review preset", agentID, value)
+		}
 	}
 	inlineSource, ok := javascript["inlineSource"].(map[string]any)
 	if !ok || inlineSource["encoding"] != "utf-8" || strings.TrimSpace(fmt.Sprint(inlineSource["inline"])) == "" {
@@ -871,6 +882,9 @@ invocationSignature:
 orchestrator:
   kind: JAVASCRIPT
   javascript:
+    agents:
+      release-analyst:
+        preset: careful-review
     metadata:
       purpose: bounded-release-synthesis
     argsSchema:
@@ -907,6 +921,30 @@ orchestrator:
           });
         })();
 `
+
+func writeJavaScriptAgentPresetConfig(t *testing.T, homeDir string) {
+	t.Helper()
+
+	configDir := filepath.Join(homeDir, ".you-agent-factory")
+	if err := os.MkdirAll(configDir, 0o700); err != nil {
+		t.Fatalf("create operator config directory: %v", err)
+	}
+	config := []byte(`{
+  "defaults": {
+    "workerModelProvider": "codex",
+    "workerModel": "gpt-5"
+  },
+  "workerPresets": [{
+    "id": "careful-review",
+    "modelProvider": "codex",
+    "model": "gpt-5",
+    "reasoningEffort": "medium"
+  }]
+}`)
+	if err := os.WriteFile(filepath.Join(configDir, "config.json"), config, 0o600); err != nil {
+		t.Fatalf("write operator agent preset config: %v", err)
+	}
+}
 
 // isBuilderRoutingPrompt reports whether a provider call is the Factory
 // Builder's routing classification rather than a build or an installed-Factory
