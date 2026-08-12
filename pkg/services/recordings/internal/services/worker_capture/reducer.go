@@ -254,58 +254,76 @@ func reduceWorkerTerminal(projection *WorkerRecordingProjection, record events.R
 // read results; callers must inspect Projection.Status instead of treating a
 // missing terminal as a generic replay failure.
 func (codec WorkerRecordingCodec) ReplayWorkerRecording(request WorkerRecordingReplayRequest) (WorkerRecordingReplayResult, error) {
-	if strings.TrimSpace(request.Snapshot.RecordingID) == "" {
-		return WorkerRecordingReplayResult{}, fmt.Errorf("%w: recording identity is required", ErrWorkerRecordingReplay)
-	}
-	if len(request.Snapshot.Sessions) == 0 {
-		return WorkerRecordingReplayResult{}, fmt.Errorf("%w: Worker Session history is missing", ErrWorkerRecordingReplay)
-	}
-	if err := validateWorkerRecordingSnapshot(request.Snapshot); err != nil {
+	if err := validateReplayRequest(request); err != nil {
 		return WorkerRecordingReplayResult{}, err
 	}
-	sessionID := strings.TrimSpace(request.WorkerSessionID)
-	if sessionID == "" {
-		if len(request.Snapshot.Sessions) != 1 {
-			return WorkerRecordingReplayResult{}, fmt.Errorf("%w: Worker Session ID is required for a multi-session snapshot", ErrWorkerRecordingReplay)
-		}
-		sessionID = request.Snapshot.Sessions[0].WorkerSessionID
+	sessionID, err := replayWorkerSessionID(request.Snapshot, request.WorkerSessionID)
+	if err != nil {
+		return WorkerRecordingReplayResult{}, err
 	}
 	for _, session := range request.Snapshot.Sessions {
 		if session.WorkerSessionID != sessionID {
 			continue
 		}
-		legacyStatus, legacyFailure, err := normalizeWorkerRecordingStatus(session.Status)
-		if err != nil {
-			return WorkerRecordingReplayResult{}, err
-		}
-		failure := strings.TrimSpace(session.Failure)
-		if legacyFailure && failure == "" {
-			failure = "LEGACY_CAPTURE_FAILED"
-		}
-		projection, err := codec.ReduceWorkerRecording(WorkerRecordingHistory{
-			RecordingID:        request.Snapshot.RecordingID,
-			WorkerSessionID:    session.WorkerSessionID,
-			Topic:              session.Topic,
-			Failure:            failure,
-			InterruptionReason: session.InterruptionReason,
-			ExecutionTerminal:  session.ExecutionTerminal,
-			Records:            session.Records,
-		})
-		if err != nil {
-			return WorkerRecordingReplayResult{}, fmt.Errorf("%w: %w", ErrWorkerRecordingReplay, err)
-		}
-		if projection.Status != WorkerRecordingStatusIncomplete && strings.TrimSpace(session.InterruptionReason) != "" {
-			return WorkerRecordingReplayResult{}, fmt.Errorf("%w: interruption reason is only valid for INCOMPLETE recordings", ErrWorkerRecordingCompatibility)
-		}
-		projection.InterruptionReason = recoveredInterruptionReason(projection, failure)
-		if legacyStatus != "" && !isLegacyWorkerRecordingStatus(session.Status) && legacyStatus != projection.Status {
-			return WorkerRecordingReplayResult{}, fmt.Errorf("%w: declared status %q disagrees with durable evidence %q", ErrWorkerRecordingCompatibility, session.Status, projection.Status)
-		}
-		return WorkerRecordingReplayResult{Projection: projection}, nil
+		return codec.replayWorkerRecordingSession(request.Snapshot, session)
 	}
 	return WorkerRecordingReplayResult{}, fmt.Errorf("%w: Worker Session %q was not found", ErrWorkerRecordingReplay, sessionID)
 }
 
+func validateReplayRequest(request WorkerRecordingReplayRequest) error {
+	if strings.TrimSpace(request.Snapshot.RecordingID) == "" {
+		return fmt.Errorf("%w: recording identity is required", ErrWorkerRecordingReplay)
+	}
+	if len(request.Snapshot.Sessions) == 0 {
+		return fmt.Errorf("%w: Worker Session history is missing", ErrWorkerRecordingReplay)
+	}
+	return validateWorkerRecordingSnapshot(request.Snapshot)
+}
+
+func replayWorkerSessionID(snapshot WorkerRecordingSnapshot, requested string) (string, error) {
+	sessionID := strings.TrimSpace(requested)
+	if sessionID != "" {
+		return sessionID, nil
+	}
+	if len(snapshot.Sessions) != 1 {
+		return "", fmt.Errorf("%w: Worker Session ID is required for a multi-session snapshot", ErrWorkerRecordingReplay)
+	}
+	return snapshot.Sessions[0].WorkerSessionID, nil
+}
+
+func (codec WorkerRecordingCodec) replayWorkerRecordingSession(
+	snapshot WorkerRecordingSnapshot,
+	session WorkerSessionRecordingSnapshot,
+) (WorkerRecordingReplayResult, error) {
+	legacyStatus, legacyFailure, err := normalizeWorkerRecordingStatus(session.Status)
+	if err != nil {
+		return WorkerRecordingReplayResult{}, err
+	}
+	failure := strings.TrimSpace(session.Failure)
+	if legacyFailure && failure == "" {
+		failure = "LEGACY_CAPTURE_FAILED"
+	}
+	projection, err := codec.ReduceWorkerRecording(WorkerRecordingHistory{
+		RecordingID:        snapshot.RecordingID,
+		WorkerSessionID:    session.WorkerSessionID,
+		Topic:              session.Topic,
+		Failure:            failure,
+		InterruptionReason: session.InterruptionReason,
+		ExecutionTerminal:  session.ExecutionTerminal,
+		Records:            session.Records,
+	})
+	if err != nil {
+		return WorkerRecordingReplayResult{}, fmt.Errorf("%w: %w", ErrWorkerRecordingReplay, err)
+	}
+	if projection.Status != WorkerRecordingStatusIncomplete && strings.TrimSpace(session.InterruptionReason) != "" {
+		return WorkerRecordingReplayResult{}, fmt.Errorf("%w: interruption reason is only valid for INCOMPLETE recordings", ErrWorkerRecordingCompatibility)
+	}
+	projection.InterruptionReason = recoveredInterruptionReason(projection, failure)
+	if legacyStatus != "" && !isLegacyWorkerRecordingStatus(session.Status) && legacyStatus != projection.Status {
+		return WorkerRecordingReplayResult{}, fmt.Errorf("%w: declared status %q disagrees with durable evidence %q", ErrWorkerRecordingCompatibility, session.Status, projection.Status)
+	}
+	return WorkerRecordingReplayResult{Projection: projection}, nil
+}
 func validateWorkerRecordingSnapshot(snapshot WorkerRecordingSnapshot) error {
 	seen := make(map[string]struct{}, len(snapshot.Sessions))
 	for _, session := range snapshot.Sessions {

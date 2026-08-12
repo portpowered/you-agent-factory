@@ -574,32 +574,7 @@ func TestStreamWorkerSessionEventsBySessionIDWritesRetainedAndTerminalFrames(t *
 	handler.StreamWorkerSessionEventsBySessionId(recorder, request, factoryapi.SessionID("session-1"), factoryapi.StreamWorkerSessionEventsBySessionIdParams{
 		Provider: factoryapi.LoadableProviderSessionProvider("codex"), Kind: factoryapi.LoadableProviderSessionKind("session_id"), Id: "provider-session-1",
 	})
-
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200; body=%s", recorder.Code, recorder.Body.String())
-	}
-	if got := recorder.Header().Get("Content-Type"); got != "text/event-stream" {
-		t.Fatalf("content type = %q, want text/event-stream", got)
-	}
-	frames := decodeSSEFrames(t, recorder.Body.String())
-	if len(frames) != 2 || frames[0].Delivery != "RECORD" || frames[1].Delivery != "TERMINAL" {
-		t.Fatalf("frames = %#v, want RECORD then TERMINAL", frames)
-	}
-	if frames[0].WorkerSessionID != "worker-session-1" || frames[0].ProviderSession == nil || frames[0].ProviderSession.Id != "provider-session-1" {
-		t.Fatalf("frame identity = %#v, want exact worker/provider identity", frames[0])
-	}
-	if frames[0].Event == nil || frames[0].Event.Position != 1 || string(frames[0].Event.Payload) != `{"state":"RUNNING"}` {
-		t.Fatalf("first event = %#v, want canonical event payload", frames[0].Event)
-	}
-	if frames[0].Event.Cursor == nil || frames[0].Event.Cursor.Position != 1 {
-		t.Fatalf("first event cursor = %#v, want position 1", frames[0].Event.Cursor)
-	}
-	if service.streamSubscription == nil || !service.streamSubscription.closed {
-		t.Fatal("stream subscription was not closed after terminal delivery")
-	}
-	if service.streamRequest.Limit != workersessions.DefaultObservationStreamLimit {
-		t.Fatalf("stream limit = %d, want stable default %d", service.streamRequest.Limit, workersessions.DefaultObservationStreamLimit)
-	}
+	assertRetainedTerminalFrames(t, recorder, service)
 }
 
 func TestStreamWorkerSessionEventsBySessionIDReplayOnlyWritesSummaryAndPreservesMode(t *testing.T) {

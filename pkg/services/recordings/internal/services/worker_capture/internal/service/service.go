@@ -535,6 +535,12 @@ func (capture *capture) close(ctx context.Context, terminal *recordings.WorkerRe
 	if terminal != nil {
 		capture.setExecutionTerminal(*terminal)
 	}
+	capture.markClosing(ctx)
+	capture.classifyClosingState(ctx)
+	return capture.awaitClose(ctx)
+}
+
+func (capture *capture) markClosing(ctx context.Context) {
 	if err := ctx.Err(); err != nil {
 		// Classify an already-canceled close before marking the capture as
 		// closing; otherwise the consumer can win the race and report an
@@ -550,21 +556,35 @@ func (capture *capture) close(ctx context.Context, terminal *recordings.WorkerRe
 		}
 	}
 	capture.mu.Unlock()
-	if !capture.isTerminal() && capture.failureError() == nil && ctx.Err() != nil {
-		capture.fail(fmt.Errorf("%w: close wait canceled: %w", recordings.ErrWorkerRecordingCanceled, ctx.Err()))
-	} else if !capture.isTerminal() && capture.failureError() == nil {
-		pending, err := capture.hasPendingRecords(ctx)
-		if err != nil {
-			if ctx.Err() != nil {
-				capture.fail(fmt.Errorf("%w: close wait canceled: %w", recordings.ErrWorkerRecordingCanceled, ctx.Err()))
-			} else {
-				capture.fail(fmt.Errorf("%w: inspect closing Worker topic: %v", recordings.ErrWorkerRecordingDelivery, err))
-			}
-		} else if !pending {
-			capture.fail(fmt.Errorf("%w: source closed before a durable terminal record", recordings.ErrWorkerRecordingIncomplete))
-		}
-	}
+}
 
+func (capture *capture) classifyClosingState(ctx context.Context) {
+	if capture.isTerminal() || capture.failureError() != nil {
+		return
+	}
+	if ctx.Err() != nil {
+		capture.fail(fmt.Errorf("%w: close wait canceled: %w", recordings.ErrWorkerRecordingCanceled, ctx.Err()))
+		return
+	}
+	pending, err := capture.hasPendingRecords(ctx)
+	if err != nil {
+		capture.classifyPendingRecordsError(ctx, err)
+		return
+	}
+	if !pending {
+		capture.fail(fmt.Errorf("%w: source closed before a durable terminal record", recordings.ErrWorkerRecordingIncomplete))
+	}
+}
+
+func (capture *capture) classifyPendingRecordsError(ctx context.Context, err error) {
+	if ctx.Err() != nil {
+		capture.fail(fmt.Errorf("%w: close wait canceled: %w", recordings.ErrWorkerRecordingCanceled, ctx.Err()))
+		return
+	}
+	capture.fail(fmt.Errorf("%w: inspect closing Worker topic: %v", recordings.ErrWorkerRecordingDelivery, err))
+}
+
+func (capture *capture) awaitClose(ctx context.Context) error {
 	capture.persistFailureMarker()
 	select {
 	case <-capture.done:

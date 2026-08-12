@@ -59,7 +59,10 @@ func (writer *FileWriter) PersistWorkerRecord(ctx context.Context, record record
 	if err := record.Record.Validate(); err != nil {
 		return fmt.Errorf("validate Worker record: %w", err)
 	}
+	return writer.persistWorkerRecord(ctx, record)
+}
 
+func (writer *FileWriter) persistWorkerRecord(ctx context.Context, record recordings.WorkerRecordingRecord) error {
 	snapshot, err := writer.snapshotForWrite(ctx, record.RecordingID)
 	if err != nil {
 		return err
@@ -125,11 +128,6 @@ func (writer *FileWriter) PersistWorkerRecord(ctx context.Context, record record
 	writer.snapshots[record.RecordingID] = snapshot
 	return nil
 }
-
-// PersistWorkerRecordingFailure preserves a failed or interrupted capture as
-// durable loss evidence. The accepted source records remain readable, and the
-// shared reducer decides whether their execution truth makes the result
-// DEGRADED or INCOMPLETE.
 func (writer *FileWriter) PersistWorkerRecordingFailure(ctx context.Context, failure recordings.WorkerRecordingFailure) error {
 	if writer == nil {
 		return recordings.ErrMissingWorkerRecordingWriter
