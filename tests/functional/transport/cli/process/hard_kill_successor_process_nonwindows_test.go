@@ -9,40 +9,44 @@ import (
 	"syscall"
 )
 
+type hardKillProcessHandle interface {
+	Signal(os.Signal) error
+	Kill() error
+	Release() error
+}
+
 func suspendHardKillProcess(pid int) (hardKillProcessControl, error) {
 	process, err := os.FindProcess(pid)
 	if err != nil {
 		return hardKillProcessControl{}, err
 	}
+	return newHardKillProcessControl(process)
+}
+
+func newHardKillProcessControl(process hardKillProcessHandle) (hardKillProcessControl, error) {
 	if err := process.Signal(syscall.SIGSTOP); err != nil {
 		return hardKillProcessControl{}, errors.Join(err, process.Release())
 	}
 
 	var mu sync.Mutex
-	released := false
-	resume := func() error {
+	terminal := false
+	terminalOperation := func(signal func() error) error {
 		mu.Lock()
 		defer mu.Unlock()
-		if released {
+		if terminal {
 			return nil
 		}
-		signalErr := process.Signal(syscall.SIGCONT)
-		releaseErr := process.Release()
-		released = true
-		return errors.Join(signalErr, releaseErr)
+		terminal = true
+		return errors.Join(signal(), process.Release())
 	}
-	terminate := func() error {
-		mu.Lock()
-		defer mu.Unlock()
-		if released {
-			return nil
-		}
-		killErr := process.Kill()
-		releaseErr := process.Release()
-		released = true
-		return errors.Join(killErr, releaseErr)
-	}
-	return hardKillProcessControl{resume: resume, terminate: terminate}, nil
+	return hardKillProcessControl{
+		resume: func() error {
+			return terminalOperation(func() error { return process.Signal(syscall.SIGCONT) })
+		},
+		terminate: func() error {
+			return terminalOperation(process.Kill)
+		},
+	}, nil
 }
 
 func isPreRuntimeStagingMetadataUnavailable(error) bool {
