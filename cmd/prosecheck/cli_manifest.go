@@ -944,7 +944,7 @@ func cliManifestLiterals(root *cliJSONValue) []string {
 
 func cliLiteralField(key string) bool {
 	switch key {
-	case "id", "name", "path", "long", "shorthand", "aliases", "targetItemId", "operationId", "code", "default":
+	case "id", "name", "path", "long", "shorthand", "aliases", "targetItemId", "operationId", "code", "default", "provider", "model", "providerName", "modelName", "event", "schema":
 		return true
 	default:
 		return false
@@ -991,6 +991,7 @@ var (
 	cliPlaceholderPattern = regexp.MustCompile(`<[^>\r\n]{1,80}>`)
 	cliPathPattern        = regexp.MustCompile(`(?:\./|\.\./|~/|/|[A-Za-z]:[\\/])[^\s,;!?)]*`)
 	cliIdentifierPattern  = regexp.MustCompile(`\b[A-Za-z][A-Za-z0-9]*(?:[._][A-Za-z0-9_-]+)+\b`)
+	cliCamelCasePattern   = regexp.MustCompile(`\b[A-Za-z]+[a-z][A-Z][A-Za-z0-9]*\b`)
 	cliSnakePattern       = regexp.MustCompile(`\b[A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+)+\b`)
 	cliErrorCodePattern   = regexp.MustCompile(`\b(?:[A-Z][A-Z0-9]*[-_]){1,}[A-Z0-9]+\b`)
 	cliProviderPattern    = regexp.MustCompile(`(?i)\b(?:codex|cursor(?:-acp)?|openai|anthropic|ollama|gpt(?:-[A-Za-z0-9.]+)?)\b`)
@@ -1006,12 +1007,14 @@ func cliProtectedRanges(text string, literals []string) []TextRange {
 	ranges = append(ranges, cliRegexRanges(text, cliPlaceholderPattern)...)
 	ranges = append(ranges, cliRegexRanges(text, cliPathPattern)...)
 	ranges = append(ranges, cliRegexRanges(text, cliIdentifierPattern)...)
+	ranges = append(ranges, cliRegexRanges(text, cliCamelCasePattern)...)
 	ranges = append(ranges, cliRegexRanges(text, cliSnakePattern)...)
 	ranges = append(ranges, cliRegexRanges(text, cliErrorCodePattern)...)
 	ranges = append(ranges, cliRegexRanges(text, cliProviderPattern)...)
 	ranges = append(ranges, cliRegexRanges(text, cliSchemePattern)...)
 	ranges = append(ranges, markdownRouteRanges(text)...)
 	ranges = append(ranges, markdownCommandLineRanges(text)...)
+	ranges = append(ranges, cliCommandLiteralLineRanges(text, literals)...)
 	ranges = append(ranges, cliStructuredLineRanges(text)...)
 	ranges = append(ranges, cliQuotedOutputRanges(text)...)
 	ranges = append(ranges, cliRegexRanges(text, cliQuotedTechnical)...)
@@ -1106,6 +1109,35 @@ func cliLooksLikeStructuredLine(line string) bool {
 func cliQuotedOutputRanges(text string) []TextRange {
 	pattern := regexp.MustCompile(`(?im)^\s*(?:error|fatal|usage|exit status|stdout|stderr)\s*:\s*\S[^\r\n]*`)
 	return cliRegexRanges(text, pattern)
+}
+
+func cliCommandLiteralLineRanges(text string, literals []string) []TextRange {
+	var ranges []TextRange
+	for lineStart := 0; lineStart < len(text); {
+		lineEnd := strings.IndexByte(text[lineStart:], '\n')
+		if lineEnd < 0 {
+			lineEnd = len(text)
+		} else {
+			lineEnd += lineStart
+		}
+		line := strings.TrimSuffix(text[lineStart:lineEnd], "\r")
+		leading := len(line) - len(strings.TrimLeft(line, " \t"))
+		trimmed := line[leading:]
+		for _, literal := range literals {
+			if !strings.Contains(literal, " ") || !strings.HasPrefix(literal, "you ") || !strings.HasPrefix(trimmed, literal) {
+				continue
+			}
+			if cliLiteralBoundary(trimmed, 0, len(literal), literal) {
+				ranges = append(ranges, TextRange{Start: lineStart + leading, End: lineEnd})
+				break
+			}
+		}
+		if lineEnd == len(text) {
+			break
+		}
+		lineStart = lineEnd + 1
+	}
+	return ranges
 }
 
 func mergeCLIRanges(ranges []TextRange) []TextRange {
