@@ -18,8 +18,8 @@ const (
 	DiagnosticProviderFailureType = "provider_failure_type"
 	DiagnosticRecoveryAction      = "recovery_action"
 
-	FailureClassProvider       = "agent_run_provider_failure"
-	FailureClassHarnessRuntime = "agent_run_harness_failure"
+	FailureClassProvider       = workerexecution.AgentRunFailureClassProvider
+	FailureClassHarnessRuntime = workerexecution.AgentRunFailureClassHarness
 	FailureClassCanceled       = "agent_run_canceled"
 	FailureClassTimeout        = "agent_run_timeout"
 	FailureClassLeaseDenied    = "agent_run_lease_denied"

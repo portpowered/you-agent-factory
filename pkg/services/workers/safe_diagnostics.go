@@ -25,6 +25,13 @@ type SafeProviderDiagnostic struct {
 const (
 	AgentRunExecutionBehavior = "agent_run"
 
+	// AgentRunFailureClassProvider identifies an agent run that failed while
+	// executing a normalized provider request.
+	AgentRunFailureClassProvider = "agent_run_provider_failure"
+	// AgentRunFailureClassHarness identifies an agent run that failed in the
+	// harness rather than in a normalized provider request.
+	AgentRunFailureClassHarness = "agent_run_harness_failure"
+
 	AgentRunMetadataExecutionBehavior = "execution_behavior"
 	AgentRunMetadataFailureClass      = "failure_class"
 	AgentRunMetadataRecoveryAction    = "recovery_action"

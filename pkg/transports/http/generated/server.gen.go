@@ -7481,6 +7481,9 @@ type WorkerSessionExecutionMetadata struct {
 
 // WorkerSessionFailure defines model for WorkerSessionFailure.
 type WorkerSessionFailure struct {
+	// AgentRunFailureClass Optional bounded Workers-owned agent-run class distinguishing provider and harness failures.
+	AgentRunFailureClass *string `json:"agentRunFailureClass"`
+
 	// Detail Customer-safe failure detail derived by Worker Sessions.
 	Detail string `json:"detail"`
 

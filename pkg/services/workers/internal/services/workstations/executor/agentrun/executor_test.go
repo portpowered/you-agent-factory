@@ -303,6 +303,9 @@ func TestAgentRunExecutor_ProviderFailureSurfacesProviderClassAndSafeType(t *tes
 	if got := result.Diagnostics.Metadata[DiagnosticProviderFailureType]; got != string(workerexecution.WorkFailureTypeInternalServerError) {
 		t.Fatalf("provider failure type = %q, want %q", got, workerexecution.WorkFailureTypeInternalServerError)
 	}
+	if got := result.Diagnostics.Metadata[DiagnosticRecoveryAction]; got != "retry the agent run after the provider recovers" {
+		t.Fatalf("provider recovery action = %q, want retry guidance", got)
+	}
 	if !strings.HasPrefix(result.Error, "agent run provider failure:") ||
 		!strings.Contains(result.Error, string(workerexecution.WorkFailureTypeInternalServerError)) {
 		t.Fatalf("Error = %q, want safe provider failure wording", result.Error)

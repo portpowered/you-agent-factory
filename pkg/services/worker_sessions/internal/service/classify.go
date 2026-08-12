@@ -84,6 +84,9 @@ func terminalForWorkResult(
 	workResult workers.WorkResult,
 ) workersessions.TerminalResult {
 	terminal := failedTerminal(kind, detail)
+	if terminal.Cause != nil {
+		terminal.Cause.AgentRunFailureClass = agentRunFailureClassFromWorkDiagnostics(workResult.Diagnostics)
+	}
 	terminal.Cause.ProviderFailureKind,
 		terminal.Cause.ProviderContinuationFailureKind,
 		terminal.Cause.ProviderContinuationOutcome = workersessions.SanitizeProviderFailureClassification(
@@ -471,12 +474,33 @@ func normalizeCommittedTerminal(state workersessions.State, result workersession
 			cause.ProviderContinuationFailureKind,
 			cause.ProviderContinuationOutcome,
 		)
+		cause.AgentRunFailureClass = sanitizeAgentRunFailureClass(cause.AgentRunFailureClass)
 		return workersessions.TerminalResult{
 			Outcome: workersessions.TerminalOutcomeFailed,
 			Cause:   &cause,
 		}
 	default:
 		return result
+	}
+}
+
+func agentRunFailureClassFromWorkDiagnostics(diagnostics *workers.WorkDiagnostics) string {
+	if diagnostics == nil {
+		return ""
+	}
+	diagnostic := workers.SafeAgentRunDiagnosticFromWorkDiagnostics(diagnostics)
+	if diagnostic == nil {
+		return ""
+	}
+	return sanitizeAgentRunFailureClass(diagnostic.FailureClass)
+}
+
+func sanitizeAgentRunFailureClass(class string) string {
+	switch class {
+	case workers.AgentRunFailureClassProvider, workers.AgentRunFailureClassHarness:
+		return class
+	default:
+		return ""
 	}
 }
 
@@ -514,9 +538,10 @@ func causeKindString(cause *workersessions.FailureCause) string {
 // W3 terminal record. Failure fields are additive and carry only the already
 // normalized Worker Sessions classification.
 type terminalSessionPayload struct {
-	Status        string `json:"status,omitempty"`
-	FailureCause  string `json:"failureCause,omitempty"`
-	FailureDetail string `json:"failureDetail,omitempty"`
+	Status               string `json:"status,omitempty"`
+	FailureCause         string `json:"failureCause,omitempty"`
+	FailureDetail        string `json:"failureDetail,omitempty"`
+	AgentRunFailureClass string `json:"agentRunFailureClass,omitempty"`
 }
 
 // terminalPhase is the pure mapping from a committed Worker Session State to
@@ -551,6 +576,7 @@ func terminalDraft(state workersessions.State, result workersessions.TerminalRes
 	if result.Cause != nil {
 		payload.FailureCause = string(result.Cause.Kind)
 		payload.FailureDetail = result.Cause.Detail
+		payload.AgentRunFailureClass = result.Cause.AgentRunFailureClass
 	}
 	payloadJSON, _ := json.Marshal(payload)
 	return workers.Draft{

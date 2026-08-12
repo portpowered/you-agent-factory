@@ -902,6 +902,45 @@ func TestClassifyTerminal_FailureMetadataPresentAlongsideSensitiveRawText_UsesOn
 	}
 }
 
+func TestClassifyTerminal_PreservesOnlyBoundedAgentRunProviderAndHarnessClasses(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		class string
+		want  string
+	}{
+		{name: "provider", class: workers.AgentRunFailureClassProvider, want: workers.AgentRunFailureClassProvider},
+		{name: "harness", class: workers.AgentRunFailureClassHarness, want: workers.AgentRunFailureClassHarness},
+		{name: "unknown class", class: "agent_run_failure_with_secret", want: ""},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			terminal := classifyTerminal(nil, workers.WorkstationDispatchResult{Result: workers.WorkResult{
+				Outcome: workers.OutcomeFailed,
+				Diagnostics: &workers.WorkDiagnostics{Metadata: map[string]string{
+					workers.AgentRunMetadataExecutionBehavior: workers.AgentRunExecutionBehavior,
+					workers.AgentRunMetadataFailureClass:      test.class,
+				}},
+			}})
+			if terminal.Cause == nil {
+				t.Fatal("terminal cause = nil, want failed cause")
+			}
+			if terminal.Cause.Kind != workersessions.FailureCauseWorkersExecutionFailure {
+				t.Fatalf("terminal cause kind = %q, want generic Workers execution failure", terminal.Cause.Kind)
+			}
+			if terminal.Cause.AgentRunFailureClass != test.want {
+				t.Fatalf("agent-run failure class = %q, want %q", terminal.Cause.AgentRunFailureClass, test.want)
+			}
+			if err := terminal.Cause.Validate(); err != nil {
+				t.Fatalf("terminal cause validation = %v, want nil", err)
+			}
+		})
+	}
+}
+
 // TestClassifyTerminal_ExecutorPanicWithSensitiveRawEvidence_ClassifiesCorrectlyWithoutLeakingDetail
 // proves executor-panic classification still works from raw evidence text
 // (isExecutorPanicEvidence legitimately inspects it), while Detail itself
