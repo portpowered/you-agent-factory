@@ -25,7 +25,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
-	"github.com/portpowered/infinite-you/tests/functional/internal/terminalportlock"
+	"github.com/portpowered/infinite-you/tests/functional/transport/terminalportlock"
 )
 
 const (
