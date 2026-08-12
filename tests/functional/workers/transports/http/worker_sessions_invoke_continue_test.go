@@ -62,7 +62,20 @@ func TestWorkerSessionRemoteInvokeObserveContinueUsesServerAfterDisconnect(t *te
 	client := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: clientRunner})
 	support.CleanupProcess(t, client)
 
-	listed := waitForRemoteWorkerSession(t, ctx, client, env, factoryDir, server.URL(), "remote-source-session")
+	serverURL := server.URL()
+	assertRemoteSourceObservation(t, ctx, client, env, factoryDir, serverURL)
+	continueRemoteWorkerSession(t, ctx, client, env, factoryDir, serverURL)
+	assertRemoteContinuationUsesServer(t, clientRunner, runner)
+
+	all := waitForRemoteWorkerSessionList(t, ctx, client, env, factoryDir, serverURL)
+	if len(all) != 2 {
+		t.Fatalf("top-level direct Worker Session count = %d, want source and distinct successor", len(all))
+	}
+}
+
+func assertRemoteSourceObservation(t *testing.T, ctx context.Context, client support.Process, env []string, factoryDir, serverURL string) {
+	t.Helper()
+	listed := waitForRemoteWorkerSession(t, ctx, client, env, factoryDir, serverURL, "remote-source-session")
 	if listed.State != "COMPLETED" || listed.WorkerSessionID != "remote-source-session" {
 		t.Fatalf("remote source observation = %#v, want completed source", listed)
 	}
@@ -70,7 +83,7 @@ func TestWorkerSessionRemoteInvokeObserveContinueUsesServerAfterDisconnect(t *te
 		t.Fatalf("remote source provider session = %#v, want exact provider identity", listed.ProviderSession)
 	}
 
-	show := executeRemoteWorkerCLI(t, ctx, client, env, factoryDir, server.URL(),
+	show := executeRemoteWorkerCLI(t, ctx, client, env, factoryDir, serverURL,
 		"--json", "worker-sessions", "show", "--worker-session-id", "remote-source-session")
 	var shown remoteWorkerSessionObservation
 	decodeRemoteWorkerJSON(t, show.Stdout(), &shown)
@@ -78,7 +91,7 @@ func TestWorkerSessionRemoteInvokeObserveContinueUsesServerAfterDisconnect(t *te
 		t.Fatalf("remote show = %#v, want completed source", shown)
 	}
 
-	read := executeRemoteWorkerCLI(t, ctx, client, env, factoryDir, server.URL(),
+	read := executeRemoteWorkerCLI(t, ctx, client, env, factoryDir, serverURL,
 		"--json", "worker-sessions", "read", "--worker-session-id", "remote-source-session")
 	var transcript remoteWorkerSessionTranscript
 	decodeRemoteWorkerJSON(t, read.Stdout(), &transcript)
@@ -90,12 +103,14 @@ func TestWorkerSessionRemoteInvokeObserveContinueUsesServerAfterDisconnect(t *te
 		t.Fatalf("remote transcript omitted provider answer: %s", transcriptBytes)
 	}
 
-	stream := executeRemoteWorkerCLI(t, ctx, client, env, factoryDir, server.URL(),
+	stream := executeRemoteWorkerCLI(t, ctx, client, env, factoryDir, serverURL,
 		"--json", "worker-sessions", "stream", "--worker-session-id", "remote-source-session", "--replay-only")
-	streamFrames := decodeRemoteWorkerNDJSON(t, stream.Stdout())
-	assertRemoteWorkerStreamTerminal(t, streamFrames, "remote-source-session")
+	assertRemoteWorkerStreamTerminal(t, decodeRemoteWorkerNDJSON(t, stream.Stdout()), "remote-source-session")
+}
 
-	continued := executeRemoteWorkerCLI(t, ctx, client, env, factoryDir, server.URL(),
+func continueRemoteWorkerSession(t *testing.T, ctx context.Context, client support.Process, env []string, factoryDir, serverURL string) {
+	t.Helper()
+	continued := executeRemoteWorkerCLI(t, ctx, client, env, factoryDir, serverURL,
 		"--json", "worker-sessions", "continue", "remote-source-session",
 		"--request-id", "remote-continue-request", "--successor-worker-session-id", "remote-successor-session",
 		"--user-message", "continue on the exact provider session", "--async")
@@ -106,14 +121,16 @@ func TestWorkerSessionRemoteInvokeObserveContinueUsesServerAfterDisconnect(t *te
 		t.Fatalf("remote continuation admission = %#v, want accepted source/successor", continuation)
 	}
 
-	successorStream := executeRemoteWorkerCLI(t, ctx, client, env, factoryDir, server.URL(),
+	successorStream := executeRemoteWorkerCLI(t, ctx, client, env, factoryDir, serverURL,
 		"--json", "worker-sessions", "stream", "--worker-session-id", "remote-successor-session", "--replay-only")
-	successorFrames := decodeRemoteWorkerNDJSON(t, successorStream.Stdout())
-	assertRemoteWorkerStreamTerminal(t, successorFrames, "remote-successor-session")
+	assertRemoteWorkerStreamTerminal(t, decodeRemoteWorkerNDJSON(t, successorStream.Stdout()), "remote-successor-session")
 	if !strings.Contains(successorStream.Stdout(), "Codex fixture answer COMPLETE") {
 		t.Fatalf("remote successor stream omitted continued provider output:\n%s", successorStream.Stdout())
 	}
+}
 
+func assertRemoteContinuationUsesServer(t *testing.T, clientRunner *testutil.ProviderCommandRunner, runner *remoteInvokeContinueRunner) {
+	t.Helper()
 	if clientRunner.CallCount() != 0 {
 		t.Fatalf("remote CLI caused local provider fallback: %d calls", clientRunner.CallCount())
 	}
@@ -126,11 +143,6 @@ func TestWorkerSessionRemoteInvokeObserveContinueUsesServerAfterDisconnect(t *te
 	}
 	if !containsRemoteArgSequence(requests[1].Args, []string{"resume", remoteWorkerSessionProviderID}) {
 		t.Fatalf("continuation server provider command = %#v, want exact resume identity", requests[1].Args)
-	}
-
-	all := waitForRemoteWorkerSessionList(t, ctx, client, env, factoryDir, server.URL())
-	if len(all) != 2 {
-		t.Fatalf("top-level direct Worker Session count = %d, want source and distinct successor", len(all))
 	}
 }
 

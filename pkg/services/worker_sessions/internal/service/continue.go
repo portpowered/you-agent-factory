@@ -2,10 +2,14 @@ package service
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"slices"
+	"sort"
 	"strings"
 
+	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -433,4 +437,206 @@ func (r *registry) logContinuationRejected(req workersessions.ContinueRequest, o
 		"requestID", req.RequestID,
 		"outcome", outcome,
 	)
+}
+
+func (r *registry) ListWorkerSessionObservations(
+	ctx context.Context,
+	req workersessions.ListWorkerSessionObservationsRequest,
+) (workersessions.ListWorkerSessionObservationsResult, error) {
+	query, err := r.parseObservationListQuery(ctx, req)
+	if err != nil {
+		return workersessions.ListWorkerSessionObservationsResult{}, err
+	}
+	ids := r.observationListIDs(query.cursor, query.scope, req.States)
+	pageIDs := observationListPage(ids, query.limit)
+	observations, err := r.projectObservationList(ctx, pageIDs)
+	if err != nil {
+		return workersessions.ListWorkerSessionObservationsResult{}, err
+	}
+	nextToken := observationListNextToken(ids, pageIDs)
+	r.logger.Info("worker session top-level observation list", "scope", string(query.scope), "state_count", len(req.States), "result_count", len(observations), "has_next", nextToken != "")
+	return workersessions.ListWorkerSessionObservationsResult{
+		Observations: observations,
+		MaxResults:   query.limit,
+		NextToken:    nextToken,
+	}, nil
+}
+
+type observationListQuery struct {
+	limit  int
+	cursor string
+	scope  workersessions.ObservationScope
+}
+
+func (r *registry) parseObservationListQuery(ctx context.Context, req workersessions.ListWorkerSessionObservationsRequest) (observationListQuery, error) {
+	if err := req.Validate(); err != nil {
+		r.logger.Info("worker session top-level observation list rejected", "outcome", "invalid")
+		return observationListQuery{}, err
+	}
+	if err := observationContextError(ctx); err != nil {
+		return observationListQuery{}, err
+	}
+	limit := req.MaxResults
+	if limit == 0 {
+		limit = workersessions.DefaultWorkerSessionObservationListMaxResults
+	}
+	cursor, err := decodeObservationListCursor(req.NextToken)
+	if err != nil {
+		return observationListQuery{}, err
+	}
+	return observationListQuery{limit: limit, cursor: cursor, scope: req.Scope.Normalized()}, nil
+}
+
+func decodeObservationListCursor(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", nil
+	}
+	decoded, err := base64.StdEncoding.DecodeString(value)
+	if err != nil {
+		return "", workersessions.ErrInvalidObservationPagination
+	}
+	return string(decoded), nil
+}
+
+func (r *registry) observationListIDs(cursor string, scope workersessions.ObservationScope, states []workersessions.State) []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	ids := make([]string, 0, len(r.observations))
+	for id, metadata := range r.observations {
+		if metadata == nil || id <= cursor || !observationScopeMatches(metadata.direct, scope) {
+			continue
+		}
+		session, exists := r.sessions[id]
+		if !exists || !observationStateMatches(session.State, states) {
+			continue
+		}
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids
+}
+
+func observationListPage(ids []string, limit int) []string {
+	if len(ids) <= limit {
+		return ids
+	}
+	return ids[:limit]
+}
+
+func (r *registry) projectObservationList(ctx context.Context, ids []string) ([]workersessions.Observation, error) {
+	observations := make([]workersessions.Observation, 0, len(ids))
+	for _, id := range ids {
+		projected, err := r.projectObservation(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		observations = append(observations, projected)
+	}
+	return observations, nil
+}
+
+func observationListNextToken(allIDs, pageIDs []string) string {
+	if len(allIDs) <= len(pageIDs) || len(pageIDs) == 0 {
+		return ""
+	}
+	return base64.StdEncoding.EncodeToString([]byte(pageIDs[len(pageIDs)-1]))
+}
+
+func observationScopeMatches(direct bool, scope workersessions.ObservationScope) bool {
+	switch scope.Normalized() {
+	case workersessions.ObservationScopeDirect:
+		return direct
+	case workersessions.ObservationScopeFactory:
+		return !direct
+	case workersessions.ObservationScopeAll:
+		return true
+	default:
+		return false
+	}
+}
+
+func observationStateMatches(state workersessions.State, states []workersessions.State) bool {
+	if len(states) == 0 {
+		return true
+	}
+	return slices.Contains(states, state)
+}
+
+// ReadTranscriptByWorkerSessionID resolves the registry-owned association
+// before projecting a direct or Factory Worker Session transcript. The caller
+// cannot substitute a provider tuple or cause a provider-session discovery.
+func (r *registry) ReadTranscriptByWorkerSessionID(
+	ctx context.Context,
+	req workersessions.ReadTranscriptByWorkerSessionIDRequest,
+) (workersessions.ReadTranscriptResult, error) {
+	if err := req.Validate(); err != nil {
+		r.logger.Info("worker session identity transcript read rejected", "outcome", "invalid")
+		return workersessions.ReadTranscriptResult{}, err
+	}
+	if err := observationContextError(ctx); err != nil {
+		return workersessions.ReadTranscriptResult{}, err
+	}
+	session, metadata, ok := r.loadObservationState(req.WorkerSessionID)
+	if !ok {
+		r.logger.Info("worker session identity transcript read", "workerSessionID", req.WorkerSessionID, "outcome", "not_found")
+		return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationSessionNotFound
+	}
+	providerSession := providers.SessionRef{}
+	if session.ProviderSessionAssociation != nil {
+		providerSession = session.ProviderSessionAssociation.Reference
+	}
+	return r.projectTranscript(ctx, session, metadata, providerSession)
+}
+
+func (r *registry) projectTranscript(
+	ctx context.Context,
+	session workersessions.Session,
+	metadata *observation,
+	providerSession providers.SessionRef,
+) (workersessions.ReadTranscriptResult, error) {
+	if !session.State.Terminal() {
+		r.logger.Info("worker session transcript read", "workerSessionID", session.ID, "outcome", "active")
+		return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationTranscriptActive
+	}
+	if session.ProviderSessionAssociation == nil {
+		r.logger.Info("worker session transcript read", "workerSessionID", session.ID, "outcome", "unavailable")
+		return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationTranscriptUnavailable
+	}
+	if r.providerSessions == nil {
+		r.logger.Info("worker session transcript read", "workerSessionID", session.ID, "outcome", "projection_unavailable")
+		return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationTranscriptProjectionUnavailable
+	}
+
+	projected, projectErr := r.providerSessions.Project(providersessions.ProjectRequest{
+		Session: providerSession.Clone(),
+		Context: ctx,
+	})
+	if projectErr != nil {
+		if errors.Is(projectErr, context.Canceled) || errors.Is(projectErr, providersessions.ErrOperationCanceled) {
+			return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationCanceled
+		}
+		if transcriptSourceUnavailable(projectErr) {
+			return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationTranscriptUnavailable
+		}
+		return workersessions.ReadTranscriptResult{}, fmt.Errorf("%w: %v", workersessions.ErrObservationTranscriptProjectionUnavailable, projectErr)
+	}
+
+	result := workersessions.ReadTranscriptResult{
+		WorkerSessionID: session.ID,
+		ProviderSession: providerSession.Clone(),
+		WorkIDs:         append([]string(nil), metadata.workIDs...),
+		AttemptID:       metadata.attemptID,
+		State:           session.State,
+		Entries:         transcriptEntries(projected.Detail.Transcript),
+	}
+	if session.ProviderSessionAssociation != nil {
+		result.TurnID = session.ProviderSessionAssociation.TurnID
+		result.AttemptID = session.ProviderSessionAssociation.AttemptID
+	}
+	if err := result.Validate(); err != nil {
+		return workersessions.ReadTranscriptResult{}, fmt.Errorf("validate Worker Session transcript: %w", err)
+	}
+	r.logger.Info("worker session transcript read", "workerSessionID", result.WorkerSessionID, "outcome", "success", "result_count", len(result.Entries))
+	return result, nil
 }

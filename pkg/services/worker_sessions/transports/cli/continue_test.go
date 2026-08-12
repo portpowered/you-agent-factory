@@ -79,25 +79,7 @@ func TestContinueLocalWaitsForSuccessorTerminalOutput(t *testing.T) {
 func TestContinueRemoteUsesExactSourceRouteAndDoesNotFallback(t *testing.T) {
 	var received factoryapi.WorkerSessionContinueRequest
 	var postCount, getCount int
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || r.URL.Path != "/worker-sessions/source-session/continue" {
-			t.Fatalf("unexpected remote request %s %s", r.Method, r.URL.Path)
-		}
-		postCount++
-		if err := json.NewDecoder(r.Body).Decode(&received); err != nil {
-			t.Fatalf("decode continuation request: %v", err)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusAccepted)
-		_ = json.NewEncoder(w).Encode(factoryapi.WorkerSessionContinueResponse{
-			RequestId: "continue-request", SourceWorkerSessionId: "source-session", SuccessorWorkerSessionId: "successor-session",
-			PredecessorWorkerSessionId: "source-session", Accepted: true,
-			State: factoryapi.WorkerSessionContinueResponseStateRunning, EventTopic: "worker-session/successor-session/events",
-		})
-		if getCount != 0 {
-			t.Errorf("async continuation opened an observation stream")
-		}
-	}))
+	server := httptest.NewServer(remoteContinueAdmissionHandler(t, &received, &postCount, &getCount))
 	defer server.Close()
 
 	boundary := &invokeLocalFake{}
@@ -122,6 +104,29 @@ func TestContinueRemoteUsesExactSourceRouteAndDoesNotFallback(t *testing.T) {
 	if result.SourceWorkerSessionID != "source-session" || result.SuccessorWorkerSessionID != "successor-session" || result.State != "RUNNING" {
 		t.Fatalf("remote result = %#v, want admitted lineage", result)
 	}
+}
+
+func remoteContinueAdmissionHandler(t *testing.T, received *factoryapi.WorkerSessionContinueRequest, postCount, getCount *int) http.Handler {
+	t.Helper()
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/worker-sessions/source-session/continue" {
+			t.Fatalf("unexpected remote request %s %s", r.Method, r.URL.Path)
+		}
+		(*postCount)++
+		if err := json.NewDecoder(r.Body).Decode(received); err != nil {
+			t.Fatalf("decode continuation request: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		_ = json.NewEncoder(w).Encode(factoryapi.WorkerSessionContinueResponse{
+			RequestId: "continue-request", SourceWorkerSessionId: "source-session", SuccessorWorkerSessionId: "successor-session",
+			PredecessorWorkerSessionId: "source-session", Accepted: true,
+			State: factoryapi.WorkerSessionContinueResponseStateRunning, EventTopic: "worker-session/successor-session/events",
+		})
+		if *getCount != 0 {
+			t.Errorf("async continuation opened an observation stream")
+		}
+	})
 }
 
 func TestContinueRemoteWaitsOnSuccessorEventRoute(t *testing.T) {

@@ -2171,3 +2171,80 @@ type coverageEventsReader struct {
 func (r coverageEventsReader) Subscribe(context.Context, events.SubscribeRequest) (events.Subscription, error) {
 	return r.subscription, r.err
 }
+
+func TestStreamObservationsMapsLookupAndSubscribeErrors(t *testing.T) {
+	ref := observationProviderRef()
+	withoutReader := newObservationRegistry(observationProjectorFake{}, nil)
+	if _, err := withoutReader.StreamObservations(context.Background(), workersessions.StreamObservationsRequest{ProviderSession: providers.SessionRef{}}); !errors.Is(err, workersessions.ErrInvalidObservationIdentity) {
+		t.Fatalf("StreamObservations(invalid request) error = %v", err)
+	}
+	withoutReader.sessions["worker-1"] = observationSession("worker-1", workersessions.StateRunning)
+	if _, err := withoutReader.StreamObservations(context.Background(), workersessions.StreamObservationsRequest{ProviderSession: ref}); !errors.Is(err, workersessions.ErrObservationSourceUnavailable) {
+		t.Fatalf("StreamObservations(without reader) error = %v", err)
+	}
+	missing := newObservationRegistry(observationProjectorFake{}, &observationEventReaderFake{subscription: events.Subscription(func(context.Context) events.Delivery { return events.Delivery{Kind: events.DeliveryClosed} })})
+	if _, err := missing.StreamObservations(context.Background(), workersessions.StreamObservationsRequest{ProviderSession: ref}); !errors.Is(err, workersessions.ErrObservationSessionNotFound) {
+		t.Fatalf("StreamObservations(missing session) error = %v", err)
+	}
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := missing.StreamObservations(canceled, workersessions.StreamObservationsRequest{ProviderSession: ref}); !errors.Is(err, workersessions.ErrObservationCanceled) {
+		t.Fatalf("StreamObservations(canceled) error = %v", err)
+	}
+
+	active := newObservationRegistry(observationProjectorFake{}, &observationEventReaderFake{err: errors.New("subscribe failed")})
+	active.sessions["worker-1"] = observationSession("worker-1", workersessions.StateRunning)
+	if _, err := active.StreamObservations(context.Background(), workersessions.StreamObservationsRequest{ProviderSession: ref}); !errors.Is(err, workersessions.ErrObservationSourceUnavailable) {
+		t.Fatalf("StreamObservations(subscribe failure) error = %v", err)
+	}
+	canceledReader := newObservationRegistry(observationProjectorFake{}, &observationEventReaderFake{err: context.Canceled})
+	canceledReader.sessions["worker-1"] = observationSession("worker-1", workersessions.StateRunning)
+	if _, err := canceledReader.StreamObservations(context.Background(), workersessions.StreamObservationsRequest{ProviderSession: ref}); !errors.Is(err, workersessions.ErrObservationCanceled) {
+		t.Fatalf("StreamObservations(canceled subscribe) error = %v", err)
+	}
+	terminal := newObservationRegistry(observationProjectorFake{}, &observationEventReaderFake{subscription: events.Subscription(func(context.Context) events.Delivery { return events.Delivery{Kind: events.DeliveryClosed} })})
+	terminal.sessions["worker-1"] = observationSession("worker-1", workersessions.StateCompleted)
+	subscription, err := terminal.StreamObservations(context.Background(), workersessions.StreamObservationsRequest{ProviderSession: ref, Limit: 2})
+	if err != nil {
+		t.Fatalf("StreamObservations(terminal) error = %v", err)
+	}
+	subscription.Close()
+}
+
+func TestReadTranscriptMapsProviderProjectionErrors(t *testing.T) {
+	ref := observationProviderRef()
+	cases := []struct {
+		name string
+		err  error
+		want error
+	}{
+		{"canceled", context.Canceled, workersessions.ErrObservationCanceled},
+		{"provider canceled", providersessions.ErrOperationCanceled, workersessions.ErrObservationCanceled},
+		{"source unavailable", providersessions.ErrSessionNotFound, workersessions.ErrObservationTranscriptUnavailable},
+		{"projection failure", errors.New("projection failed"), workersessions.ErrObservationTranscriptProjectionUnavailable},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			registry := newObservationRegistry(observationProjectorFake{err: test.err}, nil)
+			registry.sessions["worker-1"] = observationSession("worker-1", workersessions.StateCompleted)
+			registry.observations["worker-1"] = observationMetadata()
+			_, err := registry.ReadTranscript(context.Background(), workersessions.ReadTranscriptRequest{ProviderSession: ref})
+			if !errors.Is(err, test.want) {
+				t.Fatalf("ReadTranscript() error = %v, want %v", err, test.want)
+			}
+		})
+	}
+}
+
+func TestReadTranscriptRejectsInvalidRequestAndProjection(t *testing.T) {
+	ref := observationProviderRef()
+	registry := newObservationRegistry(observationProjectorFake{result: providersessions.ProjectResult{Detail: providersessions.Detail{Transcript: []providersessions.TranscriptEntry{{Order: 0}}}}}, nil)
+	registry.sessions["worker-1"] = observationSession("worker-1", workersessions.StateCompleted)
+	registry.observations["worker-1"] = observationMetadata()
+	if _, err := registry.ReadTranscript(context.Background(), workersessions.ReadTranscriptRequest{}); !errors.Is(err, workersessions.ErrInvalidObservationIdentity) {
+		t.Fatalf("ReadTranscript(invalid request) error = %v", err)
+	}
+	if _, err := registry.ReadTranscript(context.Background(), workersessions.ReadTranscriptRequest{ProviderSession: ref}); err == nil {
+		t.Fatal("ReadTranscript(invalid projected entry) error = nil, want validation error")
+	}
+}

@@ -73,37 +73,7 @@ func TestWorkerSessionsCLI(t *testing.T) {
 	server := support.StartProcessCommand(t, process, serverInputs.Input)
 	baseURL := api.WaitForURL(t)
 
-	helpInputs := executeCLI(t, ctx, process, env, factoryDir, "worker-sessions")
-	for _, marker := range []string{
-		"Usage:",
-		"continue    Continue a Worker Session",
-		"invoke      Invoke a direct Worker",
-		"list        List direct or Factory Worker Sessions",
-		"read        Read a finished Worker Session",
-		"show        Show one Worker Session",
-		"stream      Stream one Worker Session",
-	} {
-		if !strings.Contains(helpInputs.Stdout(), marker) {
-			t.Fatalf("worker-sessions help omitted %q:\n%s", marker, helpInputs.Stdout())
-		}
-	}
-	explicitHelpInputs := executeCLI(t, ctx, process, env, factoryDir, "worker-sessions", "--help")
-	if !strings.Contains(explicitHelpInputs.Stdout(), "Usage:") {
-		t.Fatalf("worker-sessions --help omitted usage:\n%s", explicitHelpInputs.Stdout())
-	}
-	unknownInputs, unknownErr := executeCLIExpectError(t, ctx, process, env, factoryDir, "worker-sessions", "--unknown")
-	if unknownErr == nil {
-		t.Fatal("worker-sessions unknown argument returned nil error")
-	}
-	if !strings.Contains(unknownErr.Error()+unknownInputs.Stderr(), "unknown command") {
-		t.Fatalf("worker-sessions unknown argument omitted diagnostic: %v\nstderr:\n%s", unknownErr, unknownInputs.Stderr())
-	}
-	completionInputs := executeCLI(t, ctx, process, env, factoryDir, "__complete", "worker-sessions", "")
-	for _, marker := range []string{"continue", "invoke", "list", "read", "show", "stream"} {
-		if !strings.Contains(completionInputs.Stdout(), marker) {
-			t.Fatalf("worker-sessions completion omitted %q:\n%s", marker, completionInputs.Stdout())
-		}
-	}
+	assertWorkerSessionsCLIHelp(t, ctx, process, env, factoryDir)
 
 	successWorkID := submitWork(t, ctx, process, env, factoryDir, baseURL, "worker-session-cli-success")
 	waitForWorkerSession(t, ctx, process, env, factoryDir, baseURL, successWorkID)
@@ -135,6 +105,41 @@ func TestWorkerSessionsCLI(t *testing.T) {
 		"cli/you.worker-sessions.show",
 		"cli/you.worker-sessions.stream",
 	)
+}
+
+func assertWorkerSessionsCLIHelp(t *testing.T, ctx context.Context, process support.Process, env []string, factoryDir string) {
+	t.Helper()
+	helpInputs := executeCLI(t, ctx, process, env, factoryDir, "worker-sessions")
+	for _, marker := range []string{
+		"Usage:",
+		"continue    Continue a Worker Session",
+		"invoke      Invoke a direct Worker",
+		"list        List direct or Factory Worker Sessions",
+		"read        Read a finished Worker Session",
+		"show        Show one Worker Session",
+		"stream      Stream one Worker Session",
+	} {
+		if !strings.Contains(helpInputs.Stdout(), marker) {
+			t.Fatalf("worker-sessions help omitted %q:\n%s", marker, helpInputs.Stdout())
+		}
+	}
+	explicitHelpInputs := executeCLI(t, ctx, process, env, factoryDir, "worker-sessions", "--help")
+	if !strings.Contains(explicitHelpInputs.Stdout(), "Usage:") {
+		t.Fatalf("worker-sessions --help omitted usage:\n%s", explicitHelpInputs.Stdout())
+	}
+	unknownInputs, unknownErr := executeCLIExpectError(t, ctx, process, env, factoryDir, "worker-sessions", "--unknown")
+	if unknownErr == nil {
+		t.Fatal("worker-sessions unknown argument returned nil error")
+	}
+	if !strings.Contains(unknownErr.Error()+unknownInputs.Stderr(), "unknown command") {
+		t.Fatalf("worker-sessions unknown argument omitted diagnostic: %v\nstderr:\n%s", unknownErr, unknownInputs.Stderr())
+	}
+	completionInputs := executeCLI(t, ctx, process, env, factoryDir, "__complete", "worker-sessions", "")
+	for _, marker := range []string{"continue", "invoke", "list", "read", "show", "stream"} {
+		if !strings.Contains(completionInputs.Stdout(), marker) {
+			t.Fatalf("worker-sessions completion omitted %q:\n%s", marker, completionInputs.Stdout())
+		}
+	}
 }
 
 // TestWorkerSessionsReplayOnlyRedirectsWellFormedNDJSON proves that the

@@ -109,7 +109,9 @@ func (a workerExecutorRequestAdapter) Execute(
 			workerType,
 		)
 	}
-	if resolved, ok := executor.(ResolvedWorkerExecutor); ok {
+	if resolved, ok := executor.(interface {
+		ExecuteResolved(context.Context, WorkstationExecutionRequest) (WorkResult, error)
+	}); ok {
 		return resolved.ExecuteResolved(ctx, request)
 	}
 	return executor.Execute(ctx, request.Dispatch)

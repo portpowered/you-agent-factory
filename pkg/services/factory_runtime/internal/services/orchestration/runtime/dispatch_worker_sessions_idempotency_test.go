@@ -71,9 +71,7 @@ func (s *countingWorkerSessionsService) GetObservationByWorkerSessionID(
 	return s.inner.GetObservationByWorkerSessionID(ctx, req)
 }
 
-func (s *countingWorkerSessionsService) ListWorkerSessionObservations(
-	ctx context.Context, req workersessions.ListWorkerSessionObservationsRequest,
-) (workersessions.ListWorkerSessionObservationsResult, error) {
+func (s *countingWorkerSessionsService) ListWorkerSessionObservations(ctx context.Context, req workersessions.ListWorkerSessionObservationsRequest) (workersessions.ListWorkerSessionObservationsResult, error) {
 	return s.inner.ListWorkerSessionObservations(ctx, req)
 }
 
@@ -95,9 +93,7 @@ func (s *countingWorkerSessionsService) ReadTranscript(
 	return s.inner.ReadTranscript(ctx, req)
 }
 
-func (s *countingWorkerSessionsService) ReadTranscriptByWorkerSessionID(
-	ctx context.Context, req workersessions.ReadTranscriptByWorkerSessionIDRequest,
-) (workersessions.ReadTranscriptResult, error) {
+func (s *countingWorkerSessionsService) ReadTranscriptByWorkerSessionID(ctx context.Context, req workersessions.ReadTranscriptByWorkerSessionIDRequest) (workersessions.ReadTranscriptResult, error) {
 	return s.inner.ReadTranscriptByWorkerSessionID(ctx, req)
 }
 
@@ -119,9 +115,7 @@ func (s *countingWorkerSessionsService) Start(
 	return s.inner.Start(ctx, req)
 }
 
-func (s *countingWorkerSessionsService) Continue(
-	ctx context.Context, req workersessions.ContinueRequest,
-) (workersessions.ContinueResult, error) {
+func (s *countingWorkerSessionsService) Continue(ctx context.Context, req workersessions.ContinueRequest) (workersessions.ContinueResult, error) {
 	return s.inner.Continue(ctx, req)
 }
 
