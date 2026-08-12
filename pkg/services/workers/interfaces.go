@@ -131,6 +131,14 @@ type WorkerExecutor interface {
 	Execute(context.Context, work.WorkDispatch) (WorkResult, error)
 }
 
+// ResolvedWorkerExecutor is an optional WorkerExecutor capability for callers
+// that already resolved the full execution request. The workstation pool uses
+// it when a Worker Session continuation carries an exact Provider Session
+// reference that is not part of the legacy WorkDispatch contract.
+type ResolvedWorkerExecutor interface {
+	ExecuteResolved(context.Context, WorkstationExecutionRequest) (WorkResult, error)
+}
+
 // WorkstationRequestExecutor handles execution after workstation resolution.
 type WorkstationRequestExecutor interface {
 	Execute(context.Context, WorkstationExecutionRequest) (WorkResult, error)

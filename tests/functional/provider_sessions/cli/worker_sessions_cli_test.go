@@ -76,7 +76,9 @@ func TestWorkerSessionsCLI(t *testing.T) {
 	helpInputs := executeCLI(t, ctx, process, env, factoryDir, "worker-sessions")
 	for _, marker := range []string{
 		"Usage:",
-		"list        List Worker Sessions",
+		"continue    Continue a Worker Session",
+		"invoke      Invoke a direct Worker",
+		"list        List direct or Factory Worker Sessions",
 		"read        Read a finished Worker Session",
 		"show        Show one Worker Session",
 		"stream      Stream one Worker Session",
@@ -97,7 +99,7 @@ func TestWorkerSessionsCLI(t *testing.T) {
 		t.Fatalf("worker-sessions unknown argument omitted diagnostic: %v\nstderr:\n%s", unknownErr, unknownInputs.Stderr())
 	}
 	completionInputs := executeCLI(t, ctx, process, env, factoryDir, "__complete", "worker-sessions", "")
-	for _, marker := range []string{"list", "read", "show", "stream"} {
+	for _, marker := range []string{"continue", "invoke", "list", "read", "show", "stream"} {
 		if !strings.Contains(completionInputs.Stdout(), marker) {
 			t.Fatalf("worker-sessions completion omitted %q:\n%s", marker, completionInputs.Stdout())
 		}
@@ -695,16 +697,6 @@ func assertMissingWorkerSessionInputs(t *testing.T, ctx context.Context, process
 		args []string
 		code string
 	}{
-		{
-			name: "list local JSON output",
-			args: []string{"--server", baseURL, "worker-sessions", "list", "--output", "json"},
-			code: "WORK_ID_REQUIRED",
-		},
-		{
-			name: "list global JSON output",
-			args: []string{"--json", "worker-sessions", "list"},
-			code: "WORK_ID_REQUIRED",
-		},
 		{
 			name: "show local provider validation",
 			args: []string{"--server", baseURL, "worker-sessions", "show", "--output", "json"},

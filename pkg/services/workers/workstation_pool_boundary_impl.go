@@ -109,6 +109,9 @@ func (a workerExecutorRequestAdapter) Execute(
 			workerType,
 		)
 	}
+	if resolved, ok := executor.(ResolvedWorkerExecutor); ok {
+		return resolved.ExecuteResolved(ctx, request)
+	}
 	return executor.Execute(ctx, request.Dispatch)
 }
 

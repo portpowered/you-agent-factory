@@ -214,7 +214,12 @@ func provideLocalWorkerSessionsBoundary(
 	if providerInvocationFactory == nil {
 		return nil, fmt.Errorf("construct local Worker Sessions boundary: provider invocation factory is required")
 	}
-	providerInvocation, err := providerInvocationFactory(nil, nil)
+	// The local direct route has no Factory Runtime publisher to supply. Bind
+	// the same Worker Sessions-owned observation bridge used by Factory Runtime
+	// before the first dispatch so provider-session association and source-native
+	// Worker drafts reach the local session topic as well.
+	observationPublisher := workersessions.NewProviderSessionObservationPublisher(nil)
+	providerInvocation, err := providerInvocationFactory(nil, observationPublisher.Publish)
 	if err != nil {
 		return nil, fmt.Errorf("construct local Worker Sessions boundary: %w", err)
 	}
@@ -237,6 +242,7 @@ func provideLocalWorkerSessionsBoundary(
 	if err != nil {
 		return nil, fmt.Errorf("construct local Worker Sessions service: %w", err)
 	}
+	observationPublisher.Bind(service)
 	return &localWorkerSessionsBoundary{service: service, pool: pool}, nil
 }
 

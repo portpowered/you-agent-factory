@@ -86,6 +86,26 @@ type resolvedWorkstationExecutionContext struct {
 
 // Execute implements WorkerExecutor for WorkstationExecutor.
 func (we *WorkstationExecutor) Execute(ctx context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
+	return we.executeResolved(ctx, workerexecution.WorkstationExecutionRequest{Dispatch: dispatch})
+}
+
+// ExecuteResolved preserves Worker Sessions' resolved continuation metadata
+// while retaining the legacy WorkDispatch entry point for ordinary Factory
+// dispatches. In particular, ResumeSession must survive workstation prompt
+// rendering so the inner runner reaches Providers.Continue rather than
+// starting a fresh provider session.
+func (we *WorkstationExecutor) ExecuteResolved(
+	ctx context.Context,
+	request workerexecution.WorkstationExecutionRequest,
+) (workerexecution.WorkResult, error) {
+	return we.executeResolved(ctx, request)
+}
+
+func (we *WorkstationExecutor) executeResolved(
+	ctx context.Context,
+	request workerexecution.WorkstationExecutionRequest,
+) (workerexecution.WorkResult, error) {
+	dispatch := request.Dispatch
 	if we == nil || we.Now == nil {
 		return workerexecution.WorkResult{}, fmt.Errorf("workstation executor clock is required")
 	}
@@ -112,7 +132,7 @@ func (we *WorkstationExecutor) Execute(ctx context.Context, dispatch work.WorkDi
 	case factorydefinitions.WorkstationTypeLogical:
 		return we.executeLogicalMove(dispatch, start), nil
 	default:
-		return we.executeModelWorkstation(ctx, dispatch, workstationDef, start)
+		return we.executeModelWorkstation(ctx, request, workstationDef, start)
 	}
 }
 
@@ -140,7 +160,8 @@ func (we *WorkstationExecutor) executeLogicalMove(dispatch work.WorkDispatch, st
 // backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 // pkgmaintcheck:ignore-function-lines pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 // pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
-func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, dispatch work.WorkDispatch, workstationDef *interfaces.FactoryWorkstationConfig, start time.Time) (workerexecution.WorkResult, error) {
+func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, request workerexecution.WorkstationExecutionRequest, workstationDef *interfaces.FactoryWorkstationConfig, start time.Time) (workerexecution.WorkResult, error) {
+	dispatch := request.Dispatch
 	logger := logging.EnsureLogger(we.Logger)
 	invocationArgs := invocationArgumentsFromDispatch(dispatch)
 	invocationDiagnostics := invocationDiagnosticsForDispatch(we.RuntimeConfig, invocationArgs)
@@ -227,12 +248,13 @@ func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, disp
 		}
 	}
 
-	request, failed := we.buildWorkstationExecutionRequest(dispatch, workerName, workerDef, workstationDef, resolvedContext, start, logger)
+	executionRequest, failed := we.buildWorkstationExecutionRequest(dispatch, workerName, workerDef, workstationDef, resolvedContext, start, logger)
 	if failed != nil {
 		return *failed, nil
 	}
+	executionRequest.ResumeSession = workerexecution.CloneProviderSessionReference(request.ResumeSession)
 
-	result, err := we.executeInnerWorker(ctx, request, workerDef, workstationDef, start, logger)
+	result, err := we.executeInnerWorker(ctx, executionRequest, workerDef, workstationDef, start, logger)
 	result.Diagnostics = mergeWorkDiagnostics(result.Diagnostics, invocationDiagnostics)
 	if err != nil {
 		return result, err
@@ -243,7 +265,7 @@ func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, disp
 			workerDef.Type == factorydefinitions.WorkerTypeScript,
 		)
 	}
-	return we.verifyExpectedArtifacts(request, workstationDef, result), nil
+	return we.verifyExpectedArtifacts(executionRequest, workstationDef, result), nil
 }
 
 func (we *WorkstationExecutor) resolveInvocationProvider(

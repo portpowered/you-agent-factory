@@ -21,6 +21,7 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
@@ -92,6 +93,45 @@ func TestWorkstationExecutorPreservesExecutorProviderInDetachedRequest(t *testin
 	}
 	if got := capture.dispatch.ExecutorProvider; got != "cursor-acp" {
 		t.Fatalf("ExecutorProvider = %q, want cursor-acp", got)
+	}
+}
+
+func TestWorkstationExecutorPreservesResolvedContinuationReference(t *testing.T) {
+	t.Parallel()
+	runtimeConfig := staticRuntimeConfig{
+		Workers: map[string]*interfaces.FactoryWorkerConfig{
+			"worker-a": {Type: interfaces.WorkerTypeModel},
+		},
+		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+			"standard": {Type: interfaces.WorkstationTypeModel, PromptTemplate: "run"},
+		},
+	}
+	capture := &wsMockExecutor{result: workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted}}
+	executor := newTestWorkstationExecutor(runtimeConfig, capture)
+	reference := providers.SessionRef{
+		Provider: providers.IDCodex,
+		Kind:     providers.SessionIDKind,
+		ID:       "provider-session-1",
+	}
+
+	_, err := executor.ExecuteResolved(context.Background(), workerexecution.WorkstationExecutionRequest{
+		ResumeSession: &reference,
+		Dispatch: work.WorkDispatch{
+			DispatchID:      "dispatch-resume",
+			TransitionID:    "transition-resume",
+			WorkerType:      "worker-a",
+			WorkstationName: "standard",
+		},
+	})
+	if err != nil {
+		t.Fatalf("ExecuteResolved() error = %v", err)
+	}
+	if capture.dispatch.ResumeSession == nil || *capture.dispatch.ResumeSession != reference {
+		t.Fatalf("inner request ResumeSession = %#v, want %#v", capture.dispatch.ResumeSession, reference)
+	}
+	reference.ID = "caller-mutated"
+	if capture.dispatch.ResumeSession.ID != "provider-session-1" {
+		t.Fatalf("inner request retained caller mutation: %#v", capture.dispatch.ResumeSession)
 	}
 }
 

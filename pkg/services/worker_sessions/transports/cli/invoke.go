@@ -590,6 +590,14 @@ func captureEvent(capture *invokeCapture, schemaID string, payload json.RawMessa
 	if err := json.Unmarshal(payload, &values); err != nil {
 		return
 	}
+	captureEventValues(capture, schemaID, values)
+	if nested, ok := eventPayloadObject(values["payload"]); ok {
+		captureEventValues(capture, schemaID, nested)
+		captureDraftOutput(capture, values, nested)
+	}
+}
+
+func captureEventValues(capture *invokeCapture, schemaID string, values map[string]json.RawMessage) {
 	captureEventState(capture, values)
 	captureEventOutput(capture, values)
 	captureEventStructuredResult(capture, values)
@@ -597,6 +605,69 @@ func captureEvent(capture *invokeCapture, schemaID string, payload json.RawMessa
 	if capture.State == "" {
 		capture.State = inferInvokeState(schemaID)
 	}
+}
+
+func eventPayloadObject(raw json.RawMessage) (map[string]json.RawMessage, bool) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil, false
+	}
+	var values map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &values); err != nil || values == nil {
+		return nil, false
+	}
+	return values, true
+}
+
+func captureDraftOutput(capture *invokeCapture, draft, payload map[string]json.RawMessage) {
+	var kind, phase string
+	_ = json.Unmarshal(draft["kind"], &kind)
+	_ = json.Unmarshal(draft["phase"], &phase)
+	switch strings.ToUpper(strings.TrimSpace(kind)) {
+	case "MESSAGE":
+		var message struct {
+			Partial       bool `json:"partial"`
+			ContentBlocks []struct {
+				Kind             string          `json:"kind"`
+				Text             string          `json:"text"`
+				StructuredOutput json.RawMessage `json:"structuredOutput"`
+			} `json:"contentBlocks"`
+		}
+		if err := decodeEventPayload(payload, &message); err != nil || message.Partial {
+			return
+		}
+		var text strings.Builder
+		for _, block := range message.ContentBlocks {
+			if block.Text != "" {
+				text.WriteString(block.Text)
+			}
+			if len(block.StructuredOutput) > 0 && json.Valid(block.StructuredOutput) {
+				var structured any
+				if json.Unmarshal(block.StructuredOutput, &structured) == nil {
+					capture.StructuredResult = structured
+					capture.HasStructured = true
+				}
+			}
+		}
+		if text.Len() > 0 && strings.EqualFold(strings.TrimSpace(phase), "COMPLETED") {
+			capture.Output = text.String()
+			capture.HasOutput = true
+		}
+	case "ERROR":
+		var failure struct {
+			Message string `json:"message"`
+		}
+		if decodeEventPayload(payload, &failure) == nil && strings.TrimSpace(failure.Message) != "" {
+			capture.Error = strings.TrimSpace(failure.Message)
+		}
+	}
+}
+
+func decodeEventPayload(raw map[string]json.RawMessage, target any) error {
+	encoded, err := json.Marshal(raw)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(encoded, target)
 }
 
 func captureEventState(capture *invokeCapture, values map[string]json.RawMessage) {
