@@ -632,7 +632,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		LocalWorkerSessions:               wireLocalWorkerSessionsBoundary,
 		OpenRunSelection:                  selectionFactory,
 		RemoteInvocation:                  remoteInvocationOperation,
-		ResponsePresentation:              v80,
+		ResponsePresentation:              v81,
 		ACP:                               acpService,
 		ACPServer:                         server,
 	}
