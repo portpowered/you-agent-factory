@@ -1,5 +1,7 @@
 package workers
 
+import "time"
+
 // SafeWorkDiagnostics carries the canonical dashboard-safe execution
 // diagnostics surface used by history, replay, and projections.
 type SafeWorkDiagnostics struct {
@@ -59,4 +61,29 @@ type AgentRunToolDiagnostic struct {
 type AgentRunTranscriptEntry struct {
 	Role    string `json:"role,omitempty"`
 	Summary string `json:"summary,omitempty"`
+}
+
+// SafeDiagnostics carries persistence-safe diagnostic facts. Raw prompts,
+// environment values, credentials, and command stdin are excluded.
+type SafeDiagnostics struct {
+	RenderedPrompt *SafeRenderedPromptDiagnostic
+	Provider       *SafeProviderDiagnostic
+	AgentRun       *SafeAgentRunDiagnostic
+	Invocation     *InvocationDiagnostic
+	Command        *SafeCommandDiagnostic
+	Panic          *PanicDiagnostic
+	Metadata       map[string]string
+}
+
+// SafeCommandDiagnostic records command identity and exit facts without stdin
+// or environment values.
+type SafeCommandDiagnostic struct {
+	Command    string
+	Args       []string
+	Stdout     string
+	Stderr     string
+	ExitCode   int
+	TimedOut   bool
+	Duration   time.Duration
+	WorkingDir string
 }

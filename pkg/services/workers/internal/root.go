@@ -10,12 +10,20 @@ import (
 	workstations "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations"
 )
 
+// ExecuteCapability is the request-scoped Execute owner composed into the
+// Workers root. Legacy runtime and pool capabilities remain available during
+// the stateless execution migration, but they do not own this operation.
+type ExecuteCapability interface {
+	Execute(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error)
+}
+
 // Root is the inert Workers root composed from parent-private runtime assembly
 // and workstation owners. It starts no lifecycle, runner execution, or
 // workstation pool admission.
 type Root struct {
 	runtimeAssembly runtimeassembly.Service
 	workstations    workstations.Service
+	execute         ExecuteCapability
 }
 
 var _ workers.Service = (*Root)(nil)
@@ -25,6 +33,7 @@ var _ workers.Service = (*Root)(nil)
 func NewRoot(
 	runtimeAssembly runtimeassembly.Service,
 	workstationsOwner workstations.Service,
+	execute ...ExecuteCapability,
 ) (workers.Service, error) {
 	if runtimeAssembly == nil {
 		return nil, fmt.Errorf("construct Workers: runtime assembly owner is required")
@@ -32,9 +41,14 @@ func NewRoot(
 	if workstationsOwner == nil {
 		return nil, fmt.Errorf("construct Workers: workstations owner is required")
 	}
+	var executeOwner ExecuteCapability
+	if len(execute) > 0 {
+		executeOwner = execute[0]
+	}
 	return &Root{
 		runtimeAssembly: runtimeAssembly,
 		workstations:    workstationsOwner,
+		execute:         executeOwner,
 	}, nil
 }
 
@@ -60,6 +74,23 @@ func (r Root) ReplaceRuntimeAssembly(runtimeAssembly runtimeassembly.Service) Ro
 func (r Root) ReplaceWorkstations(workstationsOwner workstations.Service) Root {
 	r.workstations = workstationsOwner
 	return r
+}
+
+// ReplaceExecute returns a copy with an updated request-scoped Execute owner.
+func (r Root) ReplaceExecute(execute ExecuteCapability) Root {
+	r.execute = execute
+	return r
+}
+
+// Execute delegates one isolated attempt to the request-scoped Execute owner.
+func (r *Root) Execute(
+	ctx context.Context,
+	request workers.ExecuteRequest,
+) (workers.ExecuteResult, error) {
+	if r == nil || r.execute == nil {
+		return workers.ExecuteResult{}, workers.ErrExecuteUnavailable
+	}
+	return r.execute.Execute(ctx, request)
 }
 
 // BuildRuntime delegates the singular Workers root operation to its

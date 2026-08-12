@@ -280,6 +280,11 @@ var ErrIncompleteRuntimeAssembly = errors.New("Workers runtime assembly incomple
 // DispatchWorkstation, CancelWorkstationDispatch) is the sole production
 // execution route.
 type Service interface {
+	// Execute runs one complete, detached Worker attempt. The operation is
+	// request-scoped; callers retain dispatch lifecycle, scheduling, and retry
+	// state outside Workers.
+	Execute(context.Context, ExecuteRequest) (ExecuteResult, error)
+
 	ModelInvoker
 
 	// BuildRuntime assembles detached execution bindings from explicit

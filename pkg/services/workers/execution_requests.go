@@ -1,6 +1,9 @@
 package workers
 
 import (
+	"errors"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/providers"
@@ -357,5 +360,353 @@ func cloneStringSliceMap(values map[string][]string) map[string][]string {
 	for key, items := range values {
 		clone[key] = append([]string(nil), items...)
 	}
+	return clone
+}
+
+var ErrInvalidExecuteRequest = errors.New("invalid Workers execute request")
+
+var ErrExecuteUnavailable = errors.New("Workers execute capability unavailable")
+
+type ExecutionOutcome string
+
+const (
+	ExecutionOutcomeAccepted ExecutionOutcome = "ACCEPTED"
+	ExecutionOutcomeContinue ExecutionOutcome = "CONTINUE"
+	ExecutionOutcomeRejected ExecutionOutcome = "REJECTED"
+	ExecutionOutcomeFailed   ExecutionOutcome = "FAILED"
+	ExecutionOutcomeCanceled ExecutionOutcome = "CANCELED"
+)
+
+// ExecuteRequest is the complete, detached input for one Workers attempt.
+type ExecuteRequest struct {
+	Correlation ExecutionCorrelation
+	Target      ExecutionTarget
+	Input       ExecutionInput
+	Attempt     AttemptContext
+}
+
+type ExecutionCorrelation struct {
+	FactorySessionID string
+	RuntimeID        string
+	DispatchID       string
+	AttemptID        string
+	RequestID        string
+	TraceID          string
+}
+
+type ExecutionTarget struct {
+	WorkerName      string
+	WorkstationName string
+	RunnerID        string
+	Provider        ProviderReference
+	Model           ModelReference
+	Prompt          PromptPolicy
+	Tools           ToolPolicy
+	Output          OutputPolicy
+	Environment     EnvironmentPolicy
+	Workspace       WorkspacePolicy
+	Permissions     PermissionPolicy
+	Timeout         time.Duration
+}
+
+type ProviderReference struct {
+	ID    string
+	Alias string
+}
+
+type ModelReference struct {
+	Name            string
+	Provider        string
+	ReasoningEffort string
+	Locality        string
+}
+
+type PromptPolicy struct {
+	SystemPrompt string
+	UserMessage  string
+	OutputSchema string
+}
+
+type ToolPolicy struct {
+	ExecutionMode                RunnerToolExecutionMode
+	RequiredOptionalCapabilities []RunnerOptionalCapability
+}
+
+type OutputPolicy struct {
+	Contract string
+}
+
+type EnvironmentPolicy struct {
+	Vars                   map[string]string
+	ProcessEnvironment     []string
+	WorkingDirectory       string
+	WorkingDirectorySet    bool
+	SkipProcessInheritance bool
+}
+
+type WorkspacePolicy struct {
+	Worktree           string
+	WorkingDirectory   string
+	PrepareWorktree    bool
+	FactoryDirectory   string
+	CheckoutIdentifier string
+}
+
+type PermissionPolicy struct {
+	SkipPermissions bool
+}
+
+type ExecutionInput struct {
+	Work             []WorkInput
+	Invocation       work.InvocationArguments
+	ModelBindings    []ResolvedModelOperationBinding
+	ModelOperation   string
+	PreviousAttempts []AttemptSummary
+	Resume           *ProviderContinuationRef
+}
+
+type WorkInput struct {
+	WorkID       string
+	WorkTypeID   string
+	RequestID    string
+	Content      []work.WorkContentPart
+	Tags         map[string]string
+	Relations    []work.Relation
+	Lineage      WorkLineage
+	AttemptFacts AttemptFacts
+}
+
+type WorkLineage struct {
+	ParentWorkID string
+	TraceID      string
+	OriginRef    string
+}
+
+type AttemptFacts struct {
+	AttemptNumber int
+	LastOutcome   string
+	LastFailure   string
+}
+
+type AttemptContext struct {
+	Number int
+}
+
+type AttemptSummary struct {
+	AttemptID string
+	Outcome   ExecutionOutcome
+	Failure   *ExecutionFailure
+	Finished  time.Time
+}
+
+type ProviderContinuationRef struct {
+	Provider          string
+	ProviderSessionID string
+	ExternalRef       string
+}
+
+type ExecuteResult struct {
+	Correlation  ExecutionCorrelation
+	Outcome      ExecutionOutcome
+	Output       ProposedOutput
+	Failure      *ExecutionFailure
+	Diagnostics  *SafeDiagnostics
+	Metrics      ExecutionMetrics
+	Continuation *ProviderContinuationRef
+}
+
+type ExecutionFailure struct {
+	Type      WorkFailureType
+	Family    WorkFailureFamily
+	Message   string
+	RetryHint bool
+	Detail    *FailureDetail
+}
+
+type ExecutionMetrics struct {
+	Duration   time.Duration
+	Cost       float64
+	RetryCount int
+}
+
+func (request ExecuteRequest) Validate() error {
+	if strings.TrimSpace(request.Correlation.DispatchID) == "" {
+		return fmt.Errorf("%w: dispatch id is required", ErrInvalidExecuteRequest)
+	}
+	if strings.TrimSpace(request.Correlation.AttemptID) == "" {
+		return fmt.Errorf("%w: attempt id is required", ErrInvalidExecuteRequest)
+	}
+	if strings.TrimSpace(request.Target.RunnerID) == "" &&
+		strings.TrimSpace(request.Target.Provider.ID) == "" &&
+		strings.TrimSpace(request.Target.Provider.Alias) == "" &&
+		strings.TrimSpace(request.Target.Model.Name) == "" {
+		return fmt.Errorf("%w: runner, provider, or model target is required", ErrInvalidExecuteRequest)
+	}
+	if request.Target.Timeout < 0 {
+		return fmt.Errorf("%w: timeout must not be negative", ErrInvalidExecuteRequest)
+	}
+	if request.Input.Resume != nil &&
+		strings.TrimSpace(request.Input.Resume.Provider) == "" &&
+		strings.TrimSpace(request.Input.Resume.ProviderSessionID) == "" &&
+		strings.TrimSpace(request.Input.Resume.ExternalRef) == "" {
+		return fmt.Errorf("%w: resume continuation is empty", ErrInvalidExecuteRequest)
+	}
+	return nil
+}
+
+func (request ExecuteRequest) Clone() ExecuteRequest {
+	clone := request
+	clone.Target = request.Target.Clone()
+	clone.Input = request.Input.Clone()
+	return clone
+}
+
+func (target ExecutionTarget) Clone() ExecutionTarget {
+	clone := target
+	clone.Tools.RequiredOptionalCapabilities = append(
+		[]RunnerOptionalCapability(nil),
+		target.Tools.RequiredOptionalCapabilities...,
+	)
+	clone.Environment.Vars = cloneStringMap(target.Environment.Vars)
+	clone.Environment.ProcessEnvironment = append(
+		[]string(nil),
+		target.Environment.ProcessEnvironment...,
+	)
+	return clone
+}
+
+func (input ExecutionInput) Clone() ExecutionInput {
+	clone := input
+	if args := work.CloneInvocationArguments(&input.Invocation); args != nil {
+		clone.Invocation = *args
+	}
+	clone.ModelBindings = CloneResolvedModelOperationBindings(input.ModelBindings)
+	if len(input.Work) > 0 {
+		clone.Work = make([]WorkInput, len(input.Work))
+		for i, item := range input.Work {
+			clone.Work[i] = item.Clone()
+		}
+	}
+	if len(input.PreviousAttempts) > 0 {
+		clone.PreviousAttempts = make([]AttemptSummary, len(input.PreviousAttempts))
+		for i, summary := range input.PreviousAttempts {
+			clone.PreviousAttempts[i] = summary.Clone()
+		}
+	}
+	if input.Resume != nil {
+		resume := *input.Resume
+		clone.Resume = &resume
+	}
+	return clone
+}
+
+func (input WorkInput) Clone() WorkInput {
+	clone := input
+	clone.Content = work.CloneWorkContentParts(input.Content)
+	clone.Tags = cloneStringMap(input.Tags)
+	clone.Relations = append([]work.Relation(nil), input.Relations...)
+	return clone
+}
+
+func (summary AttemptSummary) Clone() AttemptSummary {
+	clone := summary
+	if summary.Failure != nil {
+		failure := summary.Failure.Clone()
+		clone.Failure = &failure
+	}
+	return clone
+}
+
+func (failure ExecutionFailure) Clone() ExecutionFailure {
+	clone := failure
+	clone.Detail = CloneFailureDetail(failure.Detail)
+	return clone
+}
+
+func (result ExecuteResult) Clone() ExecuteResult {
+	clone := result
+	clone.Output = result.Output.Clone()
+	if result.Failure != nil {
+		failure := result.Failure.Clone()
+		clone.Failure = &failure
+	}
+	clone.Diagnostics = cloneSafeDiagnostics(result.Diagnostics)
+	if result.Continuation != nil {
+		continuation := *result.Continuation
+		clone.Continuation = &continuation
+	}
+	return clone
+}
+
+func cloneSafeDiagnostics(diagnostics *SafeDiagnostics) *SafeDiagnostics {
+	if diagnostics == nil {
+		return nil
+	}
+	clone := &SafeDiagnostics{
+		RenderedPrompt: cloneSafeRenderedPromptDiagnostic(diagnostics.RenderedPrompt),
+		Provider:       cloneSafeProviderDiagnostic(diagnostics.Provider),
+		AgentRun:       cloneSafeAgentRunDiagnostic(diagnostics.AgentRun),
+		Invocation:     CloneInvocationDiagnostic(diagnostics.Invocation),
+		Metadata:       cloneStringMap(diagnostics.Metadata),
+	}
+	if diagnostics.Command != nil {
+		clone.Command = &SafeCommandDiagnostic{
+			Command:    diagnostics.Command.Command,
+			Args:       append([]string(nil), diagnostics.Command.Args...),
+			Stdout:     diagnostics.Command.Stdout,
+			Stderr:     diagnostics.Command.Stderr,
+			ExitCode:   diagnostics.Command.ExitCode,
+			TimedOut:   diagnostics.Command.TimedOut,
+			Duration:   diagnostics.Command.Duration,
+			WorkingDir: diagnostics.Command.WorkingDir,
+		}
+	}
+	if diagnostics.Panic != nil {
+		clone.Panic = &PanicDiagnostic{
+			Message: diagnostics.Panic.Message,
+			Stack:   diagnostics.Panic.Stack,
+		}
+	}
+	return clone
+}
+
+func cloneSafeRenderedPromptDiagnostic(
+	diagnostic *SafeRenderedPromptDiagnostic,
+) *SafeRenderedPromptDiagnostic {
+	if diagnostic == nil {
+		return nil
+	}
+	return &SafeRenderedPromptDiagnostic{
+		SystemPromptHash: diagnostic.SystemPromptHash,
+		UserMessageHash:  diagnostic.UserMessageHash,
+		Variables:        cloneStringMap(diagnostic.Variables),
+	}
+}
+
+func cloneSafeProviderDiagnostic(diagnostic *SafeProviderDiagnostic) *SafeProviderDiagnostic {
+	if diagnostic == nil {
+		return nil
+	}
+	return &SafeProviderDiagnostic{
+		Provider:         diagnostic.Provider,
+		Model:            diagnostic.Model,
+		RequestMetadata:  cloneStringMap(diagnostic.RequestMetadata),
+		ResponseMetadata: cloneStringMap(diagnostic.ResponseMetadata),
+	}
+}
+
+func cloneSafeAgentRunDiagnostic(diagnostic *SafeAgentRunDiagnostic) *SafeAgentRunDiagnostic {
+	if diagnostic == nil {
+		return nil
+	}
+	clone := &SafeAgentRunDiagnostic{
+		ExecutionBehavior: diagnostic.ExecutionBehavior,
+		FailureClass:      diagnostic.FailureClass,
+		RecoveryAction:    diagnostic.RecoveryAction,
+		ToolPolicy:        diagnostic.ToolPolicy,
+		ToolCallCount:     diagnostic.ToolCallCount,
+	}
+	clone.ToolDiagnostics = append([]AgentRunToolDiagnostic(nil), diagnostic.ToolDiagnostics...)
+	clone.Transcript = append([]AgentRunTranscriptEntry(nil), diagnostic.Transcript...)
 	return clone
 }

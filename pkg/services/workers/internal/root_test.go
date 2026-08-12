@@ -82,3 +82,56 @@ func TestNewRootBuildRuntimeDelegatesWithoutLifecycle(t *testing.T) {
 		t.Fatalf("BuildRuntime() = %#v, want runner selection %#v", got, want.RunnerSelection)
 	}
 }
+
+func TestNewRootExecuteDelegatesDetachedAttempt(t *testing.T) {
+	t.Parallel()
+
+	execute := &recordingExecuteCapability{
+		result: workers.ExecuteResult{
+			Correlation: workers.ExecutionCorrelation{
+				DispatchID: "dispatch-1",
+				AttemptID:  "attempt-1",
+			},
+			Outcome: workers.ExecutionOutcomeAccepted,
+		},
+	}
+	root, err := workersinternal.NewRoot(
+		&recordingRuntimeAssembly{},
+		workstationswire.NewService(),
+		execute,
+	)
+	if err != nil {
+		t.Fatalf("NewRoot() error = %v", err)
+	}
+
+	got, err := root.Execute(t.Context(), workers.ExecuteRequest{
+		Correlation: workers.ExecutionCorrelation{
+			DispatchID: "dispatch-1",
+			AttemptID:  "attempt-1",
+		},
+		Target: workers.ExecutionTarget{RunnerID: workers.RunnerIDCodex},
+	})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if got.Correlation != execute.result.Correlation ||
+		got.Outcome != execute.result.Outcome {
+		t.Fatalf("Execute() = %#v, want %#v", got, execute.result)
+	}
+	if execute.calls != 1 {
+		t.Fatalf("Execute() calls = %d, want 1", execute.calls)
+	}
+}
+
+type recordingExecuteCapability struct {
+	result workers.ExecuteResult
+	calls  int
+}
+
+func (capability *recordingExecuteCapability) Execute(
+	context.Context,
+	workers.ExecuteRequest,
+) (workers.ExecuteResult, error) {
+	capability.calls++
+	return capability.result, nil
+}
