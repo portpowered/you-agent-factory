@@ -547,6 +547,50 @@ func (fake *functionalRecordingsRootFake) QueryRecordingScope(context.Context, r
 	return recordings.QueryRecordingScopeResult{}, recordings.ErrRecordingScopeUnknown
 }
 
+func (fake *functionalRecordingsRootFake) OpenRecordingScope(context.Context, recordings.OpenRecordingScopeRequest) (recordings.OpenRecordingScopeResult, error) {
+	return recordings.OpenRecordingScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (fake *functionalRecordingsRootFake) SubscribeRecordingScope(context.Context, recordings.SubscribeRecordingScopeRequest) (recordings.SubscribeRecordingScopeResult, error) {
+	return recordings.SubscribeRecordingScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (fake *functionalRecordingsRootFake) LoadReplayRecordingScope(context.Context, recordings.LoadReplayRecordingScopeRequest) (recordings.LoadReplayRecordingScopeResult, error) {
+	return recordings.LoadReplayRecordingScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (fake *functionalRecordingsRootFake) CreateReplayPlanScope(context.Context, recordings.CreateReplayPlanScopeRequest) (recordings.CreateReplayPlanScopeResult, error) {
+	return recordings.CreateReplayPlanScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (fake *functionalRecordingsRootFake) ObserveReplayScope(context.Context, recordings.ObserveReplayScopeRequest) (recordings.ObserveReplayScopeResult, error) {
+	return recordings.ObserveReplayScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (fake *functionalRecordingsRootFake) ReconstructRecordingScope(context.Context, recordings.ReconstructRecordingScopeRequest) (recordings.ReconstructRecordingScopeResult, error) {
+	return recordings.ReconstructRecordingScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (fake *functionalRecordingsRootFake) QuerySimpleDashboardScope(context.Context, recordings.QuerySimpleDashboardScopeRequest) (recordings.QuerySimpleDashboardScopeResult, error) {
+	return recordings.QuerySimpleDashboardScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (fake *functionalRecordingsRootFake) QueryWorkstationRequestsScope(context.Context, recordings.QueryWorkstationRequestsScopeRequest) (recordings.QueryWorkstationRequestsScopeResult, error) {
+	return recordings.QueryWorkstationRequestsScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (fake *functionalRecordingsRootFake) BuildPortableArtifactScope(context.Context, recordings.BuildPortableArtifactScopeRequest) (recordings.BuildPortableArtifactScopeResult, error) {
+	return recordings.BuildPortableArtifactScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (fake *functionalRecordingsRootFake) ExportPortableArtifactScope(context.Context, recordings.ExportPortableArtifactScopeRequest) (recordings.ExportPortableArtifactScopeResult, error) {
+	return recordings.ExportPortableArtifactScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (fake *functionalRecordingsRootFake) ReadPortableArtifactScope(context.Context, recordings.ReadPortableArtifactScopeRequest) (recordings.ReadPortableArtifactScopeResult, error) {
+	return recordings.ReadPortableArtifactScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
 func recordingsBackedRichWorldPayload(t *testing.T) string {
 	t.Helper()
 	state := interfaces.FactoryWorldState{

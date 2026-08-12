@@ -333,3 +333,47 @@ func (stub *recordingsRequestBoundaryStub) CloseRecordingScope(context.Context, 
 func (stub *recordingsRequestBoundaryStub) QueryRecordingScope(context.Context, recordings.QueryRecordingScopeRequest) (recordings.QueryRecordingScopeResult, error) {
 	return recordings.QueryRecordingScopeResult{}, recordings.ErrRecordingScopeUnknown
 }
+
+func (stub *recordingsRequestBoundaryStub) OpenRecordingScope(context.Context, recordings.OpenRecordingScopeRequest) (recordings.OpenRecordingScopeResult, error) {
+	return recordings.OpenRecordingScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (stub *recordingsRequestBoundaryStub) SubscribeRecordingScope(context.Context, recordings.SubscribeRecordingScopeRequest) (recordings.SubscribeRecordingScopeResult, error) {
+	return recordings.SubscribeRecordingScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (stub *recordingsRequestBoundaryStub) LoadReplayRecordingScope(context.Context, recordings.LoadReplayRecordingScopeRequest) (recordings.LoadReplayRecordingScopeResult, error) {
+	return recordings.LoadReplayRecordingScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (stub *recordingsRequestBoundaryStub) CreateReplayPlanScope(context.Context, recordings.CreateReplayPlanScopeRequest) (recordings.CreateReplayPlanScopeResult, error) {
+	return recordings.CreateReplayPlanScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (stub *recordingsRequestBoundaryStub) ObserveReplayScope(context.Context, recordings.ObserveReplayScopeRequest) (recordings.ObserveReplayScopeResult, error) {
+	return recordings.ObserveReplayScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (stub *recordingsRequestBoundaryStub) ReconstructRecordingScope(context.Context, recordings.ReconstructRecordingScopeRequest) (recordings.ReconstructRecordingScopeResult, error) {
+	return recordings.ReconstructRecordingScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (stub *recordingsRequestBoundaryStub) QuerySimpleDashboardScope(context.Context, recordings.QuerySimpleDashboardScopeRequest) (recordings.QuerySimpleDashboardScopeResult, error) {
+	return recordings.QuerySimpleDashboardScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (stub *recordingsRequestBoundaryStub) QueryWorkstationRequestsScope(context.Context, recordings.QueryWorkstationRequestsScopeRequest) (recordings.QueryWorkstationRequestsScopeResult, error) {
+	return recordings.QueryWorkstationRequestsScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (stub *recordingsRequestBoundaryStub) BuildPortableArtifactScope(context.Context, recordings.BuildPortableArtifactScopeRequest) (recordings.BuildPortableArtifactScopeResult, error) {
+	return recordings.BuildPortableArtifactScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (stub *recordingsRequestBoundaryStub) ExportPortableArtifactScope(context.Context, recordings.ExportPortableArtifactScopeRequest) (recordings.ExportPortableArtifactScopeResult, error) {
+	return recordings.ExportPortableArtifactScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (stub *recordingsRequestBoundaryStub) ReadPortableArtifactScope(context.Context, recordings.ReadPortableArtifactScopeRequest) (recordings.ReadPortableArtifactScopeResult, error) {
+	return recordings.ReadPortableArtifactScopeResult{}, recordings.ErrRecordingScopeUnknown
+}

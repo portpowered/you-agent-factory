@@ -344,6 +344,6 @@ func scopedScopeEvent(
 		Cursor:     recordings.CanonicalEventCursor{StreamGenerationID: "gen-1", Sequence: sequence},
 		RecordedAt: time.Unix(1_700_000_000+int64(sequence), 0).UTC(),
 		Kind:       recordings.CanonicalEventKind(factorydefinitions.FactoryEventTypeWorkRequest),
-		Payload:    `{"work":"scope"}`,
+		Payload:    `{"type":"FACTORY_REQUEST_BATCH","works":[]}`,
 	}
 }
