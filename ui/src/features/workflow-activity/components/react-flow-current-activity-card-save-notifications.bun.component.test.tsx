@@ -1,20 +1,22 @@
+import { describe, expect, it, mock } from "bun:test";
 import { render } from "@testing-library/react";
-import { toast } from "sonner";
 
-import { CurrentFactoryDefinitionError } from "../../../api/current-factory-definition";
 import {
   GLOBAL_TOAST_DURATION_MS,
   PERSISTENT_TOAST_DURATION_MS,
 } from "../../notifications/lib/save-notification-delivery-policy";
-import { CurrentActivityGraphSaveNotifications } from "./react-flow-current-activity-card-save-notifications";
+import {
+  type CurrentActivityGraphSaveNotificationEffects,
+  CurrentActivityGraphSaveNotifications,
+} from "./react-flow-current-activity-card-save-notifications";
 
-vi.mock("sonner", () => ({
-  toast: {
-    error: vi.fn(),
-    success: vi.fn(),
-    warning: vi.fn(),
-  },
-}));
+function createNotificationEffects(): CurrentActivityGraphSaveNotificationEffects {
+  return {
+    error: mock(() => {}),
+    success: mock(() => {}),
+    warning: mock(() => {}),
+  };
+}
 
 function createViewModelStub(overrides: Record<string, unknown> = {}) {
   const merged = {
@@ -50,36 +52,36 @@ function createViewModelStub(overrides: Record<string, unknown> = {}) {
   };
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: save notification outcomes remain one focused contract across success, warning, error, and retry delivery.
 describe("CurrentActivityGraphSaveNotifications", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it("calls the sonner success hook when scoped document save succeeds", () => {
+  it("delivers the success outcome through the injected notification effect", () => {
+    const effects = createNotificationEffects();
     render(
       <CurrentActivityGraphSaveNotifications
-        viewModel={
+        editorController={
           createViewModelStub({
             documentSave: { status: "success" },
             saveAttemptRevision: 1,
           }) as never
         }
+        notificationEffects={effects}
       />,
     );
 
-    expect(toast.success).toHaveBeenCalledWith("Topology saved", {
+    expect(effects.success).toHaveBeenCalledWith("Topology saved", {
       description:
         "The draft has been cleared and the graph is waiting for the latest factory-change event refresh.",
       duration: GLOBAL_TOAST_DURATION_MS,
     });
-    expect(toast.error).not.toHaveBeenCalled();
-    expect(toast.warning).not.toHaveBeenCalled();
+    expect(effects.error).not.toHaveBeenCalled();
+    expect(effects.warning).not.toHaveBeenCalled();
   });
 
-  it("calls the sonner error hook when scoped document save fails", () => {
+  it("delivers the error outcome through the injected notification effect", () => {
+    const effects = createNotificationEffects();
     render(
       <CurrentActivityGraphSaveNotifications
-        viewModel={
+        editorController={
           createViewModelStub({
             documentSave: {
               errorMessage: "The graph is invalid.",
@@ -91,28 +93,28 @@ describe("CurrentActivityGraphSaveNotifications", () => {
             },
           }) as never
         }
+        notificationEffects={effects}
       />,
     );
 
-    expect(toast.error).toHaveBeenCalledWith("Topology save failed", {
+    expect(effects.error).toHaveBeenCalledWith("Topology save failed", {
       description: "The graph is invalid.",
       duration: PERSISTENT_TOAST_DURATION_MS,
     });
-    expect(toast.success).not.toHaveBeenCalled();
-    expect(toast.warning).not.toHaveBeenCalled();
+    expect(effects.success).not.toHaveBeenCalled();
+    expect(effects.warning).not.toHaveBeenCalled();
   });
 
-  it("calls the sonner warning hook for stale version save failures", () => {
-    const saveMutationError = new CurrentFactoryDefinitionError(
-      "The factory definition changed on the server.",
-      {
-        code: "STALE_FACTORY_VERSION",
-      },
-    );
+  it("delivers the stale-version warning through the injected notification effect", () => {
+    const effects = createNotificationEffects();
+    const saveMutationError = {
+      code: "STALE_FACTORY_VERSION",
+      message: "The factory definition changed on the server.",
+    };
 
     render(
       <CurrentActivityGraphSaveNotifications
-        viewModel={
+        editorController={
           createViewModelStub({
             documentSave: {
               message:
@@ -125,10 +127,11 @@ describe("CurrentActivityGraphSaveNotifications", () => {
             },
           }) as never
         }
+        notificationEffects={effects}
       />,
     );
 
-    expect(toast.warning).toHaveBeenCalledWith(
+    expect(effects.warning).toHaveBeenCalledWith(
       "A newer factory definition is available",
       {
         description:
@@ -136,30 +139,38 @@ describe("CurrentActivityGraphSaveNotifications", () => {
         duration: GLOBAL_TOAST_DURATION_MS,
       },
     );
-    expect(toast.error).not.toHaveBeenCalled();
-    expect(toast.success).not.toHaveBeenCalled();
+    expect(effects.error).not.toHaveBeenCalled();
+    expect(effects.success).not.toHaveBeenCalled();
   });
 
   it("does not repeat the same save notification across rerenders with the same attempt revision", () => {
+    const effects = createNotificationEffects();
     const viewModel = createViewModelStub({
       documentSave: { status: "success" },
       saveAttemptRevision: 1,
     });
     const { rerender } = render(
-      <CurrentActivityGraphSaveNotifications viewModel={viewModel as never} />,
+      <CurrentActivityGraphSaveNotifications
+        editorController={viewModel as never}
+        notificationEffects={effects}
+      />,
     );
 
     rerender(
-      <CurrentActivityGraphSaveNotifications viewModel={viewModel as never} />,
+      <CurrentActivityGraphSaveNotifications
+        editorController={viewModel as never}
+        notificationEffects={effects}
+      />,
     );
 
-    expect(toast.success).toHaveBeenCalledTimes(1);
+    expect(effects.success).toHaveBeenCalledTimes(1);
   });
 
-  it("calls toast.error twice for the same message on distinct save attempts", () => {
+  it("delivers the same error twice for distinct save attempts", () => {
+    const effects = createNotificationEffects();
     const { rerender } = render(
       <CurrentActivityGraphSaveNotifications
-        viewModel={
+        editorController={
           createViewModelStub({
             documentSave: {
               errorMessage: "The graph is invalid.",
@@ -171,14 +182,15 @@ describe("CurrentActivityGraphSaveNotifications", () => {
             },
           }) as never
         }
+        notificationEffects={effects}
       />,
     );
 
-    expect(toast.error).toHaveBeenCalledTimes(1);
+    expect(effects.error).toHaveBeenCalledTimes(1);
 
     rerender(
       <CurrentActivityGraphSaveNotifications
-        viewModel={
+        editorController={
           createViewModelStub({
             documentSave: {
               errorMessage: "The graph is invalid.",
@@ -190,9 +202,10 @@ describe("CurrentActivityGraphSaveNotifications", () => {
             },
           }) as never
         }
+        notificationEffects={effects}
       />,
     );
 
-    expect(toast.error).toHaveBeenCalledTimes(2);
+    expect(effects.error).toHaveBeenCalledTimes(2);
   });
 });
