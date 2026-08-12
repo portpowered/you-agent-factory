@@ -61,6 +61,14 @@ func (fake *hostedLiveSessionsFake) GetFactorySession(_ context.Context, session
 	return factorysessions.SessionProjection{}, factorysessions.ErrSessionNotFound
 }
 
+func (fake *hostedLiveSessionsFake) ApplyLiveChange(context.Context, string, factorysessions.LiveChangeRequest) (factorysessions.LiveChangeResult, error) {
+	return factorysessions.LiveChangeResult{}, factorysessions.ErrLiveChangeApplicationUnavailable
+}
+
+func (fake *hostedLiveSessionsFake) RecoverLiveChange(context.Context, string, string) (factorysessions.LiveChangeResult, error) {
+	return factorysessions.LiveChangeResult{}, factorysessions.ErrLiveChangeApplicationUnavailable
+}
+
 func (fake *hostedLiveSessionsFake) GetFactorySessionSyncPreflight(context.Context, string, *factorydefinitions.FactoryEventReconnectCursor, *factorydefinitions.FactorySessionLogicalResolveHint) (factorysessions.SyncPreflightResult, error) {
 	return factorysessions.SyncPreflightResult{}, factorysessions.ErrSessionNotFound
 }

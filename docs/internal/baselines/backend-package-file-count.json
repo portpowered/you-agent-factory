@@ -81,7 +81,7 @@
     },
     {
       "packagePath": "pkg/services/factory_runtime",
-      "fileCount": 76,
+      "fileCount": 77,
       "owner": "factory-runtime-maintainers",
       "removalReason": "Move runtime capabilities behind focused orchestration and subsystem packages."
     },
@@ -99,13 +99,13 @@
     },
     {
       "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/engine",
-      "fileCount": 16,
+      "fileCount": 18,
       "owner": "backend-maintainers",
       "removalReason": "Split orchestration engine files by runtime and submission responsibility."
     },
     {
       "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/runtime",
-      "fileCount": 35,
+      "fileCount": 36,
       "owner": "factory-runtime-maintainers",
       "removalReason": "Split runtime coordination from lifecycle and projection behavior."
     },
@@ -141,13 +141,13 @@
     },
     {
       "packagePath": "pkg/services/factory_sessions/transports/cli/session",
-      "fileCount": 19,
+      "fileCount": 21,
       "owner": "factory-session-maintainers",
       "removalReason": "Separate session command lifecycle and rendering behavior."
     },
     {
       "packagePath": "pkg/services/factory_sessions/transports/http",
-      "fileCount": 23,
+      "fileCount": 25,
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this package into focused sub-packages and remove this entry."
     },
@@ -363,7 +363,7 @@
     },
     {
       "packagePath": "pkg/transports/mapping/factorysession",
-      "fileCount": 21,
+      "fileCount": 22,
       "owner": "transport-mapping-maintainers",
       "removalReason": "Partition Factory Session mapping by contract direction."
     },

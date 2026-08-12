@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -23,6 +24,34 @@ func TestNewRequiresHTTPAndPreparationDependencies(t *testing.T) {
 	}
 	if service := New(testHTTPProtocol(t), canonicalListRequestPreparation); service == nil {
 		t.Fatal("New(protocol, preparation) = nil, want Sessions CLI service")
+	}
+}
+
+func TestBoundService_SetResourceCapacityDelegatesAndRequiresOperation(t *testing.T) {
+	t.Parallel()
+
+	wantErr := errors.New("capacity operation failed")
+	called := false
+	service := Bind(Operations{
+		SetResourceCapacity: func(cfg ResourceCapacityConfig) error {
+			called = true
+			if cfg.ResourceID != "reviewers" || cfg.Capacity != 8 {
+				t.Fatalf("config = %#v, want reviewers capacity 8", cfg)
+			}
+			return wantErr
+		},
+	})
+
+	err := service.SetResourceCapacity(ResourceCapacityConfig{ResourceID: "reviewers", Capacity: 8})
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("SetResourceCapacity() error = %v, want %v", err, wantErr)
+	}
+	if !called {
+		t.Fatal("SetResourceCapacity() did not invoke the bound operation")
+	}
+
+	if err := Bind(Operations{}).SetResourceCapacity(ResourceCapacityConfig{}); err == nil || err.Error() != "session resource capacity service is required" {
+		t.Fatalf("missing SetResourceCapacity operation error = %v, want stable dependency error", err)
 	}
 }
 
@@ -140,6 +169,42 @@ func TestConstructedService_ListJSONMatchesPackageCommandOutcome(t *testing.T) {
 
 	if serviceOut.String() != commandOut.String() {
 		t.Fatalf("service list JSON = %q, command list JSON = %q", serviceOut.String(), commandOut.String())
+	}
+}
+
+func TestConstructedService_SetResourceCapacityUsesInjectedRequestIDGenerator(t *testing.T) {
+	t.Parallel()
+
+	var received factoryapi.FactorySessionResourceCapacityRequest
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got, want := r.URL.Path, "/factory-sessions/session-beta/resources/reviewers/capacity"; got != want {
+			t.Fatalf("path = %q, want %q", got, want)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&received); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(factoryapi.FactorySessionResourceCapacityResponse{
+			SessionId: "session-beta", ResourceId: "reviewers", PreviousCapacity: 1,
+			RequestedCapacity: 8, EffectiveCapacity: 8, AvailableCount: 8,
+			MinimumCapacity: 1, Outcome: factoryapi.FactorySessionResourceCapacityOutcome("APPLIED"),
+			Revision: 2, RequestId: "generated-request", ChangeId: "live-change/generated-request",
+		})
+	}))
+	defer srv.Close()
+
+	service := NewWithRequestIDGenerator(testHTTPProtocol(t), canonicalListRequestPreparation, func() string {
+		return "generated-request"
+	})
+	var out bytes.Buffer
+	if err := service.SetResourceCapacity(ResourceCapacityConfig{
+		Context: context.Background(), Server: srv.URL, SessionID: "session-beta", ResourceID: "reviewers",
+		Capacity: 8, ExpectedRevision: 1, JSON: true, Output: &out,
+	}); err != nil {
+		t.Fatalf("SetResourceCapacity() error = %v", err)
+	}
+	if received.RequestId != "generated-request" {
+		t.Fatalf("request id = %q, want generated-request", received.RequestId)
 	}
 }
 

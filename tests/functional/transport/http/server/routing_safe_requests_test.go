@@ -25,6 +25,7 @@ import (
 const (
 	routingReachabilityRequestTimeout  = 15 * time.Second
 	routingReachabilityModelName       = "OMNIVOICE_Q4_K_M"
+	routingReachabilityResourceID      = "reviewers"
 	routingReachabilityWorkstation     = "process"
 	routingReachabilityWorkerSessionID = "%20"
 )
@@ -142,6 +143,10 @@ func (ctx *routingReachabilityContext) safeRequest(operation contractinventory.O
 			return nil, err
 		}
 		return newJSONRequest(http.MethodPost, endpoint, map[string]any{})
+	case "setFactorySessionResourceCapacity":
+		return newJSONRequest(http.MethodPost, endpoint, map[string]any{
+			"capacity": 1,
+		})
 	case "validateCurrentFactoryWorkstationPromptTemplateBySessionId":
 		return newJSONRequest(
 			http.MethodPost,
@@ -190,6 +195,7 @@ func (ctx *routingReachabilityContext) resolveOperationPath(operation contractin
 		"{session_id}":        ctx.sessionIDFor(operation),
 		"{worker_session_id}": routingReachabilityWorkerSessionID,
 		"{model_name}":        routingReachabilityModelName,
+		"{resource_id}":       routingReachabilityResourceID,
 		"{workstation_name}":  routingReachabilityWorkstation,
 		"{request_id}":        "routing-reachability",
 		"{id}":                ctx.workID,
@@ -409,6 +415,11 @@ func scaffoldRoutingReachabilityFactory(t *testing.T) string {
 
 	dir := support.ScaffoldFactory(t, map[string]any{
 		"name": "routing-reachability",
+		"resources": []map[string]any{{
+			"id":       routingReachabilityResourceID,
+			"name":     routingReachabilityResourceID,
+			"capacity": 1,
+		}},
 		"workTypes": []map[string]any{{
 			"name": "task",
 			"states": []map[string]string{

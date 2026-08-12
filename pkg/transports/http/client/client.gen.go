@@ -65,6 +65,7 @@ const (
 
 // Defines values for ErrorResponseCode.
 const (
+	ErrorResponseCodeADMITTEDAPPLICATIONFAILURE                   ErrorResponseCode = "ADMITTED_APPLICATION_FAILURE"
 	ErrorResponseCodeBADREQUEST                                   ErrorResponseCode = "BAD_REQUEST"
 	ErrorResponseCodeEXECUTIONREQUESTIDCONFLICT                   ErrorResponseCode = "EXECUTION_REQUEST_ID_CONFLICT"
 	ErrorResponseCodeFACTORYALREADYEXISTS                         ErrorResponseCode = "FACTORY_ALREADY_EXISTS"
@@ -76,13 +77,17 @@ const (
 	ErrorResponseCodeINVALIDFACTORYNAME                           ErrorResponseCode = "INVALID_FACTORY_NAME"
 	ErrorResponseCodeINVALIDRESPONSEEVENTCURSOR                   ErrorResponseCode = "INVALID_RESPONSE_EVENT_CURSOR"
 	ErrorResponseCodeINVALIDRESPONSEEVENTFILTER                   ErrorResponseCode = "INVALID_RESPONSE_EVENT_FILTER"
+	ErrorResponseCodeLIFECYCLECONFLICT                            ErrorResponseCode = "LIFECYCLE_CONFLICT"
 	ErrorResponseCodeMETHODNOTALLOWED                             ErrorResponseCode = "METHOD_NOT_ALLOWED"
 	ErrorResponseCodeMOVEWORKREQUESTALREADYAPPLIED                ErrorResponseCode = "MOVE_WORK_REQUEST_ALREADY_APPLIED"
 	ErrorResponseCodeNOTFOUND                                     ErrorResponseCode = "NOT_FOUND"
 	ErrorResponseCodePROJECTIONUNAVAILABLE                        ErrorResponseCode = "PROJECTION_UNAVAILABLE"
 	ErrorResponseCodePROVIDERUNSUPPORTED                          ErrorResponseCode = "PROVIDER_UNSUPPORTED"
+	ErrorResponseCodeREQUESTCONFLICT                              ErrorResponseCode = "REQUEST_CONFLICT"
+	ErrorResponseCodeRESOURCECAPACITYINUSE                        ErrorResponseCode = "RESOURCE_CAPACITY_IN_USE"
 	ErrorResponseCodeRESPONSEEVENTSESSIONNOTFOUND                 ErrorResponseCode = "RESPONSE_EVENT_SESSION_NOT_FOUND"
 	ErrorResponseCodeRESPONSEEVENTSTREAMEXPIRED                   ErrorResponseCode = "RESPONSE_EVENT_STREAM_EXPIRED"
+	ErrorResponseCodeREVISIONCONFLICT                             ErrorResponseCode = "REVISION_CONFLICT"
 	ErrorResponseCodeSESSIONKINDUNSUPPORTED                       ErrorResponseCode = "SESSION_KIND_UNSUPPORTED"
 	ErrorResponseCodeSTALEFACTORYVERSION                          ErrorResponseCode = "STALE_FACTORY_VERSION"
 	ErrorResponseCodeWORKERSESSIONADMISSIONFAILED                 ErrorResponseCode = "WORKER_SESSION_ADMISSION_FAILED"
@@ -182,6 +187,8 @@ const (
 	FactoryEventTypeDispatchResponse                 FactoryEventType = "DISPATCH_RESPONSE"
 	FactoryEventTypeDispatchWorkerSessionAssociation FactoryEventType = "DISPATCH_WORKER_SESSION_ASSOCIATION"
 	FactoryEventTypeFactoryChange                    FactoryEventType = "FACTORY_CHANGE"
+	FactoryEventTypeFactoryChangeFailed              FactoryEventType = "FACTORY_CHANGE_FAILED"
+	FactoryEventTypeFactoryChangeRequest             FactoryEventType = "FACTORY_CHANGE_REQUEST"
 	FactoryEventTypeFactoryStateResponse             FactoryEventType = "FACTORY_STATE_RESPONSE"
 	FactoryEventTypeInferenceRequest                 FactoryEventType = "INFERENCE_REQUEST"
 	FactoryEventTypeInferenceResponse                FactoryEventType = "INFERENCE_RESPONSE"
@@ -321,6 +328,12 @@ const (
 // Defines values for FactoryRecordingSchemaVersion.
 const (
 	AgentFactoryRecordingV1 FactoryRecordingSchemaVersion = "agent-factory.recording.v1"
+)
+
+// Defines values for FactoryResourceCapacityChangeOutcome.
+const (
+	FactoryResourceCapacityChangeOutcomeAPPLIED FactoryResourceCapacityChangeOutcome = "APPLIED"
+	FactoryResourceCapacityChangeOutcomeNOOP    FactoryResourceCapacityChangeOutcome = "NO_OP"
 )
 
 // Defines values for FactoryResponseEventSchemaVersion.
@@ -480,6 +493,13 @@ const (
 	FactorySessionLogicalTargetKindDefault  FactorySessionLogicalTargetKind = "default"
 	FactorySessionLogicalTargetKindNamed    FactorySessionLogicalTargetKind = "named"
 	FactorySessionLogicalTargetKindProvider FactorySessionLogicalTargetKind = "provider"
+)
+
+// Defines values for FactorySessionResourceCapacityOutcome.
+const (
+	FactorySessionResourceCapacityOutcomeAPPLIED  FactorySessionResourceCapacityOutcome = "APPLIED"
+	FactorySessionResourceCapacityOutcomeNOOP     FactorySessionResourceCapacityOutcome = "NO_OP"
+	FactorySessionResourceCapacityOutcomeREPLAYED FactorySessionResourceCapacityOutcome = "REPLAYED"
 )
 
 // Defines values for FactorySessionResultMode.
@@ -1577,6 +1597,9 @@ type ErrorResponse struct {
 	Family  ErrorFamily `json:"family"`
 	Message string      `json:"message"`
 
+	// ResourceCapacity Accounting details explaining why a resource-capacity reduction was rejected.
+	ResourceCapacity *FactorySessionResourceCapacityErrorDetails `json:"resourceCapacity,omitempty"`
+
 	// Targets Optional canonical validation targets that clients can map to factory graph nodes, handles, and form fields.
 	Targets *[]FactoryValidationTarget `json:"targets,omitempty"`
 }
@@ -1803,10 +1826,73 @@ type FactoryArtifactVisibility string
 
 // FactoryChangeEventPayload Runtime topology snapshot after a live factory definition change replaces the running factory.
 type FactoryChangeEventPayload struct {
+	// ChangeId Stable live-change identity when this is a revisioned change boundary.
+	ChangeId *string `json:"changeId,omitempty"`
+
+	// EffectiveSequence Canonical Factory Event sequence at which this change became effective.
+	EffectiveSequence *int `json:"effectiveSequence,omitempty"`
+
 	// Factory Top-level factory.json contract. Declare the work types, resources, portability resources, workers, and workstations that make up one authored factory here. Guarded loop breakers should be authored as guarded LOGICAL_MOVE workstations using VISIT_COUNT guards instead of a top-level exhaustion-rules field.
-	Factory         Factory    `json:"factory"`
-	Metadata        *StringMap `json:"metadata,omitempty"`
-	SourceDirectory *string    `json:"sourceDirectory,omitempty"`
+	Factory  Factory    `json:"factory"`
+	Metadata *StringMap `json:"metadata,omitempty"`
+
+	// NewRevision Effective Factory revision created by this change.
+	NewRevision *int `json:"newRevision,omitempty"`
+
+	// Operation Normalized live-change operation name.
+	Operation *string `json:"operation,omitempty"`
+
+	// PreviousRevision Effective Factory revision immediately before this change.
+	PreviousRevision *int `json:"previousRevision,omitempty"`
+
+	// ResourceCapacity Detached resource-capacity accounting retained in a successful Factory change event so replay does not depend on mutable runtime state.
+	ResourceCapacity *FactoryResourceCapacityChange `json:"resourceCapacity,omitempty"`
+	SourceDirectory  *string                        `json:"sourceDirectory,omitempty"`
+
+	// TargetId Stable target identity changed by the operation.
+	TargetId *string `json:"targetId,omitempty"`
+}
+
+// FactoryChangeFailedEventPayload Safe terminal failure for an admitted live Factory Session change. Raw provider payloads, commands, stack traces, and requested values are excluded.
+type FactoryChangeFailedEventPayload struct {
+	ChangeId         string `json:"changeId"`
+	ExpectedRevision int    `json:"expectedRevision"`
+
+	// FailureCode Stable safe failure category.
+	FailureCode string `json:"failureCode"`
+
+	// FailureMessage Bounded safe failure explanation.
+	FailureMessage   string `json:"failureMessage"`
+	Operation        string `json:"operation"`
+	PreviousRevision int    `json:"previousRevision"`
+	TargetId         string `json:"targetId"`
+}
+
+// FactoryChangeRequestEventPayload Normalized live Factory Session change intent. Request identity and session scope are carried by FactoryEvent.context.
+type FactoryChangeRequestEventPayload struct {
+	// Actor Safe actor identity supplied by the caller.
+	Actor *string `json:"actor,omitempty"`
+
+	// ChangeId Stable identity of the requested live change.
+	ChangeId string `json:"changeId"`
+
+	// ExpectedRevision Effective Factory revision the operator observed before admission.
+	ExpectedRevision int `json:"expectedRevision"`
+
+	// Operation Normalized live-change operation name.
+	Operation string `json:"operation"`
+
+	// Reason Optional normalized safe operator reason.
+	Reason *string `json:"reason,omitempty"`
+
+	// RequestedValue Canonical JSON value requested by the operation.
+	RequestedValue interface{} `json:"requestedValue"`
+
+	// Source Safe source label such as cli or api.
+	Source *string `json:"source,omitempty"`
+
+	// TargetId Stable target identity changed by the operation.
+	TargetId string `json:"targetId"`
 }
 
 // FactoryDispatch defines model for FactoryDispatch.
@@ -2577,6 +2663,39 @@ type FactoryRecording struct {
 
 // FactoryRecordingSchemaVersion Version of the Factory Recording envelope schema.
 type FactoryRecordingSchemaVersion string
+
+// FactoryResourceCapacityChange Detached resource-capacity accounting retained in a successful Factory change event so replay does not depend on mutable runtime state.
+type FactoryResourceCapacityChange struct {
+	// AvailableCount Number of currently available capacity units.
+	AvailableCount int `json:"availableCount"`
+
+	// EffectiveCapacity Capacity effective after the change.
+	EffectiveCapacity int `json:"effectiveCapacity"`
+
+	// InUseCount Number of leases in use at the decision boundary.
+	InUseCount int `json:"inUseCount"`
+
+	// MinimumCapacity Lowest capacity permitted by the current in-use count.
+	MinimumCapacity int `json:"minimumCapacity"`
+
+	// Outcome Terminal capacity decision recorded by the runtime.
+	Outcome FactoryResourceCapacityChangeOutcome `json:"outcome"`
+
+	// PreviousCapacity Capacity immediately before the change.
+	PreviousCapacity int `json:"previousCapacity"`
+
+	// RequestedCapacity Capacity requested by the operator.
+	RequestedCapacity int `json:"requestedCapacity"`
+
+	// ResourceId Stable authored Resource.id whose capacity changed.
+	ResourceId string `json:"resourceId"`
+
+	// ResourceName Optional display name retained for inspection only.
+	ResourceName *string `json:"resourceName,omitempty"`
+}
+
+// FactoryResourceCapacityChangeOutcome Terminal capacity decision recorded by the runtime.
+type FactoryResourceCapacityChangeOutcome string
 
 // FactoryResponseEvent Provider-neutral envelope for transient agent activity observed during one Factory Session run. Unlike canonical factory events, these records are ephemeral observation records and must not derive canonical work state after replay.
 type FactoryResponseEvent struct {
@@ -3870,6 +3989,76 @@ type FactorySessionResolvedSourceIdentity struct {
 
 	// SourceRef Safe customer-facing source reference after resolution.
 	SourceRef *string `json:"sourceRef,omitempty"`
+}
+
+// FactorySessionResourceCapacityErrorDetails Accounting details explaining why a resource-capacity reduction was rejected.
+type FactorySessionResourceCapacityErrorDetails struct {
+	AvailableCount    int `json:"availableCount"`
+	CurrentCapacity   int `json:"currentCapacity"`
+	InUseCount        int `json:"inUseCount"`
+	MinimumCapacity   int `json:"minimumCapacity"`
+	RequestedCapacity int `json:"requestedCapacity"`
+
+	// ResourceId Stable authored Resource.id.
+	ResourceId string `json:"resourceId"`
+}
+
+// FactorySessionResourceCapacityLinks Canonical relative links for inspecting the affected Factory Session and its events.
+type FactorySessionResourceCapacityLinks struct {
+	// Events Relative URL for the session's canonical Factory Events.
+	Events *string `json:"events,omitempty"`
+
+	// Session Relative URL for the affected Factory Session.
+	Session *string `json:"session,omitempty"`
+
+	// Status Relative URL for the session status projection.
+	Status *string `json:"status,omitempty"`
+}
+
+// FactorySessionResourceCapacityOutcome Terminal capacity decision outcome.
+type FactorySessionResourceCapacityOutcome string
+
+// FactorySessionResourceCapacityRequest defines model for FactorySessionResourceCapacityRequest.
+type FactorySessionResourceCapacityRequest struct {
+	// Capacity Requested total resource capacity. Zero is valid only when no units are in use.
+	Capacity int `json:"capacity"`
+
+	// ExpectedRevision Effective Factory revision observed before admission.
+	ExpectedRevision int `json:"expectedRevision"`
+
+	// Reason Optional safe operator reason retained with the canonical change request.
+	Reason *string `json:"reason,omitempty"`
+
+	// RequestId Caller-owned idempotency identity for this capacity request.
+	RequestId string `json:"requestId"`
+}
+
+// FactorySessionResourceCapacityResponse defines model for FactorySessionResourceCapacityResponse.
+type FactorySessionResourceCapacityResponse struct {
+	AvailableCount    int    `json:"availableCount"`
+	ChangeId          string `json:"changeId"`
+	EffectiveCapacity int    `json:"effectiveCapacity"`
+	InUseCount        int    `json:"inUseCount"`
+
+	// Links Canonical relative links for inspecting the affected Factory Session and its events.
+	Links *FactorySessionResourceCapacityLinks `json:"links,omitempty"`
+
+	// MinimumCapacity Lowest capacity currently safe to admit without interrupting in-use work.
+	MinimumCapacity int `json:"minimumCapacity"`
+
+	// Outcome Terminal capacity decision outcome.
+	Outcome           FactorySessionResourceCapacityOutcome `json:"outcome"`
+	PreviousCapacity  int                                   `json:"previousCapacity"`
+	RequestId         string                                `json:"requestId"`
+	RequestedCapacity int                                   `json:"requestedCapacity"`
+
+	// ResourceId Stable authored Resource.id. This is the only resource identity used by the operation.
+	ResourceId string `json:"resourceId"`
+
+	// ResourceName Current display label, provided for presentation only.
+	ResourceName *string `json:"resourceName,omitempty"`
+	Revision     int     `json:"revision"`
+	SessionId    string  `json:"sessionId"`
 }
 
 // FactorySessionResult Durable factory-session result retrieval response for final or partial workflow outputs. Non-ready, unavailable, and failed-with-partial states return typed bodies with session identity, current session status, and actionable failure or availability details when known.
@@ -8056,6 +8245,9 @@ type MaxResults = int
 // NextToken defines model for NextToken.
 type NextToken = string
 
+// ResourceID defines model for ResourceID.
+type ResourceID = string
+
 // ResponseEventAfterSequence defines model for ResponseEventAfterSequence.
 type ResponseEventAfterSequence = int64
 
@@ -8118,6 +8310,11 @@ type ExecutionRequestIdConflict = ErrorResponse
 
 // FactorySessionLifecycleControlConflict defines model for FactorySessionLifecycleControlConflict.
 type FactorySessionLifecycleControlConflict struct {
+	union json.RawMessage
+}
+
+// FactorySessionResourceCapacityConflict defines model for FactorySessionResourceCapacityConflict.
+type FactorySessionResourceCapacityConflict struct {
 	union json.RawMessage
 }
 
@@ -8376,6 +8573,58 @@ func (t *FactoryEvent_Payload) FromFactoryChangeEventPayload(v FactoryChangeEven
 
 // MergeFactoryChangeEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided FactoryChangeEventPayload
 func (t *FactoryEvent_Payload) MergeFactoryChangeEventPayload(v FactoryChangeEventPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsFactoryChangeRequestEventPayload returns the union data inside the FactoryEvent_Payload as a FactoryChangeRequestEventPayload
+func (t FactoryEvent_Payload) AsFactoryChangeRequestEventPayload() (FactoryChangeRequestEventPayload, error) {
+	var body FactoryChangeRequestEventPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromFactoryChangeRequestEventPayload overwrites any union data inside the FactoryEvent_Payload as the provided FactoryChangeRequestEventPayload
+func (t *FactoryEvent_Payload) FromFactoryChangeRequestEventPayload(v FactoryChangeRequestEventPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeFactoryChangeRequestEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided FactoryChangeRequestEventPayload
+func (t *FactoryEvent_Payload) MergeFactoryChangeRequestEventPayload(v FactoryChangeRequestEventPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsFactoryChangeFailedEventPayload returns the union data inside the FactoryEvent_Payload as a FactoryChangeFailedEventPayload
+func (t FactoryEvent_Payload) AsFactoryChangeFailedEventPayload() (FactoryChangeFailedEventPayload, error) {
+	var body FactoryChangeFailedEventPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromFactoryChangeFailedEventPayload overwrites any union data inside the FactoryEvent_Payload as the provided FactoryChangeFailedEventPayload
+func (t *FactoryEvent_Payload) FromFactoryChangeFailedEventPayload(v FactoryChangeFailedEventPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeFactoryChangeFailedEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided FactoryChangeFailedEventPayload
+func (t *FactoryEvent_Payload) MergeFactoryChangeFailedEventPayload(v FactoryChangeFailedEventPayload) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -11201,6 +11450,68 @@ func (t FactorySessionLifecycleControlConflict) MarshalJSON() ([]byte, error) {
 }
 
 func (t *FactorySessionLifecycleControlConflict) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsFactorySessionResourceCapacityResponse returns the union data inside the FactorySessionResourceCapacityConflict as a FactorySessionResourceCapacityResponse
+func (t FactorySessionResourceCapacityConflict) AsFactorySessionResourceCapacityResponse() (FactorySessionResourceCapacityResponse, error) {
+	var body FactorySessionResourceCapacityResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromFactorySessionResourceCapacityResponse overwrites any union data inside the FactorySessionResourceCapacityConflict as the provided FactorySessionResourceCapacityResponse
+func (t *FactorySessionResourceCapacityConflict) FromFactorySessionResourceCapacityResponse(v FactorySessionResourceCapacityResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeFactorySessionResourceCapacityResponse performs a merge with any union data inside the FactorySessionResourceCapacityConflict, using the provided FactorySessionResourceCapacityResponse
+func (t *FactorySessionResourceCapacityConflict) MergeFactorySessionResourceCapacityResponse(v FactorySessionResourceCapacityResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsErrorResponse returns the union data inside the FactorySessionResourceCapacityConflict as a ErrorResponse
+func (t FactorySessionResourceCapacityConflict) AsErrorResponse() (ErrorResponse, error) {
+	var body ErrorResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromErrorResponse overwrites any union data inside the FactorySessionResourceCapacityConflict as the provided ErrorResponse
+func (t *FactorySessionResourceCapacityConflict) FromErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeErrorResponse performs a merge with any union data inside the FactorySessionResourceCapacityConflict, using the provided ErrorResponse
+func (t *FactorySessionResourceCapacityConflict) MergeErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t FactorySessionResourceCapacityConflict) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *FactorySessionResourceCapacityConflict) UnmarshalJSON(b []byte) error {
 	err := t.union.UnmarshalJSON(b)
 	return err
 }

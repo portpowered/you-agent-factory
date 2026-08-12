@@ -21,6 +21,7 @@ type runtimeGlobals struct {
 	ctx                   context.Context
 	records               *recordCollector
 	childExecutor         ChildExecutor
+	parallelGate          chan struct{}
 	agents                map[string]interfaces.FactoryOrchestratorJavaScriptAgent
 	workerSettings        WorkerSettingsConfig
 	onArtifact            func(kind string, content json.RawMessage) error
@@ -29,6 +30,14 @@ type runtimeGlobals struct {
 	finalSet              bool
 	returned              goja.Value
 	returnedSet           bool
+}
+
+func newParallelGate(policy workflowpolicy.EffectivePolicy) chan struct{} {
+	concurrency := policy.Concurrency
+	if concurrency < 1 {
+		concurrency = 1
+	}
+	return make(chan struct{}, concurrency)
 }
 
 func (g *runtimeGlobals) bindArgs(argsValue goja.Value) {

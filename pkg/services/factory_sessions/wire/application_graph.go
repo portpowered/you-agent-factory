@@ -18,6 +18,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	invocationwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/invocation/wire"
+	factorysessionwirecontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 )
 
@@ -64,6 +65,7 @@ type (
 	InvocationOperation                  = roles.InvocationOperation
 	InvocationTarget                     = roles.InvocationTarget
 	FactoryInvocationOutcome             = roles.FactoryInvocationOutcome
+	LiveChangeCoordinator                = factorysessionwirecontracts.LiveChangeCoordinator
 	ApplicationOpeningPorts              = roles.ApplicationOpeningPorts
 	ApplicationOpeningRequest            = roles.ApplicationOpeningRequest
 	RuntimeResources                     = roles.RuntimeResources

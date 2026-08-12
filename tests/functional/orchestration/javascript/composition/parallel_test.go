@@ -59,8 +59,6 @@ const parallelPartialFailureWorkflow = `return (async function () {
 // public Factory Session and dispatch surfaces, using controllable provider edges
 // instead of wall-clock sleeps to observe concurrency.
 func TestJavaScriptParallelDispatchesChildrenConcurrently(t *testing.T) {
-	t.Parallel()
-
 	dir := support.ScaffoldFactory(t, parallelCompositionFactoryConfig())
 	support.WriteAgentConfig(t, dir, "worker-a", "---\ntype: MODEL_WORKER\n---\n")
 	homeDir := writeParallelCompositionGlobalConfig(t)
@@ -88,7 +86,7 @@ func TestJavaScriptParallelDispatchesChildrenConcurrently(t *testing.T) {
 		t.Fatal("session id unexpectedly empty")
 	}
 
-	waitForParallelCompositionInFlightDispatches(t, baseURL, sessionID, 2, 5*time.Second)
+	provider.waitForConcurrentCalls(t, 5*time.Second)
 	provider.releaseAll()
 
 	completed := waitForParallelCompositionSessionStatus(
@@ -597,16 +595,30 @@ func waitForParallelCompositionLabelCompletion(
 }
 
 type gatedParallelChildProvider struct {
-	mu          sync.Mutex
-	active      int
-	peak        int
-	release     chan struct{}
-	releaseOnce sync.Once
+	mu                  sync.Mutex
+	active              int
+	peak                int
+	release             chan struct{}
+	concurrent          chan struct{}
+	releaseOnce         sync.Once
+	concurrentCallsOnce sync.Once
 }
 
 func newGatedParallelChildProvider() *gatedParallelChildProvider {
 	return &gatedParallelChildProvider{
-		release: make(chan struct{}),
+		release:    make(chan struct{}),
+		concurrent: make(chan struct{}),
+	}
+}
+
+func (p *gatedParallelChildProvider) waitForConcurrentCalls(t *testing.T, timeout time.Duration) {
+	t.Helper()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-p.concurrent:
+	case <-timer.C:
+		t.Fatalf("provider did not observe two concurrent child calls within %s; peak active calls = %d", timeout, p.peakActive())
 	}
 }
 
@@ -630,6 +642,9 @@ func (p *gatedParallelChildProvider) Infer(
 	p.active++
 	if p.active > p.peak {
 		p.peak = p.active
+	}
+	if p.active >= 2 {
+		p.concurrentCallsOnce.Do(func() { close(p.concurrent) })
 	}
 	p.mu.Unlock()
 

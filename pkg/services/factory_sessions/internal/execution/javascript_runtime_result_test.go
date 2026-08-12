@@ -466,6 +466,47 @@ func TestChildWorkerExecutor_CompletedChildRecordsItsWorkerAndOutput(t *testing.
 	}
 }
 
+func TestChildWorkerExecutor_ResourceLeaseSurroundsTerminalChild(t *testing.T) {
+	released := 0
+	var leaseRequests []factory.ResourceCapacityLeaseRequest
+	invoker := &recordingWorkerInvoker{
+		result: factory.InvokeWorkerResult{
+			Outcome:            factory.InvokeWorkerOutcomeCompleted,
+			Output:             `{"text":"resource-bound child finished"}`,
+			Provider:           "codex",
+			ProviderSessionRef: "codex-session-resource",
+		},
+	}
+	sink := newChildRecordSink()
+	executor := newTestChildWorkerExecutor(invoker, sink, nil)
+	executor.resourceLeaseAcquirer = func(_ context.Context, request factory.ResourceCapacityLeaseRequest) (*childResourceLease, error) {
+		leaseRequests = append(leaseRequests, request)
+		return &childResourceLease{factoryRevision: 7, release: func() { released++ }}, nil
+	}
+
+	result, err := executor.Execute(context.Background(), factory.JavaScriptChildExecutionRequest{
+		Prompt:     "review",
+		Label:      "resource-review",
+		ResourceID: "reviewers",
+	})
+	if err != nil {
+		t.Fatalf("Execute resource-bound child: %v", err)
+	}
+	if result.Request.ResourceID != "reviewers" || result.Request.FactoryRevision != 7 {
+		t.Fatalf("child result request = %#v, want resource reviewers at revision 7", result.Request)
+	}
+	terminal := sink.terminalChildDispatch(t)
+	if terminal.Status != factory.JavaScriptChildDispatchStatusCompleted || terminal.ResourceID != "reviewers" || terminal.FactoryRevision != 7 {
+		t.Fatalf("terminal resource child = %#v, want completed reviewers at revision 7", terminal)
+	}
+	if len(leaseRequests) != 1 || leaseRequests[0].ResourceID != "reviewers" {
+		t.Fatalf("resource lease requests = %#v, want one reviewers request", leaseRequests)
+	}
+	if released != 1 {
+		t.Fatalf("resource lease releases = %d, want exactly one after terminal child", released)
+	}
+}
+
 // TestChildWorkerExecutor_FailedChildCarriesItsProviderWithTheSessionReference
 // is the regression pin for the defect that turned a crashed provider into an
 // internal error.

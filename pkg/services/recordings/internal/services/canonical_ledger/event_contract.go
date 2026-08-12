@@ -6,36 +6,38 @@ import factorydefinitions "github.com/portpowered/infinite-you/pkg/services/fact
 // payloads. Peers import these aliases from pkg/services/recordings rather than
 // treating the vocabulary as Factory Definitions-owned peer contract surface.
 type (
-	ArtifactCreatedEventPayload           = factorydefinitions.ArtifactCreatedEventPayload
-	DispatchInterruptedEventPayload       = factorydefinitions.DispatchInterruptedEventPayload
-	DispatchQueuedEventPayload            = factorydefinitions.DispatchQueuedEventPayload
-	DispatchReconciledEventPayload        = factorydefinitions.DispatchReconciledEventPayload
-	DispatchRequestEventPayload           = factorydefinitions.DispatchRequestEventPayload
-	FactoryChangeEventPayload             = factorydefinitions.FactoryChangeEventPayload
-	FactoryEvent                          = factorydefinitions.FactoryEvent
-	FactoryEventContext                   = factorydefinitions.FactoryEventContext
-	FactoryEventReconnectCursor           = factorydefinitions.FactoryEventReconnectCursor
-	FactoryEventReconnectScope            = factorydefinitions.FactoryEventReconnectScope
-	FactoryEventStream                    = factorydefinitions.FactoryEventStream
-	FactoryEventType                      = factorydefinitions.FactoryEventType
-	FactorySessionCompletedEventPayload   = factorydefinitions.FactorySessionCompletedEventPayload
+	ArtifactCreatedEventPayload                = factorydefinitions.ArtifactCreatedEventPayload
+	DispatchInterruptedEventPayload            = factorydefinitions.DispatchInterruptedEventPayload
+	DispatchQueuedEventPayload                 = factorydefinitions.DispatchQueuedEventPayload
+	DispatchReconciledEventPayload             = factorydefinitions.DispatchReconciledEventPayload
+	DispatchRequestEventPayload                = factorydefinitions.DispatchRequestEventPayload
+	FactoryChangeEventPayload                  = factorydefinitions.FactoryChangeEventPayload
+	FactoryChangeRequestEventPayload           = factorydefinitions.FactoryChangeRequestEventPayload
+	FactoryChangeFailedEventPayload            = factorydefinitions.FactoryChangeFailedEventPayload
+	FactoryEvent                               = factorydefinitions.FactoryEvent
+	FactoryEventContext                        = factorydefinitions.FactoryEventContext
+	FactoryEventReconnectCursor                = factorydefinitions.FactoryEventReconnectCursor
+	FactoryEventReconnectScope                 = factorydefinitions.FactoryEventReconnectScope
+	FactoryEventStream                         = factorydefinitions.FactoryEventStream
+	FactoryEventType                           = factorydefinitions.FactoryEventType
+	FactorySessionCompletedEventPayload        = factorydefinitions.FactorySessionCompletedEventPayload
 	FactorySessionLifecycleControlEventPayload = factorydefinitions.FactorySessionLifecycleControlEventPayload
-	FactorySessionLogicalResolveHint      = factorydefinitions.FactorySessionLogicalResolveHint
-	FactorySessionPausedEventPayload      = factorydefinitions.FactorySessionPausedEventPayload
-	FactorySessionResultUpdatedEventPayload = factorydefinitions.FactorySessionResultUpdatedEventPayload
-	FactorySessionResumedEventPayload     = factorydefinitions.FactorySessionResumedEventPayload
-	FactorySessionStartedEventPayload     = factorydefinitions.FactorySessionStartedEventPayload
-	FactorySessionSyncPreflightOptions    = factorydefinitions.FactorySessionSyncPreflightOptions
-	FactoryStateResponseEventPayload      = factorydefinitions.FactoryStateResponseEventPayload
-	InitialStructureRequestEventPayload   = factorydefinitions.InitialStructureRequestEventPayload
-	JavaScriptCheckpointRefEventPayload   = factorydefinitions.JavaScriptCheckpointRefEventPayload
-	JavaScriptPhaseChangeEventPayload     = factorydefinitions.JavaScriptPhaseChangeEventPayload
-	OrchestratorCheckpointWrittenEventPayload = factorydefinitions.OrchestratorCheckpointWrittenEventPayload
-	OrchestratorPhaseChangedEventPayload  = factorydefinitions.OrchestratorPhaseChangedEventPayload
-	RunEventWallClock                     = factorydefinitions.RunEventWallClock
-	RunRequestEventPayload                = factorydefinitions.RunRequestEventPayload
-	RunResponseEventPayload               = factorydefinitions.RunResponseEventPayload
-	WorkStateChangeEventPayload           = factorydefinitions.WorkStateChangeEventPayload
+	FactorySessionLogicalResolveHint           = factorydefinitions.FactorySessionLogicalResolveHint
+	FactorySessionPausedEventPayload           = factorydefinitions.FactorySessionPausedEventPayload
+	FactorySessionResultUpdatedEventPayload    = factorydefinitions.FactorySessionResultUpdatedEventPayload
+	FactorySessionResumedEventPayload          = factorydefinitions.FactorySessionResumedEventPayload
+	FactorySessionStartedEventPayload          = factorydefinitions.FactorySessionStartedEventPayload
+	FactorySessionSyncPreflightOptions         = factorydefinitions.FactorySessionSyncPreflightOptions
+	FactoryStateResponseEventPayload           = factorydefinitions.FactoryStateResponseEventPayload
+	InitialStructureRequestEventPayload        = factorydefinitions.InitialStructureRequestEventPayload
+	JavaScriptCheckpointRefEventPayload        = factorydefinitions.JavaScriptCheckpointRefEventPayload
+	JavaScriptPhaseChangeEventPayload          = factorydefinitions.JavaScriptPhaseChangeEventPayload
+	OrchestratorCheckpointWrittenEventPayload  = factorydefinitions.OrchestratorCheckpointWrittenEventPayload
+	OrchestratorPhaseChangedEventPayload       = factorydefinitions.OrchestratorPhaseChangedEventPayload
+	RunEventWallClock                          = factorydefinitions.RunEventWallClock
+	RunRequestEventPayload                     = factorydefinitions.RunRequestEventPayload
+	RunResponseEventPayload                    = factorydefinitions.RunResponseEventPayload
+	WorkStateChangeEventPayload                = factorydefinitions.WorkStateChangeEventPayload
 )
 
 const (
@@ -49,6 +51,8 @@ const (
 	FactoryEventTypeDispatchRequest               = factorydefinitions.FactoryEventTypeDispatchRequest
 	FactoryEventTypeDispatchResponse              = factorydefinitions.FactoryEventTypeDispatchResponse
 	FactoryEventTypeFactoryChange                 = factorydefinitions.FactoryEventTypeFactoryChange
+	FactoryEventTypeFactoryChangeRequest          = factorydefinitions.FactoryEventTypeFactoryChangeRequest
+	FactoryEventTypeFactoryChangeFailed           = factorydefinitions.FactoryEventTypeFactoryChangeFailed
 	FactoryEventTypeFactoryStateResponse          = factorydefinitions.FactoryEventTypeFactoryStateResponse
 	FactoryEventTypeInferenceRequest              = factorydefinitions.FactoryEventTypeInferenceRequest
 	FactoryEventTypeInferenceResponse             = factorydefinitions.FactoryEventTypeInferenceResponse

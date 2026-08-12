@@ -17,6 +17,32 @@ type Service struct {
 	durableexecution.Service
 }
 
+// liveChangeCapability is the optional durable-session boundary used by the
+// live-change coordinator without widening the root execution contract.
+type liveChangeCapability interface {
+	ApplyLiveChange(context.Context, string, factorysessions.LiveChangeRequest) (factorysessions.LiveChangeResult, error)
+	RecoverLiveChange(context.Context, string, string) (factorysessions.LiveChangeResult, error)
+}
+
+func (s *Service) forwardLiveChange(
+	ctx context.Context,
+	sessionID string,
+	request factorysessions.LiveChangeRequest,
+	recoverRequestID string,
+) (factorysessions.LiveChangeResult, error) {
+	var capability liveChangeCapability
+	if s != nil {
+		capability, _ = s.Service.(liveChangeCapability)
+	}
+	if capability == nil {
+		return factorysessions.LiveChangeResult{}, factorysessions.ErrRuntimeNotAvailable
+	}
+	if recoverRequestID != "" {
+		return capability.RecoverLiveChange(ctx, sessionID, recoverRequestID)
+	}
+	return capability.ApplyLiveChange(ctx, sessionID, request)
+}
+
 // BindWorkerInvoker forwards the session's Factory Runtime to the underlying
 // JavaScript runtime, which invokes its workflow children as Workers through
 // it. An execution backend that runs no Workers of its own -- the fake and
@@ -52,6 +78,27 @@ func (s *Service) SubscribeResponseEvents(
 		return nil, factorysessions.ErrRuntimeNotAvailable
 	}
 	return subscriber.SubscribeResponseEvents(ctx, sessionID, request)
+}
+
+// ApplyLiveChange forwards the optional durable-session live-change capability
+// without widening the durable execution root interface used by other
+// backends.
+func (s *Service) ApplyLiveChange(
+	ctx context.Context,
+	sessionID string,
+	request factorysessions.LiveChangeRequest,
+) (factorysessions.LiveChangeResult, error) {
+	return s.forwardLiveChange(ctx, sessionID, request, "")
+}
+
+// RecoverLiveChange forwards durable live-change recovery when the underlying
+// execution backend retains canonical change events.
+func (s *Service) RecoverLiveChange(
+	ctx context.Context,
+	sessionID string,
+	requestID string,
+) (factorysessions.LiveChangeResult, error) {
+	return s.forwardLiveChange(ctx, sessionID, factorysessions.LiveChangeRequest{}, requestID)
 }
 
 // New constructs an inert durable execution capability around an explicitly

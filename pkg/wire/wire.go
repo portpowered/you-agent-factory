@@ -61,6 +61,7 @@ var servicesSet = wire.NewSet(
 	wire.Bind(new(initializerapplication.ProviderRegistry), new(workers.ProviderRegistry)),
 	provideFactorySessionProviderIdentityResolver,
 	factorysessionwire.NewRequestPreparation,
+	factorysessionwire.NewLiveChangeCoordinator,
 	provideFactorySessionHTTPRequestPreparation,
 	factoryruntime.NewFactoryStatusProjector,
 	factoryruntime.NewSessionResultProjectionOperation,

@@ -27,6 +27,8 @@ var SessionFamilyCommandIDs = []string{
 	"you.session.cancel",
 	"you.session.terminate",
 	"you.session.dispatches",
+	"you.session.resource",
+	"you.session.resource.set",
 }
 
 // IsSessionFamilyCommandID reports whether id belongs to the canonical session family.

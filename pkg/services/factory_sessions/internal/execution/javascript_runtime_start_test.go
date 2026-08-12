@@ -10,6 +10,8 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livechange"
+	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"os"
@@ -30,6 +32,20 @@ func TestServiceMethods_PropagateContextCancellation(t *testing.T) {
 	service = stubCancelAwareService{}
 	if _, err := service.GetSession(ctx, "dur-sess-001"); !errors.Is(err, context.Canceled) {
 		t.Fatalf("GetSession error = %v, want context.Canceled", err)
+	}
+}
+
+func TestNewJavaScriptRuntimeService_RetainsInjectedLiveChangeCoordinator(t *testing.T) {
+	coordinator := livechange.NewCoordinator()
+	service := newConfiguredJavaScriptRuntimeService(javaScriptRuntimeServiceConfig{
+		ProjectRoot:           t.TempDir(),
+		LiveChangeCoordinator: coordinator,
+	})
+	if service == nil {
+		t.Fatal("NewJavaScriptRuntimeService returned nil")
+	}
+	if service.liveChangeCoordinator != coordinator {
+		t.Fatalf("live-change coordinator = %p, want injected %p", service.liveChangeCoordinator, coordinator)
 	}
 }
 
@@ -268,12 +284,13 @@ func TestJavaScriptRuntimeService_StartSync_WaitTimeoutWithoutCancelKeepsSession
 }
 
 type javaScriptRuntimeServiceConfig struct {
-	ProjectRoot        string
-	ChildExecutorMode  string
-	InvocationExecutor workerexecution.InvocationExecutor
-	Persistence        runtimepersist.Store
-	Clock              factory.Clock
-	Workflows          factory.JavaScriptWorkflows
+	ProjectRoot           string
+	ChildExecutorMode     string
+	InvocationExecutor    workerexecution.InvocationExecutor
+	Persistence           runtimepersist.Store
+	Clock                 factory.Clock
+	Workflows             factory.JavaScriptWorkflows
+	LiveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator
 }
 
 func testRuntimePersistenceStoreFactory(projectRoot string) (runtimepersist.Store, error) {
@@ -307,7 +324,7 @@ func newConfiguredJavaScriptRuntimeService(config javaScriptRuntimeServiceConfig
 		workflows, orchestrationJavaScriptFromWorkflows(workflows), workflows,
 		nil, factory.JavaScriptWorkerSettings{}, mustTestRecordingWriter(),
 		testSessionIDGenerator,
-		nil, nil,
+		nil, nil, config.LiveChangeCoordinator,
 	)
 }
 

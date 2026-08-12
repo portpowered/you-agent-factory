@@ -39,6 +39,7 @@ func TestNewDurable_DefaultPolicyDoesNotCreateProjectDurableSessions(t *testing.
 		func() string { return "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
 		nil,
 		nil,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("NewDurable(default policy): %v", err)
@@ -73,6 +74,7 @@ func TestNewDurable_EnabledPolicyPersistsProjectDurableSessions(t *testing.T) {
 		factoryruntime.JavaScriptWorkerSettings{},
 		restartRecordingWriter{},
 		func() string { return "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" },
+		nil,
 		nil,
 		nil,
 	)
@@ -119,6 +121,7 @@ func TestNewStandalone_DoesNotCreateProjectDurableSessions(t *testing.T) {
 		factoryruntimefixtures.ScriptedJavaScriptWorkflows{},
 		restartRecordingWriter{},
 		func() string { return "cccccccccccccccccccccccccccccccc" },
+		nil,
 		nil,
 	)
 	if err != nil {

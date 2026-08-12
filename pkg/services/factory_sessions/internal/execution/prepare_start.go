@@ -521,7 +521,7 @@ func rebuildRuntimeSessionCanonicalEvents(state *runtimeSessionState) []json.Raw
 		runtimeDispatchEventInputFromState(state),
 	)
 	projected = mergePreservedDispatchInterruptedEvents(projected, preserved)
-	if state.eventConsumer == nil {
+	if state.eventConsumer == nil && !hasDurableLiveChangeEvents(state.events) {
 		return projected
 	}
 	return reconcileAppendOnlyCanonicalEvents(state.events, projected)

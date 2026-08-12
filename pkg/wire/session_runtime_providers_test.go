@@ -179,6 +179,7 @@ func TestProvideFactorySessionExecutionFactory_TakesNoProviderEdge(t *testing.T)
 		adaptRunner,
 		edges,
 		eventsService,
+		factorysessionwire.NewLiveChangeCoordinator(),
 	)
 
 	provider := wireTestProvider{}

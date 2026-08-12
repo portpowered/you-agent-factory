@@ -1189,6 +1189,10 @@
       }
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livechange",
+      "minimum": 57.77
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession",
       "minimum": 53.12
     },

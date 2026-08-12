@@ -640,6 +640,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/factory-sessions/{session_id}/resources/{resource_id}/capacity": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Set one Factory Session resource capacity
+     * @description Changes the effective capacity of one live Factory Session resource by stable Resource.id. The operation is revisioned and idempotent. It does not cancel, interrupt, terminate, restart, or admit work directly; a capacity increase wakes waiting runtime dispatches.
+     */
+    post: operations["setFactorySessionResourceCapacity"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/factory-sessions/{session_id}/artifacts": {
     parameters: {
       query?: never;
@@ -1636,6 +1656,8 @@ export interface components {
       code: ErrorResponseCode;
       /** @description Optional canonical validation targets that clients can map to factory graph nodes, handles, and form fields. */
       targets?: components["schemas"]["FactoryValidationTarget"][];
+      /** @description Resource accounting for a rejected capacity reduction. */
+      resourceCapacity?: components["schemas"]["FactorySessionResourceCapacityErrorDetails"];
     };
     ErrorTarget: {
       /** @description Client-visible target category such as form, node, edge, field, or save. */
@@ -3108,6 +3130,59 @@ export interface components {
       /** @description Inspection links for session, results, dispatches, and artifacts. */
       links?: components["schemas"]["FactorySessionLifecycleControlLinks"];
     };
+    FactorySessionResourceCapacityRequest: {
+      /** @description Caller-owned idempotency identity for this capacity request. */
+      requestId: string;
+      /** @description Effective Factory revision observed before admission. */
+      expectedRevision: number;
+      /** @description Requested total resource capacity. Zero is valid only when no units are in use. */
+      capacity: number;
+      /** @description Optional safe operator reason retained with the canonical change request. */
+      reason?: string;
+    };
+    /** @description Accounting details explaining why a resource-capacity reduction was rejected. */
+    FactorySessionResourceCapacityErrorDetails: {
+      /** @description Stable authored Resource.id. */
+      resourceId: string;
+      currentCapacity: number;
+      requestedCapacity: number;
+      inUseCount: number;
+      availableCount: number;
+      minimumCapacity: number;
+    };
+    /**
+     * @description Terminal capacity decision outcome.
+     * @enum {string}
+     */
+    FactorySessionResourceCapacityOutcome: FactorySessionResourceCapacityOutcome;
+    /** @description Canonical relative links for inspecting the affected Factory Session and its events. */
+    FactorySessionResourceCapacityLinks: {
+      /** @description Relative URL for the affected Factory Session. */
+      session?: string;
+      /** @description Relative URL for the session's canonical Factory Events. */
+      events?: string;
+      /** @description Relative URL for the session status projection. */
+      status?: string;
+    };
+    FactorySessionResourceCapacityResponse: {
+      sessionId: string;
+      /** @description Stable authored Resource.id. This is the only resource identity used by the operation. */
+      resourceId: string;
+      /** @description Current display label, provided for presentation only. */
+      resourceName?: string;
+      previousCapacity: number;
+      requestedCapacity: number;
+      effectiveCapacity: number;
+      inUseCount: number;
+      availableCount: number;
+      /** @description Lowest capacity currently safe to admit without interrupting in-use work. */
+      minimumCapacity: number;
+      outcome: components["schemas"]["FactorySessionResourceCapacityOutcome"];
+      revision: number;
+      requestId: string;
+      changeId: string;
+      links?: components["schemas"]["FactorySessionResourceCapacityLinks"];
+    };
     LoadableProviderSessionRef: {
       provider: components["schemas"]["LoadableProviderSessionProvider"];
       kind: components["schemas"]["LoadableProviderSessionKind"];
@@ -3508,6 +3583,8 @@ export interface components {
         | components["schemas"]["RunRequestEventPayload"]
         | components["schemas"]["InitialStructureRequestEventPayload"]
         | components["schemas"]["FactoryChangeEventPayload"]
+        | components["schemas"]["FactoryChangeRequestEventPayload"]
+        | components["schemas"]["FactoryChangeFailedEventPayload"]
         | components["schemas"]["WorkRequestEventPayload"]
         | components["schemas"]["RelationshipChangeRequestEventPayload"]
         | components["schemas"]["DispatchRequestEventPayload"]
@@ -3611,6 +3688,30 @@ export interface components {
       runnerId?: components["schemas"]["RunnerID"];
       runnerSelectionSource?: components["schemas"]["RunnerSelectionSource"];
     };
+    /** @description Detached resource-capacity accounting retained in a successful Factory change event so replay does not depend on mutable runtime state. */
+    FactoryResourceCapacityChange: {
+      /** @description Stable authored Resource.id whose capacity changed. */
+      resourceId: string;
+      /** @description Optional display name retained for inspection only. */
+      resourceName?: string;
+      /** @description Capacity immediately before the change. */
+      previousCapacity: number;
+      /** @description Capacity requested by the operator. */
+      requestedCapacity: number;
+      /** @description Capacity effective after the change. */
+      effectiveCapacity: number;
+      /** @description Number of leases in use at the decision boundary. */
+      inUseCount: number;
+      /** @description Number of currently available capacity units. */
+      availableCount: number;
+      /** @description Lowest capacity permitted by the current in-use count. */
+      minimumCapacity: number;
+      /**
+       * @description Terminal capacity decision recorded by the runtime.
+       * @enum {string}
+       */
+      outcome: FactoryResourceCapacityChangeOutcome;
+    };
     RunRequestEventPayload: {
       /** Format: date-time */
       recordedAt: string;
@@ -3627,8 +3728,53 @@ export interface components {
     /** @description Runtime topology snapshot after a live factory definition change replaces the running factory. */
     FactoryChangeEventPayload: {
       factory: components["schemas"]["Factory"];
+      /** @description Stable live-change identity when this is a revisioned change boundary. */
+      changeId?: string;
+      /** @description Normalized live-change operation name. */
+      operation?: string;
+      /** @description Stable target identity changed by the operation. */
+      targetId?: string;
+      /** @description Effective Factory revision immediately before this change. */
+      previousRevision?: number;
+      /** @description Effective Factory revision created by this change. */
+      newRevision?: number;
+      /** @description Canonical Factory Event sequence at which this change became effective. */
+      effectiveSequence?: number;
+      /** @description Detached resource-capacity accounting for a capacity change. */
+      resourceCapacity?: components["schemas"]["FactoryResourceCapacityChange"];
       sourceDirectory?: string;
       metadata?: components["schemas"]["StringMap"];
+    };
+    /** @description Normalized live Factory Session change intent. Request identity and session scope are carried by FactoryEvent.context. */
+    FactoryChangeRequestEventPayload: {
+      /** @description Stable identity of the requested live change. */
+      changeId: string;
+      /** @description Effective Factory revision the operator observed before admission. */
+      expectedRevision: number;
+      /** @description Normalized live-change operation name. */
+      operation: string;
+      /** @description Stable target identity changed by the operation. */
+      targetId: string;
+      /** @description Canonical JSON value requested by the operation. */
+      requestedValue: unknown;
+      /** @description Safe actor identity supplied by the caller. */
+      actor?: string;
+      /** @description Safe source label such as cli or api. */
+      source?: string;
+      /** @description Optional normalized safe operator reason. */
+      reason?: string;
+    };
+    /** @description Safe terminal failure for an admitted live Factory Session change. Raw provider payloads, commands, stack traces, and requested values are excluded. */
+    FactoryChangeFailedEventPayload: {
+      changeId: string;
+      operation: string;
+      targetId: string;
+      expectedRevision: number;
+      previousRevision: number;
+      /** @description Stable safe failure category. */
+      failureCode: string;
+      /** @description Bounded safe failure explanation. */
+      failureMessage: string;
     };
     /** @description Normalized work request entering the factory. Single-work submissions accepted by POST /work are converted into this one-work request shape before an event is emitted. */
     WorkRequestEventPayload: {
@@ -6490,6 +6636,17 @@ export interface components {
           | components["schemas"]["ErrorResponse"];
       };
     };
+    /** @description Resource capacity admission was rejected because the request revision or Factory Session lifecycle is stale, the requested capacity is below units in use. */
+    FactorySessionResourceCapacityConflict: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json":
+          | components["schemas"]["FactorySessionResourceCapacityResponse"]
+          | components["schemas"]["ErrorResponse"];
+      };
+    };
     /** @description Server failed while reading or building runtime state. */
     InternalError: {
       headers: {
@@ -6532,6 +6689,8 @@ export interface components {
     SessionID: string;
     /** @description Stable Worker Session identity returned by the Worker Sessions list operation. */
     WorkerSessionID: string;
+    /** @description Stable authored Resource.id. Mutable display names are not accepted as identifiers. */
+    ResourceID: string;
     /** @description Optional positive page size. Omit to use the default page size; non-positive values fall back to the default after successful integer binding. */
     MaxResults: number;
     /** @description Optional base64-encoded token ID cursor. */
@@ -7577,6 +7736,39 @@ export interface operations {
       500: components["responses"]["InternalError"];
     };
   };
+  setFactorySessionResourceCapacity: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+        /** @description Stable authored Resource.id. Mutable display names are not accepted as identifiers. */
+        resource_id: components["parameters"]["ResourceID"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["FactorySessionResourceCapacityRequest"];
+      };
+    };
+    responses: {
+      /** @description Capacity was applied, was an exact no-op, or replayed an identical request. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["FactorySessionResourceCapacityResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      409: components["responses"]["FactorySessionResourceCapacityConflict"];
+      500: components["responses"]["InternalError"];
+    };
+  };
   listFactorySessionArtifacts: {
     parameters: {
       query?: never;
@@ -8352,6 +8544,8 @@ export const ErrorResponseCode = {
   METHOD_NOT_ALLOWED: "METHOD_NOT_ALLOWED",
   // Durable execution requestId was reused with materially different inputs.
   EXECUTION_REQUEST_ID_CONFLICT: "EXECUTION_REQUEST_ID_CONFLICT",
+  // A live-change requestId was reused with a different normalized request body.
+  REQUEST_CONFLICT: "REQUEST_CONFLICT",
   // Worker Session start requestId was reused with different normalized inputs.
   WORKER_SESSION_START_REQUEST_ID_CONFLICT:
     "WORKER_SESSION_START_REQUEST_ID_CONFLICT",
@@ -8367,6 +8561,14 @@ export const ErrorResponseCode = {
   // Lifecycle control requestId was already applied with different control inputs.
   FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED:
     "FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED",
+  // Requested resource capacity is below the number of units currently in use.
+  RESOURCE_CAPACITY_IN_USE: "RESOURCE_CAPACITY_IN_USE",
+  // The caller's expected Factory revision is no longer current.
+  REVISION_CONFLICT: "REVISION_CONFLICT",
+  // The Factory Session lifecycle does not admit the requested change.
+  LIFECYCLE_CONFLICT: "LIFECYCLE_CONFLICT",
+  // A live change was admitted but its runtime application failed.
+  ADMITTED_APPLICATION_FAILURE: "ADMITTED_APPLICATION_FAILURE",
   // The Factory Response Event reconnect cursor is invalid.
   INVALID_RESPONSE_EVENT_CURSOR: "INVALID_RESPONSE_EVENT_CURSOR",
   // A Factory Response Event filter is invalid.
@@ -8718,6 +8920,13 @@ export const FactorySessionLifecycleControlOutcome = {
 } as const;
 export type FactorySessionLifecycleControlOutcome =
   (typeof FactorySessionLifecycleControlOutcome)[keyof typeof FactorySessionLifecycleControlOutcome];
+export const FactorySessionResourceCapacityOutcome = {
+  APPLIED: "APPLIED",
+  NO_OP: "NO_OP",
+  REPLAYED: "REPLAYED",
+} as const;
+export type FactorySessionResourceCapacityOutcome =
+  (typeof FactorySessionResourceCapacityOutcome)[keyof typeof FactorySessionResourceCapacityOutcome];
 export const LoadableProviderSessionProvider = {
   Codex: "codex",
   Cursor: "cursor",
@@ -8803,6 +9012,10 @@ export const FactoryEventType = {
   FactoryEventTypeInitialStructureRequest: "INITIAL_STRUCTURE_REQUEST",
   // The running factory definition changed and a canonical replacement topology is now active.
   FactoryEventTypeFactoryChange: "FACTORY_CHANGE",
+  // A normalized live Factory Session change request was admitted before application.
+  FactoryEventTypeFactoryChangeRequest: "FACTORY_CHANGE_REQUEST",
+  // An admitted live Factory Session change could not become effective and was closed with a safe failure.
+  FactoryEventTypeFactoryChangeFailed: "FACTORY_CHANGE_FAILED",
   // Work entered the factory as a normalized request.
   FactoryEventTypeWorkRequest: "WORK_REQUEST",
   // A relationship-change request between work items was recorded.
@@ -8876,6 +9089,12 @@ export const WorkStateChangeSource = {
 } as const;
 export type WorkStateChangeSource =
   (typeof WorkStateChangeSource)[keyof typeof WorkStateChangeSource];
+export const FactoryResourceCapacityChangeOutcome = {
+  APPLIED: "APPLIED",
+  NO_OP: "NO_OP",
+} as const;
+export type FactoryResourceCapacityChangeOutcome =
+  (typeof FactoryResourceCapacityChangeOutcome)[keyof typeof FactoryResourceCapacityChangeOutcome];
 export const InferenceOutcome = {
   // The provider attempt returned a successful response.
   InferenceOutcomeSucceeded: "SUCCEEDED",

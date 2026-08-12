@@ -545,10 +545,11 @@ func provideFactorySessionsService(
 	initialWorkFiles factorysessionwire.InitialWorkReader,
 	resolveSymlinks factorysessions.LogicalTargetResolveSymlinks,
 	eventsService events.Service,
+	liveChangeCoordinator factorysessionwire.LiveChangeCoordinator,
 ) (factorysessions.Service, error) {
 	return factorysessionwire.NewService(func() factoryruntime.JavaScriptCheckpointStore {
 		return factoryruntimewire.NewJavaScriptCheckpointStore()
-	}, sessionResultProjection, interpolation, invocationWorkTypes, ttsObservability, eventIDs, responseEventRetentionLimits, sessionIDs, resolveHome, directories, namedPaths, invocationInputFiles, initialWorkFiles, resolveSymlinks, eventsService)
+	}, sessionResultProjection, interpolation, invocationWorkTypes, ttsObservability, eventIDs, responseEventRetentionLimits, sessionIDs, resolveHome, directories, namedPaths, invocationInputFiles, initialWorkFiles, resolveSymlinks, eventsService, liveChangeCoordinator)
 }
 
 func provideOrchestrationJavaScriptExecution(
@@ -578,6 +579,7 @@ func provideFactorySessionExecutionFactory(
 	adaptRunner factorysessionwire.WorkerCommandRunnerAdapter,
 	edges serviceedges.Edges,
 	eventsService events.Service,
+	liveChangeCoordinator factorysessionwire.LiveChangeCoordinator,
 ) factorysessionwire.FactorySessionExecutionFactory {
 	// The allocator, runner adapter, and edges are read only to decide whether
 	// this process can reach a provider at all. No invocation executor is built
@@ -623,6 +625,7 @@ func provideFactorySessionExecutionFactory(
 			responseEventIDs,
 			responseEventRetentionLimits,
 			eventsService,
+			liveChangeCoordinator,
 		)
 	}
 }
@@ -635,6 +638,7 @@ func provideStandaloneSessionExecutionFactory(
 	syncWaits factorysessionwire.SyncWaitScheduler,
 	sessionIDs factorysessions.SessionIDGenerator,
 	fixtureFiles factorysessionwire.ContractFixtureReader,
+	liveChangeCoordinator factorysessionwire.LiveChangeCoordinator,
 ) factorysessionwire.StandaloneSessionExecutionFactory {
 	return func(
 		provider factorysessions.ExecutionProvider,
@@ -659,6 +663,7 @@ func provideStandaloneSessionExecutionFactory(
 			recordingWriter,
 			sessionIDs,
 			fixtureFiles,
+			liveChangeCoordinator,
 		)
 	}
 }

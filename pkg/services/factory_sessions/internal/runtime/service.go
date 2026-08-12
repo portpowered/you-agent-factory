@@ -220,6 +220,14 @@ func (s *Service) ResponseEventService() responsestreamservice.Service {
 	return s.responseEvents
 }
 
+// Clock returns the runtime-selected clock for session-owned effects.
+func (s *Service) Clock() factoryruntime.Clock {
+	if s == nil {
+		return nil
+	}
+	return s.clock
+}
+
 // ResponseStreamsForSession returns the canonical registry-owned stream set
 // for one live session.
 func (s *Service) ResponseStreamsForSession(session *livesession.LiveSession) *responsestream.StreamSet {

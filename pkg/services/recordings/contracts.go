@@ -48,6 +48,8 @@ type (
 	ExportPortableArtifactRequest                              = recordingcontracts.ExportPortableArtifactRequest
 	ExportPortableArtifactResult                               = recordingcontracts.ExportPortableArtifactResult
 	FactoryChangeEventPayload                                  = recordingcontracts.FactoryChangeEventPayload
+	FactoryChangeRequestEventPayload                           = recordingcontracts.FactoryChangeRequestEventPayload
+	FactoryChangeFailedEventPayload                            = recordingcontracts.FactoryChangeFailedEventPayload
 	FactoryDispatchKind                                        = recordingcontracts.FactoryDispatchKind
 	FactoryDispatchRecord                                      = recordingcontracts.FactoryDispatchRecord
 	FactoryDispatchStatus                                      = recordingcontracts.FactoryDispatchStatus
@@ -297,6 +299,8 @@ const (
 	FactoryEventTypeDispatchResponse              = recordingcontracts.FactoryEventTypeDispatchResponse
 	FactoryEventTypeDispatchWorkerSessionAssoc    = recordingcontracts.FactoryEventTypeDispatchWorkerSessionAssoc
 	FactoryEventTypeFactoryChange                 = recordingcontracts.FactoryEventTypeFactoryChange
+	FactoryEventTypeFactoryChangeRequest          = recordingcontracts.FactoryEventTypeFactoryChangeRequest
+	FactoryEventTypeFactoryChangeFailed           = recordingcontracts.FactoryEventTypeFactoryChangeFailed
 	FactoryEventTypeFactoryStateResponse          = recordingcontracts.FactoryEventTypeFactoryStateResponse
 	FactoryEventTypeInferenceRequest              = recordingcontracts.FactoryEventTypeInferenceRequest
 	FactoryEventTypeInferenceResponse             = recordingcontracts.FactoryEventTypeInferenceResponse

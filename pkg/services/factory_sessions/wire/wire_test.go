@@ -33,6 +33,7 @@ func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 		{name: "initial Work reader", mutate: func(in *newServiceInputs) { in.initialWorkFiles = nil }},
 		{name: "symlink resolver", mutate: func(in *newServiceInputs) { in.resolveSymlinks = nil }},
 		{name: "events root", mutate: func(in *newServiceInputs) { in.eventsService = nil }},
+		{name: "live-change coordinator", mutate: func(in *newServiceInputs) { in.liveChangeCoordinator = nil }},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -239,6 +240,7 @@ type newServiceInputs struct {
 	initialWorkFiles             fileeffects.InitialWorkReader
 	resolveSymlinks              factorysessions.LogicalTargetResolveSymlinks
 	eventsService                events.Service
+	liveChangeCoordinator        LiveChangeCoordinator
 }
 
 func validNewServiceInputs() newServiceInputs {
@@ -254,6 +256,7 @@ func validNewServiceInputs() newServiceInputs {
 		initialWorkFiles:        fileeffects.InitialWorkReader(func(string) ([]byte, error) { return nil, nil }),
 		resolveSymlinks:         func(path string) (string, error) { return path, nil },
 		eventsService:           eventsService,
+		liveChangeCoordinator:   NewLiveChangeCoordinator(),
 	}
 }
 
@@ -274,6 +277,7 @@ func (in newServiceInputs) callNewService() (factorysessions.Service, error) {
 		in.initialWorkFiles,
 		in.resolveSymlinks,
 		in.eventsService,
+		in.liveChangeCoordinator,
 	)
 }
 

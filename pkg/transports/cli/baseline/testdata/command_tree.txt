@@ -33,6 +33,8 @@ you session delete	delete <session-id>	you session
 you session dispatches	dispatches <session-id>	you session
 you session list	list [arg0...]	you session
 you session pause	pause [session-id]	you session
+you session resource	resource	you session
+you session resource set	set <resource-id> <capacity> [session-id]	you session resource
 you session resume	resume [session-id]	you session
 you session show	show [session-id]	you session
 you session terminate	terminate [session-id]	you session

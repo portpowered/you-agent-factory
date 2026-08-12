@@ -39,6 +39,7 @@ func Run(ctx context.Context, req Request, hooks Hooks) (Outcome, error) {
 		ctx:            ctx,
 		records:        records,
 		childExecutor:  childExecutor,
+		parallelGate:   newParallelGate(policy),
 		agents:         req.Agents,
 		workerSettings: req.WorkerSettings,
 		onArtifact:     hooks.OnArtifact,

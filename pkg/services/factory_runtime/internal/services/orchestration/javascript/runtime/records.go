@@ -136,6 +136,8 @@ type ChildDispatchRecord struct {
 	ModelProvider         string                          `json:"modelProvider,omitempty"`
 	Model                 string                          `json:"model,omitempty"`
 	ReasoningEffort       string                          `json:"reasoningEffort,omitempty"`
+	ResourceID            string                          `json:"resourceId,omitempty"`
+	FactoryRevision       int                             `json:"factoryRevision,omitempty"`
 	SkipPermissions       bool                            `json:"skipPermissions,omitempty"`
 	Command               string                          `json:"command,omitempty"`
 	Sandbox               string                          `json:"sandbox,omitempty"`

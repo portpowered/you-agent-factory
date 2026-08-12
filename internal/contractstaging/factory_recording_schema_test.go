@@ -12,7 +12,7 @@ import (
 const (
 	factoryEventSchemaPath     = "packages/api/generated/schemas/factory-event.schema.json"
 	factoryRecordingSchemaPath = "packages/api/generated/schemas/factory-recording.schema.json"
-	factoryEventVariantCount   = 32
+	factoryEventVariantCount   = 34
 )
 
 func TestStandaloneFactorySchemasValidateCanonicalEventAndRecordingShapes(t *testing.T) {

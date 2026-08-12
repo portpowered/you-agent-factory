@@ -11,6 +11,7 @@ import (
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	legacyservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
+	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 )
 
 // Root retains process-scoped Factory Sessions dependencies. It is inert until
@@ -31,6 +32,7 @@ type Root struct {
 	initialWorkFiles             fileeffects.InitialWorkReader
 	identity                     identity.Service
 	responseStreams              responsestreamservice.Service
+	liveChangeCoordinator        factorysessioncontracts.LiveChangeCoordinator
 }
 
 // NewRoot constructs the process-scoped Factory Sessions service without
@@ -50,6 +52,7 @@ func NewRoot(
 	initialWorkFiles fileeffects.InitialWorkReader,
 	identityService identity.Service,
 	responseStreams responsestreamservice.Service,
+	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
 ) (*Root, error) {
 	if sessionResultProjection == nil {
 		return nil, fmt.Errorf("construct Factory Sessions: session result projection is required")
@@ -97,6 +100,7 @@ func NewRoot(
 		initialWorkFiles:             initialWorkFiles,
 		identity:                     identityService,
 		responseStreams:              responseStreams,
+		liveChangeCoordinator:        liveChangeCoordinator,
 	}, nil
 }
 
@@ -128,6 +132,7 @@ func (r *Root) ForRuntime(binding factorysessions.RuntimeBinding) (factorysessio
 		r.initialWorkFiles,
 		r.identity,
 		r.responseStreams,
+		r.liveChangeCoordinator,
 	)
 	if assembly == nil {
 		return nil, fmt.Errorf("construct Factory Sessions runtime: implementation rejected its dependencies")
