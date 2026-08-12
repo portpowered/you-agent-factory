@@ -19,7 +19,7 @@ type Service struct {
 }
 
 var (
-	_ recordings.Service          = (*Service)(nil)
+	_ recordings.Service           = (*Service)(nil)
 	_ recordings.ProjectionService = (*Service)(nil)
 )
 
@@ -155,6 +155,48 @@ func (stub *Service) FinishRecording(recordings.FinishRecordingRequest) (recordi
 
 func (stub *Service) QueryRecordingStatus(recordings.RecordingStatusRequest) (recordings.RecordingStatusResult, error) {
 	return recordings.RecordingStatusResult{}, recordings.ErrMissingRecordingTarget
+}
+
+func (stub *Service) BeginRecordingScope(
+	context.Context,
+	recordings.BeginRecordingScopeRequest,
+) (recordings.BeginRecordingScopeResult, error) {
+	return recordings.BeginRecordingScopeResult{}, recordings.ErrMissingRecordingTarget
+}
+
+func (stub *Service) AppendRecordingScopeEvent(
+	context.Context,
+	recordings.AppendRecordingScopeEventRequest,
+) (recordings.AppendRecordingScopeEventResult, error) {
+	return recordings.AppendRecordingScopeEventResult{}, recordings.ErrInvalidRecordingEvent
+}
+
+func (stub *Service) FlushRecordingScope(
+	context.Context,
+	recordings.FlushRecordingScopeRequest,
+) (recordings.FlushRecordingScopeResult, error) {
+	return recordings.FlushRecordingScopeResult{}, recordings.ErrMissingRecordingTarget
+}
+
+func (stub *Service) FinalizeRecordingScope(
+	context.Context,
+	recordings.FinalizeRecordingScopeRequest,
+) (recordings.FinalizeRecordingScopeResult, error) {
+	return recordings.FinalizeRecordingScopeResult{}, recordings.ErrMissingRecordingTarget
+}
+
+func (stub *Service) CloseRecordingScope(
+	context.Context,
+	recordings.CloseRecordingScopeRequest,
+) (recordings.CloseRecordingScopeResult, error) {
+	return recordings.CloseRecordingScopeResult{}, recordings.ErrMissingRecordingTarget
+}
+
+func (stub *Service) QueryRecordingScope(
+	context.Context,
+	recordings.QueryRecordingScopeRequest,
+) (recordings.QueryRecordingScopeResult, error) {
+	return recordings.QueryRecordingScopeResult{}, recordings.ErrMissingRecordingTarget
 }
 
 func (stub *Service) LoadReplayRecording(recordings.LoadReplayRecordingRequest) (recordings.LoadReplayRecordingResult, error) {
