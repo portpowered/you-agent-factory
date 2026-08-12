@@ -58,7 +58,6 @@ func TestCLIHelpListsPublicCommandFamilies(t *testing.T) {
 	t.Parallel()
 
 	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
-	session := harness.NewSession(t)
 
 	for _, tc := range []struct {
 		name string
@@ -69,6 +68,7 @@ func TestCLIHelpListsPublicCommandFamilies(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+			session := harness.NewSession(t)
 
 			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 			defer cancel()
@@ -120,8 +120,8 @@ func TestCLIHelpListsPublicCommandFamilies(t *testing.T) {
 		})
 	}
 
-	bareListed := runRootHelpListedCommands(t, session, nil)
-	helpListed := runRootHelpListedCommands(t, session, []string{"--help"})
+	bareListed := runRootHelpListedCommands(t, harness, nil)
+	helpListed := runRootHelpListedCommands(t, harness, []string{"--help"})
 	if !sameStringSet(bareListed, helpListed) {
 		t.Fatalf("bare root and --help listed different command families:\nbare=%v\nhelp=%v", bareListed, helpListed)
 	}
@@ -135,7 +135,6 @@ func TestCLISubcommandHelpUsesStableUsageAndExitZero(t *testing.T) {
 	t.Parallel()
 
 	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
-	session := harness.NewSession(t)
 
 	for _, tc := range []struct {
 		name string
@@ -146,6 +145,7 @@ func TestCLISubcommandHelpUsesStableUsageAndExitZero(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+			session := harness.NewSession(t)
 
 			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 			defer cancel()
@@ -191,7 +191,6 @@ func TestCLIVersionWritesOneMachineReadableVersion(t *testing.T) {
 	t.Parallel()
 
 	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
-	session := harness.NewSession(t)
 
 	for _, tc := range []struct {
 		name string
@@ -201,6 +200,7 @@ func TestCLIVersionWritesOneMachineReadableVersion(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+			session := harness.NewSession(t)
 
 			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 			defer cancel()
@@ -241,10 +241,11 @@ func TestCLIVersionWritesOneMachineReadableVersion(t *testing.T) {
 
 func runRootHelpListedCommands(
 	t *testing.T,
-	session *builtcliacceptance.Session,
+	harness *builtcliacceptance.Harness,
 	args []string,
 ) []string {
 	t.Helper()
+	session := harness.NewSession(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()

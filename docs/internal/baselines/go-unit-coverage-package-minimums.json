@@ -97,6 +97,10 @@
       "minimum": 41.30
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/rollingfile",
+      "minimum": 76.20
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/platform/runtimeartifact",
       "minimum": 70.58
     },
