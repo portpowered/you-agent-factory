@@ -126,7 +126,7 @@ func TestGenericRepresentativeProjectionIsObservableThroughApplicationRoot(t *te
 	}
 }
 
-func TestWorkerSessionProjectionReportsMissingRequiredWorkID(t *testing.T) {
+func TestWorkerSessionProjectionAcceptsDirectListAndOptionalWorkID(t *testing.T) {
 	var observation cliobservation.Result
 	process := support.BuildProcess(t, serviceedges.Edges{
 		CLIObserver: cliobservation.Capture(&observation),
@@ -136,8 +136,8 @@ func TestWorkerSessionProjectionReportsMissingRequiredWorkID(t *testing.T) {
 	})
 
 	err := process.Execute(inputs.Input)
-	if err == nil || !strings.Contains(err.Error(), `required flag(s) "--work-id" not set`) {
-		t.Fatalf("Process.Execute(worker-sessions list) error = %v, want missing --work-id diagnostic", err)
+	if err != nil {
+		t.Fatalf("Process.Execute(worker-sessions list) error = %v, want direct-session list to succeed without --work-id", err)
 	}
 	if observation.Parse.CommandPath != "you worker-sessions list" {
 		t.Fatalf("observed command path = %q, want worker-sessions list", observation.Parse.CommandPath)

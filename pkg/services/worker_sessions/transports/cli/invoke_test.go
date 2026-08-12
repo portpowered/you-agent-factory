@@ -233,6 +233,211 @@ func TestInvokeRemoteConnectionFailureRedactsSelectedEndpoint(t *testing.T) {
 	}
 }
 
+func TestInvokeRequestHelpersCoverInjectedInputsAndValidationEdges(t *testing.T) {
+	local := &invokeLocalFake{}
+	valid := InvokeConfig{Context: context.Background(), Output: &bytes.Buffer{}, Local: local}
+	for _, test := range []struct {
+		name   string
+		config InvokeConfig
+		want   string
+	}{
+		{name: "missing context", config: InvokeConfig{Output: &bytes.Buffer{}}, want: "context is required"},
+		{name: "missing output", config: InvokeConfig{Context: context.Background()}, want: "output writer is required"},
+		{name: "negative retry", config: InvokeConfig{Context: context.Background(), Output: &bytes.Buffer{}, RetryMaxAttempts: -1}, want: "WORKER_SESSION_RETRY_INVALID"},
+		{name: "remote protocol missing", config: InvokeConfig{Context: context.Background(), Output: &bytes.Buffer{}, Remote: true}, want: "WORKER_SESSION_HTTP_UNAVAILABLE"},
+		{name: "local boundary missing", config: InvokeConfig{Context: context.Background(), Output: &bytes.Buffer{}}, want: "WORKER_SESSION_LOCAL_UNAVAILABLE"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			err := validateInvokeConfig(test.config)
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("validateInvokeConfig() = %v, want %q", err, test.want)
+			}
+		})
+	}
+	if err := validateInvokeConfig(valid); err != nil {
+		t.Fatalf("validateInvokeConfig(valid) = %v, want nil", err)
+	}
+
+	for _, test := range []struct {
+		name   string
+		config InvokeConfig
+		want   string
+	}{
+		{name: "stdin document missing", config: InvokeConfig{ExecutionJSON: "-"}, want: "WORKER_SESSION_INPUT_MISSING"},
+		{name: "file reader missing", config: InvokeConfig{ExecutionJSON: "request.json"}, want: "WORKER_SESSION_INPUT_FAILED"},
+		{name: "file read failure", config: InvokeConfig{ExecutionJSON: "request.json", ReadFile: func(string) ([]byte, error) { return nil, errors.New("read failed") }}, want: "WORKER_SESSION_INPUT_FAILED"},
+		{name: "malformed JSON", config: InvokeConfig{ExecutionJSON: "{"}, want: "WORKER_SESSION_INPUT_INVALID"},
+		{name: "trailing JSON", config: InvokeConfig{ExecutionJSON: "{} {}"}, want: "WORKER_SESSION_INPUT_INVALID"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := readInvokeRequest(test.config)
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("readInvokeRequest() = %v, want %q", err, test.want)
+			}
+		})
+	}
+	fromFile, err := readInvokeRequest(InvokeConfig{
+		ExecutionJSON: "request.json",
+		ReadFile: func(string) ([]byte, error) {
+			return []byte(`{"requestId":"request","workerSessionId":"session","execution":{"workstationName":"review","dispatch":{"dispatchId":"dispatch","workstationName":"review"},"userMessage":"message"}}`), nil
+		},
+	})
+	if err != nil || fromFile.RequestId != "request" {
+		t.Fatalf("readInvokeRequest(file) = %#v, %v, want decoded request", fromFile, err)
+	}
+
+	request := factoryapi.WorkerSessionStartRequest{}
+	if err := applyInvokeOverrides(&request, InvokeConfig{
+		RequestID: " request ", WorkerSessionID: " session ", WorkstationName: " review ", DispatchID: " dispatch ",
+		WorkerType: " type ", RunnerID: " runner ", Provider: " provider ", Model: " model ", ReasoningEffort: " high ",
+		SystemPrompt: "system", UserMessage: "user", RetryMaxAttempts: 3,
+	}); err != nil {
+		t.Fatalf("applyInvokeOverrides() = %v, want nil", err)
+	}
+	if request.RequestId != "request" || request.WorkerSessionId != "session" || request.Execution.WorkstationName != "review" ||
+		request.Execution.Dispatch.DispatchId != "dispatch" || request.Execution.Dispatch.WorkstationName != "review" || request.Execution.UserMessage == nil || *request.Execution.UserMessage != "user" ||
+		request.Execution.WorkerType == nil || *request.Execution.WorkerType != "type" || request.Execution.RunnerId == nil || *request.Execution.RunnerId != "runner" ||
+		request.Execution.ModelProvider == nil || *request.Execution.ModelProvider != "provider" || request.Execution.Model == nil || *request.Execution.Model != "model" ||
+		request.Execution.ReasoningEffort == nil || *request.Execution.ReasoningEffort != "high" || request.Execution.SystemPrompt == nil || *request.Execution.SystemPrompt != "system" ||
+		request.Retry == nil || request.Retry.MaxAttempts == nil || *request.Retry.MaxAttempts != 3 {
+		t.Fatalf("applyInvokeOverrides() did not apply all explicit fields: %#v", request)
+	}
+
+	if err := ensureInvokeIdentities(&request, nil); err != nil {
+		t.Fatalf("ensureInvokeIdentities(populated) = %v, want nil", err)
+	}
+	missing := factoryapi.WorkerSessionStartRequest{}
+	if err := ensureInvokeIdentities(&missing, nil); err == nil || !strings.Contains(err.Error(), "WORKER_SESSION_IDENTITY_UNAVAILABLE") {
+		t.Fatalf("ensureInvokeIdentities(missing, nil) = %v, want identity error", err)
+	}
+	ids := []string{"generated-request", "generated-session", "generated-dispatch"}
+	index := 0
+	if err := ensureInvokeIdentities(&missing, func() string { value := ids[index]; index++; return value }); err != nil {
+		t.Fatalf("ensureInvokeIdentities(generated) = %v, want nil", err)
+	}
+	if missing.RequestId != ids[0] || missing.WorkerSessionId != ids[1] || missing.Execution.Dispatch.DispatchId != ids[2] || missing.Execution.Dispatch.Execution == nil || missing.Execution.Dispatch.Execution.RequestId == nil {
+		t.Fatalf("generated identities = %#v, want request/session/dispatch metadata", missing)
+	}
+}
+
+func TestInvokeObservationProjectionAndTerminalHelpersCoverCanonicalFrames(t *testing.T) {
+	capture := invokeCapture{}
+	captureEvent(&capture, "worker.session.running", json.RawMessage(`{"state":"RUNNING","kind":"MESSAGE","phase":"COMPLETED","payload":{"contentBlocks":[{"kind":"TEXT","text":"provider output"},{"kind":"JSON","structuredOutput":{"answer":42}}]}}`))
+	if capture.State != "RUNNING" || capture.Output != "provider output" || !capture.HasOutput || !capture.HasStructured {
+		t.Fatalf("captureEvent() = %#v, want state/output/structured result", capture)
+	}
+	captureEvent(&capture, "worker.session.failed", json.RawMessage(`{"error":"safe failure"}`))
+	if capture.Error != "safe failure" {
+		t.Fatalf("captureEvent(error) = %#v, want safe failure", capture)
+	}
+	errorCapture := invokeCapture{}
+	captureEvent(&errorCapture, "worker.output", json.RawMessage(`{"kind":"ERROR","phase":"COMPLETED","payload":{"message":"draft failure"}}`))
+	if errorCapture.Error != "draft failure" {
+		t.Fatalf("captureEvent(ERROR draft) = %#v, want draft failure", errorCapture)
+	}
+	for _, test := range []struct {
+		schema string
+		want   string
+	}{
+		{schema: "worker.canceled", want: "CANCELED"}, {schema: "worker.terminated", want: "TERMINATED"},
+		{schema: "worker.failed", want: "FAILED"}, {schema: "worker.completed", want: "COMPLETED"}, {schema: "worker.running", want: ""},
+	} {
+		if got := inferInvokeState(test.schema); got != test.want {
+			t.Errorf("inferInvokeState(%q) = %q, want %q", test.schema, got, test.want)
+		}
+	}
+	if _, ok := eventPayloadObject(nil); ok {
+		t.Fatal("eventPayloadObject(nil) = ok, want false")
+	}
+	if _, ok := eventPayloadObject(json.RawMessage("null")); ok {
+		t.Fatal("eventPayloadObject(null) = ok, want false")
+	}
+	if _, ok := eventPayloadObject(json.RawMessage("not-json")); ok {
+		t.Fatal("eventPayloadObject(malformed) = ok, want false")
+	}
+	if derefString(nil) != "" {
+		t.Fatal("derefString(nil) was non-empty")
+	}
+	for _, state := range []string{"COMPLETED", "FAILED", "CANCELED", "TERMINATED", "", "UNKNOWN"} {
+		err := terminalInvokeError(invokeCapture{State: state})
+		if state == "COMPLETED" && err != nil {
+			t.Fatalf("terminalInvokeError(COMPLETED) = %v, want nil", err)
+		}
+		if state != "COMPLETED" && err == nil {
+			t.Fatalf("terminalInvokeError(%q) = nil, want error", state)
+		}
+	}
+
+	for _, test := range []struct {
+		delivery string
+		payload  string
+		wantDone bool
+		wantErr  bool
+	}{
+		{delivery: "RECORD", payload: `{"delivery":"RECORD"}`},
+		{delivery: "TERMINAL", payload: `{"delivery":"TERMINAL","event":{"schemaId":"worker.session.completed","payload":{"state":"COMPLETED"}}}`, wantDone: true},
+		{delivery: "SOURCE_FAILURE", payload: `{"delivery":"SOURCE_FAILURE","errorCode":"STREAM_GAP","errorMessage":"gap"}`, wantErr: true},
+		{delivery: "SOURCE_FAILURE", payload: `{"delivery":"SOURCE_FAILURE"}`, wantErr: true},
+		{delivery: "REPLAY_SUMMARY", payload: `{"delivery":"REPLAY_SUMMARY"}`},
+	} {
+		t.Run(test.delivery, func(t *testing.T) {
+			got := invokeCapture{}
+			done, err := applyRemoteObservationFrame(&got, []byte(test.payload))
+			if done != test.wantDone || (err != nil) != test.wantErr {
+				t.Fatalf("applyRemoteObservationFrame() = done:%t err:%v, want done:%t err:%t", done, err, test.wantDone, test.wantErr)
+			}
+		})
+	}
+	if _, err := applyRemoteObservationFrame(&invokeCapture{}, []byte("not-json")); err == nil {
+		t.Fatal("applyRemoteObservationFrame(malformed) = nil, want typed error")
+	}
+}
+
+func TestInvokeOutputAndRemoteErrorHelpersCoverStableMappings(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		fn   func() error
+	}{
+		{name: "remote canceled", fn: func() error {
+			return remoteInvokeTransportError(InvokeConfig{Context: context.Background()}, context.Canceled)
+		}},
+		{name: "remote stream canceled", fn: func() error {
+			return remoteInvokeStreamTransportError(InvokeConfig{Context: context.Background()}, context.Canceled)
+		}},
+		{name: "remote stream read canceled", fn: func() error {
+			return remoteStreamReadError(InvokeConfig{Context: context.Background()}, context.Canceled)
+		}},
+		{name: "remote stream closed", fn: func() error { return remoteStreamClosedError() }},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if err := test.fn(); err == nil {
+				t.Fatal("helper returned nil, want stable CLI error")
+			}
+		})
+	}
+	for _, code := range []string{"BAD_REQUEST", "CONFLICT", "INTERNAL_ERROR", "", "OTHER"} {
+		response := &http.Response{StatusCode: http.StatusBadRequest, Body: io.NopCloser(strings.NewReader(`{"code":"` + code + `","message":"bad"}`))}
+		if err := remoteInvokeHTTPError(response, response.StatusCode); err == nil {
+			t.Fatalf("remoteInvokeHTTPError(%q) = nil", code)
+		}
+	}
+	if err := remoteInvokeStreamHTTPError(&http.Response{StatusCode: http.StatusBadGateway, Body: io.NopCloser(strings.NewReader("not-json"))}, http.StatusBadGateway); err == nil {
+		t.Fatal("remoteInvokeStreamHTTPError() = nil, want stable error")
+	}
+
+	var output bytes.Buffer
+	if err := writeInvokeResult(InvokeConfig{Output: &output}, false, invokeResult{RequestID: "request", WorkerSessionID: "session", State: "RUNNING", Observation: "observe"}, false); err != nil || !strings.Contains(output.String(), "Worker Session admitted") {
+		t.Fatalf("writeInvokeResult(async human) = %v, output=%q", err, output.String())
+	}
+	output.Reset()
+	if err := writeInvokeResult(InvokeConfig{Output: &output}, false, invokeResult{WorkerSessionID: "session", State: "COMPLETED", Observation: "observe"}, true); err != nil || !strings.Contains(output.String(), "Worker Session session completed") {
+		t.Fatalf("writeInvokeResult(sync human) = %v, output=%q", err, output.String())
+	}
+	if got := safeRemoteServer(":bad"); got != "<remote>" {
+		t.Fatalf("safeRemoteServer(invalid) = %q, want <remote>", got)
+	}
+}
+
 type invokeLocalFake struct {
 	startResult      workersessions.StartResult
 	startRequests    []workersessions.StartRequest

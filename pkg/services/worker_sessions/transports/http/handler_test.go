@@ -299,6 +299,80 @@ func TestListWorkerSessionsReturnsTopLevelEmptyCollection(t *testing.T) {
 	}
 }
 
+func TestWorkerSessionStartMappingRoundTripsResolvedExecutionAndOptionalValues(t *testing.T) {
+	var apiRequest factoryapi.WorkerSessionStartRequest
+	if err := json.Unmarshal([]byte(`{
+		"requestId":"request-1",
+		"workerSessionId":"worker-1",
+		"retry":{"maxAttempts":3},
+		"execution":{
+			"workstationName":"review",
+			"workerType":"worker",
+			"workstationType":"type",
+			"runnerId":"runner",
+			"runnerSelectionSource":"explicit",
+			"executorProvider":"provider",
+			"projectId":"project",
+			"factorySessionId":"factory-session",
+			"modelOperation":"operation",
+			"model":"model",
+			"modelProvider":"codex",
+			"reasoningEffort":"high",
+			"systemPrompt":"system",
+			"userMessage":"message",
+			"outputSchema":"schema",
+			"outputContract":"contract",
+			"worktree":"worktree",
+			"workingDirectory":"workspace",
+			"workingDirectoryAuthored":true,
+			"skipPermissions":true,
+			"inputTokens":["input"],
+			"envVars":{"KEY":"VALUE"},
+			"resumeSession":{"provider":"codex","kind":"session_id","id":"provider-session"},
+			"modelBindings":[{"slot":"slot","source":"INPUT","content":[]}],
+			"dispatch":{
+				"dispatchId":"dispatch-1",
+				"transitionId":"transition",
+				"workerType":"worker",
+				"workstationName":"review",
+				"projectId":"project",
+				"currentChainingTraceId":"trace",
+				"previousChainingTraceIds":["previous"],
+				"expectedArtifactContext":{"project":"project","sessionId":"factory-session","inputs":[]},
+				"execution":{"dispatchCreatedTick":1,"currentTick":2,"requestId":"request-1","traceId":"trace","workIds":["work-1"],"replayKey":"replay"},
+				"inputTokens":["dispatch-input"],
+				"inputBindings":{"slot":["work-1"]}
+			}
+		}
+	}`), &apiRequest); err != nil {
+		t.Fatalf("decode mapping fixture: %v", err)
+	}
+	serviceRequest, err := WorkerSessionStartRequestFromAPI(apiRequest)
+	if err != nil {
+		t.Fatalf("WorkerSessionStartRequestFromAPI() = %v, want nil", err)
+	}
+	if serviceRequest.RequestID != "request-1" || serviceRequest.ID != "worker-1" || serviceRequest.Retry.MaxAttempts != 3 ||
+		serviceRequest.Execution.WorkstationName != "review" || serviceRequest.Execution.Execution.Dispatch.DispatchID != "dispatch-1" ||
+		serviceRequest.Execution.Execution.ResumeSession == nil || serviceRequest.Execution.Execution.ResumeSession.ID != "provider-session" ||
+		len(serviceRequest.Execution.Execution.ModelBindings) != 1 || serviceRequest.Execution.Execution.ModelBindings[0].Slot != "slot" ||
+		serviceRequest.Execution.Execution.WorkingDirectoryAuthored != true || !serviceRequest.Execution.Execution.SkipPermissions {
+		t.Fatalf("mapped service request = %#v, want all resolved execution values", serviceRequest)
+	}
+	apiRoundTrip, err := WorkerSessionStartRequestToAPI(serviceRequest)
+	if err != nil {
+		t.Fatalf("WorkerSessionStartRequestToAPI() = %v, want nil", err)
+	}
+	if apiRoundTrip.RequestId != "request-1" || apiRoundTrip.WorkerSessionId != "worker-1" || apiRoundTrip.Retry == nil || apiRoundTrip.Retry.MaxAttempts == nil || *apiRoundTrip.Retry.MaxAttempts != 3 ||
+		apiRoundTrip.Execution.ResumeSession == nil || apiRoundTrip.Execution.ResumeSession.Id != "provider-session" || apiRoundTrip.Execution.Dispatch.Execution == nil ||
+		apiRoundTrip.Execution.Dispatch.Execution.RequestId == nil || *apiRoundTrip.Execution.Dispatch.Execution.RequestId != "request-1" || apiRoundTrip.Execution.EnvVars == nil || apiRoundTrip.Execution.ModelBindings == nil {
+		t.Fatalf("round-tripped API request = %#v, want retained optional execution fields", apiRoundTrip)
+	}
+	minimal, err := WorkerSessionStartRequestToAPI(workersessions.StartRequest{RequestID: "request", ID: "worker"})
+	if err != nil || minimal.Retry != nil || minimal.Execution.Dispatch.Execution != nil || minimal.Execution.ResumeSession != nil {
+		t.Fatalf("minimal WorkerSessionStartRequestToAPI() = %#v, %v, want omitted optional values", minimal, err)
+	}
+}
+
 func TestTopLevelWorkerSessionIdentityRoutesResolveWithoutProviderTuple(t *testing.T) {
 	service := &fakeObservationService{
 		getByWorkerResult: workersessions.Observation{

@@ -4,6 +4,7 @@ package service
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"reflect"
@@ -2246,5 +2247,288 @@ func TestReadTranscriptRejectsInvalidRequestAndProjection(t *testing.T) {
 	}
 	if _, err := registry.ReadTranscript(context.Background(), workersessions.ReadTranscriptRequest{ProviderSession: ref}); err == nil {
 		t.Fatal("ReadTranscript(invalid projected entry) error = nil, want validation error")
+	}
+}
+
+func TestContinuationHelpersCoverReplayErrorsAndObservationScopes(t *testing.T) {
+	cause := errors.New("admission failed")
+	withCause := continuationNotAccepted(cause)
+	if withCause.Error() != workersessions.ErrContinuationNotAccepted.Error() || !errors.Is(withCause, workersessions.ErrContinuationNotAccepted) || !errors.Is(withCause, cause) {
+		t.Fatalf("continuationNotAccepted(cause) = %v, want typed continuation and cause", withCause)
+	}
+	withoutCause := continuationNotAccepted(nil)
+	if !errors.Is(withoutCause, workersessions.ErrContinuationNotAccepted) || errors.Is(withoutCause, cause) {
+		t.Fatalf("continuationNotAccepted(nil) = %v, want only typed continuation error", withoutCause)
+	}
+
+	for _, test := range []struct {
+		name string
+		err  error
+		want string
+	}{
+		{name: "request conflict", err: workersessions.ErrContinuationRequestIDConflict, want: "idempotency_conflict"},
+		{name: "server stopping", err: workersessions.ErrContinuationServerStopping, want: "server_stopping"},
+		{name: "source missing", err: workersessions.ErrContinuationSourceNotFound, want: "source_not_found"},
+		{name: "source active", err: workersessions.ErrContinuationSourceActive, want: "source_active"},
+		{name: "other", err: errors.New("other"), want: "rejected"},
+	} {
+		if got := continuationReservationOutcome(test.err); got != test.want {
+			t.Errorf("continuationReservationOutcome(%s) = %q, want %q", test.name, got, test.want)
+		}
+	}
+	if continuationReplayOutcome(nil) != "accepted" || continuationReplayOutcome(cause) != "rejected" {
+		t.Fatalf("continuationReplayOutcome() did not classify nil/non-nil errors")
+	}
+
+	for _, test := range []struct {
+		direct bool
+		scope  workersessions.ObservationScope
+		want   bool
+	}{
+		{direct: true, scope: "", want: true},
+		{direct: true, scope: workersessions.ObservationScopeDirect, want: true},
+		{direct: false, scope: workersessions.ObservationScopeDirect, want: false},
+		{direct: false, scope: workersessions.ObservationScopeFactory, want: true},
+		{direct: true, scope: workersessions.ObservationScopeFactory, want: false},
+		{direct: true, scope: workersessions.ObservationScopeAll, want: true},
+		{direct: false, scope: workersessions.ObservationScopeAll, want: true},
+		{direct: true, scope: "unknown", want: false},
+	} {
+		if got := observationScopeMatches(test.direct, test.scope); got != test.want {
+			t.Errorf("observationScopeMatches(%t, %q) = %t, want %t", test.direct, test.scope, got, test.want)
+		}
+	}
+
+	validCursor := base64.StdEncoding.EncodeToString([]byte("worker-1"))
+	if got, err := decodeObservationListCursor(validCursor); err != nil || got != "worker-1" {
+		t.Fatalf("decodeObservationListCursor(valid) = %q, %v, want worker-1", got, err)
+	}
+	if got, err := decodeObservationListCursor(" "); err != nil || got != "" {
+		t.Fatalf("decodeObservationListCursor(blank) = %q, %v, want empty success", got, err)
+	}
+	if _, err := decodeObservationListCursor("not-base64"); !errors.Is(err, workersessions.ErrInvalidObservationPagination) {
+		t.Fatalf("decodeObservationListCursor(invalid) = %v, want ErrInvalidObservationPagination", err)
+	}
+}
+
+func TestAwaitContinuationReplayAndObservationListIDsRemainDetachedAndDeterministic(t *testing.T) {
+	replay := &continueReplay{
+		done:   make(chan struct{}),
+		result: workersessions.ContinueResult{RequestID: "request-1", Session: workersessions.Session{ID: "successor", State: workersessions.StateRunning}},
+	}
+	close(replay.done)
+	got, err := awaitContinueReplay(nil, replay)
+	if err != nil || got.RequestID != "request-1" {
+		t.Fatalf("awaitContinueReplay(completed) = %#v, %v, want completed replay", got, err)
+	}
+
+	pending := &continueReplay{done: make(chan struct{})}
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := awaitContinueReplay(canceled, pending); !errors.Is(err, context.Canceled) {
+		t.Fatalf("awaitContinueReplay(canceled) = %v, want context.Canceled", err)
+	}
+
+	r := &registry{
+		sessions: map[string]workersessions.Session{
+			"direct-a":  {ID: "direct-a", State: workersessions.StateCompleted},
+			"factory-a": {ID: "factory-a", State: workersessions.StateCompleted},
+		},
+		observations: map[string]*observation{
+			"direct-a":  {direct: true},
+			"factory-a": {direct: false},
+			"nil-meta":  nil,
+		},
+	}
+	if got := r.observationListIDs("", workersessions.ObservationScopeAll, nil); !reflect.DeepEqual(got, []string{"direct-a", "factory-a"}) {
+		t.Fatalf("observationListIDs(all) = %#v, want deterministic IDs", got)
+	}
+	if got := r.observationListIDs("direct-a", workersessions.ObservationScopeDirect, nil); !reflect.DeepEqual(got, []string{}) {
+		t.Fatalf("observationListIDs(cursor) = %#v, want empty after direct-a", got)
+	}
+	if got := r.observationListIDs("", workersessions.ObservationScopeFactory, []workersessions.State{workersessions.StateRunning}); len(got) != 0 {
+		t.Fatalf("observationListIDs(state mismatch) = %#v, want empty", got)
+	}
+}
+
+func TestValidateContinuationSourceAssociationClassifiesMissingMalformedAndForeignState(t *testing.T) {
+	valid := workersessions.Session{
+		ID:    "worker-1",
+		State: workersessions.StateCompleted,
+		ProviderSessionAssociation: &workersessions.ProviderSessionAssociation{
+			WorkerSessionID: "worker-1",
+			DispatchID:      "dispatch-1",
+			AttemptID:       "dispatch-1",
+			Reference:       providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-session-1"},
+		},
+	}
+	if err := validateContinuationSourceAssociation(valid); err != nil {
+		t.Fatalf("valid association = %v, want nil", err)
+	}
+	for _, test := range []struct {
+		name    string
+		session workersessions.Session
+		want    error
+	}{
+		{name: "missing", session: workersessions.Session{ID: "worker-1"}, want: workersessions.ErrContinuationProviderSessionMissing},
+		{name: "malformed", session: workersessions.Session{ID: "worker-1", ProviderSessionAssociation: &workersessions.ProviderSessionAssociation{WorkerSessionID: "worker-1"}}, want: workersessions.ErrContinuationProviderSessionInvalid},
+		{name: "foreign", session: workersessions.Session{ID: "worker-1", ProviderSessionAssociation: &workersessions.ProviderSessionAssociation{WorkerSessionID: "worker-2", DispatchID: "dispatch-1", AttemptID: "dispatch-1", Reference: providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-session-1"}}}, want: workersessions.ErrContinuationProviderSessionInvalid},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if err := validateContinuationSourceAssociation(test.session); !errors.Is(err, test.want) {
+				t.Fatalf("validateContinuationSourceAssociation() = %v, want %v", err, test.want)
+			}
+		})
+	}
+}
+
+func TestContinuationReservationRejectsExecutionAndLifecycleEdges(t *testing.T) {
+	request := workersessions.ContinueRequest{
+		RequestID:                "request-1",
+		SourceWorkerSessionID:    "source-1",
+		SuccessorWorkerSessionID: "successor-1",
+		FollowUpInput:            "follow up",
+	}
+	association := &workersessions.ProviderSessionAssociation{
+		WorkerSessionID: "source-1",
+		DispatchID:      "dispatch-1",
+		AttemptID:       "dispatch-1",
+		Reference:       providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-session-1"},
+	}
+	validExecution := func(dispatchID string) workers.WorkstationDispatchRequest {
+		return workers.WorkstationDispatchRequest{
+			WorkstationName: "review",
+			Execution: workers.WorkstationExecutionRequest{Dispatch: work.WorkDispatch{
+				DispatchID: dispatchID, WorkstationName: "review",
+			}},
+		}
+	}
+	newSource := func() *registry {
+		r := newTestRegistry(t)
+		associationCopy := association.Clone()
+		r.sessions[request.SourceWorkerSessionID] = workersessions.Session{
+			ID:                         request.SourceWorkerSessionID,
+			State:                      workersessions.StateCompleted,
+			ProviderSessionAssociation: &associationCopy,
+		}
+		return r
+	}
+
+	missingSupervision := newSource()
+	if _, err := missingSupervision.snapshotContinuationSourceLocked(request); !errors.Is(err, workersessions.ErrContinuationExecutionUnavailable) {
+		t.Fatalf("snapshotContinuationSourceLocked(missing supervision) = %v, want execution unavailable", err)
+	}
+
+	missingDispatch := newSource()
+	missingDispatch.supervisions[request.SourceWorkerSessionID] = newSupervision("", "turn-1", validExecution("dispatch-1"))
+	if _, err := missingDispatch.snapshotContinuationSourceLocked(request); !errors.Is(err, workersessions.ErrContinuationExecutionUnavailable) {
+		t.Fatalf("snapshotContinuationSourceLocked(blank dispatch) = %v, want execution unavailable", err)
+	}
+
+	mismatchedDispatch := newSource()
+	mismatchedDispatch.supervisions[request.SourceWorkerSessionID] = newSupervision("dispatch-2", "turn-1", validExecution("dispatch-2"))
+	if _, err := mismatchedDispatch.snapshotContinuationSourceLocked(request); !errors.Is(err, workersessions.ErrContinuationProviderSessionInvalid) {
+		t.Fatalf("snapshotContinuationSourceLocked(mismatched dispatch) = %v, want provider session invalid", err)
+	}
+
+	valid := newSource()
+	valid.supervisions[request.SourceWorkerSessionID] = newSupervision("dispatch-1", "turn-1", validExecution("dispatch-1"))
+	valid.dispatchOwners["dispatch-1"] = request.SourceWorkerSessionID
+	snapshot, err := valid.snapshotContinuationSourceLocked(request)
+	if err != nil {
+		t.Fatalf("snapshotContinuationSourceLocked(valid) = %v, want nil", err)
+	}
+
+	withSuccessor := newSource()
+	withSuccessor.sessions[request.SuccessorWorkerSessionID] = workersessions.Session{ID: request.SuccessorWorkerSessionID, State: workersessions.StateReserved}
+	if _, err := withSuccessor.buildContinuationExecutionLocked(request, snapshot); !errors.Is(err, workersessions.ErrContinuationSuccessorConflict) {
+		t.Fatalf("buildContinuationExecutionLocked(existing successor) = %v, want successor conflict", err)
+	}
+
+	withDispatchConflict := newSource()
+	withDispatchConflict.dispatchOwners[continuationDispatchID("dispatch-1", request.SuccessorWorkerSessionID)] = "other-session"
+	if _, err := withDispatchConflict.buildContinuationExecutionLocked(request, snapshot); !errors.Is(err, workersessions.ErrContinuationSuccessorConflict) {
+		t.Fatalf("buildContinuationExecutionLocked(existing dispatch) = %v, want successor conflict", err)
+	}
+
+	withInvalidExecution := newSource()
+	invalidSnapshot := snapshot
+	invalidSnapshot.execution = workers.WorkstationDispatchRequest{Execution: workers.WorkstationExecutionRequest{Dispatch: work.WorkDispatch{DispatchID: "dispatch-1"}}}
+	if _, err := withInvalidExecution.buildContinuationExecutionLocked(request, invalidSnapshot); !errors.Is(err, workersessions.ErrContinuationExecutionUnavailable) {
+		t.Fatalf("buildContinuationExecutionLocked(invalid execution) = %v, want execution unavailable", err)
+	}
+	missingReservation := newTestRegistry(t)
+	if _, _, err := missingReservation.reserveContinuation(request); !errors.Is(err, workersessions.ErrContinuationSourceNotFound) {
+		t.Fatalf("reserveContinuation(missing source) = %v, want source not found", err)
+	}
+
+	reservation := newSource()
+	reservation.supervisions[request.SourceWorkerSessionID] = newSupervision("dispatch-1", "turn-1", validExecution("dispatch-1"))
+	reservation.continueReplays = nil
+	reservation.startsDone = nil
+	if replay, owner, err := reservation.reserveContinuation(request); err != nil || !owner || replay == nil {
+		t.Fatalf("reserveContinuation(first reservation) = %v, %t, %#v, want owned replay", err, owner, replay)
+	}
+
+	stopping := newSource()
+	stopping.stopping = true
+	if _, _, err := stopping.reserveContinuation(request); !errors.Is(err, workersessions.ErrContinuationServerStopping) {
+		t.Fatalf("reserveContinuation(stopping) = %v, want server stopping", err)
+	}
+	if _, err := valid.Continue(nil, workersessions.ContinueRequest{}); !errors.Is(err, workersessions.ErrInvalidContinuationRequestID) {
+		t.Fatalf("Continue(nil, invalid) = %v, want invalid request ID", err)
+	}
+
+	terminal := newSource()
+	terminal.supervisions[request.SourceWorkerSessionID] = newSupervision("dispatch-1", "turn-1", validExecution("dispatch-1"))
+	terminalReplay, owner, err := terminal.reserveContinuation(request)
+	if err != nil || !owner {
+		t.Fatalf("reserveContinuation(terminal branch) = %v, %t, want owned replay", err, owner)
+	}
+	terminal.stopping = true
+	_, err = terminal.continueReserved(terminalReplay.plan)
+	if !errors.Is(err, workersessions.ErrContinuationNotAccepted) {
+		t.Fatalf("continueReserved(stopping) = %v, want ErrContinuationNotAccepted", err)
+	}
+}
+
+func TestContinuationObservationQueriesMapCanceledAndUnavailableProjections(t *testing.T) {
+	r := newObservationRegistry(nil, nil)
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := r.ListWorkerSessionObservations(canceled, workersessions.ListWorkerSessionObservationsRequest{}); !errors.Is(err, workersessions.ErrObservationCanceled) {
+		t.Fatalf("ListWorkerSessionObservations(canceled) = %v, want canceled", err)
+	}
+
+	r.sessions["invalid-observation"] = workersessions.Session{
+		ID: "invalid-observation", State: workersessions.State("UNKNOWN"),
+		ProviderSessionAssociation: &workersessions.ProviderSessionAssociation{
+			WorkerSessionID: "invalid-observation", DispatchID: "attempt-1", AttemptID: "attempt-1",
+			Reference: providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-1"},
+		},
+	}
+	r.observations["invalid-observation"] = observationMetadata()
+	if _, err := r.ListWorkerSessionObservations(context.Background(), workersessions.ListWorkerSessionObservationsRequest{Scope: workersessions.ObservationScopeAll}); err == nil {
+		t.Fatal("ListWorkerSessionObservations(invalid projection) = nil, want projection validation error")
+	}
+
+	withoutAssociation := newObservationRegistry(observationProjectorFake{}, nil)
+	withoutAssociation.sessions["terminal-no-association"] = workersessions.Session{ID: "terminal-no-association", State: workersessions.StateCompleted}
+	withoutAssociation.observations["terminal-no-association"] = observationMetadata()
+	if _, err := withoutAssociation.ReadTranscriptByWorkerSessionID(context.Background(), workersessions.ReadTranscriptByWorkerSessionIDRequest{WorkerSessionID: "terminal-no-association"}); !errors.Is(err, workersessions.ErrObservationTranscriptUnavailable) {
+		t.Fatalf("ReadTranscriptByWorkerSessionID(no association) = %v, want transcript unavailable", err)
+	}
+
+	withoutProjector := newObservationRegistry(nil, nil)
+	withoutProjector.sessions["terminal-with-association"] = observationSession("terminal-with-association", workersessions.StateCompleted)
+	withoutProjector.observations["terminal-with-association"] = observationMetadata()
+	if _, err := withoutProjector.ReadTranscriptByWorkerSessionID(context.Background(), workersessions.ReadTranscriptByWorkerSessionIDRequest{WorkerSessionID: "terminal-with-association"}); !errors.Is(err, workersessions.ErrObservationTranscriptProjectionUnavailable) {
+		t.Fatalf("ReadTranscriptByWorkerSessionID(no projector) = %v, want projection unavailable", err)
+	}
+	if _, err := withoutProjector.ReadTranscriptByWorkerSessionID(context.Background(), workersessions.ReadTranscriptByWorkerSessionIDRequest{}); !errors.Is(err, workersessions.ErrInvalidSessionID) {
+		t.Fatalf("ReadTranscriptByWorkerSessionID(invalid) = %v, want ErrInvalidSessionID", err)
+	}
+	if _, err := withoutProjector.ReadTranscriptByWorkerSessionID(canceled, workersessions.ReadTranscriptByWorkerSessionIDRequest{WorkerSessionID: "terminal-with-association"}); !errors.Is(err, workersessions.ErrObservationCanceled) {
+		t.Fatalf("ReadTranscriptByWorkerSessionID(canceled) = %v, want ErrObservationCanceled", err)
 	}
 }

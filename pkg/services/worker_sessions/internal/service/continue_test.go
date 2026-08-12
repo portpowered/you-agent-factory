@@ -259,6 +259,124 @@ type continuationAdmissionBoundary struct {
 	readyOnce         sync.Once
 }
 
+type continuationFailureBoundary struct {
+	*controlledBoundary
+	err error
+}
+
+func (b *continuationFailureBoundary) Publish(
+	ctx context.Context,
+	request workers.WorkstationDispatchRequest,
+	accept workers.WorkstationDispatchAcceptFunc,
+) error {
+	return b.PublishWithAdmission(ctx, request, nil, accept)
+}
+
+func (b *continuationFailureBoundary) PublishWithAdmission(
+	ctx context.Context,
+	request workers.WorkstationDispatchRequest,
+	admitted workers.WorkstationDispatchAdmissionFunc,
+	accept workers.WorkstationDispatchAcceptFunc,
+) error {
+	if request.Execution.ResumeSession == nil {
+		return b.controlledBoundary.PublishWithAdmission(ctx, request, admitted, accept)
+	}
+	accept(context.Background(), request, workers.WorkstationDispatchResult{
+		DispatchID:      request.Execution.Dispatch.DispatchID,
+		TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeFailed,
+		Result: workers.WorkResult{
+			DispatchID: request.Execution.Dispatch.DispatchID,
+			Outcome:    workers.OutcomeFailed,
+		},
+	}, b.err)
+	return nil
+}
+
+func TestContinue_PreAdmissionFailureReturnsTerminalSuccessorAndTypedError(t *testing.T) {
+	base := newControlledBoundary()
+	boundary := &continuationFailureBoundary{controlledBoundary: base, err: errors.New("continuation admission rejected")}
+	registry := newControlledRegistry(t, boundary)
+	reference := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-session-failure"}
+	sourceResult := startControlledSession(t, registry, base, "source-session", "dispatch-source")
+	base.complete(completedDispatchWithProviderSession("dispatch-source", reference), nil)
+	if source := <-sourceResult; source.Session.State != workersessions.StateCompleted {
+		t.Fatalf("source result = %#v, want COMPLETED", source.Session)
+	}
+
+	request := workersessions.ContinueRequest{
+		RequestID:                "continue-request-failure",
+		SourceWorkerSessionID:    "source-session",
+		SuccessorWorkerSessionID: "successor-session",
+		FollowUpInput:            "follow-up",
+	}
+	result, err := registry.Continue(context.Background(), request)
+	if !errors.Is(err, workersessions.ErrContinuationNotAccepted) {
+		t.Fatalf("Continue() error = %v, want ErrContinuationNotAccepted", err)
+	}
+	if result.Session.ID != request.SuccessorWorkerSessionID || result.Session.State != workersessions.StateFailed {
+		t.Fatalf("Continue() result = %#v, want failed successor snapshot", result)
+	}
+	if result.Session.Result == nil || result.Session.Result.Cause == nil {
+		t.Fatalf("Continue() result = %#v, want terminal failure cause", result.Session)
+	}
+}
+
+func TestContinue_CanceledCallerDoesNotCancelReservedContinuation(t *testing.T) {
+	base := newControlledBoundary()
+	continuationGate := make(chan struct{})
+	boundary := &continuationAdmissionBoundary{
+		controlledBoundary: base,
+		continuationGate:   continuationGate,
+		continuationReady:  make(chan struct{}),
+	}
+	registry := newControlledRegistry(t, boundary)
+	reference := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-session-cancel"}
+	sourceResult := startControlledSession(t, registry, base, "source-session", "dispatch-source")
+	base.complete(completedDispatchWithProviderSession("dispatch-source", reference), nil)
+	if source := <-sourceResult; source.Session.State != workersessions.StateCompleted {
+		t.Fatalf("source result = %#v, want COMPLETED", source.Session)
+	}
+
+	request := workersessions.ContinueRequest{
+		RequestID:                "continue-request-cancel",
+		SourceWorkerSessionID:    "source-session",
+		SuccessorWorkerSessionID: "successor-session",
+		FollowUpInput:            "follow up",
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	outcomes := make(chan struct {
+		result workersessions.ContinueResult
+		err    error
+	}, 1)
+	go func() {
+		result, err := registry.Continue(ctx, request)
+		outcomes <- struct {
+			result workersessions.ContinueResult
+			err    error
+		}{result: result, err: err}
+	}()
+	select {
+	case <-boundary.continuationReady:
+	case <-time.After(time.Second):
+		t.Fatal("continuation did not reach admission wait")
+	}
+	cancel()
+	select {
+	case outcome := <-outcomes:
+		if !errors.Is(outcome.err, context.Canceled) {
+			t.Fatalf("Continue(canceled caller) error = %v, want context.Canceled", outcome.err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Continue(canceled caller) did not return")
+	}
+	close(continuationGate)
+	base.complete(completedDispatchWithProviderSession(base.currentRequest().Execution.Dispatch.DispatchID, reference), nil)
+	final, err := registry.Get(context.Background(), workersessions.GetRequest{ID: request.SuccessorWorkerSessionID})
+	if err != nil || final.State != workersessions.StateCompleted {
+		t.Fatalf("successor after canceled caller = %#v, %v, want server-owned completion", final, err)
+	}
+}
+
 func (b *continuationAdmissionBoundary) PublishWithAdmission(
 	ctx context.Context,
 	request workers.WorkstationDispatchRequest,
