@@ -286,7 +286,7 @@ func assertJSONProviderInventory(t *testing.T, decoded listOutput) map[string]pr
 		}
 		wantCapabilities := []string{"prompt_submission"}
 		if providerID == "cursor-acp" {
-			wantCapabilities = []string{"image_input", "prompt_submission"}
+			wantCapabilities = []string{"image_input", "permission_bypass", "prompt_submission"}
 		}
 		if !sameStrings(provider.Capabilities, wantCapabilities) {
 			t.Fatalf("ACP provider %q capabilities = %v, want %v", providerID, provider.Capabilities, wantCapabilities)

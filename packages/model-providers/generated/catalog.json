@@ -2500,7 +2500,7 @@
       "knownLimits": [],
       "maximumExecutionCapabilities": {
         "imageInput": true,
-        "permissionBypass": false,
+        "permissionBypass": true,
         "promptSubmission": true,
         "sessionResume": false,
         "structuredOutput": false,
