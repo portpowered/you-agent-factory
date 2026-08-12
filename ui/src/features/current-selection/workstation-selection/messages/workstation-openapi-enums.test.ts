@@ -18,6 +18,12 @@ describe("workstation OpenAPI enum localization", () => {
       "Model workstation (legacy)",
     );
     expect(localizeWorkstationTypeValue("LOGICAL_MOVE", "ja")).toBe("論理移動");
+    expect(localizeWorkstationTypeValue("HUMAN_APPROVAL", "en")).toBe(
+      "Human approval",
+    );
+    expect(localizeWorkstationTypeValue("HUMAN_APPROVAL", "zh-CN")).toBe(
+      "人工审批",
+    );
     expect(localizeWorkstationTypeValue("FUTURE_TYPE", "en")).toBe(
       "Unknown type: FUTURE_TYPE",
     );

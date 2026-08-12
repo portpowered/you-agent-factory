@@ -59,6 +59,7 @@ describe("Factory workstation axis resolution", () => {
     [WorkstationType.MODEL_INVOKE, "INFERENCE"],
     [WorkstationType.LOGICAL_MOVE, "LOGICAL_MOVE"],
     [WorkstationType.CLASSIFIER_WORKSTATION, "CLASSIFIER"],
+    [WorkstationType.HUMAN_APPROVAL, "HUMAN_APPROVAL"],
   ] as const)("maps canonical runtime type %s to role %s", (type, role) => {
     expect(factoryGraphWorkstationRuntimeRole(type)).toBe(role);
   });
@@ -131,6 +132,23 @@ describe("Factory workstation axis resolution", () => {
         }),
       ).controlRole,
     ).toBe("LOGICAL_ROUTER");
+  });
+
+  test("projects human approval as a workerless control role", () => {
+    const semantics = resolveFactoryGraphWorkstationSemantics(
+      workstation({ type: WorkstationType.HUMAN_APPROVAL, worker: undefined }),
+    );
+
+    expect(semantics).toMatchObject({
+      controlRole: "HUMAN_APPROVAL",
+      runtimeRole: "HUMAN_APPROVAL",
+      runtimeType: WorkstationType.HUMAN_APPROVAL,
+    });
+    expect(factoryGraphWorkstationPresentation(semantics, "en")).toMatchObject({
+      controlRole: "HUMAN_APPROVAL",
+      iconKind: "constraint",
+      label: "Human approval workstation",
+    });
   });
 
   test("exposes an authored argument-backed visit limit", () => {

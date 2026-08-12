@@ -32,10 +32,11 @@ export function buildFactoryGraphWorkerStatusMap(input: {
 
   const workerByWorkstationName = new Map<string, string>();
   for (const workstation of factoryDefinition.workstations ?? []) {
-    if (workstation.worker.trim().length === 0) {
+    const workerName = workstation.worker?.trim() ?? "";
+    if (workerName.length === 0) {
       continue;
     }
-    workerByWorkstationName.set(workstation.name, workstation.worker);
+    workerByWorkstationName.set(workstation.name, workerName);
   }
 
   for (const pause of input.snapshot.runtime.active_throttle_pauses ?? []) {

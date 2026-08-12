@@ -60,6 +60,7 @@ function runtimePresentation(
   const labels: Record<FactoryGraphWorkstationRuntimeRole, string> = {
     AGENT: chinese ? "代理工作站" : "Agent workstation",
     CLASSIFIER: chinese ? "分类器工作站" : "Classifier workstation",
+    HUMAN_APPROVAL: chinese ? "人工审批工作站" : "Human approval workstation",
     INFERENCE: chinese ? "推理工作站" : "Inference workstation",
     LOGICAL_MOVE: chinese ? "逻辑移动工作站" : "Logical move workstation",
     POLLER: chinese ? "轮询运行工作站" : "Poller-run workstation",
@@ -72,6 +73,7 @@ function runtimePresentation(
   > = {
     AGENT: "workstation",
     CLASSIFIER: "queue",
+    HUMAN_APPROVAL: "constraint",
     INFERENCE: "processing",
     LOGICAL_MOVE: "workstation",
     POLLER: "poller",
@@ -125,6 +127,8 @@ export function factoryGraphWorkstationControlRoleLabel(
     switch (controlRole) {
       case "CLASSIFIER":
         return "分类器路由";
+      case "HUMAN_APPROVAL":
+        return "人工审批";
       case "LOGICAL_ROUTER":
         return "逻辑路由";
       case "LOOP_BREAKER":
@@ -139,6 +143,8 @@ export function factoryGraphWorkstationControlRoleLabel(
   switch (controlRole) {
     case "CLASSIFIER":
       return "Classifier route";
+    case "HUMAN_APPROVAL":
+      return "Human approval";
     case "LOGICAL_ROUTER":
       return "Logical router";
     case "LOOP_BREAKER":

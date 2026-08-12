@@ -5911,8 +5911,8 @@ export interface components {
       operation?: components["schemas"]["ModelOperationName"];
       /** @description Optional workstation-authored slot bindings that resolve operation inputs from runtime content or static config content. */
       operationBindings?: components["schemas"]["WorkstationOperationBinding"][];
-      /** @description Name of a worker declared in the workers list. */
-      worker: string;
+      /** @description Name of a worker declared in the workers list. Omit this field for HUMAN_APPROVAL workstations. */
+      worker?: string;
       /** @description Optional workstation-specific runner override. When omitted, dispatch falls back to the factory runner, then worker modelProvider compatibility when no explicit runner is configured, then the default codex runner. */
       runner?: components["schemas"]["RunnerID"];
       /** @description Path to a prompt template file loaded for model-oriented workstation execution. */
@@ -10701,6 +10701,7 @@ export const WorkstationType = {
   MODEL_INVOKE: "MODEL_INVOKE",
   LOGICAL_MOVE: "LOGICAL_MOVE",
   CLASSIFIER_WORKSTATION: "CLASSIFIER_WORKSTATION",
+  HUMAN_APPROVAL: "HUMAN_APPROVAL",
 } as const;
 export type WorkstationType =
   (typeof WorkstationType)[keyof typeof WorkstationType];

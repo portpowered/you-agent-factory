@@ -81,6 +81,60 @@ describe("factory graph React Flow projection", () => {
     ).toBe(true);
   });
 
+  it("projects human approval output edges onto the stable approval handle", () => {
+    const humanApprovalDefinition = {
+      ...baseFactoryDefinition,
+      workstations: [
+        {
+          ...baseFactoryDefinition.workstations?.[0],
+          description: {
+            type: "LOCALIZABLE_ASSET" as const,
+            value: "Confirm the release",
+          },
+          id: "release-approval",
+          name: "release-approval",
+          onRejection: [{ state: "queued", workType: "story" }],
+          type: WorkstationType.HUMAN_APPROVAL,
+          worker: undefined,
+        },
+      ],
+    } satisfies CanonicalFactoryDefinition;
+    const topology = buildFactoryGraphTopologyFromDefinition(
+      humanApprovalDefinition,
+    );
+
+    const projection = projectFactoryGraphToReactFlow({
+      factoryDefinition: humanApprovalDefinition,
+      topology,
+      workstationResolver: createFactoryGraphWorkstationResolver(
+        humanApprovalDefinition.workstations,
+      ),
+    });
+
+    expect(projection.edges).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "workstation-output:workstation:release-approval->work-state:story:done",
+          sourceHandle: "workstation-approval-source",
+        }),
+        expect.objectContaining({
+          id: "workstation-on-rejection:workstation:release-approval->work-state:story:queued",
+          sourceHandle: "workstation-on-rejection-source",
+        }),
+      ]),
+    );
+    expect(
+      projection.nodes
+        .find((node) => node.id === "workstation:release-approval")
+        ?.data.connectionAnchors.map((anchor) => anchor.id),
+    ).toEqual(
+      expect.arrayContaining([
+        "workstation-approval-source",
+        "workstation-on-rejection-source",
+      ]),
+    );
+  });
+
   it("projects renamed work-state node ids and labels from an updated factory definition", () => {
     const renamedFactoryDefinition = {
       ...baseFactoryDefinition,

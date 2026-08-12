@@ -551,7 +551,7 @@ function schedulerCandidatesFor(
         for (const index of indexes) executableWork.add(index);
         retainBoundedCandidate({
           transitionId: workstation.name,
-          workerId: workstation.worker,
+          workerId: workstation.worker ?? "",
           workstationKind:
             workstation.type === "LOGICAL_MOVE" ? "logical" : "normal",
           resources: (workstation.resources ?? []).map(
@@ -1709,7 +1709,7 @@ export function createFactoryEmulatorSession(
           completionId,
           transitionId,
           workstation: execution.workstation.name,
-          worker: execution.workstation.worker,
+          worker: execution.workstation.worker ?? "",
           startedElapsedMs: state.virtualElapsedMs,
           dueElapsedMs,
           inputTokenIds: works.map(({ tokenId }) => tokenId),

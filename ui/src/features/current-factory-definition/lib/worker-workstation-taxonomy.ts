@@ -36,6 +36,7 @@ export const FACTORY_GRAPH_ADD_WORKSTATION_TYPES = [
   WorkstationType.SCRIPT_RUN,
   WorkstationType.POLLER_RUN,
   WorkstationType.LOGICAL_MOVE,
+  WorkstationType.HUMAN_APPROVAL,
 ] as const satisfies readonly ApiWorkstationType[];
 
 export function isInferenceWorkerType(
@@ -107,6 +108,12 @@ export function isPollerRunWorkstationType(
   return workstationType === WorkstationType.POLLER_RUN;
 }
 
+export function isHumanApprovalWorkstationType(
+  workstationType: ApiWorkstationType | string | null | undefined,
+): boolean {
+  return workstationType === WorkstationType.HUMAN_APPROVAL;
+}
+
 export function isLegacyWorkerType(
   workerType: ApiWorkerType | string | null | undefined,
 ): boolean {
@@ -138,6 +145,9 @@ export function resolveEditableWorkstationTypeConversionOptions(
   }
   if (workstationType === WorkstationType.CLASSIFIER_WORKSTATION) {
     return [WorkstationType.CLASSIFIER_WORKSTATION];
+  }
+  if (workstationType === WorkstationType.HUMAN_APPROVAL) {
+    return [WorkstationType.HUMAN_APPROVAL];
   }
 
   const preferred = EDITABLE_WORKSTATION_TYPE_CONVERSION_OPTIONS;

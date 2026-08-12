@@ -33,6 +33,7 @@ describe("worker-workstation taxonomy helpers", () => {
       WorkstationType.SCRIPT_RUN,
       WorkstationType.POLLER_RUN,
       WorkstationType.LOGICAL_MOVE,
+      WorkstationType.HUMAN_APPROVAL,
     ]);
     expect(EDITABLE_WORKER_TYPES).toEqual([
       WorkerType.INFERENCE_WORKER,
@@ -68,6 +69,9 @@ describe("worker-workstation taxonomy helpers", () => {
     expect(
       isLegacyRunnableWorkstationType(WorkstationType.MODEL_WORKSTATION),
     ).toBe(true);
+    expect(
+      isLegacyRunnableWorkstationType(WorkstationType.HUMAN_APPROVAL),
+    ).toBe(false);
   });
 
   it("keeps legacy worker types selectable while preferring new taxonomy options", () => {

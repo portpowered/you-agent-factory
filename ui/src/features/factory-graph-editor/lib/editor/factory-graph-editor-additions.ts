@@ -1,4 +1,13 @@
+// biome-ignore-all lint/style/noExcessiveLinesPerFile: graph entity draft mutation stays co-located with its canonical workstation operations.
+
 import { validateEditableWorkstationCronDraft } from "../../../current-factory-definition/lib/editable-workstation-cron-validation";
+import {
+  DEFAULT_FACTORY_GRAPH_ADD_WORKSTATION_TYPE,
+  DEFAULT_WORKER_TYPE,
+  type FactoryGraphAddWorkerType,
+  isHumanApprovalWorkstationType,
+  isPollerRunWorkstationType,
+} from "../../../current-factory-definition/lib/worker-workstation-taxonomy";
 import type { EditableWorkstationType } from "../../../current-factory-definition/lib/workstation/workstation-type";
 import {
   DEFAULT_WORKSTATION_BEHAVIOR,
@@ -11,12 +20,6 @@ import {
   createEmptyEditableWorkstationCronDraft,
   type EditableWorkstationCronDraft,
 } from "../../../current-factory-definition/lib/workstation-editable-values";
-import {
-  DEFAULT_FACTORY_GRAPH_ADD_WORKSTATION_TYPE,
-  DEFAULT_WORKER_TYPE,
-  type FactoryGraphAddWorkerType,
-  isPollerRunWorkstationType,
-} from "../../../current-factory-definition/lib/worker-workstation-taxonomy";
 import type {
   FactoryGraphAddModelOperationDraft,
   FactoryGraphAddModelOperationValidationErrors,
@@ -337,23 +340,42 @@ export function applyFactoryGraphAddEntityDraft(
     type: entityDraft.workstationType,
   });
   const trimmedBody = entityDraft.body.trim();
-  const behavior = isPollerRunWorkstationType(entityDraft.workstationType)
-    ? "POLLER"
-    : entityDraft.behavior;
+  const trimmedName = entityDraft.name.trim();
+  const isHumanApproval = isHumanApprovalWorkstationType(
+    entityDraft.workstationType,
+  );
+  const behavior = isHumanApproval
+    ? DEFAULT_WORKSTATION_BEHAVIOR
+    : isPollerRunWorkstationType(entityDraft.workstationType)
+      ? "POLLER"
+      : entityDraft.behavior;
 
   nextDraft.additions.workstations.push({
+    ...(isHumanApproval
+      ? {
+          description: {
+            type: "LOCALIZABLE_ASSET" as const,
+            value: trimmedName,
+          },
+          id: trimmedName,
+        }
+      : {}),
     ...(behavior === DEFAULT_WORKSTATION_BEHAVIOR ? {} : { behavior }),
-    ...(trimmedBody.length > 0 ? { body: trimmedBody } : {}),
-    ...(entityDraft.behavior === "CRON" && entityDraft.cron
+    ...(!isHumanApproval && trimmedBody.length > 0
+      ? { body: trimmedBody }
+      : {}),
+    ...(behavior === "CRON" && entityDraft.cron
       ? { cron: buildCanonicalWorkstationCronFromDraft(entityDraft.cron) }
       : {}),
     inputs: [],
-    name: entityDraft.name.trim(),
+    name: trimmedName,
     outputs: [],
     type: entityDraft.workstationType,
     ...(requiresWorkerAssignment
       ? { worker: entityDraft.workerName.trim() }
-      : { worker: "" }),
+      : isHumanApproval
+        ? {}
+        : { worker: "" }),
   });
   return nextDraft;
 }
@@ -376,6 +398,9 @@ export function resolveFactoryGraphAddWorkstationDraftForTypeChange(
   } else if (draft.behavior === "POLLER") {
     behavior = DEFAULT_WORKSTATION_BEHAVIOR;
   }
+  if (isHumanApprovalWorkstationType(workstationType)) {
+    behavior = DEFAULT_WORKSTATION_BEHAVIOR;
+  }
 
   return {
     ...draft,
@@ -393,6 +418,15 @@ export function resolveFactoryGraphAddWorkstationDraftForBehaviorChange(
   draft: Extract<FactoryGraphAddEntityDraft, { kind: "workstation" }>,
   behavior: EditableWorkstationBehavior,
 ): Extract<FactoryGraphAddEntityDraft, { kind: "workstation" }> {
+  if (isHumanApprovalWorkstationType(draft.workstationType)) {
+    return {
+      ...draft,
+      behavior: DEFAULT_WORKSTATION_BEHAVIOR,
+      body: "",
+      cron: null,
+    };
+  }
+
   if (behavior === "CRON") {
     return {
       ...draft,

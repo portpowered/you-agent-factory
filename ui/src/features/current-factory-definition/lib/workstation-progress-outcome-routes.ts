@@ -5,6 +5,7 @@ import {
 } from "../../../api/generated/openapi";
 import {
   isAgentRunWorkstationType,
+  isHumanApprovalWorkstationType,
   isInferenceRunWorkstationType,
 } from "./worker-workstation-taxonomy";
 import { resolveEditableWorkstationType } from "./workstation/workstation-type";
@@ -59,7 +60,9 @@ export function workstationSupportsProgressOutcomeRoutes(
   }
 
   if (
-    resolveEditableWorkstationType(workstation) === WorkstationType.LOGICAL_MOVE
+    resolveEditableWorkstationType(workstation) ===
+      WorkstationType.LOGICAL_MOVE ||
+    isHumanApprovalWorkstationType(resolveEditableWorkstationType(workstation))
   ) {
     return false;
   }
@@ -89,7 +92,9 @@ export function workstationSupportsProgressOutcomeFailureRoute(
   workstation: WorkstationProgressOutcomeRouteContext,
 ): boolean {
   return (
-    resolveEditableWorkstationType(workstation) !== WorkstationType.LOGICAL_MOVE
+    resolveEditableWorkstationType(workstation) !==
+      WorkstationType.LOGICAL_MOVE &&
+    !isHumanApprovalWorkstationType(resolveEditableWorkstationType(workstation))
   );
 }
 
@@ -98,6 +103,12 @@ export function workstationHasZAxisIncompleteForConnections(
   workstation: WorkstationProgressOutcomeRouteContext,
 ): boolean {
   if (isClassifierWorkstation(workstation)) {
+    return false;
+  }
+
+  if (
+    isHumanApprovalWorkstationType(resolveEditableWorkstationType(workstation))
+  ) {
     return false;
   }
 

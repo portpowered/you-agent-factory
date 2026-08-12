@@ -251,6 +251,7 @@ describe("getFactoryGraphEditorMessages", () => {
         "workstation-input-source",
         "workstation-input-target",
         "workstation-output-source",
+        "workstation-approval-source",
         "work-state-input-target",
         "workstation-on-continue-source",
         "work-state-input-target",

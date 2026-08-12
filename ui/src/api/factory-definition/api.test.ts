@@ -75,6 +75,32 @@ describe("normalizeFactoryDefinition localized descriptions", () => {
       workstationDescription,
     );
   });
+
+  it("accepts a workerless human approval workstation", () => {
+    const normalized = normalizeFactoryDefinition({
+      name: "approval-factory",
+      workstations: [
+        {
+          description: {
+            type: "LOCALIZABLE_ASSET",
+            value: "Confirm the release",
+          },
+          id: "release-approval",
+          inputs: [{ state: "awaiting", workType: "release" }],
+          name: "release-approval",
+          onRejection: [{ state: "changes-requested", workType: "release" }],
+          outputs: [{ state: "approved", workType: "release" }],
+          type: "HUMAN_APPROVAL",
+        },
+      ],
+    });
+
+    expect(normalized.workstations?.[0]).toMatchObject({
+      id: "release-approval",
+      type: "HUMAN_APPROVAL",
+    });
+    expect(normalized.workstations?.[0]).not.toHaveProperty("worker");
+  });
 });
 
 describe("normalizeFactoryDefinition", () => {
