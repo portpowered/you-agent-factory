@@ -132,6 +132,78 @@ func TestFailureMetadataForError_PreservesRetryableProviderFailure(t *testing.T)
 	}
 }
 
+func TestAgentRunProviderFailureRecoveryUsesCanonicalFamily(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		failureType   workerexecution.WorkFailureType
+		wantFamily    workerexecution.WorkFailureFamily
+		wantRetryable bool
+		wantRecovery  string
+	}{
+		{
+			name:          "dependency or overload normalized as internal server error",
+			failureType:   workerexecution.WorkFailureTypeInternalServerError,
+			wantFamily:    workerexecution.WorkFailureFamilyRetryable,
+			wantRetryable: true,
+			wantRecovery:  "retry the agent run after the provider recovers",
+		},
+		{
+			name:          "provider timeout",
+			failureType:   workerexecution.WorkFailureTypeTimeout,
+			wantFamily:    workerexecution.WorkFailureFamilyRetryable,
+			wantRetryable: true,
+			wantRecovery:  "retry the agent run after the provider recovers",
+		},
+		{
+			name:          "rate limited provider",
+			failureType:   workerexecution.WorkFailureTypeThrottled,
+			wantFamily:    workerexecution.WorkFailureFamilyThrottle,
+			wantRetryable: true,
+			wantRecovery:  "retry after provider capacity or rate limiting recovers",
+		},
+		{
+			name:        "authentication failure",
+			failureType: workerexecution.WorkFailureTypeAuthFailure,
+			wantFamily:  workerexecution.WorkFailureFamilyTerminal,
+		},
+		{
+			name:        "permanent invalid request",
+			failureType: workerexecution.WorkFailureTypePermanentBadRequest,
+			wantFamily:  workerexecution.WorkFailureFamilyTerminal,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := workerexecution.NewProviderError(
+				test.failureType,
+				"normalized provider failure",
+				errors.New("provider payload must not become recovery guidance"),
+			)
+			metadata := failureMetadataForError(err)
+			if metadata == nil || metadata.Family != test.wantFamily || metadata.Type != test.failureType {
+				t.Fatalf("failure metadata = %#v, want family %q and type %q", metadata, test.wantFamily, test.failureType)
+			}
+			decision := workerexecution.FailureDecisionFromMetadata(metadata)
+			if decision.Retryable != test.wantRetryable || decision.Terminal != !test.wantRetryable {
+				t.Fatalf("failure decision = %#v, want retryable=%t and terminal=%t", decision, test.wantRetryable, !test.wantRetryable)
+			}
+
+			diagnostics := agentRunFailureDiagnostics(err)
+			if got := diagnostics[DiagnosticRecoveryAction]; got != test.wantRecovery {
+				t.Fatalf("recovery action = %q, want %q", got, test.wantRecovery)
+			}
+			if test.wantRecovery == "" && strings.Contains(diagnostics[DiagnosticRecoveryAction], "retry") {
+				t.Fatalf("terminal provider failure received retry guidance: %q", diagnostics[DiagnosticRecoveryAction])
+			}
+		})
+	}
+}
+
 func TestAgentRunFailureDiagnostics_ProviderFailurePreservesSafeType(t *testing.T) {
 	t.Parallel()
 

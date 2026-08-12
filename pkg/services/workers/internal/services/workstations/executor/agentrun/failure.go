@@ -178,6 +178,9 @@ func safeProviderFailureSummary(providerErr *workerexecution.ProviderError) stri
 }
 
 func recoveryActionForError(err error) string {
+	if providerErr := normalizedProviderErrorForAgentRun(err); providerErr != nil {
+		return recoveryActionForProviderFailure(providerErr)
+	}
 	if errors.Is(err, models.ErrHostCapacityExhausted) {
 		return "retry later or increase managed runtime resource capacity"
 	}
@@ -192,6 +195,21 @@ func recoveryActionForError(err error) string {
 		return "resolve the managed runtime failure before retrying the agent run"
 	}
 	return ""
+}
+
+func recoveryActionForProviderFailure(providerErr *workerexecution.ProviderError) string {
+	metadata := workerexecution.WorkFailureMetadataFromProviderError(providerErr)
+	if metadata == nil {
+		return ""
+	}
+	switch metadata.Family {
+	case workerexecution.WorkFailureFamilyRetryable:
+		return "retry the agent run after the provider recovers"
+	case workerexecution.WorkFailureFamilyThrottle:
+		return "retry after provider capacity or rate limiting recovers"
+	default:
+		return ""
+	}
 }
 
 func recoveryActionForReadiness(readiness models.ReadinessState) string {
